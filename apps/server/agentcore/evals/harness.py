@@ -248,14 +248,18 @@ def single_outcome(
     ``react_loop`` 的四元组不带 finish_reason，但 B2 收敛治理会把非默认终态经
     ``ReactLoopOut.finish_override`` 抬出来（取最后一次：如 ``UNPRODUCTIVE`` 后收尾轮
     ``ask_user`` → ``PAUSED``）。有 ``finish_override`` 就用它（评估据此能断言降级 /
-    早停 / 挂起、与 team 路径口径一致），否则镜像 pipeline 按轮数推导（rounds 达上限即
-    ``max_rounds``，否则 ``end_turn``）。成本用 ``runtime/costing`` 的定价按 usage+model
-    现算（``react_loop`` 不回 cost）。纯函数，便于单测。
+    早停 / 挂起、与 team 路径口径一致），否则镜像 pipeline 按轮数推导：
+    ``profile.max_rounds > 0`` 且 rounds 达上限 → ``max_rounds``；``max_rounds <= 0``
+    是产品「无轮次熔断」（chat/agent 默认），不得判成撞顶。成本用
+    ``runtime/costing`` 的定价按 usage+model 现算（``react_loop`` 不回 cost）。纯函数，
+    便于单测。
     """
     if finish_override is not None:
         finish = finish_override.value
+    elif profile.max_rounds > 0 and rounds >= profile.max_rounds:
+        finish = "max_rounds"
     else:
-        finish = "end_turn" if rounds < profile.max_rounds else "max_rounds"
+        finish = "end_turn"
     cost_nano = calculate_cost(model, usage, billing_mode="platform").total
     tool_calls = list(sink.tool_calls)
     return TurnOutcome(

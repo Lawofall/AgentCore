@@ -8,7 +8,7 @@ from typing import Any
 
 from agentcore.config import settings
 from agentcore.core.error_codes import ErrorCode
-from agentcore.core.errors import LLMUpstreamError, error_fields_for
+from agentcore.core.errors import AgentCoreError, LLMUpstreamError, error_fields_for
 from agentcore.core.logging import get_logger
 from agentcore.llm.model_selection import SelectedCall, build_selected_request
 from agentcore.llm.profiles import ProfileParams
@@ -30,6 +30,18 @@ from .tool_clear import EXEC_OUTPUT_CLEAR_TOOLS, project_cleared_window
 from .write_args_clear import project_cleared_write_args
 
 logger = get_logger(__name__)
+
+# Where a ReAct LLM round died — spine/raw must distinguish chrome vs this path.
+ORIGIN_STREAM_ROUND = "stream_round"
+ORIGIN_STREAM_ABORTED = "stream_aborted"
+_ERROR_CLIP = 240
+
+
+def _clip_error(text: str) -> str:
+    trimmed = (text or "").strip()
+    if len(trimmed) <= _ERROR_CLIP:
+        return trimmed
+    return trimmed[:_ERROR_CLIP] + "…"
 
 
 def record_round_start(*, round_idx: int, run_id: str, role: str) -> None:
@@ -101,8 +113,13 @@ def build_request_window(
         )
         window = exec_cleared
     # Handoff 缓存崩塌：落盘后的 file_write 等大 body 仍在 assistant tool_calls.args，
-    # 后续轮（含 handoff）整段 cache_miss。投影侧坍缩正文，canonical messages 不动。
-    write_cleared = project_cleared_write_args(window, min_chars=500)
+    # 更早的轮（含 handoff）整段 cache_miss。近端 keep_recent 轮留全文供下一刀衔接；
+    # 更早的投影侧压成 path。canonical messages 不动。
+    write_cleared = project_cleared_write_args(
+        window,
+        min_chars=500,
+        keep_recent=settings.engine_write_args_clear_keep_recent,
+    )
     if write_cleared is not window:
         n_writes = sum(
             1
@@ -112,6 +129,7 @@ def build_request_window(
         logger.info(
             "engine.write_args_clear",
             cleared=n_writes,
+            keep_recent=settings.engine_write_args_clear_keep_recent,
             round=round_idx,
         )
         window = write_cleared
@@ -181,12 +199,20 @@ class LlmRoundFailure:
     but does NOT emit it: the loop defers surfacing the error until
     ``decide_llm_failure`` returns a terminal directive. The ``raise_on_error``
     (worker) path re-raises instead of returning this.
+
+    ``error_type`` / ``classified`` / ``error_preview`` are observation-only: the
+    fence may have already logged ``llm.call_failed``, but a consumer-side crash
+    after a successful ``llm.call`` has no other fingerprint.
     """
 
     error_code: str
     error_message: str
     error_context: dict | None = None
     upstream_error: bool = False
+    error_type: str | None = None
+    origin: str = ORIGIN_STREAM_ROUND
+    classified: bool = False
+    error_preview: str | None = None
 
 
 async def run_llm_round(
@@ -236,11 +262,39 @@ async def run_llm_round(
                 fallback_code=ErrorCode.LLM_ERROR,
                 fallback_message="出了点问题，请稍后重试。",
             )
+            error_type = type(e).__name__
+            classified = isinstance(e, AgentCoreError)
+            preview = _clip_error(str(e))
+            # Unclassified: need the stack (fence did not see this). Classified
+            # leaf failures already have ``llm.call_failed``; skip traceback noise.
+            if classified:
+                logger.warning(
+                    "engine.llm_round_exception",
+                    error_type=error_type,
+                    error_code=code,
+                    classified=classified,
+                    origin=ORIGIN_STREAM_ROUND,
+                    error=preview,
+                )
+            else:
+                logger.error(
+                    "engine.llm_round_exception",
+                    error_type=error_type,
+                    error_code=code,
+                    classified=classified,
+                    origin=ORIGIN_STREAM_ROUND,
+                    error=preview,
+                    exc_info=True,
+                )
             return LlmRoundFailure(
                 error_code=code,
                 error_message=message,
                 error_context=context,
                 upstream_error=isinstance(e, LLMUpstreamError),
+                error_type=error_type,
+                origin=ORIGIN_STREAM_ROUND,
+                classified=classified,
+                error_preview=preview or None,
             )
     finally:
         mark_llm_inflight(run_id, False)

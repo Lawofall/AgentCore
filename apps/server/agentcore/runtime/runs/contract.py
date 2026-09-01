@@ -13,14 +13,8 @@ A worker's product is accepted only if it satisfies its node's delivery spec
 文件」——任一通道命中即满足。产品在盘上时不再因正文只是
 简报而假失败「缺章节」；仅显式 ``prose`` 保持只看正文。
 
-网页接缝静态检查：同批落盘出现 HTML + CSS/JS 时，交叉校验 HTML class/id 与 CSS/JS
-选择器命中率（未命中率超过阈值则 fail → ``contract.retry``）；普通文档交付不触发。
-
-占位符 / 未核实内容扫描（定案乙）：内容类落盘（HTML / Markdown / …）检出骨架标记
-（``400-XXX-XXXX``、``PLACEHOLDER``、``[占位]``、lorem ipsum 等）与自注（「示例数据」
-「虚构」等；「待核实」诚实标注不进 soft）一律写入 :class:`ContractVerdict` 的
-``warnings``（不阻断验收、不占满 ``contract.retry``）。已删字数/必含词字段不再被运行时消费。
-代码文件豁免 TODO/XXX 习惯。建站链 ``web_quality`` / ``web_seam`` 硬闸与引用/书目硬闸不变。
+占位 / 自注扫描与网页静态质检已撤（质量交给模型、下一轮编辑与人看页）。已删字数/必含词
+字段不再被运行时消费。
 
 引用 / 书目质量（台账接通时）：对内容类 ``artifact_contents`` 走
 :func:`~agentcore.runtime.verify.citation_quality_reworks`（落盘成文闸，**不是**
@@ -28,8 +22,9 @@ chat ``finish_guard``）——非法 ``#rN``、无绑定 GB/T 著录等 → fail
 
 判「写得好不好」的语义裁判（额外一次 LLM 调用）留作后续增强。
 
-校验的后续处置（带反馈返工 / 按 ``strict`` 决定硬退或软提醒）在执行器里，本模块只产出结论
-（:class:`ContractVerdict`）、给模型的修正说明与产出要求描述，保持纯函数、可独立单测。
+校验的后续处置（带反馈返工；返工后仍不达标 → 软提醒完成，不因 ``strict`` 把节点打
+FAILED）在执行器里，本模块只产出结论（:class:`ContractVerdict`）、给模型的修正说明
+与产出要求描述，保持纯函数、可独立单测。
 
 → 见设计: docs/03-AI核心/执行引擎架构设计.md §八（Run 模型）
 """
@@ -43,24 +38,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from agentcore.runtime.runs.placeholder_scan import (
-    PlaceholderScanResult,
+from agentcore.runtime.runs.artifact_paths import (
+    has_content_surface,
     is_content_deliverable_path,
     is_opaque_source_data_path,
     is_table_deliverable_path,
-    needs_placeholder_scan,
-    scan_placeholder_signals,
 )
 from agentcore.runtime.runs.types import Deliverable, deliverable_expects_landing
-from agentcore.runtime.runs.web_quality_scan import (
-    needs_web_quality_scan,
-    scan_web_quality,
-)
-from agentcore.runtime.runs.web_seam import (
-    check_web_seam_failures,
-    is_web_artifact_batch,
-)
 from agentcore.workspace._paths import strip_root_label_prefix
+from agentcore.workspace.stage_dirs import DRAFTS_DIR
 
 # Sandbox absolute paths models declare (``/workspace/…``) must compare as
 # workspace-relative — same rewrite file tools use before the containment guard.
@@ -85,8 +71,7 @@ class ContractVerdict:
     # Structured stamps for the same ``warnings`` (reason / severity). Executor
     # copies these onto ``delivery_gaps`` so CEO collect/format read fields, not copy.
     warning_rows: list[dict[str, str]] = field(default_factory=list)
-    # Anti-slop / soft web-quality hits — flip ``ok`` for one rework shot, then the
-    # executor demotes them to ``warnings`` (never hard-fail the run).
+    # Unused leftover (always empty). Keep the slot so executor copies stay stable.
     soft_failures: list[str] = field(default_factory=list)
     # P1c visual critic critical findings — flip ``ok`` for up to 2 reworks, then
     # demote to warnings (partial). Populated by the executor after hard gates.
@@ -113,21 +98,13 @@ def needs_file_contents(
 
     Consumers that read file contents: the JSON file gate (``output_format="json"`` +
     ``artifacts``), the file-form content channel (section checks on a file
-    deliverable), the web seam gate (HTML + CSS/JS in ``landed_paths``), the
-    placeholder scan, and (when the executor passes ledger ids into
-    :func:`check_contract`) the citation / bibliography gate on the same content
-    surfaces. A file deliverable with only existence rules needs
-    no read unless the landed batch is a web artifact set or a content surface. The
-    executor uses this to skip file I/O when the contract would ignore the contents
-    anyway.
+    deliverable), and (when the executor passes ledger ids into
+    :func:`check_contract`) the citation / bibliography gate on content surfaces.
+    A file deliverable with only existence rules needs no read unless the landed
+    batch is a content surface. The executor uses this to skip file I/O when the
+    contract would ignore the contents anyway.
     """
-    if landed_paths and is_web_artifact_batch(landed_paths):
-        return True
-    # Content surfaces: placeholder + citation/bibliography (ledger-connected) share
-    # this load path.
-    if landed_paths and needs_placeholder_scan(landed_paths):
-        return True
-    if landed_paths and needs_web_quality_scan(landed_paths):
+    if landed_paths and has_content_surface(landed_paths):
         return True
     if deliverable is None:
         return False
@@ -138,43 +115,6 @@ def needs_file_contents(
     if not is_file_deliverable(deliverable):
         return False
     return bool(deliverable.required_sections)
-
-
-def _placeholder_hard_exempt_paths(
-    deliverable: Deliverable | None,
-    artifact_contents: dict[str, str] | None,
-) -> list[str]:
-    """Resolve deliverable-declared paths that skip hard placeholder failures."""
-    if deliverable is None:
-        return []
-    if deliverable.placeholder_hard_exempt and artifact_contents:
-        return [p for p in artifact_contents if p]
-    return [
-        p
-        for p in (deliverable.placeholder_hard_exempt_artifacts or [])
-        if isinstance(p, str) and p.strip()
-    ]
-
-
-def _scan_placeholders_for_contract(
-    artifact_contents: dict[str, str] | None,
-    *,
-    hard_exempt_paths: list[str] | None = None,
-) -> PlaceholderScanResult:
-    """Placeholder scan (skeleton + self-note → soft warnings)."""
-    return scan_placeholder_signals(
-        artifact_contents,
-        hard_exempt_paths=hard_exempt_paths,
-    )
-
-
-def _unverified_note_rows(warnings: list[str]) -> list[dict[str, str]]:
-    """Stamp placeholder-scan warnings as ``unverified_note`` (soft)."""
-    from agentcore.runtime.delegate.delivery_status import REASON_UNVERIFIED_NOTE
-
-    return _stamp_warning_rows(
-        warnings, reason=REASON_UNVERIFIED_NOTE, severity="warning"
-    )
 
 
 def _stamp_warning_rows(
@@ -306,8 +246,8 @@ def zero_files_gap_message(*, landing_failure_kind: str | None = None) -> str:
         # Align with WORKSPACE_CHANNEL_DEAD_RETIRE_STEER: prose/handoff close-out,
         # not "don't paste to fake landing" (that framing fights dead-channel steer).
         return (
-            f"{head}未把产物写入工作区：写盘通道不可用（local workspace channel dead / "
-            "活性挂起），落盘工具已失败——"
+            f"{head}未把产物写入工作区：写盘通道不可用（工作区/本地文件连不上），"
+            "落盘工具已失败——"
             "请在 handoff 或正文交结论，禁止再尝试落盘；"
             "可请用户恢复工作区通道后重试"
         )
@@ -366,18 +306,13 @@ def check_contract(
 
     ``artifact_contents`` maps workspace paths → file text. When ``output_format=json``
     pairs with ``artifacts``, the JSON gate reads these texts (file channel) instead of
-    requiring the chat body to be JSON. When the same map holds an HTML+CSS/JS web batch,
-    the web seam gate cross-checks HTML class/id tokens against CSS/JS selectors. When it
-    holds content surfaces (HTML / Markdown / …), the placeholder scan flags skeleton
-    markers and soft self-notes as ``warnings`` (定案乙：不再 hard-fail). When
-    ``ledger_entries`` is not ``None`` (turn evidence ledger connected; empty list
-    still counts), content surfaces are also checked with
-    :func:`~agentcore.runtime.verify.citation_quality_reworks` (file-contract
-    citation gate, not chat ``finish_guard``) — unless ``enforce_citations=False``
-    （调研阶段 A：检索草案跳过
-    成稿引用闸). Callers that cannot supply contents still get existence checks
-    via ``artifacts``; parseability / seam / placeholder / citation checks are
-    enforced when contents are given.
+    requiring the chat body to be JSON. When ``ledger_entries`` is not ``None``
+    (turn evidence ledger connected; empty list still counts), content surfaces are
+    checked with :func:`~agentcore.runtime.verify.citation_quality_reworks`
+    (file-contract citation gate, not chat ``finish_guard``) — unless
+    ``enforce_citations=False`` （调研阶段 A：检索草案跳过成稿引用闸). Callers that
+    cannot supply contents still get existence checks via ``artifacts``; parseability
+    / citation checks are enforced when contents are given.
 
     ``can_execute`` is the turn's execution-class fact (``code_execute`` in the
     worker registry). Default True keeps the with-exec path unchanged. False +
@@ -403,8 +338,6 @@ def check_contract(
     if not _has_product_signal(text, files_written, debrief, deliverable, artifact_contents):
         return ContractVerdict(ok=False, failures=["产出为空"])
     if deliverable is None:
-        web_failures = check_web_seam_failures(artifact_contents)
-        ph = _scan_placeholders_for_contract(artifact_contents)
         cite_failures = (
             _artifact_citation_failures(
                 artifact_contents,
@@ -414,13 +347,6 @@ def check_contract(
             if enforce_citations
             else []
         )
-        failures = [*web_failures, *ph.failures, *cite_failures]
-        landed_web = needs_web_quality_scan(list(artifact_contents or {}))
-        wq_soft: list[str] = []
-        if landed_web:
-            wq = scan_web_quality(artifact_contents)
-            failures.extend(wq.failures)
-            wq_soft.extend(wq.soft_failures)
         table_gap = _no_exec_table_gap(
             can_execute=can_execute,
             artifact_contents=artifact_contents,
@@ -429,25 +355,19 @@ def check_contract(
         )
         extra_w = [table_gap[0]] if table_gap else []
         extra_r = [table_gap[1]] if table_gap else []
-        warnings = [*ph.warnings, *extra_w]
-        warning_rows = [*_unverified_note_rows(ph.warnings), *extra_r]
-        if failures:
+        if cite_failures:
             return ContractVerdict(
                 ok=False,
-                failures=failures,
-                warnings=warnings,
-                warning_rows=warning_rows,
-                soft_failures=wq_soft,
+                failures=cite_failures,
+                warnings=extra_w,
+                warning_rows=extra_r,
             )
-        ok = not wq_soft
         return ContractVerdict(
-            ok=ok,
-            warnings=warnings,
-            warning_rows=warning_rows,
-            soft_failures=wq_soft,
+            ok=True,
+            warnings=extra_w,
+            warning_rows=extra_r,
         )
 
-    exempt_paths = _placeholder_hard_exempt_paths(deliverable, artifact_contents)
     failures = []  # deliverable-specific failures (distinct from early-return above)
     # 交付形态对齐: a FILE deliverable's product lives on disk, so the content checks read
     # the run's landed files alongside the chat body. Prose deliverables (no file channel)
@@ -502,15 +422,6 @@ def check_contract(
             path_mismatch_warnings.append(
                 f"产物未写入约定文档目录 `{dir_pat}`（建议落在此目录下，勿写到工作区根）"
             )
-    # 网页接缝：同批 HTML+CSS/JS（外链表跳过，不瞎拦）。
-    failures.extend(check_web_seam_failures(artifact_contents))
-    # 占位符 / 未核实：内容类文件骨架标记 + 自注一律 warnings（定案乙：不硬拦）。
-    # Internal coordination paths may declare skeleton exemption on the deliverable.
-    ph = _scan_placeholders_for_contract(
-        artifact_contents,
-        hard_exempt_paths=exempt_paths,
-    )
-    failures.extend(ph.failures)
     # 引用 / 书目：落盘成文闸（citation_quality_reworks）；仅台账接通时扫内容类落盘。
     # 调研阶段 A（enforce_citations=False）跳过成稿引用闸。
     if enforce_citations:
@@ -554,7 +465,7 @@ def check_contract(
                 if write_unavailable and landing_failure_kind == "channel_dead":
                     zero_files_warnings.append(
                         f"{_MEMBER_WAVE_UNDELIVERED}：写盘通道不可用"
-                        "（local workspace channel dead / 活性挂起），"
+                        "（工作区/本地文件连不上），"
                         "已跳过 audit JSON 缺产物结构硬闸——请恢复通道后补齐配套 *.audit.json"
                     )
                 elif write_unavailable:
@@ -571,34 +482,16 @@ def check_contract(
                     )
         else:
             failures.extend(gate_fails)
-    soft_failures: list[str] = []
-    # 前端质量：落盘含 web 扩展名即跑静态扫描（语法 / 假联系方式 / anti-slop）。
-    landed_web = needs_web_quality_scan(
-        list(artifact_contents or {})
-        or list(workspace_paths or [])
-    )
-    if landed_web:
-        wq = scan_web_quality(
-            artifact_contents,
-            soft_exempt=bool(deliverable and deliverable.web_quality_soft_exempt),
-            soft_exempt_labels=(
-                deliverable.web_quality_soft_exempt_labels if deliverable else None
-            ),
-        )
-        failures.extend(wq.failures)
-        soft_failures.extend(wq.soft_failures)
     from agentcore.runtime.delegate.delivery_status import (
         REASON_FILES_NOT_LANDED,
         REASON_PATH_HINT,
     )
 
     warnings = [
-        *ph.warnings,
         *zero_files_warnings,
         *path_mismatch_warnings,
     ]
     warning_rows = [
-        *_unverified_note_rows(ph.warnings),
         *_stamp_warning_rows(
             zero_files_warnings, reason=REASON_FILES_NOT_LANDED, severity="warning"
         ),
@@ -615,15 +508,11 @@ def check_contract(
     if table_gap:
         warnings.append(table_gap[0])
         warning_rows.append(table_gap[1])
-    # Soft web-quality hits flip ok so the executor can spend one rework shot;
-    # after that shot the executor demotes them to warnings.
-    ok = not failures and not soft_failures
     return ContractVerdict(
-        ok=ok,
+        ok=not failures,
         failures=failures,
         warnings=warnings,
         warning_rows=warning_rows,
-        soft_failures=soft_failures,
     )
 
 
@@ -686,45 +575,6 @@ def partition_citation_failures(
         else:
             other.append(text)
     return cite, other
-
-
-def paths_from_citation_failures(failures: list[str] | None) -> list[str]:
-    """Extract workspace paths from path-scoped citation failure lines (stable, deduped)."""
-    seen: set[str] = set()
-    out: list[str] = []
-    for raw in failures or []:
-        match = _CITATION_FAILURE_PATH_RE.match(str(raw).strip())
-        if not match:
-            continue
-        path = match.group(1).strip().replace("\\", "/")
-        if not path or path in seen:
-            continue
-        seen.add(path)
-        out.append(path)
-    return out
-
-
-def citation_rework_reread_paths(
-    *,
-    cite_failures: list[str] | None = None,
-    checked_files: list[str] | None = None,
-    artifacts: list[str] | None = None,
-) -> list[str]:
-    """Union of paths a citation rework pass should be allowed to re-read."""
-    seen: set[str] = set()
-    out: list[str] = []
-    for group in (
-        paths_from_citation_failures(cite_failures),
-        checked_files or [],
-        artifacts or [],
-    ):
-        for raw in group:
-            path = (raw or "").strip().replace("\\", "/")
-            if not path or path in seen:
-                continue
-            seen.add(path)
-            out.append(path)
-    return out
 
 
 def strip_invalid_ledger_refs_from_surfaces(
@@ -980,7 +830,7 @@ def _json_artifact_failures(
 
 # Format-only failures eligible for one in-place light repair (缺章节).
 # 已删字数/必含词字段不再进 failures / soft / light_repair。
-# Placeholders, web seam, empty product, missing files, JSON parse, etc. stay on full retry.
+# Placeholders, empty product, missing files, JSON parse, etc. stay on full retry.
 _FORMAT_REPAIR_SECTION_PREFIX = "缺少必备章节："
 
 
@@ -989,7 +839,7 @@ def is_format_repairable(verdict: ContractVerdict) -> bool:
 
     Used by the executor to try one cheap in-place completion before a full
     ``contract.retry`` that re-opens investigation. Mixed or non-format failures
-    (网页接缝 / 网页质量 / 空产出 / JSON …) return False. 已删字数 / 必含词
+    (空产出 / JSON …) return False. 已删字数 / 必含词
     不再出现在 ``failures``。
 
     写盘形态下仅缺配套 ``*.audit.json``（:func:`is_code_audit_landing_absence_failure`）
@@ -1212,9 +1062,9 @@ def format_feedback(
     Soft ``warnings`` (未核实 / 示例自注) are appended when present so the retry
     prompt also carries handoff-style reminders; warnings alone never produce a
     retry instruction (``ok`` stays true — caller may surface them via
-    :func:`format_soft_reminders`). Soft ``soft_failures`` (anti-slop) and
-    ``visual_failures`` (P1c critic) do trigger a retry and are listed alongside
-    hard failures.
+    :func:`format_soft_reminders`). ``soft_failures`` is an unused leftover slot
+    (always empty). ``visual_failures`` (P1c critic, retired) would still list
+    alongside hard failures if a caller filled them.
 
     ``checked_files`` (交付形态对齐: 标注检查通道) lists the run's landed files whose text
     this contract check covered alongside the chat body, so the worker knows WHERE the
@@ -1277,90 +1127,46 @@ def format_soft_reminders(verdict: ContractVerdict) -> str:
 
 
 def describe_deliverable(deliverable: Deliverable | None) -> str:
-    """Render a deliverable as up-front requirements stated in the worker's prompt."""
+    """This node's instance facts for the worker opening (paths / sections).
+
+    Form HOW (look / land files / edit the project) lives on worker identity.
+    Default ``工作稿/`` lives on the workspace fact line. Empty → omit the
+    「交付物规格」channel. JSON / audit-gate / strict / retrieval budget are
+    not rendered here.
+    """
     if deliverable is None:
         return ""
     lines: list[str] = []
-    if deliverable.form == "prose":
-        lines.append("- 交付形态：纯文字（正文直接交付，不要落盘）")
-    elif deliverable.form == "workspace" or deliverable.workspace_native:
-        lines.append(
-            "- 交付形态：改工程（就地改用户工作区源码 / 项目文件，必须写入工作区，"
-            "不要落进 `AgentCore/文档/`）"
-        )
-    else:
-        lines.append("- 交付形态：落盘文件（必须 file_write 写入工作区）")
-    # Markdown section headings and JSON are mutually exclusive acceptance shapes.
-    if deliverable.output_format == "json":
-        if deliverable.artifacts and deliverable.form != "prose":
-            lines.append(
-                "- 产出必须是可解析的 JSON，写入声明的交付物路径"
-                "（不要只贴在回复正文；契约验文件存在 + 可解析）"
-            )
-        else:
-            lines.append("- 产出必须是可解析的 JSON")
-    elif deliverable.required_sections:
+    if deliverable.required_sections and deliverable.output_format != "json":
         lines.append(
             "- 必须包含这些章节（用小标题）：" + "、".join(deliverable.required_sections)
         )
-        # 验收骨架与 contract 同源：把 required_sections 直接铺成 Markdown 小标题骨架，
-        # 避免 worker 只看到「必须包含」枚举却在正文里用错标题 → contract.retry。
-        skeleton = "\n".join(f"## {section}\n" for section in deliverable.required_sections)
-        lines.append("- 建议正文骨架（小标题须与上列一致，可在节内自由展开）：\n" + skeleton)
-    # prose form never surfaces file-landing requirements (even if a stale flag slipped in).
-    if deliverable.form != "prose":
-        if deliverable.form == "workspace" or deliverable.workspace_native:
-            lines.append(
-                "- 产物是工作区原生文件（源码 / 项目文件）：写在工作区里它本该在的位置"
-                "（改存量用 str_replace 就地改），"
-                "不要落进 `AgentCore/文档/`——那是 AI 的过程材料抽屉，不装业务代码"
-            )
-        if deliverable.artifact_dir:
-            lines.append(
-                f"- 建议约定文档落盘目录：`{deliverable.artifact_dir}/`（系统约定；你只定文件名，"
-                "建议写入此目录，勿写到工作区根或其他路径）"
-            )
-        if deliverable.artifacts:
-            # Directory-only gate already covered by artifact_dir line — skip redundant
-            # listing when artifacts is exactly the dir prefix.
-            dir_prefix = (
-                f"{deliverable.artifact_dir.rstrip('/')}/" if deliverable.artifact_dir else ""
-            )
-            listed_paths = [
-                p
-                for p in deliverable.artifacts
-                if p
-                and (
-                    not dir_prefix
-                    or (
-                        p.replace("\\", "/").rstrip("/") + "/" != dir_prefix
-                        and p.replace("\\", "/") != dir_prefix.rstrip("/")
-                    )
+    if deliverable.form == "prose":
+        return "\n".join(lines)
+    dir_norm = (deliverable.artifact_dir or "").replace("\\", "/").rstrip("/")
+    if dir_norm and dir_norm != DRAFTS_DIR:
+        lines.append(f"- 落点目录：`{dir_norm}/`")
+    if deliverable.artifacts:
+        dir_prefix = f"{dir_norm}/" if dir_norm else ""
+        listed_paths = [
+            p
+            for p in deliverable.artifacts
+            if p
+            and (
+                not dir_prefix
+                or (
+                    p.replace("\\", "/").rstrip("/") + "/" != dir_prefix
+                    and p.replace("\\", "/") != dir_norm
                 )
-            ]
-            if listed_paths:
-                listed = "、".join(f"`{p}`" for p in listed_paths)
-                lines.append(f"- 建议把以下交付物路径写入工作区（可用目录或通配）：{listed}")
-            elif not deliverable.artifact_dir:
-                listed = "、".join(f"`{p}`" for p in deliverable.artifacts)
-                lines.append(f"- 建议把以下交付物路径写入工作区（可用目录或通配）：{listed}")
-        elif deliverable.form in ("files", "workspace"):
-            lines.append(
-                "- 必须调用 file_write / str_replace / file_append 把产物写进工作区"
-                "（成品是落盘文件，不能只贴在回复正文里）"
             )
-    if deliverable.code_audit_gate:
-        lines.append(
-            "- 须另交配套 `*.audit.json`：建议先落 findings 骨架再成文 Markdown；"
-            "仅缺配套 JSON 时可补写修复（不整轮作废）。"
-            "findings：severity/verification/verdict/evidence；"
-            "severity 权威=高|中|低|观察·工程，亦接受 P0–P3 / high|medium|low|info 等同义归一；"
-            "高须 trigger_path；安全类或高须 reachability；"
-            "未读全/待核实不得标中+；全量 tsc/pytest 超时不得标中+；"
-            "已读到的 JSON 字段违规仍结构硬拒"
-        )
-    if deliverable.strict:
-        lines.append("- 契约严格模式：返工后仍不达标将判定本节点失败（非软提醒）")
+        ]
+        if listed_paths:
+            listed = "、".join(f"`{p}`" for p in listed_paths)
+            lines.append(f"- 交付路径：{listed}")
+        elif not dir_norm:
+            listed = "、".join(f"`{p}`" for p in deliverable.artifacts if p)
+            if listed:
+                lines.append(f"- 交付路径：{listed}")
     return "\n".join(lines)
 
 

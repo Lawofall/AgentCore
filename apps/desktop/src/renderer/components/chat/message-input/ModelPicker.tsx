@@ -11,6 +11,11 @@ import {
 import { useLlmModelProfiles } from "@/hooks/useLlmModelProfiles";
 import { useLlmProviders } from "@/hooks/useLlmProviders";
 import { useModels } from "@/hooks/useModels";
+import {
+  lookupComposerProfile,
+  resolveComposerProfileId,
+  useComposerProfileDraftStore,
+} from "@/lib/composerModelProfile";
 import { notifyError } from "@/lib/toast";
 import { setConversationModelProfile } from "@/services/conversations";
 import {
@@ -122,15 +127,13 @@ export function ModelPicker({ disabled }: { disabled?: boolean }) {
   const plus = useComposerPlusRow("model");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
-  /** New-chat draft: unset → fall back to last-used / account default display; profile → pick. */
-  const [draft, setDraft] = useState<
-    { kind: "unset" } | { kind: "profile"; id: string }
-  >({ kind: "unset" });
+  const draftProfileId = useComposerProfileDraftStore((s) => s.profileId);
+  const setDraftProfileId = useComposerProfileDraftStore((s) => s.setProfileId);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on conversation switch
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversationId is the reset key
   useEffect(() => {
-    setDraft({ kind: "unset" });
-  }, [conversationId]);
+    setDraftProfileId(null);
+  }, [conversationId, setDraftProfileId]);
 
   const catalogModels = useMemo(() => catalog?.models ?? [], [catalog]);
   const profiles = profileList?.data ?? [];
@@ -141,29 +144,20 @@ export function ModelPicker({ disabled }: { disabled?: boolean }) {
     : undefined;
   const overrideId = activeConv?.modelProfileId?.trim() || null;
 
-  const isNewChat = !conversationId;
-  const lastUsedId = getLastUsedProfileId();
-  const validLastUsed =
-    lastUsedId && profiles.some((p) => p.id === lastUsedId)
-      ? lastUsedId
-      : undefined;
-  const suggestionId = isNewChat
-    ? draft.kind === "profile"
-      ? draft.id
-      : (validLastUsed ?? null)
-    : null;
-
-  /** Session / draft profile id; null → show account default name (no live-follow entry). */
-  const selectedId = overrideId ?? suggestionId;
+  const selectedId = resolveComposerProfileId({
+    conversationId,
+    conversationProfileId: overrideId,
+    draftProfileId,
+    lastUsedProfileId: getLastUsedProfileId(),
+    profileIds: profiles.map((p) => p.id),
+  });
   /** Highlight which row is active; fall back to account default when none chosen yet. */
   const highlightId = selectedId ?? accountDefault?.id ?? null;
 
-  const displayProfile = useMemo(() => {
-    if (selectedId) {
-      return profiles.find((p) => p.id === selectedId) ?? accountDefault;
-    }
-    return accountDefault;
-  }, [selectedId, profiles, accountDefault]);
+  const displayProfile = useMemo(
+    () => lookupComposerProfile(selectedId, profiles, accountDefault),
+    [selectedId, profiles, accountDefault],
+  );
 
   const visibleProfiles = useMemo(
     () => pickerProfiles(profiles, overrideId),
@@ -185,7 +179,7 @@ export function ModelPicker({ disabled }: { disabled?: boolean }) {
     if (plus.mode === "panel" || plus.mode === "row") plus.close();
     else setOpen(false);
     if (!conversationId) {
-      setDraft({ kind: "profile", id: profileId });
+      setDraftProfileId(profileId);
       return;
     }
     setPending(true);

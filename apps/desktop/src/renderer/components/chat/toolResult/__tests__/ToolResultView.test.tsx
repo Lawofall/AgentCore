@@ -272,24 +272,7 @@ describe("ToolResultView · read_url", () => {
   });
 });
 
-describe("ToolResultView · file_read ceiling guidance", () => {
-  it("renders ceiling cheap-hit as warning, not destructive", () => {
-    const { container } = render(
-      <ToolResultView
-        data={data({
-          toolName: "file_read",
-          result:
-            "已多次读取 `doc.md`（本 run 上限 5 次）。请求范围仍在对话投影窗中，本次不重复灌入全文。请直接使用已有正文，勿再读全文。",
-          status: "success",
-        })}
-      />,
-    );
-    const pre = container.querySelector("pre");
-    expect(pre?.textContent).toContain("不重复灌入全文");
-    expect(pre?.className).toContain("text-warning");
-    expect(pre?.className).not.toContain("text-destructive");
-  });
-
+describe("ToolResultView · error / redirect faces", () => {
   it("keeps real file_read errors destructive", () => {
     const { container } = render(
       <ToolResultView
@@ -369,31 +352,82 @@ describe("ToolResultView · file_read ceiling guidance", () => {
   });
 });
 
-describe("ToolResultView · test_run budget exceeded", () => {
-  it("shows incomplete banner and muted Timeout stderr (not fault red)", () => {
+describe("ToolResultView · test_run incomplete", () => {
+  it("shows 验证未完成 banner when budget_exceeded has no timeout_kind", () => {
     const { container } = render(
       <ToolResultView
         data={data({
           toolName: "test_run",
-          result: "验证未在 300s 预算内完成（验证未完成，非工具故障）",
+          result: "验证未取得完整结果（已中止）",
           status: "error",
           display: {
             check: "typecheck",
             command: "npx tsc --noEmit",
             exit_code: -1,
             stdout: "",
-            stderr: "Timeout: execution exceeded 300s",
+            stderr: "Timeout: no timeout_kind",
             budget_exceeded: true,
           },
         })}
       />,
     );
-    expect(container.textContent).toContain("验证未完成（预算耗尽）");
+    expect(container.textContent).toContain("验证未完成");
+    expect(container.textContent).not.toContain("预算耗尽");
     const stderr = Array.from(container.querySelectorAll("pre")).find((p) =>
       p.textContent?.includes("Timeout"),
     );
     expect(stderr?.className).toContain("text-muted-foreground");
     expect(stderr?.className).not.toContain("text-destructive");
+  });
+
+  it("shows idle hang banner for timeout_kind idle", () => {
+    const { container } = render(
+      <ToolResultView
+        data={data({
+          toolName: "test_run",
+          result: "执行长时间无输出，已按挂起中止",
+          status: "error",
+          display: {
+            check: "typecheck",
+            command: "npx tsc --noEmit",
+            exit_code: -1,
+            stdout: "",
+            stderr: "idle timeout",
+            budget_exceeded: true,
+            timeout_kind: "idle",
+          },
+        })}
+      />,
+    );
+    expect(container.textContent).toContain("执行无响应（无输出已中止）");
+    expect(container.textContent).not.toContain("预算耗尽");
+    expect(container.innerHTML).toContain("text-warning");
+    expect(container.querySelector(".text-destructive")).toBeNull();
+  });
+
+  it("shows disaster wall banner for timeout_kind disaster", () => {
+    const { container } = render(
+      <ToolResultView
+        data={data({
+          toolName: "test_run",
+          result: "已跑满灾难顶，强制中止",
+          status: "error",
+          display: {
+            check: "typecheck",
+            command: "npx tsc --noEmit",
+            exit_code: -1,
+            stdout: "",
+            stderr: "forced stop",
+            budget_exceeded: true,
+            timeout_kind: "disaster",
+          },
+        })}
+      />,
+    );
+    expect(container.textContent).toContain("执行已强制中止");
+    expect(container.textContent).not.toContain("预算耗尽");
+    expect(container.innerHTML).toContain("text-warning");
+    expect(container.querySelector(".text-destructive")).toBeNull();
   });
 });
 

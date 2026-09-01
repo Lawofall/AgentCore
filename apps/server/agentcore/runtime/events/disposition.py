@@ -59,7 +59,7 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
         "run 未执行（cascade/abort）——重放「未执行」，避免假排队中",
     ),
     EventType.RUN_PROGRESS: (Disposition.DURABLE, "run 阶段进度里程碑——重放过程节拍"),
-    EventType.BATCH_METRICS: (Disposition.DURABLE, "调度埋点量化——run-detail 诊断信息重放"),
+    EventType.BATCH_METRICS: (Disposition.DURABLE, "调度埋点量化——journal 重放；产品不展示"),
     EventType.DEBATE_RESULT: (Disposition.DURABLE, "辩论最终裁决——重放结论"),
     EventType.TOOL_USE_START: (Disposition.DURABLE, "工具调用开始——重放工具时间线条目"),
     EventType.TOOL_USE_END: (Disposition.DURABLE, "工具调用结束（结果）——重放工具结果"),

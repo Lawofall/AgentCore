@@ -96,8 +96,7 @@ def emit_batch_metrics(
     # turn-level roll-up on the accumulator (rolls up to the captain via absorb_children).
     tool._acc.collab["scope_signals"] += m.scope_escalations
     tool._acc.collab["escalations"] += m.escalations
-    # 深层诊断指标 (前端UX设计.md §十): surface the scheduler snapshot to the client so
-    # 诊断模式 shows it in run detail (journaled → replays on reload). Whole-batch verbatim
+    # 调度埋点：journaled → 重放；采集仍在、产品不展示。Whole-batch verbatim
     # — the host already logged it; this just also hands it to the UI fold.
     tool._sink.emit(batch_metrics_event(execution_id=execution_id, metrics=dataclasses.asdict(m)))
 
@@ -264,10 +263,8 @@ async def handle_partial_failure(
     if session is not None:
         post_session_all_completed(
             session,
-            output=synthesis.prose,
-            roster_text=synthesis.roster_text,
+            output=synthesis.text,
             roster_facts=synthesis.roster_facts,
-            closing_text=synthesis.closing_text,
             user_facts=collect_harvest_user_facts(plan, results),
         )
     from agentcore.runtime.delegate.delivery_status import build_delivery_status
@@ -371,10 +368,8 @@ async def finalize_successful_drive(
     if session is not None:
         post_session_all_completed(
             session,
-            output=synthesis.prose,
-            roster_text=synthesis.roster_text,
+            output=synthesis.text,
             roster_facts=synthesis.roster_facts,
-            closing_text=synthesis.closing_text,
             user_facts=collect_harvest_user_facts(plan, results),
         )
     return ToolResult(

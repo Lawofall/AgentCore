@@ -18,7 +18,7 @@ from agentcore.runtime.audit.projector import (
     project_permission_axes_changed,
 )
 from agentcore.runtime.audit.recorder import AuditRecorder, current_audit_recorder
-from agentcore.tools.builtin.code_execute import CodeExecuteTool
+from agentcore.tools.builtin.run_short import execute_short
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.gvisor import GVisorSandbox
 from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
@@ -116,8 +116,8 @@ async def test_full_trust_journal_tool_side_effect_without_delegate():
                 "kind": "tool_use_start",
                 "payload": {
                     "tool_call_id": "tc-1",
-                    "tool_name": "code_execute",
-                    "arguments": {"code": "print(1)"},
+                    "tool_name": "run",
+                    "arguments": {"command": "print(1)"},
                     "run_id": "r1",
                 },
             }
@@ -127,7 +127,7 @@ async def test_full_trust_journal_tool_side_effect_without_delegate():
                 "kind": "tool_use_end",
                 "payload": {
                     "tool_call_id": "tc-1",
-                    "tool_name": "code_execute",
+                    "tool_name": "run",
                     "status": "success",
                     "run_id": "r1",
                 },
@@ -168,7 +168,6 @@ async def test_code_execute_network_mode_follows_axes(tmp_path: Path):
             )
 
     backend = ServerWorkspace(root=tmp_path, sandbox=_CaptureSandbox())
-    tool = CodeExecuteTool(location="server")
 
     ctx_trust = ToolContext.create(
         execution_id="e",
@@ -178,7 +177,11 @@ async def test_code_execute_network_mode_follows_axes(tmp_path: Path):
         user_id="u",
         permission_axes="{\"file_write\":\"session\",\"command\":\"auto\",\"host\":\"session\"}",
     )
-    await tool.execute({"code": "print(1)", "language": "python"}, ctx_trust)
+    await execute_short(
+        {"code": "print(1)", "language": "python"},
+        ctx_trust,
+        location="server",
+    )
     assert captured[-1].network_mode == "restricted"
 
     ctx_ws = ToolContext.create(
@@ -189,5 +192,9 @@ async def test_code_execute_network_mode_follows_axes(tmp_path: Path):
         user_id="u",
         permission_axes="{\"file_write\":\"ask\",\"command\":\"ask\",\"host\":\"off\"}",
     )
-    await tool.execute({"code": "print(1)", "language": "python"}, ctx_ws)
+    await execute_short(
+        {"code": "print(1)", "language": "python"},
+        ctx_ws,
+        location="server",
+    )
     assert captured[-1].network_mode == "none"

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from agentcore.runtime.coordination.session import (
     DEFAULT_COORDINATION_BUDGET,
-    DEFAULT_WORKER_TIMEOUT_S,
     MAX_COORDINATION_BUDGET,
     CoordinationEvent,
     CoordinationEventKind,
@@ -34,7 +33,6 @@ from agentcore.runtime.coordination.session import (
 __all__ = [
     "DEFAULT_COORDINATION_BUDGET",
     "MAX_COORDINATION_BUDGET",
-    "DEFAULT_WORKER_TIMEOUT_S",
     "CoordinationEvent",
     "CoordinationEventKind",
     "CoordinationSession",

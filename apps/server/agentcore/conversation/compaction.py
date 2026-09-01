@@ -116,6 +116,8 @@ _COMPACT_SYSTEM_PROMPT = """\
 只输出摘要正文本身，不要任何前后缀、解释或寒暄。用对话所使用的语言书写。
 
 摘要只留会改变以后行动的信息。过程与已完成步骤不进「已确立的事实」。\
+文件工作集不是过程——用户消息里的【本批涉及的文件】是 journal 抽出的权威路径清单，\
+必须并入「涉及的文件与标识符」，照抄、不得当过程省略。\
 「关键决策」只留仍生效的决定与否决，废选项不要写成还要选的活路。\
 「未决」只留此刻仍开放的；后续原文已解决的，整段省略。
 
@@ -180,7 +182,11 @@ def compaction_message_due(
     )
 
 
-def _render_fold(old_summary: str, messages: Sequence[Message]) -> str:
+def _render_fold(
+    old_summary: str,
+    messages: Sequence[Message],
+    file_ledger: str = "",
+) -> str:
     """The user-turn payload: the prior rolling summary + the片段 to merge into it."""
     lines: list[str] = []
     for m in messages:
@@ -198,8 +204,15 @@ def _render_fold(old_summary: str, messages: Sequence[Message]) -> str:
                 lines.append(f"assistant：（失败）{fail}")
     convo = "\n\n".join(lines) if lines else "（无正文）"
     prior = old_summary.strip() or "（无，这是本对话的首次压缩）"
+    ledger = file_ledger.strip()
+    files = (
+        f"# 本批涉及的文件（journal 权威路径，必须并入「涉及的文件与标识符」）\n{ledger}\n\n"
+        if ledger
+        else ""
+    )
     return (
         f"# 已有滚动摘要\n{prior}\n\n"
+        f"{files}"
         f"# 待并入摘要的更早对话片段（按时间先后）\n{convo}\n\n"
         "请输出更新后的滚动摘要。"
     )
@@ -225,6 +238,7 @@ async def _summarize(
     model: str,
     conversation_id: str,
     user_waiting: bool = False,
+    file_ledger: str = "",
 ) -> str:
     """One flash, non-thinking call → the updated rolling summary ("" on failure).
 
@@ -240,7 +254,10 @@ async def _summarize(
         select_call("compaction", model),
         [
             LLMMessage(role="system", content=system),
-            LLMMessage(role="user", content=_render_fold(old_summary, messages)),
+            LLMMessage(
+                role="user",
+                content=_render_fold(old_summary, messages, file_ledger=file_ledger),
+            ),
         ],
         stream=False,
     )
@@ -335,6 +352,15 @@ async def compact_conversation(
             new_watermark = fold_msgs[-1].created_at
             old_summary = conv.compaction_summary or ""
             user_id = conv.user_id
+            fold_turn_ids = [
+                m.id
+                for m in fold_msgs
+                if getattr(m, "role", None) == "assistant" and getattr(m, "id", None)
+            ]
+
+        from agentcore.runtime.context.working_set import build_fold_file_ledger
+
+        file_ledger = await build_fold_file_ledger(fold_turn_ids)
 
         async def _runner(credentials: LLMCredentials) -> str:
             model = resolve_user_model(credentials)
@@ -347,6 +373,7 @@ async def compact_conversation(
                     model=model,
                     conversation_id=conversation_id,
                     user_waiting=user_waiting,
+                    file_ledger=file_ledger,
                 )
             finally:
                 close = getattr(provider, "close", None)

@@ -355,11 +355,12 @@ def test_sidecar_withholds_cloud_execution_even_when_unprobed(
     assert code_execution_enabled_for(_CloudBackend()) is False
     assert code_execution_enabled_for(LocalBackend()) is True
     names = set(build_worker_registry(backend=_CloudBackend()).names)
+    assert "run" not in names
     assert "code_execute" not in names
     assert "test_run" not in names
     assert "browser" not in names
     local_names = set(build_worker_registry(backend=LocalBackend()).names)
-    assert "code_execute" in local_names
+    assert "run" in local_names
     assert "browser" not in local_names
 
 

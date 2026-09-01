@@ -71,7 +71,8 @@ class TurnOutcome:
     """harness 把一次真实运行归一化成可断言的事实。
 
     单 Agent 路径的 ``finish_reason`` 优先取引擎经 ``ReactLoopOut.finish_override`` 抬出的非默认
-    终态（``degraded`` / ``unproductive``），无则按轮数推导（``end_turn`` / ``max_rounds``）；
+    终态（``degraded`` / ``unproductive``），无则按轮数推导：``max_rounds > 0`` 且 rounds
+    达上限 → ``max_rounds``，否则 ``end_turn``（含 chat/agent ``max_rounds=0`` 无熔断）；
     ``roster`` 取自 ``run_plan.agents[*].role``（team 路径）；``cost_usd`` 单 Agent 现算、
     team 读 ``cost_runs``。
     ``plan_runs`` / ``plan_type`` / ``collab_interactions`` 来自 ``RecordingSink`` 对 SSE 的截获

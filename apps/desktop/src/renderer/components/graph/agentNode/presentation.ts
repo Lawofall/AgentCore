@@ -1,7 +1,14 @@
-import { toolPhaseText } from "@/components/chat/message-bubble/constants";
+import {
+  composingWriteChars,
+  toolPhaseText,
+} from "@/components/chat/message-bubble/constants";
 import { isWitnessSeatRun } from "@/components/graph/helpers";
 import { statusPillSoft } from "@/components/ui/tone-presets";
-import { formatCompact, formatDuration } from "@/lib/format";
+import {
+  formatCompact,
+  formatDuration,
+  stripDurationFaceSuffix,
+} from "@/lib/format";
 import { STANCE_META, toolLabel } from "@/stores/execution";
 import { visibleFaceBadgeKeys } from "./faceBudget";
 import {
@@ -91,7 +98,7 @@ export function buildAgentNodePresentation(
   const faceHint =
     d.isRevision && !debate ? revisionFaceHint(d.revisionSummary) : null;
 
-  const ariaLabel = `${d.role}，${statusFace.text.replace(/ · \d+s$/, "")}，模型 ${modelText}，Token ${tokenText}${
+  const ariaLabel = `${d.role}，${stripDurationFaceSuffix(statusFace.text)}，模型 ${modelText}，Token ${tokenText}${
     d.costText ? `，成本 ${d.costText}` : ""
   }${durationText ? `，用时 ${durationText}` : ""}${
     d.toolCount > 0 ? `，工具 ${d.toolCount} 次` : ""
@@ -116,13 +123,13 @@ export function buildAgentNodePresentation(
         : ""
   }${d.debateCrossExamMark ? `，${d.debateCrossExamMark.label}` : ""}`;
 
+  const writeChars = liveTool
+    ? composingWriteChars(liveTool.toolName, liveTool.chars)
+    : null;
   const peekActivity = liveTool
-    ? {
-        heading: "正在生成",
-        text: `${toolLabel(liveTool.toolName)}${
-          liveTool.chars > 0 ? ` · ${formatCompact(liveTool.chars)} 字` : ""
-        }`,
-      }
+    ? writeChars
+      ? { heading: toolLabel(liveTool.toolName), text: writeChars }
+      : null
     : liveToolExec
       ? {
           heading: toolPhaseText(liveToolExec.phase) ?? "Working",

@@ -1,12 +1,13 @@
 """Built-in tool: code_diagnostics — language-service inner verify loop (TS/JS).
 
-Complements outer-loop ``test_run``（验收员 / typecheck·build·test）:
+Complements outer-loop ``run``（验收员 / typecheck·build·test）:
 
 - **Inner** ``code_diagnostics`` — desktop language service for landed / named paths
-- **Outer** ``test_run`` — project typecheck / build / test exit 0
+- **Outer** ``run`` — project typecheck / build / test exit 0
 
-Cloud ``ServerWorkspace`` returns ``unavailable`` honestly; never fakes a full
-``tsc`` as the inner loop. Approval NEVER (read-only probe).
+Cloud desks return ``unavailable`` honestly; sidecar / 过桥 route to the
+desktop language service. Never fakes a full ``tsc`` as the inner loop.
+Approval NEVER (read-only probe).
 """
 
 from __future__ import annotations
@@ -30,8 +31,9 @@ from agentcore.tools.registration import (
 from agentcore.workspace.limits import (
     channel_dead_error_message,
     channel_dead_retire_metadata,
-    is_channel_dead_detail,
     is_liveness_timeout_detail,
+    is_presence_disconnected_detail,
+    is_workspace_reconnect_detail,
     op_liveness_timeout_metadata,
 )
 from agentcore.workspace.protocol import WorkspaceError
@@ -73,8 +75,8 @@ def _format_full_output(payload: dict[str, Any], *, paths: list[str]) -> str:
         detail = reason or "语言服务不可用"
         return (
             f"内环诊断不可用：{detail}\n"
-            "说明：云端 / 未装配语言服务时诚实降级；"
-            "验收请用外环 test_run（typecheck/build/test）。"
+            "说明：无语言服务通道时诚实降级；"
+            "验收请用 run（typecheck/build/test）。"
             + (f"\n请求路径：{', '.join(paths)}" if paths else "")
         )
 
@@ -134,9 +136,7 @@ class CodeDiagnosticsTool:
             description=(
                 "内环语言服务诊断（本地 TS/JS）：对指定路径或本 run 已落盘的 "
                 f"{suffixes} 文件拉取 error/warning。"
-                "写盘成功后工具回执常已附带短诊断；本工具用于主动复查。"
-                "云端工作区诚实返回 unavailable——勿用全仓 typecheck 冒充内环；"
-                "验收请走外环 test_run。"
+                "写盘回执常已附带短诊断；主动复查用本工具。验收用 run。"
             ),
             parameters={
                 "type": "object",
@@ -199,7 +199,7 @@ class CodeDiagnosticsTool:
             payload = await diag_fn(paths)
         except WorkspaceError as e:
             detail = str(e)
-            if is_channel_dead_detail(detail):
+            if is_presence_disconnected_detail(detail):
                 return ToolResult(
                     tool_call_id="",
                     success=False,
@@ -208,6 +208,14 @@ class CodeDiagnosticsTool:
                     duration_ms=int((time.monotonic() - start) * 1000),
                     metadata=channel_dead_retire_metadata(),
                     contract_failure=True,
+                )
+            if is_workspace_reconnect_detail(detail):
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output="",
+                    error=detail,
+                    duration_ms=int((time.monotonic() - start) * 1000),
                 )
             if is_liveness_timeout_detail(detail):
                 return ToolResult(

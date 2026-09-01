@@ -94,7 +94,7 @@ def _synthetic_recording() -> dict:
         _e("run_reasoning_delta", {"run_id": "r1", "agent_id": "w1", "delta": "查。"}, 25),
         # 白名单 EPHEMERAL：oracle 写 agent.toolProgress。
         _e("run_tool_progress", {"run_id": "r1", "agent_id": "w1",
-                                 "tool_name": "code_execute", "chars": 64}, 30),
+                                 "tool_name": "run", "chars": 64}, 30),
         _e("run_output_delta", {"run_id": "r1", "agent_id": "w1", "delta": "worker 草稿"}, 35),
         _e("run_output_reset", {"run_id": "r1", "agent_id": "w1", "reason": "retry"}, 40),
         _e("run_output_delta", {"run_id": "r1", "agent_id": "w1", "delta": "worker 结论。"}, 45),
@@ -253,7 +253,7 @@ def test_run_tool_progress_whitelisted_for_mid_tool_pause():
                     _e("run_plan", _run_plan_payload(), 5),
                     _e("run_started", {"run_id": "r1", "agent_id": "w1", "kind": "agent"}, 10),
                     _e("run_tool_progress", {"run_id": "r1", "agent_id": "w1",
-                                             "tool_name": "code_execute", "chars": 32}, 15),
+                                             "tool_name": "run", "chars": 32}, 15),
                     _e("checkpoint_required", {"checkpoint_id": "cp-mid", "title": "确认",
                                                "description": "", "risk": "medium"}, 20),
                     _e("message_end", {"finish_reason": "paused", "usage": _USAGE,
@@ -265,7 +265,7 @@ def test_run_tool_progress_whitelisted_for_mid_tool_pause():
     fx = cut_recording_to_fixture(recording, name="mid_tool_pause")
     assert fx["projected"]["status"] == "paused"
     agent = next(a for a in fx["projected"]["agents"] if a["id"] == "w1")
-    assert agent["toolProgress"] == {"toolName": "code_execute", "chars": 32}
+    assert agent["toolProgress"] == {"toolName": "run", "chars": 32}
     # 反证：若把它从 durable face 里去掉，裁判态即漂移（证明其入表必要性）。
     without = [ev for ev in fx["events"] if ev["type"] != "run_tool_progress"]
     drifted = next(a for a in project_turn(without)["agents"] if a["id"] == "w1")

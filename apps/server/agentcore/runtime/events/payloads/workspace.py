@@ -72,7 +72,7 @@ class BoardReadRequiredPayload(WirePayload):
 
 class DesktopNotifyRequiredPayload(WirePayload):
     """Transport-only client-tool request: show an OS notification on the bound desktop
-    (`desktop_notify` worker tool). NOT journaled."""
+    (`desktop_notify`). NOT journaled."""
 
     request_id: str
     conversation_id: str

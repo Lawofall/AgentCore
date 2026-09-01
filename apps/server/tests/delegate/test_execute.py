@@ -135,11 +135,8 @@ async def test_single_worker_keeps_plain_worker_identity():
     assert all("正文直达用户" not in sys for sys in _system_prompts(provider))
 
 
-async def test_single_worker_failure_still_folds_to_ceo():
-    """Worker 硬失败（缺必备章节 + strict）→ 仍走 format_for_ceo，不直出。
-
-    定案乙后 min_length 已 soft；改用仍硬拦的 required_sections。
-    """
+async def test_single_worker_section_miss_still_folds_to_ceo():
+    """Worker 缺必备章节（即使带 strict）→ 软完成，仍走 format_for_ceo，不直出。"""
     t = tool(Provider(["X"]))
     result = await t.execute(
         {
@@ -770,7 +767,9 @@ async def test_playbook_xor_and_hoist_conflict_skip_circuit_breaker():
 
 def test_schema_cues_xor_and_top_level_completion_criteria():
     t = tool(Provider([]))
-    assert "二选一" in t.schema.description
+    playbook_desc = t.schema.parameters["properties"]["playbook"]["description"]
+    assert "二选一" in playbook_desc
+    assert "二选一" not in t.schema.description
     props = t.schema.parameters["properties"]
     assert "completion_criteria" not in props
     assert "finalize" not in props

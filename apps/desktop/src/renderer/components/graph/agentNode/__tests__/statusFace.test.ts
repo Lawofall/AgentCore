@@ -21,6 +21,13 @@ describe("statusFaceLabel", () => {
     expect(face.tickElapsed).toBe(true);
   });
 
+  it("formats live elapsed past a minute like completed duration", () => {
+    expect(
+      statusFaceLabel("running", null, 968, null, false, null, "thinking").text,
+    ).toBe("思考中 · 16m 8s");
+    expect(statusFaceLabel("completed", 968_000).text).toBe("已完成 · 16m 8s");
+  });
+
   it("omits elapsed suffix before 1 second", () => {
     expect(statusFaceLabel("running", null, 0).text).toBe("执行中");
   });
@@ -382,7 +389,7 @@ describe("buildAgentNodePresentation revision face", () => {
         debateCrossExamMark: { label: "含质询", mode: "suffix" },
       }),
     );
-    expect(done.statusFace.text).toBe("已完成 · 1m28s · 含质询");
+    expect(done.statusFace.text).toBe("已完成 · 1m 28s · 含质询");
 
     const failed = buildAgentNodePresentation(
       baseNode({
@@ -493,6 +500,32 @@ describe("buildAgentNodePresentation revision face", () => {
     );
     expect(winding.statusFace.text).toBe("收尾中");
     expect(winding.liveThinking).toBe("");
+  });
+
+  it("composing peek: write family is label + 字, no 正在生成", () => {
+    const p = buildAgentNodePresentation(
+      baseNode({
+        status: "running",
+        isAnimating: true,
+        toolProgress: { toolName: "file_write", chars: 2100 },
+      }),
+    );
+    expect(p.peekActivity).toEqual({
+      heading: "Write file",
+      text: "2.1k 字",
+    });
+  });
+
+  it("composing peek: non-write has no 字 and no verb heading", () => {
+    const p = buildAgentNodePresentation(
+      baseNode({
+        status: "running",
+        isAnimating: true,
+        toolProgress: { toolName: "web_search", chars: 1280 },
+      }),
+    );
+    expect(p.peekActivity).toBeNull();
+    expect(p.liveTool).toEqual({ toolName: "web_search", chars: 1280 });
   });
 });
 

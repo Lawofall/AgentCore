@@ -7,7 +7,6 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from agentcore.core.logging import get_logger
-from agentcore.workspace.channel import index_io_mode
 from agentcore.workspace.protocol import CodeIndexStatus
 
 if TYPE_CHECKING:
@@ -210,8 +209,7 @@ class IndexMaintainer:
                 self._force = False
                 logger.info("workspace.index_build_start", force=force)
                 started = time.perf_counter()
-                with index_io_mode():
-                    updated = await self._manager.ensure_index(backend, force=force)
+                updated = await self._manager.ensure_index(backend, force=force)
                 duration_ms = int((time.perf_counter() - started) * 1000)
                 logger.info(
                     "workspace.index_build_complete",

@@ -17,8 +17,6 @@ from agentcore.runtime.skills.long_form_writing import (
 from agentcore.runtime.skills.product_help import (
     _PRODUCT_BUG_TRIAGE,
     _PRODUCT_HELP,
-    _PRODUCT_HELP_FAQ,
-    _PRODUCT_HELP_MAP,
 )
 from agentcore.runtime.skills.registry import (
     AUDIENCE_CEO_ONLY,
@@ -27,13 +25,12 @@ from agentcore.runtime.skills.registry import (
     SystemSkill,
 )
 from agentcore.runtime.skills.revising_a_product import _REVISING_A_PRODUCT
+from agentcore.runtime.skills.run import _RUN
 from agentcore.runtime.skills.team_cross_folder import _TEAM_CROSS_FOLDER
 from agentcore.runtime.skills.team_delivery_env import _TEAM_DELIVERY_ENV
 from agentcore.runtime.skills.team_orchestration import (
     _TEAM_ORCHESTRATION_ADVANCED,
 )
-from agentcore.runtime.skills.verify_and_fix import _VERIFY_AND_FIX
-from agentcore.runtime.skills.work_discipline import _WORK_DISCIPLINE
 
 # --- The system skills (single source of truth) -----------------------------
 # Catalog summaries: name-like (what this is), not a 19-way scene classifier.
@@ -54,36 +51,19 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     ),
     SystemSkill(
         name="team_delivery_env",
-        summary="Office / 空桌 / 本机进桌",
+        summary="交付环境",
         body=_TEAM_DELIVERY_ENV,
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
-        name="work_discipline",
-        summary="工程纪律 / Windows .bat",
-        body=_WORK_DISCIPLINE,
-    ),
-    SystemSkill(
         name="product_help",
-        summary="本产品用法 / 官网 / 下载",
+        summary="本产品用法",
         body=_PRODUCT_HELP,
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
-        name="product_help_map",
-        summary="界面入口地图",
-        body=_PRODUCT_HELP_MAP,
-        audience=AUDIENCE_CEO_ONLY,
-    ),
-    SystemSkill(
-        name="product_help_faq",
-        summary="产品 FAQ（官网 / Cursor）",
-        body=_PRODUCT_HELP_FAQ,
-        audience=AUDIENCE_CEO_ONLY,
-    ),
-    SystemSkill(
         name="product_bug_triage",
-        summary="用户报产品故障",
+        summary="产品故障排查",
         body=_PRODUCT_BUG_TRIAGE,
         audience=AUDIENCE_CEO_ONLY,
     ),
@@ -122,12 +102,10 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         requires_tools=("ask_user",),
     ),
     SystemSkill(
-        name="verify_and_fix",
-        summary="改完验测并修失败",
-        body=_VERIFY_AND_FIX,
-        # Consult is CEO+worker. Body is the worker loop; CEO still consults to brief.
-        # Do not gate on ``delegate`` (would hide it from workers) or ``test_run``
-        # (CEO has no test_run → skill would vanish from the supervisor catalog).
+        name="run",
+        summary="跑命令 / 启服",
+        body=_RUN,
+        requires_tools=("run",),
     ),
     SystemSkill(
         name="long_form_writing",
@@ -138,17 +116,17 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     ),
     SystemSkill(
         name="long_form_landing",
-        summary="超长落盘（队员写文件）",
+        summary="超长落盘",
         body=_LONG_FORM_LANDING,
         audience=AUDIENCE_WORKER_ONLY,
     ),
     SystemSkill(
         name="data_file_landing",
-        summary="账单/报表 → 可打开表",
+        summary="表格落盘",
         body=_DATA_FILE_LANDING,
         # Consult is CEO+worker. Body is the worker loop; CEO still consults to brief.
-        # Do not gate on ``code_execute`` (CEO has none → skill would vanish from
-        # the supervisor catalog).
+        # Do not gate on ``run``: this turn may have no execution assembled; the
+        # brief still belongs in the supervisor catalog.
     ),
     SystemSkill(
         name="deep_multi_lens_research",

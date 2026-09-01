@@ -148,8 +148,8 @@ export function ConnectorsPage() {
       />
 
       <p className="max-w-2xl text-xs text-muted-foreground">
-        配置本机 stdio MCP Server。启用后，下一轮协作中的 worker
-        可发现并调用其工具（一律需审批；CEO 不直持）。
+        配置本机 stdio MCP Server。启用后，下一轮协作中 CEO 与队员均可发现并调用
+        （一律需审批；开场不灌工具表）。
       </p>
 
       {error ? (

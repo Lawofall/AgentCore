@@ -83,7 +83,7 @@ afterEach(() => {
 });
 
 describe("midFlight · 主路门 + store 断言", () => {
-  it("经典排队：turn_queued 无用户泡仅条；ack 即 resolve；started 后插泡", async () => {
+  it("经典排队：turn_queued 即入时间线用户泡；ack 即 resolve；started 不双泡", async () => {
     const turn1Token = claimPrimaryStream(CID);
     const conv = useConversationStore.getState();
     conv.addMessage(
@@ -128,12 +128,12 @@ describe("midFlight · 主路门 + store 断言", () => {
       expect(useQueuedTurnsStore.getState().list(CID)).toHaveLength(1);
     });
     expect(notifyInfoMock).not.toHaveBeenCalled();
-    // queued 后无用户泡；仅 QueuedTurnsBar
+    // queued ack 即入主时间线用户泡 + 条
     expect(
       getRuntime(CID).messages.some(
         (m) => m.role === "user" && m.content === "第二问",
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(useQueuedTurnsStore.getState().list(CID)).toHaveLength(1);
     expect(useQueuedTurnsStore.getState().list(CID)[0]?.content).toBe("第二问");
     // ack 后 composer 可清（Promise 已 settle）
@@ -155,13 +155,13 @@ describe("midFlight · 主路门 + store 断言", () => {
     sse.push(ev("message_start", { message_id: "srv-turn2" }));
     await new Promise((r) => setTimeout(r, 10));
 
-    // 缓冲中：轻态仍在（尚未 flush）；用户泡仍未进时间线
+    // 缓冲中：轻态仍在（尚未 flush）；用户泡已在（ack 入场），started 未放行
     expect(useQueuedTurnsStore.getState().list(CID)).toHaveLength(1);
     expect(
-      getRuntime(CID).messages.some(
+      getRuntime(CID).messages.filter(
         (m) => m.role === "user" && m.content === "第二问",
       ),
-    ).toBe(false);
+    ).toHaveLength(1);
 
     // 不变式 c：turn1 正文未被 resetAssistant 清掉
     const midRace = getRuntime(CID).messages;
@@ -208,9 +208,9 @@ describe("midFlight · 主路门 + store 断言", () => {
     expect(after.find((m) => m.serverMessageId === "srv-turn1")?.content).toBe(
       "turn1-正文",
     );
-    expect(after.some((m) => m.role === "user" && m.content === "第二问")).toBe(
-      true,
-    );
+    expect(
+      after.filter((m) => m.role === "user" && m.content === "第二问"),
+    ).toHaveLength(1);
 
     sse.push(ev("content_delta", { delta: "turn2-答" }));
     sse.push(ev("message_end", { finish_reason: "end_turn" }));
@@ -224,7 +224,7 @@ describe("midFlight · 主路门 + store 断言", () => {
     });
   });
 
-  it("缓冲期空快照清条后 flush 仍插泡", async () => {
+  it("缓冲期空快照清条后已入场用户泡仍在，flush 不双泡", async () => {
     const turn1Token = claimPrimaryStream(CID);
     const conv = useConversationStore.getState();
     conv.addMessage(
@@ -278,11 +278,12 @@ describe("midFlight · 主路门 + store 断言", () => {
     expect(useQueuedTurnsStore.getState().list(CID)).toHaveLength(1);
     useQueuedTurnsStore.getState().replaceConversation(CID, []);
     expect(useQueuedTurnsStore.getState().list(CID)).toEqual([]);
+    // 空快照清条，不撤已入场用户泡
     expect(
-      getRuntime(CID).messages.some(
+      getRuntime(CID).messages.filter(
         (m) => m.role === "user" && m.content === "出队正文",
       ),
-    ).toBe(false);
+    ).toHaveLength(1);
 
     handleMessageStreamEvent(ev("message_end", { finish_reason: "end_turn" }), {
       conversationId: CID,
@@ -291,15 +292,15 @@ describe("midFlight · 主路门 + store 断言", () => {
     releasePrimaryStream(CID, turn1Token);
     await vi.waitFor(() => {
       expect(
-        getRuntime(CID).messages.some(
+        getRuntime(CID).messages.filter(
           (m) => m.role === "user" && m.content === "出队正文",
         ),
-      ).toBe(true);
+      ).toHaveLength(1);
     });
     sse.close();
   });
 
-  it("排队等待中 Abort：丢缓冲；保留排队条、无用户泡（Stop≠取消）", async () => {
+  it("排队等待中 Abort：丢缓冲；保留排队条与用户泡（Stop≠取消）", async () => {
     const turn1Token = claimPrimaryStream(CID);
     const parentAc = new AbortController();
     useConversationStore.getState().setAbort(parentAc, CID);
@@ -329,7 +330,7 @@ describe("midFlight · 主路门 + store 断言", () => {
       getRuntime(CID).messages.some(
         (m) => m.role === "user" && m.content === "排队后停止",
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(useQueuedTurnsStore.getState().list(CID)).toHaveLength(1);
 
     sse.push(ev("message_start", { message_id: "srv-should-not-land" }));
@@ -344,7 +345,7 @@ describe("midFlight · 主路门 + store 断言", () => {
       getRuntime(CID).messages.some(
         (m) => m.role === "user" && m.content === "排队后停止",
       ),
-    ).toBe(false);
+    ).toBe(true);
     // Abort 丢缓冲：条保留（Stop ≠ 取消排队；亦未收到 turn_queue_started）
     expect(useQueuedTurnsStore.getState().list(CID)).toHaveLength(1);
     expect(
@@ -382,12 +383,11 @@ describe("midFlight · 主路门 + store 断言", () => {
       }),
     );
     await expect(pending).resolves.toMatchObject({ kind: "queued" });
-    // turn_queued 后无用户泡
     expect(
       getRuntime(CID).messages.some(
         (m) => m.role === "user" && m.content === "同刻停止",
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(useQueuedTurnsStore.getState().list(CID)).toHaveLength(1);
     sse.push(ev("message_start", { message_id: "srv-race-abort-flush" }));
     await new Promise((r) => setTimeout(r, 10));
@@ -403,12 +403,12 @@ describe("midFlight · 主路门 + store 断言", () => {
 
     sse.error(new DOMException("Aborted", "AbortError"));
     await new Promise((r) => setTimeout(r, 10));
-    // 仍无泡；message_start 未 fold；条保留
+    // 用户泡保留；缓冲 message_start 未 fold；条保留
     expect(
       getRuntime(CID).messages.some(
         (m) => m.role === "user" && m.content === "同刻停止",
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(useQueuedTurnsStore.getState().list(CID)).toHaveLength(1);
     expect(
       getRuntime(CID).messages.some(
@@ -448,14 +448,16 @@ describe("midFlight · 主路门 + store 断言", () => {
       kind: "received",
       interjectionId: "ij1",
     });
-    // 主路仍持有也不妨碍插话短流收口
-    expect(getRuntime(CID).messages.some((m) => m.content === "插一句")).toBe(
-      false,
-    );
+    // 主路仍持有也不妨碍插话短流收口；ack 即入主时间线用户泡
+    expect(
+      getRuntime(CID).messages.some(
+        (m) => m.role === "user" && m.content === "插一句",
+      ),
+    ).toBe(true);
     releasePrimaryStream(CID, turn1Token);
   });
 
-  it("经典 soft-insert：user_interjection(received) 即时 dispatch，不插 Message 气泡", async () => {
+  it("经典 soft-insert：user_interjection(received) 即时 dispatch，ack 入主时间线用户泡", async () => {
     const turn1Token = claimPrimaryStream(CID);
     const sse = controllableSse();
     vi.stubGlobal(
@@ -486,11 +488,13 @@ describe("midFlight · 主路门 + store 断言", () => {
       kind: "received",
       interjectionId: "inj-steer-1",
     });
-    // 持久气泡走 execution.userInterjections，不插 conversation Message 行；无瞬态 toast。
+    // 正文进主时间线用户泡；过程态仍走 execution.userInterjections。无瞬态 toast。
     expect(notifyInfoMock).not.toHaveBeenCalled();
-    expect(getRuntime(CID).messages.some((m) => m.content === "改成中文")).toBe(
-      false,
-    );
+    expect(
+      getRuntime(CID).messages.some(
+        (m) => m.role === "user" && m.content === "改成中文",
+      ),
+    ).toBe(true);
     releasePrimaryStream(CID, turn1Token);
   });
 

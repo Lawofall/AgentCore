@@ -257,13 +257,6 @@ async def apply_loop_directive(
                         reasoning_content=coordination.reasoning or None,
                     )
                 )
-                from agentcore.runtime.engine.tool_clear import apply_file_read_clear_state
-
-                tool_context = apply_file_read_clear_state(
-                    tool_context,
-                    messages,
-                    investigation_tools=controller.investigation_tool_names,
-                )
                 tool_results, terminal, attempts = await execute_tools(
                     tool_calls,
                     tools,

@@ -1,9 +1,9 @@
-"""``code_execute`` → ``file_read`` / ``grep`` when the snippet is browsing source.
+"""Short-exec dump/grep → ``file_read`` / ``grep`` when the snippet is browsing source.
 
-Same shape as :mod:`project_verify` (slow CLI → ``test_run``) and :mod:`long_running`
-(dev servers → ``terminal``): the file tools already exist for this job, and the
-``code_execute`` contract already forbids dump. Patterns are snippet-shaped so
-table parsing, AST analysis, and read-then-write transforms do not false-positive.
+Same shape as :mod:`project_verify` (slow CLI → ``run``) and :mod:`long_running`
+(dev servers → ``run`` + ``background``): the file tools already exist for this
+job. Patterns are snippet-shaped so table parsing, AST analysis, and
+read-then-write transforms do not false-positive.
 """
 
 from __future__ import annotations
@@ -148,16 +148,16 @@ def source_inspect_match(code: str) -> SourceInspectHit | None:
 
 
 def source_inspect_redirect_message(hit: SourceInspectHit) -> str:
-    """``code_execute`` refusal: tip the file tool without running the snippet."""
+    """Short-path refusal: tip the file tool without running the snippet."""
     if hit.kind == "dump":
         return (
-            f"禁止用 code_execute 把工作区文件 dump 到 stdout（检测到：{hit.matched}）。"
-            "看正文请用 file_read（可分页）；定位或计数请用 grep / code_search。"
-            "解析表格、改文件、跑计算仍用本工具。"
+            f"把工作区文件 dump 到 stdout 请用 file_read（检测到：{hit.matched}）。"
+            "可分页；定位或计数请用 grep / code_search。"
+            "解析表格、改文件、跑计算仍用 run。"
         )
     return (
-        f"禁止用 code_execute 打开源码再正则扫描（检测到：{hit.matched}）。"
+        f"打开源码再正则扫描请用 grep（检测到：{hit.matched}）。"
         "在工作区搜符号、字符串或计数请用 grep；概念定位用 code_search；"
         "看命中正文用 file_read。"
-        "解析表格、改文件、对内存数据跑计算仍用本工具。"
+        "解析表格、改文件、对内存数据跑计算仍用 run。"
     )

@@ -101,7 +101,7 @@ class ToolRegistration:
     git_class: bool = False
     # Catalog-gated tools: listed on the roster + capability catalog, but NOT
     # auto-registered by ``build_worker_registry``. Callers wire them after the
-    # registry is built (e.g. ``_wire_worker_conversation_log_tools``). Same
+    # registry is built (e.g. ``_wire_conversation_log_tools``). Same
     # pattern as ``consult_memory``.
     manual_wire: bool = False
     # 落盘产物自报契约（见 :class:`FileProductsContract`）。**只有开发期棘轮读它**——

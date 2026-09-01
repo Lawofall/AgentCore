@@ -156,6 +156,79 @@ def _is_tools_unsupported_rejection(status: int, body: str) -> bool:
     return bool(_TOOLS_PARAM_MARKERS.search(body) and _TOOLS_REJECT_MARKERS.search(body))
 
 
+# Model does not accept image input — not "this file is a bad image".
+_IMAGES_UNSUPPORTED = re.compile(
+    r"(?:"
+    r"(?:this\s+)?model.{0,80}(?:does\s+not|doesn't)\s+(?:support|accept)"
+    r".{0,40}(?:images?|vision|multimodal|image_url)"
+    r"|"
+    r"(?:does\s+not|doesn't)\s+(?:support|accept)\s+"
+    r"(?:images?|vision|multimodal|image_url)"
+    r"|"
+    r"(?:image_url|image\s+content|images?|vision\s+input).{0,60}"
+    r"(?:not\s+supported|unsupported|not\s+allowed)"
+    r"|"
+    r"not\s+support(?:ed)?\s+(?:the\s+)?"
+    r"(?:image_url|images?|vision|multimodal)"
+    r"|"
+    r"不支持(?:图片|图像|多模态|视觉(?:输入|能力)?)"
+    r"|"
+    r"不接受(?:图片|图像)"
+    r")",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _error_body_text(body: bytes | str | None) -> str:
+    if body is None:
+        return ""
+    if isinstance(body, bytes):
+        return body.decode("utf-8", errors="replace")
+    return body
+
+
+def _payload_has_image_url(payload: dict | None) -> bool:
+    """True when this chat/completions body already carries an ``image_url`` part."""
+    if not payload:
+        return False
+    for msg in payload.get("messages") or []:
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "image_url":
+                return True
+    return False
+
+
+# File/payload faults on an otherwise multimodal model — not "this SKU has no vision".
+_IMAGE_FILE_FAULT = re.compile(
+    r"(?:image\s+)?format|file\s+size|too\s+large|dimensions?|corrupt|invalid\s+mime",
+    re.IGNORECASE,
+)
+
+
+def _is_images_unsupported_rejection(status: int, body: str) -> bool:
+    """True when a 400 body says the *model* rejects image input.
+
+    Format / size failures on an otherwise multimodal model must not match.
+    """
+    if status != 400 or not body.strip():
+        return False
+    if _IMAGE_FILE_FAULT.search(body):
+        return False
+    return bool(_IMAGES_UNSUPPORTED.search(body))
+
+
+def _note_images_rejected(model_id: str) -> None:
+    """Import seam for ``note_images_rejected`` (negative cache lives in image_accept)."""
+    from agentcore.llm.image_accept import note_images_rejected
+
+    note_images_rejected(model_id)
+
+
 def _usage_from(usage_data: dict) -> TokenUsage:
     """Wire-usage parse — both DeepSeek and OpenAI prompt-cache dialects (protocol.py)."""
     return TokenUsage.from_openai_wire(usage_data)
@@ -1400,6 +1473,20 @@ class OpenAICompatibleProvider:
                 status_code=status_code,
                 body_preview=body_preview(body),
             )
+            if (
+                status_code == 400
+                and _payload_has_image_url(payload)
+                and _is_images_unsupported_rejection(
+                    status_code, _error_body_text(body)
+                )
+            ):
+                model = str((payload or {}).get("model") or "")
+                _note_images_rejected(model)
+                raise LLMError(
+                    "该模型不接受图片",
+                    upstream_status=400,
+                    upstream_body_preview=body_preview(body),
+                )
             typed = self._opencode_typed_client_error(
                 status=status_code, body=body
             )

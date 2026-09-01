@@ -42,6 +42,7 @@ from .types import (
     _LANDED_SUMMARY_ECHO_STOP_STEER,
     _PERMANENT_RETIRE_STEER,
     _VALIDATION_PATH_STOP_STEER,
+    CIRCUIT_TALLY_KEEP_AVAILABLE,
     DEFAULT_EMPTY_THRESHOLD,
     DEFAULT_EXEC_ENV_TIMEOUT_RETIRE,
     DEFAULT_PATH_WRITE_REJECT_STREAK,
@@ -57,6 +58,7 @@ from .types import (
     ERROR_CLASS_VALIDATION,
     EXEC_ENV_TIMEOUT_FAMILY,
     EXEC_ENV_TIMEOUT_RETIRE_STEER,
+    EXEC_RUN_TOOL_NAMES,
     FORCE_SEGMENTED_NARROW_TOOLS,
     LANDING_TOOLS,
     MEMORY_TOOLS,
@@ -78,6 +80,7 @@ from .types import (
 from .write_reject import WriteRejectStreakMixin
 
 __all__ = [
+    "CIRCUIT_TALLY_KEEP_AVAILABLE",
     "DEFAULT_EMPTY_THRESHOLD",
     "DEFAULT_EXEC_ENV_TIMEOUT_RETIRE",
     "DEFAULT_PATH_WRITE_REJECT_STREAK",
@@ -93,6 +96,7 @@ __all__ = [
     "ERROR_CLASS_VALIDATION",
     "EXEC_ENV_TIMEOUT_FAMILY",
     "EXEC_ENV_TIMEOUT_RETIRE_STEER",
+    "EXEC_RUN_TOOL_NAMES",
     "FORCE_SEGMENTED_NARROW_TOOLS",
     "LANDING_TOOLS",
     "MEMORY_TOOLS",
@@ -209,10 +213,12 @@ class LoopController(
         self._tool_liveness_last: dict[str, bool] = {}
         # Sticky: local workspace channel dead → allow disabling LANDING_TOOLS too.
         self._workspace_channel_dead: bool = False
-        # Consecutive sandbox wall-clock timeouts across code_execute/test_run.
+        # Consecutive sandbox wall-clock timeouts across run.
         self._exec_env_timeout_hits: int = 0
         self._tool_warned: set[str] = set()
         self._tool_disabled: set[str] = set()
+        # Explicit retire (``retire_tools`` on non-run tools): may disable KEEP_AVAILABLE.
+        self._tool_force_retire: set[str] = set()
         # Write/landing tools that hit disable threshold but stay enabled (强制分段).
         self._tool_segmented_forced: set[str] = set()
         # Same-path consecutive classified write rejects: path → (class, streak).
@@ -482,8 +488,8 @@ class LoopController(
             # the model but must not feed the run-scoped circuit breaker: they still ride
             # the sliding window above (REPEATED_FAILURE / round recording) and count toward
             # per-round unproductive detection, only the cumulative warn/disable tally
-            # skips them. Path thrash stays constrained by validation fingerprint streak /
-            # same-path file_read cheap-hit — not by disabling the tool.
+            # skips them. Path thrash stays constrained by validation fingerprint streak,
+            # not by disabling the tool.
             # Permanent failures skip the incremental tally too — retire below leaps
             # straight to disable on first hit (no warn=2 / disable=3 window).
             counts_toward_breaker = (
@@ -520,7 +526,6 @@ class LoopController(
             # Explicit hard-stop retire (browser egress / workspace channel dead /
             # permanent class / access-permission) must apply even when
             # ``contract_failure`` — otherwise tip thrashing never disables the tool.
-            # Same-path file_read ceiling is path-scoped only (no retire_tools).
             if not attempt.success:
                 retire_list: list[str] = []
                 retire = meta.get("retire_tools")
@@ -538,10 +543,10 @@ class LoopController(
                     # Access permission (e.g. grep 无权限): retire so re-call denies.
                     # Allowlist denials stay policy-only (already denied by allowlist).
                     retire_list = [attempt.tool_name]
-                if meta.get("workspace_channel_dead") or (
-                    meta.get("liveness_timeout")
-                    and meta.get("timeout_layer") == "channel"
-                ):
+                retire_list = [
+                    n for n in retire_list if n and n not in EXEC_RUN_TOOL_NAMES
+                ]
+                if meta.get("workspace_channel_dead"):
                     was_dead = self._workspace_channel_dead
                     self._workspace_channel_dead = True
                     if not was_dead:
@@ -558,6 +563,7 @@ class LoopController(
                 if retire_list:
                     summary = (attempt.error_summary or "").strip()
                     for sname in retire_list:
+                        self._tool_force_retire.add(sname)
                         self._tool_failures[sname] = max(
                             int(self._tool_failures.get(sname, 0)),
                             self._tool_failure_disable,
@@ -575,49 +581,6 @@ class LoopController(
                         self._pending_retire_message = (
                             f"工具 {names} {_PERMANENT_RETIRE_STEER}"
                         )
-                    if any(n in EXEC_ENV_TIMEOUT_FAMILY for n in retire_list):
-                        from agentcore.runtime.coordination.exec_env_dead_notice import (
-                            mark_and_emit_exec_env_dead_user_notice,
-                        )
-
-                        eid = meta.get("execution_id")
-                        reason = meta.get("code")
-                        mark_and_emit_exec_env_dead_user_notice(
-                            execution_id=str(eid).strip() if eid else None,
-                            reason_code=str(reason).strip() if reason else None,
-                        )
-            # Exec-env idle hangs / probe fails: retire code_execute+test_run
-            # after N consecutive hits (disaster wall is not this path).
-            if is_exec_env_timeout(attempt):
-                self._exec_env_timeout_hits += 1
-                summary = (attempt.error_summary or "").strip()
-                name = attempt.tool_name
-                if summary:
-                    self._tool_last_error[name] = cap_error_summary(summary)
-                self._tool_succeeded_after_fail[name] = False
-                if (
-                    self._exec_env_timeout_hits >= DEFAULT_EXEC_ENV_TIMEOUT_RETIRE
-                    and not EXEC_ENV_TIMEOUT_FAMILY.issubset(self._tool_disabled)
-                ):
-                    for sname in EXEC_ENV_TIMEOUT_FAMILY:
-                        self._tool_failures[sname] = max(
-                            int(self._tool_failures.get(sname, 0)),
-                            self._tool_failure_disable,
-                        )
-                        self._tool_succeeded_after_fail[sname] = False
-                    self._pending_retire_message = EXEC_ENV_TIMEOUT_RETIRE_STEER
-                    from agentcore.runtime.coordination.exec_env_dead_notice import (
-                        mark_and_emit_exec_env_dead_user_notice,
-                    )
-
-                    eid = (attempt.meta or {}).get("execution_id")
-                    reason = (attempt.meta or {}).get("code")
-                    mark_and_emit_exec_env_dead_user_notice(
-                        execution_id=str(eid).strip() if eid else None,
-                        reason_code=str(reason).strip() if reason else None,
-                    )
-            elif attempt.success and attempt.tool_name in EXEC_ENV_TIMEOUT_FAMILY:
-                self._exec_env_timeout_hits = 0
             if attempt.success and self._tool_failures.get(attempt.tool_name, 0) > 0:
                 self._tool_succeeded_after_fail[attempt.tool_name] = True
             # Validation same-fingerprint streak → path stop (tool stays available).

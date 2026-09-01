@@ -43,7 +43,7 @@ def test_code_audit_single_module_one_auditor():
     assert not t.get("depends_on")
     d = t["deliverable"]
     assert d["form"] == "files"
-    assert d["strict"] is True
+    assert d.get("strict") is not True
     assert d["code_audit_gate"] is True
     assert "P0" in t["task"] and "P3" in t["task"]
     assert "观察·工程" in t["task"]
@@ -84,7 +84,7 @@ def test_code_audit_single_module_one_auditor():
     assert plan_errs == []
     assert len(plan.nodes) == 1
     assert plan.nodes[0].deliverable is not None
-    assert plan.nodes[0].deliverable.strict is True
+    assert plan.nodes[0].deliverable.strict is False
     assert plan.nodes[0].deliverable.code_audit_gate is True
 
 
@@ -434,7 +434,7 @@ def test_cite_write_review_fans_out_one_researcher_per_angle_then_outline_then_w
     assert "min_length" not in review_d
     assert review_d["artifacts"] == ["AgentCore/文档/reviews/审校报告.md"]
     assert "复核落盘" in by_id["review"]["task"]
-    # 审校节点显式墙钟 300s（CEO 显式 timeout_ms 恒优先于统一 backstop）。
+    # 审校节点显式墙钟 300s（CEO 显式 timeout_ms）。
     assert by_id["review"]["timeout_ms"] == 300_000
     # checkpoint flag rides the 提纲 step (成纲后写作前过目); the write step requires file landing.
     assert by_id["outline"]["checkpoint_after"] is True
@@ -554,9 +554,7 @@ def test_cite_write_review_checkpoint_can_be_disabled():
 
 def test_cite_write_review_review_explicit_wall_clock_survives_build():
     """审校节点显式 timeout_ms=300000 经真实 builder 落成 policy.timeout_s=300；
-    token 顶走统一 backstop（200k）。"""
-    from agentcore.runtime.runs.worker_budget import WORKER_TIMEOUT_BACKSTOP_S
-
+    token 顶走统一 backstop（8M）。"""
     tasks, errors = expand_playbook(
         "cite_write_review", {"topic": "T", "angles": ["a", "b"]}
     )
@@ -567,10 +565,10 @@ def test_cite_write_review_review_explicit_wall_clock_survives_build():
     by_role = {n.role: n for n in plan.nodes}
     # review 有上游；墙钟显式 300s；token 顶走统一 backstop。
     assert by_role["学术审校员"].policy.timeout_s == 300
-    assert by_role["学术审校员"].token_ceiling == 4_000_000
-    # 提纲同为依赖上游的节点、未显式声明墙钟 → 统一 backstop 1200s / 4M。
-    assert by_role["提纲编辑"].policy.timeout_s == WORKER_TIMEOUT_BACKSTOP_S
-    assert by_role["提纲编辑"].token_ceiling == 4_000_000
+    assert by_role["学术审校员"].token_ceiling == 8_000_000
+    # 提纲同为依赖上游的节点、未显式声明墙钟 → 不武装；token 仍 8M。
+    assert by_role["提纲编辑"].policy.timeout_s is None
+    assert by_role["提纲编辑"].token_ceiling == 8_000_000
 
 
 def test_cite_write_review_requires_topic():

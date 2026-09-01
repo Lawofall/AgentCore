@@ -1,5 +1,9 @@
 import { IconButton } from "@/components/ui";
-import { useActiveMessages, useConversationStore } from "@/stores/conversation";
+import {
+  NO_ACTIVE_MESSAGES,
+  activeRuntime,
+  useConversationStore,
+} from "@/stores/conversation";
 import { useUIStore } from "@/stores/ui";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -22,7 +26,10 @@ export function FindBar({
   open: boolean;
   onClose: () => void;
 }) {
-  const messages = useActiveMessages();
+  const messages = useConversationStore((s) => {
+    if (!open) return NO_ACTIVE_MESSAGES;
+    return activeRuntime(s).messages;
+  });
   const focusMessage = useConversationStore((s) => s.focusMessage);
   const conversationId = useConversationStore((s) => s.currentConversationId);
   const openSearch = useUIStore((s) => s.openSearch);

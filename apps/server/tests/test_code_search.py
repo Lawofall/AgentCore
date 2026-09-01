@@ -74,6 +74,17 @@ async def test_index_manager_build_and_search(sample_py: Path):
     assert db_path.is_file()
 
 
+def test_code_search_schema_is_short_trigger_not_index_cookbook():
+    schema = CodeSearchTool().schema
+    desc = schema.description
+    assert "grep" in desc
+    assert "概念" in desc or "意图" in desc
+    for token in ("building", "stale", "尚无快照", "勿空等", "两工具并存", "file_read"):
+        assert token not in desc
+    query = schema.parameters["properties"]["query"]["description"]
+    assert "grep" not in query
+
+
 @pytest.mark.asyncio
 async def test_code_search_tool_end_to_end(sample_py: Path):
     from unittest.mock import MagicMock
@@ -174,6 +185,7 @@ async def test_code_search_kicks_when_index_not_ready(status: str):
     result = await tool.execute({"query": "ApprovalGate"}, ctx)
     assert result.success
     assert result.metadata["index_status"] == status
+    assert "grep" in result.output.lower()
     backend.start_code_index_maintenance.assert_called_once()
     backend.code_search.assert_awaited_once()
 

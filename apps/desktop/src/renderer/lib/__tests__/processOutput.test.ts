@@ -55,4 +55,10 @@ describe("formatProcessDuration", () => {
     const now = Date.parse(start) + 125_000;
     expect(formatProcessDuration(start, now)).toBe("2m 5s");
   });
+
+  it("formats hours via the shared duration helper", () => {
+    const start = new Date("2026-01-01T00:00:00.000Z").toISOString();
+    const now = Date.parse(start) + 3_723_000;
+    expect(formatProcessDuration(start, now)).toBe("1h 2m");
+  });
 });

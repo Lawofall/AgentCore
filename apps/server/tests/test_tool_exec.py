@@ -9,13 +9,13 @@ import pytest
 from structlog.testing import capture_logs
 
 from agentcore.core.errors import SandboxError
-from agentcore.core.types import ToolCategory, ToolEffect
+from agentcore.core.types import ToolApproval, ToolCategory, ToolEffect
 from agentcore.llm.provider.protocol import ToolCall, ToolCallFunction
 from agentcore.runtime.engine.tool_exec import execute_tools
 from agentcore.runtime.engine.tool_failure_face import DEFAULT_TOOL_FAILURE_MESSAGE
 from agentcore.runtime.events import EventSink, EventType
-from agentcore.tools.builtin.code_execute import CodeExecuteTool
-from agentcore.tools.builtin.test_run import TestRunTool
+from agentcore.tools.builtin.run_short import execute_short
+from agentcore.tools.builtin.run_verify import execute_verify
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
@@ -1009,7 +1009,7 @@ async def test_write_tool_parse_failure_splits_user_and_model_copy():
 
 async def test_code_execute_maps_sandbox_error_to_failed_result():
     backend = _FakeBackend(raise_sandbox=True)
-    result = await CodeExecuteTool().execute(
+    result = await execute_short(
         {"code": "print(1)", "language": "python"},
         _ctx(backend),  # type: ignore[arg-type]
     )
@@ -1309,7 +1309,7 @@ async def test_execute_end_forwards_code_search_index_status():
     assert ends[0]["index_status"] == "ready"
 
 
-_SHELL_OBSERVE_KEYS = frozenset({"command_preview", "subcommand", "cwd_preview"})
+_SHELL_OBSERVE_KEYS = frozenset({"command_preview", "action", "cwd_preview"})
 
 
 def test_shell_observe_log_fields_records_facts_not_write_guess():
@@ -1320,16 +1320,15 @@ def test_shell_observe_log_fields_records_facts_not_write_guess():
     )
 
     start = _shell_observe_log_fields(
-        "terminal",
-        {"subcommand": "start", "command": "pnpm dev", "cwd": "apps/web"},
+        "run",
+        {"command": "pnpm dev", "cwd": "apps/web"},
     )
     assert start == {
-        "subcommand": "start",
         "command_preview": "pnpm dev",
         "cwd_preview": "apps/web",
     }
-    listed = _shell_observe_log_fields("terminal", {"subcommand": "list"})
-    assert listed == {"subcommand": "list"}
+    listed = _shell_observe_log_fields("run", {"action": "list"})
+    assert listed == {"action": "list"}
     host = _shell_observe_log_fields("host", {"command": "Get-ChildItem"})
     assert host == {"command_preview": "Get-ChildItem"}
     secret_tail = "TOKEN=supersecret"
@@ -1338,9 +1337,8 @@ def test_shell_observe_log_fields_records_facts_not_write_guess():
     assert clipped["command_preview"] == clip_preview(long_cmd, _SHELL_COMMAND_PREVIEW_MAX)
     assert secret_tail not in clipped["command_preview"]
     assert set(clipped) <= _SHELL_OBSERVE_KEYS
-    assert _shell_observe_log_fields("code_execute", {"command": long_cmd}) == {}
     assert _shell_observe_log_fields("file_write", {"path": "a.py", "command": "x"}) == {}
-    assert _shell_observe_log_fields("terminal", "not-a-dict") == {}
+    assert _shell_observe_log_fields("run", "not-a-dict") == {}
     license_url = "https://www.tldraw.dev/community/license"
     url_fields = _shell_observe_log_fields("read_url", {"url": license_url})
     assert url_fields["host"] == "tldraw.dev"
@@ -1371,20 +1369,20 @@ def test_shell_observe_redacts_secret_shapes_clipping_would_keep():
     assert "node run.js" in key_preview
 
     bearer_preview = _shell_observe_log_fields(
-        "terminal",
-        {"subcommand": "start", "command": 'curl -H "Authorization: Bearer abcdefgh1234" api'},
+        "run",
+        {"command": 'curl -H "Authorization: Bearer abcdefgh1234" api'},
     )["command_preview"]
     assert "abcdefgh1234" not in bearer_preview
     assert REDACTED in bearer_preview
 
 
-async def test_execute_end_terminal_list_records_subcommand():
-    """terminal list 免审，execute_end 记 subcommand 事实。"""
+async def test_execute_end_run_list_records_action():
+    """run action=list 免审，execute_end 记 action 事实。"""
     reg = ToolRegistry()
-    reg.register(_OkTool("terminal"))
+    reg.register(_OkTool("run"))
     with capture_logs() as logs:
         await execute_tools(
-            [_call("c1", "terminal", json.dumps({"subcommand": "list"}))],
+            [_call("c1", "run", json.dumps({"action": "list"}))],
             reg,
             _ctx(),
             EventSink(),
@@ -1394,27 +1392,38 @@ async def test_execute_end_terminal_list_records_subcommand():
     ends = [e for e in logs if e.get("event") == "tool.execute_end"]
     assert len(ends) == 1
     end = ends[0]
-    assert end["tool"] == "terminal"
+    assert end["tool"] == "run"
     assert end["status"] == "ok"
-    assert end["subcommand"] == "list"
+    assert end["action"] == "list"
     assert "command_preview" not in end
     assert "is_write" not in end
 
 
-async def test_execute_end_terminal_start_no_gate_still_records_preview():
-    """无闸 terminal start 拒执行，仍记 command_preview（只观测，不猜写盘）。"""
+class _GrantableRunTool(_OkTool):
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name=self._name,
+            description="stub",
+            parameters={"type": "object", "properties": {}},
+            category=ToolCategory.EXECUTION,
+            approval=ToolApproval.GRANTABLE,
+        )
+
+
+async def test_execute_end_run_command_no_gate_still_records_preview():
+    """无闸 run(command) 拒执行，仍记 command_preview（只观测，不猜写盘）。"""
     reg = ToolRegistry()
-    reg.register(_OkTool("terminal"))
+    reg.register(_GrantableRunTool("run"))
     args = json.dumps(
         {
-            "subcommand": "start",
             "command": "echo hello",
             "cwd": "src",
         }
     )
     with capture_logs() as logs:
         await execute_tools(
-            [_call("c1", "terminal", args)],
+            [_call("c1", "run", args)],
             reg,
             _ctx(),
             EventSink(),
@@ -1424,9 +1433,8 @@ async def test_execute_end_terminal_start_no_gate_still_records_preview():
     ends = [e for e in logs if e.get("event") == "tool.execute_end"]
     assert len(ends) == 1
     end = ends[0]
-    assert end["tool"] == "terminal"
+    assert end["tool"] == "run"
     assert end["status"] == "grantable_no_gate"
-    assert end["subcommand"] == "start"
     assert end["command_preview"] == "echo hello"
     assert end["cwd_preview"] == "src"
     assert "is_write" not in end
@@ -1458,7 +1466,7 @@ async def test_execute_end_host_records_command_preview():
 
 
 async def test_execute_end_other_tool_omits_command_preview():
-    """command 参数只对 terminal/host 进 execute_end，避免扩大命令泄漏面。"""
+    """command 参数只对 run/host 进 execute_end，避免扩大命令泄漏面。"""
     reg = ToolRegistry()
     reg.register(_OkTool("ok"))
     with capture_logs() as logs:
@@ -1558,15 +1566,15 @@ async def test_test_run_maps_sandbox_error_to_failed_result(monkeypatch: pytest.
         return "pytest"
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _profile,
     )
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run._detect_framework",
+        "agentcore.tools.builtin.run_verify._detect_framework",
         _framework,
     )
 
-    result = await TestRunTool().execute({"scope": "all"}, _ctx(backend))  # type: ignore[arg-type]
+    result = await execute_verify({"scope": "all"}, _ctx(backend))  # type: ignore[arg-type]
 
     assert result.success is False
     assert "代码执行环境启动失败" in (result.error or "")
@@ -1609,7 +1617,6 @@ async def test_parallel_same_path_file_read_coalesces_once(tmp_path: Path):
     assert len(messages) == 3
     assert all(a.success for a in attempts)
     assert reads["n"] == 1
-    assert ctx.file_read_counts.get("doc.md") == 1
     bodies = [m.content or "" for m in messages]
     assert all("shared body" in b for b in bodies)
     # Each call still gets its own tool_use_start/end on the wire.
@@ -1651,8 +1658,6 @@ async def test_parallel_distinct_path_file_reads_not_coalesced(tmp_path: Path):
     )
     assert all(a.success for a in attempts)
     assert reads["n"] == 2
-    assert ctx.file_read_counts.get("a.md") == 1
-    assert ctx.file_read_counts.get("b.md") == 1
     by_id = {m.tool_call_id: m.content or "" for m in messages}
     assert "AAA" in by_id["r1"]
     assert "BBB" in by_id["r2"]
@@ -1700,8 +1705,8 @@ async def test_parallel_same_path_different_window_file_reads_not_coalesced(
     assert "第 3–3 行" in by_id["r2"]
 
 
-async def test_ceo_str_replace_miss_still_audience_deny():
-    """CEO 面缺写盘工具仍走 audience_deny / delegate 提示。"""
+async def test_ceo_str_replace_miss_still_not_assembled():
+    """CEO 写盘是 BOTH：本面未装配时走 not_assembled，不是 worker-only audience_deny。"""
     reg = ToolRegistry()
     reg.register(_OkTool("delegate"))
     ctx = _ctx()
@@ -1715,7 +1720,7 @@ async def test_ceo_str_replace_miss_still_audience_deny():
         role="captain",
     )
     content = messages[0].content or ""
-    assert "delegate" in content.lower() or "派工" in content
+    assert "未装配" in content
     assert "form=prose" not in content
 
 
@@ -2073,21 +2078,27 @@ async def test_grantable_without_gate_denied_on_cloud_captain_path():
     assert [e["status"] for e in ends] == ["grantable_no_gate"]
 
 
-async def test_cloud_code_execute_outer_timeout_is_sandbox_unavailable():
+async def test_cloud_code_execute_outer_timeout_is_sandbox_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+):
     from agentcore.tools.sandbox.exec_env import (
         EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
         EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+    )
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.run.run_op_timeout_seconds",
+        lambda _args=None: 0.05,
     )
 
     class _HangExec:
         @property
         def schema(self) -> ToolSchema:
             return ToolSchema(
-                name="code_execute",
+                name="run",
                 description="stub",
                 parameters={"type": "object", "properties": {}},
                 category=ToolCategory.EXECUTION,
-                timeout_seconds=0.05,
             )
 
         async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -2098,7 +2109,7 @@ async def test_cloud_code_execute_outer_timeout_is_sandbox_unavailable():
     reg.register(_HangExec())
     sink = EventSink()
     messages, _terminal, attempts = await execute_tools(
-        [_call("c1", "code_execute")],
+        [_call("c1", "run")],
         reg,
         _ctx(),
         sink,
@@ -2107,8 +2118,7 @@ async def test_cloud_code_execute_outer_timeout_is_sandbox_unavailable():
     )
     assert attempts[0].success is False
     assert attempts[0].meta.get("code") == EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
-    assert "code_execute" in attempts[0].meta.get("retire_tools", [])
-    assert "test_run" in attempts[0].meta.get("retire_tools", [])
+    assert "retire_tools" not in (attempts[0].meta or {})
     assert attempts[0].meta.get("execution_id") == "e"
     assert EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE in (messages[0].content or "")
     assert "本机" not in (messages[0].content or "")

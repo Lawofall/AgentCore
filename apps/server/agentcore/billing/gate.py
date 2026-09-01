@@ -31,10 +31,11 @@ bare ``None``. Some refusals name the moment upstream frees up (a platform-funde
 429 whose ``Retry-After`` outran the call's budget), and flattening that into an
 empty value left callers guessing a cooldown upstream had already dated for them.
 
-Auth-rejected platform keys fall back **once** to user BYOK through
-``run_background_llm`` — the sole chrome entry that may retry after
-``LLMAuthError``. Call sites must not invent their own try/except BYOK glue or
-process-local auth circuit breakers.
+Auth-rejected or balance-exhausted platform keys fall back **once** to user BYOK
+through ``run_background_llm`` — the sole chrome entry that may retry after
+``LLMAuthError`` / ``LLMInsufficientBalanceError``. Either side failing still
+skips (never 429s the user turn). Call sites must not invent their own
+try/except BYOK glue or process-local auth circuit breakers.
 """
 
 from __future__ import annotations
@@ -52,6 +53,7 @@ from agentcore.core.errors import (
     BYOK_KEY_REQUIRED_MESSAGE,
     BYOKKeyMissingError,
     LLMAuthError,
+    LLMInsufficientBalanceError,
     LLMQuotaExceededError,
     PlatformBillingUnavailableError,
     QuotaExceededError,
@@ -121,6 +123,7 @@ class BackgroundSkipReason(StrEnum):
     NO_CREDENTIALS = "no_credentials"
     QUOTA_EXCEEDED = "quota_exceeded"
     AUTH_REJECTED = "auth_rejected"
+    INSUFFICIENT_BALANCE = "insufficient_balance"
 
 
 @dataclass(frozen=True)
@@ -292,7 +295,8 @@ async def resolve_and_gate_background(
     spend, not the platform's.
 
     Prefer ``run_background_llm`` at call sites that actually invoke the model: it
-    adds the single platform-``LLMAuthError`` → user BYOK retry.
+    adds the single platform-``LLMAuthError`` / ``LLMInsufficientBalanceError``
+    → user BYOK retry.
     """
     cfg = await resolve_model_config(session, user_id, purpose)
     if cfg is None:
@@ -400,7 +404,7 @@ async def _invoke_background_runner[T](
     runner: Callable[[LLMCredentials], Awaitable[T]],
     resolved: BackgroundGateResolve,
 ) -> BackgroundLlmOutcome[T]:
-    """Run ``runner`` after admission: skip / one platform→BYOK auth retry."""
+    """Run ``runner`` after admission: skip / one platform→BYOK auth or balance retry."""
     from agentcore.llm.turn_auth_dead import is_turn_auth_dead
 
     if resolved.credentials is None:
@@ -431,12 +435,17 @@ async def _invoke_background_runner[T](
         return BackgroundLlmSkip(
             reason=BackgroundSkipReason.QUOTA_EXCEEDED, declared_recovery_in=declared
         )
-    except LLMAuthError as e:
+    except (LLMAuthError, LLMInsufficientBalanceError) as e:
         await maybe_mark_byok_provider_error(
             user_id=user_id, purpose=purpose, credentials=resolved.credentials, exc=e
         )
+        skip_reason = (
+            BackgroundSkipReason.AUTH_REJECTED
+            if isinstance(e, LLMAuthError)
+            else BackgroundSkipReason.INSUFFICIENT_BALANCE
+        )
         if resolved.credentials.source != "platform":
-            return BackgroundLlmSkip(reason=BackgroundSkipReason.AUTH_REJECTED)
+            return BackgroundLlmSkip(reason=skip_reason)
     except Exception as e:
         await maybe_mark_byok_provider_error(
             user_id=user_id, purpose=purpose, credentials=resolved.credentials, exc=e
@@ -453,7 +462,7 @@ async def _invoke_background_runner[T](
             session, user_id, purpose=purpose
         )
     if fallback is None:
-        return BackgroundLlmSkip(reason=BackgroundSkipReason.AUTH_REJECTED)
+        return BackgroundLlmSkip(reason=skip_reason)
 
     if is_turn_auth_dead(fallback.source):
         logger.info(
@@ -466,11 +475,17 @@ async def _invoke_background_runner[T](
     try:
         value = await runner(fallback)
         return BackgroundLlmResult(value=value, credentials=fallback)
-    except LLMAuthError as e:
+    except (LLMAuthError, LLMInsufficientBalanceError) as e:
         await maybe_mark_byok_provider_error(
             user_id=user_id, purpose=purpose, credentials=fallback, exc=e
         )
-        return BackgroundLlmSkip(reason=BackgroundSkipReason.AUTH_REJECTED)
+        return BackgroundLlmSkip(
+            reason=(
+                BackgroundSkipReason.AUTH_REJECTED
+                if isinstance(e, LLMAuthError)
+                else BackgroundSkipReason.INSUFFICIENT_BALANCE
+            )
+        )
     except Exception as e:
         await maybe_mark_byok_provider_error(
             user_id=user_id, purpose=purpose, credentials=fallback, exc=e
@@ -489,10 +504,11 @@ async def run_background_llm[T](
     Flow:
     1. ``resolve_and_gate_background`` (platform-first + quota when platform).
     2. Run ``runner(credentials)``.
-    3. On ``LLMAuthError`` **and** ``credentials.source == "platform"``: resolve
-       user BYOK once via ``resolve_and_gate_background_user_fallback`` and re-run.
-    4. Missing credentials on either side, or BYOK also auth-fails →
-       :class:`BackgroundLlmSkip`.
+    3. On ``LLMAuthError`` / ``LLMInsufficientBalanceError`` **and**
+       ``credentials.source == "platform"``: resolve user BYOK once via
+       ``resolve_and_gate_background_user_fallback`` and re-run.
+    4. Missing credentials on either side, or BYOK also auth-fails / is empty
+       → :class:`BackgroundLlmSkip`.
     5. On ``LLMQuotaExceededError``: the platform allowance is spent after step 1
        admitted the call — the per-call gate saying so, or upstream answering a
        day-scale 429 through the platform quota face. Same decision as step 1's own

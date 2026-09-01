@@ -31,19 +31,19 @@ from agentcore.tools.ceo_toolset import (
 from agentcore.tools.registry import ToolRegistry
 
 
-def _wire_worker_conversation_log_tools(
-    worker_tools: ToolRegistry,
+def _wire_conversation_log_tools(
+    tools: ToolRegistry,
     *,
     folder_id: str | None = None,
 ) -> None:
-    """Register cross-session log tools on the worker registry.
+    """Register cross-session log tools on any registry (CEO or worker).
 
-    ``search_conversations`` / ``read_conversation`` are ``manual_wire`` worker-only
-    tools — never auto-registered by ``build_worker_registry``, never on the CEO
-    toolset. Product-always-on (跨会话对话日志访问定案 A).
+    ``search_conversations`` / ``read_conversation`` are ``manual_wire`` —
+    never auto-registered by ``build_worker_registry`` / ``build_ceo_tool_registry``.
+    Product-always-on (跨会话对话日志访问定案 A); still on-demand until consult.
     """
-    worker_tools.register(SearchConversationsTool(folder_id=folder_id))
-    worker_tools.register(ReadConversationTool())
+    tools.register(SearchConversationsTool(folder_id=folder_id))
+    tools.register(ReadConversationTool())
 
 
 def _build_agent_mention_context(

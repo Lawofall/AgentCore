@@ -156,7 +156,11 @@ FAILURE_FAMILIES: tuple[FailureFamily, ...] = (
     FailureFamily(
         key="llm_call_failed",
         label="LLM 调用失败",
-        events=("llm.call_failed", "engine.llm_failed_terminal"),
+        events=(
+            "llm.call_failed",
+            "engine.llm_round_exception",
+            "engine.llm_failed_terminal",
+        ),
         since="2026-08-04",
     ),
     FailureFamily(
@@ -179,7 +183,10 @@ FAILURE_FAMILIES: tuple[FailureFamily, ...] = (
         label="工具执行失败",
         detector="tool_failure",
         since="2026-08-04",
-        note="tool.execute_end 且 ok=false 或 status 属失败集；判定见 patrol.TOOL_FAIL_STATUSES。",
+        note=(
+            "tool.execute_end 且 is_tool_failure（query.tool_end；"
+            "含 allowlist_deny 等未执行；redirect 不算）。"
+        ),
     ),
     FailureFamily(
         key="test_run_budget",

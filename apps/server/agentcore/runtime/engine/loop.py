@@ -59,6 +59,7 @@ from .loop_salvage import maybe_salvage_captain_reply
 from .loop_wind_down import LoopWindDown
 from .outcome import RoundOutcome
 from .round import (
+    ORIGIN_STREAM_ABORTED,
     LlmRoundFailure,
     decide_no_tool_round,
     record_round_start,
@@ -97,6 +98,48 @@ def _messages_have_tool_progress(messages: list[LLMMessage]) -> bool:
     """True when this turn already issued or completed a tool call (process exists)."""
     return any(
         m.role == "tool" or (m.role == "assistant" and m.tool_calls) for m in messages
+    )
+
+
+def _ensure_assistant_so_far(messages: list[LLMMessage], content: str) -> None:
+    """Keep the already-streamed draft in context before a same-turn hear round."""
+    text = (content or "").strip()
+    if not text:
+        return
+    last = messages[-1] if messages else None
+    if last is not None and last.role == "assistant" and (last.content or "").strip() == text:
+        return
+    messages.append(LLMMessage(role="assistant", content=content))
+
+
+def _should_hold_return_for_interjection(
+    *,
+    role: str,
+    steer_cid: str,
+    profile: ProfileParams,
+    round_idx: int,
+) -> bool:
+    """Captain no-tool RETURN with unread 插队 and a remaining round → hear this turn.
+
+    Does not abort the just-finished LLM stream. Workers never hold. No remaining
+    ``max_rounds`` slot → leftover 升队 at close (existing honesty path).
+    """
+    if role != "captain":
+        return False
+    if profile.max_rounds > 0 and round_idx + 1 >= profile.max_rounds:
+        return False
+    if steer_cid:
+        from agentcore.runtime.turn.steer import peek_count
+
+        if peek_count(steer_cid) > 0:
+            return True
+    from agentcore.runtime.coordination.session import active_coordination
+
+    session = active_coordination()
+    return bool(
+        session is not None
+        and session.active
+        and session.has_unread_user_interjection()
     )
 
 
@@ -144,8 +187,9 @@ async def react_loop(
     thinking text across all rounds (empty when thinking is disabled), mirroring
     what was streamed via ``reasoning_delta`` so it can be persisted for replay.
 
-    The ``profile`` drives both the model params and the round budget
-    (``profile.max_rounds``); it defaults to the chat profile. By
+    The ``profile`` drives model params. ``profile.max_rounds`` is an optional
+    explicit cap (``<=0`` = no product round fuse; loop exits on end_turn /
+    token / wall / spin / circuit / Stop). It defaults to the chat profile. By
     default content/reasoning deltas are emitted as conversation events
     (single-agent path). A caller running a multi-agent run passes ``on_content``
     /``on_reasoning`` to redirect text into ``run_output_delta`` instead, and
@@ -234,15 +278,17 @@ async def react_loop(
     accumulation byte-identical to before (standalone loops / tests).
 
     ``token_budget`` (Worker hard ceiling · loose backstop): a cumulative
-    input+output token cap for the whole run, checked at the TOP of each round. Once
-    ``total_usage.total_tokens`` reaches it the loop stops and force-finalizes — the
+    fuse-token cap (cache miss + output; full prompt repeats do not count) for
+    the whole run, checked at the TOP of each round. Once
+    ``total_usage.fuse_tokens`` reaches it the loop stops and force-finalizes — the
     backstop against a worker blowing past the configured unified ceiling. The
     terminal finalize (this AND ``max_rounds`` exhaustion) is gate-routed by run
     health (``controller.is_thrashing()``): an on-track run delivers normally; a
     thrashing worker finishes DEGRADED and emits an observable ``escalation_raised``
-    signal (no auto re-decompose — the CEO may voluntarily replan). ``0`` (CEO /
-    solo / tests / ceiling disabled) disables the backstop, leaving the run bounded
-    only by ``profile.max_rounds``.
+    signal (no auto re-decompose — the CEO may voluntarily replan).     ``0`` (CEO /
+    solo / tests / ceiling disabled) disables the token backstop. The run then
+    exits on model ``end_turn``, an explicit ``profile.max_rounds`` cap if
+    ``>0``, wall-clock timeout, spin / circuit, or user Stop.
 
     ``controller_seed`` (resume path): optional JSON-safe latch snapshot from a prior
     ``turn_paused.controller``; omitted on a fresh turn (behaviour unchanged).
@@ -359,7 +405,7 @@ async def react_loop(
     wind_down.refresh_tool_defs = _refresh_tool_defs
 
     def _maybe_retire_workspace_channel_dead() -> None:
-        """Session/backend sticky-dead → strip file family from offered tools."""
+        """Session/presence miss → strip file family; reconnect restores it."""
         nonlocal tool_defs
         if apply_workspace_channel_dead_retire(
             disabled_tools=disabled_tools,
@@ -369,7 +415,7 @@ async def react_loop(
             tool_defs = _resolve_tool_defs()
 
     def _maybe_retire_exec_env_dead() -> None:
-        """Session sticky exec-env-dead → strip code_execute/test_run (not terminal)."""
+        """Kept for call-site parity; env-dead no longer strips ``run``."""
         nonlocal tool_defs
         if apply_exec_env_dead_retire(
             disabled_tools=disabled_tools,
@@ -421,7 +467,7 @@ async def react_loop(
             kind,
             rounds_used=round_idx,
             rounds_limit=profile.max_rounds,
-            tokens_spent=total_usage.total_tokens,
+            tokens_spent=total_usage.fuse_tokens,
         )
 
     def _export_tool_failures() -> None:
@@ -478,10 +524,18 @@ async def react_loop(
             begin_accepting(steer_cid, execution_id=tool_context.execution_id)
 
     try:
-        for round_idx in range(profile.max_rounds):
+        # ``max_rounds <= 0`` = no product round fuse. Increment-at-start so
+        # ``continue`` and early ``return`` keep the same 0-based index as the
+        # old ``for range`` loop.
+        round_idx = -1
+        while True:
+            round_idx += 1
+            if profile.max_rounds > 0 and round_idx >= profile.max_rounds:
+                ceiling_reason = "max_rounds"
+                break
             # Hard-timeout entry check BEFORE arming wind-down / LLM: after TIMEOUT
             # grant one grace round; after grace force-cancel (no new LLM/tool).
-            hard_break = wind_down.enforce_hard_timeout_entry(tokens=total_usage.total_tokens)
+            hard_break = wind_down.enforce_hard_timeout_entry(tokens=total_usage.fuse_tokens)
             if hard_break is not None:
                 import asyncio
 
@@ -496,16 +550,17 @@ async def react_loop(
             # file_write 糊成正文 DSML。先武装收尾窗；若本轮刚进入，即使已过硬顶也
             # 先跑这一轮落盘/handoff，下一轮再撞硬顶 finalize。
             already_winding = wind_down.wind_down_active
-            wind_down.maybe_arm_wind_down(tokens=total_usage.total_tokens)
+            wind_down.maybe_arm_wind_down(tokens=total_usage.fuse_tokens)
             just_armed_wind_down = wind_down.wind_down_active and not already_winding
             # Loose token backstop (Worker 硬顶): stop BEFORE starting a round once the run's
-            # cumulative input+output tokens reach the ceiling, so a runaway overshoots by at
-            # most one round instead of grinding on (根因: 之前没人比对这个累计数). ``total_usage``
+            # cumulative fuse tokens (new work) reach the ceiling, so a runaway overshoots by at
+            # most one round instead of grinding on. ``total_usage``
             # is updated at each round's end, so this reflects rounds 0..round_idx-1. 0 =
-            # disabled (CEO / solo / tests → bounded only by max_rounds).
+            # disabled (CEO / solo / tests → no token fuse; optional max_rounds
+            # cap only when profile.max_rounds > 0).
             if (
                 token_budget > 0
-                and total_usage.total_tokens >= token_budget
+                and total_usage.fuse_tokens >= token_budget
                 and not just_armed_wind_down
             ):
                 ceiling_reason = "token_budget"
@@ -513,7 +568,8 @@ async def react_loop(
                     "engine.token_budget_exhausted",
                     run_id=run_id,
                     role=role,
-                    tokens=total_usage.total_tokens,
+                    tokens=total_usage.fuse_tokens,
+                    billed_tokens=total_usage.total_tokens,
                     token_budget=token_budget,
                     round=round_idx,
                 )
@@ -692,6 +748,10 @@ async def react_loop(
                     final_content=final_content,
                     error_code=round_result.error_code or "",
                     role=role,
+                    error_type=round_result.error_type,
+                    origin=round_result.origin,
+                    classified=round_result.classified,
+                    error=round_result.error_preview,
                 )
             elif round_result.aborted:
                 # Post-commit disconnect / stall: keep the partial prose and finish
@@ -723,6 +783,7 @@ async def react_loop(
                     final_content=final_content,
                     error_code=ErrorCode.LLM_ERROR,
                     role=role,
+                    origin=ORIGIN_STREAM_ABORTED,
                 )
             else:
                 usage = round_result.usage
@@ -798,7 +859,7 @@ async def react_loop(
                 else:
                     # Wind-down breach: non-whitelist tool → nudge+handoff-only, or
                     # local synth close (2nd breach / already at hard ceiling).
-                    breach = wind_down.apply_tool_breach(outcome, tokens=total_usage.total_tokens)
+                    breach = wind_down.apply_tool_breach(outcome, tokens=total_usage.fuse_tokens)
                     outcome = breach.outcome
                     skip_tool_exec = breach.skip_tool_exec
                     if breach.directive is not None:
@@ -891,6 +952,25 @@ async def react_loop(
                 form_prose=form_prose,
             )
             if applied.action == "return":
+                if _should_hold_return_for_interjection(
+                    role=role,
+                    steer_cid=steer_cid,
+                    profile=profile,
+                    round_idx=round_idx,
+                ):
+                    held = applied.content or final_content
+                    logger.info(
+                        "engine.steer_hold_return",
+                        round=round_idx,
+                        conversation_id=steer_cid,
+                    )
+                    _ensure_assistant_so_far(messages, held)
+                    final_content = held
+                    if applied.reasoning:
+                        final_reasoning = applied.reasoning
+                    if applied.usage is not None:
+                        total_usage = applied.usage
+                    continue
                 return _exit(
                     applied.content,
                     applied.reasoning,
@@ -933,7 +1013,7 @@ async def react_loop(
                 and rb.limit > 0
                 and rb.remaining <= 0
             ):
-                wind_down.enter_wind_down("retrieval_budget", tokens=total_usage.total_tokens)
+                wind_down.enter_wind_down("retrieval_budget", tokens=total_usage.fuse_tokens)
                 logger.info(
                     "engine.retrieval_budget_wind_down",
                     run_id=run_id,

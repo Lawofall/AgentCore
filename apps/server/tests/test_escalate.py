@@ -172,18 +172,21 @@ def test_escalation_required_carries_timeout_only_when_ops_configured_one():
 
 
 def test_escalate_schema_teaches_blocking_choice():
-    """Worker 按题自选 blocking：身份段用人话，按钮上仍须写清 JSON 字段默认 false。"""
+    """Worker 按题自选 blocking：默认 false / 猜错作废只留 blocking 参数。"""
     schema = EscalateTool().schema
     desc = schema.description
-    assert "默认 false" in desc
-    assert "猜错作废" in desc
     assert "小事勿升级" in desc
-    assert "报一声继续" in desc
-    assert "只有上级能定" in desc
+    assert "报一声" in desc
+    assert "猜错作废" in desc
+    assert "默认 false" not in desc
+    assert "browser_login" not in desc
+    assert "kind：" not in desc
     blocking = schema.parameters["properties"]["blocking"]["description"]
     assert "默认 false" in blocking
     assert "报一声继续" in blocking or "原地等" in blocking
     assert "已拒凭据" in blocking and "false" in blocking
+    login = schema.parameters["properties"]["browser_login"]["description"]
+    assert "blocking" in login
     # 身份段整句不进按钮
     assert "挂起等密钥" not in blocking
     assert "已明确拒绝已有凭据" not in blocking

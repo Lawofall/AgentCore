@@ -374,7 +374,7 @@ class RedirectController:
             from agentcore.llm.turn_auth_dead import credential_source_from_llm
             from agentcore.runtime.turn.token_budget import resolve_wave_budget_hooks
 
-            should_stop, priority_reserve_hit = resolve_wave_budget_hooks(
+            should_stop = resolve_wave_budget_hooks(
                 credential_source=credential_source_from_llm(
                     getattr(self.tool, "_llm", None)
                 ),
@@ -390,7 +390,6 @@ class RedirectController:
                 on_boundary=None,
                 on_skipped=on_skipped,
                 should_stop=should_stop,
-                priority_reserve_hit=priority_reserve_hit,
             )
             results.update(more)
         results.update(self.hot_revision_states)

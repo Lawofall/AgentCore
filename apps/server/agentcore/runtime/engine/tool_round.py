@@ -94,14 +94,6 @@ async def handle_tool_calls_round(
         tool_context,
         round_content_chars=len(outcome.content or ""),
     )
-    # R1: sync projected-window verbatim / fully-cleared file_read ledger before tools run.
-    from agentcore.runtime.engine.tool_clear import apply_file_read_clear_state
-
-    tool_context = apply_file_read_clear_state(
-        tool_context,
-        messages,
-        investigation_tools=controller.investigation_tool_names,
-    )
     # Team-gate / circuit-breaker strip from defs; also deny at execute so a
     # scripted or rogue tool_call cannot land after hard-stop.
     exec_allowed = allowed_tool_names

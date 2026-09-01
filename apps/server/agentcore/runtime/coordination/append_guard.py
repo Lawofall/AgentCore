@@ -17,21 +17,15 @@ rejected as ``sibling_role``. Serial ``depends_on`` and scoped fan-out
 
 **Seat reclaim**: FAILED / CANCELLED / SKIPPED (vacated) **and** successfully
 COMPLETED same-seat terminals auto-fill ``replaces_run_id`` when a new node
-reclaims the seat with no incomplete same-seat peer (file lock transfer +
-depends_on rewrite via the existing replaces pipeline). Still-running holders
-keep the seat; overlap still rejects.
+reclaims the seat with no incomplete same-seat peer (depends_on rewrite via
+the existing replaces pipeline). Still-running holders keep the seat; overlap
+still rejects.
 
-**C3 file side**: deliverable artifacts consult the session ownership ledger.
-**Completed** holders of a declared path are **not** append-rejected — dispatch
-``declare_plan_artifacts`` handoffs those paths to the new node (审校→修订 /
-同岗位补派). Still-running / incomplete holders keep blocking. Role-only
-overlap still requires incomplete live nodes (plus same-batch peers above).
-
-Same-batch sibling role / artifact crosses are rejected at dispatch (name the
-pair), **before** durable ``run_plan`` emit (admit → commit → execute). The
-try_start sibling defense uses the same rule: scan the **new batch only**
-(:func:`same_batch_plan` drops host terminals). Completed same-seat + same
-path 续派 is not a sibling cross.
+Parallel workers **may** declare and write the same file. Occupancy is the
+write tool call (disk serial + whole-file CAS), not a run-lifetime owner.
+Same-batch ``sibling_role`` still rejects at dispatch **before** durable
+``run_plan`` emit. The try_start defense uses the same seat rule on the
+**new batch only** (:func:`same_batch_plan` drops host terminals).
 
 Cross-turn ``append_to_execution_id`` admits the **new batch only** against the
 host plan + journal completed seed (auto-``replaces`` on free seats) — never
@@ -221,13 +215,12 @@ def find_append_overlaps(
     ownership: WriteCoordinator | None = None,
     birth_desk_id: str | None = None,
 ) -> list[AppendOverlap]:
-    """Return overlaps between ``new_plan`` nodes and live / ownership holders."""
+    """Return seat overlaps between ``new_plan`` and live holders (not file paths)."""
+    _ = ownership, birth_desk_id
     if not new_plan.nodes:
         return []
 
-    hits: list[AppendOverlap] = find_sibling_artifact_crosses(
-        new_plan, birth_desk_id=birth_desk_id
-    )
+    hits: list[AppendOverlap] = find_sibling_role_crosses(new_plan)
 
     if live_plan is None:
         return hits
@@ -237,118 +230,31 @@ def find_append_overlaps(
     if started_run_ids is not None:
         started = set(started_run_ids)
         incomplete = [n for n in incomplete if n.run_id in started]
-    live_by_id = {n.run_id: n for n in live_plan.nodes}
-
-    combined_ancestors = _ancestors_for_plan(live_plan)
-    # New nodes may depend on live ids — fold their depends_on into ancestor sets.
-    for nn in new_plan.nodes:
-        deps = frozenset(getattr(nn, "depends_on", None) or ())
-        extra = set(deps)
-        for d in deps:
-            extra |= set(combined_ancestors.get(d, frozenset()))
-        combined_ancestors[nn.run_id] = frozenset(extra)
 
     for nn in new_plan.nodes:
         replaces = (getattr(nn, "replaces_run_id", None) or "").strip()
-        continue_from = (getattr(nn, "continue_from_run_id", None) or "").strip()
-        # Explicit replaces is plan surgery — skip overlap (transfer happens at declare).
+        # Explicit replaces is plan surgery — skip overlap.
         if replaces:
             continue
         n_role = _node_role(nn)
-        n_desk = node_ownership_desk(nn, birth_desk_id=birth_desk_id)
-        n_files = node_artifact_paths(nn)
-        n_anc = set(combined_ancestors.get(nn.run_id, frozenset()))
-        if continue_from:
-            n_anc.add(continue_from)
 
-        # --- Role overlaps: incomplete live nodes only (role gate retained) ---
+        # Seat overlap still rejects. Parallel co-writes of the same file do not.
         role_hit_live = None
         for live in incomplete:
             if roles_overlap(n_role, _node_role(live)):
                 role_hit_live = live
                 break
-
-        # --- File overlaps ---
-        # Completed holders are not append-rejected: declare_plan_artifacts will
-        # dispatch_handoff those paths. Still-running owners keep blocking.
-        file_hit_id: str | None = None
-        file_hit_role = ""
-        file_hit_path = ""
-        if n_files and ownership is not None:
-            for path in n_files:
-                owner = ownership.owner_of(path, desk_id=n_desk)
-                if owner is None:
-                    continue
-                if owner == nn.run_id or owner in n_anc:
-                    continue
-                if owner in done:
-                    continue
-                is_ended = getattr(ownership, "is_ended", None)
-                if is_ended is not None and is_ended(owner):
-                    continue
-                file_hit_id = owner
-                live_node = live_by_id.get(owner)
-                file_hit_role = (_node_role(live_node) if live_node else "") or owner
-                file_hit_path = path
-                break
-
-        if role_hit_live is None and file_hit_id is None:
+        if role_hit_live is None:
             continue
-        if role_hit_live is not None and file_hit_id is not None:
-            role_id = role_hit_live.run_id
-            if role_id == file_hit_id:
-                hits.append(
-                    AppendOverlap(
-                        new_role=n_role or nn.run_id,
-                        new_run_id=nn.run_id,
-                        live_role=_node_role(role_hit_live) or role_hit_live.run_id,
-                        live_run_id=role_id,
-                        reason="role+deliverable",
-                        path=file_hit_path,
-                    )
-                )
-            else:
-                # Different parties: report seat collision and file owner separately.
-                hits.append(
-                    AppendOverlap(
-                        new_role=n_role or nn.run_id,
-                        new_run_id=nn.run_id,
-                        live_role=_node_role(role_hit_live) or role_hit_live.run_id,
-                        live_run_id=role_id,
-                        reason="role",
-                    )
-                )
-                hits.append(
-                    AppendOverlap(
-                        new_role=n_role or nn.run_id,
-                        new_run_id=nn.run_id,
-                        live_role=file_hit_role,
-                        live_run_id=file_hit_id or "",
-                        reason="deliverable",
-                        path=file_hit_path,
-                    )
-                )
-        elif role_hit_live is not None:
-            hits.append(
-                AppendOverlap(
-                    new_role=n_role or nn.run_id,
-                    new_run_id=nn.run_id,
-                    live_role=_node_role(role_hit_live) or role_hit_live.run_id,
-                    live_run_id=role_hit_live.run_id,
-                    reason="role",
-                )
+        hits.append(
+            AppendOverlap(
+                new_role=n_role or nn.run_id,
+                new_run_id=nn.run_id,
+                live_role=_node_role(role_hit_live) or role_hit_live.run_id,
+                live_run_id=role_hit_live.run_id,
+                reason="role",
             )
-        else:
-            hits.append(
-                AppendOverlap(
-                    new_role=n_role or nn.run_id,
-                    new_run_id=nn.run_id,
-                    live_role=file_hit_role,
-                    live_run_id=file_hit_id or "",
-                    reason="deliverable",
-                    path=file_hit_path,
-                )
-            )
+        )
     return hits
 
 
@@ -498,20 +404,15 @@ def declare_plan_artifacts(
     completed_run_ids: set[str] | frozenset[str] | None = None,
     birth_desk_id: str | None = None,
 ) -> list[tuple[str, str, str]]:
-    """Reserve deliverable.artifacts for each node; apply replaces/continue transfers.
+    """Record declared artifacts on the session ledger (not an exclusive write lock).
 
-    By default (``ancestor_handoff_at_declare=False``) a downstream node that lists the
-    same path as an ancestor **does not** steal the lock at dispatch — the ancestor
-    keeps holding until write-time claim, completion handoff, or explicit transfer.
-    Nested lead→child drives pass ``ancestor_handoff_at_declare=True``.
+    Writes no longer refuse on ledger owner. ``replaces`` / ``continue_from`` still
+    move recorded names for snapshots. Nested lead→child may
+    ``ancestor_handoff_at_declare=True``. Completed / ended holders can still
+    transfer the recorded name at dispatch.
 
-    When ``completed_run_ids`` is set, a hard conflict against a **completed** holder is
-    treated as dispatch-time handoff (审校→修订跨波次)：新节点声明同路径即接手，无需
-    用户点「移交写权」。``ended_owners`` on the ledger (nested terminal bypass) is
-    treated the same. Still-running lock owners keep blocking.
-
-    Returns list of ``(new_run_id, path, conflicting_owner)`` for hard conflicts
-    when not transfer-eligible (caller should have rejected via overlaps first).
+    Returns leftover ``(new_run_id, path, conflicting_owner)`` tuples when a
+    still-running recorded owner exists — callers do not reject the batch on them.
     ``path`` in the tuple is the bare ``rel_path``.
     """
     ancestors = ancestor_map if ancestor_map is not None else _ancestors_for_plan(plan)

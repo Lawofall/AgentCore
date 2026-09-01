@@ -210,7 +210,11 @@ def test_list_folders_schema_and_registration():
     assert "rel_path" in desc
     assert "resolve_folder" in desc
     assert "file_list" in desc
-    assert "清单" in desc
+    assert "名册" in desc
+    assert "不常驻" in desc
+    assert "跨桌" in desc
+    assert "先列" in desc
+    assert "清单已有" not in desc
     reg = tool_registration(ListFoldersTool)
     assert reg.surface is ToolSurface.CEO_ORCHESTRATION
     assert reg.audience == (AUDIENCE_CEO,)

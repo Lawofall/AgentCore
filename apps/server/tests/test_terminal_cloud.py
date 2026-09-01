@@ -1,4 +1,4 @@
-"""Cloud ``terminal`` (slice 2): desk-guest ledger, not WorkspaceChannel.
+"""Cloud process kernel (slice 2): desk-guest ledger, not WorkspaceChannel.
 
 Local ``process_*`` shapes stay in ``test_terminal_tool.py``. These tests never
 talk to a real runsc: short exec is faked so Windows CI can prove start does not
@@ -16,7 +16,7 @@ import pytest
 
 import agentcore.tools.sandbox.gvisor as gvisor_mod
 from agentcore.config import settings
-from agentcore.tools.builtin.terminal import TerminalTool
+from agentcore.tools.builtin.run_process import process_manage
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.gvisor import (
     GVisorSandbox,
@@ -157,17 +157,6 @@ def test_sandboxd_exec_allowlist_unchanged():
     assert frozenset({"python3", "node", "bash"}) == EXEC_BINS
 
 
-def test_server_description_is_not_local_only():
-    catalog = TerminalTool().schema.description
-    server = TerminalTool(location="server").schema.description
-    local = TerminalTool(location="local").schema.description
-    assert "仅本地" not in catalog
-    assert "仅本地" not in server
-    assert "云桌" in server
-    assert "本机" in local
-    assert "对话" in server
-
-
 async def test_cloud_start_does_not_emit_workspace_op(tmp_path: Path):
     sandbox = _FakeDesk(tmp_path / "scratch")
     backend = _backend(tmp_path, sandbox)
@@ -180,7 +169,7 @@ async def test_cloud_start_does_not_emit_workspace_op(tmp_path: Path):
     backend.execute = _spy_execute  # type: ignore[method-assign]
     channel = _channel()
     DELIVERED_EVENTS.clear()
-    result = await TerminalTool().execute(
+    result = await process_manage(
         {"subcommand": "start", "command": "echo hi"},
         _ctx(backend, channel=channel),
     )
@@ -196,7 +185,7 @@ async def test_cloud_start_releases_exec_slot_before_wait_for(tmp_path: Path):
     sandbox = _FakeDesk(tmp_path / "scratch", auto_log="")
     backend = _backend(tmp_path, sandbox)
     task = asyncio.create_task(
-        TerminalTool().execute(
+        process_manage(
             {
                 "subcommand": "start",
                 "command": "pnpm dev",
@@ -226,16 +215,16 @@ async def test_cloud_start_releases_exec_slot_before_wait_for(tmp_path: Path):
 async def test_conversations_do_not_share_a_process_list(tmp_path: Path):
     sandbox = _FakeDesk(tmp_path / "scratch")
     backend = _backend(tmp_path, sandbox)
-    started = await TerminalTool().execute(
+    started = await process_manage(
         {"subcommand": "start", "command": "echo a"},
         _ctx(backend, conversation_id=CONV_A),
     )
     assert started.success
-    listed_b = await TerminalTool().execute(
+    listed_b = await process_manage(
         {"subcommand": "list"},
         _ctx(backend, conversation_id=CONV_B),
     )
-    listed_a = await TerminalTool().execute(
+    listed_a = await process_manage(
         {"subcommand": "list"},
         _ctx(backend, conversation_id=CONV_A),
     )
@@ -246,7 +235,7 @@ async def test_conversations_do_not_share_a_process_list(tmp_path: Path):
 async def test_restart_honesty_does_not_rebuild_from_leftover_files(tmp_path: Path):
     sandbox = _FakeDesk(tmp_path / "scratch")
     backend = _backend(tmp_path, sandbox)
-    started = await TerminalTool().execute(
+    started = await process_manage(
         {"subcommand": "start", "command": "echo hi"},
         _ctx(backend),
     )
@@ -259,15 +248,15 @@ async def test_restart_honesty_does_not_rebuild_from_leftover_files(tmp_path: Pa
     from agentcore.tools.sandbox.desk_process import reset_desk_processes_for_tests
 
     reset_desk_processes_for_tests()
-    listed = await TerminalTool().execute({"subcommand": "list"}, _ctx(backend))
+    listed = await process_manage({"subcommand": "list"}, _ctx(backend))
     assert "无后台进程" in listed.output
-    read = await TerminalTool().execute(
+    read = await process_manage(
         {"subcommand": "read", "process_id": process_id},
         _ctx(backend),
     )
     assert read.success is False
     assert read.metadata.get("code") == "process_not_registered"
-    stopped = await TerminalTool().execute(
+    stopped = await process_manage(
         {"subcommand": "stop", "process_id": process_id},
         _ctx(backend),
     )
@@ -278,20 +267,20 @@ async def test_restart_honesty_does_not_rebuild_from_leftover_files(tmp_path: Pa
 async def test_close_all_desk_sessions_drops_ledger(tmp_path: Path):
     sandbox = _FakeDesk(tmp_path / "scratch")
     backend = _backend(tmp_path, sandbox)
-    started = await TerminalTool().execute(
+    started = await process_manage(
         {"subcommand": "start", "command": "echo hi"},
         _ctx(backend),
     )
     assert started.success
     await close_all_desk_sessions()
-    listed = await TerminalTool().execute({"subcommand": "list"}, _ctx(backend))
+    listed = await process_manage({"subcommand": "list"}, _ctx(backend))
     assert "无后台进程" in listed.output
 
 
 async def test_cloud_wait_for_required_does_not_launch(tmp_path: Path):
     sandbox = _FakeDesk(tmp_path / "scratch")
     backend = _backend(tmp_path, sandbox)
-    result = await TerminalTool().execute(
+    result = await process_manage(
         {"subcommand": "start", "command": "npm run dev"},
         _ctx(backend),
     )
@@ -305,7 +294,7 @@ async def test_subprocess_sandbox_start_is_cloud_desk_required(tmp_path: Path):
     backend = _backend(tmp_path, SubprocessSandbox())
     channel = _channel()
     DELIVERED_EVENTS.clear()
-    result = await TerminalTool().execute(
+    result = await process_manage(
         {"subcommand": "start", "command": "echo hi"},
         _ctx(backend, channel=channel),
     )
@@ -317,7 +306,7 @@ async def test_subprocess_sandbox_start_is_cloud_desk_required(tmp_path: Path):
 async def test_cloud_read_and_stop_round_trip(tmp_path: Path):
     sandbox = _FakeDesk(tmp_path / "scratch", auto_log="Listening on :3000\n")
     backend = _backend(tmp_path, sandbox)
-    started = await TerminalTool().execute(
+    started = await process_manage(
         {
             "subcommand": "start",
             "command": "pnpm dev",
@@ -328,13 +317,13 @@ async def test_cloud_read_and_stop_round_trip(tmp_path: Path):
     assert started.success
     assert started.display.get("matched") is True
     process_id = started.display["process_id"]
-    read = await TerminalTool().execute(
+    read = await process_manage(
         {"subcommand": "read", "process_id": process_id, "tail_lines": 10},
         _ctx(backend),
     )
     assert read.success
     assert "Listening" in (read.display.get("output") or "")
-    stopped = await TerminalTool().execute(
+    stopped = await process_manage(
         {"subcommand": "stop", "process_id": process_id},
         _ctx(backend),
     )

@@ -1,4 +1,4 @@
-"""委派前奏单测：硬拒 / 软告警 / 规范化，不经整条执行链。
+"""委派前奏单测：硬拒 / 规范化，不经整条执行链。
 
 `resolve_delegate_prelude` 从 `DelegateTool.execute` 抽出后是纯函数（零 await、不写实例），
 这里直接喂 `arguments` 断言这几道闸——不用 mock LLM / 调度 / 协作图。
@@ -262,13 +262,13 @@ def test_deep_deliverable_single_worker_stays_standard():
     assert out.complexity_hint == "standard"
 
 
-# ── 软告警（三条都只告警、不拒收）────────────────────────────────────────────
+# ── 一次性软提示族已撤（同形入参仍接受，无告警字段、无事件）──────────────────
 
 
-def test_consumer_missing_depends_soft_warns(monkeypatch):
+def test_former_soft_scan_shapes_accepted_without_warn_fields_or_events(monkeypatch):
     spy = LogSpy()
     monkeypatch.setattr(prelude_mod, "logger", spy)
-    out = accepted(
+    goldbach = accepted(
         {
             "tasks": [
                 {"id": "r1", "role": "调研甲", "task": "调研偶数哥德巴赫猜想相关文献"},
@@ -277,15 +277,7 @@ def test_consumer_missing_depends_soft_warns(monkeypatch):
             ]
         }
     )
-    assert out.consumer_deps_warn is not None
-    assert "depends_on" in out.consumer_deps_warn
-    assert spy.get("delegate.consumer_deps_soft_warn")["task_count"] == 3
-
-
-def test_design_impl_same_grant_soft_warns(monkeypatch):
-    spy = LogSpy()
-    monkeypatch.setattr(prelude_mod, "logger", spy)
-    out = accepted(
+    mixed = accepted(
         {
             "tasks": [
                 {
@@ -304,23 +296,40 @@ def test_design_impl_same_grant_soft_warns(monkeypatch):
             ]
         }
     )
-    assert out.design_impl_warn is not None
-    assert spy.get("delegate.design_impl_same_grant_soft_warn")["task_count"] == 1
+    root_ws = accepted(
+        {
+            "tasks": [
+                {
+                    "role": "工程师",
+                    "task": "从零实现应用 MVP",
+                    "deliverable": {"form": "workspace"},
+                }
+            ]
+        }
+    )
+    nested = accepted(
+        {
+            "tasks": [
+                {
+                    "role": "工程师",
+                    "task": "从零实现应用 MVP",
+                    "deliverable": {"form": "workspace"},
+                }
+            ]
+        },
+        depth=1,
+    )
+    for out in (goldbach, mixed, root_ws, nested):
+        assert not hasattr(out, "consumer_deps_warn")
+        assert not hasattr(out, "design_impl_warn")
+        assert not hasattr(out, "root_slice_warn")
+    names = [n for n, _ in spy.events]
+    assert "delegate.consumer_deps_soft_warn" not in names
+    assert "delegate.design_impl_same_grant_soft_warn" not in names
+    assert "delegate.root_slice_honesty_soft_warn" not in names
 
 
-def test_root_slice_honesty_soft_warns_at_root_only(monkeypatch):
-    spy = LogSpy()
-    monkeypatch.setattr(prelude_mod, "logger", spy)
-    tasks = [
-        {"role": "工程师", "task": "从零实现应用 MVP", "deliverable": {"form": "workspace"}}
-    ]
-    assert accepted({"tasks": tasks}).root_slice_warn is not None
-    assert "delegate.root_slice_honesty_soft_warn" in [n for n, _ in spy.events]
-    # 嵌套扇出是合法等价路径 → 子团队内不再告警。
-    assert accepted({"tasks": tasks}, depth=1).root_slice_warn is None
-
-
-def test_no_soft_warnings_on_a_clean_batch():
+def test_declared_depends_still_accepted():
     out = accepted(
         {
             "tasks": [
@@ -329,6 +338,5 @@ def test_no_soft_warnings_on_a_clean_batch():
             ]
         }
     )
-    assert out.consumer_deps_warn is None
-    assert out.design_impl_warn is None
-    assert out.root_slice_warn is None
+    assert isinstance(out, DelegateBatchRequest)
+    assert not hasattr(out, "consumer_deps_warn")

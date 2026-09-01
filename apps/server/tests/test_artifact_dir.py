@@ -82,17 +82,19 @@ def test_apply_workspace_does_not_join_leftover_artifact_dir():
     assert d.artifact_dir == ""
     assert d.artifacts == [name]
     desc = describe_deliverable(d)
-    assert "不要落进 `AgentCore/文档/`" in desc
+    assert name in desc
+    assert "不要落进 `AgentCore/文档/`" not in desc
     assert f"建议约定文档落盘目录：`{REVIEWS_DIR}/`" not in desc
+    assert f"落点目录：`{REVIEWS_DIR}/`" not in desc
 
 
-def test_describe_workspace_native_replaces_drafts_hint():
+def test_describe_workspace_native_omits_drafts_hint():
     """写码节点的任务书不得再出现「建议落工作稿/」这类误导。"""
     d = Deliverable(form="files", workspace_native=True)
     apply_artifact_dir_defaults(d)
     desc = describe_deliverable(d)
     assert DRAFTS_DIR not in desc
-    assert "工作区原生文件" in desc
+    assert desc == ""
 
 
 def test_resolve_skips_business_artifacts():
@@ -137,9 +139,9 @@ def test_apply_empty_artifacts_keeps_shared_dir_without_fake_artifact():
 def test_describe_mentions_artifact_dir_filename_only():
     d = Deliverable(form="files", artifact_dir=RESEARCH_DIR, artifacts=[])
     desc = describe_deliverable(d)
-    assert f"建议约定文档落盘目录：`{RESEARCH_DIR}/`" in desc
-    assert "只定文件名" in desc
-    assert "勿写到工作区根" in desc
+    assert f"落点目录：`{RESEARCH_DIR}/`" in desc
+    assert "只定文件名" not in desc
+    assert "勿写到工作区根" not in desc
 
 
 def test_contract_root_write_warns_under_artifact_dir():
@@ -163,8 +165,8 @@ def test_contract_root_write_warns_under_artifact_dir():
     assert not any("约定文档目录" in w for w in ok.warnings)
 
 
-def test_artifact_dir_mismatch_is_blocking_on_delivery_status():
-    """Contract artifact_dir 文案仍可 warning 盖戳；交付对账升为失配，错位文件不进 delivered。"""
+def test_artifact_dir_mismatch_is_soft_on_delivery_status():
+    """Contract artifact_dir 文案仍可 warning 盖戳；错位文件进卡，失配不挡 delivered。"""
     from agentcore.runtime.delegate.delivery_status import build_delivery_status
     from agentcore.runtime.runs.executor.shared import _delivery_gaps_from_warnings
     from agentcore.runtime.runs.file_acceptance import (
@@ -210,12 +212,11 @@ def test_artifact_dir_mismatch_is_blocking_on_delivery_status():
     }
     payload = build_delivery_status(plan, results, execution_id="e-adir-pipe")
     assert payload is not None
-    assert payload["state"] == "partial"
-    assert payload["state"] != "delivered"
-    assert payload["delivered_files"] == []
+    assert payload["state"] == "delivered"
+    assert "miro-research.md" in payload["delivered_files"]
     assert any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])
     assert all(
-        g.get("severity") != "warning"
+        g.get("severity") == "warning"
         for g in payload["gaps"]
         if g.get("reason") == REASON_PATH_MISMATCH
     )
@@ -238,7 +239,8 @@ def test_build_run_plan_injects_default_drafts_dir():
     assert d.artifact_dir == DRAFTS_DIR
     assert d.artifacts == []
     desc = describe_deliverable(d)
-    assert DRAFTS_DIR in desc
+    assert desc == ""
+    assert DRAFTS_DIR not in desc
 
 
 def test_build_run_plan_workspace_native_skips_default_drafts_dir():

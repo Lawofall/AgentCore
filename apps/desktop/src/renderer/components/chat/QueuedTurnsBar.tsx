@@ -9,9 +9,9 @@ import { Loader2, X } from "lucide-react";
 import { useState } from "react";
 
 /**
- * 排队唯一 UI：drain 前展示 FIFO 项，可按项取消或立刻插队（Stop ≠ 取消排队）。
- * 挂在 composer 上方；排队期不插主时间线用户泡。
- * 内容权威 = GET 对账；本端发送 ack 即时 upsert 为低延迟，条上可标插话升队来源。
+ * 排队条：drain 前可按项取消或立刻插队（Stop ≠ 取消排队）。
+ * 挂在 composer 上方；正文在主时间线用户泡（ack 即入场），条不是唯一载体。
+ * 本端发送 ack 即时 upsert；快照对账兜底。
  */
 export function QueuedTurnsBar({
   conversationId,

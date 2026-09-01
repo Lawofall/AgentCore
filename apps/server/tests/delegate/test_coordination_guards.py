@@ -88,14 +88,13 @@ def test_worker_budget_facts_only_lists_stamped_numbers():
     s._worker_started_at["w1"] = s._worker_started_at["w2"] = __import__("time").monotonic()
     assert s.worker_budget_facts("w1") == [
         "超时阈值 1200s",
-        "轮次上限 56",
         "token 顶 4000000",
     ]
     assert s.worker_budget_facts("w2") == []
     summary = s.worker_progress_summary()
     assert "token 顶 4000000" in summary
-    assert "轮次上限 56" in summary
     assert "超时阈值 1200s" in summary
+    assert "轮次上限" not in summary
     assert "已用" not in summary
     assert "已花" not in summary
 
@@ -119,7 +118,6 @@ def test_worker_budget_facts_use_live_spend_not_just_ceilings():
     s.mark_worker_busy("w1", "llm")
     assert s.worker_budget_facts("w1") == [
         "超时阈值 1200s",
-        "轮次上限 56",
         "token 顶 4000000",
     ]
     s.mark_worker_busy(
@@ -131,33 +129,29 @@ def test_worker_budget_facts_use_live_spend_not_just_ceilings():
     )
     assert s.worker_budget_facts("w1") == [
         "超时阈值 1200s",
-        "已用 52/56 轮",
         "已花 2700000/4000000",
     ]
     summary = s.worker_progress_summary()
-    assert "已用 52/56 轮" in summary
     assert "已花 2700000/4000000" in summary
-    assert "轮次上限 56" not in summary
+    assert "已用" not in summary
+    assert "轮次上限" not in summary
     assert "token 顶 4000000" not in summary
     # 轮间 clear 必须保住数字，否则 idle 巡查刚好赶上空窗。
     s.clear_worker_busy("w1")
     assert s.worker_budget_facts("w1") == [
         "超时阈值 1200s",
-        "已用 52/56 轮",
         "已花 2700000/4000000",
     ]
-    # Pass-local round reset (light_repair) last-write-wins; tokens keep the max
+    # Pass-local reset last-write-wins; tokens keep the max
     # so a new pass's 0 cannot wipe prior-pass spend.
     s.mark_worker_busy("w1", "llm", rounds_used=0, rounds_limit=4, tokens_spent=0)
     assert s.worker_budget_facts("w1") == [
         "超时阈值 1200s",
-        "已用 0/4 轮",
         "已花 2700000/4000000",
     ]
     s.disarm_worker_timeout("w1")
     assert s.worker_budget_facts("w1") == [
         "超时阈值 1200s",
-        "轮次上限 56",
         "token 顶 4000000",
     ]
 
@@ -564,8 +558,7 @@ def test_roles_and_file_targets_detect_geo_class_overlap():
     hits = find_append_overlaps(
         overlapping, live, completed_run_ids=set(), ownership=ownership
     )
-    assert hits
-    assert hits[0].reason in ("deliverable", "role+deliverable")
+    assert hits == []
 
     non_overlap = _plan(
         RunSpec(run_id="seo", role="SEO 优化师", task="整理站外外链策略备忘"),
@@ -865,8 +858,8 @@ async def test_merge_auto_replaces_vacated_seat_and_rewrites_deps():
         clear_active_coordination("e-seat")
 
 
-async def test_merge_rejects_overlapping_append_with_explanation():
-    """DAG 未完成时追加文件重叠队员 → 拒绝且回执含解释（异座仍可因文件拒）。"""
+async def test_merge_allows_same_path_different_seat_append():
+    """DAG 未完成时追加同路径、不同座位 → 放行。"""
     from agentcore.runtime.coordination.append_guard import declare_plan_artifacts
     from agentcore.runtime.coordination.host import _merge_into_active_coordination
     from agentcore.runtime.runs.types import Deliverable
@@ -911,17 +904,9 @@ async def test_merge_rejects_overlapping_append_with_explanation():
             complexity_hint="",
             call_idx=2,
         )
-        assert result.success is False
-        err = result.error or ""
-        assert "重叠" in err
-        assert "波次" in err or "等待" in err
-        assert "replaces_run_id" in err
-        assert "cancel_worker" in err
-        assert "已完成" in err and "不能靠 cancel" in err
-        assert "文件主人" in err or "交付物" in err
-        assert result.contract_failure is True
-        assert session.total_workers == 2
-        assert len(live.nodes) == 2
+        assert result.success is True
+        assert session.total_workers == 3
+        assert len(live.nodes) == 3
     finally:
         session.drive_task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -1028,17 +1013,16 @@ def test_healthy_idle_inject_has_progress_and_no_action_guidance():
     assert "依赖阻塞" in brief
     assert "无需追加" in brief
     assert "正常推进" in brief
-    assert "不要 delegate" in brief or "勿" in brief
+    assert "【协调期】" in brief
     assert "可静默" in brief
-    assert "谁还在跑" in brief
-    assert "三选一" in brief
+    assert "谁还在跑" not in brief
+    assert "三选一" not in brief
     assert "谁在后台推进" not in brief
     assert "谁在后台、完成后会再汇报" not in brief
     assert "保持静默即可" not in brief
-    assert "保持等待" in brief or "保持静默" in brief  # forbid phrasing appears as prohibition
-    assert "cancel_worker" in brief
+    assert "cancel_worker" not in brief
     assert "token 顶 4000000" in brief
-    assert "轮次上限 56" in brief
+    assert "轮次上限" not in brief
     assert "超时阈值 1200s" in brief
     assert "疑似卡死" not in brief
     assert "上方进展行" not in brief
@@ -1050,12 +1034,12 @@ def test_healthy_idle_inject_has_progress_and_no_action_guidance():
     assert "无需追加" in (msgs[0].content or "")
     assert "可静默" in (msgs[0].content or "")
     assert "保持静默即可" not in (msgs[0].content or "")
-    assert "cancel_worker" in (msgs[0].content or "")
+    assert "cancel_worker" not in (msgs[0].content or "")
     assert "token 顶 4000000" in (msgs[0].content or "")
 
 
 def test_healthy_idle_brief_shows_live_spend_when_stamped():
-    """CEO idle brief lists 已用/已花 once the executor has stamped spend."""
+    """CEO idle brief lists 已花 once the executor has stamped spend."""
     from agentcore.runtime.coordination.pipeline_view import format_idle_yield_brief
     from agentcore.runtime.runs.types import Deliverable
 
@@ -1088,9 +1072,9 @@ def test_healthy_idle_brief_shows_live_spend_when_stamped():
         tokens_spent=2_700_000,
     )
     brief = format_idle_yield_brief(session)
-    assert "已用 52/56 轮" in brief
     assert "已花 2700000/4000000" in brief
-    assert "轮次上限 56" not in brief
+    assert "已用" not in brief
+    assert "轮次上限" not in brief
     assert "token 顶 4000000" not in brief
     assert "疑似卡死" not in brief
     assert "上方进展行" not in brief
@@ -1594,8 +1578,8 @@ def test_same_seat_completed_cold_redispatch_inherits_locks():
     assert ownership.claim("src/ui/ReasoningGraph.tsx", "fe2", frozenset()) is None
 
 
-def test_running_owner_still_blocks_append_file_overlap():
-    """锁主仍在跑时，声明同 artifact 的无关节点仍拒。"""
+def test_running_owner_does_not_block_append_file_overlap():
+    """锁主仍在跑时，声明同 artifact 的无关节点可以开工（座位不重叠）。"""
     from agentcore.runtime.coordination.append_guard import (
         declare_plan_artifacts,
         find_append_overlaps,
@@ -1624,9 +1608,7 @@ def test_running_owner_still_blocks_append_file_overlap():
     hits = find_append_overlaps(
         new, live, completed_run_ids=set(), ownership=ownership
     )
-    assert hits
-    assert hits[0].reason == "deliverable"
-    assert hits[0].live_run_id == "integration"
+    assert hits == []
 
 
 def test_replaces_skips_overlap_and_transfers():
@@ -1738,12 +1720,11 @@ def test_session_ownership_snapshot_roundtrip():
 # --- C3: reject before durable run_plan emit (零图副作用) ---
 
 
-async def test_sibling_artifact_reject_emits_no_run_plan(monkeypatch):
-    """同批交付物交叉 → 拒在 emit 前，sink/journal 无该批 run_plan，无 delegate.started。"""
+async def test_sibling_artifact_same_path_emits_run_plan(monkeypatch):
+    """同批交付物交叉、不同座位 → 能开工（有 run_plan）。"""
     import agentcore.tools.builtin.delegate.tool as delegate_tool_mod
     from agentcore.runtime.events import EventSink, EventType
     from agentcore.runtime.facts import FactKind, TurnFactLog, current_fact_log
-    from agentcore.runtime.journal.fold import plan_from_journal
     from tests.conftest import LogSpy
     from tests.delegate.conftest import ctx, tool
 
@@ -1773,30 +1754,23 @@ async def test_sibling_artifact_reject_emits_no_run_plan(monkeypatch):
             },
             ctx(),
         )
-        assert result.success is False
-        assert result.contract_failure is True
-        assert "同批交付物交叉" in (result.error or "") or "交叉" in (result.error or "")
+        assert result.success is True
         run_plans = [e for e in sink._history if e.type is EventType.RUN_PLAN]
-        assert run_plans == []
-        assert active_coordination("e") is None
-        assert all(
-            e.get("kind") != FactKind.PLAN_SNAPSHOT.value for e in log.entries()
-        )
-        assert plan_from_journal(log.entries()) is None
-        assert not any(name == "delegate.started" for name, _ in spy.events)
+        assert len(run_plans) == 1
+        assert any(e.get("kind") == FactKind.PLAN_SNAPSHOT.value for e in log.entries())
     finally:
         current_fact_log.reset(token)
 
 
-async def test_sibling_reject_then_reassign_single_swimlane():
-    """拒后改分文件再派 → 仅一套泳道（一次成功 run_plan）。"""
+async def test_sibling_same_path_then_second_batch_adds_swimlane():
+    """同路径不同座位第一批能开工；再派不同文件仍可追加。"""
     from agentcore.runtime.events import EventSink, EventType
     from tests.delegate.conftest import Provider, ctx, tool
 
     clear_active_coordination()
     sink = EventSink()
     t = tool(Provider(["AOUT", "BOUT"]), sink=sink)
-    rejected = await t.execute(
+    first = await t.execute(
         {
             "tasks": [
                 {
@@ -1814,36 +1788,15 @@ async def test_sibling_reject_then_reassign_single_swimlane():
         },
         ctx(),
     )
-    assert rejected.success is False
-    assert [e for e in sink._history if e.type is EventType.RUN_PLAN] == []
-
-    ok = await t.execute(
-        {
-            "tasks": [
-                {
-                    "role": "前端",
-                    "task": "写 App",
-                    "deliverable": {"artifacts": ["src/App.tsx"]},
-                },
-                {
-                    "role": "整合",
-                    "task": "写汇总",
-                    "deliverable": {"artifacts": ["src/summary.md"]},
-                },
-            ],
-            "coordinate": False,
-        },
-        ctx(),
-    )
-    assert ok.success is True
+    assert first.success is True
     run_plans = [e for e in sink._history if e.type is EventType.RUN_PLAN]
     assert len(run_plans) == 1
     roles = {a.get("role") for a in (run_plans[0].payload.get("agents") or [])}
     assert "前端" in roles and "整合" in roles
 
 
-async def test_append_overlap_reject_emits_no_run_plan():
-    """活跃协调上文件重叠追加 → 拒在 emit 前，无第二张 run_plan。"""
+async def test_append_same_path_different_seat_emits_second_run_plan():
+    """活跃协调上文件重叠、不同座位追加 → 第二张 run_plan。"""
     from agentcore.runtime.events import EventSink, EventType
     from tests.delegate.conftest import ctx, tool
     from tests.delegate.test_coordination_secondary_delegate import _SlowWorkers
@@ -1892,13 +1845,9 @@ async def test_append_overlap_reject_emits_no_run_plan():
         },
         ctx(),
     )
-    assert second.success is False
-    assert "重叠" in (second.error or "") or "归属" in (second.error or "")
-    assert "replaces_run_id" in (second.error or "")
-    assert "不能靠 cancel" in (second.error or "")
-    plans_after_reject = [e for e in sink._history if e.type is EventType.RUN_PLAN]
-    assert len(plans_after_reject) == 1
-    assert session.total_workers == 2
+    assert second.success is True
+    plans_after = [e for e in sink._history if e.type is EventType.RUN_PLAN]
+    assert len(plans_after) == 2
 
     drive.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -1906,8 +1855,9 @@ async def test_append_overlap_reject_emits_no_run_plan():
     clear_active_coordination("e")
 
 
-def test_try_start_sibling_reject_creates_no_session():
-    """try_start 防御闸：sibling 拒在建 session 之前。"""
+@pytest.mark.asyncio
+async def test_try_start_same_path_different_seat_creates_session():
+    """try_start：同路径不同座位 → 建 session。"""
     from agentcore.runtime.coordination.host import try_start_coordination
     from agentcore.runtime.runs.types import Deliverable
 
@@ -1939,8 +1889,15 @@ def test_try_start_sibling_reject_creates_no_session():
         coordinate=True,
     )
     assert started is not None
-    assert started.success is False
-    assert active_coordination("e-sib-pre") is None
+    assert started.success is True
+    session = active_coordination("e-sib-pre")
+    assert session is not None
+    drive = session.drive_task
+    if drive is not None and not drive.done():
+        drive.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await drive
+    clear_active_coordination("e-sib-pre")
 
 
 def test_nested_declare_transfers_paths_from_parent_not_all():
@@ -2272,7 +2229,7 @@ async def test_try_start_late_sibling_wipes_empty_seats_and_unlocks_isomorphic(
                         "deliverable": {"artifacts": ["src/App.tsx"]},
                     },
                     {
-                        "role": "整合",
+                        "role": "前端",
                         "task": "也写 App",
                         "deliverable": {"artifacts": ["src/App.tsx"]},
                     },
@@ -2283,7 +2240,7 @@ async def test_try_start_late_sibling_wipes_empty_seats_and_unlocks_isomorphic(
         )
         assert rejected.success is False
         assert rejected.contract_failure is True
-        assert "交叉" in (rejected.error or "") or "重叠" in (rejected.error or "")
+        assert "座位" in (rejected.error or "") or "重叠" in (rejected.error or "")
         assert active_coordination("e") is None
         folded = plan_from_journal(log.entries())
         leftover_ids = {n.run_id for n in folded.nodes} if folded is not None else set()
@@ -2346,7 +2303,7 @@ async def test_try_start_retracts_already_written_empty_seats():
         ),
         RunSpec(
             run_id="b",
-            role="整合",
+            role="前端",
             task="也写",
             deliverable=Deliverable(artifacts=["App.tsx"]),
         ),
@@ -2357,7 +2314,7 @@ async def test_try_start_retracts_already_written_empty_seats():
             execution_id="e-late-wipe",
             plan_type="multi_agent",
             task_summary="2",
-            agents=[{"id": "a", "role": "前端"}, {"id": "b", "role": "整合"}],
+            agents=[{"id": "a", "role": "前端"}, {"id": "b", "role": "前端"}],
             runs=[{"id": "a"}, {"id": "b"}],
         )
     )

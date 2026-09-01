@@ -170,7 +170,7 @@ export type RunFrame =
   | { t: number; kind: "run_progress"; completed: number; total: number }
   | {
       // 调度埋点量化 (深层诊断指标): a WaveScheduler segment's snapshot, folded onto
-      // Execution.batches for 诊断模式 (run detail). Carries no run_id — it is execution-level.
+      // Execution.batches（采集仍在、产品不展示）. Carries no run_id — it is execution-level.
       t: number;
       kind: "batch_metrics";
       metrics: BatchMetricsSnapshot;

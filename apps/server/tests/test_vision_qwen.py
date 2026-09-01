@@ -3,7 +3,7 @@
 Verifies the reader sends the board PNG as an OpenAI-compatible multimodal message
 (``image_url`` data URL), parses the text reading back, maps upstream HTTP errors to
 typed LLM errors, and that the factory builds a reader from (a) profile vision-slot
-credentials or (b) platform ``VISION_*`` when the slot is null.
+credentials, (b) empty slot + image-accepting main, or (c) platform ``VISION_*``.
 Network is mocked via ``httpx.MockTransport`` (injected through the reader's ``transport``
 seam) — no real DashScope calls.
 """
@@ -233,6 +233,93 @@ async def test_resolve_vision_reader_byok_no_slot_none():
         vision_timeout_seconds=60.0,
     )
     assert await resolve_vision_reader(MagicMock(), "u1", None, settings=cfg) is None
+
+
+def _byok_cfg() -> SimpleNamespace:
+    return SimpleNamespace(
+        billing_mode="byok",
+        vision_api_key="sk-platform",
+        vision_base_url="https://relay.example/v1",
+        vision_model="kimi-k2.5",
+        vision_timeout_seconds=60.0,
+    )
+
+
+def _patch_accepts(monkeypatch, predicate) -> None:
+    monkeypatch.setattr("agentcore.vision.factory._model_accepts_images", predicate)
+
+
+def _patch_byok_creds(monkeypatch, *, api_key: str, base_url: str, provider_id: str) -> None:
+    from agentcore.llm.credentials import LLMCredentials
+
+    monkeypatch.setattr(
+        "agentcore.llm.resolve.resolve_provider_credentials",
+        AsyncMock(
+            return_value=LLMCredentials(
+                api_key=api_key,
+                base_url=base_url,
+                default_model="unused",
+                source="user",
+                provider_id=provider_id,
+            )
+        ),
+    )
+
+
+async def test_resolve_vision_reader_byok_empty_slot_follows_image_main(monkeypatch):
+    """BYOK empty vision slot + main that accepts images → reader from main creds."""
+    _patch_accepts(monkeypatch, lambda mid: mid == "gpt-4o")
+    _patch_byok_creds(
+        monkeypatch,
+        api_key="main-key",
+        base_url="https://main.example/v1",
+        provider_id="prov-main",
+    )
+    main = ModelSelection(model="gpt-4o", origin="byok", provider_id="prov-main")
+    reader = await resolve_vision_reader(
+        MagicMock(), "u1", None, settings=_byok_cfg(), main=main
+    )
+    assert isinstance(reader, QwenVLReader)
+    assert reader._model == "gpt-4o"
+    assert reader._api_key == "main-key"
+    assert reader.credential_source == "user"
+
+
+async def test_resolve_vision_reader_byok_empty_slot_text_main_none(monkeypatch):
+    """BYOK empty vision slot + text-only main still does not follow (no VISION_*)."""
+    _patch_accepts(monkeypatch, lambda mid: False)
+    _patch_byok_creds(
+        monkeypatch,
+        api_key="main-key",
+        base_url="https://main.example/v1",
+        provider_id="prov-main",
+    )
+    main = ModelSelection(model="deepseek-v4-flash", origin="byok", provider_id="prov-main")
+    assert (
+        await resolve_vision_reader(
+            MagicMock(), "u1", None, settings=_byok_cfg(), main=main
+        )
+        is None
+    )
+
+
+async def test_resolve_vision_reader_slot_beats_image_main(monkeypatch):
+    """Filled vision slot wins even when main also accepts images."""
+    _patch_accepts(monkeypatch, lambda _mid: True)
+    _patch_byok_creds(
+        monkeypatch,
+        api_key="slot-key",
+        base_url="https://slot.example/v1",
+        provider_id="prov-slot",
+    )
+    vision = ModelSelection(model="qwen-vl-max", origin="byok", provider_id="prov-slot")
+    main = ModelSelection(model="gpt-4o", origin="byok", provider_id="prov-main")
+    reader = await resolve_vision_reader(
+        MagicMock(), "u1", vision, settings=_byok_cfg(), main=main
+    )
+    assert isinstance(reader, QwenVLReader)
+    assert reader._model == "qwen-vl-max"
+    assert reader._api_key == "slot-key"
 
 
 async def test_resolve_vision_reader_platform_no_slot_with_vision_env():

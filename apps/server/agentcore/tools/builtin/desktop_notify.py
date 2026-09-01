@@ -1,9 +1,10 @@
-"""desktop_notify — worker tool to show an OS notification on the user's desktop.
+"""desktop_notify — OS notification on the user's desktop (CEO + worker).
 
 Available only when the conversation runs against a local workspace binding (the
 desktop Electron app is the client). The tool suspends on the unified client_tool
 bridge; the renderer shows the notification via the main-process ``Notification`` API.
 GRANTABLE by default; ``command=auto`` silently auto-passes (see sandbox_approval).
+Execute fails honestly when no desktop channel is bound.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.desktop.channel import DesktopNotifyError
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
-    AUDIENCE_WORKER_ONLY,
+    AUDIENCE_BOTH,
     ToolRegistration,
     ToolSurface,
 )
@@ -32,7 +33,7 @@ class DesktopNotifyTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.WORKER_ONLY,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
     )
 
     @property

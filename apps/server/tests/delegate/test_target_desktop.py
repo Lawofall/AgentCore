@@ -763,7 +763,7 @@ class _NamedTool:
 async def test_apply_target_desktop_sidecar_strips_cloud_exec_tools(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """Birth-desk code_execute must not ride onto a sidecar cloud folder."""
+    """Birth-desk ``run`` must not ride onto a sidecar cloud folder."""
     from agentcore.config import settings
     from agentcore.tools.sandbox.cloud_health import set_cloud_sandbox_health_for_tests
 
@@ -790,8 +790,7 @@ async def test_apply_target_desktop_sidecar_strips_cloud_exec_tools(
         local_binding=None,
     )
     worker_tools = ToolRegistry()
-    worker_tools.register(_NamedTool("code_execute"))
-    worker_tools.register(_NamedTool("test_run"))
+    worker_tools.register(_NamedTool("run"))
     worker_tools.register(_NamedTool("file_read"))
 
     async def _fake_rebuild(**_kwargs):
@@ -826,10 +825,9 @@ async def test_apply_target_desktop_sidecar_strips_cloud_exec_tools(
         )
 
     names = set(applied.worker_tools.names)
-    assert "code_execute" not in names
-    assert "test_run" not in names
+    assert "run" not in names
     assert "file_read" in names
-    assert "code_execute" in set(worker_tools.names)
+    assert "run" in set(worker_tools.names)
 
 
 @pytest.mark.asyncio
@@ -863,7 +861,7 @@ async def test_apply_target_desktop_cloud_api_keeps_exec_when_sandbox_healthy(
         local_binding=None,
     )
     worker_tools = ToolRegistry()
-    worker_tools.register(_NamedTool("code_execute"))
+    worker_tools.register(_NamedTool("run"))
     worker_tools.register(_NamedTool("file_read"))
 
     async def _fake_rebuild(**_kwargs):
@@ -898,7 +896,7 @@ async def test_apply_target_desktop_cloud_api_keeps_exec_when_sandbox_healthy(
         )
 
     names = set(applied.worker_tools.names)
-    assert "code_execute" in names
+    assert "run" in names
     assert "file_read" in names
 
 

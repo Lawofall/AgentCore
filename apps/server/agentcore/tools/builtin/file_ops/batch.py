@@ -10,12 +10,12 @@ from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.tools.file_products import FileProduct, file_product
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
-    AUDIENCE_WORKER_ONLY,
+    AUDIENCE_BOTH,
     FileProductsContract,
     ToolRegistration,
     ToolSurface,
 )
-from agentcore.workspace.limits import is_channel_dead_detail
+from agentcore.workspace.limits import is_presence_disconnected_detail
 from agentcore.workspace.protocol import (
     AlreadyExists,
     OutsideWorkspace,
@@ -51,7 +51,7 @@ class FileBatchTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         # 一次调用可产多件（move / copy 逐件自报；mkdir / delete 没有产物）。
         file_products=FileProductsContract.SELF_REPORT,
     )
@@ -170,8 +170,8 @@ class FileBatchTool:
                 fail_n += 1
                 lines.append(f"{i}. 失败 · {label}：{e}")
                 continue
-            if status == "fail" and is_channel_dead_detail(detail):
-                # Channel sticky-dead: stop the batch and stamp family retire.
+            if status == "fail" and is_presence_disconnected_detail(detail):
+                # Presence disconnect: stop the batch and stamp family retire.
                 dead = _liveness_workspace_error(detail, start)
                 # 中途中断不抹账：前面成功的那几件确实躺在盘上（漏账才是事故）。
                 dead.file_products = products

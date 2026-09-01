@@ -34,7 +34,9 @@ A keyless user on a deployment with no platform subsidy gets an EMPTY catalog �
 shows an empty state that guides to 设置·模型配置 (no greyed-out「add a key」guide rows).
 
 BYOK id set = default ∪ base_url presets ∪ discovery; ``model_metadata`` only
-ENRICHES display fields. Pricing reuses the community chain (:func:`pricing_for_model`).
+ENRICHES display fields. Catalog ``vision`` is stamped there from
+:mod:`agentcore.llm.image_accept`. Pricing reuses the community chain
+(:func:`pricing_for_model`).
 Off-protocol OpenCode ids are kept in that set (visible, not selectable).
 """
 

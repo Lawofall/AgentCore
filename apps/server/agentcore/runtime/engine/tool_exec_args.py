@@ -14,6 +14,7 @@ from agentcore.llm.provider.protocol import LLMMessage
 from agentcore.runtime.events import EventSink, tool_use_end
 from agentcore.runtime.loop_controller import (
     ERROR_CLASS_PERMANENT,
+    EXEC_RUN_TOOL_NAMES,
     ToolAttempt,
     classify_segmented_write_reject,
 )
@@ -48,7 +49,7 @@ TOOL_FAILED_MARKER = "<!--agentcore:tool_failed-->"
 _TOOL_ERROR_REASON_MAX = 200
 
 # terminal / host(action=shell) 观测：命令可能含 token，先 redact 再 clip。
-_SHELL_OBSERVE_TOOLS = frozenset({"terminal", "host"})
+_SHELL_OBSERVE_TOOLS = frozenset({"run", "host"})
 _SHELL_COMMAND_PREVIEW_MAX = 160
 _SHELL_CWD_PREVIEW_MAX = 80
 _URL_OBSERVE_TOOLS = frozenset({"read_url", "download_url"})
@@ -75,8 +76,14 @@ def _attempt_meta_with_landing_path(
     )
     if reject_class:
         meta["segmented_write_reject"] = reject_class
-    # Permanent liveness: ensure first-fail retire of this tool (loop_controller).
-    if meta.get("liveness_timeout") and "retire_tools" not in meta and name:
+    # Permanent liveness: first-fail retire of this tool (loop_controller).
+    # ``run`` 族只记失败，不卸工具。
+    if (
+        meta.get("liveness_timeout")
+        and "retire_tools" not in meta
+        and name
+        and name not in EXEC_RUN_TOOL_NAMES
+    ):
         meta["error_class"] = ERROR_CLASS_PERMANENT
         meta["retire_tools"] = [name]
         if not meta.get("retire_message"):
@@ -115,9 +122,9 @@ def _url_observe_log_fields(name: str, args: Any) -> dict[str, Any]:
 
 
 def _shell_observe_log_fields(name: str, args: Any) -> dict[str, Any]:
-    """Facts for ``tool.execute_*`` on terminal / host / URL tools. No write-intent guess.
+    """Facts for ``tool.execute_*`` on run / host / URL tools. No write-intent guess.
 
-    CEO 可持 terminal/host，落盘不进 ``file_products``；查询时靠 preview + subcommand
+    CEO 可持 run/host，落盘不进 ``file_products``；查询时靠 preview + action
     由人判断是否写了工作区。命令可能含 token / key，故先 ``redact_secrets`` 再 clip。
     ``read_url`` / ``download_url`` 带 url/host，对照 in_flight 挂起用。
     """
@@ -132,11 +139,11 @@ def _shell_observe_log_fields(name: str, args: Any) -> dict[str, Any]:
             preview = clip_preview(redact_secrets(command), _SHELL_COMMAND_PREVIEW_MAX)
             if preview:
                 fields["command_preview"] = preview
-        subcommand = args.get("subcommand")
-        if isinstance(subcommand, str):
-            sub = subcommand.strip()
-            if sub:
-                fields["subcommand"] = sub
+        action = args.get("action")
+        if isinstance(action, str):
+            act = action.strip()
+            if act:
+                fields["action"] = act
         cwd = args.get("cwd")
         if isinstance(cwd, str):
             cwd_preview = clip_preview(cwd, _SHELL_CWD_PREVIEW_MAX)
@@ -227,12 +234,10 @@ def _missing_tool_feedback(
     execution = execution_class_tool_names()
     declared = declared_tool_names()
 
-    if missing in worker_only and missing in execution:
+    if missing in execution:
         return (
             (
-                f"工具 '{missing}' 当前工具面不可用。"
-                "若你是 CEO：写盘/跑代码/跑测试须 `delegate` 派给 worker，勿亲自调用。"
-                "若你是 worker：本回合未装配执行类工具（见 `<工作区>` 的"
+                f"工具 '{missing}' 本回合未装配执行类工具（见 `<工作区>` 的"
                 "「本回合执行能力」），勿空转重试。"
             ),
             "not_assembled",

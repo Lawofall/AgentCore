@@ -27,12 +27,14 @@ _CEO_ORCHESTRATION = {
     "create_folder",
     "ask_user",
 }
-# Mutation / execution built-ins the coordinator must NOT hold (they belong to workers),
-# plus the worker-only collaboration channel (escalate upward).
-# test_run is here too: it runs project code through the same sandbox chain as
-# code_execute, so it is a worker-only execution tool (not a CEO read tool).
-_WORKER_ONLY_BUILTINS = {
+# Worker-only collaboration channel. Write / execute built-ins are CEO+worker.
+_WORKER_ONLY_COLLAB = {
+    "escalate",
+    "handoff",
+}
+_CEO_AND_WORKER_MUTATION = {
     "file_write",
+    "file_append",
     "str_replace",
     "file_delete",
     "file_move",
@@ -43,9 +45,8 @@ _WORKER_ONLY_BUILTINS = {
     "md_to_pdf",
     "archive_extract",
     "archive_create",
-    "code_execute",
-    "test_run",
-    "escalate",
+    "download_url",
+    "run",
 }
 
 
@@ -107,11 +108,31 @@ def test_read_only_builtins_are_shared_with_ceo():
         assert set(entries[name].available_to) == {AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER}
 
 
-def test_mutation_and_escalate_are_worker_only():
+def test_notify_and_conversation_logs_are_ceo_and_worker():
     entries = _by_name()
-    for name in _WORKER_ONLY_BUILTINS:
+    for name in ("desktop_notify", "search_conversations", "read_conversation"):
+        assert name in entries, f"{name} missing from catalog"
+        assert set(entries[name].available_to) == {
+            AVAILABLE_TO_CEO,
+            AVAILABLE_TO_WORKER,
+        }
+
+
+def test_escalate_and_handoff_are_worker_only():
+    entries = _by_name()
+    for name in _WORKER_ONLY_COLLAB:
         assert name in entries, f"{name} missing from catalog"
         assert entries[name].available_to == (AVAILABLE_TO_WORKER,)
+
+
+def test_mutation_and_execution_are_shared_with_ceo():
+    entries = _by_name()
+    for name in _CEO_AND_WORKER_MUTATION:
+        assert name in entries, f"{name} missing from catalog"
+        assert set(entries[name].available_to) == {
+            AVAILABLE_TO_CEO,
+            AVAILABLE_TO_WORKER,
+        }
 
 
 def test_ceo_prompt_lists_skill_directory_when_ask_user_wired():

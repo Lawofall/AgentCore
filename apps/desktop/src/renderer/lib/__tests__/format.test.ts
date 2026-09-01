@@ -10,9 +10,12 @@ import {
   formatDateDivider,
   formatDisplayCost,
   formatDownloadProgress,
+  formatDuration,
+  formatDurationSec,
   formatMessageTime,
   formatMessageTimeOfDay,
   pickCostMoney,
+  stripDurationFaceSuffix,
   sumChunkChars,
   tailText,
 } from "@/lib/format";
@@ -166,6 +169,32 @@ describe("formatMessageTime", () => {
     expect(formatMessageTime("2026-07-04T08:30:00")).toBe("昨天 08:30");
 
     vi.useRealTimers();
+  });
+});
+
+describe("formatDuration / formatDurationSec", () => {
+  it("keeps sub-minute clocks as seconds", () => {
+    expect(formatDuration(45_000)).toBe("45s");
+    expect(formatDurationSec(45)).toBe("45s");
+  });
+
+  it("splits minutes and seconds with a space", () => {
+    expect(formatDuration(88_000)).toBe("1m 28s");
+    expect(formatDurationSec(968)).toBe("16m 8s");
+  });
+
+  it("drops seconds once past an hour", () => {
+    expect(formatDuration(3_723_000)).toBe("1h 2m");
+    expect(formatDurationSec(3_723)).toBe("1h 2m");
+  });
+
+  it("strips the face suffix for every compact shape", () => {
+    expect(stripDurationFaceSuffix("思考中 · 45s")).toBe("思考中");
+    expect(stripDurationFaceSuffix("思考中 · 16m 8s")).toBe("思考中");
+    expect(stripDurationFaceSuffix("已完成 · 1h 2m")).toBe("已完成");
+    expect(stripDurationFaceSuffix("已完成 · 1m 28s · 含质询")).toBe(
+      "已完成 · 1m 28s · 含质询",
+    );
   });
 });
 

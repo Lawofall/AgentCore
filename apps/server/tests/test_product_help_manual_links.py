@@ -1,8 +1,8 @@
 """product_help* ↔ desktop manual deep-link drift gate.
 
 Parses ``sectionIds.ts`` (+ ``paths.ts`` chapter keys) from the monorepo and
-asserts every ``#/toolbox/manual/...`` / bare ``?s=`` in the ``product_help`` /
-``product_help_map`` / ``product_help_faq`` skill bodies lands in that registry
+asserts every ``#/toolbox/manual/...`` / bare ``?s=`` in the ``product_help``
+skill body lands in that registry
 (canonical ids + aliases). No TS→Python export — lightweight regex parse only.
 """
 
@@ -303,7 +303,7 @@ def collect_manual_link_errors(body: str, registry: ManualRegistry) -> list[str]
     return errors
 
 
-_PRODUCT_HELP_SKILL_NAMES = ("product_help", "product_help_map", "product_help_faq")
+_PRODUCT_HELP_SKILL_NAMES = ("product_help",)
 
 
 def _skill_bodies(names: tuple[str, ...]) -> str:

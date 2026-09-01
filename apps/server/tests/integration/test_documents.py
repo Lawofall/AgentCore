@@ -131,7 +131,8 @@ async def test_on_demand_user_rule_excluded_from_injected_rules(session_factory)
     assert {d.name for d in on_demand} == {"按需.md"}
 
 
-async def test_user_rule_injected_ahead_of_memory(session_factory):
+async def test_user_rule_follows_memory_slots_in_the_same_layer(session_factory):
+    """Global layer: 偏好 → 画像 → 用户常驻规则（稳定顺序，不是作者权威）。"""
     uid = str(uuid.uuid4())
     async with session_factory() as session:
         repo = DocumentRepository(session)
@@ -151,7 +152,8 @@ async def test_user_rule_injected_ahead_of_memory(session_factory):
         )
     assert "必须始终用中文" in rules_md
     assert "用 Python" in rules_md and "倾向简洁" in rules_md
-    assert rules_md.index("必须始终用中文") < rules_md.index("倾向简洁")
+    assert rules_md.index("倾向简洁") < rules_md.index("用 Python")
+    assert rules_md.index("用 Python") < rules_md.index("必须始终用中文")
 
 
 async def test_user_rule_survives_when_memory_disabled(session_factory):

@@ -49,6 +49,16 @@ const WAVES = [
 const ALL_DONE = Math.max(...TIMELINE.map((w) => w.done));
 const MERGE_UNTIL = ALL_DONE + 2000;
 
+/** 与桌面 `formatDurationSec` 同形（45s / 2m 34s / 1h 2m）。本循环不到一分钟，过分钟仍跟产品。 */
+function formatElapsedSec(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m ${s}s`;
+}
+
 /** Agent 身份色：与站内协作图同一套，五个角色各占一格。 */
 const TONES = ["--agent-1", "--agent-3", "--agent-6", "--agent-4", "--agent-8"];
 
@@ -307,9 +317,9 @@ export default function CollabGraph() {
      带括号带「已等」的长写法必然折行，而且折点会落在词中间。 */
   const ceoLabel =
     ceoTone === "wait"
-      ? `${tr(GRAPH.ceo.waiting)} ${doneCount}/${TIMELINE.length} · ${secs(TIMELINE[0].start)}s`
+      ? `${tr(GRAPH.ceo.waiting)} ${doneCount}/${TIMELINE.length} · ${formatElapsedSec(secs(TIMELINE[0].start))}`
       : ceoTone === "merge"
-        ? `${tr(GRAPH.ceo.merging)} · ${secs(ALL_DONE)}s`
+        ? `${tr(GRAPH.ceo.merging)} · ${formatElapsedSec(secs(ALL_DONE))}`
         : tr(GRAPH.ceo.ready);
 
   return (
@@ -457,10 +467,10 @@ export default function CollabGraph() {
                 {stage === "idle"
                   ? tr(GRAPH.queued)
                   : stage === "thinking"
-                    ? `${tr(GRAPH.thinking)} · ${secs(TIMELINE[i].start)}s`
+                    ? `${tr(GRAPH.thinking)} · ${formatElapsedSec(secs(TIMELINE[i].start))}`
                     : stage === "running"
-                      ? `${spec.tool} · ${secs(TIMELINE[i].start)}s`
-                      : `${tr(GRAPH.finished)} · ${Math.round((TIMELINE[i].done - TIMELINE[i].start) / 1000)}s`}
+                      ? `${spec.tool} · ${formatElapsedSec(secs(TIMELINE[i].start))}`
+                      : `${tr(GRAPH.finished)} · ${formatElapsedSec(Math.round((TIMELINE[i].done - TIMELINE[i].start) / 1000))}`}
               </p>
 
               <p className="cg-note">

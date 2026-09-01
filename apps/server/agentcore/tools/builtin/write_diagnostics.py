@@ -1,8 +1,9 @@
 """Best-effort language-service diagnostics after TS/JS writes (inner verify loop).
 
-Runtime attaches a short diagnostics block to successful ``file_write`` /
-``str_replace`` / ``file_append`` receipts — not relying on the model to call
-``code_diagnostics``. Failures and ``unavailable`` never flip a write success
+On in-process desks, runtime attaches a short diagnostics block to successful
+``file_write`` / ``str_replace`` / ``file_append`` receipts. Over a desktop
+fulfill hop the write returns without waiting — ``code_diagnostics`` stays the
+explicit inner-loop tool. Failures and ``unavailable`` never flip a write success
 into failure.
 """
 
@@ -11,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from agentcore.tools.protocol import ToolContext, ToolResult
+from agentcore.workspace.presence import diagnostics_rides_fulfill_channel
 
 # First-ship local TS/JS surface (inner loop). Keep in sync with code_diagnostics.
 JS_TS_SUFFIXES: tuple[str, ...] = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
@@ -33,7 +35,7 @@ def format_diagnostics_block(payload: dict[str, Any], *, path_hint: str | None =
 
     if status == "unavailable":
         detail = reason or "语言服务不可用"
-        return f"\n内环诊断不可用：{detail}（验收请用外环 test_run）"
+        return f"\n内环诊断不可用：{detail}（验收请用 run）"
 
     errors = [
         d
@@ -107,6 +109,10 @@ async def attach_write_diagnostics(
 ) -> ToolResult:
     """Append inner-loop diagnostics to a successful write receipt (best-effort)."""
     if not result.success or not is_js_ts_path(path):
+        return result
+    if diagnostics_rides_fulfill_channel(getattr(context, "backend", None)):
+        # Write already landed. Inner-loop LS is a separate capability over the
+        # fulfill hop — do not wait on it here. Explicit ``code_diagnostics`` may.
         return result
 
     diag_fn = getattr(context.backend, "diagnostics", None)

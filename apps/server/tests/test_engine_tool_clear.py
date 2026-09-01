@@ -31,10 +31,11 @@ CLEARABLE = frozenset({"file_read", "grep", "web_search"})
 
 
 def test_production_keep_recent_default() -> None:
-    """Investigation stacking tax vs independent exec window."""
+    """Investigation stacking tax vs independent exec window vs write-args near window."""
     assert settings.engine_tool_clear_keep_recent == 2
     assert settings.engine_tool_clear_exec_keep_recent == 1
-    assert frozenset({"host", "terminal"}) == EXEC_OUTPUT_CLEAR_TOOLS
+    assert settings.engine_write_args_clear_keep_recent == 1
+    assert frozenset({"host", "run"}) == EXEC_OUTPUT_CLEAR_TOOLS
 
 
 def _read_pair(call_id: str, path: str, result: str, *, tool: str = "file_read") -> list[LLMMessage]:
@@ -51,6 +52,24 @@ def _read_pair(call_id: str, path: str, result: str, *, tool: str = "file_read")
             ],
         ),
         LLMMessage(role="tool", content=result, tool_call_id=call_id),
+    ]
+
+
+def _read_batch(ids_and_paths: list[tuple[str, str]], result: str) -> list[LLMMessage]:
+    """One assistant message that issued several file_reads in parallel."""
+    tool_calls = [
+        ToolCall(
+            id=call_id,
+            function=ToolCallFunction(name="file_read", arguments=json.dumps({"path": path})),
+        )
+        for call_id, path in ids_and_paths
+    ]
+    return [
+        LLMMessage(role="assistant", content=None, tool_calls=tool_calls),
+        *[
+            LLMMessage(role="tool", content=result, tool_call_id=call_id)
+            for call_id, _path in ids_and_paths
+        ],
     ]
 
 
@@ -91,13 +110,46 @@ def _cleared_ids(messages: list[LLMMessage]) -> list[str]:
 
 
 def test_keeps_recent_clears_old():
-    msgs = _window(8)  # 8 big read results
+    msgs = _window(8)  # 8 serial rounds → 8 assistant messages
     out = project_cleared_window(msgs, clearable_tools=CLEARABLE, keep_recent=2, min_chars=100)
-    # First 6 cleared, last 2 (c6, c7) kept verbatim.
+    # First 6 rounds cleared, last 2 (c6, c7) kept verbatim.
     assert _cleared_ids(out) == [f"c{i}" for i in range(6)]
     kept = [m for m in out if m.role == "tool" and not (m.content or "").startswith("[已清理")]
     assert [m.tool_call_id for m in kept] == ["c6", "c7"]
     assert all(len(m.content or "") == 200 for m in kept)
+
+
+def test_parallel_batch_kept_as_one_round():
+    """One assistant with six file_reads is one keep unit — none of the batch clears."""
+    msgs = [LLMMessage(role="user", content="go")]
+    msgs += _read_batch([(f"b{i}", f"src/f{i}.py") for i in range(6)], "X" * 200)
+    out = project_cleared_window(msgs, clearable_tools=CLEARABLE, keep_recent=1, min_chars=100)
+    assert out is msgs
+    assert _cleared_ids(out) == []
+
+
+def test_older_parallel_batch_clears_when_round_falls_out():
+    """keep_recent=2 keeps the last two assistant batches; the first batch of 6 clears."""
+    msgs = [LLMMessage(role="user", content="go")]
+    for batch in range(3):
+        msgs += _read_batch(
+            [(f"b{batch}_{i}", f"src/b{batch}_{i}.py") for i in range(6)],
+            "X" * 200,
+        )
+    out = project_cleared_window(msgs, clearable_tools=CLEARABLE, keep_recent=2, min_chars=100)
+    assert _cleared_ids(out) == [f"b0_{i}" for i in range(6)]
+    kept = [
+        m.tool_call_id
+        for m in out
+        if m.role == "tool" and not (m.content or "").startswith("[已清理")
+    ]
+    assert kept == [f"b{b}_{i}" for b in (1, 2) for i in range(6)]
+
+
+def test_keep_recent_zero_clears_all_qualifying():
+    msgs = _window(3)
+    out = project_cleared_window(msgs, clearable_tools=CLEARABLE, keep_recent=0, min_chars=100)
+    assert _cleared_ids(out) == ["c0", "c1", "c2"]
 
 
 def test_small_results_not_cleared():
@@ -280,8 +332,8 @@ async def test_loop_clears_old_reads_in_request_window(monkeypatch):
     provider = _CapturingProvider([[LLMChunk(delta_content="调查完成，结论如下。")]])
     await _run_loop(provider)
     window = provider.windows[0]
-    # 6 old read results cleared, 2 most-recent kept full — the canonical messages
-    # the loop holds are untouched (only the request view is projected).
+    # 6 older serial rounds cleared, 2 most-recent rounds kept full — the canonical
+    # messages the loop holds are untouched (only the request view is projected).
     assert len(_cleared_ids(window)) == 6
     kept = [m for m in window if m.role == "tool" and not (m.content or "").startswith("[已清理")]
     assert len(kept) == 2 and all(len(m.content or "") == 200 for m in kept)
@@ -376,106 +428,6 @@ def test_grep_clear_stays_pointer_only_even_with_summary_budget():
             assert "自动" not in (m.content or "")
 
 
-def test_apply_file_read_clear_state_records_fully_cleared_paths():
-    from agentcore.runtime.engine.tool_clear import apply_file_read_clear_state
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    body = "X" * 200
-    # Same path read to MAX; keep_recent=1 ⇒ one verbatim.
-    msgs = [LLMMessage(role="user", content="go")]
-    msgs += _read_pair("c0", "a.md", body)
-    msgs += _read_pair("c1", "a.md", body)
-    msgs += _read_pair("c2", "b.md", body)  # filler so a.md's first falls out
-    msgs += _read_pair("c3", "c.md", body)
-
-    ctx = _context()
-    ctx.file_read_counts["a.md"] = FILE_READ_SAME_PATH_MAX
-    # keep_recent=2 → c2,c3 kept; c0,c1 cleared → a.md zero verbatim → cleared ledger
-    synced = apply_file_read_clear_state(
-        ctx,
-        msgs,
-        investigation_tools=CLEARABLE,
-        keep_recent=2,
-        min_chars=100,
-        summary_max_chars=0,
-    )
-    assert "a.md" not in (synced.file_read_verbatim_paths or frozenset())
-    assert "a.md" in (synced.file_read_cleared_paths or frozenset())
-    # Clear no longer issues a sticky grant — recovery does not consume quota.
-    assert "a.md" not in synced.file_read_reread_issued
-    assert synced.file_read_reread_remaining.get("a.md", 0) == 0
-
-    # Partial clear: keep_recent=3 keeps one a.md verbatim → not fully cleared
-    ctx2 = _context()
-    ctx2.file_read_counts["a.md"] = FILE_READ_SAME_PATH_MAX
-    partial = apply_file_read_clear_state(
-        ctx2,
-        msgs,
-        investigation_tools=CLEARABLE,
-        keep_recent=3,
-        min_chars=100,
-        summary_max_chars=0,
-    )
-    assert "a.md" in (partial.file_read_verbatim_paths or frozenset())
-    assert "a.md" not in (partial.file_read_cleared_paths or frozenset())
-    assert "a.md" not in partial.file_read_reread_issued
-
-
-def test_apply_file_read_clear_state_cleared_ledger_is_projection_snapshot():
-    from agentcore.runtime.engine.tool_clear import apply_file_read_clear_state
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    body = "Y" * 200
-    msgs = [LLMMessage(role="user", content="go")]
-    msgs += _read_pair("a0", "a.md", body)
-    msgs += _read_pair("a1", "a.md", body)
-    msgs += _read_pair("f0", "filler0.md", body)
-    msgs += _read_pair("f1", "filler1.md", body)
-    # keep_recent=1 keeps only filler1 → a.md fully cleared.
-
-    ctx = _context()
-    ctx.file_read_counts["a.md"] = FILE_READ_SAME_PATH_MAX
-    first = apply_file_read_clear_state(
-        ctx,
-        msgs,
-        investigation_tools=CLEARABLE,
-        keep_recent=1,
-        min_chars=100,
-        summary_max_chars=0,
-    )
-    assert "a.md" not in (first.file_read_verbatim_paths or frozenset())
-    assert "a.md" in (first.file_read_cleared_paths or frozenset())
-    # Re-projecting the same window must restate the same ledger, not invent a grant.
-    first.file_read_counts["a.md"] = FILE_READ_SAME_PATH_MAX + 1
-    second = apply_file_read_clear_state(
-        first,
-        msgs,
-        investigation_tools=CLEARABLE,
-        keep_recent=1,
-        min_chars=100,
-        summary_max_chars=0,
-    )
-    assert "a.md" in (second.file_read_cleared_paths or frozenset())
-    assert second.file_read_reread_remaining.get("a.md", 0) == 0
-
-
-def test_refresh_file_read_reread_grant_allows_rework_reread():
-    """Citation/contract rework refreshes sticky grant so same path is readable once more."""
-    from agentcore.runtime.engine.tool_clear import refresh_file_read_reread_grant
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    ctx = _context()
-    ctx.file_read_counts["draft.md"] = FILE_READ_SAME_PATH_MAX
-    ctx.file_read_reread_issued["draft.md"] = True
-    ctx.file_read_reread_remaining["draft.md"] = 0  # prior grant consumed
-
-    refreshed = refresh_file_read_reread_grant(ctx, ["draft.md", "AgentCore/文档/research/a.md"])
-    assert refreshed == ["draft.md", "AgentCore/文档/research/a.md"]
-    assert ctx.file_read_reread_remaining["draft.md"] == 1
-    assert ctx.file_read_reread_remaining["AgentCore/文档/research/a.md"] == 1
-    assert ctx.file_read_reread_issued["draft.md"] is True
-
-
 def test_canonical_messages_untouched_by_projection():
     """Journal / canonical keep full bodies — only the projected view clears."""
     msgs = _window(6, size=200)
@@ -487,7 +439,7 @@ def test_canonical_messages_untouched_by_projection():
     assert [m.content for m in msgs if m.role == "tool"] == originals
 
 
-# ── exec output family (host / terminal) ──────────────────────────────
+# ── exec output family (host / run) ──────────────────────────────
 
 
 def test_exec_keeps_one_clears_old():
@@ -511,6 +463,33 @@ def test_exec_keeps_one_clears_old():
     assert "可重新调用该工具获取" not in (stub.content or "")
 
 
+def test_exec_parallel_batch_kept_as_one_round():
+    msgs = [LLMMessage(role="user", content="go")]
+    tool_calls = [
+        ToolCall(
+            id=f"h{i}",
+            function=ToolCallFunction(
+                name="host",
+                arguments=json.dumps({"action": "shell", "command": f"echo {i}"}),
+            ),
+        )
+        for i in range(3)
+    ]
+    msgs.append(LLMMessage(role="assistant", content=None, tool_calls=tool_calls))
+    msgs.extend(
+        LLMMessage(role="tool", content="X" * 200, tool_call_id=f"h{i}") for i in range(3)
+    )
+    out = project_cleared_window(
+        msgs,
+        clearable_tools=EXEC_OUTPUT_CLEAR_TOOLS,
+        keep_recent=1,
+        min_chars=100,
+        already_executed=True,
+    )
+    assert out is msgs
+    assert _cleared_ids(out) == []
+
+
 def test_exec_and_investigation_windows_independent(monkeypatch):
     monkeypatch.setattr(settings, "engine_tool_clear_keep_recent", 2)
     monkeypatch.setattr(settings, "engine_tool_clear_exec_keep_recent", 1)
@@ -518,7 +497,7 @@ def test_exec_and_investigation_windows_independent(monkeypatch):
     msgs: list[LLMMessage] = [LLMMessage(role="user", content="go")]
     for i in range(3):
         msgs += _read_pair(f"r{i}", f"src/f{i}.py", "R" * 200)
-        msgs += _exec_pair(f"s{i}", "terminal", {"subcommand": "read", "process_id": f"p{i}"}, "S" * 200)
+        msgs += _exec_pair(f"s{i}", "run", {"action": "read", "process_id": f"p{i}"}, "S" * 200)
     out = build_request_window(msgs, investigation_tools=CLEARABLE, round_idx=0)
     assert set(_cleared_ids(out)) == {"r0", "s0", "s1"}
     stub = next(m for m in out if m.tool_call_id == "s0")
@@ -535,6 +514,48 @@ def test_build_request_window_leaves_code_execute(monkeypatch):
     msgs = _window(4, tool="code_execute")
     out = build_request_window(msgs, investigation_tools=CLEARABLE, round_idx=0)
     assert _cleared_ids(out) == []
+
+
+def test_build_request_window_keeps_recent_write_args():
+    """近端一轮 str_replace 全文留在 arguments；更早的 file_write 压成 path。"""
+    old = "OLD" * 200
+    new = "NEW" * 200
+    msgs: list[LLMMessage] = [LLMMessage(role="user", content="go")]
+    msgs += [
+        LLMMessage(
+            role="assistant",
+            tool_calls=[
+                ToolCall(
+                    id="w0",
+                    function=ToolCallFunction(
+                        name="file_write",
+                        arguments=json.dumps({"path": "a.md", "content": old}),
+                    ),
+                )
+            ],
+        ),
+        LLMMessage(role="tool", content="ok", tool_call_id="w0"),
+        LLMMessage(
+            role="assistant",
+            tool_calls=[
+                ToolCall(
+                    id="w1",
+                    function=ToolCallFunction(
+                        name="str_replace",
+                        arguments=json.dumps(
+                            {"path": "a.md", "old_string": "x", "new_string": new}
+                        ),
+                    ),
+                )
+            ],
+        ),
+        LLMMessage(role="tool", content="ok", tool_call_id="w1"),
+    ]
+    out = build_request_window(msgs, investigation_tools=CLEARABLE, round_idx=0)
+    older = json.loads(out[1].tool_calls[0].function.arguments)
+    recent = json.loads(out[3].tool_calls[0].function.arguments)
+    assert older == {"path": "a.md"}
+    assert recent["new_string"] == new
 
 
 async def test_loop_clears_old_exec_in_request_window(monkeypatch):

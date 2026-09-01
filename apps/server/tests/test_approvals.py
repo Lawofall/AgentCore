@@ -34,7 +34,6 @@ from agentcore.tools.builtin import (
     delegation_grantable_tool_names,
     per_call_tool_names,
 )
-from agentcore.tools.builtin.test_run import TestRunTool
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -154,7 +153,7 @@ async def test_gate_authorize_times_out_to_deny():
     gate = _gate(sink, reg, timeout_seconds=0.01)
 
     # No resolver — the request is never answered and must auto-deny.
-    decision = await gate.authorize(tool_name="code_execute", tool_call_id="x", arguments={})
+    decision = await gate.authorize(tool_name="run", tool_call_id="x", arguments={})
 
     assert decision is ApprovalDecision.DENY
     resolved = [e for e in _drain(sink) if e.type is EventType.APPROVAL_RESOLVED]
@@ -192,7 +191,7 @@ async def test_gate_per_tool_timeout_override():
     # Other tools still use the short default.
     # Bound is loose under pytest-xdist load (machine contention); not a product SLA.
     t0 = time.monotonic()
-    deny = await gate.authorize(tool_name="code_execute", tool_call_id="ce-1", arguments={})
+    deny = await gate.authorize(tool_name="run", tool_call_id="ce-1", arguments={})
     assert deny is ApprovalDecision.DENY
     assert time.monotonic() - t0 < 1.0
 
@@ -203,7 +202,7 @@ def test_approval_settings_default_infinite_wait():
     assert settings.approval_timeout_seconds is None
     assert settings.approval_timeout_overrides == {}
     assert settings.approval_timeout_for("file_write") is None
-    assert settings.approval_timeout_for("code_execute") is None
+    assert settings.approval_timeout_for("run") is None
 
 
 async def test_gate_approve_always_skips_second_prompt():
@@ -238,11 +237,11 @@ async def test_approve_always_sweeps_pending_same_tool():
     sink = EventSink()
     gate = _gate(sink, reg)
 
-    # Two file_writes + one code_execute suspended in parallel on the SAME gate.
+    # Two file_writes + one run suspended in parallel on the SAME gate.
     a = asyncio.create_task(gate.authorize(tool_name="file_write", tool_call_id="a", arguments={}))
     b = asyncio.create_task(gate.authorize(tool_name="file_write", tool_call_id="b", arguments={}))
     c = asyncio.create_task(
-        gate.authorize(tool_name="code_execute", tool_call_id="c", arguments={})
+        gate.authorize(tool_name="run", tool_call_id="c", arguments={})
     )
     # Let all three register before the grant, so the sweep can see b and c.
     for _ in range(2000):
@@ -265,7 +264,7 @@ async def test_approve_always_sweeps_pending_same_tool():
 async def test_approve_always_files_grants_whole_class():
     """'本轮内允许所有文件改动' grants the file-mutation class for the turn (so a LATER
     write/edit/delete/move auto-approves) and sweeps every already-suspended file-op
-    call — while code_execute, outside the class, stays separately gated.
+    call — while run, outside the class, stays separately gated.
 
     Uses always_ask so session file-trust does not short-circuit the file cards
     (that path is covered by test_session_file_trust_*).
@@ -295,11 +294,11 @@ async def test_approve_always_files_grants_whole_class():
         permission_axes=recipe_to_axes(AutonomyPolicy.CAUTIOUS),
     )
 
-    # A file_write (the clicked card), a parallel str_replace, and a code_execute.
+    # A file_write (the clicked card), a parallel str_replace, and a run.
     w = asyncio.create_task(gate.authorize(tool_name="file_write", tool_call_id="w", arguments={}))
     r = asyncio.create_task(gate.authorize(tool_name="str_replace", tool_call_id="r", arguments={}))
     x = asyncio.create_task(
-        gate.authorize(tool_name="code_execute", tool_call_id="x", arguments={})
+        gate.authorize(tool_name="run", tool_call_id="x", arguments={})
     )
     for _ in range(2000):
         if len(reg.list_pending("conv-1")) == 3:
@@ -312,7 +311,7 @@ async def test_approve_always_files_grants_whole_class():
     assert await w is ApprovalDecision.APPROVE_ALWAYS_FILES
     # str_replace (in the class) was swept to APPROVE without its own resolve.
     assert await r is ApprovalDecision.APPROVE
-    # code_execute (NOT in the class) is untouched — still gated until resolved.
+    # run (NOT in the class) is untouched — still gated until resolved.
     assert reg.resolve("x", ApprovalDecision.DENY, conversation_id="conv-1")
     assert await x is ApprovalDecision.DENY
 
@@ -321,15 +320,15 @@ async def test_approve_always_files_grants_whole_class():
     later = await gate.authorize(tool_name="file_delete", tool_call_id="d", arguments={})
     assert later is ApprovalDecision.APPROVE
     assert _drain(sink) == []
-    # A LATER code_execute after the earlier deny short-circuits — no second card.
-    later_exec = await gate.authorize(tool_name="code_execute", tool_call_id="x2", arguments={})
+    # A LATER run after the earlier deny short-circuits — no second card.
+    later_exec = await gate.authorize(tool_name="run", tool_call_id="x2", arguments={})
     assert later_exec is ApprovalDecision.DENY
     assert _drain(sink) == []
 
 
-async def test_code_execute_approve_always_grants_turn():
-    """Cursor-aligned: code_execute may take「本轮内都允许」— APPROVE_ALWAYS writes a
-    turn grant and the next code_execute skips the prompt (no longer downgraded)."""
+async def test_run_approve_always_grants_turn():
+    """Cursor-aligned: run may take「本轮内都允许」— APPROVE_ALWAYS writes a
+    turn grant and the next run skips the prompt (no longer downgraded)."""
     reg = InteractionRegistry()
     sink = EventSink()
     gate = ApprovalGate(
@@ -343,12 +342,12 @@ async def test_code_execute_approve_always_grants_turn():
     resolver = asyncio.create_task(
         _resolve_when_ready(reg, "id1", ApprovalDecision.APPROVE_ALWAYS, "conv-1")
     )
-    first = await gate.authorize(tool_name="code_execute", tool_call_id="id1", arguments={})
+    first = await gate.authorize(tool_name="run", tool_call_id="id1", arguments={})
     await resolver
     assert first is ApprovalDecision.APPROVE_ALWAYS
 
     _drain(sink)
-    second = await gate.authorize(tool_name="code_execute", tool_call_id="id2", arguments={})
+    second = await gate.authorize(tool_name="run", tool_call_id="id2", arguments={})
     assert second is ApprovalDecision.APPROVE  # whitelisted for the turn
     assert _drain(sink) == []
 
@@ -363,13 +362,13 @@ async def test_per_call_tool_grant_downgraded_to_one_shot():
         conversation_id="conv-1",
         registry=reg,
         timeout_seconds=5.0,
-        per_call_tools=frozenset({"code_execute"}),
+        per_call_tools=frozenset({"run"}),
     )
 
     resolver = asyncio.create_task(
         _resolve_when_ready(reg, "id1", ApprovalDecision.APPROVE_ALWAYS, "conv-1")
     )
-    first = await gate.authorize(tool_name="code_execute", tool_call_id="id1", arguments={})
+    first = await gate.authorize(tool_name="run", tool_call_id="id1", arguments={})
     await resolver
     assert first is ApprovalDecision.APPROVE  # downgraded from APPROVE_ALWAYS
 
@@ -377,7 +376,7 @@ async def test_per_call_tool_grant_downgraded_to_one_shot():
     resolver2 = asyncio.create_task(
         _resolve_when_ready(reg, "id2", ApprovalDecision.DENY, "conv-1")
     )
-    second = await gate.authorize(tool_name="code_execute", tool_call_id="id2", arguments={})
+    second = await gate.authorize(tool_name="run", tool_call_id="id2", arguments={})
     await resolver2
     assert second is ApprovalDecision.DENY
     assert any(e.type is EventType.APPROVAL_REQUIRED for e in _drain(sink))
@@ -393,7 +392,7 @@ async def test_per_call_tool_does_not_affect_other_tools_turn_grant():
         conversation_id="conv-1",
         registry=reg,
         timeout_seconds=5.0,
-        per_call_tools=frozenset({"code_execute"}),
+        per_call_tools=frozenset({"run"}),
     )
     resolver = asyncio.create_task(
         _resolve_when_ready(reg, "w1", ApprovalDecision.APPROVE_ALWAYS, "conv-1")
@@ -413,25 +412,23 @@ def test_per_call_tool_names_is_empty_cursor_aligned():
     (Cursor-aligned). The helper stays as the injection point for ApprovalGate."""
     names = per_call_tool_names()
     assert names == frozenset()
+    assert "run" not in names
     assert "code_execute" not in names
     assert "test_run" not in names
 
 
-def test_test_run_is_governed_by_the_approval_gate():
-    """P0 invariant: test_run runs project code through the SAME sandbox chain as
-    code_execute, so it must pass the approval gate — it must NOT be NEVER (which slipped
-    the gate entirely). Pinned at the class level: its schema is GRANTABLE, so the same
-    ``tool_call_requires_approval`` path that gates code_execute gates it.
-    Turn grants are allowed (per_call_tool_names empty); file-class grant still excludes it."""
-    schema = TestRunTool().schema
+def test_run_is_governed_by_the_approval_gate():
+    """Verify/short commands share GRANTABLE with the rest of ``run``."""
+    from agentcore.tools.builtin.run import RunTool
+
+    schema = RunTool().schema
     assert schema.approval is ToolApproval.GRANTABLE
     assert schema.category is ToolCategory.EXECUTION
-    assert tool_call_requires_approval("test_run", schema.approval, {}) is True
-    assert (
-        tool_call_requires_approval("code_execute", schema.approval, {}) is True
-    )  # same path
-    assert "test_run" not in per_call_tool_names()
-    assert build_builtin_registry().get("test_run").schema.approval is ToolApproval.GRANTABLE
+    assert tool_call_requires_approval(
+        "run", schema.approval, {"command": "pnpm test"}
+    ) is True
+    assert "run" not in per_call_tool_names()
+    assert build_builtin_registry().get("run").schema.approval is ToolApproval.GRANTABLE
 
 
 async def test_gate_truncates_large_argument_preview():
@@ -450,32 +447,32 @@ async def test_gate_truncates_large_argument_preview():
     assert preview.endswith("[truncated]")
 
 
-async def test_gate_code_execute_code_preview_allows_20k():
+async def test_gate_run_command_preview_allows_20k():
     from agentcore.runtime.approvals import _PREVIEW_CODE_EXECUTE_CODE_MAX, _TRUNCATION_SUFFIX
 
     reg = InteractionRegistry()
     sink = EventSink()
     gate = _gate(sink, reg)
 
-    code = "c" * (_PREVIEW_CODE_EXECUTE_CODE_MAX + 500)
+    command = "c" * (_PREVIEW_CODE_EXECUTE_CODE_MAX + 500)
     purpose = "p" * 800
     resolver = asyncio.create_task(_resolve_when_ready(reg, "id1", ApprovalDecision.DENY, "conv-1"))
     await gate.authorize(
-        tool_name="code_execute",
+        tool_name="run",
         tool_call_id="id1",
-        arguments={"code": code, "purpose": purpose},
+        arguments={"command": command, "purpose": purpose},
     )
     await resolver
 
     required = next(e for e in _drain(sink) if e.type is EventType.APPROVAL_REQUIRED)
     args = required.payload["arguments"]
-    assert args["code"].endswith(_TRUNCATION_SUFFIX)
-    assert len(args["code"]) == _PREVIEW_CODE_EXECUTE_CODE_MAX + len(_TRUNCATION_SUFFIX)
+    assert args["command"].endswith(_TRUNCATION_SUFFIX)
+    assert len(args["command"]) == _PREVIEW_CODE_EXECUTE_CODE_MAX + len(_TRUNCATION_SUFFIX)
     assert args["purpose"].endswith(_TRUNCATION_SUFFIX)
     assert len(args["purpose"]) < len(purpose)
 
 
-async def test_gate_code_execute_env_values_are_redacted():
+async def test_gate_run_env_values_are_redacted():
     from agentcore.core.secrets import REDACTED
 
     reg = InteractionRegistry()
@@ -484,10 +481,10 @@ async def test_gate_code_execute_env_values_are_redacted():
 
     resolver = asyncio.create_task(_resolve_when_ready(reg, "id1", ApprovalDecision.DENY, "conv-1"))
     await gate.authorize(
-        tool_name="code_execute",
+        tool_name="run",
         tool_call_id="id1",
         arguments={
-            "code": "print(1)",
+            "command": "print(1)",
             "purpose": "call api",
             "env": {"AGNES_API_KEY": "opaque-secret-value-here"},
         },
@@ -776,16 +773,16 @@ async def test_kickoff_grant_via_gate_api():
     assert "exec-1" in gate._delegation_grants  # noqa: SLF001
 
     decision = await gate.authorize(
-        tool_name="code_execute",
+        tool_name="run",
         tool_call_id="ce-1",
-        arguments={"code": "print(1)"},
+        arguments={"command": "print(1)"},
         execution_id="exec-1",
     )
     assert decision is ApprovalDecision.APPROVE
     assert _drain(sink) == []
 
     decision2 = await gate.authorize(
-        tool_name="test_run",
+        tool_name="run",
         tool_call_id="tr-1",
         arguments={},
         execution_id="exec-1",
@@ -793,23 +790,23 @@ async def test_kickoff_grant_via_gate_api():
     assert decision2 is ApprovalDecision.APPROVE
 
 
-async def test_kickoff_grant_covers_terminal_start():
-    """B · 开工已授执行类后，同 execution 的 terminal start 静默（不逐次弹门）。"""
+async def test_kickoff_grant_covers_run():
+    """B · 开工已授执行类后，同 execution 的 run 静默（不逐次弹门）。"""
     reg = InteractionRegistry()
     sink = EventSink()
     gate = _gate(sink, reg)
     gate.grant_delegation("exec-1")
 
     first = await gate.authorize(
-        tool_name="terminal",
+        tool_name="run",
         tool_call_id="term-1",
-        arguments={"subcommand": "start", "command": "pnpm dev"},
+        arguments={"command": "pnpm dev"},
         execution_id="exec-1",
     )
     second = await gate.authorize(
-        tool_name="terminal",
+        tool_name="run",
         tool_call_id="term-2",
-        arguments={"subcommand": "start", "command": "pnpm build"},
+        arguments={"command": "pnpm build"},
         execution_id="exec-1",
     )
     assert first is ApprovalDecision.APPROVE
@@ -817,7 +814,7 @@ async def test_kickoff_grant_covers_terminal_start():
     assert _drain(sink) == []
 
 
-async def test_approve_once_still_reprompts_terminal():
+async def test_approve_once_still_reprompts_run():
     """用户主动「允许一次」后，同工具仍可再次出卡（能力保留）。"""
     reg = InteractionRegistry()
     sink = EventSink()
@@ -827,9 +824,9 @@ async def test_approve_once_still_reprompts_terminal():
         _resolve_when_ready(reg, "term-1", ApprovalDecision.APPROVE, "conv-1")
     )
     first = await gate.authorize(
-        tool_name="terminal",
+        tool_name="run",
         tool_call_id="term-1",
-        arguments={"subcommand": "start", "command": "a"},
+        arguments={"command": "a"},
         execution_id="exec-1",
     )
     await resolver
@@ -840,9 +837,9 @@ async def test_approve_once_still_reprompts_terminal():
         _resolve_when_ready(reg, "term-2", ApprovalDecision.APPROVE, "conv-1")
     )
     second = await gate.authorize(
-        tool_name="terminal",
+        tool_name="run",
         tool_call_id="term-2",
-        arguments={"subcommand": "start", "command": "b"},
+        arguments={"command": "b"},
         execution_id="exec-1",
     )
     await resolver2
@@ -850,7 +847,7 @@ async def test_approve_once_still_reprompts_terminal():
     assert any(e.type is EventType.APPROVAL_REQUIRED for e in _drain(sink))
 
 
-async def test_delegation_grant_skips_code_execute_approval():
+async def test_delegation_grant_skips_run_approval():
     reg = InteractionRegistry()
     sink = EventSink()
     gate = _gate(sink, reg)
@@ -859,9 +856,9 @@ async def test_delegation_grant_skips_code_execute_approval():
     gate._delegation_grants["exec-1"] = DelegationGrant(execution_id="exec-1")  # noqa: SLF001
 
     decision = await gate.authorize(
-        tool_name="code_execute",
+        tool_name="run",
         tool_call_id="ce-1",
-        arguments={"code": "print(1)"},
+        arguments={"command": "print(1)"},
         execution_id="exec-1",
     )
     assert decision is ApprovalDecision.APPROVE
@@ -889,9 +886,9 @@ async def test_always_ask_policy_ignores_kickoff_grant():
         _resolve_when_ready(reg, "ce-1", ApprovalDecision.APPROVE, "conv-1")
     )
     decision = await gate.authorize(
-        tool_name="code_execute",
+        tool_name="run",
         tool_call_id="ce-1",
-        arguments={"code": "print(1)"},
+        arguments={"command": "print(1)"},
         execution_id="exec-1",
     )
     await resolver
@@ -911,7 +908,7 @@ async def test_delegation_grant_revoked_restores_per_call():
     gate.revoke_delegation("exec-1")
 
     decision = await gate.authorize(
-        tool_name="code_execute",
+        tool_name="run",
         tool_call_id="ce-1",
         arguments={},
         execution_id="exec-1",
@@ -921,9 +918,10 @@ async def test_delegation_grant_revoked_restores_per_call():
 
 def test_delegation_grantable_tool_names_includes_execution_and_file_ops():
     names = delegation_grantable_tool_names()
-    assert "code_execute" in names
-    assert "test_run" in names
-    assert "terminal" in names
+    assert "run" in names
+    assert "code_execute" not in names
+    assert "test_run" not in names
+    assert "terminal" not in names
     assert "git" in names
     assert "file_write" in names
 
@@ -1154,7 +1152,7 @@ async def test_session_host_trust_still_prompts_package_install():
     )
 
 
-async def test_session_file_trust_does_not_cover_code_execute():
+async def test_session_file_trust_does_not_cover_run():
     """执行类仍需开工卡 / 逐次审批，不被文件会话信任短路。"""
     from agentcore.core.types import AutonomyPolicy, recipe_to_axes
     from agentcore.tools.builtin import approval_class_tool_names
@@ -1175,9 +1173,9 @@ async def test_session_file_trust_does_not_cover_code_execute():
         _resolve_when_ready(reg, "ce-1", ApprovalDecision.APPROVE, "conv-1")
     )
     decision = await gate.authorize(
-        tool_name="code_execute",
+        tool_name="run",
         tool_call_id="ce-1",
-        arguments={"code": "print(1)"},
+        arguments={"command": "print(1)"},
     )
     await resolver
     assert decision is ApprovalDecision.APPROVE
@@ -1232,17 +1230,17 @@ def test_host_actions_require_approval_like_git_writes():
     )
 
 
-def test_terminal_start_requires_approval_like_git_writes():
-    """terminal schema is NEVER; only start is gated (git write subcommand posture)."""
-    from agentcore.tools.builtin.terminal import TerminalTool
+def test_run_process_manage_skips_approval():
+    """run is GRANTABLE; read/stop/list skip the gate; start/command still gated."""
+    from agentcore.tools.builtin.run import RunTool
 
-    schema = TerminalTool().schema
-    assert schema.approval is ToolApproval.NEVER
+    schema = RunTool().schema
+    assert schema.approval is ToolApproval.GRANTABLE
     assert tool_call_requires_approval(
-        "terminal", schema.approval, {"subcommand": "start", "command": "pnpm dev"}
+        "run", schema.approval, {"command": "pnpm dev", "background": True}
     )
     assert not tool_call_requires_approval(
-        "terminal", schema.approval, {"subcommand": "list"}
+        "run", schema.approval, {"action": "list"}
     )
 
 
@@ -1268,7 +1266,7 @@ def test_will_prompt_matrix_short_circuits_and_force():
     )
 
     # Baseline: GRANTABLE with no short-circuit → would prompt.
-    assert gate.will_prompt(tool_name="code_execute", arguments={}) is True
+    assert gate.will_prompt(tool_name="run", arguments={}) is True
 
     # Session file trust (LESS_INTERRUPT) covers reversible file ops.
     assert gate.will_prompt(tool_name="mkdir", arguments={"path": "docs/x"}) is False
@@ -1285,7 +1283,7 @@ def test_will_prompt_matrix_short_circuits_and_force():
     gate._delegation_grants["exec-1"] = DelegationGrant(execution_id="exec-1")  # noqa: SLF001
     assert (
         gate.will_prompt(
-            tool_name="code_execute",
+            tool_name="run",
             arguments={},
             execution_id="exec-1",
         )
@@ -1294,7 +1292,7 @@ def test_will_prompt_matrix_short_circuits_and_force():
     # force bypasses kickoff / session short-circuits.
     assert (
         gate.will_prompt(
-            tool_name="code_execute",
+            tool_name="run",
             arguments={},
             execution_id="exec-1",
             force=True,
@@ -1311,8 +1309,8 @@ def test_will_prompt_matrix_short_circuits_and_force():
     )
 
     # Turn-wide grant / deny skip the card.
-    gate._granted.add("code_execute")  # noqa: SLF001
-    assert gate.will_prompt(tool_name="code_execute", arguments={}) is False
+    gate._granted.add("run")  # noqa: SLF001
+    assert gate.will_prompt(tool_name="run", arguments={}) is False
     gate._granted.clear()  # noqa: SLF001
     gate._denied.add("file_write")  # noqa: SLF001
     assert gate.will_prompt(tool_name="file_write", arguments={"path": "a"}) is False

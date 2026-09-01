@@ -43,7 +43,9 @@ READ_FOLDER_FILE_TOOL_NAME = "read_folder_file"
 # inject this before delegating so cross-desk sampling cannot inherit that cap.
 _READ_FOLDER_SAMPLE_LINES = 500
 
-_MISSING_FOLDER_ID = "缺少 folder_id（目标文件夹 id；见文件夹清单行内 id / resolve_folder）。"
+_MISSING_FOLDER_ID = (
+    "缺少 folder_id（目标文件夹 id；list_folders / resolve_folder）。"
+)
 _DENIED_MSG = (
     "目标文件夹 `{folder_id}` 不存在或无权访问；请重新列/解析文件夹后再读。"
 )
@@ -111,18 +113,16 @@ async def _open_target_folder(
         user_id=context.user_id,
         conversation_id=context.conversation_id,
     )
-    # Ephemeral desk: do not share birth-desk file_read ceilings / materials;
+    # Ephemeral desk: do not share birth-desk materials;
     # do not rewrite context.backend (session mount stays put). Fresh slot so
     # this read does not follow (or cause) a parent rebind.
-    from agentcore.tools.protocol import fork_workspace_slot, isolate_file_read_ceiling
+    from agentcore.tools.protocol import fork_workspace_slot
 
-    target_ctx = isolate_file_read_ceiling(
-        replace(
-            context,
-            _workspace=fork_workspace_slot(backend, material_paths=frozenset()),
-            workspace_channel=workspace_channel,
-            shared_workspace=True,
-        )
+    target_ctx = replace(
+        context,
+        _workspace=fork_workspace_slot(backend, material_paths=frozenset()),
+        workspace_channel=workspace_channel,
+        shared_workspace=True,
     )
     logger.info(
         "folder_fs.target_opened",
@@ -171,11 +171,6 @@ class ListFolderDirTool:
             name=LIST_FOLDER_DIR_TOOL_NAME,
             description=(
                 "只读跨文件夹：列出【另一张已有桌】某目录当前层（须 folder_id）。"
-                "当前出生桌用 file_list（无 folder_id）。范围=该文件夹及其子文件夹。"
-                "按次指定，不改本会话出生桌，不写目标桌记忆。"
-                "派单前轻量认桌/抽样；成规模跨桌摸底请 delegate 填 target_folder_id"
-                "（队员拿不到本工具）。"
-                "folder_id 来自文件夹清单行内 id / resolve_folder / create_folder。"
                 "HOW→consult(team_cross_folder)。"
             ),
             parameters={
@@ -184,7 +179,7 @@ class ListFolderDirTool:
                     "folder_id": {
                         "type": "string",
                         "description": (
-                            "目标文件夹 id（文件夹清单行内 id / resolve_folder / "
+                            "目标文件夹 id（list_folders / resolve_folder / "
                             "create_folder）。当前出生桌勿用本工具。"
                         ),
                     },
@@ -231,12 +226,6 @@ class ReadFolderFileTool:
             name=READ_FOLDER_FILE_TOOL_NAME,
             description=(
                 "只读跨文件夹：读取【另一张已有桌】内某文件（folder_id + path）。"
-                "当前出生桌用 file_read。范围=该文件夹及其子文件夹。"
-                "按次指定，不改本会话出生桌，不写目标桌记忆。"
-                "派单前轻量认桌/抽样；成规模跨桌摸底请 delegate 填 target_folder_id"
-                "（队员拿不到本工具）。"
-                "folder_id 来自文件夹清单行内 id / resolve_folder / create_folder。"
-                "支持 offset/limit 行窗；Office/PDF 抽文本同 file_read。"
                 "HOW→consult(team_cross_folder)。"
             ),
             parameters={
@@ -245,7 +234,7 @@ class ReadFolderFileTool:
                     "folder_id": {
                         "type": "string",
                         "description": (
-                            "目标文件夹 id（文件夹清单行内 id / resolve_folder / "
+                            "目标文件夹 id（list_folders / resolve_folder / "
                             "create_folder）。当前出生桌勿用本工具。"
                         ),
                     },

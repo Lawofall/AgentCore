@@ -10,7 +10,7 @@
 比体积更要紧的是**权威归属**：同一件事只能有一处权威。
 
 - 环境能不能做某事 = **算出来的事实**，住 ``<工作区>``（``本回合执行能力`` /
-  ``产物格式`` / ``装包事实`` / ``出站网络`` …）。核里复述一份就会漂——案 0a71 就是核里
+  ``产物格式`` / ``出站网络`` …）。核里复述一份就会漂——案 0a71 就是核里
   散文断言「``md_to_docx`` / ``md_to_pdf`` 无条件装配」，而 CEO 并不持这两把工具、在自己的
   工具列表里看不见它们，模型于是花了整段思考链猜「队员到底有没有」，最后把用户的三个选项
   连同提问一起丢了。**下面那条 assembly-claim 测试就是这个 bug 的回归守卫。**
@@ -73,7 +73,7 @@ from agentcore.runtime.resolve.prompt import (
 # 当次实测 19859。cap 提到 19860。
 # 2026-08-26 问面广度开火：讨论/盘点/架构不再并列自己聊；对话本身=不发卡不写盘+队员结论开口。
 # 当次实测 19855。cap 保持 19860。
-# 2026-08-27 第 3 步：Windows .bat 出共享基座，HOW 进 work_discipline。当次实测 19655。
+# 2026-08-27 第 3 步：Windows .bat 出共享基座，HOW 进 run。当次实测 19655。
 # cap 降到 19660。
 # 2026-08-27 第 7 步：CEO 核判例→原则；ask_user 百科去双写；事故话术出核。
 # 当次实测 18859。cap 降到 18860。
@@ -168,12 +168,25 @@ from agentcore.runtime.resolve.prompt import (
 # 2026-08-30 工种叠层：CEO 专属（大白话 / 用户可见面）从基座搬回 <身份>；
 # 扩范围按角色分叉。当次实测 1569。cap 1570（抬顶=身份语义归位，非回潮）。
 # 2026-08-30 基座权威去通道分叉（问谁归工具 description）。当次实测 1498。cap 1500。
-_RESIDENT_CAP = 1500
+# 2026-08-30 CEO 身份：全套工具、装得下自己做。当次实测 1503。cap 1510
+# （抬顶=身份语义，非回潮；不靠核内塞字躲 3 字符）。
+# 2026-08-30 「全套工具」出核（装配态归 <工作区>）。当次实测 1492。cap 1500
+# 2026-08-30 档 1 身份：超规模默认交团队、协调收口；装得下≠看起来简单/手上有工具。
+# 当次实测 1539。cap 1540（抬顶=新身份语义，非回潮）。
+# 2026-08-30 核去「超规模」门槛，默认交团队；「动手前先判规模」留下。当次实测 1536。cap 1540。
+# 2026-08-31 规模句：自己做只限一问就能收口；「一份注意力 / 装得下」出核。
+# 当次实测 1527。cap 1530。
+# 2026-08-31 「手上有工具 ≠ 该自己做完」出核（正向已盖住；工具面仍有「有写权 ≠」）。
+# 当次实测 1513。cap 1520。
+# 2026-08-31 规模句改为短答和单点 ≠ 成件事。当次实测 1518。cap 1520。
+# 2026-09-01 身份问路由句出核；基座删只读审计句；run HOW 出 capability_how_suffix。
+# 当次实测 1443。cap 降到 1450。
+_RESIDENT_CAP = 1450
 
 # (门工具, 该手册的签名字面) —— 手册只在门开的回合出现，不许常驻。
+# run 的 HOW 在 skill body（consult(run) 命中 skill），不进 capability_how_suffix。
 _GATED_MANUALS: tuple[tuple[str, str], ...] = (
-    ("terminal", "wait_for"),
-    ("terminal", "报 URL"),
+    ("run", "wait_for"),
     ("host", "通识 FAQ"),
     ("host", "Get-WinEvent"),
     ("browser", "ask_user(browser_login=true)"),
@@ -226,13 +239,23 @@ def test_core_does_not_restate_computed_workspace_facts():
 
 @pytest.mark.parametrize(("gate_tool", "signature"), _GATED_MANUALS)
 def test_gated_manuals_do_not_ride_the_resident_core(gate_tool: str, signature: str):
-    """可履约手册唯一所有者 = consult：核与 compose 开场都不挂，consult 正文才有。"""
+    """可履约手册唯一所有者 = consult / skill：核与 compose 开场都不挂。"""
     assert signature not in _CEO_CORE_HINT, (
         f"{signature} 属于 {gate_tool} 的手册，不该常驻——交给 consult"
     )
-    assert signature in capability_how_suffix({gate_tool}), (
-        f"{gate_tool} 的 consult 手册丢了签名 {signature}"
-    )
+    if gate_tool == "run":
+        from agentcore.runtime.skills.run import _RUN
+
+        assert signature in _RUN, (
+            f"run 的手册丢了签名 {signature}（应在 skill body）"
+        )
+        assert signature not in capability_how_suffix({"run"}), (
+            "run HOW 不进 capability_how_suffix"
+        )
+    else:
+        assert signature in capability_how_suffix({gate_tool}), (
+            f"{gate_tool} 的 consult 手册丢了签名 {signature}"
+        )
     catalog_like = compose_ceo_chat_prompt(
         assemble_system_prompt(),
         ceo_tool_names={"delegate", gate_tool},
@@ -248,6 +271,21 @@ def test_gated_manuals_do_not_ride_the_resident_core(gate_tool: str, signature: 
     assert signature not in offered, (
         f"{signature} 不应在工具已进表时再挂进冻结核（{gate_tool}）"
     )
+
+
+def test_capability_how_has_no_ceo_must_delegate_leftovers():
+    """Tool-lock leftovers left consult HOW; do not reintroduce as 禁止自己跑/截图."""
+    how = capability_how_suffix({"run", "host", "browser"})
+    for token in (
+        "验收与短命令由队员",
+        "打开系统面板 / 切默认音频 / 重启白名单服务 / 装本机软件 → `delegate`",
+        "验收 / 截图 → `delegate`",
+        "队员 `screenshot`",
+        "禁止自己跑",
+        "禁止自己截图",
+    ):
+        assert token not in how
+        assert token not in _CEO_CORE_HINT
 
 
 def test_honesty_floors_stay_resident():

@@ -214,7 +214,7 @@ def test_project_cleared_write_args_collapses_completed_writes():
         LLMMessage(role="tool", content="已写入 100 字节到 docs/a.md", tool_call_id=call_id),
         LLMMessage(role="assistant", content="准备 handoff"),
     ]
-    out = project_cleared_write_args(msgs, min_chars=100)
+    out = project_cleared_write_args(msgs, min_chars=100, keep_recent=0)
     assert out is not msgs
     call = out[1].tool_calls[0]
     # Keep original write name — never emit _write_landed as function.name bait.
@@ -232,7 +232,7 @@ def test_project_cleared_write_args_collapses_completed_writes():
             for tc in msg.tool_calls:
                 assert tc.function.name != LANDED_STATUS_TOOL
     # 幂等：再投影一次不得二次追加摘要，也不得改动参数。
-    out2 = project_cleared_write_args(out, min_chars=100)
+    out2 = project_cleared_write_args(out, min_chars=100, keep_recent=0)
     assert out2[1].tool_calls[0].function.arguments == call.function.arguments
     assert out2[1].tool_calls[0].function.name == "file_write"
     assert out2[2].content == out[2].content
@@ -267,7 +267,7 @@ def test_project_cleared_write_args_str_replace_readonly_summary():
         ),
         LLMMessage(role="tool", content="已替换 notes.md", tool_call_id=call_id),
     ]
-    out = project_cleared_write_args(msgs, min_chars=100)
+    out = project_cleared_write_args(msgs, min_chars=100, keep_recent=0)
     assert out is not msgs
     call = out[0].tool_calls[0]
     assert call.function.name == "str_replace"
@@ -330,6 +330,102 @@ def test_project_cleared_write_args_skips_pending_write():
         )
     ]
     assert project_cleared_write_args(msgs, min_chars=100) is msgs
+
+
+def _write_round(
+    call_id: str, path: str, body: str, *, tool: str = "file_write"
+) -> list[LLMMessage]:
+    if tool == "str_replace":
+        args = {"path": path, "old_string": "OLD_MARK", "new_string": body}
+    else:
+        args = {"path": path, "content": body}
+    return [
+        LLMMessage(
+            role="assistant",
+            tool_calls=[
+                ToolCall(
+                    id=call_id,
+                    function=ToolCallFunction(
+                        name=tool,
+                        arguments=json.dumps(args, ensure_ascii=False),
+                    ),
+                )
+            ],
+        ),
+        LLMMessage(role="tool", content=f"ok {path}", tool_call_id=call_id),
+    ]
+
+
+def test_project_cleared_write_args_keeps_sole_completed_write():
+    """默认 keep_recent=1：刚落下的唯一一刀全文留着，供下一刀当 old_string。"""
+    body = "章节正文" * 200
+    msgs = [LLMMessage(role="user", content="go")] + _write_round(
+        "s1", "notes.md", body, tool="str_replace"
+    )
+    out = project_cleared_write_args(msgs, min_chars=100)
+    assert out is msgs
+    args = json.loads(out[1].tool_calls[0].function.arguments)
+    assert args["new_string"] == body
+    assert "old_string" in args
+
+
+def test_project_cleared_write_args_collapses_older_keeps_recent():
+    """连续两轮写：更早的压成 path，最近一轮全文仍在。"""
+    old_body = "旧稿" * 200
+    new_body = "新稿" * 200
+    msgs = (
+        [LLMMessage(role="user", content="go")]
+        + _write_round("w0", "a.md", old_body)
+        + _write_round("w1", "a.md", new_body, tool="str_replace")
+    )
+    out = project_cleared_write_args(msgs, min_chars=100)
+    assert out is not msgs
+    older = json.loads(out[1].tool_calls[0].function.arguments)
+    recent = json.loads(out[3].tool_calls[0].function.arguments)
+    assert older == {"path": "a.md"}
+    assert old_body not in out[1].tool_calls[0].function.arguments
+    assert "已落盘" in out[2].content
+    assert recent["new_string"] == new_body
+    assert new_body not in (out[2].content or "")
+
+
+def test_project_cleared_write_args_keeps_parallel_writes_in_same_round():
+    """同一 assistant 消息里并行两刀写：keep_recent=1 都留（都是刚落下的那一轮）。"""
+    a = "AAAA" * 200
+    b = "BBBB" * 200
+    msgs = [
+        LLMMessage(
+            role="assistant",
+            tool_calls=[
+                ToolCall(
+                    id="p0",
+                    function=ToolCallFunction(
+                        name="str_replace",
+                        arguments=json.dumps(
+                            {"path": "a.ts", "old_string": "x", "new_string": a}
+                        ),
+                    ),
+                ),
+                ToolCall(
+                    id="p1",
+                    function=ToolCallFunction(
+                        name="str_replace",
+                        arguments=json.dumps(
+                            {"path": "b.ts", "old_string": "y", "new_string": b}
+                        ),
+                    ),
+                ),
+            ],
+        ),
+        LLMMessage(role="tool", content="ok a", tool_call_id="p0"),
+        LLMMessage(role="tool", content="ok b", tool_call_id="p1"),
+    ]
+    out = project_cleared_write_args(msgs, min_chars=100)
+    assert out is msgs
+    args0 = json.loads(out[0].tool_calls[0].function.arguments)
+    args1 = json.loads(out[0].tool_calls[1].function.arguments)
+    assert args0["new_string"] == a
+    assert args1["new_string"] == b
 
 
 def test_cleared_write_stub_rejection_exact_markers_only():

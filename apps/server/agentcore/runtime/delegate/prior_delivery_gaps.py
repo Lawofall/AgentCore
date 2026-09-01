@@ -14,10 +14,15 @@ Hard rules (intercept-discipline):
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from typing import Any
 
+from agentcore.core.logging import get_logger
 from agentcore.runtime.delegate.redispatch_hint import _load_latest_prior_journal
 from agentcore.runtime.events.types import EventType
+
+logger = get_logger(__name__)
+_DELEGATE_TOOL = "delegate"
 
 # Align caps with delivery_status emission (_MAX_GAPS / _MAX_FILES).
 _MAX_GAPS = 12
@@ -120,6 +125,53 @@ def apply_gaps_vs_redispatch_mutex(
     if gaps:
         return gaps_block, ""
     return gaps_block or "", redispatch_block or ""
+
+
+def _event_type_and_payload(ev: object) -> tuple[str, Mapping[str, Any]]:
+    if isinstance(ev, Mapping):
+        raw = ev.get("type") or ev.get("kind") or ""
+        payload = ev.get("payload")
+        return (
+            str(getattr(raw, "value", raw) or ""),
+            payload if isinstance(payload, Mapping) else {},
+        )
+    raw = getattr(ev, "type", "")
+    payload = getattr(ev, "payload", None)
+    return (
+        str(getattr(raw, "value", raw) or ""),
+        payload if isinstance(payload, Mapping) else {},
+    )
+
+
+def events_include_delegate(events: object) -> bool:
+    """True when this turn's wire has a ``delegate`` tool_use_end (any status)."""
+    if isinstance(events, str | bytes) or not isinstance(events, Iterable):
+        return False
+    for ev in events:
+        etype, payload = _event_type_and_payload(ev)
+        if etype == "tool_use_end" and payload.get("tool_name") == _DELEGATE_TOOL:
+            return True
+    return False
+
+
+def observe_unclosed_cue(
+    *,
+    prior_gaps: bool,
+    recent_graph: bool,
+    delegated: bool,
+) -> None:
+    """阶梯 2: count only. Emit when last-turn unclosed cue was in the prompt.
+
+    Does not inject, reject, or scan user text. ``delegated`` is the miss bit.
+    """
+    if not prior_gaps and not recent_graph:
+        return
+    logger.info(
+        "ceo.unclosed_cue",
+        prior_gaps=prior_gaps,
+        recent_graph=recent_graph,
+        delegated=delegated,
+    )
 
 
 async def build_prior_delivery_gaps_hint(

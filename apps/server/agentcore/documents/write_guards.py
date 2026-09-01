@@ -1,9 +1,12 @@
 """Write-side guards for document CRUD (AI memory cores vs user-owned entries).
 
 Core memory leaves keep fixed store-relative names from ``memory.store`` —
-偏好.md / 画像.md / 导航.md — so callers can refuse delete without heuristics.
-Apply-mode mutations for any ``ai_maintained`` row are refused at the API layer
-(see ``api/routes/documents.py``).
+偏好.md / 画像.md / 导航.md. ``DELETE /documents/{id}`` still refuses those rows
+(the name is the load protocol). Clearing the *body* is a different path:
+empty ``PUT /users/me/memory/files/{kind}`` drops the note so it leaves
+injection; the file-page list keeps a placeholder. Apply-mode mutations for
+any ``ai_maintained`` row are refused at the API layer (see
+``api/routes/documents.py``).
 """
 
 from __future__ import annotations

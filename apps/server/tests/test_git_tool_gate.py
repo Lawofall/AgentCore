@@ -135,10 +135,10 @@ def test_capability_catalog_still_advertises_git():
 def test_capability_line_git_unassembled_when_desktop_offline():
     out = build_workspace_context(_ChannelLocalBackend(), desktop_online=False)
     assert "git=未装配" in out
-    assert "未装配 `git` 工具" in out
-    assert "通道未连接" in out
-    assert "在桌面客户端打开【本对话】" in out
-    assert "文件读写与其它已装配工具不受影响" in out
+    assert "未装配 git" in out
+    assert "装配启用" not in out
+    assert "在桌面客户端打开【本对话】" not in out
+    assert "文件读写与其它已装配工具不受影响" not in out
     # 「未装配怎么开工 / 勿声称已用」写在共享基座 <诚实>，事实层不复述
     assert "同轮可开工" not in out
     from agentcore.runtime.resolve.prompt import _CEO_CORE_HINT, _DEFAULT_SYSTEM_PROMPT
@@ -153,7 +153,7 @@ def test_capability_line_git_unassembled_when_desktop_offline():
 def test_capability_line_git_assembled_when_desktop_online():
     out = build_workspace_context(_ChannelLocalBackend(), desktop_online=True)
     assert "git=已装配" in out
-    assert "未装配 `git` 工具" not in out
+    assert "未装配 git" not in out
 
 
 def test_capability_line_git_assembled_for_cloud_and_sidecar(tmp_path):

@@ -8,5 +8,5 @@
     { "name": "FinishReason" },
     { "name": "Delegated" }
   ],
-  "rubric": "成篇科普且要求落盘：CEO 无写文件工具，应委派 worker 写并存文件，而非把长文粘进回复。"
+  "rubric": "成篇科普且要求落盘：默认委派 worker 写并存文件，而非 CEO 自己写整篇或把长文粘进回复。"
 }

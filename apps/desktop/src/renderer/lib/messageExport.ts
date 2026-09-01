@@ -35,6 +35,7 @@ const TOOL_LABEL: Record<string, string> = {
   read_url: "Read page",
   grep: "Grep code",
   code_search: "Search code",
+  run: "Run",
   code_execute: "Run code",
   terminal: "Run terminal",
   test_run: "Run tests",

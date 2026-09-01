@@ -217,14 +217,14 @@ async def test_prepare_aborts_desktop_offline_skips_llm(monkeypatch):
     async def _empty_rules(*_a, **_k):
         return ""
 
-    async def _empty_catalog(*_a, **_k):
-        return []
+    async def _no_desk_label(*_a, **_k):
+        return None
 
     monkeypatch.setattr(
         "agentcore.runtime.pipeline.prepare.assemble_turn_rules", _empty_rules
     )
     monkeypatch.setattr(
-        "agentcore.runtime.pipeline.prepare.load_folder_catalog", _empty_catalog
+        "agentcore.runtime.pipeline.prepare.resolve_desk_folder_label", _no_desk_label
     )
 
     with pytest.raises(WorkspaceIOError) as ei:
@@ -264,16 +264,16 @@ async def test_prepare_aborts_root_not_held_skips_llm(monkeypatch):
         async def _empty_rules(*_a, **_k):
             return ""
 
-        async def _empty_catalog(*_a, **_k):
-            return []
+        async def _no_desk_label(*_a, **_k):
+            return None
 
         monkeypatch.setattr(
             "agentcore.runtime.pipeline.prepare.assemble_turn_rules",
             _empty_rules,
         )
         monkeypatch.setattr(
-            "agentcore.runtime.pipeline.prepare.load_folder_catalog",
-            _empty_catalog,
+            "agentcore.runtime.pipeline.prepare.resolve_desk_folder_label",
+            _no_desk_label,
         )
 
         with pytest.raises(WorkspaceIOError) as ei:

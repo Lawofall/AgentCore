@@ -8,9 +8,11 @@ Cite-tier / contract failures that name a path reject that path even when the
 run soft-COMPLETEDs — so soft-COMPLETED must not smuggle those paths into the
 delivered list. Declared artifact / ``artifact_dir`` vs landed path: exact / dir / glob after
 normalize, **or** the write-sanitizer flatten (dossier nested ``a/b.md`` →
-``a_b.md``). A landed path that misses the declaration is **omitted** from
-the card (not ``rejected`` / 未通过). Missing declared paths are a
-``path_mismatch`` **gap**, not a row on the extra file.
+``a_b.md``). A landed path that misses the declaration is omitted from the card **when
+the declared path did land** (backups). If the pin missed, extras stay on
+the card — they are the product. Missing declared paths are a
+``path_mismatch`` **warning** gap, not a row on the extra file, and do not
+block ``delivered``.
 
 调研两阶段（``citation_mode=two_phase``）：阶段 A 草案仅内部态，不写入本表；
 阶段 B 过闸 → ``accepted``；不过 → ``rejected(citations_unverified)``。draft 永不

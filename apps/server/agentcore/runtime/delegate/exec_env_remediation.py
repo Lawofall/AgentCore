@@ -92,10 +92,10 @@ def exec_env_remediation_zh(
         )
         if local:
             return (
-                "[能力提示] 本回合执行环境未装配（无 code_execute / test_run / terminal），"
+                "[能力提示] 本回合执行环境未装配（无 run），"
                 "需执行才能生成的 Office 目标（.pptx/.xlsx 等）无法在本回合生成。"
                 f"{docx_clause}"
-                "【禁止】再派「写脚本 / 跑脚本」空转，也【禁止】再 claim code_execute=已装配；"
+                "【禁止】再派「写脚本 / 跑脚本」空转，也【禁止】再 claim run=已装配；"
                 "请立即发 ask_user 卡说明缺口，并**推荐**引导 Composer「导入到云」"
                 "或诚实收口并标缺口（脚本仅备本机运行，目标 Office 文件未生成）。"
                 "本机传统三件套合法可教、非默认（≠离线）。"
@@ -103,7 +103,7 @@ def exec_env_remediation_zh(
         if _sidecar_engine():
             return (
                 "[能力提示] 本机传统回合坐到了云文件夹，执行环境未装配"
-                "（无 code_execute / test_run / terminal），"
+                "（无 run），"
                 "需执行才能生成的 Office 目标（.pptx/.xlsx 等）无法在本回合生成。"
                 f"{docx_clause}"
                 "【禁止】再派「写脚本 / 跑脚本」空转；【禁止】再引导「导入到云」；"
@@ -113,7 +113,7 @@ def exec_env_remediation_zh(
             )
         return (
             "[能力提示] 本回合已是云端会话，执行环境未装配"
-            f"{failure_clause}（无 code_execute / test_run / terminal），"
+            f"{failure_clause}（无 run），"
             "需执行才能生成的 Office 目标（.pptx/.xlsx 等）无法在本回合生成。"
             f"{docx_clause}"
             "【禁止】再派「写脚本 / 跑脚本」空转，也【禁止】再 claim 已装配；"
@@ -125,7 +125,7 @@ def exec_env_remediation_zh(
     # capability_run
     if local:
         return (
-            "[能力提示] 本回合执行环境未装配（无 code_execute / test_run / terminal）："
+            "[能力提示] 本回合执行环境未装配（无 run）："
             "任务文案涉及「运行 / 启动 / 生成二进制或可播放产物」，worker 只能写脚本 / 文件，"
             "无法真正运行或生成此类产物。收尾时请如实标缺口，或 ask_user 并**推荐** "
             "Composer「导入到云」后重派。"
@@ -134,14 +134,14 @@ def exec_env_remediation_zh(
     if _sidecar_engine():
         return (
             "[能力提示] 本机传统回合坐到了云文件夹，执行环境未装配"
-            "（无 code_execute / test_run / terminal）："
+            "（无 run）："
             "worker 只能写脚本 / 文件，无法真正运行。"
-            "【禁止】再引导「导入到云」；【禁止】再派 code_execute。"
+            "【禁止】再引导「导入到云」；【禁止】再派 run。"
             "拷文件请用文件工具；要跑代码请新开云协作对话。收尾如实标缺口。"
         )
     return (
         "[能力提示] 本回合已是云端会话，执行沙箱未装配"
-        f"{failure_clause}（无 code_execute / test_run / terminal）："
+        f"{failure_clause}（无 run）："
         "worker 只能写脚本 / 文件，无法真正运行或生成需执行才能产出的产物。"
         "【禁止】再引导「导入到云」。收尾如实标缺口，或 ask_user："
         "稍后重试 / export_to_local 本机跑 / 本机传统（合法非默认）。"

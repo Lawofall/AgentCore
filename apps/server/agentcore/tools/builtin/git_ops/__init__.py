@@ -5,10 +5,9 @@ LocalWorkspace (no Path.root): same allowlisted surface via desktop ``git_run``.
 Read subcommands (status / diff / log / fetch / show / blame; stash/tag/remote
 ``action=list``) run without approval; write subcommands (add / commit / branch /
 checkout / push / pull / init_baseline / clone / merge / rebase / cherry-pick /
-create_pr; stash push/pop; tag create; remote add) are refused on the CEO path
-except ``init_baseline`` / ``clone`` (first baseline or shallow clone into dest;
-still approval-gated, not always-confirm) and executed on delegated workers
-(mutating ops require user authorization).
+create_pr; stash push/pop; tag create; remote add) run on the same path for CEO
+and worker (mutating ops require user authorization). Push / create_pr
+always-confirm.
 Hard-banned at the breaker (``reset`` / ``clean``); force push /
 protected-branch targets stay DENY. Push itself is allowlisted but never force;
 ``create_pr`` is GitHub-only via API (not free ``gh`` shell); pull is always
@@ -60,7 +59,6 @@ from agentcore.tools.builtin.git_ops.policy import (
     _ALLOWED_SUBCOMMANDS,
     _ALWAYS_WRITE_SUBCOMMANDS,
     _BLAME_LINE_LIMIT,
-    _CEO_ALLOWED_WRITE_SUBCOMMANDS,
     _COLLAB_DANGER_KEYS,
     _DIFF_OUTPUT_LIMIT,
     _FORBIDDEN_PATTERNS,
@@ -83,7 +81,6 @@ from agentcore.tools.builtin.git_ops.policy import (
     _STATUS_LINE_LIMIT,
     _WRITE_SUBCOMMANDS,
     GIT_TOOL_PARAMETERS,
-    _is_ceo_context,
     _normalize_paths,
     _remote_name_error,
     _validate_add_paths,
@@ -139,7 +136,6 @@ __all__ = [
     "_AUTH_FAILURE_HINT",
     "_AUTH_FAILURE_MARKERS",
     "_BLAME_LINE_LIMIT",
-    "_CEO_ALLOWED_WRITE_SUBCOMMANDS",
     "_COLLAB_DANGER_KEYS",
     "_DIFF_OUTPUT_LIMIT",
     "_FORBIDDEN_PATTERNS",
@@ -171,7 +167,6 @@ __all__ = [
     "_git_failure",
     "_git_spawn_kwargs",
     "_git_subprocess_env",
-    "_is_ceo_context",
     "_load_account_git_auth",
     "_looks_like_auth_failure",
     "_looks_like_unusable_repo",

@@ -318,9 +318,6 @@ class DelegateTool:
         playbook_notes = prelude.playbook_notes
         valid_tools = prelude.valid_tools
         complexity_hint = prelude.complexity_hint
-        consumer_deps_warn = prelude.consumer_deps_warn
-        design_impl_warn = prelude.design_impl_warn
-        root_slice_warn = prelude.root_slice_warn
 
         # §4.2b·2b / 改法④A：无出生且写盘缺目标 → 先静默建云桌，再闸。
         # 裸聊同回合唯一 create/resolve / auto 可经 turn_target_desk 继承缺省目标。
@@ -735,12 +732,6 @@ class DelegateTool:
                 tails.extend(playbook_notes)
             if latest_miss_degraded_note:
                 tails.append(latest_miss_degraded_note)
-            if consumer_deps_warn:
-                tails.append(consumer_deps_warn)
-            if design_impl_warn:
-                tails.append(design_impl_warn)
-            if root_slice_warn:
-                tails.append(root_slice_warn)
             if prev_execution_id:
                 tails.append(
                     "【协作图·续接】本回合新开一队、接续上一张图；"

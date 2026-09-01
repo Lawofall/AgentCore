@@ -234,17 +234,49 @@ export function journalEntriesFromMap(
   return sorted.map((k) => journal[k]);
 }
 
+/** Mirror server ``JOURNAL_OVERFLOW_SEQ_START`` (pause-turn overflow band). */
+export const JOURNAL_OVERFLOW_SEQ_START = 1_000_000;
+
+/**
+ * Mid-turn projection: only seqs the cloud has not confirmed.
+ * Live and overflow bands are independent watermarks (overflow keys sit at
+ * ``JOURNAL_OVERFLOW_SEQ_START+``; a single max seq would skip later live keys).
+ */
+export function unackedJournalEntries(
+  entries: Array<{ seq: number; entry: unknown }>,
+  ackedLiveSeq: number,
+  ackedOverflowSeq: number,
+): Array<{ seq: number; entry: unknown }> {
+  return entries.filter(({ seq }) =>
+    seq >= JOURNAL_OVERFLOW_SEQ_START
+      ? seq > ackedOverflowSeq
+      : seq > ackedLiveSeq,
+  );
+}
+
+export function journalAckAfterPost(
+  posted: ReadonlyArray<{ seq: number }>,
+  ackedLiveSeq: number,
+  ackedOverflowSeq: number,
+): { ackedLiveSeq: number; ackedOverflowSeq: number } {
+  let live = ackedLiveSeq;
+  let overflow = ackedOverflowSeq;
+  for (const { seq } of posted) {
+    if (seq >= JOURNAL_OVERFLOW_SEQ_START) overflow = Math.max(overflow, seq);
+    else live = Math.max(live, seq);
+  }
+  return { ackedLiveSeq: live, ackedOverflowSeq: overflow };
+}
+
 function journalMapAfterSeq(
   journal: Record<string, unknown>,
   afterSeq: number,
 ): Record<string, unknown> {
-  // Mirror server ``JOURNAL_OVERFLOW_SEQ_START``: overflow is pause-turn.
-  const overflowStart = 1_000_000;
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(journal)) {
     if (!isNumericJournalKey(key)) continue;
     const seq = Number(key);
-    if (seq >= overflowStart) continue;
+    if (seq >= JOURNAL_OVERFLOW_SEQ_START) continue;
     if (seq > afterSeq) out[key] = value;
   }
   return out;
@@ -300,16 +332,19 @@ const CHANNEL_REDIRECT_CODES = new Set([
 ]);
 
 function remapPathOrVerifyFailure(raw: string): string | null {
-  if (raw.includes("禁止用 code_execute 跑项目级慢验证")) {
+  if (raw.includes("跑项目级慢验证")) {
     return "project_verify_redirect";
   }
-  if (raw.includes("禁止用 code_execute 打开源码再正则扫描")) {
+  if (raw.includes("打开源码再正则扫描")) {
     return "source_grep_redirect";
   }
-  if (raw.includes("禁止用 code_execute 把工作区文件 dump")) {
+  if (raw.includes("把工作区文件 dump 到 stdout")) {
     return "source_dump_redirect";
   }
-  if (raw.includes("禁止用 code_execute 启动长驻进程")) {
+  if (
+    raw.includes("禁止用 code_execute 启动长驻进程") ||
+    raw.includes("请用 run 启动长驻进程")
+  ) {
     return "long_running_redirect";
   }
   if (

@@ -754,6 +754,19 @@ describe("drainOutbox", () => {
         "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。",
       ),
     ).toBe("source_grep_redirect");
+    expect(
+      normalizeToolFailureCode("跑项目级慢验证请用 run（检测到：pytest）。"),
+    ).toBe("project_verify_redirect");
+    expect(
+      normalizeToolFailureCode(
+        "打开源码再正则扫描请用 grep（检测到：re.findall(）。",
+      ),
+    ).toBe("source_grep_redirect");
+    expect(
+      normalizeToolFailureCode(
+        "请用 run 启动长驻进程（检测到：npm run dev）。",
+      ),
+    ).toBe("long_running_redirect");
   });
 
   it("toolFailuresFromJournal prefers tool_call over tool_use_end", () => {
@@ -1015,6 +1028,59 @@ describe("drainOutbox", () => {
     expect(body.content).toBe("half reply from flush");
     expect(body.reasoning_content).toBe("mid think");
     expect(body.finish_reason).toBe("cancelled");
+  });
+
+  it("OPEN drain posts journal once then only newly appended seqs", async () => {
+    writeReady("u-open-j", {
+      phase: "open",
+      content: "",
+      journal: {
+        "0": { kind: "run_started", payload: { id: "r1" }, ord: 0 },
+        "1": { kind: "text_delta", payload: { t: "a" }, ord: 1 },
+      },
+    });
+    h.bearerPostJson.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {},
+    });
+    await drainOutbox();
+    const firstJournal = h.bearerPostJson.mock.calls.find((c) =>
+      String(c[0]).includes("/journal"),
+    );
+    expect(firstJournal?.[1]).toMatchObject({
+      message_id: "m1",
+      replace: false,
+      entries: [
+        { seq: 0, entry: { kind: "run_started", payload: { id: "r1" } } },
+        { seq: 1, entry: { kind: "text_delta", payload: { t: "a" } } },
+      ],
+    });
+    h.bearerPostJson.mockClear();
+    await drainOutbox();
+    expect(
+      h.bearerPostJson.mock.calls.filter((c) =>
+        String(c[0]).includes("/journal"),
+      ),
+    ).toHaveLength(0);
+
+    writeReady("u-open-j", {
+      phase: "open",
+      content: "",
+      journal: {
+        "0": { kind: "run_started", payload: { id: "r1" }, ord: 0 },
+        "1": { kind: "text_delta", payload: { t: "a" }, ord: 1 },
+        "2": { kind: "text_delta", payload: { t: "b" }, ord: 2 },
+      },
+    });
+    await drainOutbox();
+    const secondJournal = h.bearerPostJson.mock.calls.find((c) =>
+      String(c[0]).includes("/journal"),
+    );
+    expect(secondJournal?.[1]).toMatchObject({
+      replace: false,
+      entries: [{ seq: 2, entry: { kind: "text_delta", payload: { t: "b" } } }],
+    });
   });
 
   it("regular drain POSTs stream-segments for open rows, not local-turns", async () => {

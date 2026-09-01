@@ -1,8 +1,9 @@
 """Model combination profiles (模型组合) — CRUD + expand as a **derived query layer**.
 
 A profile is ``{main, worker?, background?, vision?}``. Empty worker / background =
-follow_main. Empty vision does **not** follow main (VisionReader uses platform
-``VISION_*`` only when ``billing_mode=platform``).
+follow_main. Empty vision does **not** persist follow_main into the slot columns.
+VisionReader resolve may reuse main credentials when that id accepts images
+(``llm.image_accept``); else platform ``VISION_*`` only when ``billing_mode=platform``.
 
 **Not a model-metadata owner.** Platform 上架 / display enrichment live in
 :mod:`agentcore.llm.catalog` (+ :mod:`agentcore.llm.model_metadata`). System presets
@@ -56,7 +57,11 @@ class ProfileSlot:
 
 @dataclass(frozen=True)
 class ExpandedProfile:
-    """Resolved slots after expand (worker/background None = follow_main; vision None ≠ main)."""
+    """Resolved slots after expand.
+
+    Worker/background None = follow_main. Vision None = no dedicated slot (not a
+    copied main); reader resolve may still follow an image-accepting main.
+    """
 
     profile_id: str
     name: str

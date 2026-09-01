@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 # 对齐 debate 工具薄立场硬闸（见 tools/builtin/debate/schema.py）——只读复用，不复制阈值。
+from agentcore.runtime.debate.constants import DEBATE_FORM_VALUES
 from agentcore.tools.builtin.debate.schema import STANCE_MAX_CHARS, validate_stance
 
 __all__ = [
@@ -18,13 +19,14 @@ __all__ = [
     "parse_motion_card",
 ]
 
-MOTION_CARD_FORMS = frozenset({"debate", "red_team", "roundtable"})
+# parse 接受 DebateForm 全员（历史卡不硬拒）；广告 enum 只留 debate，见 handoff schema。
+MOTION_CARD_FORMS = frozenset(DEBATE_FORM_VALUES)
 
 _RETRY_TIP = (
     "请改写 `motion_card` 后重试 handoff："
     "motion=争议命题；sides≥2 且各方 stance 为一句话立场倾向（单句判断句，禁论证展开）；"
     "fact_pointers=事实指针（#rN / 路径 / URL）；rationale=为何必须对抗交锋而非继续调研；"
-    "form 可选（debate|red_team|roundtable，默认 debate）。"
+    "form 可选（正反，默认 debate）。"
 )
 
 
@@ -64,8 +66,7 @@ def parse_motion_card(raw: Any) -> tuple[dict[str, Any] | None, str]:
         form = form_raw.strip()
     else:
         return None, (
-            f"`motion_card.form` 须为 debate / red_team / roundtable"
-            f"（收到 {form_raw!r}）。{_RETRY_TIP}"
+            f"`motion_card.form` 须为 debate（收到 {form_raw!r}）。{_RETRY_TIP}"
         )
 
     sides_raw = raw.get("sides")

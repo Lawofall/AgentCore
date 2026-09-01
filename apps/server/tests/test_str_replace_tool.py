@@ -234,6 +234,43 @@ async def test_non_unique_without_replace_all_fails(tmp_path: Path):
     assert (tmp_path / "f.txt").read_text(encoding="utf-8") == "x = 1\nx = 2\n"
 
 
+async def test_ambiguous_receipt_starts_at_hit_and_offers_unique_anchor(tmp_path: Path):
+    """命中行置顶（短预览也能看见 old_string），并给出可复制的唯一邻行。"""
+    (tmp_path / "t.ts").write_text(
+        "    })\n"
+        "    calls.length = 0\n"
+        "    r.render(scene)\n"
+        "    expect(calls).toContain('fillRect(10,10,100,100)')\n"
+        "    // clip\n"
+        "    })\n"
+        "    calls.length = 0\n"
+        "    r.render(scene)\n"
+        "    expect(calls).toContain('fillRect(10,10,100,100)')\n"
+        "    // group\n",
+        encoding="utf-8",
+    )
+    needle = "expect(calls).toContain('fillRect(10,10,100,100)')"
+    result = await StrReplaceTool().execute(
+        {"path": "t.ts", "old_string": needle, "new_string": "expect(calls).toEqual([])"},
+        _ctx(tmp_path),
+    )
+    err = result.error or ""
+    assert result.success is False
+    assert "不唯一" in err
+    first_hit = err.split("精确命中 #1", 1)[1].split("精确命中 #2", 1)[0]
+    numbered = [
+        line
+        for line in first_hit.splitlines()
+        if line.lstrip()[:1].isdigit() and "|" in line
+    ]
+    assert numbered, first_hit
+    assert needle in numbered[0]
+    assert "下一刀请把下面整段当作 old_string" in err
+    assert "// clip" in err
+    assert "// group" in err
+    assert (tmp_path / "t.ts").read_text(encoding="utf-8").count(needle) == 2
+
+
 # --- core edit behavior ---
 
 

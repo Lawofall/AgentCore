@@ -14,7 +14,6 @@ from agentcore.tools.builtin import (
     build_worker_registry,
     file_mutation_tool_names,
 )
-from agentcore.tools.builtin.terminal import TerminalTool
 
 _EXPECTED_NAMES = {
     "web_search",
@@ -39,28 +38,37 @@ _EXPECTED_NAMES = {
     "code_search",
     "code_diagnostics",
     "git",
-    "test_run",
-    "code_execute",
-    "terminal",
+    "run",
 }
 
-# The CEO chat agent is a COORDINATOR: it directly holds only the read/retrieval
-# tools and delegates every production/mutation tool to a worker (协调者 CEO).
-# test_run is NOT here — it is a code-execution tool (GRANTABLE), so it is worker-only
-# like code_execute (it runs arbitrary project code through the same sandbox chain).
-_CEO_READONLY_NAMES = {
+# CEO default roster = builtin surface (read + write + execute). On-demand
+# exporters stay registered; opening FC table withholds them separately.
+_CEO_DEFAULT_NAMES = {
     "web_search",
     "read_url",
     "file_read",
+    "file_write",
+    "file_append",
+    "str_replace",
     "file_list",
     "glob",
+    "file_delete",
+    "file_move",
+    "file_copy",
+    "mkdir",
+    "file_batch",
+    "md_to_docx",
+    "md_to_pdf",
+    "archive_extract",
+    "archive_create",
+    "download_url",
     "grep",
     "code_search",
     "code_diagnostics",
     "git",
-    "terminal",
+    "run",
 }
-_DELEGATED_MUTATION_NAMES = {
+_MUTATION_NAMES = {
     "file_write",
     "file_append",
     "str_replace",
@@ -74,7 +82,6 @@ _DELEGATED_MUTATION_NAMES = {
     "archive_extract",
     "archive_create",
     "download_url",
-    "code_execute",
 }
 
 
@@ -88,27 +95,27 @@ def test_registry_excludes_ceo_only_delegate():
     assert "delegate" not in names
 
 
-# Worker-only orchestration primitives: present in the worker toolset, but NOT in the
-# builtin catalog (GET /tools) nor the CEO's own toolset. `escalate` is the upward
-# channel (worker → CEO); `handoff` is the terminal 完工交接简报 submission (结论 / 关键要点 /
-# 关键假设 / 建议下一步, read off the call args — never parsed out of prose). All stay
-# where they belong instead of leaking platform-wide.
-_WORKER_ONLY_NAMES = {
+# Worker-surface extras auto-registered on the worker roster (not builtin catalog).
+# escalate / handoff stay CEO-absent forever. desktop_notify is worker-surface +
+# extra CEO register in assemble (``build_ceo_tool_registry`` still omits it).
+_WORKER_SURFACE_NAMES = {
     "escalate",
     "handoff",
     "desktop_notify",
 }
 
 
-def test_worker_registry_adds_worker_only_tools_without_leaking_them():
+def test_worker_registry_adds_worker_surface_tools_without_leaking_them():
     worker = {s.name for s in build_worker_registry().list_all()}
     builtin = {s.name for s in build_builtin_registry().list_all()}
     ceo = {s.name for s in build_ceo_tool_registry().list_all()}
-    assert worker >= _WORKER_ONLY_NAMES
-    # builtins + the worker-only primitives, nothing else.
-    assert worker == _EXPECTED_NAMES | _WORKER_ONLY_NAMES
-    assert builtin.isdisjoint(_WORKER_ONLY_NAMES)
-    assert ceo.isdisjoint(_WORKER_ONLY_NAMES)
+    assert worker >= _WORKER_SURFACE_NAMES
+    # builtins + the worker-surface primitives, nothing else.
+    assert worker == _EXPECTED_NAMES | _WORKER_SURFACE_NAMES
+    assert builtin.isdisjoint(_WORKER_SURFACE_NAMES)
+    # Default CEO registry still omits worker-surface names (notify is extra-wired
+    # in assemble; escalate/handoff never join CEO).
+    assert ceo.isdisjoint(_WORKER_SURFACE_NAMES)
 
 
 def test_write_and_exec_tools_are_grantable():
@@ -116,10 +123,7 @@ def test_write_and_exec_tools_are_grantable():
     assert approvals["file_write"] is ToolApproval.GRANTABLE
     assert approvals["file_append"] is ToolApproval.GRANTABLE
     assert approvals["str_replace"] is ToolApproval.GRANTABLE
-    assert approvals["code_execute"] is ToolApproval.GRANTABLE
-    # test_run runs project code through the same sandbox chain as code_execute, so it
-    # carries the same execution-class consent — never NEVER (the P0 it slipped through).
-    assert approvals["test_run"] is ToolApproval.GRANTABLE
+    assert approvals["run"] is ToolApproval.GRANTABLE
     # Destructive / mutating file ops require the same consent as writes.
     assert approvals["file_delete"] is ToolApproval.GRANTABLE
     assert approvals["file_move"] is ToolApproval.GRANTABLE
@@ -158,88 +162,84 @@ def test_file_mutation_class_is_grantable_filesystem_without_code_execute():
         "download_url",
     }
     assert "code_execute" not in names
-    # Exactly the delegated mutation set minus code_execute (stays in lockstep).
-    assert names == _DELEGATED_MUTATION_NAMES - {"code_execute"}
+    assert names == _MUTATION_NAMES - {"code_execute"}
 
 
-def test_code_execute_description_does_not_overpromise_sandbox():
+def test_run_description_does_not_overpromise_sandbox():
     # Location-aware wording: catalog (no location) must not claim「用户自己的机器」;
-    # local registry must; server registry must name the cloud sandbox.
-    from agentcore.tools.builtin.code_execute import CodeExecuteTool, code_execute_description
+    # local registry must; server registry must name the cloud desk.
+    from agentcore.tools.builtin.run import RunTool, run_description
 
     catalog = {s.name: s for s in build_builtin_registry().list_all()}
-    assert "用户自己的机器" not in catalog["code_execute"].description
-    assert "可能【直接运行" not in catalog["code_execute"].description
+    assert "用户自己的机器" not in catalog["run"].description
+    assert "可能【直接运行" not in catalog["run"].description
 
-    assert "用户本机" in code_execute_description("local")
-    assert "云端沙箱" in code_execute_description("server")
-    assert "用户本机" in CodeExecuteTool(location="local").schema.description
-    assert "云端沙箱" in CodeExecuteTool(location="server").schema.description
+    assert "用户本机" in run_description("local")
+    assert "云桌" in run_description("server")
+    assert "用户本机" in RunTool(location="local").schema.description
+    assert "云桌" in RunTool(location="server").schema.description
 
 
-def test_code_execute_description_routes_source_dump_to_file_read():
-    from agentcore.tools.builtin.code_execute import code_execute_description
+def test_run_consult_is_how_owner_file_read_keeps_dump_steer():
+    from agentcore.runtime.skills import build_system_skill_registry
     from agentcore.tools.builtin.file_ops.read import FileReadTool
+    from agentcore.tools.builtin.run import run_description
 
-    ce = code_execute_description("local")
-    assert "file_read" in ce
-    assert "grep" in ce
+    desc = run_description("local")
+    assert "HOW→consult(run)" in desc
+    skill = build_system_skill_registry().get("run")
+    assert skill is not None
+    assert "命令" in skill.body
     # dump 纠偏在 source_inspect 回执；file_read 留一句短触发
     fr = FileReadTool().schema.description
-    assert "code_execute" in fr
     assert "dump" in fr
+    assert "code_execute" not in fr
+    assert "test_run" not in fr
 
 
-def test_code_execute_description_routes_long_running_to_terminal():
-    # Long-lived servers must not be waited on via code_execute (60s timeout trap).
-    from agentcore.tools.builtin.code_execute import code_execute_description
-    from agentcore.tools.builtin.terminal import TerminalTool
+def test_run_description_routes_long_running_to_background():
+    from agentcore.tools.builtin.run import RunTool, run_description
 
-    ce = code_execute_description("local")
-    assert "terminal" in ce
-    assert "npm run dev" in ce
-    # Bounded verify is the home for slow project checks — not code_execute.
-    assert "test_run" in ce
-    assert "npm run build" in ce  # mentioned as forbidden / redirect, not promoted
-    # Local short-CLI guidance: prefer node/javascript over bash shell.
-    assert "language=javascript" in ce
-    assert "WSL" in ce
-
-    td = TerminalTool().schema.description
-    assert "禁止改走 code_execute" in td
-    assert "host(action=shell)" in td
-    assert "code_execute" in td  # short commands still pointed there
-    assert "wait_for" in TerminalTool().schema.parameters["properties"]
-    assert "仅本地" not in td
-    assert "仅本地" not in TerminalTool(location="server").schema.description
+    desc = run_description("local")
+    assert "HOW→consult(run)" in desc
+    assert "background" not in desc
+    assert "wait_for" not in desc
+    schema = RunTool().schema
+    assert "wait_for" in schema.parameters["properties"]
+    assert "background" in schema.parameters["properties"]
+    wait_desc = schema.parameters["properties"]["wait_for"]["description"]
+    bg_desc = schema.parameters["properties"]["background"]["description"]
+    assert "background" in wait_desc
+    assert "wait_for" in bg_desc
+    assert "pnpm" in schema.parameters["properties"]["command"]["description"]
+    assert "仅本地" not in RunTool(location="server").schema.description
 
 
-def test_ceo_registry_holds_terminal_with_execution_class():
-    assert "terminal" in {s.name for s in build_ceo_tool_registry().list_all()}
-    assert "terminal" in {
+def test_ceo_registry_holds_run_with_execution_class():
+    assert "run" in {s.name for s in build_ceo_tool_registry().list_all()}
+    assert "run" in {
         s.name for s in build_ceo_tool_registry(backend_location="server").list_all()
     }
-    assert "terminal" in {
+    assert "run" in {
         s.name for s in build_ceo_tool_registry(backend_location="local").list_all()
     }
-    assert "terminal" not in {
+    assert "run" not in {
         s.name
         for s in build_ceo_tool_registry(include_execution_tools=False).list_all()
     }
     assert (
-        build_ceo_tool_registry(backend_location="server").get("terminal").schema.approval
-        is TerminalTool().schema.approval
+        build_ceo_tool_registry(backend_location="server").get("run").schema.approval
+        is ToolApproval.GRANTABLE
     )
 
 
-def test_code_execute_description_server_omits_local_wsl_hint():
-    from agentcore.tools.builtin.code_execute import code_execute_description
+def test_run_description_server_omits_local_machine_wording():
+    from agentcore.tools.builtin.run import run_description
 
-    server = code_execute_description("server")
+    server = run_description("server")
     assert "WSL" not in server
-    # Server copy still steers project verify to test_run (capability, not WSL hint).
-    assert "test_run" in server
-    assert "npx tsc" not in server
+    assert "用户本机" not in server
+    assert "云桌" in server
 
 
 def test_read_url_description_does_not_overclaim_completeness():
@@ -256,26 +256,23 @@ def test_read_url_description_does_not_overclaim_completeness():
     assert "search" in desc
 
 
-def test_ceo_registry_is_read_only_subset():
-    # 协调者 CEO: it looks + answers directly, so its direct toolset is exactly the
-    # read/retrieval tools — no production/mutation tool leaks into the CEO's hands.
+def test_ceo_registry_holds_full_builtin_surface():
     names = {schema.name for schema in build_ceo_tool_registry().list_all()}
-    assert names == _CEO_READONLY_NAMES
+    assert names == _CEO_DEFAULT_NAMES
 
 
-def test_ceo_registry_excludes_every_mutation_tool():
+def test_ceo_registry_includes_mutation_tools():
     names = {schema.name for schema in build_ceo_tool_registry().list_all()}
-    assert names.isdisjoint(_DELEGATED_MUTATION_NAMES)
+    assert names >= _MUTATION_NAMES
 
 
-def test_ceo_registry_holds_only_auto_run_tools():
-    # The split is by approval level: the CEO keeps only NEVER tools (auto-run, no
-    # consent), while every GRANTABLE (env-mutating) tool is delegated — **except**
-    # Host P3 ``host`` / browser ``browser`` (gated; not in the
-    # default no-desktop / no-browser set).
-    schemas = build_ceo_tool_registry().list_all()
-    assert schemas, "CEO must retain its read/retrieval tools"
-    assert all(s.approval is ToolApproval.NEVER for s in schemas)
+def test_ceo_registry_write_tools_are_grantable():
+    schemas = {s.name: s for s in build_ceo_tool_registry().list_all()}
+    assert schemas, "CEO must retain its builtin tools"
+    for name in ("file_write", "str_replace", "file_delete", "run"):
+        assert schemas[name].approval is ToolApproval.GRANTABLE, name
+    for name in ("file_read", "file_list", "web_search"):
+        assert schemas[name].approval is ToolApproval.NEVER, name
 
 
 def test_ceo_registry_host_when_desktop_online():
@@ -292,9 +289,7 @@ def test_ceo_registry_host_when_desktop_online():
         "host_package_install",
     ):
         assert retired not in schemas
-    # All CEO tools remain NEVER (browser GRANTABLE is a separate include_browser test).
-    for name, schema in schemas.items():
-        assert schema.approval is ToolApproval.NEVER, name
+    assert schemas["host"].approval is ToolApproval.NEVER
 
 
 def test_ceo_registry_browser_interactive_grantable_when_include_browser():
@@ -304,20 +299,17 @@ def test_ceo_registry_browser_interactive_grantable_when_include_browser():
     assert "browser" in schemas
     assert schemas["browser"].approval is ToolApproval.GRANTABLE
     assert "browser_screenshot" not in schemas
-    for name, schema in schemas.items():
-        if name == "browser":
-            continue
-        assert schema.approval is ToolApproval.NEVER, name
+    assert schemas["file_write"].approval is ToolApproval.GRANTABLE
 
 
 def test_ceo_registry_excludes_browser_navigate_by_default():
     names = {schema.name for schema in build_ceo_tool_registry().list_all()}
     assert "browser" not in names
-    assert names == _CEO_READONLY_NAMES
+    assert names == _CEO_DEFAULT_NAMES
 
 
 def test_ceo_registry_excludes_delegate_primitive():
-    # build_ceo_tool_registry returns only the read subset; the pipeline wires the
+    # build_ceo_tool_registry is the builtin surface; the pipeline wires the
     # CEO-only delegate primitive separately, so it must not appear here.
     names = {schema.name for schema in build_ceo_tool_registry().list_all()}
     assert "delegate" not in names
@@ -346,8 +338,7 @@ def test_worker_registry_omits_execution_class_on_cloud_server():
 
     backend = ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox(), location="server")
     names = {s.name for s in build_worker_registry(backend=backend).list_all()}
-    assert "code_execute" not in names
-    assert "test_run" not in names
+    assert "run" not in names
     assert "escalate" in names
 
 
@@ -359,9 +350,7 @@ def test_worker_registry_keeps_execution_class_on_local_server_workspace():
 
     backend = ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox(), location="local")
     names = {s.name for s in build_worker_registry(backend=backend).list_all()}
-    assert "code_execute" in names
-    assert "test_run" in names
-    assert "terminal" in names
+    assert "run" in names
 
 
 def test_worker_registry_omits_terminal_when_cloud_desk_unhealthy():
@@ -373,8 +362,7 @@ def test_worker_registry_omits_terminal_when_cloud_desk_unhealthy():
 
     backend = ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox(), location="server")
     names = {s.name for s in build_worker_registry(backend=backend).list_all()}
-    assert "terminal" not in names
-    assert "code_execute" not in names
+    assert "run" not in names
 
 
 def test_worker_registry_assembles_terminal_when_cloud_desk_healthy(
@@ -391,12 +379,12 @@ def test_worker_registry_assembles_terminal_when_cloud_desk_healthy(
     set_cloud_sandbox_health_for_tests(True)
     backend = ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox(), location="server")
     names = {s.name for s in build_worker_registry(backend=backend).list_all()}
-    assert "terminal" in names
+    assert "run" in names
     assert "browser" in names
-    desc = build_worker_registry(backend=backend).get("terminal").schema.description
+    desc = build_worker_registry(backend=backend).get("run").schema.description
     assert "云桌" in desc
     assert "仅本地" not in desc
-    # Catalog / default CEO (execution class on) advertise terminal.
-    assert "terminal" in {s.name for s in build_worker_registry().list_all()}
-    assert "terminal" in {s.name for s in build_builtin_registry().list_all()}
-    assert "terminal" in {s.name for s in build_ceo_tool_registry().list_all()}
+    # Catalog / default CEO (execution class on) advertise run.
+    assert "run" in {s.name for s in build_worker_registry().list_all()}
+    assert "run" in {s.name for s in build_builtin_registry().list_all()}
+    assert "run" in {s.name for s in build_ceo_tool_registry().list_all()}

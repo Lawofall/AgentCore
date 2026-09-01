@@ -11,7 +11,6 @@ from agentcore.llm.pricing import calculate_cost
 from agentcore.llm.provider.protocol import LLMMessage, TokenUsage
 from agentcore.runtime.events import (
     FinishReason,
-    escalation_raised,
     run_cancelled,
     run_completed,
     run_failed,
@@ -31,7 +30,6 @@ from agentcore.runtime.runs.executor.shared import (
     _apply_cutoff_reasons,
     _apply_finish_interrupt,
     _delivery_gaps_from_warnings,
-    _is_hard_failure,
     _priced_failure,
 )
 from agentcore.runtime.runs.file_acceptance import (
@@ -84,7 +82,8 @@ def build_terminal_run_state(
     tool_ctx: Any,
     runtime_file_products: list[FileProduct] | None = None,
 ) -> RunState:
-    """Build COMPLETED / contract-FAILED / hard-gap FAILED terminal RunState + emit."""
+    """Build COMPLETED terminal RunState (contract misses stay warnings) + emit."""
+    _ = (write_pass_used, product_landing_artifacts)
     usage = run_usage.as_dict()
     cost = asdict(calculate_cost(priced_model, run_usage))
     # Upward escalations this worker raised (escalate tool calls), harvested
@@ -109,22 +108,19 @@ def build_terminal_run_state(
     # 完工交接简报: harvest the worker's structured brief from its ``handoff`` tool call
     # (best-effort; None when it finished without one) so downstream dep injection / CEO
     # synthesis read the author's own 结论 + 建议下一步 instead of re-deriving them from
-    # prose. Carried on BOTH terminal states (a worker that failed its contract can still
-    # have submitted a useful brief before failing). Nodes that expect a handoff
-    # (has dependents, or leaf after substantial work) but still lack a minimum-quality
-    # brief get an engine-synthesized degraded debrief so CEO / delivery_status can see
-    # 「汇报不完整」. Upstream: only when salvageable half-product (body / disk /
-    # qualified brief) — empty inventory must not mint an empty ``degraded_synth``.
-    # Leaf substantial (tools / longer body): always stamp degraded when missing.
+    # prose. Contract misses stay COMPLETED with warnings and still carry this brief.
+    # Nodes that expect a handoff (has dependents, or leaf after substantial work) but
+    # still lack a minimum-quality brief get an engine-synthesized degraded debrief so
+    # CEO / delivery_status can see「汇报不完整」. Upstream: only when salvageable
+    # half-product (body / disk / qualified brief) — empty inventory must not mint an
+    # empty ``degraded_synth``. Leaf substantial (tools / longer body): always stamp
+    # degraded when missing.
     debrief = debrief_from_transcript(messages)
     products = merge_file_products(
         file_products_from_transcript(messages),
         runtime_file_products or (),
     )
     touched = [p.path for p in products]
-    product_touched = filter_product_landing_paths(
-        touched, product_landing_artifacts
-    )
     author_brief = debrief
     expects_handoff = worker_expects_handoff(
         env.plan,
@@ -151,114 +147,9 @@ def build_terminal_run_state(
         )
     # 队员卡片/简报跟对话成稿同一口径：不剥 search-only / 未登记号。
     # 落盘成文仍走文件合同 ``citation_quality_reworks``。
-    # Soft web-quality (anti-slop): at most one rework (already spent in the loop).
-    # Remaining soft-only hits demote to warnings — never hard-fail the run.
-    if verdict.soft_failures and not verdict.failures:
-        logger.info(
-            "contract.web_quality_soft_accept",
-            run_id=spec.run_id,
-            soft_failures=verdict.soft_failures,
-        )
-        verdict = ContractVerdict(
-            ok=True,
-            failures=[],
-            warnings=[
-                *verdict.warnings,
-                *verdict.soft_failures,
-            ],
-            warning_rows=list(verdict.warning_rows),
-            soft_failures=[],
-            visual_failures=[],
-        )
     path_rej = path_rejections_from_contract_messages(
         [*verdict.failures, *verdict.soft_failures]
     )
-    if not verdict.ok and _is_hard_failure(
-        content, deliverable, files_touched=len(product_touched)
-    ):
-        reason = "；".join(verdict.failures)
-        logger.info("contract.failed", run_id=spec.run_id, failures=verdict.failures)
-        # 交付真相：零落盘硬失败时上浮 escalate，供 CEO 续派 / 收口（非自愈旁路）。
-        if (
-            deliverable is not None
-            and (deliverable.form in ("files", "workspace") or bool(deliverable.artifacts))
-            and not product_touched
-        ):
-            esc_q = (
-                "落盘契约未满足：form=files/workspace/artifacts 且零落盘"
-                + ("（写盘 pass 已用尽）" if write_pass_used else "")
-                + "——请 continue_from_run_id 续派或冷补派，勿当作已完成。"
-            )
-            if not any(e.get("question") == esc_q for e in escalations):
-                escalations.append(
-                    {
-                        "question": esc_q,
-                        "assumption": "",
-                        "blocking": False,
-                        "kind": "normal",
-                        "source": "contract",
-                    }
-                )
-            env.sink.emit(
-                escalation_raised(
-                    spec.run_id,
-                    agent_id,
-                    question=esc_q,
-                    assumption="",
-                    blocking=False,
-                    kind="normal",
-                )
-            )
-        # A contract miss still produced a deliverable + (often) a 交接简报: surface it so
-        # the run-detail shows the author's wrap-up beside the failure (the infra-failure
-        # except path below has no reliable content, so it carries none).
-        # 分脸：结构/格式闸 → format「格式未过」；内容/结论 → quality「未达标」。
-        from agentcore.runtime.runs.contract import contract_run_failure_kind
-
-        env.sink.emit(
-            run_failed(
-                spec.run_id,
-                agent_id,
-                reason,
-                failure_kind=contract_run_failure_kind(verdict),
-                debrief=debrief,
-                execution_id=env.execution_id,
-                retryable=False,
-            )
-        )
-        # Contract retries already exhausted inside this executor; mark
-        # non-retryable so a later hop does not treat this as a transient
-        # transcript continue (same tokens, same empty/short product).
-        return _stamp_retrieval_evidence_gap(
-            RunState(
-                phase=RunPhase.FAILED,
-                content=content,
-                reasoning=reasoning,
-                error=reason,
-                error_retryable=False,
-                escalations=escalations,
-                debrief=debrief,
-                citations=worker_citations,
-                model=priced_model,
-                duration_ms=duration_ms,
-                rounds=run_rounds,
-                files_touched=touched,
-                file_acceptance=build_file_acceptance(
-                    touched,
-                    phase=RunPhase.FAILED,
-                    error=reason,
-                    path_rejections=path_rej,
-                    products=products,
-                ),
-                tool_failures=list(tool_failures),
-                usage=usage,
-                cost=cost,
-                transcript=messages,
-                received_context=received_blocks,
-            ),
-            tool_ctx,
-            search_policy=spec.search_policy or "",
-        )
     # Soft-accept / clean complete: still surface an interrupted LLM finish so CEO
     # synthesis sees the gap (files may be on disk but handoff missing/thin).
     warnings = [] if verdict.ok else [
@@ -267,7 +158,7 @@ def build_terminal_run_state(
         *verdict.visual_failures,
     ]
     if verdict.ok and verdict.warnings:
-        # Soft-accept demotion / placeholder soft notes already on the verdict.
+        # Placeholder / unverified-content notes already on the verdict.
         warnings = list(verdict.warnings)
     elif verdict.warnings:
         warnings = [*warnings, *verdict.warnings]

@@ -24,8 +24,6 @@ from agentcore.runtime.coordination.session import (
 )
 from agentcore.runtime.delegate.team_synthesis import worker_output_blurb
 
-_COORD_HINT_CLOSED_TAIL = "全部完成后做最终合成（正文），然后退出协调。"
-
 # Independent-review / audit-package roles (playbook stamps). Not 调研/方向专员.
 _AUDIT_REVIEW_ROLE_MARKERS = ("审校", "审计")
 # code_audit = 审计套餐; cite_write_review = 成文专线（用户点名审校的结构戳）.
@@ -52,6 +50,12 @@ _TEAM_CLOSE_LINE = {
         "等用户拍板后再继续，不要自行接着干。"
     ),
 }
+
+_CLOSE_DISCIPLINE = (
+    "【终稿纪律】给用户的是交付、不是协调日志：交付物在前，过程简述从简；"
+    "上面这些事件、名册、升级原文和草稿是工作输入，禁止整段粘进终稿；"
+    "未交付的承诺产物须显式列出。"
+)
 
 
 def _wave_expects_landing(session: CoordinationSession) -> bool:
@@ -171,61 +175,23 @@ def _team_close_kind(
 
 
 def _format_ownership_escalation_hint(payload: dict) -> str:
-    """Optional ownership conflict briefing for CEO escalate inject."""
-    paths = payload.get("ownership_paths") or []
-    if not isinstance(paths, list) or not paths:
-        return ""
-    path_bit = "、".join(f"`{p}`" for p in paths if isinstance(p, str) and p.strip())
-    if not path_bit:
-        return ""
-    lock_owner = (payload.get("lock_owner_run_id") or "").strip()
-    kind = payload.get("ownership_kind") or ""
-    status = payload.get("owner_status") or ""
-    nested = payload.get("escalator_is_lock_owner_nested_child")
-    kind_label = (
-        "仅派发占位未落盘"
-        if kind == "declared"
-        else ("已写入" if kind == "written" else "归属冲突")
-    )
-    status_label = {
-        "running": "进行中",
-        "completed": "已完成（账本仍记名；同座续派/declare 可接手）",
-        "ended": "已结束（账本仍记名；declare/claim 可接手）",
-        "unknown": "状态未知",
-    }.get(str(status), "")
-    bits = [f"文件归属：{path_bit}（{kind_label}"]
-    if status_label:
-        bits[0] += f"，锁主{status_label}"
-    bits[0] += "）"
-    if lock_owner:
-        bits.append(f"锁主=`{lock_owner}`")
-    if str(status) in ("completed", "ended", "unknown"):
-        bits.append(
-            "锁主已完成/已结束或状态未知——用同座位 replan/append（auto-replaces）接手，"
-            "勿让用户点「移交写权」"
-        )
-    elif nested is True:
-        bits.append(
-            "升级方疑似锁主的【嵌套子队】——"
-            "优先 transfer_ownership=true 路径级移交，勿误判为遗留 worker"
-        )
-    elif nested is False and lock_owner:
-        bits.append("升级方并非锁主嵌套子")
-    return "；" + "；".join(bits) + "。"
+    """Ownership transfer is gone; leftover payload keys must not teach 移交."""
+    _ = payload
+    return ""
 
 
 def _capability_dead_inject_lines(session: CoordinationSession) -> list[str]:
     """Sticky capability-missing facts for CEO inject (soft steer, not a new hard gate).
 
-    Mirrors channel_dead / exec_env_dead user-visible copy. Does not scan task
-    prose. user_stop close wording is independent and stays on cancel_close.
+    Workspace channel-dead only. Env-dead no longer forbids dispatching ``run``.
+    Does not scan task prose. user_stop close wording stays on cancel_close.
     """
     from agentcore.workspace.limits import capability_dead_inject_lines
 
     return capability_dead_inject_lines(
         workspace_channel_dead=bool(getattr(session, "workspace_channel_dead", False)),
-        exec_env_dead=bool(getattr(session, "exec_env_dead", False)),
-        exec_env_dead_reason=getattr(session, "exec_env_dead_reason", None),
+        exec_env_dead=False,
+        exec_env_dead_reason=None,
     )
 
 
@@ -251,6 +217,10 @@ def format_coordination_events(
         lines.append("")
         lines.append(f"当前合成草稿：\n{session.draft.strip()}")
     lines.append("")
+    from agentcore.runtime.interaction_orphan import (
+        format_hot_pending_hold_line,
+        holds_for_hot_user,
+    )
     from agentcore.runtime.resolve.ceo_surface import COORDINATION_PERIOD_HINT
 
     closing_now = any(
@@ -261,82 +231,41 @@ def format_coordination_events(
         )
         for ev in events
     )
-    # 终态：现在写终稿，剥掉未来时尾巴，避免与 close_line 自相矛盾。
-    hint = COORDINATION_PERIOD_HINT
-    if closing_now and hint.endswith(_COORD_HINT_CLOSED_TAIL):
-        hint = hint[: -len(_COORD_HINT_CLOSED_TAIL)].rstrip()
-    lines.append(hint)
-    from agentcore.runtime.interaction_orphan import (
-        format_hot_pending_hold_line,
-        holds_for_hot_user,
-    )
-
     cancel_kind = classify_cancel_close(session, events)
     if holds_for_hot_user(session):
-        close_line = format_hot_pending_hold_line(session.conversation_id)
-    elif closing_now:
-        terminal_kind = _team_close_kind(session, events)
-        if terminal_kind == "cancelled" and cancel_kind is not None:
-            close_line = cancel_close_line(cancel_kind)
-        else:
-            close_line = _TEAM_CLOSE_LINE[terminal_kind]
-        all_done = next(
-            (ev for ev in events if ev.kind is CoordinationEventKind.ALL_COMPLETED),
-            None,
-        )
-        if (
-            terminal_kind == "success"
-            and all_done is not None
-            and _wave_expects_landing(session)
-            and not _accepted_landing_paths(session, all_done.payload or {})
-        ):
-            close_line = (
-                "按终稿纪律向用户交代：写盘形态未见已接受文件，不得宣称已交付；"
-                "说明缺口或续派，不要把队员回合结束当成用户交付。"
-            )
+        lines.append(format_hot_pending_hold_line(session.conversation_id))
+        return "\n".join(lines)
+    if not closing_now:
+        lines.append(COORDINATION_PERIOD_HINT)
+        return "\n".join(lines)
+
+    terminal_kind = _team_close_kind(session, events)
+    if terminal_kind == "cancelled" and cancel_kind is not None:
+        close_line = cancel_close_line(cancel_kind)
     else:
-        close_line = "全部完成后做最终合成（走 content_delta），然后退出协调。"
-    discipline = (
-        "【终稿纪律】最终合成是给用户的交付、不是协调日志：交付物在前，过程简述从简；"
-        "协调态进度旁白不得焊进终稿 content；以上协调事件、队员终态名册、escalation 原文"
-        "与合成草稿是你的工作输入，禁止整段粘进终稿——草稿要用也须重写成交付口吻；"
-        "未交付的承诺产物须显式列出，不得含糊带过。"
+        close_line = _TEAM_CLOSE_LINE[terminal_kind]
+    all_done = next(
+        (ev for ev in events if ev.kind is CoordinationEventKind.ALL_COMPLETED),
+        None,
     )
-    extra = ""
     if (
-        not holds_for_hot_user(session)
-        and cancel_kind is not None
-        and (
-            closing_now
-            or any(ev.kind is CoordinationEventKind.DRIVE_CANCELLED for ev in events)
-        )
+        terminal_kind == "success"
+        and all_done is not None
+        and _wave_expects_landing(session)
+        and not _accepted_landing_paths(session, all_done.payload or {})
     ):
+        close_line = (
+            "按终稿纪律向用户交代：写盘形态未见已接受文件，不得宣称已交付；"
+            "说明缺口或续派，不要把队员回合结束当成用户交付。"
+        )
+    lines.append(close_line)
+    output = (all_done.payload or {}).get("output") if all_done is not None else None
+    if not (isinstance(output, str) and "【终稿纪律】" in output):
+        lines.append(_CLOSE_DISCIPLINE)
+    if cancel_kind is not None:
         extra = cancel_discipline_sentence(cancel_kind, session)
-    if extra:
-        discipline += extra
-    lines.append(
-        "先判断本批事件要不要你出手：带指令的事件"
-        "（阻塞仲裁 / 边界让出 / 插话 / 全部完成 / 队员失败）"
-        "按其指令办；例行成功完成不会单独叫醒你，会挂在上述决策点一并送达。"
-        "纯进展事件（worker_completed / note）多数【无需处置】——完成计数与"
-        "各队员完成摘要已由系统自动展示给用户，勿为播报进度调 update_synthesis，"
-        "也勿用用户可见正文复述进度（【可静默】）。"
-        "无需处置时调 wait（或空响应、不写正文），等下一批事件即可——"
-        "禁止用 delegate / update_synthesis 占位等待。"
-        "对用户开口仅三选一：请示用户 / 报告阻塞与选项 / 宣布阶段结论（非纯进度）。"
-        "可用工具：wait 确认等待；cancel_worker(run_id, reason) 终止队员；"
-        "delegate 再派【全新角色/任务】队员（同回合追加进同一张协作图，不必等全队完成；"
-        "禁止对在跑任务同构重派；流水线未完成时亦禁止与在图节点职责/文件目标重叠的追加）；"
-        "replan(add=…) 仅在『计划已让出』波边界追加；"
-        "resolve_escalation(run_id, answer) 兑现阻塞升级裁决；"
-        "queue_user_message(interjection_id, reason) 把无关插话转入对话级排队（下一回合）；"
-        "ask_user 向用户请示（偏好/授权/费用类须先问用户再 resolve）；"
-        "update_synthesis(draft) 只在【里程碑】写合成草稿——新结论、冲突/方向修正、"
-        "一波/一阶段收束、终稿收束；禁止纯进度播报；例行的单个 worker 完成【不写】"
-        "（进度已由系统自动呈现），微调措辞更不算里程碑。"
-        f"{close_line}"
-        f"{discipline}"
-    )
+        if extra:
+            lines.append(extra)
     return "\n".join(lines)
 
 
@@ -393,16 +322,13 @@ def _format_one(
                 " ——你须仲裁：resolve_escalation(run_id, answer) 直裁；"
                 "偏好/授权/费用类须先 ask_user 征询用户，再 "
                 "resolve_escalation(run_id, answer, via_user=true)。"
-                "若需把冲突路径移交给升级方，设 transfer_ownership=true"
-                "（可带 paths；缺省用事件里的 ownership_paths）。"
                 "超时无响应时队员会按假设继续，勿永久卡住。"
             )
         return (
             f"- escalation【{role}】{esc_kind}（via {src}）：{question}"
             f"{ownership_bit}"
             " ——可 update_synthesis 记分歧、cancel_worker、"
-            "ask_user 请用户裁决；"
-            "文件归属冲突可 resolve_escalation(..., transfer_ownership=true) 路径级移交。"
+            "ask_user 请用户裁决。"
         )
     if ev.kind is CoordinationEventKind.TIMEOUT:
         rid = p.get("run_id") or "?"
@@ -480,11 +406,6 @@ def _format_one(
             and _wave_wants_audit_nudge(session, p)
         ):
             lines.append(_AUDIT_NUDGE)
-        lines.append(
-            "最终合成按【终稿纪律】写：交付物在前、过程简述从简，"
-            "不粘贴协调事件 / 队员终态名册 / escalation 原文 / 中间合成草稿；"
-            "未交付的承诺产物显式列出。"
-        )
         return "\n".join(lines)
     if ev.kind is CoordinationEventKind.DRIVE_CANCELLED:
         from agentcore.runtime.interaction_orphan import (

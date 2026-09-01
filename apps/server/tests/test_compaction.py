@@ -158,6 +158,18 @@ def test_render_fold_includes_prior_summary_and_messages():
     assert "assistant：在的" in out
 
 
+def test_render_fold_includes_journal_file_ledger():
+    out = _render_fold("旧摘要", [_msg("user", "你好")], file_ledger="- read src/a.py")
+    assert "本批涉及的文件" in out
+    assert "- read src/a.py" in out
+    assert out.index("本批涉及的文件") < out.index("待并入摘要")
+
+
+def test_render_fold_omits_file_ledger_when_empty():
+    out = _render_fold("旧摘要", [_msg("user", "你好")])
+    assert "本批涉及的文件" not in out
+
+
 def test_render_fold_marks_first_compaction_when_no_prior():
     out = _render_fold("", [_msg("user", "hi")])
     assert "首次压缩" in out
@@ -203,6 +215,8 @@ def test_compact_prompt_has_structure_and_guards():
     # 现行检验：摘要只留会改变以后行动的信息（原则句，不点名废字段）。
     assert "会改变以后行动" in _COMPACT_SYSTEM_PROMPT
     assert "已完成步骤" in _COMPACT_SYSTEM_PROMPT
+    assert "文件工作集不是过程" in _COMPACT_SYSTEM_PROMPT
+    assert "本批涉及的文件" in _COMPACT_SYSTEM_PROMPT
     assert "仍生效的决定与否决" in _COMPACT_SYSTEM_PROMPT
     assert "废选项" in _COMPACT_SYSTEM_PROMPT
     assert "此刻仍开放" in _COMPACT_SYSTEM_PROMPT
@@ -1812,3 +1826,28 @@ def test_token_usage_add_keeps_max_last_prompt():
     zero = TokenUsage() + a
     assert zero.last_prompt_tokens == 100
     assert TokenUsage.from_usage_dict(a.as_dict()).last_prompt_tokens == 100
+
+
+def test_token_usage_fuse_excludes_cache_hits():
+    """Worker fuse meters new work (miss + output); billing still sums the prompt."""
+    from agentcore.llm.provider.protocol import TokenUsage
+
+    billed = TokenUsage(
+        input_tokens=4_130_000,
+        output_tokens=90_000,
+        cache_hit_tokens=3_120_000,
+        cache_miss_tokens=1_010_000,
+    )
+    assert billed.total_tokens == 4_220_000
+    assert billed.fuse_tokens == 1_100_000
+
+    openai_hit_only = TokenUsage(
+        input_tokens=4_130_000,
+        output_tokens=90_000,
+        cache_hit_tokens=3_120_000,
+        cache_miss_tokens=0,
+    )
+    assert openai_hit_only.fuse_tokens == 1_100_000
+
+    no_split = TokenUsage(input_tokens=4_130_000, output_tokens=90_000)
+    assert no_split.fuse_tokens == no_split.total_tokens

@@ -199,10 +199,11 @@ describe("AskDecisionBody organize confirm card", () => {
     ],
   };
 
-  it("shows 将整理 target; footer is 提交 not 允许整理 until the grant row is used", () => {
+  it("shows 将整理 target; mixed skip keeps 需要你拍板 until the grant row is used", () => {
     render(<Harness content={organizeContent} />);
     expect(screen.getByText("将整理：桌面 › 咨询")).toBeTruthy();
-    expect(screen.getByText(/整理确认/)).toBeTruthy();
+    expect(screen.getByText("需要你拍板")).toBeTruthy();
+    expect(screen.queryByText(/整理确认/)).toBeNull();
     expect(screen.queryByRole("button", { name: /^允许整理$/ })).toBeNull();
     expect(
       (screen.getByRole("button", { name: /^提交$/ }) as HTMLButtonElement)
@@ -210,6 +211,60 @@ describe("AskDecisionBody organize confirm card", () => {
     ).toBe(true);
     // No picker framing
     expect(screen.queryByText(/选文件夹/)).toBeNull();
+  });
+
+  it("mixed scope+attach card stays 需要你拍板 (does not hijack to 加入本对话)", () => {
+    const mixed: AskUserContent = {
+      question: "现在还看不到效果，下一步怎么做？",
+      assumptions: [],
+      questions: [
+        {
+          id: "q0",
+          prompt: "现在还看不到效果，下一步怎么做？",
+          kind: "choice",
+          options: [
+            {
+              label: "先搭一个最小演示页（推荐）",
+              action: "grant_attach_folder",
+            },
+            { label: "先不搭，等以后做界面" },
+          ],
+          multiple: false,
+          default: "",
+        },
+      ],
+    };
+    render(<Harness content={mixed} />);
+    expect(screen.getByText("需要你拍板")).toBeTruthy();
+    expect(screen.queryByText(/加入本对话/)).toBeNull();
+    expect(screen.queryByText(/将本机目录加入/)).toBeNull();
+  });
+
+  it("grant-only attach card uses 加入本对话 chrome and 允许改 target", () => {
+    const attachOnly: AskUserContent = {
+      question: "允许改这个目录？",
+      assumptions: [],
+      questions: [
+        {
+          id: "q0",
+          prompt: "允许改这个目录？",
+          kind: "choice",
+          options: [
+            {
+              label: "允许改设计稿",
+              action: "grant_attach_folder",
+              well_known: "desktop",
+              target_name: "设计稿",
+            },
+          ],
+          multiple: false,
+          default: "",
+        },
+      ],
+    };
+    render(<Harness content={attachOnly} />);
+    expect(screen.getByText(/加入本对话/)).toBeTruthy();
+    expect(screen.getByText("允许改：桌面 › 设计稿")).toBeTruthy();
   });
 
   it("grant option row fulfills organize via helper — no silent upgrade, no picker", async () => {
@@ -540,6 +595,27 @@ describe("AskDecisionBody question stems", () => {
     expect(screen.getByText("用这句话当题干")).toBeTruthy();
     expect(screen.getAllByText("用这句话当题干")).toHaveLength(1);
     expect(screen.getByText("A")).toBeTruthy();
+  });
+
+  it("paints a fill-in when a choice question has no options", () => {
+    const content: AskUserContent = {
+      question: "总标题不要画",
+      assumptions: [],
+      questions: [
+        {
+          id: "q0",
+          prompt: "还缺什么？",
+          kind: "choice",
+          options: [],
+          multiple: false,
+          default: "",
+        },
+      ],
+    };
+    render(<Harness content={content} />);
+    expect(screen.getByText("还缺什么？")).toBeTruthy();
+    expect(screen.getByPlaceholderText("填写你的答案")).toBeTruthy();
+    expect(screen.queryByText("总标题不要画")).toBeNull();
   });
 });
 

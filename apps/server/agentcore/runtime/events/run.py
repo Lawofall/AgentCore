@@ -560,7 +560,7 @@ def delivery_status(
     handoff gaps (含 degraded 交接、artifacts 对账缺口、soft overlay notes),
     and derived user actions (如云端无执行环境 → ``bind_local_folder``). ``state`` ∈
     delivered / partial / blocked / notes（软自注 unverified_note 不单独 → notes；
-    path_mismatch 为声明未落盘的 blocking gap，不得 delivered；未声明落盘不进 artifacts）.
+    path_mismatch 为声明未落盘的 warning，不挡 delivered；声明未命中时实际落盘进 artifacts）.
     ``artifacts`` = path acceptance rows；``delivered_files`` = accepted only.
     ``gaps`` items are ``{role, description}`` plus optional ``reason`` /
     ``severity`` / ``paths``；``actions`` 已知 kind 含 ``bind_local_folder`` /
@@ -739,7 +739,7 @@ def execution_completed(
 
 
 def batch_metrics(*, execution_id: str, metrics: dict[str, Any]) -> SSEEvent:
-    """WaveScheduler 观测快照（调度埋点量化）→ 桌面诊断模式。
+    """WaveScheduler 观测快照（调度埋点量化）。采集仍在、产品不展示。
 
     ``metrics`` 是 :class:`~agentcore.runtime.runs.types.BatchMetrics` 的 asdict
     （nodes / width / wall_ms / busy_ms / slot_starved / 受监督波循环 + escalate）。

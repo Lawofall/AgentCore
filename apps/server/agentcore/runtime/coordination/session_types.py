@@ -72,11 +72,6 @@ def _budget_pools_from_dict(data: dict[str, Any]) -> tuple[int, int] | None:
     return max(0, progress), max(0, decision)
 
 
-# Fallback per-worker wall-clock before a timeout *notification* (CEO decides; no auto-cancel).
-# Prefer ``RunPolicy.timeout_s`` from worker_budget backstop (or CEO-explicit ``timeout_ms``).
-DEFAULT_WORKER_TIMEOUT_S = 1200.0
-
-
 def _durable_terminal_run_ids(entries: list[dict[str, Any]] | None) -> set[str]:
     """``run_id`` values that already have a durable close fact in ``entries``."""
     from agentcore.runtime.terminal import RUN_CLOSE_EVENT_TYPES

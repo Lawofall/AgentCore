@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from agentcore.core.log_context import bind_log_context, clear_log_context
+from agentcore.core.log_context import bind_log_context, log_context
 from agentcore.llm.provider.protocol import LLMMessage, TokenUsage
 from agentcore.observability.prefix_cache import (
     BASIS_ESTIMATED,
@@ -34,14 +34,34 @@ from agentcore.observability.prefix_cache import (
 )
 from agentcore.runtime.context import ContextAssembler, SectionOrder
 
+_CHAIN_LOG_KEYS = (
+    "conversation_id",
+    "trace_id",
+    "agent_id",
+    "run_id",
+    "cost_role",
+    "message_id",
+)
+
+
+def _drop_chain_log_ids() -> None:
+    """Unbind chain ids without wiping the root ``traffic=test`` fixture."""
+    from structlog.contextvars import get_contextvars, unbind_contextvars
+
+    present = [k for k in _CHAIN_LOG_KEYS if k in get_contextvars()]
+    if present:
+        unbind_contextvars(*present)
+
 
 @pytest.fixture(autouse=True)
 def _clean_probe_state():
+    # Prefix-cache ledger + chain ids. Do not clear_log_context — the root
+    # ``_mark_test_traffic`` fixture holds ``bound_contextvars`` for the test.
     reset_prefix_cache_state()
-    clear_log_context()
+    _drop_chain_log_ids()
     yield
     reset_prefix_cache_state()
-    clear_log_context()
+    _drop_chain_log_ids()
 
 
 def _m(role: str, content: str) -> LLMMessage:
@@ -243,6 +263,34 @@ def test_unrecorded_layer_degrades_to_the_container_section():
 
     leaves = flatten_sections(_conversation_sections["c1"].scopes)
     assert [leaf.key for leaf in leaves] == ["ceo_prompt", "workspace_context"]
+
+
+def test_flatten_splices_when_outer_layer_is_exactly_the_inner_render():
+    # No volatile tail: ceo_turn is one section whose text equals the ceo_chat join.
+    # Last-write on render_digest would keep the container and report ``ceo_prompt``.
+    record_prompt_sections(
+        scope="shared_base",
+        sections=[("base", "BASE")],
+        conversation_id="c1",
+        turn_id="t1",
+    )
+    inner_render = "BASE\nFACTS"
+    record_prompt_sections(
+        scope="ceo_chat",
+        sections=[("ceo_base", "BASE"), ("workspace_facts", "FACTS")],
+        conversation_id="c1",
+        turn_id="t1",
+    )
+    record_prompt_sections(
+        scope="ceo_turn",
+        sections=[("ceo_prompt", inner_render)],
+        conversation_id="c1",
+        turn_id="t1",
+    )
+    from agentcore.observability.prefix_cache import _conversation_sections
+
+    leaves = flatten_sections(_conversation_sections["c1"].scopes)
+    assert [leaf.key for leaf in leaves] == ["base", "workspace_facts"]
 
 
 def test_a_second_shared_base_in_the_same_turn_does_not_break_the_chain():
@@ -689,6 +737,27 @@ def test_tracking_changes_nothing_about_the_assembled_prompt():
     assert [c.key for c in tracked.contributors()] == ["base", "tail"]
 
 
+def test_empty_turn_id_then_labelled_keeps_nested_scopes():
+    """A layer recorded before trace_id is bound must not look like a new turn."""
+    record_prompt_sections(
+        scope="shared_base",
+        sections=[("base", "BASE")],
+        conversation_id="c-adopt",
+        turn_id="",
+    )
+    record_prompt_sections(
+        scope="ceo_chat",
+        sections=[("ceo_base", "BASE"), ("ceo_core", "CORE")],
+        conversation_id="c-adopt",
+        turn_id="t1",
+    )
+    from agentcore.observability.prefix_cache import _conversation_sections
+
+    scopes = _conversation_sections["c-adopt"].scopes
+    assert set(scopes) == {"shared_base", "ceo_chat"}
+    assert _conversation_sections["c-adopt"].turn_id == "t1"
+
+
 def test_the_real_ceo_layers_splice_into_leaf_sections():
     # End-to-end over the production composers: the outer layer must NOT stay stuck on its
     # ``ceo_prompt`` container. Guards the digest-splicing invariant against a future change
@@ -698,30 +767,34 @@ def test_the_real_ceo_layers_splice_into_leaf_sections():
         compose_ceo_chat_prompt,
     )
 
-    bind_log_context(conversation_id="conv-real", trace_id="t1")
-    shared_base = assemble_system_prompt(
-        rules_markdown="记住：用户偏好简洁",
-    )
-    ceo_prompt = compose_ceo_chat_prompt(
-        shared_base,
-        ceo_tool_names=set(),
-        workspace_context="<工作区>本地桌面</工作区>",
-    )
-    (
-        ContextAssembler()
-        .add("ceo_prompt", ceo_prompt, SectionOrder.BASE)
-        .add("workspace_context", "<工作区文件/>", SectionOrder.WORKSPACE_OVERVIEW)
-        .observe(scope="ceo_turn", soft_cap=None)
-    )
+    cid = "conv-real-splice"
+    with log_context(conversation_id=cid, trace_id="t-splice"):
+        shared_base = assemble_system_prompt(
+            rules_markdown="记住：用户偏好简洁",
+        )
+        ceo_prompt = compose_ceo_chat_prompt(
+            shared_base,
+            ceo_tool_names=set(),
+            workspace_context="<工作区>本地桌面</工作区>",
+            workspace_file_index="文件：空",
+        )
+        (
+            ContextAssembler()
+            .add("ceo_prompt", ceo_prompt, SectionOrder.BASE)
+            .observe(scope="ceo_turn", soft_cap=None)
+        )
     from agentcore.observability.prefix_cache import _conversation_sections
 
-    keys = [leaf.key for leaf in flatten_sections(_conversation_sections["conv-real"].scopes)]
+    keys = [leaf.key for leaf in flatten_sections(_conversation_sections[cid].scopes)]
     assert "ceo_prompt" not in keys and "ceo_base" not in keys  # containers were spliced
     assert keys[0] == "base"
     assert {"runtime_context", "workspace_facts", "memory_rules", "ceo_core"} <= set(keys)
     assert keys.index("ceo_core") < keys.index("workspace_facts")
-    assert keys.index("workspace_facts") < keys.index("workspace_context")
-    assert keys[-1] == "workspace_context"  # the volatile tail stays last
+    assert "workspace_context" not in keys
+    assert keys[-1] == "workspace_facts"  # file index rides the end of facts, not a second tag
+    assert "文件：空" in ceo_prompt
+    assert ceo_prompt.index("本地桌面") < ceo_prompt.index("文件：空")
+    assert ceo_prompt.index("文件：空") < ceo_prompt.index("</工作区>")
 
 
 def test_a_growing_source_ledger_is_attributable_to_its_own_section():
@@ -733,11 +806,10 @@ def test_a_growing_source_ledger_is_attributable_to_its_own_section():
     def _turn(sources: str) -> None:
         build_chat_system_prompt(
             ceo_prompt="CEO",
-            workspace_overview="<工作区文件/>",
+            working_set="",
             recent_team_graph="",
             prior_delivery_gaps="",
             prior_delegate_retry="",
-            prior_futile_retries="",
             attachment_context="",
             registered_sources=sources,
             soft_cap=None,

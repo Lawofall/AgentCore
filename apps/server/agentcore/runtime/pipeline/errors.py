@@ -1,18 +1,22 @@
-"""Honest prepare / turn-start aborts for local workspace presence + liveness.
+"""Honest prepare / turn-start aborts for local workspace presence.
 
-Four user-visible cases (message already persisted → guide regenerate, not resend):
+Three user-visible presence cases (message already persisted → guide regenerate, not resend):
 
 1. No desktop fulfillment session at all (desktop offline / not connected).
 2. Desktop online for ``workspace`` but does not declare this ``root_id``.
-3. Fulfiller present yet channel IO hangs / sticky-dead — existing channel-dead copy.
-4. Another device is online, but the one that started this turn is not (pinned
+3. Another device is online, but the one that started this turn is not (pinned
    channels only — see ``fulfill/origin.py``).
 
 Prepare-phase local IO also shares a wall-clock budget (see
 ``settings.prepare_local_io_budget_seconds``) so op timeouts cannot sum unbound.
-The budget is in force only inside a :func:`prepare_local_io_span`; execution-phase
-tool IO — including a delegate re-probing a *target* desk — never sees it bound
+Budget exhaustion uses the existing channel-unresponsive copy — that aborts
+prepare, it does not mean mid-turn file tools are disconnected. The budget is
+in force only inside a :func:`prepare_local_io_span`; execution-phase tool IO —
+including a delegate re-probing a *target* desk — never sees it bound
 (双模式工作区.md §7.7).
+
+Mid-turn settle timeouts fail that op only. File-family retire follows fulfiller
+presence (``workspace.presence``), not timeout counts.
 """
 
 from __future__ import annotations
@@ -33,6 +37,7 @@ from agentcore.workspace.limits import (
     is_channel_dead_detail,
     is_liveness_timeout_detail,
 )
+from agentcore.workspace.presence import backend_needs_workspace_fulfiller
 from agentcore.workspace.protocol import WorkspaceIOError
 
 logger = get_logger(__name__)
@@ -48,7 +53,7 @@ LOCAL_DESKTOP_OFFLINE = (
 # delivery says the same thing when roots change after this gate ran
 # (``fulfill/dispatch.py`` → ``DeliverResult.ROOT_NOT_HELD``).
 
-# Case 3 — re-export the existing sticky-dead prepare abort (channel hung).
+# Case 3 — re-export prepare-budget / IO-hang abort (not mid-turn presence).
 LOCAL_CHANNEL_DEAD = CHANNEL_DEAD_PREPARE_ABORT
 
 # Case 4 — some other install could serve this op, but it is not the machine the
@@ -87,14 +92,6 @@ def is_prepare_local_abort_message(detail: str | None) -> bool:
     return (detail or "").strip() in PREPARE_LOCAL_ABORT_MESSAGES
 
 
-def _backend_needs_workspace_fulfiller(backend: object | None) -> bool:
-    """True for LocalWorkspace (desktop channel), not sidecar Path-backed local."""
-    if backend is None or getattr(backend, "location", None) != "local":
-        return False
-    channel = getattr(backend, "_channel", None)
-    return channel is not None
-
-
 def raise_if_local_workspace_fulfiller_absent(
     *,
     user_id: str,
@@ -110,7 +107,7 @@ def raise_if_local_workspace_fulfiller_absent(
     so the gate can never pass a turn whose first op reports having no machine
     to run on.
     """
-    if not _backend_needs_workspace_fulfiller(backend):
+    if not backend_needs_workspace_fulfiller(backend):
         return
     channel = getattr(backend, "_channel", None)
     root_id = (getattr(channel, "root_id", None) or "") or None
@@ -152,7 +149,7 @@ def backend_uses_local_channel(backend: object | None) -> bool:
     Cloud backends and sidecar Path-backed local workspaces do no desktop
     round-trips, so they neither need a presence gate nor a prepare budget.
     """
-    return _backend_needs_workspace_fulfiller(backend)
+    return backend_needs_workspace_fulfiller(backend)
 
 
 def prepare_local_io_budget_active() -> bool:
@@ -241,7 +238,7 @@ def raise_prepare_local_channel_dead(*, reason: str, detail: str | None = None) 
 def reraise_prepare_liveness_timeout(exc: BaseException) -> None:
     """If ``exc`` is a prepare-relevant hang, raise case-3; else return (caller continues).
 
-    Used when prepare budget is active: the first sticky-eligible liveness timeout
+    Used when prepare budget is active: the first liveness timeout
     (including ``probe_exec``) aborts immediately — do not wait for a second hang.
     """
     if not isinstance(exc, WorkspaceIOError):

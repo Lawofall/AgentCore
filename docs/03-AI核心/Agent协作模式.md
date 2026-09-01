@@ -73,7 +73,7 @@ worker 唯一向上通道。`blocking=false`（默认）= 已有合理默认、�
 
 被否决：`key_points` 换成纯接力状态（它是计划复核卡 / CEO 确定性评审 / 审计 playbook 的事实载荷，换血同时饿死三方）；门禁改「必须 ≥2 条 key_points」（数条数挡不住结论复述，却误伤只写长 summary 的合规上游 → [拦截纪律](/.cursor/rules/intercept-discipline.mdc)）。`summary` 长度只作 schema 提示，不做运行时拒收（harvest 不 enforce `maxLength`）。
 
-约束边界：`degraded` 不是 `RunDebrief` wire 字段，两端读 dict 额外键（降级 debrief = 正文切片，展示必然与正文重复，故只留提示）——payload 若加严格校验或剔未声明键会静默失效。8 员全平行 prose 叶子经协调态 `ALL_COMPLETED` 二次裁后每员只剩残片，未提预算。
+约束边界：`degraded` 不是 `RunDebrief` wire 字段，两端读 dict 额外键（降级 debrief = 正文切片，展示必然与正文重复，故只留提示）——payload 若加严格校验或剔未声明键会静默失效。8 员全平行 prose 叶子共享 `CEO_SYNTHESIS_BUDGET`（水填）；名册与终稿纪律不进这笔预算。禁止再对整包做第二次内容整形。
 
 ### 自主度三档
 
@@ -85,38 +85,36 @@ Worker 工具后还有确定性 **Escalation Gate**：只把工具失败当执�
 
 一句话：**写只走 `drive*` / `CoordinationSession`，`pipeline_view` 与前端协作图只是读投影**。完整分工表（含各面的「禁止」与定案）→ [编排器 · 执行写路径 vs 进度读视图](/docs/03-AI核心/编排器与CEO主Agent.md#执行写路径-vs-进度读视图)（**权威，勿在本文复制**）。
 
-本文只钉一条协作侧边界：路径写权账本（§三）与「图上怎么画」**正交**——账本管能不能写文件，图只反映进度。
+本文只钉一条协作侧边界：写占用（§三）与「图上怎么画」**正交**——图只反映进度；能不能写这一下看权限、短锁和版本，不看「文件归谁到交卷」。
 
 ## 三、冲突与文件写权
 
-CEO 唯一裁决；置信度低才 `ask_user`。资源冲突靠 DAG。
+CEO 唯一裁决；置信度低才 `ask_user`。资源先后靠 DAG（`depends_on`）。
 
-### 交接式写权（C3）
+### 写占用 = 这一次工具调用
 
-协调会话内一本路径账本（`WriteCoordinator`）；内部键 = **桌 × 相对路径**（`desk_id = target_folder_id or 会话出生 desk`，跨桌同 `rel_path` 不互拦；用户可见冲突仍点名裸路径）。跨文件夹换桌写盘见 [双模式工作区 · 跨文件夹](/docs/02-架构/双模式工作区.md)。
+Agent 没有「文件开在编辑器里」。写盘占用只包住**这一次** `file_write` / `file_append` / `str_replace`（以及同族改盘工具）：磁盘短串行（`workspace_lock`）+ 整篇覆盖须对得上刚读的版本（CAS）。写完（成败）即放开；人还在队里也不占着。
 
-| 阶段 | 行为 |
-|---|---|
-| **派发 declare** | 无主路径由首个声明 artifact 的节点成为写主；**下游不因祖先关系在派发瞬间抢锁**（只登记计划意图）。嵌套 lead→child 显式允许派发交接。**跨波次**：新节点声明的路径若锁主已在 `completed_run_ids`，派发时自动移交（审校→修订无需用户点卡；入闸不再因「已完成占位」拒单）。 |
-| **同岗位续派** | 座位（规范化角色名）上前任已完成或已 vacated，再派同座且无在跑同座 → 自动填 `replaces_run_id`，继承其写锁（预算触顶未落盘后再派同一岗位可直接写）。 |
-| **写入 claim** | 真写时：本人 / 无主可写；祖先持有则可交接覆写；无关队友拒写。 |
-| **完成交接** | worker 完成后，若其持有路径恰好被**唯一**未完成依赖方列入 artifacts，则自动移交。 |
-| **显式移交** | `resolve_escalation(transfer_ownership=true)`；或用户写权卡「移交写权 / 保持原主」。**仅锁主仍在跑**时写权冲突直达用户；已完成占位不走用户移交卡（走同座续派 / declare）。 |
+并肩两人可以点名同一份产出、同时开工。冲突 = 原文或整篇版本对不上（`str_replace` 找不到原文；`file_write` 盘上已不是刚读到的那一版），不是「这份文件归谁」。新建空路径两人同时创建 = 后写覆盖，可接受。
 
-写权冲突 escalate：**锁主进行中**才直达用户（与 `browser_login` 同属用户直达例外），卡上结构化动作真正转锁——自然语言「移交」 alone 不会改账本。锁主已完成却仍撞账本 → 协调活跃时改走主管裁决，提示同座续派，不弹「移交写权」。
+**留下**：真有先后的 `depends_on`（下游吃上游产出）；同一岗位不要同时坐两个人（`sibling_role`）；写权限 / 哪张桌 / `write_scope`。
 
-**编排纪律（✅ 提示词，非软闸）**：无 `depends_on` 的并行 sibling 勿共写同一目标文件——各写私有产出或串行 / 指定整合者。已声明同 `artifacts` 交叉由 `sibling_artifact` 硬拒（拒在 durable `run_plan` / `plan_snapshot` 之前；try_start 才拒须擦从未开工座位，不得进同构「还在跑」分母；无活跃协调时 `cancel_worker` 仍可划空座位）；**不做**「同 artifacts 软提示」、**不**扫 task 长文猜同 path、**不**改为写成功即 release。→ CEO `【并行写盘】` · skill「并行写盘·同路径纪律」· captain 嵌套扇出写盘句 · `coordination/host.py`
+**已撤**（不要半套兼容）：派工 `declare` 当排他锁；写时因「归别人」拒绝；做完交接 / 用户卡「移交写权 / 保持原主」；对账「写权冲突未解」blocking；写权冲突把队员打成 `FAILED` / vacated；同批 `artifacts` 交叉 `sibling_artifact` 硬拒整批；队长「并行别写同一份 / 各写私有再整合」纪律。不扫 task 长文猜路径，不加「不许用命令改文件」。
+
+同座位续派仍可 auto-`replaces`（预算触顶后再派同一岗位）。`replaces_run_id` / `continue_from_run_id` 是计划手术，与写占用无关。
 
 ### 验收与座位（质量两档）
 
 | 档 | 信号（例） | 座位 / 修路 |
 |---|---|---|
-| **Hard** | 写权冲突、契约 `strict` 结构失败等 | `FAILED` → 进 `vacated_run_ids`；同座可 auto-`replaces` |
-| **Soft** | 薄交接、未声明路径落盘、引用可剥、批次 `files_written` soft note | 仍 `COMPLETED`；**不** vacated；修路 = **同座位** replan/append（系统 auto-`replaces` + declare 转锁） |
+| **Hard** | 结构契约失败、能力缺失等 | `FAILED` → 进 `vacated_run_ids`；同座可 auto-`replaces` |
+| **Soft** | 薄交接、引用可剥、批次 `files_written` soft note、结构不达标（缺章节 / 审计闸） | 仍 `COMPLETED`；**不** vacated；修路 = **同座位** replan/append（系统 auto-`replaces`） |
 
-**不做**：把 soft 质量塞进 vacated（污染失败语义）。**已撤**：空 handoff / 零声明清单把节点或整轮打成失败（实测误伤；行业也无此闸）。**禁止**：另起 `-v2` 角色名假装新座位抢同一路径；队员对已完成锁主 escalate 要用户移交。
+声明未命中时工人另写下的文件即产物，不是 soft 缺口。→ [执行引擎](/docs/03-AI核心/执行引擎架构设计.md)。
 
-→ 见代码: `workspace/write_claims.py` · `coordination/append_guard.py` · `EscalationCard`
+**不做**：把 soft 质量塞进 vacated（污染失败语义）。**已撤**：空 handoff / 零声明清单把节点或整轮打成失败（实测误伤；行业也无此闸）。**禁止**：另起 `-v2` 角色名假装新座位。单次工具失败（原文不对、整篇 CAS 失败）不是座位失败。
+
+→ 见代码: `tools/builtin/file_ops/integrity.py` · `coordination/append_guard.py` · `workspace_lock`
 
 ## 四、⏳ / 否决
 
@@ -127,4 +125,4 @@ CEO 唯一裁决；置信度低才 `ask_user`。资源冲突靠 DAG。
 | 独立 Arena | **否决** |
 | 树级共享 Semaphore | **否决**（父子互等死锁） |
 | 便签墙 / worker 侧向广播 | **否决**（第四套实体；不留波内推送。旧 journal `team_note_posted` 跳过、不展示） |
-| 两篇成稿靠边信道互焊 / 互 `depends_on` 成环 | **否决**；先非空 `team_brief` 或短规格岗。不新 playbook；不扩 `consumer_deps` 漏边软提示 |
+| 两篇成稿靠边信道互焊 / 互 `depends_on` 成环 | **否决**；先非空 `team_brief` 或短规格岗。不新 playbook；不复活 `consumer_deps` 漏边软提示 |

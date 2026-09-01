@@ -1,10 +1,11 @@
-"""Shared project-verify CLI detection for ``code_execute`` → ``test_run`` routing.
+"""Shared project-verify CLI detection for the short-exec path → ``run``.
 
 Models often stuff ``npm install`` / ``pip install`` / ``tsc`` / ``npm test`` into
-``code_execute``, which hard-caps at 60s. Same shape as :mod:`long_running`
-(dev servers → terminal): hard refuse with ``contract_failure``, tip the bounded
-verify tool. Keep the list the single source of truth. Patterns are command-shaped
-so imports like ``from 'vitest'`` / ``from 'vite'`` do not false-positive.
+a short command, which hard-caps at 60s. Same shape as :mod:`long_running`
+(dev servers → ``run`` + ``background``): hard refuse with ``contract_failure``,
+tip ``run`` with the same command. Keep the list the single source of truth.
+Patterns are command-shaped so imports like ``from 'vitest'`` / ``from 'vite'``
+do not false-positive.
 """
 
 from __future__ import annotations
@@ -45,22 +46,18 @@ def project_verify_redirect_message(
     *,
     verify_policy: str = "",
 ) -> str:
-    """``code_execute`` refusal: tip the right next tool without running the command."""
+    """Short-path refusal: tip ``run`` (or inner diagnostics) without running the command."""
     policy = (verify_policy or "").strip().lower()
     if policy == "inner":
         return (
-            f"禁止用 code_execute 跑项目级慢验证（检测到：{matched}）。"
+            f"跑项目级慢验证请改走内环（检测到：{matched}）。"
             "当前队员为调查/审查姿态（verify_policy=inner）："
             "全量 typecheck/build 请改用内环 code_diagnostics，"
-            "或 escalate / 交验收员跑 test_run；"
+            "或 escalate / 交验收员用 run；"
             "运行时 blank-page / 挂载问题优先 browser 与入口链路，勿烧分钟级 tsc 预算。"
         )
     return (
-        f"禁止用 code_execute 跑项目级慢验证（检测到：{matched}）。"
-        "本工具约 60s 硬顶，不适配 install / tsc / 全量 test·build。"
-        "请改用 test_run（有界项目验证，分钟级预算）："
-        "装包用 check=install（或 check=command + `npm|pnpm|yarn install|ci` / "
-        "`uv sync` / `pip install` / `poetry install`，"
-        "子目录用 --prefix/--dir/--directory 或 working_directory，禁止 cd&&）；"
-        "验绿用 check=test|typecheck|build，或 check=command 填同一命令。"
+        f"跑项目级慢验证请用 run（检测到：{matched}）。"
+        "本路径约 60s 硬顶，不适配 install / tsc / 全量 test·build。"
+        "command 写成同一检查命令。"
     )

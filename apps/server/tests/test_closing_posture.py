@@ -1,5 +1,7 @@
 """收口诚实性（closing_posture）：档位真源 + 薄 A 闭集 + resume 拼接。"""
 
+import pytest
+
 from agentcore.runtime.closing_posture import (
     claims_full_delivery,
     claims_needs_confirm,
@@ -752,8 +754,8 @@ def test_b1_browser_success_latch_accepts_new_and_legacy_names():
     clear_b1_closing_latches()
 
 
-def test_b1_browser_claim_requires_tool_success():
-    """17cafc76：未装配/无 browser 成功时禁称已打开右坞."""
+def test_b1_browser_claim_hard_rework_withdrawn():
+    """浏览器声称扫词硬回炉已撤：检测器仍命中；未装配/无成功不再清气泡。"""
     from agentcore.runtime.closing_posture import (
         claims_browser_open_or_login,
         clear_b1_closing_latches,
@@ -761,19 +763,17 @@ def test_b1_browser_claim_requires_tool_success():
         note_browser_assembled,
         note_browser_tool_success,
     )
+    from agentcore.runtime.closing_posture.browser import _browser_claim_rework
 
     clear_b1_closing_latches()
     note_browser_assembled(False)
     claim = "登录页已在右坞浏览器打开并渲染成功，请填写用户名。"
     assert claims_browser_open_or_login(claim)
-    rework = closing_honesty_rework(claim)
-    assert rework is not None
-    assert "未装配" in rework or "browser" in rework.lower()
+    assert _browser_claim_rework(claim) is None
+    assert closing_honesty_rework(claim) is None
 
     note_browser_assembled(True)
-    rework2 = closing_honesty_rework(claim)
-    assert rework2 is not None
-    assert "browser_*" in rework2 or "工具成功" in rework2
+    assert closing_honesty_rework(claim) is None
 
     note_browser_tool_success()
     assert closing_honesty_rework(claim) is None
@@ -803,51 +803,59 @@ def test_b1_zero_write_landing_hard_rework_withdrawn():
     clear_b1_closing_latches()
 
 
-def test_b1_over_seat_forces_partial_gap_checklist():
-    """e94dcd6b：超席闩锁 → 禁仍在进行 / 须缺口承认."""
+def test_hollow_claim_detectors_absent():
+    """空心措辞扫描已删：不观测、不清气泡。"""
+    import importlib
+
+    import agentcore.runtime.closing_posture as cp
+
+    assert not hasattr(cp, "claims_hollow_in_progress")
+    assert not hasattr(cp, "claims_hollow_teach_invite")
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("agentcore.runtime.closing_posture.hollow")
+
+
+def test_b1_over_seat_latch_does_not_rework():
+    """超席 latch 仍打；不因 latch 清气泡。"""
     from agentcore.runtime.closing_posture import (
         clear_b1_closing_latches,
         closing_honesty_rework,
         note_over_seat_reject,
+        turn_has_over_seat_reject,
     )
 
     clear_b1_closing_latches()
     note_over_seat_reject(task_count=31, max_tasks=20)
-    hanging = "目前仍在进行第三层审查，尚未形成最终审查结论。"
-    rework = closing_honesty_rework(hanging)
-    assert rework is not None
-    assert "PARTIAL" in rework or "缺口" in rework
-    honest = "部分完成：前 12 席有摘要；其余因超席未跑，缺口清单如下，建议分批续派。"
-    assert closing_honesty_rework(honest) is None
+    assert turn_has_over_seat_reject()
+    assert closing_honesty_rework("部分完成：前 12 席有摘要；其余因超席未跑。") is None
     clear_b1_closing_latches()
 
 
-def test_b1_ceiling_bans_hollow_teach_invite():
-    """1eb5eb99 C：ceiling 后禁空心请开讲."""
+def test_b1_ceiling_steer_unchanged_without_hollow_scan():
+    """硬顶 steer / enforce 仍在；掐断 latch 不清气泡。"""
     from agentcore.runtime.closing_posture import (
         ceiling_honesty_steer,
-        claims_hollow_teach_invite,
         clear_cutoff_delivery_gap,
+        closing_honesty_rework,
         enforce_ceiling_closing_honesty,
         enforce_cutoff_closing_honesty,
         note_cutoff_delivery_gap,
     )
 
-    hollow = "好，我在听——请讲，第一部分怎么写。"
-    assert claims_hollow_teach_invite(hollow)
+    sample = "先把已落地的部分列出来。"
     steer = ceiling_honesty_steer(reason="token_budget")
     assert steer is not None
-    assert "请开讲" not in steer and "请讲" not in steer and "我在听" not in steer
     assert "姿势 A" in steer
     assert "continue_from_run_id" in steer
-    out = enforce_ceiling_closing_honesty(hollow, reason="token_budget")
-    assert out == hollow
+    out = enforce_ceiling_closing_honesty(sample, reason="token_budget")
+    assert out == sample
     assert "【收口说明】" not in out
 
     clear_cutoff_delivery_gap()
     note_cutoff_delivery_gap()
-    cut = enforce_cutoff_closing_honesty(hollow)
-    assert cut == hollow
+    assert closing_honesty_rework(sample) is None
+    cut = enforce_cutoff_closing_honesty(sample)
+    assert cut == sample
     assert "【收口说明】" not in cut
     clear_cutoff_delivery_gap()
 

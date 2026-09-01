@@ -400,6 +400,20 @@ class LLMInsufficientBalanceError(LLMError):
         "平台模型暂时不可用（上游账户余额不足）。请改用自己的 API Key，或联系管理员。"
     )
 
+    @staticmethod
+    def _byok_message(
+        provider_name: str | None, display_name: str | None
+    ) -> str:
+        shown = (display_name or "").strip()
+        name = (provider_name or "").strip()
+        if shown:
+            label = shown
+        elif name and name != "user":
+            label = name
+        else:
+            label = "服务商"
+        return f"{label} API Key 有效，但账户余额不足，请充值后重试。"
+
     def __init__(
         self,
         message: str | None = None,
@@ -408,24 +422,24 @@ class LLMInsufficientBalanceError(LLMError):
         display_name: str | None = None,
         **kwargs,
     ):
-        if message is None:
-            name = (provider_name or "").strip()
-            shown = (display_name or "").strip()
-            if name == "platform":
-                message = self._PLATFORM_MESSAGE
+        name = (provider_name or "").strip()
+        source = kwargs.get("credential_source")
+        if source not in ("user", "platform"):
+            if name == "platform" or message == self._PLATFORM_MESSAGE:
+                source = "platform"
             else:
-                if shown:
-                    label = shown
-                elif name and name != "user":
-                    label = name
-                else:
-                    label = "服务商"
-                message = f"{label} API Key 有效，但账户余额不足，请充值后重试。"
+                source = "user"
+            kwargs["credential_source"] = source
+        if message is None or (
+            source == "user" and message == self._PLATFORM_MESSAGE
+        ):
+            message = (
+                self._PLATFORM_MESSAGE
+                if source == "platform"
+                else self._byok_message(provider_name, display_name)
+            )
         if provider_name is not None and "provider_name" not in kwargs:
             kwargs["provider_name"] = provider_name
-        if "credential_source" not in kwargs:
-            name = (provider_name or "").strip()
-            kwargs["credential_source"] = "platform" if name == "platform" else "user"
         super().__init__(message, **kwargs)
 
 
@@ -480,6 +494,20 @@ class LLMAuthError(LLMError):
 
     _PLATFORM_MESSAGE = "平台模型暂时不可用（上游鉴权失败）。请改用自己的 API Key，或联系管理员。"
 
+    @staticmethod
+    def _byok_message(
+        provider_name: str | None, display_name: str | None
+    ) -> str:
+        shown = (display_name or "").strip()
+        name = (provider_name or "").strip()
+        if shown:
+            label = shown
+        elif name and name != "user":
+            label = name
+        else:
+            label = "服务商"
+        return f"{label} API Key 无效或无权限，请更新后重试。"
+
     def __init__(
         self,
         message: str | None = None,
@@ -489,22 +517,23 @@ class LLMAuthError(LLMError):
         **kwargs,
     ):
         name = (provider_name or "").strip()
-        shown = (display_name or "").strip()
-        if message is None:
-            if name == "platform":
-                message = self._PLATFORM_MESSAGE
+        source = kwargs.get("credential_source")
+        if source not in ("user", "platform"):
+            if name == "platform" or message == self._PLATFORM_MESSAGE:
+                source = "platform"
             else:
-                if shown:
-                    label = shown
-                elif name and name != "user":
-                    label = name
-                else:
-                    label = "服务商"
-                message = f"{label} API Key 无效或无权限，请更新后重试。"
+                source = "user"
+            kwargs["credential_source"] = source
         # Wire CTA 分流：platform → 接入自己的 Key；user/BYOK → 各端换 Key
         # （桌面「去服务商」、手机「去配置」）。句子本身不点名页面。
-        if "credential_source" not in kwargs:
-            kwargs["credential_source"] = "platform" if name == "platform" else "user"
+        if message is None or (
+            source == "user" and message == self._PLATFORM_MESSAGE
+        ):
+            message = (
+                self._PLATFORM_MESSAGE
+                if source == "platform"
+                else self._byok_message(provider_name, display_name)
+            )
         if provider_name is not None and "provider_name" not in kwargs:
             kwargs["provider_name"] = provider_name
         super().__init__(message, **kwargs)

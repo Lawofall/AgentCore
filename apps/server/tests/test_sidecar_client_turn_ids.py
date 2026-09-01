@@ -234,6 +234,10 @@ async def test_deliver_message_queue_stores_client_triple(tmp_path, monkeypatch)
         "agentcore.runtime.coordination.session.active_coordination_for_conversation",
         lambda _cid: None,
     )
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.persist_midflight_user_message",
+        AsyncMock(return_value=CLIENT_TURN_IDS["userMessageId"]),
+    )
     try:
         await server.handle_line(
             json.dumps(

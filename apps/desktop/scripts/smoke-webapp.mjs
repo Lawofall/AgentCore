@@ -20,7 +20,8 @@
 //   SMOKE_USER / SMOKE_PASS  login creds (default dev / devpassword — the documented
 //                            non-secret seed values, see apps/desktop/.env.example)
 //   SMOKE_API                backend base (default http://localhost:8000)
-//   SMOKE_PORT               vite port, must be CORS-allowlisted (default 5174)
+//   SMOKE_PORT               vite port, must be CORS-allowlisted (default 5175;
+//                            same as vite.webapp.config.ts — 5174 is admin / electron-vite)
 //   SMOKE_PROMPT             message to send (default a 1-line self-intro, low token)
 //   SMOKE_TURN_TIMEOUT_MS    max wait for the turn to finish (default 120000)
 //   SMOKE_HEADED=1           run headed (watch it drive the browser)
@@ -38,7 +39,7 @@ const desktopDir = resolve(here, "..");
 const USER = process.env.SMOKE_USER ?? "dev";
 const PASS = process.env.SMOKE_PASS ?? "devpassword";
 const API = process.env.SMOKE_API ?? "http://localhost:8000";
-const PORT = Number(process.env.SMOKE_PORT ?? 5174);
+const PORT = Number(process.env.SMOKE_PORT ?? 5175);
 const PROMPT = process.env.SMOKE_PROMPT ?? "你好，请用一句话介绍你自己。";
 const TURN_TIMEOUT_MS = Number(process.env.SMOKE_TURN_TIMEOUT_MS ?? 120_000);
 const HEADED = process.env.SMOKE_HEADED === "1";

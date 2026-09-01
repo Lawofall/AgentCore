@@ -15,15 +15,31 @@ _MAX_OPTIONS = 6  # 每个 choice 问题的选项上限
 _MAX_OPTION_DETAIL = 120  # 单个选项的权衡说明上限（一行内）
 _MAX_TARGET_NAME = 120  # grant_* target_name 截断上限
 _WELL_KNOWN_DIRS = frozenset({"desktop", "downloads", "documents"})
-_ALLOWED_OPTION_ACTIONS = frozenset(
-    {
-        "open_local_project",
-        "register_local_project",
-        "bind_local_folder",
-        "grant_organize_folder",
-        "grant_attach_folder",
-    }
+_LOCAL_PROJECT_ACTIONS: tuple[str, ...] = (
+    "open_local_project",
+    "register_local_project",
+    "bind_local_folder",
 )
+_GRANT_ORGANIZE = "grant_organize_folder"
+_GRANT_ATTACH = "grant_attach_folder"
+_ALLOWED_OPTION_ACTIONS = frozenset(
+    (*_LOCAL_PROJECT_ACTIONS, _GRANT_ORGANIZE, _GRANT_ATTACH)
+)
+
+
+def advertised_option_actions(
+    *, desktop: bool, workspace_location: str | None
+) -> tuple[str, ...]:
+    """Desktop AskOption.action enum for this turn's workspace location.
+
+    Cloud / unknown：本机传统入口 + 整理，不广告 attach_rw。
+    已在本机传统：整理 + 区外旁根 attach，不再广告 open/register/bind。
+    """
+    if not desktop:
+        return ()
+    if (workspace_location or "").strip().lower() == "local":
+        return (_GRANT_ORGANIZE, _GRANT_ATTACH)
+    return (*_LOCAL_PROJECT_ACTIONS, _GRANT_ORGANIZE)
 _MAX_ASSUMPTIONS = 10
 _MAX_ASSUMPTION_LABEL = 8  # 短项名原样保留；更长并入 value，项名改「假设」
 _FALLBACK_ASSUMPTION_LABEL = "假设"
@@ -241,6 +257,31 @@ def normalize_assumptions(raw: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _question_prompt(it: dict[str, Any]) -> str:
+    """Ask stem: ``prompt`` wins; ``question`` is the Claude-pretrained alias."""
+    return str(it.get("prompt") or it.get("question") or "").strip()
+
+
+def _options_absent(raw: Any) -> bool:
+    if raw is None:
+        return True
+    if isinstance(raw, list) and not raw:
+        return True
+    return bool(isinstance(raw, str) and not raw.strip())
+
+
+def _flattened_option_raw(it: dict[str, Any]) -> list[dict[str, Any]]:
+    """Option fields written on the question (no ``options`` array)."""
+    label = str(it.get("label") or "").strip()
+    if not label:
+        return []
+    raw: dict[str, Any] = {"label": label}
+    detail = str(it.get("detail") or "").strip()
+    if detail:
+        raw["detail"] = detail
+    return [raw]
+
+
 def normalize_questions(
     raw: Any,
     *,
@@ -254,19 +295,29 @@ def normalize_questions(
     is left empty when the CEO omits it.     ``max_options`` / ``keep_detail`` forward to
     :func:`normalize_options` (cap raised for ``organize_plan`` / ``daily_review``;
     ``keep_detail`` only for those dedicated cards).
+
+    Choice with no options after absorb is lowered to ``text`` so the card is
+    fill-in, never a zero-button choice. A question-level ``label`` with absent
+    ``options`` becomes a one-item choice (model flattened the option onto the
+    question). ``question`` is accepted as an alias for ``prompt``.
     """
     items = coerce_list_arg(raw, field="questions")
     out: list[dict[str, Any]] = []
     for i, it in enumerate(items[:_MAX_QUESTIONS]):
         if not isinstance(it, dict):
             continue
-        prompt = str(it.get("prompt") or "").strip()
+        prompt = _question_prompt(it)
         if not prompt:
             continue
         kind = "text" if str(it.get("kind") or "").strip() == "text" else "choice"
         if kind == "choice":
+            raw_options = it.get("options")
+            if _options_absent(raw_options):
+                absorbed = _flattened_option_raw(it)
+                if absorbed:
+                    raw_options = absorbed
             options = normalize_options(
-                it.get("options"), max_options=max_options, keep_detail=keep_detail
+                raw_options, max_options=max_options, keep_detail=keep_detail
             )
             multiple = bool(it.get("multiple") or False)
             default = str(it.get("default") or "").strip()
@@ -286,6 +337,11 @@ def normalize_questions(
                     targets = [options[0]]
                 for opt in targets:
                     opt["action"] = q_action
+            if not options:
+                kind = "text"
+                options = []
+                multiple = False
+                default = ""
         else:
             options = []
             multiple = False

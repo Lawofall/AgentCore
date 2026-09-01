@@ -1,6 +1,6 @@
-"""read_conversation — Worker deep-read of one past chat (messages + journal).
+"""read_conversation — deep-read of one past chat (messages + journal).
 
-Worker-only; wired via ``manual_wire`` + ``_wire_worker_conversation_log_tools``.
+``AUDIENCE_BOTH`` + ``manual_wire``; wired via ``_wire_conversation_log_tools``.
 Supports cursor continuation so a multi-chunk transcript can be reassembled — never
 silently summarised via the default 4k ToolResult head+tail truncate.
 
@@ -27,7 +27,7 @@ from agentcore.db.repositories import (
 )
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
-    AUDIENCE_WORKER_ONLY,
+    AUDIENCE_BOTH,
     ToolRegistration,
     ToolSurface,
 )
@@ -142,7 +142,7 @@ class ReadConversationTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.WORKER_ONLY,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         manual_wire=True,
     )
 
@@ -154,7 +154,7 @@ class ReadConversationTool:
                 "按 conversation_id 读取一场历史对话的整段原文与过程（用户/助手正文、思考、"
                 "工具调用与结果、辩论、证据与引用）。超长时返回 truncated + next_cursor，"
                 "请带着 cursor 续读并自行拼回全文——禁止把单次截断当成「摘要版全文」。"
-                "读完后向 CEO 回传蒸馏结论 + 出处 id/标题（默认不要把百万字原文原样塞回）。"
+                "读完后蒸馏结论并记下出处 id/标题（默认不要把百万字原文原样塞回）。"
             ),
             parameters={
                 "type": "object",

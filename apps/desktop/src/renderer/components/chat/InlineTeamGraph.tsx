@@ -2,6 +2,7 @@ import { DebateProgressLine } from "@/components/chat/DebateProgressLine";
 import { StatusStrip } from "@/components/chat/StatusStrip";
 import { teamGraphVisible } from "@/components/chat/debatePreviewPlacement";
 import { GraphView } from "@/components/graph/GraphView";
+import { shouldMountInlineGraphHost } from "@/components/graph/graphHost";
 import {
   journalHydrateIdentity,
   journalHydrateIdentityEqual,
@@ -120,6 +121,29 @@ export function InlineTeamGraph({
     Boolean(graphLive),
     { liveDefault: true, settledDefault: caps.inlineDefaultExpanded },
   );
+  const [inView, setInView] = useState(true);
+  const ioRef = useRef<IntersectionObserver | null>(null);
+  const setHostNode = useCallback((node: HTMLDivElement | null) => {
+    ioRef.current?.disconnect();
+    ioRef.current = null;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry) setInView(entry.isIntersecting);
+      },
+      { rootMargin: "160px 0px" },
+    );
+    io.observe(node);
+    ioRef.current = io;
+  }, []);
+  useEffect(
+    () => () => {
+      ioRef.current?.disconnect();
+      ioRef.current = null;
+    },
+    [],
+  );
 
   if (
     !execution ||
@@ -131,6 +155,7 @@ export function InlineTeamGraph({
   }
 
   const graphHeight = measured?.height ?? fallbackHeight;
+  const mountHost = shouldMountInlineGraphHost({ expanded, inView });
   // 推进线（认知轨迹）位置随辩论状态分治：进行中留在标题下方，让用户不点开也能瞥当前轮焦点；
   // 收场后标题已给出结论，推进线降权下移到协作图之后，头部只留一条结论行（前端UX设计.md §三）。
   const debateLive =
@@ -141,7 +166,10 @@ export function InlineTeamGraph({
   return (
     <ExecutionScopeContext.Provider value={messageId}>
       <ContextualTip tipId="inline_team_graph" placement="top" active>
-        <div className="animate-task-card-enter mb-3 overflow-hidden rounded-xl border border-border bg-card">
+        <div
+          ref={setHostNode}
+          className="animate-task-card-enter mb-3 overflow-hidden rounded-xl border border-border bg-card"
+        >
           {/* 辩论全过程 / 版本对比等「过程产物」不再内联聊天——它们归全屏放大态（统一辩论室 /
               统一「对比」视图），聊天正文状态条只留战绩 + 入口 CTA
               （协作图与双视图UX.md §六 两个入口：聊天内嵌 ⇄ 全屏放大）。
@@ -158,17 +186,17 @@ export function InlineTeamGraph({
               disclosureKey={`${messageId}:debate-progress`}
             />
           )}
-          {/* 折叠优先隐藏 GraphArea，勿卸载 ReactFlow（白板宿主常驻）。 */}
-          <div
-            className={expanded ? undefined : "hidden"}
-            aria-hidden={!expanded}
-          >
-            <GraphArea
-              messageId={messageId}
-              height={graphHeight}
-              onMeasure={onMeasure}
-            />
-          </div>
+          {expanded && (
+            <div
+              className="w-full select-none border-t border-border"
+              style={{ height: graphHeight }}
+              aria-hidden={!mountHost}
+            >
+              {mountHost ? (
+                <GraphArea messageId={messageId} onMeasure={onMeasure} />
+              ) : null}
+            </div>
+          )}
           {debateSettled && (
             <DebateProgressLine
               execution={execution}
@@ -183,11 +211,9 @@ export function InlineTeamGraph({
 
 function GraphArea({
   messageId,
-  height,
   onMeasure,
 }: {
   messageId: string;
-  height: number;
   onMeasure: (m: { height: number; overflowing: boolean }) => void;
 }) {
   const showRunDetail = useSidePanelStore((s) => s.showRunDetail);
@@ -204,10 +230,7 @@ function GraphArea({
   );
 
   return (
-    <div
-      className="w-full select-none border-t border-border"
-      style={{ height }}
-    >
+    <div className="h-full w-full">
       <GraphView
         interactive={false}
         fitMode="width"

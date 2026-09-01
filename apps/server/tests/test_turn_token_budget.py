@@ -26,63 +26,14 @@ from agentcore.runtime.turn.token_budget import (
 def test_engine_turn_token_ceiling_default():
     s = EngineSettings()
     assert s.engine_turn_token_ceiling == 30_000_000
-    assert s.engine_turn_token_delivery_reserve == 400_000
-    assert s.engine_nested_turn_token_ceiling == 8_000_000
-    assert s.engine_worker_token_ceiling == 4_000_000  # orthogonal
-
-
-def test_engine_nested_turn_token_ceiling_disable():
-    s = EngineSettings(engine_nested_turn_token_ceiling=0)
-    assert s.engine_nested_turn_token_ceiling == 0
+    assert s.engine_worker_token_ceiling == 8_000_000  # orthogonal
+    assert not hasattr(s, "engine_nested_turn_token_ceiling")
+    assert not hasattr(s, "engine_turn_token_delivery_reserve")
 
 
 def test_engine_turn_token_ceiling_disable():
     s = EngineSettings(engine_turn_token_ceiling=0)
     assert s.engine_turn_token_ceiling == 0
-
-
-def test_delivery_reserve_hit_window(monkeypatch):
-    from agentcore.runtime.turn.token_budget import is_turn_token_delivery_reserve_hit
-
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 1000,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_delivery_reserve",
-        lambda: 200,
-    )
-    token = bind_turn_token_meter(seed=0)
-    try:
-        assert not is_turn_token_delivery_reserve_hit()
-        record_turn_tokens(799)
-        assert not is_turn_token_delivery_reserve_hit()
-        record_turn_tokens(1)  # 800 = ceiling - reserve
-        assert is_turn_token_delivery_reserve_hit()
-        assert not is_turn_token_ceiling_hit()
-        record_turn_tokens(200)  # 1000 = hard ceiling
-        assert is_turn_token_ceiling_hit()
-        assert not is_turn_token_delivery_reserve_hit()  # hard owns the stop
-    finally:
-        reset_turn_token_meter(token)
-
-
-def test_delivery_reserve_off_when_reserve_ge_ceiling(monkeypatch):
-    from agentcore.runtime.turn.token_budget import is_turn_token_delivery_reserve_hit
-
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 100,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_delivery_reserve",
-        lambda: 100,
-    )
-    token = bind_turn_token_meter(seed=50)
-    try:
-        assert not is_turn_token_delivery_reserve_hit()
-    finally:
-        reset_turn_token_meter(token)
 
 
 def test_meter_records_and_hits(monkeypatch):
@@ -154,6 +105,41 @@ def test_log_llm_call_feeds_turn_meter(monkeypatch):
         reset_turn_token_meter(token)
 
 
+def test_log_llm_call_feeds_turn_meter_excludes_cache_hits(monkeypatch):
+    monkeypatch.setattr(
+        "agentcore.llm.observability.settings.log_llm_bodies",
+        False,
+    )
+    monkeypatch.setattr(
+        "agentcore.llm.pricing.calculate_cost",
+        lambda *a, **k: MagicMock(
+            total=0, credential_source="platform", pricing_source="curated"
+        ),
+    )
+    monkeypatch.setattr(
+        "agentcore.llm.pricing.resolve_credential_source",
+        lambda **k: "platform",
+    )
+    token = bind_turn_token_meter(seed=0)
+    try:
+        log_llm_call(
+            scenario="agent",
+            model="test-model",
+            usage=TokenUsage(
+                input_tokens=40,
+                output_tokens=10,
+                cache_hit_tokens=30,
+                cache_miss_tokens=10,
+            ),
+            finish_reason="stop",
+            latency_ms=1,
+            stream=False,
+        )
+        assert current_turn_tokens() == 20  # miss + output, not billing 50
+    finally:
+        reset_turn_token_meter(token)
+
+
 def test_tokens_from_journal_entries():
     entries = [
         {"kind": "turn_started", "payload": {}},
@@ -168,6 +154,23 @@ def test_tokens_from_journal_entries():
     ]
     assert tokens_from_journal_entries(entries) == 155
     assert tokens_from_journal_entries(None) == 0
+
+
+def test_tokens_from_journal_entries_uses_fuse_when_cache_split_present():
+    entries = [
+        {
+            "kind": "llm_call",
+            "payload": {
+                "usage": {
+                    "input": 100,
+                    "output": 20,
+                    "cache_hit": 80,
+                    "cache_miss": 20,
+                }
+            },
+        },
+    ]
+    assert tokens_from_journal_entries(entries) == 40  # miss 20 + output 20
 
 
 @pytest.mark.asyncio
@@ -276,131 +279,6 @@ async def test_materialise_turn_token_budget_skips():
 
 
 @pytest.mark.asyncio
-async def test_priority_reserve_admits_qa_cuts_secondary(monkeypatch):
-    """Reserve window: after ≥1 section done, cut remaining sections; still run QA."""
-    from agentcore.runtime.runs.plan import RunPlan
-    from agentcore.runtime.runs.types import Deliverable, RunState
-    from agentcore.runtime.runs.wave import WaveScheduler
-    from agentcore.runtime.turn.token_budget import is_turn_token_delivery_reserve_hit
-
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 1000,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_delivery_reserve",
-        lambda: 400,
-    )
-    token = bind_turn_token_meter(seed=0)
-    try:
-        plan = RunPlan()
-        plan.add(RunSpec(run_id="s0", role="区0", task="t", agent_id="s0"))
-        plan.add(RunSpec(run_id="s1", role="区1", task="t", agent_id="s1"))
-        plan.add(
-            RunSpec(
-                run_id="qa",
-                role="QA",
-                task="qa",
-                agent_id="qa",
-                depends_on=["s0", "s1"],
-                ceiling_priority=True,
-                deliverable=Deliverable(form="files"),
-            )
-        )
-        dispatched: list[str] = []
-
-        async def executor(spec, completed):
-            dispatched.append(spec.run_id)
-            # After first section, enter reserve window (spent ≥ 600).
-            if spec.run_id == "s0":
-                record_turn_tokens(650)
-                assert is_turn_token_delivery_reserve_hit()
-            return RunState(phase=RunPhase.COMPLETED, content="ok")
-
-        results = await WaveScheduler(max_parallel=1).run(
-            plan,
-            executor,
-            should_stop=is_turn_token_ceiling_hit,
-            priority_reserve_hit=is_turn_token_delivery_reserve_hit,
-        )
-        assert "s0" in dispatched
-        assert "qa" in dispatched
-        assert "s1" not in dispatched
-        assert results["s1"].phase is RunPhase.SKIPPED
-        assert results["qa"].phase is RunPhase.COMPLETED
-    finally:
-        reset_turn_token_meter(token)
-
-
-@pytest.mark.asyncio
-async def test_priority_reserve_admits_assemble_and_qa_cuts_secondary(monkeypatch):
-    """Wave3 D: assemble+QA both ceiling_priority; reserve cuts leftover sections."""
-    from agentcore.runtime.runs.plan import RunPlan
-    from agentcore.runtime.runs.types import Deliverable, RunState
-    from agentcore.runtime.runs.wave import WaveScheduler
-    from agentcore.runtime.turn.token_budget import is_turn_token_delivery_reserve_hit
-
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 1000,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_delivery_reserve",
-        lambda: 400,
-    )
-    token = bind_turn_token_meter(seed=0)
-    try:
-        plan = RunPlan()
-        plan.add(RunSpec(run_id="s0", role="区0", task="t", agent_id="s0"))
-        plan.add(RunSpec(run_id="s1", role="区1", task="t", agent_id="s1"))
-        plan.add(
-            RunSpec(
-                run_id="assemble",
-                role="组装",
-                task="assemble",
-                agent_id="assemble",
-                depends_on=["s0", "s1"],
-                ceiling_priority=True,
-            )
-        )
-        plan.add(
-            RunSpec(
-                run_id="qa",
-                role="QA",
-                task="qa",
-                agent_id="qa",
-                depends_on=["assemble"],
-                ceiling_priority=True,
-                deliverable=Deliverable(form="files"),
-            )
-        )
-        dispatched: list[str] = []
-
-        async def executor(spec, completed):
-            dispatched.append(spec.run_id)
-            if spec.run_id == "s0":
-                record_turn_tokens(650)
-                assert is_turn_token_delivery_reserve_hit()
-            return RunState(phase=RunPhase.COMPLETED, content="ok")
-
-        results = await WaveScheduler(max_parallel=1).run(
-            plan,
-            executor,
-            should_stop=is_turn_token_ceiling_hit,
-            priority_reserve_hit=is_turn_token_delivery_reserve_hit,
-        )
-        assert "s0" in dispatched
-        assert "assemble" in dispatched
-        assert "qa" in dispatched
-        assert "s1" not in dispatched
-        assert results["s1"].phase is RunPhase.SKIPPED
-        assert results["assemble"].phase is RunPhase.COMPLETED
-        assert results["qa"].phase is RunPhase.COMPLETED
-    finally:
-        reset_turn_token_meter(token)
-
-
-@pytest.mark.asyncio
 async def test_skip_qa_delivery_status_partial_with_honesty_gaps():
     from agentcore.runtime.delegate.delivery_status import build_delivery_status
     from agentcore.runtime.delegate.drive import _materialise_turn_token_budget_skips
@@ -424,7 +302,6 @@ async def test_skip_qa_delivery_status_partial_with_honesty_gaps():
             task="qa",
             agent_id="qa",
             depends_on=["s0"],
-            ceiling_priority=True,
             deliverable=Deliverable(
                 form="files",
                 artifacts=["site/QA.md"],
@@ -593,261 +470,6 @@ def test_turn_token_budget_gate_seed_round_trip():
     assert seed["turn_token_budget_gate_fired"] is True
     restored = create_loop_controller(frozenset(), seed=seed)
     assert restored.turn_token_budget_gate_fired is True
-
-
-def test_nested_envelope_isolates_from_parent_ceiling(monkeypatch):
-    """Wave hooks bind nested envelope stop; parent reserve is off while nested."""
-    from agentcore.runtime.turn.token_budget import (
-        bind_nested_envelope,
-        is_nested_envelope_hit,
-        is_turn_token_ceiling_hit,
-        release_nested_envelope,
-        reset_nested_envelope,
-        resolve_wave_budget_hooks,
-        try_reserve_nested_envelope,
-    )
-
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 1000,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_nested_turn_token_ceiling",
-        lambda: 400,
-    )
-    token = bind_turn_token_meter(seed=100)
-    try:
-        env = try_reserve_nested_envelope(depth=1)
-        assert env is not None
-        assert env.envelope == 400
-        assert env.baseline == 100
-        nest_tok = bind_nested_envelope(env)
-        try:
-            should_stop, priority = resolve_wave_budget_hooks(credential_source="user")
-            assert priority is None  # nested disables parent reserve
-            # Composed stop (= nested envelope OR turn auth-dead); identity may wrap.
-            assert should_stop() is is_nested_envelope_hit()
-            assert not is_nested_envelope_hit()
-            record_turn_tokens(399)
-            assert not is_nested_envelope_hit()
-            assert not is_turn_token_ceiling_hit()
-            record_turn_tokens(1)  # nested used=400 → envelope hit
-            assert is_nested_envelope_hit()
-            assert should_stop() is True
-        finally:
-            reset_nested_envelope(nest_tok)
-            release_nested_envelope(env)
-    finally:
-        reset_turn_token_meter(token)
-
-
-def test_nested_envelope_rejects_when_parent_remaining_zero(monkeypatch):
-    from agentcore.runtime.turn.token_budget import (
-        NestedEnvelopeRejected,
-        nested_turn_envelope_scope,
-        try_reserve_nested_envelope,
-    )
-
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 1000,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_nested_turn_token_ceiling",
-        lambda: 400,
-    )
-    token = bind_turn_token_meter(seed=1000)
-    try:
-        assert try_reserve_nested_envelope(depth=1) is None
-        with pytest.raises(NestedEnvelopeRejected), nested_turn_envelope_scope(depth=1):
-            pass
-    finally:
-        reset_turn_token_meter(token)
-
-
-def test_nested_envelope_parallel_reserve_no_double_claim(monkeypatch):
-    from agentcore.runtime.turn.token_budget import (
-        release_nested_envelope,
-        try_reserve_nested_envelope,
-    )
-
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 1000,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_nested_turn_token_ceiling",
-        lambda: 800,
-    )
-    token = bind_turn_token_meter(seed=200)
-    try:
-        a = try_reserve_nested_envelope(depth=1)
-        b = try_reserve_nested_envelope(depth=1)
-        assert a is not None and a.envelope == 800  # min(800, remaining 800)
-        # After A took 800, remaining=0 → B must fail.
-        assert b is None
-        release_nested_envelope(a)
-        c = try_reserve_nested_envelope(depth=1)
-        assert c is not None and c.envelope == 800
-        release_nested_envelope(c)
-    finally:
-        reset_turn_token_meter(token)
-
-
-@pytest.mark.asyncio
-async def test_nested_wave_ignores_parent_ceiling_until_envelope(monkeypatch):
-    """Parent ceiling appearing mid-flight must not cut nested tail before envelope."""
-    from agentcore.runtime.runs.plan import RunPlan
-    from agentcore.runtime.runs.wave import WaveScheduler
-    from agentcore.runtime.turn.token_budget import (
-        bind_nested_envelope,
-        is_nested_envelope_hit,
-        is_turn_token_ceiling_hit,
-        release_nested_envelope,
-        reset_nested_envelope,
-        resolve_wave_budget_hooks,
-        try_reserve_nested_envelope,
-    )
-
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 1000,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_nested_turn_token_ceiling",
-        lambda: 500,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_delivery_reserve",
-        lambda: 200,
-    )
-    token = bind_turn_token_meter(seed=0)
-    try:
-        env = try_reserve_nested_envelope(depth=1)
-        assert env is not None
-        assert env.envelope == 500
-        nest_tok = bind_nested_envelope(env)
-        try:
-            plan = RunPlan()
-            plan.add(RunSpec(run_id="a", role="基建", task="t", agent_id="a"))
-            plan.add(
-                RunSpec(
-                    run_id="b",
-                    role="整合",
-                    task="t2",
-                    agent_id="b",
-                    depends_on=["a"],
-                )
-            )
-            dispatched: list[str] = []
-            parent_hit = {"v": False}
-
-            def _parent_hit() -> bool:
-                return parent_hit["v"] or is_turn_token_ceiling_hit()
-
-            async def executor(spec, completed):
-                dispatched.append(spec.run_id)
-                if spec.run_id == "a":
-                    record_turn_tokens(100)
-                    # Simulate parent ceiling already true (e.g. sibling burn /
-                    # admission race) while nested envelope still has room.
-                    parent_hit["v"] = True
-                    assert _parent_hit()
-                    assert not is_nested_envelope_hit()
-                return RunState(phase=RunPhase.COMPLETED, content="ok")
-
-            should_stop, priority = resolve_wave_budget_hooks(credential_source="user")
-            # Nested hooks must NOT use parent ceiling — even if parent is "hit".
-            assert priority is None
-            assert should_stop() is is_nested_envelope_hit()
-            results = await WaveScheduler(max_parallel=1).run(
-                plan,
-                executor,
-                should_stop=should_stop,
-                priority_reserve_hit=priority,
-            )
-            assert dispatched == ["a", "b"]
-            assert results["b"].phase is RunPhase.COMPLETED
-        finally:
-            reset_nested_envelope(nest_tok)
-            release_nested_envelope(env)
-    finally:
-        reset_turn_token_meter(token)
-
-
-@pytest.mark.asyncio
-async def test_nested_disables_parent_priority_reserve_cut(monkeypatch):
-    """Nested path must not cut secondary nodes via parent delivery reserve."""
-    from agentcore.runtime.runs.plan import RunPlan
-    from agentcore.runtime.runs.types import Deliverable
-    from agentcore.runtime.runs.wave import WaveScheduler
-    from agentcore.runtime.turn.token_budget import (
-        bind_nested_envelope,
-        is_turn_token_delivery_reserve_hit,
-        release_nested_envelope,
-        reset_nested_envelope,
-        resolve_wave_budget_hooks,
-        try_reserve_nested_envelope,
-    )
-
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 1000,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_nested_turn_token_ceiling",
-        lambda: 800,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_delivery_reserve",
-        lambda: 400,
-    )
-    token = bind_turn_token_meter(seed=500)
-    try:
-        env = try_reserve_nested_envelope(depth=1)
-        assert env is not None
-        nest_tok = bind_nested_envelope(env)
-        try:
-            # Enter parent reserve window (spent ≥ 600) without hitting nested envelope.
-            record_turn_tokens(150)
-            assert is_turn_token_delivery_reserve_hit()
-            should_stop, priority = resolve_wave_budget_hooks(credential_source="user")
-            assert priority is None
-
-            plan = RunPlan()
-            plan.add(RunSpec(run_id="s0", role="区0", task="t", agent_id="s0"))
-            plan.add(RunSpec(run_id="s1", role="区1", task="t", agent_id="s1"))
-            plan.add(
-                RunSpec(
-                    run_id="qa",
-                    role="QA",
-                    task="qa",
-                    agent_id="qa",
-                    depends_on=["s0", "s1"],
-                    ceiling_priority=True,
-                    deliverable=Deliverable(form="files"),
-                )
-            )
-            dispatched: list[str] = []
-
-            async def executor(spec, completed):
-                dispatched.append(spec.run_id)
-                return RunState(phase=RunPhase.COMPLETED, content="ok")
-
-            results = await WaveScheduler(max_parallel=1).run(
-                plan,
-                executor,
-                should_stop=should_stop,
-                priority_reserve_hit=priority,
-            )
-            # Without parent reserve cut, all nodes run.
-            assert set(dispatched) == {"s0", "s1", "qa"}
-            assert results["s1"].phase is RunPhase.COMPLETED
-        finally:
-            reset_nested_envelope(nest_tok)
-            release_nested_envelope(env)
-    finally:
-        reset_turn_token_meter(token)
 
 
 def test_delivery_status_continue_skipped_runs_not_continue_writing():

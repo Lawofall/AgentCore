@@ -63,13 +63,13 @@ async def _apply_local_destructive_baseline_gate(
     name = (tool_name or "").strip()
     from agentcore.tools.builtin.host import host_call_is_shell
 
-    if name not in {"terminal", "code_execute"} and not (
+    if name not in {"run"} and not (
         name == "host" and host_call_is_shell(args)
     ):
         return existing
-    if name == "terminal":
-        sub = str(args.get("subcommand") or "").strip().lower()
-        if sub and sub != "start":
+    if name == "run":
+        action = str(args.get("action") or "").strip().lower()
+        if action in {"read", "stop", "list"}:
             return existing
 
     fs_hit = scan_destructive_fs(command_text_for_tool(name, args))

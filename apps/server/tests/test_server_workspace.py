@@ -164,6 +164,17 @@ async def test_list_on_file_raises_not_a_directory(tmp_path: Path):
         await _ws(tmp_path).list("f.txt", "*")
 
 
+async def test_list_tree_missing_raises_path_not_found(tmp_path: Path):
+    with pytest.raises(PathNotFound):
+        await _ws(tmp_path).list_tree("ghost/dir")
+
+
+async def test_list_tree_file_raises_not_a_directory(tmp_path: Path):
+    (tmp_path / "f.txt").write_text("x", encoding="utf-8")
+    with pytest.raises(NotADirectory):
+        await _ws(tmp_path).list_tree("f.txt")
+
+
 async def test_list_missing_declared_stage_dir_returns_empty(tmp_path: Path):
     """约定出口尚未落盘：list → []（不预创建、不抛 NotADirectory）。"""
     from agentcore.workspace.stage_dirs import RESEARCH_DIR

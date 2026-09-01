@@ -289,6 +289,8 @@ class AccountRuleDoc(BaseModel):
     content: str
     # Retrieval summary for the 规则目录; on_demand entries are picked by this, not by body.
     description: str = ""
+    # Injection scope (None = global). Sidecar joins always-on <设定> by folder, not author.
+    folder_id: str | None = None
 
 
 class AccountRulesListResponse(BaseModel):
@@ -312,10 +314,24 @@ class AccountRulesListResponse(BaseModel):
 def _rule_docs(docs: Sequence[Document]) -> list[AccountRuleDoc]:
     return [
         AccountRuleDoc(
-            name=d.name, content=d.content or "", description=d.description or ""
+            name=d.name,
+            content=d.content or "",
+            description=d.description or "",
+            folder_id=str(d.folder_id) if d.folder_id else None,
         )
         for d in docs
     ]
+
+
+async def _folder_scope_is_live(
+    session: AsyncSession, user_id: str, folder_id: str | None
+) -> bool:
+    """False when ``folder_id`` names a missing or soft-deleted desk (global is live)."""
+    if not folder_id:
+        return True
+    return (
+        await FolderRepository(session).get_by_id(folder_id, user_id=user_id)
+    ) is not None
 
 
 @router.post("/rules/list", response_model=AccountRulesListResponse)
@@ -332,8 +348,10 @@ async def list_account_user_rules(
             body.folder_id, user_id=user.user_id
         )
         if body.folder_id not in folder_chain:
-            folder_chain = [body.folder_id]
+            # Missing / soft-deleted: empty chain, not「只当前层」.
+            folder_chain = []
     ancestors = folder_chain[:-1]
+    current_id = folder_chain[-1] if folder_chain else None
 
     ancestor_docs: list[Document] = []
     ancestor_on_demand: list[Document] = []
@@ -345,12 +363,12 @@ async def list_account_user_rules(
 
     project_docs: Sequence[Document] = []
     project_on_demand: Sequence[Document] = []
-    if body.folder_id:
+    if current_id:
         project_docs = await repo.list_injectable_rules(
-            user.user_id, body.folder_id, ai_maintained=False
+            user.user_id, current_id, ai_maintained=False
         )
         project_on_demand = await repo.list_on_demand_user_rules(
-            user.user_id, body.folder_id
+            user.user_id, current_id
         )
     return AccountRulesListResponse(
         global_rules=_rule_docs(
@@ -440,8 +458,10 @@ async def list_account_memory(
 
     Carries each note's retrieval ``description`` and its ``disputed`` mark so a sidecar
     warm builds the same directory — and skips the same user-disputed entries — as an
-    in-process turn.
+    in-process turn. A soft-deleted folder is an empty scope (设定 hibernates with the desk).
     """
+    if not await _folder_scope_is_live(session, user.user_id, body.scope):
+        return AccountMemoryListResponse(files=[])
     store = DocumentMemoryStore(session)
     metas = await store.list(user.user_id, body.scope)
     return AccountMemoryListResponse(
@@ -472,9 +492,11 @@ async def load_account_memory(
     user: AccountApiUser,
     session: AsyncSession = Depends(get_db),
 ) -> AccountMemoryLoadResponse:
-    """Load one memory note body; missing path → empty string (soft)."""
+    """Load one memory note body; missing path / hibernating folder → empty string (soft)."""
     path = (body.path or "").strip()
     if not path:
+        return AccountMemoryLoadResponse(content="")
+    if not await _folder_scope_is_live(session, user.user_id, body.scope):
         return AccountMemoryLoadResponse(content="")
     store = DocumentMemoryStore(session)
     content = await store.load(user.user_id, path, body.scope)

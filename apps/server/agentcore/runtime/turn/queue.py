@@ -462,6 +462,7 @@ async def _start_queued_turn(conversation_id: str, item: QueuedTurn) -> None:
                 llm_supports_tools=item.llm_supports_tools,
                 x_client_platform=item.x_client_platform,
                 agent_mentions=item.agent_mentions,
+                existing_user_message_id=item.user_message_id,
             )
         )
     turn_runs.register(

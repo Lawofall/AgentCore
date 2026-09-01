@@ -213,11 +213,11 @@ async def test_execute_tools_not_found_mentions_protocol_strip():
 
 @pytest.mark.asyncio
 async def test_execute_tools_worker_only_miss_is_actionable_policy():
-    """CEO-style empty registry calling code_execute must not look like a typo."""
+    """CEO-style empty registry calling run must not look like a typo."""
     reg = ToolRegistry()
     tc = ToolCall(
         id="c1",
-        function=ToolCallFunction(name="code_execute", arguments="{}"),
+        function=ToolCallFunction(name="run", arguments="{}"),
     )
     ctx = ToolContext.create(
         execution_id="e",
@@ -229,12 +229,12 @@ async def test_execute_tools_worker_only_miss_is_actionable_policy():
     msgs, _, attempts = await execute_tools([tc], reg, ctx, EventSink(), approval_gate=None)
     assert attempts[0].success is False
     assert attempts[0].policy_failure is True
-    assert "delegate" in msgs[0].content
+    assert "未装配" in msgs[0].content
     assert "not found" not in msgs[0].content.lower()
 
 
 @pytest.mark.asyncio
-async def test_execute_tools_file_write_miss_points_to_delegate():
+async def test_execute_tools_file_write_miss_is_not_assembled():
     reg = ToolRegistry()
     tc = ToolCall(
         id="c1",
@@ -248,9 +248,10 @@ async def test_execute_tools_file_write_miss_points_to_delegate():
         user_id="u",
     )
     msgs, _, attempts = await execute_tools([tc], reg, ctx, EventSink(), approval_gate=None)
+    assert attempts[0].success is False
     assert attempts[0].policy_failure is True
-    assert "delegate" in msgs[0].content
-    assert "worker" in msgs[0].content.lower() or "委派" in msgs[0].content
+    assert "未装配" in msgs[0].content
+    assert "not found" not in msgs[0].content.lower()
 
 
 def test_debrief_strips_protocol_tags_from_handoff_fields():

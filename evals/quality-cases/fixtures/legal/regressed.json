@@ -6,8 +6,8 @@
   "symptom": "同一案在新窗同形态再失败，标复发",
   "family": "run_failed",
   "family_candidate": null,
-  "suspected_knobs": ["skill:verify_and_fix"],
-  "knobs_changed": ["skill:verify_and_fix"],
+  "suspected_knobs": ["tool:run"],
+  "knobs_changed": ["tool:run"],
   "evidence": {
     "traces": [],
     "conversations": [],

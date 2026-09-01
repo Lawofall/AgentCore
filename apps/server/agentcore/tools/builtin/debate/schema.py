@@ -10,8 +10,8 @@ from agentcore.runtime.debate import DebateForm, DebateSide
 from agentcore.runtime.debate.constants import (
     CLOSING_LENGTH_HINT,
     CX_LENGTH_HINT,
-    DEBATE_FORM_VALUES,
     DEBATE_OUTPUT_LIMIT,
+    DEBATE_SCHEMA_FORM_VALUES,
     FORM_LABELS,
     LENGTH_HINT,
     QUICK_DEBATER_HINT,
@@ -67,12 +67,9 @@ _STANCE_RETRY_TIP = (
     "请改写成一句立场倾向后重试本工具。"
 )
 
-# Schema layer (工具面瘦身): short trigger + key param cues. HOW → debate_and_review skill.
+# Schema layer: short trigger. 入口分流 HOW → debate_and_review skill（不在此逐句双写）。
 DEBATE_DESCRIPTION = (
     "用户点名才开：主持人驱动结构化正反辩论，交回【决策简报+交锋叙事线】（非终结）。"
-    "form=debate 正反；挑刺/压测走 delegate 审校岗；多视角走 delegate。"
-    "必填 motion+form+sides（≥2）；轮数/收敛主持人自调。"
-    "独立并行调研用 delegate；无对立面/单点事实勿用。"
     "HOW→consult(debate_and_review)。"
 )
 
@@ -85,11 +82,8 @@ DEBATE_PARAMETERS = {
         },
         "form": {
             "type": "string",
-            "enum": list(DEBATE_FORM_VALUES),
-            "description": (
-                "正反攻防（debate）。挑刺/压测走 delegate 审校岗；"
-                "多视角走 delegate。流程细节→debate_and_review。"
-            ),
+            "enum": list(DEBATE_SCHEMA_FORM_VALUES),
+            "description": "取值：正反。",
         },
         "sides": {
             "type": "array",
@@ -163,6 +157,11 @@ def err(msg: str) -> ToolResult:
 
 
 def parse_form(raw: Any) -> DebateForm:
+    """接受 DebateForm 全员（含历史 red_team / roundtable）；缺省或非法回落 debate。
+
+    schema 广告子集是 :data:`~agentcore.runtime.debate.constants.DEBATE_SCHEMA_FORM_VALUES`，
+    不在此硬拒旧 form。
+    """
     if isinstance(raw, str):
         try:
             return DebateForm(raw.strip())

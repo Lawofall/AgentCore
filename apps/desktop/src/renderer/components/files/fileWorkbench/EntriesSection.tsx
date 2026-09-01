@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui";
+import { Badge, ConfirmDialog } from "@/components/ui";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -18,6 +18,7 @@ import {
   setDocumentDisputed,
   updateDocumentApplyMode,
 } from "@/services/documents";
+import { type MemoryKind, writeMemoryFile } from "@/services/memory";
 import {
   GLOBAL_PREFERENCES_PATH,
   GLOBAL_PROFILE_PATH,
@@ -29,6 +30,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Eraser,
   FileText,
   History,
   Loader2,
@@ -68,11 +70,22 @@ const ROW_CHARS_FLOOR = 1000;
 /** Fixed AI core leaf names (aligned with server ``memory.store`` / write_guards). */
 const AI_CORE_NAMES = new Set(["偏好.md", "画像.md", "导航.md"]);
 
-/** AI-maintained 画像 / 偏好 / 导航 — undeletable; topics stay deletable. */
+/** AI-maintained 画像 / 偏好 / 导航 — named slots; clear via empty PUT, not DELETE. */
 export function isAiCoreMemoryLeaf(
   doc: Pick<DocumentNode, "name" | "aiMaintained">,
 ): boolean {
   return doc.aiMaintained && AI_CORE_NAMES.has(doc.name);
+}
+
+/** Map a core leaf onto the per-file memory write surface; ``null`` = not a core. */
+export function coreMemoryLeafKind(
+  doc: Pick<DocumentNode, "name" | "aiMaintained" | "folderId">,
+): MemoryKind | null {
+  if (!isAiCoreMemoryLeaf(doc)) return null;
+  if (doc.name === "偏好.md") return "preferences";
+  if (doc.name === "画像.md") return "profile";
+  if (doc.name === "导航.md") return "navigation";
+  return null;
 }
 
 /** Ensure an entry name is markdown so it opens in the shared editor. */
@@ -222,6 +235,8 @@ export function EntriesSection({
   const folderId = scope.kind === "folder" ? scope.folderId : null;
   const [disputing, setDisputing] = useState<DocumentNode | null>(null);
   const [disputeBusy, setDisputeBusy] = useState(false);
+  const [clearing, setClearing] = useState<DocumentNode | null>(null);
+  const [clearBusy, setClearBusy] = useState(false);
 
   const entries = useQuery({
     queryKey: [...ENTRIES_QUERY_KEY, folderId ?? "global"],
@@ -264,6 +279,28 @@ export function EntriesSection({
       await refresh();
     } catch (e) {
       notifyError(e, "删除失败");
+    }
+  };
+
+  const confirmClearCoreLeaf = async () => {
+    const doc = clearing;
+    if (!doc || clearBusy) return;
+    const kind = coreMemoryLeafKind(doc);
+    if (!kind) return;
+    setClearBusy(true);
+    try {
+      const result = await writeMemoryFile(kind, "", null, doc.folderId);
+      if (!result.ok) {
+        notifyError("这篇设定刚被改过，请刷新后再试。", "清空失败");
+        return;
+      }
+      onDeleted(entryOpenTarget(doc));
+      setClearing(null);
+      await refresh();
+    } catch (e) {
+      notifyError(e, "清空失败");
+    } finally {
+      setClearBusy(false);
     }
   };
 
@@ -313,7 +350,6 @@ export function EntriesSection({
     const mode = doc.applyMode;
     const other: DocumentApplyMode = mode === "always" ? "on_demand" : "always";
     const canToggleApply = !doc.aiMaintained && !doc.frontmatterError;
-    const canDelete = !isAiCoreMemoryLeaf(doc);
     const disputed = doc.disputedAt != null;
     const target = entryOpenTarget(doc);
     return (
@@ -377,14 +413,20 @@ export function EntriesSection({
             <Pencil size={14} className="shrink-0" />
             <span className="flex-1 truncate">重命名</span>
           </ContextMenuItem>
-          <ContextMenuItem
-            variant="danger"
-            disabled={!canDelete}
-            onSelect={() => void removeEntry(doc)}
-          >
-            <Trash2 size={14} className="shrink-0" />
-            <span className="flex-1 truncate">删除</span>
-          </ContextMenuItem>
+          {isAiCoreMemoryLeaf(doc) ? (
+            <ContextMenuItem variant="danger" onSelect={() => setClearing(doc)}>
+              <Eraser size={14} className="shrink-0" />
+              <span className="flex-1 truncate">清空</span>
+            </ContextMenuItem>
+          ) : (
+            <ContextMenuItem
+              variant="danger"
+              onSelect={() => void removeEntry(doc)}
+            >
+              <Trash2 size={14} className="shrink-0" />
+              <span className="flex-1 truncate">删除</span>
+            </ContextMenuItem>
+          )}
         </ContextMenuContent>
       </ContextMenu>
     );
@@ -483,6 +525,18 @@ export function EntriesSection({
           if (!open) setDisputing(null);
         }}
         onConfirm={() => void confirmDispute()}
+      />
+      <ConfirmDialog
+        open={clearing != null}
+        onOpenChange={(open) => {
+          if (!open) setClearing(null);
+        }}
+        title={clearing ? `清空「${clearing.name}」？` : "清空这篇设定？"}
+        description="下一句对话 AI 不再使用这篇。列表里还会留下这个名字，方便以后再写。项目文件不会被删。"
+        confirmLabel="清空"
+        tone="danger"
+        busy={clearBusy}
+        onConfirm={() => void confirmClearCoreLeaf()}
       />
     </div>
   );

@@ -85,6 +85,23 @@ export function findCatalogItem(
   return matches.find((m) => m.available) ?? matches[0];
 }
 
+/** Whether this profile slot's catalog row lists ``vision``. */
+export function slotHasCatalogVision(
+  slot: {
+    model: string;
+    origin: ModelCatalogItem["origin"];
+    provider_id?: string | null;
+  },
+  catalogModels: ModelCatalogItem[],
+): boolean {
+  const item = findCatalogItem(catalogModels, {
+    id: slot.model,
+    origin: slot.origin,
+    providerId: slot.provider_id,
+  });
+  return (item?.capabilities ?? []).includes("vision");
+}
+
 /** List the models this user may pick + the account's currently-resolved model. */
 export function getModels(): Promise<ModelCatalog> {
   return api.get<ModelCatalog>("/v1/users/me/models");

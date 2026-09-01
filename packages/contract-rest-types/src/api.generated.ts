@@ -285,7 +285,7 @@ export interface paths {
          *
          *     Carries each note's retrieval ``description`` and its ``disputed`` mark so a sidecar
          *     warm builds the same directory — and skips the same user-disputed entries — as an
-         *     in-process turn.
+         *     in-process turn. A soft-deleted folder is an empty scope (设定 hibernates with the desk).
          */
         post: operations["list_account_memory_v1_account_memory_list_post"];
         delete?: never;
@@ -305,7 +305,7 @@ export interface paths {
         put?: never;
         /**
          * Load Account Memory
-         * @description Load one memory note body; missing path → empty string (soft).
+         * @description Load one memory note body; missing path / hibernating folder → empty string (soft).
          */
         post: operations["load_account_memory_v1_account_memory_load_post"];
         delete?: never;
@@ -3861,8 +3861,10 @@ export interface paths {
          * Delete Document
          * @description Soft-delete a node and (for a folder) its whole subtree.
          *
-         *     AI-maintained core leaves (偏好 / 画像 / 导航) are undeletable; on-demand
-         *     AI topics and user-owned entries remain deletable.
+         *     AI-maintained core leaves (偏好 / 画像 / 导航) keep their protocol names, so
+         *     this DELETE is refused. Empty the body instead (``PUT …/memory/files/{kind}``
+         *     with empty content) — injection skips the empty note; the list still shows
+         *     a placeholder. On-demand AI topics and user-owned entries remain deletable.
          */
         delete: operations["delete_document_v1_documents__document_id__delete"];
         options?: never;
@@ -6562,6 +6564,8 @@ export interface components {
              * @default
              */
             description: string;
+            /** Folder Id */
+            folder_id?: string | null;
             /** Name */
             name: string;
         };
@@ -13352,7 +13356,7 @@ export interface components {
         /**
          * UpdateLlmModelProfileRequest
          * @description Partial update. Omitted fields unchanged; explicit null on worker/background/vision
-         *     clears the slot (worker/background → follow_main; vision → no slot / platform fallback).
+         *     clears the slot (worker/background → follow_main; vision → no dedicated slot).
          */
         UpdateLlmModelProfileRequest: {
             background?: components["schemas"]["ModelProfileSlot"] | null;

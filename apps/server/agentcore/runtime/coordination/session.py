@@ -28,7 +28,6 @@ from agentcore.runtime.coordination.session_types import (
     DEFAULT_COORDINATION_BUDGET,  # noqa: F401 — public re-export
     DEFAULT_DECISION_BUDGET,
     DEFAULT_PROGRESS_BUDGET,
-    DEFAULT_WORKER_TIMEOUT_S,  # noqa: F401 — public re-export
     MAX_COORDINATION_BUDGET,  # noqa: F401 — public re-export
     MAX_DECISION_BUDGET,  # noqa: F401 — public re-export
     MAX_PROGRESS_BUDGET,  # noqa: F401 — public re-export
@@ -198,11 +197,11 @@ class CoordinationSession(
     # Explicit user /stop cascaded cancel — release_turn_coordination must clear
     # (not detach) so the background drive does not outlive the stopped turn.
     user_stopped: bool = False
-    # Sticky local workspace channel dead (process-local).
+    # Presence-disconnect stamp (desktop gone). Cleared when the fulfiller returns.
     workspace_channel_dead: bool = False
     # One-shot host content_delta for CHANNEL_DEAD_USER_VISIBLE already emitted.
     channel_dead_user_notice_emitted: bool = False
-    # Sticky: code_execute/test_run family retired on exec-env hangs / probe fail.
+    # Sticky: run family retired on exec-env hangs / probe fail.
     exec_env_dead: bool = False
     # Classified probe reason (``exec_env_no_interpreter`` / ``…_probe_timeout`` /
     # ``…_spawn_denied``), so CEO inject repeats the same honest cause

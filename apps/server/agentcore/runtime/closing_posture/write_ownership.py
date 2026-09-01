@@ -129,12 +129,13 @@ def note_unresolved_write_ownership_from_ledger(
     run_ids: set[str] | frozenset[str] | list[str] | None = None,
     coordinator: Any = None,
 ) -> tuple[str, ...]:
-    """Stamp or clear latch from ledger scan. Returns still-unresolved paths."""
-    return reconcile_unresolved_write_ownership_latch(
-        execution_id=execution_id,
-        run_ids=run_ids,
-        coordinator=coordinator,
-    )
+    """Stamp or clear latch from ledger scan. Returns still-unresolved paths.
+
+    Write occupancy is the tool call (CAS + disk serial). Ledger owners are not
+    a blocking delivery gap.
+    """
+    _ = execution_id, run_ids, coordinator
+    return ()
 
 
 def run_ids_for_write_ownership_scan(
@@ -231,25 +232,9 @@ def downgrade_verdict_for_unresolved_write_ownership(
 
 
 def apply_write_ownership_honesty_for_session(session: Any) -> tuple[str, ...]:
-    """Re-stamp latch + downgrade when adopting a live coordination session (harvest)."""
-    if session is None:
-        return ()
-    coord = getattr(session, "file_ownership", None)
-    if coord is None:
-        return ()
-    eid = (getattr(session, "execution_id", None) or "").strip() or None
-    paths = note_unresolved_write_ownership_from_ledger(
-        execution_id=eid,
-        run_ids=run_ids_for_write_ownership_scan(session=session),
-        coordinator=coord,
-    )
-    if paths:
-        downgrade_verdict_for_unresolved_write_ownership(
-            execution_id=eid,
-            run_ids=run_ids_for_write_ownership_scan(session=session),
-            coordinator=coord,
-        )
-    return paths
+    """No-op: run-lifetime write locks are gone; harvest must not latch them."""
+    _ = session
+    return ()
 
 
 def enforce_write_ownership_honesty(content: str) -> str:

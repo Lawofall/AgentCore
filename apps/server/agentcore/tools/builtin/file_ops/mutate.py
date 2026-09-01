@@ -10,16 +10,11 @@ from typing import Any, Literal
 from agentcore.core.logging import get_logger
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.runtime.engine.write_args_clear import cleared_write_stub_rejection
-from agentcore.tools.builtin.code_integrity import (
-    code_omission_rejection,
-    code_structure_rejection,
-    is_brace_code_path,
-)
 from agentcore.tools.builtin.write_diagnostics import attach_write_diagnostics
 from agentcore.tools.file_products import file_product
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
-    AUDIENCE_WORKER_ONLY,
+    AUDIENCE_BOTH,
     FileProductsContract,
     ToolRegistration,
     ToolSurface,
@@ -42,7 +37,6 @@ from .errors import (
     _write_io_error,
 )
 from .integrity import (
-    _SUBSTANTIAL_FILE_CHARS,
     _claim_write_path,
     _mark_landed_files,
     _norm_rel_path,
@@ -50,15 +44,10 @@ from .integrity import (
     _reject_write_scope,
     classify_write_kind,
     format_artifact_manifest,
-    has_omission_marker,
     has_skeleton_markers,
-    is_hard_severe_shrink,
     is_skeleton_content,
-    is_substantial_existing_body,
-    overwrite_integrity_nudge,
     prose_append_rejection,
-    prose_omission_rejection,
-    severe_shrink_rejection,
+    stale_overwrite_rejection,
 )
 from .read import _format_numbered_lines
 
@@ -71,12 +60,16 @@ logger = get_logger(__name__)
 # 回显有界（行数 + 字符双上限），大文件不炸 token。
 _EDIT_ECHO_CONTEXT = 3
 _EDIT_ECHO_MAX_LINES = 24
-# str_replace 失败回执：从磁盘带回有界片段（编辑以盘为真源）；不放开通用 file_read 上限。
+# str_replace 失败回执：从磁盘带回有界片段（编辑以盘为真源）。
 _EDIT_FAIL_CONTEXT = 3
 _EDIT_FAIL_MAX_LINES = 24
 _EDIT_FAIL_FUZZY_MAX = 3
 _EDIT_FAIL_FUZZY_MIN_RATIO = 0.45
 _EDIT_FAIL_OLD_PREVIEW_CHARS = 160
+# 不唯一时：邻行扩到「整段在文件中只出现一次、且只含这一处 old_string」。
+# 不自动改盘（两处都合法时不能猜）；只把可复制锚交给下一刀。
+_UNIQUE_ANCHOR_MAX_EXTRA = 4
+_UNIQUE_ANCHOR_MAX_CHARS = 800
 
 def _region_slice(
     lines: list[str], center_idx0: int, *, context: int, max_lines: int
@@ -149,6 +142,71 @@ def _fuzzy_line_candidates(
     return out
 
 
+def _old_string_line_span(old_string: str) -> int:
+    text = old_string.replace("\r\n", "\n").replace("\r", "\n")
+    if not text:
+        return 0
+    if text.endswith("\n"):
+        return text.count("\n")
+    return text.count("\n") + 1
+
+
+def _exact_match_offsets(content: str, old_string: str) -> list[int]:
+    """Non-overlapping start offsets (same count口径 as workspace ``replace``)."""
+    if not old_string:
+        return []
+    out: list[int] = []
+    start = 0
+    step = max(1, len(old_string))
+    while True:
+        idx = content.find(old_string, start)
+        if idx < 0:
+            return out
+        out.append(idx)
+        start = idx + step
+
+
+def _match_first_region(
+    lines: list[str], *, start_idx0: int, span: int
+) -> tuple[int, list[str]]:
+    """Snippet starts at the hit line so a short UI preview still shows old_string."""
+    if not lines:
+        return 1, []
+    start0 = max(0, min(start_idx0, len(lines) - 1))
+    end0 = min(len(lines), start0 + max(span, 1) + _EDIT_FAIL_CONTEXT)
+    if end0 - start0 > _EDIT_FAIL_MAX_LINES:
+        end0 = start0 + _EDIT_FAIL_MAX_LINES
+    return start0 + 1, lines[start0:end0]
+
+
+def _expand_unique_anchor(
+    content: str, old_string: str, match_idx: int
+) -> str | None:
+    """Smallest neighbor window that is unique and contains this old_string once."""
+    if not old_string or match_idx < 0 or match_idx >= len(content):
+        return None
+    raw_lines = content.splitlines(keepends=True)
+    if not raw_lines:
+        return None
+    start_line = content[:match_idx].count("\n")
+    span = _old_string_line_span(old_string)
+    for extra_total in range(1, 2 * _UNIQUE_ANCHOR_MAX_EXTRA + 1):
+        for before in range(0, extra_total + 1):
+            after = extra_total - before
+            if before > _UNIQUE_ANCHOR_MAX_EXTRA or after > _UNIQUE_ANCHOR_MAX_EXTRA:
+                continue
+            i0 = max(0, start_line - before)
+            i1 = min(len(raw_lines), start_line + span + after)
+            candidate = "".join(raw_lines[i0:i1])
+            if not candidate or len(candidate) > _UNIQUE_ANCHOR_MAX_CHARS:
+                continue
+            if candidate.count(old_string) != 1:
+                continue
+            if content.count(candidate) == 1:
+                return candidate
+    return None
+
+
 def _exact_match_regions(
     content: str, old_string: str, *, max_show: int = _EDIT_FAIL_FUZZY_MAX
 ) -> list[tuple[int, list[str]]]:
@@ -156,21 +214,12 @@ def _exact_match_regions(
     lines = content.splitlines()
     if not lines or not old_string:
         return []
+    span = _old_string_line_span(old_string)
     out: list[tuple[int, list[str]]] = []
-    start_search = 0
-    while len(out) < max_show:
-        idx = content.find(old_string, start_search)
-        if idx < 0:
-            break
+    for idx in _exact_match_offsets(content, old_string)[:max_show]:
         line_idx0 = content[:idx].count("\n")
-        start, region = _region_slice(
-            lines,
-            line_idx0,
-            context=_EDIT_FAIL_CONTEXT,
-            max_lines=_EDIT_FAIL_MAX_LINES,
-        )
+        start, region = _match_first_region(lines, start_idx0=line_idx0, span=span)
         out.append((start, region))
-        start_search = idx + max(1, len(old_string))
     return out
 
 
@@ -197,7 +246,7 @@ async def _assemble_str_replace_fail_receipt(
     kind: Literal["no_match", "ambiguous"],
     match_count: int | None = None,
 ) -> str:
-    """Disk-backed failure receipt for ``str_replace`` (bounded snippets; no sticky re-read).
+    """Disk-backed failure receipt for ``str_replace`` (bounded snippets).
 
     Backend still raises ``NoMatch`` / ``AmbiguousMatch``; this only enriches the tool
     error so the model can re-anchor from disk instead of inventing a skeleton rewrite.
@@ -228,16 +277,25 @@ async def _assemble_str_replace_fail_receipt(
 
     blocks: list[str] = []
     if kind == "ambiguous" and old_string:
-        for i, (start, region) in enumerate(
-            _exact_match_regions(content, old_string), start=1
+        offsets = _exact_match_offsets(content, old_string)
+        regions = _exact_match_regions(content, old_string)
+        for i, ((start, region), idx) in enumerate(
+            zip(regions, offsets, strict=True), start=1
         ):
-            blocks.append(
-                _format_fail_snippet_block(
-                    label=f"精确命中 #{i}",
-                    start_line=start,
-                    region=region,
-                )
+            block = _format_fail_snippet_block(
+                label=f"精确命中 #{i}",
+                start_line=start,
+                region=region,
             )
+            anchor = _expand_unique_anchor(content, old_string, idx)
+            if anchor:
+                from agentcore.core.secrets import redact_secrets
+
+                block += (
+                    "\n下一刀请把下面整段当作 old_string（邻行已补，文件中唯一）：\n"
+                    f"```\n{redact_secrets(anchor)}\n```"
+                )
+            blocks.append(block)
         if match_count is not None and match_count > len(blocks):
             blocks.append(f"（另有 {match_count - len(blocks)} 处未列出）")
     else:
@@ -334,21 +392,17 @@ class FileWriteTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
     )
 
     @property
     def schema(self) -> ToolSchema:
-        # Schema layer (工具面瘦身): 主路径 + 不硬拒字数 + 引擎硬拒一句。
-        # 反例 / 清参 HOW → consult(long_form_landing)。
+        # Schema layer: 这是什么 + HOW。落盘姿势在 consult(long_form_landing)。
         return ToolSchema(
             name="file_write",
             description=(
                 "把内容写入文件：创建（含上级目录）或整体覆盖已有文件。"
-                "路径须相对工作区。【主路径】一次写入完整正文（含超长；不硬拒字数）。"
-                "成篇后修订【优先】str_replace。"
-                "引擎硬拒：省略标记、覆盖成篇缩水 50% 且 ≥800 字、代码括号不完整/含省略。"
                 "HOW→consult(long_form_landing)。"
             ),
             parameters={
@@ -363,15 +417,7 @@ class FileWriteTool:
                     },
                     "content": {
                         "type": "string",
-                        "description": "要写入的完整正文；含省略标记会硬拒。",
-                    },
-                    "allow_shrink": {
-                        "type": "boolean",
-                        "description": (
-                            "显式允许大幅缩水覆盖（默认 false）。仅当用户明确要求"
-                            "删大半 / 精简 / 推倒重建时设 true；普通修订勿开。"
-                        ),
-                        "default": False,
+                        "description": "要写入的完整正文。",
                     },
                 },
                 "required": ["path", "content"],
@@ -388,7 +434,6 @@ class FileWriteTool:
 
         requested_path = arguments.get("path", "")
         content = arguments.get("content", "")
-        allow_shrink = bool(arguments.get("allow_shrink", False))
 
         # A missing/empty path resolves to the workspace root (a directory); writing
         # onto it raises a cryptic OS error (Permission denied / IsADirectory) that
@@ -407,8 +452,8 @@ class FileWriteTool:
         if scope_denied is not None:
             return scope_denied
 
-        # 并行写隔离·硬约束 (C3): refuse overwrite when another run owns the path.
-        # Claimed BEFORE the awaited write; ancestor handoff still allowed.
+        # Occupancy is this tool call (disk serial + CAS). Run-lifetime ledger
+        # owners never refuse a write.
         denied, release_on_fail = _claim_write_path(
             context, rel_path, event="file_write.collision", start=start
         )
@@ -422,7 +467,7 @@ class FileWriteTool:
             rel_path, content, context
         )
 
-        # Pre-read for overwrite integrity (hard shrink + soft nudge).
+        # Pre-read for stale-overwrite CAS (concurrent writer).
         old_content: str | None = None
         try:
             old_content = await context.backend.read(rel_path)
@@ -446,75 +491,23 @@ class FileWriteTool:
                 )
             return _error(f"读取既有文件失败：{e}", start, user_face=False)
 
-        # 代码落盘完整性闸 (D1)：括号截断 / 省略标记硬拒；SECTION 骨架豁免结构闸。
-        if is_brace_code_path(rel_path):
-            if has_omission_marker(write_content):
-                logger.info(
-                    "file_write.code_integrity_rejected",
-                    path=rel_path,
-                    reason="omission",
-                )
-                if coordinator is not None and release_on_fail:
-                    coordinator.release(rel_path, context.run_id)
+        if old_content is not None:
+            try:
+                latest = await context.backend.read(rel_path)
+            except PathNotFound:
+                latest = None
+            except WorkspaceError as e:
+                dead = _maybe_channel_dead_error(e, start)
+                if dead is not None:
+                    return dead
+                latest = None
+            if latest != old_content:
+                logger.info("file_write.stale_overwrite_rejected", path=rel_path)
                 return _error(
-                    code_omission_rejection(rel_path),
+                    stale_overwrite_rejection(rel_path),
                     start,
                     contract_failure=True,
                 )
-            if not has_skeleton_markers(write_content):
-                struct_err = code_structure_rejection(rel_path, write_content)
-                if struct_err is not None:
-                    logger.info(
-                        "file_write.code_integrity_rejected",
-                        path=rel_path,
-                        reason="structure",
-                    )
-                    if coordinator is not None and release_on_fail:
-                        coordinator.release(rel_path, context.run_id)
-                    return _error(struct_err, start, contract_failure=True)
-        # 成篇 prose 省略硬拒：视图截断语气不得冒充交付；骨架占位豁免。
-        elif (
-            has_omission_marker(write_content)
-            and len((write_content or "").strip()) >= _SUBSTANTIAL_FILE_CHARS
-            and not has_skeleton_markers(write_content)
-        ):
-            logger.info(
-                "file_write.prose_omission_rejected",
-                path=rel_path,
-                chars=len(write_content),
-            )
-            if coordinator is not None and release_on_fail:
-                coordinator.release(rel_path, context.run_id)
-            return _error(
-                prose_omission_rejection(rel_path),
-                start,
-                contract_failure=True,
-            )
-
-        # 成篇缩水硬拒：修订路径整篇砍稿（样本 19k→3k）；allow_shrink 放行正当精简。
-        if (
-            old_content is not None
-            and not allow_shrink
-            and is_substantial_existing_body(old_content)
-            and is_hard_severe_shrink(len(old_content), len(write_content))
-        ):
-            old_chars = len(old_content)
-            new_chars = len(write_content)
-            logger.info(
-                "file_write.severe_shrink_rejected",
-                path=rel_path,
-                old_chars=old_chars,
-                new_chars=new_chars,
-            )
-            if coordinator is not None and release_on_fail:
-                coordinator.release(rel_path, context.run_id)
-            return _error(
-                severe_shrink_rejection(
-                    rel_path, old_chars=old_chars, new_chars=new_chars
-                ),
-                start,
-                contract_failure=True,
-            )
 
         try:
             written = await context.backend.write(rel_path, write_content)
@@ -562,16 +555,6 @@ class FileWriteTool:
             output = f"{output}\n{rename_note}"
         if anchor_note:
             output += anchor_note
-        if old_content is not None:
-            nudge = overwrite_integrity_nudge(rel_path, old_content, write_content)
-            if nudge:
-                logger.info(
-                    "file_write.integrity_nudge",
-                    path=rel_path,
-                    old_chars=len(old_content),
-                    new_chars=len(write_content),
-                )
-                output += nudge
         _mark_landed_files(context, path_key, kind=kind)
         result = ToolResult(
             tool_call_id="",
@@ -588,30 +571,25 @@ class FileAppendTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
     )
 
     @property
     def schema(self) -> ToolSchema:
-        # Schema layer (工具面瘦身): 成篇后禁 append 硬拒 + 骨架填空路由。
-        # manifest 验真 → identity；HOW → consult(long_form_landing).
+        # Schema layer: 这是什么 + HOW。落盘姿势在 consult(long_form_landing)。
         return ToolSchema(
             name="file_append",
             description=(
                 "在文件末尾追加：不存在则创建（含上级目录）；已存在则拼接、不重写全文。"
-                "仅用于骨架填空：短骨架落盘后按节追加（不硬拒字数）。"
-                "禁止对本 run 已 file_write 成篇正文再 append；成篇后用 str_replace。"
+                "HOW→consult(long_form_landing)。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": (
-                            "工作区内的相对文件路径；约定文档区写盘扁平"
-                            "（前缀后嵌套 `/` → `_` 单文件名）"
-                        ),
+                        "description": "工作区内的相对文件路径。",
                     },
                     "content": {
                         "type": "string",
@@ -681,32 +659,6 @@ class FileAppendTool:
         # is handled above. If disk is prose but not locked this run (扩写 / 他 run
         # 骨架)，仍放行。若本 run 未登记且盘上已是成篇、又无骨架标记——仍放行扩写。
 
-        # 代码落盘完整性闸 (D1)：追加后的合并正文也必须结构完整（骨架豁免）。
-        merged_preview = (old_content or "") + (content or "")
-        if is_brace_code_path(rel_path):
-            if has_omission_marker(content or ""):
-                if coordinator is not None and release_on_fail:
-                    coordinator.release(rel_path, context.run_id)
-                return _error(
-                    code_omission_rejection(rel_path),
-                    start,
-                    contract_failure=True,
-                )
-            skeleton_ok = has_skeleton_markers(merged_preview) or has_skeleton_markers(
-                old_content or ""
-            )
-            if not skeleton_ok:
-                struct_err = code_structure_rejection(rel_path, merged_preview)
-                if struct_err is not None:
-                    logger.info(
-                        "file_append.code_integrity_rejected",
-                        path=rel_path,
-                        reason="structure",
-                    )
-                    if coordinator is not None and release_on_fail:
-                        coordinator.release(rel_path, context.run_id)
-                    return _error(struct_err, start, contract_failure=True)
-
         try:
             appended = await context.backend.append(rel_path, content)
         except OutsideWorkspace as e:
@@ -767,33 +719,25 @@ class StrReplaceTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
     )
 
     @property
     def schema(self) -> ToolSchema:
-        # Schema layer (工具面瘦身): unique-match 契约 + 清参硬拒。
-        # 大文件安全 / manifest 验真 → identity；HOW → consult(long_form_landing).
+        # Schema layer: 这是什么 + HOW。落盘姿势在 consult(long_form_landing)。
         return ToolSchema(
             name="str_replace",
             description=(
-                "精确替换已有文件中【完全匹配】的文本片段。成篇后修订【优先】用它。"
-                "old_string 须带足够上下文、默认唯一匹配一次（含空白/缩进/换行）；"
-                "不存在或多于一次则失败（replace_all=true 除外）。失败回执含盘片段，按盘文重锚。"
-                "整盖请用 file_write（须完整正文）。新建用 file_write。\n"
-                "【清参后改稿】只见已落盘短状态时禁止当 old_string/new_string 重发；"
-                "先 file_read 取真文，再按真文重填。"
+                "精确替换已有文件中【完全匹配】的文本片段。"
+                "HOW→consult(long_form_landing)。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": (
-                            "工作区内的相对文件路径；约定文档区写盘扁平"
-                            "（前缀后嵌套 `/` → `_` 单文件名）"
-                        ),
+                        "description": "工作区内的相对文件路径。",
                     },
                     "old_string": {
                         "type": "string",
@@ -895,7 +839,7 @@ class StrReplaceTool:
         except NoMatch:
             if coordinator is not None and release_on_fail:
                 coordinator.release(rel_path, context.run_id)
-            # 失败回执自带有界盘片段 → 不加 sticky「补丁再读」，勿放开通用 file_read 上限。
+            # 失败回执自带有界盘片段，模型可凭回执改 old_string。
             receipt = await _assemble_str_replace_fail_receipt(
                 context, rel_path, old_string, kind="no_match"
             )

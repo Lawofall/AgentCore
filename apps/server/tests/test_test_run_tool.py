@@ -1,4 +1,4 @@
-"""Regression tests for TestRunTool — bounded project verification.
+"""Regression tests for execute_verify — bounded project verification.
 
 Approval posture (GRANTABLE + turn-grantable + cloud withhold) is already pinned in
 ``test_approvals.py`` / ``test_tools_catalog.py`` — this file covers the execute-path
@@ -12,27 +12,29 @@ from typing import Any
 
 import pytest
 
-from agentcore.config import settings
 from agentcore.core.errors import SandboxError
-from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.runtime.context.workspace_profile import WorkspaceProfile
 from agentcore.tools.builtin.package_install import is_install_shaped_argv
-from agentcore.tools.builtin.test_run import (
+from agentcore.tools.builtin.run_verify import (
     _ALLOWED_PREFIXES,
-    _ENGINE_TIMEOUT_SLACK_SECONDS,
     _VERIFY_BUDGET_HEAVY_SECONDS,
     _VERIFY_BUDGET_SECONDS,
     _VERIFY_BUDGET_STANDARD_SECONDS,
-    TestRunTool,
     _base_command,
+    _command_looks_like_test,
     _detect_framework,
+    _format_test_output,
     _is_allowed_command,
     _is_allowed_verify_argv,
     _profile_test_argv,
     _python_argv_runner,
     _resolve_test_argv,
+    _shell_command_runner,
+    _test_not_passed_error,
+    execute_verify,
     resolve_verify_budget_seconds,
     resolve_verify_timeouts,
+    verify_coalesce_fingerprint,
 )
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.exec_env import (
@@ -104,25 +106,7 @@ def _make_profile(**kwargs: Any) -> WorkspaceProfile:
     return WorkspaceProfile(**defaults)
 
 
-# --- approval posture (thin nail; full gate coverage lives in test_approvals) ---
-
-
-def test_test_run_schema_stays_grantable_execution():
-    """P0-1 regression nail: test_run must remain GRANTABLE ∩ EXECUTION."""
-    schema = TestRunTool().schema
-    assert schema.name == "test_run"
-    assert schema.approval is ToolApproval.GRANTABLE
-    assert schema.category is ToolCategory.EXECUTION
-    assert "有界项目验证" in schema.description
-    assert "code_execute" in schema.description
-    # Engine ceiling must outlive heavy sandbox budget + desk boot so Timeout
-    # returns as contract_failure rather than the engine outer wait_for.
-    assert schema.timeout_seconds is not None
-    assert schema.timeout_seconds == (
-        _VERIFY_BUDGET_HEAVY_SECONDS
-        + _ENGINE_TIMEOUT_SLACK_SECONDS
-        + settings.gvisor_desk_start_timeout_seconds
-    )
+# --- approval posture lives on ``run`` (test_approvals / test_tools_catalog) ---
 
 
 def test_verify_timeouts_idle_and_disaster():
@@ -144,6 +128,20 @@ def test_verify_timeouts_idle_and_disaster():
     )
     assert _VERIFY_BUDGET_SECONDS == _VERIFY_BUDGET_STANDARD_SECONDS == EXEC_DISASTER_TIMEOUT_S
     assert _VERIFY_BUDGET_HEAVY_SECONDS == EXEC_DISASTER_TIMEOUT_S
+
+
+def test_command_install_shaped_idle_is_120():
+    """``check=command`` + install-shaped argv uses install idle; ``pnpm test`` stays 60."""
+    _, idle_install = resolve_verify_timeouts("command", ["pnpm", "install"])
+    assert idle_install == EXEC_IDLE_TIMEOUT_INSTALL_S == 120
+    _, idle_add = resolve_verify_timeouts("command", ["pnpm", "add", "lodash"])
+    assert idle_add == EXEC_IDLE_TIMEOUT_INSTALL_S
+    _, idle_uv = resolve_verify_timeouts("command", ["uv", "sync"])
+    assert idle_uv == EXEC_IDLE_TIMEOUT_INSTALL_S
+    _, idle_test = resolve_verify_timeouts("command", ["pnpm", "test"])
+    assert idle_test == EXEC_IDLE_TIMEOUT_DEFAULT_S == 60
+    _, idle_bare = resolve_verify_timeouts("command")
+    assert idle_bare == EXEC_IDLE_TIMEOUT_DEFAULT_S
 
 
 # --- command whitelist ---
@@ -265,6 +263,29 @@ def test_python_argv_runner_embeds_argv_without_bash():
     assert "subprocess.run" in code
 
 
+def test_python_argv_runner_does_not_shell_whole_argv():
+    code = _python_argv_runner(["pnpm", "add", "vitest"])
+    assert "shell=True" not in code
+    assert "list2cmdline(argv)" not in code
+    assert "list2cmdline" not in code
+    assert "ComSpec" in code
+    assert "/c" in code
+
+
+def test_shell_command_runner_is_bash_or_powershell_not_cmd():
+    code = _shell_command_runner("pnpm test")
+    assert "-lc" in code
+    assert "-NoProfile" in code
+    assert "-NonInteractive" in code
+    assert "-Command" in code
+    assert "shell=True" not in code
+    assert "list2cmdline" not in code
+    assert "cmd.exe" not in code
+    assert "/c" not in code
+    assert "system32" in code
+    assert "Git" in code
+
+
 async def test_execute_rejects_when_command_leaves_whitelist(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -278,19 +299,19 @@ async def test_execute_rejects_when_command_leaves_whitelist(
         return "pytest"
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run._detect_framework",
+        "agentcore.tools.builtin.run_verify._detect_framework",
         _framework,
     )
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run._base_command",
+        "agentcore.tools.builtin.run_verify._base_command",
         lambda *_a, **_k: ["bash", "-c", "evil"],
     )
 
-    result = await TestRunTool().execute({"scope": "all"}, _ctx(backend))
+    result = await execute_verify({"scope": "all"}, _ctx(backend))
     assert result.success is False
     assert "白名单" in (result.error or "")
     assert backend.requests == []  # never reached the sandbox
@@ -443,10 +464,10 @@ async def test_execute_fails_cleanly_when_framework_undetectable(
         return _make_profile()
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _empty_profile,
     )
-    result = await TestRunTool().execute({"scope": "all"}, _ctx(backend))
+    result = await execute_verify({"scope": "all"}, _ctx(backend))
     assert result.success is False
     assert "无法检测" in (result.error or "")
     assert backend.requests == []
@@ -456,7 +477,7 @@ async def test_execute_fails_cleanly_when_framework_undetectable(
 # --- bounded verify modes ---
 
 
-async def test_check_command_runs_via_python_launcher(
+async def test_check_command_runs_via_shell_runner(
     monkeypatch: pytest.MonkeyPatch,
 ):
     backend = _FakeBackend(
@@ -469,10 +490,10 @@ async def test_check_command_runs_via_python_launcher(
         return _make_profile()
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute(
+    result = await execute_verify(
         {"check": "command", "command": "npx tsc --noEmit"},
         _ctx(backend),
     )
@@ -482,8 +503,15 @@ async def test_check_command_runs_via_python_launcher(
     assert req.language == "python"
     assert req.timeout_seconds == _VERIFY_BUDGET_HEAVY_SECONDS
     assert "npx" in req.code and "tsc" in req.code
-    assert "bash" not in req.code
+    assert "-lc" in req.code
+    assert "-NoProfile" in req.code
+    assert "shell=True" not in req.code
+    assert "list2cmdline" not in req.code
+    assert "cmd.exe" not in req.code
     assert "## 验证结果：通过" in result.output
+    assert "退出码 0" in result.output
+    assert "### 摘要" not in result.output
+    assert "验证预算" not in result.output
     assert result.contract_failure is False
 
 
@@ -504,10 +532,10 @@ async def test_check_build_uses_profile_build_command(
         )
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute({"check": "build"}, _ctx(backend))
+    result = await execute_verify({"check": "build"}, _ctx(backend))
     assert result.success is True
     assert "npm" in backend.requests[0].code
     assert "build" in backend.requests[0].code
@@ -534,10 +562,10 @@ async def test_idle_timeout_is_exec_env_not_contract_failure(
         return _make_profile()
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute(
+    result = await execute_verify(
         {"check": "command", "command": "npm run build"},
         _ctx(backend),
     )
@@ -549,6 +577,8 @@ async def test_idle_timeout_is_exec_env_not_contract_failure(
     assert result.metadata.get("timeout_kind") == "idle"
     assert "无输出" in (result.error or "") or "无响应" in (result.output or "")
     assert "验证结果：未完成（执行无响应）" in result.output
+    assert "验证预算" not in (result.output or "")
+    assert "缩小范围" not in (result.output or "")
     assert backend.requests[0].idle_timeout_seconds == EXEC_IDLE_TIMEOUT_DEFAULT_S
     assert backend.requests[0].timeout_seconds == EXEC_DISASTER_TIMEOUT_S
 
@@ -571,10 +601,10 @@ async def test_disaster_timeout_is_contract_failure_not_tool_breakage(
         return _make_profile()
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute(
+    result = await execute_verify(
         {"check": "command", "command": "npm run build"},
         _ctx(backend),
     )
@@ -586,10 +616,12 @@ async def test_disaster_timeout_is_contract_failure_not_tool_breakage(
     assert result.metadata.get("timeout_kind") == "disaster"
     assert "灾难顶" in (result.error or "") or "强制中止" in (result.error or "")
     assert "验证结果：未完成（强制中止）" in result.output
+    assert "验证预算" not in (result.output or "")
+    assert "缩小范围" not in (result.output or "")
 
 
 async def test_check_command_missing_is_contract_failure():
-    result = await TestRunTool().execute({"check": "command"}, _ctx(_FakeBackend()))
+    result = await execute_verify({"check": "command"}, _ctx(_FakeBackend()))
     assert result.success is False
     assert result.contract_failure is True
     assert "command" in (result.error or "")
@@ -613,10 +645,10 @@ async def test_default_check_test_still_parses_pytest(
         return _make_profile(languages=["python"], test_commands=["pytest"])
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute({"scope": "all"}, _ctx(backend))
+    result = await execute_verify({"scope": "all"}, _ctx(backend))
     assert result.success is True
     assert backend.requests[0].language == "python"
     assert "通过" in result.output
@@ -647,20 +679,22 @@ async def test_check_install_runs_with_restricted_network_and_registry_pin(
         return _make_profile(package_managers=["npm"])
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute({"check": "install"}, _auto_permission_ctx(backend))
+    result = await execute_verify({"check": "install"}, _auto_permission_ctx(backend))
     assert result.success is True
     assert len(backend.requests) == 1
     req = backend.requests[0]
     assert req.network_mode == "restricted"
     assert req.cache_bucket == "u"
     assert req.timeout_seconds == _VERIFY_BUDGET_SECONDS
+    assert req.idle_timeout_seconds == EXEC_IDLE_TIMEOUT_INSTALL_S
     assert req.env is not None
     assert "registry.npmjs.org" in (req.env.get("NPM_CONFIG_REGISTRY") or "")
     assert req.env.get("NPM_CONFIG_CACHE", "").startswith("/pkg-cache")
     assert "npm" in req.code and "install" in req.code
+    assert "-lc" not in req.code
 
 
 async def test_check_install_pure_python_resolves_uv_not_npm(
@@ -677,10 +711,10 @@ async def test_check_install_pure_python_resolves_uv_not_npm(
         return _make_profile(package_managers=["uv"], languages=["python"])
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute({"check": "install"}, _auto_permission_ctx(backend))
+    result = await execute_verify({"check": "install"}, _auto_permission_ctx(backend))
     assert result.success is True
     req = backend.requests[0]
     assert "uv" in req.code and "sync" in req.code
@@ -704,7 +738,7 @@ async def test_check_install_omits_cache_bucket_without_user_id(
         return _make_profile(package_managers=["npm"])
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
     ctx = ToolContext.create(
@@ -715,7 +749,7 @@ async def test_check_install_omits_cache_bucket_without_user_id(
         user_id="",
         permission_axes='{"file_write":"session","command":"auto","team_kickoff":"rules","host":"session"}',
     )
-    result = await TestRunTool().execute({"check": "install"}, ctx)
+    result = await execute_verify({"check": "install"}, ctx)
     assert result.success is True
     assert backend.requests[0].cache_bucket is None
 
@@ -729,16 +763,17 @@ async def test_check_install_rejects_without_restricted_network(
         return _make_profile(package_managers=["npm"])
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
     # Default ctx: no permission_axes → network_mode would be none
-    result = await TestRunTool().execute({"check": "install"}, _ctx(backend))
+    result = await execute_verify({"check": "install"}, _ctx(backend))
     assert result.success is False
     assert result.contract_failure is True
     assert result.metadata is not None
     assert result.metadata.get("code") == "install_network_unavailable"
     assert "无法装包" in (result.error or "")
+    assert "test_run" not in (result.error or "")
     assert backend.requests == []
 
 
@@ -758,10 +793,10 @@ async def test_check_install_local_skips_host_egress_gate(
         return _make_profile(package_managers=["npm"])
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute({"check": "install"}, _auto_permission_ctx(backend))
+    result = await execute_verify({"check": "install"}, _auto_permission_ctx(backend))
     assert result.success is True
     req = backend.requests[0]
     assert req.cache_bucket is None
@@ -779,10 +814,10 @@ async def test_check_install_local_still_requires_permission(
         return _make_profile(package_managers=["npm"])
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute({"check": "install"}, _ctx(backend))
+    result = await execute_verify({"check": "install"}, _ctx(backend))
     assert result.success is False
     assert result.contract_failure is True
     assert result.metadata is not None
@@ -790,23 +825,279 @@ async def test_check_install_local_still_requires_permission(
     assert backend.requests == []
 
 
-async def test_command_install_rejects_shell_chain(monkeypatch: pytest.MonkeyPatch):
+async def test_command_install_allows_cd_and_runs_shell(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    backend = _FakeBackend(
+        result=ExecutionResult(
+            success=True, stdout="", stderr="", exit_code=0, duration_ms=20
+        )
+    )
+
+    async def _fake_profile(_backend):
+        return _make_profile()
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
+        _fake_profile,
+    )
+    result = await execute_verify(
+        {"check": "command", "command": "cd apps/web && npm install"},
+        _auto_permission_ctx(backend),
+    )
+    assert result.success is True
+    assert backend.requests
+    code = backend.requests[0].code
+    assert "cd apps/web && npm install" in code
+    assert "-lc" in code
+    assert "input_bytes=first.stdout" not in code
+
+
+async def test_command_install_keeps_tail_and_stderr_merge(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    backend = _FakeBackend(
+        result=ExecutionResult(
+            success=True, stdout="", stderr="", exit_code=0, duration_ms=20
+        )
+    )
+
+    async def _fake_profile(_backend):
+        return _make_profile()
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
+        _fake_profile,
+    )
+    result = await execute_verify(
+        {"check": "command", "command": "pnpm add vitest 2>&1 | tail -20"},
+        _auto_permission_ctx(backend),
+    )
+    assert result.success is True
+    assert backend.requests
+    assert "tail" in backend.requests[0].code
+    assert "2>&1" in backend.requests[0].code
+    assert "pnpm add vitest 2>&1 | tail -20" in backend.requests[0].code
+
+
+async def test_command_test_grep_executes_as_shell_not_stripped(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    backend = _FakeBackend(
+        result=ExecutionResult(
+            success=True, stdout="ok\n", stderr="", exit_code=0, duration_ms=20
+        )
+    )
+
+    async def _fake_profile(_backend):
+        return _make_profile()
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
+        _fake_profile,
+    )
+    result = await execute_verify(
+        {"check": "command", "command": "pnpm test | grep FAIL"},
+        _ctx(backend),
+    )
+    assert result.success is True
+    code = backend.requests[0].code
+    assert "pnpm test | grep FAIL" in code
+    assert "grep" in code
+    assert "FAIL" in code
+    assert "input_bytes=first.stdout" not in code
+    assert "-lc" in code
+
+
+async def test_command_install_allows_real_pipe_and_redirect(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    backend = _FakeBackend(
+        result=ExecutionResult(
+            success=True, stdout="", stderr="", exit_code=0, duration_ms=10
+        )
+    )
+
+    async def _fake_profile(_backend):
+        return _make_profile()
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
+        _fake_profile,
+    )
+    for command in ("pnpm add vitest | grep x", "pnpm install > log.txt"):
+        backend.requests.clear()
+        result = await execute_verify(
+            {"check": "command", "command": command},
+            _auto_permission_ctx(backend),
+        )
+        assert result.success is True
+        assert backend.requests
+        assert command in backend.requests[0].code
+
+
+async def test_command_cd_dotdot_from_root_refused(
+    monkeypatch: pytest.MonkeyPatch,
+):
     backend = _FakeBackend()
 
     async def _fake_profile(_backend):
         return _make_profile()
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute(
-        {"check": "command", "command": "cd apps/web && npm install"},
+    result = await execute_verify(
+        {"check": "command", "command": "cd .. && pnpm test"},
+        _ctx(backend),
+    )
+    assert result.success is False
+    assert result.contract_failure is True
+    assert "工作区" in (result.error or "")
+    assert backend.requests == []
+
+
+@pytest.mark.parametrize(
+    ("command", "idle"),
+    [
+        ("pnpm install", EXEC_IDLE_TIMEOUT_INSTALL_S),
+        ("pnpm add lodash", EXEC_IDLE_TIMEOUT_INSTALL_S),
+        ("uv sync", EXEC_IDLE_TIMEOUT_INSTALL_S),
+        ("pnpm test", EXEC_IDLE_TIMEOUT_DEFAULT_S),
+    ],
+)
+async def test_check_command_idle_follows_install_argv(
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+    idle: int,
+):
+    backend = _FakeBackend(
+        result=ExecutionResult(
+            success=True, stdout="", stderr="", exit_code=0, duration_ms=10
+        )
+    )
+
+    async def _fake_profile(_backend):
+        return _make_profile()
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
+        _fake_profile,
+    )
+    ctx = (
+        _auto_permission_ctx(backend)
+        if idle == EXEC_IDLE_TIMEOUT_INSTALL_S
+        else _ctx(backend)
+    )
+    result = await execute_verify(
+        {"check": "command", "command": command},
+        ctx,
+    )
+    assert result.success is True
+    assert backend.requests[0].idle_timeout_seconds == idle
+
+
+def test_command_looks_like_test_skips_install_shaped():
+    assert _command_looks_like_test(["pnpm", "add", "-Dw", "vitest"]) is False
+    assert _command_looks_like_test(["uv", "add", "pytest"]) is False
+    assert _command_looks_like_test(["pnpm", "test"]) is True
+
+
+def test_test_not_passed_error_leads_with_red_counts():
+    assert _test_not_passed_error(failed=1, errors=0, exit_code=0) == "测试未通过（失败 1）"
+    assert _test_not_passed_error(failed=4, errors=1, exit_code=1) == "测试未通过（失败 4，错误 1）"
+    assert _test_not_passed_error(failed=0, errors=0, exit_code=1) == "测试未通过（退出码 1）"
+
+
+def test_format_test_output_notes_exit_zero_when_parsed_red():
+    from agentcore.tools.builtin.test_parsers import TestRunResult
+
+    body = _format_test_output(
+        TestRunResult(
+            framework="vitest",
+            passed=0,
+            failed=1,
+            errors=0,
+            skipped=0,
+            duration_seconds=0.2,
+        ),
+        ["npx", "vitest", "run"],
+        0.2,
+        exit_code=0,
+    )
+    assert "退出码：0" in body
+    assert "命令返回成功码，但解析到失败用例" in body
+
+
+async def test_vitest_red_with_exit_zero_titles_failed_count(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """解析到失败时标题说失败条数，不把退出码 0 写进 error。"""
+    backend = _FakeBackend(
+        result=ExecutionResult(
+            success=True,
+            stdout=(
+                "FAIL packages/core/src/render/Canvas2DRenderer.test.ts > "
+                "group 递归绘制 children\n"
+                "AssertionError: expected array to include fillRect\n"
+                "Tests 0 passed | 1 failed\n"
+            ),
+            stderr="",
+            exit_code=0,
+            duration_ms=80,
+        )
+    )
+
+    async def _fake_profile(_backend):
+        return _make_profile()
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
+        _fake_profile,
+    )
+    result = await execute_verify(
+        {"check": "command", "command": "npx vitest run"},
+        _ctx(backend),
+    )
+    assert result.success is False
+    assert result.error == "测试未通过（失败 1）"
+    assert "退出码 0" not in (result.error or "")
+    assert "退出码：0" in (result.output or "")
+    assert "解析到失败用例" in (result.output or "")
+
+
+async def test_pnpm_add_vitest_does_not_parse_as_test(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    backend = _FakeBackend(
+        result=ExecutionResult(
+            success=False,
+            stdout="",
+            stderr="ERR_PNPM_UNEXPECTED_PKG\n",
+            exit_code=1,
+            duration_ms=20,
+        )
+    )
+
+    async def _fake_profile(_backend):
+        return _make_profile()
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
+        _fake_profile,
+    )
+    result = await execute_verify(
+        {"check": "command", "command": "pnpm add -Dw vitest"},
         _auto_permission_ctx(backend),
     )
     assert result.success is False
-    assert "shell" in (result.error or "").lower() or "cd" in (result.error or "")
-    assert backend.requests == []
+    assert "测试结果" not in (result.output or "")
+    assert "0 passed" not in (result.output or "")
+    assert "验证结果" in (result.output or "")
+    assert "ERR_PNPM_UNEXPECTED_PKG" in (result.output or "")
+    assert "### 摘要" not in (result.output or "")
+    assert "passed" not in (result.display or {})
 
 
 async def test_command_install_rejects_registry_override(monkeypatch: pytest.MonkeyPatch):
@@ -816,10 +1107,10 @@ async def test_command_install_rejects_registry_override(monkeypatch: pytest.Mon
         return _make_profile()
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute(
+    result = await execute_verify(
         {
             "check": "command",
             "command": "npm install --registry https://evil.example/",
@@ -842,10 +1133,10 @@ async def test_command_npm_prefix_install_allowed(monkeypatch: pytest.MonkeyPatc
         return _make_profile()
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute(
+    result = await execute_verify(
         {"check": "command", "command": "npm --prefix apps/web install"},
         _auto_permission_ctx(backend),
     )
@@ -865,16 +1156,17 @@ async def test_working_directory_injects_npm_prefix(monkeypatch: pytest.MonkeyPa
         return _make_profile(package_managers=["npm"])
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute(
+    result = await execute_verify(
         {"check": "install", "working_directory": "apps/web"},
         _auto_permission_ctx(backend),
     )
     assert result.success is True
     assert "--prefix" in backend.requests[0].code
     assert "apps/web" in backend.requests[0].code
+    assert "-lc" not in backend.requests[0].code
 
 
 async def test_verify_policy_inner_refuses_typecheck(monkeypatch: pytest.MonkeyPatch):
@@ -888,7 +1180,7 @@ async def test_verify_policy_inner_refuses_typecheck(monkeypatch: pytest.MonkeyP
         )
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
     ctx = ToolContext.create(
@@ -899,20 +1191,19 @@ async def test_verify_policy_inner_refuses_typecheck(monkeypatch: pytest.MonkeyP
         user_id="u",
         verify_policy="inner",
     )
-    result = await TestRunTool().execute({"check": "typecheck"}, ctx)
+    result = await execute_verify({"check": "typecheck"}, ctx)
     assert result.success is False
     assert result.contract_failure is True
     assert (result.metadata or {}).get("code") == "verify_policy_inner"
     assert "code_diagnostics" in (result.error or "")
+    assert "执行 run" in (result.error or "")
+    assert "test_run" not in (result.error or "")
     assert backend.requests == []
 
 
-def test_apply_verify_policies_stamps_review_roles():
+def test_apply_verify_policies_does_not_guess_from_role_names():
     from agentcore.runtime.runs.types import RunSpec
-    from agentcore.runtime.runs.worker_budget import (
-        apply_verify_policies_to_specs,
-        is_outer_verify_role,
-    )
+    from agentcore.runtime.runs.worker_budget import apply_verify_policies_to_specs
 
     review = RunSpec(run_id="r1", role="渲染链路审查员", task="查 blank page")
     accept = RunSpec(run_id="r2", role="验收员", task="外环 typecheck")
@@ -920,9 +1211,8 @@ def test_apply_verify_policies_stamps_review_roles():
         run_id="r3", role="审查员", task="x", verify_policy="outer"
     )
     apply_verify_policies_to_specs([review, accept, explicit])
-    assert review.verify_policy == "inner"
+    assert review.verify_policy == ""
     assert accept.verify_policy == ""
-    assert is_outer_verify_role("验收员")
     assert explicit.verify_policy == "outer"
 
 
@@ -930,10 +1220,20 @@ def test_project_verify_redirect_respects_inner_policy():
     from agentcore.tools.builtin.project_verify import project_verify_redirect_message
 
     outer = project_verify_redirect_message("npx tsc")
-    assert "test_run" in outer
+    assert "请用 run" in outer
+    assert "test_run" not in outer
+    assert "check=install" not in outer
     inner = project_verify_redirect_message("npx tsc", verify_policy="inner")
     assert "code_diagnostics" in inner
     assert "verify_policy=inner" in inner
+    assert "test_run" not in inner
+    assert "check=install" not in inner
+
+
+def test_verify_inner_discipline_prompt_is_gone():
+    import agentcore.runtime.runs.worker_budget as wb
+
+    assert not hasattr(wb, "VERIFY_INNER_DISCIPLINE")
 
 
 async def test_build_whitelist_unaffected_by_install_rules(
@@ -954,17 +1254,15 @@ async def test_build_whitelist_unaffected_by_install_rules(
         )
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute({"check": "build"}, _ctx(backend))
+    result = await execute_verify({"check": "build"}, _ctx(backend))
     assert result.success is True
     assert backend.requests[0].network_mode == "none"
 
 
 def test_verify_coalesce_fingerprint_stable_on_resolved_argv():
-    from agentcore.tools.builtin.test_run import verify_coalesce_fingerprint
-
     a = verify_coalesce_fingerprint("typecheck", ["npx", "tsc", "--noEmit"], None)
     b = verify_coalesce_fingerprint("typecheck", ["npx", "tsc", "--noEmit"], "")
     c = verify_coalesce_fingerprint("typecheck", ["npx", "tsc", "--noEmit"], "apps/web")
@@ -1014,7 +1312,7 @@ async def test_sibling_verify_inflight_coalesce(monkeypatch: pytest.MonkeyPatch)
         )
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
 
@@ -1023,10 +1321,9 @@ async def test_sibling_verify_inflight_coalesce(monkeypatch: pytest.MonkeyPatch)
     session._running_workers["w1"] = "渲染"
     session._running_workers["w2"] = "存储"
     set_active_coordination(session)
-    tool = TestRunTool()
     try:
         t1 = asyncio.create_task(
-            tool.execute(
+            execute_verify(
                 {"check": "typecheck"},
                 ToolContext.create(
                     execution_id="e-coalesce",
@@ -1039,7 +1336,7 @@ async def test_sibling_verify_inflight_coalesce(monkeypatch: pytest.MonkeyPatch)
         )
         await asyncio.wait_for(backend.entered.wait(), timeout=2.0)
         t2 = asyncio.create_task(
-            tool.execute(
+            execute_verify(
                 {"check": "typecheck"},
                 ToolContext.create(
                     execution_id="e-coalesce",
@@ -1062,8 +1359,9 @@ async def test_sibling_verify_inflight_coalesce(monkeypatch: pytest.MonkeyPatch)
         assert r2.contract_failure is True
         assert (r2.metadata or {}).get("verify_shared") == "inflight"
         assert "团队共享验证" in (r2.output or "")
+        assert "烧预算" not in (r2.output or "")
         # Cache hit on a third call (no new sandbox execute).
-        r3 = await tool.execute(
+        r3 = await execute_verify(
             {"check": "typecheck"},
             ToolContext.create(
                 execution_id="e-coalesce",
@@ -1090,7 +1388,7 @@ async def test_sibling_verify_inflight_coalesce(monkeypatch: pytest.MonkeyPatch)
             kind="skeleton",
         )
         assert session._verify_cache == {}
-        r4 = await tool.execute(
+        r4 = await execute_verify(
             {"check": "typecheck"},
             ToolContext.create(
                 execution_id="e-coalesce",
@@ -1121,16 +1419,16 @@ async def test_test_run_cloud_desk_down_is_not_contract_failure(
         return _make_profile()
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    result = await TestRunTool().execute(
+    result = await execute_verify(
         {"check": "command", "command": "npx tsc --noEmit"},
         _ctx(_Down()),
     )
     assert result.success is False
     assert result.contract_failure is False
     assert result.metadata.get("code") == EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
-    assert "code_execute" in result.metadata.get("retire_tools", [])
+    assert "retire_tools" not in (result.metadata or {})
     assert result.error == EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE
     assert "本机" not in (result.error or "")

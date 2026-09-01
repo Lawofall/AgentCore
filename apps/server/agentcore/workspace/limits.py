@@ -75,8 +75,13 @@ LIVENESS_TIMEOUT_DETAIL_MARKERS = (
     "活性挂起",
 )
 
-# Local workspace IO family retired together when the desktop channel is sticky-dead
-# (fail-fast alone still lets the model thrash / re-delegate writers).
+# Exact detail shared with desktop ``clientToolFulfill.WORKSPACE_RECONNECT_DETAIL``.
+# In-flight file-channel op the desktop discarded because the fulfill transport
+# dropped — fail this call only, retry is not futile, not presence-disconnect.
+WORKSPACE_RECONNECT_DETAIL = "桌面在重连，请再试这一下"
+
+# Local workspace IO family retired together when the desktop fulfiller is gone
+# (immediate no-fulfiller fail alone still lets the model thrash / re-delegate writers).
 WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS: tuple[str, ...] = (
     "file_read",
     "file_list",
@@ -127,17 +132,17 @@ CHANNEL_DEAD_CEO_INJECT = (
 
 # CEO coordination inject when the local exec env is sticky-dead. Soft steer
 # only — no new delegate hard gate (no form=files-shaped predicate for
-# "this task needs code_execute").
+# "this task needs run").
 EXEC_ENV_DEAD_CEO_INJECT = (
     "这台电脑此刻跑不了命令，基于已有材料收口；"
-    "禁止再派需要 code_execute/test_run 的队员；只读/只写文档可以。"
+    "禁止再派需要 run 的队员；只读/只写文档可以。"
 )
 EXEC_ENV_DEAD_CEO_INJECT_CLOUD = (
     "云端隔离执行当前不可用，基于已有材料收口；"
-    "禁止再派需要 code_execute/test_run 的队员；只读/只写文档可以。"
+    "禁止再派需要 run 的队员；只读/只写文档可以。"
 )
 
-# Quiet user-visible line when code_execute/test_run family retires on hangs
+# Quiet user-visible line when the run family retires on hangs
 # (mirrors CHANNEL_DEAD_USER_VISIBLE — no card, one-shot content_delta).
 #
 # This is the *unclassified* fallback: it states the fact and stops there. It
@@ -181,9 +186,8 @@ EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE: dict[str, str] = {
     ),
 }
 
-# Prepare / turn-start abort when the local channel is already sticky-dead —
-# no LLM, no "收口" framing (nothing ran yet). Keep ``channel dead`` so
-# ``is_channel_dead_detail`` / SSE mapping stay aligned with tool envelopes.
+# Prepare / turn-start abort when local prepare IO hangs or the budget is exhausted.
+# Not a mid-turn presence miss — execution-phase timeouts fail that op only.
 CHANNEL_DEAD_PREPARE_ABORT = (
     "本机工作区通道无响应（已挂起 / channel dead）。请检查桌面连接后重试。"
 )
@@ -201,7 +205,7 @@ LOCAL_ROOT_NOT_HELD = (
 )
 
 WORKSPACE_CHANNEL_DEAD_RETIRE_STEER = (
-    "本地工作区文件通道已挂起（活性无响应）：本回合起停用全部本地文件读写工具。"
+    "工作区/本地文件连不上：本回合停用全部本地文件读写工具（桌面重新连上后会恢复）。"
     "请向用户说明「工作区/本地文件连不上，请稍后重试或重开桌面」，基于已有材料收口；"
     "禁止再调用文件工具，也禁止再派需要读写本地文件的队员。"
 )
@@ -254,6 +258,11 @@ def is_file_too_large_detail(detail: str | None) -> bool:
     return text == FILE_TOO_LARGE_DETAIL or text.startswith(FILE_TOO_LARGE_DETAIL)
 
 
+def is_workspace_reconnect_detail(detail: str | None) -> bool:
+    """True when the desktop failed this op because the fulfill transport dropped."""
+    return (detail or "").strip() == WORKSPACE_RECONNECT_DETAIL
+
+
 def is_liveness_timeout_detail(detail: str | None) -> bool:
     """True when a workspace/channel failure is a hang / no-response timeout."""
     text = (detail or "").lower()
@@ -261,12 +270,31 @@ def is_liveness_timeout_detail(detail: str | None) -> bool:
 
 
 def is_channel_dead_detail(detail: str | None) -> bool:
-    """True when the failure is sticky channel-dead (not a single-op settle timeout)."""
+    """True when prepare-abort copy still names ``channel dead`` (not a settle timeout)."""
     return "channel dead" in (detail or "").lower()
 
 
+def is_presence_disconnected_detail(detail: str | None) -> bool:
+    """True when a workspace I/O failure is desktop-gone, not a hang or capacity miss."""
+    text = detail or ""
+    if not text.strip():
+        return False
+    lowered = text.lower()
+    if "工作区/本地文件连不上" in text:
+        return True
+    if "无履约方" in text or "no fulfiller" in lowered:
+        return True
+    if LOCAL_ROOT_NOT_HELD in text:
+        return True
+    if "本机桌面未连接" in text:
+        return True
+    from agentcore.fulfill.origin import ORIGIN_DEVICE_OFFLINE
+
+    return ORIGIN_DEVICE_OFFLINE in text
+
+
 def op_liveness_timeout_metadata() -> dict[str, object]:
-    """ToolResult.metadata for a single-op channel settle timeout (no family sticky)."""
+    """ToolResult.metadata for a single-op channel settle timeout (no family retire)."""
     return {
         "code": "liveness_timeout",
         "liveness_timeout": True,
@@ -275,11 +303,9 @@ def op_liveness_timeout_metadata() -> dict[str, object]:
 
 
 def channel_dead_retire_metadata() -> dict[str, object]:
-    """ToolResult.metadata for sticky channel-dead (family retire + steer)."""
+    """ToolResult.metadata for presence-disconnect (family retire + steer)."""
     return {
         "code": "workspace_channel_dead",
-        "liveness_timeout": True,
-        "timeout_layer": "channel",
         "error_class": "permanent",
         "workspace_channel_dead": True,
         "retire_tools": list(WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS),
@@ -288,9 +314,8 @@ def channel_dead_retire_metadata() -> dict[str, object]:
 
 
 def channel_dead_error_message(detail: str) -> str:
-    """User/model-facing error text when the local file channel is sticky-dead."""
+    """User/model-facing error text when the local desk fulfiller is gone."""
     return (
-        f"本地工作区通道活性挂起（无响应）：{detail}。"
-        "这不是文件过大或参数合同失败——"
+        f"工作区/本地文件连不上：{detail}。"
         f"{WORKSPACE_CHANNEL_DEAD_RETIRE_STEER}"
     )

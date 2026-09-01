@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 WriteScope = Literal["none", "explore_memory", "project"]
@@ -102,27 +102,6 @@ def fork_explore_write_scope(
         pending=bool(context.cold_start_explore_pending),
         write_scope=scope,
         turn_created_folder_ids=context._explore_gate.turn_created_folder_ids,
-    )
-
-
-def isolate_file_read_ceiling(context: ToolContext) -> ToolContext:
-    """Give this run its own same-path ``file_read`` ledger.
-
-    Counts / delivered ranges / reread grants are mutable dicts: ``replace()``
-    aliases them, so sibling workers and the CEO would otherwise share one cap
-    (a second auditor of the same file hits 「上限 5 次」 after two reads).
-    Landed-artifact ledgers stay shared. Projection dual-state resets to
-    unsynced; ``apply_file_read_clear_state`` fills it on the next tool round.
-    """
-    return replace(
-        context,
-        file_read_counts={},
-        file_read_delivered_ranges={},
-        file_read_line_totals={},
-        file_read_reread_issued={},
-        file_read_reread_remaining={},
-        file_read_verbatim_paths=None,
-        file_read_cleared_paths=None,
     )
 
 
@@ -431,16 +410,17 @@ class ToolContext:
     # ``desktop_online``) so tools can backfill via ClientTool SSE; ``None`` when
     # no desktop is attached. MCP stdio is fulfilled only on the desktop process.
     desktop_channel: DesktopClientChannel | None = None
-    # Background process ops (terminal tool): the same ``workspace_op_required`` channel
-    # LocalWorkspace already uses for file/execute ops. Reused from LocalWorkspace when
-    # present; for sidecar (ServerWorkspace location=local) a channel is built so process
-    # ops still leave the short-lived sidecar and land in the desktop main process.
-    # ``None`` on cloud-only runs — ``terminal`` is not registered there.
+    # Desktop-held workspace ops (terminal + language-service diagnostics): the
+    # same ``workspace_op_required`` channel LocalWorkspace already uses for
+    # file/execute. Reused from LocalWorkspace when present; for sidecar
+    # (ServerWorkspace location=local) a channel is built so process ops and
+    # ``diagnostics`` still leave the short-lived sidecar and land in the
+    # desktop main process. ``None`` on cloud-only runs.
     workspace_channel: WorkspaceChannel | None = None
-    # AI 协作白板 / 对话读图: optional vision port (``board_read`` / visual critic /
-    # attachment eye→text). Wired by ``resolve_vision_reader_for_conversation`` from
-    # the profile ``vision`` slot or platform ``VISION_*`` fallback; ``None`` ⇒ clean
-    # 「读图能力未配置」. CEO context only (not workers).
+    # AI 协作白板 / 对话读图: optional vision port (``board_read`` / attachment
+    # eye→text). Wired by ``resolve_vision_reader_for_conversation``: vision slot,
+    # else image-accepting main credentials, else platform ``VISION_*``; ``None`` ⇒
+    # clean「读图能力未配置」. CEO context only (not workers).
     vision_reader: VisionReader | None = None
     # Turn-level sink for priced ``role=vision`` ledger rows (board_read + conversation
     # image attachments). Shared by every derived run via ``replace`` (list by reference).
@@ -503,36 +483,10 @@ class ToolContext:
     # signal only — ``dataclasses.replace`` drops this bool. Handoff / executor
     # body-floor exemption must read ``landed_artifact_kinds`` (prose) instead.
     has_landed_files: bool = False
-    # Wave3 B：本 run 内各相对路径成功 ``file_read`` 次数。worker / CEO / 续派 fork
-    # 必须 :func:`isolate_file_read_ceiling`，禁止靠 ``replace(run_id=)`` 误共用。
-    # 从第 1 行要满安全顶的整读计次；开窗仅当本次请求行范围已被此前交付覆盖、且投影窗内
-    # 仍有该 path 正文时计次。``tool_clear`` 全文已清后的重读不计次。超
-    # ``FILE_READ_SAME_PATH_MAX`` 且投影窗内仍有该 path 正文、又无再读授额时
-    # **不硬拒**：回短指针（不灌全文）。
-    file_read_counts: dict[str, int] = field(default_factory=dict)
-    # 已交付行范围（path → 合并后的闭区间）+ 最近一次成功读的总行数（供把请求裁到 EOF）。
-    # 与 ``file_read_counts`` 同生命周期：写成功必须一并清，否则写后核对会按旧范围误拒。
-    file_read_delivered_ranges: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
-    file_read_line_totals: dict[str, int] = field(default_factory=dict)
-    # R1 tool_clear 双态：engine 在每轮 ``execute_tools`` 前对 canonical 再跑
-    # ``project_cleared_window`` 后写入。``None`` = 未同步（单测/旁路）→ 视为正文仍在。
-    # ``frozenset`` = 投影窗内仍有 verbatim ``file_read`` 正文的 path 集合
-    # （空集 = 该窗内全部已清）。正文已清时不因授额用尽走同窗短指针。
-    file_read_verbatim_paths: frozenset[str] | None = None
-    # 同一投影写下的「全文已清」path：至少一条 ``file_read`` stub，且该 path 无 verbatim。
-    # ``None`` = 未同步，不按清后重读豁免计次。清后重读不计 ``FILE_READ_SAME_PATH_MAX``。
-    file_read_cleared_paths: frozenset[str] | None = None
-    # 写成功 / citation ``refresh_file_read_reread_grant`` 的 sticky 标记（共享可变 dict；值恒 True）。
-    file_read_reread_issued: dict[str, bool] = field(default_factory=dict)
-    # 写成功 / citation 授额剩余次数（共享可变 dict）。成功再读时工具扣减。
-    # 授额 > 0 时可覆盖仍在窗内的 stale 正文（写后核对 / citation refresh）。
-    # ``tool_clear`` 清后重读走 ``file_read_cleared_paths``，不消耗本授额、不计同 path 上限。
-    file_read_reread_remaining: dict[str, int] = field(default_factory=dict)
     # Artifact-first Writing：本 execution 已落盘 path → ``skeleton`` | ``prose``（共享可变
-    # dict；``dataclasses.replace`` 浅拷贝与 ``file_read_counts`` 同模式）。``prose`` = 成篇
+    # dict；``dataclasses.replace`` 浅拷贝）。``prose`` = 成篇
     # 正文，同 path 后续 ``file_append`` 硬拒。配 ``landed_artifact_authors``：首次落盘
-    # 该 path 的 ``agent_id``（归属/可观测；作者与读者 ``file_read`` 各有独立
-    # ``FILE_READ_SAME_PATH_MAX``，无身份硬闸）。
+    # 该 path 的 ``agent_id``（归属/可观测）。
     landed_artifact_kinds: dict[str, Literal["skeleton", "prose"]] = field(
         default_factory=dict
     )

@@ -7,7 +7,7 @@ _LONG_FORM_WRITING = """\
 ## 长文落盘（Artifact-first）
 
 用户要产出超长单文档（报告、论文、综述、长 README、多章节手册、出行/行程成文）时：\
-【主路径】一次 `file_write` 写入**完整正文**（含超长、无省略标记）；成篇后修订**只用** \
+【主路径】一次 `file_write` 写入**完整正文**（含超长）；成篇后修订**只用** \
 `str_replace`。`file_append` **仅**骨架填空路径（本 run 已成篇 prose 则禁 append）。\
 【可选】防截断 / 超大风险时，可先短骨架再按节 `file_append` / `str_replace` 填空——非硬教条。\
 短笔记 / 小配置 / 小片段仍一次写完。
@@ -47,12 +47,12 @@ task 里只要求写正文本身；核对提醒、假设、待补项、格式说
 修订。【可选】防截断/超大：先短骨架（标题/锚点，或 `<!-- FILL:… -->` / \
 `<!-- OUTLINE -->` / 章节小标题占位），再按节用 **str_replace 或 file_append** 填空。
 并行拆章 ≠ 各写各的就交（论文/综述/长报告允许）：各章可写到临时路径以免并发冲突，\
-但【必须】在同一次 delegate 里写死——① 最终主文件同一路径（各章 brief + \
-`deliverable.artifacts` 均指向它）；② 合并责任（末尾 merge worker `depends_on` 各章，\
+但【必须】在同一次 delegate 里写死——① 最终主文件同一路径（task 写明终稿路径）；\
+② 合并责任（末尾 merge worker `depends_on` 各章，\
 或你 CEO 收口合并进主文件）。验收只认合并后的那一篇。\
 与「单写手分波」二选一：要么一人分波串写，要么多章并行+合并——勿混成并行同角色抢锁。
 验真：写/append 成功回执即 artifact manifest（path / chars / lines / hash / 标题树 / 末段预览）\
-——禁止为质检再 code_execute / file_read 回读正文；下一步仅 str_replace \
+——禁止为质检再 run / file_read 回读正文；下一步仅 str_replace \
 （局部改）或同轮 handoff；成篇后勿再用 file_append，整文件覆盖须完整正文。\
 【例外】≠ 为验真空转回读（仍认 artifact manifest）；清参后改稿才可先 `file_read`——\
 写参被收成已落盘短状态后须先读盘上真文，再 `str_replace`（优先）或按真文写，\
@@ -72,18 +72,15 @@ _LONG_FORM_LANDING = """\
 <超长落盘>
 ## 长文落盘（你来写文件）
 
-【主路径】一次 `file_write` 写入**完整正文**（含超长、无省略标记）；成篇后修订**只用** \
+【主路径】一次 `file_write` 写入**完整正文**（含超长）；成篇后修订**只用** \
 `str_replace`。`file_append` **仅**骨架填空路径（本 run 已成篇 prose 则禁 append）。\
 【可选】防截断 / 超大风险时，可先短骨架再按节 `file_append` / `str_replace` 填空——非硬教条。\
-短笔记 / 小配置 / 小片段仍一次写完。\
-【引擎硬拒】成篇含省略标记（反例：「……（中间省略，已保留首尾）……」）、\
-覆盖成篇缩水低于旧稿 50% 且绝对减少 ≥800 字、代码括号不完整或含省略 → 硬拒绝；\
-用户明确要求大幅删减时传 `allow_shrink=true`。
+短笔记 / 小配置 / 小片段仍一次写完。
 
 【主交付】用户要 PDF / Word：handoff 前对主文件调 `md_to_pdf` / `md_to_docx`。
 
 写/append 成功回执即 artifact manifest（path / chars / lines / hash / 标题树 / 末段预览）\
-——以此验真，禁止为质检再 code_execute / file_read 回读正文；下一步仅 str_replace \
+——以此验真，禁止为质检再 run / file_read 回读正文；下一步仅 str_replace \
 （局部改）或同轮 handoff；成篇后勿再用 file_append，整文件覆盖须完整正文。\
 【例外】≠ 为验真空转回读（仍认 artifact manifest）；清参后改稿才可先 `file_read`——\
 写参被收成已落盘短状态后须先读盘上真文，再 `str_replace`（优先）或按真文写，\

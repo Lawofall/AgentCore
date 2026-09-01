@@ -1,19 +1,22 @@
-"""Collapse large write-tool arguments in the model-facing window (handoff 缓存崩塌).
+"""Collapse old write-tool arguments in the model-facing window (handoff 缓存崩塌).
 
 After a worker ``file_write`` / ``file_append`` / ``str_replace`` lands, the assistant
-message still carries the FULL body inside ``tool_calls[].function.arguments``. Later
+message still carries the FULL body inside ``tool_calls[].function.arguments``. Older
 rounds re-pay that body as cache_miss (case: handoff round ~28k in / ~27k miss).
 
 This projection — applied at request-assembly time only, like ``tool_clear`` — keeps the
-**original write tool name**, reduces args to ``{"path": …}``, and appends the size /
-structure digest to that call's **tool result**. Canonical ``messages`` / journal keep
-the full args; resume rebuilds then re-applies.
+**original write tool name**. Writes that have fallen out of the near window reduce args
+to ``{"path": …}`` and append a size / structure digest to that call's **tool result**.
+The latest ``keep_recent`` assistant rounds that contain a completed bulky write keep
+full ``content`` / ``old_string`` / ``new_string`` so the next thought can chain an edit.
+Canonical ``messages`` / journal keep the full args; resume rebuilds then re-applies.
 
-定案：**参数槽里不再放任何可照抄的东西**。历代投影（``content:"[已清理]"`` 假稿纸 →
-``_landed_summary`` 模板 → 合成名 ``_write_landed`` → ``{"status": "landed", …}``）都被
-模型当写参回灌过——复用上一次调用的 arguments 是 tool-calling 的正常语义，改措辞治不住。
-裸 ``path`` 显然不是一份可提交的载荷；真被回灌也只撞普通的「缺必填 content」。结果本就
-属于 tool result，摘要因此挪到那里。
+定案：掉出近端窗的写，参数槽只留 path（模型不能把摘要当正文回灌）。近端保留全文。
+历代投影（``content:"[已清理]"`` 假稿纸 → ``_landed_summary`` 模板 → 合成名
+``_write_landed`` → ``{"status": "landed", …}``）都被模型当写参回灌过——复用上一次
+调用的 arguments 是 tool-calling 的正常语义，改措辞治不住。裸 ``path`` 显然不是一份
+可提交的载荷；真被回灌也只撞普通的「缺必填 content」。结果本就属于 tool result，
+摘要因此挪到那里。
 
 遗留形态（stub / ``_landed_summary`` / landed-status / 仿调 ``_write_landed``）的结构化
 硬拒**保留为安全网**，见 ``cleared_write_stub_rejection`` / ``landed_status_name_rejection``；
@@ -388,16 +391,20 @@ def project_cleared_write_args(
     messages: list[LLMMessage],
     *,
     min_chars: int = 500,
+    keep_recent: int = 1,
 ) -> list[LLMMessage]:
     """Collapse bulky write-tool args once their tool result is present.
 
-    Keeps the original write ``function.name``, reduces args to ``path`` alone, and
-    appends the size / structure digest to that call's tool result. Also migrates any
-    leftover ``_write_landed`` names back to ``via`` so old windows lose the imitation
-    bait. Returns the same list when nothing qualifies. Prefix-cache safe for a given
-    completed write: both projections are pure functions of (path, body, original_len).
+    Keeps the original write ``function.name``. Completed bulky writes **older than**
+    the last ``keep_recent`` assistant messages that contain such a write reduce args
+    to ``path`` alone, and append a size / structure digest to that call's tool result.
+    The near window keeps full bodies so the next thought can chain ``str_replace``.
+    ``keep_recent=0`` collapses every completed bulky write (legacy). ``keep_recent<0``
+    is a no-op. Also migrates leftover ``_write_landed`` names back to ``via``.
+    Returns the same list when nothing qualifies. Prefix-cache safe for a given
+    collapsed write: the projection is a pure function of (path, body, original_len).
     """
-    if min_chars < 0:
+    if min_chars < 0 or keep_recent < 0:
         return messages
 
     # tool_call_id → (tool_name, arguments, assistant_msg_index, call_index)
@@ -435,16 +442,36 @@ def project_cleared_write_args(
     if not completed_ids and not bait_ids:
         return messages
 
+    # Near window = last N assistant messages that contain a completed bulky write
+    # (one ReAct round may issue several writes in parallel; all stay until the
+    # next write-round). keep_recent=0 → collapse all. Do not use lst[-0:].
+    write_round_indices: list[int] = []
+    for mi, message in enumerate(messages):
+        if message.role != "assistant" or not message.tool_calls:
+            continue
+        if any(call.id in completed_ids for call in message.tool_calls):
+            write_round_indices.append(mi)
+    keep_rounds: set[int] = (
+        set()
+        if keep_recent == 0
+        else set(write_round_indices[-keep_recent:])
+    )
+    collapse_ids = {
+        cid for cid in completed_ids if call_meta[cid][2] not in keep_rounds
+    }
+    if not collapse_ids and not bait_ids:
+        return messages
+
     # The digest the collapsed body is worth keeping, keyed by the call it describes.
     notes: dict[str, str] = {}
-    for cid in completed_ids:
+    for cid in collapse_ids:
         _, args, _, _ = call_meta[cid]
         note = landed_result_note(args, _body_len(args))
         if note:
             notes[cid] = note
 
     # Rebuild only assistant messages that need a call rewritten.
-    touch_indices = {call_meta[cid][2] for cid in completed_ids} | {
+    touch_indices = {call_meta[cid][2] for cid in collapse_ids} | {
         bait_ids[cid][1] for cid in bait_ids
     }
     projected: list[LLMMessage] = []
@@ -461,7 +488,7 @@ def project_cleared_write_args(
         new_calls: list[ToolCall] = []
         changed = False
         for call in message.tool_calls:
-            if call.id in completed_ids:
+            if call.id in collapse_ids:
                 name, args, _, _ = call_meta[call.id]
                 new_calls.append(
                     ToolCall(

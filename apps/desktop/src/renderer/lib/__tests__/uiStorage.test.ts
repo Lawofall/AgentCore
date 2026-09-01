@@ -38,8 +38,8 @@ describe("uiStorage", () => {
     expect(localStorage.getItem(`${PREFIX}theme`)).toBe(JSON.stringify("dark"));
     expect(uiGet<string>("theme")).toBe("dark");
 
-    uiSet("diagnostic-mode", true);
-    expect(uiGet<boolean>("diagnostic-mode")).toBe(true);
+    uiSet("sidebar-collapsed", true);
+    expect(uiGet<boolean>("sidebar-collapsed")).toBe(true);
   });
 
   it("removes a key when set to undefined", async () => {

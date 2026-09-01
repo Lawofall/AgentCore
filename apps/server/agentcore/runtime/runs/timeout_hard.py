@@ -332,10 +332,19 @@ def arm_hard_timeout(
     on_warn: Any | None = None,
     on_timeout: Any | None = None,
     on_force_cancel: Any | None = None,
-    default_timeout_s: float = 300.0,
 ) -> HardTimeoutGuard | None:
-    """Arm (or refresh) a hard-timeout guard. ``timeout_s<=0`` / None → default."""
+    """Arm (or refresh) a hard-timeout guard.
+
+    ``timeout_s`` None / ≤0 → do not arm. No product-default wall clock;
+    only CEO-explicit ``timeout_ms`` (already converted to seconds) arms a timer.
+    """
     if not run_id:
+        return None
+    try:
+        threshold = float(timeout_s) if timeout_s is not None else 0.0
+    except (TypeError, ValueError):
+        return None
+    if threshold <= 0:
         return None
     existing = _GUARDS.get(run_id)
     if existing is not None and existing._task is not None and not existing._task.done():
@@ -343,9 +352,6 @@ def arm_hard_timeout(
         if role:
             existing.role = role
         return existing
-    threshold = (
-        float(timeout_s) if timeout_s and float(timeout_s) > 0 else float(default_timeout_s)
-    )
     if warn_ratio is None:
         try:
             from agentcore.config import settings

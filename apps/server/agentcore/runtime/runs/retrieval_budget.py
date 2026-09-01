@@ -157,7 +157,7 @@ def _apply_one(
 
 
 def format_retrieval_budget_line(budget: int | None) -> str:
-    """Worker-facing one-liner for the deliverable / context block."""
+    """One-liner for a retrieval cap. Opening context no longer glues this onto 交付物规格."""
     if budget is None:
         return ""
     if budget <= 0:

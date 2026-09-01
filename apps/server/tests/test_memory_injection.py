@@ -6,7 +6,6 @@ never the note's first content line, which says nothing about WHEN to consult th
 
 from agentcore.memory.injection import MemoryTopic, load_memory_topics
 from agentcore.memory.store import FileMemoryStore
-from agentcore.memory.user_memory import topic_summary_line
 
 
 def _note(description: str, body: str = "## 要点\n- 内容\n") -> str:
@@ -58,14 +57,3 @@ async def test_memory_topic_without_description_shows_name_only(tmp_path):
     assert await load_memory_topics(store, "u1", folder_id=None, enabled=True) == [
         MemoryTopic("部署流程", "")
     ]
-
-
-def test_topic_summary_line_handles_freeform_truncation_and_empty():
-    # Freeform first line (no bullet) is taken verbatim.
-    assert topic_summary_line("自由文本第一行\n第二行") == "自由文本第一行"
-    # Over-long summary is truncated with an ellipsis (directory stays cheap).
-    summary = topic_summary_line("- " + "а" * 100)
-    assert summary.endswith("…") and len(summary) == 60
-    # Empty / chrome-only note → "" so the caller shows just the name.
-    assert topic_summary_line("") == ""
-    assert topic_summary_line("# 用户记忆\n> 注释\n") == ""

@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 
 from agentcore.core.logging import get_logger
 from agentcore.runtime.coordination.session_types import (
-    DEFAULT_WORKER_TIMEOUT_S,
     CoordinationEvent,
     CoordinationEventKind,
 )
@@ -34,13 +33,12 @@ class SessionTimeoutMixin:
         role: str = "",
         timeout_s: float | int | None = None,
     ) -> None:
-        """Arm hard-timeout for ``run_id`` (warn → TIMEOUT → grace → force cancel).
+        """Register ``run_id`` for cancel resolution; arm hard-timeout only if explicit.
 
-        Two-phase warn + hard TIMEOUT notification to the CEO; after TIMEOUT the
-        engine bans new LLM/tool calls, grants one wind-down grace round, then
-        force-cancels via :meth:`request_cancel` (same cancel_ids channel as
-        ``cancel_worker``). Nested drives without a session use the same
-        :mod:`timeout_hard` registry.
+        ``timeout_s`` None / ≤0 → no timer (product default: no worker wall clock).
+        Positive ``timeout_s`` (CEO ``timeout_ms``) still does warn → TIMEOUT →
+        grace → force-cancel via :meth:`request_cancel`. Nested drives without a
+        session use the same :mod:`timeout_hard` registry.
         """
         if not self.active or run_id in self.completed_run_ids:
             return
@@ -48,6 +46,12 @@ class SessionTimeoutMixin:
         # (refreshed each dispatch; before the idempotent-arm short-circuit so a
         # re-arm still keeps the registry current). Cleared on disarm / completion.
         self._running_workers[run_id] = role or run_id
+        try:
+            threshold = float(timeout_s) if timeout_s is not None else 0.0
+        except (TypeError, ValueError):
+            return
+        if threshold <= 0:
+            return
         from agentcore.runtime.runs.timeout_hard import (
             HardTimeoutGuard,
             arm_hard_timeout,
@@ -139,7 +143,6 @@ class SessionTimeoutMixin:
             on_warn=_on_warn,
             on_timeout=_on_timeout,
             on_force_cancel=_on_force_cancel,
-            default_timeout_s=DEFAULT_WORKER_TIMEOUT_S,
         )
         # Mirror timer task into legacy map so cancel_all_timeouts / disarm still work.
         if guard is not None and guard._task is not None:

@@ -6,9 +6,10 @@ Pins two things:
    and anti-"AI slop" — it lives in the base prompt, so it must reach both the CEO
    chat agent and every delegated worker, and survive the optional memory /
    attachment-context sections layered on top. (<写工具谨慎> used to be shared here
-   too, but 按角色 right-size 反向 moved it onto the worker identities — the coordinator
-   CEO holds only read-only tools — so this file pins its ABSENCE from the base/CEO
-   path; the worker-side presence is pinned in tests/runs_executor/test_identities.py.)
+   too, but 按角色 right-size 反向 moved it onto the worker identities. CEO also
+   holds write/execute; its caution lives in those tools' descriptions
+   (一层一所有者), not the CEO core — so this file pins its ABSENCE from the
+   base/CEO path; the worker-side presence is pinned in tests/runs_executor/test_identities.py.)
 2. The CEO core is identity only — not a numbered routing classifier.
    Honesty / output / inbound trust live in the shared base. HOW lives in
    system Skills / tool descriptions (runtime/skills/, see test_skills.py)
@@ -40,7 +41,7 @@ from agentcore.runtime.skills import (
     build_system_skill_registry,
 )
 
-_LOCAL_HOW = capability_how_suffix({"terminal", "host", "browser"})
+_LOCAL_HOW = capability_how_suffix({"run", "host", "browser"})
 
 
 def test_derive_ceo_addon_splits_shared_prefix_from_full_ceo_prompt():
@@ -52,6 +53,7 @@ def test_derive_ceo_addon_splits_shared_prefix_from_full_ceo_prompt():
     )
     addon = derive_ceo_addon(base, ceo)
     assert addon
+    assert "<文件夹清单>" not in ceo
     assert "<身份>" in addon
     assert "<输出>" not in addon
     assert ceo.startswith(base)
@@ -152,9 +154,8 @@ def test_system_feedback_block_frames_engine_steers_as_non_user():
 
 def test_tool_safety_moved_out_of_shared_base_and_ceo():
     # 按角色 right-size (反向): the environment-mutation caution (<写工具谨慎>) used to ride
-    # the shared base, so the CEO carried it too — but the coordinator CEO holds only
-    # read-only tools (build_ceo_tool_registry); a caution about write/delete/execute tools
-    # it cannot call was inert weight. It moved onto the worker identities
+    # the shared base, so the CEO carried it too. CEO write-tool caution stays in
+    # those tools' descriptions; the worker block lives on worker identities
     # (executor.identities._WORKER_TOOL_SAFETY_POLICY, pinned in test_identities.py). Pin its
     # ABSENCE from the base AND the composed CEO prompt so a refactor can't quietly re-inflate
     # the CEO prefix by folding it back into the shared base.
@@ -253,30 +254,46 @@ def test_charting_affordance_is_mermaid_not_a_resident_classifier():
 
 
 def test_core_states_coordinator_tool_boundary():
-    # 协调者 CEO: 只读边界；写与超规模交给团队。HOW 在 consult，不进核。
+    # 默认交团队、协调收口；自己做只限短答和单点。何时派在 delegate description，不进核。
+    # 「全套工具 / 已装配」是能力行事实，不进核。
     from agentcore.tools.builtin.delegate.schema import DELEGATE_DESCRIPTION
 
     hint = _CEO_CORE_HINT
-    assert "只读" in hint
+    assert "全套工具" not in hint
+    assert "已装配" not in hint
+    assert "短答和单点" in hint
+    assert "成件事交团队" in hint
+    assert "一问就能收口" not in hint
+    assert "一份注意力" not in hint
+    assert "装得下" not in hint
     assert "delegate" not in hint
-    assert "改产物" in DELEGATE_DESCRIPTION
-    assert "超规模" in hint
+    assert "默认用本工具" in DELEGATE_DESCRIPTION
+    assert "一份注意力" not in DELEGATE_DESCRIPTION
+    assert "探路够了" not in DELEGATE_DESCRIPTION
+    assert "小落盘" in DELEGATE_DESCRIPTION
+    assert "定位入口" not in DELEGATE_DESCRIPTION
+    assert "定位入口" in _TEAM_ORCHESTRATION_ADVANCED
+    assert "默认交给团队" in hint
     assert "未装配能力" not in hint
-    assert "consult(terminal)" not in hint
+    assert "consult(run)" not in hint
     assert "【三分日志】" not in hint
     assert "本机运行态" not in hint
     assert "本机 Host" not in hint
     host_how = capability_how_suffix({"host"})
-    term_how = capability_how_suffix({"terminal"})
+    run_how = capability_how_suffix({"run"})
+    run_skill = build_system_skill_registry().get("run").body
     assert "三分日志" in host_how
     assert "host(action=os_log)" in host_how
     assert "search_conversations" in host_how
     assert "Get-WinEvent" in host_how
-    assert "报 URL" in term_how
-    assert "wait_for" in term_how
-    assert "长驻" in term_how and "host(action=shell)" in term_how
+    assert "报 URL" not in run_how
+    assert "wait_for" not in run_how
+    assert "wait_for" in run_skill
+    assert "长驻" in run_skill and "host(action=shell)" in run_skill
+    assert "验收与短命令由队员" not in run_how
     assert "通识 FAQ" in host_how
     assert "盲探" in host_how
+    assert "delegate" not in host_how
     assert "host_os_log_summary" not in hint
     assert "host_ping" not in hint
     assert "host_info" not in hint
@@ -296,14 +313,18 @@ def test_capability_how_gated_on_ceo_tool_names():
     assert "把启服写进队员任务" not in spine
     assert "未装配能力" not in spine
 
-    term = capability_how_suffix({"terminal"})
-    assert "wait_for" in term
-    assert "云桌" in term
-    assert "ask_user(browser_login=true)" not in term
-    assert "通识 FAQ" not in term
-    # 异步 HTTP 轮询短触发只在 code_execute schema，不进核 / 不进 consult(terminal) 启服手册
+    run_how = capability_how_suffix({"run"})
+    run_skill = build_system_skill_registry().get("run").body
+    assert "wait_for" not in run_how
+    assert "wait_for" in run_skill
+    assert "云桌" not in run_how
+    assert "ask_user(browser_login=true)" not in run_how
+    assert "通识 FAQ" not in run_how
+    assert "验收与短命令由队员" not in run_how
+    # 异步 HTTP 轮询短触发只在内部 exec schema，不进核 / 不进 consult(run) 启服手册
     assert "异步 HTTP" not in spine
-    assert "异步 HTTP" not in term
+    assert "异步 HTTP" not in run_how
+    assert "异步 HTTP" not in run_skill
 
     host = capability_how_suffix({"host"})
     assert "通识 FAQ" in host
@@ -313,8 +334,10 @@ def test_capability_how_gated_on_ceo_tool_names():
     assert "search_conversations" in host
     assert "open_settings" in host and "install_package" in host
     assert "set_audio" in host and "restart_service" in host
+    assert "host(action=open_settings)" in host
     assert "Get-WinEvent" in host
-    assert "delegate" in host
+    assert "delegate" not in host
+    assert "打开系统面板" not in host
     assert "host_info" not in host
     assert "host_package_install" not in host
     assert "host_ping" not in host
@@ -325,6 +348,8 @@ def test_capability_how_gated_on_ceo_tool_names():
     assert "永不代填密码" in browser
     assert "read_url" in browser and "已开页" in browser
     assert "wait_for" not in browser
+    assert "验收 / 截图" not in browser
+    assert "队员 `screenshot`" not in browser
 
     grant = capability_how_suffix({"external_mount_readonly"})
     assert "先写工作区" in grant
@@ -337,12 +362,12 @@ def test_capability_how_gated_on_ceo_tool_names():
     # Production opening also must not hang HOW even if the tool is already offered.
     for names, offered in (
         ({"delegate", "consult"}, None),
-        ({"delegate", "terminal", "host", "browser"}, None),
+        ({"delegate", "run", "host", "browser"}, None),
         (
-            {"delegate", "terminal", "host", "browser"},
-            {"delegate", "terminal", "host", "browser"},
+            {"delegate", "run", "host", "browser"},
+            {"delegate", "run", "host", "browser"},
         ),
-        ({"delegate", "terminal", "host", "browser"}, {"delegate"}),
+        ({"delegate", "run", "host", "browser"}, {"delegate"}),
     ):
         prompt = compose_ceo_chat_prompt(
             assemble_system_prompt(),
@@ -355,12 +380,34 @@ def test_capability_how_gated_on_ceo_tool_names():
         assert assemble_ceo_core(names) == spine
 
 
-def test_core_teaches_split_criterion_over_count():
-    # 身份核：只读边界；写与超规模交给团队。编制细则在 skill。
+def test_capability_how_has_no_ceo_must_delegate_tool_locks():
+    """Leftover product-fact: CEO 须派才能跑/截图/开设置. Identity scale routing stays."""
     hint = _CEO_CORE_HINT
-    assert "只读" in hint
+    how = capability_how_suffix({"run", "host", "browser"})
+    leftovers = (
+        "验收与短命令由队员",
+        "打开系统面板 / 切默认音频 / 重启白名单服务 / 装本机软件 → `delegate`",
+        "验收 / 截图 → `delegate`",
+        "队员 `screenshot`",
+        "CEO 只启停",
+        "禁止自己跑",
+        "禁止自己截图",
+    )
+    for token in leftovers:
+        assert token not in hint
+        assert token not in how
+
+
+def test_core_teaches_split_criterion_over_count():
+    # 身份核：默认交团队、协调收口。编制细则在 skill。
+    # 「全套工具」出核：装配态归能力行。
+    hint = _CEO_CORE_HINT
+    assert "全套工具" not in hint
+    assert "短答和单点" in hint
+    assert "一问就能收口" not in hint
+    assert "装得下" not in hint
     assert "delegate" not in hint
-    assert "超规模" in hint
+    assert "默认交给团队" in hint
     for retired in (
         "①",
         "②",
@@ -382,6 +429,8 @@ def test_core_teaches_split_criterion_over_count():
         "档 2",
         "轻成文",
         "consumer_deps",
+        "design_impl_same_grant",
+        "root_slice_honesty",
         "先多角度摸清",
         "暂不派队",
         "写成文档并保存",
@@ -432,6 +481,7 @@ def test_core_teaches_split_criterion_over_count():
     assert "【继续·承接确认项】" not in hint
     assert "【短确认·只补缺口】" not in hint
     assert "<上轮交付缺口>" not in hint
+    assert "<工作集>" not in hint
     assert "静默自拟" not in hint
     assert "零摩擦" not in hint
     assert "先问你" not in hint
@@ -439,7 +489,7 @@ def test_core_teaches_split_criterion_over_count():
 
     form_desc = TASK_DELIVERABLE_SCHEMA["properties"]["form"]["description"]
     assert "【存文档】" in form_desc and "files" in form_desc
-    help_map = build_system_skill_registry().get("product_help_map").body
+    help_map = build_system_skill_registry().get("product_help").body
     assert "产物出口" in help_map
     lf_fail = build_system_skill_registry().get("long_form_writing").body
     assert "参数不是合法 JSON" in lf_fail
@@ -450,6 +500,8 @@ def test_core_teaches_split_criterion_over_count():
     assert "短改稿" in kickoff and "任务卡" in kickoff
     for retired in (
         "web_quality_scan",
+        "placeholder_scan",
+        "placeholder_hard_exempt",
         "visual_critic",
         "write_section",
         "consult(build_website)",
@@ -457,6 +509,8 @@ def test_core_teaches_split_criterion_over_count():
         "playbook=none",
         "playbook_id",
         "consult(building_software)",
+        "尚无工程清单",
+        "一块模块",
         "做软件手写",
         "提案墙",
         "结构自检",
@@ -465,6 +519,10 @@ def test_core_teaches_split_criterion_over_count():
         "假两段",
         "薄旁路",
         "continue_from_run_id",
+        "verify_and_fix",
+        "consult(verify_and_fix)",
+        "work_discipline",
+        "consult(work_discipline)",
     ):
         assert retired not in hint, retired
     assert "先设计再实现" in _TEAM_ORCHESTRATION_ADVANCED
@@ -482,7 +540,7 @@ def test_core_teaches_split_criterion_over_count():
     assert "用户面前空白" not in hint
     from agentcore.tools.builtin.delegate.schema import DELEGATE_DESCRIPTION
 
-    assert "可见打算" in DELEGATE_DESCRIPTION
+    assert "可见打算" not in DELEGATE_DESCRIPTION
     assert "先给用户一句可见打算" not in hint
     orch_honesty = _TEAM_ORCHESTRATION_ADVANCED
     assert "收口对照核" in orch_honesty and "主张对照本回合结构真相" in orch_honesty
@@ -505,8 +563,13 @@ def test_core_teaches_split_criterion_over_count():
     assert "成文编制" in orch_sum
     skill = _TEAM_ORCHESTRATION_ADVANCED
     assert "形状词汇" in skill
-    assert "改产物 / 成规模取证该派就派" in skill or "成规模取证该派就派" in skill
-    assert "桌上结果已定" in skill
+    assert "默认用本工具" in DELEGATE_DESCRIPTION
+    assert "一份注意力" not in DELEGATE_DESCRIPTION
+    assert "小落盘" in DELEGATE_DESCRIPTION
+    assert "成篇落盘" in DELEGATE_DESCRIPTION
+    assert "可运行应用" in DELEGATE_DESCRIPTION
+    assert "有写权" in DELEGATE_DESCRIPTION
+    assert "何时用" in skill and "delegate" in skill
     assert "教学示例形状" in skill and "对照学形状" in skill
     assert "免手搓" not in skill
     assert "并列对象分组" in skill and "独立多透镜诊断" in skill
@@ -583,8 +646,9 @@ def test_consult_hook_lives_only_in_the_core():
     assert "成文编制" in orch_sum
     assert orch_sum in directory
     delivery_sum = build_system_skill_registry().get("team_delivery_env").summary
-    assert "Office" in delivery_sum
-    assert "空桌" in delivery_sum
+    assert delivery_sum == "交付环境"
+    assert "Office" in _TEAM_DELIVERY_ENV
+    assert "空桌" in _TEAM_DELIVERY_ENV
     cross_sum = build_system_skill_registry().get("team_cross_folder").summary
     assert "跨文件夹" in cross_sum or "target_folder_id" in cross_sum
 
@@ -694,7 +758,7 @@ def test_skill_teaches_same_layer_pipeline():
 def test_core_teaches_delegating_parallel_research():
     # 成规模查证归团队；编制细则在编排 skill，核不写探路判决树。
     hint = _CEO_CORE_HINT
-    assert "超规模" in hint
+    assert "默认交给团队" in hint
     assert "成规模查证" not in hint
     assert "【探路 ≠ 摸底】" not in hint
     assert "自动两路" not in hint
@@ -717,7 +781,7 @@ def test_prompt_investigation_discipline_follows_settings():
     )
     from agentcore.runtime.skills.deep_multi_lens_research import _DEEP_MULTI_LENS_RESEARCH
 
-    assert "超规模" in _CEO_CORE_HINT
+    assert "默认交给团队" in _CEO_CORE_HINT
     assert "成规模查证" not in _CEO_CORE_HINT
     assert "【探路 ≠ 摸底】" not in _CEO_CORE_HINT
     assert "不派仅限" not in _CEO_CORE_HINT
@@ -730,9 +794,9 @@ def test_prompt_investigation_discipline_follows_settings():
     assert "0～1" not in _TEAM_ORCHESTRATION_ADVANCED
     assert "【工作流】" in _DEEP_MULTI_LENS_RESEARCH
     assert "探路检索默认 0～1 轮" not in _DEEP_MULTI_LENS_RESEARCH
-    assert "定位入口" in _COLD_START_EXPLORE_HINT_EMPTY
-    assert "定位入口" in _COLD_START_EXPLORE_HINT_REBIND
-    assert "定位入口" in _COLD_START_EXPLORE_HINT_REFRESH
+    assert "先轻探再 delegate 调研建档" in _COLD_START_EXPLORE_HINT_EMPTY
+    assert "先轻探再 delegate 调研建档" in _COLD_START_EXPLORE_HINT_REBIND
+    assert "先轻探再 delegate 调研建档" in _COLD_START_EXPLORE_HINT_REFRESH
     assert "只定位入口" not in _COLD_START_EXPLORE_HINT_EMPTY
     assert "定位入口" in _TEAM_ORCHESTRATION_ADVANCED
     assert "禁止自己取证" in _DEEP_MULTI_LENS_RESEARCH
@@ -874,15 +938,19 @@ def test_core_teaches_delegate_point_dont_answer():
 def test_core_teaches_execution_and_recall_routing():
     # HOW 在挂门手册 / 编排 skill；核不写执行判决树。
     hint = _CEO_CORE_HINT
-    term_how = capability_how_suffix({"terminal"})
+    run_how = capability_how_suffix({"run"})
+    run_skill = build_system_skill_registry().get("run").body
     assert "【执行 / 运行 / 打开】" not in hint
-    assert "consult(terminal)" not in hint
+    assert "consult(run)" not in hint
     assert "consult(browser)" not in hint
-    assert "跑起来" in term_how
-    assert "报 URL" in term_how
-    assert "wait_for" in term_how
+    assert "跑起来" not in run_how
+    assert "报 URL" not in run_how
+    assert "wait_for" not in run_how
+    assert "wait_for" in run_skill
     br_how = capability_how_suffix({"browser"})
     assert "右坞打开" in br_how or "用浏览器打开" in br_how or "开页" in br_how
+    assert "验收 / 截图" not in br_how
+    assert "队员 `screenshot`" not in br_how
     assert "delegate" not in hint
     assert "假开页" not in hint
     desk = _TEAM_DELIVERY_ENV
@@ -891,7 +959,8 @@ def test_core_teaches_execution_and_recall_routing():
     orch = _TEAM_ORCHESTRATION_ADVANCED
     assert "tsc -b" in orch
     assert "npm install" in orch
-    assert "code_execute" in orch
+    assert "consult(run)" in orch
+    assert "consult(browser)" not in orch
     assert "wait_for" not in hint
     assert "口头假验收" not in hint
     assert "已登录，继续" not in hint
@@ -900,7 +969,7 @@ def test_core_teaches_execution_and_recall_routing():
 
 
 def test_core_teaches_repair_code_ui_verify_routing():
-    """白屏/挂载复现 HOW 在编排 skill；核只留修码 consult 钩（team_orchestration 已有则勿双写）。"""
+    """修码 HOW 在编排 skill；开页 HOW 在 consult(browser)，不写进工人 task。"""
     from agentcore.runtime.runs.playbooks import available_playbooks
 
     hint = _CEO_CORE_HINT
@@ -910,11 +979,11 @@ def test_core_teaches_repair_code_ui_verify_routing():
     assert "form=workspace" in orch
     assert "短任务" in orch
     assert "diagnose_fix_verify" not in orch.replace(available_playbooks(), "")
-    assert "白屏" in orch or "挂载" in orch
-    assert "browser" in orch
     assert "怎么算修好" in orch
     assert "同一人验" in orch
     assert "勿" in orch and ("tsc" in orch or "pytest" in orch)
+    assert "browser" not in orch
+    assert "白屏" not in orch
     for token in ("complexity_hint", "result_handling", "require_upstream"):
         assert token not in hint, token
 
@@ -957,13 +1026,13 @@ def test_core_teaches_outline_checkpoint_prefers_structured_path():
 
 
 def test_core_worker_capability_follows_workspace_facts():
-    # Prompt 事实对齐（能力闸门与交付诚实性）：不再宣称 worker「持全套工具」；以
-    # <工作区> 的「本回合执行能力」行为准——code_execute=未装配 时 worker
+    # Prompt 事实对齐（能力闸门与交付诚实性）：核不宣称「全套工具」；以
+    # <工作区> 的「本回合执行能力」行为准——run=未装配 时 worker
     # 同样没有执行环境（能写文件、不能运行 / 生成二进制产物）。
     hint = _CEO_CORE_HINT
-    assert "持全套工具" not in hint
+    assert "全套工具" not in hint
     assert "本回合执行能力" not in hint
-    assert "code_execute=未装配" not in hint
+    assert "run=未装配" not in hint
     assert "能写文件、不能运行" not in hint
     assert "可播放文件" not in hint
     delivery = _TEAM_DELIVERY_ENV
@@ -972,7 +1041,8 @@ def test_core_worker_capability_follows_workspace_facts():
     assert catalog_data is not None
     assert "表格 → `.csv`" not in hint
     orch = _TEAM_ORCHESTRATION_ADVANCED
-    assert "执行事实行" in delivery
+    assert "执行事实行" not in delivery
+    assert "对照 `<工作区>`" in delivery
     # 表质量 / 源数据下一步 HOW 在交付手册（核只留 consult 一句）
     assert "表质量基线" in delivery
     assert "冒充表结构" in delivery
@@ -996,7 +1066,7 @@ def test_core_teaches_delivery_honesty_when_no_execution():
     assert "【执行 / 运行 / 打开】" not in hint
     skill = _TEAM_ORCHESTRATION_ADVANCED
     delivery = _TEAM_DELIVERY_ENV
-    assert "test_run" in skill or "verify" in skill
+    assert "run" in skill or "verify" in skill
     assert "未运行验证" in skill or "交付缺口" in delivery
     assert "form=files" in skill
 
@@ -1042,11 +1112,11 @@ def test_core_teaches_dispatch_landing_not_promote_ritual():
 
 
 def test_core_teaches_panel_path_not_workspace_root_jargon():
-    """对用户指路禁说「工作区根」：HOW 在 product_help_map；核不枚举禁语。"""
+    """对用户指路禁说「工作区根」：HOW 在 product_help；核不枚举禁语。"""
     hint = _CEO_CORE_HINT
     assert "工作区根" not in hint
     assert "工作区根目录" not in hint
-    help_map = build_system_skill_registry().get("product_help_map").body
+    help_map = build_system_skill_registry().get("product_help").body
     assert "工作区根" in help_map
     assert "工作区根目录" in help_map
     assert "禁止" in help_map
@@ -1055,9 +1125,9 @@ def test_core_teaches_panel_path_not_workspace_root_jargon():
 
 
 def test_core_teaches_delivery_path_by_workspace_type():
-    # 核留执行/打开钩；收口路径 HOW → product_help_map / 编排 skill。
+    # 核留执行/打开钩；收口路径 HOW → product_help / 编排 skill。
     hint = _CEO_CORE_HINT
-    help_map = build_system_skill_registry().get("product_help_map").body
+    help_map = build_system_skill_registry().get("product_help").body
     delivery = _TEAM_DELIVERY_ENV
     assert "【产物路径】" in delivery
     assert "完整" in delivery
@@ -1170,7 +1240,8 @@ def test_core_teaches_presentation_honesty():
     assert "已落盘可直接使用" not in hint
     assert "先干再问" not in hint
     assert "点名载体" not in hint
-    assert "form/artifacts" in delivery
+    assert "落盘回执" in delivery
+    assert "实际写下" in delivery or "在盘上" in delivery
     assert "不可产" in delivery and "等效替代" in delivery
     assert "静默降级" in delivery
     assert "确定性导出器" in delivery
@@ -1270,28 +1341,29 @@ def test_core_teaches_explicit_confirm_before_disk_write():
     assert "本回合明示" in mid
 
 
-def test_windows_bat_how_lives_in_work_discipline_not_shared_base():
-    """案 261bfc46 A：Windows .bat HOW 在 work_discipline；基座不常驻；目录摘要只写这是什么。"""
+def test_windows_bat_how_lives_in_run_not_shared_base():
+    """Windows .bat HOW 在 run；基座不常驻；目录摘要只写这是什么。"""
     from agentcore.runtime.resolve.prompt import _DEFAULT_SYSTEM_PROMPT
-    from agentcore.runtime.skills.work_discipline import _WORK_DISCIPLINE
+    from agentcore.runtime.skills.run import _RUN
 
     base = _DEFAULT_SYSTEM_PROMPT
     assert "<cross_platform_scripts>" not in base
     assert "ASCII-only" not in base
-    wd = _WORK_DISCIPLINE
-    assert ".bat" in wd and "CRLF" in wd
-    assert "ASCII" in wd
-    assert ".ps1" in wd
-    assert "不" in wd and ("转码" in wd or "改换行" in wd)
+    run = _RUN
+    assert ".bat" in run and "CRLF" in run
+    assert "ASCII" in run
+    assert ".ps1" in run
+    assert "不" in run and ("转码" in run or "改换行" in run)
     hint = _CEO_CORE_HINT
     assert "work_discipline" not in hint
     assert ".bat" not in hint
     assert "CRLF" not in hint
-    catalog = build_system_skill_registry().get("work_discipline")
+    catalog = build_system_skill_registry().get("run")
     assert catalog is not None
-    assert ".bat" in catalog.summary or "Windows" in catalog.summary
+    assert catalog.summary == "跑命令 / 启服"
     delivery = _TEAM_DELIVERY_ENV
-    assert "work_discipline" in delivery and ".bat" in delivery
+    assert "consult(run)" in delivery and ".bat" in delivery
+    assert "work_discipline" not in delivery
     assert "双击即用" in delivery
 
 
@@ -1349,15 +1421,16 @@ def test_credential_hygiene_forbids_reask_plaintext_and_user_self_run():
 
 
 def test_core_teaches_cloud_web_install_verify_honesty():
-    """装包/验绿 HOW 在 building_software；核不写验绿检查表。"""
+    """装包边界在 building_software；核不写验绿检查表；对账不进 skill 剧本。"""
     hint = _CEO_CORE_HINT
     assert "结构自检" not in hint
     assert "export_to_local" not in hint
     build = build_system_skill_registry().get("building_software").body
-    assert "外环验绿对账" in build
-    assert "test_run" in build
-    assert "N/N OK" in build or "passed" in build
-    assert "分轴" in build or "零写盘" in build
+    assert "结构自检" in build
+    assert "export_to_local" in build
+    assert "run" in build
+    assert "外环验绿对账" not in build
+    assert "N/N OK" not in build
 
 
 def test_core_teaches_short_clarify_not_scene_ledger():
@@ -1378,7 +1451,7 @@ def test_skill_teaches_environment_capability_constraint():
     skill = _TEAM_ORCHESTRATION_ADVANCED
     delivery = _TEAM_DELIVERY_ENV
     assert "环境能力约束" in skill
-    assert "code_execute=未装配" in delivery
+    assert "run=未装配" in delivery
     assert "交付缺口" in delivery
     assert "bind_local_folder" in _TEAM_CROSS_FOLDER
     assert "consult(team_delivery_env)" in _TEAM_CROSS_FOLDER
@@ -1411,7 +1484,8 @@ def test_shared_base_teaches_delivery_honesty():
     assert "search-only 不可" not in _DEFAULT_SYSTEM_PROMPT
     assert "引擎会核验" not in _DEFAULT_SYSTEM_PROMPT
     assert "成稿可引用集" not in _DEFAULT_SYSTEM_PROMPT
-    assert "写报告" in _DEFAULT_SYSTEM_PROMPT and "写工具" in _DEFAULT_SYSTEM_PROMPT
+    assert "只读审计" not in _DEFAULT_SYSTEM_PROMPT
+    assert "写报告 ≠ 未使用写工具" not in _DEFAULT_SYSTEM_PROMPT
     assert "交付验收对照" not in _DEFAULT_SYSTEM_PROMPT
     assert "禁口头验收" not in _DEFAULT_SYSTEM_PROMPT
     assert "可用性短问" not in _DEFAULT_SYSTEM_PROMPT
@@ -1475,7 +1549,7 @@ def test_worker_opening_drops_captain_only_context():
     assert "team_orchestration_advanced" not in worker_dir
     assert "team_cross_folder" not in worker_dir
     assert "team_delivery_env" not in worker_dir
-    assert "work_discipline" in worker_dir
+    assert "work_discipline" not in worker_dir
     assert "long_form_landing" in worker_dir
 
 
@@ -1530,14 +1604,11 @@ def test_ceo_core_workspace_outranks_global_current_project_memory():
     assert "工作区" in _DEFAULT_SYSTEM_PROMPT
     assert "正在做" in _DEFAULT_SYSTEM_PROMPT
     assert "没有现场" in _DEFAULT_SYSTEM_PROMPT
-    # 权威线索 / 未定案 HOW 在 skill，不进核。
+    # 权威线索在编排 skill；未定案 contrib 纪律已撤，核不常驻。
     assert "权威线索" not in hint
     assert "未定案·窄" not in hint
     assert "读全局规则" not in hint
-    from agentcore.runtime.skills.work_discipline import _WORK_DISCIPLINE
-
-    assert "未定案·窄" in _WORK_DISCIPLINE
-    assert "架构" in _WORK_DISCIPLINE and "不可逆" in _WORK_DISCIPLINE
+    assert "未定案·窄" not in _DEFAULT_SYSTEM_PROMPT
     assert "权威线索" in _TEAM_ORCHESTRATION_ADVANCED
 
 
@@ -1724,27 +1795,25 @@ def test_ceo_core_teaches_memory_must_not_override_routing():
 
 
 def test_ceo_core_teaches_memory_history_user_facing_framing():
-    """记忆/历史对外口径 HOW → product_help / faq；派查阅走 delegate，核不写跨会话判决。"""
+    """记忆/历史对外口径 HOW → product_help；派查阅走 delegate，核不写跨会话判决。"""
     hint = _CEO_CORE_HINT
     assert "跨会话原文" not in hint
     assert "查阅员" not in hint
     assert "空口编" not in hint
     help_body = build_system_skill_registry().get("product_help").body
-    faq = build_system_skill_registry().get("product_help_faq").body
     assert "记忆/历史·对外口径" in help_body
     assert "禁止报工具名" in help_body or "禁止报工具名与内部角色名" in help_body
     assert "画像细节" in help_body
-    assert "能不能读历史对话" in faq or "有没有记忆" in faq
+    assert "能不能读历史对话" in help_body or "有没有记忆" in help_body
 
 
 def test_ceo_core_teaches_user_rules_framing():
-    """用户规则：载体对照 / 对外口径 HOW → product_help / faq；核不复述百科。"""
+    """用户规则：载体对照 / 对外口径 HOW → product_help；核不复述百科。"""
     hint = _CEO_CORE_HINT
     assert "【用户规则·载体对照】" not in hint
     assert "硬约束清单" not in hint
     assert "记忆偏好=软" not in hint
     help_body = build_system_skill_registry().get("product_help").body
-    faq = build_system_skill_registry().get("product_help_faq").body
     assert "用户规则·对外口径" in help_body
     assert "用户规则·内部" in help_body
     assert "可增" in help_body and "可改" in help_body and "可删" in help_body
@@ -1757,10 +1826,10 @@ def test_ceo_core_teaches_user_rules_framing():
     external = help_body.split("【用户规则·对外口径】", 1)[1].split("【", 1)[0]
     assert "action=" not in external
     assert "replace" not in external and "forget" not in external
-    assert "你能改规则吗" in faq
-    assert "AgentCore/规则/" in faq or "AgentCore/规则/" in help_body
-    assert ".mdc" in faq
-    assert "remember" in faq or "remember" in help_body
+    assert "你能改规则吗" in help_body
+    assert "AgentCore/规则/" in help_body
+    assert ".mdc" in help_body
+    assert "remember" in help_body
 
 
 def test_ceo_core_splits_routing_tree_from_acting_tree():
@@ -1775,15 +1844,27 @@ def test_ceo_core_splits_routing_tree_from_acting_tree():
     honesty = base.split("<诚实>", 1)[1].split("</诚实>", 1)[0]
     output = base.split("<输出>", 1)[1].split("</输出>", 1)[0]
     assert "<platform_knowledge>" not in hint
-    assert "只读" in role and "超规模" in role and "团队" in role
+    assert "全套工具" not in role
+    assert "短答和单点" in role and "默认交给团队" in role
+    assert "成件事交团队" in role
+    assert "一问就能收口" not in role
+    assert "装得下" not in role
+    assert "先判规模" in role
+    assert "协调" in role and "收口" in role
     assert "delegate" not in role
     for leaked in ("改文件", "Git 写", "跑测试", "成篇", "闲聊", "自己回", "窗口里已有"):
         assert leaked not in role
         assert leaked not in hint
-    assert "改产物" in DELEGATE_DESCRIPTION
+    assert "默认用本工具" in DELEGATE_DESCRIPTION
+    assert "一份注意力" not in DELEGATE_DESCRIPTION
+    assert "探路够了" not in DELEGATE_DESCRIPTION
+    assert "定位入口" not in DELEGATE_DESCRIPTION
     assert "成规模" in DELEGATE_DESCRIPTION
+    assert "成篇落盘" in DELEGATE_DESCRIPTION
+    assert "可运行应用" in DELEGATE_DESCRIPTION
+    assert "有写权" in DELEGATE_DESCRIPTION
     assert "闲聊" in DELEGATE_DESCRIPTION and "不必派" in DELEGATE_DESCRIPTION
-    assert "可见打算" in DELEGATE_DESCRIPTION
+    assert "可见打算" not in DELEGATE_DESCRIPTION
     assert "成规模查证" not in role
     assert "对照本回合结构面" in honesty
     assert "大白话" not in output
@@ -1816,6 +1897,8 @@ def test_ceo_core_gathers_evidence_before_workspace_judgment():
     assert "讨论对齐时读设计文档" not in hint
     assert "用户项目整仓摸底" not in hint
     assert "先不成文 ≠ 自己做完" not in hint
+    assert "<工作区文件>" not in hint
+    assert "<工作区文件>" not in _DEFAULT_SYSTEM_PROMPT
 
 
 def test_ceo_core_platform_knowledge_two_way_routing():
@@ -1837,26 +1920,28 @@ def test_ceo_core_platform_knowledge_two_way_routing():
     assert "【用户规则·载体对照】" not in hint
     catalog = build_system_skill_registry()
     help_sum = catalog.get("product_help").summary
-    faq_sum = catalog.get("product_help_faq").summary
     bug_sum = catalog.get("product_bug_triage").summary
-    assert "官网" in help_sum
+    help_body = catalog.get("product_help").body
+    assert help_sum == "本产品用法"
+    assert "官网" not in help_sum
+    assert "官网" in help_body
     assert "product_help_map" not in help_sum
     assert "product_help_faq" not in help_sum
-    assert "Cursor" in faq_sum or ".mdc" in help_sum
-    assert "故障" in bug_sum or "Bug" in bug_sum
-    faq = catalog.get("product_help_faq").body
-    assert "AgentCore/规则/" in faq
-    assert ".mdc" in faq
-    assert "skills/*.json" in faq
-    assert "Cursor" in faq and "AgentCore" in faq
+    assert "Cursor" in help_body or ".mdc" in help_body
+    assert bug_sum == "产品故障排查"
+    assert "AgentCore/规则/" in help_body
+    assert ".mdc" in help_body
+    assert "skills/*.json" in help_body
+    assert "Cursor" in help_body and "AgentCore" in help_body
 
 
 def test_ceo_core_teaches_identity_question_answers_our_product_first():
-    """身份问走自己答：可见正文用 `<身份>` 定位；他品落地禁令出核（缺席）。"""
+    """身份问：核内不应再有「这是什么项目」路由句；身份正文留下。他品落地禁令出核。"""
     hint = _CEO_CORE_HINT
     assert "【身份问·先答我方】" not in hint
     role = hint.split("<身份>", 1)[1].split("</身份>", 1)[0]
-    assert "这是什么项目" in role
+    assert "这是什么项目" not in hint
+    assert "这是什么项目" not in role
     assert "不必先查阅" not in role
     assert "同名他品" not in role
     assert "第三方" not in role
@@ -1898,23 +1983,21 @@ def test_ceo_core_teaches_existing_tool_results_must_not_be_denied():
 
 
 def test_ceo_core_cross_product_rule_paradigm_routing_hook():
-    """跨产品规则范式不进常驻核（不是①短问）；HOW 在 product_help / faq。"""
+    """跨产品规则范式不进常驻核（不是①短问）；HOW 在 product_help。"""
     hint = _CEO_CORE_HINT
     assert "【跨产品规则范式】" not in hint
     role = hint.split("<身份>", 1)[1].split("</身份>", 1)[0]
     assert "Cursor" not in role
     assert ".mdc" not in role
     help_body = build_system_skill_registry().get("product_help").body
-    faq = build_system_skill_registry().get("product_help_faq").body
     assert "至多一次窄 list `.cursor/rules`" in help_body or "至多一次窄 list" in help_body
     assert "多轮 list / 通读 `.mdc`" in help_body
-    assert "AgentCore/规则/" in faq or "AgentCore/规则/" in help_body
-    assert "skills/*.json" in faq or "skills/*.json" in help_body
-    assert "skill JSON" in help_body or "skill JSON" in faq
-    assert "未钉死目标载体" in faq or "未钉死目标载体" in help_body
-    assert "consult(product_help)" in faq or "必查 `product_help`" in faq
-    faq_sum = build_system_skill_registry().get("product_help_faq").summary
-    assert "Cursor" in faq_sum
+    assert "AgentCore/规则/" in help_body
+    assert "skills/*.json" in help_body
+    assert "skill JSON" in help_body
+    assert "未钉死目标载体" in help_body
+    help_sum = build_system_skill_registry().get("product_help").summary
+    assert "Cursor" not in help_sum
     assert "意图分类器" not in hint
     assert "凡写「短问 / `ask_user`」处一律适用" not in hint
 
@@ -1930,17 +2013,21 @@ def test_ceo_core_teaches_intent_routing_for_adversarial_entry():
     assert "庭前取证由辩论机制保证" not in hint
     assert "点名才开" in DEBATE_DESCRIPTION
     assert "正反" in DEBATE_DESCRIPTION
-    assert "挑刺" in DEBATE_DESCRIPTION and "delegate" in DEBATE_DESCRIPTION
-    assert "多视角" in DEBATE_DESCRIPTION
+    assert "挑刺" not in DEBATE_DESCRIPTION
+    assert "多视角" not in DEBATE_DESCRIPTION
+    assert "delegate" not in DEBATE_DESCRIPTION
     assert "三种形态" not in DEBATE_DESCRIPTION
     assert "红队压测" not in DEBATE_DESCRIPTION
     assert "多方圆桌" not in DEBATE_DESCRIPTION
     assert "对抗性多视角思考" not in DEBATE_DESCRIPTION
     form_desc = DEBATE_PARAMETERS["properties"]["form"]["description"]
     assert "正反" in form_desc
-    assert "delegate" in form_desc
+    assert "delegate" not in form_desc
+    assert "挑刺" not in form_desc
+    assert "多视角" not in form_desc
     assert "红队压测" not in form_desc
     assert "多方圆桌" not in form_desc
+    assert DEBATE_PARAMETERS["properties"]["form"]["enum"] == ["debate"]
     assert "点名才开" not in hint
     catalog = build_system_skill_registry()
     debate_sum = catalog.get("debate_and_review").summary

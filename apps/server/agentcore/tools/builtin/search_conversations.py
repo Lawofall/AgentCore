@@ -1,9 +1,8 @@
-"""search_conversations — Worker directory / search over the owner's past chats.
+"""search_conversations — directory / search over the owner's past chats.
 
-Worker-only (``AUDIENCE_WORKER_ONLY`` + ``ToolSurface.WORKER_ONLY`` + ``manual_wire``).
-Wired after ``build_worker_registry`` by ``_wire_worker_conversation_log_tools``.
-Never reaches the CEO toolset (``build_ceo_tool_registry`` only collects builtin
-CEO-audience tools).
+``AUDIENCE_BOTH`` + ``ToolSurface.WORKER_ONLY`` + ``manual_wire``. Wired after
+``build_*_registry`` by ``_wire_conversation_log_tools`` (CEO and worker).
+Product-always-on; still on-demand until consult.
 
 With account narrow-ticket creds (sidecar), calls the cloud HTTP API instead of
 the local ConversationRepository (大众桌面无本机 PG).
@@ -21,7 +20,7 @@ from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import ConversationRepository, MessageRepository
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
-    AUDIENCE_WORKER_ONLY,
+    AUDIENCE_BOTH,
     ToolRegistration,
     ToolSurface,
 )
@@ -178,7 +177,7 @@ class SearchConversationsTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.WORKER_ONLY,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         manual_wire=True,
     )
 

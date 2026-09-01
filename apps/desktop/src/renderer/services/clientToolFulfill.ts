@@ -7,6 +7,12 @@ import {
 
 export type { InteractionSettleOrigin };
 
+/** Exact detail shared with ``agentcore.workspace.limits.WORKSPACE_RECONNECT_DETAIL``. */
+export const WORKSPACE_RECONNECT_DETAIL = "桌面在重连，请再试这一下";
+
+const ABORT_CANCEL = "cancel";
+const ABORT_RECONNECT = "reconnect";
+
 /** Result envelope posted as `ResolveClientToolInteraction` (sans `kind`). */
 export type ClientToolResultEnvelope =
   | { ok: true; value: unknown }
@@ -28,8 +34,15 @@ const inFlight = new Map<string, Promise<void>>();
 /** Successfully performed side effects — skip re-run; may still resolve. */
 const fulfilled = new Map<string, FulfilledEntry>();
 
-/** Per-request abort controllers (timeout + `client_tool_cancelled`). */
-const abortByRequest = new Map<string, AbortController>();
+type InflightAbort = {
+  ac: AbortController;
+  origin: InteractionSettleOrigin;
+  logLabel: string;
+  conversationId: string;
+};
+
+/** Per-request abort controllers (timeout + `client_tool_cancelled` + reconnect). */
+const abortByRequest = new Map<string, InflightAbort>();
 
 /** Cancel arrived before fulfill started — skip side effect + settle. */
 const cancelledBeforeStart = new Set<string>();
@@ -95,11 +108,41 @@ export function resetClientToolFulfillmentForTests(): void {
 export function abortClientToolRequest(requestId: string): void {
   cancelledBeforeStart.add(requestId);
   fulfilled.delete(requestId);
-  const ac = abortByRequest.get(requestId);
-  if (ac && !ac.signal.aborted) {
-    ac.abort();
+  const entry = abortByRequest.get(requestId);
+  if (entry && !entry.ac.signal.aborted) {
+    entry.ac.abort(ABORT_CANCEL);
   }
   logEvent("info", "client_tool.cancelled", { request_id: requestId });
+}
+
+function reconnectEnvelope(): ClientToolResultEnvelope {
+  return {
+    ok: false,
+    error: { kind: "WorkspaceIOError", detail: WORKSPACE_RECONNECT_DETAIL },
+  };
+}
+
+/**
+ * Fulfill transport dropped: fail in-flight **workspace** ops of this origin
+ * immediately so the server does not burn the settle deadline. Host / MCP / board
+ * keep running (HTTP settle still works across a 1–4s SSE blip).
+ *
+ * Does not skip settle — unlike {@link abortClientToolRequest}.
+ */
+export function failInflightClientToolsForReconnect(
+  origin: InteractionSettleOrigin,
+): void {
+  for (const [requestId, entry] of abortByRequest) {
+    if (entry.origin !== origin) continue;
+    if (entry.logLabel !== "workspaceOps") continue;
+    if (entry.ac.signal.aborted) continue;
+    entry.ac.abort(ABORT_RECONNECT);
+    logEvent("info", "workspace_op.reconnect_abort", {
+      conversation_id: entry.conversationId,
+      request_id: requestId,
+      origin,
+    });
+  }
 }
 
 function logWorkspaceResolve(
@@ -334,33 +377,71 @@ export async function fulfillClientToolOnce(opts: {
   }
 
   const ac = new AbortController();
-  abortByRequest.set(requestId, ac);
+  abortByRequest.set(requestId, {
+    ac,
+    origin,
+    logLabel,
+    conversationId,
+  });
+
+  const settleReconnect = () =>
+    tryResolve(
+      conversationId,
+      requestId,
+      reconnectEnvelope(),
+      logLabel,
+      origin,
+      isWorkspace
+        ? {
+            duration_ms: Date.now() - t0,
+            result_ok: false,
+            reconnect: true,
+          }
+        : undefined,
+    );
 
   const run = (async () => {
     try {
-      if (cancelledBeforeStart.has(requestId) || ac.signal.aborted) {
+      if (cancelledBeforeStart.has(requestId)) {
         cancelledBeforeStart.delete(requestId);
+        fulfilled.delete(requestId);
+        return;
+      }
+      if (ac.signal.aborted) {
+        await settleReconnect();
         return;
       }
       let result: ClientToolResultEnvelope;
       try {
         result = await perform(ac.signal);
       } catch (err) {
+        if (cancelledBeforeStart.has(requestId)) {
+          cancelledBeforeStart.delete(requestId);
+          fulfilled.delete(requestId);
+          return;
+        }
         if (
           ac.signal.aborted ||
-          cancelledBeforeStart.has(requestId) ||
           (err instanceof DOMException && err.name === "AbortError") ||
           (err instanceof Error && err.name === "AbortError")
         ) {
+          if (ac.signal.aborted && !cancelledBeforeStart.has(requestId)) {
+            await settleReconnect();
+            return;
+          }
           cancelledBeforeStart.delete(requestId);
           fulfilled.delete(requestId);
           return;
         }
         throw err;
       }
-      if (ac.signal.aborted || cancelledBeforeStart.has(requestId)) {
+      if (cancelledBeforeStart.has(requestId)) {
         cancelledBeforeStart.delete(requestId);
         fulfilled.delete(requestId);
+        return;
+      }
+      if (ac.signal.aborted) {
+        await settleReconnect();
         return;
       }
       if (result.ok) {

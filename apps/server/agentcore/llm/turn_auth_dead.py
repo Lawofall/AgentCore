@@ -19,8 +19,8 @@ Consumers (all read this module — do not invent parallel flags):
 
 - ``ObservingLLMProvider`` — mark on death; raise before new complete/stream
 - ``run_background_llm`` — skip chrome when **that call's** source is latched
-- ``resolve_wave_budget_hooks`` / materialise — stop admitting unstarted workers
-  whose drive LLM is the dead payer
+- ``resolve_wave_budget_hooks`` / materialise — ``should_stop`` when this drive's
+  payer is dead (OR the turn token ceiling); stop admitting unstarted workers
 - ``delegate`` / ``debate`` tools — hard-refuse new batches for the dead payer
 """
 

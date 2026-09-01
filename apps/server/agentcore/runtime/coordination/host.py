@@ -226,7 +226,7 @@ def admit_before_run_plan_emit(
         append_overlap_reject_message,
         apply_vacated_seat_replaces,
         find_append_overlaps,
-        find_sibling_artifact_crosses,
+        find_sibling_role_crosses,
     )
     from agentcore.runtime.delegate.batch_shape import annotate_batch_meta
 
@@ -404,8 +404,7 @@ def admit_before_run_plan_emit(
             )
         return None
 
-    birth_desk = getattr(tool, "_folder_id", None)
-    sibling_hits = find_sibling_artifact_crosses(plan, birth_desk_id=birth_desk)
+    sibling_hits = find_sibling_role_crosses(plan)
     if sibling_hits:
         msg = append_overlap_reject_message(
             sibling_hits,
@@ -413,10 +412,9 @@ def admit_before_run_plan_emit(
             total=len(plan.nodes),
         )
         logger.info(
-            "coordination.sibling_artifact_rejected",
+            "coordination.sibling_role_rejected",
             execution_id=execution_id,
             overlaps=len(sibling_hits),
-            paths=[o.path for o in sibling_hits if o.path],
             call=call_idx,
             via="pre_emit",
         )
@@ -908,14 +906,13 @@ def try_start_coordination(
             )
         return None
 
-    # C3 sibling gate before session create (defense if caller skipped pre-emit admit).
-    # Same rule as pre_emit: scan the **new batch only** (host terminals in a merged
-    # plan are 续派, not sibling).
+    # Same-batch seat overlap before session create (defense if caller skipped
+    # pre-emit admit). Scan the **new batch only** (host terminals are 续派).
     creating_fresh = session is None
     if creating_fresh:
         from agentcore.runtime.coordination.append_guard import (
             append_overlap_reject_message,
-            find_sibling_artifact_crosses,
+            find_sibling_role_crosses,
             same_batch_plan,
         )
         from agentcore.runtime.delegate.batch_shape import annotate_batch_meta
@@ -926,9 +923,7 @@ def try_start_coordination(
             if str(rid).strip()
         }
         batch = same_batch_plan(plan, exclude_run_ids=exclude)
-        sibling_hits = find_sibling_artifact_crosses(
-            batch, birth_desk_id=getattr(tool, "_folder_id", None)
-        )
+        sibling_hits = find_sibling_role_crosses(batch)
         if sibling_hits:
             drop_ids = {n.run_id for n in batch.nodes if n.run_id}
             node_count = len(batch.nodes)
@@ -940,10 +935,9 @@ def try_start_coordination(
                 total=node_count or len(plan.nodes),
             )
             logger.info(
-                "coordination.sibling_artifact_rejected",
+                "coordination.sibling_role_rejected",
                 execution_id=execution_id,
                 overlaps=len(sibling_hits),
-                paths=[o.path for o in sibling_hits if o.path],
                 call=call_idx,
                 via="try_start",
             )

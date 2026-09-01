@@ -179,15 +179,30 @@ export function formatMessageTime(iso: string): string {
   return `${d.getFullYear()}年${md} ${tod}`;
 }
 
-/** 毫秒时长 → 人类可读："45s" / "2m34s" / "1h2m"（用于任务用时摘要）。 */
+/**
+ * 毫秒时长 → 紧凑用时："45s" / "2m 34s" / "1h 2m"。
+ * 对话里任务/节点/工具/状态条的秒表都走这里；单位间留空格（GitHub Actions / Linear / Vercel 同形）。
+ * 过小时不再带秒——长跑密度优先。倒计时、中文时限、录音 `m:ss` 不走本函数。
+ */
 export function formatDuration(ms: number): string {
   const totalSec = Math.round(ms / 1000);
   if (totalSec < 60) return `${totalSec}s`;
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
-  if (h > 0) return `${h}h${m}m`;
-  return `${m}m${s}s`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m ${s}s`;
+}
+
+/** 整数秒 → {@link formatDuration}。进行中秒表已有秒数时用这个，禁止再拼裸秒。 */
+export function formatDurationSec(totalSec: number): string {
+  if (!Number.isFinite(totalSec) || totalSec < 0) return "0s";
+  return formatDuration(totalSec * 1000);
+}
+
+/** 从状态行去掉末尾用时。a11y 完成态改由 `durationText` 报；进行中不把每秒跳动读进 aria。 */
+export function stripDurationFaceSuffix(text: string): string {
+  return text.replace(/ · \d+(?:h \d+m|m \d+s|s)$/, "");
 }
 
 /** 1 单位 = 10^9 nano：台账/接口里钱的规范单位（整数，绝不用 float）。 */

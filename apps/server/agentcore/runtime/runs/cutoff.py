@@ -47,8 +47,8 @@ REASON_TO_WARNING: dict[str, str] = {
     REASON_DEGRADED_HANDOFF: DEGRADED_HANDOFF_WARNING,
 }
 
-# 预算收尾窗口：累计 token ≥ ceiling − reserve 时进入落盘/handoff-only（默认 30k）
-DEFAULT_TOKEN_WIND_DOWN_RESERVE = 30_000
+# 预算收尾窗口：累计 fuse token ≥ ceiling − reserve 时进入落盘/handoff-only（默认 20 万）
+DEFAULT_TOKEN_WIND_DOWN_RESERVE = 200_000
 
 # 收尾窗口允许的工具（落盘 + 内环诊断 + handoff；调查/执行类一律剔除）
 # file_read 不在此基础集：仅交付类（form=files / 非空 artifacts，工具面仍含

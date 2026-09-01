@@ -21,25 +21,24 @@ Flow (one op):
 
 State is in-process (single-worker posture, same as the approval gate); front
 with Redis to scale to multiple workers (see ``config.py``). A result the client
-never delivers fails as a ``WorkspaceIOError`` after the timeout. A single settle
-timeout fails only that op; **consecutive** real-op settle timeouts (N=2) mark the
-channel sticky-dead for the turn (sibling inflight settle + later ops fail-fast),
-so a dropped desktop never hangs the turn on cascaded deadlines. Concurrent
-desktop round-trips are capped (``max_inflight``, default 16); extras queue before
-suspend, and queue wait rides the outer tool wall clock. No online fulfiller →
-typed failure without waiting out the deadline, named the way the turn-start
-presence gate would have named it: a desktop that is online but no longer declares
-this root reads as 未声明持有本会话的本地目录, not 无履约方. The one delay is a
-desktop whose SSE dropped seconds ago — that op waits out a bounded reconnect
-grace inside its own deadline (``fulfill/grace.py``) instead of failing blind.
+never delivers fails as a ``WorkspaceIOError`` after the timeout — **that op
+only**. Timeouts do not declare the desk disconnected; whether files are
+connected is fulfiller presence (``workspace.presence``), the same fact the
+turn-start gate asks. An op the desktop has already started is failed immediately
+when the fulfill transport drops (desktop POSTs 「桌面在重连，请再试这一下」);
+ops not yet delivered still wait reconnect grace. Concurrent desktop round-trips are capped
+(``max_inflight``, default 16); extras queue before suspend, and queue wait
+rides the outer tool wall clock. No online fulfiller → typed failure without
+waiting out the deadline, named the way the turn-start presence gate would have
+named it: a desktop that is online but no longer declares this root reads as
+未声明持有本会话的本地目录, not 无履约方. The one delay is a desktop whose SSE
+dropped seconds ago — that op waits out a bounded reconnect grace inside its
+own deadline (``fulfill/grace.py``) instead of failing blind.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterator
-from contextlib import contextmanager
-from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, NoReturn
@@ -73,24 +72,6 @@ from agentcore.workspace.protocol import (
 
 logger = get_logger(__name__)
 
-# Background IndexMaintainer channel IO: timeouts must not sticky-dead the shared
-# Local file channel (same spirit as ``probe_exec``). Bound around ``ensure_index``.
-_index_io: ContextVar[bool] = ContextVar("workspace_index_io", default=False)
-
-
-@contextmanager
-def index_io_mode() -> Iterator[None]:
-    """Mark the current task as background index IO (no sticky-dead on timeout)."""
-    token = _index_io.set(True)
-    try:
-        yield
-    finally:
-        _index_io.reset(token)
-
-
-def index_io_active() -> bool:
-    return _index_io.get()
-
 
 class WorkspaceOp(StrEnum):
     """The op names exchanged over the channel (one per ``WorkspaceBackend`` method).
@@ -117,10 +98,10 @@ class WorkspaceOp(StrEnum):
     REPLACE = "replace"
     GREP = "grep"
     EXECUTE = "execute"
-    # Language-service diagnostics (inner verify loop) — LocalWorkspace only;
-    # ServerWorkspace returns unavailable without issuing this op. Desktop runs
-    # TS/JS diagnostics for ``args.paths`` and returns
-    # ``{status, reason?, diagnostics[]}``.
+    # Language-service diagnostics (inner verify loop). LocalWorkspace and
+    # sidecar ServerWorkspace(location=local) issue this op; cloud desks return
+    # unavailable without delivery. Desktop runs TS/JS diagnostics for
+    # ``args.paths`` and returns ``{status, reason?, diagnostics[]}``.
     DIAGNOSTICS = "diagnostics"
     # Probe which code_execute languages have a usable launcher on the user's
     # machine (PATH / Git Bash). Not a WorkspaceBackend method — issued at turn
@@ -138,7 +119,8 @@ class WorkspaceOp(StrEnum):
     ENSURE_TURN_BASELINE = "ensure_turn_baseline"
     # Background process ops (双模式工作区 §四): spawn / read / stop / list long-lived
     # processes held by the desktop main process. NOT WorkspaceBackend methods — issued by
-    # the worker-only ``terminal`` tool over the same channel (LocalWorkspace + sidecar).
+    # model-facing ``run`` (background / process actions) over the same channel
+    # (LocalWorkspace + sidecar).
     PROCESS_START = "process_start"
     PROCESS_READ = "process_read"
     PROCESS_STOP = "process_stop"
@@ -189,14 +171,6 @@ def raise_op_error(error: dict[str, Any]) -> NoReturn:
     raise cls(detail)
 
 
-# Shared detail fragment so ``is_channel_dead_detail`` / ``is_liveness_timeout_detail``
-# keep matching channel-dead fail-fast / sibling cancel envelopes (capacity ≠ liveness).
-_CHANNEL_DEAD_DETAIL = "local workspace channel dead（活性挂起）"
-
-# Real-op settle timeouts must streak this many times before sticky-dead (success clears).
-_STICKY_AFTER_CONSECUTIVE_TIMEOUTS = 2
-
-
 @dataclass
 class WorkspaceChannel:
     """Suspends one LocalWorkspace op until the bound desktop runs it.
@@ -208,16 +182,9 @@ class WorkspaceChannel:
     fails with a typed ``WorkspaceIOError`` without burning the deadline (a
     just-dropped desktop first gets its reconnect grace, see ``fulfill/grace.py``).
 
-    Sticky dead: **consecutive** transport ``TimeoutError``s on **real** workspace
-    ops (desktop liveness hang, N=2) mark the channel dead for the rest of the turn —
-    subsequent ``request``s fail-fast without delivery, and same-channel inflight ops
-    are settled with a failure envelope so they do not burn the remaining deadline.
-    A single settle timeout fails only that op (no sibling cancel, no sticky).
-    A successful settle clears the consecutive-timeout streak.
-    ``probe_exec`` (language advertise probe at turn prepare) is exempt: its
-    timeout/failure only fail-closes the language surface, and must not sticky-dead
-    the file channel. Background index IO (``index_io_mode``) is likewise exempt so
-    an IndexMaintainer hang cannot drag tool-family siblings into channel-dead.
+    A settle timeout fails only that op. It does not cancel siblings, does not
+    fail-fast later ops, and does not mean the desk is disconnected — presence
+    is ``workspace.presence.local_workspace_files_reachable``.
 
     Bounded in-flight: a semaphore caps concurrent desktop round-trips
     (``max_inflight``, default 16). Extra callers queue before suspend; queue wait
@@ -230,59 +197,14 @@ class WorkspaceChannel:
     timeout_seconds: float
     root_id: str = ""  # which desktop FS root this workspace is bound to (P2d)
     max_inflight: int = 16  # concurrent suspends; settings.workspace_channel_max_inflight
-    _dead: bool = field(default=False, init=False, repr=False)
     _inflight: set[str] = field(default_factory=set, init=False, repr=False)
-    _consecutive_settle_timeouts: int = field(default=0, init=False, repr=False)
     _sem: asyncio.Semaphore | None = field(default=None, init=False, repr=False)
-
-    @property
-    def is_dead(self) -> bool:
-        """True after sticky-dead (consecutive real-op liveness hangs)."""
-        return self._dead
 
     def _get_sem(self) -> asyncio.Semaphore:
         """Lazy semaphore so it binds to the running event loop on first acquire."""
         if self._sem is None:
             self._sem = asyncio.Semaphore(max(1, self.max_inflight))
         return self._sem
-
-    def _fail_inflight_siblings(self, *, trigger_request_id: str) -> None:
-        """Settle other same-channel awaits with a channel-dead failure envelope."""
-        envelope = {
-            "ok": False,
-            "error": {"kind": "WorkspaceIOError", "detail": _CHANNEL_DEAD_DETAIL},
-        }
-        for rid in list(self._inflight):
-            if rid == trigger_request_id:
-                continue
-            # resolve → Future.set_result; already-done / unknown is a no-op.
-            self.registry.resolve(rid, envelope, conversation_id=self.conversation_id)
-
-    def _mark_dead(self, *, op: str, request_id: str) -> None:
-        """Consecutive liveness hangs reached N: sticky-dead + cancel siblings (idempotent)."""
-        if self._dead:
-            return
-        self._dead = True
-        logger.info(
-            "workspace.channel_dead",
-            op=op,
-            request_id=request_id,
-            conversation_id=self.conversation_id,
-            consecutive_timeouts=self._consecutive_settle_timeouts,
-        )
-        self._fail_inflight_siblings(trigger_request_id=request_id)
-
-    def _reject_if_dead(self, op_name: str) -> None:
-        if not self._dead:
-            return
-        logger.info(
-            "workspace.op_rejected_channel_dead",
-            op=op_name,
-            conversation_id=self.conversation_id,
-        )
-        raise WorkspaceIOError(
-            f"local workspace op '{op_name}' rejected: channel dead（活性挂起）"
-        )
 
     async def request(
         self,
@@ -313,28 +235,11 @@ class WorkspaceChannel:
         ``root_id`` overrides the channel's bound root for this one op (W3 session
         read-only mounts under ``external/<alias>/``); omit to use the workspace
         binding root. Does not change the conversation workspace binding contract.
-
-        After consecutive real-op liveness timeouts (N=2) the channel stays
-        sticky-dead: new requests raise immediately (no delivery) so a hung desktop
-        cannot cascade into more 60s waits. A single timeout fails only that op.
-        ``probe_exec`` and background index-IO timeouts do not enter that sticky
-        state (and do not advance the consecutive-timeout streak).
-
-        Concurrency order: dead-check → acquire slot → dead-check → suspend. A
-        waiter that obtains a slot after the channel died fail-fasts without delivery.
         """
         op_name = str(op)
-        self._reject_if_dead(op_name)
-        counts_toward_sticky = (
-            op_name != WorkspaceOp.PROBE_EXEC and not index_io_active()
-        )
-
         sem = self._get_sem()
         await sem.acquire()
         try:
-            # Re-check after queueing: channel may have died while we waited.
-            self._reject_if_dead(op_name)
-
             request_id = new_id()
             deadline = derive_channel_timeout(
                 explicit=timeout,
@@ -404,8 +309,6 @@ class WorkspaceChannel:
                         on_suspended=_emit_op_required,
                     )
                 except TimeoutError as e:
-                    # Attribute from channel fields (not contextvars) so background
-                    # index / detached tasks stay replayable in logs/dev.jsonl.
                     timeout_fields: dict[str, Any] = {
                         "op": op_name,
                         "request_id": request_id,
@@ -421,19 +324,6 @@ class WorkspaceChannel:
                     if directory is not None:
                         timeout_fields["directory"] = directory
                     logger.info("workspace.op_timeout", **timeout_fields)
-                    # probe_exec / background index IO: fail the op only — never
-                    # sticky-dead the shared file channel or cancel tool siblings.
-                    if counts_toward_sticky:
-                        self._consecutive_settle_timeouts += 1
-                        if (
-                            self._consecutive_settle_timeouts
-                            >= _STICKY_AFTER_CONSECUTIVE_TIMEOUTS
-                        ):
-                            self._mark_dead(op=op_name, request_id=request_id)
-                            raise WorkspaceIOError(
-                                f"local workspace op '{op_name}' timed out; "
-                                f"channel dead（活性挂起）"
-                            ) from e
                     raise WorkspaceIOError(
                         f"local workspace op '{op_name}' timed out（活性挂起）"
                     ) from e
@@ -442,32 +332,7 @@ class WorkspaceChannel:
         finally:
             sem.release()
 
-        # Any non-timeout settle clears the hang streak (ok or typed desktop error).
-        if counts_toward_sticky:
-            self._consecutive_settle_timeouts = 0
-
         if not isinstance(result, dict) or not result.get("ok"):
             error = result.get("error") if isinstance(result, dict) else None
             raise_op_error(error or {"kind": "WorkspaceIOError", "detail": "malformed op result"})
         return result.get("value")
-
-
-def raise_if_backend_channel_dead(backend: object | None) -> None:
-    """Abort when a local backend's ``WorkspaceChannel`` is already sticky-dead.
-
-    Used by prepare / turn_runner so a dead desktop channel fails the turn before
-    assemble + LLM (tools would only reject afterward). No-op for cloud / no-channel
-    backends. Raises ``WorkspaceIOError`` with a user-honest prepare-abort message.
-    """
-    if backend is None:
-        return
-    channel = getattr(backend, "_channel", None)
-    if not isinstance(channel, WorkspaceChannel) or not channel.is_dead:
-        return
-    from agentcore.workspace.limits import CHANNEL_DEAD_PREPARE_ABORT
-
-    logger.info(
-        "workspace.prepare_aborted_channel_dead",
-        conversation_id=getattr(channel, "conversation_id", None),
-    )
-    raise WorkspaceIOError(CHANNEL_DEAD_PREPARE_ABORT)

@@ -21,22 +21,27 @@ from agentcore.core.logging import get_logger
 from agentcore.db.repositories import DocumentRepository
 from agentcore.db.repositories.documents import USER_RULES_DOC_NAME
 from agentcore.documents.frontmatter import set_entry_frontmatter, strip_entry_frontmatter
+from agentcore.memory.always_join import (
+    ancestor_rule_bodies_by_scope,
+    join_always_layers,
+)
 from agentcore.memory.injection import (
-    _ANCESTOR_MEMORY_LABEL,
-    _FOLDER_MEMORY_LABEL,
+    _ANCESTOR_SETTINGS_LABEL,
     _FOLDER_NAV_LABEL,
+    _FOLDER_SETTINGS_LABEL,
     disputed_memory_paths,
 )
 from agentcore.memory.scope_chain import (
     ancestor_scopes,
+    cloud_scope_chain,
     db_scope_chain,
     own_scope_chain,
     snapshot_scope_chain,
 )
 from agentcore.memory.store import (
-    ALWAYS_MEMORY_FILES,
     CORE_MEMORY_FILE,
     NAVIGATION_MEMORY_FILE,
+    PREFERENCES_MEMORY_FILE,
     MemoryStore,
 )
 from agentcore.memory.user_memory import strip_memory_chrome
@@ -45,17 +50,6 @@ if TYPE_CHECKING:
     from agentcore.memory.account_prepare_cache import AccountPrepareSnapshot
 
 logger = get_logger(__name__)
-
-# Labels the folder-layer user rules inside the shared block (mirrors the memory folder label).
-_USER_RULE_FOLDER_LABEL = "（以下为「当前文件夹」专属规则，仅在本文件夹内适用）"
-
-# Labels an ANCESTOR folder's user rules (双模式工作区 §5.4 沿树继承). Nesting has no
-# hard-override structure either — proximity is expressed by order (outer first) and by
-# saying so in the label, same as the global-vs-folder seam.
-_USER_RULE_ANCESTOR_LABEL = (
-    "（以下为「上层文件夹」的规则，其下所有文件夹一并适用；"
-    "与更靠近当前文件夹的规则冲突时，以更近的为准）"
-)
 
 _RULE_BULLET_RE = re.compile(r"^\s*[-*]\s+(.*)$")
 
@@ -367,123 +361,147 @@ def compose_injected_rules(fragments: Sequence[RuleFragment]) -> str:
     return "\n\n".join(f.body for f in fragments)
 
 
+def _join_frags(**kwargs: object) -> list[RuleFragment]:
+    return [
+        RuleFragment(body=item.body)
+        for item in join_always_layers(
+            folder_settings_label=_FOLDER_SETTINGS_LABEL,
+            ancestor_settings_label=_ANCESTOR_SETTINGS_LABEL,
+            folder_nav_label=_FOLDER_NAV_LABEL,
+            **kwargs,  # type: ignore[arg-type]
+        )
+    ]
+
+
+async def _slot_body(
+    store: MemoryStore,
+    user_id: str,
+    path: str,
+    scope: str | None,
+    disputed: frozenset[str],
+) -> str | None:
+    if path in disputed:
+        return None
+    return _injectable_body(await store.load(user_id, path, scope=scope), chrome=True)
+
+
+async def _rule_bodies(
+    repo: DocumentRepository, user_id: str, scope: str | None
+) -> list[str]:
+    out: list[str] = []
+    for doc in await repo.list_injectable_rules(user_id, scope, ai_maintained=False):
+        body = _injectable_body(doc.content, chrome=False)
+        if body:
+            out.append(body)
+    return out
+
+
+def _cloud_rule_bodies(payload: Mapping[str, object], key: str) -> list[str]:
+    out: list[str] = []
+    for doc in _iter_cloud_rule_docs(payload, key):
+        body = _injectable_body(str(doc.get("content") or ""), chrome=False)
+        if body:
+            out.append(body)
+    return out
+
+
+def _cloud_doc_body(doc: Mapping[str, object]) -> str | None:
+    return _injectable_body(str(doc.get("content") or ""), chrome=False)
+
+
+def _snapshot_slot(
+    snapshot: AccountPrepareSnapshot, path: str, scope: str | None
+) -> str | None:
+    from agentcore.memory.account_prepare_cache import memory_body_from_snapshot
+
+    return _injectable_body(
+        memory_body_from_snapshot(snapshot, path, scope=scope), chrome=True
+    )
+
+
 async def _memory_fragments(
     store: MemoryStore, user_id: str, *, scope_chain: Sequence[str]
 ) -> list[RuleFragment]:
-    """The AI-memory core as fragments, rendered exactly as the legacy memory concatenation.
-
-    GLOBAL 偏好.md + 画像.md (in ``ALWAYS_MEMORY_FILES`` order, chrome-stripped), then every
-    ANCESTOR folder's 画像.md outermost-first (§5.4 沿树继承), then the current folder's
-    画像.md and 导航.md (skip missing).
-
-    ``导航.md`` does **not** inherit: it is a route table of workspace-root-relative paths, and
-    an outer folder's routes do not resolve from an inner folder's root. Re-basing them is a
-    product decision nobody has made — routing the model at broken paths is worse than not
-    routing it at all.
-
-    A note the user marked wrong (纠错通道) is skipped in whatever layer it was marked — one
-    listing per touched scope answers that, and an unreadable listing degrades to「not
-    disputed」rather than dropping the layer.
-    """
-    frags: list[RuleFragment] = []
+    """Memory slots only (tests). Production assemble interleaves rules in the same layers."""
     global_disputed = await disputed_memory_paths(store, user_id, None)
-    for file in ALWAYS_MEMORY_FILES:
-        if file in global_disputed:
-            continue
-        body = _injectable_body(await store.load(user_id, file), chrome=True)
-        if body:
-            frags.append(RuleFragment(body=body))
+    ancestor_layers: list[tuple[str | None, Sequence[str]]] = []
     for scope in ancestor_scopes(scope_chain):
-        if CORE_MEMORY_FILE in await disputed_memory_paths(store, user_id, scope):
-            continue
-        body = _injectable_body(
-            await store.load(user_id, CORE_MEMORY_FILE, scope=scope), chrome=True
+        disputed = await disputed_memory_paths(store, user_id, scope)
+        profile = await _slot_body(
+            store, user_id, CORE_MEMORY_FILE, scope, disputed
         )
-        if body:
-            frags.append(RuleFragment(body=f"{_ANCESTOR_MEMORY_LABEL}\n{body}"))
+        ancestor_layers.append((profile, ()))
+    current_profile = current_nav = None
     if scope_chain:
         folder_id = scope_chain[-1]
-        folder_disputed = await disputed_memory_paths(store, user_id, folder_id)
-        if CORE_MEMORY_FILE not in folder_disputed:
-            folder_body = _injectable_body(
-                await store.load(user_id, CORE_MEMORY_FILE, scope=folder_id), chrome=True
-            )
-            if folder_body:
-                frags.append(RuleFragment(body=f"{_FOLDER_MEMORY_LABEL}\n{folder_body}"))
-        if NAVIGATION_MEMORY_FILE not in folder_disputed:
-            nav_body = _injectable_body(
-                await store.load(user_id, NAVIGATION_MEMORY_FILE, scope=folder_id),
-                chrome=True,
-            )
-            if nav_body:
-                frags.append(RuleFragment(body=f"{_FOLDER_NAV_LABEL}\n{nav_body}"))
-    return frags
+        disputed = await disputed_memory_paths(store, user_id, folder_id)
+        current_profile = await _slot_body(
+            store, user_id, CORE_MEMORY_FILE, folder_id, disputed
+        )
+        current_nav = await _slot_body(
+            store, user_id, NAVIGATION_MEMORY_FILE, folder_id, disputed
+        )
+    return _join_frags(
+        global_pref=await _slot_body(
+            store, user_id, PREFERENCES_MEMORY_FILE, None, global_disputed
+        ),
+        global_profile=await _slot_body(
+            store, user_id, CORE_MEMORY_FILE, None, global_disputed
+        ),
+        ancestor_layers=ancestor_layers,
+        current_profile=current_profile,
+        current_nav=current_nav,
+        include_current=bool(scope_chain),
+    )
 
 
 async def _user_rule_fragments(
     repo: DocumentRepository, user_id: str, *, scope_chain: Sequence[str]
 ) -> list[RuleFragment]:
-    """The user's own always-injected rule docs (``ai_maintained=false``) as fragments.
-
-    GLOBAL rules first, then each ANCESTOR folder outermost-first, then the current folder
-    (§5.4 沿树继承 — 近的排在后面). Frontmatter stripped; unclosed fence omits the entry.
-    """
-    frags: list[RuleFragment] = []
-    for doc in await repo.list_injectable_rules(user_id, None, ai_maintained=False):
-        body = _injectable_body(doc.content, chrome=False)
-        if body:
-            frags.append(RuleFragment(body=body))
-    for scope in ancestor_scopes(scope_chain):
-        for doc in await repo.list_injectable_rules(user_id, scope, ai_maintained=False):
-            body = _injectable_body(doc.content, chrome=False)
-            if body:
-                frags.append(RuleFragment(body=f"{_USER_RULE_ANCESTOR_LABEL}\n{body}"))
+    """User always-rules only (tests / enabled=False). Same scope labels as the mixed join."""
+    ancestor_layers = [
+        (None, await _rule_bodies(repo, user_id, scope))
+        for scope in ancestor_scopes(scope_chain)
+    ]
+    current_rules: list[str] = []
     if scope_chain:
-        for doc in await repo.list_injectable_rules(
-            user_id, scope_chain[-1], ai_maintained=False
-        ):
-            body = _injectable_body(doc.content, chrome=False)
-            if body:
-                frags.append(
-                    RuleFragment(body=f"{_USER_RULE_FOLDER_LABEL}\n{body}")
-                )
-    return frags
-
-
-def _cloud_rule_fragments(
-    payload: Mapping[str, object], key: str, *, label: str | None
-) -> list[RuleFragment]:
-    """One ``/rules/list`` list field → fragments (optionally layer-labeled)."""
-    frags: list[RuleFragment] = []
-    for doc in _iter_cloud_rule_docs(payload, key):
-        body = _injectable_body(str(doc.get("content") or ""), chrome=False)
-        if body:
-            frags.append(RuleFragment(body=f"{label}\n{body}" if label else body))
-    return frags
+        current_rules = await _rule_bodies(repo, user_id, scope_chain[-1])
+    return _join_frags(
+        global_rules=await _rule_bodies(repo, user_id, None),
+        ancestor_layers=ancestor_layers,
+        current_rules=current_rules,
+        include_current=bool(scope_chain),
+    )
 
 
 def _user_rule_fragments_from_cloud(
     payload: Mapping[str, object], *, folder_id: str | None
 ) -> list[RuleFragment]:
-    """Map ``POST /v1/account/rules/list`` payload into injection fragments.
-
-    The cloud resolves the ancestor chain (a sidecar has no folders table) and hands back
-    ``ancestor_rules`` already ordered outermost-first; older clouds omit the key and simply
-    do not inherit.
-    """
-    frags = _cloud_rule_fragments(payload, "global_rules", label=None)
-    if folder_id:
-        frags.extend(
-            _cloud_rule_fragments(
-                payload, "ancestor_rules", label=_USER_RULE_ANCESTOR_LABEL
+    """Map ``POST /v1/account/rules/list`` into scope layers (rules only)."""
+    chain = cloud_scope_chain(payload, folder_id)
+    if folder_id and not chain:
+        return _join_frags(global_rules=_cloud_rule_bodies(payload, "global_rules"))
+    ancestors = ancestor_scopes(chain)
+    if folder_id and not ancestors and _iter_cloud_rule_docs(payload, "ancestor_rules"):
+        ancestor_layers: list[tuple[str | None, Sequence[str]]] = [
+            (None, _cloud_rule_bodies(payload, "ancestor_rules"))
+        ]
+    else:
+        ancestor_layers = [
+            (None, rules)
+            for rules in ancestor_rule_bodies_by_scope(
+                _iter_cloud_rule_docs(payload, "ancestor_rules"),
+                ancestors,
+                body_of=_cloud_doc_body,
             )
-        )
-        frags.extend(
-            _cloud_rule_fragments(
-                payload, "project_rules", label=_USER_RULE_FOLDER_LABEL
-            )
-        )
-    return frags
+        ]
+    current_rules = _cloud_rule_bodies(payload, "project_rules") if chain else []
+    return _join_frags(
+        global_rules=_cloud_rule_bodies(payload, "global_rules"),
+        ancestor_layers=ancestor_layers,
+        current_rules=current_rules,
+        include_current=bool(chain),
+    )
 
 
 async def assemble_injected_rules(
@@ -497,59 +515,126 @@ async def assemble_injected_rules(
 ) -> str:
     """Load + compose this turn's ``<设定>`` body (read-side full injection).
 
-    Returns one equal-authority markdown string for ``assemble_system_prompt``. AI memory
-    is gated by the caller-supplied ``enabled`` flag (product resolve always on / 定案 A;
-    False ⇒ no memory fragments); USER rules are the user's own instructions and are injected
-    regardless. Display order is global→ancestors→current, user-owned entries then
-    AI-maintained core (load order only — not an authority tier).
+    Equal-authority markdown for ``assemble_system_prompt``. AI memory is gated by
+    ``enabled`` (False ⇒ slots omitted); user always-rules still inject. Display
+    order is global → ancestors → current; inside a layer, protocol slots then
+    that layer's user-written always md.
 
-    ``scope_chain`` (outermost-first, current folder last) is resolved by the caller so this
-    stays a pure assembler over the passed repo/store — omitting it injects the current
-    folder only. The production entry point is :func:`assemble_turn_rules`.
+    ``scope_chain`` (outermost-first, current last) is resolved by the caller —
+    omitting it injects the current folder only. Production entry:
+    :func:`assemble_turn_rules`.
     """
     chain = tuple(scope_chain) if scope_chain is not None else own_scope_chain(folder_id)
-    fragments: list[RuleFragment] = []
-    fragments.extend(await _user_rule_fragments(repo, user_id, scope_chain=chain))
-    if enabled:
-        fragments.extend(await _memory_fragments(store, user_id, scope_chain=chain))
-    return compose_injected_rules(fragments)
+    global_disputed = (
+        await disputed_memory_paths(store, user_id, None) if enabled else frozenset()
+    )
+    ancestor_layers: list[tuple[str | None, Sequence[str]]] = []
+    for scope in ancestor_scopes(chain):
+        disputed = (
+            await disputed_memory_paths(store, user_id, scope) if enabled else frozenset()
+        )
+        profile = (
+            await _slot_body(store, user_id, CORE_MEMORY_FILE, scope, disputed)
+            if enabled
+            else None
+        )
+        ancestor_layers.append((profile, await _rule_bodies(repo, user_id, scope)))
+    current_profile = current_nav = None
+    current_rules: list[str] = []
+    if chain:
+        current_id = chain[-1]
+        disputed = (
+            await disputed_memory_paths(store, user_id, current_id)
+            if enabled
+            else frozenset()
+        )
+        if enabled:
+            current_profile = await _slot_body(
+                store, user_id, CORE_MEMORY_FILE, current_id, disputed
+            )
+            current_nav = await _slot_body(
+                store, user_id, NAVIGATION_MEMORY_FILE, current_id, disputed
+            )
+        current_rules = await _rule_bodies(repo, user_id, current_id)
+    return compose_injected_rules(
+        _join_frags(
+            global_pref=(
+                await _slot_body(
+                    store, user_id, PREFERENCES_MEMORY_FILE, None, global_disputed
+                )
+                if enabled
+                else None
+            ),
+            global_profile=(
+                await _slot_body(
+                    store, user_id, CORE_MEMORY_FILE, None, global_disputed
+                )
+                if enabled
+                else None
+            ),
+            global_rules=await _rule_bodies(repo, user_id, None),
+            ancestor_layers=ancestor_layers,
+            current_profile=current_profile,
+            current_nav=current_nav,
+            current_rules=current_rules,
+            include_current=bool(chain),
+        )
+    )
+
+
+def _fragments_from_snapshot(
+    snapshot: AccountPrepareSnapshot, *, folder_id: str | None, enabled: bool
+) -> list[RuleFragment]:
+    payload = snapshot.rules_payload
+    chain = snapshot_scope_chain(snapshot, folder_id)
+    raw_chain = payload.get("folder_chain") if payload else None
+    if isinstance(raw_chain, list) and not raw_chain:
+        chain = ()
+    ancestors = ancestor_scopes(chain)
+    rule_lists = ancestor_rule_bodies_by_scope(
+        _iter_cloud_rule_docs(payload, "ancestor_rules"),
+        ancestors,
+        body_of=_cloud_doc_body,
+    )
+    ancestor_layers: list[tuple[str | None, Sequence[str]]] = []
+    for i, scope in enumerate(ancestors):
+        profile = (
+            _snapshot_slot(snapshot, CORE_MEMORY_FILE, scope) if enabled else None
+        )
+        ancestor_layers.append((profile, rule_lists[i]))
+    current_profile = current_nav = None
+    current_rules: list[str] = []
+    current_id = chain[-1] if chain else None
+    if current_id:
+        if enabled:
+            current_profile = _snapshot_slot(
+                snapshot, CORE_MEMORY_FILE, current_id
+            )
+            current_nav = _snapshot_slot(
+                snapshot, NAVIGATION_MEMORY_FILE, current_id
+            )
+        current_rules = _cloud_rule_bodies(payload, "project_rules")
+    return _join_frags(
+        global_pref=(
+            _snapshot_slot(snapshot, PREFERENCES_MEMORY_FILE, None) if enabled else None
+        ),
+        global_profile=(
+            _snapshot_slot(snapshot, CORE_MEMORY_FILE, None) if enabled else None
+        ),
+        global_rules=_cloud_rule_bodies(payload, "global_rules"),
+        ancestor_layers=ancestor_layers,
+        current_profile=current_profile,
+        current_nav=current_nav,
+        current_rules=current_rules,
+        include_current=bool(chain),
+    )
 
 
 def _memory_fragments_from_snapshot(
     snapshot: AccountPrepareSnapshot, *, folder_id: str | None
 ) -> list[RuleFragment]:
-    """AI-memory core fragments from a warm :class:`AccountPrepareSnapshot`."""
-    from agentcore.memory.account_prepare_cache import memory_body_from_snapshot
-
-    frags: list[RuleFragment] = []
-    for file in ALWAYS_MEMORY_FILES:
-        body = _injectable_body(
-            memory_body_from_snapshot(snapshot, file, scope=None), chrome=True
-        )
-        if body:
-            frags.append(RuleFragment(body=body))
-    chain = snapshot_scope_chain(snapshot, folder_id)
-    for scope in ancestor_scopes(chain):
-        body = _injectable_body(
-            memory_body_from_snapshot(snapshot, CORE_MEMORY_FILE, scope=scope),
-            chrome=True,
-        )
-        if body:
-            frags.append(RuleFragment(body=f"{_ANCESTOR_MEMORY_LABEL}\n{body}"))
-    if folder_id:
-        folder_body = _injectable_body(
-            memory_body_from_snapshot(snapshot, CORE_MEMORY_FILE, scope=folder_id),
-            chrome=True,
-        )
-        if folder_body:
-            frags.append(RuleFragment(body=f"{_FOLDER_MEMORY_LABEL}\n{folder_body}"))
-        nav_body = _injectable_body(
-            memory_body_from_snapshot(snapshot, NAVIGATION_MEMORY_FILE, scope=folder_id),
-            chrome=True,
-        )
-        if nav_body:
-            frags.append(RuleFragment(body=f"{_FOLDER_NAV_LABEL}\n{nav_body}"))
-    return frags
+    """Memory slots from a warm snapshot (tests). Turn path uses mixed join."""
+    return _fragments_from_snapshot(snapshot, folder_id=folder_id, enabled=True)
 
 
 async def assemble_turn_rules(
@@ -575,37 +660,28 @@ async def assemble_turn_rules(
     from agentcore.db.base import async_session_factory
     from agentcore.memory.account_prepare_cache import get_account_rules_memory_snapshot
 
-    user_fragments: list[RuleFragment] = []
-    memory_frags: list[RuleFragment] = []
     try:
         creds = get_account_credentials()
         if creds is not None:
             snap = get_account_rules_memory_snapshot(user_id, folder_id)
-            if snap is not None:
-                user_fragments = _user_rule_fragments_from_cloud(
-                    snap.rules_payload, folder_id=folder_id
-                )
-                if enabled:
-                    memory_frags = _memory_fragments_from_snapshot(
-                        snap, folder_id=folder_id
-                    )
-            # miss → empty injection (no cloud await)
-        else:
-            async with async_session_factory() as session:
-                chain = await db_scope_chain(user_id, folder_id, session=session)
-                user_fragments = await _user_rule_fragments(
-                    DocumentRepository(session), user_id, scope_chain=chain
-                )
-            if enabled:
-                memory_frags = await _memory_fragments(
-                    store, user_id, scope_chain=chain
-                )
+            if snap is None:
+                return ""
+            return compose_injected_rules(
+                _fragments_from_snapshot(snap, folder_id=folder_id, enabled=enabled)
+            )
+        async with async_session_factory() as session:
+            chain = await db_scope_chain(user_id, folder_id, session=session)
+            return await assemble_injected_rules(
+                store,
+                DocumentRepository(session),
+                user_id,
+                folder_id=folder_id,
+                enabled=enabled,
+                scope_chain=chain,
+            )
     except Exception as e:  # noqa: BLE001 - user rules must never break a turn's assembly
         logger.warning("memory.user_rules_load_failed", user_id=user_id, error=str(e))
-
-    fragments = list(user_fragments)
-    fragments.extend(memory_frags)
-    return compose_injected_rules(fragments)
+        return ""
 
 
 # --- on-demand user rules (规则目录 + consult_rule; NOT memory topics) ----------------------
@@ -676,7 +752,8 @@ def on_demand_user_rules_from_cloud(
     """
     summaries: dict[str, str] = {}
     _collect_cloud_on_demand(summaries, payload, "global_on_demand_rules")
-    if folder_id:
+    chain = cloud_scope_chain(payload, folder_id)
+    if chain:
         _collect_cloud_on_demand(summaries, payload, "ancestor_on_demand_rules")
         _collect_cloud_on_demand(summaries, payload, "project_on_demand_rules")
     return [
@@ -707,7 +784,7 @@ def lookup_on_demand_rule_body_from_cloud(
             return body if body.strip() else None
         return None
 
-    if folder_id:
+    if cloud_scope_chain(payload, folder_id):
         hit = _body_in("project_on_demand_rules")
         if hit is None:
             hit = _body_in("ancestor_on_demand_rules", innermost_first=True)

@@ -614,25 +614,27 @@ def resolve_finalize_coordination_tools(
 
 
 def is_workspace_channel_sticky_dead(tool_context: Any | None = None) -> bool:
-    """True when coordination session or this worker's ``WorkspaceChannel`` is sticky-dead.
+    """True when this desk's files are unreachable (fulfiller gone, not a timeout).
 
-    Session flag covers teammates that never hit a dead envelope; backend channel
-    covers the same desk when sticky-dead before/without a session stamp.
+    Live hub presence wins: a reconnecting or live desktop clears a stale session
+    stamp. Session flag covers CEO / teammates whose backend is not a local channel.
     """
     from agentcore.runtime.coordination.session import active_coordination
-    from agentcore.workspace.channel import WorkspaceChannel
+    from agentcore.workspace.presence import local_workspace_files_reachable
 
     session = active_coordination()
-    if session is not None and bool(getattr(session, "workspace_channel_dead", False)):
-        return True
-    if tool_context is None:
+    user_id = None
+    backend = None
+    if tool_context is not None:
+        raw_uid = getattr(tool_context, "user_id", None)
+        user_id = str(raw_uid).strip() if raw_uid else None
+        backend = getattr(tool_context, "backend", None)
+    reachable = local_workspace_files_reachable(user_id=user_id, backend=backend)
+    if reachable is True:
         return False
-    backend = getattr(tool_context, "backend", None)
-    channel = getattr(backend, "_channel", None) if backend is not None else None
-    if isinstance(channel, WorkspaceChannel) and channel.is_dead:
+    if reachable is False:
         return True
-    wc = getattr(tool_context, "workspace_channel", None)
-    return isinstance(wc, WorkspaceChannel) and wc.is_dead
+    return bool(session is not None and getattr(session, "workspace_channel_dead", False))
 
 
 def is_exec_env_sticky_dead(tool_context: Any | None = None) -> bool:
@@ -670,40 +672,26 @@ def apply_exec_env_dead_retire(
     controller: LoopController | None = None,
     tool_context: Any | None = None,
 ) -> bool:
-    """Seed ``EXEC_ENV_TIMEOUT_FAMILY`` into ``disabled_tools`` when sticky-dead.
+    """No-op: env-dead never strips ``run`` (per-call fail stays; tool stays).
 
-    Called at ``react_loop`` entry and before each LLM round so newly dispatched
-    workers stop seeing ``code_execute`` / ``test_run`` without having hung
-    themselves. Does **not** retire ``terminal`` (not in the family). Idempotent;
-    does not auto-DENY. ``controller`` is accepted for signature parity with
-    :func:`apply_workspace_channel_dead_retire` (no extra latch).
+    Kept for signature parity with :func:`apply_workspace_channel_dead_retire`
+    and existing ``react_loop`` call sites. ``disabled_tools`` is unchanged.
     """
-    _ = controller
-    if not is_exec_env_sticky_dead(tool_context):
-        return False
-
-    from agentcore.runtime.loop_controller.types import EXEC_ENV_TIMEOUT_FAMILY
-
-    before = len(disabled_tools)
-    disabled_tools.update(EXEC_ENV_TIMEOUT_FAMILY)
-    return len(disabled_tools) > before
+    _ = disabled_tools, controller, tool_context
+    return False
 
 
 def registry_can_execute(
     tools: ToolRegistry, tool_context: Any | None = None
 ) -> bool:
-    """Whether this worker may claim / use ``code_execute``.
+    """Whether this worker may claim / use ``run``.
 
-    Must run **after** :func:`apply_exec_env_dead_retire` would seed the family:
-    sticky ``session.exec_env_dead`` makes this False even when the tool is
-    still registered. Cloud-without-sandbox (tool absent) is the other False.
-    Nested workers pass ``tool_context`` so conversation-registry fallback applies.
+    True when the tool is registered. Sticky ``session.exec_env_dead`` does
+    **not** hide ``run`` (a failed call stays a failed call). Cloud-without-sandbox
+    (tool absent) is the False case. ``tool_context`` kept for call-site parity.
     """
-    retired: set[str] = set()
-    apply_exec_env_dead_retire(disabled_tools=retired, tool_context=tool_context)
-    if "code_execute" in retired:
-        return False
-    return tools.get_optional("code_execute") is not None
+    _ = tool_context
+    return tools.get_optional("run") is not None
 
 
 def apply_workspace_channel_dead_retire(
@@ -712,16 +700,19 @@ def apply_workspace_channel_dead_retire(
     controller: LoopController | None = None,
     tool_context: Any | None = None,
 ) -> bool:
-    """Seed ``WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS`` into ``disabled_tools`` when sticky-dead.
+    """Seed or restore ``WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS`` from live presence.
 
-    Called at ``react_loop`` entry and before each LLM round so sibling workers stop
-    seeing the local file family without having hit a retire envelope themselves.
-    Returns whether tool defs should be refreshed. Idempotent; does not revive mid-turn.
+    Called at ``react_loop`` entry and before each LLM round. When the fulfiller
+    returns, the file family is offered again. Returns whether tool defs should
+    be refreshed.
     """
-    if not is_workspace_channel_sticky_dead(tool_context):
-        return False
-
     from agentcore.workspace.limits import WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS
+
+    if not is_workspace_channel_sticky_dead(tool_context):
+        return _revive_workspace_file_family(
+            disabled_tools=disabled_tools,
+            controller=controller,
+        )
 
     before = len(disabled_tools)
     disabled_tools.update(WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS)
@@ -730,6 +721,46 @@ def apply_workspace_channel_dead_retire(
         controller._workspace_channel_dead = True
         latch_flipped = True
     return latch_flipped or len(disabled_tools) > before
+
+
+def _revive_workspace_file_family(
+    *,
+    disabled_tools: set[str],
+    controller: LoopController | None,
+) -> bool:
+    """Undo presence-retire when the desktop fulfiller is back.
+
+    Only undoes a presence latch (session stamp / controller flag). A single-op
+    timeout may force-retire one file tool; that is not a family presence retire
+    and must stay.
+    """
+    from agentcore.runtime.coordination.session import active_coordination
+    from agentcore.workspace.limits import (
+        WORKSPACE_CHANNEL_DEAD_RETIRE_STEER,
+        WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS,
+    )
+
+    session = active_coordination()
+    session_stamped = session is not None and bool(
+        getattr(session, "workspace_channel_dead", False)
+    )
+    latched = controller is not None and bool(controller._workspace_channel_dead)
+    if not session_stamped and not latched:
+        return False
+    if session is not None and session_stamped:
+        session.workspace_channel_dead = False
+        session.channel_dead_user_notice_emitted = False
+    if controller is not None and latched:
+        controller._workspace_channel_dead = False
+        family = set(WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS)
+        for name in family:
+            controller._tool_force_retire.discard(name)
+            controller._tool_disabled.discard(name)
+            controller._tool_failures.pop(name, None)
+        if controller._pending_retire_message == WORKSPACE_CHANNEL_DEAD_RETIRE_STEER:
+            controller._pending_retire_message = None
+    disabled_tools.difference_update(WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS)
+    return True
 
 
 @dataclass(frozen=True)
@@ -810,6 +841,10 @@ def decide_llm_failure(
     final_content: str,
     error_code: str = "",
     role: str = "",
+    error_type: str | None = None,
+    origin: str | None = None,
+    classified: bool | None = None,
+    error: str | None = None,
 ) -> LoopDirective:
     from agentcore.runtime.turn.ceo_continue import should_pause_ceo_rate_limit
 
@@ -820,8 +855,22 @@ def decide_llm_failure(
         )
         return Return(finish_reason=FinishReason.PAUSED)
     reason = FinishReason.DEGRADED if final_content else FinishReason.ERROR
+    extra: dict[str, object] = {}
+    if error_code:
+        extra["error_code"] = error_code
+    if error_type:
+        extra["error_type"] = error_type
+    if origin:
+        extra["origin"] = origin
+    if classified is not None:
+        extra["classified"] = classified
+    if error:
+        extra["error"] = error
     logger.warning(
-        "engine.llm_failed_terminal", reason=reason.value, has_content=bool(final_content)
+        "engine.llm_failed_terminal",
+        reason=reason.value,
+        has_content=bool(final_content),
+        **extra,
     )
     return Return(finish_reason=reason)
 

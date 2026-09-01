@@ -22,7 +22,7 @@ from agentcore.docs_export.workspace_export import ExportMarkdownError, export_m
 from agentcore.tools.file_products import file_product
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
-    AUDIENCE_WORKER_ONLY,
+    AUDIENCE_BOTH,
     FileProductsContract,
     ToolRegistration,
     ToolSurface,
@@ -38,7 +38,7 @@ class MdToDocxTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         # 漏账事故的原点：它从注册那天起就没进过任何一份工具名白名单。
         file_products=FileProductsContract.SELF_REPORT,
         produces_formats=(".docx",),
@@ -52,7 +52,6 @@ class MdToDocxTool:
                 "把工作区内的 Markdown 文件确定性导出为同目录同名 Word（.docx）。"
                 "例：`报告.md` → `报告.docx`。覆盖标题 #–####、段落、有序/无序列表、"
                 "表格、围栏代码、相对路径图片（嵌入）与链接；缺图会在回执中明确警告。"
-                "不要用 code_execute / LLM 写脚本做主路径转换。"
                 "路径必须是相对于工作区的 .md / .markdown 相对路径。"
             ),
             parameters={

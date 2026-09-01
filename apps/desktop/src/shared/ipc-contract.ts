@@ -168,8 +168,8 @@ export type FsWriteResult =
  * Path.root，破坏形闸问 ready 而非 backend 有无 Path。
  * ``probe_exec`` 同样不是 backend 方法——回合准备时探测本机 code_execute 可用解释器，
  * 供服务端裁剪工具 schema（坏 WSL bash 等不进 enum）。
- * ``diagnostics`` 同样不是 backend 方法——本地 TypeScript LanguageService 诊断（写码验证内环）；
- * 云端无 LS 时诚实 ``status=unavailable``，不把通道打挂。
+ * ``diagnostics`` 是 backend 方法：桌面 TypeScript LanguageService（写码验证内环）。
+ * 本机引擎与过桥经通道到达；云桌无 LS 时诚实 ``status=unavailable``，不把通道打挂。
  * ``git_repo_status`` / ``git_scm`` 同样不是 backend 方法——桌面 U1–U3 用户 SCM
  *（只读摘要 + stage/commit/push/pull）；渲染层经 ``workspaceOp`` 直调，服务端/Agent 不发此 op。
  * ``git_run`` 同样不是 backend 方法——Agent 结构化 ``git`` 在 LocalWorkspace 上经通道

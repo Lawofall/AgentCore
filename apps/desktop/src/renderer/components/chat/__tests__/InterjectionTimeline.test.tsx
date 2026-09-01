@@ -189,6 +189,57 @@ describe("InterjectionTimeline", () => {
     );
   });
 
+  it("folds received when a later user bubble already carries the body", () => {
+    useConversationStore.setState((s) => ({
+      byId: {
+        ...s.byId,
+        [DRAFT_KEY]: {
+          ...s.byId[DRAFT_KEY],
+          turnPhase: "streaming",
+          messages: [
+            {
+              id: "m1",
+              role: "assistant",
+              content: "正在说",
+              createdAt: new Date().toISOString(),
+              executionId: null,
+              isStreaming: true,
+            },
+            {
+              id: "u-steer",
+              role: "user",
+              content: "补充成本对比",
+              createdAt: new Date().toISOString(),
+              executionId: null,
+              isStreaming: false,
+            },
+          ],
+        },
+      },
+    }));
+    useExecutionStore.setState({
+      byId: {
+        m1: {
+          userInterjections: [
+            {
+              interjectionId: "ij-recv",
+              executionId: "e1",
+              content: "补充成本对比",
+              status: "received",
+              note: null,
+            },
+          ],
+        },
+      },
+    } as never);
+
+    render(<InterjectionTimeline messageId="m1" interjectionId="ij-recv" />);
+    expect(screen.getByTestId("interjection-note-ij-recv")).toBeTruthy();
+    expect(screen.queryByTestId("interjection-bubble-ij-recv")).toBeNull();
+    expect(screen.getByText("已送达，等待主 Agent 读取")).toBeTruthy();
+    expect(screen.queryByText("补充成本对比")).toBeNull();
+  });
+
   it("does not fold queued when later user content differs", () => {
     useConversationStore.setState((s) => ({
       byId: {

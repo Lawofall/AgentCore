@@ -119,6 +119,12 @@ def _patch_repo(
             folder = folders.get(folder_id)
             return folder if folder is not None else None
 
+        async def list_live_subtree_ids(
+            self, folder_id: str, *, user_id: str
+        ) -> list[str]:
+            del user_id
+            return [folder_id] if folder_id in folders else []
+
     class _CM:
         async def __aenter__(self) -> object:
             return object()

@@ -18,21 +18,9 @@ from .errors import _error
 
 logger = get_logger(__name__)
 
-# Overwrite integrity: two tiers on whole-file ``file_write`` clobber.
-# Soft nudge (never auto-redispatches): mild shrink / short-body omission markers
-# on success. Hard reject: severe shrink of a substantial existing body (ratio +
-# absolute drop) — prefer str_replace; intentional shorten via ``allow_shrink``.
-# Substantial prose with omission markers is hard-rejected at accept (not nudged).
-# Soft path mirrors ``engine.audit_gate_nudge``. Hard shrink aligns Aider-style
-# whole-rewrite drop guards (open PR: rewrite <50% of existing file).
-_INTEGRITY_SHRINK_RATIO = 0.6
-_INTEGRITY_HARD_SHRINK_RATIO = 0.5
-# Absolute drop floor: near-threshold drafts (e.g. 500→200) stay soft-nudge only.
-_INTEGRITY_HARD_SHRINK_ABS = 800
-# Delivery-incomplete literals (write-path integrity). Distinct from
-# ``core.text.DEFAULT_ELISION_MARKER`` (system *view* truncation for model-facing
-# budgets). Do not reuse transport elision wording here — models must not treat
-# view cuts as license to land incomplete artifacts.
+# Artifact-first: skeleton vs prose (append lock), write_scope.
+# Completeness heuristics are not write-path gates (evals / remember
+# may still reuse ``has_omission_marker`` / ``is_severe_shrink``).
 _OMISSION_LITERALS = (
     "中间省略",
     "已保留首尾",
@@ -44,24 +32,13 @@ _OMISSION_RE = re.compile(
     re.IGNORECASE,
 )
 
-# "成篇" threshold: delete gate + classify_write_kind / prose-append / omission hard-reject.
-# file_write whole-file overwrite is allowed (prefer str_replace).
+# "成篇" threshold: classify_write_kind / prose-append lock.
+# file_write overwrite and file_delete of a substantial draft are allowed
+# (prefer str_replace for revisions; delete is reversible by default).
 # Length is advisory only (skill / schema 可选骨架分段) — no hard reject on oversized bodies.
 _SUBSTANTIAL_FILE_CHARS = 400
-
-def is_substantial_existing_body(content: str) -> bool:
-    """True when ``content`` looks like a finished article / page worth protecting."""
-    return len((content or "").strip()) >= _SUBSTANTIAL_FILE_CHARS
-
-
-def substantial_delete_rejection(path: str, old_chars: int) -> str:
-    """User-facing error when ``file_delete`` would wipe a substantial draft."""
-    return (
-        f"拒绝删除成篇草稿：`{path}` 已有约 {old_chars} 字（阈值 "
-        f"{_SUBSTANTIAL_FILE_CHARS} 字）。禁止整篇 delete 后重写长文——"
-        "请用 str_replace 局部修订；超长可一次完整写入或先短骨架再按节 "
-        "file_append / str_replace；预算不够时停在完整章边界并诚实交接，勿推倒重来。"
-    )
+# Eval / remember helper: same ratio the old overwrite nudge used.
+_INTEGRITY_SHRINK_RATIO = 0.6
 
 
 def has_omission_marker(content: str) -> bool:
@@ -74,73 +51,11 @@ def has_omission_marker(content: str) -> bool:
 
 
 def is_severe_shrink(old_chars: int, new_chars: int) -> bool:
-    """True when new length is below soft ``_INTEGRITY_SHRINK_RATIO`` of the old length."""
+    """True when new length is below ``_INTEGRITY_SHRINK_RATIO`` of the old length.
+
+    Used by evals, not by ``file_write``.
+    """
     return old_chars > 0 and new_chars < old_chars * _INTEGRITY_SHRINK_RATIO
-
-
-def is_hard_severe_shrink(old_chars: int, new_chars: int) -> bool:
-    """True when overwrite would chop a substantial draft (ratio + absolute drop).
-
-    Softer shrinks stay on the nudge path; tiny near-threshold files (abs drop
-    below ``_INTEGRITY_HARD_SHRINK_ABS``) are not hard-rejected.
-    """
-    if old_chars <= 0:
-        return False
-    if new_chars >= old_chars * _INTEGRITY_HARD_SHRINK_RATIO:
-        return False
-    return (old_chars - new_chars) >= _INTEGRITY_HARD_SHRINK_ABS
-
-
-def severe_shrink_rejection(path: str, *, old_chars: int, new_chars: int) -> str:
-    """User-facing hard reject when ``file_write`` would truncate a substantial draft."""
-    pct = int(_INTEGRITY_HARD_SHRINK_RATIO * 100)
-    return (
-        f"拒绝整篇截断覆盖：`{path}` 旧稿约 {old_chars} 字 → 新稿 {new_chars} 字"
-        f"（低于旧稿 {pct}% 且绝对减少 ≥{_INTEGRITY_HARD_SHRINK_ABS} 字）。"
-        "修订请用 str_replace 局部改；确需大幅删减/精简/重建时，"
-        "对本次 file_write 显式传 allow_shrink=true 后重试。"
-    )
-
-
-def integrity_nudge_text(
-    *,
-    path: str,
-    reasons: list[str],
-    old_chars: int,
-    new_chars: int,
-) -> str:
-    """Soft warning appended to a successful ``file_write`` receipt."""
-    reason = "；".join(reasons)
-    return (
-        f"\n\n[系统提示] 产物疑似不完整（`{path}`：{reason}；"
-        f"旧 {old_chars} 字 → 新 {new_chars} 字）。"
-        "请用 str_replace 就地补全（勿再 file_read 回读），或向主管说明需重派。"
-        "系统只提示、绝不代派、绝不自动重跑、绝不拦截本次写入。"
-    )
-
-
-def overwrite_integrity_nudge(
-    path: str, old_content: str, new_content: str
-) -> str | None:
-    """Return a soft nudge when overwriting a non-empty file looks truncated.
-
-    Only for existing non-empty targets. Never raises; callers append to tool output.
-    Hard severe-shrink is rejected before write (see ``is_hard_severe_shrink``).
-    """
-    if not old_content:
-        return None
-    old_chars = len(old_content)
-    new_chars = len(new_content)
-    reasons: list[str] = []
-    if has_omission_marker(new_content):
-        reasons.append("正文含省略标记")
-    if is_severe_shrink(old_chars, new_chars):
-        reasons.append(f"字数骤降至旧稿 {int(_INTEGRITY_SHRINK_RATIO * 100)}% 以下")
-    if not reasons:
-        return None
-    return integrity_nudge_text(
-        path=path, reasons=reasons, old_chars=old_chars, new_chars=new_chars
-    )
 
 
 # Skeleton vs prose (Artifact-first Writing) ---------------------------------
@@ -279,7 +194,7 @@ def format_artifact_manifest(
         f"title_tree:\n{tree_block}\n"
         f"end_preview:\n{preview}\n"
         "【验真】请以本 manifest 确认落盘；优先用 manifest 验真，"
-        "勿为空转反复 file_read（同 path 同窗触顶只回短指针、不灌全文）。"
+        "勿为空转反复 file_read。"
     )
 
 
@@ -373,13 +288,6 @@ def write_scope_rejection(context: ToolContext, path: str) -> str | None:
         )
     return None
 
-def prose_omission_rejection(path: str) -> str:
-    """Hard reject when substantial prose lands with delivery-omission markers."""
-    return (
-        f"拒绝写入 `{path}`：成篇正文含省略标记（残缺交付）。"
-        "请一次写完完整正文，或用短骨架 + `<!-- SECTION: -->` 按节 "
-        "file_append / str_replace 填空；禁止用「中间省略」等标记交差。"
-    )
 
 def _reject_write_scope(
     context: ToolContext,
@@ -409,23 +317,12 @@ def _mark_landed_files(
     ``kind="prose"`` locks same-path append. ``kind="skeleton"`` or omitted keeps
     append allowed. Existing ``prose`` is never downgraded.
     First writer of ``path`` is recorded in ``landed_artifact_authors`` (setdefault).
-
-    Successful land also resets the same-path ``file_read`` ceiling (counts → 0,
-    delivered ranges cleared, sticky reread grant) so post-write verify /
-    citation refresh is not blocked.
-    Failure paths never call this — no grant on failed ``str_replace`` receipts.
+    Failure paths never call this.
     """
     context.has_landed_files = True
     path_key = _norm_rel_path(path)
     if not path_key:
         return
-    # Post-write verify: clear same-path read ceiling and refresh sticky grant.
-    context.file_read_counts[path_key] = 0
-    context.file_read_delivered_ranges.pop(path_key, None)
-    context.file_read_line_totals.pop(path_key, None)
-    from agentcore.runtime.engine.tool_clear import refresh_file_read_reread_grant
-
-    refresh_file_read_reread_grant(context, [path_key])
     # C3: successful I/O → path is no longer declare-only on the ownership ledger.
     coordinator = context.write_coordinator
     if coordinator is not None:
@@ -480,6 +377,14 @@ def _log_write_collision(
         logger.info(event, path=path, run_id=run_id, owner=owner)
 
 
+def stale_overwrite_rejection(path: str) -> str:
+    """User/model-facing refuse when whole-file write lost the race to another writer."""
+    return (
+        f"`{path}` 盘上已经不是你刚读到的版本（期间有人改过）。"
+        "请重新 file_read 后再 file_write，或改用 str_replace 按当前原文局部改。"
+    )
+
+
 def _claim_write_path(
     context: ToolContext,
     rel_path: str,
@@ -487,64 +392,11 @@ def _claim_write_path(
     event: str,
     start: float,
 ) -> tuple[ToolResult | None, bool]:
-    """C3 / batch ownership gate.
+    """Occupancy is this tool call only (disk serial + CAS). Never refuse on run-lifetime owner.
 
-    Returns ``(error_result, release_on_fail)``. On conflict, ``error_result`` is set and
-    ``release_on_fail`` is False. On success / no coordinator, ``error_result`` is None;
-    ``release_on_fail`` is True only when this call newly acquired an *unowned* path
-    (so a later I/O failure can free it without wiping a dispatch-time declare).
+    Returns ``(error_result, release_on_fail)``. Always ``(None, False)``: a run-lifetime
+    ledger must not block writes; ``release_on_fail`` stays false so I/O failure does
+    not pretend to free a dispatch declare that no longer gates writes.
     """
-    coordinator = context.write_coordinator
-    if coordinator is None:
-        return None, False
-    desk = getattr(context, "ownership_desk_id", None)
-    prior = coordinator.owner_of(rel_path, desk_id=desk)
-    owner = coordinator.claim(
-        rel_path,
-        context.run_id,
-        context.write_ancestors,
-        desk_id=desk,
-    )
-    if owner is not None:
-        _log_write_collision(
-            event, path=rel_path, run_id=context.run_id, owner=owner
-        )
-        from agentcore.runtime.audit.hooks import on_write_conflict
-        from agentcore.workspace.write_claims import (
-            lookup_owner_status,
-            ownership_conflict_message,
-        )
-
-        on_write_conflict(
-            path=rel_path,
-            run_id=context.run_id,
-            owner_run_id=owner,
-        )
-        try:
-            from agentcore.runtime.closing_posture import note_unresolved_write_ownership
-
-            note_unresolved_write_ownership(run_id=context.run_id)
-        except Exception:  # noqa: BLE001 — honesty latch must never block the refusal
-            pass
-        ownership_kind = (
-            "written" if coordinator.is_written(rel_path, desk_id=desk) else "declared"
-        )
-        owner_role, owner_status = lookup_owner_status(
-            owner, execution_id=context.execution_id
-        )
-        return (
-            _error(
-                ownership_conflict_message(
-                    rel_path,
-                    owner,
-                    owner_role=owner_role,
-                    ownership_kind=ownership_kind,
-                    owner_status=owner_status,
-                ),
-                start,
-                contract_failure=True,
-            ),
-            False,
-        )
-    # Newly claimed empty path → release on failed I/O; already ours (declare) → keep.
-    return None, prior is None
+    _ = context, rel_path, event, start
+    return None, False

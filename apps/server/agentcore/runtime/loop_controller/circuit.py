@@ -10,6 +10,7 @@ from collections import Counter
 from typing import Any
 
 from .types import (
+    CIRCUIT_TALLY_KEEP_AVAILABLE,
     LANDING_TOOLS,
     MEMORY_TOOLS,
     ORCHESTRATION_TOOLS,
@@ -29,10 +30,11 @@ class ToolCircuitBreakerMixin:
     _tool_liveness_last: dict[str, bool]
     _workspace_channel_dead: bool
     _tool_warned: set[str]
+    _tool_force_retire: set[str]
 
     @property
     def workspace_channel_dead(self) -> bool:
-        """Sticky latch: local workspace channel died this run (landing retired)."""
+        """Presence latch: local desk fulfiller gone this run (landing retired)."""
         return self._workspace_channel_dead
     _tool_disabled: set[str]
     _tool_segmented_forced: set[str]
@@ -55,17 +57,19 @@ class ToolCircuitBreakerMixin:
         count is only disabled (no redundant warn).
 
         Landing / write tools (``LANDING_TOOLS``) are never circuit-disabled **except**
-        when the local workspace channel is sticky-dead (``_workspace_channel_dead``):
+        when the local desk fulfiller is gone (``_workspace_channel_dead``):
         then pens are disabled with the rest of the workspace IO family. Otherwise
         hitting the disable threshold yields ``force_segmented`` instead (keep the
         pen, force skeleton + section writes). Orchestration tools (``ORCHESTRATION_TOOLS``)
         and memory tools (``MEMORY_TOOLS``) are never disabled on **parse-only**
         failures either (keep the dispatcher / remember; typed JSON-format steer).
-        Non-landing tools (e.g. ``read_url`` via ``retire_tools``) still disable normally.
+        ``CIRCUIT_TALLY_KEEP_AVAILABLE`` (``run`` / 打开网页族) 不因累计失败
+        警告或卸工具。``run`` 族亦不因探测失败 / 干等 / 环境死卸工具；网页等
+        显式 ``_tool_force_retire``（``retire_tools``）仍卸。
 
-        Same-path consecutive classified write rejects (prose-append / code integrity
-        / severe_shrink) also enter ``force_segmented`` via the same latch — early
-        strategy upgrade, not a second breaker.
+        Same-path consecutive classified write rejects (prose-append lock only)
+        also enter ``force_segmented`` via the same latch — early strategy
+        upgrade, not a second breaker.
         """
         newly_warned: list[str] = []
         newly_disabled: list[str] = []
@@ -75,6 +79,11 @@ class ToolCircuitBreakerMixin:
                 name in self._tool_disabled
                 or name in self._tool_segmented_forced
                 or name in self._tool_parse_kept
+            ):
+                continue
+            if (
+                name in CIRCUIT_TALLY_KEEP_AVAILABLE
+                and name not in self._tool_force_retire
             ):
                 continue
             if count >= self._tool_failure_disable:

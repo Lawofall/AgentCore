@@ -32,6 +32,7 @@ from agentcore.tools.builtin import (
 from agentcore.tools.builtin.ask_user import AskUserTool
 from agentcore.tools.builtin.consult import ConsultTool
 from agentcore.tools.builtin.delegate import DelegateTool
+from agentcore.tools.builtin.desktop_notify import DesktopNotifyTool
 from agentcore.tools.builtin.remember import RememberTool
 from agentcore.tools.builtin.update_folder_profile import UpdateFolderProfileTool
 from agentcore.tools.protocol import ToolContext
@@ -137,11 +138,7 @@ def _assemble_ceo_toolset(
         # The worker roster already asked ``git_execution_enabled_for`` / execution
         # class with the live backend; reuse those verdicts so CEO and workers agree.
         include_git="git" in worker_tools.names,
-        include_execution_tools=(
-            "code_execute" in worker_tools.names
-            or "test_run" in worker_tools.names
-            or "terminal" in worker_tools.names
-        ),
+        include_execution_tools="run" in worker_tools.names,
     )
     chat_tools.register(delegate_tool)
     from agentcore.tools.builtin.debate import DebateTool
@@ -181,13 +178,13 @@ def _assemble_ceo_toolset(
             execution_id=base_tool_context.execution_id
         ),
     )
-    from agentcore.llm.model_metadata import model_has_curated_vision
+    from agentcore.llm.image_accept import model_accepts_images
     from agentcore.vision import vision_capability_available
 
     main_model = profiles.model_for("chat") if profiles is not None else ""
     include_vision = vision_capability_available(
         vision_reader=base_tool_context.vision_reader,
-        main_native_vision=model_has_curated_vision(main_model),
+        main_native_vision=model_accepts_images(main_model),
     )
     register_always_ceo_tools(
         chat_tools,
@@ -221,8 +218,11 @@ def _assemble_ceo_toolset(
                 suspension_deleter=suspension_deleter,
                 folder_id=folder_id,
                 advertise_bind_local_folder=advertise_bind_local_folder,
+                workspace_location=backend_location,
             )
         )
+    # Same as workers: always registered (on-demand); execute fails without a channel.
+    chat_tools.register(DesktopNotifyTool())
     return delegate_tool, debate_tool, chat_tools
 
 

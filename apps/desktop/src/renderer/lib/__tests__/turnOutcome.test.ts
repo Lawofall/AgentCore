@@ -286,6 +286,27 @@ describe("arbitrateTurnOutcome", () => {
     expect(o.kind).not.toBe("partial");
   });
 
+  it("attested ok + delivery.partial paints 部分完成 even when the team graph completed", () => {
+    const o = arbitrateTurnOutcome({
+      content: "做到一半",
+      attestedKind: "ok",
+      executionStatus: "completed",
+      deliveryState: "partial",
+      hasTeamStrip: true,
+    });
+    expect(o.kind).toBe("partial");
+  });
+
+  it("completed graph + delivery.partial without attested still paints 部分完成", () => {
+    const o = arbitrateTurnOutcome({
+      content: "做到一半",
+      executionStatus: "completed",
+      deliveryState: "partial",
+      hasTeamStrip: true,
+    });
+    expect(o.kind).toBe("partial");
+  });
+
   it("empty cancelled hides the bubble; rate-limit on the same turn does not", () => {
     const cancelled = arbitrateTurnOutcome({
       content: "",

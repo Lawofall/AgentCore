@@ -15,6 +15,19 @@ from agentcore.runtime.turn.queue import new_queued_turn, turn_queue
 from agentcore.runtime.turn.runs import turn_runs
 
 
+@pytest.fixture(autouse=True)
+def _stub_midflight_persist(monkeypatch):
+    """send_message 现在会落用户行；本文件用假 conversation_id，不打库。"""
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.persist_midflight_user_message",
+        AsyncMock(return_value="00000000-0000-0000-0000-000000000001"),
+    )
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.delete_midflight_user_message",
+        AsyncMock(return_value=True),
+    )
+
+
 def test_send_message_request_requires_delivery():
     with pytest.raises(ValidationError) as exc:
         SendMessageRequest(content="hi")

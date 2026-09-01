@@ -145,7 +145,8 @@ async def ceiling_finalize(
         reason=ceiling_reason,
         thrashing=thrashing,
         rounds=rounds_done,
-        tokens=total_usage.total_tokens,
+        tokens=total_usage.fuse_tokens,
+        billed_tokens=total_usage.total_tokens,
         token_budget=token_budget,
         run_id=run_id,
     )
@@ -173,7 +174,7 @@ async def ceiling_finalize(
             agent_id=tool_context.agent_id,
             question=ceiling_question,
             evidence=(
-                f"{ceiling_reason}: tokens={total_usage.total_tokens}, "
+                f"{ceiling_reason}: tokens={total_usage.fuse_tokens}, "
                 f"rounds={rounds_done}"
             ),
             sink=sink,
@@ -252,13 +253,6 @@ async def ceiling_finalize(
                 tool_calls=tool_calls,
                 reasoning_content=coordination.reasoning or None,
             )
-        )
-        from agentcore.runtime.engine.tool_clear import apply_file_read_clear_state
-
-        tool_context = apply_file_read_clear_state(
-            tool_context,
-            messages,
-            investigation_tools=controller.investigation_tool_names,
         )
         tool_results, terminal, attempts = await execute_tools(
             tool_calls,

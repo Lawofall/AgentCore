@@ -166,11 +166,10 @@ def _ceo_turn(**overrides: object) -> str:
 
     sections: dict[str, object] = {
         "ceo_prompt": "CEO",
-        "workspace_overview": "",
+        "working_set": "",
         "recent_team_graph": "",
         "prior_delivery_gaps": "",
         "prior_delegate_retry": "",
-        "prior_futile_retries": "",
         "attachment_context": "",
         "registered_sources": "",
         "soft_cap": None,
@@ -189,14 +188,18 @@ def test_ceo_turn_renders_the_source_ledger_after_the_volatile_tail():
     assert out == "CEO\n<attachments/>\n<已登记来源/>"
 
 
-def test_ceo_turn_prior_futile_retries_slot_between_retry_and_attachments():
+def test_ceo_turn_working_set_sits_after_ceo_before_graph():
     out = _ceo_turn(
-        prior_delegate_retry="<上轮重派/>",
-        prior_futile_retries="<上轮徒劳重试/>",
+        working_set="<工作集/>",
+        recent_team_graph="<近期团队图/>",
     )
-    assert out == (
-        "CEO\n<上轮重派/>\n<上轮徒劳重试/>"
-    )
+    assert out == "CEO\n<工作集/>\n<近期团队图/>"
+
+
+def test_ceo_turn_prompt_omits_retired_futile_retry_section():
+    out = _ceo_turn(prior_delegate_retry="<上轮重派/>")
+    assert out == "CEO\n<上轮重派/>"
+    assert "上轮徒劳重试" not in out
 
 
 def test_ceo_turn_observation_covers_the_source_ledger(monkeypatch):

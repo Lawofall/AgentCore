@@ -9,6 +9,7 @@ import {
   notifyUnauthorized,
   tryRefresh,
 } from "@/services/api";
+import { failInflightClientToolsForReconnect } from "@/services/clientToolFulfill";
 import {
   getDeviceId,
   resetDeviceIdentityForTests,
@@ -296,6 +297,9 @@ async function connect(): Promise<void> {
     running = false;
     return;
   }
+  // Already-running workspace ops: fail-fast so the server does not wait out
+  // the settle deadline. Not-yet-delivered ops still use reconnect grace.
+  failInflightClientToolsForReconnect("cloud");
   scheduleReconnect();
 }
 

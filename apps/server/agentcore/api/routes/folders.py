@@ -285,6 +285,10 @@ async def delete_folder(
     access-session only.
     """
     try:
+        repo = FolderRepository(session)
+        subtree_ids = await repo.list_live_subtree_ids(
+            folder_id, user_id=user.user_id
+        )
         deleted = await soft_delete_folder_tree(
             session, user_id=user.user_id, folder_id=folder_id
         )
@@ -292,6 +296,9 @@ async def delete_folder(
         raise ConflictError("工作区正忙（有回合在跑），请稍后再删除") from e
     if not deleted:
         raise NotFoundError("文件夹不存在")
+    from agentcore.memory.account_prepare_cache import hibernate_folder_injection_cache
+
+    await hibernate_folder_injection_cache(user.user_id, subtree_ids)
     return StatusResponse()
 
 

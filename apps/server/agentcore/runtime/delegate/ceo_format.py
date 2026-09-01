@@ -17,68 +17,6 @@ DelegateTool = Any
 logger = get_logger(__name__)
 
 
-def _format_motion_card_block(role: str, card: dict[str, Any], *, run_id: str = "") -> str:
-    """One worker's 命题卡 as a structured CEO-facing block."""
-    form = str(card.get("form") or "debate")
-    motion = str(card.get("motion") or "").strip()
-    rationale = str(card.get("rationale") or "").strip()
-    sides = card.get("sides") if isinstance(card.get("sides"), list) else []
-    side_lines: list[str] = []
-    for s in sides:
-        if not isinstance(s, dict):
-            continue
-        key = str(s.get("key") or "").strip()
-        name = str(s.get("name") or "").strip()
-        stance = str(s.get("stance") or "").strip()
-        if not (key and name and stance):
-            continue
-        side_lines.append(f"  - `{key}`（{name}）：{stance}")
-    pointers = card.get("fact_pointers") if isinstance(card.get("fact_pointers"), list) else []
-    ptr_text = "、".join(str(p).strip() for p in pointers if str(p).strip()) or "（无）"
-    head = f"#### {role}"
-    if run_id:
-        head += f" · run_id: `{run_id}`"
-    return "\n".join(
-        [
-            head,
-            f"- **命题**：{motion}",
-            f"- **形态**：{form}",
-            "- **各方**：",
-            *(side_lines or ["  - （无有效参与方）"]),
-            f"- **事实指针**：{ptr_text}",
-            f"- **为何必须对抗**：{rationale}",
-        ]
-    )
-
-
-def _motion_card_guidance() -> str:
-    """How CEO should treat leftover worker motion_cards (not an open-debate gate)."""
-    return (
-        "【消费指引】系统不再据此登记推进卡。不要调 debate、不要催开辩。"
-        "冲突写进综述即可；用户要正反检验会自己说开辩。多张卡时当材料列出。"
-    )
-
-
-def motion_cards_block(products: list[dict[str, Any]], *, auto_adopt: bool = False) -> str:
-    """CEO-facing leftover 命题卡 section, or "" when no worker submitted a motion_card."""
-    _ = auto_adopt
-    cards = [
-        (wp["role"], wp["run_id"], wp["motion_card"])
-        for wp in products
-        if isinstance(wp.get("motion_card"), dict)
-    ]
-    if not cards:
-        return ""
-    body = "\n\n".join(
-        _format_motion_card_block(role, card, run_id=rid) for role, rid, card in cards
-    )
-    return (
-        "\n### 队员提交的命题卡（非开辩入口）\n"
-        "以下是队员交接里误带或遗留的结构化命题卡。"
-        f"{_motion_card_guidance()}\n\n" + body
-    )
-
-
 def escalation_block(tool: DelegateTool, plan: RunPlan, results: dict) -> str:
     """The CEO-facing「队员升级」section, or "" when no worker escalated."""
     pending: list[tuple[bool, str]] = []
@@ -235,9 +173,6 @@ def worker_products(tool: DelegateTool, plan: RunPlan, results: dict) -> list[di
             if isinstance(raw_points, list)
             else []
         )
-        motion_card = (debrief or {}).get("motion_card") if debrief else None
-        if not isinstance(motion_card, dict):
-            motion_card = None
         fidelity = ""
         truncated = False
         if mode == "pointer":
@@ -335,7 +270,6 @@ def worker_products(tool: DelegateTool, plan: RunPlan, results: dict) -> list[di
                 "truncated": truncated,
                 "files": files,
                 "next_steps": next_steps,
-                "motion_card": motion_card,
                 "replaces_run_id": node.replaces_run_id,
                 "tool_failures": tool_failures,
             }
@@ -366,36 +300,6 @@ def _compact_worker_body(
     if clean.strip():
         parts.append(truncate_head_tail(clean, prose_limit))
     return "\n\n".join(parts) if parts else "（无输出）"
-
-
-def _synthesis_char_cap(raw_chars: int) -> int:
-    """Effective final-char cap for ``format_for_ceo``.
-
-    Short handoffs used to expand into ~6k of wrapper+digest text (ratio~12).
-    Per-worker pointer/brief sizing is the primary guard; this absolute cap is the
-    backstop. When ``raw_chars`` already exceeds the prose budget, water-filling
-    has done the work — allow up to ``DELEGATE_OUTPUT_LIMIT`` so middle workers
-    are not elided by a second whole-document chop.
-    """
-    from agentcore.runtime.runs.constants import (
-        CEO_SYNTHESIS_BUDGET,
-        CEO_SYNTHESIS_MAX_CHARS,
-        DELEGATE_OUTPUT_LIMIT,
-    )
-
-    if raw_chars >= CEO_SYNTHESIS_BUDGET:
-        return DELEGATE_OUTPUT_LIMIT
-    return CEO_SYNTHESIS_MAX_CHARS
-
-
-def _cap_synthesis_output(output: str, raw_chars: int) -> tuple[str, bool]:
-    """Trim synthesis package to ratio/absolute cap (head+tail keeps roster + 终稿纪律)."""
-    from agentcore.runtime.runs.fidelity import truncate_head_tail
-
-    limit = _synthesis_char_cap(raw_chars)
-    if len(output) <= limit:
-        return output, False
-    return truncate_head_tail(output, limit), True
 
 
 def _roster_facts(
@@ -624,9 +528,6 @@ def build_ceo_synthesis(
     head_lines = list(lines)
     lines = []
     emit_captain_readback(tool, products)
-    cards_block = motion_cards_block(products)
-    if cards_block:
-        lines.append(cards_block)
     # 完工交接简报: surface each worker's 建议下一步 (proactive, non-blocking — distinct from the
     # escalation block's 待决问题) as ONE advisory section so the CEO can relay the worthwhile
     # ones to the user. Empty when nobody suggested anything.
@@ -642,11 +543,7 @@ def build_ceo_synthesis(
         lines.append(
             f"\n### {wp['role']}（{wp['status']}） · run_id: `{wp['run_id']}`\n{wp['body']}"
         )
-    # Lean footer (unconditional): keep 防幻觉 / 文件产出判据 / 名册铁律; drop debate-dead
-    # copy when no cards, compress PPT + work-log rhetoric.
-    debate_tail = ""
-    if cards_block:
-        debate_tail = "有队员命题卡：当材料看，勿调 debate、勿催开辩。\n"
+    # Lean footer (unconditional): keep 防幻觉 / 文件产出判据 / 名册铁律.
     closing_text = (
         "\n---\n以上为团队产出。「文件产出（路径已核）」= 落盘且路径核对通过的地面真相。\n"
         "⚠️ 防幻觉铁律：是否真交付文件只看「文件产出（路径已核）」行——"
@@ -655,11 +552,9 @@ def build_ceo_synthesis(
         "路径已核 ≠ 脚本已跑通 / 内容已校验。\n"
         "相互依赖时【语义边界对账】（冲突/缺口/重复）；"
         "【完工核验】对照用户请求：未达成就补，已达成则短概览收口。\n"
-        + debate_tail
-        + "【终稿纪律】交付物在前、过程简述从简；对照【队员终态名册】"
+        "【终稿纪律】交付物在前、过程简述从简；对照【队员终态名册】"
         "（名册是对账输入，禁止整段粘进终稿），"
         "失败/跳过/接替必须写入，禁止编造「全部交付」。"
-        "要 PPT 却无 .pptx：禁止写「PPT 已落盘」。"
     )
     if any(wp["status"] != "completed" for wp in products) or any(
         n.replaces_run_id for n in plan.nodes
@@ -671,14 +566,19 @@ def build_ceo_synthesis(
             "单次条数受缺口硬闸，勿整团重开、勿另开无关大派）。"
             "若无需补跑，直接如实回复用户即可。"
             "已完成但质量不够（软验收 / 需改同一落盘路径）：**同座位**再派即可"
-            "（系统会 auto-replaces 并转写锁），勿另起 `-v2` 角色名抢路径，"
-            "勿让队员 escalate 请用户「移交写权」。"
+            "（系统会 auto-replaces），勿另起 `-v2` 角色名。"
         )
     prose = "\n".join([*head_lines, *lines])
-    output = "\n".join([*head_lines, roster_text, *lines, closing_text])
+    from agentcore.runtime.delegate.terminal_output import compose_all_completed_output
+
+    output = compose_all_completed_output(
+        prose, roster_text, closing_text, limit=DELEGATE_OUTPUT_LIMIT
+    )
     raw_chars = sum(len(s.content) for s in results.values() if s and s.content)
-    output, ratio_capped = _cap_synthesis_output(output, raw_chars)
-    limit = _synthesis_char_cap(raw_chars)
+    naive_len = len(
+        "\n".join(p for p in (prose, roster_text, closing_text) if (p or "").strip())
+    )
+    capped = naive_len > DELEGATE_OUTPUT_LIMIT
     execution_id = str(
         getattr(getattr(tool, "_base_tool_context", None), "execution_id", "") or ""
     )
@@ -695,9 +595,9 @@ def build_ceo_synthesis(
             raw_chars=raw_chars,
             final_chars=len(output),
             ratio=round(len(output) / raw_chars, 2) if raw_chars else 1.0,
-            capped=len(output) > DELEGATE_OUTPUT_LIMIT or ratio_capped,
-            synthesis_cap=limit,
-            ratio_capped=ratio_capped,
+            capped=capped,
+            synthesis_cap=DELEGATE_OUTPUT_LIMIT,
+            ratio_capped=False,
         )
     return CeoSynthesis(
         text=output,

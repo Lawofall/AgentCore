@@ -175,7 +175,7 @@ def test_incomplete_rule_content_trailing_ellipsis():
 
 
 def test_incomplete_rule_content_mid_omission_marker():
-    # Reuses file_ops.has_omission_marker — same mid-body literals as write path.
+    # Reuses file_ops.has_omission_marker (remember / evals; not a file_write gate).
     assert _is_incomplete_rule_content("以后都用中文（略）回复")
     assert _is_incomplete_rule_content("see ... omitted details")
     assert _is_incomplete_rule_content("中间省略，已保留首尾")

@@ -6,7 +6,7 @@
   "symptom": "多文件编辑时未走委派，直接单 Agent 改写",
   "family": "contract_failed",
   "family_candidate": null,
-  "suspected_knobs": ["skill:verify_and_fix"],
+  "suspected_knobs": ["tool:run"],
   "knobs_changed": [],
   "evidence": {
     "traces": [],

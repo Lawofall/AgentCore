@@ -32,17 +32,11 @@ vi.mock("@/stores/sidePanel", () => ({
 }));
 
 vi.mock("@/stores/ui", () => ({
-  useUIStore: (sel: (s: Record<string, unknown>) => unknown) =>
-    sel({ diagnosticMode: false }),
   turnDetailPath: () => "/t",
 }));
 
 vi.mock("@/hooks/useTurnAudit", () => ({
   useTurnAudit: () => ({ data: null }),
-}));
-
-vi.mock("@/hooks/useRunLlmWindow", () => ({
-  useRunLlmWindow: () => ({ data: null, loading: false, error: null }),
 }));
 
 vi.mock("@/stores/disclosure", () => ({
@@ -180,9 +174,9 @@ describe("RunDetailBody process timeline", () => {
           <RunDetailBody messageId="m1" runId="r1" />
         </MemoryRouter>,
       );
-      expect(screen.getByText("Handoff")).toBeTruthy();
-      expect(screen.getByText("交叉验证完成")).toBeTruthy();
-      expect(screen.queryByText("交接简报")).toBeNull();
+      expect(screen.getByRole("button", { name: "交接简报" })).toBeTruthy();
+      expect(screen.queryByText("交叉验证完成")).toBeNull();
+      expect(screen.queryByText("Handoff")).toBeNull();
       expect(screen.queryByText("简报由系统降级生成")).toBeNull();
     } finally {
       run.debrief = prevDebrief;

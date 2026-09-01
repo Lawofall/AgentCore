@@ -224,20 +224,13 @@ async def load_host_journal_entries(host_message_id: str) -> list[dict[str, Any]
 # text, so the tool-result echo alone would be dropped next turn. This block rides the
 # CEO system prompt's volatile tail (assemble.py) — never the shared worker base.
 #
-# Facts only: worker count / role / terminal-or-running status / task brief. No talk-
-# script, completion heuristics, or "don't lie" instructions (intercept-discipline).
+# Facts only: worker count / role / terminal-or-running status / task brief.
+# append_to_execution_id / continue_from fill lives on the delegate schema.
+# No talk-script, completion heuristics, or "don't lie" instructions.
 _MAX_RECENT_GRAPH_WORKERS = 12
 _MAX_RECENT_GRAPH_TASK_CHARS = 80
 
-_RECENT_GRAPH_APPEND_NOTE = (
-    "用户显式要求往这支团队继续加人 / 接着干时，delegate 可传 "
-    'append_to_execution_id="latest"（引擎自动解析到最近一张图），'
-    "或在 tasks[] 上填 continue_from_run_id / replaces_run_id："
-    "跨回合会新开一队、接续上一张图；同回合二次派发合入同一张图。新任务默认仍新建图。"
-    "要动上面某个具体队员（含本图已收口后）：在 tasks[] 上填其 run_id——"
-    "让原作者带现场接着干用 continue_from_run_id，接手 failed/skipped 缺口用 "
-    "replaces_run_id。"
-)
+_RECENT_GRAPH_APPEND_NOTE = ""
 
 
 def _worker_status_label(phase: Any) -> str:
@@ -303,7 +296,7 @@ def render_recent_graph_context(
     execution_id: str,
     worker_facts: str = "",
 ) -> str:
-    """Assemble the ``<近期团队图>`` block (facts + append channel note)."""
+    """Assemble the ``<近期团队图>`` block (facts only)."""
     eid = (execution_id or "").strip()
     if not eid:
         return ""
@@ -314,7 +307,9 @@ def render_recent_graph_context(
     facts = (worker_facts or "").strip()
     if facts:
         parts.append(facts)
-    parts.append(_RECENT_GRAPH_APPEND_NOTE)
+    note = _RECENT_GRAPH_APPEND_NOTE.strip()
+    if note:
+        parts.append(note)
     parts.append("</近期团队图>")
     return "\n".join(parts)
 
@@ -328,8 +323,8 @@ async def build_recent_graph_context(
 
     Resolves the newest appendable execution, then loads its host journal for a
     compact worker roster (count / role / status / task brief). Missing journal
-    still yields the append channel note so ``latest`` stays usable. Does not
-    print the graph execution_id to the model.
+    still yields the graph-exists header. Does not print the graph execution_id
+    to the model.
     """
     execution_id = await resolve_latest_appendable_execution(
         conversation_id=conversation_id,

@@ -255,7 +255,6 @@ export function CommandPalette() {
   const open = useUIStore((s) => s.searchOpen);
   const close = useUIStore((s) => s.closeSearch);
   const theme = useUIStore((s) => s.theme);
-  const diagnosticMode = useUIStore((s) => s.diagnosticMode);
   const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const switchConversation = useConversationStore((s) => s.switchConversation);
   const navigate = useNavigate();
@@ -404,7 +403,6 @@ export function CommandPalette() {
       buildPaletteCommands({
         navigate,
         theme,
-        diagnosticMode,
         sidebarCollapsed,
         openBookmarksInPalette,
         demoTapes,
@@ -414,7 +412,6 @@ export function CommandPalette() {
     [
       navigate,
       theme,
-      diagnosticMode,
       sidebarCollapsed,
       openBookmarksInPalette,
       demoTapes,

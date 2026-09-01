@@ -77,7 +77,7 @@ async def test_resident_file_uses_workspace_path_and_hint():
 
 
 @pytest.mark.asyncio
-async def test_spreadsheet_without_preview_omits_code_execute_when_unassembled():
+async def test_spreadsheet_without_preview_omits_run_when_unassembled():
     out = await _build_attachment_context(
         [
             {
@@ -92,8 +92,8 @@ async def test_spreadsheet_without_preview_omits_code_execute_when_unassembled()
     )
     assert out is not None
     assert "[表格 / 仅路径]" in out
-    assert "includes code_execute" not in out
-    assert "with code_execute" not in out
+    assert "includes run" not in out
+    assert "with run" not in out
     assert "Do NOT use an OS absolute path" in out
     assert "Do NOT treat file_list emptiness as missing" in out
     assert "are in your workspace" in out
@@ -102,7 +102,7 @@ async def test_spreadsheet_without_preview_omits_code_execute_when_unassembled()
 
 
 @pytest.mark.asyncio
-async def test_spreadsheet_mentions_code_execute_only_when_in_tool_table():
+async def test_spreadsheet_mentions_run_only_when_in_tool_table():
     att = {
         "name": "report.xlsx",
         "path": "attachments/report.xlsx",
@@ -111,18 +111,16 @@ async def test_spreadsheet_mentions_code_execute_only_when_in_tool_table():
         "workspace_path": "attachments/report.xlsx",
     }
     with_exec = await _build_attachment_context(
-        [att], available_tools=frozenset({"file_read", "code_execute"})
+        [att], available_tools=frozenset({"file_read", "run"})
     )
     assert with_exec is not None
-    assert "code_execute" in with_exec
-    assert "CEO has no code_execute" in with_exec
-    assert "Open and parse it with code_execute" not in with_exec
+    assert "includes run" in with_exec
+    assert "CEO has no run" not in with_exec
 
     without_exec = await _build_attachment_context([att], available_tools=frozenset())
     assert without_exec is not None
-    assert "includes code_execute" not in without_exec
-    assert "with code_execute" not in without_exec
-    assert "does not include code_execute" in without_exec
+    assert "includes run" not in without_exec
+    assert "does not include run" in without_exec
     assert "structure report" in without_exec
     assert "transform script" in without_exec
 
@@ -619,7 +617,7 @@ async def test_image_with_vision_reader_injects_text_and_bills():
     assert "[image / vision]" in out
     assert "图中有一只猫和一行标题" in out
     assert "未配置识图" not in out
-    assert "code_execute" not in out
+    assert "CEO has no run" not in out
     assert len(reader.calls) == 1
     assert len(sink) == 1
     assert sink[0].role == "vision"
@@ -648,13 +646,16 @@ async def test_image_without_vision_reader_honest_unconfigured():
     )
     assert out is not None
     assert "[image]" in out
-    assert "未配置识图" in out
-    assert "vision 槽" in out or "VISION_*" in out
-    assert "code_execute" not in out or "勿默认建议用 code_execute" in out
-    assert "已随本回合附件送达" in out and "无法读取图像内容" in out and "勿索要重发" in out
-    # Must not fall back to the generic binary / delegate code_execute block.
+    assert "当前主模型不收图" in out
+    assert "未配置识图兜底" in out
+    assert "勿把工作区路径当作已读图" in out
+    assert "勿索要重发" in out
+    assert "vision 槽" not in out
+    assert "VISION_*" not in out
+    assert "未配置识图（组合" not in out
+    # Must not fall back to the generic binary / delegate run block.
     assert "[binary]" not in out
-    assert "CEO has no code_execute" not in out
+    assert "CEO has no run" not in out
 
 
 @pytest.mark.asyncio
@@ -677,8 +678,8 @@ async def test_non_image_spreadsheet_skips_vision():
     assert "[表格 /" in out
     assert "[image" not in out
     assert "未配置识图" not in out
-    assert "includes code_execute" not in out
-    assert "with code_execute" not in out
+    assert "includes run" not in out
+    assert "with run" not in out
 
 
 @pytest.mark.asyncio
@@ -706,13 +707,13 @@ async def test_table_structure_preview_hides_full_body():
     assert "date:date" in out
     assert "amount:float" in out or "amount:int" in out
     assert secret not in out
-    assert "includes code_execute" not in out
-    assert "with code_execute" not in out
+    assert "includes run" not in out
+    assert "with run" not in out
     assert "structure preview only" in out
 
 
 @pytest.mark.asyncio
-async def test_office_extract_declares_lossy_tables_without_code_execute():
+async def test_office_extract_declares_lossy_tables_without_run():
     out = await _build_attachment_context(
         [
             {
@@ -730,17 +731,17 @@ async def test_office_extract_declares_lossy_tables_without_code_execute():
     assert out is not None
     assert "lossy for tabular content" in out
     assert "Do not use this extract as the data source" in out
-    assert "includes code_execute" not in out
-    assert "with code_execute" not in out
-    assert "Parse the original workspace file with code_execute" not in out
+    assert "includes run" not in out
+    assert "with run" not in out
+    assert "Parse the original workspace file with run" not in out
     assert "structure report" in out
     assert "transform script" in out
     assert "hand-copied" in out
 
 
 @pytest.mark.asyncio
-async def test_heic_routes_to_vision_not_code_execute():
-    """HEIC/HEIF must take eye→text, not the generic [binary]/code_execute path."""
+async def test_heic_routes_to_vision_not_run():
+    """HEIC/HEIF must take eye→text, not the generic [binary]/run path."""
     out = await _build_attachment_context(
         [
             {
@@ -757,9 +758,10 @@ async def test_heic_routes_to_vision_not_code_execute():
     )
     assert out is not None
     assert "[image]" in out
-    assert "未配置识图" in out
+    assert "当前主模型不收图" in out
+    assert "未配置识图兜底" in out
     assert "[binary]" not in out
-    assert "CEO has no code_execute" not in out
+    assert "CEO has no run" not in out
 
 
 @pytest.mark.asyncio

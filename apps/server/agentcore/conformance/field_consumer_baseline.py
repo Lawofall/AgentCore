@@ -123,6 +123,15 @@ FIELD_CONSUMER_BASELINE: tuple[FieldConsumerBaselineGroup, ...] = (
         ),
         leaves=frozenset({"moderator_provider_id"}),
     ),
+    FieldConsumerBaselineGroup(
+        id="run_debrief.motion_card",
+        reason=(
+            "handoff motion_card 已撤（开辩由用户点名，不靠交接卡催场）；"
+            "桌面简报只读 summary / key_points / assumptions / next_steps。"
+            "历史 debrief JSON 与 wire 仍可躺着 motion_card，契约字段保留。"
+        ),
+        leaves=frozenset({"motion_card"}),
+    ),
 )
 
 

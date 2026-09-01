@@ -3,7 +3,8 @@
 Hard-deletes every member conversation (cascade messages / runs / journal / …),
 purges the shared cloud ``folder:<id>`` workspace directory + server snapshots,
 unbinds boards + bare-chat ``auto_desk_folder_id`` soft-pointers (via
-:func:`clear_folder_session_pointers`), then removes the folder rows.
+:func:`clear_folder_session_pointers`), physically removes documents in those
+injection scopes, then removes the folder rows.
 
 Scope is the whole subtree — the same one
 :func:`agentcore.folders.tree_ops.soft_delete_folder_tree` takes. Nested folders
@@ -21,6 +22,7 @@ from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import (
     ConversationRepository,
     ConversationShareRepository,
+    DocumentRepository,
     FolderRepository,
 )
 from agentcore.folders.unbind import clear_folder_session_pointers
@@ -79,5 +81,11 @@ async def permanent_delete_folder(*, folder_id: str, user_id: str) -> bool:
         )
 
     async with async_session_factory() as session:
+        await DocumentRepository(session).hard_delete_for_folders(
+            user_id, subtree_ids, commit=False
+        )
         await FolderRepository(session).hard_delete_many(subtree_ids)
+    from agentcore.memory.account_prepare_cache import hibernate_folder_injection_cache
+
+    await hibernate_folder_injection_cache(user_id, subtree_ids)
     return True

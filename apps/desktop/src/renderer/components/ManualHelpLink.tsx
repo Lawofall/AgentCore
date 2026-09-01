@@ -17,7 +17,6 @@ export const MANUAL_HELP = {
     "collaboration",
     MANUAL_SECTION_IDS.collaboration.checkpoint,
   ),
-  legend: manualHref("mechanism", MANUAL_SECTION_IDS.mechanism.legend),
   autonomy: manualHref(
     "collaboration",
     MANUAL_SECTION_IDS.collaboration.autonomy,
@@ -30,7 +29,7 @@ export const MANUAL_HELP = {
 
 /**
  * 低调圆形「?」手册入口：hover 提示「看手册说明」，点击深链到产品手册对应节。
- * 功能现场（拍板 / 审批 / 升级 / 协作图 / 设置等）共用，形态统一。
+ * 功能现场（辩论室 / 审批 / 升级等）共用，形态统一。拍板卡与全屏协作画布不挂。
  */
 export function ManualHelpLink({
   to,

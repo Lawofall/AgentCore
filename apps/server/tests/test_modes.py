@@ -27,7 +27,7 @@ def test_default_turn_profiles_uses_platform_model(monkeypatch):
 
 def test_turn_profiles_agent_uses_single_worker_profile():
     ps = default_turn_profiles(model="test-model")
-    assert ps.agent().max_rounds == PROFILES["agent"].max_rounds == 80
+    assert ps.agent().max_rounds == PROFILES["agent"].max_rounds == 0
 
 
 def test_turn_profiles_model_overrides():

@@ -46,7 +46,7 @@ const post = vi.mocked(api.post);
 const sendMidFlight = vi.mocked(sendMidFlightMessage);
 const CID = "conv-cancel-q";
 
-/** Happy path：排队期无用户泡，仅条。 */
+/** 仅条、尚无 messageId（快照项 / 他端）。 */
 function seedQueuedBarOnly(content = "queued") {
   useConversationStore.getState().switchConversation(CID);
   useQueuedTurnsStore.getState().upsert({

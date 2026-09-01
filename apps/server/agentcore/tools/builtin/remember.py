@@ -6,8 +6,8 @@ The memory system splits how durable knowledge is written (Agent记忆与知识�
 - **explicit user directive → user rule** (this tool): when the user clearly says「记住…」「以后
   都要…」「别再…」「改为…」「忘掉…」, the CEO records / mutates a ``role='rule',
   ai_maintained=false`` document — the user OWNS it, so the offline consolidation never rewrites
-  it, and it injects with authoritative wording ahead of AI memory (§二 两档措辞). Effect is
-  immediate: next turn's ``<设定>``.
+  it. Same ``<设定>`` block as AI memory, ordered by folder not author. Effect is immediate:
+  next turn's ``<设定>``.
 - **inferred preference → offline consolidation** (NOT this tool): preferences merely observed in
   conversation stay with the two-layer consolidation pass, which writes ``ai_maintained=true``
   memory. The tool description steers the model to that split.
@@ -76,13 +76,10 @@ class RememberTool:
         return ToolSchema(
             name="remember",
             description=(
-                "把用户明确下达的指令记为「用户规则」——长期生效、注入后续每一轮对话，"
-                "权威性高于 AI 记忆。仅当用户清楚地说「记住…」「以后都要…」「以后别…」"
+                "把用户明确下达的指令记为「用户规则」——长期生效、注入后续每一轮对话。"
+                "仅当用户清楚地说「记住…」「以后都要…」「以后别…」"
                 "「改为…」「忘掉…」「现在有哪些规则」等明确指令时使用；普通对话里推测出来的偏好"
                 "不要用本工具，交给会话结束后的离线巩固。"
-                "action：add 追加（默认）；replace 按 replaces 归一化匹配删旧再写新"
-                "（旧条不存在则只追加，且须诚实说明）；"
-                "forget 删除；list 列出当前作用域规则（不写盘）。"
                 "写入/删除后立即生效，下一轮对话即注入。"
                 "禁止把文件夹调研简报 / 技术栈盘点 / 探索幕产出写成规则——"
                 "那是文件夹画像，须用 update_folder_profile。"
@@ -94,7 +91,8 @@ class RememberTool:
                         "type": "string",
                         "enum": ["add", "replace", "forget", "list"],
                         "description": (
-                            "add=追加（默认）；replace=替换旧条；forget=删除；list=列出当前规则。"
+                            "add=追加（默认）；replace=按 replaces 匹配删旧再写新"
+                            "（旧条不存在则只追加）；forget=删除；list=列出（不写盘）。"
                         ),
                     },
                     "content": {

@@ -1,6 +1,6 @@
 """Unit tests for cross-session conversation log access (P0 backend).
 
-Covers: Worker-only audience / CEO registry exclusion, worker wire,
+Covers: AUDIENCE_BOTH / manual_wire, CEO assemble+wire, worker omit-until-wired,
 host exclusion, soft-miss, cursor reassembly, output_limit vs default 4k,
 and ConversationRepository search filters.
 """
@@ -18,13 +18,13 @@ from agentcore.conversation.log_export import (
     chunk_transcript,
     render_conversation_log,
 )
-from agentcore.runtime.resolve.prepare import _wire_worker_conversation_log_tools
+from agentcore.runtime.resolve.prepare import _wire_conversation_log_tools
 from agentcore.tools.builtin import build_ceo_tool_registry, build_worker_registry
 from agentcore.tools.builtin.read_conversation import ReadConversationTool
 from agentcore.tools.builtin.search_conversations import SearchConversationsTool
 from agentcore.tools.protocol import ToolContext, ToolResult
 from agentcore.tools.registration import (
-    AUDIENCE_WORKER_ONLY,
+    AUDIENCE_BOTH,
     ToolSurface,
     tool_registration,
 )
@@ -41,18 +41,18 @@ def _ctx(*, conversation_id: str = "host-conv", user_id: str = "user-1") -> Tool
     )
 
 
-# --- registration / audience / CEO exclusion ---------------------------------
+# --- registration / audience / CEO wire --------------------------------------
 
 
-def test_log_tools_are_worker_only_manual_wire():
+def test_log_tools_are_both_manual_wire():
     for cls in (SearchConversationsTool, ReadConversationTool):
         reg = tool_registration(cls)
         assert reg.surface is ToolSurface.WORKER_ONLY
-        assert reg.audience == AUDIENCE_WORKER_ONLY
+        assert reg.audience == AUDIENCE_BOTH
         assert reg.manual_wire is True
 
 
-def test_ceo_registry_excludes_conversation_log_tools():
+def test_ceo_builtin_registry_omits_log_tools_until_wired():
     ceo = build_ceo_tool_registry()
     names = {s.name for s in ceo.list_all()}
     assert "search_conversations" not in names
@@ -65,13 +65,88 @@ def test_worker_registry_omits_log_tools_until_wired():
     assert worker.get_optional("read_conversation") is None
 
 
+def test_log_and_notify_are_not_in_worker_only_names():
+    from agentcore.tools.registration import worker_only_tool_names
+
+    names = worker_only_tool_names()
+    assert {"escalate", "handoff"} <= names
+    assert names.isdisjoint(
+        {"desktop_notify", "search_conversations", "read_conversation"}
+    )
+
+
 def test_wire_registers_log_tools():
     worker = build_worker_registry()
-    _wire_worker_conversation_log_tools(worker, folder_id="F1")
+    _wire_conversation_log_tools(worker, folder_id="F1")
     assert worker.get_optional("search_conversations") is not None
     assert worker.get_optional("read_conversation") is not None
     search = worker.get("search_conversations")
     assert getattr(search, "folder_id", None) == "F1"
+
+
+def _assemble_ceo_chat_tools():
+    from pathlib import Path
+
+    from agentcore.llm.profiles import default_turn_profiles
+    from agentcore.runtime.events import EventSink
+    from agentcore.runtime.resolve.prepare import _assemble_ceo_toolset
+    from agentcore.runtime.skills import build_system_skill_registry
+    from agentcore.tools.protocol import ToolContext as _ToolContext
+    from agentcore.tools.registry import ToolRegistry
+    from agentcore.tools.sandbox.subprocess import SubprocessSandbox
+    from agentcore.workspace.server import ServerWorkspace
+
+    ctx = _ToolContext.create(
+        execution_id="exec-assembly",
+        run_id="r",
+        agent_id="a",
+        backend=ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox()),
+        user_id="u",
+    )
+    _, _, chat_tools = _assemble_ceo_toolset(
+        llm=object(),
+        sink=EventSink(),
+        base_system_prompt="SYS",
+        user_message="原始请求",
+        history=[],
+        worker_tools=ToolRegistry(),
+        base_tool_context=ctx,
+        profiles=default_turn_profiles(),
+        approval_gate=None,
+        session_store=None,
+        session_saver=None,
+        session_loader=None,
+        conversation_id="c",
+        captain_run_id="cap",
+        checkpoint_enabled=True,
+        message_id="m",
+        suspension_saver=None,
+        suspension_deleter=None,
+        backend_location="cloud",
+        skill_registry=build_system_skill_registry(),
+    )
+    return chat_tools
+
+
+def test_ceo_assemble_and_wire_holds_log_tools():
+    chat_tools = _assemble_ceo_chat_tools()
+    assert chat_tools.get_optional("desktop_notify") is not None
+    assert "escalate" not in chat_tools.names
+    assert "handoff" not in chat_tools.names
+    assert chat_tools.get_optional("search_conversations") is None
+    assert chat_tools.get_optional("read_conversation") is None
+    _wire_conversation_log_tools(chat_tools, folder_id="F1")
+    assert chat_tools.get_optional("search_conversations") is not None
+    assert chat_tools.get_optional("read_conversation") is not None
+    search = chat_tools.get("search_conversations")
+    assert getattr(search, "folder_id", None) == "F1"
+    offered = {
+        str((d.get("function") or {}).get("name") or d.get("name") or "")
+        for d in chat_tools.get_openai_definitions()
+    }
+    assert "desktop_notify" not in offered
+    assert "search_conversations" not in offered
+    assert "read_conversation" not in offered
 
 
 # --- log_export chunking / output_limit --------------------------------------

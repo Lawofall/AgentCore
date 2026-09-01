@@ -27,16 +27,13 @@ from agentcore.memory.store import (
 
 logger = get_logger(__name__)
 
-# Labels the folder layer inside the shared <设定> block so the model reads those bullets
-# as "current folder only" (a global vs folder conflict resolves by wording + proximity,
-# §3.2 — no hard-override structure; the user's explicit instruction still wins).
-_FOLDER_MEMORY_LABEL = "（以下为「当前文件夹」专属记忆，仅在本文件夹内适用）"
+# Layer labels inside the shared <设定> block (scope, not author). A global vs folder
+# conflict resolves by wording + proximity (§3.2) — no hard-override structure.
+_FOLDER_SETTINGS_LABEL = "（以下为「当前文件夹」专属设定，仅在本文件夹内适用）"
 _FOLDER_NAV_LABEL = "（以下为「当前文件夹」导航短入口，只指路、不塞长文）"
-# An ANCESTOR folder's memory (双模式工作区 §5.4 沿树继承): same no-hard-override rule —
-# outer layers come first and the wording says the nearer layer wins.
-_ANCESTOR_MEMORY_LABEL = (
-    "（以下为「上层文件夹」的记忆，其下所有文件夹一并适用；"
-    "与更靠近当前文件夹的记忆冲突时，以更近的为准）"
+_ANCESTOR_SETTINGS_LABEL = (
+    "（以下为「上层文件夹」的设定，其下所有文件夹一并适用；"
+    "与更靠近当前文件夹的设定冲突时，以更近的为准）"
 )
 
 

@@ -549,6 +549,17 @@
             "title": "Description",
             "type": "string"
           },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -16018,7 +16029,7 @@
         "type": "object"
       },
       "UpdateLlmModelProfileRequest": {
-        "description": "Partial update. Omitted fields unchanged; explicit null on worker/background/vision\nclears the slot (worker/background → follow_main; vision → no slot / platform fallback).",
+        "description": "Partial update. Omitted fields unchanged; explicit null on worker/background/vision\nclears the slot (worker/background → follow_main; vision → no dedicated slot).",
         "properties": {
           "background": {
             "anyOf": [
@@ -17611,7 +17622,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.10"
+    "version": "0.7.11"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -18337,7 +18348,7 @@
     },
     "/v1/account/memory/list": {
       "post": {
-        "description": "List memory notes under one scope (global when ``scope`` is null).\n\nCarries each note's retrieval ``description`` and its ``disputed`` mark so a sidecar\nwarm builds the same directory — and skips the same user-disputed entries — as an\nin-process turn.",
+        "description": "List memory notes under one scope (global when ``scope`` is null).\n\nCarries each note's retrieval ``description`` and its ``disputed`` mark so a sidecar\nwarm builds the same directory — and skips the same user-disputed entries — as an\nin-process turn. A soft-deleted folder is an empty scope (设定 hibernates with the desk).",
         "operationId": "list_account_memory_v1_account_memory_list_post",
         "parameters": [
           {
@@ -18413,7 +18424,7 @@
     },
     "/v1/account/memory/load": {
       "post": {
-        "description": "Load one memory note body; missing path → empty string (soft).",
+        "description": "Load one memory note body; missing path / hibernating folder → empty string (soft).",
         "operationId": "load_account_memory_v1_account_memory_load_post",
         "parameters": [
           {
@@ -33023,7 +33034,7 @@
     },
     "/v1/documents/{document_id}": {
       "delete": {
-        "description": "Soft-delete a node and (for a folder) its whole subtree.\n\nAI-maintained core leaves (偏好 / 画像 / 导航) are undeletable; on-demand\nAI topics and user-owned entries remain deletable.",
+        "description": "Soft-delete a node and (for a folder) its whole subtree.\n\nAI-maintained core leaves (偏好 / 画像 / 导航) keep their protocol names, so\nthis DELETE is refused. Empty the body instead (``PUT …/memory/files/{kind}``\nwith empty content) — injection skips the empty note; the list still shows\na placeholder. On-demand AI topics and user-owned entries remain deletable.",
         "operationId": "delete_document_v1_documents__document_id__delete",
         "parameters": [
           {

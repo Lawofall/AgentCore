@@ -474,15 +474,26 @@ async def send_message(
     # Idle open-turn stays below (HTTP ``stream_chat`` only).
     existing = turn_runs.get(conversation_id)
     if existing is not None and not existing.task.done():
-        from agentcore.runtime.events import user_interjection
+        from agentcore.conversation.midflight_persist import persist_midflight_user_message
+        from agentcore.core.types import new_id
+        from agentcore.runtime.events import turn_saved, user_interjection
 
+        att_dicts = [a.model_dump() for a in body.attachments]
+        mention_dicts = [m.model_dump() for m in body.agent_mentions]
+        user_message_id = await persist_midflight_user_message(
+            conversation_id=conversation_id,
+            content=body.content,
+            user_message_id=new_id(),
+            attachments=att_dicts,
+            agent_mentions=mention_dicts,
+        )
         delivered = await deliver_in_flight(
             conversation_id=conversation_id,
             content=body.content,
             delivery=body.delivery,
             user_id=user.user_id,
-            attachments=[a.model_dump() for a in body.attachments],
-            agent_mentions=[m.model_dump() for m in body.agent_mentions],
+            attachments=att_dicts,
+            agent_mentions=mention_dicts,
             requires_tools=needs_tools,
             x_client_platform=x_client_platform,
             origin_device_id=current_origin_device(),
@@ -490,8 +501,35 @@ async def send_message(
             llm_supports_tools=preflight.supports_tools,
             persist_attachments_fn=_persist_delivered_interjection_attachments,
             wait_for_start=True,
+            user_message_id=user_message_id,
         )
-        if delivered is not None and delivered.status == "received":
+        if delivered is None:
+            # Host turn finished between persist and deliver — open the new turn
+            # on the row we just wrote (do not insert a second user bubble).
+            sink = EventSink()
+            emit_preflight_warnings(sink, preflight)
+            task = asyncio.create_task(
+                stream_chat(
+                    conversation_id=conversation_id,
+                    user_message=body.content,
+                    user_id=user.user_id,
+                    sink=sink,
+                    attachments=att_dicts,
+                    agent_mentions=mention_dicts,
+                    llm_credentials=preflight.credentials,
+                    llm_supports_tools=preflight.supports_tools,
+                    x_client_platform=x_client_platform,
+                    existing_user_message_id=user_message_id,
+                )
+            )
+            turn_runs.register(
+                conversation_id=conversation_id,
+                task=task,
+                sink=sink,
+                user_id=user.user_id,
+            )
+            return sse_response(sink, detach_on_disconnect=True)
+        if delivered.status == "received":
             # Sender's POST: short SSE confirm — history/SSE only, do NOT re-journal
             # (live sink already emitted once; same interjection_id must not double-write).
             confirm = EventSink()
@@ -505,18 +543,19 @@ async def send_message(
                     agent_mentions=delivered.agent_mentions or None,
                 )
             )
+            confirm.emit_sse_only(turn_saved(user_message_id=user_message_id))
             confirm.close(reason=delivered.confirm_reason)
             return sse_response(confirm, detach_on_disconnect=True)
-        if delivered is not None:
-            assert delivered.started is not None
-            return sse_queued_response(
-                conversation_id=conversation_id,
-                queue_id=delivered.queue_id or "",
-                position=delivered.position or 1,
-                queue_depth=delivered.queue_depth or 1,
-                started=delivered.started,
-                degraded_from=delivered.degraded_from,
-            )
+        assert delivered.started is not None
+        return sse_queued_response(
+            conversation_id=conversation_id,
+            queue_id=delivered.queue_id or "",
+            position=delivered.position or 1,
+            queue_depth=delivered.queue_depth or 1,
+            started=delivered.started,
+            degraded_from=delivered.degraded_from,
+            user_message_id=user_message_id,
+        )
 
     sink = EventSink()
     emit_preflight_warnings(sink, preflight)
@@ -603,6 +642,9 @@ async def cancel_queued_turn(
     item = cancel_queued_item(conversation_id, queue_id)
     if item is None:
         raise NotFoundError("排队项不存在或已开始")
+    from agentcore.conversation.midflight_persist import delete_midflight_user_message
+
+    await delete_midflight_user_message(conversation_id, item.user_message_id)
     return StatusResponse()
 
 

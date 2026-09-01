@@ -22,6 +22,7 @@ from agentcore.runtime.safety_breaker import (
     BreakerVerdict,
     SensitivePathClass,
     classify_sensitive_path,
+    command_text_for_tool,
     evaluate_tool_call,
     fuse_aligned_deny_rule_ids,
     git_forbidden_subcommands,
@@ -269,39 +270,25 @@ def test_evaluate_file_write_safe_scaffold_passes():
     )
 
 
-def test_evaluate_terminal_start_destructive_forces():
-    hit = evaluate_tool_call(
-        "terminal", {"subcommand": "start", "command": "rm -rf /"}
-    )
+def test_evaluate_run_destructive_forces():
+    hit = evaluate_tool_call("run", {"command": "rm -rf /"})
     assert hit is not None
     assert hit.verdict is BreakerVerdict.FORCE_APPROVAL
 
 
-def test_evaluate_terminal_read_skips():
-    assert (
-        evaluate_tool_call(
-            "terminal", {"subcommand": "read", "command": "rm -rf /"}
-        )
-        is None
-    )
+def test_evaluate_run_process_manage_skips():
+    assert evaluate_tool_call("run", {"action": "read", "command": "rm -rf /"}) is None
 
 
-def test_evaluate_code_execute_destructive_forces():
-    hit = evaluate_tool_call(
-        "code_execute",
-        {"language": "bash", "code": "rm -rf /\n"},
-    )
-    assert hit is not None
-    assert hit.verdict is BreakerVerdict.FORCE_APPROVAL
+def test_evaluate_run_benign_passes():
+    assert evaluate_tool_call("run", {"command": "print(1+1)\n"}) is None
 
 
-def test_evaluate_code_execute_benign_passes():
-    assert (
-        evaluate_tool_call(
-            "code_execute",
-            {"language": "python", "code": "print(1+1)\n"},
-        )
-        is None
+def test_historical_extractors_still_read_retired_exec_names():
+    """Journal-era names still extract; live fuse is ``run``."""
+    assert command_text_for_tool("code_execute", {"code": "rm -rf /"}) == "rm -rf /"
+    assert "git push --force-with-lease origin master" in command_text_for_tool(
+        "test_run", {"filter": "git push --force-with-lease origin master"}
     )
 
 
@@ -316,13 +303,11 @@ def test_evaluate_whitelist_cleanup_passes():
         "rimraf __pycache__\n",
     ):
         assert (
-            evaluate_tool_call("code_execute", {"language": "python", "code": code})
+            evaluate_tool_call("run", {"command": code})
             is None
         ), code
     assert (
-        evaluate_tool_call(
-            "terminal", {"subcommand": "start", "command": "rm -rf node_modules"}
-        )
+        evaluate_tool_call("run", {"command": "rm -rf node_modules"})
         is None
     )
 
@@ -330,11 +315,8 @@ def test_evaluate_whitelist_cleanup_passes():
 def test_evaluate_top_level_project_rmtree_forces():
     """P2: top-level whole-project tree → FORCE_APPROVAL (honest heuristic)."""
     hit = evaluate_tool_call(
-        "code_execute",
-        {
-            "language": "python",
-            "code": 'shutil.rmtree(cwd / "ai-team-workbench")\n',
-        },
+        "run",
+        {"command": 'shutil.rmtree(cwd / "ai-team-workbench")\n'},
     )
     assert hit is not None
     assert hit.verdict is BreakerVerdict.FORCE_APPROVAL
@@ -346,8 +328,8 @@ def test_evaluate_nested_rmtree_not_top_tree():
     """Nested project path is not the P2 top-tree gate (P0 baseline gate is separate)."""
     assert (
         evaluate_tool_call(
-            "code_execute",
-            {"language": "python", "code": 'shutil.rmtree("src/legacy")\n'},
+            "run",
+            {"command": 'shutil.rmtree("src/legacy")\n'},
         )
         is None
     )
@@ -367,16 +349,15 @@ def test_host_shell_top_tree_forces_not_deny():
 @pytest.mark.parametrize(
     "tool_name,arguments",
     [
-        ("terminal", {"subcommand": "start", "command": "git push --force origin main"}),
+        ("run", {"command": "git push --force origin main"}),
         ("host", {"action": "shell", "command": "git push --force origin main"}),
-        ("code_execute", {"code": "os.system('git push --force origin main')"}),
-        ("test_run", {"filter": "git push --force-with-lease origin master"}),
+        ("run", {"command": "git push --force-with-lease origin master"}),
     ],
 )
 def test_evaluate_shell_force_push_protected_denies(
     tool_name: str, arguments: dict[str, Any]
 ):
-    """terminal / code_execute / test_run / host(action=shell): force→main|master → DENY."""
+    """run / host(action=shell): force→main|master → DENY."""
     hit = evaluate_tool_call(tool_name, arguments)
     assert hit is not None
     assert hit.verdict is BreakerVerdict.DENY
@@ -454,11 +435,9 @@ def test_host_shell_silent_install_denies(command: str):
 
 
 @pytest.mark.parametrize("command,rule_id", _FUSE_SUBSET_DENY_SAMPLES)
-def test_terminal_fuse_covered_shapes_still_force_approval(command: str, rule_id: str):
-    """terminal has no host fuse — same shapes stay FORCE_APPROVAL."""
-    hit = evaluate_tool_call(
-        "terminal", {"subcommand": "start", "command": command}
-    )
+def test_run_fuse_covered_shapes_still_force_approval(command: str, rule_id: str):
+    """run has no host fuse — same shapes stay FORCE_APPROVAL."""
+    hit = evaluate_tool_call("run", {"command": command})
     assert hit is not None
     assert hit.verdict is BreakerVerdict.FORCE_APPROVAL
     assert hit.rule_id == rule_id
@@ -590,16 +569,16 @@ async def test_force_authorize_ignores_turn_grant_and_delegation():
         registry=registry,
         timeout_seconds=5.0,
         permission_axes=recipe_to_axes(AutonomyPolicy.MANAGED),
-        delegation_grantable_tools=frozenset({"code_execute", "terminal"}),
+        delegation_grantable_tools=frozenset({"run"}),
     )
     gate.grant_delegation("exec-1")
-    gate._granted.add("code_execute")  # noqa: SLF001 — simulate 本轮放行
+    gate._granted.add("run")  # noqa: SLF001 — simulate 本轮放行
 
     task = asyncio.create_task(
         gate.authorize(
-            tool_name="code_execute",
+            tool_name="run",
             tool_call_id="tc-force-1",
-            arguments={"code": "rm -rf /", "circuit_breaker_hint": "hint"},
+            arguments={"command": "rm -rf /", "circuit_breaker_hint": "hint"},
             execution_id="exec-1",
             force=True,
         )
@@ -624,9 +603,9 @@ async def test_force_authorize_refuses_approve_always_grant():
     )
     task = asyncio.create_task(
         gate.authorize(
-            tool_name="code_execute",
+            tool_name="run",
             tool_call_id="tc-force-2",
-            arguments={"code": "rm -rf /"},
+            arguments={"command": "rm -rf /"},
             force=True,
         )
     )
@@ -635,7 +614,7 @@ async def test_force_authorize_refuses_approve_always_grant():
     )
     decision = await task
     assert decision is ApprovalDecision.APPROVE  # downgraded
-    assert "code_execute" not in gate._granted  # noqa: SLF001
+    assert "run" not in gate._granted  # noqa: SLF001
 
 
 async def test_full_trust_auto_pass_bypassed_for_destructive_via_tool_exec():
@@ -649,7 +628,7 @@ async def test_full_trust_auto_pass_bypassed_for_destructive_via_tool_exec():
         registry=registry,
         timeout_seconds=5.0,
         permission_axes=recipe_to_axes(AutonomyPolicy.MANAGED),
-        delegation_grantable_tools=frozenset({"code_execute"}),
+        delegation_grantable_tools=frozenset({"run"}),
     )
 
     class _Local:
@@ -659,7 +638,7 @@ async def test_full_trust_auto_pass_bypassed_for_destructive_via_tool_exec():
         @property
         def schema(self) -> ToolSchema:
             return ToolSchema(
-                name="code_execute",
+                name="run",
                 description="t",
                 parameters={"type": "object", "properties": {}},
                 category=ToolCategory.EXECUTION,
@@ -682,7 +661,7 @@ async def test_full_trust_auto_pass_bypassed_for_destructive_via_tool_exec():
 
     assert (
         execution_tool_auto_passes(
-            _Local(), "code_execute", permission_axes=recipe_to_axes(AutonomyPolicy.MANAGED)
+            _Local(), "run", permission_axes=recipe_to_axes(AutonomyPolicy.MANAGED)
         )
         is True
     )
@@ -690,7 +669,7 @@ async def test_full_trust_auto_pass_bypassed_for_destructive_via_tool_exec():
     tc = ToolCall(
         id="tc-ft-1",
         function=ToolCallFunction(
-            name="code_execute", arguments='{"code": "rm -rf /"}'
+            name="run", arguments='{"command": "rm -rf /"}'
         ),
     )
 

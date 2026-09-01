@@ -423,15 +423,17 @@ def test_missing_audit_json_without_md_is_format_repairable_directed():
     assert "file_write" in fb
 
 
-def test_describe_deliverable_code_audit_skeleton_first_hint():
+def test_describe_deliverable_code_audit_lists_paths_not_field_manual():
     from agentcore.runtime.runs.contract import describe_deliverable
     from agentcore.runtime.runs.types import Deliverable
 
     desc = describe_deliverable(
         Deliverable(form="files", code_audit_gate=True, artifacts=["a.md", "a.audit.json"])
     )
-    assert "骨架" in desc
-    assert "补写修复" in desc or "可补写" in desc
+    assert "`a.md`" in desc
+    assert "`a.audit.json`" in desc
+    assert "骨架" not in desc
+    assert "severity" not in desc
 
 
 def test_check_contract_missing_by_design_section_fails():

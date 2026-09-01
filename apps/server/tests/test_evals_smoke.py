@@ -284,6 +284,18 @@ def test_single_outcome_derives_finish_and_cost():
     )
     assert capped.finish_reason == "max_rounds"  # rounds 达上限
 
+    unlimited = single_outcome(
+        "hi",
+        usage,
+        1,
+        profile=ProfileParams(temperature=0.7, max_rounds=0),
+        model="deepseek-v4-flash",
+        sink=sink,
+        citations=[],
+        latency_ms=1,
+    )
+    assert unlimited.finish_reason == "end_turn"  # 0 = 无轮次熔断
+
 
 def test_single_outcome_finish_override_wins_over_rounds():
     # When the engine hands back a non-default terminal reason, it must win over the

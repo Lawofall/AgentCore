@@ -671,59 +671,17 @@ def ownership_escalation_hints(
     write_coordinator: WriteCoordinator | None = None,
     desk_id: str | None = None,
 ) -> dict[str, Any]:
-    """Structured ownership hints for CEO escalation inject / resolve transfer.
-
-    Path source order: explicit ``paths`` → this run's recent ``claim`` denials
-    on ``write_coordinator`` (still held by someone else) → regex on
-    ``写入冲突：`path``` in ``question``. Preferring ledger denials keeps the
-    user ownership card wired when the model paraphrases the conflict.
-
-    Returns keys: ownership_paths, lock_owner_run_id, escalator_is_lock_owner_nested_child,
-    ownership_kind, owner_status (empty dict when no conflict path resolved).
-    ``ownership_paths`` are always bare ``rel_path``.
-    """
-    hints: dict[str, Any] = {}
-    escalator = (escalator_run_id or "").strip()
-    path_list = [p for p in (paths or []) if isinstance(p, str) and p.strip()]
-    if not path_list and escalator and write_coordinator is not None:
-        path_list = [
-            p
-            for p in write_coordinator.denied_paths_for(escalator)
-            if (owner := write_coordinator.owner_of(p, desk_id=desk_id))
-            and owner != escalator
-        ]
-    if not path_list:
-        path_list = parse_ownership_conflict_paths(question)
-    if not path_list:
-        return hints
-
-    # Always expose bare paths to the card / transfer APIs.
-    path_list = [ownership_display_path(p) for p in path_list]
-
-    ledger = write_coordinator or resolve_write_coordinator(execution_id=execution_id)
-    lock_owners: list[str] = []
-    kinds: list[str] = []
-    for p in path_list:
-        owner = ledger.owner_of(p, desk_id=desk_id)
-        if owner:
-            lock_owners.append(owner)
-            kinds.append("written" if ledger.is_written(p, desk_id=desk_id) else "declared")
-
-    hints["ownership_paths"] = path_list
-    if not lock_owners:
-        return hints
-
-    lock_owner = lock_owners[0]
-    hints["lock_owner_run_id"] = lock_owner
-    hints["ownership_kind"] = kinds[0] if kinds else None
-    _role, status = lookup_owner_status(lock_owner, execution_id=execution_id)
-    hints["owner_status"] = status
-    anc = write_ancestors or frozenset()
-    nested = lock_owner in anc or _is_nested_child_of(
-        escalator, lock_owner, execution_id=execution_id
+    """Never feeds a user transfer card. Occupancy is the write tool call."""
+    _ = (
+        escalator_run_id,
+        question,
+        execution_id,
+        paths,
+        write_ancestors,
+        write_coordinator,
+        desk_id,
     )
-    hints["escalator_is_lock_owner_nested_child"] = bool(nested)
-    return hints
+    return {}
 
 
 def _is_nested_child_of(

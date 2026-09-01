@@ -27,8 +27,9 @@ JSON). One ``cost.prefix_cache`` line per call answers:
   whether the provider spoke about caching at all (a silent provider is NOT a 0% hit).
 - **被什么击穿** — ``breach`` classifies the first divergence against the previous request
   (system prompt / mid-history rewrite / pure append), and ``breach_section`` names the leaf
-  when the system prompt is the culprit (e.g. ``workspace_context`` = 文件索引变动,
-  ``folder_catalog`` = 项目清单重排, ``attachment_context`` = 变尾段本身).
+  when the system prompt is the culprit (e.g. ``workspace_facts`` = 文件索引变动,
+  ``attachment_context`` = 变尾段本身). ``folder_catalog`` slot is kept;
+  production no longer assembles that section.
 - **随对话长度的差异** — ``prompt_messages`` / ``prompt_chars`` / ``input_tokens`` /
   ``chain_calls`` let the analyzer bucket by conversation size.
 
@@ -180,9 +181,15 @@ def record_prompt_sections(
     if entry is None:
         entry = _ConversationSections(turn_id=turn, scopes=OrderedDict(), previous_leaves=())
     elif entry.turn_id != turn:
-        entry.previous_leaves = flatten_sections(entry.scopes) or entry.previous_leaves
-        entry.scopes = OrderedDict()
-        entry.turn_id = turn
+        # Empty vs labelled is the same turn (tests bind trace_id after a layer
+        # already recorded, or an inner assemble ran before bind). Only wipe when
+        # both sides have a real, different id.
+        if not entry.turn_id:
+            entry.turn_id = turn
+        elif turn:
+            entry.previous_leaves = flatten_sections(entry.scopes) or entry.previous_leaves
+            entry.scopes = OrderedDict()
+            entry.turn_id = turn
     entry.scopes.setdefault(scope, record)
     _lru_put(_conversation_sections, conv, entry, _MAX_CONVERSATIONS)
 
@@ -201,7 +208,13 @@ def flatten_sections(scopes: Mapping[str, ScopeRecord]) -> tuple[SectionFingerpr
     if not scopes:
         return ()
     records = list(scopes.values())
-    by_render: dict[str, ScopeRecord] = {r.render_digest: r for r in records}
+    by_render: dict[str, ScopeRecord] = {}
+    for rec in records:
+        existing = by_render.get(rec.render_digest)
+        # Identical render (outer container == inner join) — keep the finer layer
+        # so a turn with no volatile tail still splices.
+        if existing is None or len(rec.sections) > len(existing.sections):
+            by_render[rec.render_digest] = rec
     nested = {s.digest for r in records for s in r.sections if s.digest in by_render}
     roots = [r for r in records if r.render_digest not in nested]
     if not roots:  # every layer is contained (cycle / duplicate renders) — fall back by size

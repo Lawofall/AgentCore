@@ -228,6 +228,7 @@ import {
   COMPOSER_CONTINUE_PLACEHOLDER,
   COMPOSER_EMPTY_INTERRUPTED_HINT,
 } from "@/lib/composerContinueHint";
+import { useComposerProfileDraftStore } from "@/lib/composerModelProfile";
 import { LLM_RATE_LIMIT_MESSAGE, LLM_RATE_LIMIT_WHY } from "@/lib/errors";
 import {
   setComposerSendError,
@@ -361,6 +362,7 @@ beforeEach(async () => {
     fillToken: 0,
     dockFlipToken: 0,
   });
+  useComposerProfileDraftStore.setState({ profileId: null });
 });
 
 afterEach(cleanup);
@@ -694,6 +696,7 @@ describe("TurnComposer variants", () => {
       },
     ]);
     renderComposer("bar");
+    expect(screen.getByTestId("composer-vision-hint")).toBeTruthy();
     const send = screen.getByRole("button", { name: "发送" });
     expect((send as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(send);

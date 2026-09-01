@@ -22,7 +22,7 @@ from agentcore.docs_export.workspace_export import ExportMarkdownError, export_m
 from agentcore.tools.file_products import file_product
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
-    AUDIENCE_WORKER_ONLY,
+    AUDIENCE_BOTH,
     FileProductsContract,
     ToolRegistration,
     ToolSurface,
@@ -38,7 +38,7 @@ class MdToPdfTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
         produces_formats=(".pdf",),
     )
@@ -51,7 +51,6 @@ class MdToPdfTool:
                 "把工作区内的 Markdown 文件确定性导出为同目录同名 PDF（.pdf）。"
                 "例：`报告.md` → `报告.pdf`。覆盖标题 #–####、段落、有序/无序列表、"
                 "表格与围栏代码；中文依赖系统/Noto CJK 字体，缺字体时回执明确警告。"
-                "不要用 code_execute / LLM 写脚本做主路径转换。"
                 "路径必须是相对于工作区的 .md / .markdown 相对路径。"
             ),
             parameters={

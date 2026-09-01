@@ -260,8 +260,10 @@ def test_render_recent_graph_context_keeps_append_channel():
     assert "exec-1" not in block
     assert "run_id=w1" in block
     assert "status=cancelled" in block
-    assert 'append_to_execution_id="latest"' in block
-    assert "新开一队、接续上一张图" in block
+    assert "本对话最近一张协作图" in block
+    assert "append_to_execution_id" not in block
+    assert "continue_from" not in block
+    assert "replaces_run_id" not in block
     assert "prev_execution_id" not in block
 
 
@@ -283,8 +285,9 @@ async def test_build_recent_graph_context_mentions_prev(monkeypatch):
     )
     note = await build_recent_graph_context(conversation_id="c1")
     assert "exec-recent" not in note
-    assert "新开一队、接续上一张图" in note
-    assert 'append_to_execution_id="latest"' in note
+    assert "本对话最近一张协作图" in note
+    assert "append_to_execution_id" not in note
+    assert "continue_from" not in note
     assert "prev_execution_id" not in note
 
 
@@ -326,8 +329,8 @@ async def test_build_recent_graph_context_includes_worker_status_facts(monkeypat
     assert "workers=1：" in note
     assert "run_id=del_1" in note
     assert "role=研究员; status=cancelled; task=查资料" in note
-    assert 'append_to_execution_id="latest"' in note
-    assert "新开一队、接续上一张图" in note
+    assert "append_to_execution_id" not in note
+    assert "continue_from" not in note
 
 
 @pytest.mark.asyncio

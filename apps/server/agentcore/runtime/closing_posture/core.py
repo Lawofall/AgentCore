@@ -29,7 +29,7 @@ _INFORMAL_TIERS = frozenset({"partial", "notes", "blocked"})
 
 # (A) 完整交付宣称闭集。故意不含裸「已完成 / 已交付 / 弱可用」——修码/建站正常收口不得误伤。
 # ✅ 已撤回 20260803「复核/审查/验收通过、已修复、可玩」扩面；乙（修好/验绿）仍在。
-# 禁止再往本表加案面词（「综述已完成」「站点做好了」等）；漏拦应回到档位/产物结构，而非加词。
+# 禁止再往本表加案面词（「综述已完成」「站点做好了」等）；漏拦应回到档位呈现 / 磁盘，而非加词。
 _POSTURE_A_CLAIMS = re.compile(
     r"(?:"
     r"已全部收卷|全部收卷|已收卷|"
@@ -186,37 +186,17 @@ def closing_honesty_rework(
     主路径：``delivery_verdict.state`` ∉ 正式完成 → 不得姿势 A；
     ``requires_draft_ack``（evidence_deficit / thin_review / verify_failed /
     node_failed / artifact_rejected）另须正文出现草稿/缺口承认（正向要求，不靠加完成词）。
-    B1：浏览器声称须 tool 成功；超席/空交接/cancel·0 须 PARTIAL 缺口清单。
+    B1 空心措辞扫描已删（不清气泡、不观测）。超席 / 超时 / 掐断 latch 留下。
+    浏览器声称扫词硬回炉已撤（与零写 / 产物结构同构）。
     零写落盘声称扫词硬回炉已撤（2026-08-09 定案 B）。
     无对账卡（含本轮 ``no_batch``）：不扫完成话术、不回炉；团队状态以结构面为准。
 
     档位命中（姿势 A / draft_ack）本轮只打影子日志、不回炉——闸在团队路径从未
-    真正跑过，须先观测误伤面。B1 结构轴仍回炉（它们不依赖跨 Task verdict）。
+    真正跑过，须先观测误伤面。
     """
-    # Late imports: B1 probe axes live in sibling latch modules (avoid import cycles).
-    from .b1 import (
-        _browser_claim_rework,
-        _ceiling_hollow_teach_rework,
-        _partial_storm_rework,
-        _verify_budget_hollow_rework,
-    )
-
     text = content or ""
     if not text.strip():
         return None
-
-    # B1 structural axes first（真源=装配/tool/对账 latch，不扫用户气泡）。
-    browser_hit = _browser_claim_rework(text)
-    if browser_hit:
-        return browser_hit
-    for probe in (
-        _partial_storm_rework,
-        _verify_budget_hollow_rework,
-        _ceiling_hollow_teach_rework,
-    ):
-        hit = probe(text)
-        if hit:
-            return hit
 
     verdict_hit = closing_honesty_verdict_hit(text, delivery_verdict)
     if verdict_hit is not None and delivery_verdict is not None:

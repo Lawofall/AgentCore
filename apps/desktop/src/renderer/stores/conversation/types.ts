@@ -198,7 +198,7 @@ export interface Message {
   outcome?: "ok" | "partial" | "paused" | "error" | null;
   /** 协作质量 (学·度量 §2.5): turn-level orchestration signals. Live via
    * message_end; reload via messages API (nested in usage column). Orchestration
-   * counts also surface in the assistant footer; audit_drops is diagnostic-only. */
+   * counts also surface in the assistant footer; audit_drops 采集仍在、产品不展示. */
   collab?: import("@/types/events").TurnCollabMetrics;
   /** 本回合团队状态（`message_end.team_batch` live；REST 从 journal 派生）。 */
   teamBatch?: import("@/types/events").TeamBatchStatus;

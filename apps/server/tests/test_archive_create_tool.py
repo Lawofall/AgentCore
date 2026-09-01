@@ -6,7 +6,6 @@ import zipfile
 from pathlib import Path
 
 from agentcore.tools.builtin.archive_create import ArchiveCreateTool
-from agentcore.tools.builtin.code_execute import code_execute_description
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
@@ -93,11 +92,9 @@ async def test_archive_create_missing_source(tmp_path: Path):
 async def test_archive_create_in_schema_and_points_off_code_execute():
     schema = ArchiveCreateTool().schema
     assert schema.name == "archive_create"
-    assert "code_execute" in schema.description
+    assert "code_execute" not in schema.description
+    assert "本工具" in schema.description
     assert "HOW→consult(archive_create)" in schema.description
-    ce = code_execute_description("local")
-    assert "archive_create" in ce
-    assert "archive_extract" in ce
 
 
 async def test_archive_create_rejects_over_file_limit(

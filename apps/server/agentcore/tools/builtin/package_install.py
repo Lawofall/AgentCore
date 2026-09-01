@@ -15,7 +15,9 @@ Used by ``test_run`` (check=install / command=JS|Python install-shaped).
 
 from __future__ import annotations
 
+import json
 import re
+import shlex
 from pathlib import PurePosixPath
 
 # In-sandbox mount for package-manager caches (must match egress.PACKAGE_CACHE_MOUNT).
@@ -100,9 +102,11 @@ _REGISTRY_OVERRIDE_RE = re.compile(
     re.IGNORECASE,
 )
 
-_SHELL_CHAIN_HINT_RE = re.compile(
-    r"(?:&&|\|\||;|`|\$\(|^\s*(?:cd|pushd)\b)",
-    re.IGNORECASE,
+# Segment classify skips these; they still run in the real shell.
+_SKIP_BINS = frozenset({"cd", "pushd", "export", "unset"})
+_FILTER_BINS = frozenset({"grep", "findstr", "rg", "tail", "head"})
+_REDIRECT_ONLY = frozenset(
+    {">", ">>", "<", "2>", "2>>", "&>", ">&", "2>&1", ">&1", ">&2", "|&", "1>", "1>>"}
 )
 
 _NETWORK_DEGRADE_CODE = "install_network_unavailable"
@@ -205,18 +209,140 @@ def is_safe_relpath(raw: str) -> bool:
     return bool(parts) and ".." not in parts
 
 
-def reject_shell_chain_command(command: str) -> str | None:
-    """Refuse ``cd && npm/pip install`` / shell metacharacters in the raw command string."""
-    text = (command or "").strip()
+def _bin_base(token: str) -> str:
+    head = (token or "").lower().replace("\\", "/")
+    base = head.rsplit("/", 1)[-1]
+    for suffix in (".exe", ".cmd", ".bat", ".com"):
+        if base.endswith(suffix):
+            return base[: -len(suffix)]
+    return base
+
+
+def split_shell_segments(command: str) -> list[str]:
+    """Split on ``&&`` / ``||`` / ``;`` / ``|`` / ``|&`` / newlines outside quotes."""
+    text = command or ""
+    segs: list[str] = []
+    buf: list[str] = []
+    quote: str | None = None
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if quote is not None:
+            buf.append(ch)
+            if ch == "\\" and quote == '"' and i + 1 < n:
+                buf.append(text[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+            i += 1
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+            buf.append(ch)
+            i += 1
+            continue
+        two = text[i : i + 2]
+        if ch == "\n" or two in ("&&", "||", "|&") or ch in ("|", ";"):
+            piece = "".join(buf).strip()
+            if piece:
+                segs.append(piece)
+            buf = []
+            i += 2 if two in ("&&", "||", "|&") else 1
+            continue
+        buf.append(ch)
+        i += 1
+    piece = "".join(buf).strip()
+    if piece:
+        segs.append(piece)
+    return segs
+
+
+def _strip_redirect_argv(argv: list[str]) -> list[str]:
+    out: list[str] = []
+    skip_next = False
+    for tok in argv:
+        if skip_next:
+            skip_next = False
+            continue
+        low = tok.lower()
+        if low in _REDIRECT_ONLY or re.fullmatch(r"\d>>?", tok):
+            if low not in {"2>&1", ">&1", ">&2", "|&"}:
+                skip_next = True
+            continue
+        out.append(tok)
+    return [t for t in out if t]
+
+
+def parse_segment_argv(segment: str) -> list[str]:
+    """shlex a segment and drop ``2>&1`` / ``> file`` tokens (classify only)."""
+    text = (segment or "").strip()
     if not text:
-        return None
-    if _SHELL_CHAIN_HINT_RE.search(text):
+        return []
+    try:
+        argv = shlex.split(text, posix=True)
+    except ValueError:
+        argv = text.split()
+    return _strip_leading_env_assigns(_strip_redirect_argv(argv))
+
+
+_ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.")
+
+
+def _strip_leading_env_assigns(argv: list[str]) -> list[str]:
+    i = 0
+    while i < len(argv) and _ENV_ASSIGN_RE.match(argv[i]):
+        i += 1
+    return argv[i:]
+
+
+def command_payload_argvs(command: str) -> list[list[str]]:
+    """Argv of payload segments, skipping ``cd`` / ``export`` / output filters."""
+    payloads: list[list[str]] = []
+    for seg in split_shell_segments(command):
+        argv = parse_segment_argv(seg)
+        if not argv:
+            continue
+        head = _bin_base(argv[0])
+        if head in _SKIP_BINS or head in _FILTER_BINS:
+            continue
+        payloads.append(argv)
+    return payloads
+
+
+def reject_workspace_cd(command: str) -> str | None:
+    """Refuse literal ``cd`` / ``pushd`` that would leave the workspace."""
+    for seg in split_shell_segments(command):
+        argv = parse_segment_argv(seg)
+        if not argv or _bin_base(argv[0]) not in {"cd", "pushd"}:
+            continue
+        paths = [
+            a
+            for a in argv[1:]
+            if a != "--" and not (a.startswith("-") and a != "-")
+        ]
+        if not paths:
+            return (
+                "命令里的 cd/pushd 不能离开工作区"
+                "（空 cd 会进家目录）。请用工作区相对子目录，或用 cwd。"
+            )
+        for raw in paths:
+            if raw == "-" or not is_safe_relpath(raw):
+                return (
+                    "命令里的 cd/pushd 不能离开工作区"
+                    f"（禁止绝对路径 / .. / ~ / /）：{raw}"
+                )
+    return None
+
+
+def reject_registry_override_in_command(command: str) -> str | None:
+    """Refuse ``--registry`` / ``--index-url`` in the raw command string."""
+    low = (command or "").lower()
+    if "--registry" in low or "--index-url" in low:
         return (
-            "禁止用 shell 链（cd && / ; / ||）跑装包；"
-            "请用 test_run check=install（可选 working_directory），"
-            "或 check=command + `npm|pnpm|yarn install` / "
-            "`uv sync` / `pip install` / `poetry install`，"
-            "子目录用 --prefix / --dir / --directory / working_directory（相对路径）。"
+            "禁止改包装源（检测到 --registry / --index-url）。"
+            "云端装包固定 allowlist registry；勿传 --registry / --index-url。"
         )
     return None
 
@@ -317,8 +443,8 @@ def network_unavailable_message() -> str:
         "无法装包：当前会话未授权受限出网，或云端主机不具备包装源白名单出网能力"
         "（云端需 Linux gVisor + netns chokepoint；本机执行不依赖主机 gVisor）。"
         "装包不会在无授权 / 无 chokepoint 时空转。\n"
-        "可选降级：① 将命令执行轴设为 auto 后重试 test_run check=install "
-        "→ build；② 走结构自检（graph_consistent / import 图）；"
+        "可选降级：① 将命令执行轴设为 auto 后重试 run（command 写成装包命令） "
+        "→ 再验；② 走结构自检（graph_consistent / import 图）；"
         "③ export_to_local 或本机传统打开本地文件夹后 npm/pnpm/yarn / uv/pip/poetry "
         "install（已是云端会话时【勿】再引导「导入到云」当修复）。"
     )
@@ -446,3 +572,18 @@ def _apply_pip_working_directory(
             return out
         i += 1
     return out
+
+
+def permission_allows_restricted_network(raw: str | None) -> bool:
+    """True when session ``permission_axes`` JSON allows restricted network in sandbox."""
+    if not raw:
+        return False
+    try:
+        from agentcore.core.types import PermissionAxes
+
+        data = json.loads(raw) if raw.lstrip().startswith("{") else None
+        if isinstance(data, dict):
+            return PermissionAxes.from_mapping(data).auto_executes
+    except (ValueError, TypeError, json.JSONDecodeError):
+        pass
+    return "'command': 'auto'" in raw or '"command": "auto"' in raw

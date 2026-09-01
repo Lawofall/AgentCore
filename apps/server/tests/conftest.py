@@ -41,6 +41,15 @@ def _mark_test_traffic():
 
 
 @pytest.fixture(autouse=True)
+def _isolate_prompt_profile():
+    """No leaked eval prompt variant may rewrite base / CEO core for a later test."""
+    from agentcore.runtime.resolve.profile import use_profile
+
+    with use_profile(None):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _isolate_coordination_registry():
     """Clear the module-global coordination session registry around every test.
 
@@ -122,7 +131,7 @@ def _isolate_turn_scoped_closing_state():
     Storm latches and ``current_delivery_verdict`` are ContextVars set as side effects
     of delivery_status emission. Tests that drive the engine loop directly skip
     ``prepare``, so without this they inherit the previous test's latches and
-    ``finish_guard`` injects spurious「超席/空交接」or 缺口承认 reworks depending on
+    ``finish_guard`` injects spurious 缺口承认影子（或旧超席回炉）depending on
     collection order. Calls the same owner as production so the two cannot drift.
     """
     from agentcore.runtime.closing_posture import reset_turn_scoped_closing_state

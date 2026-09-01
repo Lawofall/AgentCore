@@ -64,7 +64,7 @@ def test_failed_worker_section_survives_when_completed_bodies_are_huge():
 def test_cap_joined_blob_keeps_roster_instead_of_tail_chop():
     """Host backfill used to do ``text[:4000]`` — roster at the end vanished."""
     workers = "\n".join(
-        f"### 写手{i}（completed） · run_id: `w{i}`\n" + ("正文。" * 400) for i in range(8)
+        f"### 写手{i}（completed） · run_id: `w{i}`\n" + ("正文。" * 800) for i in range(8)
     )
     # Old harvest join put roster after the worker dump — a head slice dropped it.
     blob = f"{INTRO}\n{workers}\n{ROSTER}\n{CLOSING}"
@@ -79,8 +79,12 @@ def test_cap_joined_blob_keeps_roster_instead_of_tail_chop():
     assert "系统视图截断" in capped or "已省略" in capped or "…" in capped
 
 
-def test_default_limit_is_still_4000():
+def test_default_limit_is_the_pathological_valve():
+    from agentcore.runtime.runs.constants import DELEGATE_OUTPUT_LIMIT
+
+    assert ALL_COMPLETED_OUTPUT_LIMIT == DELEGATE_OUTPUT_LIMIT
     prose = f"{INTRO}\n{LONG_WORKER}\n{LONG_WORKER.replace('w3', 'w4').replace('撰稿', '校对')}"
     out = compose_all_completed_output(prose, ROSTER, CLOSING)
     assert len(out) <= ALL_COMPLETED_OUTPUT_LIMIT
-    assert ALL_COMPLETED_OUTPUT_LIMIT == 4000
+    assert "系统视图截断" not in out
+    assert "【终稿纪律】" in out

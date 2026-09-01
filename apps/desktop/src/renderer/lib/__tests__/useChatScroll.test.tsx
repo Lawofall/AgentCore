@@ -86,7 +86,8 @@ function ChatHarness({
   onReady: (api: ChatApi, scroll: HTMLElement) => void;
 }) {
   const api = useChatScroll({
-    messages,
+    firstMessageId: messages[0]?.id ?? null,
+    hasTranscript: messages.length > 0,
     resetKey,
     contentKey,
     hasMoreBefore: false,

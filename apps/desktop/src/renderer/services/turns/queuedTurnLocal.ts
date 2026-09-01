@@ -2,6 +2,10 @@ import {
   mapQueuedAttachments,
   mapQueuedMentions,
 } from "@/services/queuedTurnMap";
+import type {
+  OutgoingAgentMention,
+  OutgoingAttachment,
+} from "@/services/streamConversation";
 import { getRuntime, useConversationStore } from "@/stores/conversation";
 import {
   type QueuedTurnEntry,
@@ -38,6 +42,80 @@ function peekQueuedBubble(
   return entry;
 }
 
+/** 把 ``queue_id`` 钉到已入场的用户泡上，出队 ``turn_queue_started`` 不再二次插泡。 */
+export function registerQueuedTurnUserBubble(
+  conversationId: string,
+  queueId: string,
+  localId: string,
+): void {
+  const qid = queueId.trim();
+  const lid = localId.trim();
+  if (!conversationId || !qid || !lid) return;
+  queuedBubbles.set(queueKey(conversationId, qid), {
+    conversationId,
+    queueId: qid,
+    localId: lid,
+    bound: false,
+  });
+}
+
+/**
+ * 生成中再发 ack 后立刻入主时间线（排队 / 插队同一条用户泡）。
+ * ``queueId`` 有值时登记出队幂等键。同 ``id`` 已在列表则只登记、不双泡。
+ */
+export function paintMidFlightUserBubble(
+  conversationId: string,
+  args: {
+    id?: string;
+    content: string;
+    attachments?: OutgoingAttachment[];
+    agentMentions?: OutgoingAgentMention[];
+    queueId?: string;
+  },
+): string {
+  const id = (args.id ?? "").trim() || crypto.randomUUID();
+  const exists = getRuntime(conversationId).messages.some((m) => m.id === id);
+  if (!exists) {
+    const attachments = args.attachments;
+    const agentMentions = args.agentMentions;
+    useConversationStore.getState().addMessage(
+      {
+        id,
+        role: "user",
+        content: args.content,
+        createdAt: new Date().toISOString(),
+        executionId: null,
+        isStreaming: false,
+        attachments:
+          attachments && attachments.length > 0
+            ? attachments.map((a, i) => ({
+                id: `mf-att-${i}`,
+                name: a.name,
+                path: a.path,
+                truncated: a.truncated,
+                kind: a.kind,
+                conversationId: a.conversation_id,
+                documentId: a.document_id,
+                workspacePath: a.workspace_path,
+              }))
+            : undefined,
+        agentMentions:
+          agentMentions && agentMentions.length > 0
+            ? agentMentions.map((a) => ({
+                agentId: a.agent_id,
+                role: a.role,
+              }))
+            : undefined,
+      },
+      conversationId,
+    );
+  }
+  if (args.queueId) {
+    registerQueuedTurnUserBubble(conversationId, args.queueId, id);
+  }
+  return id;
+}
+
 /**
  * 本地清排队条（幂等）。有关联 messageId 时顺带删泡；无泡则只清条。
  * HTTP 取消成功 / 404、以及 SSE ``turn_queue_cancelled`` 共用。
@@ -58,9 +136,8 @@ export function clearQueuedTurnLocally(
 }
 
 /**
- * ``turn_queue_started`` 出队开跑：从帧 payload 的 content / attachments /
- * agent_mentions 幂等插用户泡（不从 QueuedTurnsBar 抄；条可已被空快照清掉）。
- * midFlight 与 messageStream 共用，按 ``conversationId+queue_id`` 防双泡。
+ * ``turn_queue_started`` 出队开跑：发送端 ack 已入场则只绑 ``queue_id``；
+ * 他端 / 无泡才从帧 payload 插用户泡。按 ``conversationId+queue_id`` 防双泡。
  */
 export function insertQueuedTurnUserBubble(
   conversationId: string,
@@ -124,6 +201,7 @@ export function insertQueuedTurnUserBubble(
 
 /**
  * ``turn_saved``：若本会话有尚未绑服务端 id 的排队入场泡，只改那条。
+ * 气泡 id 与 ``queuedTurns.messageId``（「排队中」徽标 / 取消删泡）一并换成服务端 id。
  * @returns 已绑上 → 调用方不得再 ``reconcileLastTurn``（会改掉上一轮最后一条 user）。
  */
 export function bindQueuedTurnUserId(
@@ -157,6 +235,14 @@ export function bindQueuedTurnUserId(
   }
   hit.localId = serverId;
   hit.bound = true;
+
+  const queued = useQueuedTurnsStore.getState();
+  const entry = queued
+    .list(conversationId)
+    .find((e) => e.queueId === hit.queueId);
+  if (entry && entry.messageId !== serverId) {
+    queued.upsert({ ...entry, messageId: serverId });
+  }
   return true;
 }
 

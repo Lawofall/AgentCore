@@ -93,6 +93,29 @@ def test_insufficient_balance_latches_and_preserves_error_class():
 
 
 @pytest.mark.asyncio
+async def test_background_title_balance_does_not_latch_chat_payer():
+    """铸题/记忆走便宜后台模型；失败不得闩死正在聊的同一把用户 Key。"""
+    inner = MagicMock()
+    inner.name = "user"
+    inner.complete = AsyncMock(side_effect=LLMInsufficientBalanceError())
+    fence = ObservingLLMProvider(inner)
+
+    token = bind_turn_auth_dead()
+    try:
+        title_req = LLMRequest(
+            messages=[LLMMessage(role="user", content="hi")],
+            model="test-model",
+            scenario="title",
+        )
+        with pytest.raises(LLMInsufficientBalanceError):
+            await fence.complete(title_req)
+        assert is_turn_auth_dead("user") is False
+        raise_if_turn_auth_dead("user")
+    finally:
+        reset_turn_auth_dead(token)
+
+
+@pytest.mark.asyncio
 async def test_observing_provider_marks_balance_and_short_circuits():
     inner = MagicMock()
     inner.name = "user"
@@ -254,7 +277,7 @@ async def test_wave_stops_new_dispatch_when_auth_dead():
     token = bind_turn_auth_dead()
     try:
         mark_turn_auth_dead(LLMAuthError(provider_name="user"))
-        should_stop, _ = resolve_wave_budget_hooks(credential_source="user")
+        should_stop = resolve_wave_budget_hooks(credential_source="user")
         assert should_stop()
 
         plan = RunPlan()
@@ -398,9 +421,9 @@ def test_wave_does_not_stop_when_other_payer_is_dead():
     token = bind_turn_auth_dead()
     try:
         mark_turn_auth_dead(LLMInsufficientBalanceError(provider_name="platform"))
-        should_stop, _ = resolve_wave_budget_hooks(credential_source="user")
+        should_stop = resolve_wave_budget_hooks(credential_source="user")
         assert not should_stop()
-        should_stop_p, _ = resolve_wave_budget_hooks(credential_source="platform")
+        should_stop_p = resolve_wave_budget_hooks(credential_source="platform")
         assert should_stop_p()
     finally:
         reset_turn_auth_dead(token)

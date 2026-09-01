@@ -38,6 +38,7 @@ from typing import Any
 from agentcore.core.errors import AgentCoreError
 from agentcore.llm.observability import log_llm_call, log_llm_call_failed
 from agentcore.llm.provider.protocol import (
+    TURN_SCALE_SCENARIOS,
     LLMChunk,
     LLMProvider,
     LLMRequest,
@@ -187,7 +188,8 @@ class ObservingLLMProvider:
             await self._refuse_if_quota_spent(request)
             response = await self._inner.complete(request)
         except Exception as e:
-            mark_turn_auth_dead(e)
+            if request.scenario in TURN_SCALE_SCENARIOS:
+                mark_turn_auth_dead(e)
             log_llm_call_failed(
                 scenario=request.scenario,
                 model=request.model,
@@ -271,7 +273,8 @@ class ObservingLLMProvider:
             raise
         except Exception as e:
             outcome = "failed"
-            mark_turn_auth_dead(e)
+            if request.scenario in TURN_SCALE_SCENARIOS:
+                mark_turn_auth_dead(e)
             log_llm_call_failed(
                 scenario=request.scenario,
                 model=request.model,

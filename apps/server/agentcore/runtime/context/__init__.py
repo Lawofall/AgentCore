@@ -14,13 +14,6 @@ from agentcore.runtime.context.artifact_formats import (
 from agentcore.runtime.context.assembler import ContextAssembler, assembly_hash
 from agentcore.runtime.context.consultable import Consultable, ConsultDirectoryEntry
 from agentcore.runtime.context.contributor import PromptContributor, SectionOrder
-from agentcore.runtime.context.folder_catalog import (
-    FolderCatalogEntry,
-    build_folder_catalog_entries,
-    catalog_label_for,
-    load_folder_catalog,
-    render_folder_catalog,
-)
 from agentcore.runtime.context.outlet_inventory import (
     OutletDirListing,
     collect_outlet_inventory,
@@ -35,14 +28,16 @@ from agentcore.runtime.context.workspace_context import (
     format_workspace_git_line,
     resolve_channel_profile,
 )
-from agentcore.runtime.context.workspace_overview import build_workspace_overview
+from agentcore.runtime.context.workspace_overview import (
+    attach_workspace_file_index,
+    build_workspace_overview,
+)
 
 __all__ = [
     "ChannelProfile",
     "Consultable",
     "ConsultDirectoryEntry",
     "ContextAssembler",
-    "FolderCatalogEntry",
     "PromptContributor",
     "SectionOrder",
     "OutletDirListing",
@@ -50,16 +45,13 @@ __all__ = [
     "assembly_hash",
     "build_artifact_format_line",
     "collect_outlet_inventory",
-    "build_folder_catalog_entries",
-    "catalog_label_for",
     "build_workspace_context",
     "format_artifact_capability_line",
+    "attach_workspace_file_index",
     "build_workspace_overview",
     "detect_workspace_git",
     "detect_workspace_git_sync",
     "desktop_client_can_bind",
     "format_workspace_git_line",
-    "load_folder_catalog",
-    "render_folder_catalog",
     "resolve_channel_profile",
 ]

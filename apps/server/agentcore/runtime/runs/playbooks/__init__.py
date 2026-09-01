@@ -115,7 +115,7 @@ def playbook_args_schema_description() -> str:
             cues.append(f"{p.name}→{'/'.join(req)}")
     required_cues = "；".join(cues)
     return (
-        "具名 playbook 快捷槽位对象（与 playbook 联用；默认手写 tasks 时勿传）。"
+        "具名 playbook 快捷槽位对象（与 playbook 联用）。"
         f"必填槽：{required_cues}。"
         "code_audit modules：整仓按产品缝扇出（先 2–3，不从 scope 自动拆；勿按目录填满上限）。"
         "其余可选槽→consult(team_orchestration_advanced)。"

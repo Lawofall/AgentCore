@@ -182,12 +182,19 @@ def test_coordination_injection_has_all_completed():
     )
 
 
-def test_apply_captain_max_rounds_raises_chat_ceiling():
-    base = ProfileParams(max_rounds=16, name="chat")
-    raised = apply_captain_max_rounds(base)
-    assert raised.max_rounds >= 24
+def test_apply_captain_max_rounds_default_does_not_raise():
+    base = ProfileParams(max_rounds=0, name="chat")
+    assert apply_captain_max_rounds(base).max_rounds == 0
     high = ProfileParams(max_rounds=32, name="chat")
     assert apply_captain_max_rounds(high).max_rounds == 32
+
+
+def test_apply_captain_max_rounds_raises_when_configured(monkeypatch):
+    from agentcore.config import settings
+
+    monkeypatch.setattr(settings, "engine_captain_max_rounds", 32)
+    base = ProfileParams(max_rounds=0, name="chat")
+    assert apply_captain_max_rounds(base).max_rounds == 32
 
 
 def test_should_audit_gate_requires_hard_flag():

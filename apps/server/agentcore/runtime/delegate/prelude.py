@@ -18,14 +18,11 @@ from agentcore.llm.turn_auth_dead import (
     is_turn_auth_dead,
     turn_auth_dead_reject_message,
 )
-from agentcore.runtime.delegate.consumer_deps import check_consumer_missing_depends
-from agentcore.runtime.delegate.design_impl_slice import check_design_impl_same_grant
 from agentcore.runtime.delegate.playbook_declaration import (
     PLAYBOOK_TASKS_XOR_MSG,
     declaration_reject_gate,
     resolve_playbook_declaration,
 )
-from agentcore.runtime.delegate.root_slice_honesty import check_root_slice_honesty
 from agentcore.runtime.runs.constants import MAX_WORKER_SUBDELEGATIONS
 from agentcore.runtime.runs.playbooks import collect_playbook_notes, expand_playbook
 from agentcore.runtime.turn.token_budget import (
@@ -114,9 +111,6 @@ class DelegateBatchRequest:
     valid_tools: set[str]
     # CEO 可传任意值；下游按需 isinstance 收窄（build_run_plan）。
     complexity_hint: Any
-    consumer_deps_warn: str | None
-    design_impl_warn: str | None
-    root_slice_warn: str | None
 
     @property
     def playbook(self) -> str | None:
@@ -134,7 +128,7 @@ def resolve_delegate_prelude(
     sub_workers_spawned: int,
     credential_source: str,
 ) -> DelegateBatchRequest | DelegatePreludeReject:
-    """校验并规范化一次 `delegate` 调用（零 await；6 道硬拒 + 3 条软告警）。"""
+    """校验并规范化一次 `delegate` 调用（零 await；硬拒后规范化）。"""
     # Turn 级硬顶：禁新派（在飞不 cancel）；与 per-worker ceiling 正交。
     if is_turn_token_ceiling_hit():
         msg = turn_token_ceiling_reject_message()
@@ -294,47 +288,10 @@ def resolve_delegate_prelude(
                 ToolResult(tool_call_id="", success=False, output="", error=msg),
                 flags,
             )
-    # 消费者漏边：task 写明吃同批队友产出但 depends_on 为空 → 软告警一次，不拒收入图。
-    # playbook 展开后的 tasks 也过闸；有边则无告警。引擎不猜边改图。
-    consumer_deps_warn = check_consumer_missing_depends(tasks_raw)
-    if consumer_deps_warn:
-        logger.info(
-            "delegate.consumer_deps_soft_warn",
-            task_count=len(tasks_raw),
-            hint=consumer_deps_warn[:200],
-        )
-
-    # 设计+实现同 grant：单 task artifacts/文案同时含设计与实现且未结构拆开 → 软告警一次。
-    # 不拒收、不自动拆波改图。
-    design_impl_warn = check_design_impl_same_grant(tasks_raw)
-    if design_impl_warn:
-        logger.info(
-            "delegate.design_impl_same_grant_soft_warn",
-            task_count=len(tasks_raw),
-            hint=design_impl_warn[:200],
-        )
-
-    # 根委派切片诚实：单节点手写写工程且无结构钉 → 软告警一次。
-    # 不拒收、不改图；嵌套扇出为合法等价路径（文案明示）。
-    root_slice_warn = check_root_slice_honesty(
-        tasks_raw,
-        depth=depth,
-        playbook=playbook if isinstance(playbook, str) else None,
-    )
-    if root_slice_warn:
-        logger.info(
-            "delegate.root_slice_honesty_soft_warn",
-            task_count=len(tasks_raw) if isinstance(tasks_raw, list) else 0,
-            hint=root_slice_warn[:200],
-        )
-
     return DelegateBatchRequest(
         flags=flags,
         tasks_raw=tasks_raw,
         playbook_notes=playbook_notes,
         valid_tools=valid_tools,
         complexity_hint=complexity_hint,
-        consumer_deps_warn=consumer_deps_warn,
-        design_impl_warn=design_impl_warn,
-        root_slice_warn=root_slice_warn,
     )

@@ -15,8 +15,9 @@ class LlmModelProfile(Base):
     """A named model combination: main (required) + optional worker / background / vision.
 
     Empty worker / background slots (model NULL) mean ``follow_main``. Empty vision
-    (NULL) does **not** follow main — VisionReader falls back to platform ``VISION_*``
-    only when ``billing_mode=platform``. System presets are virtual (not stored here).
+    (NULL) is not persisted follow_main; reader resolve may reuse main when that
+    id accepts images, else platform ``VISION_*`` when ``billing_mode=platform``.
+    System presets are virtual (not stored here).
     ``kind=implicit`` rows are migration-era per-session overrides; ``kind=user`` are
     user-authored combinations.
     """

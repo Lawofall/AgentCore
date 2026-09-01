@@ -160,4 +160,32 @@ describe("runsAllSettled reconcile (via recordFrame → setStatus completed)", (
     expect(hasUnsettledRuns(rt())).toBe(true);
     expect(rt().status).toBe("running");
   });
+
+  it("does not settle from output-delta recordFrames (structural frames own 收口)", () => {
+    store().startExecution(onePlan, MID);
+    store().recordFrame(started(), MID);
+    store().recordFrames(
+      [
+        {
+          t: 2,
+          kind: "run_output_delta",
+          runId: "r1",
+          agentId: "a1",
+          delta: "token ",
+        },
+        {
+          t: 3,
+          kind: "run_output_delta",
+          runId: "r1",
+          agentId: "a1",
+          delta: "storm",
+        },
+      ],
+      MID,
+    );
+    expect(rt().status).toBe("running");
+    expect(hasUnsettledRuns(rt())).toBe(true);
+    store().recordFrame(completed(), MID);
+    expect(rt().status).toBe("completed");
+  });
 });

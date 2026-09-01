@@ -1,4 +1,4 @@
-"""Discover local MCP tools via desktop backfill and register on the worker registry."""
+"""Discover local MCP tools via desktop backfill and register on a tool registry."""
 
 from __future__ import annotations
 

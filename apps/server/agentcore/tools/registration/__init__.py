@@ -99,7 +99,7 @@ def declared_tools(*, surface: ToolSurface | None = None) -> tuple[type, ...]:
 
 
 def execution_class_tool_names() -> frozenset[str]:
-    """Tools flagged ``execution_class`` (code_execute / test_run / terminal / browser_*)."""
+    """Tools flagged ``execution_class`` (run / browser_*)."""
     return frozenset(
         declared_tool_name(cls)
         for cls in declared_tools()
@@ -122,7 +122,7 @@ def declared_tool_names() -> frozenset[str]:
 
 
 def worker_only_tool_names() -> frozenset[str]:
-    """Tools whose audience excludes CEO (write / execute / worker orchestration)."""
+    """Tools whose audience excludes CEO (escalate / handoff)."""
     return frozenset(
         declared_tool_name(cls)
         for cls in declared_tools()

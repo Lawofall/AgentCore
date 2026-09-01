@@ -1,4 +1,4 @@
-"""handoff ``motion_card`` 契约：字段校验 + 序列化往返 + CEO 有卡/无卡渲染。"""
+"""``parse_motion_card`` 契约（stage_card / journal）+ handoff 字段已撤。"""
 
 from __future__ import annotations
 
@@ -74,6 +74,15 @@ def test_parse_motion_card_defaults_form_to_debate():
     assert card["form"] == "debate"
 
 
+def test_parse_motion_card_accepts_legacy_forms():
+    """广告 enum 只留 debate；parse 仍接受历史三值。"""
+    for form in ("red_team", "roundtable"):
+        card, err = parse_motion_card(_valid_card(form=form))
+        assert err == ""
+        assert card is not None
+        assert card["form"] == form
+
+
 def test_parse_motion_card_rejects_stance_over_limit():
     thick = "甲" * (STANCE_MAX_CHARS + 1)
     card, err = parse_motion_card(
@@ -121,7 +130,8 @@ def test_parse_motion_card_rejects_sides_lt_two():
 
 
 @pytest.mark.asyncio
-async def test_handoff_execute_rejects_invalid_motion_card():
+async def test_handoff_execute_ignores_extra_motion_card():
+    """handoff ``motion_card`` 已撤：额外字段不拒收。"""
     t = HandoffTool()
     thick = "甲" * (STANCE_MAX_CHARS + 1)
     res = await t.execute(
@@ -136,16 +146,6 @@ async def test_handoff_execute_rejects_invalid_motion_card():
         },
         _ctx(),
     )
-    assert res.success is False
-    assert res.error
-    assert str(STANCE_MAX_CHARS) in (res.error or "")
-    assert res.effect is not ToolEffect.HANDOFF
-
-
-@pytest.mark.asyncio
-async def test_handoff_execute_accepts_valid_motion_card():
-    t = HandoffTool()
-    res = await t.execute({"summary": "调研完成", "motion_card": _valid_card()}, _ctx())
     assert res.success is True
     assert res.effect is ToolEffect.HANDOFF
 
@@ -214,34 +214,29 @@ async def test_handoff_mere_debate_mention_without_card_ok():
 
 
 @pytest.mark.asyncio
-async def test_handoff_invalid_card_rejected_missing_card_ok():
-    """填了坏卡仍拒；建议开辩而无卡可交接。"""
+async def test_handoff_extra_or_missing_motion_card_both_ok():
+    """handoff 不再硬拒 motion_card；建议开辩而无卡可交接。"""
     t = HandoffTool()
-    bad = await t.execute(
+    extra = await t.execute(
         {
             "summary": "建议开辩",
             "motion_card": {"motion": "只有命题"},
         },
         _ctx(),
     )
-    assert bad.success is False
-    assert "`motion_card.rationale`" in (bad.error or "") or "motion_card.rationale" in (
-        bad.error or ""
-    )
+    assert extra.success is True
+    assert extra.effect is ToolEffect.HANDOFF
 
     missing = await t.execute({"summary": "建议开辩"}, _ctx())
     assert missing.success is True
     assert missing.effect is ToolEffect.HANDOFF
 
 
-def test_handoff_schema_motion_card_is_leftover_not_debate_gate():
-    """调研默认不填命题卡；开辩由用户点名。"""
-    desc = HandoffTool().schema.description
-    assert "motion_card" in desc
-    assert "调研默认不填" in desc
-    assert "用户点名" in desc
-    card_desc = HandoffTool().schema.parameters["properties"]["motion_card"]["description"]
-    assert "遗留" in card_desc or "默认不填" in card_desc
+def test_handoff_schema_has_no_motion_card():
+    """handoff 不再广告 / 硬拒 motion_card。"""
+    schema = HandoffTool().schema
+    assert "motion_card" not in schema.parameters["properties"]
+    assert "motion_card" not in (schema.description or "")
 
 
 # ── serialize ─────────────────────────────────────────────────────
@@ -257,17 +252,14 @@ def _handoff_msg(arguments: str, call_id: str = "h1") -> LLMMessage:
     )
 
 
-def test_debrief_harvests_motion_card():
+def test_debrief_does_not_harvest_motion_card():
     args = {
         "summary": "发现核心争议",
         "motion_card": _valid_card(),
     }
     debrief = debrief_from_transcript([_handoff_msg(json.dumps(args, ensure_ascii=False))])
-    assert debrief is not None
-    assert debrief["summary"] == "发现核心争议"
-    assert debrief["motion_card"]["motion"] == "一审判决是否过重"
-    assert debrief["motion_card"]["form"] == "debate"
-    assert len(debrief["motion_card"]["sides"]) == 2
+    assert debrief == {"summary": "发现核心争议"}
+    assert "motion_card" not in debrief
 
 
 def test_debrief_omits_motion_card_when_absent():
@@ -301,7 +293,7 @@ def test_state_json_round_trips_motion_card():
 # ── ceo_format ────────────────────────────────────────────────────
 
 
-def test_format_for_ceo_surfaces_motion_card_section():
+def test_format_for_ceo_does_not_surface_leftover_motion_card():
     t = tool(Provider([]))
     t._permission_axes = recipe_to_axes(AutonomyPolicy.CAUTIOUS)
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="汇总分析", role="汇总分析师")])
@@ -313,19 +305,14 @@ def test_format_for_ceo_surfaces_motion_card_section():
         )
     }
     out = format_for_ceo(t, plan, results)
-    assert "非开辩入口" in out
-    assert "命题卡" in out
-    assert "一审判决是否过重" in out
-    assert "支持一审判决正确" in out
-    assert "认为判赔过重" in out
-    assert "为何必须对抗" in out
-    assert "不要调 debate" in out
-    assert "可直接调 debate" not in out
-    assert "勿口头征求" not in out
+    assert "队员提交的命题卡" not in out
+    assert "不要调 debate" not in out
+    assert "非开辩入口" not in out
+    assert "一审判决是否过重" not in out
     assert "汇总分析师" in out
 
 
-def test_format_for_ceo_lists_all_motion_cards():
+def test_format_for_ceo_does_not_list_leftover_motion_cards():
     t = tool(Provider([]))
     plan = RunPlan(
         nodes=[
@@ -352,9 +339,9 @@ def test_format_for_ceo_lists_all_motion_cards():
         ),
     }
     out = format_for_ceo(t, plan, results)
-    assert "命题甲" in out and "命题乙" in out
+    assert "命题甲" not in out and "命题乙" not in out
     assert "分析师甲" in out and "分析师乙" in out
-    assert "当材料" in out
+    assert "队员提交的命题卡" not in out
 
 
 def test_format_for_ceo_no_motion_card_section_when_absent():

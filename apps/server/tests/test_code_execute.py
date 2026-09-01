@@ -1,6 +1,6 @@
-"""Tests for the code_execute tool's structured display (工具结果富渲染).
+"""Tests for the short-exec kernel's structured display (工具结果富渲染).
 
-The tool flattens stdout/stderr/exit_code into the model-facing ``output`` string,
+The kernel flattens stdout/stderr/exit_code into the model-facing ``output`` string,
 but also carries them STRUCTURED on ``display`` so the desktop renders a terminal
 view (stderr in red, exit-code badge) instead of parsing "stdout:\\n…" text. A
 non-zero exit must still produce a display (so a failed run surfaces its stderr).
@@ -9,7 +9,7 @@ non-zero exit must still produce a display (so a failed run surfaces its stderr)
 import pytest
 
 from agentcore.core.errors import SandboxError
-from agentcore.tools.builtin.code_execute import CodeExecuteTool
+from agentcore.tools.builtin.run_short import execute_short
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
 
@@ -41,7 +41,7 @@ async def test_code_execute_display_carries_stdout_and_exit():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="hello\n", stderr="", exit_code=0, duration_ms=5)
     )
-    result = await CodeExecuteTool().execute(
+    result = await execute_short(
         {"code": "print('hello')", "language": "python"}, _ctx(backend)
     )
 
@@ -54,20 +54,14 @@ async def test_code_execute_display_carries_stdout_and_exit():
     }
 
 
-def test_code_execute_schema_advertises_env():
-    props = CodeExecuteTool().schema.parameters["properties"]
-    assert "env" in props
-    assert props["env"]["additionalProperties"]["type"] == "string"
-
-
 async def test_code_execute_emits_executing_phase():
-    # 工具执行阶段进度 (联网前端展示优化): code_execute signals 「正在执行」before the (slow,
+    # 工具执行阶段进度 (联网前端展示优化): short-exec signals 「正在执行」before the (slow,
     # blocking) sandbox run so the waiting row is live instead of a dead spinner.
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="ok\n", stderr="", exit_code=0, duration_ms=5)
     )
     phases: list[str] = []
-    result = await CodeExecuteTool().execute(
+    result = await execute_short(
         {"code": "print('ok')", "language": "python"},
         _ctx(backend, on_phase=phases.append),
     )
@@ -89,8 +83,8 @@ async def test_code_execute_surfaces_written_back_files():
             written_files=["out/course.pptx", "out/chart.png"],
         )
     )
-    result = await CodeExecuteTool(location="server").execute(
-        {"code": "make()", "language": "python"}, _ctx(backend)
+    result = await execute_short(
+        {"code": "make()", "language": "python"}, _ctx(backend), location="server"
     )
 
     assert result.success is True
@@ -105,7 +99,7 @@ async def test_code_execute_display_unchanged_without_write_back():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="ok\n", stderr="", exit_code=0, duration_ms=5)
     )
-    result = await CodeExecuteTool().execute(
+    result = await execute_short(
         {"code": "print('ok')", "language": "python"}, _ctx(backend)
     )
     assert result.display is not None
@@ -132,8 +126,8 @@ async def test_code_execute_self_reports_write_back_products():
             written_files=["out/a、b.md", "out/chart.png"],
         )
     )
-    result = await CodeExecuteTool(location="server").execute(
-        {"code": "make()", "language": "python"}, _ctx(backend)
+    result = await execute_short(
+        {"code": "make()", "language": "python"}, _ctx(backend), location="server"
     )
     assert [(p.path, p.kind) for p in result.file_products] == [
         ("out/a、b.md", "md"),
@@ -149,7 +143,7 @@ async def test_code_execute_self_reports_write_back_products():
             tool_calls=[
                 ToolCall(
                     id="c1",
-                    function=ToolCallFunction(name="code_execute", arguments="{}"),
+                    function=ToolCallFunction(name="run", arguments="{}"),
                 )
             ],
         ),
@@ -172,7 +166,9 @@ async def test_code_execute_display_on_failure_keeps_stderr_and_exit():
             duration_ms=5,
         )
     )
-    result = await CodeExecuteTool().execute({"code": "boom", "language": "python"}, _ctx(backend))
+    result = await execute_short(
+        {"code": "boom", "language": "python"}, _ctx(backend)
+    )
 
     assert result.success is False
     assert result.display is not None
@@ -182,7 +178,7 @@ async def test_code_execute_display_on_failure_keeps_stderr_and_exit():
 
 
 def test_long_running_command_match_catches_dev_servers():
-    from agentcore.tools.builtin.code_execute import long_running_command_match
+    from agentcore.tools.builtin.run_short import long_running_command_match
 
     assert long_running_command_match("npm run dev") is not None
     assert long_running_command_match("pnpm dev") is not None
@@ -195,21 +191,10 @@ def test_long_running_command_match_catches_dev_servers():
     assert long_running_command_match("import { defineConfig } from 'vite'") is None
 
 
-def test_code_execute_description_routes_async_http_poll_away():
-    """邻格分流仍在 description：异步 HTTP 轮询超 60s → terminal/host；不扩 long_running 正则。"""
-    from agentcore.tools.builtin.code_execute import (
-        code_execute_description,
-        long_running_command_match,
-    )
+def test_long_running_command_match_ignores_async_http_poll():
+    """Finite poll loops exit; do not grow the long_running regex into a scanner."""
+    from agentcore.tools.builtin.run_short import long_running_command_match
 
-    ce = code_execute_description()
-    assert "异步" in ce and "轮询" in ce
-    assert "60s" in ce
-    assert "terminal" in ce
-    assert "host(action=shell)" in ce
-    assert "test_run" in ce
-    # Finite poll loops will exit, but they are not never-exit servers — do not
-    # grow this regex into a sleep/requests script scanner.
     assert long_running_command_match("time.sleep(5)") is None
     assert long_running_command_match("requests.get(status_url)") is None
     poll = (
@@ -224,7 +209,7 @@ def test_code_execute_description_routes_async_http_poll_away():
 
 
 def test_project_verify_command_match_routes_to_test_run():
-    from agentcore.tools.builtin.code_execute import project_verify_command_match
+    from agentcore.tools.builtin.run_short import project_verify_command_match
 
     assert project_verify_command_match("npm install") is not None
     assert project_verify_command_match("pnpm install") is not None
@@ -247,7 +232,7 @@ def test_project_verify_command_match_routes_to_test_run():
 
 
 def test_source_inspect_match_reexport():
-    from agentcore.tools.builtin.code_execute import source_inspect_match
+    from agentcore.tools.builtin.run_short import source_inspect_match
 
     dump = source_inspect_match("print(open('apps/server/foo.py').read()[:80])")
     assert dump is not None and dump.kind == "dump"
@@ -261,7 +246,7 @@ async def test_code_execute_blocks_source_dump_without_sandbox():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="should-not-run\n", stderr="", exit_code=0, duration_ms=1)
     )
-    result = await CodeExecuteTool().execute(
+    result = await execute_short(
         {
             "code": (
                 "src = open('apps/server/foo.py', encoding='utf-8').read()\n"
@@ -277,7 +262,8 @@ async def test_code_execute_blocks_source_dump_without_sandbox():
     assert result.metadata.get("code") == "source_dump_redirect"
     err = result.error or ""
     assert "file_read" in err
-    assert "code_execute" in err
+    assert "code_execute" not in err
+    assert "run" in err
     assert backend.requests == []
 
 
@@ -285,7 +271,7 @@ async def test_code_execute_blocks_source_grep_without_sandbox():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="should-not-run\n", stderr="", exit_code=0, duration_ms=1)
     )
-    result = await CodeExecuteTool().execute(
+    result = await execute_short(
         {
             "code": (
                 "src = open('apps/server/agentcore/observability/catalog.py', encoding='utf-8').read()\n"
@@ -309,7 +295,7 @@ async def test_code_execute_allows_pandas_after_source_inspect_gate():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="ok\n", stderr="", exit_code=0, duration_ms=1)
     )
-    result = await CodeExecuteTool().execute(
+    result = await execute_short(
         {
             "code": "import pandas as pd\ndf = pd.read_csv('a.csv')\nprint(df.head())",
             "language": "python",
@@ -325,17 +311,19 @@ async def test_code_execute_blocks_project_verify_without_sandbox():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="should-not-run\n", stderr="", exit_code=0, duration_ms=1)
     )
-    result = await CodeExecuteTool(location="local").execute(
+    result = await execute_short(
         {"code": "npx tsc --noEmit", "language": "bash"},
         _ctx(backend),
+        location="local",
     )
 
     assert result.success is False
     assert result.contract_failure is True
     assert result.metadata.get("code") == "project_verify_redirect"
     err = result.error or ""
-    assert "test_run" in err
-    assert "code_execute" in err
+    assert "请用 run" in err
+    assert "test_run" not in err
+    assert "check=install" not in err
     assert backend.requests == []
 
 
@@ -343,17 +331,19 @@ async def test_code_execute_blocks_npm_install_to_test_run():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="should-not-run\n", stderr="", exit_code=0, duration_ms=1)
     )
-    result = await CodeExecuteTool(location="server").execute(
+    result = await execute_short(
         {"code": "npm install", "language": "bash"},
         _ctx(backend),
+        location="server",
     )
 
     assert result.success is False
     assert result.contract_failure is True
     assert result.metadata.get("code") == "project_verify_redirect"
     err = result.error or ""
-    assert "test_run" in err
-    assert "check=install" in err
+    assert "请用 run" in err
+    assert "test_run" not in err
+    assert "check=install" not in err
     assert backend.requests == []
 
 
@@ -371,17 +361,19 @@ async def test_code_execute_blocks_python_install_to_test_run(code: str):
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="should-not-run\n", stderr="", exit_code=0, duration_ms=1)
     )
-    result = await CodeExecuteTool(location="server").execute(
+    result = await execute_short(
         {"code": code, "language": "bash"},
         _ctx(backend),
+        location="server",
     )
 
     assert result.success is False
     assert result.contract_failure is True
     assert result.metadata.get("code") == "project_verify_redirect"
     err = result.error or ""
-    assert "test_run" in err
-    assert "check=install" in err
+    assert "请用 run" in err
+    assert "test_run" not in err
+    assert "check=install" not in err
     assert backend.requests == []
 
 
@@ -389,16 +381,19 @@ async def test_code_execute_blocks_long_running_without_sandbox():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="should-not-run\n", stderr="", exit_code=0, duration_ms=1)
     )
-    result = await CodeExecuteTool(location="local").execute(
+    result = await execute_short(
         {"code": "npm run dev", "language": "bash"},
         _ctx(backend),
+        location="local",
     )
 
     assert result.success is False
     assert result.contract_failure is True
     assert result.metadata.get("code") == "long_running_redirect"
-    assert "terminal" in (result.error or "")
-    assert "wait_for" in (result.error or "")
+    err = result.error or ""
+    assert "background=true" in err
+    assert "wait_for" in err
+    assert "terminal" not in err
     assert backend.requests == []
 
 
@@ -406,16 +401,19 @@ async def test_code_execute_long_running_server_message_points_to_terminal():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="", stderr="", exit_code=0, duration_ms=1)
     )
-    result = await CodeExecuteTool(location="server").execute(
+    result = await execute_short(
         {"code": "next dev", "language": "bash"},
         _ctx(backend),
+        location="server",
     )
 
     assert result.success is False
     assert result.contract_failure is True
     err = result.error or ""
-    assert "terminal" in err
-    assert "subcommand=start" in err
+    assert "background=true" in err
+    assert "wait_for" in err
+    assert "terminal" not in err
+    assert "subcommand=start" not in err
     assert backend.requests == []
 
 
@@ -434,9 +432,10 @@ async def test_code_execute_launcher_unavailable_is_contract_failure():
             duration_ms=1,
         )
     )
-    result = await CodeExecuteTool(location="local").execute(
+    result = await execute_short(
         {"code": "print(42)", "language": "bash"},
         _ctx(backend),
+        location="local",
     )
 
     assert result.success is False
@@ -457,7 +456,7 @@ async def test_code_execute_nonzero_exit_without_launcher_msg_not_contract():
             duration_ms=5,
         )
     )
-    result = await CodeExecuteTool().execute(
+    result = await execute_short(
         {"code": "throw new Error('fail')", "language": "javascript"},
         _ctx(backend),
     )
@@ -467,7 +466,7 @@ async def test_code_execute_nonzero_exit_without_launcher_msg_not_contract():
 
 
 async def test_code_execute_sandbox_network_unsupported_is_permanent_retire():
-    """gVisor rootless network unsupported → permanent retire of code_execute."""
+    """gVisor rootless network unsupported → permanent retire of run."""
     backend = _FakeBackend(
         ExecutionResult(
             success=False,
@@ -477,7 +476,7 @@ async def test_code_execute_sandbox_network_unsupported_is_permanent_retire():
             duration_ms=5,
         )
     )
-    result = await CodeExecuteTool().execute(
+    result = await execute_short(
         {"code": "print(1)", "language": "python"},
         _ctx(backend),
     )
@@ -485,15 +484,14 @@ async def test_code_execute_sandbox_network_unsupported_is_permanent_retire():
     assert result.contract_failure is False
     assert result.metadata.get("error_class") == "permanent"
     assert result.metadata.get("code") == "sandbox_network_unsupported"
-    assert result.metadata.get("retire_tools") == ["code_execute"]
-    assert "沙箱网络" in (result.metadata.get("retire_message") or "")
+    assert "retire_tools" not in (result.metadata or {})
 
 
 async def test_code_execute_forwards_env_to_backend():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="ok\n", stderr="", exit_code=0, duration_ms=5)
     )
-    result = await CodeExecuteTool().execute(
+    result = await execute_short(
         {
             "code": "print('ok')",
             "language": "python",
@@ -509,7 +507,7 @@ async def test_code_execute_rejects_path_env():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="ok\n", stderr="", exit_code=0, duration_ms=5)
     )
-    result = await CodeExecuteTool().execute(
+    result = await execute_short(
         {"code": "print(1)", "language": "python", "env": {"PATH": "/evil"}},
         _ctx(backend),
     )
@@ -530,7 +528,7 @@ async def test_code_execute_scrubs_env_from_stdout():
             duration_ms=5,
         )
     )
-    result = await CodeExecuteTool().execute(
+    result = await execute_short(
         {
             "code": "print(1)",
             "language": "python",
@@ -541,21 +539,6 @@ async def test_code_execute_scrubs_env_from_stdout():
     assert secret not in (result.output or "")
     assert secret not in (result.display or {}).get("stdout", "")
     assert "[REDACTED]" in (result.display or {}).get("stdout", "")
-
-
-def test_code_execute_server_schema_covers_desk_boot():
-    from agentcore.config import settings
-    from agentcore.runtime.engine.timeout import resolve_tool_timeout
-
-    server = CodeExecuteTool(location="server").schema
-    assert server.timeout_seconds == (
-        settings.gvisor_desk_start_timeout_seconds
-        + settings.tool_execution_timeout_seconds
-    )
-    assert resolve_tool_timeout(server) == server.timeout_seconds
-    local = CodeExecuteTool(location="local").schema
-    assert local.timeout_seconds is None
-    assert resolve_tool_timeout(local) == settings.tool_execution_timeout_seconds
 
 
 async def test_code_execute_cloud_desk_down_is_not_contract_failure():
@@ -584,15 +567,15 @@ async def test_code_execute_cloud_desk_down_is_not_contract_failure():
             return await super().execute(request)
 
     backend = _Down()
-    result = await CodeExecuteTool(location="server").execute(
+    result = await execute_short(
         {"code": "print(1)", "language": "python"},
         _ctx(backend),
+        location="server",
     )
     assert result.success is False
     assert result.contract_failure is False
     assert result.metadata.get("code") == EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
-    assert "code_execute" in result.metadata.get("retire_tools", [])
-    assert "test_run" in result.metadata.get("retire_tools", [])
+    assert "retire_tools" not in (result.metadata or {})
     assert result.error == EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE
     assert "本机" not in (result.error or "")
     assert backend.ensure_calls == 1

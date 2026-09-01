@@ -72,15 +72,16 @@ export const STANCE_META: Record<Stance, { label: string; short: string }> = {
   con: { label: "反方", short: "反" },
 };
 
-/** Tool name → English action label, shared by the team graph's live「正在生成」progress line
- * (AgentNode) and the run-detail tool rows. A label-only twin of MessageBubble's
- * TOOL_META (which also couples a lucide icon, so it can't live in the store); keep
- * the two in sync. An unknown tool falls back to its raw name. */
+/** Tool name → English action label, shared by the team graph's live composing
+ * progress line (AgentNode) and the run-detail tool rows. A label-only twin of
+ * MessageBubble's TOOL_META (which also couples a lucide icon, so it can't live
+ * in the store); keep the two in sync. An unknown tool falls back to its raw name. */
 export const TOOL_LABELS: Record<string, string> = {
   web_search: "Search web",
   read_url: "Read page",
   grep: "Grep code",
   code_search: "Search code",
+  run: "Run",
   code_execute: "Run code",
   terminal: "Run terminal",
   test_run: "Run tests",
@@ -215,7 +216,7 @@ export interface AgentState {
    * name + the chars of arguments streamed so far. Non-null only during active
    * argument assembly — set on each progress tick, cleared once the call starts
    * executing (tool_use_start) or the run ends. Drives the node/detail's live
-   *「正在生成 {tool} · N 字」line so a long file write never looks frozen. */
+   * write-family「{tool} · N 字」heartbeat so a long file write never looks frozen. */
   toolProgress: { toolName: string; chars: number } | null;
   /** Coarse EXECUTION phase for this worker's currently-running tool (`tool_use_progress`
    * with `run_id`). Transport-only — never folded from frames/journal; overlaid live from
@@ -418,8 +419,8 @@ export interface RunNode {
 /** 多任务并行调度 (batch_metrics): one dispatched node's occupancy window, folded (snake→camel) from a
  * `batch_metrics` frame's `timeline`. `startMs`/`endMs` are offsets from the scheduler wall start
  * (same t0 as {@link BatchMetricsSnapshot.wallMs}) — overlap = real concurrency, a gap before a
- * window = the `width` cap serialized it, the longest window = the critical path. Consumed by
- * SchedulingDiag / toolbar metrics chip (graph timeline layout removed). `runId` ties back to a
+ * window = the `width` cap serialized it, the longest window = the critical path. 采集仍在、
+ * 产品不展示. `runId` ties back to a
  * {@link RunNode} for role/label/color. `outcome` is the terminal status (`completed`/`failed`).
  * Dispatched nodes only (cascade-skipped omitted). */
 export interface NodeTiming {
@@ -435,8 +436,7 @@ export interface NodeTiming {
  * fired this segment (bind 晚绑定 / scope 漂移返工 / checkpoint 用户复核); the escalate tallies
  * are raw (`scopeEscalations ⊆ escalations`). `timeline` carries each dispatched node's occupancy
  * window. A delegate turn accrues one per scheduler segment (a checkpoint / scope yield + resume
- * appends another). Aggregates + timeline show in 诊断模式 (run detail SchedulingDiag); toolbar
- * may surface a one-line metrics chip from the same data. */
+ * appends another). 采集仍在、产品不展示. */
 export interface BatchMetricsSnapshot {
   nodes: number;
   width: number;
@@ -472,8 +472,8 @@ export interface Execution {
   progress: { completed: number; total: number };
   /** 调度埋点量化 (深层诊断指标, §十): the turn's WaveScheduler snapshots, one per delegate
    * segment, folded from `batch_metrics` frames. Empty for a single-agent turn or before the
-   * scheduler reports. Surfaced ONLY in 诊断模式 (run detail's 调度 block) — a desktop-local
-   * diagnostic, kept out of the conformance ProjectedTurn. */
+   * scheduler reports. 采集仍在、产品不展示 — a desktop-local field, kept out of the
+   * conformance ProjectedTurn. */
   batches: BatchMetricsSnapshot[];
   /** 辩论收场产物（`debate_result`）：决策简报 + 交锋叙事线，verbatim 承载；null = 非
    * 辩论回合。与 {@link runs} 互补——辩手发言全文在对应辩手节点，本字段是主持人的逐轮

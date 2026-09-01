@@ -48,12 +48,8 @@ async def test_safe_index_files_swallows_backend_failure():
     assert ok.order == "recent"
 
 
-async def test_safe_index_files_timeout_does_not_sticky_dead_channel():
-    """Best-effort index hangs must not sticky-dead the shared file channel.
-
-    Bare tool-side INDEX_FILES still counts toward sticky (control); ``_safe_index_files``
-    wraps ``index_io_mode`` so N=2 ambient hangs leave the channel alive for real tools.
-    """
+async def test_safe_index_files_timeout_does_not_block_later_read():
+    """Best-effort index hangs fail that listing only — a later file op still delivers."""
     import asyncio
 
     import pytest
@@ -80,7 +76,6 @@ async def test_safe_index_files_timeout_does_not_sticky_dead_channel():
     for _ in range(2):
         with pytest.raises(WorkspaceIOError, match="活性挂起"):
             await channel_bare.request(WorkspaceOp.INDEX_FILES, {"cap": 10, "order": "path"})
-    assert channel_bare._dead is True  # noqa: SLF001
 
     registry = InteractionRegistry()
     channel = WorkspaceChannel(
@@ -93,7 +88,6 @@ async def test_safe_index_files_timeout_does_not_sticky_dead_channel():
     backend = LocalWorkspace(channel)
     assert await _safe_index_files(backend) == []
     assert await _safe_index_files(backend) == []
-    assert channel._dead is False  # noqa: SLF001
     from tests.client_tool_fulfill_testutil import DELIVERED_EVENTS
 
     DELIVERED_EVENTS.clear()

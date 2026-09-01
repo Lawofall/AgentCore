@@ -26,7 +26,7 @@ from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.executor import build_agent_executor
 from agentcore.runtime.runs.types import RunPhase
 from agentcore.runtime.runs.wave import WaveScheduler
-from agentcore.tools.builtin.code_execute import CodeExecuteTool
+from agentcore.tools.builtin.run import RunTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.subprocess import (
@@ -37,11 +37,11 @@ from agentcore.workspace.server import ServerWorkspace
 from tests.runs_executor.conftest import _ContentProvider, _ctx
 
 
-class _CodeExecuteThenNote:
-    """Round 1: call ``code_execute`` (lands the file via copy-out); round 2: stream a
+class _RunThenNote:
+    """Round 1: call ``run`` (lands the file via copy-out); round 2: stream a
     terse chat note — the product is on disk, deliberately NOT pasted into the reply."""
 
-    def __init__(self, code: str, note: str) -> None:
+    def __init__(self, command: str, note: str) -> None:
         self._rounds = [
             [
                 LLMChunk(
@@ -49,9 +49,9 @@ class _CodeExecuteThenNote:
                         ToolCallDelta(
                             index=0,
                             id="x1",
-                            function_name="code_execute",
+                            function_name="run",
                             arguments_delta=json.dumps(
-                                {"code": code, "language": "python"}, ensure_ascii=False
+                                {"command": command}, ensure_ascii=False
                             ),
                         )
                     ]
@@ -98,8 +98,9 @@ async def test_requires_files_satisfied_by_code_execute_landing(tmp_path):
         id_prefix="t",
     )
     reg = ToolRegistry()
-    reg.register(CodeExecuteTool(location="server"))
-    provider = _CodeExecuteThenNote(
+    reg.register(RunTool(location="server"))
+    provider = _RunThenNote(
+        "print()\n"
         "open('report.md', 'w', encoding='utf-8')"
         ".write('# 报告\\n扎实可信的分析正文。')",
         "报告已生成，见 report.md",

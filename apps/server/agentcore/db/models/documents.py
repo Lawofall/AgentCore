@@ -127,7 +127,9 @@ class Document(Base):
     parent_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), nullable=True)
     # Injection scope (位置即作用域, §5.3): NULL = global (every conversation); a workspace
     # ``Folder`` id = that project's layer. Denormalized onto every node so a scope query is a
-    # flat filter. App-level FK; cleared/ignored if the folder is gone (no cascade lock).
+    # flat filter. App-level ref, not a DB FK: soft-deleting a folder does not cascade these
+    # rows (restore must bring 设定 back). Injection skips a missing/soft-deleted folder;
+    # permanent delete / retention purge physically remove the scope.
     folder_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), nullable=True)
     kind: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'document'")

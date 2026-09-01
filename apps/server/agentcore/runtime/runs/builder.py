@@ -28,7 +28,6 @@ from agentcore.core.types import new_id
 from agentcore.runtime.runs.constants import (
     DEFAULT_ON_FAILURE,
     MAX_DELEGATION_TASKS,
-    MAX_TASK_ROUNDS,
     VALID_ON_FAILURE,
 )
 from agentcore.runtime.runs.plan import RunPlan, RunPlanError
@@ -46,7 +45,7 @@ from agentcore.runtime.runs.types import (
 # so a stray value never leaks onto the graph.
 _VALID_STANCES = frozenset({"pro", "con"})
 _VALID_OUTPUT_FORMATS = frozenset({"text", "json"})
-# DAG 节点可显式声明 timeout_ms；缺省不填 → ``apply_worker_budgets`` 填统一 backstop。
+# DAG 节点可显式声明 timeout_ms；缺省不填 → ``policy.timeout_s`` 保持 None（无默认墙钟）。
 # Per-sibling excerpt caps in a fan-out awareness summary: a scope line (任务),
 # kept tight so a wide fan-out's awareness block stays scannable and can't blow
 # up a worker's context.
@@ -339,13 +338,11 @@ def build_run_plan(
         _apply_sibling_summaries(plan)
         from agentcore.runtime.runs.retrieval_budget import apply_retrieval_budgets
         from agentcore.runtime.runs.worker_budget import (
-            apply_directed_search_tools,
             apply_verify_policies,
             apply_worker_budgets,
         )
 
         apply_retrieval_budgets(plan, valid_tools=valid_tools, complexity_hint=complexity_hint)
-        apply_directed_search_tools(plan, valid_tools=valid_tools)
         apply_verify_policies(plan)
         apply_worker_budgets(plan)
         from agentcore.runtime.runs.artifact_dir import apply_artifact_dir_to_plan
@@ -512,15 +509,13 @@ def build_added_nodes(
         return [], [f"add 拓扑无效：{e}"]
     from agentcore.runtime.runs.retrieval_budget import apply_retrieval_budgets_to_specs
     from agentcore.runtime.runs.worker_budget import (
-        apply_directed_search_tools_to_specs,
         apply_verify_policies_to_specs,
         apply_worker_budgets_to_specs,
     )
 
     apply_retrieval_budgets_to_specs(specs, valid_tools=valid_tools, complexity_hint="standard")
-    apply_directed_search_tools_to_specs(specs, valid_tools=valid_tools)
     apply_verify_policies_to_specs(specs)
-    # replan add：token/超时走统一 backstop；检索额度走统一默认 + 硬例外。
+    # replan add：token 走统一 backstop；超时仅保留显式 timeout_ms；检索额度走统一默认 + 硬例外。
     apply_worker_budgets_to_specs(specs)
     from agentcore.runtime.runs.artifact_dir import apply_artifact_dir_to_specs
 
@@ -846,7 +841,6 @@ def _inline_spec(
         replaces_run_id=_parse_replaces_run_id(item.get("replaces_run_id")),
         continue_from_run_id=_parse_continue_from_run_id(item.get("continue_from_run_id")),
         force_continue=bool(item.get("force_continue")),
-        ceiling_priority=bool(item.get("ceiling_priority")),
         context_inject_files=_str_list(item.get("context_inject_files")),
         require_upstream=bool(item.get("require_upstream")),
         # 检索额度由 apply_retrieval_budgets 填统一默认；CEO/task 不可配置。
@@ -864,17 +858,16 @@ def _inline_spec(
 
 
 def _parse_max_rounds(raw: Any) -> int | None:
-    """Optional per-task ReAct round cap (repair / light posture).
+    """Optional per-task ReAct round cap (CEO-stamped short segment).
 
-    Values ``<1`` (and non-ints) drop to ``None`` (profile default). Values
-    above :data:`MAX_TASK_ROUNDS` are clamped — the CEO cannot request an
-    unbounded per-segment budget.
+    Values ``<1`` (and non-ints) drop to ``None`` (profile default = no fuse).
+    No product upper clamp — an explicit stamp is the whole cap.
     """
     if isinstance(raw, bool) or not isinstance(raw, int):
         return None
     if raw < 1:
         return None
-    return min(raw, MAX_TASK_ROUNDS)
+    return raw
 
 
 def _parse_replaces_run_id(raw: Any) -> str | None:
@@ -978,7 +971,7 @@ def _excerpt(text: str, limit: int) -> str:
 
 
 def _explicit_timeout_s(item: dict[str, Any]) -> int | None:
-    """CEO-explicit ``timeout_ms`` → seconds; omit → None (worker_budget fills)."""
+    """CEO-explicit ``timeout_ms`` → seconds; omit → None (no default wall clock)."""
     raw_timeout = item.get("timeout_ms")
     if isinstance(raw_timeout, bool):
         return None
@@ -993,8 +986,7 @@ def _dag_policy(item: dict[str, Any]) -> RunPolicy:
     """Map a DAG node's declarative knobs onto a RunPolicy (the WaveScheduler
     reads on_failure; result_handling feeds the dep-context size).
 
-    ``timeout_ms`` is CEO-explicit only: omit → ``None``, filled later by
-    :func:`~agentcore.runtime.runs.worker_budget.apply_worker_budgets`.
+    ``timeout_ms`` is CEO-explicit only: omit → ``None``（不回填默认墙钟）。
     """
     raw_on_failure = item.get("on_failure", DEFAULT_ON_FAILURE)
     on_failure = raw_on_failure if raw_on_failure in VALID_ON_FAILURE else DEFAULT_ON_FAILURE
@@ -1062,14 +1054,6 @@ def _deliverable_from_dict(raw: dict[str, Any]) -> Deliverable:
             else ""
         )
         workspace_native = form == "workspace"
-    placeholder_hard_exempt = bool(raw.get("placeholder_hard_exempt", False))
-    placeholder_hard_exempt_artifacts = _str_list(
-        raw.get("placeholder_hard_exempt_artifacts")
-    )
-    web_quality_soft_exempt = bool(raw.get("web_quality_soft_exempt", False))
-    web_quality_soft_exempt_labels = _str_list(
-        raw.get("web_quality_soft_exempt_labels")
-    )
     citation_mode_raw = raw.get("citation_mode")
     citation_mode = citation_mode_raw if citation_mode_raw == "two_phase" else None
     return Deliverable(
@@ -1079,10 +1063,6 @@ def _deliverable_from_dict(raw: dict[str, Any]) -> Deliverable:
         artifacts=artifacts,
         artifact_dir=artifact_dir,
         workspace_native=workspace_native,
-        placeholder_hard_exempt=placeholder_hard_exempt,
-        placeholder_hard_exempt_artifacts=placeholder_hard_exempt_artifacts,
-        web_quality_soft_exempt=web_quality_soft_exempt,
-        web_quality_soft_exempt_labels=web_quality_soft_exempt_labels,
         strict=bool(raw.get("strict", False)),
         citation_mode=citation_mode,  # type: ignore[arg-type]
         code_audit_gate=bool(raw.get("code_audit_gate", False)),

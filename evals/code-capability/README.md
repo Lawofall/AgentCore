@@ -47,11 +47,11 @@
 
 | Gap | 来源 | 性质 | 状态 |
 |-----|------|------|------|
-| `delegate` 契约拒绝（playbook⊕tasks / 误传已删字段等）未标 `contract_failure` → 连拒烧穿熔断；熔断后 CEO 无写盘（**设计如此**） | S5 R1 | 校验归因 + 提示 | **已修**：契约拒绝标 `contract_failure` + 更清晰报错 + schema/CEO 提示防踩坑；**已定案不给 CEO 加 `file_write`**。R2 组队 + GOLDEN Pass |
+| `delegate` 契约拒绝（playbook⊕tasks / 误传已删字段等）未标 `contract_failure` → 连拒烧穿熔断；熔断后当时 CEO 无写盘 | S5 R1 | 校验归因 + 提示 | **已修**：契约拒绝标 `contract_failure` + 更清晰报错。写盘工具现已给 CEO（按规模路由，不是卸写权）。R2 组队 + GOLDEN Pass |
 | `GET …/messages/{mid}/files/diff` → 500（`conv` 为 None → `folder_id`） | S6 | 云 diff 接缝 Bug | **已修**：`turn_files_diff.py` 误用 `_require_owned_conversation`（无返回）→ 改为 `_get_owned_conversation`；`test_turn_files_diff` 10 passed |
 | S3 刷新/重进仍见挂起卡 | S3 | U 层 | **待人手 / CDP**（无 RPC 等价；见 runbook） |
 | U 层产物卡按钮未点 | S4 等 | 可选 U | 不挡 D；RPC `turnFilesDiff` / `restoreTurnBaseline` 已通 |
-| 环境摩擦（`code_execute` WSL、`test_run` framework） | S1/S2/S5/S6 | 环境噪音 | **部分已清**：① CEO/未装配面误调执行类工具 → 可操作报错 + `policy_failure`（不烧熔断）；② 本机无 bash 时 `code_execute` 启动前失败并提示改用 python/js。`test_run` 在近空仓 `framework=unknown` 仍属试件早期噪音；S1 探针 900s 超时视为空转后果，随①②减轻。**不**给 CEO 加执行/写盘工具（定案不变） |
+| 环境摩擦（`code_execute` WSL、`test_run` framework） | S1/S2/S5/S6 | 环境噪音 | **部分已清**：① 未装配面误调执行类工具 → 可操作报错 + `policy_failure`（不烧熔断）；② 本机无 bash 时 `code_execute` 启动前失败并提示改用 python/js。`test_run` 在近空仓 `framework=unknown` 仍属试件早期噪音。CEO 现持写盘/执行（未装配仍走①） |
 
 ## 交付物（Phase 1 + 本轮）
 

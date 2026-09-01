@@ -25,6 +25,28 @@ def test_form_parsed_onto_deliverable():
     assert d.form == "prose"
 
 
+def test_placeholder_exempt_keys_not_parsed_onto_deliverable():
+    plan, errs = build_run_plan(
+        [
+            {
+                "role": "A",
+                "task": "写页",
+                "deliverable": {
+                    "form": "files",
+                    "placeholder_hard_exempt": True,
+                    "placeholder_hard_exempt_artifacts": ["index.html"],
+                },
+            }
+        ],
+        id_prefix="t",
+    )
+    assert errs == []
+    d = plan.nodes[0].deliverable
+    assert d is not None
+    assert not hasattr(d, "placeholder_hard_exempt")
+    assert not hasattr(d, "placeholder_hard_exempt_artifacts")
+
+
 def test_form_files_is_write_disk():
     plan, errs = build_run_plan(
         [{"role": "A", "task": "建站", "deliverable": {"form": "files"}}],
@@ -139,25 +161,22 @@ def test_identity_form_prose_has_no_file_write_guidance():
     assert "必须" in files
     # 压缩后的落盘纪律（identity，不只 CEO skill）。
     assert "artifact manifest" in files
-    assert "禁止" in files and "file_read" in files
-    assert "Artifact-first" not in files
     assert "落盘与修订" not in files
-    assert "consult(long_form_landing)" in files
-    assert "consult(long_form_landing)" in omitted
+    assert "consult(long_form_landing)" not in files
+    assert "consult(long_form_landing)" not in omitted
     assert "consult(long_form_landing)" not in prose
-    assert "consult(data_file_landing)" in files
-    assert "consult(data_file_landing)" in omitted
+    assert "consult(data_file_landing)" not in files
+    assert "consult(data_file_landing)" not in omitted
     assert "consult(data_file_landing)" not in prose
-    assert "consult(verify_and_fix)" in files
-    assert "consult(verify_and_fix)" in omitted
-    assert "consult(verify_and_fix)" not in prose
+    assert "consult(verify_and_fix)" not in files
+    assert "consult(verify_and_fix)" not in omitted
+    assert "consult(verify_and_fix)" not in workspace
 
     # omit = files（无双向自判）
     assert "form=files" in omitted
     assert "可独立阅读的文字" not in omitted
     assert "file_write" in omitted
     assert "artifact manifest" in omitted
-    assert "禁止" in omitted and "file_read" in omitted
     assert "Artifact-first" not in omitted
     assert "落盘与修订" not in omitted
 
@@ -165,8 +184,8 @@ def test_identity_form_prose_has_no_file_write_guidance():
     assert "改工程" in workspace
     assert "AgentCore/文档" in workspace
     assert "file_write" in workspace
-    assert "consult(long_form_landing)" in workspace
-    assert "consult(verify_and_fix)" in workspace
+    assert "consult(long_form_landing)" not in workspace
+    assert "consult(verify_and_fix)" not in workspace
 
 def test_artifacts_inject_files_form_identity_block():
     """非空 artifacts 且 form 省略 ⇒ 强制 files 形态提示，非 legacy。"""
@@ -205,16 +224,14 @@ def test_identity_handoff_topology_preserved_with_form():
 
 def test_describe_deliverable_form_split():
     prose = describe_deliverable(Deliverable(form="prose"))
-    assert "纯文字" in prose
+    assert prose == ""
     assert "file_write" not in prose
 
     files = describe_deliverable(Deliverable(form="files"))
-    assert "落盘" in files
-    assert "file_write" in files
+    assert files == ""
 
     workspace = describe_deliverable(Deliverable(form="workspace"))
-    assert "改工程" in workspace
-    assert "AgentCore/文档" in workspace
+    assert workspace == ""
     assert DRAFTS_DIR not in workspace
 
 def test_schema_exposes_form_enum():
@@ -229,8 +246,13 @@ def test_schema_exposes_form_enum():
     assert "【改工程】" not in DELEGATE_DESCRIPTION
     assert "才用本工具" not in DELEGATE_DESCRIPTION
     # 何时用写在 description（行业：when-to-use 在工具面）；编制闭集不进按钮。
-    assert "改产物" in DELEGATE_DESCRIPTION
+    assert "默认用本工具" in DELEGATE_DESCRIPTION
+    assert "一份注意力" not in DELEGATE_DESCRIPTION
+    assert "探路够了" not in DELEGATE_DESCRIPTION
+    assert "成篇落盘" in DELEGATE_DESCRIPTION
+    assert "可运行应用" in DELEGATE_DESCRIPTION
     assert "成规模查证" in DELEGATE_DESCRIPTION
+    assert "有写权" in DELEGATE_DESCRIPTION
     assert "闲聊" in DELEGATE_DESCRIPTION
     assert "用：" not in DELEGATE_DESCRIPTION
     assert "不用：" not in DELEGATE_DESCRIPTION
@@ -242,7 +264,10 @@ def test_schema_exposes_form_enum():
     assert "build_app" not in DELEGATE_DESCRIPTION
     assert "建站→build_website" not in DELEGATE_DESCRIPTION
     assert "建站→build_website" not in DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
-    assert "二选一" in DELEGATE_DESCRIPTION
+    assert "二选一" not in DELEGATE_DESCRIPTION
+    playbook_desc = DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
+    assert "二选一" in playbook_desc
+    assert "不要传 tasks" in playbook_desc
     assert "既填 code_audit 又传 tasks" not in DELEGATE_DESCRIPTION
     assert "HOW→consult(team_orchestration_advanced)" in DELEGATE_DESCRIPTION
     # 协调 / 一张图 / 续派 HOW 的唯一所有者是 skill，不在工具 description。
@@ -261,14 +286,14 @@ def test_schema_exposes_form_enum():
     assert HANDWRITTEN_TASKS_SKELETON not in DELEGATE_DESCRIPTION
     assert "默认" in DELEGATE_DESCRIPTION
     assert "手写顶层 tasks" in DELEGATE_DESCRIPTION or "默认手写" in DELEGATE_DESCRIPTION
-    assert "快捷进阶" in DELEGATE_DESCRIPTION or "固化流水线" in DELEGATE_DESCRIPTION
+    assert "快捷进阶" not in DELEGATE_DESCRIPTION
+    assert "快捷进阶" in playbook_desc or "固化流水线" in playbook_desc
     tasks_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["description"]
     assert HANDWRITTEN_TASKS_SKELETON in tasks_desc
     assert "摸底抄骨架" in tasks_desc
     assert "摸底抄骨架" not in DELEGATE_DESCRIPTION
     assert "默认主路" in tasks_desc
-    assert "手写" in tasks_desc and "互斥" in tasks_desc
-    playbook_desc = DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
+    assert "互斥" not in tasks_desc
     assert "不要传 tasks" in playbook_desc
     assert "非默认" in playbook_desc or "进阶" in playbook_desc or "快捷" in playbook_desc
     assert "build_app" not in playbook_desc
@@ -330,6 +355,7 @@ def test_schema_exposes_form_enum():
         "workspace_native",
         "artifact_dir",
         "web_quality_scan",
+        "placeholder_hard_exempt",
         "code_audit_gate",
     ):
         assert banned not in props

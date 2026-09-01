@@ -44,10 +44,10 @@ skip_if:
 |---|---|
 | 后端 | 又一个 run+SSE 客户端；发现改编排器 → 停（绊线） |
 | 协议 | 复用现有 run fold；组件层不进 conformance |
-| 读图 | `board_read` CLIENT_TOOL；视觉子调用 `role=vision` 独立入账；与对话贴图共用 `VisionReader`（组合 `vision` 槽，或槽空时 platform + `VISION_*`，默认 `kimi-k2.5`）；BYOK 无槽则不启用；空配置干净失败。对话附件识图权威 → [平台 LLM 接入 · 识图槽](/docs/05-平台与运维/平台LLM接入.md) |
+| 读图 | `board_read` CLIENT_TOOL；视觉子调用 `role=vision` 独立入账；与对话贴图共用 `VisionReader`（组合 `vision` 槽，或槽空且 main 收图时复用 main，或 platform + `VISION_*`）；空配置干净失败。对话附件识图权威 → [平台 LLM 接入 · 识图槽](/docs/05-平台与运维/平台LLM接入.md) |
 | 产物 | 文本卡先行；`@` 回工作区待文件信号；迭代空间留痕 |
 
-平台识图（`kimi-k2.5` + curated 价卡 + `board_read` 实调用）已在本地验收通过；桌面画布前台栅格化仍依赖打开白板的真实 CLIENT_TOOL 回填。
+桌面画布前台栅格化仍依赖打开白板的真实 CLIENT_TOOL 回填。读图路由 → [平台 LLM 接入 · 识图槽](/docs/05-平台与运维/平台LLM接入.md)。
 
 ## 风险护栏
 

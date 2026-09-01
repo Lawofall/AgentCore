@@ -223,7 +223,7 @@ def node_holds_execution_tools(spec: Any) -> bool:
     return True
 
 def _code_execute_succeeded_in_transcript(transcript: list[LLMMessage]) -> bool:
-    """True when at least one ``code_execute`` call completed without a non-zero exit."""
+    """True when at least one ``run`` call completed without a non-zero exit."""
     call_names: dict[str, str] = {}
     for msg in transcript:
         if msg.role != "assistant" or not msg.tool_calls:
@@ -233,7 +233,7 @@ def _code_execute_succeeded_in_transcript(transcript: list[LLMMessage]) -> bool:
     for msg in transcript:
         if msg.role != "tool" or not msg.tool_call_id:
             continue
-        if call_names.get(msg.tool_call_id) != "code_execute":
+        if call_names.get(msg.tool_call_id) != "run":
             continue
         content = llm_content_text(msg.content)
         if "退出码" not in content:
@@ -241,7 +241,7 @@ def _code_execute_succeeded_in_transcript(transcript: list[LLMMessage]) -> bool:
     return False
 
 def _test_run_succeeded_in_transcript(transcript: list[LLMMessage]) -> bool:
-    """True when at least one ``test_run`` completed with a passing verify signal.
+    """True when at least one ``run`` completed with a passing verify signal.
 
     Accepts structured test summaries (``通过：``) and the bounded-verify header
     ``## 验证结果：通过`` (typecheck / build / command checks).
@@ -255,7 +255,7 @@ def _test_run_succeeded_in_transcript(transcript: list[LLMMessage]) -> bool:
     for msg in transcript:
         if msg.role != "tool" or not msg.tool_call_id:
             continue
-        if call_names.get(msg.tool_call_id) != "test_run":
+        if call_names.get(msg.tool_call_id) != "run":
             continue
         content = llm_content_text(msg.content)
         if "测试未通过" in content or "验证未通过" in content:
@@ -291,7 +291,7 @@ def _terminal_verify_succeeded_in_transcript(transcript: list[LLMMessage]) -> bo
         if msg.role != "tool" or not msg.tool_call_id:
             continue
         name, args_json = calls.get(msg.tool_call_id, ("", ""))
-        if name != "terminal":
+        if name != "run":
             continue
         if not _VERIFY_COMMAND_RE.search(args_json):
             continue
@@ -319,7 +319,7 @@ def _code_execute_verify_succeeded_in_transcript(transcript: list[LLMMessage]) -
         if msg.role != "tool" or not msg.tool_call_id:
             continue
         name, args_json = calls.get(msg.tool_call_id, ("", ""))
-        if name != "code_execute":
+        if name != "run":
             continue
         if not _VERIFY_COMMAND_RE.search(args_json):
             continue
@@ -329,9 +329,9 @@ def _code_execute_verify_succeeded_in_transcript(transcript: list[LLMMessage]) -
     return False
 
 def _run_verified_in_transcript(transcript: list[LLMMessage]) -> bool:
-    """Honest verify only: test_run / verify-shaped code_execute / terminal.
+    """Honest verify only: ``run`` with a passing verify signal.
 
-    Non-verify ``code_execute`` success is intentionally excluded (delivery_status
+    Non-verify ``run`` success is intentionally excluded (delivery_status
     still uses ``_code_execute_succeeded_in_transcript`` for writeback sniffing).
     """
     if not transcript:
@@ -432,8 +432,7 @@ def _overlay_verify_soft_note() -> str:
     """Soft reminder when .ts/.tsx landed without a verify signal (D2 overlay)."""
     return (
         "提醒（不阻断验收）：已落盘 .ts/.tsx，建议补一次验证"
-        "（code_execute / test_run / terminal 跑通 tsc|typecheck|test|build；"
-        "启动开发服务器不算）"
+        "（run 跑通 tsc|typecheck|test|build；启动开发服务器不算）"
     )
 
 def _as_overlay_soft_note(msg: str) -> str:
@@ -533,7 +532,7 @@ def _test_run_budget_exhausted_in_transcript(transcript: list[LLMMessage]) -> bo
         if msg.role != "tool" or not msg.tool_call_id:
             continue
         name, _ = calls.get(msg.tool_call_id, ("", ""))
-        if name != "test_run":
+        if name != "run":
             continue
         content = llm_content_text(msg.content)
         if "预算耗尽" in content or "验证未完成" in content:
@@ -549,24 +548,33 @@ def _test_run_budget_exhausted_in_transcript(transcript: list[LLMMessage]) -> bo
     return False
 
 def _test_run_failed_in_transcript(transcript: list[LLMMessage]) -> bool:
-    """True when a ``test_run`` was attempted and none succeeded (未过)."""
+    """True when a verify-shaped ``run`` was attempted and none succeeded (未过)."""
     if not transcript:
         return False
     calls = _tool_call_args_map(transcript)
-    saw_test_run = False
+    saw_verify_run = False
     for msg in transcript:
         if msg.role != "tool" or not msg.tool_call_id:
             continue
-        name, _ = calls.get(msg.tool_call_id, ("", ""))
-        if name != "test_run":
+        name, _args_json = calls.get(msg.tool_call_id, ("", ""))
+        if name != "run":
             continue
-        saw_test_run = True
-    if not saw_test_run:
+        content = llm_content_text(msg.content)
+        if not (
+            "## 验证结果" in content
+            or "通过：" in content
+            or "失败：" in content
+            or "测试未通过" in content
+            or "验证未通过" in content
+        ):
+            continue
+        saw_verify_run = True
+    if not saw_verify_run:
         return False
     return not _test_run_succeeded_in_transcript(transcript)
 
 def _verify_shaped_command_failed_in_transcript(transcript: list[LLMMessage]) -> bool:
-    """True when verify-shaped ``code_execute`` / ``terminal`` ran and none exited 0.
+    """True when verify-shaped ``run`` ran and none exited 0.
 
     Mirrors the success predicates used by ``_run_verified_in_transcript``: only
     typecheck/test/build-shaped commands count. A failed verify attempt with no
@@ -580,7 +588,7 @@ def _verify_shaped_command_failed_in_transcript(transcript: list[LLMMessage]) ->
         if msg.role != "tool" or not msg.tool_call_id:
             continue
         name, args_json = calls.get(msg.tool_call_id, ("", ""))
-        if name not in ("code_execute", "terminal"):
+        if name != "run":
             continue
         if not _VERIFY_COMMAND_RE.search(args_json or ""):
             continue
@@ -617,7 +625,7 @@ def _verify_failure_rows(transcript: list[LLMMessage]) -> list[dict[str, str]]:
     elif _test_run_failed_in_transcript(transcript):
         out.append(
             {
-                "description": "测试未通过（test_run 未全部通过）",
+                "description": "测试未通过（run 未全部通过）",
                 "reason": _VERIFY_FAILED_REASON,
             }
         )
@@ -625,8 +633,7 @@ def _verify_failure_rows(transcript: list[LLMMessage]) -> list[dict[str, str]]:
         out.append(
             {
                 "description": (
-                    "验证命令未通过（verify 形 code_execute / terminal "
-                    "非零退出或执行失败）"
+                    "验证命令未通过（verify 形 run 非零退出或执行失败）"
                 ),
                 "reason": _VERIFY_FAILED_REASON,
             }

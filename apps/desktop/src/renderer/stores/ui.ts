@@ -1,20 +1,10 @@
 import { uiGet, uiSet } from "@/lib/uiStorage";
 import { create } from "zustand";
 
-const DIAGNOSTIC_MODE_KEY = "diagnostic-mode";
 const THEME_KEY = "theme";
 const SIDECAR_KEY = "sidecar-enabled";
 
 type Theme = "light" | "dark" | "system";
-
-// 开发者 / 诊断模式 (前端UX设计.md §十): off by default.
-function loadDiagnosticMode(): boolean {
-  return uiGet<boolean>(DIAGNOSTIC_MODE_KEY) === true;
-}
-
-function persistDiagnosticMode(v: boolean): void {
-  uiSet(DIAGNOSTIC_MODE_KEY, v);
-}
 
 // Theme is persisted so the choice survives a reload; it is *applied* to the DOM
 // by lib/theme.ts (the store only holds the value). Falls back to 跟随系统.
@@ -30,7 +20,7 @@ function persistTheme(v: Theme): void {
 // 本机执行（sidecar）偏好——三态（双模式工作区 §7.2）。
 //
 // 产品：本机传统（mode=local）新开回合默认同侧 sidecar。大众 Appearance **不再**暴露本开关；
-// 强制关（偏好 `off`）仅诊断入口可写——不是「默认关→整段过桥」。
+// 强制关（偏好 `off`）仅通用·进阶「允许本机执行」可写——不是「默认关→整段过桥」。
 //   - `setSidecarEnabled(true)` → 偏好 `on`（允许本机同侧；与 unset 对路由等价）
 //   - `setSidecarEnabled(false)` → 偏好 `off`（显式强制走云，诊断用）
 // 持久化的是**偏好**而非有效值，故翻产品默认时不静默改写已落盘的 `on`/`off`：
@@ -40,7 +30,7 @@ function persistTheme(v: Theme): void {
 // 新开回合路由读 `sidecarPreference`（见 `isSidecarForceOff`），勿把 `sidecarEnabled` 当默认挡板。
 type SidecarPreference = "unset" | "on" | "off";
 
-/** 一次性清历史：大众 Appearance 曾可写 `off`；毕业后加载时把历史 off→unset，之后诊断仍可显式写 off。 */
+/** 一次性清历史：大众 Appearance 曾可写 `off`；毕业后加载时把历史 off→unset，之后进阶开关仍可显式写 off。 */
 const SIDECAR_OFF_CLEARED_KEY = "sidecar-off-cleared-v1";
 
 /** 未表态时 {@link sidecarEnabled} 布尔默认。保持 false——**勿**翻成全站 true 当「默认同侧」捷径；
@@ -62,7 +52,7 @@ export function parseSidecarPreference(raw: unknown): SidecarPreference {
 /**
  * 加载本机执行偏好。尚未写过 {@link SIDECAR_OFF_CLEARED_KEY} 时做一次性迁移：
  * 已落盘 `off`（含旧 boolean `false` 经 {@link parseSidecarPreference}）删键 → `unset`，并写 flag。
- * 之后诊断入口 `setSidecarEnabled(false)` 再写的 `off` 不会被二次清掉。
+ * 之后进阶开关 `setSidecarEnabled(false)` 再写的 `off` 不会被二次清掉。
  */
 export function loadSidecarPreference(): SidecarPreference {
   const pref = parseSidecarPreference(uiGet<unknown>(SIDECAR_KEY));
@@ -93,26 +83,19 @@ interface UIState {
   /** Open directly in the bookmarks facet (命令面板「已收藏」); consumed on open. */
   searchInitialBookmarks: boolean;
   theme: Theme;
-  /** 开发者 / 诊断模式 (前端UX设计.md §十). When true, low-level execution
-   * diagnostics (run / trace ids、调度埋点等) surface in run detail — dev-only
-   * noise kept off the 大众 path. 「复制排查包」(错误卡 / 气泡更多) 不依赖本开关。
-   * Persisted via uiStorage (`agentcore:diagnostic-mode`). */
-  diagnosticMode: boolean;
   /** 本机执行偏好折成的展示布尔（= `resolveSidecarEnabled`；unset→`SIDECAR_DEFAULT_ENABLED`）。
    * **不是**新开回合路由挡板——路由看 {@link sidecarPreference} 是否显式 `off`（强制关）。
    * 设置面应用 `preference !== "off"` 表示「允许」，以免 unset 显示关却仍默认同侧。 */
   sidecarEnabled: boolean;
-  /** 本机执行**持久化偏好**（三态）：`unset` / `on` = 允许本机传统同侧；`off` = 诊断强制走云。
+  /** 本机执行**持久化偏好**（三态）：`unset` / `on` = 允许本机传统同侧；`off` = 进阶开关强制走云。
    * 翻产品默认时不静默改写已落盘偏好。持久化到 `agentcore:sidecar-enabled`。
-   * 大众 Appearance 无此开关；强制关仅诊断入口。 */
+   * 大众 Appearance 无此开关；强制关仅通用·进阶。 */
   sidecarPreference: SidecarPreference;
 
   openSearch: (initialQuery?: string, opts?: { bookmarks?: boolean }) => void;
   closeSearch: () => void;
   toggleSearch: () => void;
   setTheme: (theme: UIState["theme"]) => void;
-  setDiagnosticMode: (v: boolean) => void;
-  toggleDiagnosticMode: () => void;
   setSidecarEnabled: (v: boolean) => void;
 }
 
@@ -142,7 +125,6 @@ export const useUIStore = create<UIState>((set) => ({
   searchInitialQuery: "",
   searchInitialBookmarks: false,
   theme: loadTheme(),
-  diagnosticMode: loadDiagnosticMode(),
   sidecarPreference: loadSidecarPreference(),
   sidecarEnabled: loadSidecarEnabled(),
 
@@ -166,16 +148,6 @@ export const useUIStore = create<UIState>((set) => ({
     persistTheme(theme);
     set({ theme });
   },
-  setDiagnosticMode: (diagnosticMode) => {
-    persistDiagnosticMode(diagnosticMode);
-    set({ diagnosticMode });
-  },
-  toggleDiagnosticMode: () =>
-    set((s) => {
-      const diagnosticMode = !s.diagnosticMode;
-      persistDiagnosticMode(diagnosticMode);
-      return { diagnosticMode };
-    }),
   setSidecarEnabled: (sidecarEnabled) => {
     const sidecarPreference: SidecarPreference = sidecarEnabled ? "on" : "off";
     persistSidecarPreference(sidecarPreference);

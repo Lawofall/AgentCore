@@ -157,6 +157,25 @@ class TokenUsage:
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens
 
+    @property
+    def fuse_tokens(self) -> int:
+        """Runaway fuse: new work only (cache miss + output).
+
+        Billing still uses :attr:`total_tokens` (full prompt every round). The
+        per-worker ceiling must not count a repeated cached prefix as spend —
+        otherwise a long coding run hits the fuse while most tokens are cache
+        hits. Providers that omit the split (hit=0 and miss=0) fall back to
+        ``total_tokens`` so the fuse still fires. OpenAI-style hit-only wires
+        derive miss as ``input − hit``.
+        """
+        hit = int(self.cache_hit_tokens or 0)
+        miss = int(self.cache_miss_tokens or 0)
+        if miss <= 0 and hit <= 0:
+            return self.total_tokens
+        if miss <= 0:
+            miss = max(int(self.input_tokens or 0) - hit, 0)
+        return miss + int(self.output_tokens or 0)
+
     def __add__(self, other: "TokenUsage") -> "TokenUsage":
         return TokenUsage(
             input_tokens=self.input_tokens + other.input_tokens,

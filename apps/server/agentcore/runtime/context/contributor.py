@@ -2,7 +2,7 @@
 
 上下文注入统一 Step 2（常驻源插件化）. Step 1 centralized the *assembly* (ContextAssembler);
 this gives every always-on source — base prompt, runtime context, memory ``<设定>``, CEO
-core, skill directory, workspace overview, per-turn attachment — ONE shape:
+core, skill directory, workspace facts, per-turn attachment — ONE shape:
 a named fragment + its render ``order`` + an optional ``budget``. So:
 
 - ordering is DECLARATIVE in one place (:class:`SectionOrder`), not implicit in the
@@ -27,11 +27,13 @@ class SectionOrder(IntEnum):
 
     One ordering universe so every assembler renders sections in the same relative order
     regardless of the sequence that contributed them. Spaced by 100 to leave room for
-    future sections to slot between without renumbering. The tail (workspace overview,
-    attachment) is deliberately LAST so the foundation/hint prefix can stay byte-identical
-    across turns — a **cost optimization** for exact-prefix cache billing (e.g. DeepSeek),
-    not a product invariant. Discipline: new sections only append after the current tail
-    or insert at a new stable key between existing slots; never reorder existing keys.
+    future sections to slot between without renumbering. The tail (working set,
+    attachment) is deliberately LAST so the foundation/hint prefix can stay
+    byte-identical across turns — a **cost optimization** for exact-prefix cache
+    billing (e.g. DeepSeek), not a product invariant. CEO file index rides the end
+    of ``WORKSPACE_FACTS`` (same ``<工作区>``), not a second tag. Discipline: new
+    sections only append after the current tail or insert at a new stable key
+    between existing slots; never reorder existing keys.
 
     Exception (2026-08-19): ``WORKSPACE_FACTS`` moved 250 → 750. That discipline exists
     so a later edit cannot silently reshuffle the billed prefix; this move *is* the
@@ -42,7 +44,7 @@ class SectionOrder(IntEnum):
     the volatile section. Facts used to ride the shared-base blob (order 250) in front
     of the core, so a location / capability restamp invalidated the whole core.
     Catalog already sits after the core (570). Moving facts after the core, adjacent
-    to the volatile tail (overview = 800), makes shared-base + resident core one
+    to the volatile tail (working set = 810), makes shared-base + resident core one
     uninterrupted byte-stable prefix. CEO and workers share that base and add facts
     at this same key — do not fork a second facts section. Do not revert this to
     restore "never reorder" without a new measurement showing the gap closed.
@@ -60,8 +62,8 @@ class SectionOrder(IntEnum):
     # On-demand user rules (consult) — constraint appendices, NOT memory topics.
     # Same live-tool gate: render only when ``consult`` is wired this turn.
     RULE_DIRECTORY = 560
-    # Derived cross-folder roster (Folder path + 画像.md first line). CEO-only;
-    # rendered outside ``<设定>`` so it stays separate from the always-on entry block.
+    # Retired: 名册改 list_folders. Slot kept so billed prefix keys are not
+    # reshuffled. Production does not assemble this section.
     FOLDER_CATALOG = 570
     # Retired 2026-08-29: resident <citing_sources> HOW removed (#rN lives in
     # shared delivery_honesty). Slot kept so billed prefix keys are not reshuffled.
@@ -74,7 +76,13 @@ class SectionOrder(IntEnum):
     # see class docstring Exception. Both CEO and worker composers add this key;
     # it is not baked into ``assemble_system_prompt``.
     WORKSPACE_FACTS = 750
+    # Retired as a separate XML tag 2026-09-01: CEO file index is the last
+    # subsection of ``<工作区>`` (attached into WORKSPACE_FACTS). Slot kept so
+    # billed prefix keys are not reshuffled.
     WORKSPACE_OVERVIEW = 800
+    # Conversation working set (CEO + workers): paths still in play after history
+    # drops tool I/O. Pointers only — body stays on disk. Volatile tail.
+    WORKING_SET = 810
     # CEO-only conversation state: the newest appendable team graph (跨回合同图追加's
     # cross-turn id echo — history replays no tool I/O, so it rides the volatile tail).
     RECENT_TEAM_GRAPH = 850
@@ -84,8 +92,8 @@ class SectionOrder(IntEnum):
     # Cross-turn soft nudge when the prior turn journal fingerprints empty-delegate /
     # unproductive (history drops tool I/O — same volatile-tail reason as recent graph).
     PRIOR_DELEGATE_RETRY = 860
-    # Cross-turn one-shot when the prior other turn has tool_call.cross_turn_retry=futile
-    # (history drops tool I/O; prompt information only — not a gate).
+    # Cross-turn futile-retry hint retired; slot kept unused so later sections
+    # keep their prefix-cache order.
     PRIOR_FUTILE_RETRIES = 862
     ATTACHMENT = 900
     # 已登记来源台账 (#rN): hydrated from the whole conversation's assistant rows, so it

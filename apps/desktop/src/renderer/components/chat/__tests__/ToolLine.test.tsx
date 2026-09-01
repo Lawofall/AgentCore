@@ -699,6 +699,44 @@ describe("ToolLine · browser 单步折叠一行", () => {
     }
   });
 
+  it("formats live tool elapsed past a minute like the status strip", () => {
+    vi.useFakeTimers();
+    const key =
+      useConversationStore.getState().currentConversationId ?? DRAFT_KEY;
+    const prev = runtimeOf(useConversationStore.getState(), key);
+    useConversationStore.setState({
+      byId: {
+        ...useConversationStore.getState().byId,
+        [key]: { ...prev, toolStartedMs: { call_1: Date.now() - 90_000 } },
+      },
+    });
+    try {
+      const { unmount } = render(
+        <ToolLine
+          step={step({
+            tool_name: "grep",
+            arguments: { pattern: "WaveScheduler" },
+            status: "running",
+            result: null,
+          })}
+        />,
+      );
+      expect(screen.getByText("1m 30s")).toBeTruthy();
+      unmount();
+    } finally {
+      vi.useRealTimers();
+      useConversationStore.setState({
+        byId: {
+          ...useConversationStore.getState().byId,
+          [key]: {
+            ...runtimeOf(useConversationStore.getState(), key),
+            toolStartedMs: {},
+          },
+        },
+      });
+    }
+  });
+
   it("keeps the collapsed error row to one line (no failure.message subline)", () => {
     const { container } = renderWithTooltip(
       <ToolLine
@@ -963,7 +1001,7 @@ describe("ToolLineGroup · 混杂组浏览器 CTA", () => {
 describe("ToolLine · handoff brief card", () => {
   const receipt = "已收尾并提交交接简报。";
 
-  it("peeks arguments.summary and never the protocol receipt", () => {
+  it("collapsed face is 交接简报; protocol receipt stays hidden", () => {
     const { container } = render(
       <ToolLine
         step={step({
@@ -974,14 +1012,14 @@ describe("ToolLine · handoff brief card", () => {
         })}
       />,
     );
-    expect(screen.getByText("Handoff")).toBeTruthy();
-    expect(screen.getByText("交叉验证完成，建议一周内表态")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "交接简报" })).toBeTruthy();
+    expect(screen.queryByText("交叉验证完成，建议一周内表态")).toBeNull();
+    expect(screen.queryByText("Handoff")).toBeNull();
     expect(screen.queryByText(receipt)).toBeNull();
-    expect(screen.queryByText("交接简报")).toBeNull();
     expect(collapsedSubline(container)).toBeNull();
   });
 
-  it("summary-only has no chevron and does not expand", () => {
+  it("summary-only still folds under 交接简报", () => {
     const { container } = render(
       <ToolLine
         step={step({
@@ -992,16 +1030,40 @@ describe("ToolLine · handoff brief card", () => {
         })}
       />,
     );
-    expect(screen.getByText("只写了结论")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "交接简报" })).toBeTruthy();
+    expect(screen.queryByText("只写了结论")).toBeNull();
     expect(collapsedSubline(container)).toBeNull();
-    expect(container.querySelector(".lucide-chevron-right")).toBeNull();
-    expect(container.querySelector(".lucide-chevron-down")).toBeNull();
-    fireEvent.click(screen.getByText("Handoff"));
+    expect(container.querySelector(".lucide-chevron-right")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "交接简报" }));
+    expect(screen.getByText("只写了结论")).toBeTruthy();
     expect(screen.queryByText("关键要点")).toBeNull();
     expect(screen.queryByText(receipt)).toBeNull();
   });
 
-  it("expands details with DebriefDetails layout, no 交接简报 heading", () => {
+  it("keeps a long summary out of the collapsed face", () => {
+    const long =
+      "新增 packages/core/src/tools 工具系统（ToolName/Tool 契约 + 9 真实工具实现 + createTool 工厂），并把 engine.setTool 接入为真实实例切换。";
+    render(
+      <ToolLine
+        step={step({
+          tool_name: "handoff",
+          arguments: {
+            summary: long,
+            key_points: ["共识：一周内需清晰立场"],
+          },
+          result: receipt,
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "交接简报" })).toBeTruthy();
+    expect(screen.queryByText(long)).toBeNull();
+    expect(screen.queryByText("关键要点")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "交接简报" }));
+    expect(screen.getByText(long)).toBeTruthy();
+  });
+
+  it("expands body with summary then DebriefDetails", () => {
     const { container } = render(
       <ToolLine
         step={step({
@@ -1017,15 +1079,17 @@ describe("ToolLine · handoff brief card", () => {
         })}
       />,
     );
-    expect(screen.getByText("交叉验证完成")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "交接简报" })).toBeTruthy();
+    expect(screen.queryByText("交叉验证完成")).toBeNull();
+    expect(screen.queryByText("Handoff")).toBeNull();
     expect(screen.queryByText("关键要点")).toBeNull();
     expect(container.querySelector(".lucide-chevron-right")).toBeTruthy();
-    fireEvent.click(screen.getByText("Handoff"));
+    fireEvent.click(screen.getByRole("button", { name: "交接简报" }));
+    expect(screen.getByText("交叉验证完成")).toBeTruthy();
     expect(screen.getByText("关键要点")).toBeTruthy();
     expect(screen.getByText("共识：一周内需清晰立场")).toBeTruthy();
     expect(screen.getByText("关键假设")).toBeTruthy();
     expect(screen.getByText("建议下一步")).toBeTruthy();
-    expect(screen.queryByText("交接简报")).toBeNull();
     expect(screen.queryByText(receipt)).toBeNull();
   });
 
@@ -1491,22 +1555,33 @@ describe("toolGroupSummary · read_url", () => {
   });
 });
 
-describe("ComposingToolLine · 中文组装心跳", () => {
-  it("renders 正在组装 + 字数，不留英文 Composing/chars", () => {
+describe("ComposingToolLine · 参数组装心跳", () => {
+  it("shows tool label only for non-write tools — no 正在组装 / Composing / 字", () => {
     renderWithTooltip(
       <ComposingToolLine tool={{ toolName: "web_search", chars: 1280 }} />,
     );
-    expect(screen.getByText(/正在组装/)).toBeTruthy();
-    expect(screen.getByText(/1\.3k 字/)).toBeTruthy();
+    expect(screen.getByText("Search web")).toBeTruthy();
+    expect(screen.queryByText(/正在组装/)).toBeNull();
     expect(screen.queryByText(/Composing/i)).toBeNull();
+    expect(screen.queryByText(/字/)).toBeNull();
     expect(screen.queryByText(/chars/i)).toBeNull();
+  });
+
+  it("write family shows label + char count, no verb prefix", () => {
+    renderWithTooltip(
+      <ComposingToolLine tool={{ toolName: "file_write", chars: 2100 }} />,
+    );
+    expect(screen.getByText(/Write file/)).toBeTruthy();
+    expect(screen.getByText(/2\.1k 字/)).toBeTruthy();
+    expect(screen.queryByText(/正在组装/)).toBeNull();
   });
 
   it("omits char count when zero", () => {
     renderWithTooltip(
       <ComposingToolLine tool={{ toolName: "debate", chars: 0 }} />,
     );
-    expect(screen.getByText(/正在组装/)).toBeTruthy();
+    expect(screen.getByText("Debate")).toBeTruthy();
+    expect(screen.queryByText(/正在组装/)).toBeNull();
     expect(screen.queryByText(/字/)).toBeNull();
   });
 });
@@ -1598,65 +1673,6 @@ describe("ToolLine · tool_use_end.failure product face", () => {
   });
 });
 
-describe("ToolLine · file_read ceiling guidance", () => {
-  it("shows warning affordance instead of fault-red ✗", () => {
-    const { container } = renderWithTooltip(
-      <ToolLine
-        step={step({
-          tool_name: "file_read",
-          arguments: { path: "doc.md" },
-          result:
-            "已多次读取 `doc.md`（本 run 上限 5 次）。请求范围仍在对话投影窗中，本次不重复灌入全文。请直接使用已有正文，勿再读全文。",
-          status: "success",
-        })}
-      />,
-    );
-    expect(container.querySelector(".text-destructive")).toBeNull();
-    expect(container.querySelector(".text-warning")).toBeTruthy();
-  });
-
-  it("keeps real file_read IO failures destructive", () => {
-    const { container } = renderWithTooltip(
-      <ToolLine
-        step={step({
-          tool_name: "file_read",
-          arguments: { path: "missing.md" },
-          result: "读取文件失败：文件不存在",
-          status: "error",
-        })}
-      />,
-    );
-    expect(container.querySelector(".text-destructive")).toBeTruthy();
-    expect(container.querySelector(".text-warning")).toBeNull();
-  });
-
-  it("excludes ceiling guidance from tool-group failed badge", () => {
-    renderWithTooltip(
-      <ToolLineGroup
-        tools={[
-          step({
-            id: "a",
-            tool_name: "file_read",
-            arguments: { path: "a.md" },
-            result: "已多次读取 `a.md`，勿再读此文件",
-            status: "error",
-          }),
-          step({
-            id: "b",
-            tool_name: "code_execute",
-            arguments: {},
-            result: "boom",
-            status: "error",
-          }),
-        ]}
-        isStreaming={false}
-      />,
-    );
-    // Only the real code_execute fault counts — ceiling is guidance.
-    expect(screen.getByText("1 failed")).toBeTruthy();
-  });
-});
-
 describe("ToolLine · git 执行相位", () => {
   // git can sit ~2min behind the repo queue, a credential lookup and a remote round
   // trip. Each of those waits reports its own phase, so the running row must name the
@@ -1697,20 +1713,20 @@ describe("ToolLine · git 执行相位", () => {
   });
 });
 
-describe("ToolLine · test_run budget exceeded", () => {
+describe("ToolLine · test_run incomplete", () => {
   it("shows warning affordance instead of fault-red ✗", () => {
     const { container } = renderWithTooltip(
       <ToolLine
         step={step({
           tool_name: "test_run",
           arguments: { check: "typecheck" },
-          result: "验证未在 300s 预算内完成（验证未完成，非工具故障）",
+          result: "验证未取得完整结果（已中止）",
           status: "error",
           display: {
             check: "typecheck",
             exit_code: -1,
             stdout: "",
-            stderr: "Timeout: execution exceeded 300s",
+            stderr: "Timeout: no timeout_kind",
             budget_exceeded: true,
           },
         })}
@@ -1718,7 +1734,60 @@ describe("ToolLine · test_run budget exceeded", () => {
     );
     expect(container.querySelector(".text-destructive")).toBeNull();
     expect(container.querySelector(".text-warning")).toBeTruthy();
-    expect(container.textContent).toContain("验证未完成（预算耗尽）");
+    expect(container.textContent).toContain("验证未完成");
+    expect(container.textContent).not.toContain("预算耗尽");
+    expect(collapsedSubline(container)).toBeNull();
+  });
+
+  it("idle hang face is warning, not fault red", () => {
+    const { container } = renderWithTooltip(
+      <ToolLine
+        step={step({
+          tool_name: "test_run",
+          arguments: { check: "typecheck" },
+          result: "执行长时间无输出，已按挂起中止",
+          status: "error",
+          display: {
+            check: "typecheck",
+            exit_code: -1,
+            stdout: "",
+            stderr: "idle timeout",
+            budget_exceeded: true,
+            timeout_kind: "idle",
+          },
+        })}
+      />,
+    );
+    expect(container.querySelector(".text-destructive")).toBeNull();
+    expect(container.querySelector(".text-warning")).toBeTruthy();
+    expect(container.textContent).toContain("执行无响应（无输出已中止）");
+    expect(container.textContent).not.toContain("预算耗尽");
+    expect(collapsedSubline(container)).toBeNull();
+  });
+
+  it("disaster wall face is warning, not fault red", () => {
+    const { container } = renderWithTooltip(
+      <ToolLine
+        step={step({
+          tool_name: "test_run",
+          arguments: { check: "typecheck" },
+          result: "已跑满灾难顶，强制中止",
+          status: "error",
+          display: {
+            check: "typecheck",
+            exit_code: -1,
+            stdout: "",
+            stderr: "forced stop",
+            budget_exceeded: true,
+            timeout_kind: "disaster",
+          },
+        })}
+      />,
+    );
+    expect(container.querySelector(".text-destructive")).toBeNull();
+    expect(container.querySelector(".text-warning")).toBeTruthy();
+    expect(container.textContent).toContain("执行已强制中止");
+    expect(container.textContent).not.toContain("预算耗尽");
     expect(collapsedSubline(container)).toBeNull();
   });
 });

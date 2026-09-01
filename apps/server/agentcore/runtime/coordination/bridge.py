@@ -243,12 +243,14 @@ def wrap_executor_with_timeouts(
     executor: Callable[..., Awaitable[RunState]],
     session: CoordinationSession | None = None,
 ) -> Callable[..., Awaitable[RunState]]:
-    """Arm per-worker hard-timeout around the real executor.
+    """Arm per-worker hard-timeout around the real executor when ``timeout_s`` is set.
 
-    With a coordination ``session``: CEO gets TIMEOUT, force-cancel uses
-    ``cancel_ids``. Without session (nested depth>0 blocking drive): same
-    wind-down / grace / force-cancel via the shared timeout_hard registry,
-    cancelling the worker task directly.
+    No product-default wall clock: omitted / non-positive ``spec.policy.timeout_s``
+    does not start a timer. With a coordination ``session``, the worker is still
+    registered for ``cancel_worker`` resolution. With session and positive timeout:
+    CEO gets TIMEOUT, force-cancel uses ``cancel_ids``. Without session (nested
+    depth>0 blocking drive): same wind-down / grace / force-cancel via the shared
+    timeout_hard registry, cancelling the worker task directly.
     """
 
     async def timed_executor(spec: RunSpec, completed: dict[str, RunState]) -> RunState:

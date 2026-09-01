@@ -143,6 +143,7 @@ def test_command_ask_withholds_execution_tools():
             backend=_LocalBackend(), permission_axes=axes
         ).list_all()
     }
+    assert "run" not in names
     assert "code_execute" not in names
     assert "test_run" not in names
     assert "terminal" not in names
@@ -161,25 +162,17 @@ def test_command_ask_capability_line_matches_registry():
     out = build_workspace_context(
         backend, desktop_online=True, permission_axes=axes
     )
-    assert "code_execute=未装配" in out
-    assert "terminal=未装配" in out
-    assert (
-        "code_execute=已装配"
-        in build_workspace_context(backend, desktop_online=True)
-    )
+    assert "run=未装配" in out
+    assert "code_execute=" not in out
+    assert "terminal=" not in out
+    assert "run=已装配" in build_workspace_context(backend, desktop_online=True)
 
 
 def test_command_auto_skips_kickoff_and_local_exec_auto_pass():
     axes = recipe_to_axes(AutonomyPolicy.MANAGED)
     assert (
         execution_tool_auto_passes(
-            _LocalBackend(), "code_execute", permission_axes=axes
-        )
-        is True
-    )
-    assert (
-        execution_tool_auto_passes(
-            _LocalBackend(), "terminal", permission_axes=axes
+            _LocalBackend(), "run", permission_axes=axes
         )
         is True
     )
@@ -220,9 +213,7 @@ def test_less_interrupt_and_managed_same_axes():
     assert not hasattr(axes, "implies_deep_research_auto")
     assert axes.host is HostAxis.SESSION
     for tool in (
-        "code_execute",
-        "test_run",
-        "terminal",
+        "run",
         "browser",
         "desktop_notify",
     ):
@@ -238,8 +229,7 @@ def test_command_ask_no_execution_auto_pass():
     """谨慎档 command=ask：execution_class / desktop_notify 仍需审批卡。"""
     axes = recipe_to_axes(AutonomyPolicy.CAUTIOUS)
     for tool in (
-        "code_execute",
-        "terminal",
+        "run",
         "browser",
         "desktop_notify",
     ):

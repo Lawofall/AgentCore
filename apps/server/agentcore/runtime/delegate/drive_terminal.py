@@ -81,11 +81,10 @@ def post_session_all_completed(
 ) -> None:
     """Post the coordination terminal event (happy path + criteria-gap / partial-fail).
 
-    ``output`` is the lossy synthesis prose (worker bodies + advisory sections).
-    The roster and closing are reserved first; long per-worker bodies shrink
-    before any tail of the assembled document is touched. Harvest replays this
-    payload, so a roster that lost a budget race would order the CEO to
-    reconcile against something that is not there.
+    ``output`` is the canonical package when ``roster_text`` / ``closing_text``
+    are empty (already composed by ``build_ceo_synthesis``). Passing the parts
+    separately still composes once — used by tests and the host backfill leak
+    path. Do not compose a second time onto an already-composed ``text``.
     """
     from agentcore.runtime.coordination.session import (
         CoordinationEvent,
@@ -94,15 +93,21 @@ def post_session_all_completed(
 
     completed_n = completed if completed is not None else len(session.completed_run_ids)
     total_n = total if total is not None else session.total_workers
-    raw_join = "\n".join(
-        p for p in (output.strip(), roster_text.strip(), closing_text.strip()) if p
-    )
-    composed = compose_all_completed_output(
-        output,
-        roster_text,
-        closing_text,
-        limit=output_limit,
-    )
+    roster = (roster_text or "").strip()
+    closing = (closing_text or "").strip()
+    if roster or closing:
+        composed = compose_all_completed_output(
+            output,
+            roster_text,
+            closing_text,
+            limit=output_limit,
+        )
+    else:
+        composed = (output or "").strip()
+        if len(composed) > output_limit:
+            from agentcore.runtime.delegate.terminal_output import cap_all_completed_output
+
+            composed = cap_all_completed_output(composed, limit=output_limit)
     payload: dict[str, Any] = {
         "completed": completed_n,
         "total": total_n,
@@ -137,7 +142,11 @@ def post_session_all_completed(
         failed=failed,
         criteria_met=criteria_met,
         output_chars=len(composed),
-        prose_chars=len(output),
-        prose_trimmed=len(raw_join) > len(composed),
-        roster_attached=bool(roster_text.strip()),
+        prose_chars=len(output or ""),
+        prose_trimmed=len(composed) < (
+            len((output or "").strip())
+            if not (roster or closing)
+            else len("\n".join(p for p in ((output or "").strip(), roster, closing) if p))
+        ),
+        roster_attached=bool(roster_text.strip()) or ("队员终态名册" in composed),
     )

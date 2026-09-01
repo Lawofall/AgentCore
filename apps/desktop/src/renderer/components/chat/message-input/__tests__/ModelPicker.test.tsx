@@ -44,6 +44,7 @@ import {
 import { useLlmModelProfiles } from "@/hooks/useLlmModelProfiles";
 import { useLlmProviders } from "@/hooks/useLlmProviders";
 import { useModels } from "@/hooks/useModels";
+import { useComposerProfileDraftStore } from "@/lib/composerModelProfile";
 import { __setUiStorageBackendForTests } from "@/lib/uiStorage";
 import { setConversationModelProfile } from "@/services/conversations";
 import type { LlmModelProfileListResponse } from "@/services/llmModelProfiles";
@@ -154,6 +155,7 @@ beforeEach(() => {
     keys: () => [...store.keys()],
   });
   useConversationStore.setState({ currentConversationId: null, byId: {} });
+  useComposerProfileDraftStore.setState({ profileId: null });
   useConversationsMock.mockReturnValue([]);
   useModelsMock.mockReturnValue({
     data: {

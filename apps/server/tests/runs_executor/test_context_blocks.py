@@ -46,6 +46,7 @@ def test_team_position_block_four_dag_shapes():
     # (1) UPSTREAM link (has dependents): told it feeds the downstream 写手 and must NOT
     #     produce the final artifact itself — the over-reach fix.
     up = _build_messages(plan, r1, {}, "SYS", "原始请求")[1].content or ""
+    assert "检索纪律" not in up
     assert "你在团队中的位置" in up
     assert "上游一环" in up and "写手" in up
     assert "不要自己产出整个最终交付物" in up
@@ -137,6 +138,19 @@ async def test_context_blocks_channel_sequence_and_single_source():
     assert blocks[-1].body == "按新方向调整"
     assert blocks[-2].channel == "gate_notes"
     assert blocks[-2].body == "把关要点文"
+    deliverable = next(b for b in blocks if b.channel == "deliverable")
+    assert "结论" in deliverable.body
+    assert "建议正文骨架" not in deliverable.body
+    assert "检索预算" not in deliverable.body
+    assert "交付形态" not in deliverable.body
+
+
+async def test_context_blocks_omit_deliverable_when_no_instance_facts():
+    plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
+    spec = plan.by_id("t_1")
+    blocks = _build_context_blocks(plan, spec, {}, "原始请求", None)
+    assert [b.channel for b in blocks] == ["request", "task"]
+    assert not any(b.channel == "deliverable" for b in blocks)
 
 
 async def test_context_blocks_dependency_carries_provenance():
@@ -289,3 +303,14 @@ def test_worker_turn_observe_covers_identity(monkeypatch):
     assert row["sections"]["worker_base"] == 3
     assert row["sections"]["identity"] > 0
     assert row["sections"]["role"] == len("你的角色：汇报员")
+
+
+def test_build_messages_appends_working_set_on_system_tail():
+    spec = RunSpec(run_id="x", agent_id="x", role="调研员", task="t")
+    block = "<工作集>\n正文以磁盘为准；需要细节时用 file_read。\n- read src/a.py\n</工作集>"
+    msgs = _build_messages(
+        _plan(spec), spec, {}, "SYS", "原始请求", working_set=block
+    )
+    system = msgs[0].content or ""
+    assert system.endswith(block)
+    assert system.index("SYS") < system.index("<工作集>")

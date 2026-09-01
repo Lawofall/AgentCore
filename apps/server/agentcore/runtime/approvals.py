@@ -47,9 +47,14 @@ def tool_call_requires_approval(
 
     GRANTABLE tools always do — except a plan-bound ``file_batch`` whose ops are
     within a confirmed ``organize_plan`` (方案确认即批次授权，不再二次弹卡).
-    ``git`` / ``terminal`` / ``host`` are ``NEVER`` at schema level but mutating
+    ``git`` / ``host`` are ``NEVER`` at schema level but mutating
     subcommands / Host GRANTABLE actions are gated here — same posture as ``file_write``.
+    ``run`` is GRANTABLE except process manage (read/stop/list).
     """
+    if tool_name == "run":
+        action = str(arguments.get("action") or "").strip().lower()
+        if action in {"read", "stop", "list"}:
+            return False
     if tool_name == "file_batch":
         plan_id = str(arguments.get("organize_plan_id") or "").strip()
         if plan_id or bool(arguments.get("organize_undo")):
@@ -74,11 +79,6 @@ def tool_call_requires_approval(
         from agentcore.tools.builtin.git_ops import git_call_is_write
 
         return git_call_is_write(arguments)
-    if tool_name == "terminal":
-        from agentcore.tools.builtin.terminal import terminal_approval_subcommands
-
-        subcommand = str(arguments.get("subcommand", "")).strip().lower()
-        return subcommand in terminal_approval_subcommands()
     if tool_name == "host":
         from agentcore.tools.builtin.host import host_call_requires_approval
 
@@ -109,6 +109,8 @@ class DelegationGrant:
 
 
 def _preview_value_max(tool_name: str, key: str) -> int:
+    if tool_name == "run" and key in {"command", "code"}:
+        return _PREVIEW_CODE_EXECUTE_CODE_MAX
     if tool_name == "code_execute" and key == "code":
         return _PREVIEW_CODE_EXECUTE_CODE_MAX
     return _PREVIEW_VALUE_MAX

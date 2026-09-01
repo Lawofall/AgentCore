@@ -183,7 +183,7 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
     ),
     "multi_agent_multi_lens_research": (
         "多 Agent·多视角深度调研幕1：delegate → 4 透镜并行流式 → "
-        "汇总分析师 debrief.motion_card → CEO 呈报建议开辩（开辩入口 stage_card）",
+        "汇总分析师落盘综述；开辩由用户点名（不靠 handoff motion_card 催场）",
         _multi_agent_multi_lens_research,
     ),
     "multi_agent_mlr_debate_acts": (
@@ -241,7 +241,7 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
     ),
     "multi_agent_pptx_promised_md_only": (
         "选 pptx 却只落 md/脚本：delivery_status=partial 可见缺口；"
-        "假「PPT 已可打开」经 finish_guard content_reset 回炉为诚实终稿",
+        "产物结构窄闸已撤，终稿承认尚未交付 pptx（无 finish_guard content_reset）",
         _multi_agent_pptx_promised_md_only,
     ),
     "multi_agent_worker_rate_limit_partial": (

@@ -115,9 +115,14 @@ def resolve_hard_explore_reason(
     Returns ``(hard_reason, folder_profile_empty_soft)``.
     ``hard_reason`` is set for pending/write_scope=explore_memory; soft empty alone
     yields ``(None, True)`` so the request is not blocked.
+    Named refresh (先了解 / 重新了解 / …) wins over empty-soft so a cleared 画像
+    plus 点名 still hard-opens; rebind stays rebind even if the message also
+    contains a refresh phrase.
     """
     soft_empty = False
-    if not explore_reason and user_named_explore_refresh(user_message):
+    if user_named_explore_refresh(user_message) and (
+        not explore_reason or explore_reason == "empty"
+    ):
         explore_reason = "refresh"
     if explore_reason == "empty" and not user_named_folder_work(user_message):
         soft_empty = True

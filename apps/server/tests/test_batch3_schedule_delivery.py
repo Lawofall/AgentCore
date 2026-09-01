@@ -257,8 +257,6 @@ async def test_hard_timeout_still_fires_when_idle():
 @pytest.mark.asyncio
 async def test_nested_drive_pauses_parent_hard_timeout():
     """depth>0 drive 期间对 captain_run_id 调用 mark_waiting_children。"""
-    from contextlib import nullcontext
-
     from agentcore.runtime.delegate.drive import drive
     from agentcore.tools.protocol import ToolResult
 
@@ -287,10 +285,6 @@ async def test_nested_drive_pauses_parent_hard_timeout():
         patch(
             "agentcore.runtime.turn.token_budget.is_turn_token_ceiling_hit",
             return_value=False,
-        ),
-        patch(
-            "agentcore.runtime.turn.token_budget.nested_turn_envelope_scope",
-            side_effect=lambda **_k: nullcontext(),
         ),
         patch(
             "agentcore.runtime.delegate.drive._drive_body",
@@ -383,8 +377,6 @@ async def test_nested_drive_pauses_on_turn_ceiling_seed_finalize():
 @pytest.mark.asyncio
 async def test_root_drive_does_not_pause_hard_timeout():
     """depth=0 根 drive 不调用 mark_waiting_children（普通/协调路径不变）。"""
-    from contextlib import nullcontext
-
     from agentcore.runtime.delegate.drive import drive
     from agentcore.tools.protocol import ToolResult
 
@@ -408,10 +400,6 @@ async def test_root_drive_does_not_pause_hard_timeout():
         patch(
             "agentcore.runtime.turn.token_budget.is_turn_token_ceiling_hit",
             return_value=False,
-        ),
-        patch(
-            "agentcore.runtime.turn.token_budget.nested_turn_envelope_scope",
-            side_effect=lambda **_k: nullcontext(),
         ),
         patch(
             "agentcore.runtime.delegate.drive._drive_body",

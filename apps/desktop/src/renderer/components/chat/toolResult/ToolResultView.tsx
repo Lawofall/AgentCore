@@ -3,7 +3,6 @@ import {
   browserResultPeek,
   isBrowserDisplay,
 } from "@/components/chat/BrowserActivityCard";
-import { DebriefDetails } from "@/components/chat/detail/sections/RunDebrief";
 import {
   debriefFromHandoffArgs,
   handoffSummaryPeek,
@@ -40,10 +39,9 @@ import { CodeDiagnosticsResult } from "./CodeDiagnosticsResult";
 import { SearchHitResult } from "./SearchHitResult";
 import { codeDiagnosticsPeek, extractCodeDiagnostics } from "./codeDiagnostics";
 import { type DiffLine, lineDiff } from "./diff";
-import { isFileReadCeilingGuidance } from "./fileReadCeiling";
 import { isSearchHitTool } from "./parseSearchHits";
 import { specificToolFailureMessage } from "./productFailureFace";
-import { isVerifyBudgetExceeded } from "./verifyBudget";
+import { isVerifyBudgetExceeded, verifyIncompleteFace } from "./verifyBudget";
 
 /** Normalized data a tool result renders from, shared by the single-agent process
  * panel (ProcessToolRow) and the multi-agent run detail (RunDetailBody): the call
@@ -215,7 +213,8 @@ export function toolResultPeek(d: ToolResultData): string {
     return clampLine(title);
   }
   if (isCodeExecDisplay(d.display)) {
-    if (isVerifyBudgetExceeded(d.display)) return "验证未完成（预算耗尽）";
+    if (isVerifyBudgetExceeded(d.display))
+      return verifyIncompleteFace(d.display);
     const code =
       typeof d.display.exit_code === "number" ? d.display.exit_code : 0;
     if (code !== 0) return `退出码 ${code}`;
@@ -269,10 +268,7 @@ export function toolResultPeek(d: ToolResultData): string {
     const path = asString(d.args.path);
     return path ? `已写入 ${path}` : "已写入文件";
   }
-  if (
-    d.status === "error" &&
-    !isFileReadCeilingGuidance(d.toolName, d.result)
-  ) {
+  if (d.status === "error") {
     return "";
   }
   if (d.toolName === "grep") return grepCollapsedPeek(d.result);
@@ -395,7 +391,7 @@ function ReadUrlResult({ display }: { display: ReadUrlDisplay }) {
 
 /** Terminal-style stdout/stderr view + exit-code badge.
  *  Hard fail → stderr destructive; ``budget_exceeded`` → incomplete banner + muted/warning
- *  (Timeout stderr is not painted as fault red). */
+ *  (Timeout stderr is not painted as fault red). Face copy follows ``timeout_kind``. */
 function CodeExecResult({ display }: { display: CodeExecDisplay }) {
   const exitCode =
     typeof display.exit_code === "number" ? display.exit_code : 0;
@@ -413,7 +409,7 @@ function CodeExecResult({ display }: { display: CodeExecDisplay }) {
     <div className="mt-1 overflow-hidden rounded-lg border border-border">
       {incomplete && (
         <div className="border-border/60 border-b bg-warning/10 px-2.5 py-1.5 text-xs text-warning">
-          验证未完成（预算耗尽）
+          {verifyIncompleteFace(display)}
         </div>
       )}
       <div className="flex items-center gap-2 border-border/60 border-b bg-muted/40 px-2.5 py-1 text-xs">
@@ -675,18 +671,12 @@ function FileWriteCard({
 function TextResult({
   result,
   status,
-  ceilingGuidance = false,
 }: {
   result: string;
   status: ToolResultData["status"];
-  /** Same-path file_read ceiling — warning/muted, not fault red. */
-  ceilingGuidance?: boolean;
 }) {
-  const tone = ceilingGuidance
-    ? "text-warning/90"
-    : status === "error"
-      ? "text-destructive/90"
-      : "text-muted-foreground";
+  const tone =
+    status === "error" ? "text-destructive/90" : "text-muted-foreground";
   return (
     <pre
       className={`mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted/50 px-2 py-1.5 text-xs ${tone}`}
@@ -735,14 +725,9 @@ export function ToolResultView({ data }: { data: ToolResultData }) {
 function ToolResultBody({ data }: { data: ToolResultData }) {
   const diagnostics = extractCodeDiagnostics(data.display);
 
+  // Successful handoff face lives on HandoffBriefCard (ToolLine), not this expand body.
   if (isSuccessfulHandoff(data.toolName, data.status)) {
-    const debrief = debriefFromHandoffArgs(data.args);
-    if (!hasDebriefDetails(debrief)) return null;
-    return (
-      <div className="mt-1">
-        <DebriefDetails debrief={debrief} />
-      </div>
-    );
+    return null;
   }
 
   if (isWebSearchDisplay(data.display)) {
@@ -847,12 +832,5 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
   ) {
     return <SearchHitResult result={data.result} kind={data.toolName} />;
   }
-  const ceilingGuidance = isFileReadCeilingGuidance(data.toolName, data.result);
-  return (
-    <TextResult
-      result={data.result ?? ""}
-      status={data.status}
-      ceilingGuidance={ceilingGuidance}
-    />
-  );
+  return <TextResult result={data.result ?? ""} status={data.status} />;
 }

@@ -1,8 +1,8 @@
-"""Tests for the intra-batch write-conflict guard (并行写隔离·硬约束).
+"""Tests for write occupancy: ledger unit rules vs file tools.
 
-Two layers: the pure :class:`WriteCoordinator` ownership rules, and the
-``FileWriteTool`` end-to-end behaviour when a coordinator is wired onto the context
-(concurrent sibling refused; dependency overwrite allowed; no-coordinator path inert).
+``WriteCoordinator`` still records declare/claim for snapshots. Product writes
+do not refuse on a run-lifetime owner — occupancy is the tool call (CAS +
+disk serial). Sibling overwrite is allowed; stale whole-file write is refused.
 """
 
 import json
@@ -96,7 +96,7 @@ def test_release_only_affects_the_owner():
 # --- FileWriteTool end-to-end ---
 
 
-async def test_concurrent_sibling_write_is_refused_and_does_not_clobber(tmp_path: Path):
+async def test_concurrent_sibling_write_is_allowed(tmp_path: Path):
     coordinator = WriteCoordinator()
     a = await FileWriteTool().execute(
         {"path": "report.md", "content": "from-A"},
@@ -108,11 +108,8 @@ async def test_concurrent_sibling_write_is_refused_and_does_not_clobber(tmp_path
         {"path": "report.md", "content": "from-B"},
         _ctx(tmp_path, run_id="b", coordinator=coordinator),
     )
-    assert b.success is False
-    assert "写入冲突" in b.error
-    assert "`a`" in b.error or "owner" in b.error.lower() or "负责" in b.error
-    # A's deliverable survives — B never overwrote it.
-    assert (tmp_path / "report.md").read_text(encoding="utf-8") == "from-A"
+    assert b.success is True
+    assert (tmp_path / "report.md").read_text(encoding="utf-8") == "from-B"
 
 
 async def test_dependency_overwrite_is_allowed(tmp_path: Path):
@@ -130,44 +127,84 @@ async def test_dependency_overwrite_is_allowed(tmp_path: Path):
     assert (tmp_path / "report.md").read_text(encoding="utf-8") == "final"
 
 
-async def test_write_conflict_result_is_contract_failure(tmp_path: Path):
-    """并发写冲突回执标 contract_failure（自我纠正型参数打回）——file_write 与 file_append 对称。"""
-    coordinator = WriteCoordinator()
-    await FileWriteTool().execute(
-        {"path": "report.md", "content": "from-A"},
-        _ctx(tmp_path, run_id="a", coordinator=coordinator),
+async def test_stale_file_write_is_contract_failure(tmp_path: Path):
+    """Pre-read 后盘上被改成另一份 → 整篇 write 拒，且不进 run 级熔断。"""
+    from agentcore.tools.builtin.file_ops.integrity import stale_overwrite_rejection
+
+    (tmp_path / "report.md").write_text("from-A", encoding="utf-8")
+    inner = ServerWorkspace(root=tmp_path, sandbox=SubprocessSandbox())
+
+    class _Flip:
+        def __init__(self) -> None:
+            self._n = 0
+
+        def __getattr__(self, name: str):
+            return getattr(inner, name)
+
+        async def read(self, path: str) -> str:
+            self._n += 1
+            data = await inner.read(path)
+            if self._n >= 2:
+                return data + "-changed"
+            return data
+
+    ctx = ToolContext.create(
+        execution_id="e",
+        run_id="b",
+        agent_id="a",
+        backend=_Flip(),
+        user_id="u",
+        write_coordinator=WriteCoordinator(),
     )
-    # A concurrent sibling's file_write onto A's claimed path collides.
     w = await FileWriteTool().execute(
         {"path": "report.md", "content": "from-B"},
-        _ctx(tmp_path, run_id="b", coordinator=coordinator),
+        ctx,
     )
     assert w.success is False
     assert w.contract_failure is True
+    assert "不是你刚读到的版本" in (w.error or "")
+    assert stale_overwrite_rejection("report.md") in (w.error or "")
+    assert (tmp_path / "report.md").read_text(encoding="utf-8") == "from-A"
 
-    # file_append onto the same claimed path collides identically.
     ap = await FileAppendTool().execute(
         {"path": "report.md", "content": "more"},
-        _ctx(tmp_path, run_id="c", coordinator=coordinator),
+        _ctx(tmp_path, run_id="c", coordinator=WriteCoordinator()),
     )
-    assert ap.success is False
-    assert ap.contract_failure is True
+    assert ap.success is True
 
 
-async def test_write_conflict_does_not_trip_run_circuit_breaker(tmp_path: Path):
-    """写冲突经 execute_tools→LoopController 不计入 run 级熔断：同批连撞不烧穿禁用阈值。"""
-    coordinator = WriteCoordinator()
-    a = await FileWriteTool().execute(
-        {"path": "report.md", "content": "from-A"},
-        _ctx(tmp_path, run_id="a", coordinator=coordinator),
+async def test_stale_write_does_not_trip_run_circuit_breaker(tmp_path: Path):
+    """CAS 失败经 execute_tools→LoopController 不计入 run 级熔断。"""
+    (tmp_path / "report.md").write_text("from-A", encoding="utf-8")
+    inner = ServerWorkspace(root=tmp_path, sandbox=SubprocessSandbox())
+
+    class _Flip:
+        def __init__(self) -> None:
+            self._n = 0
+
+        def __getattr__(self, name: str):
+            return getattr(inner, name)
+
+        async def read(self, path: str) -> str:
+            self._n += 1
+            data = await inner.read(path)
+            if self._n >= 2:
+                return data + "-changed"
+            return data
+
+    ctx = ToolContext.create(
+        execution_id="e",
+        run_id="b",
+        agent_id="a",
+        backend=_Flip(),
+        user_id="u",
+        write_coordinator=WriteCoordinator(),
     )
-    assert a.success is True
-
     reg = ToolRegistry()
     reg.register(FileWriteTool())
     controller = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    # A concurrent sibling collides more times than the disable threshold.
     for _ in range(DEFAULT_TOOL_FAILURE_DISABLE + 1):
+        ctx.backend._n = 0
         tc = ToolCall(
             id="c",
             function=ToolCallFunction(
@@ -178,24 +215,20 @@ async def test_write_conflict_does_not_trip_run_circuit_breaker(tmp_path: Path):
         _msgs, _terminal, attempts = await execute_tools(
             [tc],
             reg,
-            _ctx(tmp_path, run_id="b", coordinator=coordinator),
+            ctx,
             EventSink(),
-            # 云端沙箱上的 worker 写文件：按 sandbox_approval 免逐次卡。
             approval_gate=None,
             role="worker",
         )
         assert attempts[0].success is False
-        assert attempts[0].contract_failure is True  # forwarded from the ToolResult
+        assert attempts[0].contract_failure is True
         controller.record(attempts)
 
-    # The run-scoped breaker never tallied the collisions → tool stays enabled.
-    # Same-fingerprint validation may path-stop (steer) without disabling the pen.
     assert controller.tool_failure_count("file_write") == 0
     cb = controller.tool_circuit_breaker()
     assert cb.disabled == ()
     assert cb.warned == ()
     assert cb.force_segmented == frozenset()
-    # A's deliverable survived every collision (B never overwrote it).
     assert (tmp_path / "report.md").read_text(encoding="utf-8") == "from-A"
 
 
@@ -216,11 +249,10 @@ async def test_no_coordinator_means_no_guard(tmp_path: Path):
 # --- C3: str_replace / declare / transfer ---
 
 
-async def test_str_replace_respects_ownership(tmp_path: Path):
+async def test_str_replace_allows_other_run(tmp_path: Path):
     from agentcore.tools.builtin.file_ops import StrReplaceTool
 
     coordinator = WriteCoordinator()
-    # 新建（非覆盖非空代码）以建立 integration 归属。
     await FileWriteTool().execute(
         {"path": "App.tsx", "content": "from-integration"},
         _ctx(tmp_path, run_id="integration", coordinator=coordinator),
@@ -229,10 +261,8 @@ async def test_str_replace_respects_ownership(tmp_path: Path):
         {"path": "App.tsx", "old_string": "from-integration", "new_string": "hijack"},
         _ctx(tmp_path, run_id="frontend", coordinator=coordinator),
     )
-    assert r.success is False
-    assert "integration" in (r.error or "")
-    assert "负责" in (r.error or "")
-    assert (tmp_path / "App.tsx").read_text(encoding="utf-8") == "from-integration"
+    assert r.success is True
+    assert (tmp_path / "App.tsx").read_text(encoding="utf-8") == "hijack"
 
 
 def test_declare_does_not_steal_from_ancestor():
@@ -403,11 +433,7 @@ def test_claim_denial_feeds_ownership_hints_without_error_verbatim():
         question=paraphrased,
         write_coordinator=c,
     )
-    assert hints["ownership_paths"] == [
-        "src/ui/ReasoningGraph.tsx",
-        "src/game/GameScene.ts",
-    ]
-    assert hints["lock_owner_run_id"] == "del_old"
+    assert hints == {}
 
     c.transfer("src/ui/ReasoningGraph.tsx", "del_new")
     c.transfer("src/game/GameScene.ts", "del_new")
@@ -430,8 +456,7 @@ def test_ownership_hints_still_parse_verbatim_conflict_error():
         question=question,
         write_coordinator=c,
     )
-    assert hints["ownership_paths"] == ["site/index.html"]
-    assert hints["lock_owner_run_id"] == "owner"
+    assert hints == {}
 
 
 def test_ancestors_include_nested_parent_run_id():

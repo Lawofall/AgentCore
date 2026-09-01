@@ -45,23 +45,6 @@ MAX_WORKER_SUBDELEGATIONS = 4
 DEFAULT_CONTRACT_RETRIES = 1
 MAX_CONTRACT_RETRIES = 3
 
-# Absolute ceiling on task / CEO ``max_rounds`` input (builder clamps; ``<1``
-# still drops to None → profile default). Member default is 80; this bound
-# equals that default so a CEO cannot inflate a single produce segment past
-# the worker profile. Repair playbooks stamp 4–6 and are unaffected.
-# Keep in sync with ``PROFILES["agent"].max_rounds`` (llm/profiles.py).
-MAX_TASK_ROUNDS = 80
-
-# Cross-attempt produce-round cap for one worker run (main pass +
-# contract.retry + light_repair / write_pass). Per-pass default 80 is
-# unchanged; a second full 80-round investigation after contract retry is
-# what this stops (online historically: 56+54 stacked to 109, 4.46M input
-# tokens, no product). 104 = 80 + 24: after a full first pass the
-# correction slice is less than half a default segment — enough to rewrite
-# / handoff, not another investigation. Round-ceiling hits skip the full
-# retry entirely (light_repair / write_pass only).
-MAX_RUN_TOTAL_ROUNDS = 104
-
 # 带现场续派（乙）唤回闸：一条作者链累计可被续写（CEO continue_from_run_id + redirect
 # 热修共用）的次数上限，防无限打磨；辩论编排续写豁免（轮次上限归 RoundPolicy）。参照
 # contract 的「一次自动返工」略宽到 3；超限后续派项拒绝并提示回落甲（冷 delegate）。
@@ -127,35 +110,14 @@ DEP_POINTER_MAX_FILES = 20
 # 单文件截断上限；多文件合计另受调用方清单约束。
 CONTEXT_INJECT_CHARS = 2400
 
-# Wave3 B：同一相对路径成功 file_read 次数上限（per-run；fork 时 isolate）。
-# 从第 1 行要满安全顶（双省 offset/limit、只传 offset=1、只传 limit=行顶）计次；
-# 开窗仅当本次请求行范围已被此前交付覆盖、且投影窗内仍有该 path 正文时计次。
-# 新范围分页不计次。触顶且投影窗仍有该 path 正文、又无再读授额时回短指针（不灌全文、不硬拒）；
-# 正文已清理或写成功（计数与已交付范围一并清）后可再读。
-# 同轮并行同 path 多 call 在 execute_tools 扇出去重，只计一次成功读。
-FILE_READ_SAME_PATH_MAX = 5
-
-# CEO 综述输入瘦身: the prose pool shared across a batch's pass_through workers when
-# their products are rendered into the CEO's synthesis input (ceo_format.format_for_ceo).
-# Same fidelity discipline as a worker's dep-injection budget, but applied at the OTHER
-# fan-in (all workers → the CEO's overview pass) instead of (a worker's deps → it). The
-# motive is correctness, not only cost: an unbounded aggregate would hit the single
-# ToolResult output_limit net and, by middle-elision, drop whole workers from the middle
-# (防幻觉铁律 / 收尾指引 at the tail now survive — ToolResult keeps head+tail — but a
-# worker silently vanishing from the synthesis input is still wrong). File-producers
-# (digested — their full product is on disk + shown in the UI) don't draw on this pool.
-# Sized well below DELEGATE_OUTPUT_LIMIT so digests + roster + closing instructions fit
-# under CEO_SYNTHESIS_MAX_CHARS (prefer pointer + short bullets over full prose dump).
+# CEO 综述：工人正文共享 ``CEO_SYNTHESIS_BUDGET``（落盘工人走指针，不占池）。
+# 名册 / 缺口 / 终稿纪律不进这笔预算。拼好后只经 ``compose_all_completed_output``
+# 一次，病态安全阀 = ``DELEGATE_OUTPUT_LIMIT``（与 ToolResult 同一数字）。
+# 回合内回执与收工注入看同一份，禁止再整包头尾切一遍。
 CEO_SYNTHESIS_BUDGET = 3600
 # Per file-producer digest in CEO synthesis (tighter than DEP_POINTER_SUMMARY_CHARS —
 # CEO only needs orientation; full artifact is on disk / in the UI).
 CEO_SYNTHESIS_POINTER_CHARS = 240
-# Hard cap on format_for_ceo final text (chars) when raw product is small.
-# Blocks short-raw → ~6k packaging bloat; large-raw batches rely on BUDGET instead.
-CEO_SYNTHESIS_MAX_CHARS = 4000
-# Soft expansion guard used by tests / metrics (prefer_brief + POINTER_CHARS
-# keep natural length under MAX; whole-doc chop only at MAX_CHARS).
-CEO_SYNTHESIS_MAX_RATIO = 4.0
 
 # Canonical name of the worker-only「向上升级」tool (worker → CEO clarification)
 # channel). One source of truth shared by three sites that must agree without coupling

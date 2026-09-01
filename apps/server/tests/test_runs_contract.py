@@ -282,8 +282,8 @@ def test_describe_deliverable_renders_rules():
             required_sections=["结论"], output_format="json"
         )
     )
-    # json + required_sections: describe only surfaces JSON (Markdown sections skipped)
-    assert "JSON" in desc
+    # json + required_sections: JSON HOW is not in the spec block; no artifacts → empty
+    assert desc == ""
     # 已删字段不再渲染进文案
     assert "风险" not in desc
     assert "建议覆盖（软）" not in desc
@@ -295,16 +295,16 @@ def test_describe_deliverable_none_is_empty():
     assert describe_deliverable(None) == ""
 
 
-def test_describe_deliverable_renders_section_skeleton():
-    """required_sections appear both as acceptance list and as Markdown skeleton."""
+def test_describe_deliverable_renders_section_names_without_skeleton():
+    """required_sections appear as an acceptance list; no Markdown skeleton / form HOW."""
     desc = describe_deliverable(
         Deliverable(required_sections=["Bug清单", "每个Bug的详情"])
     )
     assert "Bug清单" in desc
     assert "每个Bug的详情" in desc
-    assert "## Bug清单" in desc
-    assert "## 每个Bug的详情" in desc
-    assert "建议正文骨架" in desc
+    assert "## Bug清单" not in desc
+    assert "建议正文骨架" not in desc
+    assert "交付形态" not in desc
     assert "50" not in desc  # min_length retired from describe
 
 
@@ -315,9 +315,8 @@ def test_describe_deliverable_json_file_channel():
             output_format="json",
             artifacts=["AgentCore/文档/reviews/legal.json"])
     )
-    assert "JSON" in desc
     assert "AgentCore/文档/reviews/legal.json" in desc
-    assert "文件存在" in desc or "可解析" in desc
+    assert "JSON" not in desc
     assert "结构化审查" not in desc  # deliverable.name retired from describe
 
 
@@ -576,15 +575,14 @@ def test_prose_form_ignores_file_count():
 
 def test_describe_deliverable_form_files_without_artifacts():
     desc = describe_deliverable(Deliverable(form="files"))
-    assert "file_write" in desc
-    assert "str_replace" in desc
-    assert "工作区" in desc
+    assert desc == ""
 
 
-def test_describe_deliverable_omitted_form_has_must_write_line():
-    # 漏填 = files，须写桌。
+def test_describe_deliverable_omitted_form_has_no_must_write_line():
+    # 漏填 = files；交法在身份，规格无实例则空。
     desc = describe_deliverable(Deliverable())
-    assert "必须调用 file_write" in desc or "必须 file_write" in desc
+    assert desc == ""
+    assert "file_write" not in desc
 
 
 # --- artifacts: declarative path reconciliation ---------------------------------
@@ -775,6 +773,10 @@ def test_is_file_deliverable_predicate():
     assert not hasattr(Deliverable(), "must_contain")
     assert not hasattr(Deliverable(), "name")
     assert not hasattr(Deliverable(), "must_contain_soft")
+    assert not hasattr(Deliverable(), "web_quality_soft_exempt")
+    assert not hasattr(Deliverable(), "web_quality_soft_exempt_labels")
+    assert not hasattr(Deliverable(), "placeholder_hard_exempt")
+    assert not hasattr(Deliverable(), "placeholder_hard_exempt_artifacts")
 
 
 def test_needs_file_contents_predicate():
@@ -791,19 +793,84 @@ def test_needs_file_contents_predicate():
     # prose (body-only) → no file read
     assert not needs_file_contents(Deliverable(form="prose"))
     assert not needs_file_contents(None)
-    # web batch (HTML+CSS/JS) → read even for existence-only / no deliverable
+    # HTML / Markdown are citation content surfaces (not a quality scan)
     assert needs_file_contents(
         Deliverable(form="files"),
         landed_paths=["index.html", "style.css"])
     assert needs_file_contents(None, landed_paths=["index.html", "app.js"])
-    # content surface (Markdown) → placeholder scan needs a read
+    # content surface (Markdown) → citation gate may need a read
     assert needs_file_contents(
         Deliverable(form="files"),
         landed_paths=["report.md"])
+    # CSS/JS-only existence landing → no read
+    assert not needs_file_contents(
+        Deliverable(form="files"),
+        landed_paths=["style.css"])
+    assert not needs_file_contents(
+        Deliverable(form="files"),
+        landed_paths=["app.js"])
     # code-only landing → still no read for existence-only deliverable
     assert not needs_file_contents(
         Deliverable(form="files"),
         landed_paths=["main.py"])
+
+
+def test_landed_html_css_skip_web_quality_and_seam():
+    """Former anti-slop / fake-phone / unused-class gates no longer flip the contract."""
+    html = """
+    <html><head>
+    <link rel="stylesheet" href="style.css">
+    <style>body { font-family: Inter, "Poppins", sans-serif; }</style>
+    </head><body>
+    <h1>🏠 首页</h1>
+    <p>咨询请拨 400-888-0000</p>
+    <div class="site-header unused-slot">ok</div>
+    </body></html>
+    """
+    css = ".hero { display: grid; } .never-used-in-html { color: red; }"
+    contents = {"index.html": html, "style.css": css}
+    v = check_contract(
+        "已落盘网页",
+        Deliverable(form="files"),
+        files_written=2,
+        workspace_paths=list(contents),
+        artifact_contents=contents,
+    )
+    assert v.ok
+    assert v.failures == []
+    assert v.soft_failures == []
+    v_none = check_contract(
+        "已落盘网页",
+        None,
+        files_written=2,
+        workspace_paths=list(contents),
+        artifact_contents=contents,
+    )
+    assert v_none.ok
+    assert v_none.failures == []
+    assert v_none.soft_failures == []
+    assert not any("400" in w or "骨架" in w or "占位" in w for w in v.warnings)
+    assert not any("400" in w or "骨架" in w or "占位" in w for w in v_none.warnings)
+
+
+def test_landed_copy_self_notes_are_not_contract_warnings():
+    """示例/虚构/TODO 文案不再进合同；质量交给模型。"""
+    md = (
+        "# 增长报告\n\n"
+        "本页客户证言为示例，关键指标为示例数据（虚构示意）。\n\n"
+        "TODO: 补真实转化率。\n"
+    )
+    v = check_contract(
+        "报告已写入",
+        Deliverable(form="files", artifacts=["report.md"]),
+        files_written=1,
+        workspace_paths=["report.md"],
+        artifact_contents={"report.md": md},
+    )
+    assert v.ok
+    assert v.failures == []
+    assert v.warnings == []
+    assert v.warning_rows == []
 
 
 def test_file_form_section_satisfied_by_file_only():

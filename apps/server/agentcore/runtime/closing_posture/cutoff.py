@@ -4,7 +4,7 @@
 posture-A word expansion. Does **not** expand the posture-A word list.
 
 User-visible 【收口说明】 prefixes are gone. Continuation teach lives in the
-private ceiling steer. Latch remains for finish_guard / B1 probes.
+private ceiling steer. Latch remains（观测）；空心措辞扫描已删。
 """
 
 from __future__ import annotations
@@ -50,5 +50,5 @@ def note_cutoff_delivery_gap_from_delivery(
 
 
 def enforce_cutoff_closing_honesty(content: str) -> str:
-    """No user-visible prefix. Latch still arms B1 / finish_guard probes."""
+    """No user-visible prefix. Latch remains for observation; finish_guard 不再据此清气泡。"""
     return content or ""

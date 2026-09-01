@@ -28,6 +28,23 @@ class TestRunResult:
 
 
 _RAW_OUTPUT_LIMIT = 4000
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[mK]")
+_VITEST_ASSERT = re.compile(
+    r"AssertionError:\s*(.+?)(?:\n|$)",
+    re.IGNORECASE,
+)
+_VITEST_EXPECTED = re.compile(
+    r"Expected[:\s]+(.+?)(?:\n|$)",
+    re.IGNORECASE,
+)
+_VITEST_RECEIVED = re.compile(
+    r"Received[:\s]+(.+?)(?:\n|$)",
+    re.IGNORECASE,
+)
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 _PYTEST_SUMMARY = re.compile(
     r"(\d+)\s+passed(?:.*?(\d+)\s+failed)?(?:.*?(\d+)\s+error)?",
@@ -125,7 +142,7 @@ def parse_pytest_output(stdout: str, stderr: str) -> TestRunResult:
 
 def parse_vitest_output(stdout: str, stderr: str) -> TestRunResult:
     """Parse vitest output."""
-    combined = f"{stdout}\n{stderr}"
+    combined = _strip_ansi(f"{stdout}\n{stderr}")
     passed = failed = skipped = 0
     duration: float | None = None
 
@@ -141,13 +158,28 @@ def parse_vitest_output(stdout: str, stderr: str) -> TestRunResult:
     failures: list[TestFailure] = []
     for match in _VITEST_FAIL.finditer(combined):
         file_path, test_name = match.groups()
+        tail = combined[match.end() : match.end() + 800]
+        message = ""
+        assert_hit = _VITEST_ASSERT.search(tail)
+        if assert_hit:
+            message = assert_hit.group(1).strip()
+        expected = _VITEST_EXPECTED.search(tail)
+        received = _VITEST_RECEIVED.search(tail)
+        snippet = None
+        if expected or received:
+            bits = []
+            if expected:
+                bits.append(f"Expected {expected.group(1).strip()}")
+            if received:
+                bits.append(f"Received {received.group(1).strip()}")
+            snippet = "; ".join(bits)
         failures.append(
             TestFailure(
                 test_name=test_name.strip(),
                 file_path=file_path.strip(),
                 line=None,
-                message="",
-                snippet=None,
+                message=message,
+                snippet=snippet,
             )
         )
     if not passed and not failed and failures:

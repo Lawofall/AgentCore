@@ -220,3 +220,39 @@ async def test_build_hint_injects_once_only_on_fingerprint(monkeypatch):
     assert text.count("<上轮交付缺口>") == 1
     assert "execution_id=" not in text
     assert "e1" not in text
+
+
+def test_events_include_delegate_only_counts_delegate_end():
+    from agentcore.runtime.delegate.prior_delivery_gaps import events_include_delegate
+
+    assert events_include_delegate([]) is False
+    assert (
+        events_include_delegate(
+            [{"type": "tool_use_end", "payload": {"tool_name": "file_read"}}]
+        )
+        is False
+    )
+    assert (
+        events_include_delegate(
+            [{"type": "tool_use_end", "payload": {"tool_name": "delegate"}}]
+        )
+        is True
+    )
+
+
+def test_observe_unclosed_cue_logs_only_when_cue_present():
+    from structlog.testing import capture_logs
+
+    from agentcore.runtime.delegate.prior_delivery_gaps import observe_unclosed_cue
+
+    with capture_logs() as logs:
+        observe_unclosed_cue(prior_gaps=False, recent_graph=False, delegated=False)
+    assert not any(row.get("event") == "ceo.unclosed_cue" for row in logs)
+
+    with capture_logs() as logs:
+        observe_unclosed_cue(prior_gaps=True, recent_graph=True, delegated=False)
+    hits = [row for row in logs if row.get("event") == "ceo.unclosed_cue"]
+    assert len(hits) == 1
+    assert hits[0]["prior_gaps"] is True
+    assert hits[0]["recent_graph"] is True
+    assert hits[0]["delegated"] is False

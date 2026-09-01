@@ -9,7 +9,11 @@ from agentcore.llm.profiles import ProfileParams
 
 
 def apply_captain_max_rounds(profile: ProfileParams) -> ProfileParams:
-    """Raise CEO max_rounds to ``engine_captain_max_rounds`` when configured higher."""
+    """Optional ops raise: only when ``engine_captain_max_rounds`` is configured >0.
+
+    Product default is 0 (no captain round fuse). Explicit positive profile
+    caps (tests / eval clamps) are left unchanged when already at or above the knob.
+    """
     cap = settings.engine_captain_max_rounds
     if cap <= 0 or profile.max_rounds >= cap:
         return profile

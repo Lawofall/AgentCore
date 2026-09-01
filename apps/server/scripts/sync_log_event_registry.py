@@ -80,10 +80,23 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "path": "str",
         "error": "str",
     },
+    "checkpoint.finalized": {
+        "checkpoint_id": "str",
+        "intent": "str",
+        "card": "str",
+        "browser_login": "bool",
+        "n_questions": "int",
+        "n_options": "int",
+    },
     "journal.failure_pack_gc_expired": {
         "path": "str",
         "trace_id": "str",
         "ttl_days": "int",
+    },
+    "ceo.unclosed_cue": {
+        "prior_gaps": "bool",
+        "recent_graph": "bool",
+        "delegated": "bool",
     },
     "llm.rate_limit_no_retry": {
         "provider": "str",
@@ -461,6 +474,22 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "execution_id": "str",
         "tier_label": "str",
     },
+    "engine.llm_round_exception": {
+        "error_type": "str",
+        "error_code": "str",
+        "classified": "bool",
+        "origin": "str",
+        "error": "str",
+    },
+    "engine.llm_failed_terminal": {
+        "reason": "str",
+        "has_content": "bool",
+        "error_code": "str",
+        "error_type": "str",
+        "origin": "str",
+        "classified": "bool",
+        "error": "str",
+    },
     "llm.call": {
         "scenario": "str",
         "model": "str",
@@ -492,7 +521,6 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "platform_credential_id": "str",
     },
     "contract.retry": {},
-    "contract.failed": {},
     "run.failed": {"error": "str"},
     "run.captain_failed": {"error": "str"},
     "cost.recorded": {
@@ -940,9 +968,20 @@ HISTORICAL_COMPAT: dict[str, str] = {
         "历史兼容：曾解析 delegate/replan force 入参失败时发出；"
         "force 跳闸已撤，不再发此事件"
     ),
+    "contract.failed": (
+        "历史兼容：曾作 logger 事件名；现为 RunPhase.FAILED 的 error 字面，不再 emit"
+    ),
 }
 
 KEY_DESC: dict[str, str] = {
+    "checkpoint.finalized": (
+        "ask_user 挂起已落帧。n_questions / n_options 为 normalize 后卡面结构"
+        "（空 choice 已降为 text；题上误写的 label 已收进 options）"
+    ),
+    "ceo.unclosed_cue": (
+        "阶梯 2 记账：本轮提示装了上轮交付缺口和/或近期团队图。"
+        "delegated=false 表示线索在、这轮一次没派。不拦截、不改成功路径。"
+    ),
     "llm.rate_limit_no_retry": (
         "429 冷却超出本次调用能等的上限，放弃重试。cooldown_sec / cooldown_source = 判定所依据的"
         "冷却及其来源：upstream_header（上游声明，reason=retry_after_too_large）/ local_backoff"
@@ -1041,6 +1080,17 @@ KEY_DESC: dict[str, str] = {
         "收口诚实性本该回炉但只观测：verdict_state / "
         "hit=posture_a|draft_ack|overview_length / "
         "has_delivered_files / gap_reasons（不记正文；不回炉不 reset）"
+    ),
+    "engine.llm_round_exception": (
+        "ReAct 一轮 stream 在引擎侧抛了异常（叶子 fence 的 llm.call_failed 可能缺席："
+        "流已成功计量后消费者再崩）。error_type=异常类名；classified=false 表示未纳入 "
+        "AgentCoreError、用户面走兜底「出了点问题」；origin=stream_round；"
+        "error 为截断异常字面（无正文）。未分类带 traceback（exc_info）"
+    ),
+    "engine.llm_failed_terminal": (
+        "引擎把本轮 LLM 失败收成 ERROR/DEGRADED。reason=error|degraded；"
+        "origin=stream_round（round 异常）/ stream_aborted（流中断 salvage）；"
+        "error_type / classified / error 与 engine.llm_round_exception 对齐（中断无 type）"
     ),
     "llm.call": "单次 LLM 调用（latency/tokens/cost_nano；平台代付可带 platform_credential_id）",
     "llm.request": "LLM prompt 截断脱敏（需 LOG_LLM_BODIES）",

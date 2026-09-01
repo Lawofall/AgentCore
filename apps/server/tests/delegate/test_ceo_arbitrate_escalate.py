@@ -71,7 +71,7 @@ def test_inject_blocking_escalation_prompts_resolve():
     assert "resolve_escalation" in text
     assert "via_user=true" in text
     assert "ask_user" in text
-    assert "transfer_ownership" in text
+    assert "transfer_ownership" not in text
 
 
 def test_inject_ownership_conflict_flags_nested_child():
@@ -98,10 +98,9 @@ def test_inject_ownership_conflict_flags_nested_child():
             )
         ],
     )
-    assert "嵌套子队" in text
-    assert "transfer_ownership=true" in text
-    assert "仅派发占位未落盘" in text
-    assert "backend-fix" in text
+    assert "嵌套子队" not in text
+    assert "transfer_ownership=true" not in text
+    assert "仅派发占位未落盘" not in text
 
 
 @pytest.mark.asyncio
@@ -132,8 +131,8 @@ async def test_resolve_escalation_transfer_ownership_paths():
         _ctx(execution_id="e-own"),
     )
     assert result.success is True
-    assert "路径级移交" in result.output
-    assert ledger.owner_of("src/storage/db.ts") == "storage"
+    assert "路径级移交" not in result.output
+    assert ledger.owner_of("src/storage/db.ts") == "backend-fix"
     # Sibling path not in ownership_paths stays with parent.
     assert ledger.owner_of("src/tools/base.ts") == "backend-fix"
     clear_active_coordination()
@@ -203,8 +202,8 @@ async def test_blocking_escalate_stays_user_without_coordination():
 
 
 @pytest.mark.asyncio
-async def test_ownership_conflict_escalate_stays_user_under_coordination():
-    """写权冲突且锁主仍在跑 → 直达用户（与 browser_login 同属例外）。"""
+async def test_ownership_question_escalate_goes_to_ceo_under_coordination():
+    """写入冲突话术不再直达用户移交卡；协调活跃时走主管。"""
     clear_active_coordination()
     session = CoordinationSession(execution_id="e-own-u", total_workers=2)
     set_active_coordination(session)
@@ -217,8 +216,8 @@ async def test_ownership_conflict_escalate_stays_user_under_coordination():
 
     async def _request(q, a, questions, kind, awaiting="user", **kwargs):
         seen.append((awaiting, kwargs.get("ownership_paths")))
-        assert session._busy_workers.get("skeleton") == "tool"
-        return EscalationOutcome(status="resolved", answer="已移交写权")
+        assert session._busy_workers.get("skeleton") == "arbitrate"
+        return EscalationOutcome(status="resolved", answer="继续写")
 
     channel = EscalationChannel(armed=True, request=_request)
     try:
@@ -231,8 +230,8 @@ async def test_ownership_conflict_escalate_stays_user_under_coordination():
             _ctx(execution_id="e-own-u", escalation=channel, run_id="skeleton"),
         )
         assert result.success is True
-        assert "用户就你的升级问题答复" in result.output
-        assert seen == [("user", ["site/index.html"])]
+        assert "主管就你的升级问题裁决" in result.output
+        assert seen == [("ceo", None)]
     finally:
         clear_active_coordination("e-own-u")
         clear_active_coordination()
@@ -310,7 +309,7 @@ async def test_ended_owner_ownership_escalate_goes_to_ceo():
 
 @pytest.mark.asyncio
 async def test_nl_transfer_answer_does_not_mutate_ledger():
-    """NL「移交写权」答复不改账本；仅 structured transfer_ownership 才移交。"""
+    """NL「移交写权」答复不改账本；structured transfer 已撤。"""
     clear_active_coordination()
     session = CoordinationSession(execution_id="e-nl", total_workers=2)
     set_active_coordination(session)

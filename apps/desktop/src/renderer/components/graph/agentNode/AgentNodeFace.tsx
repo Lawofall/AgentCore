@@ -1,12 +1,14 @@
 import { pickAgentNodeIdlePrimary } from "@/components/chat/debate/debateFaceCopy";
-import { toolPhaseText } from "@/components/chat/message-bubble/constants";
+import {
+  composingWriteChars,
+  toolPhaseText,
+} from "@/components/chat/message-bubble/constants";
 import {
   graphBadgeMuted,
   graphBadgeMutedPlain,
   graphBadgePrimary,
 } from "@/components/ui/tone-presets";
 import { agentColorVar, agentGlyph } from "@/lib/agentIdentity";
-import { formatCompact } from "@/lib/format";
 import { runningElapsedSec } from "@/lib/runningElapsed";
 import { useActiveTurnPhase } from "@/stores/conversation";
 import {
@@ -183,7 +185,7 @@ function AgentNodeHeader({
 
 /**
  * Honest mid-flight stop: when pending store covers this run, status line shows
- * 「停止请求中…」instead of 「执行中 · Ns」. Reuses settle cleanup from the old
+ * 「停止请求中…」instead of the live elapsed face. Reuses settle cleanup from the old
  * node action bar — does not invent a parallel pending channel.
  */
 function useAgentNodeStopOverride(
@@ -291,7 +293,7 @@ function AgentNodeMeta({
 /**
  * Live elapsed seconds since the run's REAL backend start (`startedAt`, epoch ms from
  * the `run_started` frame's wall-clock `t`) — NOT since component mount. Deriving from
- * `startedAt` makes the「执行中 · Ns」counter survive node remount (视口虚拟化 / 幕 LOD
+ * `startedAt` makes the「执行中 · 用时」counter survive node remount (视口虚拟化 / 幕 LOD
  * 切换 / 重新布局), late viewing (晚开协作图), and reload — all of which used to reset it
  * to 0. The 1s ticker only forces a re-render; the value is recomputed from the wall
  * clock each render. Clamped to ≥0 (guards client/server clock skew); on completion the
@@ -372,7 +374,7 @@ function AgentNodeStatusLine({
 
   // replace 态（质询作答失败）整行归因、可点直达质询 run；
   // suffix「含质询」已移到头部第二行（立场后），状态行不再拼后缀。
-  // 停止请求覆盖优先于正常「执行中 · Ns」，不覆盖质询失败归因行。
+  // 停止请求覆盖优先于正常进行中用时，不覆盖质询失败归因行。
   if (mark?.mode === "replace" && d.onActivateCrossExam) {
     return (
       <p
@@ -402,13 +404,17 @@ function AgentNodeActivity({
   showIdleTask: boolean;
 }) {
   if (p.liveTool) {
+    const charLabel = composingWriteChars(
+      p.liveTool.toolName,
+      p.liveTool.chars,
+    );
     return (
       <p className="mt-2 line-clamp-2 text-xs leading-snug text-primary/90">
-        正在生成 {toolLabel(p.liveTool.toolName)}
-        {p.liveTool.chars > 0 && (
+        {toolLabel(p.liveTool.toolName)}
+        {charLabel && (
           <span className="text-muted-foreground/70">
             {" · "}
-            {formatCompact(p.liveTool.chars)} 字
+            {charLabel}
           </span>
         )}
         <span className="ml-0.5 inline-block animate-pulse text-primary">

@@ -5,14 +5,19 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from agentcore.runtime.events import EventSink, EventType
 from agentcore.runtime.turn.queue import new_queued_turn, turn_queue
 from agentcore.runtime.turn.runs import turn_runs
-from agentcore.sidecar.protocol import NO_LIVE_TURN, PENDING_INTERACTIONS, QUEUED_TURN_NOT_FOUND
+from agentcore.sidecar.protocol import (
+    INTERNAL_ERROR,
+    NO_LIVE_TURN,
+    PENDING_INTERACTIONS,
+    QUEUED_TURN_NOT_FOUND,
+)
 from agentcore.sidecar.server import SidecarServer
 from agentcore.sidecar.server_pkg.turns import register_current_turn_run
 
@@ -62,7 +67,15 @@ def _reply(lines: list[dict[str, Any]], request_id: int) -> dict[str, Any]:
 
 
 @pytest.fixture(autouse=True)
-def _clean_slots():
+def _clean_slots(monkeypatch):
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.persist_midflight_user_message",
+        AsyncMock(return_value="u-mid"),
+    )
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.delete_midflight_user_message",
+        AsyncMock(return_value=True),
+    )
     yield
     turn_queue.clear("c-sidecar-deliver")
     turn_queue.clear("c-sidecar-queue")
@@ -70,6 +83,8 @@ def _clean_slots():
     turn_queue.clear("c-sidecar-hot")
     turn_queue.clear("c-sidecar-list")
     turn_queue.clear("c-sidecar-started")
+    turn_queue.clear("c-sidecar-persist-fail")
+    turn_queue.clear("c-sidecar-persist-rollback")
 
 
 async def test_deliver_message_steer_received_no_new_turn(tmp_path, monkeypatch):
@@ -258,7 +273,9 @@ async def test_sidecar_fifo_starter_asks_desktop_start_turn(tmp_path, monkeypatc
 
 
 async def test_deliver_message_without_live_fails(tmp_path):
-    """No occupying run → RPC error; does not succeed or mention the cloud."""
+    """No occupying run → RPC error; does not persist, succeed, or mention the cloud."""
+    from agentcore.conversation import midflight_persist as mp
+
     lines, write_line = _recorder()
     server = SidecarServer(write_line)
     await _init_sidecar(server, tmp_path)
@@ -279,6 +296,106 @@ async def test_deliver_message_without_live_fails(tmp_path):
     assert "/messages" not in msg
     assert turn_queue.depth(cid) == 0
     assert turn_runs.get(cid) is None
+    mp.persist_midflight_user_message.assert_not_awaited()
+
+
+async def test_deliver_message_persist_failure_does_not_deliver(tmp_path, monkeypatch):
+    """Persist raises → RPC error; do not queue/steer or ack success."""
+    from agentcore.conversation import midflight_persist as mp
+
+    persist = AsyncMock(side_effect=RuntimeError("db down"))
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.persist_midflight_user_message",
+        persist,
+    )
+    lines, write_line = _recorder()
+    server = SidecarServer(write_line)
+    await _init_sidecar(server, tmp_path)
+    cid = "c-sidecar-persist-fail"
+    pinned = "11111111-1111-4111-8111-111111111111"
+    turn_queue.clear(cid)
+    blocker = asyncio.create_task(_never())
+    sink = EventSink()
+    turn_runs.register(conversation_id=cid, task=blocker, sink=sink, user_id="u")
+    server._register_turn("turn-live", blocker, conversation_id=cid)
+    try:
+        await server.handle_line(
+            _req(
+                2,
+                "deliverMessage",
+                {
+                    "conversationId": cid,
+                    "content": "must not land",
+                    "delivery": "queue",
+                    "userMessageId": pinned,
+                },
+            )
+        )
+        resp = _reply(lines, 2)
+        assert "result" not in resp
+        assert resp["error"]["code"] == INTERNAL_ERROR
+        assert turn_queue.depth(cid) == 0
+        persist.assert_awaited_once()
+        assert persist.await_args.kwargs["user_message_id"] == pinned
+        mp.delete_midflight_user_message.assert_not_awaited()
+        inj = [e for e in sink._history if e.type is EventType.USER_INTERJECTION]  # noqa: SLF001
+        assert inj == []
+    finally:
+        blocker.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await blocker
+        turn_queue.clear(cid)
+
+
+async def test_deliver_message_rolls_back_when_deliver_fails(tmp_path, monkeypatch):
+    """Persist ok but deliver fails → delete the row, then RPC error."""
+    from agentcore.conversation import midflight_persist as mp
+
+    lines, write_line = _recorder()
+    server = SidecarServer(write_line)
+    await _init_sidecar(server, tmp_path)
+    cid = "c-sidecar-persist-rollback"
+    pinned = "11111111-1111-4111-8111-111111111111"
+    turn_queue.clear(cid)
+    blocker = asyncio.create_task(_never())
+    sink = EventSink()
+    turn_runs.register(conversation_id=cid, task=blocker, sink=sink, user_id="u")
+    server._register_turn("turn-live", blocker, conversation_id=cid)
+
+    async def persist_then_end_turn(**_kwargs: Any) -> str:
+        blocker.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await blocker
+        return pinned
+
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.persist_midflight_user_message",
+        persist_then_end_turn,
+    )
+    try:
+        await server.handle_line(
+            _req(
+                2,
+                "deliverMessage",
+                {
+                    "conversationId": cid,
+                    "content": "must not land",
+                    "delivery": "queue",
+                    "userMessageId": pinned,
+                },
+            )
+        )
+        resp = _reply(lines, 2)
+        assert "result" not in resp
+        assert resp["error"]["code"] == NO_LIVE_TURN
+        assert turn_queue.depth(cid) == 0
+        mp.delete_midflight_user_message.assert_awaited_once_with(cid, pinned)
+    finally:
+        if not blocker.done():
+            blocker.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await blocker
+        turn_queue.clear(cid)
 
 
 async def test_deliver_message_hot_pending_blocked(tmp_path):

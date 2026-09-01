@@ -143,10 +143,9 @@ def test_hint_wording_requires_nonempty_tasks_and_is_user_text_agnostic():
     assert "一次性" in hint
     assert "可忽略" in hint
     assert "继续" not in hint
-    assert "禁止" in hint and "只复盘" in hint
-    assert "只道歉收口" in hint  # instructs model not to apologize-only; not a user-scan
-    # playbook is secondary nudge only.
-    assert "次选" in hint and "playbook" in hint
+    assert "禁止" not in hint
+    assert "只道歉" not in hint
+    assert "playbook" not in hint
 
 
 def test_fingerprint_ignores_user_message_content():

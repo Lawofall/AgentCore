@@ -643,6 +643,7 @@ async def test_quota_skip_declared_recovery_beats_the_exponential_ladder(monkeyp
         BackgroundSkipReason.NO_CREDENTIALS,
         BackgroundSkipReason.AUTH_REJECTED,
         BackgroundSkipReason.TURN_AUTH_DEAD,
+        BackgroundSkipReason.INSUFFICIENT_BALANCE,
     ],
 )
 async def test_account_shaped_skips_stay_conversation_local(monkeypatch, reason):

@@ -327,16 +327,36 @@ async def soft_delete_folder(*, user_id: str, folder_id: str) -> bool:
     creds = get_folders_credentials()
     if creds is not None:
         try:
-            return await cloud_soft_delete_folder(creds, folder_id=folder_id)
+            deleted = await cloud_soft_delete_folder(creds, folder_id=folder_id)
         except FoldersCloudError:
             raise
         except Exception as e:  # noqa: BLE001
             raise FoldersCloudError(str(e)) from e
+        if deleted:
+            from agentcore.memory.account_prepare_cache import (
+                hibernate_folder_injection_cache,
+            )
+
+            await hibernate_folder_injection_cache(
+                user_id, [folder_id], rewarm=True
+            )
+        return deleted
 
     async with async_session_factory() as session:
-        return await soft_delete_folder_tree(
+        repo = FolderRepository(session)
+        subtree_ids = await repo.list_live_subtree_ids(
+            folder_id, user_id=user_id
+        )
+        deleted = await soft_delete_folder_tree(
             session, user_id=user_id, folder_id=folder_id
         )
+    if deleted:
+        from agentcore.memory.account_prepare_cache import (
+            hibernate_folder_injection_cache,
+        )
+
+        await hibernate_folder_injection_cache(user_id, subtree_ids)
+    return deleted
 
 
 def looks_like_folder_id(value: str) -> bool:
@@ -376,7 +396,7 @@ class ListFoldersTool:
         return ToolSchema(
             name=LIST_FOLDERS_TOOL_NAME,
             description=(
-                "文件夹名册（rel_path）。清单已有 id 勿列；当前桌→file_list。"
+                "文件夹名册（rel_path）。名册不常驻，跨桌先列；当前桌→file_list。"
                 "按路径定位→resolve_folder。HOW→consult(team_cross_folder)。"
             ),
             parameters={"type": "object", "properties": {}, "required": []},
@@ -844,22 +864,9 @@ class DeleteFolderTool:
         return ToolSchema(
             name=DELETE_FOLDER_TOOL_NAME,
             description=(
-                "删除当前账号下的一个【已有文件夹】（软删；等同侧栏删除 / "
-                "DELETE /folders/{id}）。语义：文件夹连同其子文件夹进最近删除，"
-                "成员对话就地归档（对话本身不删），目录移出用户树到墓碑区"
-                "（所以同层这个名字立刻可以再用），"
-                "云端工作区文件与快照在保留期后由清理任务回收；"
-                "**不动**本机目录（本机文件夹背后那个真实目录分毫未动）。"
-                "【只按 folder_id】——跨层同名合法（`设计/图标` 与 `归档/图标`），"
-                "按名删必然误删：先 list_folders / resolve_folder 拿 id；"
-                "多命中先 ask_user（kind=choice，选项带完整路径）让用户选。"
-                "【一次一个】每次调用逐个弹审批卡；要删多个就发多次调用，"
-                "禁止拼成一次批量、也禁止用「本轮内都允许」代替逐个确认。"
-                "【连子文件夹一起】删的是整棵子树，不是只删这一层——"
-                "用户只想删里面某一层时请点名那一层的 id。"
-                "【彻底删除做不到】/permanent 只能用户在桌面弹窗里勾选确认，"
-                "别向用户承诺 AI 能彻底清盘。"
-                "误删风险高：用户没点名要删就不要删；不确定删哪个先 ask_user。"
+                "只按 folder_id 软删一个已有云文件夹（连子文件夹一起；不动本机目录）。"
+                "一次一个。彻底删除做不到。"
+                "HOW→consult(team_cross_folder)。"
             ),
             parameters={
                 "type": "object",

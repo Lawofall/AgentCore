@@ -35,7 +35,6 @@ CODE_SEARCH_PARAMETERS = {
             "type": "string",
             "description": (
                 "概念 / 意图查询（自然语言或关键词，如「审批门控」「User model」）。"
-                "精确符号名或字面字符串请改用 grep。"
             ),
         },
         "language": {
@@ -77,13 +76,8 @@ class CodeSearchTool:
         return ToolSchema(
             name="code_search",
             description=(
-                "按【概念 / 意图】搜索工作区代码（BM25 符号块）。适合「审批怎么做」"
-                "「User 模型在哪」这类自然语言或关键词定位；返回匹配的函数/类/方法"
-                "及路径。命中后单文件默认 file_read 整读；仅页脚已截断或已有行号时开窗，"
-                "禁止整目录通读。"
-                "精确符号名、字符串或正则请用 grep——两工具并存，勿互相替代。"
-                "查当前索引快照：ready 命中可信；building=尚无快照（首次构建）请改用"
-                "grep、勿空等；stale 时建议配合 grep 核对。"
+                "按概念/意图搜索工作区代码（BM25 符号块）。"
+                "精确符号、字符串或正则用 grep。"
             ),
             parameters=CODE_SEARCH_PARAMETERS,
             category=ToolCategory.FILESYSTEM,

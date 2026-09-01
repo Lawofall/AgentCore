@@ -35,7 +35,7 @@ _ASK_USER_KICKOFF = """\
 只改一处 → 手写。\
 已确认「先一条主路径」/ 「先…以后再说」≠ 默认整仓满编。\
 糊说「做个网站」≠ 已钉形态（展示页 / 工具壳 / 业务应用）；\
-建站用手写 `tasks`。单页一人 / 营销皮 / 自动静态质检 → `consult(team_orchestration_advanced)`。
+建站用手写 `tasks`。单页一人 / 营销皮 → `consult(team_orchestration_advanced)`。
 
 【点名载体/手段·顾问短对齐】常驻有短钩；本段供字段/话术拿不准时 consult。\
 触发（窄）：本回合明示点了载体或手段，且（能力盖不住 **或** 对已说目标明显次优）。\
@@ -119,20 +119,21 @@ _ASK_USER_MIDTASK = """\
   `register_local_project` / `bind_local_folder`，勿当默认推荐、勿与云平级主推。\
   已是云端会话仍未装配 ≠ 再导入当沙箱修复 → `consult(team_delivery_env)`。
 - 同指挥面新建云文件夹 / 多个文件夹 / 跨文件夹 → `consult(team_cross_folder)`。
-- 已绑/本机传统工程时「打开项目 / 跑起来看一下」=跑**当前**工作区（CEO `terminal` 启服报 URL）≠ \
+- 已绑/本机传统工程时「打开项目 / 跑起来看一下」=跑**当前**工作区（CEO `run` 启服报 URL）≠ \
   再弹 `open_local_project` 建新；换工程优先导入到云或从 Git 克隆，或本机传统换开\
   （勿默认催 `create_folder` 过写盘闸）。
 - 「优化/改项目」≠默认开文件夹卡：已有附件且用户收窄本轮范围（先这些/就这些）→ \
   先读材料动手，勿把开文件夹/绑本地当开工前置。
 - 「在哪工作」仅新建会话可选（云协作推荐：快速对话/云端文件夹/导入到云·从 Git 克隆；\
   本机传统可选非默认）；勿引导用户去设置改模式、勿推销本机草稿当默认。
-- 看/分析本机某目录（含桌面）→ 只读静默 `external_mount_readonly`；整理发卡 \
-  `grant_organize_folder`；本机要把该目录当可改可覆盖 → `grant_attach_folder`。\
+-   看/分析本机某目录（含桌面）→ 只读静默 `external_mount_readonly`；整理发卡 \
+  `grant_organize_folder`；区外旁根要可改可覆盖 → `grant_attach_folder`。\
+  范围/手段 choice 不加 action；整题授权才挂 grant_*。\
   挂载 ≠ 「同时开发两项目」的默认步。区外授权 HOW → \
   `consult(external_mount_readonly)`（勿复述步骤表）。\
   整理方案用 `card="organize_plan"` → 确认后 `file_batch(organize_plan_id=…)`；\
   扫描/执行：手写单 worker `tasks`（`deliverable.form=files`，工具面仅文件类、禁 \
-  code_execute/terminal）。\
+  run）。\
 Web/移动端无法履行——如实说明须用桌面客户端，并引导官网下载 \
 https://fashitianxia.xyz/download ；勿发 grant_*/bind/open_local_project 冒充可授权。\
 铁律：仅当 `<工作区>` mounts 行写明「本对话已授权区外目录…」才可声称已授权\

@@ -67,6 +67,12 @@ def _salvage_reply_and_outcome(
         finish_reason=finish,
         has_error=sink.last_turn_error() is not None,
     )
+    if outcome == "ok":
+        from agentcore.runtime.delegate.delivery_status import read_delivery_verdict
+
+        verdict = read_delivery_verdict()
+        if verdict is not None and verdict.state == "partial":
+            outcome = "partial"
     return content, outcome
 
 
@@ -85,6 +91,8 @@ async def settle_successful_turn(
     audit_recorder: Any,
     roster_writer: Any,
     journal_writer: Any,
+    had_prior_delivery_gaps: bool = False,
+    had_recent_team_graph: bool = False,
 ) -> dict:
     """Fold usage/cost/citations and emit message_end for a successful captain run."""
     # 受监督的波循环 P5「Edge」: if the CEO yielded at a delegate boundary (晚绑定 / scope)
@@ -98,10 +106,22 @@ async def settle_successful_turn(
     final_reasoning = captain_state.reasoning
     rounds = captain_state.rounds
     finish = captain_state.finish_override or (
-        FinishReason.END_TURN if rounds < profile.max_rounds else FinishReason.MAX_ROUNDS
+        FinishReason.MAX_ROUNDS
+        if profile.max_rounds > 0 and rounds >= profile.max_rounds
+        else FinishReason.END_TURN
     )
     final_content, outcome = _salvage_reply_and_outcome(
         sink=sink, content=final_content, finish=finish
+    )
+    from agentcore.runtime.delegate.prior_delivery_gaps import (
+        events_include_delegate,
+        observe_unclosed_cue,
+    )
+
+    observe_unclosed_cue(
+        prior_gaps=had_prior_delivery_gaps,
+        recent_graph=had_recent_team_graph,
+        delegated=events_include_delegate(sink.history_snapshot()),
     )
     if is_ceo_rate_limit_pause(sink=sink, finish=finish):
         outcome = "paused"

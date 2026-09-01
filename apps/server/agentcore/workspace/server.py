@@ -33,6 +33,7 @@ from agentcore.workspace._paths import (
     is_ignored_file_name,
     is_system_ignored_file_name,
     normalize_glob,
+    normalize_workspace_path,
     path_has_non_internal_entries,
     resolve_safe_path,
 )
@@ -62,7 +63,7 @@ from agentcore.workspace.limits import (
     effective_read_bytes_cap,
     effective_read_head_cap,
 )
-from agentcore.workspace.local import LocalWorkspace
+from agentcore.workspace.local import LocalWorkspace, request_diagnostics_via_channel
 from agentcore.workspace.locks import workspace_lock
 from agentcore.workspace.protocol import (
     AlreadyExists,
@@ -339,6 +340,37 @@ def _delete_target_sync(
         )
 
 
+def _merge_diagnostics_payloads(parts: list[dict]) -> dict:
+    """Combine primary-root + external-bridge diagnostics envelopes."""
+    if not parts:
+        return {"status": "ok", "diagnostics": []}
+    if len(parts) == 1:
+        return parts[0]
+    merged: list[dict] = []
+    any_ok = False
+    unavailable_reason: str | None = None
+    for payload in parts:
+        status = str(payload.get("status") or "")
+        if status == "ok":
+            any_ok = True
+        elif status == "unavailable":
+            reason = payload.get("reason")
+            if isinstance(reason, str) and reason.strip():
+                unavailable_reason = reason.strip()
+            else:
+                unavailable_reason = unavailable_reason or "diagnostics unavailable"
+        for item in payload.get("diagnostics") or []:
+            if isinstance(item, dict):
+                merged.append(item)
+    if any_ok:
+        return {"status": "ok", "diagnostics": merged}
+    return {
+        "status": "unavailable",
+        "reason": unavailable_reason or "diagnostics unavailable",
+        "diagnostics": merged,
+    }
+
+
 class ServerWorkspace:
     """``WorkspaceBackend`` backed by a directory + sandbox on the host machine.
 
@@ -394,6 +426,8 @@ class ServerWorkspace:
         self._mounts: dict[str, ExternalMount] = {}
         # Desktop channel bridge for cloud external-only ops (per-op root_id).
         self._external_bridge: LocalWorkspace | None = None
+        # Sidecar location=local: desktop-held ops (diagnostics). File I/O stays Path.
+        self._desktop_channel: WorkspaceChannel | None = None
         # Shared-space cloud second roots (``shared/<alias>/…``).
         self._shared_mounts: dict[str, SharedMount] = {}
         # Realtime membership gate: space_id → current mount mode, or None if gone.
@@ -474,6 +508,15 @@ class ServerWorkspace:
         bridge = LocalWorkspace(channel, root_label=self.root_label)
         bridge.attach_external_mounts(self._mounts)
         self._external_bridge = bridge
+
+    def attach_desktop_channel(self, channel: WorkspaceChannel) -> None:
+        """Attach the desktop channel for sidecar-held language-service ops.
+
+        File CRUD stays on ``Path``. Only ``diagnostics`` (and the same channel
+        ``terminal`` already uses) leave for Electron main. Does not flip
+        ``location``.
+        """
+        self._desktop_channel = channel
 
     def attach_shared_mounts(
         self,
@@ -1065,6 +1108,8 @@ class ServerWorkspace:
         if not base.is_dir():
             if not base.exists() and is_declared_latent_dir(directory):
                 return TreeResult(entries=[], truncated=False, elided_count=0)
+            if not base.exists():
+                raise PathNotFound(directory)
             raise NotADirectory(directory)
 
         entries: list[TreeEntry] = []
@@ -1495,13 +1540,65 @@ class ServerWorkspace:
         return await manager.ensure_index(self, force=force)
 
     async def diagnostics(self, paths: list[str]) -> dict:
-        """Cloud has no language-service channel — honest unavailable (no fake tsc)."""
-        _ = paths
-        return {
-            "status": "unavailable",
-            "reason": "云端工作区暂不支持语言服务内环诊断",
-            "diagnostics": [],
-        }
+        """Language-service inner loop: desktop LS when this desk is local-disk.
+
+        Cloud desks have no Node LanguageService — honest unavailable (no fake
+        ``tsc``). Sidecar ``location=local`` issues ``WorkspaceOp.DIAGNOSTICS``
+        on the attached desktop channel (same transport as ``process_*``).
+        """
+        cleaned = [str(p or "").strip() for p in paths if str(p or "").strip()]
+        if not cleaned:
+            return {"status": "ok", "diagnostics": []}
+
+        if self.location != "local":
+            return {
+                "status": "unavailable",
+                "reason": "这张云桌没有语言服务通道，验收请用 run",
+                "diagnostics": [],
+            }
+
+        channel = self._desktop_channel
+        if channel is None:
+            return {
+                "status": "unavailable",
+                "reason": "本机工作区未接通语言服务通道，验收请用 run",
+                "diagnostics": [],
+            }
+
+        groups: dict[tuple[str | None, str | None], list[str]] = {}
+        bridge_paths: list[str] = []
+        for path in cleaned:
+            if is_external_namespace(path):
+                if self._external_needs_channel(path):
+                    bridge_paths.append(path)
+                    continue
+                routed = route_external(path, self._mounts)
+                if routed is None:
+                    raise PathNotFound(path)
+                rid = (routed.mount.root_id or "").strip() or None
+                rel = routed.rel if routed.rel not in ("", ".") else "."
+                groups.setdefault((rid, routed.mount.alias), []).append(rel)
+                continue
+            norm = normalize_workspace_path(path, root_label=self.root_label)
+            groups.setdefault((None, None), []).append(norm)
+
+        parts: list[dict] = []
+        if groups:
+            parts.append(
+                await request_diagnostics_via_channel(
+                    channel,
+                    groups,
+                    remap_path=self._diagnostics_out_path,
+                )
+            )
+        if bridge_paths:
+            parts.append(await self._require_external_bridge().diagnostics(bridge_paths))
+        return _merge_diagnostics_payloads(parts)
+
+    def _diagnostics_out_path(self, path: str, alias: str | None) -> str:
+        if alias is None:
+            return path
+        return external_ns(alias, path)
 
     async def execute(self, req: ExecutionRequest) -> ExecutionResult:
         # Boot the cloud desk without holding the file-mutation lock — guest

@@ -9,9 +9,8 @@ gate ``settings.legal_vertical_enabled`` is on, so generic deployments never see
 legal content in the catalog.
 
 Design (公开权威 → docs/03-AI核心/工具与能力系统.md · 法律垂直；详细提案不在公开仓): v0 builds NO new infra. The
-「对方律师作战室」hero rides existing primitives — ``delegate`` (起草 / 核验 / 格式 worker)
-+ ``debate(form=red_team, is_subject=...)`` (原告红队单向攻、我方回应修补) +
-``checkpoint_after`` / ``ask_user`` (人审闸门) + web 检索 (法条接地). This Skill is the
+「对方律师作战室」hero rides existing primitives — ``delegate`` (起草 / 原告红队审校岗 / 核验 / 格式)
++ ``checkpoint_after`` / ``ask_user`` (人审闸门) + web 检索 (法条接地). This Skill is the
 only NEW thing: the domain HOW-guidance the CEO consults to orchestrate that team and
 the anti-hallucination constraints it must enforce. Stopgap home is the system-skill
 registry; it graduates to a per-agent market Skill once that infra lands.
@@ -31,7 +30,7 @@ _LEGAL_ANSWER_BRIEF = """\
 <答辩状>
 写 / 打磨民事【答辩状】时，别让单个写手闷头出稿——按「对方律师作战室」组队：你方起草 →【原告红队\
 先把你打一遍】→ 逐条核验法条 → 格式查缺 → 人审收口。红队预演对方如何反击，是单写手给不了的核心价值。\
-编排是【先 red_team 对抗再核验收口】。\
+编排是【先红队对抗再核验收口】。\
 【除外】公共品牌 / 舆论 / 商标等需多维取证的议题 → `consult(deep_multi_lens_research)`，不走本条。
 
 【一、先解析对方起诉状（答辩的地基）】
@@ -50,11 +49,10 @@ _LEGAL_ANSWER_BRIEF = """\
 【缺我方事实时】答辩的地基是我方事实——若用户只给了对方起诉状、未给我方事实（货物 / 质量 / 付款 / 催告 /\
 证据等），优先用 `ask_user` 把关键事实要齐再起草；若用户要直接开工，则以起诉状可推定的标准抗辩（管辖 /\
 时效 / 违约金过高 / 质量异议）起草，并把缺失的我方事实【显式标为假设】交红队压测——两种都【绝不编造】我方事实。
-2. 【原告红队（hero 核心）】：拿到初稿后用 `debate` 工具、`form="red_team"`，把【我方答辩】标 `is_subject=true`\
-（承受单向攻击并回应修补），另设【原告红队】方站对方代理人立场逐条挑漏洞。典型 sides：
-   - `{key:"defense", name:"我方答辩", stance:"为我方答辩状辩护，回应原告攻击并就站不住的点修补", is_subject:true}`
-   - `{key:"plaintiff", name:"原告红队", stance:"站原告/对方代理人立场，逐条攻击我方每个抗辩：程序抗辩能否成立、事实主张有无证据、法条引用是否准确/被修订、抗辩事由是否适用、有无遗漏对原告有利的事实"}`
-   - motion 写成「压力测试我方答辩状：原告会如何反击、有哪些漏洞、哪些抗辩站不住」。轮数交主持人自调，你不设。
+2. 【原告红队（hero 核心）】：拿到初稿后 `delegate` 一个「原告红队」审校岗，站对方代理人立场逐条挑漏洞\
+（程序抗辩能否成立、事实主张有无证据、法条引用是否准确/被修订、抗辩事由是否适用、有无遗漏对原告有利的事实）。\
+任务书写清：压力测试我方答辩状——原告会如何反击、有哪些漏洞、哪些抗辩站不住；攻击面见下「对抗剧本」。\
+审校岗只攻、不代写终稿；站不住的点交起草 worker 修补。
 3. 核验：`delegate` 一个「法条核验」worker，对答辩里【实际引用】的每一条法条 / 司法解释做检索接地\
 核对——条号、现行有效性（是否被修订 / 废止）、内容是否吻合、时效起算。【检索有界，勿死磕】逐条核验、\
 每条至多 1～2 次检索：命中权威摘要即停、拿不到即标『[待核验]』转人审，【不要】为凑全 / 求精反复换词重搜\
@@ -66,13 +64,13 @@ _LEGAL_ANSWER_BRIEF = """\
 `ask_user` 设【人审闸门】，把红队攻防结论 + 核验结果摊给用户/律师拍板；通过后由【你（CEO）】在收口回复正文里\
 【完整输出】打磨后的答辩状终稿（这是交付物，按答辩状要素结构整篇给出，而非简短概览——领域终稿在此覆盖「只写\
 简短概览」的通用收尾指引），起草 / 修订 worker 落在工作区的《答辩状初稿.md》（及其修订稿）即作为可下载留存附件。\
-多步可在【同一次 delegate】用 `depends_on` 串：起草 → 核验/格式（并行）→ 收口。
+多步可在【同一次 delegate】用 `depends_on` 串：起草 → 红队审校 → 核验/格式（并行）→ 收口。
 【法条引用带台账 id #rN】核验 worker 检索到的法条权威来源会登记进本回合证据台账，并随核验结果以\
 『[已登记来源] #rN=url』给到你；你在终稿正文里引用每条【已核验】法条时，用对应的 `#rN` 标注，读者可\
 溯源到该条目（这正是「玻璃箱可辩护」的落地）。仍标『[待核验]』、未取到权威来源的法条【不要】编引用——宁可\
 不带 #rN，也绝不可指向未登记的 id（未登记号不会变成可点来源卡）。
 
-【四、原告红队对抗剧本（喂给红队方 stance 的攻击清单）】
+【四、原告红队对抗剧本（喂给审校岗 worker 的攻击清单）】
 逐条质问：这条程序抗辩法院会不会驳？这个事实主张我方有证据吗、举证责任在谁？引的法条是否准确、是否已被\
 修订或不适用本案？抗辩事由构成要件齐不齐？是否漏了对原告有利、我方未回应的关键事实？时效抗辩起算点站得住吗？
 
@@ -161,15 +159,14 @@ deadline）/ 判决预期 vs 和解锚 / 诉讼成本与周期预估（喂『打
 LEGAL_SKILLS: tuple[SystemSkill, ...] = (
     SystemSkill(
         name="legal_answer_brief",
-        summary="律师写 / 打磨民事答辩状 → 本条",
+        summary="民事答辩状",
         body=_LEGAL_ANSWER_BRIEF,
-        # 起草/核验/格式靠 delegate；原告红队靠 debate。两者在 CEO 路径恒被装配——
-        # gating 仍正确声明依赖，红队是 hero 核心故 debate 必备。
-        requires_tools=("delegate", "debate"),
+        # 起草 / 原告红队审校 / 核验 / 格式靠 delegate。CEO 路径恒装配 delegate。
+        requires_tools=("delegate",),
     ),
     SystemSkill(
         name="legal_case_analysis",
-        summary="律师接案评估 / 诉讼策略 → 本条",
+        summary="接案评估",
         body=_LEGAL_CASE_ANALYSIS,
         # 原被告对抗靠 debate（form=debate）；中立法官研判 + 法条核验靠 delegate。两者在 CEO
         # 路径恒被装配——gating 仍正确声明依赖，三方对抗里 debate 必备。

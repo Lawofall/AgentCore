@@ -453,18 +453,16 @@ def test_compose_prompt_cold_start_block_only_when_flagged():
     assert "当前文件夹约定记忆「画像.md」为空" not in without
     assert "当前文件夹约定记忆「画像.md」为空" in with_flag
     assert "<冷启动探索>" in with_flag
-    assert "闲聊" in with_flag or "问候" in with_flag
-    assert "假画像" in with_flag
-    assert "update_folder_profile" in with_flag
-    assert "remember" in with_flag
-    assert "立刻继续" in with_flag
-    assert "重新了解" in with_flag
-    assert "轻探" in with_flag
-    assert "摸完整仓" in with_flag
-    assert "与巩固侧「冷启动」无关" in with_flag
     block = with_flag[
         with_flag.find("<冷启动探索>") : with_flag.find("</冷启动探索>")
     ]
+    assert "先轻探再 delegate 调研建档" in block
+    assert "闲聊不开幕" in block
+    assert "remember" in block
+    assert "写盘不得出 AgentCore/" in block
+    assert "假画像" not in block
+    assert "摸完整仓" not in block
+    assert "与巩固侧" not in block
     assert "team_preview" not in block
 
 
@@ -491,7 +489,7 @@ def test_compose_prompt_rebind_gate():
         cold_start_explore="rebind",
     )
     assert "绑定已变" in text
-    assert "轻探" in text
+    assert "先轻探再 delegate 调研建档" in text
     assert "合并更新" in text
     assert "<冷启动探索>" in text
     assert "画像.md」为空" not in text
@@ -548,9 +546,13 @@ def test_resolve_hard_explore_reason_soft_empty_and_named_work():
     assert hard is None and soft is True
     hard, soft = resolve_hard_explore_reason("empty", "请继续开发这个功能")
     assert hard == "empty" and soft is False
+    hard, soft = resolve_hard_explore_reason("empty", "请先了解一下这个仓库")
+    assert hard == "refresh" and soft is False
     hard, soft = resolve_hard_explore_reason(None, "请重新了解项目")
     assert hard == "refresh" and soft is False
     hard, soft = resolve_hard_explore_reason("rebind", "随便说说")
+    assert hard == "rebind" and soft is False
+    hard, soft = resolve_hard_explore_reason("rebind", "请先了解一下这个仓库")
     assert hard == "rebind" and soft is False
 
 
@@ -753,9 +755,11 @@ def test_compose_prompt_folder_profile_empty_soft_hint():
     assert "<文件夹画像空>" in soft
     assert "【文件夹画像提示】" in soft
     assert "不挡" in soft
+    assert "先了解" in soft
+    assert "继续开发" in soft
     assert "</冷启动探索>" not in soft
     assert "写盘不得出 AgentCore/" not in soft
-    assert "不可当跳过" in soft
+    assert "不可当跳过" not in soft
     # Hard empty wins over soft empty.
     hard = compose_ceo_chat_prompt(
         "BASE",
@@ -767,7 +771,8 @@ def test_compose_prompt_folder_profile_empty_soft_hint():
     assert "</冷启动探索>" in hard
     assert "</文件夹画像空>" not in hard
     assert "写盘不得出 AgentCore/" in hard
-    assert "不可跳过" in hard
+    assert "先轻探再 delegate 调研建档" in hard
+    assert "闲聊不开幕" in hard
 
 
 @pytest.mark.asyncio

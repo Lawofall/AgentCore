@@ -203,8 +203,8 @@ def check_prompt_contract() -> list[str]:
         gaps.append("team_orchestration_missing_files_tier")
     if "【改工程】" not in orch_body and "form=workspace" not in orch_body:
         gaps.append("team_orchestration_missing_workspace_tier")
-    if "可开 web_quality_scan" in orch_body:
-        gaps.append("team_orchestration_still_teaches_web_quality_scan_opt_in")
+    if "自动静态质检" in orch_body or "可开 web_quality_scan" in orch_body:
+        gaps.append("team_orchestration_still_teaches_web_quality_scan")
     if "required_sections" in orch_body:
         gaps.append("team_orchestration_still_teaches_required_sections")
     if "form" not in TASK_DELIVERABLE_SCHEMA.get("properties", {}):

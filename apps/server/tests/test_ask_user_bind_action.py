@@ -7,6 +7,7 @@ import pytest
 from agentcore.runtime.events import EventSink
 from agentcore.tools.builtin.ask_user.schema import (
     ListArgError,
+    advertised_option_actions,
     normalize_assumptions,
     normalize_options,
     normalize_questions,
@@ -334,6 +335,93 @@ def test_normalize_questions_rejects_garbage_string():
         normalize_questions("[{broken")
 
 
+def test_normalize_questions_accepts_question_alias_for_prompt():
+    qs = normalize_questions(
+        [{"question": "选哪条路？", "kind": "choice", "options": [{"label": "A"}]}]
+    )
+    assert qs[0]["prompt"] == "选哪条路？"
+    assert qs[0]["kind"] == "choice"
+    assert qs[0]["options"][0]["label"] == "A"
+
+
+def test_normalize_questions_prompt_wins_over_question_alias():
+    qs = normalize_questions(
+        [
+            {
+                "prompt": "用 prompt",
+                "question": "用 question",
+                "kind": "text",
+            }
+        ]
+    )
+    assert qs[0]["prompt"] == "用 prompt"
+
+
+def test_normalize_questions_absorbs_question_level_label_as_sole_option():
+    qs = normalize_questions(
+        [
+            {
+                "prompt": "下一步？",
+                "kind": "choice",
+                "label": "先做脏区",
+                "detail": "权衡应进 label",
+            }
+        ]
+    )
+    assert qs[0]["kind"] == "choice"
+    assert [o["label"] for o in qs[0]["options"]] == ["先做脏区"]
+    assert "detail" not in qs[0]["options"][0]
+
+
+def test_normalize_questions_keeps_absorbed_detail_on_dedicated_cards():
+    qs = normalize_questions(
+        [{"prompt": "执行哪些？", "kind": "choice", "label": "移走草稿", "detail": "进回收站"}],
+        keep_detail=True,
+    )
+    assert qs[0]["options"][0]["detail"] == "进回收站"
+
+
+def test_normalize_questions_empty_choice_lowers_to_text():
+    qs = normalize_questions([{"prompt": "还缺什么？", "kind": "choice"}])
+    assert qs[0]["kind"] == "text"
+    assert qs[0]["options"] == []
+    assert qs[0]["multiple"] is False
+    assert qs[0]["default"] == ""
+
+
+def test_normalize_questions_flattened_multi_question_keeps_one_option_each():
+    qs = normalize_questions(
+        [
+            {"prompt": "p1", "kind": "choice", "label": "A", "detail": "d"},
+            {"prompt": "p2", "kind": "choice", "label": "B", "detail": "d"},
+        ]
+    )
+    assert [q["kind"] for q in qs] == ["choice", "choice"]
+    assert [o["label"] for q in qs for o in q["options"]] == ["A", "B"]
+
+
+def test_normalize_questions_does_not_overwrite_existing_options_with_question_label():
+    qs = normalize_questions(
+        [
+            {
+                "prompt": "选一个",
+                "kind": "choice",
+                "label": "不该出现",
+                "options": [{"label": "A"}, {"label": "B"}],
+            }
+        ]
+    )
+    assert [o["label"] for o in qs[0]["options"]] == ["A", "B"]
+
+
+def test_normalize_questions_text_ignores_question_level_label():
+    qs = normalize_questions(
+        [{"prompt": "补充？", "kind": "text", "label": "不是选项"}]
+    )
+    assert qs[0]["kind"] == "text"
+    assert qs[0]["options"] == []
+
+
 async def test_ask_user_rejects_unparseable_questions_string():
     """Garbage string must fail the tool — not open an empty-option kickoff card."""
     tool = AskUserTool(
@@ -519,40 +607,42 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     props2 = advertised.schema.parameters["properties"]["questions"]["items"]["properties"][
         "options"
     ]["items"]["properties"]
+    # 未标 location = 云桌：本机传统入口 + 整理；不广告 attach_rw。
     assert props2["action"]["enum"] == [
         "open_local_project",
         "register_local_project",
         "bind_local_folder",
         "grant_organize_folder",
-        "grant_attach_folder",
     ]
     assert props2["well_known"]["enum"] == ["desktop", "downloads", "documents"]
     assert "target_name" in props2
     assert "path" in props2
-    assert "open_local_project" in advertised.schema.description or "open/register/bind" in advertised.schema.description
-    assert "register_local_project" in advertised.schema.description or "open/register/bind" in advertised.schema.description
-    assert "bind_local_folder" in advertised.schema.description or "bind_local_*" in advertised.schema.description
+    assert "open_local_project" not in advertised.schema.description
+    assert "register_local_project" not in advertised.schema.description
+    assert "bind_local_folder" not in advertised.schema.description
     assert "grant_readonly_folder" not in advertised.schema.description
-    assert "grant_organize_folder" in advertised.schema.description
-    assert "external_mount_readonly" in advertised.schema.description
-    assert "HOW→consult(asking_the_user" in advertised.schema.description
-    assert "grant_attach_folder" in advertised.schema.description
-    assert "只读用" in advertised.schema.description
+    assert "grant_organize_folder" not in advertised.schema.description
+    assert "external_mount_readonly" not in advertised.schema.description
+    assert "HOW→consult(asking_the_user)" in advertised.schema.description
+    assert "HOW→consult(external_mount_readonly)" not in advertised.schema.description
+    assert "grant_attach_folder" not in advertised.schema.description
+    assert "只读用" not in advertised.schema.description
+    assert "桌面分流" not in advertised.schema.description
     assert "改导" not in advertised.schema.description
     # 口头同意闭环 / 歧义 2～3 候选怎么填：HOW 在 skill，不进工具 description。
     assert "口头同意" not in advertised.schema.description
     assert "2～3" not in advertised.schema.description
     assert "2-3" not in advertised.schema.description
     action_desc = props2["action"]["description"]
-    assert "open_local_project" in action_desc or "open/register/bind" in action_desc
-    assert "register_local_project" in action_desc or "open/register/bind" in action_desc
-    assert "本机传统" in action_desc or "非默认" in action_desc
+    assert "open/register/bind_local_*" in action_desc
+    assert "grant_organize_folder" in action_desc
+    assert "grant_organize_folder=整理" not in action_desc
+    assert "本机传统" not in action_desc
     assert "改导" not in action_desc
-    assert "bind_local_folder" in action_desc or "open/register/bind" in action_desc
     assert "grant_readonly_folder" not in action_desc
     assert "grant_readonly_folder" not in props2["action"]["enum"]
-    assert "grant_organize_folder=整理" in action_desc
-    assert "grant_attach_folder=本机可写" in action_desc
+    assert "grant_attach_folder" not in action_desc
+    assert "本机可写" not in action_desc
     assert "口头同意" not in action_desc
     assert "2～3" not in action_desc
     assert "2-3" not in action_desc
@@ -567,7 +657,44 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     )
     assert len(adv_blob) < 3600, f"desktop ask_user schema too fat: {len(adv_blob)}"
     assert len(plain_blob) < len(adv_blob)
-    assert abs(len(plain_blob) - 1661) < 80  # non-desktop path must not inflate
+    assert len(plain_blob) < 1800
+
+
+def test_advertised_option_actions_splits_local_vs_cloud():
+    assert advertised_option_actions(desktop=False, workspace_location="local") == ()
+    assert advertised_option_actions(desktop=True, workspace_location=None) == (
+        "open_local_project",
+        "register_local_project",
+        "bind_local_folder",
+        "grant_organize_folder",
+    )
+    assert advertised_option_actions(desktop=True, workspace_location="local") == (
+        "grant_organize_folder",
+        "grant_attach_folder",
+    )
+
+
+def test_ask_user_local_schema_advertises_attach_not_open_bind():
+    tool = AskUserTool(
+        sink=EventSink(),
+        conversation_id="c1",
+        timeout_seconds=30.0,
+        advertise_bind_local_folder=True,
+        workspace_location="local",
+    )
+    props = tool.schema.parameters["properties"]["questions"]["items"]["properties"][
+        "options"
+    ]["items"]["properties"]
+    assert props["action"]["enum"] == [
+        "grant_organize_folder",
+        "grant_attach_folder",
+    ]
+    assert "grant_attach_folder" in props["action"]["description"]
+    assert "grant_attach_folder=区外旁根可覆盖" not in props["action"]["description"]
+    assert "open/register/bind" not in props["action"]["description"]
+    assert "open_local_project" not in tool.schema.description
+    assert "grant_attach_folder" not in tool.schema.description
+    assert "HOW→consult(asking_the_user)" in tool.schema.description
 
 
 def test_ask_user_organize_how_lives_in_skill():
@@ -587,3 +714,6 @@ def test_ask_user_organize_how_lives_in_skill():
     assert "grant_organize_folder" in desk.body
     assert "consult(external_mount_readonly)" in desk.body
     assert "consult(external_mount_readonly)" in ask.body
+    assert "整题授权" in ask.body
+    assert "区外旁根" in ask.body
+    assert "非写当前工作区" in granted

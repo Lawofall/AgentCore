@@ -4,6 +4,7 @@ import {
   grantHintsFromAskOption,
   isAttachOralConsent,
   isOrganizeOralConsent,
+  optionsAreGrantOnly,
   organizeConfirmDetail,
   pickOralGrantOption,
   previewOrganizeTargetLabel,
@@ -94,6 +95,25 @@ describe("organizeConfirmDetail", () => {
     ).toBe("将整理：桌面 › 咨询");
   });
 
+  it("prefixes 允许改 for grant_attach_folder when target is known", () => {
+    expect(
+      organizeConfirmDetail({
+        action: "grant_attach_folder",
+        well_known: "desktop",
+        target_name: "设计稿",
+      }),
+    ).toBe("允许改：桌面 › 设计稿");
+  });
+
+  it("omits empty attach / organize subtitle (no hollow 加入本对话)", () => {
+    expect(
+      organizeConfirmDetail({ action: "grant_attach_folder" }),
+    ).toBeUndefined();
+    expect(
+      organizeConfirmDetail({ action: "grant_organize_folder" }),
+    ).toBeUndefined();
+  });
+
   it("does not pass through model detail for non-organize options", () => {
     expect(
       organizeConfirmDetail({
@@ -147,6 +167,19 @@ describe("isAttachOralConsent", () => {
     expect(isAttachOralConsent("可以")).toBe(false);
     expect(isAttachOralConsent("允许")).toBe(false);
     expect(isAttachOralConsent("好的")).toBe(false);
+  });
+});
+
+describe("optionsAreGrantOnly", () => {
+  it("requires every option to be grant_*", () => {
+    expect(optionsAreGrantOnly([{ action: "grant_attach_folder" }])).toBe(true);
+    expect(
+      optionsAreGrantOnly([
+        { action: "grant_attach_folder" },
+        { action: "skip" },
+      ]),
+    ).toBe(false);
+    expect(optionsAreGrantOnly([])).toBe(false);
   });
 });
 

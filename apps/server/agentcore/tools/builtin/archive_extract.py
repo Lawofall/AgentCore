@@ -26,7 +26,7 @@ from agentcore.tools.builtin.file_ops import (
 from agentcore.tools.file_products import FileProduct, file_product
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
-    AUDIENCE_WORKER_ONLY,
+    AUDIENCE_BOTH,
     FileProductsContract,
     ToolRegistration,
     ToolSurface,
@@ -70,7 +70,7 @@ class ArchiveExtractTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
     )
 
@@ -81,7 +81,7 @@ class ArchiveExtractTool:
             description=(
                 "把工作区内的 zip 解压到指定目录（相对路径）。"
                 "写出路径经 sanitize；拒绝 zip-slip（`..` / 绝对路径成员）。"
-                "大 zip 持久落盘请用本工具，勿只靠 code_execute 解压后假定工作区可见——"
+                "大 zip 持久落盘请用本工具。"
                 "沙箱临时产物不等于 canonical 工作区树。"
                 "回执含写出文件数；超限额 / 缺文件 / 坏 zip / zip-slip 会明确失败原因。"
                 "``archive`` 须为工作区内已有 `.zip`；``dest`` 为解压目标目录（可 `.`）。"

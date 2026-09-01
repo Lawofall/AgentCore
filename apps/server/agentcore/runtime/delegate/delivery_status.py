@@ -10,8 +10,9 @@
 
 ``delivered_files`` / CEO「已交付」= 仅 ``accepted``；cite-tier 等合同点名路径为
 ``rejected``，不得因 soft-COMPLETED 进入 delivered_files。主清单认 ``artifacts``
-（accepted+rejected）= 本 ``execution_id`` 各波**声明且落盘**路径的并集（同 path
-后写覆盖）；未声明的额外落盘不进清单、不打未通过。COMPLETED 只走
+（accepted+rejected）= 本 ``execution_id`` 各波**实际落盘**路径的并集（同 path
+后写覆盖）。声明路径已命中时，未声明备份不进清单、不打未通过；声明未命中时，
+工人写下的其它文件就是产物、进清单。COMPLETED 只走
 ``file_acceptance``，不从 ``files_touched`` 合成验收行；FAILED 且未盖戳时，从
 ``files_touched`` / transcript 自报补入（与 ``product_landed`` 同源——失败前已落盘
 但没走完正式交付声明的产物仍计入交付账）。每行随带工具自报的 ``kind`` /
@@ -47,20 +48,24 @@ blocked 抬成 partial（空交/零声明清单 ≠ 整轮失败）。
 handoff 不硬降档。``requires_draft_ack`` 扩至 ``evidence_deficit`` /
 ``thin_review`` / ``verify_failed`` / ``node_failed`` / ``artifact_rejected``
 （契约硬失败·节点 FAILED·拒收产物同 thin_review 闩；正向缺口承认，不扩姿势 A 词表）。
+``path_mismatch``：已有落盘时不闩 ``requires_draft_ack``（声明未命中仍可 ``delivered``）；
+零落盘仍闩。
 
 挂在 drive 的各收尾路径旁路（正常终态 / 验收未满足 / 部分失败 stash / replan(stop)），
 永不抛错；纯 prose 成功批次（无落盘文件、无缺口）保持无声，不发事件。
 折叠语义：同 ``execution_id`` 保最新一条事件；载荷里的 ``artifacts`` 已是本回合
-声明且落盘路径的并集（后一波改汇总不得整表换成该波自己的文件）。gaps / state
-仍按本批对账。finalize 终态发射幂等：同一
+实际落盘路径的并集（后一波改汇总不得整表换成该波自己的文件；声明命中时备份仍省略）。
+gaps / state 仍按本批对账。finalize 终态发射幂等：同一
 ``execution_id`` 同一结论只发一次；结论变了（补跑覆盖同 path）仍发。
 
 严重度：``severity=warning``（示例/虚构自注 / 交接备注等）不单独撑起
-partial/blocked。轻 B：无 blocking 且 warnings **除去** ``unverified_note`` 后为空、
-且已有 ``delivered_files`` → state=``delivered``（gaps 仍可保留 soft 行）；其余
-soft reason → 仍 ``notes``。声明路径 vs 实际落盘是纯字符串比对：声明的路径未落盘为
-``path_mismatch`` blocking gap（不得进 ``delivered_files`` / state 不得
-``delivered``）；多写的未声明文件省略、不打未通过。不再当 ``path_hint`` 路径建议。
+partial/blocked。轻 B：无 blocking 且 warnings **除去** ``unverified_note`` /
+``path_mismatch`` 后为空、且已有 ``delivered_files`` → state=``delivered``
+（gaps 仍可保留 soft 行）；其余 soft reason → 仍 ``notes``。声明路径 vs 实际落盘
+是纯字符串比对：未命中为 ``path_mismatch`` **warning**（不挡 ``delivered``；
+有落盘不闩 ``requires_draft_ack``，零落盘仍闩）；``missing_declared`` 仍给
+finish_guard 防吹牛。
+声明命中时多写的备份省略、不打未通过。不再当 ``path_hint`` 路径建议。
 blocking 缺口才标
 「部分未满足 / 未满足」。成篇未写完改由对话框接着说——不再发
 ``continue_writing`` 一键按钮。
@@ -119,7 +124,8 @@ _WRITING_CUTOFF_REASONS = frozenset(
 )
 _SOFT_GAP_REASONS = frozenset({REASON_UNVERIFIED_NOTE, REASON_FILES_NOT_LANDED})
 # Gaps that latch finish_guard draft acknowledgment (扩出文献 evidence_deficit /
-# 能力4：契约硬失败 / 节点 FAILED / rejected 产物 / 声明路径未落盘 —— 不扩姿势 A 词表).
+# 能力4：契约硬失败 / 节点 FAILED / rejected 产物 —— 不扩姿势 A 词表).
+# ``path_mismatch`` 仅零落盘时闩（有替代落盘仍可 delivered）.
 # ``files_not_landed`` latches only when blocking (写盘形态); soft 甲⁺ prose 不闩.
 _DRAFT_ACK_GAP_REASONS = frozenset(
     {
@@ -129,7 +135,6 @@ _DRAFT_ACK_GAP_REASONS = frozenset(
         REASON_VERIFY_BUDGET,
         REASON_NODE_FAILED,
         REASON_ARTIFACT_REJECTED,
-        REASON_PATH_MISMATCH,
         REASON_CANCELLED,
         REASON_OVER_SEAT,
     }
@@ -155,8 +160,9 @@ class DeliveryVerdict:
     delivered_files: tuple[str, ...]
     execution_id: str
     # True when gaps include evidence_deficit / thin_review / verify_failed /
-    # node_failed / artifact_rejected / path_mismatch / blocking files_not_landed
-    # (draft / gap acknowledgment required).
+    # node_failed / artifact_rejected / blocking files_not_landed
+    # (draft / gap acknowledgment required). path_mismatch latches only
+    # when nothing was delivered.
     requires_draft_ack: bool = False
     # Structured gap reasons from the same delivery_status payload (no prose).
     # Shadow honesty logs read this; path reconciliation does not.
@@ -167,8 +173,17 @@ class DeliveryVerdict:
     absent_claimed: tuple[str, ...] = ()
 
 
-def _gaps_require_draft_ack(gaps: list[Any] | tuple[Any, ...] | None) -> bool:
-    """True when any gap reason latches requires_draft_ack."""
+def _gaps_require_draft_ack(
+    gaps: list[Any] | tuple[Any, ...] | None,
+    *,
+    delivered: tuple[str, ...] | list[str] | None = None,
+) -> bool:
+    """True when any gap reason latches requires_draft_ack.
+
+    ``path_mismatch`` latches only when nothing was delivered (named path
+    missed and no substitute landing). Wrong pin + files elsewhere does not.
+    """
+    landed = any(str(p).strip() for p in (delivered or ()))
     for gap in gaps or []:
         if not isinstance(gap, dict):
             continue
@@ -176,6 +191,8 @@ def _gaps_require_draft_ack(gaps: list[Any] | tuple[Any, ...] | None) -> bool:
         if reason in _DRAFT_ACK_GAP_REASONS:
             return True
         if reason == REASON_FILES_NOT_LANDED and gap.get("severity") != "warning":
+            return True
+        if reason == REASON_PATH_MISMATCH and not landed:
             return True
     return False
 
@@ -250,7 +267,7 @@ _SOFT_REMINDER_MARKERS = (
     "契约软提醒",
 )
 # Contract path-reconciliation copy (artifacts / artifact_dir). Delivery card
-# treats these as path_mismatch blocking — not notes / 路径建议.
+# treats these as path_mismatch warning — not blocking / 不挡 delivered.
 _PATH_MISMATCH_MARKERS = (
     "产物未写入约定文档目录",
     "声明的交付物路径未落盘",
@@ -339,6 +356,32 @@ def _acceptance_rows_for_state(state: RunState) -> list[dict[str, Any]]:
     return _undeclared_failed_acceptance(state)
 
 
+def _keep_landing_row(
+    row: dict[str, Any],
+    *,
+    artifacts: list[str],
+    artifact_dir: str,
+    declaration_hit: bool,
+) -> dict[str, Any] | None:
+    """Keep a landed row for the delivery card.
+
+    Pin hit → only declared matches (hide backups). Pin missed → extras ARE
+    the product. Unconstrained → keep.
+    """
+    from agentcore.runtime.runs.file_acceptance import apply_declared_path_acceptance
+
+    matched = apply_declared_path_acceptance(
+        row, artifacts=artifacts, artifact_dir=artifact_dir
+    )
+    if matched is not None:
+        return matched
+    if not artifacts and not artifact_dir:
+        return row
+    if not declaration_hit:
+        return row
+    return None
+
+
 def _collect_artifacts(
     results: dict[str, RunState],
     plan: RunPlan | None = None,
@@ -353,12 +396,10 @@ def _collect_artifacts(
     session birth desk). Does not rewrite session ``folder_id``.
     Self-reported ``kind`` / ``derived_from`` ride along so the client's 主清单 can
     show the export and fold its source (see :func:`_product_meta`).
-    Declared artifacts / ``artifact_dir`` omit undeclared extras (not reject).
+    Declared path hit → omit undeclared extras. Declared path missed → keep
+    the worker's other landings (they are the product).
     """
-    from agentcore.runtime.runs.file_acceptance import (
-        apply_declared_path_acceptance,
-        normalize_acceptance_row,
-    )
+    from agentcore.runtime.runs.file_acceptance import normalize_acceptance_row
     from agentcore.workspace.locate import format_workspace_id
 
     desk_by_run: dict[str, str] = {}
@@ -383,15 +424,29 @@ def _collect_artifacts(
             continue
         workspace_id = desk_by_run.get(str(run_id))
         deliverable = deliverable_by_run.get(str(run_id))
+        arts: list[str] = []
+        adir = ""
+        hit = True
+        if deliverable is not None:
+            arts = [
+                str(a).strip()
+                for a in (getattr(deliverable, "artifacts", None) or [])
+                if str(a).strip()
+            ]
+            adir = str(getattr(deliverable, "artifact_dir", "") or "").strip()
+            if arts or adir:
+                hit = bool(
+                    _accepted_declared_paths(
+                        state, artifacts=arts, artifact_dir=adir
+                    )
+                )
         for raw in _acceptance_rows_for_state(state):
             row = normalize_acceptance_row(raw)
             if row is None:
                 continue
             if deliverable is not None:
-                row = apply_declared_path_acceptance(
-                    row,
-                    artifacts=getattr(deliverable, "artifacts", None),
-                    artifact_dir=str(getattr(deliverable, "artifact_dir", "") or ""),
+                row = _keep_landing_row(
+                    row, artifacts=arts, artifact_dir=adir, declaration_hit=hit
                 )
                 if row is None:
                     continue
@@ -408,7 +463,7 @@ def _collect_artifacts(
 
 
 def _is_card_artifact(row: dict[str, Any]) -> bool:
-    """Declared-and-landed (or unconstrained). Historical path_mismatch extras stay off."""
+    """Landed acceptance row. Historical path_mismatch extras stay off."""
     status = str(row.get("status") or "")
     if status not in ("accepted", "rejected"):
         return False
@@ -606,7 +661,11 @@ def _declared_path_mismatch_gaps(
     plan: RunPlan,
     results: dict[str, RunState],
 ) -> list[dict[str, Any]]:
-    """Blocking gaps when declared artifacts / artifact_dir have no accepted match."""
+    """Warning gaps when declared artifacts / artifact_dir have no accepted match.
+
+    Does not block ``delivered`` when other files landed. Zero-write still
+    emits so the batch is not silent, and latches ``requires_draft_ack``.
+    """
     gaps: list[dict[str, Any]] = []
     for node in plan.nodes:
         state = results.get(node.run_id)
@@ -731,6 +790,7 @@ def _annotate_gap(
     item: dict[str, Any] = {"role": role, "description": text}
     if _is_path_hint(text, reason):
         item["reason"] = REASON_PATH_MISMATCH
+        item["severity"] = "warning"
         return item
     soft = severity == "warning" or _is_soft_reminder(text, reason)
     if soft:
@@ -758,8 +818,8 @@ def _node_gaps(plan: RunPlan, results: dict[str, RunState]) -> list[dict[str, An
             desc = f"未完成（失败：{err}）" if err else "未完成（失败）"
             gaps.append({"role": role, "description": desc, "reason": REASON_NODE_FAILED})
         elif state.phase is RunPhase.SKIPPED:
-            # Prefer first-class delivery_gaps (turn-ceiling honesty: 未目验 / 未跑
-            # web_quality / {{…}}); fall back to a generic skip row.
+            # Prefer first-class delivery_gaps (turn-ceiling honesty);
+            # fall back to a generic skip row.
             emitted = False
             for row in state.delivery_gaps or []:
                 if not isinstance(row, dict):
@@ -865,7 +925,7 @@ def _files_not_landed_gap(results: dict[str, RunState]) -> dict[str, Any]:
     if failure_kind == "channel_dead":
         # Mirror zero_files_gap_message(channel_dead): prose/handoff close-out.
         text = (
-            "本批未见落盘：写盘通道不可用（工作区通道已挂起 / 活性挂起），"
+            "本批未见落盘：写盘通道不可用（工作区/本地文件连不上），"
             "落盘工具调用失败——请在 handoff 或正文交结论，禁止再尝试落盘；"
             "可请用户恢复通道后重试"
         )
@@ -1054,7 +1114,8 @@ builder does not I/O. ``delivered_files`` = accepted only;
     ``artifacts`` carries path-level acceptance (accepted + rejected).
 
     ``promotion_ledger`` (回合共享台账): 历史 ``promoted`` 路径在这里被重映射；
-    且 ``reconciliation.artifacts`` 与本波声明且落盘路径做并集（同 path 后写覆盖）。
+    且 ``reconciliation.artifacts`` 与本波实际落盘路径做并集（同 path 后写覆盖；
+    声明命中时备份仍省略）。
     不传（旧调用 / 单测）则本波清单即全文。新回合 promotions 为空时是 no-op。
     """
     from agentcore.runtime.delegate.completion import (
@@ -1133,27 +1194,6 @@ builder does not I/O. ``delivered_files`` = accepted only;
         reason = str(row.get("reason") or REASON_THIN_REVIEW).strip()
         role = str(row.get("role") or "").strip() or "验收"
         raw_gaps.append(_annotate_gap(role, text, reason=reason or REASON_THIN_REVIEW))
-    # ①d 未解写权冲突（案 ghost-owner P0-B）——denied_paths 仍被他人持锁 → blocking；
-    # 不扫「定稿|闭环」正文；真源=账本结构化信号。
-    from agentcore.runtime.closing_posture import (
-        note_unresolved_write_ownership_from_ledger,
-        run_ids_for_write_ownership_scan,
-    )
-
-    ownership_paths = note_unresolved_write_ownership_from_ledger(
-        execution_id=execution_id,
-        run_ids=run_ids_for_write_ownership_scan(plan=plan, results=results),
-    )
-    if ownership_paths:
-        shown = "、".join(f"`{p}`" for p in ownership_paths[:3])
-        more = f" 等 {len(ownership_paths)} 处" if len(ownership_paths) > 3 else ""
-        raw_gaps.append(
-            _annotate_gap(
-                "验收",
-                f"写权冲突未解：{shown}{more}（账本仍记他人持锁；未结构化移交）",
-                reason=REASON_WRITE_OWNERSHIP,
-            )
-        )
     # ② 完成验收未满足 / soft overlay notes（批次级）。
     # Soft markers（「不阻断验收」等）经 _annotate_gap → severity=warning → state=notes。
     for gap in criteria_gaps or []:
@@ -1162,7 +1202,7 @@ builder does not I/O. ``delivered_files`` = accepted only;
             raw_gaps.append(_annotate_gap("验收", text))
     # ③ 失败 / 未执行 / 取消的计划节点（热修已接手的取消节点不算缺口）。
     raw_gaps.extend(_node_gaps(plan, results))
-    # ③b 声明路径 vs 实际落盘（纯字符串）→ path_mismatch blocking。
+    # ③b 声明路径 vs 实际落盘（纯字符串）→ path_mismatch warning（不挡 delivered）。
     raw_gaps.extend(_declared_path_mismatch_gaps(plan, results))
     # ③c 拒收产物（file_acceptance rejected）→ 结构化 gap + draft_ack（能力4 残差）。
     # 与 delivered_files / synthesis「路径已核」同源；不扫盘上「缺席」散文。
@@ -1259,8 +1299,12 @@ builder does not I/O. ``delivered_files`` = accepted only;
     if not blocking and not warnings:
         state = "delivered"
     elif not blocking and warnings:
-        # 轻 B：仅 soft 自注（unverified_note）不降档；path_mismatch 已是 blocking。
-        non_self_note = [g for g in warnings if g.get("reason") != REASON_UNVERIFIED_NOTE]
+        # 轻 B：仅 soft 自注 / 声明路径失配 不降档（有落盘仍 delivered）。
+        non_self_note = [
+            g
+            for g in warnings
+            if g.get("reason") not in (REASON_UNVERIFIED_NOTE, REASON_PATH_MISMATCH)
+        ]
         state = "delivered" if not non_self_note and delivered else "notes"
     elif files_landed:
         # blocked = 纯失败无文件；有落盘（accepted 或 rejected）且有缺口 → partial。
@@ -1344,7 +1388,9 @@ def maybe_emit_delivery_status(
                 state=str(payload["state"]),
                 delivered_files=tuple(payload.get("delivered_files") or ()),
                 execution_id=execution_id,
-                requires_draft_ack=_gaps_require_draft_ack(gaps),
+                requires_draft_ack=_gaps_require_draft_ack(
+                    gaps, delivered=payload.get("delivered_files") or ()
+                ),
                 gap_reasons=_gap_reasons_from(gaps),
                 missing_declared=_missing_declared_paths(plan, results),
                 absent_claimed=_absent_claimed_paths(
@@ -1444,7 +1490,9 @@ def _payload_to_verdict(payload: dict[str, Any]) -> DeliveryVerdict | None:
         state=state,
         delivered_files=tuple(str(p) for p in files if p),
         execution_id=execution_id,
-        requires_draft_ack=_gaps_require_draft_ack(payload.get("gaps") or []),
+        requires_draft_ack=_gaps_require_draft_ack(
+            payload.get("gaps") or [], delivered=files
+        ),
         gap_reasons=_gap_reasons_from(payload.get("gaps") or []),
     )
 

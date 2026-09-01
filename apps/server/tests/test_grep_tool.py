@@ -174,7 +174,8 @@ def test_grep_schema_forbids_literal_newline_as_regex():
 
 def test_grep_schema_teaches_omit_path_when_unsure():
     schema = GrepTool().schema
-    assert "省略 path" in schema.description
+    assert "省略 path" not in schema.description
+    assert "禁止猜测" not in schema.description
     assert "code_search" in schema.description
     assert "`glob`" in schema.description
     assert "file_list" not in schema.description

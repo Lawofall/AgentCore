@@ -26,7 +26,11 @@ from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.limits import (
     WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS,
     WORKSPACE_READ_MAX_BYTES,
+    WORKSPACE_RECONNECT_DETAIL,
     is_file_too_large_detail,
+    is_liveness_timeout_detail,
+    is_presence_disconnected_detail,
+    is_workspace_reconnect_detail,
 )
 from agentcore.workspace.protocol import PathNotFound, WorkspaceIOError
 from agentcore.workspace.server import ServerWorkspace
@@ -332,7 +336,8 @@ async def test_file_read_office_extract_timeout_is_observation_not_liveness(tmp_
     assert "extract_timeout" not in out
     assert "markitdown" not in out.lower()
     assert "请用 code_execute" not in out
-    assert "不要用 code_execute" in out
+    assert "code_execute" not in out
+    assert "read_image" in out
     assert "请用户" not in out
 
 
@@ -360,6 +365,36 @@ async def test_file_read_channel_liveness_maps_meta(tmp_path: Path):
     assert "禁止再调用文件工具" not in (result.error or "")
 
 
+def test_workspace_reconnect_detail_is_not_presence_or_liveness():
+    assert is_workspace_reconnect_detail(WORKSPACE_RECONNECT_DETAIL)
+    assert not is_liveness_timeout_detail(WORKSPACE_RECONNECT_DETAIL)
+    assert not is_presence_disconnected_detail(WORKSPACE_RECONNECT_DETAIL)
+
+
+@pytest.mark.asyncio
+async def test_file_read_reconnect_fail_fast_is_retryable(tmp_path: Path):
+    """Fulfill reconnect: fail this call only — not family retire, not 活性挂起."""
+
+    class _HangBackend(ServerWorkspace):
+        async def read_lines(  # noqa: ARG002
+            self, path: str, *, offset: int = 1, limit: int | None = None
+        ):
+            raise WorkspaceIOError(WORKSPACE_RECONNECT_DETAIL)
+
+    result = await FileReadTool().execute(
+        {"path": "a.txt"}, _ctx(_HangBackend(tmp_path, sandbox=SubprocessSandbox()))
+    )
+    assert result.success is False
+    assert result.contract_failure is False
+    assert result.metadata.get("liveness_timeout") is not True
+    assert result.metadata.get("workspace_channel_dead") is not True
+    assert not result.metadata.get("retire_tools")
+    assert result.error == WORKSPACE_RECONNECT_DETAIL
+    assert "连不上" not in (result.error or "")
+    assert "活性挂起" not in (result.error or "")
+    assert "禁止原样重试" not in (result.error or "")
+
+
 @pytest.mark.asyncio
 async def test_file_read_channel_dead_stamps_family_retire(tmp_path: Path):
     """Sticky channel-dead detail still stamps family retire + workspace_channel_dead."""
@@ -369,7 +404,7 @@ async def test_file_read_channel_dead_stamps_family_retire(tmp_path: Path):
             self, path: str, *, offset: int = 1, limit: int | None = None
         ):
             raise WorkspaceIOError(
-                "local workspace op 'read_lines' timed out; channel dead（活性挂起）"
+                "local workspace op 'read_lines' failed: no fulfiller（无履约方）"
             )
 
     result = await FileReadTool().execute(
@@ -377,11 +412,11 @@ async def test_file_read_channel_dead_stamps_family_retire(tmp_path: Path):
     )
     assert result.success is False
     assert result.contract_failure is False
-    assert result.metadata.get("liveness_timeout") is True
+    assert result.metadata.get("liveness_timeout") is not True
     assert result.metadata.get("workspace_channel_dead") is True
     assert "file_write" in (result.metadata.get("retire_tools") or [])
     assert "mkdir" in (result.metadata.get("retire_tools") or [])
-    assert "活性挂起" in (result.error or "")
+    assert "连不上" in (result.error or "")
     assert "禁止再调用文件工具" in (result.error or "") or "停用全部本地文件" in (
         result.error or ""
     )
@@ -449,34 +484,34 @@ async def test_filesystem_tools_channel_dead_stamps_retire(
     class _HangBackend(ServerWorkspace):
         async def list(self, *a, **k):  # noqa: ANN002, ANN003
             raise WorkspaceIOError(
-                f"local workspace op '{method}' timed out; channel dead（活性挂起）"
+                f"local workspace op '{method}' failed: no fulfiller（无履约方）"
             )
 
         async def list_tree(self, *a, **k):  # noqa: ANN002, ANN003
             raise WorkspaceIOError(
-                f"local workspace op '{method}' timed out; channel dead（活性挂起）"
+                f"local workspace op '{method}' failed: no fulfiller（无履约方）"
             )
 
         async def write(self, *a, **k):  # noqa: ANN002, ANN003
             raise WorkspaceIOError(
-                f"local workspace op '{method}' timed out; channel dead（活性挂起）"
+                f"local workspace op '{method}' failed: no fulfiller（无履约方）"
             )
 
         async def mkdir(self, *a, **k):  # noqa: ANN002, ANN003
             raise WorkspaceIOError(
-                f"local workspace op '{method}' timed out; channel dead（活性挂起）"
+                f"local workspace op '{method}' failed: no fulfiller（无履约方）"
             )
 
         async def grep(self, *a, **k):  # noqa: ANN002, ANN003
             raise WorkspaceIOError(
-                f"local workspace op '{method}' timed out; channel dead（活性挂起）"
+                f"local workspace op '{method}' failed: no fulfiller（无履约方）"
             )
 
     result = await tool.execute(
         args, _ctx(_HangBackend(tmp_path, sandbox=SubprocessSandbox()))
     )
     assert result.success is False
-    assert result.metadata.get("liveness_timeout") is True
+    assert result.metadata.get("liveness_timeout") is not True
     assert result.metadata.get("workspace_channel_dead") is True
     retire = result.metadata.get("retire_tools") or []
     for name in WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS:
@@ -514,7 +549,7 @@ async def test_file_write_preread_channel_dead_does_not_pretend_success(tmp_path
     class _HangBackend(ServerWorkspace):
         async def read(self, path: str) -> str:  # noqa: ARG002
             raise WorkspaceIOError(
-                "local workspace op 'read' timed out; channel dead（活性挂起）"
+                "local workspace op 'read' failed: no fulfiller（无履约方）"
             )
 
         async def write(self, *a, **k):  # noqa: ANN002, ANN003
@@ -525,9 +560,9 @@ async def test_file_write_preread_channel_dead_does_not_pretend_success(tmp_path
         _ctx(_HangBackend(tmp_path, sandbox=SubprocessSandbox())),
     )
     assert result.success is False
-    assert result.metadata.get("liveness_timeout") is True
+    assert result.metadata.get("liveness_timeout") is not True
     assert result.metadata.get("workspace_channel_dead") is True
-    assert "活性挂起" in (result.error or "")
+    assert "连不上" in (result.error or "")
 
 
 def test_derive_channel_timeout_from_outer_deadline():

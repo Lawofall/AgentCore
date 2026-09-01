@@ -36,7 +36,7 @@ export function workerRunsOf<T extends { kind?: string | null }>(
   return runs.filter((r) => r.kind !== "captain");
 }
 
-/** Incremental-kickoff / hard-stop: a worker is in flight. Captain is the CEO turn. */
+/** A worker is in flight (pause overlay / hard-stop). Captain is the CEO turn. */
 export function hasActiveRunningWorkers(
   runs: ReadonlyArray<{ kind?: string | null; status: string }>,
 ): boolean {

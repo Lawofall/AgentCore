@@ -23,7 +23,7 @@ def test_resolve_turn_model_platform_fallback(monkeypatch):
 def test_default_turn_profiles_carries_model():
     ps = default_turn_profiles(model="kimi-k2.5")
     assert ps.model == "kimi-k2.5"
-    assert ps.get("chat").max_rounds == 16
+    assert ps.get("chat").max_rounds == 0
 
 
 @pytest.mark.anyio

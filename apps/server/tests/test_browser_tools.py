@@ -95,12 +95,17 @@ def test_interactive_browser_tools_are_builtin_both():
     assert schema.approval is ToolApproval.GRANTABLE
 
 
-def test_screenshot_is_runtime_worker_only_action():
+def test_screenshot_is_ceo_and_worker_action():
     reg = tool_registration(BrowserTool)
     schema = BrowserTool().schema
     assert reg.surface is ToolSurface.BUILTIN
     assert reg.audience == AUDIENCE_BOTH
     assert "screenshot" in schema.parameters["properties"]["action"]["enum"]
+    action_desc = schema.parameters["properties"]["action"]["description"]
+    assert "screenshot" in action_desc
+    assert "仅 worker" not in action_desc
+    assert "delegate" not in action_desc
+    assert "CEO+worker" not in action_desc
 
 
 def test_ceo_registry_holds_interactive_browser_when_include_browser():
@@ -695,12 +700,21 @@ async def test_screenshot_missing_frame_is_weak_failure(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_ceo_screenshot_is_structured_delegate_failure(tmp_path):
-    tool = BrowserScreenshotTool(registry=_FakeRegistry(session=_FakeSession()))
+async def test_ceo_screenshot_is_not_role_deny(tmp_path):
+    session = _FakeSession(
+        BrowserCommandResult(
+            ok=True,
+            data={"final_url": "https://example.com/", "title": "Example"},
+            frame=b"\xff\xd8\xff\xe0jpeg",
+        )
+    )
+    tool = BrowserScreenshotTool(registry=_FakeRegistry(session=session))
     result = await tool.execute({}, _ctx(tmp_path))
-    assert result.success is False
-    assert result.contract_failure is True
-    assert "delegate" in _fail_text(result)
+    assert result.success is True
+    assert result.contract_failure is not True
+    assert "delegate" not in _fail_text(result)
+    assert result.display["action"] == "screenshot"
+    assert result.display["frame"] == "browser/step-0001.jpg"
 
 
 @pytest.mark.asyncio
@@ -742,13 +756,16 @@ def test_browser_type_schema_guides_password_login():
 
 
 def test_mutation_schemas_require_receipt_verification():
-    """click/type/scroll/navigate: ref table + must verify typed/clicked; snapshot when needed."""
+    """验收 HOW 在 consult(browser)，不进 action 参数百科。"""
+    from agentcore.runtime.resolve.prompt.ceo_core import capability_how_suffix
+
     blob = json.dumps(BrowserTool().schema.parameters, ensure_ascii=False)
-    assert "elements" in blob
-    assert "visible_text" in blob
-    assert "browser(action=snapshot)" in blob
-    assert "验收" in blob or "matched" in blob or "was_disabled" in blob
-    # Old "only snapshot when needed / success already enough" framing is gone.
+    assert "typed.matched" not in blob
+    assert "clicked.was_disabled" not in blob
+    how = capability_how_suffix({"browser"})
+    assert "typed.matched" in how
+    assert "clicked.was_disabled" in how
+    assert "snapshot" in how
     assert "仅必要" not in blob
     assert "可直接用于下一步；仅当" not in blob
 
@@ -763,14 +780,15 @@ def test_navigate_schema_mentions_workspace_relative_path():
 
 @pytest.mark.asyncio
 async def test_sandbox_relative_path_fails_honestly_no_fake_success(tmp_path):
-    """乙：云端沙箱相对路径 → ToolResult 失败；对照产物出口，不派发 driver。"""
+    """乙：云端沙箱相对路径 → ToolResult 失败；指引文件面板 / 完整预览，不派发 driver。"""
     session = _FakeSession(
         BrowserCommandResult(ok=True, data={"final_url": "https://x/", "title": "T"})
     )
     tool = BrowserNavigateTool(registry=_FakeRegistry(session=session))
     result = await tool.execute({"url": "site/index.html"}, _ctx(tmp_path))
     assert result.success is False
-    assert "产物出口" in _fail_text(result)
+    assert "产物出口" not in _fail_text(result)
+    assert "文件」面板" in _fail_text(result) or "完整预览" in _fail_text(result)
     assert session.sent == []
 
 
@@ -782,7 +800,8 @@ async def test_sandbox_workspace_url_fails_honestly(tmp_path):
     tool = BrowserNavigateTool(registry=_FakeRegistry(session=session))
     result = await tool.execute({"url": "workspace://c1/site/index.html"}, _ctx(tmp_path))
     assert result.success is False
-    assert "产物出口" in _fail_text(result)
+    assert "产物出口" not in _fail_text(result)
+    assert "文件」面板" in _fail_text(result) or "完整预览" in _fail_text(result)
     assert session.sent == []
 
 
@@ -867,7 +886,8 @@ async def test_bridge_session_sandbox_relative_path_fails_honestly(tmp_path, mon
     )
     result = await tool.execute({"url": "site/index.html"}, ctx)
     assert result.success is False
-    assert "产物出口" in _fail_text(result)
+    assert "产物出口" not in _fail_text(result)
+    assert "文件」面板" in _fail_text(result) or "完整预览" in _fail_text(result)
     assert session.sent == []
     # https still acquires sandbox (not open_local_bridge_session)
     result_ok = await tool.execute({"url": "https://example.com/"}, ctx)

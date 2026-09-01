@@ -1,9 +1,11 @@
 """The harvest window must always carry the roster, whatever the prose costs.
 
-Regression: worker prose and the roster shared one 4000-char budget on the
-coordination terminal payload, so big batches silently shipped a harvest turn
-whose closing discipline ordered the CEO to reconcile against a roster that had
-been truncated away (observed in production on a 2026-08-16 harvest).
+Regression: worker prose and the roster once shared a 4000-char packaging
+shaper on the coordination terminal payload, so big batches silently shipped a
+harvest turn whose closing discipline ordered the CEO to reconcile against a
+roster that had been truncated away (observed in production on a 2026-08-16
+harvest). Bodies now share ``CEO_SYNTHESIS_BUDGET``; the package is composed
+once; ToolResult and ``ALL_COMPLETED.output`` are the same string.
 """
 
 from __future__ import annotations
@@ -71,16 +73,34 @@ def test_bulky_batch_keeps_roster_in_terminal_payload():
     assert raw_chars >= CEO_SYNTHESIS_BUDGET
 
     synthesis = build_ceo_synthesis(t, plan, results)
-    # Guards the guard: the assembled package must overflow the 4000 budget, or the
-    # assertions below would pass even under the pre-fix head slice (which cut the
-    # tail off exactly this string). Prose alone cannot do it — the pass_through
-    # pool water-fills to CEO_SYNTHESIS_BUDGET — so the overflow is prose + roster
-    # + closing together, which is how production hit it.
+    # Packaging (roster + closing) still pushes the assembled package past the
+    # old 4000 shaper; that is no longer a second scrap-cut. Posting the
+    # canonical text must be identity with ToolResult.
     assert len(synthesis.text) > 4000
+    assert len(synthesis.text) <= ALL_COMPLETED_OUTPUT_LIMIT
 
     session = _Session()
     post_session_all_completed(
         session,
+        output=synthesis.text,
+        roster_facts=synthesis.roster_facts,
+        completed=1,
+        total=2,
+    )
+
+    posted = session.payload["output"]
+    assert posted == synthesis.text
+    assert ROSTER_HEADING in posted
+    assert ROSTER_COUNTERS in posted
+    assert CLOSING_DISCIPLINE in posted
+    assert "失败" in posted and "w3" in posted
+    assert len(posted) <= ALL_COMPLETED_OUTPUT_LIMIT
+    assert len(posted) > len(synthesis.roster_text)
+    assert posted.index(ROSTER_HEADING) < posted.index(CLOSING_DISCIPLINE)
+
+    via_parts = _Session()
+    post_session_all_completed(
+        via_parts,
         output=synthesis.prose,
         roster_text=synthesis.roster_text,
         roster_facts=synthesis.roster_facts,
@@ -88,16 +108,7 @@ def test_bulky_batch_keeps_roster_in_terminal_payload():
         completed=1,
         total=2,
     )
-
-    posted = session.payload["output"]
-    assert ROSTER_HEADING in posted
-    assert ROSTER_COUNTERS in posted
-    assert CLOSING_DISCIPLINE in posted
-    assert "失败" in posted and "w3" in posted
-    assert len(posted) <= ALL_COMPLETED_OUTPUT_LIMIT
-    # Prose is the lossy part: it may be trimmed, the ground truth may not.
-    assert len(posted) > len(synthesis.roster_text)
-    assert posted.index(ROSTER_HEADING) < posted.index(CLOSING_DISCIPLINE)
+    assert via_parts.payload["output"] == synthesis.text
 
 
 def test_roster_survives_a_budget_smaller_than_the_prose():

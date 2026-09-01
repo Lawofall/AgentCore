@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * 拍板卡不挂手册「?」：挡路冻结时跳走读手册是错时机。
- * 手册仍从工具箱 / 命令面板进；辩论室 / 协作图 / 审批保留现场 `?`。
+ * 手册仍从工具箱 / 命令面板进；辩论室 / 审批保留现场 `?`。全屏协作画布不挂。
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";

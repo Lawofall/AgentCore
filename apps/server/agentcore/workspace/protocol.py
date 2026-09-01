@@ -416,7 +416,10 @@ class WorkspaceBackend(Protocol):
         ``pattern="*"`` emits directories plus matching files so the tree stays
         connected. A narrower ``pattern`` emits matching names only (still
         descends unmatched directories). Raises ``OutsideWorkspace`` /
-        ``NotADirectory`` / ``WorkspaceIOError``.
+        ``PathNotFound`` (missing) / ``NotADirectory`` (exists but is not a
+        directory) / ``WorkspaceIOError``. Local backends may return an empty
+        tree for a missing relative dir (lazy workspace) instead of
+        ``PathNotFound``.
         """
         ...
 
@@ -543,8 +546,9 @@ class WorkspaceBackend(Protocol):
         where each diagnostic is
         ``{path, line, column, severity, message, code?}``.
 
-        Local backends route to the desktop language service; cloud
-        ``ServerWorkspace`` returns ``unavailable`` honestly (never fakes a full
+        Local-disk backends (过桥 ``LocalWorkspace`` and sidecar
+        ``ServerWorkspace(location=local)``) route to the desktop language
+        service; cloud desks return ``unavailable`` honestly (never fakes a full
         ``tsc``). Read-only — never sets ``dirty``.
         """
         ...

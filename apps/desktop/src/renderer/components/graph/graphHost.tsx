@@ -11,10 +11,19 @@
  *      onMeasure 写出宿主高度，禁止再把 colHeight 读回缩 zoom
  * 4. Overflow：内联卡片可 overflow-hidden 做圆角裁切；图区须先装下内容（缩 zoom），
  *    禁止靠外层裁切掩盖节点。fade 仅作极端兜底，非常态裁切路径。
- * 5. 宿主常驻：layoutReady=false 时不卸载 ReactFlow（可叠 skeleton）；内联折叠优先隐藏。
+ * 5. 活图在视口内常驻：layoutReady=false 时不卸载 ReactFlow（可叠 skeleton）。
+ *    内联折叠或滚出视口后卸树（留状态条 + 占位高），滚回/展开再挂，布局走 ELK LRU。
  */
 import { ReactFlowProvider } from "@xyflow/react";
 import type { ReactNode } from "react";
+
+/** Inline GraphView mounts only while the card is expanded and on-screen. */
+export function shouldMountInlineGraphHost(opts: {
+  expanded: boolean;
+  inView: boolean;
+}): boolean {
+  return opts.expanded && opts.inView;
+}
 
 export type GraphFitMode = "width" | "view";
 

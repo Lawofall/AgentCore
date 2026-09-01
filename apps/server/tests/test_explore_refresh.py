@@ -181,6 +181,47 @@ async def test_refresh_parse_failure_leaves_dirty(tmp_path, monkeypatch):
     assert meta.explore_fingerprint == "fp-old"
 
 
+@pytest.mark.asyncio
+async def test_refresh_skips_when_folder_profile_empty(tmp_path, monkeypatch):
+    """Cleared 画像 is not a silent fill job — no LLM, no write, dirty stays."""
+    from agentcore.memory.episode_store import InMemoryEpisodeStore
+    from agentcore.memory.episodic import save_scope_meta
+
+    store = FileMemoryStore(tmp_path)
+    ep_store = InMemoryEpisodeStore()
+    monkeypatch.setattr(
+        "agentcore.memory.episode_store.default_episode_store", lambda: ep_store
+    )
+    uid = str(uuid4())
+    folder = str(uuid4())
+    await record_explore_closeout(
+        ep_store, uid, folder, workspace_key=f"folder:{folder}", fingerprint="fp-old"
+    )
+    meta = await load_scope_meta(ep_store, uid, scope=folder)
+    meta.explore_fingerprint_dirty = True
+    await save_scope_meta(ep_store, uid, meta, scope=folder)
+
+    provider = _FakeProvider(
+        content='{"profile":"## 技术栈与工具\\n- ShouldNotWrite\\n","navigation":null,"topics":[]}'
+    )
+    ok = await refresh_folder_explore_from_snapshot(
+        user_id=uid,
+        folder_id=folder,
+        workspace_key=f"folder:{folder}",
+        snapshot="# Top-level\n- [file] a",
+        live_fingerprint="fp-new",
+        provider=provider,  # type: ignore[arg-type]
+        model="fake",
+        store=store,
+    )
+    assert ok is False
+    assert provider.calls == 0
+    assert await store.load(uid, CORE_MEMORY_FILE, scope=folder) == ""
+    meta = await load_scope_meta(ep_store, uid, scope=folder)
+    assert meta.explore_fingerprint_dirty is True
+    assert meta.explore_fingerprint == "fp-old"
+
+
 def test_stage_dirs_hold_products_only():
     """步 3：``文档/`` 退化成纯产物目录——厚约定文档已是 documents 条目。"""
     from agentcore.memory.explore_refresh import _REFRESH_SYSTEM

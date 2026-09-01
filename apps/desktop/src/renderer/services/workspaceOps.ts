@@ -1,5 +1,8 @@
 import { logEvent } from "@/lib/log";
-import { fulfillClientToolOnce } from "@/services/clientToolFulfill";
+import {
+  WORKSPACE_RECONNECT_DETAIL,
+  fulfillClientToolOnce,
+} from "@/services/clientToolFulfill";
 import type { InteractionSettleOrigin } from "@/services/interaction";
 import { resolveConversationLocalTarget } from "@/services/sidecarRouting";
 import { useWorkspaceChannelStore } from "@/stores/workspaceChannel";
@@ -13,6 +16,20 @@ const PROCESS_OPS = new Set<string>([
   "process_stop",
   "process_list",
 ]);
+
+/** Sidecar 空 root_id：按会话绑定补根，并把工作区相对路径加上 scratch 前缀。 */
+function prefixWorkspaceRelPaths(paths: unknown, subpath: string): string[] {
+  const base = subpath.replace(/^\/+|\/+$/g, "");
+  if (!base || !Array.isArray(paths)) return [];
+  const out: string[] = [];
+  for (const raw of paths) {
+    if (typeof raw !== "string") continue;
+    const rel = raw.replace(/\\/g, "/").replace(/^\/+/, "").trim();
+    if (!rel || rel === ".") out.push(base);
+    else out.push(`${base}/${rel}`);
+  }
+  return out;
+}
 
 /** Language advertise / U1 git chip — hang must not raise the file-channel banner (A1/A2). */
 const NON_FILE_CHANNEL_OPS = new Set<string>([
@@ -85,8 +102,10 @@ export function resetWorkspaceOpIpcInflightForTests(): void {
  * failure instead of the turn hanging.
  *
  * ``timeout_ms`` (optional, from server channel): AbortSignal budget matching the
- * outer tool liveness deadline. On abort we skip settle when possible; a late
- * POST after the server discarded the Future is already a stale 404 no-op.
+ * outer tool liveness deadline. User-stop (`client_tool_cancelled`) skips settle
+ * (the server already dropped the awaiter). Fulfill reconnect aborts POST a
+ * retryable IO error so the server does not burn the deadline. A late POST after
+ * the server discarded the Future is already a stale 404 no-op.
  * Abort 返回后 leave-once 卸 IPC inflight（底层 hung promise 不再永久占计数）。
  *
  * Same ``request_id`` is de-duplicated in-process so attach rehang does not
@@ -161,6 +180,21 @@ async function runLocalOp(
         args.cwd =
           cwd && cwd !== "." ? `${target.subpath}/${cwd}` : target.subpath;
       }
+    }
+  }
+  // Sidecar diagnostics：通道 root_id 恒空，按会话绑定补根。过桥已带 root_id
+  // 且 LocalWorkspace._in 已加 subpath，不得再前缀。
+  if (payload.op === "diagnostics" && !rootId) {
+    const target = await resolveConversationLocalTarget(conversationId);
+    if (!target) {
+      return ioError("会话未绑定本地工作区，无法执行类型诊断");
+    }
+    rootId = target.rootId;
+    if (target.subpath) {
+      args = {
+        ...args,
+        paths: prefixWorkspaceRelPaths(args.paths, target.subpath),
+      };
     }
   }
   const timeoutMs =
@@ -261,6 +295,15 @@ async function runLocalOp(
       });
       // abort 日志快照仍含本 op；随后 leave，避免僵尸占无界计数。
       leaveOnce();
+      const abortReason = cancelSignal.aborted
+        ? String(cancelSignal.reason ?? "")
+        : "";
+      if (abortReason === "reconnect") {
+        return ioError(WORKSPACE_RECONNECT_DETAIL);
+      }
+      if (abortReason === "cancel") {
+        return ioError("已取消");
+      }
       if (!NON_FILE_CHANNEL_OPS.has(payload.op)) {
         useWorkspaceChannelStore.getState().markNotReady();
       }

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -197,42 +197,6 @@ class FolderRepository:
             select(Folder)
             .where(Folder.user_id == user_id, Folder.deleted_at.is_(None))
             .order_by(Folder.created_at.asc())
-        )
-        return result.scalars().all()
-
-    async def list_by_user_recently_active(
-        self, user_id: str, *, limit: int
-    ) -> Sequence[Folder]:
-        """Live folders ordered by recent conversation activity (prompt catalog).
-
-        Activity = ``max(conversation.updated_at)`` among non-deleted member chats.
-        Folders with no conversations fall back to ``folder.updated_at`` then
-        ``created_at``. Hard ``limit`` truncates after sort (派生文件夹清单注入).
-        """
-        if limit <= 0:
-            return []
-        activity = (
-            select(
-                Conversation.folder_id.label("folder_id"),
-                func.max(Conversation.updated_at).label("last_active"),
-            )
-            .where(
-                Conversation.user_id == user_id,
-                Conversation.folder_id.is_not(None),
-                Conversation.deleted_at.is_(None),
-            )
-            .group_by(Conversation.folder_id)
-            .subquery()
-        )
-        last_active = func.coalesce(
-            activity.c.last_active, Folder.updated_at, Folder.created_at
-        )
-        result = await self._session.execute(
-            select(Folder)
-            .outerjoin(activity, activity.c.folder_id == Folder.id)
-            .where(Folder.user_id == user_id, Folder.deleted_at.is_(None))
-            .order_by(last_active.desc(), Folder.created_at.desc())
-            .limit(limit)
         )
         return result.scalars().all()
 

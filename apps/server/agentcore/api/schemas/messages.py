@@ -982,13 +982,13 @@ def _remap_path_or_verify_failure(message: str) -> str | None:
     journal row only has the Chinese tool error. Known codes in the whitelist stay.
     """
     raw = message or ""
-    if "禁止用 code_execute 跑项目级慢验证" in raw:
+    if "跑项目级慢验证" in raw:
         return "project_verify_redirect"
-    if "禁止用 code_execute 打开源码再正则扫描" in raw:
+    if "打开源码再正则扫描" in raw:
         return "source_grep_redirect"
-    if "禁止用 code_execute 把工作区文件 dump" in raw:
+    if "把工作区文件 dump 到 stdout" in raw:
         return "source_dump_redirect"
-    if "禁止用 code_execute 启动长驻进程" in raw:
+    if "禁止用 code_execute 启动长驻进程" in raw or "请用 run 启动长驻进程" in raw:
         return "long_running_redirect"
     if any(
         needle in raw

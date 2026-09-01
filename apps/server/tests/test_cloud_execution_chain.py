@@ -25,7 +25,8 @@ from agentcore.runtime.sandbox_approval import (
     execution_tool_auto_passes,
 )
 from agentcore.tools.builtin import build_worker_registry, code_execution_enabled_for
-from agentcore.tools.builtin.code_execute import CodeExecuteTool
+from agentcore.tools.builtin.run import RunTool
+from agentcore.tools.sandbox.cloud_python import format_cloud_python_libs
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
@@ -56,16 +57,13 @@ def test_cloud_when_gvisor_off_chain_stays_withheld(
 
     assert code_execution_enabled_for(backend) is False
     names = build_worker_registry(backend=backend).names
-    assert "code_execute" not in names
-    assert "test_run" not in names
-    assert "terminal" not in names
+    assert "run" not in names
     ctx = build_workspace_context(backend, desktop_online=True)
-    assert "code_execute=未装配" in ctx
-    assert "terminal=未装配" in ctx
+    assert "run=未装配" in ctx
     warn = execution_capability_warning(_pptx_plan(), backend)
     assert warn is not None
     assert execution_approval_posture(backend) is ExecutionApprovalPosture.UNAVAILABLE
-    assert execution_tool_auto_passes(backend, "code_execute") is False
+    assert execution_tool_auto_passes(backend, "run") is False
 
 
 def test_settings_gvisor_enabled_defaults_true():
@@ -86,12 +84,9 @@ def test_cloud_escape_hatch_registers_execution_chain(
 
     assert code_execution_enabled_for(backend) is True
     names = build_worker_registry(backend=backend).names
-    assert "code_execute" in names
-    assert "test_run" in names
-    assert "terminal" in names
+    assert "run" in names
     ctx = build_workspace_context(backend, desktop_online=True)
-    assert "code_execute=已装配" in ctx
-    assert "terminal=已装配" in ctx
+    assert "run=已装配" in ctx
     plan = _pptx_plan()
     assert execution_capability_warning(plan, backend) is None
     assert execution_approval_posture(backend) is ExecutionApprovalPosture.UNAVAILABLE
@@ -104,15 +99,12 @@ def test_cloud_gvisor_on_chain_flips_end_to_end(tmp_path: Path, monkeypatch: pyt
     # ① 注册闸：执行类工具进 worker 全集。
     assert code_execution_enabled_for(backend) is True
     names = build_worker_registry(backend=backend).names
-    assert "code_execute" in names
-    assert "test_run" in names
-    assert "terminal" in names
+    assert "run" in names
 
     # ② 能力自述：workspace_context 能力行翻「已装配」。
     # 装包另位：无 netns egress 时 package_install 保持未装配（能跑 ≠ 能装）。
     ctx = build_workspace_context(backend, desktop_online=True)
-    assert "code_execute=已装配" in ctx
-    assert "terminal=已装配" in ctx
+    assert "run=已装配" in ctx
     assert "package_install=" in ctx
 
 
@@ -122,8 +114,7 @@ def test_cloud_gvisor_on_chain_flips_end_to_end(tmp_path: Path, monkeypatch: pyt
 
     # ④ 审批姿态：云端 gVisor 真隔离 → 整类 execution_class 自动放行。
     assert execution_approval_posture(backend) is ExecutionApprovalPosture.AUTO_PASS
-    assert execution_tool_auto_passes(backend, "code_execute") is True
-    assert execution_tool_auto_passes(backend, "test_run") is True
+    assert execution_tool_auto_passes(backend, "run") is True
     assert execution_tool_auto_passes(backend, "browser") is True
     # desktop_notify 不吃 gVisor AUTO_PASS（仅 command=auto）。
     assert execution_tool_auto_passes(backend, "desktop_notify") is False
@@ -142,12 +133,9 @@ def test_cloud_probe_failed_withholds_execution_chain(
 
     assert code_execution_enabled_for(backend) is False
     names = build_worker_registry(backend=backend).names
-    assert "code_execute" not in names
-    assert "test_run" not in names
-    assert "terminal" not in names
+    assert "run" not in names
     ctx = build_workspace_context(backend, desktop_online=True)
-    assert "code_execute=未装配" in ctx
-    assert "terminal=未装配" in ctx
+    assert "run=未装配" in ctx
 
 
 def test_cloud_probe_ok_keeps_execution_chain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -160,12 +148,9 @@ def test_cloud_probe_ok_keeps_execution_chain(tmp_path: Path, monkeypatch: pytes
 
     assert code_execution_enabled_for(backend) is True
     names = build_worker_registry(backend=backend).names
-    assert "code_execute" in names
-    assert "test_run" in names
-    assert "terminal" in names
+    assert "run" in names
     ctx = build_workspace_context(backend, desktop_online=True)
-    assert "code_execute=已装配" in ctx
-    assert "terminal=已装配" in ctx
+    assert "run=已装配" in ctx
 
 
 def test_cloud_unprobed_keeps_config_only_semantics(
@@ -180,19 +165,18 @@ def test_cloud_unprobed_keeps_config_only_semantics(
     assert cloud_sandbox_health() is None
     assert code_execution_enabled_for(backend) is True
     names = build_worker_registry(backend=backend).names
-    assert "code_execute" in names
-    assert "test_run" in names
-    assert "terminal" in names
+    assert "run" in names
     ctx = build_workspace_context(backend, desktop_online=True)
-    assert "code_execute=已装配" in ctx
-    assert "terminal=已装配" in ctx
+    assert "run=已装配" in ctx
 
 
 def test_server_tool_description_declares_libs_and_write_back():
-    desc = CodeExecuteTool(location="server").schema.description
-    assert "云端沙箱" in desc  # 与 test_tools_catalog 的措辞契约保持一致
-    assert "python-pptx" in desc
-    assert "保存进工作区" in desc
+    desc = RunTool(location="server").schema.description
+    assert "云桌" in desc  # 与 test_tools_catalog 的措辞契约保持一致
+    assert "HOW→consult(run)" in desc
+    libs = format_cloud_python_libs()
+    assert "python-pptx" in libs
+    assert libs not in desc
 
 
 def test_gvisor_desk_oci_workspace_rw(tmp_path: Path):

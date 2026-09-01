@@ -1,10 +1,11 @@
 """Integration tests for 交付前核验·finish_guard wired into ``react_loop``.
 
 Drives the done-round verification guard with a scripted provider (no network):
-structural defects (unclosed / empty-bodied code fence) are the 统一底线 — they
-fire on BOTH paths. Citation markers (``[n]`` / ``#rN``) do **not** rework the
-chat bubble. On the CEO path the reset is ``content_reset``; a worker passes
-``on_reset`` so its rework clears the run card via ``run_output_reset`` instead.
+structural defects (unclosed code fence) are the 统一底线 — they fire on BOTH
+paths. Empty language fences no longer rework. Citation markers (``[n]`` / ``#rN``)
+do **not** rework the chat bubble. On the CEO path the reset is ``content_reset``;
+a worker passes ``on_reset`` so its rework clears the run card via
+``run_output_reset`` instead.
 """
 
 from pathlib import Path
@@ -148,7 +149,7 @@ async def test_worker_structural_defect_reworks_via_on_reset():
     resets: list[str] = []
     provider = _ScriptedProvider(
         [
-            [_content_chunk("草稿：\n```json\n```")],  # 声明 json 却空体
+            [_content_chunk("草稿：\n```json\n{\"a\": 1}")],  # 未闭合围栏
             [_content_chunk("修正后的产出，无代码块。")],
         ]
     )

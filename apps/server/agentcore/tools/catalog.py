@@ -75,8 +75,8 @@ def build_capability_catalog() -> list[CatalogTool]:
     ).list_all():
         available = audience_by_name.get(schema.name, (AVAILABLE_TO_WORKER,))
         catalog.append(CatalogTool(schema=schema, available_to=available))
-    # Privacy-gated worker tools (manual_wire): still advertised in the capability
-    # catalog so the 能力图鉴 lists them; runtime wiring is gate-dependent.
+    # manual_wire conversation log tools: catalog-advertised; runtime wires after
+    # ``build_*_registry`` (CEO + worker). Product-always-on, still on-demand.
     for tool_cls in declared_tools(surface=ToolSurface.WORKER_ONLY):
         reg = tool_registration(tool_cls)
         if not reg.manual_wire:

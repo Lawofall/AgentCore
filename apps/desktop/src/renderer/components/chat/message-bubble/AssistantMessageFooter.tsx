@@ -170,8 +170,8 @@ function MessageMoreMenu({
   const [contextOpen, setContextOpen] = useState(false);
   const conversationId = useConversationStore((s) => s.currentConversationId);
 
-  // 「复制排查包」恒可用（对齐错误卡；行业常见：支持 ID 可复制，底层检视才 gated）。
-  // 诊断模式只管运行详情里的裸 ID / 调度埋点等噪声，不挡报障出口。
+  // 「复制排查包」恒可用（对齐错误卡；行业常见：支持 ID 可复制）。
+  // 查 bug 走排查包喂 AI，不给人眼检视铬条。
   const serverMessageId = assistantProjectionId(message);
   const diagnosticIds = {
     conversationId,

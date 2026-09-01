@@ -37,16 +37,18 @@ export interface ReadUrlDisplay {
   content: string;
 }
 
-/** `code_execute` / `test_run` rich result: terminal-style stdout/stderr + exit code.
- *  ``test_run`` may omit ``language`` and set ``budget_exceeded`` when the verify
- *  budget was exhausted (incomplete — not a hard tool fault). */
+/** `code_execute` / `test_run` / `run` rich result: terminal-style stdout/stderr + exit code.
+ *  ``budget_exceeded`` = incomplete (not a hard tool fault). Face copy branches on
+ *  ``timeout_kind`` (idle / disaster). */
 export interface CodeExecDisplay {
   stdout: string;
   stderr: string;
   exit_code: number;
   language?: string;
-  /** True when verify budget exhausted — UI shows incomplete, not fault red. */
+  /** True when incomplete — UI shows warning, not fault red. */
   budget_exceeded?: boolean;
+  /** Idle hang vs disaster wall; omit or null when not a timeout incomplete. */
+  timeout_kind?: "idle" | "disaster" | null;
   check?: string;
   command?: string;
 }

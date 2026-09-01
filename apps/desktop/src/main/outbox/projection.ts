@@ -10,15 +10,20 @@ import type { SidecarQueuedAttachment } from "@shared/sidecar-contract";
 import { bearerPostJson } from "../auth-client";
 import { logDesktop } from "../log-service";
 import {
+  JOURNAL_OVERFLOW_SEQ_START,
   type OutboxRecord,
   PHASE_OPEN,
   PHASE_READY,
+  computeBackoffDelayMs,
   isHex32TraceId,
+  isPermanentHttpFailure,
   isSafeOutboxId,
+  journalAckAfterPost,
   journalEntriesWithExplicitSeq,
   outboxDir,
   readOutboxRecord,
   streamSegmentsForPost,
+  unackedJournalEntries,
 } from "./strategy";
 
 export interface LocalTurnOccupyArgs {
@@ -49,6 +54,79 @@ const umidLocks = new Map<string, Promise<unknown>>();
 
 let watchHandle: FSWatcher | null = null;
 const watchTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** In-memory outbox sync cursor (never write backoff onto the sidecar-owned OPEN file). */
+type OpenSyncState = {
+  ackedLiveSeq: number;
+  ackedOverflowSeq: number;
+  lastSegmentsKey: string | null;
+  backoffUntil: number;
+  failCount: number;
+  loggedFail: boolean;
+  retryTimer: ReturnType<typeof setTimeout> | null;
+};
+
+const openSync = new Map<string, OpenSyncState>();
+
+function emptyOpenSync(): OpenSyncState {
+  return {
+    ackedLiveSeq: -1,
+    ackedOverflowSeq: JOURNAL_OVERFLOW_SEQ_START - 1,
+    lastSegmentsKey: null,
+    backoffUntil: 0,
+    failCount: 0,
+    loggedFail: false,
+    retryTimer: null,
+  };
+}
+
+function openSyncFor(userMessageId: string): OpenSyncState {
+  let st = openSync.get(userMessageId);
+  if (!st) {
+    st = emptyOpenSync();
+    openSync.set(userMessageId, st);
+  }
+  return st;
+}
+
+function clearOpenSync(userMessageId: string): void {
+  const st = openSync.get(userMessageId);
+  if (st?.retryTimer) clearTimeout(st.retryTimer);
+  openSync.delete(userMessageId);
+}
+
+function clearAllOpenSync(): void {
+  for (const st of openSync.values()) {
+    if (st.retryTimer) clearTimeout(st.retryTimer);
+  }
+  openSync.clear();
+}
+
+function segmentsFingerprint(
+  rows: Array<{ channel: string; text: string; generation: number }>,
+): string {
+  const ordered = [...rows].sort((a, b) => a.channel.localeCompare(b.channel));
+  return JSON.stringify(ordered.map((r) => [r.channel, r.text, r.generation]));
+}
+
+function scheduleOpenRetry(userMessageId: string, delayMs: number): void {
+  const st = openSyncFor(userMessageId);
+  if (st.retryTimer) clearTimeout(st.retryTimer);
+  st.retryTimer = setTimeout(
+    () => {
+      st.retryTimer = null;
+      void withUmidLock(userMessageId, async () => {
+        const record = await readOutboxRecord(userMessageId);
+        if (!record || record.phase !== PHASE_OPEN) {
+          clearOpenSync(userMessageId);
+          return;
+        }
+        await postOpenCheckpoint(record);
+      });
+    },
+    Math.max(0, delayMs),
+  );
+}
 
 export function withUmidLock<T>(
   userMessageId: string,
@@ -83,12 +161,14 @@ export function noteOccupiedLocalTurn(
 ): void {
   occupied.set(userMessageId, meta);
   settled.delete(userMessageId);
+  clearOpenSync(userMessageId);
   syncLocalTurnLeaseHeartbeatLoop();
 }
 
 export function markLocalTurnSettled(userMessageId: string): void {
   settled.add(userMessageId);
   occupied.delete(userMessageId);
+  clearOpenSync(userMessageId);
   syncLocalTurnLeaseHeartbeatLoop();
 }
 
@@ -269,16 +349,38 @@ export async function abortLocalTurnPlaceholder(
     return;
   }
   occupied.delete(userMessageId);
+  clearOpenSync(userMessageId);
   syncLocalTurnLeaseHeartbeatLoop();
 }
 
 async function postOpenCheckpoint(record: OutboxRecord): Promise<void> {
   const conversationId = record.conversation_id;
   const messageId = (record.message_id || "").trim();
+  const umid = record.user_message_id;
   if (!isSafeOutboxId(conversationId) || !messageId) return;
 
-  const journal = journalEntriesWithExplicitSeq(record.journal);
-  if (journal.length > 0) {
+  const st = openSyncFor(umid);
+  const now = Date.now();
+  if (now < st.backoffUntil) {
+    scheduleOpenRetry(umid, st.backoffUntil - now);
+    return;
+  }
+
+  const allJournal = journalEntriesWithExplicitSeq(record.journal);
+  const journal = unackedJournalEntries(
+    allJournal,
+    st.ackedLiveSeq,
+    st.ackedOverflowSeq,
+  );
+  const segments = streamSegmentsForPost(record.stream_segments);
+  const segKey = segmentsFingerprint(segments);
+  const needJournal = journal.length > 0;
+  const needSegments = segments.length > 0 && segKey !== st.lastSegmentsKey;
+  if (!needJournal && !needSegments) return;
+
+  let failed = false;
+
+  if (needJournal) {
     try {
       const result = await bearerPostJson(
         localTurnsPath(conversationId, "/journal"),
@@ -288,60 +390,91 @@ async function postOpenCheckpoint(record: OutboxRecord): Promise<void> {
           entries: journal,
         },
       );
-      if (!result.ok) {
-        logDesktop({
-          level: "warn",
-          event: "outbox.local_turn_journal_failed",
-          fields: {
-            conversation_id: conversationId,
-            user_message_id: record.user_message_id,
-            status: result.status,
-          },
+      if (result.ok) {
+        const next = journalAckAfterPost(
+          journal,
+          st.ackedLiveSeq,
+          st.ackedOverflowSeq,
+        );
+        st.ackedLiveSeq = next.ackedLiveSeq;
+        st.ackedOverflowSeq = next.ackedOverflowSeq;
+      } else {
+        failed = true;
+        logCheckpointFail(st, "outbox.local_turn_journal_failed", {
+          conversation_id: conversationId,
+          user_message_id: umid,
+          status: result.status,
+          permanent: isPermanentHttpFailure(result.status),
         });
       }
     } catch (err) {
-      logDesktop({
-        level: "warn",
-        event: "outbox.local_turn_journal_failed",
-        fields: {
-          conversation_id: conversationId,
-          user_message_id: record.user_message_id,
-          error: err instanceof Error ? err.message : String(err),
-        },
+      failed = true;
+      logCheckpointFail(st, "outbox.local_turn_journal_failed", {
+        conversation_id: conversationId,
+        user_message_id: umid,
+        error: err instanceof Error ? err.message : String(err),
       });
     }
   }
 
-  const segments = streamSegmentsForPost(record.stream_segments);
-  if (segments.length > 0) {
+  if (needSegments) {
     try {
       const result = await bearerPostJson(
         localTurnsPath(conversationId, "/stream-segments"),
         { message_id: messageId, segments },
       );
-      if (!result.ok) {
-        logDesktop({
-          level: "warn",
-          event: "outbox.local_turn_segments_failed",
-          fields: {
-            conversation_id: conversationId,
-            user_message_id: record.user_message_id,
-            status: result.status,
-          },
+      if (result.ok) {
+        st.lastSegmentsKey = segKey;
+      } else {
+        failed = true;
+        logCheckpointFail(st, "outbox.local_turn_segments_failed", {
+          conversation_id: conversationId,
+          user_message_id: umid,
+          status: result.status,
+          permanent: isPermanentHttpFailure(result.status),
         });
       }
     } catch (err) {
-      logDesktop({
-        level: "warn",
-        event: "outbox.local_turn_segments_failed",
-        fields: {
-          conversation_id: conversationId,
-          user_message_id: record.user_message_id,
-          error: err instanceof Error ? err.message : String(err),
-        },
+      failed = true;
+      logCheckpointFail(st, "outbox.local_turn_segments_failed", {
+        conversation_id: conversationId,
+        user_message_id: umid,
+        error: err instanceof Error ? err.message : String(err),
       });
     }
   }
+
+  if (!failed) {
+    st.failCount = 0;
+    st.loggedFail = false;
+    st.backoffUntil = 0;
+    if (st.retryTimer) {
+      clearTimeout(st.retryTimer);
+      st.retryTimer = null;
+    }
+    return;
+  }
+
+  st.failCount += 1;
+  const delay = computeBackoffDelayMs(st.failCount);
+  st.backoffUntil = Date.now() + delay;
+  scheduleOpenRetry(umid, delay);
+}
+
+function logCheckpointFail(
+  st: OpenSyncState,
+  event:
+    | "outbox.local_turn_journal_failed"
+    | "outbox.local_turn_segments_failed",
+  fields: Record<string, unknown>,
+): void {
+  const repeat = st.loggedFail;
+  st.loggedFail = true;
+  logDesktop({
+    level: repeat ? "debug" : "warn",
+    event,
+    fields: { ...fields, repeat },
+  });
 }
 
 /**
@@ -406,10 +539,11 @@ export function stopOutboxProjectionWatch(): void {
   watchTimers.clear();
 }
 
-/** Test helper: drop occupy / settle bookkeeping. */
+/** Test helper: drop occupy / settle / mid-turn sync bookkeeping. */
 export function resetLocalTurnProjectionForTests(): void {
   occupied.clear();
   settled.clear();
+  clearAllOpenSync();
   stopLocalTurnLeaseHeartbeatLoop();
   stopOutboxProjectionWatch();
 }

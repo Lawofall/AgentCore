@@ -8,7 +8,6 @@ from agentcore.runtime.delegate.completion import (
 )
 from agentcore.runtime.delegate.delivery_status import (
     REASON_NO_EXEC_TABLE,
-    REASON_UNVERIFIED_NOTE,
     build_delivery_status,
 )
 from agentcore.runtime.runs.contract import (
@@ -115,7 +114,7 @@ def test_collect_opaque_source_skips_historical_attachments_and_drafts():
 
 
 def test_no_exec_trio_soft_notes_do_not_force_partial_delivery():
-    """无执行：报告+脚本凑齐即交付完成；报告里的虚构自注是软缺口，不强制部分交付。"""
+    """无执行：报告+脚本凑齐即交付完成；报告里的虚构自注不再进合同。"""
     paths = [
         "AgentCore/文档/工作稿/synthetic_bill_structure.md",
         "AgentCore/文档/工作稿/build_excel.py",
@@ -135,22 +134,20 @@ def test_no_exec_trio_soft_notes_do_not_force_partial_delivery():
     )
     assert verdict.ok
     assert verdict.failures == []
-    assert any("虚构" in w or "示例" in w for w in verdict.warnings)
-    assert all(
-        row.get("reason") == REASON_UNVERIFIED_NOTE for row in verdict.warning_rows
+    assert not any("虚构" in w or "示例" in w or "骨架" in w for w in verdict.warnings)
+    assert not any(
+        row.get("reason") == "unverified_note" for row in verdict.warning_rows
     )
     assert not any(row.get("reason") == REASON_NO_EXEC_TABLE for row in verdict.warning_rows)
 
-    gaps, block, payload = _settle(paths, verdict)
-    assert gaps
-    _assert_bans_completeness(block)
+    _gaps, block, payload = _settle(paths, verdict)
     assert "部分交付" not in block
     assert "尚未齐备" not in block
     assert "终稿必须使用" not in block
     assert payload is not None
     assert payload["state"] == "delivered"
-    assert any(
-        isinstance(g, dict) and g.get("reason") == REASON_UNVERIFIED_NOTE
+    assert not any(
+        isinstance(g, dict) and g.get("reason") == "unverified_note"
         for g in payload["gaps"]
     )
     assert set(payload["delivered_files"]) == set(paths)
@@ -300,8 +297,8 @@ def test_no_exec_xlsx_flagged_without_file_text():
     assert payload["state"] == "partial"
 
 
-def test_with_exec_trio_self_note_still_warns_as_soft():
-    """有执行路径：同样的报告+脚本仍扫出自注，但是软缺口。"""
+def test_with_exec_trio_self_note_is_not_a_contract_warning():
+    """有执行路径：同样的报告+脚本也不再因自注文案进合同。"""
     paths = [
         "AgentCore/文档/工作稿/synthetic_bill_structure.md",
         "AgentCore/文档/工作稿/build_excel.py",
@@ -333,21 +330,18 @@ def test_with_exec_trio_self_note_still_warns_as_soft():
         artifact_contents=contents,
         source_data_paths=[_SOURCE_PDF],
     )
-    assert any("虚构" in w or "示例" in w for w in no_exec.warnings)
-    assert any("虚构" in w or "示例" in w for w in with_exec.warnings)
-    assert with_exec.warnings == default_exec.warnings
+    assert not any("虚构" in w or "示例" in w for w in no_exec.warnings)
+    assert with_exec.warnings == default_exec.warnings == no_exec.warnings
     assert not any(row.get("reason") == REASON_NO_EXEC_TABLE for row in with_exec.warning_rows)
 
-    gaps, block, payload = _settle(paths, with_exec)
-    assert gaps
-    _assert_bans_completeness(block)
+    _gaps, block, payload = _settle(paths, with_exec)
     assert "部分交付" not in block
     assert payload is not None
     assert payload["state"] == "delivered"
 
 
 def test_no_exec_trio_keeps_skeleton_warning_as_soft():
-    """骨架占位仍提醒，并打 unverified_note；不强制部分交付。"""
+    """TODO / 虚构演示文案不再进合同；不强制部分交付。"""
     paths = ["structure.md", "build.py"]
     contents = {
         "structure.md": "# 报告\n\nTODO: 补列说明\n这份是虚构演示账单。\n",
@@ -362,13 +356,10 @@ def test_no_exec_trio_keeps_skeleton_warning_as_soft():
         can_execute=False,
         source_data_paths=[_SOURCE_PDF],
     )
-    assert any("骨架" in w or "TODO" in w for w in verdict.warnings)
-    assert any("示例/虚构自注" in w for w in verdict.warnings)
-    assert all(
-        row.get("reason") == REASON_UNVERIFIED_NOTE for row in verdict.warning_rows
-    )
+    assert verdict.ok
+    assert not any("骨架" in w or "TODO" in w or "虚构" in w for w in verdict.warnings)
+    assert verdict.warning_rows == []
     _gaps, block, payload = _settle(paths, verdict)
-    _assert_bans_completeness(block)
     assert "部分交付" not in block
     assert payload is not None
     assert payload["state"] == "delivered"

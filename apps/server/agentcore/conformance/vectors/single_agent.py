@@ -275,9 +275,9 @@ def _single_agent_tool_channel_redirect() -> list[SSEEvent]:
             "code_execute",
             success=False,
             output=(
-                "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。"
+                "打开源码再正则扫描请用 grep（检测到：re.findall(）。"
                 "在工作区搜符号、字符串或计数请用 grep；概念定位用 code_search；"
-                "看命中正文用 file_read。解析表格、改文件、对内存数据跑计算仍用本工具。"
+                "看命中正文用 file_read。解析表格、改文件、对内存数据跑计算仍用 run。"
             ),
             failure=tool_failure_fields(code="source_grep_redirect"),
         ),

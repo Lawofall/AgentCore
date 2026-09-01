@@ -9,8 +9,8 @@ import { INPUT_ID, isEndpointId } from "./constants";
 export function GraphContextMenu({
   menuNodeId,
   captainRunId,
-  taskMessage,
-  finalAnswer,
+  taskMessageId,
+  finalAnswerId,
   onNodeSelect,
   showRunDetailHere,
   onClose,
@@ -20,8 +20,8 @@ export function GraphContextMenu({
 }: {
   menuNodeId: string | null;
   captainRunId: string | undefined;
-  taskMessage: { id: string } | null;
-  finalAnswer: { id: string; content: string } | null;
+  taskMessageId: string | null;
+  finalAnswerId: string | null;
   onNodeSelect?: (runId: string) => void;
   showRunDetailHere: (runId: string) => void;
   onClose?: () => void;
@@ -47,13 +47,13 @@ export function GraphContextMenu({
               <span className="flex-1 truncate">查看详情</span>
             </ContextMenuItem>
           )}
-          {menuNodeId === INPUT_ID && taskMessage && (
+          {menuNodeId === INPUT_ID && taskMessageId && (
             <ContextMenuItem onSelect={() => activateNode(INPUT_ID)}>
               <ScanSearch size={14} className="shrink-0" />
               <span className="flex-1 truncate">查看完整提问</span>
             </ContextMenuItem>
           )}
-          {menuNodeId === captainRunId && finalAnswer && (
+          {menuNodeId === captainRunId && finalAnswerId && (
             <ContextMenuItem
               onSelect={() => captainRunId && activateNode(captainRunId)}
             >

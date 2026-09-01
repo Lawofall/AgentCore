@@ -39,7 +39,7 @@ _ALLOWED_SUBCOMMANDS = frozenset(
         "create_pr",
     }
 )
-# Always-mutating verbs (approval + CEO ban + write ensure_repo).
+# Always-mutating verbs (approval + write ensure_repo).
 _ALWAYS_WRITE_SUBCOMMANDS = frozenset(
     {
         "add",
@@ -74,9 +74,6 @@ _NO_INDEX_LOCK_SUBCOMMANDS = frozenset(
     {"branch", "tag", "remote", "push", "create_pr", "clone"}
 )
 _INDEX_LOCK_SUBCOMMANDS = _WRITE_SUBCOMMANDS - _NO_INDEX_LOCK_SUBCOMMANDS
-# CEO may run these writes: one-shot first baseline, and clone into an empty dest
-# (user still approves via gate). Same GRANTABLE posture; neither is always-confirm.
-_CEO_ALLOWED_WRITE_SUBCOMMANDS = frozenset({"init_baseline", "clone"})
 _NO_REPO_CODE = "no_repo"
 # Root ``.git`` exists but git refuses it as a work tree — never a soft ``no_repo``.
 _REPO_UNUSABLE_CODE = "repo_unusable"
@@ -124,7 +121,7 @@ def git_write_subcommands() -> frozenset[str]:
 
 
 def git_call_is_write(arguments: dict[str, Any] | None = None) -> bool:
-    """Whether this git tool call mutates repo state (approval / CEO / ensure_repo)."""
+    """Whether this git tool call mutates repo state (approval / ensure_repo)."""
     args = arguments or {}
     sub = str(args.get("subcommand", "")).strip().lower()
     if sub in _ALWAYS_WRITE_SUBCOMMANDS:
@@ -265,8 +262,8 @@ GIT_TOOL_PARAMETERS: dict[str, Any] = {
                 "remote",
                 "create_pr",
             ],
-            # 审批 / 无仓 / CEO 写入策略只在工具描述里写一遍，勿在此复述。
-            "description": "子命令；审批 / 无仓 / CEO 写入策略见工具说明。",
+            # 审批 / 无仓策略只在工具描述里写一遍，勿在此复述。
+            "description": "子命令；审批 / 无仓策略见工具说明。",
         },
         "paths": {
             "type": "array",
@@ -452,11 +449,3 @@ def _remote_name_error(remote: str, start: float) -> ToolResult | None:
             start,
         )
     return None
-
-
-def _is_ceo_context(context: Any) -> bool:
-    """CEO turns carry no worker-only coordination channels."""
-    return (
-        context.write_coordinator is None
-        and context.escalation is None
-    )

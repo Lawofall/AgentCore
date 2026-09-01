@@ -29,8 +29,9 @@ from agentcore.tools.registration import (
 from agentcore.workspace.limits import (
     channel_dead_error_message,
     channel_dead_retire_metadata,
-    is_channel_dead_detail,
     is_liveness_timeout_detail,
+    is_presence_disconnected_detail,
+    is_workspace_reconnect_detail,
     op_liveness_timeout_metadata,
 )
 from agentcore.workspace.protocol import (
@@ -62,15 +63,8 @@ class GrepTool:
         return ToolSchema(
             name="grep",
             description=(
-                "用正则精确搜索工作区文件【内容】（ripgrep / Rust regex）。"
-                "适合确切符号名、字符串或模式（如 `ApprovalGate`、`TODO`）；"
-                "返回 `path:line: text`，命中后单文件默认 file_read 整读；"
-                "仅页脚已截断或已有行号时开窗，禁止整目录通读。"
-                "概念/意图定位请用 code_search——两工具并存。"
-                "按文件名或路径找文件用 `glob`（勿先猜目录）。"
-                "不确定位置时省略 path（默认整仓）；禁止猜测 src/、@scope、app/。"
-                "仅本回合已证实存在的目录或文件才填 path。"
-                "跳过二进制与噪音目录。"
+                "用正则搜工作区文件内容（ripgrep / Rust regex）。返回 `path:line: text`。"
+                "按文件名用 `glob`；概念定位用 code_search。"
             ),
             parameters={
                 "type": "object",
@@ -85,13 +79,10 @@ class GrepTool:
                     "path": {
                         "type": "string",
                         "description": (
-                            "搜索范围：工作区相对 POSIX【目录】或【单个文件】"
-                            "（默认 `.`=整仓）。不确定时省略，不要猜测 src/、"
-                            "packages/@scope、app/ 等惯例路径。"
-                            "`.`/省略=根；`/<根标签>/…` 与裸 `/`、`\\` 视为根；"
-                            "其它绝对路径（/etc、盘符）拒绝。"
-                            "仅填本回合已证实存在的路径：目录则递归其下；"
-                            "单个文件则只搜该文件（类似 `rg PATTERN FILE`，此时 glob 被忽略）。"
+                            "搜索范围：相对目录或单文件（默认整仓）。不确定时省略，"
+                            "不要猜测 src/、packages/@scope。"
+                            "`.`/省略=根；其它绝对路径拒绝。"
+                            "已证实路径：目录递归；单文件只搜该文件（glob 忽略）。"
                         ),
                         "default": ".",
                     },
@@ -170,11 +161,17 @@ class GrepTool:
             )
         except WorkspaceError as e:
             msg = str(e)
-            if is_channel_dead_detail(msg):
+            if is_presence_disconnected_detail(msg):
                 return _fail(
                     channel_dead_error_message(msg),
                     start,
                     metadata=channel_dead_retire_metadata(),
+                )
+            if is_workspace_reconnect_detail(msg):
+                return _fail(
+                    msg,
+                    start,
+                    metadata={CROSS_TURN_RETRY_KEY: CrossTurnRetry.NOT_FUTILE.value},
                 )
             if is_liveness_timeout_detail(msg):
                 return _fail(

@@ -40,6 +40,7 @@ from agentcore.tools.file_products import (
     FileProduct,
     file_products_from_text,
 )
+from agentcore.workspace.limits import is_presence_disconnected_detail
 
 
 def _tool_call_to_dict(tc: ToolCall) -> dict[str, Any]:
@@ -87,13 +88,14 @@ def message_from_dict(d: dict[str, Any]) -> LLMMessage:
 
 
 # Failed landing-tool result → attribution for zero-disk gaps (contract / delivery card).
-# Prefer channel-dead over generic write-failed when both appear.
-_CHANNEL_DEAD_MARKERS = ("channel dead", "活性挂起", "workspace channel dead")
+# Presence-disconnect over generic write-failed when both appear. Settle timeouts
+# are write_failed, not disconnected.
 
-# ``code_execute`` lands files INDIRECTLY (sandbox copy-out), so the governance pen set
-# (``LANDING_TOOLS``) excludes it — but a worker being told 「用什么落盘」 should hear it.
-# Prose only: the ledger reads self-reported products and needs no tool name at all.
-_INDIRECT_LANDING_TOOL_NAME = "code_execute"
+# ``run`` (short path) lands files INDIRECTLY (sandbox copy-out), so the governance
+# pen set (``LANDING_TOOLS``) excludes it — but a worker being told 「用什么落盘」
+# should hear it. Prose only: the ledger reads self-reported products and needs no
+# tool name at all.
+_INDIRECT_LANDING_TOOL_NAME = "run"
 
 
 def file_landing_tool_names() -> tuple[str, ...]:
@@ -115,12 +117,12 @@ def landing_write_failure_kind(
 ) -> str | None:
     """Classify failed file-landing attempts for zero-disk / audit-JSON attribution.
 
-    Returns ``channel_dead`` when any failed landing-tool result mentions a dead
-    workspace channel / 活性挂起; ``write_failed`` when landing tools failed for
-    other reasons; ``None`` when no failed landing-tool result is observed (true
-    zero-attempt / paste-into-prose case). Successful landings are ignored here —
-    callers may still pass the kind when some files landed (e.g. channel died
-    before companion ``*.audit.json``).
+    Returns ``channel_dead`` when any failed landing-tool result is a presence
+    disconnect (desk fulfiller gone); ``write_failed`` when landing tools failed
+    for other reasons (including a settle timeout); ``None`` when no failed
+    landing-tool result is observed (true zero-attempt / paste-into-prose case).
+    Successful landings are ignored here — callers may still pass the kind when
+    some files landed (e.g. the desk dropped before companion ``*.audit.json``).
     """
     if not transcript:
         return None
@@ -137,7 +139,7 @@ def landing_write_failure_kind(
             if not _tool_result_failed(content):
                 continue
             saw_failed = True
-            if any(marker in content for marker in _CHANNEL_DEAD_MARKERS):
+            if is_presence_disconnected_detail(content):
                 saw_channel_dead = True
     if saw_channel_dead:
         return "channel_dead"
@@ -293,8 +295,7 @@ def _debrief_from_handoff_args(args: dict[str, Any]) -> dict[str, Any] | None:
     shape the run-detail card / dep injection / CEO synthesis already consume. ``key_points`` is a
     list (a lone string is tolerated by wrapping it; a markdown bullet list string is split);
     the other three are single strings.
-    Optional ``motion_card`` is normalized via the handoff contract parser (invalid card is
-    dropped so other brief fields still harvest — the tool itself rejects bad cards at execute)."""
+    ``motion_card`` 已撤：新回合不收获；历史 debrief JSON 仍可躺在 journal。"""
     from agentcore.runtime.engine.tool_protocol_sanitize import sanitize_protocol_text
     from agentcore.tools.builtin.ask_user.schema import (
         ListArgError,
@@ -337,12 +338,6 @@ def _debrief_from_handoff_args(args: dict[str, Any]) -> dict[str, Any] | None:
     next_steps = sanitize_protocol_text(str(args.get("next_steps") or "")).strip()
     if next_steps:
         out["next_steps"] = next_steps
-    # 命题卡：契约在 tools.builtin.motion_card；此处只搬运合规卡进 debrief。
-    from agentcore.tools.builtin.motion_card import parse_motion_card
-
-    card, card_err = parse_motion_card(args.get("motion_card"))
-    if card is not None and not card_err:
-        out["motion_card"] = card
     return out or None
 
 

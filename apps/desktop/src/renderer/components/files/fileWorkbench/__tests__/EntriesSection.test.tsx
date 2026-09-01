@@ -24,6 +24,9 @@ vi.mock("@/services/documents", () => ({
   setDocumentDisputed: vi.fn(),
   updateDocumentApplyMode: vi.fn(),
 }));
+vi.mock("@/services/memory", () => ({
+  writeMemoryFile: vi.fn(),
+}));
 vi.mock("@/lib/toast", () => ({
   notifyError: vi.fn(),
   notifyWarning: vi.fn(),
@@ -32,13 +35,16 @@ vi.mock("@/lib/toast", () => ({
 import {
   type DocumentDetail,
   type DocumentNode,
+  deleteDocument,
   getDocument,
   listScopeEntries,
   setDocumentDisputed,
   updateDocumentApplyMode,
 } from "@/services/documents";
+import { writeMemoryFile } from "@/services/memory";
 import {
   EntriesSection,
+  coreMemoryLeafKind,
   entryOpenTarget,
   formatAlwaysChars,
   isAiCoreMemoryLeaf,
@@ -121,6 +127,11 @@ beforeEach(() => {
   vi.mocked(getDocument).mockResolvedValue(
     entryDetail({ id: "g1", name: "偏好.md", content: PREFERENCES_BODY }),
   );
+  vi.mocked(writeMemoryFile).mockResolvedValue({
+    ok: true,
+    conflict: false,
+    version: "",
+  });
 });
 
 afterEach(() => {
@@ -200,6 +211,25 @@ describe("isAiCoreMemoryLeaf", () => {
     expect(
       isAiCoreMemoryLeaf(entry({ aiMaintained: false, name: "画像.md" })),
     ).toBe(false);
+  });
+});
+
+describe("coreMemoryLeafKind", () => {
+  it("maps cores onto the per-file memory write kinds", () => {
+    expect(
+      coreMemoryLeafKind(entry({ aiMaintained: true, name: "偏好.md" })),
+    ).toBe("preferences");
+    expect(
+      coreMemoryLeafKind(entry({ aiMaintained: true, name: "画像.md" })),
+    ).toBe("profile");
+    expect(
+      coreMemoryLeafKind(
+        entry({ aiMaintained: true, name: "导航.md", folderId: "F1" }),
+      ),
+    ).toBe("navigation");
+    expect(
+      coreMemoryLeafKind(entry({ aiMaintained: true, name: "主题/部署.md" })),
+    ).toBeNull();
   });
 });
 
@@ -485,6 +515,46 @@ describe("EntriesSection (global)", () => {
     renderScope("global");
     expect(await screen.findByText(/条目功能暂不可用/)).toBeTruthy();
   });
+
+  it("条目列表加载失败 is muted, not destructive", async () => {
+    vi.mocked(listScopeEntries).mockRejectedValue(new Error("list down"));
+    renderScope("global");
+    const btn = await screen.findByText("加载失败，点此重试");
+    expect(btn.className).toContain("text-muted-foreground");
+    expect(btn.className).not.toContain("destructive");
+  });
+
+  it("clears global 偏好 via empty memory PUT after confirm; cancel writes nothing", async () => {
+    vi.mocked(listScopeEntries).mockResolvedValue([
+      entry({
+        id: "g1",
+        name: "偏好.md",
+        aiMaintained: true,
+        folderId: null,
+      }),
+    ]);
+    renderScope("global");
+
+    fireEvent.contextMenu(await screen.findByText("偏好.md"));
+    expect(screen.queryByText("删除")).toBeNull();
+    fireEvent.click(screen.getByText("清空"));
+    expect(await screen.findByText("清空「偏好.md」？")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(writeMemoryFile).not.toHaveBeenCalled();
+
+    fireEvent.contextMenu(await screen.findByText("偏好.md"));
+    fireEvent.click(screen.getByText("清空"));
+    fireEvent.click(await screen.findByRole("button", { name: "清空" }));
+    await waitFor(() =>
+      expect(writeMemoryFile).toHaveBeenCalledWith(
+        "preferences",
+        "",
+        null,
+        null,
+      ),
+    );
+    expect(deleteDocument).not.toHaveBeenCalled();
+  });
 });
 
 describe("EntriesSection (project)", () => {
@@ -515,11 +585,31 @@ describe("EntriesSection (project)", () => {
     expect(screen.queryByLabelText("新建条目")).toBeNull();
   });
 
-  it("条目列表加载失败 is muted, not destructive", async () => {
-    vi.mocked(listScopeEntries).mockRejectedValue(new Error("list down"));
-    renderScope("global");
-    const btn = await screen.findByText("加载失败，点此重试");
-    expect(btn.className).toContain("text-muted-foreground");
-    expect(btn.className).not.toContain("destructive");
+  it("clears a folder 画像 via empty memory PUT, and does not offer 删除", async () => {
+    vi.mocked(listScopeEntries).mockResolvedValue([
+      entry({
+        id: "p1",
+        folderId: "F1",
+        name: "画像.md",
+        aiMaintained: true,
+      }),
+    ]);
+    const { onDeleted } = renderScope("folder");
+
+    fireEvent.contextMenu(await screen.findByText("画像.md"));
+    expect(screen.queryByText("删除")).toBeNull();
+    fireEvent.click(screen.getByText("清空"));
+    expect(await screen.findByText("清空「画像.md」？")).toBeTruthy();
+    expect(writeMemoryFile).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "清空" }));
+    await waitFor(() =>
+      expect(writeMemoryFile).toHaveBeenCalledWith("profile", "", null, "F1"),
+    );
+    expect(onDeleted).toHaveBeenCalledWith({
+      channel: "memory",
+      path: "project/F1/profile",
+      name: "画像.md",
+    });
+    expect(deleteDocument).not.toHaveBeenCalled();
   });
 });

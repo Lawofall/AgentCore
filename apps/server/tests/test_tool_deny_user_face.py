@@ -246,14 +246,14 @@ async def test_safety_breaker_deny_keeps_steer_off_the_user_face():
 
 async def test_safety_breaker_without_gate_keeps_steer_off_the_user_face():
     """Fuse FORCE + nobody to ask: user hears the risk, not the rule text."""
-    args = '{"subcommand":"start","command":"rm -rf /"}'
-    hit = evaluate_tool_call("terminal", {"subcommand": "start", "command": "rm -rf /"})
+    args = '{"command":"rm -rf /"}'
+    hit = evaluate_tool_call("run", {"command": "rm -rf /"})
     assert hit is not None
 
     sink = EventSink()
-    tool = _Stub("terminal", category=ToolCategory.EXECUTION)
+    tool = _Stub("run", category=ToolCategory.EXECUTION)
     await execute_tools(
-        [_call("c1", "terminal", args)],
+        [_call("c1", "run", args)],
         _registry(tool),
         _ctx(),
         sink,
@@ -264,7 +264,7 @@ async def test_safety_breaker_without_gate_keeps_steer_off_the_user_face():
     assert tool.executed is False
     model, user = _faces(sink)
     assert model == (
-        f"工具 'terminal' 触发安全熔断且当前路径无法人工确认，已拒绝执行。{hit.reason}请改用其他方案。"
+        f"工具 'run' 触发安全熔断且当前路径无法人工确认，已拒绝执行。{hit.reason}请改用其他方案。"
     )
     assert_user_face_clean(user)
     assert user == _CURATED_BY_CODE["safety_breaker_unattended"]
@@ -340,12 +340,13 @@ async def test_tool_off_this_surface_keeps_role_steer_off_the_user_face():
         worker_only_tool_names,
     )
 
-    # Precondition — if the roster moves, this test should say so rather than drift.
-    assert "code_execute" in worker_only_tool_names() & execution_class_tool_names()
+    # Precondition — execution class is assembled for both roles when the env is on.
+    assert "run" in execution_class_tool_names()
+    assert "run" not in worker_only_tool_names()
 
     sink = EventSink()
     await execute_tools(
-        [_call("c1", "code_execute")],
+        [_call("c1", "run")],
         _registry(_Stub("grep", category=ToolCategory.FILESYSTEM)),
         _ctx(),
         sink,
@@ -355,9 +356,7 @@ async def test_tool_off_this_surface_keeps_role_steer_off_the_user_face():
 
     model, user = _faces(sink)
     assert model == (
-        "工具 'code_execute' 当前工具面不可用。"
-        "若你是 CEO：写盘/跑代码/跑测试须 `delegate` 派给 worker，勿亲自调用。"
-        "若你是 worker：本回合未装配执行类工具（见 `<工作区>` 的"
+        "工具 'run' 本回合未装配执行类工具（见 `<工作区>` 的"
         "「本回合执行能力」），勿空转重试。"
     )
     assert_user_face_clean(user)

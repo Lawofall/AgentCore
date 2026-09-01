@@ -1,10 +1,11 @@
-"""Sticky channel-dead + write-desk cold-open hard gate.
+"""Presence-disconnect + write-desk cold-open hard gate.
 
-When the local workspace channel is sticky-dead (session flag or same-desk
-backend ``channel.is_dead``) and any pending node structurally needs a write
-desk, reject before workers start. Prose / non-write batches still pass.
+When the local desk fulfiller is gone (live hub, or session stamp from a
+presence-error envelope) and any pending node structurally needs a write desk,
+reject before workers start. Prose / non-write batches still pass.
 Does not scan free-text ``task`` bodies — only
 :func:`~agentcore.runtime.delegate.target_desktop.task_structurally_requires_write_desk`.
+Reconnect restores dispatch; timeouts never trip this gate.
 """
 
 from __future__ import annotations
@@ -18,9 +19,9 @@ if TYPE_CHECKING:
 DelegateTool = Any
 
 CHANNEL_DEAD_WRITE_DESK_REJECT = (
-    "本地工作区通道已挂起（channel dead）：拒绝再派需要写盘的队员"
+    "工作区/本地文件连不上：拒绝再派需要写盘的队员"
     "（deliverable.form=files / workspace / 非空 artifacts；省略 form 按 files）。"
-    "请基于已有材料收口，或改派纯 prose 队员；请稍后重试或重开桌面。"
+    "请基于已有材料收口，或改派纯 prose 队员；桌面重新连上后可再派。"
 )
 
 
@@ -42,30 +43,32 @@ def _session_for_tool(tool: DelegateTool) -> Any | None:
     return None
 
 
-def _backend_channel_is_dead(tool: DelegateTool) -> bool:
-    """True when this desk's backend holds a sticky-dead WorkspaceChannel."""
-    from agentcore.workspace.channel import WorkspaceChannel
-
-    ctx = getattr(tool, "_base_tool_context", None)
-    backend = getattr(ctx, "backend", None) if ctx is not None else None
-    if backend is None:
-        return False
-    channel = getattr(backend, "_channel", None)
-    return isinstance(channel, WorkspaceChannel) and bool(channel.is_dead)
-
-
 def workspace_channel_is_dead(
     tool: DelegateTool,
     *,
     session: Any | None = None,
 ) -> bool:
-    """Structured dead check: session sticky flag ∨ backend channel.is_dead."""
-    if session is not None and bool(getattr(session, "workspace_channel_dead", False)):
+    """True when this desk has no workspace fulfiller (live hub or presence stamp)."""
+    from agentcore.runtime.engine.governance import is_workspace_channel_sticky_dead
+    from agentcore.workspace.presence import local_workspace_files_reachable
+
+    ctx = getattr(tool, "_base_tool_context", None)
+    user_id = getattr(ctx, "user_id", None) if ctx is not None else None
+    backend = getattr(ctx, "backend", None) if ctx is not None else None
+    reachable = local_workspace_files_reachable(
+        user_id=str(user_id).strip() if user_id else None,
+        backend=backend,
+    )
+    looked = session if session is not None else _session_for_tool(tool)
+    if reachable is True:
+        if looked is not None:
+            looked.workspace_channel_dead = False
+        return False
+    if reachable is False:
         return True
-    looked = _session_for_tool(tool)
     if looked is not None and bool(getattr(looked, "workspace_channel_dead", False)):
         return True
-    return _backend_channel_is_dead(tool)
+    return is_workspace_channel_sticky_dead(ctx)
 
 
 def _deliverable_as_dict(deliverable: Any) -> dict[str, Any] | None:

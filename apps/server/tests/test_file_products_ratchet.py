@@ -57,7 +57,6 @@ import pytest
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.tools.builtin.archive_create import ArchiveCreateTool
 from agentcore.tools.builtin.archive_extract import ArchiveExtractTool
-from agentcore.tools.builtin.code_execute import CodeExecuteTool
 from agentcore.tools.builtin.file_ops import (
     FileAppendTool,
     FileBatchTool,
@@ -69,6 +68,7 @@ from agentcore.tools.builtin.file_ops import (
 from agentcore.tools.builtin.git_ops import GitTool
 from agentcore.tools.builtin.md_to_docx import MdToDocxTool
 from agentcore.tools.builtin.md_to_pdf import MdToPdfTool
+from agentcore.tools.builtin.run import RunTool
 from agentcore.tools.builtin.web import download_url as download_mod
 from agentcore.tools.builtin.web.download_url import DownloadUrlTool
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
@@ -277,7 +277,7 @@ class _CopyOutBackend:
         )
 
 
-async def _run_code_execute(root: Path, _mp: pytest.MonkeyPatch) -> ToolResult:
+async def _run_run(root: Path, _mp: pytest.MonkeyPatch) -> ToolResult:
     del root
     backend = _CopyOutBackend(["out/a、b.md", "out/chart.png"])
     context = ToolContext.create(
@@ -286,9 +286,11 @@ async def _run_code_execute(root: Path, _mp: pytest.MonkeyPatch) -> ToolResult:
         agent_id="a",
         backend=backend,  # type: ignore[arg-type]
         user_id="u",
+        write_coordinator=object(),  # type: ignore[arg-type]
+        escalation=object(),  # type: ignore[arg-type]
     )
-    return await CodeExecuteTool(location="server").execute(
-        {"code": "make()", "language": "python"}, context
+    return await RunTool(location="server").execute(
+        {"command": "print(1)"}, context
     )
 
 
@@ -338,8 +340,8 @@ _CASES: tuple[_Case, ...] = (
     _Case("download_url", _run_download_url, (("uploads/file.bin", "file", None),)),
     # 间接落盘（沙箱 copy-out）：报的是 copy-out 的 EXACT 路径，含中文顿号也不会被散文切错。
     _Case(
-        "code_execute",
-        _run_code_execute,
+        "run",
+        _run_run,
         (("out/a、b.md", "md", None), ("out/chart.png", "image", None)),
     ),
 )

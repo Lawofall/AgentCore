@@ -92,7 +92,6 @@ describe("manual route / anchor gates", () => {
       "checkpoint",
       "control",
       "debate",
-      "legend",
     ]);
     expect(failures, failures.join("\n")).toEqual([]);
   });

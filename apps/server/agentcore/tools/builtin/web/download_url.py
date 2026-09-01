@@ -39,7 +39,7 @@ from agentcore.tools.builtin.web.read_url import _safe_request
 from agentcore.tools.file_products import file_product
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
-    AUDIENCE_WORKER_ONLY,
+    AUDIENCE_BOTH,
     FileProductsContract,
     ToolRegistration,
     ToolSurface,
@@ -135,7 +135,7 @@ class DownloadUrlTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
     )
 
@@ -151,7 +151,6 @@ class DownloadUrlTool:
                 "安装包（.exe/.msi/.dmg 等）允许落盘并标明类型，但本工具不执行、不静默安装。"
                 "需要网页正文深读时用 read_url，不要用本工具；"
                 "已有工作区 zip 解压用 archive_extract。"
-                "【禁止】用 code_execute / terminal / host(action=shell) 当 wget/curl 主路径。"
                 "参数：url + path（工作区相对路径，如 `uploads/data.csv`）。"
             ),
             parameters={
@@ -273,9 +272,8 @@ class DownloadUrlTool:
             return _fail(f"写入 `{rel_path}` 失败：{e}", start)
 
         # 治理面与交付物台账是两件事，缺哪支都少一半（与 file_ops 的写盘笔同形）：这支盖
-        # landed-files 闸 / Artifact-first path kind / 首写者归属 / 同 path file_read 上限
-        # 重置（写后核对不该被读闸挡住）/ 兄弟 verify 缓存失效；台账那支是下面的
-        # ``file_products``。
+        # landed-files 闸 / Artifact-first path kind / 首写者归属 / 兄弟 verify 缓存失效；
+        # 台账那支是下面的 ``file_products``。
         _mark_landed_files(context, rel_path)
 
         site = site_of(url)

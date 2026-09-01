@@ -1,6 +1,6 @@
 {
   "name": "multi_agent_pptx_promised_md_only",
-  "description": "选 pptx 却只落 md/脚本：delivery_status=partial 可见缺口；假「PPT 已可打开」经 finish_guard content_reset 回炉为诚实终稿",
+  "description": "选 pptx 却只落 md/脚本：delivery_status=partial 可见缺口；产物结构窄闸已撤，终稿承认尚未交付 pptx（无 finish_guard content_reset）",
   "events": [
     {
       "type": "message_start",
@@ -190,23 +190,9 @@
     {
       "type": "content_delta",
       "payload": {
-        "delta": "课件 PPT 已落盘，可直接打开使用。"
-      },
-      "timestamp": "2026-01-01T00:00:01.109Z"
-    },
-    {
-      "type": "content_reset",
-      "payload": {
-        "reason": "finish_guard"
-      },
-      "timestamp": "2026-01-01T00:00:01.110Z"
-    },
-    {
-      "type": "content_delta",
-      "payload": {
         "delta": "讲稿与生成脚本已就绪；pptx 尚未生成，请绑定本机执行环境后运行脚本。"
       },
-      "timestamp": "2026-01-01T00:00:01.111Z"
+      "timestamp": "2026-01-01T00:00:01.109Z"
     },
     {
       "type": "message_end",
@@ -229,7 +215,7 @@
         },
         "rounds": 0
       },
-      "timestamp": "2026-01-01T00:00:01.112Z"
+      "timestamp": "2026-01-01T00:00:01.110Z"
     }
   ],
   "projected": {
@@ -237,7 +223,7 @@
     "finishReason": "end_turn",
     "outcome": "partial",
     "error": null,
-    "content": "讲稿与生成脚本已就绪；pptx 尚未生成，请绑定本机执行环境后运行脚本。",
+    "content": "已按你选的 PowerPoint（.pptx）安排团队。讲稿与生成脚本已就绪；pptx 尚未生成，请绑定本机执行环境后运行脚本。",
     "reasoning": "",
     "captainContext": [],
     "process": [

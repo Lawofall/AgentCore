@@ -335,6 +335,10 @@ class ToolCallFact:
     # Cross-turn: same-action retry worth it? See :class:`CrossTurnRetry`.
     # Orthogonal to ``error_class`` (in-turn breaker). Empty = unknown; omit.
     cross_turn_retry: str = ""
+    # One-line structural hint for the conversation working set (path still in
+    # play). Empty = omit; old journals lack this key. Callers fill it — this
+    # module stays stdlib-only and does not import the digest helper.
+    working_set_digest: str = ""
     kind: ClassVar[FactKind] = FactKind.TOOL_CALL
 
     def to_fact(self, ts: str | None = None) -> Fact:
@@ -353,6 +357,9 @@ class ToolCallFact:
         retry = normalize_cross_turn_retry(self.cross_turn_retry)
         if retry:
             payload[CROSS_TURN_RETRY_KEY] = retry
+        digest = (self.working_set_digest or "").strip()
+        if digest:
+            payload["working_set_digest"] = digest
         return Fact(
             kind=self.kind.value,
             payload=payload,

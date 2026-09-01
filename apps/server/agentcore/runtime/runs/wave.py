@@ -116,7 +116,6 @@ class WaveScheduler:
         *,
         seed_completed: Mapping[str, RunState] | None = None,
         should_stop: Callable[[], bool] | None = None,
-        priority_reserve_hit: Callable[[], bool] | None = None,
         cancel_run_ids: Callable[[], frozenset[str]] | None = None,
         stop_run_ids: Callable[[], frozenset[str]] | None = None,
         timeout_run_ids: Callable[[], frozenset[str]] | None = None,
@@ -146,11 +145,6 @@ class WaveScheduler:
           node is launched, in-flight nodes are drained, and the partial map is
           returned (a soft pause — the un-run tail is left out so a resume re-runs
           it). An in-flight node is never interrupted by it.
-        - ``priority_reserve_hit`` (turn delivery reserve): when True and a pending
-          ``ceiling_priority`` node remains, ready non-priority nodes are soft-skipped
-          immediately (materialised SKIPPED into the completed map) so lenient fan-in
-          can admit the priority tail; priority nodes still dispatch. No-op when no
-          pending priority node exists. Orthogonal to hard ``should_stop``.
         - ``cancel_run_ids`` is polled each cycle. In-flight matches are cancelled
           individually → ``RunPhase.CANCELLED``. Not-yet-dispatched matches are
           withdrawn as ``RunPhase.SKIPPED`` (``on_skipped(abort)``) so
@@ -424,67 +418,6 @@ class WaveScheduler:
                             plan, completed, skipped, dispatched, defer_bind=defer_bind
                         )
                     )
-                    # Turn delivery reserve: cut secondary ready nodes so priority
-                    # (QA) can still admit under remaining headroom — only once the
-                    # priority node already has ≥1 COMPLETED upstream (else cutting
-                    # every section would leave zero successes and cascade-skip QA).
-                    if (
-                        priority_reserve_hit is not None
-                        and priority_reserve_hit()
-                        and self._priority_reserve_may_cut(
-                            plan, completed, skipped, dispatched
-                        )
-                    ):
-                        kept: list[RunSpec] = []
-                        cut_any = False
-                        for spec in ready_batch:
-                            if bool(getattr(spec, "ceiling_priority", False)):
-                                kept.append(spec)
-                                continue
-                            skipped.add(spec.run_id)
-                            dispatched.add(spec.run_id)
-                            if spec.run_id not in completed:
-                                from agentcore.runtime.turn.token_budget import (
-                                    REASON_TURN_TOKEN_BUDGET,
-                                    TURN_TOKEN_RESERVE_SKIP_WARNING,
-                                )
-
-                                completed[spec.run_id] = RunState(
-                                    phase=RunPhase.SKIPPED,
-                                    warnings=[TURN_TOKEN_RESERVE_SKIP_WARNING],
-                                    delivery_gaps=[
-                                        {
-                                            "description": TURN_TOKEN_RESERVE_SKIP_WARNING,
-                                            "reason": REASON_TURN_TOKEN_BUDGET,
-                                        }
-                                    ],
-                                )
-                                if on_skipped is not None:
-                                    agent_id = (
-                                        (spec.agent_id if spec.agent_id else "")
-                                        or spec.run_id
-                                    )
-                                    on_skipped(
-                                        spec.run_id,
-                                        agent_id,
-                                        REASON_TURN_TOKEN_BUDGET,
-                                    )
-                                cut_any = True
-                        # Soft-skips resolve deps — re-scan so priority may admit now.
-                        if cut_any:
-                            ready_batch = [
-                                s
-                                for s in self._select_ready(
-                                    plan,
-                                    completed,
-                                    skipped,
-                                    dispatched,
-                                    defer_bind=defer_bind,
-                                )
-                                if bool(getattr(s, "ceiling_priority", False))
-                            ]
-                        else:
-                            ready_batch = kept
                     dispatched_this_cycle = 0
                     for spec in ready_batch:
                         if len(running) >= width:
@@ -807,47 +740,6 @@ class WaveScheduler:
             raise
         except BaseException as exc:  # noqa: BLE001 — an executor crash becomes FAILED
             return RunState(phase=RunPhase.FAILED, error=str(exc))
-
-    @staticmethod
-    def _has_pending_ceiling_priority(
-        plan: RunPlan,
-        completed: Mapping[str, RunState],
-        skipped: set[str],
-        dispatched: set[str],
-    ) -> bool:
-        """True when some ``ceiling_priority`` node has not yet finished or been skipped."""
-        for node in plan.nodes:
-            if not bool(getattr(node, "ceiling_priority", False)):
-                continue
-            if node.run_id in completed or node.run_id in skipped:
-                continue
-            return True
-        return False
-
-    @staticmethod
-    def _priority_reserve_may_cut(
-        plan: RunPlan,
-        completed: Mapping[str, RunState],
-        skipped: set[str],
-        dispatched: set[str],
-    ) -> bool:
-        """Whether reserve soft-skip of non-priority is safe for pending priority tails.
-
-        Requires a pending ``ceiling_priority`` node that already has ≥1 COMPLETED
-        upstream (lenient fan-in can still admit it after peers are cut). If every
-        priority node still has zero successes, keep admitting sections normally.
-        """
-        for node in plan.nodes:
-            if not bool(getattr(node, "ceiling_priority", False)):
-                continue
-            if node.run_id in completed or node.run_id in skipped:
-                continue
-            if node.run_id in dispatched:
-                return True  # priority already in flight — still protect it
-            successes = WaveScheduler._upstream_success_count(node, completed)
-            if successes >= 1:
-                return True
-        return False
 
     def _select_ready(
         self,

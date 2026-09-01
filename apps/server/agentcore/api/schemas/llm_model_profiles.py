@@ -68,7 +68,7 @@ class CreateLlmModelProfileRequest(BaseModel):
 
 class UpdateLlmModelProfileRequest(BaseModel):
     """Partial update. Omitted fields unchanged; explicit null on worker/background/vision
-    clears the slot (worker/background → follow_main; vision → no slot / platform fallback)."""
+    clears the slot (worker/background → follow_main; vision → no dedicated slot)."""
 
     name: str | None = Field(default=None, max_length=200)
     main: ModelProfileSlot | None = None

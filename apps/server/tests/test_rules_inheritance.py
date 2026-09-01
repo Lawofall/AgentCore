@@ -21,10 +21,11 @@ from agentcore.memory.account_prepare_cache import (
     clear_account_rules_memory_cache,
     seed_account_rules_memory_cache,
 )
-from agentcore.memory.injection import _ANCESTOR_MEMORY_LABEL, _FOLDER_MEMORY_LABEL
+from agentcore.memory.injection import (
+    _ANCESTOR_SETTINGS_LABEL,
+    _FOLDER_SETTINGS_LABEL,
+)
 from agentcore.memory.rules_injection import (
-    _USER_RULE_ANCESTOR_LABEL,
-    _USER_RULE_FOLDER_LABEL,
     _memory_fragments,
     _memory_fragments_from_snapshot,
     _user_rule_fragments,
@@ -132,6 +133,12 @@ async def test_db_chain_survives_a_broken_lookup(monkeypatch):
     assert await db_scope_chain("u1", CURRENT, session=object()) == (CURRENT,)  # type: ignore[arg-type]
 
 
+async def test_db_chain_missing_folder_is_not_a_scope(monkeypatch):
+    """软删 / 未知 id：list_ancestor 空列表。不能退回只当前层，否则已删桌的设定还会灌。"""
+    _patch_chain(monkeypatch, [])
+    assert await db_scope_chain("u1", CURRENT, session=object()) == ()  # type: ignore[arg-type]
+
+
 async def test_no_folder_means_no_chain():
     assert await db_scope_chain("u1", None) == ()
 
@@ -178,8 +185,8 @@ async def test_user_rules_inject_global_then_ancestors_then_current():
     )
     positions = [md.index(t) for t in ("全局规则", "外层规则", "中层规则", "当前规则")]
     assert positions == sorted(positions)
-    assert md.count(_USER_RULE_ANCESTOR_LABEL) == 2
-    assert md.count(_USER_RULE_FOLDER_LABEL) == 1
+    assert md.count(_ANCESTOR_SETTINGS_LABEL) == 2
+    assert md.count(_FOLDER_SETTINGS_LABEL) == 1
 
 
 async def test_ancestor_layers_carry_the_nearer_wins_wording():
@@ -189,7 +196,7 @@ async def test_ancestor_layers_carry_the_nearer_wins_wording():
         await _user_rule_fragments(repo, "u1", scope_chain=CHAIN)  # type: ignore[arg-type]
     )
     assert "以更近的为准" in md
-    assert md.index(_USER_RULE_ANCESTOR_LABEL) < md.index("外层规则")
+    assert md.index(_ANCESTOR_SETTINGS_LABEL) < md.index("外层规则")
 
 
 async def test_profile_memory_inherits_but_navigation_stays_local():
@@ -209,7 +216,7 @@ async def test_profile_memory_inherits_but_navigation_stays_local():
     assert "外层画像" in md
     assert "外层导航" not in md
     assert "当前导航" in md
-    assert md.index(_ANCESTOR_MEMORY_LABEL) < md.index(_FOLDER_MEMORY_LABEL)
+    assert md.index(_ANCESTOR_SETTINGS_LABEL) < md.index(_FOLDER_SETTINGS_LABEL)
 
 
 async def test_nearer_layer_is_injected_later_than_farther_one():
@@ -231,8 +238,47 @@ async def test_nearer_layer_is_injected_later_than_farther_one():
         enabled=True,
         scope_chain=(OUTER, CURRENT),
     )
-    assert md.index("本组用 Java") < md.index("本仓用 Rust")
-    assert "一律用英文写提交信息" in md
+    assert md.index("本组用 Java") < md.index("一律用英文写提交信息")
+    assert md.index("一律用英文写提交信息") < md.index("本仓用 Rust")
+
+
+async def test_assemble_interleaves_by_scope_not_author():
+    """同一层里槽位先于用户常驻；不是先倒完全部规则再倒画像。"""
+    repo = _FakeRuleRepo(
+        always={
+            None: [_Doc("用户规则.md", "- 全局规则")],
+            OUTER: [_Doc("用户规则.md", "- 外层规则")],
+            CURRENT: [_Doc("用户规则.md", "- 当前规则")],
+        }
+    )
+    store = _FakeMemoryStore(
+        {
+            (None, "偏好.md"): "- 沟通偏好",
+            (OUTER, "画像.md"): "- 外层画像",
+            (CURRENT, "画像.md"): "- 当前画像",
+        }
+    )
+    md = await assemble_injected_rules(
+        store,  # type: ignore[arg-type]
+        repo,  # type: ignore[arg-type]
+        "u1",
+        folder_id=CURRENT,
+        enabled=True,
+        scope_chain=(OUTER, CURRENT),
+    )
+    order = (
+        "沟通偏好",
+        "全局规则",
+        "外层画像",
+        "外层规则",
+        "当前画像",
+        "当前规则",
+    )
+    positions = [md.index(t) for t in order]
+    assert positions == sorted(positions)
+    assert "专属规则" not in md
+    assert "专属记忆" not in md
+    assert "专属设定" in md
 
 
 async def test_no_chain_means_current_layer_only():
@@ -258,17 +304,26 @@ def test_cloud_rules_payload_labels_ancestors_ahead_of_current():
     payload = {
         "global_rules": [{"name": "用户规则.md", "content": "- 全局规则"}],
         "ancestor_rules": [
-            {"name": "用户规则.md", "content": "- 外层规则"},
-            {"name": "用户规则.md", "content": "- 中层规则"},
+            {
+                "name": "用户规则.md",
+                "content": "- 外层规则",
+                "folder_id": OUTER,
+            },
+            {
+                "name": "用户规则.md",
+                "content": "- 中层规则",
+                "folder_id": MIDDLE,
+            },
         ],
         "project_rules": [{"name": "用户规则.md", "content": "- 当前规则"}],
+        "folder_chain": [OUTER, MIDDLE, CURRENT],
     }
     md = compose_injected_rules(
         _user_rule_fragments_from_cloud(payload, folder_id=CURRENT)
     )
     positions = [md.index(t) for t in ("全局规则", "外层规则", "中层规则", "当前规则")]
     assert positions == sorted(positions)
-    assert md.count(_USER_RULE_ANCESTOR_LABEL) == 2
+    assert md.count(_ANCESTOR_SETTINGS_LABEL) == 2
 
 
 def test_older_cloud_without_ancestor_keys_simply_does_not_inherit():
@@ -280,7 +335,54 @@ def test_older_cloud_without_ancestor_keys_simply_does_not_inherit():
         _user_rule_fragments_from_cloud(payload, folder_id=CURRENT)
     )
     assert "全局规则" in md and "当前规则" in md
-    assert _USER_RULE_ANCESTOR_LABEL not in md
+    assert _ANCESTOR_SETTINGS_LABEL not in md
+
+
+def test_cloud_untagged_ancestors_zip_when_counts_match():
+    payload = {
+        "global_rules": [],
+        "ancestor_rules": [
+            {"name": "用户规则.md", "content": "- 外层规则"},
+            {"name": "用户规则.md", "content": "- 中层规则"},
+        ],
+        "project_rules": [],
+        "folder_chain": [OUTER, MIDDLE, CURRENT],
+    }
+    md = compose_injected_rules(
+        _user_rule_fragments_from_cloud(payload, folder_id=CURRENT)
+    )
+    assert md.index("外层规则") < md.index("中层规则")
+    assert md.count(_ANCESTOR_SETTINGS_LABEL) == 2
+
+
+def test_cloud_untagged_ancestors_bag_on_outermost_when_counts_differ():
+    payload = {
+        "global_rules": [],
+        "ancestor_rules": [
+            {"name": "用户规则.md", "content": "- 规则甲"},
+            {"name": "用户规则.md", "content": "- 规则乙"},
+            {"name": "用户规则.md", "content": "- 规则丙"},
+        ],
+        "project_rules": [],
+        "folder_chain": [OUTER, MIDDLE, CURRENT],
+    }
+    md = compose_injected_rules(
+        _user_rule_fragments_from_cloud(payload, folder_id=CURRENT)
+    )
+    assert md.index("规则甲") < md.index("规则乙") < md.index("规则丙")
+    assert md.count(_ANCESTOR_SETTINGS_LABEL) == 1
+
+
+def test_cloud_ancestor_rules_without_chain_dump_as_one_layer():
+    payload = {
+        "ancestor_rules": [{"name": "用户规则.md", "content": "- 外层规则"}],
+        "project_rules": [{"name": "用户规则.md", "content": "- 当前规则"}],
+    }
+    md = compose_injected_rules(
+        _user_rule_fragments_from_cloud(payload, folder_id=CURRENT)
+    )
+    assert md.index("外层规则") < md.index("当前规则")
+    assert _ANCESTOR_SETTINGS_LABEL in md
 
 
 def test_snapshot_memory_walks_the_folder_chain():
@@ -313,6 +415,23 @@ def test_a_chain_that_does_not_contain_this_folder_is_refused():
     assert "外层画像" not in md
 
 
+def test_cloud_empty_folder_chain_means_the_desk_is_gone():
+    """云显式 ``folder_chain: []`` = 这张桌不在活树，不要退回只当前层。"""
+    payload = {
+        "global_rules": [{"name": "用户规则.md", "content": "- 全局规则"}],
+        "ancestor_rules": [{"name": "用户规则.md", "content": "- 外层规则"}],
+        "project_rules": [{"name": "用户规则.md", "content": "- 当前规则"}],
+        "folder_chain": [],
+    }
+    md = compose_injected_rules(
+        _user_rule_fragments_from_cloud(payload, folder_id=CURRENT)
+    )
+    assert "全局规则" in md
+    assert "外层规则" not in md
+    assert "当前规则" not in md
+    assert cloud_scope_chain({"folder_chain": []}, CURRENT) == ()
+
+
 def test_cloud_chain_falls_back_to_current_folder_when_absent_or_junk():
     assert cloud_scope_chain({}, CURRENT) == (CURRENT,)
     assert cloud_scope_chain({"folder_chain": "nope"}, CURRENT) == (CURRENT,)
@@ -323,6 +442,42 @@ def test_cloud_chain_falls_back_to_current_folder_when_absent_or_junk():
     assert cloud_scope_chain({"folder_chain": [OUTER]}, None) == ()
 
 
+def test_snapshot_empty_folder_chain_skips_the_dead_desk():
+    snapshot = AccountPrepareSnapshot(
+        rules_payload={"folder_chain": []},
+        memory_bodies={
+            ("", "偏好.md"): "- 沟通偏好",
+            (CURRENT, "画像.md"): "- 当前画像",
+        },
+        folder_chain=(),
+    )
+    md = compose_injected_rules(
+        _memory_fragments_from_snapshot(snapshot, folder_id=CURRENT)
+    )
+    assert "沟通偏好" in md
+    assert "当前画像" not in md
+    assert snapshot_scope_chain(snapshot, CURRENT) == ()
+
+
+def test_on_demand_empty_folder_chain_is_global_only():
+    payload = {
+        "global_on_demand_rules": [{"name": "合规.md", "content": "- 全局合规"}],
+        "ancestor_on_demand_rules": [{"name": "发布.md", "content": "- 外层发布"}],
+        "project_on_demand_rules": [{"name": "接口.md", "content": "- 当前接口"}],
+        "folder_chain": [],
+    }
+    names = [r.name for r in on_demand_user_rules_from_cloud(payload, folder_id=CURRENT)]
+    assert names == ["合规"]
+    assert (
+        lookup_on_demand_rule_body_from_cloud(payload, folder_id=CURRENT, name="接口")
+        is None
+    )
+    assert (
+        lookup_on_demand_rule_body_from_cloud(payload, folder_id=CURRENT, name="合规")
+        == "- 全局合规"
+    )
+
+
 async def test_ticketed_turn_injects_the_inherited_layers(account_creds):
     clear_account_rules_memory_cache()
     seed_account_rules_memory_cache(
@@ -331,7 +486,13 @@ async def test_ticketed_turn_injects_the_inherited_layers(account_creds):
         AccountPrepareSnapshot(
             rules_payload={
                 "global_rules": [{"name": "用户规则.md", "content": "- 全局规则"}],
-                "ancestor_rules": [{"name": "用户规则.md", "content": "- 外层规则"}],
+                "ancestor_rules": [
+                    {
+                        "name": "用户规则.md",
+                        "content": "- 外层规则",
+                        "folder_id": OUTER,
+                    }
+                ],
                 "project_rules": [],
                 "folder_chain": [OUTER, CURRENT],
             },
@@ -350,7 +511,39 @@ async def test_ticketed_turn_injects_the_inherited_layers(account_creds):
             enabled=True,
         )
     assert "外层规则" in md
-    assert md.index("外层画像") < md.index("当前画像")
+    assert md.index("外层画像") < md.index("外层规则")
+    assert md.index("外层规则") < md.index("当前画像")
+
+
+async def test_ticketed_turn_skips_dead_desk_settings(account_creds):
+    clear_account_rules_memory_cache()
+    seed_account_rules_memory_cache(
+        "u1",
+        CURRENT,
+        AccountPrepareSnapshot(
+            rules_payload={
+                "global_rules": [{"name": "用户规则.md", "content": "- 全局规则"}],
+                "project_rules": [{"name": "用户规则.md", "content": "- 当前规则"}],
+                "folder_chain": [],
+            },
+            memory_bodies={
+                ("", "偏好.md"): "- 沟通偏好",
+                (CURRENT, "画像.md"): "- 当前画像",
+            },
+            folder_chain=(),
+        ),
+    )
+    with account_credentials_scope(account_creds):
+        md = await assemble_turn_rules(
+            _FakeMemoryStore({}),  # type: ignore[arg-type]
+            "u1",
+            folder_id=CURRENT,
+            enabled=True,
+        )
+    assert "全局规则" in md
+    assert "沟通偏好" in md
+    assert "当前规则" not in md
+    assert "当前画像" not in md
 
 
 # --- 按需目录 / consult 取正文 -------------------------------------------------------------

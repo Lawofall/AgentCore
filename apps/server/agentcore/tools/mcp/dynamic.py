@@ -1,4 +1,4 @@
-"""Dynamic MCP tool wrappers — GRANTABLE · worker-only · desktop stdio backfill."""
+"""Dynamic MCP tool wrappers — GRANTABLE · on-demand · desktop stdio backfill."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def _parameters_schema(input_schema: dict[str, Any] | None) -> dict[str, Any]:
 
 
 class McpDynamicTool:
-    """One MCP Server tool exposed to the worker ReAct loop."""
+    """One MCP Server tool exposed to the CEO / worker ReAct loop."""
 
     def __init__(
         self,

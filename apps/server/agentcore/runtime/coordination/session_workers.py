@@ -251,19 +251,12 @@ class SessionWorkersMixin:
                     spec = node
                     break
         spend = self._worker_spend.get(run_id)
-        live_used = spend.rounds_used if spend is not None else None
-        live_limit = spend.rounds_limit if spend is not None else None
         live_tokens = spend.tokens_spent if spend is not None else None
         ceiling = getattr(spec, "token_ceiling", None) if spec is not None else None
-        spec_rounds = getattr(spec, "max_rounds", None) if spec is not None else None
         if spec is not None and guard is None:
             timeout_s = getattr(getattr(spec, "policy", None), "timeout_s", None)
             if timeout_s:
                 bits.append(f"超时阈值 {int(timeout_s)}s")
-        if live_used is not None and live_limit is not None and live_limit > 0:
-            bits.append(f"已用 {int(live_used)}/{int(live_limit)} 轮")
-        elif spec_rounds:
-            bits.append(f"轮次上限 {int(spec_rounds)}")
         if live_tokens is not None and ceiling:
             bits.append(f"已花 {int(live_tokens)}/{int(ceiling)}")
         elif live_tokens is not None:

@@ -31,6 +31,7 @@ import {
   getActiveSidecarTarget,
   getLastSidecarTarget,
 } from "../sidecarRouting";
+import { paintMidFlightUserBubble } from "./queuedTurnLocal";
 import {
   beginLocalConversationStream,
   claimPrimaryStream,
@@ -116,9 +117,22 @@ async function deliverViaSidecar(
       ...(agentMentions && agentMentions.length > 0 ? { agentMentions } : {}),
     });
     if (ack.status === "received") {
+      paintMidFlightUserBubble(conversationId, {
+        id: userMessageId,
+        content,
+        attachments,
+        agentMentions,
+      });
       return { kind: "received", interjectionId: ack.interjectionId };
     }
     if (ack.status === "queued") {
+      paintMidFlightUserBubble(conversationId, {
+        id: userMessageId,
+        content,
+        attachments,
+        agentMentions,
+        queueId: ack.queueId,
+      });
       return upsertQueuedAck(
         conversationId,
         content,
@@ -161,8 +175,8 @@ function resolveSidecarInFlightTarget(
  *   InterjectionTimeline 投影；经典终态多为 ``injected``，协调经 ``injected`` 再到
  *   ``addressed`` / ``queued`` / ``failed``）
  * - 不可注入 → ``user_interjection(queued)`` + ``turn_queued.degraded_from=steer``
- * ``delivery=queue``（强制）→ ``turn_queued`` 只 upsert QueuedTurnsBar；
- * ``turn_queue_started`` 出队开跑再插主时间线用户泡；后续帧缓冲至 turn1 主路释放再续流。
+ * ``delivery=queue``（强制）→ ``turn_queued`` upsert 条 **且** ack 即入主时间线用户泡；
+ * ``turn_queue_started`` 幂等绑定已有泡（无泡才插）；后续帧缓冲至 turn1 主路释放再续流。
  *
  * ack（queued / received）后 Promise 即 resolve，调用方可清 composer；
  * SSE 泵与 buffering/drain 在后台续跑。
@@ -364,9 +378,33 @@ export async function sendMidFlightMessage(
     };
 
     const runPump = async (): Promise<void> => {
+      let paintedId: string | null = null;
+      const paintOnce = (queueId?: string): string => {
+        if (!paintedId) {
+          paintedId = paintMidFlightUserBubble(conversationId, {
+            content,
+            attachments,
+            agentMentions,
+            queueId,
+          });
+        } else if (queueId) {
+          paintMidFlightUserBubble(conversationId, {
+            id: paintedId,
+            content,
+            queueId,
+          });
+        }
+        return paintedId;
+      };
       try {
         await pumpSseBody(response, conversationId, (event: SSEEvent) => {
           if (gate.mode === "aborted" || ac.signal.aborted) return;
+
+          if (event.type === "turn_saved") {
+            // 绑定发送端刚入场的用户泡到服务端 id；不得进缓冲（否则刷新前对账会晚一拍）。
+            dispatchSSEEvent(event, { conversationId, source: "server" });
+            return;
+          }
 
           if (event.type === "user_interjection") {
             // 经典/协调插话：即时 dispatch，不缓冲、不占主路门。
@@ -376,6 +414,7 @@ export async function sendMidFlightMessage(
             const iid = (p.interjection_id || "").trim();
             dispatchSSEEvent(event, { conversationId, source: "server" });
             if (iid && p.status === "received") {
+              paintOnce();
               result = { kind: "received", interjectionId: iid };
               finishAck(result);
             }
@@ -397,6 +436,7 @@ export async function sendMidFlightMessage(
                 position,
                 queueDepth,
                 degradedFrom: p.degraded_from === "steer" ? "steer" : undefined,
+                messageId: paintOnce(queueId),
               },
             );
             registerAbort();

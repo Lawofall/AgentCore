@@ -37,7 +37,6 @@ from agentcore.runtime.runs.executor.context import (
     _safe_index_files,
 )
 from agentcore.runtime.runs.executor.env import AgentExecutorEnv
-from agentcore.runtime.runs.executor.hooks import _grant_citation_rework_reread
 from agentcore.runtime.runs.executor.retry import (
     _can_light_repair,
     _can_write_pass,
@@ -49,7 +48,6 @@ from agentcore.runtime.runs.executor.retry import (
     should_skip_contract_retry_for_budget,
     should_skip_full_contract_retry_for_round_ceiling,
     stamp_coord_round_budget,
-    sync_round_budget_awareness,
 )
 from agentcore.runtime.runs.executor.setup import AgentNodePrepared
 from agentcore.runtime.runs.executor.shared import _react_and_capture, _retry_message
@@ -138,8 +136,8 @@ async def run_contract_loop(
     pass_round_limit = [profile.max_rounds]
 
     def _live_tokens_spent() -> int:
-        extra = inflight[0].total_tokens if inflight else 0
-        return run_usage_box[0].total_tokens + extra
+        extra = inflight[0].fuse_tokens if inflight else 0
+        return run_usage_box[0].fuse_tokens + extra
 
     on_round_begin = bind_round_budget_on_begin(
         pass_round_used,
@@ -203,7 +201,7 @@ async def run_contract_loop(
         tool_failures.clear()
         controller_seed_out.clear()
         pass_token_budget = _retry_token_budget(
-            ceiling=token_ceiling, spent=run_usage.total_tokens
+            ceiling=token_ceiling, spent=run_usage.fuse_tokens
         )
         is_light_pass = light_mode
         pass_max = _pass_max_rounds(
@@ -211,7 +209,7 @@ async def run_contract_loop(
             profile_max=profile.max_rounds,
             spent=run_rounds,
         )
-        if pass_max <= 0:
+        if pass_max is not None and pass_max <= 0:
             logger.info(
                 "contract.retry_skipped_budget",
                 run_id=spec.run_id,
@@ -219,12 +217,13 @@ async def run_contract_loop(
                 rounds=run_rounds,
             )
             break
-        pass_profile = replace(profile, max_rounds=pass_max)
+        pass_profile = replace(
+            profile, max_rounds=pass_max if pass_max is not None else 0
+        )
         pass_tools = worker_tools
         pass_allowed = allowed_tools
         if is_light_pass:
-            # Dedicated short-pass cap (not leftover from the exhausted main pool),
-            # then clipped by the cross-attempt total in ``_pass_max_rounds``.
+            # Dedicated short-pass cap (not leftover from a main-pool formula).
             # Tools narrow; run_rounds still accumulates whatever this pass spends.
             pass_tools, pass_allowed = _narrow_for_light_repair(
                 worker_tools,
@@ -239,15 +238,6 @@ async def run_contract_loop(
             limit=pass_profile.max_rounds,
             tokens_spent=_live_tokens_spent(),
         )
-        if is_light_pass or attempt > 0:
-            # Round 0 of a new react_loop skips on_round_begin — announce the
-            # new pass cap once (light_repair after 56/56 must see 4). Do not
-            # refresh this fact on later rounds of the same pass.
-            sync_round_budget_awareness(
-                messages,
-                limit=pass_profile.max_rounds,
-                before_last_user=True,
-            )
         use_rtd = (
             attempt == 0
             and not light_repair_used
@@ -358,13 +348,12 @@ async def run_contract_loop(
         # Re-index the live workspace only when reconciling declarative
         # artifacts — otherwise this run's own writes are enough.
         # 交付形态对齐: for a FILE deliverable, load the landed files' text so the
-        # contract's content checks (length / keyword / section) read the product on
+        # contract's content checks (section / JSON / citation) read the product on
         # disk, not just chat prose — artifacts declared → matching paths; else this
-        # run's own writes. Also loads when this run's writes are a web batch
-        # (HTML+CSS/JS) so the seam gate can cross-check selectors. ``needs_file_contents``
-        # skips the read for prose / existence-only non-web deliverables.
-        # Citation / bibliography: when the turn evidence ledger is connected,
-        # check_contract scans the same content surfaces already loaded here.
+        # run's own writes. ``needs_file_contents`` skips the read for prose /
+        # existence-only non-content deliverables. Citation / bibliography: when the
+        # turn evidence ledger is connected, check_contract scans the same content
+        # surfaces already loaded here.
         artifact_contents = None
         turn_ledger = env.turn_evidence_ledger
         load_contents = needs_file_contents(
@@ -512,7 +501,7 @@ async def run_contract_loop(
                             run_id=spec.run_id,
                             action="auto_strip",
                             stripped=stripped_ids,
-                            tokens_spent=run_usage.total_tokens,
+                            tokens_spent=run_usage.fuse_tokens,
                             rounds_spent=run_rounds,
                         )
                         # 剥完即过 → 直接验收，不开 LLM。
@@ -521,12 +510,6 @@ async def run_contract_loop(
                 if cite_fail and not other_fail:
                     cite_upgrade_used = True
                     light_mode = True
-                    _grant_citation_rework_reread(
-                        tool_ctx,
-                        cite_failures=cite_fail,
-                        checked_files=checked_files,
-                        deliverable=deliverable,
-                    )
                     parts = [
                         format_cite_upgrade_feedback(
                             cite_fail,
@@ -549,7 +532,7 @@ async def run_contract_loop(
                         action="light_repair",
                         failures=cite_fail,
                         stripped=stripped_ids or None,
-                        tokens_spent=run_usage.total_tokens,
+                        tokens_spent=run_usage.fuse_tokens,
                         rounds_spent=run_rounds,
                     )
                     continue
@@ -567,12 +550,12 @@ async def run_contract_loop(
                 )
                 break
         # 二次触顶：已达硬顶则不再开 correction pass（立即收口）。
-        if token_ceiling > 0 and run_usage.total_tokens >= token_ceiling:
+        if token_ceiling > 0 and run_usage.fuse_tokens >= token_ceiling:
             logger.info(
                 "contract.retry_skipped_budget",
                 run_id=spec.run_id,
                 reason="hard_ceiling",
-                tokens=run_usage.total_tokens,
+                tokens=run_usage.fuse_tokens,
                 ceiling=token_ceiling,
             )
             break
@@ -580,7 +563,7 @@ async def run_contract_loop(
         budget_wind_down = _wind_down_entered(
             cutoff_reasons=cutoff_reasons,
             token_ceiling=token_ceiling,
-            tokens_spent=run_usage.total_tokens,
+            tokens_spent=run_usage.fuse_tokens,
         )
         if should_skip_contract_retry_for_budget(
             handoff_ok=handoff_ok,
@@ -591,7 +574,7 @@ async def run_contract_loop(
                 run_id=spec.run_id,
                 reason="wind_down",
                 handoff_ok=True,
-                tokens=run_usage.total_tokens,
+                tokens=run_usage.fuse_tokens,
                 ceiling=token_ceiling,
                 failures=verdict.failures,
             )
@@ -618,10 +601,6 @@ async def run_contract_loop(
                 handoff_ok=handoff_ok,
                 light_repair_used=light_repair_used,
             )
-            and _pass_max_rounds(
-                light_pass=True, profile_max=profile.max_rounds, spent=run_rounds
-            )
-            > 0
         ):
             light_repair_used = True
             light_mode = True
@@ -647,7 +626,7 @@ async def run_contract_loop(
                 run_id=spec.run_id,
                 failures=verdict.failures,
                 handoff_ok=handoff_ok,
-                tokens_spent=run_usage.total_tokens,
+                tokens_spent=run_usage.fuse_tokens,
                 rounds_spent=run_rounds,
             )
             continue
@@ -658,10 +637,6 @@ async def run_contract_loop(
                 files_written=product_files_written,
                 write_pass_used=write_pass_used,
             )
-            and _pass_max_rounds(
-                light_pass=True, profile_max=profile.max_rounds, spent=run_rounds
-            )
-            > 0
         ):
             write_pass_used = True
             light_mode = True  # reuse narrow write/handoff surface + short rounds
@@ -678,7 +653,7 @@ async def run_contract_loop(
                 "contract.write_pass",
                 run_id=spec.run_id,
                 failures=verdict.failures,
-                tokens_spent=run_usage.total_tokens,
+                tokens_spent=run_usage.fuse_tokens,
                 rounds_spent=run_rounds,
             )
             continue
@@ -705,7 +680,7 @@ async def run_contract_loop(
         retry_cap = _pass_max_rounds(
             light_pass=False, profile_max=profile.max_rounds, spent=run_rounds
         )
-        if retry_cap <= 0:
+        if retry_cap is not None and retry_cap <= 0:
             logger.info(
                 "contract.retry_skipped_budget",
                 run_id=spec.run_id,
@@ -726,18 +701,10 @@ async def run_contract_loop(
                 )
             )
         messages.append(_retry_message("\n\n".join(p for p in parts if p)))
-        # Citation-related full retry: refresh sticky reread so cleared drafts stay readable.
         cite_fail_retry, _other_retry = partition_citation_failures(verdict.failures)
-        if cite_fail_retry:
-            _grant_citation_rework_reread(
-                tool_ctx,
-                cite_failures=cite_fail_retry,
-                checked_files=checked_files,
-                deliverable=deliverable,
-            )
         # Full contract.retry: refill only within original retrieval cap, and
         # never after wind_down（不得恢复全量检索）. 写盘形态返工缺的是定向补写而非检索；
-        # 引用类失败例外——它本就需要重读来源，且上面已发放 sticky reread。
+        # 引用类失败例外——它本就需要重读来源。
         rb = tool_ctx.retrieval_budget
         original_rb = int(spec.retrieval_budget or (rb.limit if rb else 0) or 0)
         wind_down = budget_wind_down

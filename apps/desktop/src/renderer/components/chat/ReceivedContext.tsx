@@ -28,7 +28,7 @@ const CONTEXT_CHANNEL_META: Record<string, { label: string; hint: string }> = {
   dependency: { label: "前置结果", hint: "上游队友交付的产物" },
   workspace: { label: "工作区", hint: "共享工作区可读文件" },
   task: { label: "你的任务", hint: "分派给本 Agent 的具体活" },
-  deliverable: { label: "交付物规格", hint: "期望交付的形态与硬约束" },
+  deliverable: { label: "交付物规格", hint: "本节点落点与结构约束" },
   team_brief: { label: "团队共识", hint: "本回合主协调为全员设定的共识" },
   gate_notes: {
     label: "把关要点",
@@ -181,7 +181,7 @@ export function ReceivedContextDialog({
 
 /** One「收到的上下文」block. Copy-type channels default to a citation card (collapsed
  * summary + expand for verbatim body); incremental channels keep the original segment card.
- * Pass `presentation="incremental"` to force the segment card (诊断骨架). */
+ * Pass `presentation="incremental"` to force the segment card. */
 export function ContextBlockCard({
   block,
   defaultOpen,
@@ -196,7 +196,7 @@ export function ContextBlockCard({
   sceneKey?: string;
   /**
    * `auto` — copy channels → citation card; others → incremental segment card.
-   * `incremental` — always the segment card (诊断模式).
+   * `incremental` — always the segment card.
    */
   presentation?: "auto" | "incremental";
 }) {

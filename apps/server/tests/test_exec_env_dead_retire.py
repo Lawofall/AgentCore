@@ -1,8 +1,7 @@
-"""Sticky exec-env-dead seeds EXEC_ENV_TIMEOUT_FAMILY into disabled_tools.
+"""Sticky exec-env-dead no longer strips ``run``.
 
-Teammates that never hung themselves must still stop seeing ``code_execute`` /
-``test_run`` when ``session.exec_env_dead``. ``terminal`` stays offered.
-Identity ``can_execute`` is computed after that retire.
+Per-call fail stays; teammates still see the tool. Identity ``can_execute``
+follows the registry, not the latch.
 """
 
 from __future__ import annotations
@@ -115,18 +114,10 @@ def test_apply_retire_from_session_exec_env_dead():
                 disabled_tools=disabled,
                 controller=controller,
             )
-            is True
-        )
-        for name in EXEC_ENV_TIMEOUT_FAMILY:
-            assert name in disabled
-        assert "terminal" not in disabled
-        assert (
-            apply_exec_env_dead_retire(
-                disabled_tools=disabled,
-                controller=controller,
-            )
             is False
         )
+        for name in EXEC_ENV_TIMEOUT_FAMILY:
+            assert name not in disabled
     finally:
         clear_active_coordination()
 
@@ -148,8 +139,8 @@ def test_alive_session_does_not_seed_exec_family():
         clear_active_coordination()
 
 
-def test_registry_can_execute_false_after_exec_env_dead_retire():
-    """Identity flag is computed after retire — registry still has the tool."""
+def test_registry_can_execute_true_when_run_registered_despite_latch():
+    """Latch does not hide ``run`` — identity follows the registry."""
     clear_active_coordination()
     session = CoordinationSession(
         execution_id="exec-id",
@@ -160,21 +151,18 @@ def test_registry_can_execute_false_after_exec_env_dead_retire():
     set_active_coordination(session)
     try:
         reg = ToolRegistry()
-        reg.register(_StubTool("code_execute"))
-        reg.register(_StubTool("test_run"))
-        reg.register(_StubTool("terminal", category=ToolCategory.EXECUTION))
-        assert reg.get_optional("code_execute") is not None
-        assert registry_can_execute(reg) is False
+        reg.register(_StubTool("run"))
+        assert reg.get_optional("run") is not None
+        assert registry_can_execute(reg) is True
         from agentcore.runtime.runs.executor.identities import build_worker_identity
 
-        body = build_worker_identity(has_dependents=False, can_execute=False)
-        assert "本回合执行环境未装配" in body
-        assert "已运行 / 已验证 / 已生成" not in body
+        body = build_worker_identity(has_dependents=False, can_execute=True)
+        assert "本回合执行环境未装配" not in body
     finally:
         clear_active_coordination()
 
 
-async def test_sibling_worker_does_not_offer_code_execute_when_exec_env_dead():
+async def test_sibling_worker_still_offers_run_when_exec_env_dead():
     clear_active_coordination()
     session = CoordinationSession(
         execution_id="exec-react-ee",
@@ -185,11 +173,8 @@ async def test_sibling_worker_does_not_offer_code_execute_when_exec_env_dead():
     set_active_coordination(session)
     try:
         reg = ToolRegistry()
-        reg.register(_StubTool("code_execute"))
-        reg.register(_StubTool("test_run"))
-        reg.register(_StubTool("terminal"))
+        reg.register(_StubTool("run"))
         reg.register(_StubTool("other", category=ToolCategory.SEARCH))
-        assert reg.offer("terminal") is True
         provider = _ToolsRecordingProvider([[_content_chunk("done")]])
         await react_loop(
             messages=[LLMMessage(role="user", content="go")],
@@ -206,16 +191,14 @@ async def test_sibling_worker_does_not_offer_code_execute_when_exec_env_dead():
         assert provider.offered
         offered = provider.offered[0]
         assert "other" in offered
-        assert "terminal" in offered
-        assert "code_execute" not in offered
-        assert "test_run" not in offered
-        assert registry_can_execute(reg) is False
+        assert "run" in offered
+        assert registry_can_execute(reg) is True
     finally:
         clear_active_coordination()
 
 
-async def test_executor_identity_can_execute_false_when_session_exec_env_dead():
-    """New worker: registry still has code_execute, but identity + offer both retire."""
+async def test_executor_identity_can_execute_true_when_session_exec_env_dead():
+    """New worker: registry has run → identity and offer keep it."""
     from agentcore.runtime.runs.builder import build_run_plan
     from agentcore.runtime.runs.executor import build_agent_executor
     from tests.runs_executor.conftest import _ContentProvider, _ctx
@@ -251,7 +234,7 @@ async def test_executor_identity_can_execute_false_when_session_exec_env_dead():
         )
         provider = _Record()
         reg = ToolRegistry()
-        reg.register(_StubTool("code_execute"))
+        reg.register(_StubTool("run"))
         executor = build_agent_executor(
             plan=plan,
             llm=provider,
@@ -265,15 +248,15 @@ async def test_executor_identity_can_execute_false_when_session_exec_env_dead():
         )
         await executor(plan.nodes[0], {})
         assert provider.system_messages
-        assert "本回合执行环境未装配" in provider.system_messages[0]
+        assert "本回合执行环境未装配" not in provider.system_messages[0]
         assert provider.tool_names
-        assert "code_execute" not in provider.tool_names[0]
+        assert "run" in provider.tool_names[0]
     finally:
         clear_active_coordination()
 
 
-async def test_react_loop_round_poll_exec_env_dead_strips_family():
-    """Alive at entry; mid-team stamp → next LLM round drops code_execute."""
+async def test_react_loop_round_poll_exec_env_dead_keeps_family():
+    """Alive at entry; mid-team stamp → next LLM round still offers run."""
     clear_active_coordination()
     session = CoordinationSession(
         execution_id="exec-poll-ee",
@@ -283,7 +266,7 @@ async def test_react_loop_round_poll_exec_env_dead_strips_family():
     set_active_coordination(session)
     try:
         reg = ToolRegistry()
-        reg.register(_StubTool("code_execute"))
+        reg.register(_StubTool("run"))
         reg.register(_StubTool("other", category=ToolCategory.SEARCH))
 
         def _mark_dead_after_round0() -> list[LLMMessage]:
@@ -310,9 +293,9 @@ async def test_react_loop_round_poll_exec_env_dead_strips_family():
             approval_gate=None,
         )
         assert len(provider.offered) >= 2
-        assert "code_execute" in provider.offered[0]
+        assert "run" in provider.offered[0]
         assert "other" in provider.offered[0]
-        assert "code_execute" not in provider.offered[1]
+        assert "run" in provider.offered[1]
         assert "other" in provider.offered[1]
     finally:
         clear_active_coordination()
@@ -333,9 +316,8 @@ def test_ceo_inject_names_exec_env_dead():
             )
         ],
     )
-    assert EXEC_ENV_DEAD_CEO_INJECT in text
-    assert "禁止再派需要 code_execute/test_run 的队员" in text
-    assert "只读/只写文档可以" in text
+    assert EXEC_ENV_DEAD_CEO_INJECT not in text
+    assert "禁止再派需要 run 的队员" not in text
 
 
 def test_ceo_inject_user_stop_unchanged_when_exec_env_dead():
@@ -357,7 +339,7 @@ def test_ceo_inject_user_stop_unchanged_when_exec_env_dead():
         ],
     )
     assert USER_STOPPED_MARK in text
-    assert EXEC_ENV_DEAD_CEO_INJECT in text
+    assert EXEC_ENV_DEAD_CEO_INJECT not in text
     assert "调度中断" not in text
 
 
@@ -384,11 +366,11 @@ def test_sticky_dead_falls_back_to_conversation_registry():
         )
         assert is_exec_env_sticky_dead(ctx) is True
         disabled: set[str] = set()
-        assert apply_exec_env_dead_retire(disabled_tools=disabled, tool_context=ctx) is True
-        assert "code_execute" in disabled
+        assert apply_exec_env_dead_retire(disabled_tools=disabled, tool_context=ctx) is False
+        assert "run" not in disabled
         reg = ToolRegistry()
-        reg.register(_StubTool("code_execute"))
-        assert registry_can_execute(reg, ctx) is False
+        reg.register(_StubTool("run"))
+        assert registry_can_execute(reg, ctx) is True
     finally:
         current_execution_id.reset(token)
         clear_active_coordination()
@@ -410,6 +392,6 @@ def test_ceo_inject_cloud_sandbox_unavailable():
             )
         ],
     )
-    assert EXEC_ENV_DEAD_CEO_INJECT_CLOUD in text
+    assert EXEC_ENV_DEAD_CEO_INJECT_CLOUD not in text
     assert EXEC_ENV_DEAD_CEO_INJECT not in text
     assert "这台电脑此刻跑不了命令" not in text

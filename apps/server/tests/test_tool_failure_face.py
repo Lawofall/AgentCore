@@ -90,9 +90,19 @@ def test_tool_failure_from_result_uses_metadata_code_curated():
         metadata={"code": "exec_timeout"},
     )
     assert tool_failure_from_result(result) == {
-        "message": "执行超时，请缩小范围后重试。",
+        "message": "这条命令一直没有输出，已经中止。请检查本机环境或网络后再试。",
         "code": "exec_timeout",
     }
+
+
+def test_exec_timeout_and_forced_stop_faces_are_distinct():
+    idle = _CURATED_BY_CODE["exec_timeout"]
+    wall = _CURATED_BY_CODE["exec_forced_stop"]
+    assert idle == "这条命令一直没有输出，已经中止。请检查本机环境或网络后再试。"
+    assert wall == "这条命令已经跑满上限，被强制中止。可以拆成更短的命令后让我再试。"
+    assert idle != wall
+    assert "缩小范围" not in idle
+    assert "缩小范围" not in wall
 
 
 def test_tool_failure_from_result_coded_gets_curated_uncoded_stays_generic():
@@ -300,6 +310,7 @@ _DETERMINISTIC_CODES = (
     "url_not_workspace_path",
     "user_in_control",
     "verify_contract",
+    "run_contract",
     "verify_policy_inner",
     "verify_result",
     "wait_for_required",

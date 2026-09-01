@@ -275,8 +275,8 @@ async def test_emits_debate_result_event_for_frontend_view():
 
 
 async def test_emits_batch_metrics_for_diagnostics():
-    """首轮辩手经 WaveScheduler 并行扇出 → 调度埋点快照也 emit 给前端 (诊断模式/时间线),
-    与 delegate drive 同形 (前端UX设计.md §十)；此前只 logger.info、前端诊断区为空。"""
+    """首轮辩手经 WaveScheduler 并行扇出 → 调度埋点快照也 emit（journal 重放；
+    与 delegate drive 同形）。此前只 logger.info。"""
     sink = EventSink()
     llm = _DebateLLM(converge_at=1)
     tool = _tool(llm, sink=sink)

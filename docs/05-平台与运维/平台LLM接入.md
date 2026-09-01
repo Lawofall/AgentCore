@@ -26,15 +26,15 @@ skip_if:
 
 **模型组合**：CRUD `/v1/users/me/llm-model-profiles`；会话只认 `model_profile_id`（**新建拍快照**：create 写入当时账号默认或客户端所选 uuid；改账号默认不改旧会话）。存量 `null` 仍按账号默认展开（兼容活跟随）。PATCH 显式 `null` = 再钉当时默认（非清成活跟随）。设默认只在设置 / `PUT …/default`；输入框 picker 只选具体组合。**元数据事实源** = `llm/catalog.py`（上架集）+ `llm/model_metadata.py`（展示 enrichment）；`model_profiles` 只做组合 CRUD / expand，系统预置 = 对 catalog 可见上架集的 uuid5 投影（`uuid5(…, agentcore:platform-preset:{model_id})`，无硬编码产品 UUID）。逻辑默认 = `PLATFORM_MODEL` 对应预置（须在上架集内）否则 allowlist 首个。明确不做：质量档矩阵、账号级角色→模型矩阵、输入框双 picker /「跟随账号默认」行。✅ **Per-worker 节点显式覆盖**（执行链 + sidecar proxy；确认面不提供人改模）与组合槽正交 → [编排器 · Per-worker 模型覆盖](/docs/03-AI核心/编排器与CEO主Agent.md#per-worker-模型覆盖abc-同一功能)。
 
-**识图槽 `vision`（可选）**：与 main **独立**，空 **不** follow main。有槽 → 用该槽凭据建独立 `VisionReader`（BYOK 填槽即可，不因 `billing_mode=byok` 关死）。槽空 → 仅当 `billing_mode=platform` 且 `VISION_API_KEY`/`VISION_BASE_URL` 齐全时走运维兜底（默认 `kimi-k2.5`，不上架 `PLATFORM_MODELS`）。
+**识图槽 `vision`（可选）**：组合列不 persist follow main（空槽 ≠ 把 main 抄进槽）。解析 `VisionReader`：有槽 → 该槽凭据；槽空且 main 收图 → 复用 main（白板 / `read_image`）；否则仅 `billing_mode=platform` 且 `VISION_*` 齐全走运维兜底（默认 `kimi-k2.5`，不上架 `PLATFORM_MODELS`）。BYOK 填槽不因 `billing_mode=byok` 关死。
 
-**对话贴图路由**：回合 **main** 仅当 curated 元数据表（及 family 前缀）标了 `vision` 时走原生 multimodal（`image_url` data URL 挂当前 user，跳过眼睛轨）——**禁止**用目录关键词推断的 `vision` 开原生（防误标 400）。否则 → 上述 `VisionReader` 眼→文注入 system 附件块。同一图禁止双路径。无 reader 且本回合有图 → 诚实提示「未配置识图」，不静默丢像素。visual critic **已退役**，不再走本轨。白板 `board_read` 仍只用 `VisionReader`（与 main 是否 multimodal 无关）。CEO 可按需调 `read_image` 带着问题再读工作区图。
+**对话贴图路由**：main 收图（`llm/image_accept.model_accepts_images`）→ 原生 multimodal（`image_url` 挂当前 user，跳过眼睛轨）；否则有 `VisionReader` → 眼→文；否则诚实「当前主模型不收图且未配置识图兜底」，不静默丢像素。同一图禁止双路径。能力位只认该厂商契约（精确 id + 进程内负例），不是展示元数据家族继承、也不是 id 关键词。visual critic **已退役**。白板 `board_read` 与 CEO `read_image` 走 `VisionReader`（可来自槽或收图的 main）。
 
 `llm/resolve.py` 单点：
 
 - **主对话**：用户 key 优先；无 key 才 platform。
 - **长对话压缩**（连续性，不是 chrome）：跟 **这条对话** 的聊天付款方走（会话钉住的组合）。用户**显式**把组合的 background 槽指向自带 Key 时该槽仍优先。平台对话 → 平台 key + `enforce_quota`；自带 Key 对话 → 用户 key，**不**吃平台 ¥ 帽。入口 `billing/gate.py::run_compaction_llm`。回合后压缩仍 skip（不 429 刚结束的回合）；近顶折不进去 → 拒发。
-- **后台档**（title/memory/workflow.slots）：用户**显式**把组合的 background 槽指向自带 Key 时 **该槽优先**（自己的钱，无「白嫖」可防；不过 `enforce_quota`，model id 原样透传不降档）；槽空（跟随主模型）/ 指向平台模型时才 **平台优先** + 必过 `enforce_quota`（防白嫖），平台不可用（配置缺失 **或** 上游 auth 拒绝）才回落用户 BYOK。统一入口 `billing/gate.py::run_background_llm`（`resolve_and_gate_background` 解析 + 一次 auth→BYOK；耗尽 / 两边都失败 → `None`，不 429 主回合）。禁止调用点各自 try/except 拼回落、禁止进程内 auth 熔断缓存。原 followups（「下一步」chips）已下线，不再走后台档。
+- **后台档**（title/memory/workflow.slots）：用户**显式**把组合的 background 槽指向自带 Key 时 **该槽优先**（自己的钱，无「白嫖」可防；不过 `enforce_quota`，model id 原样透传不降档）；槽空（跟随主模型）/ 指向平台模型时才 **平台优先** + 必过 `enforce_quota`（防白嫖），平台不可用（配置缺失 **或** 上游 auth 拒绝 / 余额不足）才回落用户 BYOK。统一入口 `billing/gate.py::run_background_llm`（`resolve_and_gate_background` 解析 + 一次 auth 或余额→BYOK；耗尽 / 两边都失败 → skip，不 429 主回合、不对用户弹出「请改用自己的 API Key」）。禁止调用点各自 try/except 拼回落、禁止进程内 auth 熔断缓存。原 followups（「下一步」chips）已下线，不再走后台档。
 - **回合内鉴权死短路（甲+乙）**：同一用户回合、同一付款方（`credential_source`）首次确认真 API Key `LLMAuthError`（不含 `INFERENCE_TOKEN_EXPIRED`）或余额不足后，`llm/turn_auth_dead.py` 按来源闩死后续未启动的同源 LLM（主聊后续轮 / 未开跑 worker / 本回合 chrome）；另一付款方不受影响（平台 chrome 死亡不得短路同回合 BYOK chat，反之亦然）。已在飞可自然失败。**不做**跨回合 TTL 负缓存（丙暂缓）。用户文案 / CTA 按 `credential_source` 分流（BYOK→去设置；平台→改用自己的 Key / 联系管理员）。
 - **`platform_billing_selectable`**：仅 `billing_mode=platform` 时可选；BYOK 部署不开放平台代付。
 - **Worker 槽**：空 = 跟随主模型；跨 origin 时 `build_turn_router` 注入 extras。Sidecar `cost_role=member`：请求 body `model` 为目录路由键（`platform/{id}` / `{provider_id}/{id}`）且合法 → **按该身份重解析凭据/model**；裸 mint/chat id 或未带显式 → 仍跟本槽。非法路由键 **硬失败**（`VALIDATION_ERROR`），禁 silent 回退野模型。→ [编排器 · Per-worker](/docs/03-AI核心/编排器与CEO主Agent.md#per-worker-模型覆盖abc-同一功能)。
@@ -67,6 +67,7 @@ skip_if:
 | 项 | 约束 |
 |---|---|
 | 模型名 | `deepseek-v4-pro` / `deepseek-v4-flash`；旧名 `deepseek-chat` / `deepseek-reasoner` 已停用 |
+| 识图 | 仅官方 id `deepseek-v4-flash-vision-exp` 收图；Flash / Pro 文本 id 不收 |
 | 上下文 | 官方 **1M**（input+output 合计）；max output 384K。目录 `context_length` 与近顶压缩跟这条，不跟过期的 128K 记忆 |
 | base_url | `https://api.deepseek.com`（兼容 `/v1`） |
 | 思考开关 | `extra_body.thinking.type=enabled/disabled`。官方省略 = 默认 enabled；**AgentCore 聊天/CEO/worker 显式发 enabled**，DeepSeek V4 同时发官方默认档 `reasoning_effort=high`（不暴露强度 UI）。OpenCode Go 省略 `thinking` 时思考 token=0；只发 `thinking.enabled` 仍可能不回 CoT |
@@ -154,7 +155,7 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 | 额度 | 月 ¥10 · 日 ¥10 · 日请求 500（`quota_*`） |
 | 价卡 | curated 名义价 **同** 付费 Flash（¥0.02 / ¥1 / ¥2）——上游成本由 Go 订阅月费摊，产品仍按名义价扣额度 |
 | 上下文窗 | `deepseek-v4-flash` **1M**（SKU）。目录展示与近顶压缩（窗 × 80% ≈ 800K）跟 SKU，禁止按端点猜成 Zen free 的 200K |
-| Vision | 本阶段不配 `VISION_*`（白板读图仅用户 BYOK 填 vision 槽时可用） |
+| Vision | 本阶段不配 `VISION_*`（白板读图：BYOK 填 vision 槽，或槽空且 main 收图时复用 main） |
 | 公告 | 恢复时归档 `quota_unavailable`（以及仍在线的旧 `quota_jiurelay`）；发模板 **`quota_platform_restored`** → [产品公告文案模板 §4.2](/docs/05-平台与运维/产品公告文案模板.md) |
 
 **运维动作（按序，不得跳）**

@@ -18,6 +18,7 @@ import {
   restoreFolder,
   updateFolder,
 } from "@/services/folders";
+import { scheduleAccountRulesMemoryRefresh } from "@/services/refreshAccountRulesMemory";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 /**
@@ -161,6 +162,7 @@ export function useDeleteFolder() {
       });
       void queryClient.invalidateQueries({ queryKey: folderKeys.trash });
       void queryClient.invalidateQueries({ queryKey: workspaceKeys.list });
+      scheduleAccountRulesMemoryRefresh();
     },
   });
 }
@@ -202,6 +204,7 @@ export function useRestoreFolder() {
       });
       void queryClient.invalidateQueries({ queryKey: folderKeys.trash });
       void queryClient.invalidateQueries({ queryKey: workspaceKeys.list });
+      scheduleAccountRulesMemoryRefresh();
       if (folder.name !== name) {
         notifyInfo("文件夹已恢复", {
           description: `原名已被占用，已恢复为「${folder.name}」`,
@@ -223,6 +226,7 @@ export function usePermanentDeleteFolder() {
       void queryClient.invalidateQueries({
         queryKey: conversationKeys.archived,
       });
+      scheduleAccountRulesMemoryRefresh();
     },
   });
 }

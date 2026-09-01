@@ -12,7 +12,6 @@ def load_roster() -> tuple[type, ...]:
     from agentcore.tools.builtin.archive_extract import ArchiveExtractTool
     from agentcore.tools.builtin.browser import BrowserTool
     from agentcore.tools.builtin.code_diagnostics import CodeDiagnosticsTool
-    from agentcore.tools.builtin.code_execute import CodeExecuteTool
     from agentcore.tools.builtin.code_search import CodeSearchTool
     from agentcore.tools.builtin.external_mount_readonly import ExternalMountReadonlyTool
     from agentcore.tools.builtin.file_ops import (
@@ -33,8 +32,7 @@ def load_roster() -> tuple[type, ...]:
     from agentcore.tools.builtin.host import HostTool
     from agentcore.tools.builtin.md_to_docx import MdToDocxTool
     from agentcore.tools.builtin.md_to_pdf import MdToPdfTool
-    from agentcore.tools.builtin.terminal import TerminalTool
-    from agentcore.tools.builtin.test_run import TestRunTool
+    from agentcore.tools.builtin.run import RunTool
     from agentcore.tools.builtin.web.download_url import DownloadUrlTool
     from agentcore.tools.builtin.web.read_url import ReadUrlTool
     from agentcore.tools.builtin.web.search import WebSearchTool
@@ -63,11 +61,8 @@ def load_roster() -> tuple[type, ...]:
         CodeSearchTool,
         CodeDiagnosticsTool,
         GitTool,
-        TestRunTool,
-        CodeExecuteTool,
-        # Long-running process face (CEO+worker · execution_class · start 运行时升审批)
-        TerminalTool,
-        # L3 团队浏览器：单一 ``browser``（GRANTABLE · action 政策表；screenshot 仅 worker）
+        RunTool,
+        # L3 团队浏览器：单一 ``browser``（GRANTABLE · action 政策表；CEO+worker）
         BrowserTool,
         # Host 第三能力面：单一 ``host``（schema NEVER · action 政策表 · host_class）
         HostTool,

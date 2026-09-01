@@ -1,11 +1,11 @@
 import { Markdown } from "@/components/chat/Markdown";
+import { ReceivedContextSection } from "@/components/chat/ReceivedContext";
 import { CollapsibleSpeech } from "@/components/chat/debate/CollapsibleSpeech";
 import { processHasSuccessfulHandoff } from "@/components/chat/handoffBrief";
 import { ProcessTimeline } from "@/components/chat/message-bubble/ProcessTimeline";
 import { RunInterveneControls } from "@/components/graph/RunInterveneControls";
 import { runActCapabilities } from "@/components/graph/planCapabilities";
 import { Button } from "@/components/ui";
-import { useRunLlmWindow } from "@/hooks/useRunLlmWindow";
 import { useTurnAudit } from "@/hooks/useTurnAudit";
 import { openWorkspaceDeliverable } from "@/lib/openWorkspaceDeliverable";
 import type { AgentAuditEvent } from "@/services/audit";
@@ -13,11 +13,10 @@ import { permissionAxesShortLabel } from "@/services/permissionAxes";
 import { activeRuntime, useConversationStore } from "@/stores/conversation";
 import { revisionChains, useMessageExecution } from "@/stores/execution";
 import { useSidePanelStore } from "@/stores/sidePanel";
-import { turnDetailPath, useUIStore } from "@/stores/ui";
+import { turnDetailPath } from "@/stores/ui";
 import { isLiveRunStatus } from "@agentcore/protocol-fold-kit";
 import { Shield, Square } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { WorkerContextSection } from "./WorkerContextSection";
 import {
   buildModeratorLedger,
   isDebateModeratorRun,
@@ -25,7 +24,6 @@ import {
 } from "./debateModerator";
 import { receivedContextForList, selectRunTaskSection } from "./runTaskSection";
 import { DebriefSection } from "./sections/RunDebrief";
-import { DiagnosticSection } from "./sections/RunDiagnostics";
 import { EscalationSection } from "./sections/RunEscalations";
 import { RunModeratorLedger } from "./sections/RunModeratorLedger";
 import { RunOutcomeAcceptSection } from "./sections/RunOutcomeAccept";
@@ -35,8 +33,6 @@ import {
   revisionComparePair,
 } from "./sections/RunRevisionChain";
 import { Section, StatusBadge } from "./sections/shared";
-
-export { SchedulingDiag, CollabDiag } from "./sections/RunDiagnostics";
 
 /**
  * 本回合生效的权限配方短名（原安全台账「本回合模式 · X」快照）。回合审计里
@@ -68,7 +64,7 @@ function turnPresetSnapshot(
  * Single-run detail content — hybrid layout aligned with the CEO bubble timeline:
  * header anchors (role / 接手 chip / status / task / moderator / revision /
  * escalation / context) → interleaved ProcessTimeline body → footer (debrief /
- * resources / diagnostics). Topology (depends / parent / children) lives on the
+ * resources). Topology (depends / parent / children) lives on the
  * collab graph, not this inspector.
  *
  * Bound to a specific message's execution slot (§9.3) via `messageId`, so the
@@ -85,19 +81,9 @@ export function RunDetailBody({
   runId: string;
 }) {
   const execution = useMessageExecution(messageId);
-  const diagnosticMode = useUIStore((s) => s.diagnosticMode);
   const showRunDetail = useSidePanelStore((s) => s.showRunDetail);
   const navigate = useNavigate();
   const conversationId = useConversationStore((s) => s.currentConversationId);
-  const traceId = useConversationStore(
-    (s) =>
-      activeRuntime(s).messages.find((m) => m.id === messageId)?.traceId ??
-      null,
-  );
-  const turnCollab = useConversationStore(
-    (s) =>
-      activeRuntime(s).messages.find((m) => m.id === messageId)?.collab ?? null,
-  );
   const turnInteractive = useConversationStore(
     (s) =>
       activeRuntime(s).messages.find((m) => m.id === messageId)?.isStreaming ??
@@ -112,12 +98,6 @@ export function RunDetailBody({
   const turnAudit = useTurnAudit(
     conversationId != null ? conversationId : null,
     messageId,
-  );
-  const llmWindow = useRunLlmWindow(
-    conversationId,
-    messageId,
-    runId,
-    diagnosticMode,
   );
 
   if (!execution || !run || !agent) return null;
@@ -287,17 +267,10 @@ export function RunDetailBody({
         />
       )}
 
-      {(contextBlocks.length > 0 ||
-        (diagnosticMode && conversationId != null)) && (
-        <WorkerContextSection
+      {contextBlocks.length > 0 && (
+        <ReceivedContextSection
           blocks={contextBlocks}
-          diagnosticMode={diagnosticMode && conversationId != null}
-          diagnostic={{
-            messages: llmWindow.data?.messages ?? [],
-            available: llmWindow.data?.available ?? false,
-            loading: llmWindow.loading,
-            error: llmWindow.error,
-          }}
+          defaultExpanded={false}
           keyBase={`run:${runId}`}
           onNavigate={(rid) => {
             const target = execution.runs.find((r) => r.id === rid);
@@ -371,17 +344,6 @@ export function RunDetailBody({
           run={run}
           agent={agent}
           defaultExpanded
-          keyBase={`run:${runId}`}
-        />
-      )}
-
-      {diagnosticMode && (
-        <DiagnosticSection
-          run={run}
-          executionId={execution.id}
-          traceId={traceId}
-          batches={execution.batches}
-          collab={turnCollab}
           keyBase={`run:${runId}`}
         />
       )}

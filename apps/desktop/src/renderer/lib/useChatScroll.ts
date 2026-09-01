@@ -4,7 +4,7 @@ import {
   isScrollUpWheel,
   nextStickState,
 } from "@/lib/stickScroll";
-import type { Message } from "@/stores/conversation";
+import { useActiveStickContentKey } from "@/stores/conversation";
 import {
   useCallback,
   useEffect,
@@ -51,11 +51,12 @@ const TOP_LOAD_THRESHOLD_PX = 240;
 const BOTTOM_LOAD_THRESHOLD_PX = 240;
 
 interface ChatScrollOptions {
-  messages: Message[];
+  firstMessageId: string | null;
+  hasTranscript: boolean;
   /** Conversation id — a change re-sticks to the latest item. */
   resetKey: string | null;
-  /** Re-stick trigger as the newest turn grows (answer + reasoning lengths). */
-  contentKey: string;
+  /** Test override; live ChatView uses {@link useActiveStickContentKey}. */
+  contentKey?: string;
   hasMoreBefore: boolean;
   hasMoreAfter: boolean;
   loadingOlder: boolean;
@@ -69,13 +70,15 @@ interface ChatScrollOptions {
 }
 
 export function useChatScroll(opts: ChatScrollOptions) {
-  const { messages, resetKey, contentKey, loadingOlder } = opts;
+  const { firstMessageId, resetKey, loadingOlder } = opts;
+  const storeContentKey = useActiveStickContentKey();
+  const contentKey = opts.contentKey ?? storeContentKey;
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
   const touchYRef = useRef<number | null>(null);
   const [atBottom, setAtBottom] = useState(true);
-  const hasTranscript = messages.length > 0;
+  const hasTranscript = opts.hasTranscript;
 
   // Latest props for the scroll listener, so it subscribes once yet always reads
   // current flags/callbacks (avoids re-binding the listener on every toggle).
@@ -90,7 +93,7 @@ export function useChatScroll(opts: ChatScrollOptions) {
     prevTop: number;
   } | null>(null);
 
-  const firstId = messages[0]?.id ?? null;
+  const firstId = firstMessageId;
 
   const applyStick = useCallback((stuck: boolean) => {
     stickRef.current = stuck;
@@ -141,7 +144,7 @@ export function useChatScroll(opts: ChatScrollOptions) {
         !anchorRef.current
       ) {
         anchorRef.current = {
-          firstId: live.messages[0]?.id ?? null,
+          firstId: live.firstMessageId,
           prevHeight: el.scrollHeight,
           prevTop: el.scrollTop,
         };

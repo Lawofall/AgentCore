@@ -18,10 +18,8 @@ from . import cmds_collab, cmds_local, cmds_read, cmds_remote
 from .phases import PHASE_LOCAL, phase_scope, report_phase
 from .policy import (
     _ALLOWED_SUBCOMMANDS,
-    _CEO_ALLOWED_WRITE_SUBCOMMANDS,
     _FORBIDDEN_PATTERNS,
     GIT_TOOL_PARAMETERS,
-    _is_ceo_context,
     _normalize_paths,
     git_call_is_write,
 )
@@ -176,11 +174,10 @@ class GitTool:
         return ToolSchema(
             name="git",
             description=(
-                # 审批 / 无仓 / CEO 写入这三条策略只在这里写一遍——
+                # 审批 / 无仓这两条策略只在这里写一遍——
                 # subcommand 与各参数说明只描述自己的取值语义。
                 "工作区根结构化 Git（仅根 `.git`；探路优先 glob/grep）。"
                 "只读免批；写入与 stash push/pop、tag create、remote add 须审批；"
-                "CEO 拒写须 delegate（例外 init_baseline/clone 仍须授权）。"
                 "无仓：只读→success+no_repo（勿当干净仓）；写硬错；"
                 "init_baseline=无仓则 init+首提交，脏仓→dirty_skip；"
                 "clone=无仓可浅克隆。"
@@ -206,13 +203,6 @@ class GitTool:
             return _error(f"子命令 '{subcommand}' 不在允许列表中", start)
         if any(pattern in subcommand for pattern in _FORBIDDEN_PATTERNS):
             return _error(f"子命令 '{subcommand}' 被安全策略拒绝", start)
-
-        if (
-            git_call_is_write(arguments)
-            and _is_ceo_context(context)
-            and subcommand not in _CEO_ALLOWED_WRITE_SUBCOMMANDS
-        ):
-            return _error("Git 写入操作需通过 delegate 委派给 Worker 执行。", start)
 
         # Phase reporting spans the queue as well as execution: waiting for another
         # index writer is the longest thing this call may do before it starts.

@@ -117,7 +117,11 @@ describe("getByokProviderPreset", () => {
     const preset = getByokProviderPreset("deepseek");
     expect(preset.baseUrl).toBe("https://api.deepseek.com");
     expect(preset.defaultModel).toBe("deepseek-v4-flash");
-    expect(preset.models).toEqual(["deepseek-v4-flash", "deepseek-v4-pro"]);
+    expect(preset.models).toEqual([
+      "deepseek-v4-flash",
+      "deepseek-v4-pro",
+      "deepseek-v4-flash-vision-exp",
+    ]);
     expect(preset.models).not.toContain("deepseek-chat");
   });
 

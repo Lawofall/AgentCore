@@ -97,16 +97,3 @@ export function MetricRow({
     </div>
   );
 }
-
-/** One diagnostic id row — left label, right mono value that wraps (`break-all`)
- * so a long UUID never overflows the narrow run-detail column. */
-export function DiagRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
-      <span className="break-all text-right font-mono text-xs text-foreground">
-        {value}
-      </span>
-    </div>
-  );
-}

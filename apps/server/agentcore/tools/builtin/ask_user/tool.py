@@ -22,6 +22,7 @@ from agentcore.tools.builtin.ask_user.card import (
 from agentcore.tools.builtin.ask_user.intent import resolve_ask_checkpoint_intent
 from agentcore.tools.builtin.ask_user.schema import (
     ListArgError,
+    advertised_option_actions,
     normalize_assumptions,
     normalize_questions,
 )
@@ -81,10 +82,11 @@ class AskUserTool:
     # captures it into the frame — the resumed toolset re-wires consult to the same
     # project (Agent记忆与知识系统 §二). ``None`` for 裸聊 / local. Capture-only (unused live).
     folder_id: str | None = None
-    # Advertise desktop-only ask_user option actions (open_local_project /
-    # register_local_project / bind_local_folder /
-    # grant_organize_folder / grant_attach_folder) when the desktop client can fulfil them.
+    # Advertise desktop-only ask_user option actions when the desktop client can
+    # fulfil them. Which actions appear depends on ``workspace_location``
+    # (本机传统 already-local drops open/register/bind; attach_rw only on local).
     advertise_bind_local_folder: bool = False
+    workspace_location: str | None = None
 
     @property
     def schema(self) -> ToolSchema:
@@ -109,25 +111,24 @@ class AskUserTool:
         tool_desc = (
             "向用户发问（唯一问用户原语）。暂停回合等人答复。"
             "挡路才问：桌上结果未钉、猜错会做错 → 先短问；仅可逆低杠杆才标假设。"
-            "登录拦截：browser_login=true。"
-            "问句写 questions[].prompt。"
             "HOW→consult(asking_the_user)。"
         )
-        if self.advertise_bind_local_folder:
-            # Short discriminators only — HOW lives in ask_user_* skills.
+        allowed_actions = advertised_option_actions(
+            desktop=self.advertise_bind_local_folder,
+            workspace_location=self.workspace_location,
+        )
+        if allowed_actions:
+            bits: list[str] = []
+            if "open_local_project" in allowed_actions:
+                bits.append("open/register/bind_local_*")
+            if "grant_organize_folder" in allowed_actions:
+                bits.append("grant_organize_folder")
+            if "grant_attach_folder" in allowed_actions:
+                bits.append("grant_attach_folder")
             option_properties["action"] = {
                 "type": "string",
-                "enum": [
-                    "open_local_project",
-                    "register_local_project",
-                    "bind_local_folder",
-                    "grant_organize_folder",
-                    "grant_attach_folder",
-                ],
-                "description": (
-                    "可选。open/register/bind_local_*=本机传统（合法非默认，云仍推荐）；"
-                    "grant_organize_folder=整理；grant_attach_folder=本机可写。"
-                ),
+                "enum": list(allowed_actions),
+                "description": "可选。整题授权才填：" + "；".join(bits) + "。",
             }
             option_properties["well_known"] = {
                 "type": "string",
@@ -148,15 +149,6 @@ class AskUserTool:
                     "仅 grant_*。已知运输 path（与 well_known/target_name 互补）。"
                 ),
             }
-            # Discriminators stay on the tool description so the model sees them
-            # without opening options.action; HOW still lives in ask_user_* skills.
-            tool_desc += (
-                " 桌面分流：整理 grant_organize_folder；本机可写 grant_attach_folder；"
-                "只读用 external_mount_readonly。"
-                "HOW→consult(external_mount_readonly)；"
-                "open/register/bind_local_* 本机传统。"
-            )
-
         return ToolSchema(
             name="ask_user",
             description=tool_desc,
@@ -300,10 +292,27 @@ class AskUserTool:
                     f"{CARD_RETRY_HINT}"
                 ),
             )
-        if not self.advertise_bind_local_folder:
+        allowed = set(
+            advertised_option_actions(
+                desktop=self.advertise_bind_local_folder,
+                workspace_location=self.workspace_location,
+            )
+        )
+        if not allowed:
             for q in questions:
                 for opt in q.get("options") or []:
                     if isinstance(opt, dict):
+                        opt.pop("action", None)
+                        opt.pop("well_known", None)
+                        opt.pop("target_name", None)
+                        opt.pop("path", None)
+        else:
+            for q in questions:
+                for opt in q.get("options") or []:
+                    if not isinstance(opt, dict):
+                        continue
+                    action = str(opt.get("action") or "").strip()
+                    if action not in allowed:
                         opt.pop("action", None)
                         opt.pop("well_known", None)
                         opt.pop("target_name", None)
@@ -401,6 +410,8 @@ class AskUserTool:
                 intent=intent,
                 card=card,
                 browser_login=browser_login,
+                n_questions=len(questions),
+                n_options=sum(len(q.get("options") or []) for q in questions),
             )
             return ToolResult(tool_call_id="", success=True, output="", effect=ToolEffect.SUSPEND)
         logger.error(

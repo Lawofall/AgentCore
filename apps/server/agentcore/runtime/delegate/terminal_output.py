@@ -1,11 +1,10 @@
-"""Structure-preserving cap for ``ALL_COMPLETED.output``.
+"""Structure-preserving cap for the CEO synthesis package.
 
-The 4000-char ceiling is unchanged. When the synthesis package overflows, this
-module keeps the roster and failure blocks and compresses individual worker
-bodies — never a silent tail chop of the assembled document.
-
-Section kinds are decided by ``format_for_ceo`` headings (status in the worker
-title, fixed failure titles). No content scoring.
+Worker bodies already share ``CEO_SYNTHESIS_BUDGET``. This module only
+enforces the pathological safety valve (``DELEGATE_OUTPUT_LIMIT``): keep
+roster / failure blocks / closing, shrink long worker bodies, never a
+silent tail chop. ToolResult and ``ALL_COMPLETED.output`` both use the
+same composed string — do not cap twice.
 """
 
 from __future__ import annotations
@@ -13,9 +12,10 @@ from __future__ import annotations
 import re
 
 from agentcore.core.text import truncate_head_tail
+from agentcore.runtime.runs.constants import DELEGATE_OUTPUT_LIMIT
 from agentcore.runtime.runs.fidelity import allocate
 
-ALL_COMPLETED_OUTPUT_LIMIT = 4000
+ALL_COMPLETED_OUTPUT_LIMIT = DELEGATE_OUTPUT_LIMIT
 
 _WORKER_HEAD = re.compile(
     r"^### .+（(?P<status>completed|failed|skipped|cancelled|unknown)） · run_id: `"
@@ -276,7 +276,7 @@ def _omit_workers_line(n: int) -> str:
 
 
 def _omit_others_line(n: int) -> str:
-    return f"{_ELISION_TAG} 已省略 {n} 节队员建议/命题卡"
+    return f"{_ELISION_TAG} 已省略 {n} 节队员建议"
 
 
 def _split_sections(text: str) -> list[str]:

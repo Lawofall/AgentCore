@@ -374,7 +374,10 @@ def command_text_for_tool(tool_name: str, arguments: dict[str, Any]) -> str:
 
 
 def _command_text_for_tool(tool_name: str, arguments: dict[str, Any]) -> str:
-    if tool_name == "terminal":
+    if tool_name == "run":
+        action = str(arguments.get("action") or "").strip().lower()
+        if action in {"read", "stop", "list"}:
+            return ""
         return str(arguments.get("command") or "")
     if tool_name == "host":
         from agentcore.tools.builtin.host import host_call_is_shell
@@ -578,10 +581,10 @@ def evaluate_tool_call(tool_name: str, arguments: dict[str, Any] | None) -> Brea
     from agentcore.tools.builtin.host import host_call_is_shell
 
     is_host_shell = name == "host" and host_call_is_shell(args)
-    if name in {"terminal", "code_execute", "test_run"} or is_host_shell:
-        if name == "terminal":
-            sub = str(args.get("subcommand") or "").strip().lower()
-            if sub and sub != "start":
+    if name == "run" or is_host_shell:
+        if name == "run":
+            action = str(args.get("action") or "").strip().lower()
+            if action in {"read", "stop", "list"}:
                 return None
         command_text = _command_text_for_tool(name, args)
         if is_host_shell:

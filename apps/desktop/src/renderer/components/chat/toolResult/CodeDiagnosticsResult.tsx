@@ -7,7 +7,7 @@ import {
 
 /**
  * Inner-loop type diagnostics card — neutral / warning chrome, never the outer-loop
- * ``验证未完成（预算耗尽）`` banner and never fault-red melt styling.
+ * outer-loop incomplete banner and never fault-red melt styling.
  */
 export function CodeDiagnosticsResult({
   display,

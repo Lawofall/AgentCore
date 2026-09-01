@@ -359,7 +359,7 @@ describe("ModelSettings (profiles)", () => {
     expect(screen.getByText(/主模型不能看图时再配/)).toBeTruthy();
   });
 
-  it("hints when draft main is curated vision-capable", () => {
+  it("hints when draft main is catalog vision-capable", () => {
     useModelsMock.mockReturnValue({
       data: {
         ...defaultCatalog(),

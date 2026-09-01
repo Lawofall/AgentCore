@@ -154,15 +154,21 @@ async def test_host_open_settings_accepts_display():
 
 
 @pytest.mark.asyncio
-async def test_host_ceo_worker_only_action_tells_delegate():
+async def test_host_ceo_l3_action_same_path_as_worker():
+    channel = MagicMock()
+    channel.request_host = AsyncMock(
+        return_value={"opened": True, "panel": "sound", "uri": "ms-settings:sound"}
+    )
     result = await HostTool().execute(
         {"action": "open_settings", "panel": "sound"},
-        _ctx(as_worker=False, channel=MagicMock()),
+        _ctx(as_worker=False, channel=channel),
     )
-    assert not result.success
-    assert result.contract_failure is True
-    assert "delegate" in (result.error or "")
-    assert "Worker" in (result.error or "")
+    assert result.success
+    assert result.contract_failure is not True
+    assert "delegate" not in (result.error or "")
+    channel.request_host.assert_awaited_once_with(
+        HostOp.OPEN_SETTINGS, {"panel": "sound"}, timeout=30.0
+    )
 
 
 @pytest.mark.asyncio
@@ -442,6 +448,13 @@ def test_host_call_requires_approval_by_action():
     assert host_call_requires_approval({"action": "restart_service"})
     assert host_call_requires_approval({"action": "install_package"})
     assert not host_call_requires_approval({"action": "nope"})
+
+
+def test_host_action_description_is_ceo_and_worker():
+    desc = HostTool().schema.parameters["properties"]["action"]["description"]
+    assert "仅 worker" not in desc
+    assert "status" in desc and "os_log" in desc and "shell" in desc
+    assert "有界探测" not in desc
 
 
 @pytest.mark.asyncio

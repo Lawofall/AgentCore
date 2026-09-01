@@ -253,6 +253,19 @@ const EMPTY_EXEC: ExecutionRuntime = {
 
 const RUN_TERMINAL = new Set(["completed", "failed", "cancelled", "skipped"]);
 
+function mergeInterjectionLists(
+  dest: UserInterjection[],
+  src: UserInterjection[],
+): UserInterjection[] {
+  if (src.length === 0) return dest;
+  if (dest.length === 0) return src;
+  const byId = new Map(dest.map((item) => [item.interjectionId, item]));
+  for (const item of src) {
+    if (!byId.has(item.interjectionId)) byId.set(item.interjectionId, item);
+  }
+  return [...byId.values()];
+}
+
 /**
  * Journal settled a worker that the live slot still shows in-flight.
  * Ephemeral live frames (deltas / phases) often outnumber sparse journal
@@ -346,9 +359,9 @@ export function execRuntime(
  * — the CEO's turn ended (message_end) but its team keeps running detached-hosted
  * in the background (coordination.turn_detached). The live handler holds the graph
  * at `running` instead of collapsing it to `completed`; the run-终态 reconcile in
- * {@link ExecutionState.recordFrame}/{@link ExecutionState.recordFrames} settles
+ * {@link ExecutionState.recordFrame} settles
  * it when the last worker's terminal frame lands (delivered via re-attach replay /
- * cross-turn append).
+ * cross-turn append). Delta 合批 {@link ExecutionState.recordFrames} 只 append，不判收口。
  *
  * Captain is excluded: its early `run_started` is often dropped (no plan yet), so
  * a still-pending captain after `end_turn` must not pin「正在收尾」forever when
@@ -376,6 +389,28 @@ export function hasUnsettledRuns(runtime: ExecutionRuntime): boolean {
   );
 }
 
+function maybeCompleteIfWorkersSettled(
+  get: () => ExecutionState,
+  messageId: string,
+): void {
+  const rt = execRuntime(get(), messageId);
+  if (
+    rt.plan &&
+    rt.status === "running" &&
+    runsAllSettled(
+      rt.plan,
+      rt.frames,
+      rt.status,
+      rt.debate,
+      rt.debateRounds,
+      rt.crossExamEnabled,
+      rt.debateOpening,
+    )
+  ) {
+    get().setStatus("completed", messageId);
+  }
+}
+
 export const useExecutionStore = create<ExecutionState>((set, get) => {
   /** Patch one message's runtime slice, lazily created from empty. */
   const patchExec = (
@@ -393,7 +428,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
     byId: {},
 
     startExecution: (plan, messageId) =>
-      patchExec(messageId, () => ({
+      patchExec(messageId, (cur) => ({
         plan: ensureDelegateBatchStamps(plan),
         frames: [],
         playhead: null,
@@ -410,7 +445,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
         coordinationWait: null,
         executionDetached: null,
         deliveryStatus: null,
-        userInterjections: [],
+        userInterjections: cur.userInterjections,
         attestedOutcome: null,
       })),
 
@@ -439,22 +474,8 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
         cur.plan ? { frames: [...cur.frames, frame] } : null,
       );
       // 跨回合同图追加：宿主卡不靠追加回合 message_end 收口，按 run 终态 reconcile。
-      const rt = execRuntime(get(), messageId);
-      if (
-        rt.plan &&
-        rt.status === "running" &&
-        runsAllSettled(
-          rt.plan,
-          rt.frames,
-          rt.status,
-          rt.debate,
-          rt.debateRounds,
-          rt.crossExamEnabled,
-          rt.debateOpening,
-        )
-      ) {
-        get().setStatus("completed", messageId);
-      }
+      // 只在结构帧路径上全量投影判收口；delta 合批走 recordFrames，禁止每 rAF 重折。
+      maybeCompleteIfWorkersSettled(get, messageId);
     },
 
     recordFrames: (frames, messageId) => {
@@ -467,21 +488,6 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
       );
       if (frames.length === 0) return;
       const rt = execRuntime(get(), messageId);
-      if (
-        rt.plan &&
-        rt.status === "running" &&
-        runsAllSettled(
-          rt.plan,
-          rt.frames,
-          rt.status,
-          rt.debate,
-          rt.debateRounds,
-          rt.crossExamEnabled,
-          rt.debateOpening,
-        )
-      ) {
-        get().setStatus("completed", messageId);
-      }
       if (perfOn) {
         markGraphPerf("flush", performance.now() - t0, {
           batch: frames.length,
@@ -878,10 +884,21 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
         const from = state.byId[fromId];
         if (!from) return {};
         const to = state.byId[toId];
-        // Prefer the destination if it already has a plan; only move when empty.
+        // Prefer the destination if it already has a plan; still merge 插话叶子。
         if (to?.plan) {
           const { [fromId]: _, ...rest } = state.byId;
-          return { byId: rest };
+          return {
+            byId: {
+              ...rest,
+              [toId]: {
+                ...to,
+                userInterjections: mergeInterjectionLists(
+                  to.userInterjections,
+                  from.userInterjections,
+                ),
+              },
+            },
+          };
         }
         const { [fromId]: _, ...rest } = state.byId;
         return { byId: { ...rest, [toId]: from } };

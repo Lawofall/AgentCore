@@ -97,20 +97,63 @@ def test_rejects_when_backend_channel_is_dead():
     from agentcore.workspace.channel import WorkspaceChannel
 
     channel = WorkspaceChannel(
-        user_id="u-test",
+        user_id="u-gate-absent",
         conversation_id="conv-cd",
         registry=InteractionRegistry(),
         timeout_seconds=1.0,
+        root_id="root-cd",
     )
-    channel._dead = True  # noqa: SLF001 — sticky dead stamp
     tool = _tool()
     tool._base_tool_context = SimpleNamespace(
         execution_id="exec-other",
-        backend=SimpleNamespace(_channel=channel),
+        user_id="u-gate-absent",
+        backend=SimpleNamespace(location="local", _channel=channel),
     )
     err = channel_dead_write_desk_error(tool, _files_plan())
     assert err == CHANNEL_DEAD_WRITE_DESK_REJECT
     assert channel_dead_write_desk_error(tool, _prose_plan()) is None
+
+
+def test_live_fulfiller_overrides_session_stamp_and_allows_files():
+    """Desktop back online → write-desk dispatch is allowed even if the session was stamped."""
+    from agentcore.fulfill.hub import default_fulfiller_hub
+    from agentcore.runtime.coordination.session import (
+        CoordinationSession,
+        clear_active_coordination,
+        set_active_coordination,
+    )
+    from agentcore.runtime.interaction import InteractionRegistry
+    from agentcore.workspace.channel import WorkspaceChannel
+    from agentcore.workspace.local import LocalWorkspace
+
+    uid = "u-gate-revive"
+    root = "root-gate-revive"
+    clear_active_coordination()
+    session = CoordinationSession(execution_id="exec-cd", total_workers=1)
+    session.conversation_id = "conv-cd"
+    session.workspace_channel_dead = True
+    set_active_coordination(session)
+    hub = default_fulfiller_hub()
+    bound = hub.register(uid, "dev-gate-revive", caps=["workspace"], roots=[root])
+    try:
+        channel = WorkspaceChannel(
+            user_id=uid,
+            conversation_id="conv-cd",
+            registry=InteractionRegistry(),
+            timeout_seconds=1.0,
+            root_id=root,
+        )
+        tool = _tool()
+        tool._base_tool_context = SimpleNamespace(
+            execution_id="exec-cd",
+            user_id=uid,
+            backend=LocalWorkspace(channel),
+        )
+        assert channel_dead_write_desk_error(tool, _files_plan()) is None
+        assert session.workspace_channel_dead is False
+    finally:
+        hub.unregister(bound)
+        clear_active_coordination("exec-cd")
 
 
 def test_skip_completed_write_nodes_allows_prose_tail():
@@ -218,7 +261,7 @@ async def test_delegate_rejects_files_form_when_session_workspace_channel_dead()
         )
         assert result.success is False
         assert result.contract_failure is True
-        assert "channel dead" in (result.error or "").lower()
+        assert "连不上" in (result.error or "")
         assert "写盘" in (result.error or "")
     finally:
         clear_active_coordination()
@@ -321,7 +364,7 @@ async def test_apply_replan_rejects_files_add_when_channel_dead():
             ],
         )
         assert err
-        assert any("channel dead" in e.lower() for e in err)
+        assert any("连不上" in e for e in err)
     finally:
         clear_active_coordination("exec-cd")
 

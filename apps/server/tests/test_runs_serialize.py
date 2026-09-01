@@ -129,7 +129,7 @@ def test_landing_write_failure_kind_channel_dead_vs_write_failed():
         _tool_result(
             "c1",
             with_tool_failed_marker(
-                "local workspace op 'write' rejected: channel dead（活性挂起）"
+                "工作区/本地文件连不上：local workspace op 'write' failed: no fulfiller（无履约方）"
             ),
         ),
     ]
@@ -490,6 +490,23 @@ def test_spec_round_trips_with_nested_policy_and_deliverable():
     assert isinstance(restored.deliverable, Deliverable)
     assert restored.deliverable.required_sections == ["结论"]
     assert restored.deliverable.strict is True
+
+
+def test_legacy_placeholder_exempt_keys_dropped_on_load():
+    restored = spec_from_json(
+        {
+            "run_id": "r1",
+            "task": "t",
+            "deliverable": {
+                "form": "files",
+                "placeholder_hard_exempt": True,
+                "placeholder_hard_exempt_artifacts": ["a.md"],
+            },
+        }
+    )
+    assert restored.deliverable is not None
+    assert not hasattr(restored.deliverable, "placeholder_hard_exempt")
+    assert not hasattr(restored.deliverable, "placeholder_hard_exempt_artifacts")
 
 
 def test_spec_without_deliverable_round_trips_to_none():

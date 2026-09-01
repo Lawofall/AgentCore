@@ -51,7 +51,6 @@ from agentcore.tools.protocol import (
     RetrievalBudgetState,
     ToolContext,
     fork_explore_write_scope,
-    isolate_file_read_ceiling,
 )
 from agentcore.tools.registry import ToolRegistry
 
@@ -187,11 +186,10 @@ async def _prepare_agent_node(
         base_write_scope=getattr(base_ctx, "write_scope", "project") or "project",
         turn_created_folder_ids=getattr(base_ctx, "turn_created_folder_ids", None),
     )
-    tool_ctx = isolate_file_read_ceiling(
-        replace(
-            base_ctx,
-            run_id=spec.run_id,
-            agent_id=agent_id,
+    tool_ctx = replace(
+        base_ctx,
+        run_id=spec.run_id,
+        agent_id=agent_id,
         execution_id=env.execution_id,
         write_coordinator=env.write_coordinator,
         write_ancestors=env.ancestors_by_id.get(spec.run_id, frozenset()),
@@ -235,7 +233,6 @@ async def _prepare_agent_node(
         handoff_deliverable_form=(
             deliverable.form if deliverable is not None else None
         ),
-        )
     )
     # 阶段2 嵌套子任务: hand this worker delegation tools when opted in.
     _trim_started = time.monotonic()
@@ -282,8 +279,7 @@ async def _prepare_agent_node(
         depth=spec.depth,
         form=deliverable_form,
         artifacts=list(deliverable.artifacts) if deliverable else None,
-        # 能写≠能跑: retire EXEC_ENV_TIMEOUT_FAMILY first (session.exec_env_dead),
-        # then this flag — identity must not claim it can run after the family is gone.
+        # 能写≠能跑: 只看注册表是否装配 ``run``（环境死不再卸工具）。
         can_execute=registry_can_execute(worker_tools, tool_ctx),
     )
     if worker_write_scope == "none" and not (
@@ -384,6 +380,13 @@ async def _prepare_agent_node(
         )
     else:
         with _prepare_phase("build_messages"):
+            from agentcore.runtime.context.working_set import build_working_set_block
+            from agentcore.runtime.facts import snapshot_fact_log
+
+            working_set = await build_working_set_block(
+                conversation_id=str(getattr(tool_ctx, "conversation_id", "") or ""),
+                live_entries=snapshot_fact_log(),
+            )
             messages[:] = _build_messages(
                 env.plan,
                 spec,
@@ -396,6 +399,7 @@ async def _prepare_agent_node(
                 team_brief=env.team_brief,
                 context_inject=context_inject or None,
                 conversation_id=str(getattr(tool_ctx, "conversation_id", "") or ""),
+                working_set=working_set,
             )
         # Worker window head (§8.3): journal the opening task-prompt so
         # ``window_from_journal(run_id=…)`` anchors on THIS run's system+user, not the

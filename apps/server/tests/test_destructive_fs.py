@@ -189,11 +189,8 @@ async def test_local_gate_forces_without_baseline(tmp_path: Path):
             return_value=False,
         ):
             hit = await _apply_local_destructive_baseline_gate(
-                tool_name="code_execute",
-                args={
-                    "language": "python",
-                    "code": 'shutil.rmtree("src/legacy")\n',
-                },
+                tool_name="run",
+                args={"command": 'shutil.rmtree("src/legacy")\n'},
                 context=context,  # type: ignore[arg-type]
                 existing=None,
             )
@@ -225,11 +222,8 @@ async def test_local_gate_passes_with_baseline(tmp_path: Path):
     token = current_journal_writer.set(writer)
     try:
         hit = await _apply_local_destructive_baseline_gate(
-            tool_name="code_execute",
-            args={
-                "language": "python",
-                "code": 'shutil.rmtree("src/legacy")\n',
-            },
+            tool_name="run",
+            args={"command": 'shutil.rmtree("src/legacy")\n'},
             context=context,  # type: ignore[arg-type]
             existing=None,
         )
@@ -244,8 +238,8 @@ async def test_local_gate_skips_server_location():
     backend = SimpleNamespace(location="server", root=Path("/tmp/unused"))
     context = SimpleNamespace(backend=backend, user_id="u1", conversation_id="c1")
     hit = await _apply_local_destructive_baseline_gate(
-        tool_name="code_execute",
-        args={"language": "python", "code": 'shutil.rmtree("src")\n'},
+        tool_name="run",
+        args={"command": 'shutil.rmtree("src")\n'},
         context=context,  # type: ignore[arg-type]
         existing=None,
     )
@@ -257,8 +251,8 @@ async def test_local_gate_skips_whitelist_cleanup(tmp_path: Path):
     backend = SimpleNamespace(location="local", root=tmp_path)
     context = SimpleNamespace(backend=backend, user_id="u1", conversation_id="c1")
     hit = await _apply_local_destructive_baseline_gate(
-        tool_name="code_execute",
-        args={"language": "python", "code": 'shutil.rmtree("node_modules")\n'},
+        tool_name="run",
+        args={"command": 'shutil.rmtree("node_modules")\n'},
         context=context,  # type: ignore[arg-type]
         existing=None,
     )
@@ -286,11 +280,8 @@ async def test_local_gate_does_not_stack_on_existing_force(tmp_path: Path):
             return_value=False,
         ):
             hit = await _apply_local_destructive_baseline_gate(
-                tool_name="code_execute",
-                args={
-                    "language": "python",
-                    "code": 'shutil.rmtree("ai-team-workbench")\n',
-                },
+                tool_name="run",
+                args={"command": 'shutil.rmtree("ai-team-workbench")\n'},
                 context=context,  # type: ignore[arg-type]
                 existing=existing,
             )
@@ -317,11 +308,8 @@ async def test_local_gate_channel_ready_skips_no_baseline_upgrade():
     token = current_journal_writer.set(writer)
     try:
         hit = await _apply_local_destructive_baseline_gate(
-            tool_name="code_execute",
-            args={
-                "language": "python",
-                "code": 'shutil.rmtree("src/legacy")\n',
-            },
+            tool_name="run",
+            args={"command": 'shutil.rmtree("src/legacy")\n'},
             context=context,  # type: ignore[arg-type]
             existing=None,
         )
@@ -347,11 +335,8 @@ async def test_local_gate_channel_not_ready_forces():
     token = current_journal_writer.set(writer)
     try:
         hit = await _apply_local_destructive_baseline_gate(
-            tool_name="code_execute",
-            args={
-                "language": "python",
-                "code": 'shutil.rmtree("src/legacy")\n',
-            },
+            tool_name="run",
+            args={"command": 'shutil.rmtree("src/legacy")\n'},
             context=context,  # type: ignore[arg-type]
             existing=None,
         )
@@ -381,11 +366,8 @@ async def test_local_gate_channel_ready_still_keeps_top_tree_force():
     token = current_journal_writer.set(writer)
     try:
         hit = await _apply_local_destructive_baseline_gate(
-            tool_name="code_execute",
-            args={
-                "language": "python",
-                "code": 'shutil.rmtree("ai-team-workbench")\n',
-            },
+            tool_name="run",
+            args={"command": 'shutil.rmtree("ai-team-workbench")\n'},
             context=context,  # type: ignore[arg-type]
             existing=existing,
         )
@@ -405,8 +387,8 @@ async def test_local_gate_channel_whitelist_still_skips():
     )
     context = SimpleNamespace(backend=backend, user_id="u1", conversation_id="c1")
     hit = await _apply_local_destructive_baseline_gate(
-        tool_name="code_execute",
-        args={"language": "python", "code": 'shutil.rmtree("node_modules")\n'},
+        tool_name="run",
+        args={"command": 'shutil.rmtree("node_modules")\n'},
         context=context,  # type: ignore[arg-type]
         existing=None,
     )

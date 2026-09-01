@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Tests for 设置·通用 (原「外观」) — 主题 + 从关于页搬来的两个进阶开关。
+ * Tests for 设置·通用 (原「外观」) — 主题 + 有本机引擎时的进阶「允许本机执行」。
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,7 +20,6 @@ beforeEach(() => {
   vi.mocked(hasLocalEngine).mockReturnValue(true);
   useUIStore.setState({
     theme: "light",
-    diagnosticMode: false,
     sidecarPreference: "unset",
     sidecarEnabled: false,
   });
@@ -53,31 +52,24 @@ describe("GeneralSettings · 主题", () => {
 });
 
 describe("GeneralSettings · 进阶开关（原在关于页）", () => {
-  it("hosts 开发者 / 诊断模式 and writes it to the store", () => {
+  it("hosts 允许本机执行 on a local-engine build without a parent toggle", () => {
     render(<GeneralSettings />);
-    const toggle = screen.getByRole("switch", { name: "开发者 / 诊断模式" });
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
-
-    fireEvent.click(toggle);
-    expect(useUIStore.getState().diagnosticMode).toBe(true);
+    expect(screen.getByRole("heading", { name: "进阶" })).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "允许本机执行" })).toBeTruthy();
+    expect(
+      screen.queryByRole("switch", { name: "开发者 / 诊断模式" }),
+    ).toBeNull();
   });
 
-  it("reveals 允许本机执行 only under diagnostic mode on a local-engine build", () => {
-    const { rerender } = render(<GeneralSettings />);
-    expect(screen.queryByRole("switch", { name: "允许本机执行" })).toBeNull();
-
-    useUIStore.setState({ diagnosticMode: true });
-    rerender(<GeneralSettings />);
-    expect(screen.getByRole("switch", { name: "允许本机执行" })).toBeTruthy();
-
+  it("hides the whole 进阶 section without a local engine", () => {
     vi.mocked(hasLocalEngine).mockReturnValue(false);
-    rerender(<GeneralSettings />);
+    render(<GeneralSettings />);
+    expect(screen.queryByRole("heading", { name: "进阶" })).toBeNull();
     expect(screen.queryByRole("switch", { name: "允许本机执行" })).toBeNull();
   });
 
   it("reads 允许本机执行 from the preference, not from sidecarEnabled", () => {
     // unset + sidecarEnabled=false 仍是「允许」——路由默认走同侧引擎。
-    useUIStore.setState({ diagnosticMode: true });
     render(<GeneralSettings />);
     expect(
       screen
@@ -87,7 +79,7 @@ describe("GeneralSettings · 进阶开关（原在关于页）", () => {
   });
 
   it("clears cached sidecar health when re-allowing local execution", () => {
-    useUIStore.setState({ diagnosticMode: true, sidecarPreference: "off" });
+    useUIStore.setState({ sidecarPreference: "off" });
     render(<GeneralSettings />);
     const toggle = screen.getByRole("switch", { name: "允许本机执行" });
     expect(toggle.getAttribute("aria-checked")).toBe("false");

@@ -177,7 +177,7 @@ def patch_orchestration_seams(monkeypatch, provider: RoleScriptedProvider) -> No
     monkeypatch.setattr(TurnJournalWriter, "_drain", _fast_journal_drain)
     monkeypatch.setattr("agentcore.db.base.async_session_factory", _no_db)
     monkeypatch.setattr(
-        "agentcore.runtime.context.folder_catalog.async_session_factory",
+        "agentcore.runtime.pipeline.prepare.async_session_factory",
         _no_db,
     )
 

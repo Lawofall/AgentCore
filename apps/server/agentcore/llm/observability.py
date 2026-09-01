@@ -174,7 +174,7 @@ def log_llm_call(
         try:
             from agentcore.runtime.turn.token_budget import record_turn_tokens
 
-            record_turn_tokens(usage.total_tokens)
+            record_turn_tokens(usage.fuse_tokens)
         except Exception:  # noqa: BLE001 — budget meter must never break the LLM path
             pass
 

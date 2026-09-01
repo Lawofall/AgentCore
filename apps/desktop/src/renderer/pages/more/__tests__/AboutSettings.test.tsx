@@ -84,7 +84,7 @@ describe("AboutSettings", () => {
     ).toBe("/more/legal/privacy");
   });
 
-  it("no longer hosts the diagnostic toggles (moved to 设置·通用)", () => {
+  it("does not host 允许本机执行 (that switch lives under 设置·通用·进阶)", () => {
     renderPage();
     expect(screen.queryByRole("switch")).toBeNull();
     expect(screen.queryByText("开发者 / 诊断模式")).toBeNull();

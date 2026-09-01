@@ -18,8 +18,10 @@ Token 口径（复盘必读）：
 
 执行面（保持可扫）：``execution`` 是折叠摘要——工具按名聚合、run 只取
 ``obs.turn_spans`` 的 ``invoke_agent`` 行（失败优先、有上限）、prepare 分段一行。
-成功工具 / 逐条 ``llm.call`` 不进 ``decisions``；失败 ``llm.call_failed`` 与失败
-``tool.execute_end`` 一样上脊。
+成功工具 / 逐条 ``llm.call`` 不进 ``decisions``；失败 ``llm.call_failed``、
+``engine.llm_round_exception`` / ``engine.llm_failed_terminal`` 与失败
+``tool.execute_end``（:func:`~agentcore.observability.query.tool_end.is_tool_failure`，
+含 ``allowlist_deny`` 等未执行；``redirect`` 改道上脊但不计 Exec err）一样上脊。
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from agentcore.observability.query.stats import (
     collab_drift,
     new_trace,
 )
+from agentcore.observability.query.tool_end import is_tool_failure, tool_end_on_spine
 
 SCHEMA_VERSION = "decision_spine.v0"
 
@@ -62,6 +65,8 @@ _ACTIVE_DECISION_EVENTS = frozenset(
         # Execution-layer failures (rare; same "obvious failure only" bar as tools).
         "llm.call_failed",
         "llm.rate_limit_no_retry",
+        "engine.llm_round_exception",
+        "engine.llm_failed_terminal",
         "chat.prepare_local_io_abort",
     }
 )
@@ -147,6 +152,9 @@ _DECISION_KEEP_KEYS = (
     "blocking",
     "assumption",
     "error",
+    "error_code",
+    "origin",
+    "classified",
     "scope",
     "scope_ratio",
     "escalations",
@@ -249,8 +257,9 @@ def _iter_decisions(log_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if event in _DECISION_EVENTS:
             out.append(_project_decision(ev))
             continue
-        # Obvious tool failures and channel steers (success noise stays off the spine).
-        if event == "tool.execute_end" and ev.get("status") in ("error", "redirect"):
+        # Failures + channel steers (success noise stays off the spine).
+        # Same predicate as patrol: allowlist_deny etc. are failures; redirect is steer.
+        if tool_end_on_spine(ev):
             out.append(_project_decision(ev))
             continue
         # Local write-back: aggregate tool failure codes (no fake tool.execute_end).
@@ -344,7 +353,7 @@ def _execution_summary(log_events: list[dict[str, Any]]) -> dict[str, Any]:
         slot["ms_sum"] += ms
         if ms > slot["ms_max"]:
             slot["ms_max"] = ms
-        if ev.get("status") == "error":
+        if is_tool_failure(ev):
             slot["error"] += 1
         else:
             slot["ok"] += 1

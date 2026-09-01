@@ -10,7 +10,6 @@ from agentcore.runtime.events import (
     FinishReason,
     SSEEvent,
     content_delta,
-    content_reset,
     delivery_status,
     error_event,
     message_end,
@@ -302,11 +301,11 @@ def _multi_agent_export_docx_artifacts() -> list[SSEEvent]:
 
 
 def _multi_agent_pptx_promised_md_only() -> list[SSEEvent]:
-    """选 pptx 却只落 md/脚本：部分交付卡可见；假「PPT 已可打开」经 finish_guard 回炉。
+    """选 pptx 却只落 md/脚本：部分交付卡可见；产物结构窄闸已撤，终稿承认缺口。
 
-    前置假定用户已在开工卡选定 format_id=f0（PowerPoint）；本向量钉交付诚实性——
-    delivery_status=partial（无 .pptx）+ 违规终稿被 content_reset(finish_guard) 丢掉，
-    修正为承认缺口。对照 ``multi_agent_delivery_status_partial``（诚实终稿、无回炉）。
+    前置假定用户已在开工卡选定 format_id=f0（PowerPoint）；本向量钉部分交付——
+    delivery_status=partial（无 .pptx）+ 诚实终稿。引擎不再因「PPT 已落盘」
+    content_reset。对照 ``multi_agent_delivery_status_partial``。
     """
     agents = [
         {"id": "w1", "role": "课件工程师", "thinking": True},
@@ -375,8 +374,6 @@ def _multi_agent_pptx_promised_md_only() -> list[SSEEvent]:
             ],
         ),
         tool_use_end("dc1", "delegate", success=True, output="团队产出已汇总。"),
-        content_delta("课件 PPT 已落盘，可直接打开使用。"),
-        content_reset("finish_guard"),
         content_delta("讲稿与生成脚本已就绪；pptx 尚未生成，请绑定本机执行环境后运行脚本。"),
         message_end(FinishReason.END_TURN, input_tokens=2100, output_tokens=420, cost=_COST),
     ]

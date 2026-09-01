@@ -26,11 +26,9 @@ import { useExecutionStore } from "@/stores/execution";
 /**
  * 插话主时间线单条（经典 steer + 协调共用）——挂在 process `user_interjection`
  * marker 槽，钉住真实发生位置。
- * `queued` 等待期保留完整用户气泡（仅徽标文案/色调切换）；
- * 仅当时间线上更靠后出现同内容正式 user 消息（近似「已出队」）时，
- * 才折叠成一行低权重锚点，避免双泡。匹配不上则保持完整气泡。
- * DURABLE：数据来自 execution.userInterjections（live SSE / journal hydrate），
- * 刷新/历史回看仍在；不伪造 Message 行。
+ * 主时间线尚无同内容用户泡时保留完整气泡；已有则折成一行锚点（防双泡）。
+ * DURABLE：五态来自 execution.userInterjections（live SSE / journal hydrate）；
+ * 正文以主时间线用户泡为准。
  * `addressed` 只留用户泡：徽章与服务端 note 不画（结果已在图/回复）。
  */
 export function InterjectionTimeline({
@@ -55,12 +53,12 @@ export function InterjectionTimeline({
     return isInterjectionTurnTerminal(rt.turnPhase, msg?.isStreaming);
   });
   /**
-   * queued 且后续已有同内容正式 user 消息 → 折叠成锚点（防双泡）。
-   * 返回稳定布尔：无 queued 时短路，不扫描 messages。
+   * 主时间线已有同内容正式 user 消息 → 折叠成锚点（防双泡）。
+   * 排队 / 插队发送即入场后，正文以用户泡为准，marker 只留时序。
    */
-  const queuedContent = item?.status === "queued" ? item.content : null;
+  const foldContent = item?.content ?? null;
   const folded = useConversationStore((s) => {
-    if (!queuedContent) return false;
+    if (!foldContent) return false;
     const messages = activeRuntime(s).messages;
     const assistantIdx = messages.findIndex(
       (m) =>
@@ -70,7 +68,7 @@ export function InterjectionTimeline({
     if (assistantIdx < 0) return false;
     for (let i = assistantIdx + 1; i < messages.length; i++) {
       const m = messages[i];
-      if (m.role === "user" && m.content === queuedContent) return true;
+      if (m.role === "user" && m.content === foldContent) return true;
     }
     return false;
   });
@@ -96,9 +94,7 @@ function InterjectionServerNote({ note }: { note: string }) {
 }
 
 /**
- * queued 已出队（后续同内容 user 消息已出现）：一行时序注记。
- * 正文与附件交给下方那条正式用户气泡承载——折叠前提即「同内容正式消息已在」，
- * 此处只保留「你在这个位置插过话、它被推到了下一回合」的时序事实，不重复正文。
+ * 同内容用户泡已在主时间线：一行时序注记，正文不重复。
  */
 function InterjectionQueuedAnchor({ item }: { item: UserInterjection }) {
   const tone = interjectionStatusTone(item.status);

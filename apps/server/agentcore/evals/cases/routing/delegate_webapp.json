@@ -8,5 +8,5 @@
     { "name": "FinishReason" },
     { "name": "Delegated" }
   ],
-  "rubric": "实质交付物（可运行网页文件）：CEO 自己无写文件工具，应委派给 worker 落盘，而非把整份代码粘进回复正文。"
+  "rubric": "可运行应用（单页番茄钟）：默认委派 worker 落盘，而非 CEO 自己写整份或把代码粘进回复正文。"
 }

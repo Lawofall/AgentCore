@@ -25,8 +25,8 @@ from agentcore.runtime.events.types import EventType
 # 后续应尽量补真向量再从本表移除。空 = 全部 DURABLE 已被向量覆盖。
 DURABLE_VECTOR_WAIVERS: dict[EventType, str] = {
     EventType.BATCH_METRICS: (
-        "调度埋点量化——DURABLE（落 journal，重载经 runs_from_entries 折入 run 详情：桌面 "
-        "Execution.batches / 手机 conformance fold 显式 no-op），但**不进**规范化 ProjectedTurn "
+        "调度埋点量化——DURABLE（落 journal，重载折入桌面 Execution.batches；"
+        "采集仍在、产品不展示；手机 conformance fold 显式 no-op），但**不进**规范化 ProjectedTurn "
         "表面，故没有 golden 能断言其往返。属知情记账，非静默盲区。"
     ),
     EventType.GRAPH_APPEND: (

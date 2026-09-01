@@ -246,38 +246,6 @@ def _drop_retired_user_memory_chrome(markdown: str) -> str:
     return markdown
 
 
-# Max length of a topic's one-line summary in the CEO's 记忆主题目录 (记忆系统 §1.4): long
-# enough to disambiguate WHEN to consult a note, short enough to keep the always-on
-# directory cheap / prefix-cache friendly. Overflow is truncated with an ellipsis.
-_TOPIC_SUMMARY_MAX = 60
-
-
-def topic_summary_line(markdown: str) -> str:
-    """A note's first substantive content line — the FOLDER ROSTER's one-liner.
-
-    Used by ``runtime/context/folder_catalog`` to label a folder from its 画像.md: there the
-    question is「这个文件夹是干什么的」and the profile's first line answers it.
-
-    NOT the 按需目录 summary: choosing WHEN to consult a note needs a description written
-    for retrieval, so that directory reads the entry's frontmatter ``description`` instead
-    (审计 ②). Human chrome (H1 + blockquote) is dropped via ``strip_memory_chrome``, ``##``
-    section headers are skipped, and the first bullet's text (or the first freeform line) is
-    returned — truncated to ``_TOPIC_SUMMARY_MAX`` with an ellipsis. Returns "" for an empty
-    / chrome-only note so the caller renders just the name.
-    """
-    for line in strip_memory_chrome(markdown).splitlines():
-        if not line.strip() or _SECTION_RE.match(line):
-            continue
-        bullet = _BULLET_RE.match(line)
-        text = strip_bullet_timestamp((bullet.group(1) if bullet else line).strip())
-        if not text:
-            continue
-        if len(text) > _TOPIC_SUMMARY_MAX:
-            text = text[: _TOPIC_SUMMARY_MAX - 1].rstrip() + "…"
-        return text
-    return ""
-
-
 def _normalize(text: str) -> str:
     """Normalize for matching and dedup: collapse whitespace, strip, casefold."""
     return re.sub(r"\s+", " ", text).strip().casefold()

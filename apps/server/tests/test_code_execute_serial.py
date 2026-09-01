@@ -1,7 +1,7 @@
-"""Per-conversation ``code_execute`` serial lock.
+"""Per-conversation short-exec serial lock.
 
 Same ``conversation_id`` must not overlap in wall time; different / empty ids may.
-``test_run`` deliberately does not take this lock (see code_execute_lock module doc).
+The verify kernel deliberately does not take this lock (see code_execute_lock module doc).
 """
 
 from __future__ import annotations
@@ -10,9 +10,9 @@ import asyncio
 import inspect
 import time
 
-from agentcore.tools.builtin import test_run as test_run_mod
-from agentcore.tools.builtin.code_execute import CodeExecuteTool
+import agentcore.tools.builtin.run_verify as run_verify_mod
 from agentcore.tools.builtin.code_execute_lock import code_execute_lock
+from agentcore.tools.builtin.run_short import execute_short
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
 
@@ -56,12 +56,11 @@ def _windows_overlap(a: tuple[float, float], b: tuple[float, float]) -> bool:
 
 async def test_same_conversation_serializes():
     backend = _SlowBackend(delay=0.05)
-    tool = CodeExecuteTool()
     args = {"code": "print(1)", "language": "python"}
 
     await asyncio.gather(
-        tool.execute(args, _ctx(backend, "conv-same")),
-        tool.execute(args, _ctx(backend, "conv-same")),
+        execute_short(args, _ctx(backend, "conv-same")),
+        execute_short(args, _ctx(backend, "conv-same")),
     )
 
     assert len(backend.windows) == 2
@@ -70,12 +69,11 @@ async def test_same_conversation_serializes():
 
 async def test_different_conversations_overlap():
     backend = _SlowBackend(delay=0.05)
-    tool = CodeExecuteTool()
     args = {"code": "print(1)", "language": "python"}
 
     await asyncio.gather(
-        tool.execute(args, _ctx(backend, "conv-a")),
-        tool.execute(args, _ctx(backend, "conv-b")),
+        execute_short(args, _ctx(backend, "conv-a")),
+        execute_short(args, _ctx(backend, "conv-b")),
     )
 
     assert len(backend.windows) == 2
@@ -84,12 +82,11 @@ async def test_different_conversations_overlap():
 
 async def test_empty_conversation_id_does_not_serialize():
     backend = _SlowBackend(delay=0.05)
-    tool = CodeExecuteTool()
     args = {"code": "print(1)", "language": "python"}
 
     await asyncio.gather(
-        tool.execute(args, _ctx(backend, "")),
-        tool.execute(args, _ctx(backend, "")),
+        execute_short(args, _ctx(backend, "")),
+        execute_short(args, _ctx(backend, "")),
     )
 
     assert len(backend.windows) == 2
@@ -116,9 +113,9 @@ async def test_code_execute_lock_empty_is_noop():
     assert set(events[:2]) == {"cid-enter", "empty-enter"}
 
 
-def test_test_run_bypasses_code_execute_lock():
-    # Lock is mounted only on CodeExecuteTool — test_run must not import or call it
+def test_verify_kernel_bypasses_code_execute_lock():
+    # Lock is mounted only on short-exec — the verify kernel must not import or call it
     # (would serialize minute-level verifies behind short scripts).
-    source = inspect.getsource(test_run_mod)
+    source = inspect.getsource(run_verify_mod)
     assert "code_execute_lock" not in source
-    assert "code_execute_lock" not in getattr(test_run_mod, "__dict__", {})
+    assert "code_execute_lock" not in getattr(run_verify_mod, "__dict__", {})

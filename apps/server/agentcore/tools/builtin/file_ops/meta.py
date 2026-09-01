@@ -5,12 +5,11 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from agentcore.core.logging import get_logger
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.tools.file_products import file_product
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
-    AUDIENCE_WORKER_ONLY,
+    AUDIENCE_BOTH,
     FileProductsContract,
     ToolRegistration,
     ToolSurface,
@@ -32,18 +31,15 @@ from .integrity import (
     _claim_write_path,
     _prepare_write_relpath,
     _reject_write_scope,
-    is_substantial_existing_body,
-    substantial_delete_rejection,
 )
 
-logger = get_logger(__name__)
 
 class FileDeleteTool:
     """Delete a file, or a directory and all its contents, within the workspace."""
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         # 删除只会让台账里的 path 消失，不产生新产物。
         file_products=FileProductsContract.NO_PRODUCT,
     )
@@ -53,25 +49,20 @@ class FileDeleteTool:
         return ToolSchema(
             name="file_delete",
             description=(
-                "删除一个文件，或一个目录【及其全部内容】（递归）。默认【可逆】："
-                "本地模式移入系统回收站（请在本机系统回收站手动恢复，产品不提供"
-                "一键还原）；云端 / sidecar / 无系统回收站时移入工作区软删除区"
-                "AgentCore/trash（可通过工作区「回收站」一键还原，保留期与"
-                "工作区软删一致）。仅当 permanent=true 时才永久删除。工作区根"
-                "目录本身不可删除。路径必须是相对于工作区的相对路径。"
+                "删除工作区文件或目录（递归）。默认可逆；`permanent=true` 才永久删。"
+                "工作区根不可删。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "要删除的文件或目录的相对路径",
+                        "description": "工作区相对路径。",
                     },
                     "permanent": {
                         "type": "boolean",
                         "description": (
-                            "true = 永久删除（不可恢复）；默认 false = 可逆删除"
-                            "（本地→系统回收站；云端/sidecar→AgentCore/trash）。"
+                            "true=永久不可恢复；省略或 false=可逆（默认）。"
                         ),
                         "default": False,
                     },
@@ -110,31 +101,6 @@ class FileDeleteTool:
         if denied is not None:
             return denied
         coordinator = context.write_coordinator
-
-        # 成篇质量：禁止「删长文 → 整篇重写」烧预算（delete 闸）；
-        # file_write 整盖已允许，仅软 integrity nudge。
-        old_content: str | None = None
-        try:
-            old_content = await context.backend.read(rel_path)
-        except PathNotFound:
-            old_content = None
-        except WorkspaceError:
-            # Directory / binary / outside — let delete path surface the real error.
-            old_content = None
-        if old_content is not None and is_substantial_existing_body(old_content):
-            old_chars = len(old_content.strip())
-            logger.info(
-                "file_delete.substantial_rejected",
-                path=rel_path,
-                old_chars=old_chars,
-            )
-            if coordinator is not None and release_on_fail:
-                coordinator.release(rel_path, context.run_id)
-            return _error(
-                substantial_delete_rejection(rel_path, old_chars),
-                start,
-                contract_failure=True,
-            )
 
         try:
             await context.backend.delete(rel_path, permanent=permanent)
@@ -178,7 +144,7 @@ class FileMoveTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
     )
 
@@ -187,11 +153,7 @@ class FileMoveTool:
         return ToolSchema(
             name="file_move",
             description=(
-                "在工作区内移动或重命名文件 / 目录。可用于重命名（在同一目录内"
-                "移动）或把路径迁到新位置；目标路径缺失的上级目录会自动创建。若"
-                "目标已存在则失败——【不会覆盖】。约定文档前缀下目标路径可能被扁平化；"
-                "与源规范化后相同则视为已到位（幂等成功）。两个路径都必须是相对"
-                "于工作区的相对路径。"
+                "工作区内移动或重命名文件/目录。目标已存在则失败（不覆盖）。"
             ),
             parameters={
                 "type": "object",
@@ -324,7 +286,7 @@ class FileCopyTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
     )
 
@@ -333,11 +295,8 @@ class FileCopyTool:
         return ToolSchema(
             name="file_copy",
             description=(
-                "复制文件或【目录树】（含二进制）：工作区内互拷，或从工作区拷到"
-                "已授权整理的区外挂载（目标写 `external/<别名>/…`）。目标路径缺失"
-                "的上级目录会自动创建；若目标已存在则失败——【不会覆盖】。不能复制到"
-                "自身或其子目录。约定文档前缀下目标路径可能被扁平化；与源规范化后"
-                "相同则视为已到位（幂等成功）。两个路径都必须是相对路径。"
+                "复制文件或目录树（工作区内，或到已授权 `external/<别名>/…`）。"
+                "目标已存在则失败（不覆盖）。"
             ),
             parameters={
                 "type": "object",
@@ -430,7 +389,7 @@ class MkdirTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         # 只建目录：台账记的是文件产物，空目录不是交付物。
         file_products=FileProductsContract.NO_PRODUCT,
     )
@@ -439,10 +398,7 @@ class MkdirTool:
     def schema(self) -> ToolSchema:
         return ToolSchema(
             name="mkdir",
-            description=(
-                "在工作区内创建空目录（上级目录不存在时一并创建）。若路径已存在"
-                "则失败。路径必须是相对于工作区的相对路径。"
-            ),
+            description="在工作区创建目录（缺上级一并建）。已存在则失败。",
             parameters={
                 "type": "object",
                 "properties": {

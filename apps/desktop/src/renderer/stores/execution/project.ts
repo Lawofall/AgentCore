@@ -358,8 +358,8 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
     }
     case "run_tool_progress": {
       // The worker is composing a tool call's arguments (the file body for
-      // file_write, …): light up the live「正在生成」line. Cleared when the call
-      // starts executing (tool_use_start) or the run ends.
+      // file_write, …): light up the live composing heartbeat. Cleared when the
+      // call starts executing (tool_use_start) or the run ends.
       const agent = s.agentIndex.get(f.agentId);
       if (agent) agent.toolProgress = { toolName: f.toolName, chars: f.chars };
       break;
@@ -465,7 +465,7 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
     }
     case "run_cancelled": {
       // 跑一半改方向 / 整轮停止: interrupt mid-flight (orthogonal to run_failed).
-      // Clear currentRunId + toolProgress so the node leaves its live「正在生成」line.
+      // Clear currentRunId + toolProgress so the node leaves its live composing line.
       const run = s.runIndex.get(f.runId);
       if (run) {
         run.status = "cancelled";
@@ -499,8 +499,8 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
       break;
     }
     case "batch_metrics": {
-      // 调度埋点量化 (深层诊断指标): accrue the scheduler snapshot for 诊断模式 (run
-      // detail's 调度 block). Append per segment so a multi-batch / resumed turn keeps each.
+      // 调度埋点量化 (深层诊断指标): accrue the scheduler snapshot (采集仍在、产品不展示).
+      // Append per segment so a multi-batch / resumed turn keeps each.
       s.batches.push(f.metrics);
       break;
     }
@@ -593,7 +593,7 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
           status: "running",
         });
         // The call's arguments finished assembling and it is now executing, so
-        // the「正在生成」progress line gives way to this real tool-call row.
+        // the composing heartbeat gives way to this real tool-call row.
         agent.toolProgress = null;
       }
       // Worker tool → per-run process timeline (not CEO bubble).

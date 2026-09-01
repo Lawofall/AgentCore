@@ -1,32 +1,27 @@
-"""User-turn cumulative token ceiling (策略 A 硬闸 · delivery reserve as minor helper).
+"""User-turn cumulative token ceiling (策略 A 硬闸).
 
-Metering: all LLM calls during a bound user turn (CEO + workers + 续派 / debate).
+Metering: all LLM calls during a bound user turn (CEO + workers + 续派 / debate),
+same unit as the per-worker fuse — ``TokenUsage.fuse_tokens`` (cache miss + new
+output; providers that omit the split fall back to total). Live recording and
+journal resume seeds share this unit. Billing / platform ¥ quota stay on full
+``total_tokens``.
+
 Gate: when ``spent >= engine_turn_token_ceiling`` (>0), reject new ``delegate`` /
-``debate`` and soft-stop WaveScheduler admission (in-flight drain only).
+``debate`` and soft-stop WaveScheduler admission (in-flight drain only). Nested
+sub-teams share this remaining pool — no reserved envelopes.
 
-Delivery reserve: when ``spent >= ceiling − delivery_reserve``, prefer
-``ceiling_priority`` tails so a marked wrap-up node can still start while
-secondary nodes are soft-skipped.
-
-Nested envelope (B1): ``depth ≥ 1`` drives may reserve a sub-team envelope from
-parent remaining (``engine_nested_turn_token_ceiling``). Wave ``should_stop`` then
-uses ``(spent − baseline) ≥ envelope`` on the **same** ``TurnTokenMeter`` — never
-swap the ContextVar meter. Parallel nests atomically reserve so they cannot each
-claim the full remaining. Nested paths disable parent ``priority_reserve_hit``.
-
-Step 2: when the ceiling is hit, inject a one-shot CEO wrap-up steer via the
-existing soft-gate / coordination nudge seam (``maybe_inject_turn_token_budget_gate``)
-so the captain closes on completed output — no parallel channel, no force_finalize.
+When the ceiling is hit, inject a one-shot CEO wrap-up steer via the existing
+soft-gate seam (``maybe_inject_turn_token_budget_gate``) so the captain closes on
+completed output — no parallel channel, no force_finalize.
 
 Orthogonal to per-worker ``engine_worker_token_ceiling``. No USD / tiers / CEO
-override / cancel-in-flight.
+override / cancel-in-flight / nested envelopes / delivery-reserve soft gate.
 """
 
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any
@@ -36,23 +31,12 @@ REASON_TURN_TOKEN_BUDGET = "turn_token_budget"
 
 TURN_TOKEN_CEILING_WARNING = "本回合累计 token 已触顶，未派发节点已跳过；请基于已完成产出收口"
 
-TURN_TOKEN_RESERVE_SKIP_WARNING = "本回合进入交付预留窗口，次要节点已跳过以为验收节点留量"
-
-TURN_TOKEN_NESTED_ENVELOPE_WARNING = (
-    "子团队额度信封已触顶，未派发节点已跳过；下一回合可续跑未跑节点"
-)
-
 
 @dataclass
 class TurnTokenMeter:
-    """Mutable turn-scoped spent counter (task-local via ContextVar).
-
-    ``reserved`` holds atomic nested-envelope reservations so parallel nests
-    cannot each claim the same remaining headroom.
-    """
+    """Mutable turn-scoped spent counter (task-local via ContextVar)."""
 
     spent: int = 0
-    reserved: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def add(self, tokens: int) -> None:
@@ -61,23 +45,7 @@ class TurnTokenMeter:
                 self.spent += int(tokens)
 
 
-@dataclass(frozen=True)
-class NestedTurnEnvelope:
-    """Active nested-drive envelope bound for wave ``should_stop`` predicates."""
-
-    baseline: int
-    envelope: int
-    depth: int
-
-
-class NestedEnvelopeRejected(RuntimeError):  # noqa: N818 — historical name; RuntimeError subclass
-    """Parent remaining cannot fund a nested envelope (admission failure)."""
-
-
 _meter: ContextVar[TurnTokenMeter | None] = ContextVar("turn_token_meter", default=None)
-_nested_envelope: ContextVar[NestedTurnEnvelope | None] = ContextVar(
-    "nested_turn_envelope", default=None
-)
 
 
 def bind_turn_token_meter(*, seed: int = 0) -> Token[TurnTokenMeter | None]:
@@ -112,47 +80,11 @@ def resolve_turn_token_ceiling() -> int:
         return 0
 
 
-def resolve_nested_turn_token_ceiling() -> int:
-    """Nested sub-team envelope cap; ≤0 disables nested envelopes (fallback to parent)."""
-    try:
-        from agentcore.config import settings
-
-        return int(settings.engine_nested_turn_token_ceiling)
-    except Exception:  # noqa: BLE001 — settings optional in unit stubs
-        return 0
-
-
-def resolve_turn_token_delivery_reserve() -> int:
-    """Absolute headroom for ``ceiling_priority`` tails; ≤0 disables reserve soft gate."""
-    try:
-        from agentcore.config import settings
-
-        return int(settings.engine_turn_token_delivery_reserve)
-    except Exception:  # noqa: BLE001 — settings optional in unit stubs
-        return 0
-
-
 def is_turn_token_ceiling_hit() -> bool:
     ceiling = resolve_turn_token_ceiling()
     if ceiling <= 0:
         return False
     return current_turn_tokens() >= ceiling
-
-
-def is_turn_token_delivery_reserve_hit() -> bool:
-    """True when spent has entered the delivery-reserve window (not yet hard ceiling).
-
-    ``reserve <= 0`` or ``reserve >= ceiling`` → off (same pathology rule as worker
-    wind_down). Hard ceiling alone still governs full stop.
-    """
-    ceiling = resolve_turn_token_ceiling()
-    reserve = resolve_turn_token_delivery_reserve()
-    if ceiling <= 0 or reserve <= 0 or reserve >= ceiling:
-        return False
-    spent = current_turn_tokens()
-    if spent >= ceiling:
-        return False  # hard ceiling owns the stop; reserve soft-gate is moot
-    return spent >= (ceiling - reserve)
 
 
 def turn_token_ceiling_reject_message() -> str:
@@ -165,143 +97,14 @@ def turn_token_ceiling_reject_message() -> str:
     )
 
 
-def nested_envelope_reject_message() -> str:
-    ceiling = resolve_turn_token_ceiling()
-    spent = current_turn_tokens()
-    return (
-        f"本回合父剩余 token 不足，无法为嵌套子团队拨付额度信封"
-        f"（已用 {spent} / 上限 {ceiling}）；"
-        "请下一回合续跑未完成节点，禁止本回合假装已全部完成。"
-    )
-
-
-def current_nested_envelope() -> NestedTurnEnvelope | None:
-    return _nested_envelope.get()
-
-
-def is_nested_envelope_hit() -> bool:
-    """True when the active nested envelope has been exhausted (same meter)."""
-    env = _nested_envelope.get()
-    if env is None or env.envelope <= 0:
-        return False
-    return (current_turn_tokens() - env.baseline) >= env.envelope
-
-
-def try_reserve_nested_envelope(*, depth: int) -> NestedTurnEnvelope | None:
-    """Atomically reserve a nested envelope from parent remaining, or ``None``.
-
-    Returns ``None`` when nested envelopes are disabled, no meter is bound, or
-    parent remaining is 0. Caller must bind via :func:`bind_nested_envelope` /
-    :func:`nested_turn_envelope_scope` and release on exit.
-    """
-    nested_cap = resolve_nested_turn_token_ceiling()
-    if nested_cap <= 0:
-        return None
-    ceiling = resolve_turn_token_ceiling()
-    if ceiling <= 0:
-        return None
-    meter = _meter.get()
-    if meter is None:
-        return None
-    with meter._lock:
-        remaining = max(0, ceiling - meter.spent - meter.reserved)
-        if remaining <= 0:
-            return None
-        envelope = min(int(nested_cap), remaining)
-        if envelope <= 0:
-            return None
-        baseline = meter.spent
-        meter.reserved += envelope
-        return NestedTurnEnvelope(baseline=baseline, envelope=envelope, depth=int(depth))
-
-
-def release_nested_envelope(env: NestedTurnEnvelope) -> None:
-    """Release a previously reserved nested envelope (spent already on the meter)."""
-    meter = _meter.get()
-    if meter is None:
-        return
-    with meter._lock:
-        meter.reserved = max(0, meter.reserved - int(env.envelope))
-
-
-def bind_nested_envelope(
-    env: NestedTurnEnvelope,
-) -> Token[NestedTurnEnvelope | None]:
-    """Install nested envelope for wave predicates; returns reset token."""
-    return _nested_envelope.set(env)
-
-
-def reset_nested_envelope(token: Token[NestedTurnEnvelope | None]) -> None:
-    _nested_envelope.reset(token)
-
-
-@contextmanager
-def nested_turn_envelope_scope(*, depth: int) -> Iterator[NestedTurnEnvelope | None]:
-    """Reserve + bind a nested envelope for ``depth ≥ 1`` drives; no-op when disabled.
-
-    Yields the envelope when reserved, or ``None`` when nested envelopes are off
-    / no turn meter is bound (caller falls back to parent-ceiling predicates).
-    Raises :class:`NestedEnvelopeRejected` when remaining is 0 (parent cannot
-    fund a nest).
-    """
-    nested_cap = resolve_nested_turn_token_ceiling()
-    if nested_cap <= 0 or depth < 1:
-        yield None
-        return
-    if _meter.get() is None:
-        # Off-turn / unit stubs without a meter — fall back to parent predicates.
-        yield None
-        return
-    if is_turn_token_ceiling_hit():
-        raise NestedEnvelopeRejected(turn_token_ceiling_reject_message())
-    env = try_reserve_nested_envelope(depth=depth)
-    if env is None:
-        raise NestedEnvelopeRejected(nested_envelope_reject_message())
-    token = bind_nested_envelope(env)
-    try:
-        from agentcore.core.logging import get_logger
-
-        get_logger(__name__).info(
-            "delegate.nested_turn_token_envelope",
-            depth=env.depth,
-            envelope=env.envelope,
-            baseline=env.baseline,
-            spent=current_turn_tokens(),
-            ceiling=resolve_turn_token_ceiling(),
-            nested_cap=nested_cap,
-        )
-        yield env
-    finally:
-        reset_nested_envelope(token)
-        release_nested_envelope(env)
-
-
-def resolve_wave_budget_hooks(*, credential_source: str) -> tuple[
-    Callable[[], bool],
-    Callable[[], bool] | None,
-]:
-    """Shared ``should_stop`` / ``priority_reserve_hit`` for drive + drive_redirect.
-
-    Nested envelope active → stop on envelope only; parent delivery reserve off.
-    Otherwise → parent hard ceiling + delivery reserve (depth-0 path).
-
-    This drive's LLM payer (``credential_source``) ORs into ``should_stop`` so
-    unstarted workers are not admitted after that payer's confirmed death.
-    A different payer dying (e.g. platform chrome) does not stop this wave.
-    """
+def resolve_wave_budget_hooks(*, credential_source: str) -> Callable[[], bool]:
+    """``should_stop`` for drive + drive_redirect: turn ceiling OR this drive's payer death."""
     from agentcore.llm.turn_auth_dead import is_turn_auth_dead
 
-    if _nested_envelope.get() is not None:
-
-        def _nested_stop() -> bool:
-            return is_nested_envelope_hit() or is_turn_auth_dead(credential_source)
-
-        return _nested_stop, None
-
-    def _parent_stop() -> bool:
+    def _stop() -> bool:
         return is_turn_token_ceiling_hit() or is_turn_auth_dead(credential_source)
 
-    return _parent_stop, is_turn_token_delivery_reserve_hit
+    return _stop
 
 
 def should_materialise_turn_token_budget_skips(*, credential_source: str) -> bool:
@@ -310,8 +113,6 @@ def should_materialise_turn_token_budget_skips(*, credential_source: str) -> boo
 
     if is_turn_auth_dead(credential_source):
         return True
-    if _nested_envelope.get() is not None:
-        return is_nested_envelope_hit()
     return is_turn_token_ceiling_hit()
 
 
@@ -326,8 +127,6 @@ def budget_skip_warning_for_active_scope(*, credential_source: str) -> str:
         return turn_auth_dead_reject_message(credential_source) or (
             TURN_AUTH_DEAD_REJECT_MESSAGE
         )
-    if _nested_envelope.get() is not None:
-        return TURN_TOKEN_NESTED_ENVELOPE_WARNING
     return TURN_TOKEN_CEILING_WARNING
 
 
@@ -347,7 +146,14 @@ def turn_token_budget_wrap_prompt() -> str:
 
 
 def tokens_from_journal_entries(entries: list[dict[str, Any]] | None) -> int:
-    """Sum input+output from ``llm_call`` journal facts (resume seed)."""
+    """Sum fuse tokens from ``llm_call`` journal facts (resume seed).
+
+    Same unit as live :func:`record_turn_tokens` (cache miss + output; no split
+    → input+output). Accepts short keys (``input`` / ``cache_hit``) and
+    ``*_tokens`` aliases.
+    """
+    from agentcore.llm.provider.protocol import TokenUsage
+
     total = 0
     for entry in entries or []:
         if not isinstance(entry, dict) or entry.get("kind") != "llm_call":
@@ -358,7 +164,15 @@ def tokens_from_journal_entries(entries: list[dict[str, Any]] | None) -> int:
         usage = payload.get("usage") or {}
         if not isinstance(usage, dict):
             continue
-        inp = int(usage.get("input") or usage.get("input_tokens") or 0)
-        out = int(usage.get("output") or usage.get("output_tokens") or 0)
-        total += inp + out
+        tu = TokenUsage(
+            input_tokens=int(usage.get("input") or usage.get("input_tokens") or 0),
+            output_tokens=int(usage.get("output") or usage.get("output_tokens") or 0),
+            cache_hit_tokens=int(
+                usage.get("cache_hit") or usage.get("cache_hit_tokens") or 0
+            ),
+            cache_miss_tokens=int(
+                usage.get("cache_miss") or usage.get("cache_miss_tokens") or 0
+            ),
+        )
+        total += tu.fuse_tokens
     return total

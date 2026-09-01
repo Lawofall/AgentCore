@@ -20,10 +20,7 @@ from agentcore.runtime.deep_research_auto import (
     may_auto_debate,
     tool_may_auto_debate,
 )
-from agentcore.runtime.delegate.ceo_format import (
-    format_for_ceo,
-    motion_cards_block,
-)
+from agentcore.runtime.delegate.ceo_format import format_for_ceo
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import InteractionRegistry
 from agentcore.runtime.runs.plan import RunPlan
@@ -91,27 +88,7 @@ def test_helper_may_auto_debate_never_opens():
     )
 
 
-# ── ceo_format 消费指引两态 ───────────────────────────────────────
-
-
-def test_motion_cards_block_does_not_push_debate():
-    products = [
-        {
-            "role": "汇总",
-            "run_id": "w1",
-            "motion_card": _valid_card(),
-        }
-    ]
-    default = motion_cards_block(products, auto_adopt=False)
-    assert "非开辩入口" in default
-    assert "不要调 debate" in default
-    assert "深度研究自治" not in default
-    assert "可直接调 debate" not in default
-
-    auto = motion_cards_block(products, auto_adopt=True)
-    assert "非开辩入口" in auto
-    assert "可直接调 debate" not in auto
-    assert "不要调 debate" in auto
+# ── ceo_format：handoff motion_card 已撤，不塞开辩死文案 ───────────
 
 
 def test_format_for_ceo_never_auto_adopts_debate():
@@ -129,8 +106,9 @@ def test_format_for_ceo_never_auto_adopts_debate():
     }
     out = format_for_ceo(t, plan, results)
     assert "可直接调 debate" not in out
-    assert "不要调 debate" in out
-    assert "非开辩入口" in out
+    assert "不要调 debate" not in out
+    assert "非开辩入口" not in out
+    assert "队员提交的命题卡" not in out
 
 
 def test_format_for_ceo_flag_over_cap_still_does_not_push_debate():
@@ -147,7 +125,7 @@ def test_format_for_ceo_flag_over_cap_still_does_not_push_debate():
         )
     }
     out = format_for_ceo(t, plan, results)
-    assert "不要调 debate" in out
+    assert "不要调 debate" not in out
     assert "可直接调 debate" not in out
 
 
@@ -165,7 +143,7 @@ def test_format_for_ceo_managed_axes_do_not_imply_auto_guidance():
         )
     }
     out = format_for_ceo(t, plan, results)
-    assert "不要调 debate" in out
+    assert "不要调 debate" not in out
     assert "消费指引·深度研究自治" not in out
     assert "可直接调 debate" not in out
 

@@ -305,7 +305,7 @@ async def lifespan(app: FastAPI):
     # Cloud sandbox availability: first probe when config would enable execution
     # (the verdict then TTL-refreshes in the background — runsc can rot after boot).
     # Failure must not block boot — folds into ``code_execution_enabled_for`` so
-    # code_execute/test_run stay withheld and workspace_context says 未装配.
+    # run stays withheld and workspace_context says 未装配.
     from agentcore.tools.sandbox.cloud_health import probe_cloud_sandbox_at_startup
 
     await probe_cloud_sandbox_at_startup()

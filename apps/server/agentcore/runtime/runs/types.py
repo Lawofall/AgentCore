@@ -103,18 +103,8 @@ class Deliverable:
     # not pull a workspace node into ``工作稿/``. Direct constructions may still
     # set this; ``is_workspace_landing`` treats it as workspace.
     workspace_native: bool = False
-    # Placeholder hard-signal exemption (internal coordination docs): when True, every
-    # content artifact in this run's contract check skips hard placeholder failures
-    # (soft warnings remain). ``placeholder_hard_exempt_artifacts`` narrows exemption
-    # to declared paths when the bool is False. Declared on playbook nodes — never
-    # hardcode paths in placeholder_scan.
-    placeholder_hard_exempt: bool = False
-    placeholder_hard_exempt_artifacts: list[str] = field(default_factory=list)
-    # Skip soft anti-slop only (hard syntax / fake contacts still apply).
-    # Landed HTML/CSS/JS/SVG always run syntax / fake-contact / anti-slop.
-    web_quality_soft_exempt: bool = False
-    # Skip named soft rules when the user explicitly asked for that style.
-    web_quality_soft_exempt_labels: list[str] = field(default_factory=list)
+    # Parsed for old JSON. Does not FAIL the node: contract misses stay
+    # COMPLETED with warnings after retries.
     strict: bool = False
     # 调研类两阶段引用验收（块 2）：``two_phase`` = 广搜落盘为 draft（A，不跑成稿
     # 引用闸 / 不因 cite 重试）→ 同 worker 自动升级 B（deep_read 或无编号综述）后再跑
@@ -310,10 +300,6 @@ class RunSpec:
     # ZERO successful upstreams (e.g. sole upstream CANCELLED). Orthogonal to
     # the default lenient fan-in (≥1 success → run) and to ``require_upstream``.
     force_continue: bool = False
-    # Turn delivery reserve: when spent enters ``engine_turn_token_delivery_reserve``
-    # window, WaveScheduler still admits these nodes and soft-skips ready non-priority
-    # peers so lenient fan-in can run the acceptance tail (assemble+QA).
-    ceiling_priority: bool = False
     # Wave3 B：开局从工作区注入这些相对路径的截断正文（契约/设计摘要），
     # 减少分区 worker 对同文件的反复 file_read。空 = 不注入。
     context_inject_files: list[str] = field(default_factory=list)

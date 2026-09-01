@@ -29,6 +29,7 @@ import {
 import { selectVisibleColdResumes } from "@/services/resume";
 import { draftKeyFor, useComposerDraftStore } from "@/stores/composer";
 import {
+  activeRuntime,
   assistantProjectionId,
   getActiveRuntime,
   useActiveError,
@@ -61,6 +62,7 @@ import {
   useComposerPlusHost,
 } from "./ComposerPlusMenu";
 import { ComposerSendErrorNotice } from "./ComposerSendErrorNotice";
+import { ComposerVisionHint } from "./ComposerVisionHint";
 import { ComposerWorkspaceChip } from "./ComposerWorkspaceChip";
 import { ModelPicker } from "./ModelPicker";
 import { PermissionAxesBadge } from "./PermissionPresetBadge";
@@ -159,24 +161,23 @@ export function TurnComposer({
       ? (s.openRecovery?.[conversationId] ?? "unresolved")
       : "unresolved",
   );
-  const composerMessages = useConversationStore((s) => {
-    if (!conversationId) return EMPTY_MESSAGES;
-    return s.byId?.[conversationId]?.messages ?? EMPTY_MESSAGES;
+  const hasVisibleColdResume = useConversationStore((s) => {
+    if (!conversationId) return false;
+    return (
+      selectVisibleColdResumes({
+        conversationId,
+        byId,
+        pausedPending,
+        messages: s.byId[conversationId]?.messages ?? EMPTY_MESSAGES,
+        recoveryState,
+      }).length > 0
+    );
   });
-  const hasVisibleColdResume =
-    !!conversationId &&
-    selectVisibleColdResumes({
-      conversationId,
-      byId,
-      pausedPending,
-      messages: composerMessages,
-      recoveryState,
-    }).length > 0;
   const pendingApprovals = usePendingApprovals(conversationId);
   const lastMessage = useConversationStore((s) => {
-    const id = s.currentConversationId;
-    if (!id) return null;
-    return s.byId[id]?.messages.at(-1) ?? null;
+    const rt = activeRuntime(s);
+    if (rt.isGenerating) return null;
+    return rt.messages.at(-1) ?? null;
   });
   const showPendingHint =
     !!conversationId &&
@@ -861,6 +862,9 @@ export function TurnComposer({
 
       {/* 本机绑定却本轮过桥：弱状态（非引擎切换器；强制关路径不展示）。 */}
       <ComposerCloudBridgeHint />
+
+      {/* 草稿有图且当前组合不能看图、也没识图槽：发送前轻提示（不拦发送）。 */}
+      <ComposerVisionHint />
 
       {/* 会话字段徽章：较早对话已压缩（旗标 only，无摘要正文）。 */}
       <ComposerContextCompactedHint show={contextCompacted} />

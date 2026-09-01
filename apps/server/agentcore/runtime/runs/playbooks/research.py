@@ -244,9 +244,9 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
                 "file_write 写完全文（与①主路径一致）；④ 预算/token 不够写完下一章时，"
                 "停在完整章边界，"
                 "handoff 标明已完成与【待续】章节——由主管 `continue_from_run_id` "
-                "同人续写同一主文件，禁止并行同角色抢同一路径；⑤ 禁止整篇 "
-                "file_delete 后重写长文；成篇后修订优先 str_replace，整文件 file_write "
-                "覆盖允许但须完整正文（勿惰性省略）；⑥ 写回执即 artifact manifest，禁止再对本文件 "
+                "同人续写同一主文件，禁止并行同角色抢同一路径；⑤ 成篇后修订优先 "
+                "str_replace，整文件 file_write 覆盖允许但须完整正文（勿惰性省略）；"
+                "⑥ 写回执即 artifact manifest，禁止再对本文件 "
                 "file_read 回读正文验真。"
             ),
             "depends_on": ["outline"],

@@ -37,8 +37,8 @@ def _stub_prepare_io(monkeypatch, *, on_attach, on_registry) -> None:
     async def _empty_rules(*_a, **_k):
         return ""
 
-    async def _empty_catalog(*_a, **_k):
-        return []
+    async def _no_desk_label(*_a, **_k):
+        return None
 
     async def _no_vision(*_a, **_k):
         return None
@@ -47,7 +47,7 @@ def _stub_prepare_io(monkeypatch, *, on_attach, on_registry) -> None:
         "agentcore.runtime.pipeline.prepare.assemble_turn_rules", _empty_rules
     )
     monkeypatch.setattr(
-        "agentcore.runtime.pipeline.prepare.load_folder_catalog", _empty_catalog
+        "agentcore.runtime.pipeline.prepare.resolve_desk_folder_label", _no_desk_label
     )
     monkeypatch.setattr(
         "agentcore.runtime.pipeline.prepare.resolve_vision_reader_for_conversation",
@@ -102,20 +102,22 @@ def _assert_caller_passed_this_turn_table(assembled: list[str], available: objec
     assert set(available) == set(assembled)
 
 
-async def test_prepare_passes_worker_table_when_code_execute_assembled(
+async def test_prepare_passes_worker_table_when_run_assembled(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(settings, "gvisor_enabled", True)
     names, available = await _capture_available_tools(monkeypatch, _cloud(tmp_path))
-    assert "code_execute" in names
+    assert "run" in names
+    assert "code_execute" not in names
     _assert_caller_passed_this_turn_table(names, available)
 
 
-async def test_prepare_passes_worker_table_when_code_execute_withheld(
+async def test_prepare_passes_worker_table_when_run_withheld(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(settings, "gvisor_enabled", False)
     monkeypatch.setattr(settings, "code_execute_cloud_enabled", False)
     names, available = await _capture_available_tools(monkeypatch, _cloud(tmp_path))
+    assert "run" not in names
     assert "code_execute" not in names
     _assert_caller_passed_this_turn_table(names, available)

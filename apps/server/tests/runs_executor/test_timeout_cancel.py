@@ -8,12 +8,14 @@ nobody re-tasked: it hit the timeout ceiling and was killed.
 
 import asyncio
 
+from agentcore.runtime.coordination.session import CoordinationSession
 from agentcore.runtime.events import EventSink, EventType
 from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.timeout_hard import (
     HardTimeoutPhase,
     arm_hard_timeout,
     disarm_hard_timeout,
+    get_hard_timeout,
 )
 from agentcore.runtime.runs.types import RunPhase
 from agentcore.runtime.runs.wave import WaveScheduler
@@ -50,3 +52,31 @@ async def test_hard_timeout_kill_emits_run_cancelled_reason_worker_timeout():
     cancelled = [e for e in sink._history if e.type is EventType.RUN_CANCELLED]  # noqa: SLF001
     assert [e.payload.get("reason") for e in cancelled] == ["worker_timeout"]
     assert cancelled[0].payload.get("run_id") == "t_1"
+
+
+def test_arm_hard_timeout_omitted_or_nonpositive_does_not_arm():
+    run_id = "no-default-wall"
+    try:
+        assert arm_hard_timeout(run_id, timeout_s=None) is None
+        assert get_hard_timeout(run_id) is None
+        assert arm_hard_timeout(run_id, timeout_s=0) is None
+        assert get_hard_timeout(run_id) is None
+        assert arm_hard_timeout(run_id, timeout_s=-1) is None
+        assert get_hard_timeout(run_id) is None
+    finally:
+        disarm_hard_timeout(run_id)
+
+
+def test_arm_worker_timeout_without_threshold_registers_but_does_not_arm():
+    """cancel_worker 短名解析仍要登记；缺省不建计时器。"""
+    session = CoordinationSession(execution_id="exec-no-to", total_workers=1)
+    session.arm_worker_timeout("w1", role="写手", timeout_s=None)
+    assert session._running_workers["w1"] == "写手"
+    assert get_hard_timeout("w1") is None
+    session.arm_worker_timeout("w2", role="前端", timeout_s=0)
+    assert session._running_workers["w2"] == "前端"
+    assert get_hard_timeout("w2") is None
+    session.disarm_worker_timeout("w1")
+    session.disarm_worker_timeout("w2")
+    assert "w1" not in session._running_workers
+    assert "w2" not in session._running_workers

@@ -333,7 +333,6 @@ def _auditor_deliverable(artifact: str) -> dict[str, Any]:
         "form": "files",
         "artifacts": [artifact, json_artifact],
         "required_sections": list(CODE_AUDIT_REQUIRED_SECTIONS),
-        "strict": True,
         "code_audit_gate": True,
     }
 

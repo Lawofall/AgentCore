@@ -522,6 +522,10 @@ async def test_stream_chat_schedules_title_before_turn(monkeypatch):
     monkeypatch.setattr(turns_mod, "ConversationRepository", _ConvRepo)
     monkeypatch.setattr(turns_mod, "MessageRepository", _MsgRepo)
     monkeypatch.setattr(turns_mod, "BoardRepository", _BoardRepo)
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.MessageRepository",
+        _MsgRepo,
+    )
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
 
@@ -538,7 +542,10 @@ async def test_stream_chat_schedules_title_before_turn(monkeypatch):
         AsyncMock(return_value=SimpleNamespace(location="server")),
     )
     monkeypatch.setattr(turns_mod, "persist_attachments", AsyncMock(return_value=[]))
-    monkeypatch.setattr(turns_mod, "to_stored_metadata", lambda _a: None)
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.to_stored_metadata",
+        lambda _a: None,
+    )
     monkeypatch.setattr(
         turns_mod,
         "load_chat_context",
@@ -598,6 +605,10 @@ async def test_stream_chat_skips_title_when_already_named(monkeypatch):
     monkeypatch.setattr(turns_mod, "ConversationRepository", _ConvRepo)
     monkeypatch.setattr(turns_mod, "MessageRepository", _MsgRepo)
     monkeypatch.setattr(turns_mod, "BoardRepository", _BoardRepo)
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.MessageRepository",
+        _MsgRepo,
+    )
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
 
@@ -614,7 +625,10 @@ async def test_stream_chat_skips_title_when_already_named(monkeypatch):
         AsyncMock(return_value=SimpleNamespace(location="server")),
     )
     monkeypatch.setattr(turns_mod, "persist_attachments", AsyncMock(return_value=[]))
-    monkeypatch.setattr(turns_mod, "to_stored_metadata", lambda _a: None)
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.to_stored_metadata",
+        lambda _a: None,
+    )
     monkeypatch.setattr(
         turns_mod,
         "load_chat_context",

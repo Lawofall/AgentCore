@@ -18,7 +18,7 @@ from agentcore.core.secrets import redact_secrets
 # Tool names that contribute paths / commands / searches.
 _READ_TOOLS = frozenset({"file_read"})
 _WRITE_TOOLS = frozenset({"file_write", "file_append", "str_replace"})
-_COMMAND_TOOLS = frozenset({"terminal", "host", "test_run"})
+_COMMAND_TOOLS = frozenset({"run", "host", "terminal", "test_run"})
 _SEARCH_TOOLS = frozenset({"grep", "code_search"})
 
 # Grep / code_search hit line → leading path.
@@ -274,6 +274,11 @@ def _absorb_tool(
 
 
 def _extract_command(tool_name: str, arguments: dict[str, Any]) -> str:
+    if tool_name == "run":
+        action = str(arguments.get("action") or "").strip().lower()
+        if action in {"read", "stop", "list"}:
+            return ""
+        return str(arguments.get("command") or "").strip()
     if tool_name == "terminal":
         sub = str(arguments.get("subcommand") or "").strip().lower()
         if sub and sub != "start":

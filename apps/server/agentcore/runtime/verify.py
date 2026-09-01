@@ -13,17 +13,15 @@
 （来源卡 = 已登记非 blocked，含 search-only；未登记号留白字）。落盘成文走
 :func:`citation_quality_reworks`。轻层覆盖两类**纯机械、近零误报**的校验：
 
-1. **结构完整性**——代码围栏未闭合（``` 开了没收尾、后文整片被当代码渲染）、或声明了语言却
-   空体（标了 ``python`` 却没有任何内容，等于「答应给代码却没给」）。都是「交付不完整」的
-   机械信号，最终交付里几乎不会有意为之，故误报率近零。
+1. **结构完整性**——代码围栏未闭合（``` 开了没收尾、后文整片被当代码渲染）。
+   空语言围栏（标了 ``python`` 却空体）已撤（质检启发式）。
 2. **交付验收对照**（仅 CEO：``check_citations`` + 本回合已发射的 ``delivery_verdict``）——
    **真源 = 对账档位**（见 ``closing_posture``）：``delivered``=正式完成；
    ``partial``/``notes``≈草稿·部分；``blocked``=阻塞。档位非正式完成时不得姿势 A
    （完整交付 / 收卷收齐 / 完整可用 / 修好验绿闭集；**禁止**案面加完成话术词修案）。
-   无对账卡 / 本轮 ``no_batch`` 不拦正文。另：**产物结构**窄闸——``blocked``
-   且无落盘时不得「已生成 / 请下载」；有落盘但无 ``.pptx`` 时不得宣称 PPT
-   可打开；正文点名声明/自报但磁盘没有的路径且夹「已生成/已落盘」同类宣称时回炉
-   （队员 COMPLETED ≠ 用户交付）。有交付卡时终稿超 ``engine_ceo_overview_max_chars`` → 只打
+   无对账卡 / 本轮 ``no_batch`` 不拦正文。**产物结构窄闸已撤**：不再因空盘「请下载」/
+   无 ``.pptx`` 说 PPT / 点名缺席路径扫正文回炉（与零写落盘声称同构；交付诚实走档位影子
+   与磁盘）。有交付卡时终稿超 ``engine_ceo_overview_max_chars`` → 只打
    ``engine.finish_guard_honesty_shadow``（``hit=overview_length``），
    不回炉、不改写终稿。
 
@@ -55,30 +53,6 @@ _BIBLIO_FORM_RE = re.compile(
 # 强 GB/T 文献类型标（近零误报）：无 #rN 绑定时视为未核验/编造著录。
 _BIBLIO_TYPE_MARKER_RE = re.compile(r"\[(?:D|J|M|C|N)\]")
 
-# 产物结构窄闸 · 空盘：blocked + 零落盘时不得宣称「已生成 / 请下载」。
-# Near-zero FP: only fire with an explicit file-delivery claim, never on acknowledgment alone.
-_BLOCKED_EMPTY_DELIVERY_CLAIMS = re.compile(
-    r"(已生成|文件已|已落盘|已交付|已写入工作区|已存在于工作区|"
-    r"可以(?:在|到)[^。\n]{0,40}文件[^。\n]{0,24}面板|"
-    r"请(?:直接)?下载|下载该文件|下载后用)"
-)
-
-# 产物结构窄闸 · 类型：有落盘但无 .pptx 时不得宣称 PPT 可打开（仅 md/脚本 ≠ PPT 已交付）。
-# 要求句内同时出现 PPT 语义 + 完成/可打开话术，避免「代码可直接使用」误伤。
-_PPTX_READY_CLAIMS = re.compile(
-    r"(?:"
-    r"(?:PPTX?|幻灯片|课件|演示文稿)[^。\n]{0,32}"
-    r"(?:已落盘|已生成|已交付|已就绪|已写入|已存在于工作区|"
-    r"可(?:以)?(?:直接)?(?:使用|打开|下载)|请(?:直接)?(?:打开|下载|使用))"
-    r"|"
-    r"(?:可(?:以)?(?:直接)?(?:打开|使用|下载)|请(?:直接)?(?:打开|下载|使用)|下载后用)"
-    r"[^。\n]{0,32}(?:PPTX?|幻灯片|课件|演示文稿)"
-    r")",
-    re.IGNORECASE,
-)
-
-_GAP_NEGATION_PREFIXES = ("尚未", "没有", "并未", "未", "没", "无")
-
 
 def finish_guard(
     content: str,
@@ -100,8 +74,8 @@ def finish_guard(
     1. **结构完整性**（始终查）：:func:`_code_fence_reworks`。
     2. **交付验收对照**（仅 ``check_citations``）：
        - 收口诚实性（``closing_honesty_rework``）：真源=``delivery_verdict`` 档位；
-         非正式完成不得姿势 A；无卡 / ``no_batch`` 不拦正文；
-       - 产物结构窄闸（空盘下载宣称 / 无 pptx 说 PPT）——直接回炉；
+         非正式完成不得姿势 A（默认影子）；无卡 / ``no_batch`` 不拦正文；
+         产物结构窄闸已撤；B1 空心措辞扫描已删；
        - 有交付卡时的概览篇幅（``overview_max_chars``，默认读设置）——只影子观测。
     """
     _ = citation_count  # 对话不再因角标回炉；调用面仍可传。
@@ -113,7 +87,6 @@ def finish_guard(
         honesty = closing_honesty_rework(content, delivery_verdict)
         if honesty:
             reworks.append(honesty)
-        reworks.extend(_delivery_structure_reworks(content, delivery_verdict))
         reworks.extend(
             _overview_length_reworks(
                 content,
@@ -287,154 +260,17 @@ def _overview_length_reworks(
     return []
 
 
-def _has_landed_pptx(delivered_files: tuple[str, ...]) -> bool:
-    return any(str(path).lower().endswith(".pptx") for path in delivered_files)
-
-
-def _claims_pptx_ready(content: str) -> bool:
-    """True when prose asserts a PPT/slide deck is landed / openable (ignores 尚未…)."""
-    for match in _PPTX_READY_CLAIMS.finditer(content):
-        start = match.start()
-        prefix = content[max(0, start - 2) : start]
-        if any(prefix.endswith(neg) for neg in _GAP_NEGATION_PREFIXES):
-            continue
-        return True
-    return False
-
-
-def _delivery_structure_reworks(
-    content: str,
-    delivery_verdict: DeliveryVerdict | None,
-) -> list[str]:
-    """产物类型/落盘结构窄闸（非完成话术词表）：空盘下载宣称、无 pptx 说 PPT、点名缺席路径。"""
-    if delivery_verdict is None:
-        return []
-    if not content or not content.strip():
-        return []
-    state = delivery_verdict.state
-    reworks: list[str] = []
-
-    # PPT honesty: landed files exist but none are .pptx → no「PPT 已落盘 / 可打开」。
-    landed_files = delivery_verdict.delivered_files
-    if (
-        landed_files
-        and not _has_landed_pptx(landed_files)
-        and _claims_pptx_ready(content)
-    ):
-        landed = "、".join(landed_files)
-        reworks.append(
-            "本回合交付状态卡显示落地文件中没有 .pptx"
-            f"（当前：{landed}）——"
-            "正文不得宣称 PPT / 幻灯片 / 课件已落盘、可直接使用或可打开。"
-            "请改为承认尚未交付 PowerPoint 文件，点名已有产物（如 md / 生成脚本）与缺口，"
-            "并给出下一步（绑定本地目录运行脚本、或继续委派生成 .pptx）；"
-            "不要用「PPT 已就绪」话术盖过部分交付。"
-        )
-
-    # Narrow: blocked + zero files → no「已生成 / 请下载」file-delivery claims.
-    if (
-        state == "blocked"
-        and not delivery_verdict.delivered_files
-        and _BLOCKED_EMPTY_DELIVERY_CLAIMS.search(content)
-    ):
-        reworks.append(
-            "本回合交付验收为「未满足」且工作区没有落盘文件（见交付状态卡）——"
-            "正文不得宣称已生成 / 已落盘 / 已在工作区 / 请下载。"
-            "请改为承认未交付，说明缺口，并给出用户可采取的下一步"
-            "（例如绑定本地目录、或继续让团队用写文件工具落盘）；不要用完成话术盖过红卡。"
-        )
-
-    # Disk truth: named a declared/claimed path that is not on disk.
-    reworks.extend(_absent_path_claim_reworks(content, delivery_verdict))
-    return reworks
-
-
-def _path_mention_is_negated(content: str, index: int) -> bool:
-    prefix = content[max(0, index - 2) : index]
-    if any(prefix.endswith(neg) for neg in _GAP_NEGATION_PREFIXES):
-        return True
-    window = content[max(0, index - 16) : index]
-    return any(
-        token in window
-        for token in ("尚未", "没有", "并未", "未落盘", "未见", "未写入", "不在工作区")
-    )
-
-
-def _content_asserts_path_present(content: str, path: str) -> bool:
-    """True when prose names ``path`` without a nearby gap negation."""
-    if not path or path not in content:
-        return False
-    start = 0
-    while True:
-        idx = content.find(path, start)
-        if idx < 0:
-            return False
-        if not _path_mention_is_negated(content, idx):
-            return True
-        start = idx + 1
-
-
-def _absent_path_claim_reworks(
-    content: str,
-    delivery_verdict: DeliveryVerdict,
-) -> list[str]:
-    """True finish_guard: naming a not-on-disk path as present (not posture A)."""
-    missing = tuple(getattr(delivery_verdict, "missing_declared", ()) or ())
-    absent = tuple(getattr(delivery_verdict, "absent_claimed", ()) or ())
-    candidates: list[str] = []
-    seen: set[str] = set()
-    for path in (*missing, *absent):
-        text = str(path or "").strip()
-        if not text or text in seen:
-            continue
-        seen.add(text)
-        candidates.append(text)
-    if not candidates:
-        return []
-    named = [p for p in candidates if _content_asserts_path_present(content, p)]
-    if not named:
-        return []
-    if not _BLOCKED_EMPTY_DELIVERY_CLAIMS.search(content):
-        return []
-    listed = "、".join(f"`{p}`" for p in named[:6])
-    return [
-        "工作区没有这些声明/自报路径："
-        f"{listed}（队员回合结束不是用户交付）。"
-        "请先按工作区真实文件列表交代，不得把未落盘文件说成已生成 / 已写入 / 请下载。"
-    ]
-
-
 def _code_fence_reworks(content: str) -> list[str]:
-    """结构完整性轻检：扫 Markdown 代码围栏，抓两类纯机械、近零误报的缺陷。
+    """结构完整性轻检：代码围栏未闭合（``` 开了没收尾）。
 
-    - **未闭合**：``` 开了块却没收尾——会让后文整片被当代码渲染（最终交付里几乎不会有意为之）。
-    - **声明语言却空体**：``` 标了语言（如 ``python``）却没有任何内容，等于「答应给代码却没给」。
-
-    单遍扫行、把每个行首 ``` 当作开/合切换（标准 Markdown 同字符围栏不嵌套），开块时记下语言、
-    累计块内非空内容；合块时若「有语言且零内容」记一条空体项，扫完仍在块内记一条未闭合项。
-    措辞锚到具体缺陷并点明下一步，与造引用项同风格。
+    空语言围栏（标了语言却空体）已撤。单遍扫行、把每个行首 ``` 当作开/合切换
+    （标准 Markdown 同字符围栏不嵌套）；扫完仍在块内记一条未闭合项。
     """
     reworks: list[str] = []
     in_fence = False
-    fence_lang = ""
-    body_chars = 0
     for line in content.splitlines():
         if line.lstrip().startswith("```"):
-            if in_fence:
-                if fence_lang and body_chars == 0:
-                    reworks.append(
-                        f"正文里标注为「{fence_lang}」的代码块是空的——声明了代码却没有任何内容。"
-                        "请补全该代码块的内容，或删除这个空代码块。"
-                    )
-                in_fence = False
-                fence_lang = ""
-                body_chars = 0
-            else:
-                in_fence = True
-                fence_lang = line.lstrip().lstrip("`").strip()
-                body_chars = 0
-        elif in_fence and line.strip():
-            body_chars += len(line.strip())
+            in_fence = not in_fence
     if in_fence:
         reworks.append(
             "正文里有一个用 ``` 开启的代码块没有闭合（缺少结尾的 ```）——会导致后面的内容"

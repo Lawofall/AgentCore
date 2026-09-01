@@ -30,6 +30,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -86,6 +87,63 @@ _SAFE_SEGMENT = re.compile(r"[^A-Za-z0-9._-]+")
 _DEFAULT_EXECUTE_TIMEOUT_SLACK = 30.0
 # Align with turn_baseline.LOCAL_BASELINE_TIMEOUT_S / desktop ARCHIVE gate (60s).
 _LOCAL_BASELINE_CHANNEL_TIMEOUT_S = 60.0
+# Inner-loop LS probe — short wall clock; not an outer verify budget.
+_DIAGNOSTICS_CHANNEL_TIMEOUT_S = 20.0
+
+
+async def request_diagnostics_via_channel(
+    channel: WorkspaceChannel,
+    groups: dict[tuple[str | None, str | None], list[str]],
+    *,
+    remap_path: Callable[[str, str | None], str],
+    timeout: float = _DIAGNOSTICS_CHANNEL_TIMEOUT_S,
+) -> dict[str, Any]:
+    """Issue ``DIAGNOSTICS`` per mount root and merge desktop envelopes.
+
+    Shared by ``LocalWorkspace`` and sidecar ``ServerWorkspace(location=local)``.
+    ``groups`` keys are ``(override_root_id, alias)``; ``remap_path`` turns
+    desktop-relative hits back into workspace-relative (or ``external/<alias>/``).
+    """
+    if not groups:
+        return {"status": "ok", "diagnostics": []}
+
+    merged: list[dict[str, Any]] = []
+    any_ok = False
+    unavailable_reason: str | None = None
+    for (root_id, alias), rels in groups.items():
+        value = await channel.request(
+            WorkspaceOp.DIAGNOSTICS,
+            {"paths": rels},
+            timeout=timeout,
+            root_id=root_id,
+        )
+        if not isinstance(value, dict):
+            unavailable_reason = unavailable_reason or "malformed diagnostics result"
+            continue
+        status = str(value.get("status") or "")
+        if status == "ok":
+            any_ok = True
+        elif status == "unavailable":
+            reason = value.get("reason")
+            if isinstance(reason, str) and reason.strip():
+                unavailable_reason = reason.strip()
+            else:
+                unavailable_reason = unavailable_reason or "diagnostics unavailable"
+        for item in value.get("diagnostics") or []:
+            if not isinstance(item, dict):
+                continue
+            path = str(item.get("path", "") or "")
+            entry = dict(item)
+            entry["path"] = remap_path(path, alias) if path else path
+            merged.append(entry)
+
+    if any_ok:
+        return {"status": "ok", "diagnostics": merged}
+    return {
+        "status": "unavailable",
+        "reason": unavailable_reason or "diagnostics unavailable",
+        "diagnostics": merged,
+    }
 
 
 class LocalWorkspace:
@@ -658,44 +716,11 @@ class LocalWorkspace:
         if not groups:
             return {"status": "ok", "diagnostics": []}
 
-        merged: list[dict[str, Any]] = []
-        any_ok = False
-        unavailable_reason: str | None = None
-        for (root_id, alias), rels in groups.items():
-            value = await self._channel.request(
-                WorkspaceOp.DIAGNOSTICS,
-                {"paths": rels},
-                # Inner-loop LSP probe — short wall clock; not an outer verify budget.
-                timeout=20.0,
-                root_id=root_id,
-            )
-            if not isinstance(value, dict):
-                unavailable_reason = unavailable_reason or "malformed diagnostics result"
-                continue
-            status = str(value.get("status") or "")
-            if status == "ok":
-                any_ok = True
-            elif status == "unavailable":
-                reason = value.get("reason")
-                if isinstance(reason, str) and reason.strip():
-                    unavailable_reason = reason.strip()
-                else:
-                    unavailable_reason = unavailable_reason or "diagnostics unavailable"
-            for item in value.get("diagnostics") or []:
-                if not isinstance(item, dict):
-                    continue
-                path = str(item.get("path", "") or "")
-                entry = dict(item)
-                entry["path"] = self._out_routed(path, alias) if path else path
-                merged.append(entry)
-
-        if any_ok:
-            return {"status": "ok", "diagnostics": merged}
-        return {
-            "status": "unavailable",
-            "reason": unavailable_reason or "diagnostics unavailable",
-            "diagnostics": merged,
-        }
+        return await request_diagnostics_via_channel(
+            self._channel,
+            groups,
+            remap_path=self._out_routed,
+        )
 
     async def execute(self, req: ExecutionRequest) -> ExecutionResult:
         # cwd is the desktop's job (it runs code in the bound local directory). It is

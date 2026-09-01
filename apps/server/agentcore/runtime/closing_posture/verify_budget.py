@@ -1,15 +1,14 @@
-"""Outer-loop verify timeout latch + hollow in-progress rework.
+"""Outer-loop verify timeout latch.
 
 test_run idle hang / disaster forced-stop → incomplete（进程已中止，非仍在跑）.
 Symbol names keep ``verify_budget`` for import stability.
+空心措辞扫描已删；本模块只留 latch。
 """
 
 from __future__ import annotations
 
 from contextvars import ContextVar
 from typing import Any
-
-from .hollow import claims_hollow_in_progress
 
 _turn_verify_budget_exhausted: ContextVar[bool] = ContextVar(
     "turn_verify_budget_exhausted", default=False
@@ -55,17 +54,3 @@ def note_verify_budget_from_delivery(gaps: list[Any] | None = None) -> None:
         if _gap_text_looks_like_verify_timeout(str(gap.get("description") or "")):
             note_verify_budget_exhausted()
             return
-
-
-def _verify_budget_hollow_rework(content: str) -> str | None:
-    """Timeout latch：禁『仍在进行』空悬（不扩姿势 A 词表）."""
-    text = content or ""
-    if not text.strip() or not turn_has_verify_budget_exhausted():
-        return None
-    if claims_hollow_in_progress(text):
-        return (
-            "本回合外环验证已因无响应或强制中止而结束——"
-            "禁止写『仍在进行 / 继续等待』；请标未取得验证结果、进程已中止与下一步"
-            "（缩小范围 / 检查本机环境 / 拆命令重试）。真源=结构化缺口，不扫自由文。"
-        )
-    return None

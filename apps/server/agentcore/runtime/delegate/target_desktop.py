@@ -402,7 +402,7 @@ async def apply_target_desktop(
         permission_axes=permission_axes,
     )
     # Birth-desk ``worker_tools`` keep MCP / consult wiring; only the sandbox
-    # execution class follows the *target* backend. Leaving ``code_execute`` on
+    # execution class follows the *target* backend. Leaving ``run`` on
     # a sidecar→cloud-folder swap lets the model call it, then 10ms-fail
     # ``not_linux`` and retire the family as「本机执行环境不可用」.
     from agentcore.runtime.runs.executor.shared import _registry_without
@@ -411,7 +411,7 @@ async def apply_target_desktop(
     tools_for_desk = worker_tools
     if not execution_class_enabled_for(backend, permission_axes):
         tools_for_desk = _registry_without(
-            worker_tools, "code_execute", "test_run", "terminal"
+            worker_tools, "run"
         )
     tools = await _registry_rewire_consult_tools(
         tools_for_desk,

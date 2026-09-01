@@ -59,6 +59,11 @@ export interface AskUserContent {
   questions: AskQuestion[];
 }
 
+/** Empty-option choice is a fill-in, never a zero-button list (old frames / fold). */
+export function questionPresentsAsText(q: AskQuestion): boolean {
+  return q.kind === "text" || q.options.length === 0;
+}
+
 export type AskTone =
   (typeof interactiveCheckpointTone)[keyof typeof interactiveCheckpointTone];
 
@@ -489,14 +494,16 @@ function QuestionField({
         <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm text-foreground">
           {question.prompt}
         </p>
-        {question.kind === "choice" && question.multiple && (
-          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-            可多选
-          </span>
-        )}
+        {question.kind === "choice" &&
+          question.multiple &&
+          question.options.length > 0 && (
+            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+              可多选
+            </span>
+          )}
       </div>
       <div className={`mt-1.5 ${numbered ? "pl-7" : ""}`}>
-        {question.kind === "text" ? (
+        {questionPresentsAsText(question) ? (
           <input
             type="text"
             value={answer[0] ?? ""}
@@ -611,7 +618,7 @@ export function questionHasExplicitReply(
   if ((answers[question.id] ?? []).some((s) => s.trim().length > 0)) {
     return true;
   }
-  if (question.kind === "text") return false;
+  if (questionPresentsAsText(question)) return false;
   return (notes[question.id] ?? "").trim().length > 0;
 }
 

@@ -1,7 +1,12 @@
 import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { visibleMessageText } from "@/lib/errors";
-import { useActiveMessages, useConversationStore } from "@/stores/conversation";
+import {
+  NO_ACTIVE_MESSAGES,
+  activeRuntime,
+  useActiveUserTurnCount,
+  useConversationStore,
+} from "@/stores/conversation";
 import { ListTree, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -17,11 +22,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
  * paging and is intentionally out of scope for this control.
  */
 export function ConversationOutline() {
-  const messages = useActiveMessages();
+  const userTurnCount = useActiveUserTurnCount();
   const focusMessage = useConversationStore((s) => s.focusMessage);
   const conversationId = useConversationStore((s) => s.currentConversationId);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const messages = useConversationStore((s) => {
+    if (!open) return NO_ACTIVE_MESSAGES;
+    return activeRuntime(s).messages;
+  });
 
   const turns = useMemo(
     () =>
@@ -50,7 +59,7 @@ export function ConversationOutline() {
     };
   }, [open]);
 
-  if (turns.length < 2) return null;
+  if (userTurnCount < 2) return null;
 
   const jump = (id: string) => {
     focusMessage(id, conversationId);

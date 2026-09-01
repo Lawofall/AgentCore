@@ -6,10 +6,7 @@ from collections.abc import Sequence
 from agentcore.config import settings
 from agentcore.runtime.context import ContextAssembler, SectionOrder
 from agentcore.runtime.context.consultable import ConsultDirectoryEntry
-from agentcore.runtime.context.folder_catalog import (
-    FolderCatalogEntry,
-    render_folder_catalog,
-)
+from agentcore.runtime.context.workspace_overview import attach_workspace_file_index
 from agentcore.runtime.resolve.profile import (
     FRAGMENT_BASE,
     FRAGMENT_CEO_CORE,
@@ -229,9 +226,8 @@ def compose_ceo_chat_prompt(
     *,
     ceo_tool_names: set[str],
     on_demand_entries: Sequence[ConsultDirectoryEntry] = (),
-    folder_catalog: Sequence[FolderCatalogEntry] = (),
-    current_folder_id: str | None = None,
     workspace_context: str | None = None,
+    workspace_file_index: str | None = None,
     cold_start_explore: bool | str | None = False,
     folder_nav_stale: bool = False,
     folder_profile_empty_soft: bool = False,
@@ -245,9 +241,10 @@ def compose_ceo_chat_prompt(
     """Compose the CEO chat agent's system prompt from the clean base.
 
     Layers the entry coordinator's hint stack onto the shared base: the SLIM CEO core
-    + unified ``<按需目录>`` (only when ``consult`` is wired) + derived ``<文件夹清单>`` +
-    per-turn workspace facts (same
-    :data:`SectionOrder.WORKSPACE_FACTS` workers use, after the core). ``on_demand_entries``
+    + unified ``<按需目录>`` (only when ``consult`` is wired) + per-turn workspace
+    facts (same :data:`SectionOrder.WORKSPACE_FACTS` workers use, after the core). CEO
+    file index (``workspace_file_index``) splices into that ``<工作区>`` as the last
+    subsection; workers never receive it. ``on_demand_entries``
     must match the tool's merged source.
     ``ceo_offered_names`` is the OpenAI table this turn (on-demand tools omitted until
     consult). Host / terminal / browser / grant HOW is consult-owned and must not
@@ -309,16 +306,18 @@ def compose_ceo_chat_prompt(
         .add("folder_nav_stale", stale_block, SectionOrder.CEO_CORE)
         .add("on_demand_directory", on_demand_block, SectionOrder.SKILL_DIRECTORY)
         .add(
-            "folder_catalog",
-            render_folder_catalog(
-                folder_catalog, current_folder_id=current_folder_id
-            ),
-            SectionOrder.FOLDER_CATALOG,
+            "workspace_facts",
+            attach_workspace_file_index(
+                workspace_context or "",
+                workspace_file_index or "",
+            )
+            or None,
+            SectionOrder.WORKSPACE_FACTS,
         )
-        .add("workspace_facts", workspace_context, SectionOrder.WORKSPACE_FACTS)
-        # D4: 见 assemble_system_prompt —— 本层带来 folder_catalog（项目清单，按最近活跃排序、
-        # 却落在稳定前缀中段），正是要能被单独指认的击穿嫌疑段。workspace_facts 也在本层，
-        # 但在核之后、紧邻易变尾（见 SectionOrder Exception 2026-08-19）。
+        # D4: 见 assemble_system_prompt —— ``SectionOrder.FOLDER_CATALOG`` 槽位保留、
+        # 生产不装配该段（名册改 list_folders）。workspace_facts 在核之后、紧邻易变尾
+        # （见 SectionOrder Exception 2026-08-19）。CEO 文件索引附在同一 ``<工作区>``
+        # 末节，不另开标签。
         .track_sections(scope="ceo_chat")
         .render()
     )

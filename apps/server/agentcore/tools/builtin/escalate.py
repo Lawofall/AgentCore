@@ -79,10 +79,7 @@ class EscalateTool:
             description=(
                 "向上通道：必须由上级/用户拍板或职责偏离才报（权威稿冲突、扩范围）。"
                 "小事勿升级。勿自己改、勿只标假设。"
-                "blocking 默认 false（报一声继续）；"
-                "猜错作废 / 只有上级能定 → true（须 assumption）。"
-                "kind：normal / scope 偏离 / dep 缺输入。"
-                "browser_login=true 强制 blocking。"
+                "报一声继续（默认）；猜错作废才原地等。"
             ),
             parameters={
                 "type": "object",
@@ -264,26 +261,9 @@ class EscalateTool:
                         f"{exc} 请直接传 JSON 数组，不要把数组再序列化成字符串。"
                     ),
                 )
-            # browser_login / 写权冲突 must reach the human (password never touches AI;
-            # 「移交」自然语言不会自动转锁). Skip coordination CEO arbitration.
-            from agentcore.workspace.write_claims import ownership_escalation_hints
-
-            ownership_hints = ownership_escalation_hints(
-                escalator_run_id=context.run_id,
-                question=question,
-                execution_id=context.execution_id,
-                write_ancestors=context.write_ancestors,
-                write_coordinator=context.write_coordinator,
-                desk_id=getattr(context, "ownership_desk_id", None),
-            )
-            ownership_paths = ownership_hints.get("ownership_paths")
-            # 用户写权卡仅锁主仍在跑；已完成/已结束占位靠同座续派/declare·claim 接手，
-            # 不直达用户移交。
-            user_ownership_card = bool(ownership_paths) and (
-                ownership_hints.get("owner_status") == "running"
-            )
+            # browser_login must reach the human (password never touches AI).
             awaiting = "user"
-            if not browser_login and not user_ownership_card:
+            if not browser_login:
                 try:
                     from agentcore.runtime.coordination.session import (
                         resolve_coordination_session,
@@ -307,12 +287,6 @@ class EscalateTool:
                 kind,
                 awaiting,
                 browser_login=browser_login,
-                ownership_paths=ownership_paths if user_ownership_card else None,
-                lock_owner_run_id=(
-                    str(ownership_hints.get("lock_owner_run_id") or "")
-                    if user_ownership_card
-                    else ""
-                ),
             )
             if outcome.status != "degraded":
                 return escalate_tool_result(
@@ -334,16 +308,7 @@ class EscalateTool:
         # (Blocking+CEO path already posted inside the channel; this covers non-blocking.)
         try:
             from agentcore.runtime.coordination.bridge import post_escalation_to_coordination
-            from agentcore.workspace.write_claims import ownership_escalation_hints
 
-            hints = ownership_escalation_hints(
-                escalator_run_id=context.run_id,
-                question=question,
-                execution_id=context.execution_id,
-                write_ancestors=context.write_ancestors,
-                write_coordinator=context.write_coordinator,
-                desk_id=getattr(context, "ownership_desk_id", None),
-            )
             post_escalation_to_coordination(
                 run_id=context.run_id,
                 role=context.agent_role or "",
@@ -353,13 +318,6 @@ class EscalateTool:
                 blocking=blocking,
                 source="escalate",
                 execution_id=context.execution_id,
-                ownership_paths=hints.get("ownership_paths"),
-                lock_owner_run_id=str(hints.get("lock_owner_run_id") or ""),
-                escalator_is_lock_owner_nested_child=hints.get(
-                    "escalator_is_lock_owner_nested_child"
-                ),
-                ownership_kind=hints.get("ownership_kind"),
-                owner_status=hints.get("owner_status"),
             )
         except Exception:  # noqa: BLE001
             logger.warning("worker.escalate.coordination_route_failed", run_id=context.run_id)

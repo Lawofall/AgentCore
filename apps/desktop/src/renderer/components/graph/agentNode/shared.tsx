@@ -1,5 +1,5 @@
 import { statusPillSoft } from "@/components/ui/tone-presets";
-import { formatDuration } from "@/lib/format";
+import { formatDuration, formatDurationSec } from "@/lib/format";
 import { NODE_HEIGHT } from "@/lib/graphMetrics";
 import type { ReviewConcernLevel } from "@/lib/reviewConcern";
 import type {
@@ -49,7 +49,7 @@ export interface AgentNodeData {
   nodeWidth?: number;
   model?: string | null;
   durationMs?: number | null;
-  /** 真实开始时间（epoch ms）：进行中「执行中 · Ns」live 计时锚点（见 RunNode.startedAt）。 */
+  /** 真实开始时间（epoch ms）：进行中用时 live 计时锚点（见 RunNode.startedAt）。 */
   startedAt?: number | null;
   realTokens?: number;
   costText?: string;
@@ -231,6 +231,12 @@ export function failureDetailSentence(
   }
 }
 
+function liveElapsedSuffix(elapsedSec?: number): string {
+  return elapsedSec !== undefined && elapsedSec >= 1
+    ? ` · ${formatDurationSec(elapsedSec)}`
+    : "";
+}
+
 /** Face status line for parallel wave visibility (排队 / 执行 / 完成用时 / 失败). */
 export function statusFaceLabel(
   status: RunStatus,
@@ -254,10 +260,8 @@ export function statusFaceLabel(
   productLanded?: boolean | null,
 ): { text: string; cls: string; tickElapsed: boolean } {
   if (debateRoundPhase && status === "running") {
-    const suffix =
-      elapsedSec !== undefined && elapsedSec >= 1 ? ` · ${elapsedSec}s` : "";
     return {
-      text: `${debateRoundPhase}${suffix}`,
+      text: `${debateRoundPhase}${liveElapsedSuffix(elapsedSec)}`,
       cls: "text-primary/90",
       tickElapsed: true,
     };
@@ -284,11 +288,9 @@ export function statusFaceLabel(
         tickElapsed: false,
       };
     case "running": {
-      const suffix =
-        elapsedSec !== undefined && elapsedSec >= 1 ? ` · ${elapsedSec}s` : "";
       const phaseText = runPhaseLabel(phase, phaseTool, toolLabel);
       return {
-        text: `${phaseText ?? "执行中"}${suffix}`,
+        text: `${phaseText ?? "执行中"}${liveElapsedSuffix(elapsedSec)}`,
         cls: "text-primary/90",
         tickElapsed: true,
       };

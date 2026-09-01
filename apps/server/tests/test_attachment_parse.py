@@ -424,7 +424,8 @@ async def test_preparse_failure_falls_back(tmp_path: Path):
     assert ctx is not None
     assert "[binary / office-pdf]" in ctx
     assert "file_read" in ctx
-    assert "do not default to code_execute" in ctx
+    assert "do not default to run" in ctx
+    assert "code_execute" not in ctx
     assert "openpyxl" not in ctx
 
 async def test_context_preparsed_inline_and_large_truncation():

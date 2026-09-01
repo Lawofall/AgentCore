@@ -5,7 +5,6 @@ from agentcore.llm.model_metadata import (
     CAPABILITY_REASONING,
     CAPABILITY_TOOLS,
     CAPABILITY_VISION,
-    model_has_curated_vision,
     model_metadata_for,
 )
 
@@ -130,14 +129,19 @@ def test_family_prefix_requires_separator_boundary():
     assert "flashy" in mystery.display_name.lower() or "Flashy" in mystery.display_name
 
 
-def test_model_has_curated_vision_ignores_keyword_derive():
-    """Native multimodal gate must not trust keyword-inferred vision tags."""
-    assert model_has_curated_vision("gpt-4o") is True
-    assert model_has_curated_vision("kimi-k2.5") is True
-    assert model_has_curated_vision("deepseek-v4-pro") is False
-    # Family-prefix dated variant still counts as curated for the gate.
-    assert model_has_curated_vision("gpt-4o-custom-build") is True
-    # Keyword-derived catalog may tag these, but curated gate stays closed.
-    assert CAPABILITY_VISION in model_metadata_for("acme-vl-special").capabilities
-    assert model_has_curated_vision("acme-vl-special") is False
-    assert model_has_curated_vision("mystery-4o-clone") is False
+def test_curated_table_does_not_hold_vision():
+    assert all(CAPABILITY_VISION not in meta.capabilities for meta in _METADATA.values())
+
+
+def test_catalog_vision_follows_vendor_contract_not_keywords_or_family():
+    """Directory vision bit is the same contract as routing — not inherit / keywords."""
+    vision_exp = model_metadata_for("deepseek-v4-flash-vision-exp")
+    assert vision_exp.display_name == "DeepSeek V4 Flash Vision"
+    assert CAPABILITY_VISION in vision_exp.capabilities
+    assert CAPABILITY_VISION not in model_metadata_for(
+        "deepseek-v4-flash-0731"
+    ).capabilities
+    assert CAPABILITY_VISION in model_metadata_for("gpt-4o").capabilities
+    assert CAPABILITY_VISION in model_metadata_for("gpt-4o-custom-build").capabilities
+    assert CAPABILITY_VISION not in model_metadata_for("acme-vl-special").capabilities
+    assert CAPABILITY_VISION not in model_metadata_for("mystery-4o-clone").capabilities

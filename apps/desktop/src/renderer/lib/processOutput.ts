@@ -2,6 +2,8 @@
  * 后台进程输出：strip ANSI（MVP 不引 xterm；终端 tab 纯文本滚屏）。
  */
 
+import { formatDuration } from "./format";
+
 /** CSI / OSC 等常见 ESC 序列（用 String.fromCharCode 避开 regex 控制字符 lint）。 */
 const ESC = String.fromCharCode(0x1b);
 const BEL = String.fromCharCode(0x07);
@@ -40,7 +42,7 @@ export function shouldShowTerminalTab(
   return processCount > 0 || recordCount > 0 || ptyCount > 0 || canOpenPty;
 }
 
-/** 人类可读时长（自 started_at ISO）。 */
+/** 进程已运行多久：与任务用时同一套 {@link formatDuration}（秒数仍按墙钟向下取整，避免半秒跳字）。 */
 export function formatProcessDuration(
   startedAt: string,
   nowMs = Date.now(),
@@ -48,9 +50,5 @@ export function formatProcessDuration(
   const start = Date.parse(startedAt);
   if (!Number.isFinite(start)) return "—";
   const sec = Math.max(0, Math.floor((nowMs - start) / 1000));
-  if (sec < 60) return `${sec}s`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ${sec % 60}s`;
-  const hr = Math.floor(min / 60);
-  return `${hr}h ${min % 60}m`;
+  return formatDuration(sec * 1000);
 }

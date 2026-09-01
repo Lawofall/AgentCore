@@ -1,5 +1,8 @@
-import { visibleMessageText } from "@/lib/errors";
-import { useActiveMessages, useConversationStore } from "@/stores/conversation";
+import {
+  useActiveMessageHasVisibleText,
+  useConversationStore,
+  usePrecedingUserMessageId,
+} from "@/stores/conversation";
 import type { Execution } from "@/stores/execution";
 import {
   type EndpointKind,
@@ -34,9 +37,11 @@ export function useGraphDrillIn(
   }: GraphDrillHandoff,
 ) {
   const showRunDetail = useSidePanelStore((s) => s.showRunDetail);
-  const messages = useActiveMessages();
   const focusMessage = useConversationStore((s) => s.focusMessage);
   const conversationId = useConversationStore((s) => s.currentConversationId);
+  const taskMessageId = usePrecedingUserMessageId(messageId);
+  const hasAnswerText = useActiveMessageHasVisibleText(messageId);
+  const finalAnswerId = hasAnswerText ? messageId : null;
 
   const showRunDetailHere = useCallback(
     (runId: string) => {
@@ -66,30 +71,6 @@ export function useGraphDrillIn(
       : null;
   });
 
-  const finalAnswer = useMemo(() => {
-    if (!execution) return null;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === "assistant" && m.executionId === execution.id) {
-        const content = visibleMessageText(m);
-        return content ? { id: m.id, content } : null;
-      }
-    }
-    return null;
-  }, [messages, execution]);
-
-  const taskMessage = useMemo(() => {
-    if (!execution) return null;
-    const answerIdx = messages.findIndex(
-      (m) => m.role === "assistant" && m.executionId === execution.id,
-    );
-    if (answerIdx <= 0) return null;
-    for (let i = answerIdx - 1; i >= 0; i--) {
-      if (messages[i].role === "user") return { id: messages[i].id };
-    }
-    return null;
-  }, [messages, execution]);
-
   const captainRun = useMemo(() => {
     if (!execution) return null;
     const id = resolveCaptainSinkId(execution.runs);
@@ -99,22 +80,22 @@ export function useGraphDrillIn(
   const activateNode = useCallback(
     (id: string) => {
       if (id === INPUT_ID) {
-        if (!taskMessage) return;
+        if (!taskMessageId) return;
         if (onEndpointSelect) {
-          onEndpointSelect(taskMessage.id, "提问", "prompt");
+          onEndpointSelect(taskMessageId, "提问", "prompt");
           return;
         }
-        focusMessage(taskMessage.id, conversationId);
+        focusMessage(taskMessageId, conversationId);
         if (interactive) onClose?.();
         return;
       }
       if (captainRun && id === captainRun.id) {
-        if (!finalAnswer) return;
+        if (!finalAnswerId) return;
         if (onEndpointSelect) {
-          onEndpointSelect(finalAnswer.id, "最终回答", "answer");
+          onEndpointSelect(finalAnswerId, "最终回答", "answer");
           return;
         }
-        focusMessage(finalAnswer.id, conversationId);
+        focusMessage(finalAnswerId, conversationId);
         if (interactive) onClose?.();
         return;
       }
@@ -130,8 +111,8 @@ export function useGraphDrillIn(
       onNodeSelect,
       onEndpointSelect,
       showRunDetailHere,
-      finalAnswer,
-      taskMessage,
+      finalAnswerId,
+      taskMessageId,
       captainRun,
       focusMessage,
       conversationId,
@@ -145,8 +126,8 @@ export function useGraphDrillIn(
     showRunDetailHere,
     litRunId,
     litEndpointMessageId,
-    finalAnswer,
-    taskMessage,
+    finalAnswerId,
+    taskMessageId,
     captainRun,
   };
 }

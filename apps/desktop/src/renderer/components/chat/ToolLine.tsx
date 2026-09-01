@@ -1,4 +1,8 @@
-import { isSuccessfulHandoff } from "@/components/chat/handoffBrief";
+import { HandoffBriefCard } from "@/components/chat/HandoffBriefCard";
+import {
+  debriefFromHandoffArgs,
+  isSuccessfulHandoff,
+} from "@/components/chat/handoffBrief";
 import {
   type ToolResultData,
   ToolResultView,
@@ -9,7 +13,6 @@ import {
   codeDiagnosticsPeek,
   extractCodeDiagnostics,
 } from "@/components/chat/toolResult/codeDiagnostics";
-import { isFileReadCeilingGuidance } from "@/components/chat/toolResult/fileReadCeiling";
 import { isVerifyBudgetExceeded } from "@/components/chat/toolResult/verifyBudget";
 import { Badge, Button } from "@/components/ui";
 import { isBrowserTool } from "@/lib/browserActivity";
@@ -17,7 +20,7 @@ import {
   channelRedirectFace,
   resolveToolWireStatus,
 } from "@/lib/channelRedirect";
-import { formatCompact } from "@/lib/format";
+import { formatDurationSec } from "@/lib/format";
 import { runningElapsedSec } from "@/lib/runningElapsed";
 import { runtimeOf, useConversationStore } from "@/stores/conversation";
 import {
@@ -48,6 +51,8 @@ import {
 import { ThinkingDots } from "./message-bubble/Thinking";
 import {
   RUN_TARGET_ARG_TOOLS,
+  WRITE_FAMILY_TOOLS,
+  composingWriteChars,
   looksLikeInternalId,
   toolDetail,
   toolGroupSummary,
@@ -58,11 +63,7 @@ import {
 function isToolFaultError(
   step: Extract<ProcessStep, { kind: "tool" }>,
 ): boolean {
-  return (
-    step.status === "error" &&
-    !isFileReadCeilingGuidance(step.tool_name, step.result) &&
-    !isVerifyBudgetExceeded(step.display)
-  );
+  return step.status === "error" && !isVerifyBudgetExceeded(step.display);
 }
 
 /** Tools whose collapsed title already names the target (path / topic / skill / action)
@@ -79,7 +80,8 @@ const PEEK_SUPPRESSED = new Set([
   // read_url / read_conversation：peek 并进标题 inlineMeta，折叠无第二行。
   "read_url",
   "read_conversation",
-  // 执行类：成功 stdout 不进折叠行；失败/预算 inlineMeta 并进标题。
+  // 执行类：成功 stdout 不进折叠行；失败/未完成 inlineMeta 并进标题。
+  "run",
   "code_execute",
   "test_run",
   "file_read",
@@ -148,8 +150,6 @@ const PEEK_SUPPRESSED = new Set([
   "host_package_install",
 ]);
 
-const WRITE_FAMILY = new Set(["file_write", "file_append", "str_replace"]);
-
 /** Write-family collapsed row: only surface diagnostics (errors / unavailable).
  * Clean「未发现类型错误」falls through to the path title — same as a suppressed ack. */
 function writeFamilyDiagnosticPeek(data: ToolResultData): string | null {
@@ -160,22 +160,23 @@ function writeFamilyDiagnosticPeek(data: ToolResultData): string | null {
   return null;
 }
 
-/** 模型流式组装工具调用 JSON 时的心跳行（不持久化）。 */
+/** 模型流式组装工具调用 JSON 时的心跳行（不持久化）。写盘家族才报字数。 */
 export function ComposingToolLine({
   tool,
 }: {
   tool: { toolName: string; chars: number };
 }) {
   const { Icon, label } = toolMeta(tool.toolName);
+  const charLabel = composingWriteChars(tool.toolName, tool.chars);
   return (
     <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
       <Icon size={14} className="shrink-0 text-primary" />
       <span>
-        正在组装 {label}
-        {tool.chars > 0 && (
+        {label}
+        {charLabel && (
           <span className="text-muted-foreground/70">
             {" · "}
-            {formatCompact(tool.chars)} 字
+            {charLabel}
           </span>
         )}
       </span>
@@ -253,22 +254,22 @@ function WebSearchSkeleton() {
 }
 
 /** 行尾指示（顶层工具行对齐「Read page · N sources」）：进行中用已运行秒数（取代脉冲点，
- *  折叠保持一行）；否则失败打红✗，file_read 同 path 天花板走 warning 三角（引导态，
- *  非故障红）；顶层可展开行补折叠 chevron。成功完成不再挂绿✓——标题本身已表明做完。 */
+ *  折叠保持一行）；否则失败打红✗，验证未完成走 warning 三角（非故障红）；顶层可展开
+ *  行补折叠 chevron。成功完成不再挂绿✓——标题本身已表明做完。 */
 function ToolRowTail({
   status,
   nested,
   hasBody,
   open,
-  ceilingGuidance = false,
+  verifyBudgetExceeded = false,
   elapsedSec = 0,
 }: {
   status: "running" | "success" | "error" | "redirect";
   nested: boolean;
   hasBody: boolean;
   open: boolean;
-  /** Same-path file_read ceiling — warning affordance, not fault red ✗. */
-  ceilingGuidance?: boolean;
+  /** Verify budget exceeded — warning affordance, not fault red ✗. */
+  verifyBudgetExceeded?: boolean;
   /** Live seconds while `status === "running"`; shown from 1s so the first tick isn't `0s`. */
   elapsedSec?: number;
 }) {
@@ -276,14 +277,14 @@ function ToolRowTail({
     if (elapsedSec < 1) return null;
     return (
       <span className="ml-1.5 shrink-0 tabular-nums text-xs text-muted-foreground/70">
-        {elapsedSec}s
+        {formatDurationSec(elapsedSec)}
       </span>
     );
   }
   // The verdict icon mounts fresh on the running→done edge, so a one-shot pop marks the
   // state change (设计 §3); reduced-motion skips it. 行尾只留需要动作的符号：失败红✗ /
-  // 天花板 warning 三角 / 顶层可展开 chevron。成功完成不再挂绿✓。
-  const faultIcon = ceilingGuidance ? (
+  // 验证未完成 warning 三角 / 顶层可展开 chevron。成功完成不再挂绿✓。
+  const faultIcon = verifyBudgetExceeded ? (
     <AlertTriangle
       size={14}
       className="animate-status-pop text-warning motion-reduce:animate-none"
@@ -369,23 +370,17 @@ export function ToolLine({
   const successfulHandoff = isSuccessfulHandoff(step.tool_name, status);
   const peek = toolResultPeek(data);
   const running = status === "running";
-  const fileReadCeiling = isFileReadCeilingGuidance(
-    step.tool_name,
-    step.result,
-  );
   const verifyBudgetExceeded =
     step.status === "error" && isVerifyBudgetExceeded(step.display);
-  const ceilingGuidance = fileReadCeiling || verifyBudgetExceeded;
   const isWebSearch = step.tool_name === "web_search";
-  // Collapsed error rows stay one line (title + red ✗ / warning 三角). file_read
-  // 天花板仍保留 warning 第二行；验证预算与其它失败态 inlineMeta 并进标题。
+  // Collapsed error rows stay one line (title + red ✗ / warning 三角).
+  // 验证未完成（idle/灾难顶）与其它失败态 inlineMeta 并进标题。
   const suppressesPeek =
     status === "redirect" ||
-    (status === "error"
-      ? !fileReadCeiling
-      : PEEK_SUPPRESSED.has(step.tool_name) ||
-        isBrowserTool(step.tool_name) ||
-        (step.tool_name === "terminal" && detail));
+    status === "error" ||
+    PEEK_SUPPRESSED.has(step.tool_name) ||
+    isBrowserTool(step.tool_name) ||
+    (step.tool_name === "terminal" && detail);
   // Real backend-ish start anchor (stamped at tool_use_start) keyed by tool_call_id (= step.id),
   // so the running timer survives this row remounting. Undefined on a reloaded turn (tool done).
   const startedAt = useConversationStore(
@@ -395,9 +390,8 @@ export function ToolLine({
   const phaseText = running ? toolPhaseText(step.phase) : null;
   // 完成态元信息并进标题行、不另起 peek：web_search「N results」、grep 匹配计数、
   // list_folders「N folders」、write 家族 / code_diagnostics 类型诊断、browser_* detail。
-  // handoff summary 走 inlineBody。
   const writeDiagPeek =
-    status === "success" && WRITE_FAMILY.has(step.tool_name)
+    status === "success" && WRITE_FAMILY_TOOLS.has(step.tool_name)
       ? writeFamilyDiagnosticPeek(data)
       : null;
   let inlineMetaWarning = false;
@@ -436,6 +430,7 @@ export function ToolLine({
         return peek || null;
       }
       const execTool =
+        step.tool_name === "run" ||
         step.tool_name === "code_execute" ||
         step.tool_name === "test_run" ||
         step.tool_name === "terminal";
@@ -443,7 +438,14 @@ export function ToolLine({
     }
     return null;
   })();
-  const inlineBody = successfulHandoff && peek ? peek : null;
+  if (successfulHandoff) {
+    return (
+      <HandoffBriefCard
+        debrief={debriefFromHandoffArgs(step.arguments)}
+        persistKey={turnKey ? `${turnKey}:tool:${step.id}` : null}
+      />
+    );
+  }
   return (
     <div className="min-w-0 max-w-full">
       <Button
@@ -470,11 +472,6 @@ export function ToolLine({
                 {detail && (
                   <span className="ml-1.5 text-muted-foreground">{detail}</span>
                 )}
-                {inlineBody && (
-                  <span className="ml-1.5 text-muted-foreground">
-                    {inlineBody}
-                  </span>
-                )}
                 {phaseText && (
                   <span className="ml-1.5 text-muted-foreground/70">
                     {phaseText}
@@ -497,27 +494,15 @@ export function ToolLine({
                 nested={nested}
                 hasBody={hasBody}
                 open={open}
-                ceilingGuidance={ceilingGuidance}
+                verifyBudgetExceeded={verifyBudgetExceeded}
                 elapsedSec={elapsed}
               />
             </span>
-            {(hasBody || (successfulHandoff && !!peek)) &&
-              !open &&
-              !inlineMeta &&
-              !inlineBody &&
-              !suppressesPeek && (
-                <span
-                  className={`block truncate text-xs ${
-                    ceilingGuidance
-                      ? "text-warning/80"
-                      : status === "error"
-                        ? "text-destructive/80"
-                        : "text-muted-foreground/70"
-                  }`}
-                >
-                  {peek}
-                </span>
-              )}
+            {hasBody && !open && !inlineMeta && !suppressesPeek && (
+              <span className="block truncate text-xs text-muted-foreground/70">
+                {peek}
+              </span>
+            )}
           </span>
         </span>
       </Button>
@@ -625,7 +610,7 @@ function DefaultToolLineGroup({
   const showBrowser = useSidePanelStore((s) => s.showBrowser);
 
   const summary = toolGroupSummary(tools);
-  // file_read 天花板是引导态，不进组头「N failed」红徽章。
+  // 验证未完成不是故障，不进组头「N failed」红徽章。
   const errorCount = tools.reduce(
     (n, t) => n + (isToolFaultError(t) ? 1 : 0),
     0,

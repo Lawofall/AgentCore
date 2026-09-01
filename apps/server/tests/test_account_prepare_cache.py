@@ -19,6 +19,7 @@ from agentcore.memory.account_prepare_cache import (
     account_rules_memory_ttl_remaining,
     clear_account_rules_memory_cache,
     get_account_rules_memory_snapshot,
+    hibernate_folder_injection_cache,
     prepare_account_folder_id,
     prepare_reads_cache_only,
     seed_account_rules_memory_cache,
@@ -829,6 +830,78 @@ async def test_warm_pulls_the_ancestor_folders_the_cloud_resolved(
         )
     assert "外层规则" in rules_md
     assert rules_md.index("F_outer 画像") < rules_md.index("F1 画像")
+
+
+async def test_warm_empty_folder_chain_drops_the_dead_desk(
+    monkeypatch: pytest.MonkeyPatch, account_creds
+):
+    """First-phase folder fetch races /rules/list; empty chain must not keep that desk."""
+    clear_account_rules_memory_cache()
+
+    async def _rules(creds, *, folder_id):
+        del creds, folder_id
+        return {
+            "global_rules": [{"name": "用户规则.md", "content": "- 全局规则"}],
+            "project_rules": [{"name": "用户规则.md", "content": "- 当前规则"}],
+            "folder_chain": [],
+        }
+
+    async def _mem_list(creds, *, scope):
+        del creds
+        return [{"path": "画像.md", "version": "1"}]
+
+    async def _mem_load(creds, *, path, scope):
+        del creds, path
+        return f"- {scope or 'global'} 画像\n"
+
+    async def _scope_state(creds, *, scope):
+        del creds, scope
+        return {"last_semantic_at": None}
+
+    for name, fn in (
+        ("cloud_list_user_rules", _rules),
+        ("cloud_memory_list", _mem_list),
+        ("cloud_memory_load", _mem_load),
+        ("cloud_memory_scope_state_get", _scope_state),
+    ):
+        monkeypatch.setattr(f"agentcore.memory.account_prepare_cache.{name}", fn)
+
+    snap = await warm_account_rules_memory(
+        account_creds, user_id="u1", folder_id="F1"
+    )
+    assert snap.folder_chain == ()
+    assert ("F1", "画像.md") not in snap.memory_bodies
+    assert ("", "画像.md") in snap.memory_bodies
+    assert "F1" not in snap.scope_states
+
+    with account_credentials_scope(account_creds):
+        rules_md = await assemble_turn_rules(
+            _EmptyMemoryStore(),  # type: ignore[arg-type]
+            "u1",
+            folder_id="F1",
+            enabled=True,
+        )
+        topics = await load_memory_topics(
+            _EmptyMemoryStore(),  # type: ignore[arg-type]
+            "u1",
+            folder_id="F1",
+            enabled=True,
+        )
+    assert "全局规则" in rules_md
+    assert "当前规则" not in rules_md
+    assert "F1 画像" not in rules_md
+    assert topics == []
+
+
+async def test_hibernate_drops_only_the_named_folder_snapshots():
+    clear_account_rules_memory_cache()
+    seed_account_rules_memory_cache("u1", "F1", _injectable_snapshot())
+    seed_account_rules_memory_cache("u1", "F2", _injectable_snapshot())
+    seed_account_rules_memory_cache("u1", None, _injectable_snapshot())
+    await hibernate_folder_injection_cache("u1", ["F1"])
+    assert get_account_rules_memory_snapshot("u1", "F1") is None
+    assert get_account_rules_memory_snapshot("u1", "F2") is not None
+    assert get_account_rules_memory_snapshot("u1", None) is not None
 
 
 async def test_document_store_cache_only_miss_skips_cloud(

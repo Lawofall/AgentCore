@@ -63,6 +63,29 @@ def test_user_interjection_is_necessary_decision():
     assert session.is_necessary_decision([ev]) is True
 
 
+def test_has_unread_user_interjection_peeks_without_consuming():
+    session = CoordinationSession(execution_id="e-unread", total_workers=1)
+    ev = CoordinationEvent(
+        kind=CoordinationEventKind.USER_INTERJECTION,
+        payload={"interjection_id": "i-unread", "content": "加一句"},
+    )
+    assert session.post(ev) is True
+    assert session.has_unread_user_interjection() is True
+    batch = session.drain_nowait()
+    assert any(e.kind is CoordinationEventKind.USER_INTERJECTION for e in batch)
+    assert session.has_unread_user_interjection() is False
+
+
+def test_has_unread_user_interjection_ignores_other_kinds():
+    session = CoordinationSession(execution_id="e-unread-other", total_workers=1)
+    ev = CoordinationEvent(
+        kind=CoordinationEventKind.WORKER_COMPLETED,
+        payload={"run_id": "w1"},
+    )
+    assert session.post(ev) is True
+    assert session.has_unread_user_interjection() is False
+
+
 def test_user_interjection_sse_carries_attachments():
     meta = [
         {

@@ -1,9 +1,8 @@
 """Live file names under the four 约定文档出口 directories.
 
-``<工作区>`` advertises those prefixes every turn. Without a disk
-listing the model treats the prefix as a known *file* path and concatenates a
-topic name. This module lists what is actually there (or that the dir is empty).
-Bodies stay out — paths only.
+``<工作区>`` only lists an outlet when it has files. Empty dirs stay
+out — layout HOW lives in ``team_delivery_env``. This module lists what
+is actually there. Bodies stay out — paths only.
 """
 
 from __future__ import annotations
@@ -63,13 +62,14 @@ def format_outlet_line(
     title: str,
     rel_dir: str,
     inventory: Mapping[str, OutletDirListing] | None,
-) -> str:
-    """``title`dir/` `` plus inventory suffix when a listing was probed."""
-    base = f"{title}`{rel_dir}/`"
+) -> str | None:
+    """``title`dir/` `` plus inventory suffix. Empty / missing listing → omit."""
     if inventory is None:
-        return base
+        return None
     listing = inventory.get(rel_dir, OutletDirListing())
-    return base + format_outlet_suffix(listing)
+    if not listing.names and not listing.truncated:
+        return None
+    return f"{title}`{rel_dir}/`" + format_outlet_suffix(listing)
 
 
 async def collect_outlet_inventory(

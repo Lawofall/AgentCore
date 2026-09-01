@@ -22,7 +22,6 @@ import {
   BarChart3,
   BookOpen,
   Bookmark,
-  Bug,
   Clapperboard,
   CloudUpload,
   Cpu,
@@ -91,7 +90,6 @@ export interface PaletteCommand {
 export interface CommandContext {
   navigate: NavigateFunction;
   theme: "light" | "dark" | "system";
-  diagnosticMode: boolean;
   sidebarCollapsed: boolean;
   /** Switch the open palette to the bookmarks facet (消息收藏列表). */
   openBookmarksInPalette: () => void;
@@ -117,7 +115,6 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
   const {
     navigate,
     theme,
-    diagnosticMode,
     sidebarCollapsed,
     openBookmarksInPalette,
     demoTapes = [],
@@ -205,24 +202,6 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
       keywords: ["sidebar", "toggle", "celan", "shoouqi"],
       shortcut: chord("b"),
       run: () => useSidebarStore.getState().toggleCollapsed(),
-    },
-    {
-      // 开发者 / 诊断模式 (前端UX设计.md §十): surfaces low-level run / trace ids
-      // in run detail for debugging, off by default（报障复制不依赖此开关）。
-      id: "toggle-diagnostic-mode",
-      title: "开发者 / 诊断模式",
-      category: "操作",
-      icon: Bug,
-      keywords: [
-        "diagnostic",
-        "developer",
-        "debug",
-        "trace",
-        "zhenduan",
-        "kaifazhe",
-      ],
-      hint: diagnosticMode ? "当前：开" : "当前：关",
-      run: () => useUIStore.getState().toggleDiagnosticMode(),
     },
     {
       // Acts on the open conversation (导出对话). A draft has no server id yet, so
@@ -605,7 +584,8 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
         "waiguan",
         "外观",
         "主题",
-        "诊断",
+        "进阶",
+        "本机执行",
       ],
       run: go("/more/general"),
     },

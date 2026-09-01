@@ -526,6 +526,108 @@ async def test_run_background_llm_byok_auth_does_not_retry_platform(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_run_background_llm_platform_balance_falls_back_to_byok(monkeypatch):
+    from agentcore.billing.gate import (
+        BackgroundGateResolve,
+        BackgroundLlmResult,
+        run_background_llm,
+    )
+    from agentcore.core.errors import LLMInsufficientBalanceError
+    from agentcore.llm.credentials import LLMCredentials
+
+    platform = LLMCredentials(
+        api_key="sk-platform",
+        base_url="https://p.example/v1",
+        default_model="flash",
+        source="platform",
+    )
+    byok = LLMCredentials(
+        api_key="sk-user",
+        base_url="https://user.example/v1",
+        default_model="user-flash",
+        source="user",
+        provider_id="p1",
+    )
+    calls: list[str] = []
+
+    async def _runner(creds: LLMCredentials) -> str:
+        calls.append(creds.source)
+        if creds.source == "platform":
+            raise LLMInsufficientBalanceError(provider_name="platform")
+        return "ok"
+
+    class _CM:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, *_a):
+            return False
+
+    monkeypatch.setattr("agentcore.billing.gate.async_session_factory", lambda: _CM())
+    monkeypatch.setattr(
+        "agentcore.billing.gate.resolve_and_gate_background",
+        AsyncMock(return_value=BackgroundGateResolve(credentials=platform)),
+    )
+    monkeypatch.setattr(
+        "agentcore.billing.gate.resolve_and_gate_background_user_fallback",
+        AsyncMock(return_value=byok),
+    )
+
+    result = await run_background_llm("u1", purpose="title", runner=_runner)
+    assert isinstance(result, BackgroundLlmResult)
+    assert result.value == "ok"
+    assert result.credentials is byok
+    assert calls == ["platform", "user"]
+
+
+@pytest.mark.asyncio
+async def test_run_background_llm_byok_balance_skips_without_raising(monkeypatch):
+    from agentcore.billing.gate import (
+        BackgroundGateResolve,
+        BackgroundLlmSkip,
+        BackgroundSkipReason,
+        run_background_llm,
+    )
+    from agentcore.core.errors import LLMInsufficientBalanceError
+    from agentcore.llm.credentials import LLMCredentials
+
+    byok = LLMCredentials(
+        api_key="sk-user",
+        base_url="https://user.example/v1",
+        default_model="user-flash",
+        source="user",
+        provider_id="p1",
+    )
+    fallback = AsyncMock(return_value=None)
+
+    async def _runner(creds: LLMCredentials) -> str:
+        raise LLMInsufficientBalanceError(provider_name="user")
+
+    class _CM:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, *_a):
+            return False
+
+    monkeypatch.setattr("agentcore.billing.gate.async_session_factory", lambda: _CM())
+    monkeypatch.setattr(
+        "agentcore.billing.gate.resolve_and_gate_background",
+        AsyncMock(return_value=BackgroundGateResolve(credentials=byok)),
+    )
+    monkeypatch.setattr(
+        "agentcore.billing.gate.resolve_and_gate_background_user_fallback",
+        fallback,
+    )
+
+    result = await run_background_llm("u1", purpose="memory", runner=_runner)
+    assert result == BackgroundLlmSkip(
+        reason=BackgroundSkipReason.INSUFFICIENT_BALANCE
+    )
+    fallback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_resolve_and_gate_background_user_fallback_skips_quota(monkeypatch):
     from agentcore.billing.gate import resolve_and_gate_background_user_fallback
     from agentcore.llm.resolve import ModelConfig

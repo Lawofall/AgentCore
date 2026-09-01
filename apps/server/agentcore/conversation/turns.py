@@ -19,6 +19,7 @@ from agentcore.conversation.compaction import compact_before_turn
 from agentcore.conversation.history import load_chat_context
 from agentcore.conversation.inline_body import plain_text
 from agentcore.conversation.mentions import to_stored_agent_mentions
+from agentcore.conversation.midflight_persist import load_or_create_turn_user_message
 from agentcore.conversation.turn_backend import build_turn_backend
 from agentcore.conversation.turn_persistence import (
     close_user_stop_turn,
@@ -60,7 +61,7 @@ from agentcore.runtime.turn.ceo_continue import (
     restore_ceo_continue_lock,
 )
 from agentcore.runtime.turn.runs import turn_runs
-from agentcore.workspace.attachments import persist_attachments, to_stored_metadata
+from agentcore.workspace.attachments import persist_attachments
 
 logger = get_logger(__name__)
 
@@ -114,8 +115,13 @@ async def stream_chat(
     llm_supports_tools: bool | None = None,
     x_client_platform: str | None = None,
     agent_mentions: list[dict] | None = None,
+    existing_user_message_id: str | None = None,
 ) -> None:
-    """Main entry: persist user message, run pipeline, persist assistant reply."""
+    """Main entry: persist user message, run pipeline, persist assistant reply.
+
+    ``existing_user_message_id``: mid-flight persist already wrote the user row
+    (queue / steer). Drain reuses it instead of inserting a second bubble.
+    """
     backend = None
     try:
         async with async_session_factory() as session:
@@ -165,12 +171,13 @@ async def stream_chat(
         )
 
         async with async_session_factory() as session:
-            user_msg = await MessageRepository(session).create(
+            user_msg = await load_or_create_turn_user_message(
+                session,
                 conversation_id=conversation_id,
-                role="user",
-                content=user_message,
-                attachments=to_stored_metadata(resident_attachments),
-                agent_mentions=to_stored_agent_mentions(agent_mentions),
+                user_message=user_message,
+                existing_user_message_id=existing_user_message_id,
+                attachments=resident_attachments,
+                agent_mentions=agent_mentions,
             )
             history = await load_chat_context(session, conversation_id)
 

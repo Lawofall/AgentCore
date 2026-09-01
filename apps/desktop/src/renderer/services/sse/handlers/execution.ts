@@ -165,7 +165,7 @@ export function handleExecutionEvent(
     case "run_skipped":
     case "run_progress":
     // 调度埋点量化 (深层诊断指标): the WaveScheduler snapshot folds onto Execution.batches via
-    // the same frame path (journaled → replays on reload); shown only in 诊断模式 (run detail).
+    // the same frame path (journaled → replays on reload); 采集仍在、产品不展示.
     case "batch_metrics":
     // 「计划已调整」轻痕迹 (设计 §7.2): a NON-interrupting trace — the CEO re-bound / re-steered
     // paused nodes via replan. Folds onto the runs' `revised` via the same frame path (no

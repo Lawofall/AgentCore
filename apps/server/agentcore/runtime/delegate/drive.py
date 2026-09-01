@@ -39,7 +39,7 @@ def _materialise_turn_token_budget_skips(
     plan: RunPlan,
     results: dict[str, RunState],
 ) -> None:
-    """After turn-ceiling / nested-envelope soft-stop: mark un-run tail SKIPPED.
+    """After turn-ceiling / auth-dead soft-stop: mark un-run tail SKIPPED.
 
     Not a resume substrate. Un-run nodes become SKIPPED with a budget warning.
     """
@@ -52,7 +52,6 @@ def _materialise_turn_token_budget_skips(
     from agentcore.runtime.turn.token_budget import (
         REASON_TURN_TOKEN_BUDGET,
         budget_skip_warning_for_active_scope,
-        current_nested_envelope,
         current_turn_tokens,
         resolve_turn_token_ceiling,
     )
@@ -82,15 +81,10 @@ def _materialise_turn_token_budget_skips(
         tool._sink.emit(run_skipped(node.run_id, agent_id, reason=skip_reason))
         skipped_ids.append(node.run_id)
     if skipped_ids:
-        nested = current_nested_envelope()
-        # 事件名必须是字面量：`scripts/sync_log_event_registry.py` 静态扫参数，条件表达式
-        # 会让这两个名字整个从 catalog 里消失（dev 每次调用刷未注册告警）。
         fields = {
             "skipped": len(skipped_ids),
             "spent": current_turn_tokens(),
             "ceiling": resolve_turn_token_ceiling(),
-            "nested_envelope": nested.envelope if nested else None,
-            "nested_baseline": nested.baseline if nested else None,
             "depth": getattr(tool, "_depth", None),
         }
         if skip_reason == REASON_TURN_TOKEN_BUDGET:
@@ -133,10 +127,8 @@ async def drive(
         turn_auth_dead_reject_message,
     )
     from agentcore.runtime.turn.token_budget import (
-        NestedEnvelopeRejected,
         current_turn_tokens,
         is_turn_token_ceiling_hit,
-        nested_turn_envelope_scope,
         resolve_turn_token_ceiling,
         turn_token_ceiling_reject_message,
     )
@@ -163,7 +155,6 @@ async def drive(
         )
     try:
         # Turn 顶已触：新开批拒绝；resume 续跑则跳过未跑尾并 finalize（不 cancel 已完成）。
-        # 嵌套信封开启时：父顶只决定「能否开工」；波内停靠信封（见下方 scope）。
         if is_turn_token_ceiling_hit():
             from agentcore.core.logging import get_logger
 
@@ -228,27 +219,16 @@ async def drive(
                 contract_failure=True,
             )
 
-        try:
-            with nested_turn_envelope_scope(depth=depth):
-                return await _drive_body(
-                    tool,
-                    plan,
-                    execution_id=execution_id,
-                    seed_completed=seed_completed,
-                    complexity_hint=complexity_hint,
-                    call_idx=call_idx,
-                    coordinate=coordinate,
-                    session=session,
-                )
-        except NestedEnvelopeRejected as exc:
-            # 嵌套信封拨付失败（父剩余 0）：与父顶拒开同族。
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error=str(exc),
-                contract_failure=True,
-            )
+        return await _drive_body(
+            tool,
+            plan,
+            execution_id=execution_id,
+            seed_completed=seed_completed,
+            complexity_hint=complexity_hint,
+            call_idx=call_idx,
+            coordinate=coordinate,
+            session=session,
+        )
     finally:
         if nested_parent:
             from agentcore.runtime.runs.run_phase_emit import emit_run_phase
@@ -274,7 +254,7 @@ async def _drive_body(
     coordinate: bool,
     session: Any,
 ) -> ToolResult:
-    """Inner drive after budget admission / nested envelope bind."""
+    """Inner drive after budget admission."""
     from agentcore.llm.turn_auth_dead import credential_source_from_llm
     from agentcore.runtime.turn.token_budget import (
         resolve_wave_budget_hooks,
@@ -571,7 +551,7 @@ async def _drive_body(
     def _on_skipped(rid: str, aid: str, reason: str) -> None:
         tool._sink.emit(run_skipped(rid, aid, reason=reason))
 
-    should_stop, priority_reserve_hit = resolve_wave_budget_hooks(
+    should_stop = resolve_wave_budget_hooks(
         credential_source=payer,
     )
     # 嵌套满额：depth≥1 子团不继承父层 12//N 切开份额，按满额并行派发（单 lead 仍受
@@ -599,13 +579,11 @@ async def _drive_body(
             on_boundary=on_boundary,
             on_skipped=_on_skipped,
             metrics_sink=batch_metrics,
-            # 触顶后禁新波：在飞 drain，不 cancel；嵌套路径绑信封谓词（见 resolve_wave_budget_hooks）。
+            # 触顶后禁新波：在飞 drain，不 cancel。
             should_stop=should_stop,
-            # 交付预留：根 depth0 放行 ceiling_priority；嵌套路径关闭（None）。
-            priority_reserve_hit=priority_reserve_hit,
         )
 
-        # soft should_stop 默认把未跑尾留给 resume；turn 顶 / 信封是硬停，物化为 SKIPPED。
+        # soft should_stop 默认把未跑尾留给 resume；turn 顶是硬停，物化为 SKIPPED。
         if should_materialise_turn_token_budget_skips(credential_source=payer):
             _materialise_turn_token_budget_skips(tool, plan, results)
 

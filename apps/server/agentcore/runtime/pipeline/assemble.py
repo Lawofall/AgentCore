@@ -46,26 +46,29 @@ class AssembledTurn:
     debate_tool: Any
     chat_tools: ToolRegistry
     chat_system_prompt: str
+    # Assemble-time cues for settle-side 阶梯 2 count (no intercept).
+    had_prior_delivery_gaps: bool = False
+    had_recent_team_graph: bool = False
 
 
 def build_chat_system_prompt(
     *,
     ceo_prompt: str,
-    workspace_overview: str,
+    working_set: str,
     recent_team_graph: str,
     prior_delivery_gaps: str,
     prior_delegate_retry: str,
-    prior_futile_retries: str,
     attachment_context: str,
     registered_sources: str,
     soft_cap: int | None,
 ) -> str:
     """Render the turn's CEO system prompt from its sections — the ONE assembly point.
 
-    Variable tail AFTER the stable hint stack (workspace overview + recent graph +
-    attachments + 来源台账) so the CEO prefix (base + hints) stays byte-identical across
-    turns and rides the prefix cache even when the workspace / attachments change. Empty
-    sections are dropped, so a turn with none is byte-identical to the bare CEO prompt.
+    Variable tail AFTER the stable hint stack (working set + recent graph +
+    attachments + 来源台账) so the CEO prefix (base + hints, including ``<工作区>``
+    with the CEO file index already spliced) stays byte-identical across turns
+    except when those facts themselves change. Empty sections are dropped, so a
+    turn with none is byte-identical to the bare CEO prompt.
 
     EVERY section the CEO's system prompt carries must come in through here. A fragment
     appended to the returned string instead lands outside ``assembly_hash`` /
@@ -81,11 +84,10 @@ def build_chat_system_prompt(
     return (
         ContextAssembler()
         .add("ceo_prompt", ceo_prompt, SectionOrder.BASE)
-        .add("workspace_context", workspace_overview, SectionOrder.WORKSPACE_OVERVIEW)
+        .add("working_set", working_set, SectionOrder.WORKING_SET)
         .add("recent_team_graph", recent_team_graph, SectionOrder.RECENT_TEAM_GRAPH)
         .add("prior_delivery_gaps", prior_delivery_gaps, SectionOrder.PRIOR_DELIVERY_GAPS)
         .add("prior_delegate_retry", prior_delegate_retry, SectionOrder.PRIOR_DELEGATE_RETRY)
-        .add("prior_futile_retries", prior_futile_retries, SectionOrder.PRIOR_FUTILE_RETRIES)
         .add("attachment_context", attachment_context, SectionOrder.ATTACHMENT)
         .add("registered_sources", registered_sources, SectionOrder.REGISTERED_SOURCES)
         .observe(scope="ceo_turn", soft_cap=soft_cap)
@@ -208,8 +210,13 @@ async def assemble_ceo_turn(
         advertise_bind_local_folder=checkpoint_enabled and channel.can_bind_folder,
         desktop_online=channel.desktop_online,
     )
+    from agentcore.runtime.resolve.prepare import _wire_conversation_log_tools
     from agentcore.tools.ceo_toolset import wire_ceo_consult
+    from agentcore.tools.mcp import register_mcp_tools
     from agentcore.tools.on_demand import offer_tools_from_window
+
+    register_mcp_tools(chat_tools, prepared.mcp_discover)
+    _wire_conversation_log_tools(chat_tools, folder_id=folder_id)
 
     await wire_ceo_consult(
         chat_tools,
@@ -284,7 +291,9 @@ async def assemble_ceo_turn(
                 user_message,
             )
             # R2 soft hint + R1 background refresh: fingerprint drift never blocks.
-            if not reason:
+            # Soft-empty 画像 is not "go fill it": skip stale hint + silent refresh.
+            # Named 先了解 / 工程短语 already took the hard path above.
+            if not reason and not profile_empty_soft:
                 live_fp = await compute_workspace_explore_fingerprint(backend)
                 nav_stale = await evaluate_explore_fingerprint_drift(
                     mem_store,
@@ -324,28 +333,24 @@ async def assemble_ceo_turn(
     if explore_reason:
         prepared.base_tool_context.cold_start_explore_pending = True
         prepared.base_tool_context.write_scope = "explore_memory"
+    # CEO file index: untagged body spliced into ``<工作区>`` (not a second XML tag).
+    # Workers never receive this listing. Generated fresh each turn; "" omits the 文件节.
+    workspace_overview = await _timed_phase(
+        "workspace_overview",
+        build_workspace_overview(backend, shared_workspace=folder_id is not None),
+    )
     chat_system_prompt = compose_ceo_chat_prompt(
         prepared.system_prompt,
         skill_registry=prepared.skill_registry,
         ceo_tool_names=ceo_tool_names,
         ceo_offered_names=ceo_offered_names,
         on_demand_entries=on_demand_entries,
-        folder_catalog=prepared.folder_catalog,
-        current_folder_id=folder_id,
         workspace_context=prepared.workspace_facts,
+        workspace_file_index=workspace_overview,
         cold_start_explore=explore_reason or False,
         folder_nav_stale=folder_nav_stale,
         folder_profile_empty_soft=folder_profile_empty_soft,
         attachment_material=attachment_material_scene(prepared.attachment_context),
-    )
-    # Real-time workspace overview (工作区上下文): a compact, newest-first listing of
-    # the files already on disk in this conversation's workspace, so the CEO can
-    # triage / delegate without spending a blind file_list round. Generated fresh
-    # each turn from the live backend (never indexed → never stale); "" when empty /
-    # unavailable. Workers do not receive this listing.
-    workspace_overview = await _timed_phase(
-        "workspace_overview",
-        build_workspace_overview(backend, shared_workspace=folder_id is not None),
     )
     # 跨回合同图追加的回显通道 (CEO-only): history replays no tool I/O, so the newest
     # appendable graph's execution_id must ride the prompt to stay visible next turn.
@@ -387,15 +392,12 @@ async def assemble_ceo_turn(
         prior_delivery_gaps,
         prior_delegate_retry_raw,
     )
-    # 跨回合同一动作徒劳 one-shot：上轮其它回合 journal 的 tool_call.cross_turn_retry=futile
-    # → 易变尾 `<上轮徒劳重试>`（提示信息、不拦截；空串丢段以保住 prefix cache）。
-    from agentcore.runtime.delegate.prior_futile_retries import (
-        build_prior_futile_retries_hint,
-    )
+    # 跨回合文件工作集：历史不回放工具 I/O，journal 抽出仍在场的 path（指针、不回灌正文）。
+    from agentcore.runtime.context.working_set import build_working_set_block
 
-    prior_futile_retries = await build_prior_futile_retries_hint(
+    working_set = await build_working_set_block(
         conversation_id=conversation_id,
-        exclude_message_id=message_id,
+        exclude_turn_id=message_id,
     )
     # 可用性诚实性 · 甲：偏窄短问 → 复用最近 delivery_status 发卡到本回合答复面。
     from agentcore.runtime.delegate.delivery_status import (
@@ -414,11 +416,10 @@ async def assemble_ceo_turn(
     # for this turn's prompt here.
     chat_system_prompt = build_chat_system_prompt(
         ceo_prompt=chat_system_prompt,
-        workspace_overview=workspace_overview,
+        working_set=working_set,
         recent_team_graph=recent_graph_context,
         prior_delivery_gaps=prior_delivery_gaps,
         prior_delegate_retry=prior_delegate_retry,
-        prior_futile_retries=prior_futile_retries,
         attachment_context=prepared.attachment_context,
         registered_sources=format_registered_sources_prompt(evidence_ledger),
         soft_cap=settings.prompt_budget_char_soft_cap,
@@ -437,4 +438,6 @@ async def assemble_ceo_turn(
         debate_tool=debate_tool,
         chat_tools=chat_tools,
         chat_system_prompt=chat_system_prompt,
+        had_prior_delivery_gaps=bool((prior_delivery_gaps or "").strip()),
+        had_recent_team_graph=bool((recent_graph_context or "").strip()),
     )

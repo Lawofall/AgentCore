@@ -1,25 +1,21 @@
-"""Worker token/timeout 统一 backstop：未显式声明时回填全局 ceiling + 1200s。"""
+"""Worker token 统一 backstop：未显式声明时回填全局 ceiling；无默认墙钟。"""
 
 from __future__ import annotations
 
 from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.types import Deliverable, RunPolicy, RunSpec
 from agentcore.runtime.runs.worker_budget import (
-    DIRECTED_SEARCH_TOOL_NAMES,
-    WORKER_TIMEOUT_BACKSTOP_S,
     apply_worker_budgets_to_specs,
-    ensure_directed_search_tools,
     is_deep_deliverable,
-    is_directed_search_role,
 )
 
 
-def test_apply_fills_unified_backstop():
-    """未声明 token_ceiling / timeout_s → 统一回填。"""
+def test_apply_fills_token_ceiling_not_timeout():
+    """未声明 token_ceiling → 回填；timeout_s 保持 None。"""
     spec = RunSpec(run_id="x", task="t", role="r", policy=RunPolicy())
     apply_worker_budgets_to_specs([spec], default_token_ceiling=600_000)
     assert spec.token_ceiling == 600_000
-    assert spec.policy.timeout_s == WORKER_TIMEOUT_BACKSTOP_S == 1200
+    assert spec.policy.timeout_s is None
 
 
 def test_apply_preserves_pre_set_token_ceiling_and_timeout():
@@ -37,8 +33,8 @@ def test_apply_preserves_pre_set_token_ceiling_and_timeout():
     assert spec.policy.timeout_s == 90
 
 
-def test_apply_fills_timeout_when_ceiling_preset():
-    """仅 token_ceiling 预置时仍回填 timeout。"""
+def test_apply_does_not_fill_timeout_when_ceiling_preset():
+    """仅 token_ceiling 预置时也不回填 timeout。"""
     spec = RunSpec(
         run_id="x",
         task="t",
@@ -48,11 +44,11 @@ def test_apply_fills_timeout_when_ceiling_preset():
     )
     apply_worker_budgets_to_specs([spec], default_token_ceiling=600_000)
     assert spec.token_ceiling == 50_000
-    assert spec.policy.timeout_s == WORKER_TIMEOUT_BACKSTOP_S
+    assert spec.policy.timeout_s is None
 
 
-def test_build_plan_applies_unified_backstop_regardless_of_shape():
-    """有上游 / 无上游 / 落盘 / 审校 — token/超时均走统一 backstop。"""
+def test_build_plan_applies_token_backstop_regardless_of_shape():
+    """有上游 / 无上游 / 落盘 / 审校 — token 走统一 backstop；无默认墙钟。"""
     plan, errors = build_run_plan(
         [
             {"id": "r", "role": "研究员", "task": "调研"},
@@ -74,8 +70,8 @@ def test_build_plan_applies_unified_backstop_regardless_of_shape():
     )
     assert errors == []
     for node in plan.nodes:
-        assert node.token_ceiling == 4_000_000
-        assert node.policy.timeout_s == WORKER_TIMEOUT_BACKSTOP_S
+        assert node.token_ceiling == 8_000_000
+        assert node.policy.timeout_s is None
 
 
 def test_build_plan_research_root_still_gets_research_retrieval():
@@ -92,14 +88,14 @@ def test_build_plan_research_root_still_gets_research_retrieval():
     )
     assert errors == []
     node = plan.nodes[0]
-    assert node.token_ceiling == 4_000_000
-    assert node.policy.timeout_s == WORKER_TIMEOUT_BACKSTOP_S
+    assert node.token_ceiling == 8_000_000
+    assert node.policy.timeout_s is None
     from agentcore.runtime.runs.retrieval_budget import DEFAULT_RETRIEVAL_BUDGET
 
     assert node.retrieval_budget == DEFAULT_RETRIEVAL_BUDGET
 
 
-def test_explicit_timeout_ms_wins_over_backstop():
+def test_explicit_timeout_ms_still_arms():
     plan, errors = build_run_plan(
         [
             {
@@ -114,8 +110,18 @@ def test_explicit_timeout_ms_wins_over_backstop():
     )
     assert errors == []
     node = plan.nodes[0]
-    assert node.token_ceiling == 4_000_000
+    assert node.token_ceiling == 8_000_000
     assert node.policy.timeout_s == 90  # CEO 显式优先
+
+
+def test_retired_default_worker_wall_clock_stays_gone():
+    import agentcore.runtime.coordination.session as session_mod
+    import agentcore.runtime.coordination.session_types as session_types
+    import agentcore.runtime.runs.worker_budget as wb
+
+    assert not hasattr(wb, "WORKER_TIMEOUT_BACKSTOP_S")
+    assert not hasattr(session_mod, "DEFAULT_WORKER_TIMEOUT_S")
+    assert not hasattr(session_types, "DEFAULT_WORKER_TIMEOUT_S")
 
 
 def test_deep_deliverable_signals():
@@ -189,39 +195,20 @@ def test_factory_closes_files_and_recon_delivery_idle():
     assert prose_no_files.delivery_idle_recon is False
 
 
-def test_is_directed_search_role_covers_review_and_investigation():
-    assert is_directed_search_role("后端核心审查员")
-    assert is_directed_search_role("质检官")
-    assert is_directed_search_role("调研员")
-    assert is_directed_search_role("学术审校员")
-    assert is_directed_search_role("独立复核员")
-    assert is_directed_search_role("code review")
-    assert not is_directed_search_role("撰稿人")
-    assert not is_directed_search_role("")
+def test_directed_search_role_guessing_is_absent():
+    """按职称灌检索纪律 / 补工具面已撤；搜法只在 grep / code_search / file_read。"""
+    import agentcore.runtime.runs.worker_budget as wb
 
-
-def test_ensure_directed_search_tools_enriches_restricted_allow_list():
-    valid = {"file_list", "file_read", "grep", "code_search", "handoff"}
-    enriched = ensure_directed_search_tools(
-        ["file_list", "file_read"],
-        role="前端审查员",
-        valid_tools=valid,
-    )
-    assert enriched is not None
-    assert "grep" in enriched
-    assert "code_search" in enriched
-    assert "file_read" in enriched
-    assert (
-        ensure_directed_search_tools(None, role="审查员", valid_tools=valid) is None
-    )
-    assert ensure_directed_search_tools(
-        ["file_list"], role="撰稿人", valid_tools=valid
-    ) == ["file_list"]
-    assert frozenset({"grep", "code_search"}) == DIRECTED_SEARCH_TOOL_NAMES
+    assert not hasattr(wb, "is_directed_search_role")
+    assert not hasattr(wb, "DIRECTED_SEARCH_DISCIPLINE")
+    assert not hasattr(wb, "DIRECTED_SEARCH_TOOL_NAMES")
+    assert not hasattr(wb, "ensure_directed_search_tools")
+    assert not hasattr(wb, "apply_directed_search_tools")
+    assert not hasattr(wb, "is_outer_verify_role")
 
 
 def test_build_plan_ignores_reviewer_least_privilege_tools():
-    """真纯丙：CEO 窄名单不再写入 plan；定向检索 enrichment 对 None 为 no-op。"""
+    """真纯丙：CEO 窄名单不再写入 plan。"""
     plan, errors = build_run_plan(
         [
             {
@@ -281,7 +268,7 @@ def test_should_tighten_verify_exec_thrash_for_repair_verify_posture():
     assert tightened.delivery_idle_nudge_rounds == 0
     assert tightened.delivery_idle_narrow_rounds == 0
     assert tightened.delivery_idle_recon is False
-    # disable<=2：两次同工具失败即 disable（默认 3 才 disable）
+    # disable 阈虽收到 2，但 code_execute 在 KEEP_AVAILABLE：累计失败不卸工具。
     tightened.record(
         [ToolAttempt(fingerprint="fp0", tool_name="code_execute", success=False)]
     )
@@ -289,7 +276,7 @@ def test_should_tighten_verify_exec_thrash_for_repair_verify_posture():
     tightened.record(
         [ToolAttempt(fingerprint="fp1", tool_name="code_execute", success=False)]
     )
-    assert tightened.tool_circuit_breaker().disabled == ("code_execute",)
+    assert tightened.tool_circuit_breaker().disabled == ()
 
     # unproductive threshold<=2：两轮无产出即 early stop（默认 3）
     tight_u = create_loop_controller(
@@ -445,16 +432,16 @@ def test_should_skip_contract_retry_for_budget_handoff_ok_wind_down():
             tokens_spent=1,
         ),
     )
-    # Soft reserve path: spent past ceiling − reserve.
+    # Soft reserve path: spent past ceiling − reserve (default 200k).
     assert _wind_down_entered(
         cutoff_reasons=[],
-        token_ceiling=80_000,
-        tokens_spent=55_000,  # reserve default 30k → enter at ≥50k
+        token_ceiling=1_000_000,
+        tokens_spent=850_000,  # enter at ≥800k
     )
     assert not _wind_down_entered(
         cutoff_reasons=[],
-        token_ceiling=80_000,
-        tokens_spent=40_000,
+        token_ceiling=1_000_000,
+        tokens_spent=700_000,
     )
 
 

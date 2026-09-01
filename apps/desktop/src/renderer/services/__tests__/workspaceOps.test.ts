@@ -6,7 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // rejection from the real request (user code) is tracked normally, so the
 // stale-404 swallow can be asserted cleanly. Mirrors auth.test.ts.
 import { BASE_URL } from "@/services/api";
-import { resetClientToolFulfillmentForTests } from "@/services/clientToolFulfill";
+import {
+  WORKSPACE_RECONNECT_DETAIL,
+  failInflightClientToolsForReconnect,
+  resetClientToolFulfillmentForTests,
+} from "@/services/clientToolFulfill";
 import { resolveConversationLocalTarget } from "@/services/sidecarRouting";
 import {
   performWorkspaceOp,
@@ -224,6 +228,85 @@ describe("performWorkspaceOp (本地工作区 op 回填)", () => {
     );
   });
 
+  it("resolves the bound root for a sidecar diagnostics op (empty root_id) and prefixes scratch onto paths", async () => {
+    const workspaceOp = vi.fn().mockResolvedValue({
+      ok: true,
+      value: { status: "ok", diagnostics: [] },
+    });
+    stubFsApi(workspaceOp);
+    resolveTarget.mockResolvedValue({
+      rootId: "container-1",
+      subpath: "conv-c1",
+    });
+
+    await performWorkspaceOp(
+      payload({
+        op: "diagnostics",
+        root_id: "",
+        args: { paths: ["src/a.ts"] },
+      }),
+      "c1",
+      "cloud",
+    );
+
+    expect(workspaceOp).toHaveBeenCalledWith(
+      "container-1",
+      "diagnostics",
+      { paths: ["conv-c1/src/a.ts"] },
+      undefined,
+      { conversationId: "c1", requestId: "r1" },
+    );
+  });
+
+  it("does not re-prefix diagnostics paths when payload already has a root_id (过桥)", async () => {
+    const workspaceOp = vi.fn().mockResolvedValue({
+      ok: true,
+      value: { status: "ok", diagnostics: [] },
+    });
+    stubFsApi(workspaceOp);
+    resolveTarget.mockResolvedValue({
+      rootId: "session-root",
+      subpath: "conversations/c1",
+    });
+
+    await performWorkspaceOp(
+      payload({
+        op: "diagnostics",
+        root_id: "session-root",
+        args: { paths: ["conversations/c1/src/a.ts"] },
+      }),
+      "c1",
+      "cloud",
+    );
+
+    expect(workspaceOp).toHaveBeenCalledWith(
+      "session-root",
+      "diagnostics",
+      { paths: ["conversations/c1/src/a.ts"] },
+      undefined,
+      { conversationId: "c1", requestId: "r1" },
+    );
+  });
+
+  it("answers with an IO error when a sidecar diagnostics op has no local binding", async () => {
+    const workspaceOp = vi.fn();
+    stubFsApi(workspaceOp);
+
+    await performWorkspaceOp(
+      payload({ op: "diagnostics", root_id: "", args: { paths: ["a.ts"] } }),
+      "c1",
+      "cloud",
+    );
+
+    expect(workspaceOp).not.toHaveBeenCalled();
+    const body = postedBody(fetchMock) as {
+      ok: boolean;
+      error: { kind: string };
+    };
+    expect(body.ok).toBe(false);
+    expect(body.error.kind).toBe("WorkspaceIOError");
+  });
+
   it("answers with an IO error when a sidecar process op has no local binding", async () => {
     const workspaceOp = vi.fn();
     stubFsApi(workspaceOp);
@@ -337,6 +420,38 @@ describe("performWorkspaceOp (本地工作区 op 回填)", () => {
     expect(body.error.kind).toBe("WorkspaceIOError");
     expect(body.error.detail).toContain("活性挂起");
     expect(useWorkspaceChannelStore.getState().notReady).toBe(true);
+  });
+
+  it("reconnect abort posts retryable IO error and does not raise the file-channel banner", async () => {
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const workspaceOp = vi.fn(
+      () =>
+        new Promise<{ ok: true; value: string }>(() => {
+          started();
+        }),
+    );
+    stubFsApi(workspaceOp);
+
+    const done = performWorkspaceOp(
+      payload({ request_id: "r-re" }),
+      "c1",
+      "cloud",
+    );
+    await ready;
+    failInflightClientToolsForReconnect("cloud");
+    await done;
+
+    const body = postedBody(fetchMock) as {
+      ok: boolean;
+      error: { kind: string; detail: string };
+    };
+    expect(body.ok).toBe(false);
+    expect(body.error.kind).toBe("WorkspaceIOError");
+    expect(body.error.detail).toBe(WORKSPACE_RECONNECT_DETAIL);
+    expect(useWorkspaceChannelStore.getState().notReady).toBe(false);
   });
 
   it("regression: cloud origin settles via HTTP while a sidecar turn is active", async () => {

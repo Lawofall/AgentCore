@@ -1,7 +1,7 @@
-"""Phase 1 block A: sticky channel-dead seeds file-family into disabled_tools.
+"""Presence-disconnect seeds the file-family into disabled_tools.
 
-Teammates that never hit a dead envelope must still stop seeing ``file_*`` when
-``session.workspace_channel_dead`` or this worker's ``WorkspaceChannel.is_dead``.
+Teammates that never hit a disconnect envelope must still stop seeing ``file_*``
+when ``session.workspace_channel_dead`` or live hub presence is gone.
 """
 
 from __future__ import annotations
@@ -93,15 +93,15 @@ def _server_ctx() -> ToolContext:
     )
 
 
-def _dead_local_backend() -> LocalWorkspace:
+def _absent_local_backend() -> LocalWorkspace:
+    """Local channel backend with no fulfiller registered — files unreachable."""
     channel = WorkspaceChannel(
-        user_id="u-test",
+        user_id="u-absent-files",
         conversation_id="conv-dead-retire",
         registry=InteractionRegistry(),
         timeout_seconds=5.0,
         root_id="root-dead",
     )
-    channel._dead = True  # noqa: SLF001
     return LocalWorkspace(channel)
 
 
@@ -146,13 +146,13 @@ def test_apply_retire_from_session_workspace_channel_dead():
 def test_apply_retire_from_backend_channel_is_dead():
     """Worker backend channel sticky-dead seeds retire without a session flag."""
     clear_active_coordination()
-    backend = _dead_local_backend()
+    backend = _absent_local_backend()
     ctx = ToolContext.create(
         execution_id="e",
         run_id="s",
         agent_id="a",
         backend=backend,
-        user_id="u",
+        user_id="u-absent-files",
         workspace_channel=backend._channel,
     )
     disabled: set[str] = set()
@@ -180,13 +180,13 @@ def test_backend_write_tools_retire_with_the_file_family():
     call), which is exactly the thrash the family retire prevents.
     """
     clear_active_coordination()
-    backend = _dead_local_backend()
+    backend = _absent_local_backend()
     ctx = ToolContext.create(
         execution_id="e",
         run_id="s",
         agent_id="a",
         backend=backend,
-        user_id="u",
+        user_id="u-absent-files",
         workspace_channel=backend._channel,
     )
     disabled: set[str] = set()
@@ -294,53 +294,104 @@ async def test_sibling_worker_seeds_disabled_from_session_channel_dead():
 
 
 async def test_react_loop_round_poll_channel_is_dead_strips_file_family():
-    """Alive at entry; mid-team channel sticky → next LLM round drops file family."""
+    """Alive at entry; mid-team presence stamp → next LLM round drops file family."""
     clear_active_coordination()
-    channel = WorkspaceChannel(
-        user_id="u-test",
+    session = CoordinationSession(
+        execution_id="e",
+        total_workers=2,
         conversation_id="conv-round-poll",
+    )
+    set_active_coordination(session)
+    try:
+        ctx = _server_ctx()
+        reg = ToolRegistry()
+        reg.register(_StubTool("file_list"))
+        reg.register(_StubTool("other"))
+
+        def _mark_dead_after_round0() -> list[LLMMessage]:
+            session.workspace_channel_dead = True
+            return []
+
+        provider = _ToolsRecordingProvider(
+            [
+                [_content_chunk("r0"), _tool_chunk("other", "{}")],
+                [_content_chunk("done")],
+            ]
+        )
+        await react_loop(
+            messages=[LLMMessage(role="user", content="go")],
+            llm=provider,
+            tools=reg,
+            sink=EventSink(),
+            tool_context=ctx,
+            profile=make_profile_params(max_rounds=5),
+            turn_model="m",
+            run_id="poll-worker",
+            role="worker",
+            on_round_begin=_mark_dead_after_round0,
+            approval_gate=None,
+        )
+        assert len(provider.offered) >= 2
+        assert "file_list" in provider.offered[0]
+        assert "other" in provider.offered[0]
+        assert "file_list" not in provider.offered[1]
+        assert "other" in provider.offered[1]
+    finally:
+        clear_active_coordination()
+
+
+def test_apply_retire_revives_when_fulfiller_returns():
+    """Live fulfiller clears the family retire so write tools are offered again."""
+    from agentcore.fulfill.hub import default_fulfiller_hub
+    from agentcore.runtime.interaction import InteractionRegistry
+    from agentcore.workspace.channel import WorkspaceChannel
+    from agentcore.workspace.local import LocalWorkspace
+
+    clear_active_coordination()
+    uid = "u-revive-files"
+    root = "root-revive"
+    channel = WorkspaceChannel(
+        user_id=uid,
+        conversation_id="conv-revive",
         registry=InteractionRegistry(),
         timeout_seconds=5.0,
-        root_id="root-poll",
+        root_id=root,
     )
     backend = LocalWorkspace(channel)
     ctx = ToolContext.create(
-        execution_id="e",
-        run_id="poll",
+        execution_id="e-revive",
+        run_id="s",
         agent_id="a",
         backend=backend,
-        user_id="u",
+        user_id=uid,
         workspace_channel=channel,
     )
-    reg = ToolRegistry()
-    reg.register(_StubTool("file_list"))
-    reg.register(_StubTool("other"))
-
-    def _mark_dead_after_round0() -> list[LLMMessage]:
-        channel._dead = True  # noqa: SLF001 — sibling stamped sticky mid-team
-        return []
-
-    provider = _ToolsRecordingProvider(
-        [
-            [_content_chunk("r0"), _tool_chunk("other", "{}")],
-            [_content_chunk("done")],
-        ]
+    disabled: set[str] = set()
+    controller = create_loop_controller(frozenset())
+    assert (
+        apply_workspace_channel_dead_retire(
+            disabled_tools=disabled,
+            controller=controller,
+            tool_context=ctx,
+        )
+        is True
     )
-    await react_loop(
-        messages=[LLMMessage(role="user", content="go")],
-        llm=provider,
-        tools=reg,
-        sink=EventSink(),
-        tool_context=ctx,
-        profile=make_profile_params(max_rounds=5),
-        turn_model="m",
-        run_id="poll-worker",
-        role="worker",
-        on_round_begin=_mark_dead_after_round0,
-        approval_gate=None,
+    assert "file_write" in disabled
+    hub = default_fulfiller_hub()
+    session = hub.register(
+        uid, "dev-revive", caps=["workspace"], roots=[root]
     )
-    assert len(provider.offered) >= 2
-    assert "file_list" in provider.offered[0]
-    assert "other" in provider.offered[0]
-    assert "file_list" not in provider.offered[1]
-    assert "other" in provider.offered[1]
+    try:
+        assert is_workspace_channel_sticky_dead(ctx) is False
+        assert (
+            apply_workspace_channel_dead_retire(
+                disabled_tools=disabled,
+                controller=controller,
+                tool_context=ctx,
+            )
+            is True
+        )
+        assert "file_write" not in disabled
+        assert controller._workspace_channel_dead is False  # noqa: SLF001
+    finally:
+        hub.unregister(session)

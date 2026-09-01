@@ -27,10 +27,10 @@ def resolve_tool_timeout(
     derives its transport deadline from it (minus settle slack). Capacity
     ceilings (bytes / extract) fail via ``contract_failure`` before this matters.
     """
-    if schema.name == "terminal":
-        from agentcore.tools.builtin.terminal import terminal_op_timeout_seconds
+    if schema.name == "run":
+        from agentcore.tools.builtin.run import run_op_timeout_seconds
 
-        return terminal_op_timeout_seconds(arguments)
+        return run_op_timeout_seconds(arguments)
     if schema.name == "git":
         from agentcore.tools.builtin.git_ops import git_tool_timeout_seconds
 

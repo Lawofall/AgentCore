@@ -29,12 +29,29 @@ DEFAULT_EMPTY_THRESHOLD = 2
 # never resets — it catches "this tool just isn't working out, no matter the args".
 DEFAULT_TOOL_FAILURE_WARN = 2
 DEFAULT_TOOL_FAILURE_DISABLE = 3
-# Idle hang / probe fail across code_execute+test_run: retire both after N hits.
+# 作业失败 ≠ 工具坏了：累计失败不警告、不卸这些工具。
+# ``run`` 族亦不因探测失败 / 干等 / 环境死卸工具（单次失败回执留下）。
+# 含旧名：统一 `run` 之前的 journal 仍可能写出 test_run / code_execute。
+CIRCUIT_TALLY_KEEP_AVAILABLE = frozenset(
+    {
+        "run",
+        "test_run",
+        "code_execute",
+        "terminal",
+        "read_url",
+        "web_search",
+        "browser",
+    }
+)
+# Idle hang / probe fail on run (verify/short paths): 分类用，不再据此卸工具。
 # Disaster-wall forced stops are incomplete results, not this family path.
-EXEC_ENV_TIMEOUT_FAMILY = frozenset({"code_execute", "test_run"})
+EXEC_ENV_TIMEOUT_FAMILY = frozenset({"run"})
+# 旧 journal / 内部核仍可能写出这些名；与 ``run`` 一样不卸。
+EXEC_RUN_TOOL_NAMES = frozenset({"run", "test_run", "code_execute", "terminal"})
 DEFAULT_EXEC_ENV_TIMEOUT_RETIRE = 2
+# 历史文案：连续干等曾卸 ``run``。现只保留常量供旧测试 / journal 对照，生产不再注入。
 EXEC_ENV_TIMEOUT_RETIRE_STEER = (
-    "本机执行环境连续超时（`code_execute` / `test_run`），本回合起停用这两项——"
+    "本机执行环境连续超时（`run`），本回合起停用该项——"
     "请改静态核验/读文件取证，向协调者如实报告「执行环境不可用、验证未实跑」；"
     "禁止再原样重试跑命令。"
 )
@@ -93,7 +110,7 @@ PROGRESS_TOOLS = frozenset(
 # (keep str_replace as the preferred segmented pen).
 PATH_SEGMENT_FORCE_TOOLS = frozenset({"file_write", "file_append"})
 # Dangerous landing action narrowed (disabled) once force_segmented latches —
-# keep file_write / str_replace; stop append thrashing on prose / broken bodies.
+# keep file_write / str_replace; stop append thrashing on already-landed prose.
 FORCE_SEGMENTED_NARROW_TOOLS = frozenset({"file_append"})
 # CEO orchestration primitives: parse-only thrashing must not retire them
 # (same posture as LANDING_TOOLS keeping the pen — keep the dispatcher).
@@ -111,20 +128,15 @@ def classify_segmented_write_reject(
 ) -> str | None:
     """Classify a hard write reject that feeds the same-path force_segmented streak.
 
-    Returns a stable class id (``prose_append`` / ``code_integrity`` /
-    ``severe_shrink``) or ``None``.
-    Does **not** cover length/oversized rejects (those hard gates were removed).
-    Soft ``integrity_nudge`` is success-path only and never reaches here.
+    Returns a stable class id (``prose_append``) or ``None``.
+    Does **not** cover length/oversized / brace / omission / shrink rejects
+    (those write-path heuristics were removed).
     """
     if not contract_failure or tool_name not in {"file_write", "file_append"}:
         return None
     text = error or ""
     if tool_name == "file_append" and "已落成篇正文" in text:
         return "prose_append"
-    if tool_name == "file_write" and "拒绝整篇截断覆盖" in text:
-        return "severe_shrink"
-    if "结构不完整" in text or "省略标记" in text:
-        return "code_integrity"
     return None
 
 
@@ -420,9 +432,8 @@ class CircuitBreak:
         Anchored to the concrete fact (which tool, what now happens) like the
         nudge messages — disable first (the stronger action), then force-segmented
         write steer, then warn. Parse-only write failures steer to segmented
-        landing (not「原样重发」). ``read_url`` disable/warn uses a research-specific
-        stop-read steer (do not say「换不同的输入」— that encourages URL thrashing
-        after egress storms).
+        landing (not「原样重发」). ``read_url`` 仅在显式退役时走研究向收口文案
+        （累计失败不再警告/卸工具）。
         """
         parts: list[str] = []
         if self.disabled:

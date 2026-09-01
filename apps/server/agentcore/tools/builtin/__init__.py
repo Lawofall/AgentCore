@@ -20,16 +20,15 @@ from agentcore.workspace.protocol import WorkspaceBackend
 def code_execution_enabled_for(backend: WorkspaceBackend | None) -> bool:
     """Whether the code-execution tool class may appear in a runtime worker toolset.
 
-    Governs the WHOLE class that runs code through the sandbox chain — ``code_execute``
-    AND ``test_run`` (a test suite executes arbitrary project code, so it is
-    execution-equivalent). Local / sidecar execution stays on; cloud ``location=server``
+    Governs the WHOLE class that runs code through the sandbox chain — ``run``
+    (short / verify / long-running). Local / sidecar execution stays on; cloud ``location=server``
     cloud defaults **on** via ``GVISOR_ENABLED`` (code default true；紧急可 false)；
     or ``CODE_EXECUTE_CLOUD_ENABLED`` escape hatch (a plain subprocess in the API
     container is not a real isolation boundary — 安全权限与治理 §5). The desktop
     sidecar process is never a gVisor host: a cloud desk from sidecar withholds
-    the class (do not pretend isolation on the user's machine). Keeping both
-    tools behind ONE predicate (not a per-tool special-case) is what makes the
-    production-security posture cover the class consistently.
+    the class (do not pretend isolation on the user's machine). Keeping the class
+    behind ONE predicate (not a per-mode special-case) is what makes the
+    production-security posture cover ``run`` consistently.
 
     When cloud execution is config-enabled, the sandbox ``health_check`` verdict
     (``tools.sandbox.cloud_health``) also gates this predicate: a failed probe withholds
@@ -228,7 +227,7 @@ def build_builtin_registry(
     spawn git under, or a live desktop channel (see ``git_execution_enabled_for``).
 
     ``include_browser`` gates the L3 browser class on the builtin surface
-    (navigate/click/type/scroll/snapshot — CEO+worker; screenshot stays worker-only).
+    (navigate/click/type/scroll/snapshot/screenshot — CEO+worker).
     Default False so a no-Bridge / no-gVisor process does not leak browser tools into the
     default builtin roster.
 
@@ -303,7 +302,7 @@ def build_worker_registry(
         reg = tool_registration(cls)
         if reg.manual_wire:
             # Manual-wire (e.g. conversation log tools): registered after registry
-            # build — see ``_wire_worker_conversation_log_tools``.
+            # build — see ``_wire_conversation_log_tools``.
             continue
         if reg.browser_class:
             if not include_browser:
@@ -331,20 +330,17 @@ def build_ceo_tool_registry(
     include_git: bool = True,
     include_execution_tools: bool = True,
 ) -> ToolRegistry:
-    """The CEO chat agent's DIRECT toolset: read / retrieval + Host + terminal.
+    """The CEO chat agent's DIRECT toolset: read / write / execute + Host + run.
 
     Collects ``surface=builtin`` tools whose declared audience includes ``ceo``.
-    Historically aligned with ``approval=NEVER``; ``host`` stays NEVER at schema
-    (runtime elevation for GRANTABLE actions; CEO holds status/os_log/shell,
-    worker-only actions fail and require ``delegate``).
-    **B2**: ``terminal`` is CEO-holdable (schema NEVER; ``start`` elevates
-    at runtime like ``git`` write) for pure start/stop/list of workspace long-running
-    processes — cloud desk guest or local desktop, same tool. Not a GRANTABLE
-    schema exception. Assembly follows ``include_execution_tools`` (desk health /
+    Write and execution tools are GRANTABLE (same ApprovalGate as workers).
+    ``host`` stays NEVER at schema (runtime elevation for GRANTABLE actions;
+    all actions CEO+worker).
+    ``run`` is CEO+worker (schema GRANTABLE) — short / verify / install / long-running
+    share one execute path. Assembly follows ``include_execution_tools`` (desk health /
     ``code_execution_enabled_for``), same bit as the worker roster.
     **Browser**: single ``browser`` (GRANTABLE · ``browser_class``),
-    gated by ``include_browser`` — same tier as host / terminal; screenshot
-    is a worker-only action on the same tool.
+    gated by ``include_browser`` — same tier as host / run; all actions CEO+worker.
     Orchestration primitives are wired separately in ``tools.ceo_toolset``.
     Host tools appear only when ``desktop_online`` ∧ ``host≠off``.
     **Git**: ``include_git`` mirrors the worker registry's ``git_execution_enabled_for``

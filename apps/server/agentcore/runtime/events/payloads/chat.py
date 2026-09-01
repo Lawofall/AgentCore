@@ -51,7 +51,7 @@ class ContentDeltaPayload(WirePayload):
 
 
 # 为什么发这次 reset（诊断/引擎语义；fold 一律只清正文、不留 process 痕迹）：
-# - finish_guard：交付前结构核验回炉（围栏未闭合 / 产物结构窄闸等）；
+# - finish_guard：交付前结构核验回炉（围栏未闭合等）；
 # - retry：LLM 流式传输透明重试，丢弃上次尝试的临时输出（基础设施噪音）；
 # - soft_gate：captain 收尾草稿被软门控（组队/审计）打回重来（后续组队/审计动作自带痕迹）；
 # - narration：worker 调非终止工具前的旁白回滚（正常流程，旁白只进 journal）；

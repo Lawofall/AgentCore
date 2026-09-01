@@ -339,9 +339,8 @@ async def first_round(
             failed=m.failed,
             skipped=m.skipped,
         )
-        # 深层诊断指标 (前端UX设计.md §十): also hand the scheduler snapshot to the client so
-        # 诊断模式 shows the debaters' fan-out in run detail (journaled → replays on reload),
-        # mirroring the delegate drive path. Whole-batch verbatim; the host already logged it.
+        # 调度埋点：journaled → 重放；采集仍在、产品不展示。
+        # Mirrors the delegate drive path. Whole-batch verbatim; the host already logged it.
         tool._sink.emit(batch_metrics_event(execution_id=execution_id, metrics=asdict(m)))
 
     turns: list[SideTurn] = []

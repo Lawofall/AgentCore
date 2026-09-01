@@ -6,6 +6,7 @@ related:
   - docs/03-AI核心/上下文工程.md
   - docs/02-架构/双模式工作区.md
   - docs/01-产品/现行信息.md
+  - docs/03-AI核心/编排器与CEO主Agent.md
 skip_if:
   - 只改 World A/B 提示词架构或 World B 内部工具提示词（读执行引擎 §七）
 ---
@@ -59,7 +60,7 @@ description: 一行摘要    # 可空；空不是错误
 
 **巩固写的按需条目走同一条补写路径**。巩固经 `MemoryStore.save` 只落正文，不顺手写 `description`。**按需条目送到模型面前的全部信息就是「名字 + `description`」**，空摘要 = 实际不可检索。故 `apply: on_demand` 且摘要为空 → 排补写，与用户经 documents API 写入同一函数、同一「仅空时生成」语义。常驻条目不排——它整篇进 prompt。→ 见代码: `memory/document_store.py`
 
-**按需目录只认 `description`，不回退取正文首行。** 首行是为阅读写的具体事实，既不概括这条讲什么，也不说何时该来查它；回退取首行会把「没有检索摘要」伪装成误导性摘要，比空更糟。`topic_summary_line` 只给人看的文件夹导航用（`folder_catalog.py`），不是模型检索面。→ 见代码: `memory/injection.py` · `memory/rules_injection.py`
+**按需目录只认 `description`，不回退取正文首行。** 首行是为阅读写的具体事实，既不概括这条讲什么，也不说何时该来查它；回退取首行会把「没有检索摘要」伪装成误导性摘要，比空更糟。→ 见代码: `memory/injection.py` · `memory/rules_injection.py`
 
 **`ai_maintained` 留 DB、不进 prompt**：读侧完全平权；该字段只服务两件事——写侧防护（巩固不得静默重写用户手写的条目）与 UI 审查（标出「这条是 AI 记的」供用户撤销）。
 
@@ -80,7 +81,7 @@ description: 一行摘要    # 可空；空不是错误
 
 **注入三态**：
 
-- **常驻** → 目标：全部条目拼成**一个块**，无「用户规则硬 / AI 记忆软」分节。⏳ 现状仍两层拼接（`rules_injection.py`）
+- **常驻** → 全部条目拼成**一个块**，无「用户规则硬 / AI 记忆软」分节。按文件夹叠（全局 → 祖先外→内 → 当前）；层内槽位（偏好 / 画像 / 导航）先、该层用户常驻后。✅
 - **按需** → **一个**目录（名字 + `description`）+ **一个** `consult`
 - **`@` 提及** = ✅ 运行时把一条按需条目临时当常驻用；不是 frontmatter 的第三个取值。对话页 `@` 点名设定走 `kind=document`（`document_id`），注入 `<钉住条目>`，**不**进附件块、不落盘。@ 工作区文件 / 图片 / 对话仍走附件体系，按被 @ 的东西分流。→ 见代码: `runtime/resolve/attachment_context.py` · 桌面 `useMentionMenu.ts`
 
@@ -90,7 +91,7 @@ description: 一行摘要    # 可空；空不是错误
 
 **配额：闸在写侧，读侧全量。** 常驻满了就不许再往常驻加；读侧永远全量注入、不截断。引擎不替用户挤：无分池、无自动淘汰、无 AI 溢出决策。常驻池的唯一界是 `memory_always_max_chars`。**否决**读侧每文件封顶、文件页展示「还剩 N 万字」。闸对人不可见，只拦 AI 巩固；停摆卡只说「常驻太多，AI 暂时记不下新的」，不报字符配额。→ 见代码: `memory/always_quota.py`
 
-- **读侧不截断、不按权威排序淘汰**。常驻块目前仍分「用户规则 / 记忆」两层拼接（`rules_injection.py`）；拼成单块随取消 `role` 三分一并 ⏳。
+- **读侧不截断、不按权威排序淘汰**。常驻块按层叠、层内槽位先于用户常驻（稳定顺序，非作者权威）。取消 `role` 三分仍 ⏳。
 - **计量用字符数，取消条数上限**：条目化后 `MAX_INSTRUCTION_DOCS` 失去意义（一条可长可短）。真实成本是 token，但本闸意在防无意膨胀而非精算成本，字符数确定性好且不绑某个模型的 tokenizer。闸的数字不进产品文案。**行尾仍可标每条常驻占用**（`always_chars`）：职责与满池卡片的 `quota_holder` 同源——回答「该删谁」；不足千字（含 0）一律不标。冷启动占位行与「已建但还空着」的条目长相一致。文件夹作用域的计量仍是「全局 ∪ 本文件夹」（`global_chars` / `project_chars`，已落库 wire），只给闸与卡片用，文件页不再画两段进度条。
 - **闸对「谁在写」敏感**。**用户**编辑已有常驻致超限 → **放行 + 警告**：拒绝保存他正在写的内容不可接受；他可借此把单条改大绕过闸，那是可见的自主选择。**AI** 写入——新建**或**归并进已有常驻——遇满一律**停摆**。若 AI 归并也放行，闸对最主要的增长源即失效（AI 只需永远归并、从不新建，常驻就能无限膨胀）。判据用写侧已有的 `ai_maintained`，不引入新概念。
 - **AI 停摆 = 推卡片，不降级、不留额度池**（不把该常驻的新条目改写成按需，也不给 AI 单独配额），与「治理靠可见性」一致。卡片须按「同一未决状态只推一次、用户处理或内容变化才重置」抑制重复：这是状态告知，非否决表里的累计计数软提醒。
@@ -150,7 +151,7 @@ GROUP BY 1;
 
 基座条目在 `documents` 虚拟树里（`parent_id`），不是盘上文件；本机传统模式对基座条目也不是「本机文件为权威」。`文档/` 才是工作区盘；`文档/项目/` 厚约定已迁为按需 `主题/` 条目，`文档/` 只留运行产物（`工作稿` / `research` / `debate` / `reviews`）。迁移是一次性读盘入 DB，**不**建双向同步。盘上原件归档进 `文档/已迁入记忆/`——不得留下「看得见、改得动、却无效果」的副本（原地双写比删除更伤人；直接删则动用户自己的盘）。服务端 pass 只看得见云文件夹（`rel_path IS NOT NULL`）；本机绑定盘上的存量未迁，但已无特殊语义，是普通文件。裸聊 scratch 不纳入。一次性 pass 须晚于 `migrate_workspace_tree.py`（读迁移后的 `tree/` 落点；跑反会扫到 0 个却打印成功）→ [双模式工作区 §5.4 存量迁移](/docs/02-架构/双模式工作区.md)。→ 见代码: `memory/migrate_project_docs.py` · `scripts/migrate_project_docs.py`
 
-⏳ **余项**：取消 `role` 三分（常驻拼成单块随它）；市场 Skill 入基座（系统 Skill 真源留代码）；巩固按 `description` 归位（现状仍整文件重写偏好/画像；**不得预置空条目**）。
+⏳ **余项**：取消 `role` 三分；市场 Skill 入基座（系统 Skill 真源留代码）；巩固按 `description` 归位（现状仍整文件重写偏好/画像；**不得预置空条目**）。
 
 **回归**：`evals/cases/rules_memory/` 用 `documents_fixture` 预置 `documents` 行，覆盖该拉不拉 / 拉错 / 明示约束；harness 对固定 `_EVAL_USER_ID` **每例前后硬清**。须 `path=team` 才装 `<设定>`（`single` 不装 system prompt）。`product_rules` 测产品知识落点，不是规则遵守。历史会话仍渲染旧 `consult_*` 工具名（删了旧对话就烂）；新 `consult` 尚无自己的 conformance 向量。`consult.hit` 的细 `kind` 只进日志；`display` 只带两桶 `origin`（`system` | `user`）；模型看不见。
 
@@ -160,7 +161,7 @@ GROUP BY 1;
 
 | 旧定案 | 现状 · 因 |
 |---|---|
-| 记忆与规则靠 `ai_maintained` 区分注入措辞 | 读侧目标平权（⏳ 常驻仍两层拼接）；该字段只剩写侧与 UI |
+| 记忆与规则靠 `ai_maintained` 区分注入措辞 | 读侧平权、按层叠；该字段只剩写侧与 UI |
 | 用户硬规则恒胜（prompt 分权） | 治理在记忆卡片可见可撤销，不靠措辞分权 |
 | 规则按需 ≠ 记忆主题（两个目录两个工具） | 同一按需目录；约束 vs 事实由 `description` 承载 |
 | `文档/` 永不进 `<设定>` | `文档/项目/` 已迁为按需 `主题/`；运行产物仍走盘 + `file_read` |
@@ -171,7 +172,7 @@ GROUP BY 1;
 
 ## 一、分层
 
-> 存储名与巩固仍认下列叶子；文件页 UI 已取消「记忆 / 规则 / 文档」三夹。⏳ 取消 `role` 三分、常驻拼成单块 → 上节余项。
+> 存储名与巩固仍认下列叶子；文件页 UI 已取消「记忆 / 规则 / 文档」三夹。⏳ 取消 `role` 三分 → 上节余项。
 
 | 层级 | 载体 | 生命周期 | 状态 |
 |------|------|----------|------|
@@ -201,7 +202,7 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 - **规则按需 ≠ 记忆主题**：on_demand 规则 = 约束/合规附录（应遵守）；主题 = 事实/厚知识（供查阅）。勿把百科塞进规则凑按需。
 - **双层文件夹知识**：短入口 = `导航.md`（always，只指路、不塞长文）；厚内容 = `主题/` 按需条目（不再落 `文档/项目/`）。不写用户仓库根 `AGENTS.md` / `docs/`。
 - 导航用户可改：文件页记忆轨在画像与主题之间露出该叶子，读写走 `MemoryKind=navigation`（**强制 `folder_id`**，全局作用域 422——导航只存在于文件夹层，且不沿树继承）。AI 记错路由时用户就地改，不必等下次探索。
-- 冲突：靠措辞 + 就近相关性。读侧目标平权（⏳ 常驻仍用户规则在前、AI 记忆在后）。
+- 冲突：靠措辞 + 就近相关性。读侧平权；层内槽位先于该层用户常驻（稳定顺序，不是「规则压过画像」）。
 - `文档/` 与同树旁路 `AgentCore/index/`（code_search；系统噪音）正交：索引管符号检索；导航/主题管叙事路由。勿与 `~/Documents/AgentCore/` 工作区容器混淆。
 - 主题继续 `name=主题/<slug>.md`（非真实嵌套 folder）——有意设计。
 - **约定常量**：约定文档子目录 `research`/`debate`/`reviews`（默认落点 `工作稿`）→ 代码 `workspace/stage_dirs.py`；`文档/` 已无 `项目/`。`AgentCore/` 整体 UI = **`.agentcore`**；用户要拿走的文件在派单时写入工作区，否则留在抽屉、从终稿路径或工作区树打开 → [工作区 §四](/docs/02-架构/双模式工作区.md#四约定文档目录约定)。
@@ -212,17 +213,17 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 
 ## 二、注入
 
-> 按需侧「单目录 + 单工具」；写侧常驻配额闸 → `memory/always_quota.py` + `GET /v1/documents/always-quota`（`remember` / `mutate_user_rule` 与文件页同一闸）；读侧全量不截断。⏳ 常驻拼成单块、取消 `role` 三分 → 目标形态余项。
+> 按需侧「单目录 + 单工具」；写侧常驻配额闸 → `memory/always_quota.py` + `GET /v1/documents/always-quota`（`remember` / `mutate_user_rule` 与文件页同一闸）；读侧全量不截断。⏳ 取消 `role` 三分 → 目标形态余项。
 
 1. 工作记忆经 `load_recent_history` 进窗口（CEO / worker 共用）。
-2. 长期记忆折叠进共享 `<设定>` 基座：用户规则在前（权威）、AI 记忆在后（软措辞）；无用户规则时与旧 memory-only 块逐字节一致（护前缀缓存）。桌面 sidecar **有 account 票**时：prepare/resume 对 always 规则 / AI 记忆正文 / on_demand 规则目录 / memory topics **只读进程快照缓存**（miss → 空注入、不 await 云 HTTP）；`consult` 取规则正文与目录**同一份快照**（不另打 `/rules/list`）。assemble 的 explore/画像/scope-state 经 `prepare_reads_cache_only` 同样只读快照（warm 含每作用域 scope-state）；非回合 `warmAccountRulesMemory` 并行拉取并 seed（`/rules/list` 一次供 always+on_demand，并回传云算好的 `folder_chain` 与祖先层规则；warm 据此把**祖先各层的画像 / 主题 / scope-state 一并拉进同一快照**——本机没有 folders 表，链只能由云给）。快照有 **300s TTL**（他机改动 / 漏刷的兜底），故 warm 回传 `ttlSeconds`、桌面按 account+folder 记到期时点并在下次用前**提前续期**；**本机文件页写入**（规则 / 记忆叶子）与 sidecar 上 `remember` 成功后立刻对**活着的** sidecar 强制重暖（忽略 TTL）。**detached execution 存活期**（`execution_detached` → `execution_completed`）桌面按同一 TTL **周期续暖**——CEO 回合 `startTurn` 已返回、团队仍跑时必须续，后台团队跑完只通知、不另开回合。只 warm 一次的话，TTL 到期后 miss 即空注入——用户规则与 AI 记忆会**静默**全失，故续期握手属契约而非优化。空注入仍打 `account.rules_memory_cache_miss`。**无票**仍走本地 DB。
-3. always 序：**全局偏好 → 全局画像 →（祖先各层画像，外→内）→ 当前层画像 → 当前层导航**（缺文件跳过；导航不继承）；用户 always 规则同序进共享 `<设定>` 前半（全局 → 祖先外→内 → 当前，祖先层带「其下所有文件夹一并适用、以更近的为准」标签）。on_demand 侧（记忆主题 / 用户规则 / 系统 Skill）合并为单一 `<按需目录>` → `consult`（沿链取并集，正文按**最近层优先**解析、全局兜底；目录非空才 wire，单一 `has_entries` 门控）；目录每项只有**名字 + `description`**，不回退取正文首行。两侧都跳过用户标了「这条不对」的条目（`disputed_at`，见「纠错通道」），云侧同轨——`/v1/account/memory` 与 `/rules/list` 的载荷带 `description` / `disputed`，故 sidecar 快照与本地 DB 的目录内容一致。
-4. **文件夹清单**（派生，**非记忆**）：CEO prompt 独立 `<文件夹清单>` 段，回合准备时由 Folder 列表 + 各文件夹 `画像.md` 首句实时拼装（一行一项：**完整路径** + **id** + 一句话；当前出生桌钉在名单前并在行内标出）。嵌套后同名末段可存在于多层，只给末段会把每次 `resolve_folder` 逼进歧义回合。按最近活跃排序、`folder_catalog_max_entries` 截断、无文件夹则不注入。派生而非落盘，故无需巩固、不会过期、改名即时反映。**不进** `<设定>`、不得挤掉 always 记忆。已知降级：account 票 + `prepare_reads_cache_only` 时 warm 快照只含当前 folder 及其祖先链画像，旁支文件夹可能只有名称。
+2. 长期记忆折叠进共享 `<设定>` 基座：按文件夹叠（全局 → 祖先外→内 → 当前），层内槽位先、该层用户常驻后；标签只说在哪张桌，不说谁写的。改顺序会一次性打穿前缀缓存，之后新前缀稳住。桌面 sidecar **有 account 票**时：prepare/resume 对 always 规则 / AI 记忆正文 / on_demand 规则目录 / memory topics **只读进程快照缓存**（miss → 空注入、不 await 云 HTTP）；`consult` 取规则正文与目录**同一份快照**（不另打 `/rules/list`）。assemble 的 explore/画像/scope-state 经 `prepare_reads_cache_only` 同样只读快照（warm 含每作用域 scope-state）；非回合 `warmAccountRulesMemory` 并行拉取并 seed（`/rules/list` 一次供 always+on_demand，并回传云算好的 `folder_chain` 与祖先层规则；warm 据此把**祖先各层的画像 / 主题 / scope-state 一并拉进同一快照**——本机没有 folders 表，链只能由云给）。快照有 **300s TTL**（他机改动 / 漏刷的兜底），故 warm 回传 `ttlSeconds`、桌面按 account+folder 记到期时点并在下次用前**提前续期**；**本机文件页写入**（规则 / 记忆叶子）与 sidecar 上 `remember` 成功后立刻对**活着的** sidecar 强制重暖（忽略 TTL）。**detached execution 存活期**（`execution_detached` → `execution_completed`）桌面按同一 TTL **周期续暖**——CEO 回合 `startTurn` 已返回、团队仍跑时必须续，后台团队跑完只通知、不另开回合。只 warm 一次的话，TTL 到期后 miss 即空注入——用户规则与 AI 记忆会**静默**全失，故续期握手属契约而非优化。空注入仍打 `account.rules_memory_cache_miss`。**无票**仍走本地 DB。
+3. always 序：**每一层**（全局 / 祖先外→内 / 当前）内部是槽位（偏好 → 画像 → 导航）再该层用户常驻规则（缺文件跳过；导航不继承、只出现在当前层）。祖先层带「其下所有文件夹一并适用、以更近的为准」标签。on_demand 侧（记忆主题 / 用户规则 / 系统 Skill）合并为单一 `<按需目录>` → `consult`（沿链取并集，正文按**最近层优先**解析、全局兜底；目录非空才 wire，单一 `has_entries` 门控）；目录每项只有**名字 + `description`**，不回退取正文首行。两侧都跳过用户标了「这条不对」的条目（`disputed_at`，见「纠错通道」），云侧同轨——`/v1/account/memory` 与 `/rules/list` 的载荷带 `description` / `disputed`，故 sidecar 快照与本地 DB 的目录内容一致。`/rules/list` 的 `AccountRuleDoc.folder_id` 供 sidecar 按层叠祖先规则。
+4. **跨文件夹名册**（派生，**非记忆**）：**不进** CEO 常驻提示。当前桌路径 + id 只在 `<工作区>` 工作台行；其它桌用 `list_folders`（回执含完整 `rel_path` + id）/ `resolve_folder`（嵌套同名须完整路径，歧义不静默猜）。HOW → `consult(team_cross_folder)`。不进 `<设定>`，不得挤掉 always 记忆。
 5. **当前课题认定**：「继续做项目 / 汇报现状」且用户未点名时，**工作区（及已绑工程）近况 ＞ 全局画像「正在做 X」**——全局仅软参考，不得压过工作区，也不得把旧文件夹名写进默认提问套用户。偏好/文风等仍可用全局记忆。
 6. 注入剥存量人面 chrome（旧文件里的 H1 /「本文件由 AI 自动维护」引用块）。正文从小节/列表起笔；空文件的「可编辑」说明在编辑器空状态，不进 md。
 7. 装配顺序权威 → [执行引擎 §七](/docs/03-AI核心/执行引擎架构设计.md) / `runtime/context/`（`SectionOrder`）。
 
-→ 见代码：`memory/rules_injection.py` · `memory/account_prepare_cache.py` · `runtime/context/project_catalog.py` · sidecar `warmAccountRulesMemory`
+→ 见代码：`memory/rules_injection.py` · `memory/account_prepare_cache.py` · `runtime/pipeline/prepare.py`（`resolve_desk_folder_label`）· sidecar `warmAccountRulesMemory`
 
 ---
 
@@ -258,10 +259,10 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 
 | 触发 | 信号 | 与当前用户请求 |
 |---|---|---|
-| 仅空画像 | 文件夹 `画像.md` 空（无换绑、无点名、无工程点名短语） | **不挡（软幕）**：软提示可摸仓；域外调研可直接开跑 |
+| 仅空画像 | 文件夹 `画像.md` 空（无换绑、无点名、无工程点名短语） | **不挡（软幕）**：软提示「设定空了；要重建就点名先了解 / 继续开发」；不旁路填回；域外调研可直接开跑 |
 | 空画像 + 工程信号 | 空画像且命中「继续开发 / 改本仓」等**允许表短语**（不扫长文猜意图） | **挡** |
 | 换绑 | `explore_workspace_key` ≠ 当前绑定 | **挡** |
-| 指纹漂移 | 顶层树 + 关键清单指纹相对上次探索写入已变（README / package·锁文件 / pyproject / 顶层目录名等；**不做**纯天数、**不以** commit 为唯一闸） | **不挡**。脏标记 + 软提示「文件夹结构已变，可点名刷新」；`schedule_explore_refresh` 旁路静默合并更新（无 team_preview、不占当前对话） |
+| 指纹漂移 | 顶层树 + 关键清单指纹相对上次探索写入已变（README / package·锁文件 / pyproject / 顶层目录名等；**不做**纯天数、**不以** commit 为唯一闸） | **不挡**。脏标记 + 软提示「文件夹结构已变，可点名刷新」；`schedule_explore_refresh` 旁路静默合并更新（无 team_preview、不占当前对话）；**画像空时不排程**（见「仅空画像」） |
 | 用户点名 | 「先了解 / 重新了解 / 刷新文件夹（项目）记忆」 | **挡**（强制开幕、合并更新；点名硬闸与 pending 同级 ✅） |
 
 **产物谁写**：硬挡 pending 时 worker 可用 `form=files`，但 `write_scope≤explore_memory`（只写 `AgentCore/` 约定记忆/探索笔记；越权在写工具层拒）。**例外**：本回合新建的云文件夹（`create_folder` / 裸聊自动建桌首次铸造）被点名为 `target_folder_id` 时，该 worker 用 `write_scope=project`（空新桌可填工程文件；出生文件夹仍只许约定笔记）。画像 / 导航 / 主题收尾仍经 CEO `update_folder_profile`（及同族工具）。厚背景资料是**主题条目**不是盘上文件，写它的工具本就只对 CEO 开放（`AUDIENCE_CEO_ONLY`），故该禁令由工具面承担，`explore_memory` 闸只判「在不在 `AgentCore/` 下」，**不**再内嵌路径禁令。旁路刷新亦不经 worker 写用户工程树。**否决**再用禁 `form=files` 代理本约束。
@@ -270,7 +271,7 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 
 **点名硬闸**：用户原文命中「先了解 / 重新了解 / 刷新文件夹记忆」等允许短语（产品口径已改「文件夹」，但用户仍会说「项目」，两种说法都收）→ `explore_reason=refresh`，与 rebind /（空画像+工程信号）同级置 pending + `<cold_start_explore>`（合并更新文案）；非意图分类器。
 
-**旁路刷新**：指纹脏时 `schedule_explore_refresh`（consolidation 同级：debounce、per-folder 互斥、不挡当前回合、无 team_preview）。执行面 = 工作区快照 → memory 档 LLM → 合并写导航/画像（可选主题）→ 更新指纹并清脏；**不是**后台再跑一整场 CEO+delegate 探索幕。
+**旁路刷新**：指纹脏时 `schedule_explore_refresh`（consolidation 同级：debounce、per-folder 互斥、不挡当前回合、无 team_preview）。执行面 = 工作区快照 → memory 档 LLM → 合并写导航/画像（可选主题）→ 更新指纹并清脏；**不是**后台再跑一整场 CEO+delegate 探索幕。**画像空则不排程、已排队的刷新也不写回**（空设定不是「去填上」；重建靠点名硬幕）。
 
 **厚背景资料**：走 `主题/` 按需条目；探索 pending 期间仍不写。
 
@@ -282,11 +283,11 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 
 ## 四、跨会话对话日志
 
-Worker 经 `search_conversations` / `read_conversation` 按需检索本账号历史原文（messages + turn_journal）；CEO **只 `delegate` 查阅员**。`search_conversations` 支持 `updated_within_hours`（日复盘等）。用户 `@` 对话附件走服务端 `log_export` 深读。能力**产品层恒开**（无独立隐私闸；运行时不再穿 `memory_enabled` / `conversation_history_access`，两列已 drop）。控制面为编辑/清空长期记忆与删除对话，而非总开关。
+Worker 经 `search_conversations` / `read_conversation` 按需检索本账号历史原文（messages + turn_journal）；CEO 可自己 search/read（按需 `consult`，与工人同形）；成规模查阅仍可派。`search_conversations` 支持 `updated_within_hours`（日复盘等）。用户 `@` 对话附件走服务端 `log_export` 深读。能力**产品层恒开**（无独立隐私闸；运行时不再穿 `memory_enabled` / `conversation_history_access`，两列已 drop）。控制面为编辑/清空长期记忆与删除对话，而非总开关。
 
 **系统模板 · 每日对话复盘** ✅：站立任务 `template_key=daily_conversation_review`（引导开、默认日跑）。作用域可配（全局裸聊 / 多个云文件夹 / 回看小时）。**无新料硬闸**：作用域内无近期对话则收件箱直接「今日无新料」、不跑 LLM。有料时代跑 brief 要求 `ask_user card=daily_review`；用户勾选确认后**服务端直接**写记忆 / 用户规则 / `AgentCore/文档/reviews/`（不再依赖 LLM 再调 remember）。与语义巩固并存。→ `standing_tasks/templates.py` · `review_apply.py` · `review_preflight.py`；桌面 Toolbox → 自动化。
 
-**对外口径**（CEO 对用户说话）：白话三层——当前会话 / 偏好与笔记 / 点名可派队员查旧场；不报工具名与内部角色；手头无原文时说明「需要派人去查」再行动，禁止装不知道或空口编造。→ 见代码：`runtime/resolve/prompt/`（【记忆/历史·对外口径】【跨会话原文】）
+**对外口径**（CEO 对用户说话）：白话三层——当前会话 / 偏好与笔记 / 旧场原文（可自己查；成规模可派）；不报工具名与内部角色；禁止装不知道或空口编造。「需要派人去查」仅当选择 `delegate`，不是能力锁。→ 见代码：`runtime/resolve/prompt/`（【记忆/历史·对外口径】【跨会话原文】）
 
 → 见代码：`conversation/log_export.py`、`tools/builtin/search_conversations.py`
 
@@ -348,4 +349,8 @@ Worker 经 `search_conversations` / `read_conversation` 按需检索本账号历
 
 查看/编辑：对话内 `remember`（增改删列）与文件页「全局设定」+ 各文件夹 ``.agentcore``、右坞工作区同一 ``.agentcore`` 扁平条目 + CAS 双轨；semantic diff 可搬层纠错。→ 见代码：`fileWorkbench/AgentCoreSection.tsx` · `EntriesSection.tsx` · `workspace/WorkspacePanel.tsx`
 
-条目化后文件页不再有「记忆 / 规则 / 文档」三夹：全局钉「全局设定」；各文件夹条目与过程稿合在 ``.agentcore`` 里（默认折叠；打开后条目带常驻/按需徽章与 `description`，稿夹摊平为 `工作稿`/`research`/`debate`/`reviews`）。「新建条目」在「全局设定」与 ``.agentcore`` 标题行右侧（折叠时也能建）。条目右键含**「这条不对…」/「恢复使用」**（纠错通道唯一入口，前者先弹确认摊开连带面）；被停用的条目名划掉并标「已停用」，也不再报它的常驻占用（它已不占池）。
+**核心叶可清空、槽位保留**：`画像.md` / `偏好.md` / `导航.md` 的**正文**可经文件页右键「清空」去掉（危险确认；走已有 `PUT /v1/users/me/memory/files/{kind}` 空正文，与编辑器抹空同一条）。空了就不注入。列表仍占位（与冷启动占位同一套）。`DELETE /v1/documents/{id}` 仍拒核心叶——固定文件名是加载协议，不是第三条内容类型。探索 / 巩固之后仍可能再写入；拦复活是另步。
+
+**删文件夹带走这张桌的设定（✅）**：软删桌子 → 该 `folder_id`（及子树）的设定**退出注入**，行仍留着；「最近删除」恢复桌子时一起回来。全局设定（`folder_id` 空）不陪葬。彻底删除或过保留期清盘时才物理删这些 documents。删的是文件夹实体，不是把盘掏空；清空项目文件仍不等于忘掉。→ 见代码: `memory/scope_chain.py` · `folders/permanent_delete.py`
+
+条目化后文件页不再有「记忆 / 规则 / 文档」三夹：全局钉「全局设定」；各文件夹条目与过程稿合在 ``.agentcore`` 里（默认折叠；打开后条目带常驻/按需徽章与 `description`，稿夹摊平为 `工作稿`/`research`/`debate`/`reviews`）。「新建条目」在「全局设定」与 ``.agentcore`` 标题行右侧（折叠时也能建）。条目右键含**「这条不对…」/「恢复使用」**（纠错通道唯一入口，前者先弹确认摊开连带面）；被停用的条目名划掉并标「已停用」，也不再报它的常驻占用（它已不占池）。核心叶右键是**「清空」**（不是「删除」）。

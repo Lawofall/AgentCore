@@ -364,23 +364,21 @@ def test_always_on_tools_not_in_gated_set():
         assert name not in COORDINATION_GATED_TOOLS
 
 
-def test_coordination_period_hint_allows_append_forbids_isomorphic():
-    assert "wait" in COORDINATION_PERIOD_HINT
-    assert "delegate" in COORDINATION_PERIOD_HINT
-    assert "全新" in COORDINATION_PERIOD_HINT or "追加" in COORDINATION_PERIOD_HINT
-    assert "同构" in COORDINATION_PERIOD_HINT
+def test_coordination_period_hint_posture_not_tool_manual():
+    assert "【协调期】" in COORDINATION_PERIOD_HINT
+    assert "可静默" in COORDINATION_PERIOD_HINT
+    assert "请示" in COORDINATION_PERIOD_HINT
+    assert "阻塞" in COORDINATION_PERIOD_HINT
+    assert "阶段结论" in COORDINATION_PERIOD_HINT
+    assert "三选一" not in COORDINATION_PERIOD_HINT
+    assert "ceiling" not in COORDINATION_PERIOD_HINT
+    assert "max_rounds" not in COORDINATION_PERIOD_HINT
+    assert "同质 wait" not in COORDINATION_PERIOD_HINT
+    assert "cancel_worker" not in COORDINATION_PERIOD_HINT
+    assert "update_synthesis" not in COORDINATION_PERIOD_HINT
     assert "force" not in COORDINATION_PERIOD_HINT
     assert "移除" not in COORDINATION_PERIOD_HINT
     assert "不可用" not in COORDINATION_PERIOD_HINT
-    assert "ceiling" in COORDINATION_PERIOD_HINT or "max_rounds" in COORDINATION_PERIOD_HINT
-    assert "缩 scope" in COORDINATION_PERIOD_HINT or "收窄" in COORDINATION_PERIOD_HINT
-    assert "同质 wait" in COORDINATION_PERIOD_HINT
-    # S3 可见面纪律
-    assert "可静默" in COORDINATION_PERIOD_HINT
-    assert "谁还在跑" in COORDINATION_PERIOD_HINT
-    assert "三选一" in COORDINATION_PERIOD_HINT
-    assert "先" in COORDINATION_PERIOD_HINT and "响应该句" in COORDINATION_PERIOD_HINT
-    assert "纯进度播报" in COORDINATION_PERIOD_HINT
     assert "短说谁在后台" not in COORDINATION_PERIOD_HINT
     assert "谁在后台、完成后会再汇报" not in COORDINATION_PERIOD_HINT
     assert "人已派出" not in COORDINATION_PERIOD_HINT  # 派完收束在 host/core，不在协调期 hint
@@ -458,6 +456,20 @@ def test_assembled_idle_surface_split():
     assert names.isdisjoint(COORDINATION_GATED_TOOLS)
 
 
+def test_assembled_ceo_holds_deferred_desktop_notify_not_escalate():
+    """Notify is extra-registered on CEO (on-demand); escalate/handoff stay worker-only."""
+    reg = _assemble()
+    assert "desktop_notify" in reg.names
+    assert "desktop_notify" in reg.deferred_names
+    assert "escalate" not in reg.names
+    assert "handoff" not in reg.names
+    offered = {
+        (d.get("function") or {}).get("name") or d.get("name")
+        for d in reg.get_openai_definitions()
+    }
+    assert "desktop_notify" not in offered
+
+
 def test_assembled_offers_create_folder():
     """跨文件夹 P1：create_folder 须进 live CEO 装配（勿只挂 catalog / 漏 prepare.register）。"""
     names = set(_assemble().names)
@@ -503,7 +515,7 @@ def test_assembled_offers_read_image_when_vision_reader():
 
 
 def test_assembled_offers_read_image_when_main_native_vision():
-    """主模型 curated 原生多模态、无 VisionReader → 仍装配（同一能力位）。"""
+    """主模型厂商契约收图、无 VisionReader → 仍装配（同一能力位）。"""
     names = set(_assemble(model="gpt-4o").names)
     assert "read_image" in names
 

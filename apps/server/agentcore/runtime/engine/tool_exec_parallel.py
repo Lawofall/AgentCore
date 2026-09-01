@@ -177,19 +177,30 @@ async def execute_tools(
     # to its issuing call. A SUSPEND call is skipped (挂起即收口 ②): recording its fact
     # would inject a phantom result into the resumed window — matching the old blocking
     # pause, where ``gather`` never returned so no fact was recorded for the parked call.
+    from agentcore.runtime.context.working_set import file_working_set_digest
+
     for tc, (message, terminal_q, attempt, _citations) in zip(tool_calls, quads, strict=False):
         if _suspends(terminal_q):
             continue
+        name = tc.function.name
+        arguments = tc.function.arguments or ""
+        result = llm_content_text(message.content)
         record_turn_fact(
             ToolCallFact(
                 run_id=run_id,
                 tool_call_id=message.tool_call_id or tc.id,
-                name=tc.function.name,
-                arguments=tc.function.arguments or "",
-                result=llm_content_text(message.content),
+                name=name,
+                arguments=arguments,
+                result=result,
                 success=attempt.success,
                 code=tool_call_fact_code(attempt),
                 cross_turn_retry=tool_call_fact_cross_turn_retry(attempt),
+                working_set_digest=file_working_set_digest(
+                    name=name,
+                    arguments=arguments,
+                    result=result,
+                    success=attempt.success,
+                ),
             ).to_fact()
         )
 

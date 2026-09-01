@@ -275,6 +275,10 @@ async def test_stream_chat_persists_agent_mentions(monkeypatch):
     monkeypatch.setattr(turns_mod, "ConversationRepository", _ConvRepo)
     monkeypatch.setattr(turns_mod, "MessageRepository", _MsgRepo)
     monkeypatch.setattr(turns_mod, "BoardRepository", _BoardRepo)
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.MessageRepository",
+        _MsgRepo,
+    )
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
 
@@ -289,7 +293,10 @@ async def test_stream_chat_persists_agent_mentions(monkeypatch):
         AsyncMock(return_value=SimpleNamespace(location="server")),
     )
     monkeypatch.setattr(turns_mod, "persist_attachments", AsyncMock(return_value=[]))
-    monkeypatch.setattr(turns_mod, "to_stored_metadata", lambda _a: [])
+    monkeypatch.setattr(
+        "agentcore.conversation.midflight_persist.to_stored_metadata",
+        lambda _a: [],
+    )
     monkeypatch.setattr(
         turns_mod,
         "load_chat_context",

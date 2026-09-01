@@ -87,14 +87,14 @@ def _code_execute_steer(*, has_code_execute: bool | None, spreadsheet: bool) -> 
     sheet = " (e.g. openpyxl / pandas for .xlsx/.csv)" if spreadsheet else ""
     if has_code_execute is True:
         return (
-            "This turn's tool table includes code_execute — parse the "
-            f"workspace-relative path with it{sheet}. CEO has no code_execute "
-            "and must delegate a worker. Do NOT use an OS absolute path."
+            "This turn's tool table includes run — parse the "
+            f"workspace-relative path with it{sheet}. "
+            "Do NOT use an OS absolute path."
         )
     if has_code_execute is False:
         return (
-            "This turn's tool table does not include code_execute — do not call "
-            "or plan code_execute. Complete delivery this turn is a structure report "
+            "This turn's tool table does not include run — do not call "
+            "or plan run. Complete delivery this turn is a structure report "
             "from the preview facts plus a ready-to-run transform script; do not invent "
             "or hand-copy rows. Do NOT use an OS absolute path."
         )
@@ -108,12 +108,12 @@ def _office_lossy_steer(*, has_code_execute: bool | None) -> str:
     extra = ""
     if has_code_execute is True:
         extra = (
-            " Parse the original workspace file with code_execute; do not treat "
+            " Parse the original workspace file with run; do not treat "
             "this extract as the dataset."
         )
     elif has_code_execute is False:
         extra = (
-            " This turn has no code_execute. Complete delivery is a structure report "
+            " This turn has no run. Complete delivery is a structure report "
             "of what this extract actually shows plus a ready-to-run transform script "
             "— not a hand-copied spreadsheet."
         )
@@ -266,8 +266,9 @@ async def _build_attachment_prompt(
     Resident **image** attachments: when ``main_native_vision`` and
     ``native_image_parts`` is provided, bytes become multimodal ``image_url``
     parts (no VisionReader); otherwise eye→text via ``vision_reader`` when
-    wired; without a reader the block states识图未配置 honestly (never silent
-    path-only, never「用 code_execute 开图」as primary).
+    wired; without a reader the block states the main model does not accept
+    images and no vision fallback is configured (never silent path-only,
+    never「用 code_execute 开图」as primary).
     Directories carry a recursive file listing (paths only);
     ``kind=conversation`` is **server deep-read** via ``log_export``
     (client shallow ``text`` is ignored). ``kind=document`` pins an on-demand
@@ -297,7 +298,7 @@ async def _build_attachment_prompt(
     has_conversation = False
     has_resident_missing = False
     has_image_unconfigured = False
-    has_code_execute = _tool_table_has(available_tools, "code_execute")
+    has_code_execute = _tool_table_has(available_tools, "run")
     for att in attachments:
         name = att.get("name") or "untitled"
         kind = att.get("kind") or "file"
@@ -464,7 +465,7 @@ async def _build_attachment_prompt(
                     f"--- File: {name} ({path}) [binary / office-pdf] ---\n"
                     "No inline text for this office/PDF attachment (pre-parse missed or "
                     "failed). Use file_read on the workspace-relative path above — "
-                    "text is extracted automatically. Do NOT default to code_execute "
+                    "text is extracted automatically. Do NOT default to run "
                     "for office/PDF. Do NOT use an OS absolute path."
                 )
             else:
@@ -526,7 +527,7 @@ async def _build_attachment_prompt(
         ),
         office_note=(
             " Office/PDF attachments without inline text: use file_read on the "
-            "workspace path (automatic text extract); do not default to code_execute."
+            "workspace path (automatic text extract); do not default to run."
             if has_office_unparsed
             else ""
         ),
@@ -548,10 +549,9 @@ async def _build_attachment_prompt(
             else ""
         ),
         image_note=(
-            " Image attachments are eye→text when识图 is configured (profile vision "
-            "slot or platform VISION_*); without a reader, the block states that "
-            "honestly — do not treat a bare path as a reading, and do not default to "
-            "code_execute to open images."
+            " Image attachments: the current main model does not accept images "
+            "and no vision fallback is configured — do not treat a bare path as "
+            "a reading, and do not default to run to open images."
             if has_image_unconfigured
             else ""
         ),

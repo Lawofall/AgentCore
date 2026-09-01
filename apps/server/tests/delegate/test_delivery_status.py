@@ -365,7 +365,7 @@ def test_zero_landing_gap_attributes_channel_dead_from_transcript():
             role="tool",
             tool_call_id="w1",
             content=with_tool_failed_marker(
-                "local workspace op 'write' rejected: channel dead（活性挂起）"
+                "工作区/本地文件连不上：local workspace op 'write' failed: no fulfiller（无履约方）"
             ),
         ),
     ]
@@ -374,8 +374,8 @@ def test_zero_landing_gap_attributes_channel_dead_from_transcript():
             phase=RunPhase.FAILED,
             content="",
             error=(
-                "本队员本波未交卷：未把产物写入工作区：写盘通道不可用（local workspace "
-                "channel dead / 活性挂起），落盘工具已失败——"
+                "本队员本波未交卷：未把产物写入工作区：写盘通道不可用（工作区/本地文件连不上），"
+                "落盘工具已失败——"
                 "请在 handoff 或正文交结论，禁止再尝试落盘；"
                 "可请用户恢复工作区通道后重试"
             ),
@@ -421,7 +421,7 @@ def test_batch_zero_landing_gap_channel_dead_asks_prose_handoff():
             role="tool",
             tool_call_id="w1",
             content=with_tool_failed_marker(
-                "local workspace op 'write' rejected: channel dead（活性挂起）"
+                "工作区/本地文件连不上：local workspace op 'write' failed: no fulfiller（无履约方）"
             ),
         ),
     ]
@@ -522,8 +522,8 @@ def test_maybe_emit_sets_current_delivery_verdict():
     assert verdict.execution_id == "e-verdict"
 
 
-def test_unresolved_write_ownership_forces_partial_delivery_status(monkeypatch):
-    """案 P0-B：账本仍有未解 denied → delivery state 不得 delivered。"""
+def test_unresolved_write_ownership_does_not_force_partial_delivery_status(monkeypatch):
+    """账本仍记他人持锁 ≠ 对账 blocking；写占用是单次工具调用。"""
     from agentcore.runtime.closing_posture import (
         clear_unresolved_write_ownership,
         turn_has_unresolved_write_ownership,
@@ -559,17 +559,17 @@ def test_unresolved_write_ownership_forces_partial_delivery_status(monkeypatch):
     }
     payload = build_delivery_status(plan, results, execution_id="e-own-gap")
     assert payload is not None
-    assert payload["state"] == "partial"
-    assert any(
+    assert payload["state"] == "delivered"
+    assert not any(
         isinstance(g, dict) and g.get("reason") == REASON_WRITE_OWNERSHIP for g in payload["gaps"]
     )
-    assert turn_has_unresolved_write_ownership()
+    assert not turn_has_unresolved_write_ownership()
 
     sink = EventSink()
     maybe_emit_delivery_status(sink, plan, results, execution_id="e-own-gap")
     verdict = current_delivery_verdict.get()
     assert verdict is not None
-    assert verdict.state == "partial"
+    assert verdict.state == "delivered"
     clear_unresolved_write_ownership()
     current_delivery_verdict.set(None)
 
@@ -599,8 +599,8 @@ def test_soft_unverified_note_only_is_delivered_not_notes():
     assert payload["actions"] == []
 
 
-def test_unverified_note_mixed_with_path_mismatch_is_partial():
-    """路径失配为 blocking：有 files_touched 时整轮 partial（不再因未进声明清单 blocked）。"""
+def test_unverified_note_mixed_with_path_mismatch_is_delivered():
+    """声明目录未命中但已落盘：文件进卡，path_mismatch 为 warning，不挡 delivered。"""
     plan = _plan(
         RunSpec(
             run_id="w1",
@@ -630,13 +630,17 @@ def test_unverified_note_mixed_with_path_mismatch_is_partial():
     }
     payload = build_delivery_status(plan, results, execution_id="e-mix-soft")
     assert payload is not None
-    assert payload["state"] == "partial"
-    assert payload["state"] != "delivered"
-    assert "findings.md" not in payload["delivered_files"]
-    assert all(a.get("path") != "findings.md" for a in payload["artifacts"])
+    assert payload["state"] == "delivered"
+    assert "findings.md" in payload["delivered_files"]
+    assert any(a.get("path") == "findings.md" for a in payload["artifacts"])
     reasons = {g.get("reason") for g in payload["gaps"]}
     assert "unverified_note" in reasons
     assert REASON_PATH_MISMATCH in reasons
+    assert all(
+        g.get("severity") == "warning"
+        for g in payload["gaps"]
+        if g.get("reason") == REASON_PATH_MISMATCH
+    )
 
 
 def test_overlay_soft_criteria_gaps_are_delivered_not_partial():
@@ -656,8 +660,7 @@ def test_overlay_soft_criteria_gaps_are_delivered_not_partial():
         execution_id="e-overlay",
         criteria_gaps=[
             "提醒（不阻断验收）：已落盘 .ts/.tsx，建议补一次验证"
-            "（code_execute / test_run / terminal 跑通 tsc|typecheck|test|build；"
-            "启动开发服务器不算）"
+            "（run 跑通 tsc|typecheck|test|build；启动开发服务器不算）"
         ],
     )
     assert payload is not None
@@ -669,8 +672,8 @@ def test_overlay_soft_criteria_gaps_are_delivered_not_partial():
     assert payload["actions"] == []
 
 
-def test_declared_path_a_landed_b_is_omitted_not_on_card():
-    """声明 A 实际落 B → 缺 A 的 gap；B 不进卡、不打未通过。"""
+def test_declared_path_a_landed_b_is_the_product():
+    """声明 A 实际落 B → B 进卡且 delivered；缺 A 只 warning，不挡正式完成。"""
     declared = "external/AgentCode/research/01-topic.md"
     landed = "docs/01-topic.md"
     plan = _plan(
@@ -691,15 +694,21 @@ def test_declared_path_a_landed_b_is_omitted_not_on_card():
     }
     payload = build_delivery_status(plan, results, execution_id="e-path-mismatch")
     assert payload is not None
-    assert payload["state"] == "partial"
-    assert payload["state"] != "delivered"
-    assert payload["delivered_files"] == []
-    assert landed not in payload["delivered_files"]
-    assert all(a.get("path") != landed for a in payload["artifacts"])
+    assert payload["state"] == "delivered"
+    assert landed in payload["delivered_files"]
+    assert any(a.get("path") == landed for a in payload["artifacts"])
     mismatch = [g for g in payload["gaps"] if g.get("reason") == REASON_PATH_MISMATCH]
     assert mismatch
     assert any(declared in (g.get("description") or "") for g in mismatch)
-    assert all(g.get("severity") != "warning" for g in mismatch)
+    assert all(g.get("severity") == "warning" for g in mismatch)
+    from agentcore.runtime.delegate.delivery_status import current_delivery_verdict
+
+    current_delivery_verdict.set(None)
+    maybe_emit_delivery_status(EventSink(), plan, results, execution_id="e-path-mismatch")
+    verdict = current_delivery_verdict.get()
+    assert verdict is not None
+    assert verdict.requires_draft_ack is False
+    current_delivery_verdict.set(None)
 
 
 def test_workspace_leftover_dir_keeps_bare_names_delivered_at_worker_path():
@@ -937,8 +946,8 @@ def test_workspace_prefix_declared_matches_relative_landing():
     assert payload["delivered_files"] == ["index.html"]
 
 
-def test_artifact_dir_landed_outside_is_omitted_not_delivered():
-    """仅声明 artifact_dir 时，落到目录外的文件不进卡、不进 delivered_files。"""
+def test_artifact_dir_landed_outside_is_the_product():
+    """仅声明 artifact_dir 且目录未命中：目录外落盘进卡，失配 warning 不挡 delivered。"""
     plan = _plan(
         RunSpec(
             run_id="w1",
@@ -967,20 +976,19 @@ def test_artifact_dir_landed_outside_is_omitted_not_delivered():
     }
     payload = build_delivery_status(plan, results, execution_id="e-adir")
     assert payload is not None
-    assert payload["state"] == "partial"
-    assert payload["state"] != "delivered"
-    assert payload["delivered_files"] == []
-    assert all(a.get("path") != "miro-research.md" for a in payload["artifacts"])
+    assert payload["state"] == "delivered"
+    assert "miro-research.md" in payload["delivered_files"]
+    assert any(a.get("path") == "miro-research.md" for a in payload["artifacts"])
     assert any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])
     assert all(
-        g.get("severity") != "warning"
+        g.get("severity") == "warning"
         for g in payload["gaps"]
         if g.get("reason") == REASON_PATH_MISMATCH
     )
 
 
-def test_artifact_dir_path_mismatch_from_warnings_alone_is_blocking():
-    """未预盖 severity 的契约文案经 marker 升为 path_mismatch blocking。"""
+def test_artifact_dir_path_mismatch_from_warnings_alone_is_soft():
+    """未预盖 severity 的契约文案经 marker 升为 path_mismatch warning，不挡 delivered。"""
     plan = _plan(
         RunSpec(
             run_id="w1",
@@ -1002,11 +1010,11 @@ def test_artifact_dir_path_mismatch_from_warnings_alone_is_blocking():
     }
     payload = build_delivery_status(plan, results, execution_id="e-adir-warn")
     assert payload is not None
-    assert payload["state"] == "partial"
-    assert payload["delivered_files"] == []
+    assert payload["state"] == "delivered"
+    assert "notes.md" in payload["delivered_files"]
     mismatch = [g for g in payload["gaps"] if g.get("reason") == REASON_PATH_MISMATCH]
     assert mismatch
-    assert all(g.get("severity") != "warning" for g in mismatch)
+    assert all(g.get("severity") == "warning" for g in mismatch)
 
 
 def test_partial_writing_cutoff_summary_without_continue_writing():
@@ -1366,7 +1374,7 @@ def _failed_test_run_transcript():
                 ToolCall(
                     id="tr1",
                     type="function",
-                    function=ToolCallFunction(name="test_run", arguments="{}"),
+                    function=ToolCallFunction(name="run", arguments="{}"),
                 )
             ],
         ),
@@ -1389,8 +1397,8 @@ def _budget_exhausted_test_run_transcript():
                     id="trb1",
                     type="function",
                     function=ToolCallFunction(
-                        name="test_run",
-                        arguments='{"check":"test","scope":"all"}',
+                        name="run",
+                        arguments='{"command":"pnpm test"}',
                     ),
                 )
             ],
@@ -1419,8 +1427,8 @@ def _failed_verify_tsc_transcript():
                     id="tc1",
                     type="function",
                     function=ToolCallFunction(
-                        name="code_execute",
-                        arguments='{"code":"npx tsc -b","language":"bash"}',
+                        name="run",
+                        arguments='{"command":"npx tsc -b"}',
                     ),
                 )
             ],
@@ -1517,11 +1525,9 @@ def test_verify_budget_exhausted_gap_not_still_running():
     """预算耗尽 → verify_budget 缺口；文案明示已中止、非仍在跑。"""
     from agentcore.runtime.closing_posture import (
         clear_verify_budget_exhausted,
-        closing_honesty_rework,
         note_verify_budget_from_delivery,
         turn_has_verify_budget_exhausted,
     )
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
 
     clear_verify_budget_exhausted()
     plan = _plan(RunSpec(run_id="w1", task="跑测", role="验证员"))
@@ -1551,17 +1557,6 @@ def test_verify_budget_exhausted_gap_not_still_running():
 
     note_verify_budget_from_delivery(payload["gaps"])
     assert turn_has_verify_budget_exhausted()
-    rework = closing_honesty_rework(
-        "验证员仍在进行，请继续等待结果。",
-        DeliveryVerdict(
-            state="partial",
-            delivered_files=("src/a.ts",),
-            execution_id="e-vf-budget",
-            requires_draft_ack=True,
-        ),
-    )
-    assert rework is not None
-    assert "仍在进行" in rework or "强制中止" in rework or "无响应" in rework
     clear_verify_budget_exhausted()
 
 
@@ -2867,7 +2862,8 @@ def test_prose_wave_keeps_files_not_landed_soft():
     assert gap.get("severity") == "warning"
 
 
-def test_path_mismatch_latches_draft_ack():
+def test_path_mismatch_latches_draft_ack_when_empty():
+    """零落盘且声明路径未命中：仍发卡，draft_ack 闩 path_mismatch。"""
     from agentcore.runtime.delegate.delivery_status import current_delivery_verdict
 
     declared = "build/icon.ico"
@@ -2889,4 +2885,5 @@ def test_path_mismatch_latches_draft_ack():
     assert verdict.state != "delivered"
     assert verdict.requires_draft_ack is True
     assert declared in verdict.missing_declared
+    assert "path_mismatch" in (verdict.gap_reasons or ())
     current_delivery_verdict.set(None)

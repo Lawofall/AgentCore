@@ -22,7 +22,7 @@ from agentcore.runtime.costing import RunCost
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.runtime.resolve.prepare import (
-    _wire_worker_conversation_log_tools,
+    _wire_conversation_log_tools,
 )
 from agentcore.runtime.sessions import SessionLoader, SessionSaver, default_session_registry
 from agentcore.runtime.skills import build_system_skill_registry
@@ -59,6 +59,7 @@ def restamp_workspace_facts(prompt: str, facts: str) -> str:
     Insertion matches :data:`~agentcore.runtime.context.contributor.SectionOrder.WORKSPACE_FACTS`
     (750): immediately before the attachment volatile tail, not after
     ``</运行时>`` (that was the pre-2026-08-19 slot in front of the core).
+    Facts-only — CEO file index is not restamped here (workers must not receive it).
     """
     stripped = _WORKSPACE_CONTEXT_RE.sub("", prompt or "").rstrip()
     if not facts:
@@ -119,13 +120,11 @@ async def _wire_continuation_toolset(
     folder_local_subpath: str | None = None,
 ) -> ResumedWiring:
     """Shared CEO/worker toolset rebuild for resume and crash redrive (no parallel path)."""
+    from agentcore.runtime.pipeline.errors import raise_if_local_workspace_fulfiller_absent
     from agentcore.runtime.pipeline.resume import pipeline as resume_pipeline_mod
     from agentcore.tools.sandbox.exec_languages import resolve_exec_languages
 
-    # Sticky channel-dead: abort before probe / MCP burn more wall clock.
-    from agentcore.workspace.channel import raise_if_backend_channel_dead
-
-    raise_if_backend_channel_dead(backend)
+    raise_if_local_workspace_fulfiller_absent(user_id=user_id, backend=backend)
     exec_languages = await resolve_exec_languages(backend)
     # Host / MCP backfill needs a desktop client — orthogonal to workspace location.
     channel = resolve_channel_profile(x_client_platform)
@@ -162,7 +161,7 @@ async def _wire_continuation_toolset(
         folder_id=folder_id,
         user_id=user_id,
     )
-    _wire_worker_conversation_log_tools(
+    _wire_conversation_log_tools(
         worker_tools,
         folder_id=folder_id,
     )
@@ -282,9 +281,8 @@ async def _wire_continuation_toolset(
     checkpoint_enabled = settings.checkpoint_gate_enabled
     # Re-stamp environment facts onto the worker base: continuation rebuilds the
     # backend from the CURRENT binding, so workers must not inherit a stale cloud
-    # ``<工作区>``.
+    # ``<工作区>``. Worker restamp is facts-only — do not attach the CEO file index.
     git_fact = await detect_workspace_git(backend)
-    raise_if_backend_channel_dead(backend)
     refreshed_base = restamp_workspace_facts(
         base_system_prompt,
         build_workspace_context(
@@ -331,6 +329,9 @@ async def _wire_continuation_toolset(
         desktop_online=desktop_online,
     )
     from agentcore.tools.ceo_toolset import wire_ceo_consult
+
+    register_mcp_tools(chat_tools, mcp_discover)
+    _wire_conversation_log_tools(chat_tools, folder_id=folder_id)
 
     await wire_ceo_consult(
         chat_tools,

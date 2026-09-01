@@ -13,7 +13,9 @@ vi.mock("@/services/streamConversation", () => ({
 
 import { ApiError, NetworkError } from "@/services/api";
 import {
+  WORKSPACE_RECONNECT_DETAIL,
   abortClientToolRequest,
+  failInflightClientToolsForReconnect,
   fulfillClientToolOnce,
   resetClientToolFulfillmentForTests,
 } from "../clientToolFulfill";
@@ -254,5 +256,89 @@ describe("fulfillClientToolOnce (request_id 在飞/成功去重)", () => {
     await expect(done).resolves.toBeUndefined();
     expect(signal.aborted).toBe(true);
     expect(resolveInteraction).not.toHaveBeenCalled();
+  });
+
+  it("reconnect abort settles workspace ops with retryable IO error", async () => {
+    let signal!: AbortSignal;
+    const perform = vi.fn(
+      (s: AbortSignal) =>
+        new Promise<{ ok: true; value: string }>((_resolve, reject) => {
+          signal = s;
+          s.addEventListener(
+            "abort",
+            () => reject(new DOMException("aborted", "AbortError")),
+            { once: true },
+          );
+        }),
+    );
+
+    const done = fulfillClientToolOnce({
+      requestId: "r-reconnect",
+      conversationId: "c1",
+      origin: "cloud",
+      logLabel: "workspaceOps",
+      perform,
+    });
+    await vi.waitFor(() => expect(perform).toHaveBeenCalled());
+    failInflightClientToolsForReconnect("cloud");
+    await expect(done).resolves.toBeUndefined();
+    expect(signal.aborted).toBe(true);
+    expect(resolveInteraction).toHaveBeenCalledWith(
+      "c1",
+      "r-reconnect",
+      {
+        kind: "client_tool",
+        ok: false,
+        error: { kind: "WorkspaceIOError", detail: WORKSPACE_RECONNECT_DETAIL },
+      },
+      "cloud",
+    );
+  });
+
+  it("reconnect abort does not settle a different origin or non-workspace op", async () => {
+    const sidecarPerform = vi.fn(
+      (s: AbortSignal) =>
+        new Promise<{ ok: true; value: string }>((_resolve, reject) => {
+          s.addEventListener(
+            "abort",
+            () => reject(new DOMException("aborted", "AbortError")),
+            { once: true },
+          );
+        }),
+    );
+    const hostPerform = vi.fn(
+      (s: AbortSignal) =>
+        new Promise<{ ok: true; value: string }>((_resolve, reject) => {
+          s.addEventListener(
+            "abort",
+            () => reject(new DOMException("aborted", "AbortError")),
+            { once: true },
+          );
+        }),
+    );
+    const sidecarDone = fulfillClientToolOnce({
+      requestId: "r-sidecar",
+      conversationId: "c1",
+      origin: "sidecar",
+      logLabel: "workspaceOps",
+      perform: sidecarPerform,
+    });
+    const hostDone = fulfillClientToolOnce({
+      requestId: "r-host",
+      conversationId: "c1",
+      origin: "cloud",
+      logLabel: "hostOps",
+      perform: hostPerform,
+    });
+    await vi.waitFor(() => {
+      expect(sidecarPerform).toHaveBeenCalled();
+      expect(hostPerform).toHaveBeenCalled();
+    });
+    failInflightClientToolsForReconnect("cloud");
+    await Promise.resolve();
+    expect(resolveInteraction).not.toHaveBeenCalled();
+    abortClientToolRequest("r-sidecar");
+    abortClientToolRequest("r-host");
+    await Promise.all([sidecarDone, hostDone]);
   });
 });

@@ -26,7 +26,7 @@ from agentcore.tools.builtin.file_ops import (
 from agentcore.tools.file_products import FileProduct, file_product
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
-    AUDIENCE_WORKER_ONLY,
+    AUDIENCE_BOTH,
     FileProductsContract,
     ToolRegistration,
     ToolSurface,
@@ -55,7 +55,7 @@ class ArchiveCreateTool:
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_WORKER_ONLY,
+        audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
     )
 
@@ -65,7 +65,7 @@ class ArchiveCreateTool:
             name=ARCHIVE_CREATE_TOOL_NAME,
             description=(
                 "把工作区内的文件或目录打成 zip 落到指定相对路径。"
-                "大包持久打包请用本工具，勿只靠 code_execute 假定工作区可见。"
+                "大包持久打包请用本工具。"
                 "HOW→consult(archive_create)。"
             ),
             parameters={

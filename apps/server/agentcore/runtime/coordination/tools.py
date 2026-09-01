@@ -27,48 +27,6 @@ def _session_for_control(context: ToolContext):
     return resolve_coordination_session(context.execution_id)
 
 
-def _transfer_ownership_for_escalation(
-    session: Any,
-    *,
-    escalator_run_id: str,
-    explicit_paths: list[str],
-    pending: dict[str, Any] | None,
-) -> str:
-    """Path-level ownership handoff to the escalator. Returns a short note for the CEO."""
-    paths = list(explicit_paths)
-    if not paths and pending:
-        raw = pending.get("ownership_paths") or []
-        if isinstance(raw, list):
-            paths = [str(p).strip() for p in raw if isinstance(p, str) and str(p).strip()]
-    if not paths:
-        return (
-            "（transfer_ownership 未找到可移交路径："
-            "请传 paths 或确保 escalate 问题含写入冲突路径）"
-        )
-
-    ledger = session.ensure_file_ownership()
-    moved: list[str] = []
-    for path in paths:
-        owner = ledger.owner_of(path)
-        if owner is None:
-            # Unowned — claim for escalator so they can write.
-            ledger.transfer(path, escalator_run_id)
-            moved.append(path)
-        elif owner != escalator_run_id:
-            ledger.transfer(path, escalator_run_id)
-            moved.append(path)
-    if not moved:
-        return "（transfer_ownership：路径已归升级方或无需变更）"
-    logger.info(
-        "coordination.ownership_transferred",
-        execution_id=getattr(session, "execution_id", ""),
-        run_id=escalator_run_id,
-        paths=moved,
-    )
-    joined = "、".join(f"`{p}`" for p in moved)
-    return f"；已路径级移交归属给升级方：{joined}"
-
-
 class WaitTool:
     """No-op exit for coordination rounds that need no disposition.
 
@@ -469,9 +427,6 @@ class ResolveEscalationTool:
                 "直裁：对技术/范围类问题直接给 answer。\n"
                 "转交用户：偏好 / 授权 / 花钱类须先 ask_user 征询用户，拿到答复后再调本工具，"
                 "并设 via_user=true（你是过滤器不是墙）。\n"
-                "文件归属：若升级方是锁主嵌套子或需接手冲突路径，设 transfer_ownership=true"
-                "（可选 paths；缺省用仲裁事件里的 ownership_paths）做【路径级】移交，"
-                "不会抢走锁主其它未列路径。\n"
                 "run_id 见阻塞仲裁事件中的 run_id。"
             ),
             parameters={
@@ -490,21 +445,6 @@ class ResolveEscalationTool:
                         "description": (
                             "可选，默认 false。true=本裁决经 ask_user 征询用户后作出"
                             "（偏好/授权/费用类必须如此）。"
-                        ),
-                    },
-                    "transfer_ownership": {
-                        "type": "boolean",
-                        "description": (
-                            "可选，默认 false。true=把冲突路径的文件归属移交给本 run_id"
-                            "（升级方），再回传 answer；用于嵌套子队写父已占位路径。"
-                        ),
-                    },
-                    "paths": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": (
-                            "可选。transfer_ownership 时要移交的相对路径列表；"
-                            "省略则用仲裁事件中的 ownership_paths。"
                         ),
                     },
                 },
@@ -539,13 +479,6 @@ class ResolveEscalationTool:
         run_id = str(arguments.get("run_id") or "").strip()
         answer = str(arguments.get("answer") or "").strip()
         via_user = bool(arguments.get("via_user"))
-        transfer_ownership = bool(arguments.get("transfer_ownership"))
-        raw_paths = arguments.get("paths")
-        explicit_paths: list[str] = []
-        if isinstance(raw_paths, list):
-            explicit_paths = [
-                str(p).strip() for p in raw_paths if isinstance(p, str) and str(p).strip()
-            ]
         if not run_id:
             return ToolResult(
                 tool_call_id="",
@@ -563,13 +496,6 @@ class ResolveEscalationTool:
 
         pending = session.get_arbitration(run_id)
         transfer_note = ""
-        if transfer_ownership:
-            transfer_note = _transfer_ownership_for_escalation(
-                session,
-                escalator_run_id=run_id,
-                explicit_paths=explicit_paths,
-                pending=pending,
-            )
 
         if pending is None:
             # Worker may already have been cancelled (ask_user soft-stop); stash for
@@ -583,7 +509,6 @@ class ResolveEscalationTool:
                 execution_id=session.execution_id,
                 run_id=run_id,
                 via_user=via_user,
-                transfer_ownership=transfer_ownership,
             )
             return ToolResult(
                 tool_call_id="",
@@ -617,7 +542,6 @@ class ResolveEscalationTool:
                 execution_id=session.execution_id,
                 run_id=run_id,
                 via_user=via_user,
-                transfer_ownership=transfer_ownership,
             )
             return ToolResult(
                 tool_call_id="",
@@ -638,7 +562,6 @@ class ResolveEscalationTool:
             execution_id=session.execution_id,
             run_id=run_id,
             via_user=via_user,
-            transfer_ownership=transfer_ownership,
         )
         return ToolResult(
             tool_call_id="",

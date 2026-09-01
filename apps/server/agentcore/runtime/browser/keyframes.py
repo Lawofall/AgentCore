@@ -8,8 +8,8 @@ flooding the workspace / journal:
 - **per-turn count** (default 60): over it, stop capturing but keep the tool working;
 - **single-frame bytes** (default 512KB): an oversized frame is skipped, not written.
 
-"Turn" is scoped to the worker ``run_id`` (browser tools are worker-only): the count
-resets when a new run drives the session, so each worker turn gets a fresh budget.
+"Turn" is scoped to the driving ``run_id`` (CEO captain or worker). The count
+resets when a new run drives the session. Browser is CEO+worker.
 Filenames use a session-monotonic sequence so frames never overwrite each other.
 """
 

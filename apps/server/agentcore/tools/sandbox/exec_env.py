@@ -226,8 +226,8 @@ _PROBE_FAIL_RETIRE_CAUSE: dict[str, str] = {
 # next call can pick a language whose interpreter is present. A verdict that
 # names no language (gVisor's runtime smoke test, or legacy untagged text) still
 # speaks for the whole backend, which is what cloud has always done.
-_PROBE_FAIL_RETIRE_TOOLS: dict[str, tuple[str, ...]] = {"python": ("test_run",)}
-_PROBE_FAIL_RETIRE_ALL: tuple[str, ...] = ("code_execute", "test_run")
+_PROBE_FAIL_RETIRE_TOOLS: dict[str, tuple[str, ...]] = {"python": ("run",)}
+_PROBE_FAIL_RETIRE_ALL: tuple[str, ...] = ("run",)
 
 _PROBE_FAIL_CODE_TAG = re.compile(
     re.escape(EXEC_ENV_PROBE_FAIL_MARKER) + r"\s*\[([a-z0-9_]+)\]"
@@ -258,14 +258,12 @@ def probe_failure_retire_tools(language: str | None) -> tuple[str, ...]:
 def sandbox_unavailable_tool_meta() -> dict[str, Any]:
     """``ToolResult.metadata`` / attempt meta for a dead cloud desk (not 本机).
 
-    First hit retires ``code_execute``/``test_run``. Not a contract_failure —
+    Per-call fail only — does not retire ``run``. Not a contract_failure:
     switching language will not start a guest that is down.
     """
     return {
         "code": EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
         "error_class": "permanent",
-        "retire_tools": list(probe_failure_retire_tools(None)),
-        "retire_message": probe_failure_retire_steer(EXEC_ENV_SANDBOX_UNAVAILABLE_CODE),
     }
 
 
@@ -278,19 +276,18 @@ def is_sandbox_unavailable_error(exc: BaseException) -> bool:
 
 
 def _probe_fail_scope_sentence(language: str | None) -> str:
-    """What is off for the rest of the turn, in the model's voice."""
+    """What this verdict proved, in the model's voice. Does not retire ``run``."""
     lang = (language or "").strip()
     if not lang:
-        return "本回合 code_execute / test_run 已停用，原样重试只会再失败一次；"
+        return "这次命令没有跑成；"
     if lang == "python":
         return (
-            "本回合 python 执行与 `test_run` 已停用"
-            "（test_run 把每条 check 都包成 python 脚本跑），原样重试只会再失败一次；"
+            "这次 python 路径没有跑成；"
             "其它语言不在本次判定范围内，可另行尝试；"
         )
     return (
-        f"本回合 {lang} 执行已停用，原样重试只会再失败一次；"
-        "`test_run` 与其它语言不在本次判定范围内，可另行尝试；"
+        f"这次 {lang} 路径没有跑成；"
+        "其它语言不在本次判定范围内，可另行尝试；"
     )
 
 

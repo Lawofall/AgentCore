@@ -11,12 +11,12 @@ from pathlib import Path
 
 import httpx
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 import agentcore.folders.permanent_delete as permanent_delete_mod
 from agentcore.config import settings
-from agentcore.db.models import Conversation, Folder
-from agentcore.db.repositories import FolderRepository, MessageRepository
+from agentcore.db.models import Conversation, Document, Folder
+from agentcore.db.repositories import DocumentRepository, FolderRepository, MessageRepository
 from agentcore.db.repositories.folders import FOLDER_DELETE_ORIGIN_AUTO_DESK_RECLAIM
 from agentcore.storage.factory import build_storage_provider
 from agentcore.workspace.locate import workspace_root_path
@@ -615,6 +615,60 @@ async def test_permanent_delete_folder_wipes_conversations_and_cloud_space(
     ).exists()
 
 
+async def test_permanent_delete_folder_wipes_that_desk_documents(
+    client, session_factory, monkeypatch, _fs_data_dir
+):
+    """彻底删除物理清这张桌的设定；全局层留下。"""
+    monkeypatch.setattr(permanent_delete_mod, "async_session_factory", session_factory)
+    user_id = await register_and_login(client, "folderuser7docs")
+    folder_id = await _create_cloud_folder(client, "GoneDocs")
+    async with session_factory() as session:
+        repo = DocumentRepository(session)
+        await repo.create(
+            user_id,
+            name="用户规则.md",
+            role="rule",
+            apply_mode="always",
+            content="- 全局规则留下",
+        )
+        await repo.create(
+            user_id,
+            name="用户规则.md",
+            role="rule",
+            folder_id=folder_id,
+            apply_mode="always",
+            content="- 本桌规则清掉",
+        )
+
+    r = await client.delete(f"/v1/folders/{folder_id}/permanent")
+    assert r.status_code == 200, r.text
+
+    async with session_factory() as session:
+        folder_n = (
+            await session.execute(
+                select(func.count())
+                .select_from(Document)
+                .where(
+                    Document.user_id == user_id,
+                    Document.folder_id == folder_id,
+                )
+            )
+        ).scalar_one()
+        global_n = (
+            await session.execute(
+                select(func.count())
+                .select_from(Document)
+                .where(
+                    Document.user_id == user_id,
+                    Document.folder_id.is_(None),
+                    Document.name == "用户规则.md",
+                )
+            )
+        ).scalar_one()
+    assert folder_n == 0
+    assert global_n == 1
+
+
 async def test_permanent_delete_folder_wipes_nested_subtree(
     client, session_factory, monkeypatch, _fs_data_dir
 ):
@@ -712,3 +766,71 @@ async def test_folder_isolation_between_users(client, new_client):
                 json={"folder_id": folder_id},
             )
         ).status_code == 404
+
+
+async def test_soft_delete_hibernates_folder_settings_until_restore(
+    client, session_factory
+):
+    """软删：这张桌的设定退出注入、行还在；恢复后回来。全局层不陪葬。"""
+    from agentcore.memory.document_store import DocumentMemoryStore
+    from agentcore.memory.rules_injection import assemble_injected_rules
+    from agentcore.memory.scope_chain import db_scope_chain
+
+    uid = await register_and_login(client, "foldersettings")
+    folder_id = await _create_cloud_folder(client, "SettingsDesk")
+    assert (
+        await client.put(
+            "/v1/users/me/memory/files/preferences",
+            json={"content": "- 全局偏好别用 emoji", "baseline": None},
+        )
+    ).status_code == 200
+    assert (
+        await client.put(
+            f"/v1/users/me/memory/files/profile?folder_id={folder_id}",
+            json={"content": "- 本仓用 Rust", "baseline": None},
+        )
+    ).status_code == 200
+    async with session_factory() as session:
+        await DocumentRepository(session).upsert_user_rules_doc(
+            uid, folder_id, "- 本桌必须用中文"
+        )
+
+    async def _inject() -> str:
+        async with session_factory() as session:
+            return await assemble_injected_rules(
+                DocumentMemoryStore(session=session),
+                DocumentRepository(session),
+                uid,
+                folder_id=folder_id,
+                enabled=True,
+                scope_chain=await db_scope_chain(uid, folder_id, session=session),
+            )
+
+    live = await _inject()
+    assert "全局偏好别用 emoji" in live
+    assert "本仓用 Rust" in live
+    assert "本桌必须用中文" in live
+
+    assert (await client.delete(f"/v1/folders/{folder_id}")).status_code == 200
+    hibernating = await _inject()
+    assert "全局偏好别用 emoji" in hibernating
+    assert "本仓用 Rust" not in hibernating
+    assert "本桌必须用中文" not in hibernating
+    async with session_factory() as session:
+        leftover = (
+            await session.execute(
+                select(func.count())
+                .select_from(Document)
+                .where(
+                    Document.user_id == uid,
+                    Document.folder_id == folder_id,
+                )
+            )
+        ).scalar_one()
+    assert leftover >= 1
+
+    restored = await client.post(f"/v1/folders/trash/{folder_id}/restore")
+    assert restored.status_code == 200, restored.text
+    back = await _inject()
+    assert "本仓用 Rust" in back
+    assert "本桌必须用中文" in back

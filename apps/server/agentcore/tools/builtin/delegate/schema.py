@@ -33,17 +33,17 @@ TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
         "artifacts": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "钉具体路径（不扫 task 自由文）。",
+            "description": "用户点名或流水线写死才填；否则省略。",
         },
     },
 }
 
-# Trigger + 拆任务合同 + playbook/tasks 互斥. HOW → consult(team_orchestration_advanced).
+# Trigger + when-to-use polarity. XOR → playbook 参数一句；探路/编制 HOW → consult.
 DELEGATE_DESCRIPTION = (
     f"拆任务给临时团队（默认手写顶层 tasks：role+task，≤{MAX_DELEGATION_TASKS}；非终结）。"
-    "改产物、成规模查证、实质讨论、对照多方案时用；探路够了（能写目标·约束·验收）再派；闲聊和窗口里已有的短答不必派。"
-    "派前给用户一句可见打算。"
-    "playbook 与 tasks 二选一（具名 playbook 仅固化流水线快捷进阶）。"
+    "默认用本工具（成篇落盘、可运行应用、成规模查证、要并行、要交叉验证、实质讨论尤然）；"
+    "闲聊、窗口里已有证据的一问一答、一眼写完的短文或小落盘、纯启服不必派。"
+    "有写权 ≠ 自己做完。"
     "HOW→consult(team_orchestration_advanced)。"
 )
 
@@ -56,7 +56,6 @@ DELEGATE_PARAMETERS = {
                 f"默认主路（≤{MAX_DELEGATION_TASKS}）。"
                 f"顶层非空数组可抄：{HANDWRITTEN_TASKS_SKELETON}（deliverable 可选）。"
                 "摸底抄骨架 form=prose。"
-                "手写此数组时勿填 playbook；与具名 playbook 互斥。"
             ),
             "items": {
                 "type": "object",
@@ -121,7 +120,9 @@ DELEGATE_PARAMETERS = {
         "playbook": {
             "type": "string",
             "enum": sorted(PLAYBOOKS),
-            "description": "固化流水线名（非默认）；填了就不要传 tasks。",
+            "description": (
+                "固化流水线名（非默认快捷进阶）；与 tasks 二选一，填了就不要传 tasks。"
+            ),
         },
         "playbook_args": {
             "type": "object",

@@ -86,11 +86,23 @@ def test_list_folder_dir_schema_and_registration():
     assert "max_depth" not in props
     assert "target_folder_id" not in props
     assert tool.schema.parameters["required"] == ["folder_id"]
-    # Nesting: the reach is the folder plus everything under it.
-    assert "子文件夹" in tool.schema.description
-    assert "file_list" in tool.schema.description
+    # Nesting HOW lives in consult(team_cross_folder); schema is one-line function.
+    assert "列出" in tool.schema.description
+    assert "HOW→consult(team_cross_folder)" in tool.schema.description
+    assert "轻量认桌" not in tool.schema.description
+    from agentcore.runtime.skills import build_system_skill_registry
+
+    cross = build_system_skill_registry().get("team_cross_folder")
+    assert cross is not None
+    assert "子文件夹" in cross.body
+    assert "轻量认桌" in cross.body
+    assert "file_list" not in tool.schema.description
     assert "list_folders" not in tool.schema.description
-    assert "轻量认桌" in tool.schema.description
+    folder_id_desc = props["folder_id"]["description"]
+    assert "list_folders" in folder_id_desc
+    assert "resolve_folder" in folder_id_desc
+    assert "create_folder" in folder_id_desc
+    assert "文件夹清单" not in folder_id_desc
     reg = tool_registration(ListFolderDirTool)
     assert reg.surface is ToolSurface.CEO_ORCHESTRATION
     assert reg.audience == (AUDIENCE_CEO,)
@@ -124,10 +136,16 @@ def test_read_folder_file_schema_and_registration():
     assert "limit" in props
     assert "target_folder_id" not in props
     assert set(tool.schema.parameters["required"]) == {"folder_id", "path"}
-    assert "子文件夹" in tool.schema.description
-    assert "轻量认桌" in tool.schema.description
-    assert "抽样" in tool.schema.description
+    assert "读取" in tool.schema.description
+    assert "HOW→consult(team_cross_folder)" in tool.schema.description
+    assert "轻量认桌" not in tool.schema.description
+    assert "抽样" not in tool.schema.description
     assert "读到文件末尾" not in tool.schema.description
+    folder_id_desc = props["folder_id"]["description"]
+    assert "list_folders" in folder_id_desc
+    assert "resolve_folder" in folder_id_desc
+    assert "create_folder" in folder_id_desc
+    assert "文件夹清单" not in folder_id_desc
     limit_schema = props["limit"]
     assert limit_schema["maximum"] == 500
     assert "500" in limit_schema["description"]
@@ -433,6 +451,9 @@ async def test_missing_folder_id(tmp_path: Path):
     result = await ListFolderDirTool().execute({"directory": "."}, ctx)
     assert result.success is False
     assert result.error == "missing folder_id"
+    assert "list_folders" in result.output
+    assert "resolve_folder" in result.output
+    assert "文件夹清单" not in result.output
 
 
 @pytest.mark.asyncio

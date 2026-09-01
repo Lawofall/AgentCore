@@ -36,10 +36,11 @@ from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
 # debate / delegate are wired on every path; ask_user is live-user only.
-# verify_and_fix / long_form_writing / data_file_landing ride consult audience
+# run skill is gated on the run tool (CEO+worker HOW).
+# long_form_writing / data_file_landing ride consult audience
 # (worker loop vs CEO 派工); long_form_landing is worker-only landing HOW.
 # team_orchestration_advanced / build_* / deep_multi_lens 是主管手册（audience=ceo）。
-_FULL_TOOLS = {"delegate", "ask_user", "debate"}
+_FULL_TOOLS = {"delegate", "ask_user", "debate", "run"}
 _NO_LIVE_USER = {"delegate", "debate"}  # autonomous path: no ask_user
 
 
@@ -76,17 +77,14 @@ def test_registry_registers_the_system_skills():
         "team_orchestration_advanced",
         "team_cross_folder",
         "team_delivery_env",
-        "work_discipline",
         "product_help",
-        "product_help_map",
-        "product_help_faq",
         "product_bug_triage",
         "building_software",
         "debate_and_review",
         "revising_a_product",
         "asking_the_user",
         "delegate_checkpoint",
-        "verify_and_fix",
+        "run",
         "long_form_writing",
         "long_form_landing",
         "data_file_landing",
@@ -115,26 +113,25 @@ def test_registry_rejects_duplicate_name():
 def test_available_hides_gated_skills_without_required_tools():
     # asking_the_user (and delegate_checkpoint, which pauses for user review)
     # need the ask_user tool. On the autonomous (no live user) path it is not wired,
-    # so those skills drop out of the catalog. verify_and_fix is ungated (worker loop;
-    # CEO still consults to brief) — not tied to delegate.
+    # so those skills drop out of the catalog. data_file_landing is ungated
+    # (CEO still consults to brief) — not tied to delegate.
     reg = build_system_skill_registry()
     available = {s.name for s in reg.available(_NO_LIVE_USER)}
     assert "team_orchestration_advanced" in available
     assert "product_help" in available  # requires_tools=() — always listed
-    assert "product_help_map" in available
-    assert "product_help_faq" in available
     assert "product_bug_triage" in available
     assert "build_website" not in available
     assert "building_software" in available
     assert "debate_and_review" in available
     assert "revising_a_product" in available
-    assert "verify_and_fix" in available
+    assert "verify_and_fix" not in available
     assert "data_file_landing" in available
-    assert "work_discipline" in available
+    assert "work_discipline" not in available
     assert "asking_the_user" not in available
     assert "ask_user_kickoff" not in available
     assert "ask_user_midtask" not in available
     assert "delegate_checkpoint" not in available
+    assert "run" not in available
 
 
 def test_available_shows_gated_skills_when_tools_wired():
@@ -144,7 +141,8 @@ def test_available_shows_gated_skills_when_tools_wired():
     assert "ask_user_kickoff" not in available
     assert "ask_user_midtask" not in available
     assert "delegate_checkpoint" in available
-    assert "verify_and_fix" in available
+    assert "verify_and_fix" not in available
+    assert "run" in available
 
 
 def test_available_audience_hides_ceo_only_from_workers():
@@ -152,8 +150,6 @@ def test_available_audience_hides_ceo_only_from_workers():
     reg = build_system_skill_registry()
     worker = {s.name for s in reg.available(set(), audience="worker")}
     assert "product_help" not in worker
-    assert "product_help_map" not in worker
-    assert "product_help_faq" not in worker
     assert "product_bug_triage" not in worker
     assert "revising_a_product" not in worker
     assert "team_orchestration_advanced" not in worker
@@ -162,11 +158,12 @@ def test_available_audience_hides_ceo_only_from_workers():
     assert "build_website" not in worker
     assert "building_software" not in worker
     assert "deep_multi_lens_research" not in worker
-    assert "work_discipline" in worker
+    assert "work_discipline" not in worker
     assert "long_form_landing" in worker
-    assert "verify_and_fix" in worker
+    assert "verify_and_fix" not in worker
     assert "data_file_landing" in worker
     assert "long_form_writing" not in worker
+    assert "run" not in worker
     # 持 delegate 的嵌套 lead 目录也必须与叶子同名，避免队员之间打散前缀。
     lead = {s.name for s in reg.available({"delegate"}, audience="worker")}
     assert lead == worker
@@ -177,8 +174,9 @@ def test_available_audience_hides_ceo_only_from_workers():
     assert "team_cross_folder" in ceo
     assert "team_delivery_env" in ceo
     assert "long_form_writing" in ceo
-    assert "verify_and_fix" in ceo
+    assert "verify_and_fix" not in ceo
     assert "data_file_landing" in ceo
+    assert "run" in ceo
     assert "long_form_landing" not in ceo
 
 
@@ -196,8 +194,9 @@ async def test_worker_consult_source_hides_ceo_only_listing_and_fetch():
     assert "team_cross_folder" not in names
     assert "team_delivery_env" not in names
     assert "long_form_landing" in names
-    assert "verify_and_fix" in names
+    assert "verify_and_fix" not in names
     assert "data_file_landing" in names
+    assert "run" not in names
     assert "long_form_writing" not in names
     assert await source.fetch_by_name("u", "product_help") is None
     assert await source.fetch_by_name("u", "long_form_writing") is None
@@ -218,6 +217,7 @@ async def test_ceo_consult_source_keeps_product_help():
     assert "product_help" in names
     assert "long_form_writing" in names
     assert "data_file_landing" in names
+    assert "run" in names
     assert "long_form_landing" not in names
     assert await source.fetch_by_name("u", "product_help") is not None
     assert await source.fetch_by_name("u", "long_form_writing") is not None
@@ -233,13 +233,13 @@ def test_directory_lists_only_available_skills_with_names_and_summaries():
     out = render_skill_directory(reg, _FULL_TOOLS)
     assert "<按需目录>" in out and "</按需目录>" in out
     assert "consult" in out  # the soft push to pull a skill
-    for skill in reg.list_all():
+    for skill in reg.available(_FULL_TOOLS):
         assert skill.name in out
         assert skill.summary in out
 
 
 def test_system_skill_summaries_are_short_when_triggers():
-    """目录行只写这是什么；Python len ≤80（对照 verify_and_fix 一句名字）。"""
+    """目录行只写这是什么；Python len ≤80（对照 run 一句名字）。"""
     for skill in build_system_skill_registry(include_legal=True).list_all():
         assert len(skill.summary) <= 80, (skill.name, len(skill.summary), skill.summary)
 
@@ -255,20 +255,20 @@ def test_product_help_consult_carved_out_and_owned_by_catalog():
     assert "按场面：用户主动查/报产品本身可证伪故障" not in hint
     assert "纯对话式回答自己答即可，无需 consult" not in out
     assert "- product_help：" in out
-    assert "- product_help_map：" in out
-    assert "- product_help_faq：" in out
     assert "- product_bug_triage：" in out
+    assert "- product_help_map：" not in out
+    assert "- product_help_faq：" not in out
     reg = build_system_skill_registry()
     help_sum = reg.get("product_help").summary
-    faq_sum = reg.get("product_help_faq").summary
     bug_sum = reg.get("product_bug_triage").summary
-    assert "官网" in help_sum
-    assert "下载" in help_sum
+    help_body = reg.get("product_help").body
+    assert help_sum == "本产品用法"
+    assert "官网" not in help_sum
+    assert "下载" not in help_sum
+    assert "官网" in help_body
     assert "product_help_map" not in help_sum
     assert "product_help_faq" not in help_sum
-    assert "Cursor" in faq_sum
     assert "这是什么项目" not in help_sum
-    help_body = reg.get("product_help").body
     assert "这是什么项目" in help_body
     assert "你是什么" in help_body
     assert "你的网站" in help_body
@@ -294,6 +294,8 @@ def test_greenfield_recommends_building_software_not_hard_forbid_none():
     assert "必须 build_app" not in hint
     assert "禁 none 手糊" not in hint
     assert "consult(building_software)" not in hint
+    assert "尚无工程清单" not in hint
+    assert "一块模块" not in hint
     skill = build_system_skill_registry().get("building_software")
     assert skill is not None
     orch = build_system_skill_registry().get("team_orchestration_advanced")
@@ -320,7 +322,7 @@ def test_directory_omits_gated_skills_on_autonomous_path():
     assert "delegate_checkpoint" not in out
     # The delegate-gated + non-gated advanced skills are still offered.
     assert "team_orchestration_advanced" in out
-    assert "verify_and_fix" in out
+    assert "verify_and_fix" not in out
 
 
 def test_directory_empty_when_nothing_available():
@@ -352,7 +354,7 @@ async def test_consult_returns_body_on_hit():
 
 
 async def test_consult_product_help_hit():
-    """验收：consult('product_help') 命中；目录可列出三级披露。"""
+    """验收：consult('product_help') 命中；目录只列用法 + 故障，废名缺席。"""
     reg = build_system_skill_registry()
     skill = reg.get("product_help")
     assert skill is not None
@@ -363,16 +365,20 @@ async def test_consult_product_help_hit():
     assert result.output == skill.body
     directory = render_skill_directory(reg, _NO_LIVE_USER)
     assert "- product_help：" in directory
-    assert "- product_help_map：" in directory
-    assert "- product_help_faq：" in directory
     assert "- product_bug_triage：" in directory
+    assert "- product_help_map：" not in directory
+    assert "- product_help_faq：" not in directory
     assert skill.summary in directory
-    for name in ("product_help_map", "product_help_faq", "product_bug_triage"):
-        sibling = reg.get(name)
-        assert sibling is not None
-        hit = await tool.execute({"name": name}, _ctx())
-        assert hit.success
-        assert hit.output == sibling.body
+    assert reg.get("product_help_map") is None
+    assert reg.get("product_help_faq") is None
+    sibling = reg.get("product_bug_triage")
+    assert sibling is not None
+    hit = await tool.execute({"name": "product_bug_triage"}, _ctx())
+    assert hit.success
+    assert hit.output == sibling.body
+    miss = await tool.execute({"name": "product_help_map"}, _ctx())
+    assert miss.success
+    assert "没有名为" in miss.output
 
 
 async def test_consult_build_website_is_plain_soft_miss():
@@ -468,6 +474,11 @@ _RETIRED_SKILL_LITERALS = (
     "research_report",
     "multi_lens_research",
     "repair_code",
+    "verify_and_fix",
+    "work_discipline",
+    "consumer_deps",
+    "design_impl_same_grant",
+    "root_slice_honesty",
 )
 
 # Playbook ids are identifiers: ``multi_lens_research`` must not fire on the
@@ -558,17 +569,21 @@ def test_team_orchestration_skill_teaches_shape_vocabulary():
     assert "调研→撰稿" in body
     assert "质量缝" in body
     # 本地修码：一律手写 1 人 + form=workspace + 怎么算修好写进 task、同一人验
+    # 开新层 / 做一期 ≠ 修码（不把设计章节抄进 task）
     assert "手写 1 人" in body
     assert "form=workspace" in body
     assert "短任务" in body
     assert "怎么算修好" in body
     assert "同一人验" in body
-    assert "test_run" in body
+    assert "已有代码上一个缺口" in body
+    assert "≠ 修码" in body
+    assert "设计章节" in body and "代写实施" in body
+    assert "`run`" in body
     from agentcore.runtime.runs.playbooks import available_playbooks
 
     assert "diagnose_fix_verify" not in body.replace(available_playbooks(), "")
-    assert "白屏" in body or "挂载" in body
-    assert "browser" in body
+    assert "browser" not in body.replace(available_playbooks(), "")
+    assert "白屏" not in body
     assert "tsc" in body or "pytest" in body
     for token in ("complexity_hint", "result_handling", "require_upstream"):
         assert token not in body, token
@@ -616,7 +631,10 @@ def test_team_orchestration_skill_teaches_opening_table_and_draft_tiers():
     # 禁成文产线 ≠ 禁 brief（核只留短脊柱；本 skill 是划界 HOW）
     assert "禁成文产线 ≠ 禁 brief" in body or "禁成文产线≠禁 brief" in body
     assert "不写盘" in body or "答完维度" in body
-    assert "consumer_deps" in body
+    assert "consumer_deps" not in body
+    assert "design_impl_same_grant" not in body
+    assert "root_slice_honesty" not in body
+    assert "depends_on" in body
     assert "短文" in body and "档 1" in body and "1 人" in body
     assert "档 2" in body and "≥2" in body
     # 成文后轻→标准→重；满编 cite_write_review 仅档 3（核已不钉档 2 轻成文全文）
@@ -660,140 +678,103 @@ def test_team_orchestration_skill_teaches_opening_table_and_draft_tiers():
     assert "handoff" in body
 
 
-def test_work_discipline_skill_teaches_design_and_patch_tripwires():
-    body = _body("work_discipline")
-    assert "设计三问" in body
-    assert "补丁绊线" in body
-    assert "探索信任" in body
-    assert "讨论与查证分相" in body
-    assert "<工作权威>" in body
-    assert "consult(team_orchestration_advanced)" in body
-    # worker 自主度不进本 skill（已在 identity）；本 skill 只短提醒 blocking 由工人自选
-    assert "小问题（路径拼写" not in body
-    assert "按题自选" in body or "blocking" in body
-    assert "边干边报" in body or "默认 false" in body
-    # 已确认约束 / 扇入整合：唯一所有者 = 编排 skill
+def test_work_discipline_skill_is_gone():
+    """仓内贡献纪律不是产品 AI skill；.bat HOW 在 run。"""
+    assert build_system_skill_registry().get("work_discipline") is None
     orch = _body("team_orchestration_advanced")
     assert "已确认约束" in orch
     assert "自拟的默认" in orch or "自拟默认" in orch
     assert "扇入" in orch or "整合员" in orch
-    assert "已确认约束" not in body
-    assert "扇入整合" not in body
-    # 小步增量：用户偏好小步时首派更切片，勿一口吞绿场
-    assert "小步" in body or "增量" in body
-    assert "绿场" in body or "切片" in body
-    assert "未定案·窄" in body
-    assert "架构" in body and "不可逆" in body
 
 
 def test_product_help_skill_teaches_short_answers_and_manual_deeplinks():
-    """二级披露：答法在 product_help；入口/深链在 map；FAQ 在 faq。"""
+    """用法 + 入口 + FAQ 同一 body；答法按节取，不拆目录名。"""
     help_body = _body("product_help")
-    map_body = _body("product_help_map")
-    faq_body = _body("product_help_faq")
 
     assert "短答" in help_body
     assert "禁内部名" in help_body
-    # 官网域名只在 skill（核不常驻 URL）
+    # 官网域名只在 skill（核不常驻 URL）；三条各一次
     assert "https://fashitianxia.xyz" in help_body
     assert "https://fashitianxia.xyz/download" in help_body
     assert "https://app.fashitianxia.xyz" in help_body
+    assert help_body.count("https://fashitianxia.xyz/download") == 1
+    assert help_body.count("https://app.fashitianxia.xyz") == 1
     assert "同名他品" not in help_body
     assert "只用下方【官网 / 下载】域名" in help_body or "域名只许用这三条" in help_body
     assert "ask_user" in help_body  # teach: don't say these to users
     assert "功能总览" in help_body and "≤3" in help_body
-    assert "product_help_map" in help_body and "product_help_faq" in help_body
-    assert "【入口地图】" not in help_body
-    assert "【FAQ 精华】" not in help_body
-    # 答法可举例 FAQ 题名作分流；完整短答须只在 faq body
-    assert "一人答更快就直接干" not in help_body
+    assert "product_help_map" not in help_body
+    assert "product_help_faq" not in help_body
+    assert "【入口地图】" in help_body
+    assert "【FAQ】" in help_body
+    assert "一人答更快就直接干" in help_body
     assert "Multi-Agent" in help_body or "工作台" in help_body
     assert "RAG" in help_body  # forbid
     assert "playbook=" not in help_body
     assert "SSE" in help_body  # ban list only
 
-    assert "【入口地图】" in map_body
-    assert "【产品面地图·高频入口】" in map_body
-    assert "唯一对话入口" in map_body
-    assert "怎么用本产品" in map_body
-    assert "模型与偏好等" in map_body
-    assert "产物与「完整预览」" not in map_body
-    assert "HTML「完整预览」（仅桌面）" in map_body or "仅桌面" in map_body
-    assert "完整预览" in map_body
-    assert "关键拍板与正反交锋入口" in map_body
-    assert "#/toolbox/manual/" in map_body
-    assert "手机" in map_body and "勿承诺" in map_body
-    assert "页名也按端写" in map_body
+    assert "【产品面地图·高频入口】" in help_body
+    assert "唯一对话入口" in help_body
+    assert "怎么用本产品" in help_body
+    assert "模型与偏好等" in help_body
+    assert "产物与「完整预览」" not in help_body
+    assert "HTML「完整预览」（仅桌面）" in help_body or "仅桌面" in help_body
+    assert "完整预览" in help_body
+    assert "关键拍板与正反交锋入口" in help_body
+    assert "#/toolbox/manual/" in help_body
+    assert "手机" in help_body and "勿承诺" in help_body
+    assert "页名也按端写" in help_body
     assert "我的 → 服务商" in help_body
-    assert "我的 → 服务商" in faq_body
-    assert "我的 → 模型" in faq_body
-    assert "我的 → 用量" in faq_body
-    assert "窄屏不上工具箱" in map_body
-    assert "?s=workspace" in map_body or "workspace" in map_body
+    assert "我的 → 模型" in help_body
+    assert "我的 → 用量" in help_body
+    assert "窄屏不上工具箱" in help_body
+    assert "?s=workspace" in help_body or "workspace" in help_body
     # .md 阅读预览（文件面板）≠ HTML「完整预览」（右坞）
-    assert "阅读预览" in map_body
-    assert "完整预览" in map_body
-    assert "文件」面板" in map_body or "文件面板" in map_body
+    assert "阅读预览" in help_body
+    assert "文件」面板" in help_body or "文件面板" in help_body
+    assert "不是一路" in help_body
 
-    assert "【FAQ 精华】" in faq_body
-    assert "为什么没组团" in faq_body
-    assert "https://fashitianxia.xyz" in faq_body
-    assert "官网" in faq_body and "下载" in faq_body
-    assert "?s=faq" in faq_body
-    assert "playbook=" not in faq_body
-    assert "怎么打开 .md" in faq_body or ".md" in faq_body and "阅读预览" in faq_body
-    assert "Markdown 是什么" in faq_body or "语法" in faq_body  # 禁科普口径
-    assert "完整预览" in faq_body and "不是一路" in faq_body
-    # 文件夹：入口条在 map、删除语义在 faq；保留期跟随服务端设置，勿手写漂移
-    assert "删除文件夹…" in map_body and "⋯" in map_body
-    assert "删文件夹会怎样？" in faq_body
-    assert "项目" not in map_body and "项目" not in faq_body
-    assert "一并归档" in faq_body and "已归档" in faq_body
-    assert f"约 {settings.workspace_retention_days} 天后由系统自动清理" in faq_body
-    assert "立即永久清除" in faq_body and "不可恢复" in faq_body
+    assert "为什么没组团" in help_body
+    assert "?s=faq" in help_body
+    assert ".md" in help_body and "阅读预览" in help_body
+    assert "Markdown 语法" in help_body or ".md 怎么打开" in help_body
+    # 文件夹：入口条 + 删除语义同一 body；保留期跟随服务端设置，勿手写漂移
+    assert "删除文件夹…" in help_body and "⋯" in help_body
+    assert "删文件夹会怎样？" in help_body
+    assert "一并归档" in help_body and "已归档" in help_body
+    assert f"约 {settings.workspace_retention_days} 天后由系统自动清理" in help_body
+    assert "立即永久清除" in help_body and "不可恢复" in help_body
+    assert "这张桌的 AI 设定退出注入" in help_body
+    assert "这张桌的设定一起带回来" in help_body
     # 本机磁盘不受影响（线上 trace 曾编造「删本地项目会动本机目录」）
-    assert "两种删法都不动你电脑上的文件" in faq_body
-    # 定案 A：Cursor 规则 ↔ AgentCore 用户规则（权威对照须字面在 faq，可独立短答）
-    assert "Cursor `.cursor/rules` / `.mdc` ≠ AgentCore 用户规则" in faq_body
-    assert "AgentCore 用户规则 = `AgentCore/规则/` + `remember`" in faq_body
-    assert "`skills/*.json` = 技能/能力包" in faq_body
-    assert "不是" in faq_body and "平台规则" in faq_body
-    assert "必查 `product_help`" in faq_body
-    assert "未钉死目标载体前禁止默认迁成 skill JSON" in faq_body
-    # 歧义路径压缩：consult 后至多一次窄 list；禁多轮 list/通读 .mdc 再问
-    assert "至多一次窄 list `.cursor/rules`" in faq_body
-    assert "禁多轮 list / 通读 `.mdc` 再问" in faq_body
-    # help 正反例短钩；整本对照勿膨胀进 help
-    assert "Cursor" in help_body and "改成 AgentCore 规则" in help_body
-    assert "skills/*.json" in help_body
+    assert "两种删法都不动你电脑上的文件" in help_body
+    # Cursor 规则对照只写一次
+    assert (
+        help_body.count("Cursor `.cursor/rules` / `.mdc` ≠ AgentCore 用户规则") == 1
+    )
+    assert "AgentCore 用户规则 = `AgentCore/规则/` + `remember`" in help_body
+    assert "`skills/*.json` = 技能/能力包" in help_body
+    assert "不是" in help_body and "平台规则" in help_body
+    assert "未钉死目标载体前禁止默认迁成 skill JSON" in help_body
     assert "至多一次窄 list `.cursor/rules`" in help_body
-    assert "多轮 list / 通读 `.mdc`" in help_body
-    assert "Cursor `.cursor/rules` / `.mdc` ≠ AgentCore 用户规则" not in help_body
-    # summary 只写这是什么。身份问自己答，不在摘要里必查。map/faq 分流在 body。
+    assert "禁多轮 list / 通读 `.mdc` 再问" in help_body
+    assert "改成 AgentCore 规则" in help_body
+    # summary 只写这是什么。身份问自己答，不在摘要里必查。
     help_skill = build_system_skill_registry().get("product_help")
     assert help_skill is not None
     assert "这是什么项目" not in help_skill.summary
     assert "你是什么" not in help_skill.summary
-    assert "官网" in help_skill.summary
+    assert "官网" not in help_skill.summary
+    assert "官网" in help_body
     assert "product_help_map" not in help_skill.summary
     assert "product_help_faq" not in help_skill.summary
-    map_skill = build_system_skill_registry().get("product_help_map")
-    assert map_skill is not None
-    assert "入口" in map_skill.summary
-    assert "这是什么项目" not in map_skill.summary
-    faq_skill = build_system_skill_registry().get("product_help_faq")
-    assert faq_skill is not None
-    assert "FAQ" in faq_skill.summary
-    assert "Cursor" in faq_skill.summary
-    assert "官网" in faq_skill.summary
-    assert "这是什么项目" not in faq_skill.summary
+    assert build_system_skill_registry().get("product_help_map") is None
+    assert build_system_skill_registry().get("product_help_faq") is None
 
-    assert "Markdown 语法" in help_body or ".md 怎么打开" in help_body
     # 与 product_bug_triage 分轨：用法短答不承载诊断仪式
     assert "product_bug_triage" in help_body
-    assert "product_bug_triage" in faq_body
-    assert "【L1" not in help_body and "【L1" not in faq_body
-    assert "【L2" not in help_body and "【L2" not in faq_body
+    assert "【L1" not in help_body
+    assert "【L2" not in help_body
     assert "`product_bug`" not in help_body and "`model_limit`" not in help_body
 
 
@@ -811,9 +792,6 @@ def test_product_help_teaches_identity_first_then_other_topics():
     # 08-15 官网钉：本条不改坏
     assert "https://fashitianxia.xyz" in help_body
     assert "https://fashitianxia.xyz/download" in help_body
-    # map/faq 既有「项目」漂移锁：身份 HOW 只留在 product_help
-    assert "项目" not in _body("product_help_map")
-    assert "项目" not in _body("product_help_faq")
 
 
 def test_product_bug_triage_skill_teaches_l1_l2_and_ceilings():
@@ -826,7 +804,7 @@ def test_product_bug_triage_skill_teaches_l1_l2_and_ceilings():
     assert "本会话" in body or "本会话可见" in body
     assert "ask_user" in body
     assert "服务端日志" in body
-    assert "product_help" in body or "product_help_faq" in body
+    assert "product_help" in body
     assert "设置" in body and "反馈" in body
     assert "L4" in body or "开 PR" in body
     assert "dogfood" in body
@@ -908,6 +886,8 @@ def test_team_cross_folder_skill_teaches_parallel_command():
     assert "云端读不到本地" in body and "禁止" in body
     # 空壳/双文件夹 kickoff：先问、同次两路、≠open/bind/挂载冒充
     assert "空壳" in body or "近空" in body
+    assert "文件：空" in body
+    assert "<工作区文件>" not in body
     assert "file_list" in body
     assert "file_list(pattern)" not in body
     assert "同一次" in body or "同次" in body
@@ -963,6 +943,8 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
     # Relocated from the old always-on hint: quality contract, output shaping,
     # the DAG-vs-nesting distinction (model tiers were removed).
     body = _body("team_orchestration_advanced")
+    assert "timeout_ms" in body
+    assert "墙钟不够" not in body
     assert "deliverable" in body
     assert "coordinate=false" not in body
     assert "轻量直出" not in body
@@ -978,16 +960,15 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
     assert "明示成文" in body
     assert "资料源" in body
     delivery_sum = build_system_skill_registry().get("team_delivery_env").summary
-    assert "Office" in delivery_sum
+    assert delivery_sum == "交付环境"
     assert "depends_on" in body and "同一层" in body
     # 依赖流水线 bullet 须教「派前先判生产者→消费者」+ 正反例（何时串行 / 何时并行），
     # 而非只讲 DAG 机械怎么填——修复 CEO 默认全平铺把有先后的流水线拍平的根因。
     assert "生产者→消费者" in body
     assert "正例·串行" in body and "反例·勿串" in body
-    assert "并行写盘" in body and "同路径" in body
-    assert "私有产出" in body or "私有 path" in body
-    assert "sibling_artifact" in body or "硬拒" in body
-    assert "整合员" in body and "先 file_read" in body
+    assert "并行写盘" not in body
+    assert "sibling_artifact" not in body
+    assert "整合员" in body and "先读上游指针" in body
     assert "再派同名" in body
     assert "嵌套委派" in body and "大模块" in body
     assert "编排自主" in body
@@ -1031,6 +1012,9 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
     assert "有文件系统递路径" in body
     assert "没文件尽量给全文" in body
     assert "过长引擎" in body
+    assert "`desktop_notify`" in body
+    assert "worker 可用 `desktop_notify`" not in body
+    assert "CEO 不可" not in body
     for token in (
         "checkpoint_after",
         "bind_after_deps",
@@ -1125,7 +1109,9 @@ def test_team_delivery_env_skill_teaches_presentation_pptx_honesty():
     assert "无法可靠解析的源数据文件" in body
     assert "表质量基线" in body
     assert "冒充表结构" in body
-    assert "form/artifacts" in body
+    assert "落盘回执" in body
+    assert "交付对账" in body
+    assert "实际写下" in body or "在盘上" in body
     assert "python-pptx" not in orch
 
 
@@ -1142,16 +1128,17 @@ def test_team_delivery_env_skill_teaches_deterministic_word_pdf_export():
     assert "与执行正交" not in orch
 
 
-def test_work_discipline_skill_teaches_windows_bat_crlf_ascii():
-    """案 261bfc46 A：Windows .bat HOW 在 work_discipline；编排 skill 只留派工钩。"""
-    wd = _body("work_discipline")
-    assert ".bat" in wd
-    assert "CRLF" in wd
-    assert "ASCII" in wd
-    assert ".ps1" in wd
-    assert "转码" in wd or "改换行" in wd
+def test_run_skill_teaches_windows_bat_crlf_ascii():
+    """Windows .bat HOW 在 run；编排 skill 只留派工钩。"""
+    run = _body("run")
+    assert ".bat" in run
+    assert "CRLF" in run
+    assert "ASCII" in run
+    assert ".ps1" in run
+    assert "转码" in run or "改换行" in run
     delivery = _body("team_delivery_env")
-    assert "work_discipline" in delivery and ".bat" in delivery
+    assert "consult(run)" in delivery and ".bat" in delivery
+    assert "work_discipline" not in delivery
     assert "双击即用" in delivery
     assert "ASCII-only" not in delivery
     orch = _body("team_orchestration_advanced")
@@ -1181,19 +1168,14 @@ def test_team_delivery_env_skill_teaches_image_gen_key_boundary():
     assert "生图" not in orch
 
 
-def test_building_software_skill_teaches_cloud_install_verify_honesty():
-    """案 cloud-web-install-deny A：云端不能装包时禁「自检全过/跑绿」。"""
+def test_building_software_skill_teaches_cloud_install_boundary():
+    """云端不能装包时：结构自检 ≠ 外环已跑通。验绿对账不进这本 skill。"""
     body = _body("building_software")
     assert "install" in body.lower()
     assert "结构自检" in body or "export_to_local" in body
-    assert "自检全过" in body or "跑绿" in body
-    assert "单测已绿" in body or "跑绿" in body
-    # 案 88625：记分板对账
-    assert "外环验绿对账" in body
-    assert "test_run" in body
-    # 巡检定案 B：末次同命令退出码（skill 与核同轴，不扩姿势 A）
-    assert "最后一次同命令" in body
-    assert "分项分开写" in body
+    assert "外环验绿对账" not in body
+    assert "最后一次同命令" not in body
+    assert "分项分开写" not in body
 
 
 def test_dispatch_writing_how_lives_in_skill_not_core():
@@ -1202,7 +1184,6 @@ def test_dispatch_writing_how_lives_in_skill_not_core():
 
     hint = _CEO_CORE_HINT
     orch = _body("team_orchestration_advanced")
-    discipline = _body("work_discipline")
 
     assert "必读锚点" in orch
     assert "正例·交需求" in orch
@@ -1216,7 +1197,6 @@ def test_dispatch_writing_how_lives_in_skill_not_core():
     assert "团队负责人口吻" in orch
     assert "已确认约束" in orch
     assert "同字面" in orch or "同一套原文" in orch
-    assert "写 task" in discipline or "【写 task】" in discipline
 
     for token in (
         "必读锚点",
@@ -1266,7 +1246,7 @@ def test_delivery_landing_how_lives_in_skills_not_core():
     hint = _CEO_CORE_HINT
     delivery = _body("team_delivery_env")
     orch = _body("team_orchestration_advanced")
-    help_map = _body("product_help_map")
+    help_map = _body("product_help")
 
     for token in (
         "site/",
@@ -1291,6 +1271,7 @@ def test_delivery_landing_how_lives_in_skills_not_core():
     assert "工作区相对完整路径" in delivery
     assert "归位" in delivery and "移到工作区" in delivery
     assert "约定文档出口" in delivery
+    assert "用户工程源码仍写业务路径" in delivery
     assert "裸 `reviews/…`" in delivery
     assert "混用两套前缀" in delivery
     assert "交付下载·面板路径" in delivery
@@ -1331,6 +1312,11 @@ def test_slice_honesty_how_lives_in_skills_not_core():
         "整个里程碑",
         "临时交成果组长",
         "凡大活必嵌套",
+        "开新层",
+        "做一期",
+        "写满步骤",
+        "已切薄",
+        "局部单功能",
         "根委派切片诚实",
         "目标·约束·验收",
     ):
@@ -1349,12 +1335,16 @@ def test_slice_honesty_how_lives_in_skills_not_core():
     assert "凡大活必嵌套" in orch
     assert "嵌套扇出" in orch
     assert "单 lead" in orch or "轻切片" in orch
+    assert "开新层" in orch and "≠ 修码" in orch
+    assert "设计章节" in orch
+    assert "开新层" in build or "第一期" in build
+    assert "≠ 局部单功能" in build
     assert "薄旁路" in build
     assert "薄旁路" not in hint
 
 
 def test_building_software_skill_teaches_admission_and_agent_diversion():
-    """做软件 HOW：手写 tasks；薄旁路 / 验绿；切片 HOW 在编排 skill。"""
+    """做软件 HOW：手写 tasks；薄旁路 / 空桌先装包再按模块写；编制切片在编排 skill。"""
     body = _body("building_software")
     orch = _body("team_orchestration_advanced")
     assert "手写" in body and "tasks" in body
@@ -1368,6 +1358,13 @@ def test_building_software_skill_teaches_admission_and_agent_diversion():
     assert "真两段" not in body
     assert 'playbook="build_app"' not in body
     assert "手写 1 人" in body
+    assert "局部单功能" in body
+    assert "开新层" in body or "第一期" in body
+    assert "≠ 局部单功能" in body
+    assert "尚无工程清单" in body
+    assert "按模块写" in body and "单测" in body
+    assert "另波" in body or "另人" in body
+    assert "内核骨架" in body
     assert "diagnose_fix_verify" not in body
     assert "build_website" not in body
     assert "intensity=solo" not in body
@@ -1382,7 +1379,7 @@ def test_building_software_skill_teaches_admission_and_agent_diversion():
 def test_team_orchestration_skill_teaches_sections_not_deleted_deliverable_keys():
     # 定案：已删 name/must_contain/min_length/requires_files；主题约束进 task /
     # team_brief；审查章节写进 task 正文。
-    # 写盘用 form 三档 + artifacts。已删字段不留负面清单（与 schema 棘轮同向）。
+    # 写盘用 form 三档；artifacts 仍作为 omit-unless 字段出现。已删字段不留负面清单。
     body = _body("team_orchestration_advanced")
     assert "审查章节" in body
     assert "task 正文" in body
@@ -1415,7 +1412,7 @@ def test_team_orchestration_skill_teaches_parallel_review_via_brief():
 
 
 def test_team_orchestration_skill_teaches_review_contract_template():
-    # 审查默认 prose；章节写进 task 正文；结构化 JSON 走文件通道（artifacts）。
+    # 审查默认 prose；章节写进 task 正文；结构化 JSON 走文件通道（文件名写进 task）。
     # 钉：task 写审查章节、web_search 软引导；废字段名缺席。
     body = _body("team_orchestration_advanced")
     assert "审查类任务的统一契约" in body
@@ -1485,9 +1482,13 @@ def test_team_orchestration_skill_teaches_coordination_wall_vs_none():
     assert "intensity=solo" not in body
     assert "单页一人" in body or "一人做完" in body
     assert "营销皮" in body
-    assert "自动静态质检" in body
+    assert "自动静态质检" not in body
     assert "可开 web_quality_scan" not in body
     assert "web_quality_scan" not in body
+    assert "placeholder_scan" not in body
+    assert "consumer_deps" not in body
+    assert "design_impl_same_grant" not in body
+    assert "root_slice_honesty" not in body
     assert "visual_critic" not in body
 
 
@@ -1527,7 +1528,7 @@ def test_debate_skill_teaches_intent_alignment_before_opening():
     assert "ask_user" in body
     assert "入口冲突" in body
     assert "非跳过调研通行证" in body or "不】构成跳过前置调研" in body
-    assert "已有" in body and ("motion_card" in body or "调研产物" in body)
+    assert "已有" in body and "调研产物" in body
     assert "deep_multi_lens_research" in body
     assert "模拟法庭" in body or "庭审" in body
     assert "以开辩为准" in body
@@ -1578,11 +1579,11 @@ def test_revise_skill_teaches_recall_and_delegate_fallback():
     body = _body("revising_a_product")
     assert "continue_from_run_id" in body
     assert "delegate" in body
-    # 调查批确认修 → 默认乙；换 title ≠ 换职能；验码同一人跑 test_run。
+    # 调查批确认修 → 默认乙；换 title ≠ 换职能；验码同一人跑 run。
     assert "默认乙" in body or "确认按结论修" in body
     assert "不算" in body and ("换职能" in body or "title" in body)
     assert "diagnose_fix_verify" not in body
-    assert "同一人" in body and "test_run" in body
+    assert "同一人" in body and "`run`" in body
     # 甲边界：真换职能 / 无现场 / 合并 → 冷委派 + replaces_run_id.
     assert "冷委派" in body and "replaces_run_id" in body
     assert "真换职能" in body or "非仅改 title" in body
@@ -1594,7 +1595,6 @@ def test_revise_skill_teaches_recall_and_delegate_fallback():
     assert "声明超集" not in body
     assert "白名单" not in body
     assert "相关工具" in body
-    assert "test_run" in body
     # 修订落盘纪律：优先 str_replace / file_append；整盖允许但勿惰性省略。
     assert "str_replace" in body and "file_append" in body
     assert "file_write" in body
@@ -1673,9 +1673,13 @@ def test_ask_user_kickoff_skill_teaches_short_clarify():
     assert "展示页" in body or "业务应用" in body
     assert "已钉形态" in body or "形态" in body
     assert "consult(team_orchestration_advanced)" in body
-    assert "自动静态质检" in body
+    assert "自动静态质检" not in body
     assert "可开 web_quality_scan" not in body
     assert "web_quality_scan" not in body
+    assert "placeholder_scan" not in body
+    assert "consumer_deps" not in body
+    assert "design_impl_same_grant" not in body
+    assert "root_slice_honesty" not in body
     assert "visual_critic" not in body
     assert "营销皮" in body
     assert "满编" in body
@@ -1854,21 +1858,33 @@ def test_delegate_checkpoint_skill_teaches_wave_boundary_pause():
         assert token not in body, token
 
 
-def test_verify_and_fix_skill_teaches_test_run_loop():
-    skill = build_system_skill_registry().get("verify_and_fix")
-    # Ungated: consult is CEO+worker; body is the worker loop. Do not gate on
-    # test_run (CEO has none) or delegate (would hide it from workers).
-    assert skill.requires_tools == ()
+def test_run_skill_teaches_command_face():
+    skill = build_system_skill_registry().get("run")
+    assert skill is not None
+    assert skill.requires_tools == ("run",)
+    assert skill.summary == "跑命令 / 启服"
     body = skill.body
-    assert "test_run" in body
-    assert "str_replace" in body
-    assert "escalate" in body
-    # 阶段3：编辑以磁盘为真源；禁骨架 file_write 冒充修复
-    assert "磁盘" in body
-    assert "骨架" in body
-    assert "file_write" in body
-    assert "部分完成" in body
-    assert "degraded" not in body
+    assert ".bat" in body and "CRLF" in body
+    assert "background" in body
+    assert "wait_for" in body
+    assert "command" in body
+    assert "CEO 只启停" not in body
+    assert "验收与短命令由队员" not in body
+    assert "禁止自己跑" not in body
+    assert "- run：" in render_skill_directory(
+        build_system_skill_registry(), _FULL_TOOLS
+    )
+    assert "- run：" not in render_skill_directory(
+        build_system_skill_registry(), _NO_LIVE_USER
+    )
+
+
+def test_verify_and_fix_skill_is_gone():
+    """改码循环不是 skill：不进目录。何时跑测试在 run description。"""
+    assert build_system_skill_registry().get("verify_and_fix") is None
+    assert "verify_and_fix" not in render_skill_directory(
+        build_system_skill_registry(), _FULL_TOOLS
+    )
 
 
 def test_long_form_writing_skill_teaches_skeleton_fill():
@@ -1882,7 +1898,7 @@ def test_long_form_writing_skill_teaches_skeleton_fill():
     assert "Artifact-first" in body or "骨架填空" in body
     assert "file_read 抽查" not in body
     assert "manifest" in body
-    assert "code_execute" in body
+    assert "run" in body
     assert "handoff" in body
     assert "禁止" in body and "file_read" in body
     # 成篇修订例外：≠ 验真空转回读；清参后改稿才可先 file_read，禁短状态重发。
@@ -1963,14 +1979,13 @@ def test_long_form_writing_skill_teaches_skeleton_fill():
     assert "checkpoint_after" not in landing.body
 
 
-def test_long_form_landing_teaches_omission_and_shrink_hard_reject():
-    """反例与缩水硬拒钉 landing；清参步骤已有则勿双写。"""
+def test_long_form_landing_does_not_teach_completeness_hard_reject():
     landing = build_system_skill_registry().get("long_form_landing")
     assert landing is not None
     body = landing.body
-    assert "中间省略" in body
-    assert "50%" in body and "800" in body
-    assert "硬拒" in body
+    assert "中间省略" not in body
+    assert "allow_shrink" not in body
+    assert "硬拒" not in body
     assert "清参后改稿" in body
     assert body.count("清参后改稿") == 1
 
@@ -1979,13 +1994,13 @@ def test_data_file_landing_skill_teaches_script_transform_and_invariants():
     skill = build_system_skill_registry().get("data_file_landing")
     assert skill is not None
     # Ungated: consult is CEO+worker; body is the worker loop. Do not gate on
-    # code_execute (CEO has none → skill would vanish from the supervisor catalog).
+    # run (CEO may lack it this turn → skill would vanish from the supervisor catalog).
     assert skill.requires_tools == ()
     assert skill.audience == ("ceo", "worker")
     body = skill.body
     assert "微信" not in body
     assert "手抄" in body
-    assert "code_execute" in body
+    assert "run" in body
     assert "不变量" in body
     assert "分类笔数" in body or "源记录总数" in body
     assert "口径" in body
@@ -2013,9 +2028,8 @@ def test_data_file_landing_skill_teaches_script_transform_and_invariants():
     assert "pdfplumber" not in body
     assert "汇总页" in body
     assert "form=files" in body
-    # 目录只 WHEN（丢数据文件要可打开表）；表质量基线等 HOW 钉 body
-    assert skill.summary
-    assert "账单" in skill.summary and "报表" in skill.summary
+    # 目录只 WHEN；账单/报表等 HOW 钉 body
+    assert "落盘" in skill.summary
     assert "质量基线" in body
     assert "明细与汇总" in body
     assert "冻结" in body and "筛选" in body
@@ -2059,8 +2073,8 @@ def test_data_file_landing_no_exec_is_complete_delivery():
     assert "待跑变换脚本" in no_exec
     assert "暂时不可用" in no_exec
     assert "稍后再试" in no_exec
-    assert "artifacts" in no_exec
     assert "form=files" in no_exec
+    assert "两份写进 task" in no_exec
     assert "不是缺口" in no_exec or "正常完成" in no_exec
     assert "绑本机" in no_exec
     assert "导入到云" in no_exec
@@ -2117,13 +2131,13 @@ def test_deep_multi_lens_research_teaches_parallel_lenses_and_motion_card():
     assert "品牌危机" in body or "公共事件" in body
     assert "≥2" in body
     assert "凡大事" not in body
-    assert "motion_card" in body
+    assert "motion_card" not in body
     assert "handoff" in body
     # 缺主体：问卡 HOW 在 asking_the_user
     assert "缺主体" in body
     assert "consult(asking_the_user)" in body
     assert "静默自拟" not in body
-    # 幕 1 约定文档落盘：research/ + form=files / artifacts（叠加 handoff，不替代）
+    # 幕 1 约定文档落盘：research/ + form=files（文件名写进 task；artifacts 可填约定路径）
     assert "AgentCore/文档/research/" in body
     assert "透镜报告" in body
     assert "汇总与命题卡" in body
@@ -2131,7 +2145,6 @@ def test_deep_multi_lens_research_teaches_parallel_lenses_and_motion_card():
     assert "artifacts" in body
     assert "叠加" in body or "不得替代" in body
     assert "见分歧" in body
-    assert "不要" in body and "motion_card" in body
     assert "推进卡" in body or "Followups" in body
     assert "直接说开辩" in body or "也可直接开辩" in body
     # CEO 禁止自搜替代四路；探路停手指向编排【工作流】。查询词数契约不在本 skill（基座 + web_search schema）。
@@ -2144,7 +2157,7 @@ def test_deep_multi_lens_research_teaches_parallel_lenses_and_motion_card():
     assert "本回合" in body and "debate" in body
     assert "综述收场" in body or "不催开辩" in body
     assert "勿口头征求" not in body
-    assert "不要" in body and "motion_card" in body
+    assert "motion_card" not in body
     assert "先辩后报" not in body
     assert "跨维度决策简报" not in body
     assert "【幕 2】" not in body and "【幕2】" not in body
@@ -2239,7 +2252,8 @@ def test_research_intent_routes_to_mlr():
     assert "deep_multi_lens_research" not in debate.summary
     assert "deep_multi_lens_research" in debate.body
     assert "平行取证" in deep.summary or "平行取证" in deep.body
-    assert "命题卡" in deep.summary or "motion_card" in deep.body
+    assert "汇总与命题卡" in deep.body
+    assert "motion_card" not in deep.body
     # 模糊意图：保守走 MLR + 提示也可直接开辩
     assert "意图模糊" in debate.summary or "意图模糊" in debate.body
     assert "也可直接开辩" in debate.summary or "也可直接开辩" in debate.body
@@ -2314,7 +2328,9 @@ def test_deep_multi_lens_and_legal_summaries_are_mutually_exclusive():
             assert marker not in ls, (marker, ls)
     assert "接案" in case_skill.summary or "诉讼策略" in case_skill.summary
     assert "答辩状" in brief_skill.summary
+    assert "→ 本条" not in brief_skill.summary
+    assert "→ 本条" not in case_skill.summary
     assert "先对抗后研判" in case_skill.body
-    assert "red_team" in brief_skill.body
+    assert "red_team" not in brief_skill.body
     for marker in ("律师作业", "接案", "诉讼策略", "先对抗后研判"):
         assert marker not in deep.summary, marker

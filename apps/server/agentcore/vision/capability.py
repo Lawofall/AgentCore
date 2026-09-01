@@ -5,9 +5,10 @@ False ⇒ do not put ``read_image`` on the CEO surface. Same reason
 succeed only invites 「换个工具再看一眼图」 rounds that never can work.
 
 True when a :class:`~agentcore.vision.protocol.VisionReader` is wired **or** the
-main chat model is curated-native multimodal. Empty BYOK vision slot stays
-false — this bit must not silently treat platform ``VISION_*`` as the user's
-slot (``build_vision_reader`` already refuses that).
+main chat model accepts images (:func:`~agentcore.llm.image_accept.model_accepts_images`).
+Empty BYOK vision slot does not invent a platform reader
+(``build_vision_reader`` already refuses that); a reader may still be wired from
+an image-accepting main.
 """
 
 from __future__ import annotations

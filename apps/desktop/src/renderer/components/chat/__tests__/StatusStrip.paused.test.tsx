@@ -121,7 +121,7 @@ describe("StatusStrip · paused", () => {
     expect(container.querySelector(".animate-spin")).toBeNull();
   });
 
-  it("captain 已开、工人仍 pending：静态暂停条，不冒「新批次待确认」", () => {
+  it("captain 已开、工人仍 pending：静态暂停条，不转圈", () => {
     const withCaptain: ExecutionPlan = {
       ...plan,
       id: "exec-paused-captain",
@@ -157,23 +157,19 @@ describe("StatusStrip · paused", () => {
     const { container } = renderStrip(exec);
 
     expect(screen.getByTestId("status-strip-paused")).toBeTruthy();
-    expect(screen.queryByTestId("status-strip-pending-batch")).toBeNull();
-    expect(screen.queryByTestId("status-strip-pending-batch-badge")).toBeNull();
     expect(container.querySelector(".animate-spin")).toBeNull();
   });
 
-  it("增量开工卡：paused + 第一批仍 running → 运行条 +「新批次待确认」徽标", () => {
+  it("paused + 工人仍 running：保持运行条（转圈 + n/m），无解说标题", () => {
     const exec = projectExecution(plan, firstBatchStillRunning, "paused");
     expect(exec.runs.some((r) => r.status === "running")).toBe(true);
 
     const { container } = renderStrip(exec);
 
     expect(screen.queryByTestId("status-strip-paused")).toBeNull();
-    expect(screen.getByTestId("status-strip-pending-batch")).toBeTruthy();
-    expect(
-      screen.getByTestId("status-strip-pending-batch-badge").textContent,
-    ).toBe("新批次待确认");
+    expect(screen.getByLabelText("进行中")).toBeTruthy();
     expect(screen.queryByText("并行调研")).toBeNull();
+    expect(screen.queryByText(/等待你确认/)).toBeNull();
     expect(screen.getByText("0/2")).toBeTruthy();
     expect(container.querySelector(".animate-spin")).toBeTruthy();
   });

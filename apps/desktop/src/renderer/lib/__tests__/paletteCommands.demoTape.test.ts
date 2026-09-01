@@ -53,7 +53,6 @@ vi.mock("@/stores/conversation", () => ({
 const baseCtx = {
   navigate: vi.fn(),
   theme: "system" as const,
-  diagnosticMode: false,
   sidebarCollapsed: false,
   openBookmarksInPalette: vi.fn(),
 };
@@ -71,6 +70,7 @@ describe("paletteCommands narrow restriction", () => {
     expect(cmds.some((c) => c.id === "theme-dark")).toBe(false);
     expect(cmds.some((c) => c.id === "nav-files")).toBe(true);
     expect(cmds.some((c) => c.id === "nav-settings")).toBe(true);
+    expect(cmds.some((c) => c.id === "toggle-diagnostic-mode")).toBe(false);
   });
 });
 
@@ -78,6 +78,7 @@ describe("paletteCommands demo tape gate", () => {
   it("hides demo-tape commands when catalog is empty", () => {
     const cmds = buildPaletteCommands(baseCtx);
     expect(cmds.some((c) => c.id.startsWith("demo-tape-"))).toBe(false);
+    expect(cmds.some((c) => c.id === "toggle-diagnostic-mode")).toBe(false);
   });
 
   it("injects prepare + autostart commands when server catalog is present", () => {

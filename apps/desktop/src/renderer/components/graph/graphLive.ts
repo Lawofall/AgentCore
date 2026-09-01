@@ -26,6 +26,7 @@ import {
 } from "@/lib/format";
 import { detectReviewConcern, isReviewLikeWorker } from "@/lib/reviewConcern";
 import { isGraphPerfEnabled, markGraphPerf } from "@/services/graphPerf";
+import { useActiveMessageContent } from "@/stores/conversation";
 import {
   type AgentState,
   type Execution,
@@ -84,11 +85,6 @@ export const GraphInjectPaintContext = createContext<GraphInjectPaint>(null);
 export function useGraphInjectPaint(): GraphInjectPaint {
   return useContext(GraphInjectPaintContext);
 }
-
-/** Final-answer text for captain preview (drill-in); not on Document shells. */
-export const GraphCaptainAnswerContext = createContext<{
-  content: string;
-} | null>(null);
 
 /** Scene topology for Live face derivation (same lifetime as Document). */
 export const GraphSceneContext = createContext<GraphScene | null>(null);
@@ -611,7 +607,8 @@ export function useInputEndpointLive(labelFromShell: string): EndpointLive {
 
 export function useCaptainEndpointLive(runId: string): EndpointLive {
   const actions = useGraphActions();
-  const answer = useContext(GraphCaptainAnswerContext);
+  const messageId = useExecutionScope();
+  const answerContent = useActiveMessageContent(messageId);
   const liveSig = useActiveExecField((rt) => {
     const exec = projectRuntime(rt);
     const detached = rt.executionDetached != null;
@@ -653,7 +650,7 @@ export function useCaptainEndpointLive(runId: string): EndpointLive {
       waitCaption && !detached ? "running" : captainStatus;
     const preview = captainSinkPreview({
       captainStatus,
-      answerPreview: answer?.content ? headText(answer.content) : "",
+      answerPreview: answerContent ? headText(answerContent) : "",
       synthesisPreview: captainSynthesisPreviewText(teamSynthesisPreview),
       waitCaption,
     });
@@ -673,7 +670,7 @@ export function useCaptainEndpointLive(runId: string): EndpointLive {
     liveSig,
     runId,
     actions,
-    answer,
+    answerContent,
     wait,
     detached,
     teamSynthesisPreview,

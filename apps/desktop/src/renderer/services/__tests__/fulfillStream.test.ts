@@ -9,12 +9,14 @@ const {
   notifyUnauthorizedMock,
   isWebRuntimeMock,
   isWebPreviewMock,
+  failInflightMock,
 } = vi.hoisted(() => ({
   getDeviceIdMock: vi.fn(async () => "device-test-1"),
   tryRefreshMock: vi.fn(async (): Promise<AuthRefreshResult> => "renewed"),
   notifyUnauthorizedMock: vi.fn(),
   isWebRuntimeMock: vi.fn(() => false),
   isWebPreviewMock: vi.fn(() => false),
+  failInflightMock: vi.fn(),
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -40,6 +42,11 @@ vi.mock("@/services/api", () => ({
   captureCsrf: () => undefined,
   tryRefresh: () => tryRefreshMock(),
   notifyUnauthorized: () => notifyUnauthorizedMock(),
+}));
+
+vi.mock("@/services/clientToolFulfill", () => ({
+  failInflightClientToolsForReconnect: (...args: unknown[]) =>
+    failInflightMock(...args),
 }));
 
 import {
@@ -91,6 +98,7 @@ describe("fulfillStream", () => {
     notifyUnauthorizedMock.mockReset();
     isWebRuntimeMock.mockReset().mockReturnValue(false);
     isWebPreviewMock.mockReset().mockReturnValue(false);
+    failInflightMock.mockReset();
     listRoots.mockReset().mockResolvedValue([{ id: "root-a", name: "proj" }]);
     (window as unknown as { fsApi: { listRoots: typeof listRoots } }).fsApi = {
       listRoots,
@@ -234,6 +242,7 @@ describe("fulfillStream", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(failInflightMock).toHaveBeenCalledWith("cloud");
 
     await vi.advanceTimersByTimeAsync(999);
     expect(fetchMock).toHaveBeenCalledTimes(1);

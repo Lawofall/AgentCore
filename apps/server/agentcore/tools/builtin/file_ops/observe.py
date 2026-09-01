@@ -32,7 +32,7 @@ def format_observe_envelope(
 
 def ole_next() -> str:
     return (
-        "按文件名归类或跳过正文。不要用 code_execute 解 OLE，不要原样重试 file_read。"
+        "按文件名归类或跳过正文。不要原样重试 file_read。"
     )
 
 
@@ -46,7 +46,6 @@ def scan_next() -> str:
 def extract_failed_next() -> str:
     return (
         "可改 read_image 看首页，或按文件名归类继续整理。"
-        "不要用 code_execute 硬解 Office/PDF。"
     )
 
 
@@ -66,14 +65,14 @@ def source_too_large_next() -> str:
 
 def binary_next() -> str:
     return (
-        "按文件名归类或跳过正文。不要用 code_execute dump 二进制，不要原样重试 file_read。"
+        "按文件名归类或跳过正文。不要原样重试 file_read。"
     )
 
 
 def table_next(*, code_execute_assembled: bool) -> str:
     if code_execute_assembled:
         return (
-            "file_read 不抽表格全文；用 code_execute（如 openpyxl / pandas）"
+            "file_read 不抽表格全文；用 run（如 openpyxl / pandas）"
             "按工作区相对路径解析。不要手抄单元格。"
         )
     return (

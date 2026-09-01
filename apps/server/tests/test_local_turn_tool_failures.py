@@ -79,13 +79,28 @@ _TRACE = "0123456789abcdef0123456789abcdef"
             None,
             "project_verify_redirect",
         ),
+        (
+            "跑项目级慢验证请用 run（检测到：pytest）。本路径约 60s 硬顶",
+            None,
+            "project_verify_redirect",
+        ),
         ("anything", "project_verify_redirect", "project_verify_redirect"),
         (
             "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。",
             None,
             "source_grep_redirect",
         ),
+        (
+            "打开源码再正则扫描请用 grep（检测到：re.findall(）。",
+            None,
+            "source_grep_redirect",
+        ),
         ("anything", "source_grep_redirect", "source_grep_redirect"),
+        (
+            "请用 run 启动长驻进程（检测到：npm run dev）。",
+            None,
+            "long_running_redirect",
+        ),
         ("缺少参数", "schema", "schema"),
         ("这份文件太大", "too_large", "too_large"),
         ("[WinError 5] 拒绝访问", "other", "access_denied"),

@@ -4,7 +4,7 @@
 1. 例行成功完成不叫醒；失败立刻叫醒并收口级联 skip；终局 / 升级不拖延。
 2. 空转唤醒降频：idle 巡查按 ``2**idle_streak`` 退避；忙等（有 in-flight）不叫醒 CEO；
    无人 in-flight 的卡死仍发 patrol nudge；真实事件重置。
-3. synthesis 里程碑化：工具描述 / 注入文案强调里程碑，例行完成不写。
+3. synthesis 里程碑化：工具描述强调里程碑，例行完成不写；注入不再复述 HOW。
 5. suspect_missing_dep 搭车既有注入通道呈现给 CEO（不新增独立唤醒）。
 """
 
@@ -368,15 +368,17 @@ def test_update_synthesis_tool_is_milestone_only():
     assert "禁止纯进度播报" in draft_desc
 
 
-def test_inject_footer_teaches_milestone_synthesis():
+def test_inject_footer_does_not_repeat_tool_how():
+    """Mid-run inject: facts + 协调期一句. HOW stays on wait / update_synthesis."""
     session = CoordinationSession(execution_id="e", total_workers=3)
     text = format_coordination_events(session, [_wc("w1")])
-    assert "只在【里程碑】写合成草稿" in text
-    assert "例行的单个 worker 完成【不写】" in text
+    assert "【协调期】" in text
     assert "可静默" in text
-    assert "三选一" in text
-    assert "纯进度播报" in text
-    assert "进度旁白不得焊进终稿" in text or "焊进终稿" in text
+    assert "worker_completed" in text
+    assert "只在【里程碑】写合成草稿" not in text
+    assert "可用工具：wait" not in text
+    assert "三选一" not in text
+    assert "【终稿纪律】" not in text
     assert "谁在后台、完成后会再汇报" not in text
 
 

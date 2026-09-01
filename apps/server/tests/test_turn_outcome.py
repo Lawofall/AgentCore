@@ -265,3 +265,34 @@ def test_resolve_from_live_sse_objects():
     sink.emit(run_failed("r1", "w1", "429", product_landed=True))
     sink.emit(message_end(FinishReason.DEGRADED, outcome="partial"))
     assert resolve_turn_outcome(events=sink.history_snapshot()) == "partial"
+
+
+def test_salvage_stamps_partial_when_ledger_verdict_partial():
+    """end_turn with no SSE partial bits still follows delivery_verdict.partial."""
+    from agentcore.runtime.delegate.delivery_status import (
+        DeliveryVerdict,
+        bind_delivery_verdict,
+        current_delivery_verdict,
+    )
+    from agentcore.runtime.pipeline.settle import _salvage_reply_and_outcome
+
+    token = current_delivery_verdict.set(None)
+    try:
+        bind_delivery_verdict(
+            DeliveryVerdict(
+                state="partial",
+                delivered_files=("a.ts",),
+                execution_id="e1",
+                gap_reasons=("token_budget", "verify_failed"),
+            )
+        )
+        sink = EventSink()
+        content, outcome = _salvage_reply_and_outcome(
+            sink=sink,
+            content="做到一半",
+            finish=FinishReason.END_TURN,
+        )
+        assert content == "做到一半"
+        assert outcome == "partial"
+    finally:
+        current_delivery_verdict.reset(token)

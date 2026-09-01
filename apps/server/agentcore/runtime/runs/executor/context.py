@@ -25,7 +25,6 @@ from agentcore.runtime.runs.types import (
     RunSpec,
     RunState,
 )
-from agentcore.workspace.channel import index_io_mode
 from agentcore.workspace.stage_dirs import DRAFTS_DIR
 
 logger = get_logger(__name__)
@@ -37,6 +36,7 @@ def _observe_worker_opening(
     identity: str,
     role: str | None,
     supplement: str | None,
+    working_set: str | None = None,
 ) -> None:
     """COST-004: log worker opening system sections (observe-only; join stays ``\\n\\n``)."""
     from agentcore.config import settings
@@ -49,6 +49,7 @@ def _observe_worker_opening(
         .add("identity", identity, SectionOrder.WORKER_IDENTITY)
         .add("role", role_text, SectionOrder.WORKER_ROLE)
         .add("supplement", supplement, SectionOrder.WORKER_SUPPLEMENT)
+        .add("working_set", working_set, SectionOrder.WORKING_SET)
         .observe(scope="worker_turn", soft_cap=settings.prompt_budget_char_soft_cap)
     )
 
@@ -130,6 +131,7 @@ def _build_messages(
     team_brief: str | None = None,
     context_inject: Mapping[str, str] | None = None,
     conversation_id: str = "",
+    working_set: str = "",
 ) -> list[LLMMessage]:
     """Assemble the worker's OPENING (system, user) messages from its inline role,
     the original request, its upstream dependency products, and its task.
@@ -159,12 +161,15 @@ def _build_messages(
         sys_parts.append(f"你的角色：{spec.role}")
     if spec.system_prompt_supplement:
         sys_parts.append(spec.system_prompt_supplement)
+    if working_set:
+        sys_parts.append(working_set)
     system_content = "\n\n".join(p for p in sys_parts if p)
     _observe_worker_opening(
         worker_base=system_prompt,
         identity=identity,
         role=spec.role,
         supplement=spec.system_prompt_supplement,
+        working_set=working_set,
     )
 
     blocks = _build_context_blocks(
@@ -236,37 +241,7 @@ def _build_context_blocks(
             )
         )
     blocks.append(ContextBlock(channel="task", heading="你的任务", body=spec.task))
-    from agentcore.runtime.runs.worker_budget import (
-        DIRECTED_SEARCH_DISCIPLINE,
-        VERIFY_INNER_DISCIPLINE,
-        VERIFY_POLICY_INNER,
-        is_directed_search_role,
-    )
-
-    if is_directed_search_role(spec.role):
-        blocks.append(
-            ContextBlock(
-                channel="task",
-                heading="检索纪律",
-                body=DIRECTED_SEARCH_DISCIPLINE,
-            )
-        )
-    if (spec.verify_policy or "").strip().lower() == VERIFY_POLICY_INNER:
-        blocks.append(
-            ContextBlock(
-                channel="task",
-                heading="验证范围",
-                body=VERIFY_INNER_DISCIPLINE,
-            )
-        )
     deliverable_text = describe_deliverable(deliverable or spec.deliverable)
-    from agentcore.runtime.runs.retrieval_budget import format_retrieval_budget_line
-
-    budget_line = format_retrieval_budget_line(spec.retrieval_budget)
-    if budget_line:
-        deliverable_text = (
-            f"{deliverable_text}\n{budget_line}" if deliverable_text else budget_line
-        )
     if deliverable_text:
         blocks.append(
             ContextBlock(channel="deliverable", heading="交付物规格", body=deliverable_text)
@@ -697,10 +672,6 @@ async def _safe_index_files(backend: object) -> list[str]:
     mode, an I/O hiccup) degrades the manifest to teammate products instead of failing
     the run — workspace awareness is an enhancement, never a hard dependency. Returns
     the paths (dropping the truncation flag — the manifest caps independently).
-
-    Runs under ``index_io_mode`` (same as IndexMaintainer) so ambient listing hangs
-    do not sticky-dead the shared Local file channel; real user-tool ``index_files``
-    outside this wrapper still counts toward sticky.
     """
     index = getattr(backend, "index_files", None)
     if index is None:
@@ -709,8 +680,7 @@ async def _safe_index_files(backend: object) -> list[str]:
         # newest-first: in a big workspace the manifest's budget should spend on the
         # most-recently-touched files (uploads / latest outputs), not whatever sorts
         # alphabetically first.
-        with index_io_mode():
-            paths, _truncated = await index(order="recent")
+        paths, _truncated = await index(order="recent")
         return list(paths)
     except Exception as e:  # noqa: BLE001 — manifest is best-effort, never fail a run
         logger.debug("workspace.index_failed", error=str(e))

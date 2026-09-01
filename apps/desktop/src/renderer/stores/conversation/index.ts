@@ -19,7 +19,15 @@ export {
   type MessageWindowWriteRejectReason,
 } from "./messageWindowWrite";
 export {
+  NO_ACTIVE_MESSAGES,
   useActiveMessages,
+  useActiveHasMessages,
+  useActiveFirstMessageId,
+  useActiveStickContentKey,
+  useActiveUserTurnCount,
+  useActiveLastAssistantProjectionId,
+  usePrecedingUserMessageId,
+  useActiveMessageHasVisibleText,
   useActiveMessageContent,
   useActiveMessageProcess,
   useActiveMemoryUpdates,

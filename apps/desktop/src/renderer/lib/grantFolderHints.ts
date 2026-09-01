@@ -168,9 +168,8 @@ export function previewOrganizeTargetLabel(input: {
 }
 
 /**
- * Detail under `grant_organize_folder` option: always show「将整理：…」before allow.
- * Ordinary options return undefined — generic asks are one line; do not pass
- * model `detail` through (that subtitle is dedicated-card only).
+ * Detail under grant_* options: 「将整理：{名}」/「允许改：{名}」when the
+ * target is known. Hollow「加入本对话」omitted — generic asks stay one line.
  */
 export function organizeConfirmDetail(opt: {
   action?: string;
@@ -186,9 +185,19 @@ export function organizeConfirmDetail(opt: {
     return undefined;
   const label = previewOrganizeTargetLabel(opt);
   if (opt.action === "grant_attach_folder") {
-    return label
-      ? `将可读写加入：${label}`
-      : "将本机目录加入本对话（可改可覆盖）";
+    return label ? `允许改：${label}` : undefined;
   }
-  return label ? `将整理：${label}` : "将整理本机目录";
+  return label ? `将整理：${label}` : undefined;
+}
+
+/** True when every listed option is a grant_*（整题授权；有跳过/范围项则否）. */
+export function optionsAreGrantOnly(
+  options: { action?: string }[] | undefined,
+): boolean {
+  if (!options?.length) return false;
+  return options.every(
+    (o) =>
+      o.action === "grant_organize_folder" ||
+      o.action === "grant_attach_folder",
+  );
 }

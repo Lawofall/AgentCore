@@ -179,7 +179,8 @@ def test_single_agent_tool_channel_redirect(projected):
     assert steer["tool_name"] == "code_execute"
     assert steer["status"] == "redirect"
     assert steer["failure"]["code"] == "source_grep_redirect"
-    assert "禁止用" in (steer["result"] or "")
+    assert "请用 grep" in (steer["result"] or "")
+    assert "code_execute" not in (steer["result"] or "")
     grep = p["process"][2]
     assert grep["tool_name"] == "grep"
     assert grep["status"] == "success"

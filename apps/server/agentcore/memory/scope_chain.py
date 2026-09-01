@@ -51,22 +51,41 @@ def snapshot_scope_chain(
 
     「不含当前层」意味着这份快照不是给这个文件夹 warm 的（或云端太旧还不会算链），
     此时按它的祖先注入会把别的文件夹的约定塞进来，比不继承更糟。
+
+    ``rules_payload.folder_chain: []`` 与 :func:`cloud_scope_chain` 同义：桌不在活树，
+    不要退回只当前层。载荷没有该键时仍看 ``snapshot.folder_chain``（旧快照 / 单测）。
     """
     if not folder_id:
         return ()
-    chain = tuple(snapshot.folder_chain) if snapshot is not None else ()
+    if snapshot is None:
+        return own_scope_chain(folder_id)
+    payload = snapshot.rules_payload
+    raw = payload.get("folder_chain") if payload else None
+    if isinstance(raw, list):
+        # Explicit [] = desk gone (soft-delete). Missing key still falls back
+        # through snapshot.folder_chain / current-only below.
+        return cloud_scope_chain(payload, folder_id)
+    chain = tuple(snapshot.folder_chain)
     return chain if folder_id in chain else own_scope_chain(folder_id)
 
 
 def cloud_scope_chain(
     payload: Mapping[str, object], folder_id: str | None
 ) -> tuple[str, ...]:
-    """``/rules/list`` 载荷里的 ``folder_chain``（旧云没有该键 → 只当前层）。"""
+    """``/rules/list`` 载荷里的 ``folder_chain``。
+
+    旧云没有该键 / 垃圾值 → 只当前层。显式 ``[]`` = 这张桌不在活树里（软删），
+    不要退回「只注当前层」——那会把已删桌的设定继续灌进去。
+    """
     if not folder_id:
         return ()
     raw = payload.get("folder_chain")
-    chain = tuple(str(fid) for fid in raw if str(fid)) if isinstance(raw, list) else ()
-    return chain if folder_id in chain else own_scope_chain(folder_id)
+    if isinstance(raw, list):
+        chain = tuple(str(fid) for fid in raw if str(fid))
+        if not chain:
+            return ()
+        return chain if folder_id in chain else own_scope_chain(folder_id)
+    return own_scope_chain(folder_id)
 
 
 async def db_scope_chain(
@@ -75,7 +94,10 @@ async def db_scope_chain(
     *,
     session: AsyncSession | None = None,
 ) -> tuple[str, ...]:
-    """读本机 ``folders.rel_path`` 解析链；查不到 / 出错 → 只当前层。
+    """读本机 ``folders.rel_path`` 解析链。
+
+    文件夹不存在或已软删 → 空链（这张桌的设定退出注入，全局层仍由调用方另载）。
+    查链出错 → 只当前层，以免一次 DB 抖动把继承整段摘掉。
 
     请求路径上传自己的 ``session``：另开一个会读到另一个连接（集成测试里甚至是另一个
     schema），链解析不出来就退回不继承，症状是「外层规则时灵时不灵」。
@@ -103,6 +125,8 @@ async def db_scope_chain(
             error=str(e),
         )
         return own_scope_chain(folder_id)
+    if not ids:
+        return ()
     return tuple(ids) if folder_id in ids else own_scope_chain(folder_id)
 
 

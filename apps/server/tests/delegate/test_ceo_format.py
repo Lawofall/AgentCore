@@ -366,7 +366,7 @@ def test_format_for_ceo_no_next_steps_section_when_none():
 
 
 def test_format_for_ceo_includes_final_synthesis_discipline():
-    # 终稿纪律（瘦 footer）：交付物在前、过程简述从简、名册铁律、PPT 诚实一句。
+    # 终稿纪律（瘦 footer）：交付物在前、过程简述从简、名册铁律。
     t = tool(Provider([]))
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="做课件", role="课件工程师")])
     results = {"w1": RunState(phase=RunPhase.COMPLETED, content="脚本已写好")}
@@ -378,7 +378,7 @@ def test_format_for_ceo_includes_final_synthesis_discipline():
     assert "队员终态名册" in out
     assert "禁止整段粘进终稿" in out
     assert "禁止编造" in out and "全部交付" in out
-    assert "PPT 已落盘" in out and ".pptx" in out
+    assert "禁止写「PPT 已落盘」" not in out
     # 无命题卡时不塞开辩死文案
     assert "建议开辩" not in out.split("以上为团队产出", 1)[-1]
 
@@ -562,8 +562,6 @@ def test_build_ceo_synthesis_same_conclusion_logs_once():
 
 def test_format_for_ceo_caps_short_raw_expansion_ratio():
     """Short pointer-like raw must not expand into ~6k packaging (ratio~12)."""
-    from agentcore.runtime.runs.constants import CEO_SYNTHESIS_MAX_CHARS
-
     t = tool(Provider([]))
     # Many file producers with tiny orientation notes — the old path bloated via
     # per-worker digests + footer even when raw_chars was tiny.
@@ -584,11 +582,10 @@ def test_format_for_ceo_caps_short_raw_expansion_ratio():
     metric = next(e for e in logs if e["event"] == "delegate.synthesis")
     raw = metric["raw_chars"]
     assert raw < 200
-    assert len(out) <= CEO_SYNTHESIS_MAX_CHARS
-    assert metric["final_chars"] <= CEO_SYNTHESIS_MAX_CHARS
     # Prefer-brief keeps natural size well under the old ~6k regime (log ratio~12).
     assert metric["final_chars"] < 3500
-    assert metric["ratio_capped"] is False  # natural size under cap
+    assert metric["capped"] is False
+    assert metric["ratio_capped"] is False
     assert "交接结论" in out and "要点：" in out
     assert "队员终态名册" in out or "写手0" in out
     assert "文件产出" in out or "out/0.md" in out

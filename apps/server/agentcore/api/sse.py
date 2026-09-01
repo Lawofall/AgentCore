@@ -563,6 +563,7 @@ async def _queued_turn_generator(
     queue_depth: int,
     started: asyncio.Future[EventSink],
     degraded_from: str | None = None,
+    user_message_id: str | None = None,
 ) -> AsyncIterator[str]:
     """Emit ``turn_queued``, wait for drain, then consume the live turn sink (发送即有流).
 
@@ -577,7 +578,7 @@ async def _queued_turn_generator(
     - **streaming** → ``_event_generator``'s own except detaches (same as primary
       send); our except re-detaches, which is an idempotent no-op.
     """
-    from agentcore.runtime.events import turn_queued
+    from agentcore.runtime.events import turn_queued, turn_saved
 
     sink: EventSink | None = None
     try:
@@ -590,6 +591,8 @@ async def _queued_turn_generator(
                 degraded_from=degraded_from,
             )
         )
+        if user_message_id:
+            yield _format_sse(turn_saved(user_message_id=user_message_id))
         sink = await started
         # Primary consumer of the drained turn (mirror send_message's detach policy).
         async for frame in _event_generator(sink, None, detach_on_disconnect=True):
@@ -616,6 +619,7 @@ def sse_queued_response(
     queue_depth: int,
     started: asyncio.Future[EventSink],
     degraded_from: str | None = None,
+    user_message_id: str | None = None,
 ) -> StreamingResponse:
     """SSE for an enqueued POST: ``turn_queued`` then same-connection turn stream."""
     return StreamingResponse(
@@ -626,6 +630,7 @@ def sse_queued_response(
             queue_depth=queue_depth,
             started=started,
             degraded_from=degraded_from,
+            user_message_id=user_message_id,
         ),
         media_type="text/event-stream",
         headers=_sse_headers(),

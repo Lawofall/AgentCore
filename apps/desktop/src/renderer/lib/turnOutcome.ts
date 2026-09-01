@@ -328,7 +328,14 @@ function deriveKind(
   // Attested paused can linger on the same bubble after ask→resume→Stop.
   // User-stop is not a hang — do not keep kind=paused (that path paints the
   // cancel face as a bubble warning under the team graph).
-  if (attested && !(attested === "paused" && userStopped)) return attested;
+  if (attested && !(attested === "paused" && userStopped)) {
+    // end_turn stamps ok even when delivery is partial (team graph completed).
+    // Delivery/cutoff partial must still paint「部分完成」— attested error/paused stay.
+    if (attested === "ok" && isPartial(input) && !userStopped) {
+      return "partial";
+    }
+    return attested;
+  }
 
   const structuredFailure =
     face != null &&
@@ -338,11 +345,8 @@ function deriveKind(
   // User-stop face wins over leftover delivery.partial / productLanded.
   // Rate-limit (or any non-cancel face) on a cancelled *status* still follows
   // the winning face — do not let execution.status paint「已停止」over kind.
-  if (
-    isPartial(input) &&
-    input.executionStatus !== "completed" &&
-    !isCancelCode(face?.code)
-  ) {
+  // Team graph `completed` must not hide delivery.partial (quota / tests still red).
+  if (isPartial(input) && !isCancelCode(face?.code)) {
     return "partial";
   }
 

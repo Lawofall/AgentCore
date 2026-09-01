@@ -11,7 +11,7 @@ from typing import Any
 
 from agentcore.config import settings
 from agentcore.llm.provider.protocol import LLMMessage
-from agentcore.runtime.runs.constants import HANDOFF_TOOL_NAME, MAX_RUN_TOTAL_ROUNDS
+from agentcore.runtime.runs.constants import HANDOFF_TOOL_NAME
 from agentcore.runtime.runs.contract import (
     ContractVerdict,
     is_format_repairable,
@@ -19,7 +19,6 @@ from agentcore.runtime.runs.contract import (
 )
 from agentcore.runtime.runs.executor.shared import _registry_without
 from agentcore.runtime.runs.retrieval_budget import RETRIEVAL_TOOL_NAMES
-from agentcore.runtime.runs.worker_budget import DIRECTED_SEARCH_TOOL_NAMES
 
 # Light-repair allow-list: format backfill / handoff enrichment only — no re-investigation.
 _LIGHT_REPAIR_TOOL_NAMES: frozenset[str] = frozenset(
@@ -40,25 +39,20 @@ _LIGHT_REPAIR_MAX_ROUNDS = 4
 ROUND_BUDGET_AWARENESS_PREFIX = "[系统提示] 轮次余额"
 
 
-def _pass_max_rounds(*, light_pass: bool, profile_max: int, spent: int = 0) -> int:
-    """ReAct cap for this produce pass, clipped by the cross-attempt total.
+def _pass_max_rounds(*, light_pass: bool, profile_max: int, spent: int = 0) -> int | None:
+    """ReAct cap for this produce pass.
 
-    ``light_repair`` / ``write_pass`` / cite-upgrade short passes still get a
-    dedicated :data:`_LIGHT_REPAIR_MAX_ROUNDS` — not leftover from the main
-    pool — so a format fix after a full main pass still sees 4 when the
-    total cap has room. ``spent`` is cumulative produce rounds already
-    finished on this run (main + prior retries / short passes). The total
-    :data:`MAX_RUN_TOTAL_ROUNDS` stops contract.retry from opening another
-    full investigation. Round-ceiling hits skip that full retry entirely.
-    ``0`` means no rounds remain under the total; callers must skip the
-    pass rather than start a ``max_rounds=0`` loop.
+    ``None`` = no product round fuse (loop until other exits). Light repair /
+    write_pass still get a dedicated :data:`_LIGHT_REPAIR_MAX_ROUNDS` segment.
+    ``spent`` is unused after the cross-attempt 104 cap retired (kept so call
+    sites stay stable).
     """
-    remaining = max(0, MAX_RUN_TOTAL_ROUNDS - max(0, int(spent)))
-    if remaining <= 0:
-        return 0
+    del spent
     if light_pass:
-        return min(_LIGHT_REPAIR_MAX_ROUNDS, remaining)
-    return min(max(0, int(profile_max)), remaining)
+        return _LIGHT_REPAIR_MAX_ROUNDS
+    if profile_max <= 0:
+        return None
+    return max(0, int(profile_max))
 
 
 def format_round_budget_awareness(*, limit: int) -> str:
@@ -131,15 +125,15 @@ def stamp_coord_round_budget(
     the worker window.
     """
     rid = (run_id or "").strip()
-    if not rid or limit <= 0:
+    if not rid:
         return
     from agentcore.runtime.coordination.session import note_coord_worker_busy
 
     note_coord_worker_busy(
         rid,
         kind,
-        rounds_used=max(0, int(used)),
-        rounds_limit=int(limit),
+        rounds_used=max(0, int(used)) if limit > 0 else None,
+        rounds_limit=int(limit) if limit > 0 else None,
         tokens_spent=None if tokens_spent is None else max(0, int(tokens_spent)),
     )
 
@@ -272,8 +266,7 @@ def _narrow_for_light_repair(
     withhold = tuple(
         sorted(
             RETRIEVAL_TOOL_NAMES
-            | DIRECTED_SEARCH_TOOL_NAMES
-            | frozenset({"file_list", "code_execute", "test_run", "terminal"})
+            | frozenset({"grep", "code_search", "file_list", "run"})
         )
     )
     narrowed_registry = _registry_without(worker_tools, *withhold)

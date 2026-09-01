@@ -10,8 +10,7 @@ export interface QueuedTurnEntry {
   queueId: string;
   conversationId: string;
   /**
-   * 主时间线用户气泡 id（可选：排队期无泡；``turn_queue_started`` 出队插泡后可填）。
-   * 取消只清条；有 messageId 时顺带删泡（防御竞态）。
+   * 主时间线用户气泡 id（发送 ack 即入场并填写；取消顺带删泡）。
    */
   messageId?: string;
   content: string;

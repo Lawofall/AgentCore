@@ -26,7 +26,7 @@ import type {
   TurnEvidenceLedgerEntry,
 } from "@/types/events";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { Fragment } from "react";
+import { Fragment, memo } from "react";
 import { ThinkingDots, ThinkingHeader } from "./Thinking";
 
 /** Thought 折叠覆盖面：推理/工具 + 弱式决策痕迹（批准/委派授权/推进卡）。
@@ -68,7 +68,7 @@ function formatProcessSummary(
   return parts.join(" · ");
 }
 
-function InlineReasoning({
+const InlineReasoning = memo(function InlineReasoning({
   text,
   streaming,
   persistKey,
@@ -101,9 +101,9 @@ function InlineReasoning({
       )}
     </div>
   );
-}
+});
 
-function ProcessRow({
+const ProcessRow = memo(function ProcessRow({
   step,
   streaming,
   citations,
@@ -162,7 +162,7 @@ function ProcessRow({
       <ToolLine step={step} turnKey={turnKey} conversationId={conversationId} />
     );
   return null;
-}
+});
 
 /**
  * In-stream fallback: generic Thinking… when the tail has no live node.

@@ -69,7 +69,7 @@ class RunDebrief(WirePayload):
     key_points: list[str] | None = None
     assumptions: str | None = None
     next_steps: str | None = None
-    # Optional 命题卡 harvested from handoff; omitted when the worker submitted none.
+    # Leftover on historical debrief JSON; new handoff rounds do not harvest this.
     motion_card: MotionCard | None = absent()
 
 

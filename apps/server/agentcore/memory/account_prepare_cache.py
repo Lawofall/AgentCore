@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
@@ -100,9 +100,50 @@ def _cache_miss_origin_fields() -> dict[str, str]:
     return {"origin": origin} if origin else {}
 
 
+def drop_account_rules_memory_cache(
+    user_id: str, folder_id: str | None
+) -> None:
+    """Drop one prepare-cache key (folder delete: hibernate that desk's snapshot)."""
+    _cache.pop(_cache_key(user_id, folder_id), None)
+
+
 def clear_account_rules_memory_cache() -> None:
-    """Drop process-local prepare cache (tests / forced refresh)."""
+    """Drop every prepare-cache key (tests / process reset)."""
     _cache.clear()
+
+
+async def hibernate_folder_injection_cache(
+    user_id: str, folder_ids: Sequence[str], *, rewarm: bool = False
+) -> None:
+    """Stop injecting a just-deleted desk from a stale process snapshot.
+
+    Soft-delete keeps documents so restore can bring 设定 back; this only drops
+    (and optionally re-warms) the sidecar/API prepare cache. ``rewarm`` is for
+    the ticketed sidecar after ``delete_folder``: the next list/load is global-only.
+    """
+    uid = (user_id or "").strip()
+    if not uid:
+        return
+    ids = [fid for fid in folder_ids if fid]
+    for fid in ids:
+        drop_account_rules_memory_cache(uid, fid)
+    if not rewarm:
+        return
+    from agentcore.account.credentials import get_account_credentials
+
+    creds = get_account_credentials()
+    if creds is None:
+        return
+    for fid in ids:
+        try:
+            await warm_account_rules_memory(creds, user_id=uid, folder_id=fid)
+        except Exception as e:  # noqa: BLE001 — cache refresh must not fail the delete
+            logger.warning(
+                "account.rules_memory_hibernate_rewarm_failed",
+                user_id=uid,
+                folder_id=fid,
+                error=str(e),
+            )
 
 
 def _cache_key(user_id: str, folder_id: str | None) -> tuple[str, str | None]:
@@ -491,6 +532,16 @@ async def warm_account_rules_memory(
             scope_states[folder_id] = folder_state_res  # type: ignore[assignment]
 
     folder_chain = cloud_scope_chain(rules_payload, folder_id)
+    if folder_id and not folder_chain:
+        # /rules/list and /memory/list race: first-phase still fetched this
+        # folder_id. Empty chain = desk not live — those bodies/topics must
+        # not ride the snapshot (restore will rewarm a live chain).
+        folder_topics = []
+        memory_bodies = {k: v for k, v in memory_bodies.items() if k[0] != folder_id}
+        memory_descriptions = {
+            k: v for k, v in memory_descriptions.items() if k[0] != folder_id
+        }
+        scope_states.pop(folder_id, None)
     ancestor_topics, ancestor_degraded = await _warm_ancestor_scopes(
         creds,
         uid=uid,
@@ -553,7 +604,9 @@ __all__ = [
     "AccountPrepareSnapshot",
     "account_rules_memory_ttl_remaining",
     "clear_account_rules_memory_cache",
+    "drop_account_rules_memory_cache",
     "get_account_rules_memory_snapshot",
+    "hibernate_folder_injection_cache",
     "memory_body_from_snapshot",
     "prepare_account_folder_id",
     "prepare_reads_cache_only",

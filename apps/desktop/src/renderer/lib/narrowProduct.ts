@@ -19,7 +19,6 @@ const NARROW_BLOCKED_PREFIXES = [
 
 export const NARROW_HIDDEN_PALETTE_IDS = new Set([
   "toggle-sidebar",
-  "toggle-diagnostic-mode",
   "open-workspace-terminal",
   "new-folder",
   "connect-git",

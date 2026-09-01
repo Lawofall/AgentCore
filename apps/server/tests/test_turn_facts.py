@@ -164,6 +164,27 @@ def test_tool_call_fact_omits_unknown_cross_turn_retry():
     assert stamped["cross_turn_retry"] == "futile"
 
 
+def test_tool_call_fact_omits_empty_working_set_digest():
+    empty = (
+        ToolCallFact(run_id="r", tool_call_id="c", name="file_read", result="x")
+        .to_fact()
+        .entry()["payload"]
+    )
+    assert "working_set_digest" not in empty
+    stamped = (
+        ToolCallFact(
+            run_id="r",
+            tool_call_id="c",
+            name="file_read",
+            result="x",
+            working_set_digest="Foo, bar()",
+        )
+        .to_fact()
+        .entry()["payload"]
+    )
+    assert stamped["working_set_digest"] == "Foo, bar()"
+
+
 def test_note_and_message_final_fact_shapes():
     note = (
         NoteFact(role="user", content="停止使用工具", reason="finalize", run_id="captain")

@@ -1,6 +1,6 @@
 """Cloud sandbox Python list is a single file; consumers must read it.
 
-Hand-copied inventories in Dockerfile / code_execute / docs / data_file_landing
+Hand-copied inventories in Dockerfile / consult(run) / docs / data_file_landing
 drifted (pillow vs Pillow). These tests lock the wiring: the list file is the
 only inventory, and editing a consumer copy in isolation goes red.
 """
@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 from agentcore.runtime.skills import build_system_skill_registry
-from agentcore.tools.builtin.code_execute import code_execute_description
+from agentcore.tools.builtin.run import run_description
 from agentcore.tools.sandbox.cloud_python import (
     DOCKER_CONTEXT_PATH,
     LIST_FILE,
@@ -21,8 +21,11 @@ from agentcore.tools.sandbox.cloud_python import (
 
 _REPO = Path(__file__).resolve().parents[3]
 _DOCKERFILE = _REPO / "apps" / "server" / "Dockerfile"
-_CODE_EXECUTE = (
-    _REPO / "apps" / "server" / "agentcore" / "tools" / "builtin" / "code_execute.py"
+_RUN_SKILL = (
+    _REPO / "apps" / "server" / "agentcore" / "runtime" / "skills" / "run.py"
+)
+_RUN_TOOL = (
+    _REPO / "apps" / "server" / "agentcore" / "tools" / "builtin" / "run.py"
 )
 _DATA_FILE_LANDING = (
     _REPO
@@ -110,13 +113,15 @@ def test_list_file_is_the_inventory():
 
 def test_server_description_is_rendered_from_the_list():
     libs = format_cloud_python_libs()
-    desc = code_execute_description("server")
-    assert f"沙箱 Python 已预装常用文档 / 数据库：{libs}（画图含中文时先设置" in desc
     for name in load_cloud_python_packages():
-        assert name in desc
-    # Local / catalog copies must not advertise the cloud inventory.
-    assert libs not in code_execute_description("local")
-    assert libs not in code_execute_description()
+        assert name in libs
+    # Schema is location-only; inventory lives on the formatter / consult(run).
+    assert libs not in run_description("server")
+    assert libs not in run_description("local")
+    assert libs not in run_description()
+    skill = build_system_skill_registry().get("run")
+    assert skill is not None
+    assert libs not in skill.body
 
 
 def test_dockerfile_installs_from_the_list_file():
@@ -124,10 +129,13 @@ def test_dockerfile_installs_from_the_list_file():
     assert _dockerfile_errors(text) == []
 
 
-def test_code_execute_source_has_no_inventory_literals():
-    src = _CODE_EXECUTE.read_text(encoding="utf-8")
-    assert "format_cloud_python_libs" in src
-    assert _literal_errors(src, where="code_execute.py") == []
+def test_run_sources_have_no_inventory_literals():
+    for path, where in (
+        (_RUN_SKILL, "consult(run)"),
+        (_RUN_TOOL, "run.py"),
+    ):
+        src = path.read_text(encoding="utf-8")
+        assert _literal_errors(src, where=where) == []
 
 
 def test_data_file_landing_names_no_sandbox_libs():
@@ -165,14 +173,11 @@ def test_inline_dockerfile_list_goes_red():
 
 
 def test_hardcoded_description_list_goes_red():
-    src = _CODE_EXECUTE.read_text(encoding="utf-8")
-    broken = src.replace(
-        "{format_cloud_python_libs()}",
-        "python-pptx、pillow",
-    )
+    src = _RUN_SKILL.read_text(encoding="utf-8")
+    broken = src.replace("一条 `run`", "一条 `run` python-pptx、pillow")
     assert broken != src
-    errors = _literal_errors(broken, where="code_execute.py")
-    assert errors, "hand-copying names into code_execute.py must fail the gate"
+    errors = _literal_errors(broken, where="consult(run)")
+    assert errors, "hand-copying names into consult(run) must fail the gate"
 
 
 def test_skill_naming_a_lib_goes_red():

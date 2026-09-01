@@ -89,7 +89,7 @@ async def test_download_url_marks_governance_and_self_reports_product(
 
     两者职责不同、不可互相顶替：台账口径是 ``ToolResult.file_products``（引擎盖尾注、
     ``files_touched`` 只读它）；``_mark_landed_files`` 管的是与台账无关的治理——落盘闸、
-    Artifact-first path kind、首写者归属、同 path ``file_read`` 上限重置、兄弟 verify 缓存
+    Artifact-first path kind、首写者归属、兄弟 verify 缓存
     失效。曾因「废掉与台账重复的口径」把治理一起删掉，这条用例钉住并存形状。
     """
 
@@ -98,8 +98,6 @@ async def test_download_url_marks_governance_and_self_reports_product(
 
     monkeypatch.setattr(download_mod, "_safe_request", _fake_safe_request)
     context = _ctx(tmp_path)
-    # 下载前该路径已被读过若干次：成功落盘要把同 path 读闸清零，写后核对才不被挡。
-    context.file_read_counts["uploads/data.csv"] = 3
 
     result = await DownloadUrlTool().execute(
         {"url": "https://example.com/data.csv", "path": "uploads/data.csv"},
@@ -114,8 +112,6 @@ async def test_download_url_marks_governance_and_self_reports_product(
     assert context.landed_artifact_authors["uploads/data.csv"] == "a"
     # 下载来的字节不是成篇正文：按 skeleton 记，同 path 后续 file_append 不该被锁。
     assert context.landed_artifact_kinds["uploads/data.csv"] == "skeleton"
-    assert context.file_read_counts["uploads/data.csv"] == 0
-    assert context.file_read_reread_remaining.get("uploads/data.csv", 0) > 0
 
 
 async def test_download_url_rejects_private_url_ssrf(tmp_path: Path):
@@ -174,8 +170,9 @@ async def test_download_url_schema_points_off_shell_wget():
     schema = DownloadUrlTool().schema
     assert schema.name == "download_url"
     assert "read_url" in schema.description
-    assert "code_execute" in schema.description
-    assert "host(action=shell)" in schema.description
+    assert "code_execute" not in schema.description
+    assert "terminal" not in schema.description
+    assert "host(action=shell)" not in schema.description
     assert schema.approval.value == "grantable"
 
 

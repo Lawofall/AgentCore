@@ -48,6 +48,7 @@ from agentcore.observability.query.jsonl import (
 )
 from agentcore.observability.query.stats import error_signature
 from agentcore.observability.query.timeutil import parse_timestamp
+from agentcore.observability.query.tool_end import is_tool_failure
 
 SNAPSHOT_SCHEMA_VERSION = 1
 
@@ -55,21 +56,6 @@ DEFAULT_MAX_IDS = 200
 """每个聚合行默认最多带回多少个 id。0 = 不限。``*_total`` 始终是真实总数。"""
 
 DEFAULT_CLUSTER_LIMIT = 40
-
-TOOL_FAIL_STATUSES = frozenset(
-    {
-        "error",
-        "allowlist_deny",
-        "not_found",
-        "args_parse_failed",
-        "crash",
-        "timeout",
-        "circuit_breaker_deny",
-    }
-)
-TOOL_OK_STATUSES = frozenset({"ok", "success", "done", ""})
-# Wrong-tool-channel steer: runtime refused and named the right tool. Not a fault.
-TOOL_STEER_STATUSES = frozenset({"redirect"})
 
 MUST_REVIEW_FAMILIES = frozenset(
     {
@@ -157,23 +143,6 @@ DEFAULT_REPEAT_USER_MIN = 3
 
 总次数排序会把「一人 8 小时 17 次」沉到榜底；3 能捞出集中爆发，又滤掉偶发 1–2 次。
 """
-
-
-def is_tool_failure(obj: dict[str, Any]) -> bool:
-    """``tool.execute_end`` 是否算一次工具失败。
-
-    ``ok=false`` 或 status 落在已知失败集即算。**未知 status 也算**——新出现的失败态
-    正是 README 说的「新文案必审」，宁可让它露头，也不要被静默吞掉（status 原文会出现在
-    聚类行里，一眼能看出是不是误判）。
-    """
-    if obj.get("event") != "tool.execute_end":
-        return False
-    if obj.get("ok") is False:
-        return True
-    status = str(obj.get("status") or "").strip().lower()
-    if status in TOOL_STEER_STATUSES:
-        return False
-    return status not in TOOL_OK_STATUSES
 
 
 def event_text(obj: dict[str, Any], *, limit: int = _TEXT_LIMIT) -> str:

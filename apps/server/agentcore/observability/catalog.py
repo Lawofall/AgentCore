@@ -52,6 +52,7 @@ EVENTS: list[EventSpec] = [
             'user_id': FieldType('str'),
         },
     ),
+    EventSpec(name='account.rules_memory_hibernate_rewarm_failed'),
     EventSpec(
         name='account.rules_memory_warm_failed',
         description='warm 拉取 rules/memory 部分失败（degraded seed）',
@@ -293,6 +294,18 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='byok.decrypt_failed'),
     EventSpec(name='byok.key_malformed'),
     EventSpec(name='ceo.tool_surface.promoted'),
+    EventSpec(
+        name='ceo.unclosed_cue',
+        description=(
+            '阶梯 2 记账：本轮提示装了上轮交付缺口和/或近期团队图。delegated=false 表示线索在、这轮'
+            '一次没派。不拦截、不改成功路径。'
+        ),
+        fields={
+            'delegated': FieldType('bool'),
+            'prior_gaps': FieldType('bool'),
+            'recent_graph': FieldType('bool'),
+        },
+    ),
     EventSpec(name='chat.admin_mute'),
     EventSpec(name='chat.announced'),
     EventSpec(name='chat.assistant_placeholder_failed'),
@@ -461,7 +474,21 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='chat_context.sidecar_fetch_failed'),
     EventSpec(name='chat_context.sidecar_unavailable'),
     EventSpec(name='chat_context.window_unknown_no_ticket'),
-    EventSpec(name='checkpoint.finalized'),
+    EventSpec(
+        name='checkpoint.finalized',
+        description=(
+            'ask_user 挂起已落帧。n_questions / n_options 为 normalize 后卡面结构（空 choice 已降为'
+            ' text；题上误写的 label 已收进 options）'
+        ),
+        fields={
+            'browser_login': FieldType('bool'),
+            'card': FieldType('str'),
+            'checkpoint_id': FieldType('str'),
+            'intent': FieldType('str'),
+            'n_options': FieldType('int'),
+            'n_questions': FieldType('int'),
+        },
+    ),
     EventSpec(name='checkpoint.persist_failed'),
     EventSpec(name='checkpoint.persist_unavailable'),
     EventSpec(name='checkpoint.repeated_stop_close'),
@@ -523,11 +550,13 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='consult.name_shadowed'),
     EventSpec(name='consult.reuse'),
     EventSpec(name='consult.rule_fetch_failed'),
-    EventSpec(name='contract.citation_reread_grant'),
     EventSpec(name='contract.cite_phase_a_terminal_reject'),
     EventSpec(name='contract.cite_upgrade'),
     EventSpec(name='contract.cite_upgrade_exhausted'),
-    EventSpec(name='contract.failed'),
+    EventSpec(
+        name='contract.failed',
+        description='历史兼容：曾作 logger 事件名；现为 RunPhase.FAILED 的 error 字面，不再 emit',
+    ),
     EventSpec(
         name='contract.hard_gap_blocked_completion',
         description='历史兼容：曾因空交/未落盘把节点打成 FAILED；已撤',
@@ -536,7 +565,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='contract.retry'),
     EventSpec(name='contract.retry_skipped_budget'),
     EventSpec(name='contract.retry_skipped_interrupt'),
-    EventSpec(name='contract.web_quality_soft_accept'),
     EventSpec(name='contract.write_pass'),
     EventSpec(name='contract.write_pass_exhausted'),
     EventSpec(
@@ -623,7 +651,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='coordination.merge_infeasible_no_live_plan'),
     EventSpec(name='coordination.merge_skip_node'),
     EventSpec(name='coordination.nested_declare_conflicts'),
-    EventSpec(name='coordination.ownership_transferred'),
     EventSpec(name='coordination.progress_budget_floor'),
     EventSpec(name='coordination.release_prefers_settle'),
     EventSpec(name='coordination.scope_proceed'),
@@ -644,7 +671,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='coordination.settle_skipped_visible_close'),
     EventSpec(name='coordination.settle_stale_attach_forcing'),
     EventSpec(name='coordination.settled_via_replaced'),
-    EventSpec(name='coordination.sibling_artifact_rejected'),
+    EventSpec(name='coordination.sibling_role_rejected'),
     EventSpec(name='coordination.skipped'),
     EventSpec(name='coordination.synthesis_updated'),
     EventSpec(name='coordination.team_done_shortcircuit'),
@@ -888,7 +915,6 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(name='delegate.complexity_hint_ignored'),
     EventSpec(name='delegate.complexity_hint_inferred'),
-    EventSpec(name='delegate.consumer_deps_soft_warn'),
     EventSpec(
         name='delegate.context_capped',
         description='上下文管线帽触发（site + 原长/切后长或条数；不落正文）',
@@ -952,7 +978,6 @@ EVENTS: list[EventSpec] = [
         },
     ),
     EventSpec(name='delegate.delivery_status_failed'),
-    EventSpec(name='delegate.design_impl_same_grant_soft_warn'),
     EventSpec(name='delegate.folder_display_name_failed'),
     EventSpec(
         name='delegate.force_unknown_gate',
@@ -972,7 +997,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='delegate.graph_prev'),
     EventSpec(name='delegate.isomorphic_rejected'),
     EventSpec(name='delegate.nested_code_audit_discipline'),
-    EventSpec(name='delegate.nested_turn_token_envelope'),
     EventSpec(name='delegate.partial_failure_stashed'),
     EventSpec(name='delegate.paused'),
     EventSpec(name='delegate.plan_only'),
@@ -984,7 +1008,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='delegate.post_close_redelegation_rejected'),
     EventSpec(name='delegate.rejected'),
     EventSpec(name='delegate.resume_plan'),
-    EventSpec(name='delegate.root_slice_honesty_soft_warn'),
     EventSpec(name='delegate.run_redirect_accepted'),
     EventSpec(name='delegate.run_redirect_cold'),
     EventSpec(
@@ -1081,6 +1104,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='demo_tape.unbound_after_last_turn'),
     EventSpec(name='demo_tape.unhandled_pause_type'),
     EventSpec(name='deploy.multi_worker_refused'),
+    EventSpec(name='desk_folder_label.load_failed'),
     EventSpec(name='desktop.external_mount_request'),
     EventSpec(name='desktop.external_mount_timeout'),
     EventSpec(name='desktop.host_op_request'),
@@ -1222,8 +1246,40 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='engine.force_finalize_hard_failed'),
     EventSpec(name='engine.force_finalize_skipped_empty'),
     EventSpec(name='engine.force_finalize_wall_timeout'),
-    EventSpec(name='engine.llm_failed_terminal'),
+    EventSpec(
+        name='engine.llm_failed_terminal',
+        description=(
+            '引擎把本轮 LLM 失败收成 ERROR/DEGRADED。reason=error|degraded；origin=stream_round（ro'
+            'und 异常）/ stream_aborted（流中断 salvage）；error_type / classified / error 与 engin'
+            'e.llm_round_exception 对齐（中断无 type）'
+        ),
+        fields={
+            'classified': FieldType('bool'),
+            'error': FieldType('str'),
+            'error_code': FieldType('str'),
+            'error_type': FieldType('str'),
+            'has_content': FieldType('bool'),
+            'origin': FieldType('str'),
+            'reason': FieldType('str'),
+        },
+    ),
     EventSpec(name='engine.llm_rate_limit_paused'),
+    EventSpec(
+        name='engine.llm_round_exception',
+        description=(
+            'ReAct 一轮 stream 在引擎侧抛了异常（叶子 fence 的 llm.call_failed 可能缺席：流已成功计'
+            '量后消费者再崩）。error_type=异常类名；classified=false 表示未纳入 AgentCoreError、用'
+            '户面走兜底「出了点问题」；origin=stream_round；error 为截断异常字面（无正文）。未分类'
+            '带 traceback（exc_info）'
+        ),
+        fields={
+            'classified': FieldType('bool'),
+            'error': FieldType('str'),
+            'error_code': FieldType('str'),
+            'error_type': FieldType('str'),
+            'origin': FieldType('str'),
+        },
+    ),
     EventSpec(name='engine.loop_finalize', description='收敛治理：强制收尾'),
     EventSpec(name='engine.loop_nudge', description='收敛治理：循环提醒'),
     EventSpec(
@@ -1244,6 +1300,7 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(name='engine.retrieval_budget_critical'),
     EventSpec(name='engine.retrieval_budget_wind_down'),
+    EventSpec(name='engine.steer_hold_return'),
     EventSpec(name='engine.structured_reply_salvaged'),
     EventSpec(name='engine.timeout_force_cancel'),
     EventSpec(name='engine.token_budget_exhausted'),
@@ -1350,20 +1407,14 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='event_tap.failed'),
     EventSpec(name='evidence.promote_landed_note_refs'),
     EventSpec(name='favicon.fetch_failed'),
-    EventSpec(name='file_append.code_integrity_rejected'),
     EventSpec(name='file_append.collision'),
     EventSpec(name='file_delete.collision'),
-    EventSpec(name='file_delete.substantial_rejected'),
     EventSpec(name='file_move.collision'),
     EventSpec(name='file_ownership.completion_handoff'),
     EventSpec(name='file_ownership.dispatch_handoff'),
-    EventSpec(name='file_ownership.user_transfer'),
-    EventSpec(name='file_write.code_integrity_rejected'),
     EventSpec(name='file_write.collision'),
-    EventSpec(name='file_write.integrity_nudge'),
-    EventSpec(name='file_write.prose_omission_rejected'),
     EventSpec(name='file_write.scope_rejected'),
-    EventSpec(name='file_write.severe_shrink_rejected'),
+    EventSpec(name='file_write.stale_overwrite_rejected'),
     EventSpec(
         name='firehose.backpressure_drop',
         description='IM firehose 慢连接弃最旧帧：首丢立刻一条，之后心跳，订阅结束冲余数',
@@ -1378,8 +1429,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='firehose.unsubscribe'),
     EventSpec(name='folder.tombstone_move_failed'),
     EventSpec(name='folder.tombstone_restore_failed'),
-    EventSpec(name='folder_catalog.list_failed'),
-    EventSpec(name='folder_catalog.profile_load_failed'),
     EventSpec(name='folder_fs.bind_failed'),
     EventSpec(name='folder_fs.target_opened'),
     EventSpec(name='folders.cloud_create_failed'),
@@ -1846,6 +1895,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='memory.explore_refresh_profile_conflict'),
     EventSpec(name='memory.explore_refresh_run_failed'),
     EventSpec(name='memory.explore_refresh_scheduled'),
+    EventSpec(name='memory.explore_refresh_skip_empty_profile'),
     EventSpec(name='memory.explore_refresh_skipped_no_credentials'),
     EventSpec(name='memory.explore_refresh_timeout'),
     EventSpec(name='memory.explore_refresh_topic_warning'),
@@ -2701,7 +2751,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='wave.cancel_cascade_skip'),
     EventSpec(name='wave.hold_inflight_hot_pending'),
     EventSpec(name='wave.width_recomputed'),
-    EventSpec(name='web_seam.skip_external'),
     EventSpec(
         name='worker.escalate',
         description='worker 升级求决策',
@@ -2752,6 +2801,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='workflow.slot_extract_timeout'),
     EventSpec(name='workflow.slot_roundtrip_mismatch'),
     EventSpec(name='workflow.slots_extracted'),
+    EventSpec(name='working_set.load_failed'),
     EventSpec(name='workspace.artifact_read_failed'),
     EventSpec(
         name='workspace.atomic_replace_recovered',
@@ -2779,7 +2829,6 @@ EVENTS: list[EventSpec] = [
             'target': FieldType('str'),
         },
     ),
-    EventSpec(name='workspace.channel_dead'),
     EventSpec(name='workspace.cloud_tree_migrated'),
     EventSpec(name='workspace.context_inject_failed'),
     EventSpec(name='workspace.exec_languages_probe_failed'),
@@ -2821,10 +2870,8 @@ EVENTS: list[EventSpec] = [
         },
     ),
     EventSpec(name='workspace.internal_zone_clear_skipped'),
-    EventSpec(name='workspace.op_rejected_channel_dead'),
     EventSpec(name='workspace.op_timeout'),
     EventSpec(name='workspace.overview_index_failed'),
-    EventSpec(name='workspace.prepare_aborted_channel_dead'),
     EventSpec(name='workspace.snapshot_created'),
     EventSpec(
         name='workspace.snapshot_failed',

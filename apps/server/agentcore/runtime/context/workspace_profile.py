@@ -226,7 +226,12 @@ async def detect_workspace_profile(backend: WorkspaceBackend) -> WorkspaceProfil
 
 
 def render_workspace_profile(profile: WorkspaceProfile) -> str:
-    """Render profile as concise text for workspace_file_index injection. ≤600 chars."""
+    """Render profile as concise text. ≤600 chars.
+
+    Prompt injection does **not** use this — ``build_workspace_overview`` only
+    emits a name pointer for ``AGENTS.md`` / ``CLAUDE.md``. ``run_verify`` reads
+    :class:`WorkspaceProfile` fields directly.
+    """
     if not profile.languages and not profile.vcs:
         return ""
 

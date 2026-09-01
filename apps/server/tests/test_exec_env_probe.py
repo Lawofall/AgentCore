@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from agentcore.tools.builtin.run_short import execute_short
+from agentcore.tools.builtin.run_verify import execute_verify
 from agentcore.tools.sandbox.exec_env import (
     EXEC_ENV_NO_INTERPRETER_CODE,
     EXEC_ENV_NOT_LINUX_CODE,
@@ -595,13 +597,15 @@ def test_probe_failure_text_names_the_language_it_actually_ran():
 
     py = probe_failure_result(code=EXEC_ENV_NO_INTERPRETER_CODE, language="python").stderr
     assert "找不到 python 解释器" in py
-    assert "`test_run` 已停用" in py
+    assert "这次 python 路径没有跑成" in py
+    assert "已停用" not in py
 
     # A verdict that ran no interpreter (gVisor runtime smoke, legacy untagged
-    # journals) names no language and still speaks for the whole family.
+    # journals) names no language — honest fail, tool stays.
     wide = probe_failure_result(code=EXEC_ENV_PROBE_FAIL_CODE).stderr
     assert exec_env_probe_failure_language(wide) is None
-    assert "code_execute / test_run 已停用" in wide
+    assert "这次命令没有跑成" in wide
+    assert "已停用" not in wide
 
 
 def test_probe_failure_retire_scope_follows_the_probed_language():
@@ -611,7 +615,7 @@ def test_probe_failure_retire_scope_follows_the_probed_language():
     assert set(probe_failure_retire_tools(None)) == EXEC_ENV_TIMEOUT_FAMILY
     assert set(probe_failure_retire_tools("")) == EXEC_ENV_TIMEOUT_FAMILY
     # test_run wraps every check in a python script, so a dead python takes it…
-    assert probe_failure_retire_tools("python") == ("test_run",)
+    assert probe_failure_retire_tools("python") == ("run",)
     # …and nothing else: another language only takes itself out, so code_execute
     # stays listed for the languages whose interpreters are present.
     assert probe_failure_retire_tools("javascript") == ()
@@ -709,7 +713,7 @@ async def test_server_workspace_keeps_one_runtime_verdict_for_gvisor(tmp_path: P
     assert sandbox.execute_calls == 0
     # No language in the verdict → the whole family stays the blast radius.
     assert exec_env_probe_failure_language(second.stderr) is None
-    assert set(probe_failure_retire_tools(None)) == {"code_execute", "test_run"}
+    assert set(probe_failure_retire_tools(None)) == {"run"}
 
 
 @pytest.mark.anyio
@@ -733,7 +737,6 @@ async def test_server_workspace_maps_gvisor_not_linux_code(tmp_path: Path):
 
 @pytest.mark.anyio
 async def test_code_execute_retires_only_what_the_probe_proved():
-    from agentcore.tools.builtin.code_execute import CodeExecuteTool
     from agentcore.tools.protocol import ToolContext
 
     class _ProbeFailBackend:
@@ -754,7 +757,7 @@ async def test_code_execute_retires_only_what_the_probe_proved():
             user_id="u",
         )
 
-    js = await CodeExecuteTool().execute(
+    js = await execute_short(
         {"code": "console.log(1)", "language": "javascript"}, _ctx("javascript")
     )
     assert js.success is False
@@ -766,20 +769,18 @@ async def test_code_execute_retires_only_what_the_probe_proved():
     assert js.metadata.get("error_class") is None
     assert js.contract_failure is True
 
-    py = await CodeExecuteTool().execute(
+    py = await execute_short(
         {"code": "print(1)", "language": "python"}, _ctx("python")
     )
     assert py.metadata is not None
-    assert py.metadata.get("retire_tools") == ["test_run"]
-    assert py.metadata.get("error_class") == "permanent"
-    assert "test_run" in (py.metadata.get("retire_message") or "")
+    assert "retire_tools" not in py.metadata
+    assert py.metadata.get("error_class") is None
     assert py.contract_failure is False
 
 
 @pytest.mark.anyio
 async def test_real_execution_timeout_does_not_retire():
     """Acceptance: a real-run timeout is not an env death — no wrap, no retire."""
-    from agentcore.tools.builtin.code_execute import CodeExecuteTool
     from agentcore.tools.protocol import ToolContext
 
     timeout_stderr = "Timeout: forced stop after 30s (forced stop)"
@@ -810,7 +811,7 @@ async def test_real_execution_timeout_does_not_retire():
                 duration_ms=30012,
             )
 
-    tool = await CodeExecuteTool().execute(
+    tool = await execute_short(
         {"code": "print(1)", "language": "python"},
         ToolContext.create(
             execution_id="e",
@@ -828,7 +829,6 @@ async def test_real_execution_timeout_does_not_retire():
 @pytest.mark.anyio
 async def test_real_execution_exit_127_still_retires_with_honest_reason():
     """Acceptance: exit 127 on the real run still retires and names the cause."""
-    from agentcore.tools.builtin.code_execute import CodeExecuteTool
     from agentcore.tools.protocol import ToolContext
 
     channel = _FakeChannel(
@@ -847,7 +847,7 @@ async def test_real_execution_exit_127_still_retires_with_honest_reason():
         async def execute(self, request: ExecutionRequest) -> ExecutionResult:
             return wrapped
 
-    tool = await CodeExecuteTool().execute(
+    tool = await execute_short(
         {"code": "print(1)", "language": "python"},
         ToolContext.create(
             execution_id="e",
@@ -860,9 +860,8 @@ async def test_real_execution_exit_127_still_retires_with_honest_reason():
     assert tool.success is False
     assert tool.metadata is not None
     assert tool.metadata.get("code") == EXEC_ENV_NO_INTERPRETER_CODE
-    assert tool.metadata.get("retire_tools") == ["test_run"]
-    assert tool.metadata.get("error_class") == "permanent"
-    assert "PATH 上没有 python 解释器" in (tool.metadata.get("retire_message") or "")
+    assert "retire_tools" not in tool.metadata
+    assert tool.metadata.get("error_class") is None
 
 
 @pytest.mark.anyio
@@ -870,8 +869,6 @@ async def test_real_execution_user_filenotfound_does_not_retire(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Acceptance: user-script FileNotFoundError (exit 1) must not retire python / test_run."""
-    from agentcore.tools.builtin.code_execute import CodeExecuteTool
-    from agentcore.tools.builtin.test_run import TestRunTool
     from agentcore.tools.protocol import ToolContext
 
     channel = _FakeChannel(
@@ -905,7 +902,7 @@ async def test_real_execution_user_filenotfound_does_not_retire(
                 duration_ms=40,
             )
 
-    tool = await CodeExecuteTool().execute(
+    tool = await execute_short(
         {"code": "open('missing.txt')", "language": "python"},
         ToolContext.create(
             execution_id="e",
@@ -953,10 +950,10 @@ async def test_real_execution_user_filenotfound_does_not_retire(
         )
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _empty_profile,
     )
-    test_run = await TestRunTool().execute(
+    test_run = await execute_verify(
         {"check": "command", "command": "npx tsc --noEmit"},
         ToolContext.create(
             execution_id="e",
@@ -980,8 +977,6 @@ async def test_real_execution_user_permissionerror_does_not_retire(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Acceptance: user-script PermissionError must not retire python / test_run."""
-    from agentcore.tools.builtin.code_execute import CodeExecuteTool
-    from agentcore.tools.builtin.test_run import TestRunTool
     from agentcore.tools.protocol import ToolContext
 
     channel = _FakeChannel(
@@ -1018,7 +1013,7 @@ async def test_real_execution_user_permissionerror_does_not_retire(
                 duration_ms=40,
             )
 
-    tool = await CodeExecuteTool().execute(
+    tool = await execute_short(
         {"code": "open('busy.txt', 'w')", "language": "python"},
         ToolContext.create(
             execution_id="e",
@@ -1066,10 +1061,10 @@ async def test_real_execution_user_permissionerror_does_not_retire(
         )
 
     monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _empty_profile,
     )
-    test_run = await TestRunTool().execute(
+    test_run = await execute_verify(
         {"check": "command", "command": "npx tsc --noEmit"},
         ToolContext.create(
             execution_id="e",
@@ -1091,7 +1086,6 @@ async def test_real_execution_user_permissionerror_does_not_retire(
 @pytest.mark.anyio
 async def test_real_execution_spawn_denied_tag_still_retires():
     """Acceptance: spawn-site tag still retires and names a refused start."""
-    from agentcore.tools.builtin.code_execute import CodeExecuteTool
     from agentcore.tools.protocol import ToolContext
 
     channel = _FakeChannel(
@@ -1110,7 +1104,7 @@ async def test_real_execution_spawn_denied_tag_still_retires():
         async def execute(self, request: ExecutionRequest) -> ExecutionResult:
             return wrapped
 
-    tool = await CodeExecuteTool().execute(
+    tool = await execute_short(
         {"code": "print(1)", "language": "python"},
         ToolContext.create(
             execution_id="e",
@@ -1123,9 +1117,8 @@ async def test_real_execution_spawn_denied_tag_still_retires():
     assert tool.success is False
     assert tool.metadata is not None
     assert tool.metadata.get("code") == EXEC_ENV_SPAWN_DENIED_CODE
-    assert tool.metadata.get("retire_tools") == ["test_run"]
-    assert tool.metadata.get("error_class") == "permanent"
-    assert "启动解释器进程被系统拒绝" in (tool.metadata.get("retire_message") or "")
+    assert "retire_tools" not in tool.metadata
+    assert tool.metadata.get("error_class") is None
 
 
 @pytest.mark.anyio

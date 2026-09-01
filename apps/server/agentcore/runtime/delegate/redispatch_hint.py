@@ -26,10 +26,8 @@ from agentcore.runtime.journal.entries import KIND_TURN_END
 _REDISPATCH_HINT = (
     "<上轮重派>\n"
     "【上轮委派未落地】上轮出现空委派或无产出收口（结构化指纹）。"
-    "本提示一次性、可忽略，不挡原请求。\n"
-    "若用户仍要团队推进：再发一次顶层非空 `tasks` 的 `delegate`；"
-    "固化流水线时次选具名 `playbook`。"
-    "【禁止】只复盘参数错误或只道歉收口。\n"
+    "本提示一次性、可忽略，不挡原请求。"
+    "再发一次非空 `tasks` 的 `delegate`。\n"
     "</上轮重派>"
 )
 

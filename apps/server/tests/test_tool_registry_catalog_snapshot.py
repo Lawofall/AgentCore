@@ -49,9 +49,7 @@ _BUILTIN_ORDER = [
     "code_search",
     "code_diagnostics",
     "git",
-    "test_run",
-    "code_execute",
-    "terminal",
+    "run",
 ]
 
 # Host face is host_class — only appears when desktop_online=True (not default roster).
@@ -75,25 +73,14 @@ _WORKER_ONLY_ORDER = [
     "desktop_notify",
 ]
 
-# Privacy-gated worker tools (manual_wire): catalog-advertised, not in default
-# ``build_worker_registry`` — wired after the gate (跨会话对话日志访问定案).
+# manual_wire conversation log tools: catalog-advertised, not in default
+# ``build_worker_registry`` — wired after assemble (CEO + worker).
 _WORKER_GATED_ORDER = [
     "search_conversations",
     "read_conversation",
 ]
 
-_CEO_BUILTIN_ORDER = [
-    "web_search",
-    "read_url",
-    "file_read",
-    "file_list",
-    "glob",
-    "grep",
-    "code_search",
-    "code_diagnostics",
-    "git",
-    "terminal",
-]
+_CEO_BUILTIN_ORDER = list(_BUILTIN_ORDER)
 
 _CATALOG_ORCHESTRATION_ORDER = [
     "delegate",
@@ -125,30 +112,28 @@ _CATALOG_AVAILABLE_TO: dict[str, tuple[str, ...]] = {
     "code_search": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "code_diagnostics": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "git": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    # Worker-only mutation / execution / collaboration
-    "file_write": (AVAILABLE_TO_WORKER,),
-    "file_append": (AVAILABLE_TO_WORKER,),
-    "str_replace": (AVAILABLE_TO_WORKER,),
-    "file_delete": (AVAILABLE_TO_WORKER,),
-    "file_move": (AVAILABLE_TO_WORKER,),
-    "file_copy": (AVAILABLE_TO_WORKER,),
-    "mkdir": (AVAILABLE_TO_WORKER,),
-    "file_batch": (AVAILABLE_TO_WORKER,),
-    "md_to_docx": (AVAILABLE_TO_WORKER,),
-    "md_to_pdf": (AVAILABLE_TO_WORKER,),
-    "archive_extract": (AVAILABLE_TO_WORKER,),
-    "archive_create": (AVAILABLE_TO_WORKER,),
-    "download_url": (AVAILABLE_TO_WORKER,),
-    "test_run": (AVAILABLE_TO_WORKER,),
-    "code_execute": (AVAILABLE_TO_WORKER,),
-    "terminal": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    # Write / execute: CEO + worker (same GRANTABLE ApprovalGate)
+    "file_write": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "file_append": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "str_replace": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "file_delete": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "file_move": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "file_copy": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "mkdir": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "file_batch": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "md_to_docx": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "md_to_pdf": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "archive_extract": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "archive_create": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "download_url": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "run": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "host": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "external_mount_readonly": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "escalate": (AVAILABLE_TO_WORKER,),
     "handoff": (AVAILABLE_TO_WORKER,),
-    "desktop_notify": (AVAILABLE_TO_WORKER,),
-    "search_conversations": (AVAILABLE_TO_WORKER,),
-    "read_conversation": (AVAILABLE_TO_WORKER,),
+    "desktop_notify": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "search_conversations": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "read_conversation": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     # CEO orchestration (catalog advertise)
     "delegate": (AVAILABLE_TO_CEO,),
     "replan": (AVAILABLE_TO_CEO,),
@@ -226,7 +211,6 @@ def test_tool_registry_builtin_approvals_snapshot():
         "code_search",
         "code_diagnostics",
         "git",
-        "terminal",
     }
     grantable = set(_BUILTIN_ORDER) - never
     for name in never:
@@ -256,9 +240,7 @@ def test_tool_registry_grant_sets_snapshot():
     assert approval_class_tool_names() == file_mutation_tool_names() | frozenset({"git"})
     assert delegation_grantable_tool_names() == approval_class_tool_names() | frozenset(
         {
-            "code_execute",
-            "test_run",
-            "terminal",
+            "run",
             # L3 团队浏览器 (D11): execution_class → covered by a delegation grant.
             "browser",
         }
@@ -301,8 +283,7 @@ def test_catalog_categories_present():
 
 
 def test_tool_registry_declarations_cover_roster():
-    """Every declared class has ``registration``; CEO builtins stay NEVER-aligned
-    except browser interactive GRANTABLE exceptions.
+    """Every declared class has ``registration``; CEO write/execute/browser are GRANTABLE.
     """
     from agentcore.tools.registration import (
         AUDIENCE_CEO,
@@ -313,8 +294,17 @@ def test_tool_registry_declarations_cover_roster():
         tool_registration,
     )
 
-    # Explicit break of「CEO 永不持 GRANTABLE」— browser interactive only.
-    _ceo_grantable_exceptions = frozenset(_BROWSER_CEO_ORDER)
+    _ceo_grantable = frozenset(_BUILTIN_ORDER) - {
+        "web_search",
+        "read_url",
+        "file_read",
+        "file_list",
+        "glob",
+        "grep",
+        "code_search",
+        "code_diagnostics",
+        "git",
+    } | frozenset(_BROWSER_CEO_ORDER)
 
     declared = declared_tools()
     assert declared, "DECLARED_TOOLS must not be empty"
@@ -342,7 +332,7 @@ def test_tool_registry_declarations_cover_roster():
         reg = tool_registration(cls)
         if AUDIENCE_CEO in reg.audience:
             schema = cls().schema if not reg.needs_location else cls(location=None).schema
-            if schema.name in _ceo_grantable_exceptions:
+            if schema.name in _ceo_grantable:
                 assert schema.approval is ToolApproval.GRANTABLE, schema.name
                 if schema.name == "browser":
                     assert reg.browser_class, schema.name

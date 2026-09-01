@@ -381,6 +381,112 @@ async def test_react_loop_drains_steer_at_step_top():
 
 
 @pytest.mark.asyncio
+async def test_react_loop_holds_return_to_hear_steer_same_turn():
+    """散文无工具步：流中插队不 leftover 升队，同回合再跑一轮并 injected。"""
+    _reset_for_tests()
+    cid = "c-loop-hold-return"
+    turn_queue.clear(cid)
+    ctx = replace(_context(), conversation_id=cid, execution_id="exec-hold-return")
+
+    seen_user_contents: list[str] = []
+    enqueued = False
+
+    class _SpyProvider(_ScriptedProvider):
+        async def stream(self, request):  # noqa: ANN001
+            nonlocal enqueued
+            for m in request.messages:
+                if m.role == "user" and m.content:
+                    seen_user_contents.append(m.content)
+            async for chunk in super().stream(request):
+                if not enqueued and chunk.delta_content:
+                    enqueued = True
+                    assert try_enqueue(conversation_id=cid, content="改成要点列表") is not None
+                yield chunk
+
+    provider = _SpyProvider(
+        [
+            [LLMChunk(delta_content="先写一长段")],
+            [LLMChunk(delta_content="已按要点改")],
+        ]
+    )
+    messages: list[LLMMessage] = [LLMMessage(role="user", content="写一段说明")]
+    sink = EventSink()
+    content, *_ = await react_loop(
+        messages=messages,
+        llm=provider,
+        tools=_registry(_StubTool()),
+        sink=sink,
+        tool_context=ctx,
+        profile=make_profile_params(max_rounds=4),
+        turn_model="m",
+        role="captain",
+        approval_gate=None,
+    )
+    assert "已按要点改" in content
+    assert any("改成要点列表" in c and "中途补充" in c for c in seen_user_contents)
+    assert any(
+        m.role == "user" and m.content and "改成要点列表" in m.content for m in messages
+    )
+    assert peek_count(cid) == 0
+    assert turn_queue.depth(cid) == 0
+    injected = [
+        e for e in sink._history if e.type is EventType.USER_INTERJECTION  # noqa: SLF001
+    ]
+    assert any(e.payload.get("status") == "injected" for e in injected)
+    assert not any(e.payload.get("status") == "queued" for e in injected)
+    turn_queue.clear(cid)
+    _reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_react_loop_prose_steer_leftover_when_no_remaining_round():
+    """max_rounds 用尽：散文流中插队仍 leftover 升队，不虚构同回合注入。"""
+    _reset_for_tests()
+    cid = "c-loop-hold-ceiling"
+    turn_queue.clear(cid)
+    ctx = replace(_context(), conversation_id=cid, execution_id="exec-hold-ceiling")
+    sink = EventSink()
+    blocker = asyncio.create_task(_never())
+    turn_runs.register(conversation_id=cid, task=blocker, sink=sink)
+    try:
+        enqueued = False
+
+        class _SpyProvider(_ScriptedProvider):
+            async def stream(self, request):  # noqa: ANN001
+                nonlocal enqueued
+                async for chunk in super().stream(request):
+                    if not enqueued and chunk.delta_content:
+                        enqueued = True
+                        assert try_enqueue(conversation_id=cid, content="来不及听") is not None
+                    yield chunk
+
+        provider = _SpyProvider([[LLMChunk(delta_content="只能这一轮")]])
+        await react_loop(
+            messages=[LLMMessage(role="user", content="写一段")],
+            llm=provider,
+            tools=_registry(_StubTool()),
+            sink=sink,
+            tool_context=ctx,
+            profile=make_profile_params(max_rounds=1),
+            turn_model="m",
+            role="captain",
+            approval_gate=None,
+        )
+        assert turn_queue.depth(cid) == 1
+        interjections = [
+            e for e in sink._history if e.type is EventType.USER_INTERJECTION  # noqa: SLF001
+        ]
+        assert any(e.payload.get("status") == "queued" for e in interjections)
+        assert not any(e.payload.get("status") == "injected" for e in interjections)
+    finally:
+        turn_queue.clear(cid)
+        blocker.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await blocker
+        _reset_for_tests()
+
+
+@pytest.mark.asyncio
 async def test_worker_loop_does_not_accept_classic_steer():
     """Workers must not open the classic-steer accepting window."""
     _reset_for_tests()

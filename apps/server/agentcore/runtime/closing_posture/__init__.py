@@ -10,8 +10,8 @@
 探测用**闭集**正则，仅作「是否在说 A」的薄信号；**禁止**靠案面加完成话术词修案。
 文献证据降档时用正向「草稿/缺口承认」闭集（``requires_draft_ack``），不靠把「综述已完成」加进黑名单。
 ``requires_draft_ack`` 亦闩 ``thin_review``（已声明复核落盘未对齐）、``verify_failed``
-（丙轴验证失败）、以及 ``node_failed`` / ``artifact_rejected`` / ``path_mismatch``
-（契约硬失败·节点 FAILED·拒收产物·声明路径未落盘）——仍不扩姿势 A 词表。
+（丙轴验证失败）、以及 ``node_failed`` / ``artifact_rejected``
+（契约硬失败·节点 FAILED·拒收产物）——仍不扩姿势 A 词表。
 写盘形态下 blocking 的 ``files_not_landed`` 同样闩（全员 ``form=prose`` 的 soft 行不闩）。
 无对账卡 / ``no_batch``：不拦正文（团队状态走结构面，禁止完成话术拦截）。
 
@@ -32,8 +32,7 @@ Thin facade — implementation split by axis (under ``runtime/closing_posture/``
 * ``.browser`` — browser assemble/tool-success latch
 * ``.over_seat`` / ``.empty_handoff`` / ``.cancel_zero`` — storm latches
 * ``.verify_budget`` — verify-budget latch
-* ``.hollow`` — hollow teach / in-progress claims
-* ``.b1`` — prepare clear_b1 + cross-latch probes
+* ``.b1`` — prepare clear_b1 + latch reset
 
 Public import paths stay stable via re-exports below
 (``agentcore.runtime.closing_posture`` / ``.<leaf>``; no flat root shims).
@@ -102,10 +101,6 @@ from .empty_handoff import (
     note_empty_handoff_storm,
     turn_has_empty_handoff_storm,
 )
-from .hollow import (
-    claims_hollow_in_progress,
-    claims_hollow_teach_invite,
-)
 from .over_seat import (
     clear_over_seat_reject,
     note_over_seat_reject,
@@ -147,8 +142,6 @@ __all__ = [
     "claims_disk_landing",
     "claims_draft_acknowledgment",
     "claims_full_delivery",
-    "claims_hollow_in_progress",
-    "claims_hollow_teach_invite",
     "claims_needs_confirm",
     "claims_posture_a",
     "claims_posture_c",

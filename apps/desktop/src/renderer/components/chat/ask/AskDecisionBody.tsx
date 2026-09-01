@@ -24,6 +24,7 @@ import {
   ORGANIZE_CONFIRM_CAPTION,
   ORGANIZE_CONFIRM_CTA,
   grantHintsFromAskOption,
+  optionsAreGrantOnly,
   organizeConfirmDetail,
   pickOralGrantOption,
 } from "@/lib/grantFolderHints";
@@ -51,6 +52,7 @@ import {
   type AskUserContent,
   hasExplicitAskReply,
   questionHasExplicitReply,
+  questionPresentsAsText,
   type useAskAnswer,
 } from "./AskUserFields";
 import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
@@ -131,7 +133,7 @@ export function AskDecisionBody({
     opt: AskOption;
   } | null => {
     for (const q of content.questions) {
-      if (q.kind === "text") continue;
+      if (questionPresentsAsText(q)) continue;
       for (const label of answer.answers[q.id] ?? []) {
         const opt = q.options.find((o) => o.label === label);
         if (opt && isDesktopFolderAction(opt.action)) {
@@ -152,7 +154,7 @@ export function AskDecisionBody({
     opt: AskOption;
   } | null => {
     for (const q of content.questions) {
-      if (q.kind === "text") continue;
+      if (questionPresentsAsText(q)) continue;
       if ((answer.answers[q.id] ?? []).length > 0) continue;
       const opt = pickOralGrantOption(q.options, answer.notes[q.id] ?? "");
       if (opt) return { q, opt };
@@ -321,14 +323,24 @@ export function AskDecisionBody({
   };
 
   const grantPending = findPendingFolderOption()?.opt.action;
-  const hasFolderGrant = hasOrganizeGrantOption || hasAttachGrantOption;
-  const shellCaption =
+  const grantOnlyCard = content.questions.every(
+    (q) => q.kind !== "choice" || optionsAreGrantOnly(q.options),
+  );
+  const showAttachChrome =
     grantPending === "grant_attach_folder" ||
-    (hasAttachGrantOption && !hasOrganizeGrantOption)
-      ? ATTACH_CONFIRM_CAPTION
-      : hasFolderGrant
-        ? ORGANIZE_CONFIRM_CAPTION
-        : (caption ?? META.activeCaption);
+    (!grantPending &&
+      grantOnlyCard &&
+      hasAttachGrantOption &&
+      !hasOrganizeGrantOption);
+  const showOrganizeChrome =
+    grantPending === "grant_organize_folder" ||
+    (!grantPending && grantOnlyCard && hasOrganizeGrantOption);
+  const hasFolderGrant = showAttachChrome || showOrganizeChrome;
+  const shellCaption = showAttachChrome
+    ? ATTACH_CONFIRM_CAPTION
+    : showOrganizeChrome
+      ? ORGANIZE_CONFIRM_CAPTION
+      : (caption ?? META.activeCaption);
   const shellIcon = hasFolderGrant ? FolderTree : META.icon;
   const hasQuestions = content.questions.length > 0;
   /** 无题：message 当唯一题干进壳标题。有题：不画总标题，题干在体内。 */
@@ -495,13 +507,13 @@ export function AskDecisionBody({
             <div key={q.id} data-ask-question-id={q.id}>
               <p className="px-2 whitespace-pre-wrap text-sm font-semibold leading-snug text-foreground">
                 {stem}
-                {q.kind === "choice" && q.multiple && (
+                {q.kind === "choice" && q.multiple && q.options.length > 0 && (
                   <span className="ml-1.5 text-xs font-normal text-muted-foreground">
                     可多选
                   </span>
                 )}
               </p>
-              {q.kind === "text" ? (
+              {questionPresentsAsText(q) ? (
                 <input
                   type="text"
                   value={(answer.answers[q.id] ?? [])[0] ?? ""}

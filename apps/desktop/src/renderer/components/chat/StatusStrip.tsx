@@ -13,7 +13,7 @@ import {
 import { Badge, Button, IconButton as UiIconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { copyText } from "@/lib/clipboard";
-import { formatDuration } from "@/lib/format";
+import { formatDuration, formatDurationSec } from "@/lib/format";
 import { runningElapsedSec } from "@/lib/runningElapsed";
 import {
   buildSupportDiagnosticPack,
@@ -65,11 +65,9 @@ export interface StatusStripProps {
   expanded: boolean;
   onToggle: () => void;
   onMaximize: () => void;
-  /** Incremental kickoff: overlay「新批次待确认」on the running strip. */
-  pendingBatchBadge?: boolean;
 }
 
-/** First batch still actively running (incremental kickoff overlay gate).
+/** Workers still in flight while the turn is paused (ask / plan_review / continue).
  * Pending-only (next wave queued, nothing spinning) keeps the static pause strip.
  * Captain running is the CEO turn itself — not a worker batch. */
 function hasActiveRunningRuns(execution: Execution): boolean {
@@ -100,8 +98,8 @@ function canPaintTeamCompleted(execution: Execution): boolean {
  * stopping：可见「停止中」、冻住用时。工人全终态且图已
  * cancelled、仲裁未判 partial/error/限流 → 已停止，不等气泡 finishReason。
  *
- * Incremental kickoff (`paused` while first batch still running): keep the
- * running chrome and overlay a「新批次待确认」badge.
+ * Paused while a worker is still running: keep the running chrome (scoreboard
+ * only — no talking title). Confirmation lives on the decision card.
  */
 export function StatusStrip(props: StatusStripProps) {
   const delivery = useActiveExecField((rt) => rt.deliveryStatus);
@@ -171,7 +169,7 @@ export function StatusStrip(props: StatusStripProps) {
   }
   if (turnOutcome.kind === "paused") {
     if (hasActiveRunningRuns(props.execution)) {
-      return <RunningStrip {...props} pendingBatchBadge />;
+      return <RunningStrip {...props} />;
     }
     return (
       <PausedStrip
@@ -355,7 +353,6 @@ function RunningStrip({
   expanded,
   onToggle,
   onMaximize,
-  pendingBatchBadge,
   backgroundBadge,
 }: StatusStripProps & { backgroundBadge?: boolean }) {
   const turnPhase = useActiveTurnPhase();
@@ -380,18 +377,16 @@ function RunningStrip({
       : `${completed}/${total}`;
   const frames = useActiveExecField((rt) => rt.frames);
   const elapsedSec = useRunningElapsed(!stopping, frames[0]?.t);
-  const duration = elapsedSec > 0 ? formatDuration(elapsedSec * 1000) : "";
+  const duration = elapsedSec > 0 ? formatDurationSec(elapsedSec) : "";
   const testId = stopping
     ? "status-strip-stopping"
-    : pendingBatchBadge
-      ? "status-strip-pending-batch"
-      : backgroundBadge
-        ? "status-strip-background"
-        : liveWait
-          ? "status-strip-coordination-wait"
-          : synthesizing
-            ? "status-strip-synthesizing"
-            : undefined;
+    : backgroundBadge
+      ? "status-strip-background"
+      : liveWait
+        ? "status-strip-coordination-wait"
+        : synthesizing
+          ? "status-strip-synthesizing"
+          : undefined;
 
   return (
     <div className="px-3 py-1.5" data-testid={testId}>
@@ -403,16 +398,6 @@ function RunningStrip({
         </LifeIcon>
         {stopping ? <span className="font-medium">停止中</span> : null}
         {isDebate(execution) && <DebateTag />}
-        {pendingBatchBadge ? (
-          <Badge
-            tone="primary"
-            pill
-            className="shrink-0 font-medium"
-            data-testid="status-strip-pending-batch-badge"
-          >
-            新批次待确认
-          </Badge>
-        ) : null}
         {backgroundBadge ? (
           <Badge
             tone="primary"

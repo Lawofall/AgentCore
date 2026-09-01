@@ -366,9 +366,11 @@ function primaryArg(
     const ops = args.operations;
     if (Array.isArray(ops)) return `本次共 ${ops.length} 项`;
   }
-  if (toolName === "code_execute") {
+  if (toolName === "run" || toolName === "code_execute") {
     const purpose = args.purpose;
     if (typeof purpose === "string" && purpose.trim()) return purpose.trim();
+    const cmd = args.command;
+    if (typeof cmd === "string" && cmd.trim()) return cmd.trim();
   }
   if (toolName === "terminal") {
     const cmd = args.command;

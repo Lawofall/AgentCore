@@ -50,16 +50,14 @@ def test_priced_failure_without_products_leaves_ledger_empty():
     assert state.file_acceptance == []
 
 
-def test_is_hard_failure_empty_is_not_hard():
+def test_is_hard_failure_never_fails_the_node():
+    """Contract misses stay COMPLETED; ``strict`` does not flip acceptance."""
     assert _is_hard_failure("   ", None) is False
     assert _is_hard_failure("", Deliverable(strict=False)) is False
-    assert _is_hard_failure("", Deliverable(strict=True)) is True
-
-
-def test_is_hard_failure_nonempty_depends_on_strict():
+    assert _is_hard_failure("", Deliverable(strict=True)) is False
     assert _is_hard_failure("x", None) is False
     assert _is_hard_failure("x", Deliverable(strict=False)) is False
-    assert _is_hard_failure("x", Deliverable(strict=True)) is True
+    assert _is_hard_failure("x", Deliverable(strict=True)) is False
 
 
 def test_is_hard_failure_files_form_zero_disk_is_soft():
@@ -67,6 +65,7 @@ def test_is_hard_failure_files_form_zero_disk_is_soft():
     d = Deliverable(form="files", strict=False)
     assert _is_hard_failure("有正文但未落盘", d, files_touched=0) is False
     assert _is_hard_failure("有正文且已落盘", d, files_touched=1) is False
+    assert _is_hard_failure("有正文但未落盘", Deliverable(form="files", strict=True), files_touched=0) is False
 
 
 def test_hard_gap_blocks_completion_never_fails_empty_or_unlanded():

@@ -1,7 +1,7 @@
 /**
  * 「浏览器」tab 存在性判定（conversationHasBrowserActivity）单测。
  *
- * 走真实 execution store 折叠（startExecution + recordFrames）而非手搓投影——判定的坐标系
+ * 走真实 execution store 折叠（startExecution + recordFrame）而非手搓投影——判定的坐标系
  * （`assistantProjectionId` 键 + `agent.toolCalls`）必须与 sidePanel / 终端 tab 一致，手搓
  * 会把这条一致性测掉。覆盖：无活动 / worker 用过浏览器 / CEO process 直调 navigate /
  * 用完（turn 结束）仍为真 / 只按本会话消息计（不串其他会话）。
@@ -69,29 +69,31 @@ function seedWorkerToolCall(
     },
   ];
   exec.startExecution(plan, messageId);
-  exec.recordFrames(
-    [
-      {
-        t: 1,
-        kind: "run_started",
-        agentId: "agent-1",
-        runId: "run-1",
-        parentRunId: null,
-        runKind: "agent",
-        continuesRunId: null,
-      },
-      {
-        t: 2,
-        kind: "tool_use_start",
-        toolCallId: "tc-1",
-        toolName,
-        arguments: { url: "https://example.com" },
-        runId: "run-1",
-      },
-      ...(opts?.end ? done : []),
-    ],
-    messageId,
-  );
+  const frames: RunFrame[] = [
+    {
+      t: 1,
+      kind: "run_started",
+      agentId: "agent-1",
+      runId: "run-1",
+      parentRunId: null,
+      runKind: "agent",
+      continuesRunId: null,
+    },
+    {
+      t: 2,
+      kind: "tool_use_start",
+      toolCallId: "tc-1",
+      toolName,
+      arguments: { url: "https://example.com" },
+      runId: "run-1",
+    },
+    ...(opts?.end ? done : []),
+  ];
+  // Structural frames (incl. run_completed) go through recordFrame — the production
+  // path that reconciles 收口. recordFrames is delta-only and does not settle.
+  for (const frame of frames) {
+    exec.recordFrame(frame, messageId);
+  }
 }
 
 beforeEach(() => {

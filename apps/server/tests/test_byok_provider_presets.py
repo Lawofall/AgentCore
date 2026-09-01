@@ -14,6 +14,18 @@ from agentcore.llm.byok_provider_presets import (
 )
 
 
+def test_deepseek_preset_includes_vision_exp():
+    preset = match_byok_provider_preset("https://api.deepseek.com")
+    assert preset is not None
+    assert preset.id == "deepseek"
+    assert preset.default_model == "deepseek-v4-flash"
+    assert preset.models == (
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "deepseek-v4-flash-vision-exp",
+    )
+
+
 def test_moonshot_preset_defaults_to_kimi_k26():
     preset = match_byok_provider_preset("https://api.moonshot.cn/v1")
     assert preset is not None

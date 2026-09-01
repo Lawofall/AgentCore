@@ -1,4 +1,4 @@
-"""成篇质量定案：research_quality 谓词、空 handoff、审计硬门、file_delete、检索空 streak."""
+"""成篇质量定案：research_quality 谓词、空 handoff、审计硬门、检索空 streak."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ from agentcore.runtime.runs.research_quality import (
     upstream_body_floor_satisfied,
 )
 from agentcore.runtime.runs.types import Deliverable, RunPhase, RunSpec, RunState
-from agentcore.tools.builtin.file_ops import FileDeleteTool, FileWriteTool
+from agentcore.tools.builtin.file_ops import FileWriteTool
 from agentcore.tools.builtin.handoff import HandoffTool
 from agentcore.tools.protocol import RetrievalBudgetState, ToolContext, ToolResult
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -217,25 +217,6 @@ def test_research_report_includes_review_skips_hard_block():
     assert should_audit_hard_block(c, role="captain") is False
 
 
-@pytest.mark.asyncio
-async def test_file_delete_rejects_substantial(tmp_path: Path):
-    body = "成篇正文。" * 80
-    (tmp_path / "report.md").write_text(body, encoding="utf-8")
-    result = await FileDeleteTool().execute({"path": "report.md"}, _ctx(tmp_path))
-    assert result.success is False
-    assert "拒绝删除成篇草稿" in (result.error or "")
-    assert result.contract_failure is True
-    assert (tmp_path / "report.md").read_text(encoding="utf-8") == body
-
-
-@pytest.mark.asyncio
-async def test_file_delete_allows_tiny(tmp_path: Path):
-    (tmp_path / "stub.txt").write_text("tiny", encoding="utf-8")
-    result = await FileDeleteTool().execute({"path": "stub.txt"}, _ctx(tmp_path))
-    assert result.success is True
-    assert not (tmp_path / "stub.txt").exists()
-
-
 def test_upstream_body_floor_predicate():
     # No contract floor: non-empty body OK; empty blocked unless prose landed.
     assert upstream_body_floor_satisfied(
@@ -404,14 +385,7 @@ def test_handoff_schema_brief_field_bounds():
     assert props["next_steps"]["maxLength"] == 300
     assert props["key_points"]["maxItems"] == 4
     assert props["key_points"]["items"]["maxLength"] == 120
-    # motion_card structure untouched (still required keys).
-    assert "motion_card" in props
-    assert set(props["motion_card"]["required"]) == {
-        "motion",
-        "sides",
-        "fact_pointers",
-        "rationale",
-    }
+    assert "motion_card" not in props
 
 
 @pytest.mark.asyncio
@@ -568,7 +542,7 @@ def test_research_report_write_task_has_chapter_discipline():
     assert not errors
     write = next(t for t in tasks if t["id"] == "write")
     assert "按章" in write["task"]
-    assert "file_delete" in write["task"]
+    assert "file_delete" not in write["task"]
     assert "章边界" in write["task"]
     # 中间环约定文档契约：调研 + 提纲 form=files，路径在 RESEARCH_DIR，角度名入文件名。
     from agentcore.workspace.stage_dirs import RESEARCH_DIR

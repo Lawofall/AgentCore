@@ -2,6 +2,7 @@ import {
   channelRedirectFace,
   resolveToolWireStatus,
 } from "@/lib/channelRedirect";
+import { formatCompact } from "@/lib/format";
 import type { ProcessStep, ToolPhase } from "@/types/events";
 import {
   ArrowUp,
@@ -56,6 +57,7 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   read_url: { Icon: Globe, label: "Read page" },
   grep: { Icon: Code2, label: "Grep code" },
   code_search: { Icon: Code2, label: "Search code" },
+  run: { Icon: Terminal, label: "Run" },
   code_execute: { Icon: Terminal, label: "Run code" },
   terminal: { Icon: Terminal, label: "Run terminal" },
   test_run: { Icon: TestTube2, label: "Run tests" },
@@ -86,7 +88,7 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   code_diagnostics: { Icon: Code2, label: "Check types" },
   delegate: { Icon: Users, label: "Delegate" },
   replan: { Icon: ListRestart, label: "Replan" },
-  // CEO 编排原语（组队辩论）：气泡侧只在「正在组装 …」参数组装心跳时露出，
+  // CEO 编排原语（组队辩论）：气泡侧只在参数组装心跳时露出，
   // 图标与开工卡的 debate 形态一致（Scale）。
   debate: { Icon: Scale, label: "Debate" },
   ask_user: { Icon: HelpCircle, label: "Ask you" },
@@ -181,6 +183,22 @@ const toolSummaryLabel = (
   args?: Record<string, unknown>,
 ): string => toolMeta(name, args).label;
 
+/** 写盘家族：折叠标题已点名路径；组装心跳只在这类工具上报字数（长写入不能看起来冻住）。 */
+export const WRITE_FAMILY_TOOLS = new Set([
+  "file_write",
+  "file_append",
+  "str_replace",
+]);
+
+/** 组装心跳字数；非写盘或尚未出字返回 null。 */
+export function composingWriteChars(
+  toolName: string,
+  chars: number,
+): string | null {
+  if (chars <= 0 || !WRITE_FAMILY_TOOLS.has(toolName)) return null;
+  return `${formatCompact(chars)} 字`;
+}
+
 export const toolMeta = (
   name: string,
   args?: Record<string, unknown>,
@@ -244,8 +262,8 @@ export function toolPhaseText(phase: string | undefined): string | null {
  * 用户在协作图上认的是角色名，`Cancel worker r-a3f2e1c8-…` 让他无从判断 CEO 撤的是谁、
  * 处置得对不对。撤队员 / 裁决求助的标题改挂角色名（{@link RUN_TARGET_ARG_TOOLS}），
  * 查阅历史对话改挂对话标题（结果 peek）。
- * `summary` 故意不在此列：handoff 摘要由 ToolLine 在标题行内联，不经 toolDetail
- * 再塞一遍（否则和内联摘要重复）。
+ * `summary` 故意不在此列：handoff 摘要走 `HandoffBriefCard`，不经 toolDetail
+ * 再塞一遍（否则和卡片折叠行重复）。
  * `source` / `destination` 也不单列：file_move / file_copy 没有 `path`，须成对
  * 拼进标题，见 {@link fileTransferDetail}。 */
 const TOOL_DETAIL_KEYS = [

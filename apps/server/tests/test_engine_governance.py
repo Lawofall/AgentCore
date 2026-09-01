@@ -237,6 +237,20 @@ async def test_max_rounds_exhaustion_forces_nonempty_answer():
     assert provider.calls == 5  # 3 scripted + soft + hard salvage
 
 
+async def test_zero_max_rounds_does_not_force_finalize():
+    """Product default: no round fuse. 30 tool rounds then an answer is end_turn."""
+    provider = _ScriptedProvider(
+        [[_tool_chunk("search", f'{{"q": "{i}"}}')] for i in range(30)]
+        + [[_content_chunk("done")]]
+    )
+    tool = _StubTool()
+    (content, _r, _usage, rounds), _messages = await _run(provider, tool, max_rounds=0)
+
+    assert content == "done"
+    assert rounds == 31
+    assert tool.calls == 30
+
+
 async def test_clean_answer_has_no_governance_injection():
     # A normal tool-then-answer turn must not inject any governance messages.
     provider = _ScriptedProvider([[_tool_chunk("search", '{"q": "x"}')], [_content_chunk("done")]])
@@ -979,7 +993,11 @@ async def test_length_empty_not_exempted_for_captain_coordination(monkeypatch):
     )
     monkeypatch.setattr(
         "agentcore.runtime.coordination.session.active_coordination",
-        lambda execution_id=None: SimpleNamespace(active=True, execution_id="e-len"),
+        lambda execution_id=None: SimpleNamespace(
+            active=True,
+            execution_id="e-len",
+            has_unread_user_interjection=lambda: False,
+        ),
     )
     provider = _ModelRecordingProvider([[LLMChunk(finish_reason="length")]])
     profile = make_profile_params(max_rounds=20)
@@ -1247,19 +1265,14 @@ async def test_circuit_breaker_warns_then_disables_failing_tool():
     assert provider.offered[-1] == ["other"]
 
 
-async def test_read_url_disable_survives_react_loop_restart():
-    """After CB disables read_url, a fresh react_loop with the same run_id must not
-    re-offer it (stream-stall → Wave retry / contract write_pass).
-
-    C2: web_search is stripped with read_url so deep-read death cannot reopen
-    search thrash on Wave/contract retry.
-    """
+async def test_read_url_tally_does_not_retire_or_strip_search():
+    """网页打不开三次不卸 read_url，也不连带收走 web_search。"""
     from agentcore.tools.builtin.web._net import (
         clear_read_url_retired,
         is_read_url_retired,
     )
 
-    run_id = "read-url-survive-restart"
+    run_id = "read-url-tally-keep"
     clear_read_url_retired(run_id)
     ctx = ToolContext.create(
         execution_id="e",
@@ -1292,18 +1305,40 @@ async def test_read_url_disable_survives_react_loop_restart():
         run_id=run_id,
         approval_gate=None,
     )
-    assert is_read_url_retired(run_id)
+    assert not is_read_url_retired(run_id)
     steers = [m.content or "" for m in messages if m.role == "user"]
-    assert any("停用" in s and "read_url" in s for s in steers)
-    assert any("收束继续 web_search" in s or "不要把继续检索当默认出路" in s for s in steers)
-    assert "read_url" not in provider.offered[-1]
-    assert "web_search" not in provider.offered[-1]
+    assert not any("停用" in s and "read_url" in s for s in steers)
+    assert "read_url" in provider.offered[-1]
+    assert "web_search" in provider.offered[-1]
+    clear_read_url_retired(run_id)
 
-    # Fresh loop = Wave / contract retry: retirement latch keeps read_url + search off.
-    provider2 = _ToolsRecordingProvider([[_content_chunk("done2")]])
+
+async def test_read_url_explicit_retire_survives_react_loop_restart():
+    """显式退役闩仍跨 react_loop 重启（Wave / write_pass），并连带收 web_search。"""
+    from agentcore.tools.builtin.web._net import (
+        READ_URL_RETIRE_STEER,
+        clear_read_url_retired,
+        mark_read_url_retired,
+    )
+
+    run_id = "read-url-survive-restart"
+    clear_read_url_retired(run_id)
+    mark_read_url_retired(run_id, message=READ_URL_RETIRE_STEER)
+    ctx = ToolContext.create(
+        execution_id="e",
+        run_id=run_id,
+        agent_id="a",
+        backend=ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox()),
+        user_id="u",
+    )
+    reg = ToolRegistry()
+    reg.register(_StubTool(success=True, name="read_url"))
+    reg.register(_StubTool(success=True, name="web_search"))
+    reg.register(_StubTool(success=True, name="other"))
+    provider = _ToolsRecordingProvider([[_content_chunk("done2")]])
     await react_loop(
         messages=[LLMMessage(role="user", content="retry")],
-        llm=provider2,
+        llm=provider,
         tools=reg,
         sink=EventSink(),
         tool_context=ctx,
@@ -1312,7 +1347,7 @@ async def test_read_url_disable_survives_react_loop_restart():
         run_id=run_id,
         approval_gate=None,
     )
-    assert provider2.offered[0] == ["other"]
+    assert provider.offered[0] == ["other"]
     clear_read_url_retired(run_id)
 
 

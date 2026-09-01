@@ -23,7 +23,7 @@ from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
-# legal_answer_brief gates on delegate + debate (both wired on the CEO path).
+# legal_answer_brief gates on delegate（原告红队审校岗也走 delegate）。
 _FULL_TOOLS = {"delegate", "ask_user", "debate", "test_run"}
 
 
@@ -50,7 +50,7 @@ def test_legal_skill_present_when_opted_in():
     reg = build_system_skill_registry(include_legal=True)
     skill = reg.get("legal_answer_brief")
     assert skill is not None
-    assert skill.requires_tools == ("delegate", "debate")
+    assert skill.requires_tools == ("delegate",)
 
 
 def test_legal_skill_layers_onto_the_platform_set():
@@ -88,11 +88,13 @@ def _body() -> str:
 
 
 def test_body_teaches_war_room_red_team_orchestration():
-    # hero = 对方律师作战室: delegate 起草/核验/格式 + debate(red_team, is_subject) 原告红队。
+    # hero = 对方律师作战室: delegate 起草/原告红队审校岗/核验/格式 + 人审。
     body = _body()
     assert "delegate" in body
-    assert "debate" in body and "red_team" in body and "is_subject" in body
+    assert "审校岗" in body
     assert "原告红队" in body  # the adversary that single-agent can't fake
+    assert "red_team" not in body
+    assert "is_subject" not in body
 
 
 def test_body_teaches_answer_brief_structure():

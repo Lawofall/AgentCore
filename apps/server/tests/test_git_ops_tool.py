@@ -1,7 +1,7 @@
 """Regression tests for GitTool safety guards (``tools/builtin/git_ops``).
 
 Pins the write-path hard rejects that catalog/approval tests do not cover:
-forbidden subcommands, protected-branch commits, add-path policy, CEO write ban,
+forbidden subcommands, protected-branch commits, add-path policy,
 and branch/checkout argument handling. Hermetic: throwaway repos under ``tmp_path``.
 """
 
@@ -173,7 +173,7 @@ def _worker_ctx(
     location: Literal["server", "local"] = "server",
     user_id: str = "u",
 ) -> ToolContext:
-    """Worker path: any coordination channel present clears the CEO write ban."""
+    """Worker path: write_coordinator present (same execute path as CEO)."""
     return ToolContext.create(
         execution_id="e",
         run_id="s",
@@ -232,14 +232,16 @@ async def test_unknown_subcommand_rejected(tmp_path: Path):
     assert "不在允许列表中" in (result.error or "")
 
 
-# --- CEO write ban ---
+# --- CEO write: same execute path as worker (not a role deny) ---
 
 
 @pytest.mark.parametrize(
     "subcommand",
     sorted(s for s in git_write_subcommands() if s not in {"init_baseline", "clone"}),
 )
-async def test_ceo_context_rejects_all_write_subcommands(tmp_path: Path, subcommand: str):
+async def test_ceo_context_does_not_role_deny_write_subcommands(
+    tmp_path: Path, subcommand: str
+):
     _init_repo(tmp_path / "repo")
     args: dict[str, Any] = {"subcommand": subcommand}
     if subcommand == "add":
@@ -262,8 +264,11 @@ async def test_ceo_context_rejects_all_write_subcommands(tmp_path: Path, subcomm
     elif subcommand == "create_pr":
         args["title"] = "PR"
     result = await GitTool().execute(args, _ceo_ctx(tmp_path / "repo"))
-    assert result.success is False
-    assert "delegate" in (result.error or "").lower() or "Worker" in (result.error or "")
+    err = result.error or ""
+    assert "delegate" not in err.lower()
+    assert "Git 写入操作需通过" not in err
+    if subcommand == "add":
+        assert result.success is True
 
 
 async def test_ceo_context_allows_read_status(tmp_path: Path):
@@ -613,11 +618,15 @@ async def test_commit_requires_message(tmp_path: Path):
 # --- push ---
 
 
-async def test_push_ceo_rejected_like_other_writes(tmp_path: Path):
+async def test_push_ceo_same_path_as_worker(tmp_path: Path):
     repo = _init_repo(tmp_path / "repo")
     result = await GitTool().execute({"subcommand": "push"}, _ceo_ctx(repo))
+    assert "delegate" not in (result.error or "").lower()
+    assert "Git 写入操作需通过" not in (result.error or "")
     assert result.success is False
-    assert "delegate" in (result.error or "").lower() or "Worker" in (result.error or "")
+    err = result.error or ""
+    assert "remote" in err.lower()
+    assert "配置" in err or "凭据" in err
 
 
 @pytest.mark.parametrize("branch", sorted(_PROTECTED_BRANCHES))
@@ -2090,12 +2099,11 @@ def _patch_clone_url_policy(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cmds_remote_mod, "_clone_url_policy_error", _skip)
 
 
-def test_clone_in_allowlist_ceo_exception_and_budget():
+def test_clone_in_allowlist_write_approval_and_budget():
     from agentcore.core.types import ToolApproval
     from agentcore.runtime.always_confirm import requires_always_confirm
     from agentcore.runtime.approvals import tool_call_requires_approval
     from agentcore.tools.builtin.git_ops import (
-        _CEO_ALLOWED_WRITE_SUBCOMMANDS,
         GIT_TOOL_PARAMETERS,
         git_call_is_write,
         git_call_needs_repo_lock,
@@ -2104,7 +2112,6 @@ def test_clone_in_allowlist_ceo_exception_and_budget():
 
     assert "clone" in _ALLOWED_SUBCOMMANDS
     assert "clone" in git_write_subcommands()
-    assert "clone" in _CEO_ALLOWED_WRITE_SUBCOMMANDS
     assert "clone" in GIT_TOOL_PARAMETERS["properties"]["subcommand"]["enum"]
     assert git_call_is_write({"subcommand": "clone"}) is True
     assert git_call_needs_repo_lock({"subcommand": "clone"}) is False

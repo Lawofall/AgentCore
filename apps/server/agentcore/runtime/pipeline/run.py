@@ -369,6 +369,8 @@ async def run_chat_pipeline(
             audit_recorder=audit_recorder,
             roster_writer=roster_writer,
             journal_writer=journal_writer,
+            had_prior_delivery_gaps=assembled.had_prior_delivery_gaps,
+            had_recent_team_graph=assembled.had_recent_team_graph,
         )
 
     except Exception as e:

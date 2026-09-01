@@ -6,7 +6,8 @@
   "mode": "economy",
   "checks": [
     { "name": "FinishReason" },
-    { "name": "Delegated" }
+    { "name": "NotDelegated" },
+    { "name": "ToolCalled", "tool": "file_write" }
   ],
-  "rubric": "边界用例：交付物极小（一行文件），易诱使 CEO 把内容直接粘进正文充数。但 CEO 无写文件工具，正确路由是委派 worker 落盘——判据是『活的产出形态是文件』而非『规模大小』。"
+  "rubric": "边界用例：交付物极小（一行文件）。一眼写完的小落盘，CEO 自己 file_write，不派工、不把内容只粘进正文。"
 }

@@ -1,4 +1,4 @@
-"""本机 MCP Client — dynamic worker tools over DesktopClientChannel (stdio on desktop)."""
+"""本机 MCP Client — dynamic tools over DesktopClientChannel (stdio on desktop)."""
 
 from agentcore.tools.mcp.wire import (
     McpDiscoverResult,

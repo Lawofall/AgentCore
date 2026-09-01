@@ -79,7 +79,7 @@ async def test_archive_extract_missing_archive(tmp_path: Path):
 async def test_archive_extract_in_schema_and_points_off_code_execute():
     schema = ArchiveExtractTool().schema
     assert schema.name == "archive_extract"
-    assert "code_execute" in schema.description
+    assert "code_execute" not in schema.description
     assert "zip-slip" in schema.description
 
 

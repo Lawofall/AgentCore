@@ -104,7 +104,7 @@ def _zero_write_landing_rework(
 
     曾扫「已改好/已落盘」等闭集 → finish_guard 清气泡重写；解释诚实规则时误伤。
     检测器 ``claims_*`` 仍保留（测试 / 观测）；不恢复【落盘说明】横幅；
-    不改为软提醒。真吹牛靠对账档位 / 产物结构闸。
+    不改为软提醒。真吹牛靠对账档位（影子）与磁盘，不扫措辞回炉。
     """
     _ = (content, delivery_verdict)
     return None

@@ -160,7 +160,9 @@ describe("工作区轨删除", () => {
 
     expect(await screen.findByText("删除文件夹「季度报告」？")).toBeTruthy();
     expect(
-      screen.getByText("立即永久清除全部对话与云端文件（不可恢复）"),
+      screen.getByText(
+        "立即永久清除全部对话、云端文件与这张桌的设定（不可恢复）",
+      ),
     ).toBeTruthy();
     expect(mocks.deleteFolder).not.toHaveBeenCalled();
     expect(mocks.deleteConversation).not.toHaveBeenCalled();

@@ -616,7 +616,7 @@ async def test_contract_retired_must_contain_ignored_no_soft_tip():
 
 
 async def test_contract_section_retry_continues_on_same_transcript():
-    # required_sections 仍硬拦：续写同 transcript，worker 可见旧稿。
+    # required_sections 仍返工：续写同 transcript，worker 可见旧稿。
     plan, _ = build_run_plan(
         [{"role": "A", "task": "做A", "deliverable": {"required_sections": ["结论"]}}],
         id_prefix="t",
@@ -657,6 +657,35 @@ async def test_contract_requirements_stated_in_first_prompt():
     await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
     assert "交付物规格" in provider.user_messages[0]
     assert "结论" in provider.user_messages[0]
+    assert "建议正文骨架" not in provider.user_messages[0]
+    assert "检索预算" not in provider.user_messages[0]
+
+
+async def test_default_files_omits_deliverable_spec_channel():
+    plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
+    provider = _ContentProvider(["正文"])
+    await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
+    opening = provider.user_messages[0]
+    assert "交付物规格" not in opening
+    assert "检索预算" not in opening
+
+
+async def test_contract_section_miss_soft_completes_even_if_strict():
+    plan, _ = build_run_plan(
+        [
+            {
+                "role": "A",
+                "task": "做A",
+                "deliverable": {"required_sections": ["结论"], "strict": True},
+            }
+        ],
+        id_prefix="t",
+    )
+    provider = _ContentProvider(["没有章节", "还是没有"])
+    res = await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
+    state = res["t_1"]
+    assert state.phase is RunPhase.COMPLETED
+    assert any("缺少必备章节" in w for w in (state.warnings or []))
 
 
 async def test_worker_system_prompt_grants_structure_ownership():

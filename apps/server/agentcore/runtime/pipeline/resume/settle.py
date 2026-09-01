@@ -95,6 +95,8 @@ def persist_resumed_tool_results(
             args = matched.function.arguments or ""
     if not target:
         return
+    from agentcore.runtime.context.working_set import file_working_set_digest
+
     record_turn_fact(
         ToolCallFact(
             run_id=run_id,
@@ -103,6 +105,9 @@ def persist_resumed_tool_results(
             arguments=args,
             result=output,
             success=True,
+            working_set_digest=file_working_set_digest(
+                name=name, arguments=args, result=output, success=True
+            ),
         ).to_fact()
     )
     sink.emit(tool_use_end(target, name, success=True, output=output, run_id=run_id))

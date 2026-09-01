@@ -4,11 +4,12 @@ Resolution order:
 
 1. Profile ``vision`` slot (when set) → credentials from that slot (BYOK provider or
    platform model creds), regardless of ``billing_mode``.
-2. Else platform fallback: ``billing_mode=platform`` + non-empty ``VISION_API_KEY`` /
+2. Else empty slot + main that ``model_accepts_images`` → same build with main's
+   :class:`~agentcore.llm.resolve.ModelSelection` (whiteboard / ``read_image`` reuse
+   main credentials). Text-only main does **not** follow.
+3. Else platform fallback: ``billing_mode=platform`` + non-empty ``VISION_API_KEY`` /
    ``VISION_BASE_URL`` → operator vision model.
-3. Else ``None`` (``board_read`` clean-fails「读图能力未配置」).
-
-Empty vision slot does **not** follow main.
+4. Else ``None`` (``board_read`` clean-fails「读图能力未配置」).
 """
 
 from __future__ import annotations
@@ -27,6 +28,13 @@ if TYPE_CHECKING:
     from agentcore.llm.resolve import ModelSelection
 
 logger = get_logger(__name__)
+
+
+def _model_accepts_images(model_id: str) -> bool:
+    """Import seam for ``model_accepts_images`` (vendor table lives in image_accept)."""
+    from agentcore.llm.image_accept import model_accepts_images
+
+    return model_accepts_images(model_id)
 
 
 def build_vision_reader(
@@ -84,43 +92,59 @@ def build_vision_reader(
     )
 
 
+async def _reader_from_selection(
+    session: AsyncSession,
+    user_id: str,
+    selection: ModelSelection,
+    settings: Settings | None,
+) -> VisionReader | None:
+    """Build a reader from one expanded slot (vision, or main when it accepts images)."""
+    from agentcore.llm.resolve import (
+        platform_llm_credentials,
+        resolve_provider_credentials,
+    )
+
+    if selection.origin == "platform":
+        creds = platform_llm_credentials(model=selection.model)
+        if creds is None:
+            return None
+        return build_vision_reader(
+            settings,
+            api_key=creds.api_key,
+            base_url=creds.base_url,
+            model=selection.model,
+            credential_source="platform",
+        )
+    if not selection.provider_id:
+        return None
+    creds = await resolve_provider_credentials(session, user_id, selection.provider_id)
+    if creds is None:
+        return None
+    # BYOK slot / followed main → user pricing (estimated ledger), never hardcode platform.
+    return build_vision_reader(
+        settings,
+        api_key=creds.api_key,
+        base_url=creds.base_url,
+        model=selection.model,
+        credential_source="user",
+    )
+
+
 async def resolve_vision_reader(
     session: AsyncSession,
     user_id: str,
     vision: ModelSelection | None,
     settings: Settings | None = None,
+    *,
+    main: ModelSelection | None = None,
 ) -> VisionReader | None:
-    """Build from expanded profile ``vision`` selection, else platform ``VISION_*``."""
+    """Build from vision slot, else image-accepting main, else platform ``VISION_*``."""
     if vision is not None:
-        from agentcore.llm.resolve import (
-            platform_llm_credentials,
-            resolve_provider_credentials,
-        )
-
-        if vision.origin == "platform":
-            creds = platform_llm_credentials(model=vision.model)
-            if creds is None:
-                return None
-            return build_vision_reader(
-                settings,
-                api_key=creds.api_key,
-                base_url=creds.base_url,
-                model=vision.model,
-                credential_source="platform",
-            )
-        if not vision.provider_id:
-            return None
-        creds = await resolve_provider_credentials(session, user_id, vision.provider_id)
-        if creds is None:
-            return None
-        # BYOK vision slot → user pricing (estimated ledger), never hardcode platform.
-        return build_vision_reader(
-            settings,
-            api_key=creds.api_key,
-            base_url=creds.base_url,
-            model=vision.model,
-            credential_source="user",
-        )
+        return await _reader_from_selection(session, user_id, vision, settings)
+    if main is not None and _model_accepts_images(main.model):
+        followed = await _reader_from_selection(session, user_id, main, settings)
+        if followed is not None:
+            return followed
     return build_vision_reader(settings)
 
 
@@ -151,7 +175,11 @@ async def resolve_vision_reader_for_conversation(
             else:
                 expanded = await svc.expand_for_conversation(user_id, conv)
             return await resolve_vision_reader(
-                session, user_id, expanded.vision, settings=settings
+                session,
+                user_id,
+                expanded.vision,
+                settings=settings,
+                main=expanded.main,
             )
     except Exception as e:  # noqa: BLE001 - vision optional; lookup must not break a turn
         logger.warning(

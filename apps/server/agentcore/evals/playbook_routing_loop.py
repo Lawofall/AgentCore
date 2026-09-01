@@ -142,7 +142,7 @@ async def _build_ceo_context(
     workspace_facts = build_workspace_context(
         backend,
         desktop_online=True,
-        code_execute_enabled=code_execute,
+        run_enabled=code_execute,
         browser_enabled=browser,
         outlet_inventory=await collect_outlet_inventory(backend),
     )

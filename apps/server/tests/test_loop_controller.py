@@ -271,28 +271,61 @@ def test_circuit_breaker_leaps_straight_to_disable_without_redundant_warn():
     assert cb.warned == ()
 
 
-def test_circuit_breaker_read_url_warn_and_disable_use_stop_read_steer():
-    """read_url steers must not say「换不同的输入」(that fuels URL thrashing).
+def test_circuit_breaker_keep_available_tally_does_not_warn_or_disable():
+    """run / 打开网页：累计失败只记账，不警告、不卸工具。"""
+    for name in ("run", "read_url", "web_search", "browser"):
+        c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
+        c.record([_fail("a", name), _fail("b", name), _fail("c", name), _fail("d", name)])
+        assert not c.tool_circuit_breaker()
+        assert c.tool_failure_count(name) == 4
 
-    Warn/disable must also close the «继续 web_search» default exit.
-    """
+
+def test_exec_env_timeout_does_not_retire_run():
+    """电脑连续跑挂也不卸 run；单次失败回执留下。"""
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    c.record([_fail("a", "read_url"), _fail("b", "read_url")])
-    warn = c.tool_circuit_breaker()
-    assert warn.warned == ("read_url",)
-    msg = warn.message() or ""
-    assert "换不同的输入" not in msg
-    assert "read_url" in msg
-    assert "不要把继续 web_search 当默认出路" in msg
+    hang = ToolAttempt(
+        "t1",
+        "run",
+        success=False,
+        error_summary="Timeout: no output for 60s",
+        meta={"code": "exec_timeout", "exec_env_timeout": True},
+    )
+    c.record([hang])
+    assert not c.tool_circuit_breaker()
+    c.record(
+        [
+            ToolAttempt(
+                "t2",
+                "run",
+                success=False,
+                error_summary="Timeout: no output for 60s",
+                meta={"code": "exec_timeout", "exec_env_timeout": True},
+            )
+        ]
+    )
+    assert not c.tool_circuit_breaker()
 
-    c.record([_fail("c", "read_url")])
-    disable = c.tool_circuit_breaker()
-    assert disable.disabled == ("read_url",)
-    dmsg = disable.message() or ""
-    assert "换不同的输入" not in dmsg
-    assert "停用" in dmsg
-    assert "收束继续 web_search" in dmsg or "不要把继续检索当默认出路" in dmsg
-    assert "基于已有材料" in dmsg
+
+def test_circuit_breaker_read_url_explicit_retire_still_disables():
+    """出网硬退役仍卸 read_url（不是累计三次）。"""
+    c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
+    steer = "工具 `read_url` 因出网不可用已停用"
+    c.record(
+        [
+            ToolAttempt(
+                "a",
+                "read_url",
+                success=False,
+                meta={
+                    "retire_tools": ["read_url"],
+                    "retire_message": steer,
+                },
+            )
+        ]
+    )
+    cb = c.tool_circuit_breaker()
+    assert cb.disabled == ("read_url",)
+    assert cb.retire_message == steer
 
 
 def test_circuit_breaker_counts_failures_per_tool_and_ignores_success():
@@ -424,7 +457,7 @@ def test_workspace_channel_dead_disables_landing_tools():
     """Sticky channel-dead must disable pens (not force_segmented) + retire family steer."""
     from agentcore.workspace.limits import (
         WORKSPACE_CHANNEL_DEAD_RETIRE_STEER,
-        WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS,
+        channel_dead_retire_metadata,
     )
 
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
@@ -434,15 +467,8 @@ def test_workspace_channel_dead_disables_landing_tools():
                 "dead",
                 "file_list",
                 success=False,
-                error_summary="活性挂起",
-                meta={
-                    "liveness_timeout": True,
-                    "timeout_layer": "channel",
-                    "error_class": "permanent",
-                    "workspace_channel_dead": True,
-                    "retire_tools": list(WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS),
-                    "retire_message": WORKSPACE_CHANNEL_DEAD_RETIRE_STEER,
-                },
+                error_summary="连不上",
+                meta=channel_dead_retire_metadata(),
             )
         ]
     )
@@ -513,8 +539,7 @@ def test_workspace_channel_dead_emits_user_notice_once():
     from agentcore.runtime.events import EventSink, EventType
     from agentcore.workspace.limits import (
         CHANNEL_DEAD_USER_VISIBLE,
-        WORKSPACE_CHANNEL_DEAD_RETIRE_STEER,
-        WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS,
+        channel_dead_retire_metadata,
     )
 
     clear_active_coordination()
@@ -529,13 +554,8 @@ def test_workspace_channel_dead_emits_user_notice_once():
     try:
         c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
         meta = {
-            "liveness_timeout": True,
-            "timeout_layer": "channel",
-            "error_class": "permanent",
-            "workspace_channel_dead": True,
+            **channel_dead_retire_metadata(),
             "execution_id": "exec-notice",
-            "retire_tools": list(WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS),
-            "retire_message": WORKSPACE_CHANNEL_DEAD_RETIRE_STEER,
         }
         c.record(
             [
@@ -543,7 +563,7 @@ def test_workspace_channel_dead_emits_user_notice_once():
                     "dead1",
                     "file_read",
                     success=False,
-                    error_summary="活性挂起",
+                    error_summary="连不上",
                     meta=meta,
                 )
             ]
@@ -603,8 +623,8 @@ def test_retire_tools_honored_even_with_contract_failure():
     assert "egress" in (cb.message() or "")
 
 
-def test_permanent_sandbox_network_retires_code_execute_on_first_fail():
-    """sandbox network unsupported → permanent; first fail disables code_execute."""
+def test_permanent_sandbox_network_does_not_retire_run_family():
+    """sandbox network unsupported → 失败留下；run 族不卸。"""
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
     c.record(
         [
@@ -622,39 +642,18 @@ def test_permanent_sandbox_network_retires_code_execute_on_first_fail():
             )
         ]
     )
-    cb = c.tool_circuit_breaker()
-    assert cb.disabled == ("code_execute",)
-    assert cb.warned == ()
-    assert "沙箱网络" in (cb.message() or "")
-    # Second identical failure must not re-fire or wait for threshold 3.
-    c.record(
-        [
-            ToolAttempt(
-                "b",
-                "code_execute",
-                success=False,
-                meta={
-                    "error_class": "permanent",
-                    "retire_tools": ["code_execute"],
-                },
-            )
-        ]
-    )
     assert not c.tool_circuit_breaker()
 
 
-def test_exec_env_timeout_retires_family_after_two_hits():
-    """idle hang + code_execute sandbox timeout → retire both after 2 hits."""
-    from agentcore.runtime.loop_controller import EXEC_ENV_TIMEOUT_RETIRE_STEER
-
+def test_exec_env_timeout_does_not_retire_family_after_two_hits():
+    """idle hang ×2 on run → 不卸（legacy test_run / code_execute 已并入）."""
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
     c.record(
         [
             ToolAttempt(
                 "t1",
-                "test_run",
+                "run",
                 success=False,
-                contract_failure=True,
                 error_summary="验证未在 300s 预算内完成（验证未完成，非工具故障）",
                 meta={"code": "verify_budget", "exec_env_timeout": True},
             )
@@ -665,26 +664,20 @@ def test_exec_env_timeout_retires_family_after_two_hits():
         [
             ToolAttempt(
                 "c1",
-                "code_execute",
+                "run",
                 success=False,
                 error_summary="stderr:\nTimeout: execution exceeded 30s",
                 meta={"code": "exec_timeout", "exec_env_timeout": True},
             )
         ]
     )
-    cb = c.tool_circuit_breaker()
-    assert set(cb.disabled) == {"code_execute", "test_run"}
-    assert cb.retire_message == EXEC_ENV_TIMEOUT_RETIRE_STEER
-    assert "执行环境连续超时" in (cb.message() or "")
-    # Success of either family tool would have cleared the streak earlier; after
-    # retire, further timeouts must not re-fire.
+    assert not c.tool_circuit_breaker()
     c.record(
         [
             ToolAttempt(
                 "t2",
-                "test_run",
+                "run",
                 success=False,
-                contract_failure=True,
                 meta={"code": "verify_budget", "exec_env_timeout": True},
             )
         ]
@@ -692,15 +685,13 @@ def test_exec_env_timeout_retires_family_after_two_hits():
     assert not c.tool_circuit_breaker()
 
 
-def test_exec_env_timeout_emits_user_notice_once():
+def test_exec_env_timeout_does_not_emit_user_notice():
     from agentcore.runtime.coordination.session import (
         CoordinationSession,
         clear_active_coordination,
         set_active_coordination,
     )
     from agentcore.runtime.events import EventSink, EventType
-    from agentcore.runtime.loop_controller import EXEC_ENV_TIMEOUT_RETIRE_STEER
-    from agentcore.workspace.limits import EXEC_ENV_DEAD_USER_VISIBLE
 
     clear_active_coordination()
     sink = EventSink()
@@ -713,14 +704,13 @@ def test_exec_env_timeout_emits_user_notice_once():
     set_active_coordination(session)
     try:
         c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-        for i, tool in enumerate(("test_run", "code_execute")):
+        for i in range(2):
             c.record(
                 [
                     ToolAttempt(
                         f"e{i}",
-                        tool,
+                        "run",
                         success=False,
-                        contract_failure=tool == "test_run",
                         error_summary="Timeout: execution exceeded 30s",
                         meta={
                             "code": "exec_timeout",
@@ -730,14 +720,11 @@ def test_exec_env_timeout_emits_user_notice_once():
                     )
                 ]
             )
-        assert session.exec_env_dead is True
-        assert session.exec_env_dead_user_notice_emitted is True
+        assert session.exec_env_dead is False
+        assert session.exec_env_dead_user_notice_emitted is False
         deltas = [e for e in sink._history if e.type is EventType.CONTENT_DELTA]
-        assert len(deltas) == 1
-        assert EXEC_ENV_DEAD_USER_VISIBLE in (deltas[0].payload.get("delta") or "")
-        cb = c.tool_circuit_breaker()
-        assert set(cb.disabled) == {"code_execute", "test_run"}
-        assert EXEC_ENV_TIMEOUT_RETIRE_STEER in (cb.message() or "")
+        assert deltas == []
+        assert not c.tool_circuit_breaker()
     finally:
         clear_active_coordination()
 
@@ -748,21 +735,19 @@ def test_exec_env_timeout_streak_clears_on_success():
         [
             ToolAttempt(
                 "t1",
-                "test_run",
+                "run",
                 success=False,
-                contract_failure=True,
                 meta={"code": "verify_budget", "exec_env_timeout": True},
             )
         ]
     )
-    c.record([ToolAttempt("ok", "code_execute", success=True)])
+    c.record([ToolAttempt("ok", "run", success=True)])
     c.record(
         [
             ToolAttempt(
                 "t2",
-                "test_run",
+                "run",
                 success=False,
-                contract_failure=True,
                 meta={"code": "verify_budget", "exec_env_timeout": True},
             )
         ]
@@ -819,11 +804,11 @@ def test_permission_does_not_affect_transient_thresholds():
     )
     c.record([perm, perm, perm])
     assert not c.tool_circuit_breaker()
-    c.record([_fail("a", "read_url")])
+    c.record([_fail("a", "grep")])
     assert not c.tool_circuit_breaker()
-    c.record([_fail("b", "read_url")])
+    c.record([_fail("b", "grep")])
     warn = c.tool_circuit_breaker()
-    assert warn.warned == ("read_url",)
+    assert warn.warned == ("grep",)
     assert warn.disabled == ()
 
 
@@ -1046,14 +1031,14 @@ async def test_validation_thrash_finalize_escalates_gap_upward(monkeypatch):
 
 
 def test_transient_still_warns_at_two_disables_at_three():
-    """Unclassified / transient failures keep warn=2 / disable=3."""
+    """Unclassified / transient failures keep warn=2 / disable=3 (非 keep-available)."""
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    c.record([_fail("a", "web_search")])
+    c.record([_fail("a", "grep")])
     assert not c.tool_circuit_breaker()
-    c.record([_fail("b", "web_search")])
-    assert c.tool_circuit_breaker().warned == ("web_search",)
-    c.record([_fail("c", "web_search")])
-    assert c.tool_circuit_breaker().disabled == ("web_search",)
+    c.record([_fail("b", "grep")])
+    assert c.tool_circuit_breaker().warned == ("grep",)
+    c.record([_fail("c", "grep")])
+    assert c.tool_circuit_breaker().disabled == ("grep",)
 
 
 def test_circuit_breaker_ignores_contract_failures_in_one_round():
@@ -1131,19 +1116,19 @@ def test_circuit_breaker_ignores_path_not_found_env_failures():
 def test_circuit_breaker_counts_only_real_failures_when_mixed_with_contract():
     # 契约拒绝与真实失败（网络错误等）混合时：只有真实失败计入 warn/disable。
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    rej = ToolAttempt("a", "web_search", success=False, contract_failure=True)
-    real = ToolAttempt("b", "web_search", success=False)
+    rej = ToolAttempt("a", "grep", success=False, contract_failure=True)
+    real = ToolAttempt("b", "grep", success=False)
     # 3 契约拒绝 + 2 真实失败 → 只数到 2 → warn，不 disable。
     c.record([rej, real, rej, real, rej])
     cb = c.tool_circuit_breaker()
-    assert cb.warned == ("web_search",)
+    assert cb.warned == ("grep",)
     assert cb.disabled == ()
-    assert c.tool_failure_count("web_search") == 2
+    assert c.tool_failure_count("grep") == 2
     # 第 3 个真实失败才 disable；夹带的契约拒绝仍不计数。
     c.record([rej, real, rej])
     cb2 = c.tool_circuit_breaker()
-    assert cb2.disabled == ("web_search",)
-    assert c.tool_failure_count("web_search") == 3
+    assert cb2.disabled == ("grep",)
+    assert c.tool_failure_count("grep") == 3
 
 
 def test_contract_failure_still_counts_as_round_failure_for_detection():
@@ -1245,11 +1230,11 @@ def test_circuit_breaker_remember_still_disables_on_real_failures():
 def test_circuit_breaker_other_parse_warn_is_class_aware():
     """Default-tool parse warn must cover truncate vs escape — not only「原样重发全部」."""
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    parse = ToolAttempt("a", "web_search", success=False, parse_failure=True)
-    c.record([parse, ToolAttempt("b", "web_search", success=False, parse_failure=True)])
+    parse = ToolAttempt("a", "grep", success=False, parse_failure=True)
+    c.record([parse, ToolAttempt("b", "grep", success=False, parse_failure=True)])
     cb = c.tool_circuit_breaker()
-    assert cb.warned == ("web_search",)
-    assert "web_search" in cb.parse_only
+    assert cb.warned == ("grep",)
+    assert "grep" in cb.parse_only
     msg = cb.message() or ""
     assert "截断" in msg
     assert "转义" in msg
@@ -1266,19 +1251,6 @@ def _prose_append_reject(fp: str, path: str) -> ToolAttempt:
         contract_failure=True,
         error_summary=f"拒绝追加：`{path}` 本 run 已落成篇正文（非骨架）。",
         meta={"path": path, "segmented_write_reject": "prose_append"},
-    )
-
-
-def _code_integrity_reject(fp: str, path: str) -> ToolAttempt:
-    return ToolAttempt(
-        fp,
-        "file_write",
-        success=False,
-        contract_failure=True,
-        error_summary=(
-            f"拒绝写入代码文件 `{path}`：括号/方括号/圆括号结构不完整（缺 `}}`）。"
-        ),
-        meta={"path": path, "segmented_write_reject": "code_integrity"},
     )
 
 
@@ -1303,7 +1275,7 @@ def test_path_write_reject_streak_trips_force_segmented_at_two():
 
 def test_path_write_reject_below_threshold_does_not_trip():
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    c.record([_code_integrity_reject("a", "app.ts")])
+    c.record([_prose_append_reject("a", "report.md")])
     assert not c.tool_circuit_breaker()
 
 
@@ -1314,10 +1286,9 @@ def test_path_write_reject_different_paths_do_not_combine():
     assert not c.tool_circuit_breaker()
 
 
-def test_path_write_reject_different_class_resets_streak():
+def test_path_write_reject_unclassified_resets_streak():
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
     c.record([_prose_append_reject("a", "x.md")])
-    # Same path but different class → streak restarts at 1.
     c.record(
         [
             ToolAttempt(
@@ -1325,26 +1296,14 @@ def test_path_write_reject_different_class_resets_streak():
                 "file_write",
                 success=False,
                 contract_failure=True,
-                error_summary="拒绝写入代码文件 `x.md`：正文含省略标记。",
-                meta={"path": "x.md", "segmented_write_reject": "code_integrity"},
+                error_summary="path 不能为空",
+                meta={"path": "x.md"},
             )
         ]
     )
     assert not c.tool_circuit_breaker()
-    c.record(
-        [
-            ToolAttempt(
-                "c",
-                "file_write",
-                success=False,
-                contract_failure=True,
-                error_summary="拒绝写入代码文件 `x.md`：正文含省略标记。",
-                meta={"path": "x.md", "segmented_write_reject": "code_integrity"},
-            )
-        ]
-    )
-    cb = c.tool_circuit_breaker()
-    assert "file_write" in cb.force_segmented
+    c.record([_prose_append_reject("c", "x.md")])
+    assert not c.tool_circuit_breaker()
 
 
 def test_path_write_reject_success_resets_streak():
@@ -1368,8 +1327,8 @@ def test_path_write_reject_two_in_one_round_trips():
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
     c.record(
         [
-            _code_integrity_reject("a", "main.py"),
-            _code_integrity_reject("b", "main.py"),
+            _prose_append_reject("a", "report.md"),
+            _prose_append_reject("b", "report.md"),
         ]
     )
     cb = c.tool_circuit_breaker()
@@ -1377,7 +1336,7 @@ def test_path_write_reject_two_in_one_round_trips():
     assert "file_append" in cb.force_segmented
 
 
-def test_classify_segmented_write_reject_covers_prose_and_integrity_not_length():
+def test_classify_segmented_write_reject_covers_prose_not_length():
     from agentcore.runtime.loop_controller import classify_segmented_write_reject
 
     assert (
@@ -1394,7 +1353,7 @@ def test_classify_segmented_write_reject_covers_prose_and_integrity_not_length()
             error="拒绝写入代码文件 `a.ts`：括号结构不完整（缺 `}`）。",
             contract_failure=True,
         )
-        == "code_integrity"
+        is None
     )
     assert (
         classify_segmented_write_reject(
@@ -1410,7 +1369,7 @@ def test_classify_segmented_write_reject_covers_prose_and_integrity_not_length()
             error="拒绝整篇截断覆盖：`报告.md` 旧稿约 2000 字 → 新稿 300 字（低于旧稿 50%）。",
             contract_failure=True,
         )
-        == "severe_shrink"
+        is None
     )
     assert (
         classify_segmented_write_reject(
@@ -1420,24 +1379,6 @@ def test_classify_segmented_write_reject_covers_prose_and_integrity_not_length()
         )
         is None
     )
-
-
-def test_path_severe_shrink_reject_streak_trips_force_segmented():
-    c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    rej = ToolAttempt(
-        "a",
-        "file_write",
-        success=False,
-        contract_failure=True,
-        error_summary="拒绝整篇截断覆盖：`报告.md` 旧稿约 2000 字 → 新稿 300 字。",
-        meta={"path": "报告.md", "segmented_write_reject": "severe_shrink"},
-    )
-    c.record([rej])
-    assert not c.tool_circuit_breaker()
-    c.record([rej])
-    cb = c.tool_circuit_breaker()
-    assert "file_write" in cb.force_segmented
-    assert "file_append" in cb.force_segmented
 
 
 def test_apply_circuit_breaker_narrows_file_append_on_force_segmented():

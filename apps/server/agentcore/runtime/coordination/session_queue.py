@@ -150,6 +150,17 @@ class SessionQueueMixin:
                 break
         return batch
 
+    def has_unread_user_interjection(self: CoordinationSession) -> bool:
+        """True when a USER_INTERJECTION is queued and not yet consumed this wait.
+
+        Moves queue items into ``_pending`` (same as snapshot drain) so a later
+        ``drain_nowait`` / ``wait_events`` still sees them.
+        """
+        self._drain_queue_copy()
+        return any(
+            ev.kind is CoordinationEventKind.USER_INTERJECTION for ev in self._pending
+        )
+
     def _drain_queue_copy(self: CoordinationSession) -> list[CoordinationEvent]:
         """Non-destructive peek is unavailable on Queue — drain into pending + wake."""
         drained: list[CoordinationEvent] = []

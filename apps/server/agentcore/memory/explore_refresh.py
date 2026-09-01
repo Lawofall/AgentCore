@@ -7,6 +7,9 @@ merge-write 导航/画像 (optional topics) → update fingerprint + clear dirty
 Never blocks the user turn. Never runs CEO+delegate+team_preview.
 Thick folder dossiers are on-demand ``主题/`` entries; this bypass only
 merge-writes the short entry, so it never grows one.
+
+Empty folder 画像 is not "go fill it": skip the LLM and do not write. Named
+「先了解」 / 工程短语 still hard-explore in the user turn.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from agentcore.memory.explore_profile import (
     _KEY_MANIFEST_CANDIDATES,
     MAX_EXPLORE_TOPICS,
     filter_topics_by_scope_cap,
+    folder_profile_is_empty,
     load_folder_profile,
     parse_explore_topics,
     record_explore_closeout,
@@ -173,6 +177,13 @@ async def refresh_folder_explore_from_snapshot(
         return False
 
     current_profile = await load_folder_profile(store, user_id, folder_id)
+    if folder_profile_is_empty(current_profile):
+        logger.info(
+            "memory.explore_refresh_skip_empty_profile",
+            user_id=user_id,
+            folder_id=folder_id,
+        )
+        return False
     current_nav = await store.load(user_id, NAVIGATION_MEMORY_FILE, scope=folder_id)
     user_prompt = (
         f"# Workspace snapshot\n{snapshot.strip()}\n\n"

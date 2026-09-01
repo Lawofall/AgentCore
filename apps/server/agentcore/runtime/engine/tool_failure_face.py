@@ -106,8 +106,10 @@ _CURATED_BY_CODE: dict[str, str] = {
     "landed_status_name": _TOOL_NAME_UNRESOLVED,
     "host_unavailable": "浏览器宿主暂时不可用，请稍后重试。",
     "searxng_unreachable": "本地搜索服务不可用，请稍后重试",
-    "exec_timeout": "执行超时，请缩小范围后重试。",
-    "exec_forced_stop": "执行已强制中止，请缩小范围后重试。",
+    # Idle hang: no stdout/stderr — stuck (env/network), not oversized.
+    "exec_timeout": "这条命令一直没有输出，已经中止。请检查本机环境或网络后再试。",
+    # Disaster wall: it actually ran until the ceiling.
+    "exec_forced_stop": "这条命令已经跑满上限，被强制中止。可以拆成更短的命令后让我再试。",
     "exec_env_probe_failed": (
         "本机执行环境不可用：这次没能判断出具体原因，代码没有运行。"
         "我会换个方式继续。"
@@ -174,6 +176,9 @@ _CURATED_BY_CODE: dict[str, str] = {
     # Deterministic: the same call fails again, so the fix is mine, not a retry by the user.
     "verify_contract": (
         "这次要跑的检查命令没能确定下来（缺少或者填得不对），没有执行。我会改正后重跑。"
+    ),
+    "run_contract": (
+        "这次要跑的命令没能确定下来（缺少或者填得不对），没有执行。我会改正后重跑。"
     ),
     # Posture split is a product fact (队员分工), not an engine concept.
     "verify_policy_inner": (

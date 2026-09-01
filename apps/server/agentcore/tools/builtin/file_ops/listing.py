@@ -187,12 +187,15 @@ class GlobPlan:
 
     ``locate_dir``: find directories with this basename anywhere under the search
     root, then apply ``name_filter`` under each (``**/name/**`` / ``**/name/*.py``).
+    ``star_dirs``: list immediate child directories of ``directory``, then apply
+    ``name_filter`` under each (``pkg/*/name`` — ``*`` is one path segment).
     """
 
     locate_dir: str | None
     directory: str
     name_filter: str
     max_depth: int
+    star_dirs: bool = False
 
 
 def join_glob_directory(*parts: str) -> str:
@@ -210,6 +213,26 @@ def join_glob_directory(*parts: str) -> str:
 
 def _star_or_all(name: str) -> str:
     return "*" if name in _STAR_CLASS_PATTERNS else name
+
+
+def _compile_star_dir_plan(raw: str) -> GlobPlan | None:
+    """``prefix/*/name`` — one-level directory wildcard, not a literal ``*`` path.
+
+    ``*`` as the last path segment is a name filter (``src/*.py``), handled
+    elsewhere. Multiple directory-segment stars (``a/*/b/*/c``) are out of scope.
+    """
+    segs = [part for part in raw.split("/") if part]
+    if len(segs) < 2:
+        return None
+    name = segs[-1]
+    dir_segs = segs[:-1]
+    star_at = [i for i, seg in enumerate(dir_segs) if seg == "*"]
+    if len(star_at) != 1 or star_at[0] != len(dir_segs) - 1:
+        return None
+    if any(seg == "**" for seg in dir_segs):
+        return None
+    prefix = "/".join(dir_segs[:-1]) or "."
+    return GlobPlan(None, prefix, _star_or_all(name), 1, True)
 
 
 def compile_glob_pattern(pattern: str) -> GlobPlan | None:
@@ -248,9 +271,13 @@ def compile_glob_pattern(pattern: str) -> GlobPlan | None:
     if match is not None:
         return GlobPlan(None, match.group(1), _star_or_all(match.group(2)), GLOB_DEPTH)
 
-    if "**" not in raw and "/" in raw:
-        prefix, last = raw.rsplit("/", 1)
-        return GlobPlan(None, prefix, _star_or_all(last), 1)
+    if "**" not in raw:
+        star_plan = _compile_star_dir_plan(raw)
+        if star_plan is not None:
+            return star_plan
+        if "/" in raw:
+            prefix, last = raw.rsplit("/", 1)
+            return GlobPlan(None, prefix, _star_or_all(last), 1)
 
     prefix, last = raw.rsplit("/", 1)
     prefix = prefix.replace("**", "").replace("//", "/").strip("/") or "."
@@ -263,12 +290,18 @@ def compile_glob_patterns(pattern: str) -> list[GlobPlan] | None:
     if not raw:
         return None
     plans: list[GlobPlan] = []
-    seen: set[tuple[str | None, str, str, int]] = set()
+    seen: set[tuple[str | None, str, str, int, bool]] = set()
     for item in expand_brace_globs(raw):
         plan = compile_glob_pattern(item)
         if plan is None:
             return None
-        key = (plan.locate_dir, plan.directory, plan.name_filter, plan.max_depth)
+        key = (
+            plan.locate_dir,
+            plan.directory,
+            plan.name_filter,
+            plan.max_depth,
+            plan.star_dirs,
+        )
         if key not in seen:
             seen.add(key)
             plans.append(plan)

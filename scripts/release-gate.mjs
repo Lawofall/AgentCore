@@ -22,7 +22,7 @@
  * Lite skips the desktop screenshot matrix (~4min with 4 workers) + webapp smoke (port-fragile);
  * lint / typecheck / vitest / conformance stay. Full gate still runs shoot with
  * SHOOT_FRAMES=3 and smoke:webapp:ci. Before smoke, freeListenPorts clears
- * leftover AgentCore vite on SMOKE_PORT (default 5174) to reduce port flakes.
+ * leftover AgentCore vite on SMOKE_PORT (default 5175) to reduce port flakes.
  *
  * Any non-zero step fails the whole gate. Backend uses unit pytest
  * (`--ignore=tests/integration`) for local runnability; CI still runs full
@@ -434,7 +434,7 @@ async function runDesktopSection({ lite = false } = {}) {
     });
   }
   // Pre-free smoke port so a leftover vite does not flake strictPort (port-fragile).
-  const smokePort = String(process.env.SMOKE_PORT ?? "5174");
+  const smokePort = String(process.env.SMOKE_PORT ?? "5175");
   run("free smoke port", "node", ["scripts/free-listen-port.mjs", smokePort]);
   run("desktop smoke:webapp:ci", "pnpm", [
     "--filter",

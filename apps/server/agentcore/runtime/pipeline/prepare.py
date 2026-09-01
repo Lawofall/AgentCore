@@ -12,17 +12,16 @@ from agentcore.board.channel import BoardChannel
 from agentcore.config import settings
 from agentcore.core.logging import get_logger
 from agentcore.core.types import new_id
+from agentcore.db.base import async_session_factory
+from agentcore.db.repositories import FolderRepository
 from agentcore.desktop.channel import DesktopClientChannel
 from agentcore.llm.credentials import LLMCredentials
 from agentcore.llm.profiles import TurnProfiles
 from agentcore.memory import assemble_turn_rules
 from agentcore.runtime.context import (
-    FolderCatalogEntry,
     build_workspace_context,
-    catalog_label_for,
     collect_outlet_inventory,
     detect_workspace_git,
-    load_folder_catalog,
     resolve_channel_profile,
 )
 from agentcore.runtime.costing import RunCost
@@ -30,7 +29,7 @@ from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.runtime.resolve.prepare import (
     _build_attachment_prompt,
-    _wire_worker_conversation_log_tools,
+    _wire_conversation_log_tools,
     merge_attachment_and_mention_context,
 )
 from agentcore.runtime.resolve.prompt import (
@@ -40,9 +39,11 @@ from agentcore.runtime.resolve.prompt import (
 from agentcore.runtime.skills import build_system_skill_registry
 from agentcore.tools.builtin import build_worker_registry
 from agentcore.tools.ceo_toolset import wire_worker_consult as _wire_worker_consult_tools
+from agentcore.tools.mcp.wire import McpDiscoverResult
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registry import ToolRegistry
 from agentcore.vision import resolve_vision_reader_for_conversation
+from agentcore.workspace.cloud_tree import normalize_rel_path
 from agentcore.workspace.locate import workspace_channel_for_tools
 from agentcore.workspace.protocol import WorkspaceBackend
 
@@ -62,6 +63,33 @@ async def _timed_phase[T](phase: str, awaitable: Awaitable[T]) -> T:
         )
 
 
+async def resolve_desk_folder_label(
+    user_id: str, folder_id: str | None
+) -> str | None:
+    """Sitting-desk path/name for ``<工作区>``; ``None`` on miss or failure.
+
+    ``rel_path`` wins when present, otherwise ``name``. Never raises into prepare.
+    """
+    fid = (folder_id or "").strip()
+    if not fid:
+        return None
+    try:
+        async with async_session_factory() as session:
+            folder = await FolderRepository(session).get_by_id(fid, user_id=user_id)
+    except Exception as e:  # noqa: BLE001 - label miss must never break a turn
+        logger.warning(
+            "desk_folder_label.load_failed",
+            user_id=user_id,
+            folder_id=fid,
+            error=str(e),
+        )
+        return None
+    if folder is None:
+        return None
+    label = normalize_rel_path(folder.rel_path) or (folder.name or "").strip()
+    return label or None
+
+
 @dataclass
 class PreparedTurn:
     """Phase-1 outputs shared by assemble + execute."""
@@ -78,9 +106,9 @@ class PreparedTurn:
     attachment_context: str
     user_message: str
     native_image_parts: list[dict]
-    folder_catalog: list[FolderCatalogEntry]
     bound_execution_id: str
     execution_id_token: object
+    mcp_discover: McpDiscoverResult
 
 
 async def prepare_fresh_turn(
@@ -123,12 +151,9 @@ async def prepare_fresh_turn(
             enabled=True,
         ),
     )
-    # Derived cross-folder roster (跨文件夹找文件夹): Folder path + 画像.md first line,
-    # recent-activity ordered with a hard count cap. Outside ``<设定>`` so it never
-    # evicts always memory. Empty when the user has no folders.
-    folder_catalog = await _timed_phase(
-        "folder_catalog",
-        load_folder_catalog(memory_store, user_id, current_folder_id=folder_id),
+    desk_folder_label = await _timed_phase(
+        "desk_folder_label",
+        resolve_desk_folder_label(user_id, folder_id),
     )
     # Clean, stable base (base + date + workspace facts + memory): NO attachments,
     # NO CEO hints. This is the cacheable prefix shared by the CEO and reused
@@ -140,8 +165,6 @@ async def prepare_fresh_turn(
     # Host / MCP backfill needs a desktop client — orthogonal to workspace location.
     channel = resolve_channel_profile(x_client_platform)
     desktop_online = channel.desktop_online
-    # Sticky channel-dead (e.g. baseline already hung the desktop): abort before
-    # probe / MCP / exists burn more wall clock and before assemble + LLM.
     # Presence gate + prepare local IO budget. The span adopts turn_runner's
     # turn-wide deadline (baseline already spent part of it) and starts its own
     # when prepare is invoked alone, e.g. tests / stage-card / workflow entries.
@@ -150,10 +173,8 @@ async def prepare_fresh_turn(
         prepare_local_io_span,
         raise_if_local_workspace_fulfiller_absent,
     )
-    from agentcore.workspace.channel import raise_if_backend_channel_dead
 
     raise_if_local_workspace_fulfiller_absent(user_id=user_id, backend=backend)
-    raise_if_backend_channel_dead(backend)
     with prepare_local_io_span(backend):
         from agentcore.tools.sandbox.exec_languages import resolve_exec_languages
 
@@ -191,8 +212,6 @@ async def prepare_fresh_turn(
             "outlet_inventory",
             await_prepare_local_io(collect_outlet_inventory(backend)),
         )
-        # exists/.git (and similar) may sticky-dead after prior timeouts — stop here.
-        raise_if_backend_channel_dead(backend)
     workspace_facts = build_workspace_context(
         backend,
         desktop_online=desktop_online,
@@ -203,7 +222,7 @@ async def prepare_fresh_turn(
         git_fact=git_fact,
         outlet_inventory=outlet_inventory,
         desk_folder_id=folder_id,
-        desk_folder_label=catalog_label_for(folder_catalog, folder_id),
+        desk_folder_label=desk_folder_label,
         desk_is_birth=True,
     )
     system_prompt = assemble_system_prompt(
@@ -219,11 +238,10 @@ async def prepare_fresh_turn(
             user_id=user_id, conversation_id=conversation_id
         ),
     )
-    from agentcore.llm.model_metadata import model_has_curated_vision
+    from agentcore.llm.image_accept import model_accepts_images
 
     main_model = profiles.model_for("chat") if profiles is not None else ""
-    # Curated table only — never keyword-derived catalog tags (false vision → 400).
-    main_native_vision = model_has_curated_vision(main_model)
+    main_native_vision = model_accepts_images(main_model)
     native_image_parts: list[dict] = []
     # Built before the attachment block: its ``code_execute`` steer must follow this
     # turn's real worker assembly, never a second predicate. MCP / consult wiring
@@ -277,7 +295,7 @@ async def prepare_fresh_turn(
         folder_id=folder_id,
         user_id=user_id,
     )
-    _wire_worker_conversation_log_tools(
+    _wire_conversation_log_tools(
         worker_tools,
         folder_id=folder_id,
     )
@@ -423,7 +441,7 @@ async def prepare_fresh_turn(
         attachment_context=attachment_context,
         user_message=user_message,
         native_image_parts=native_image_parts,
-        folder_catalog=folder_catalog,
         bound_execution_id=bound_execution_id,
         execution_id_token=execution_id_token,
+        mcp_discover=mcp_discover,
     )

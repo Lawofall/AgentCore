@@ -3,8 +3,8 @@
 Mirrors the check_contract / out_of_range_markers test posture: finish_guard is a
 pure function over content returning concrete rework items, and format_guard_steer
 renders them into one injected ``[系统提示]``. Chat finish_guard covers structural
-completeness and CEO delivery structure — not ``#rN`` / ``[n]`` / bibliography
-(those stay on :func:`citation_quality_reworks` for file contracts).
+completeness and CEO delivery honesty — not ``#rN`` / ``[n]`` / bibliography
+(those stay on :func:`citation_quality_reworks` for file contracts). 产物结构窄闸已撤。
 """
 
 from agentcore.runtime.closing_posture import closing_honesty_verdict_hit
@@ -47,32 +47,23 @@ def test_unclosed_fence_flagged():
     assert "没有闭合" in reworks[0]
 
 
-def test_empty_fence_with_language_flagged():
-    reworks = finish_guard("示例：\n```python\n```\n", citation_count=0)
-    assert len(reworks) == 1
-    assert "python" in reworks[0]
-    assert "空" in reworks[0]
+def test_empty_fence_with_language_does_not_rework():
+    """空语言围栏已撤：```python 空体不再清气泡。"""
+    assert finish_guard("示例：\n```python\n```\n", citation_count=0) == []
 
 
 def test_bare_empty_fence_not_flagged():
-    # 无语言标注的空围栏可能是有意排版，保守起见不判（守住近零误报）。
     assert finish_guard("```\n```\n", citation_count=0) == []
 
 
-def test_indented_empty_fence_flagged():
-    # 列表内缩进的围栏（lstrip 后仍是 ```）照样检出。
-    reworks = finish_guard("- 代码：\n  ```json\n  ```\n", citation_count=0)
-    assert len(reworks) == 1
-    assert "json" in reworks[0]
+def test_indented_empty_fence_does_not_rework():
+    assert finish_guard("- 代码：\n  ```json\n  ```\n", citation_count=0) == []
 
 
 def test_stray_citation_does_not_combine_with_structure():
-    """悬空 [n] 不进 chat 回炉；空代码块仍回炉。"""
+    """悬空 [n] 不进 chat 回炉；空代码块也不再回炉。"""
     content = "见 [5]。\n```python\n```\n"
-    reworks = finish_guard(content, citation_count=2)
-    assert len(reworks) == 1
-    assert any("空" in r for r in reworks)
-    assert not any("编造引用" in r for r in reworks)
+    assert finish_guard(content, citation_count=2) == []
 
 
 def test_format_steer_renders_problems():
@@ -195,23 +186,24 @@ def test_bibliography_bound_type_marker_skips_unbound_gate():
     )
 
 
-def test_blocked_empty_delivery_rejects_false_completion_claim():
+def test_blocked_empty_delivery_claim_does_not_rework():
+    """产物结构窄闸已撤：blocked + 空盘 +「已生成」不再清气泡。"""
     from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="blocked", delivered_files=(), execution_id="e1"
     )
-    reworks = finish_guard(
-        "文件已生成，确认结果：`测试演示.pptx` 已存在于工作区根目录。",
-        citation_count=0,
-        delivery_verdict=verdict,
+    assert (
+        finish_guard(
+            "文件已生成，确认结果：`测试演示.pptx` 已存在于工作区根目录。",
+            citation_count=0,
+            delivery_verdict=verdict,
+        )
+        == []
     )
-    assert len(reworks) == 1
-    assert "交付验收" in reworks[0]
-    assert "不得宣称" in reworks[0]
 
 
-def test_named_absent_declared_path_with_landed_claim_reworks():
+def test_named_absent_declared_path_with_landed_claim_does_not_rework():
     from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
@@ -220,14 +212,14 @@ def test_named_absent_declared_path_with_landed_claim_reworks():
         execution_id="e-icon",
         missing_declared=("build/icon.ico",),
     )
-    reworks = finish_guard(
-        "图标已落盘：`build/icon.ico` 已写入工作区。",
-        citation_count=0,
-        delivery_verdict=verdict,
+    assert (
+        finish_guard(
+            "图标已落盘：`build/icon.ico` 已写入工作区。",
+            citation_count=0,
+            delivery_verdict=verdict,
+        )
+        == []
     )
-    assert reworks
-    assert "build/icon.ico" in reworks[0]
-    assert "不是用户交付" in reworks[0]
 
 
 def test_named_absent_path_honest_gap_passes():
@@ -761,8 +753,8 @@ def test_overview_length_skipped_for_workers():
     )
 
 
-def test_delivery_structure_rework_still_fires_when_overview_also_over(monkeypatch):
-    """篇幅影子不得吞掉产物结构窄闸：无 .pptx 仍回炉。"""
+def test_overview_length_shadow_does_not_rework_former_structure_hit(monkeypatch):
+    """篇幅影子仍只打日志；旧产物结构命中不再回炉。"""
     from agentcore.runtime.closing_posture import core as honesty_core
     from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
     from tests.conftest import LogSpy
@@ -782,15 +774,13 @@ def test_delivery_structure_rework_still_fires_when_overview_also_over(monkeypat
         delivery_verdict=verdict,
         overview_max_chars=1000,
     )
-    assert len(reworks) == 1
-    assert ".pptx" in reworks[0]
-    assert "不得宣称" in reworks[0]
+    assert reworks == []
     fields = spy.get("engine.finish_guard_honesty_shadow")
     assert fields["hit"] == "overview_length"
 
 
-def test_partial_md_only_rejects_pptx_ready_claim():
-    """选了 pptx 却只落 md/脚本：假「PPT 已可打开」必须被 finish_guard 拦回。"""
+def test_partial_md_only_pptx_ready_claim_does_not_rework():
+    """产物结构窄闸已撤：只落 md/脚本却说 PPT 可打开，不再清气泡。"""
     from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
@@ -798,14 +788,14 @@ def test_partial_md_only_rejects_pptx_ready_claim():
         delivered_files=("build_pptx.py", "讲稿.md"),
         execution_id="e1",
     )
-    reworks = finish_guard(
-        "课件 PPT 已落盘，可直接打开使用。",
-        citation_count=0,
-        delivery_verdict=verdict,
+    assert (
+        finish_guard(
+            "课件 PPT 已落盘，可直接打开使用。",
+            citation_count=0,
+            delivery_verdict=verdict,
+        )
+        == []
     )
-    assert len(reworks) == 1
-    assert ".pptx" in reworks[0]
-    assert "不得宣称" in reworks[0]
 
 
 def test_partial_md_only_allows_honest_pptx_gap():

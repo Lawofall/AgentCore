@@ -61,17 +61,11 @@ vi.mock("@/stores/sidePanel", () => ({
 }));
 
 vi.mock("@/stores/ui", () => ({
-  useUIStore: (sel: (s: Record<string, unknown>) => unknown) =>
-    sel({ diagnosticMode: false }),
   turnDetailPath: () => "/t",
 }));
 
 vi.mock("@/hooks/useTurnAudit", () => ({
   useTurnAudit: () => ({ data: null }),
-}));
-
-vi.mock("@/hooks/useRunLlmWindow", () => ({
-  useRunLlmWindow: () => ({ data: null, loading: false, error: null }),
 }));
 
 vi.mock("@/stores/disclosure", () => ({

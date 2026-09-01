@@ -34,7 +34,7 @@ from agentcore.runtime.interaction import (
     default_interaction_registry,
 )
 from agentcore.tools.sandbox.protocol import ExecutionRequest
-from agentcore.workspace.channel import WorkspaceChannel, WorkspaceOp, index_io_mode
+from agentcore.workspace.channel import WorkspaceChannel, WorkspaceOp
 from agentcore.workspace.limits import LOCAL_ROOT_NOT_HELD
 from agentcore.workspace.local import LocalWorkspace
 from agentcore.workspace.protocol import (
@@ -368,8 +368,6 @@ async def test_single_timeout_keeps_channel_alive_for_next_op():
     )
     with pytest.raises(WorkspaceIOError, match=r"timed out（活性挂起）"):
         await channel.request(WorkspaceOp.READ, {"path": "never-answered.txt"})
-    assert channel._dead is False  # noqa: SLF001
-    assert channel._consecutive_settle_timeouts == 1  # noqa: SLF001
 
     while _CAPTURE:
         _CAPTURE.pop(0)
@@ -383,23 +381,28 @@ async def test_single_timeout_keeps_channel_alive_for_next_op():
         conversation_id=CONV,
     )
     assert await task == "alive"
-    assert channel._consecutive_settle_timeouts == 0  # noqa: SLF001
 
 
-async def test_after_two_timeouts_third_request_fail_fast():
-    """Sticky channel-dead only after consecutive N=2 settle timeouts."""
-    local, _registry = _make(timeout=2.0)
+async def test_after_two_timeouts_third_request_still_delivers():
+    """Settle timeouts fail those ops only — the next request still goes to the desktop."""
+    local, registry = _make(timeout=0.05)
     with pytest.raises(WorkspaceIOError, match=r"timed out（活性挂起）"):
         await local.read("never-answered-1.txt")
-    with pytest.raises(WorkspaceIOError, match=r"timed out; channel dead"):
+    with pytest.raises(WorkspaceIOError, match=r"timed out（活性挂起）"):
         await local.read("never-answered-2.txt")
 
-    t0 = asyncio.get_running_loop().time()
-    with pytest.raises(WorkspaceIOError, match="channel dead.*活性挂起"):
-        await local.read("also-never.txt")
-    elapsed = asyncio.get_running_loop().time() - t0
-    # Fail-fast: far shorter than the 2s channel timeout (no SSE / no suspend).
-    assert elapsed < 0.2
+    while _CAPTURE:
+        _CAPTURE.pop(0)
+
+    task = asyncio.create_task(local.read("third.txt"))
+    event = await _await_request()
+    assert event.payload["op"] == "read"
+    assert registry.resolve(
+        event.payload["request_id"],
+        {"ok": True, "value": "still-alive"},
+        conversation_id=CONV,
+    )
+    assert await task == "still-alive"
 
 
 async def test_probe_exec_timeout_does_not_sticky_dead_channel():
@@ -415,7 +418,6 @@ async def test_probe_exec_timeout_does_not_sticky_dead_channel():
     with pytest.raises(WorkspaceIOError, match="probe_exec.*活性挂起"):
         await channel.request(WorkspaceOp.PROBE_EXEC, {})
 
-    assert channel._dead is False  # noqa: SLF001
     # Drain the unanswered probe SSE so the next await sees the file op.
     while _CAPTURE:
         _CAPTURE.pop(0)
@@ -504,10 +506,6 @@ async def test_no_fulfiller_fail_fast_without_wall_clock_wait(monkeypatch):
     elapsed = asyncio.get_running_loop().time() - t0
     # Must not burn the 5s channel deadline awaiting a desktop that never saw the op.
     assert elapsed < 0.5
-    # Not a liveness hang — sticky streak stays clear.
-    assert channel._dead is False  # noqa: SLF001
-    assert channel._consecutive_settle_timeouts == 0  # noqa: SLF001
-
 
 async def test_root_not_held_settles_with_the_authorization_copy(monkeypatch):
     """Desktop online without this root: name the missing grant, not 无履约方."""
@@ -531,8 +529,6 @@ async def test_root_not_held_settles_with_the_authorization_copy(monkeypatch):
     assert "read" in detail
     assert "无履约方" not in detail
     assert elapsed < 0.5
-    assert channel._dead is False  # noqa: SLF001
-
 
 def _use_real_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     """Undo the module-wide deliver stub — these cases assert real hub routing."""
@@ -594,8 +590,6 @@ async def test_op_dispatched_into_a_reconnect_blind_window_survives_it(monkeypat
             conversation_id=CONV_RECONNECT,
         )
         assert await asyncio.wait_for(task, timeout=1.0) == "notes"
-        assert channel._dead is False  # noqa: SLF001
-        assert channel._consecutive_settle_timeouts == 0  # noqa: SLF001
     finally:
         task.cancel()
         for leftover in list(registry.list_pending(CONV_RECONNECT)):
@@ -626,8 +620,6 @@ async def test_desktop_that_left_long_ago_gets_no_grace(monkeypatch):
     with pytest.raises(WorkspaceIOError, match="无履约方"):
         await channel.request(WorkspaceOp.READ, {"path": "gone.txt"})
     assert asyncio.get_running_loop().time() - t0 < 0.5
-    assert channel._dead is False  # noqa: SLF001
-
 
 async def test_grace_expiry_settles_with_the_same_answer_well_inside_the_deadline(
     monkeypatch,
@@ -658,9 +650,6 @@ async def test_grace_expiry_settles_with_the_same_answer_well_inside_the_deadlin
     elapsed = asyncio.get_running_loop().time() - t0
     assert 0.15 <= elapsed < 1.0
     # Settled, not hung: the sticky-dead streak is for liveness timeouts only.
-    assert channel._dead is False  # noqa: SLF001
-    assert channel._consecutive_settle_timeouts == 0  # noqa: SLF001
-
 
 async def test_delivered_op_stays_open_until_resolve():
     """Fulfill delivery keeps the Future open until resolve (rehang / desktop settle)."""
@@ -704,12 +693,9 @@ async def test_delivered_op_stays_open_until_resolve():
         conversation_id=CONV,
     )
     assert await task == "from-reattach"
-    assert channel._dead is False  # noqa: SLF001
-    assert channel._consecutive_settle_timeouts == 0  # noqa: SLF001
 
-
-async def test_index_io_timeout_does_not_sticky_dead_channel():
-    """Background index read hang must not drag tool-family siblings into channel-dead."""
+async def test_index_io_timeout_does_not_block_next_file_op():
+    """An index-style read hang fails that op only — the next file op still delivers."""
     registry = InteractionRegistry()
     channel = WorkspaceChannel(
         user_id=USER,
@@ -718,17 +704,15 @@ async def test_index_io_timeout_does_not_sticky_dead_channel():
         timeout_seconds=0.05,
         root_id=ROOT_ID,
     )
-    with index_io_mode(), pytest.raises(WorkspaceIOError, match="read.*活性挂起"):
+    with pytest.raises(WorkspaceIOError, match="read.*活性挂起"):
         await channel.request(
             WorkspaceOp.READ,
             {"path": "logs/reviews/cases/CASE.md"},
         )
 
-    assert channel._dead is False  # noqa: SLF001
     while _CAPTURE:
         _CAPTURE.pop(0)
 
-    # Next tool read must still emit SSE (not reject as channel dead).
     task = asyncio.create_task(channel.request(WorkspaceOp.READ, {"path": "a.txt"}))
     event = await _await_request()
     assert event.payload["op"] == "read"
@@ -937,7 +921,6 @@ async def test_parallel_ops_one_timeout_does_not_fail_sibling():
         events[ev.payload["args"]["path"]] = ev
     with pytest.raises(WorkspaceIOError, match=r"timed out（活性挂起）"):
         await t_a
-    assert channel._dead is False  # noqa: SLF001
     assert registry.resolve(
         events["b.txt"].payload["request_id"],
         {"ok": True, "value": "ok-b"},
@@ -946,18 +929,16 @@ async def test_parallel_ops_one_timeout_does_not_fail_sibling():
     assert await t_b == "ok-b"
 
 
-async def test_parallel_ops_second_timeout_sticky_fails_sibling():
-    """Second consecutive hang sticky-deads and settles remaining inflight."""
+async def test_parallel_ops_second_timeout_does_not_cancel_sibling():
+    """A later hang does not fail-fast a sibling that still has budget."""
     registry = InteractionRegistry()
     channel = WorkspaceChannel(
         user_id=USER,
         conversation_id=CONV,
         registry=registry,
-        # Floor is max(1.0, …) in derive_channel_timeout — use 1s vs 5s contrast.
         timeout_seconds=1.0,
         root_id=ROOT_ID,
     )
-    # Seed one prior real-op timeout so the next hang reaches N=2 sticky.
     with pytest.raises(WorkspaceIOError, match=r"timed out（活性挂起）"):
         await channel.request(WorkspaceOp.READ, {"path": "seed.txt"})
     while _CAPTURE:
@@ -967,20 +948,19 @@ async def test_parallel_ops_second_timeout_sticky_fails_sibling():
     t_b = asyncio.create_task(
         channel.request(WorkspaceOp.READ, {"path": "b.txt"}, timeout=5.0)
     )
-    await _await_request()
-    await _await_request()
+    events: dict[str, SSEEvent] = {}
+    for _ in range(2):
+        ev = await _await_request()
+        events[ev.payload["args"]["path"]] = ev
 
-    t0 = asyncio.get_running_loop().time()
-    results = await asyncio.gather(t_a, t_b, return_exceptions=True)
-    elapsed = asyncio.get_running_loop().time() - t0
-
-    assert channel._dead is True  # noqa: SLF001
-    assert all(isinstance(r, WorkspaceIOError) for r in results)
-    details = [str(r) for r in results]
-    assert any("timed out" in d and "channel dead" in d for d in details)
-    assert any("channel dead" in d and "活性挂起" in d for d in details)
-    # Sibling had a 5s budget — channel-dead settle must finish near A's 1s hang.
-    assert elapsed < 2.0
+    with pytest.raises(WorkspaceIOError, match=r"timed out（活性挂起）"):
+        await t_a
+    assert registry.resolve(
+        events["b.txt"].payload["request_id"],
+        {"ok": True, "value": "ok-b"},
+        conversation_id=CONV,
+    )
+    assert await t_b == "ok-b"
 
 
 async def test_channel_caps_concurrent_suspends():
@@ -1040,45 +1020,34 @@ async def test_channel_caps_concurrent_suspends():
     assert all(r in ("a", "x") for r in results)
 
 
-async def test_queued_waiter_fail_fast_after_channel_dead():
-    """After sticky-dead (N=2), a queued waiter that obtains a slot fail-fasts (no SSE)."""
+async def test_queued_waiter_still_delivers_after_prior_timeout():
+    """A queued op still gets a slot after a prior hang — timeouts do not fail-fast."""
     registry = InteractionRegistry()
     channel = WorkspaceChannel(
         user_id=USER,
         conversation_id=CONV,
         registry=registry,
-        timeout_seconds=1.0,
+        timeout_seconds=0.2,
         root_id=ROOT_ID,
         max_inflight=1,
     )
-    # Seed streak so the hold timeout is the sticky trigger (N=2).
-    with pytest.raises(WorkspaceIOError, match=r"timed out（活性挂起）"):
-        await channel.request(WorkspaceOp.READ, {"path": "seed.txt"})
-    while _CAPTURE:
-        _CAPTURE.pop(0)
-
-    # Fill the only slot; leave it hanging so the next caller queues.
     t_hold = asyncio.create_task(channel.request(WorkspaceOp.READ, {"path": "hold.txt"}))
     await _await_request()
     t_queued = asyncio.create_task(channel.request(WorkspaceOp.READ, {"path": "queued.txt"}))
-    # Queued task parks on the semaphore — no second SSE while hold is open.
     for _ in range(50):
         await asyncio.sleep(0)
     assert not _CAPTURE
 
-    t0 = asyncio.get_running_loop().time()
-    results = await asyncio.gather(t_hold, t_queued, return_exceptions=True)
-    elapsed = asyncio.get_running_loop().time() - t0
-
-    assert channel._dead is True  # noqa: SLF001
-    assert all(isinstance(r, WorkspaceIOError) for r in results)
-    details = [str(r) for r in results]
-    assert any("timed out" in d and "channel dead" in d for d in details)
-    assert any("channel dead" in d and "活性挂起" in d for d in details)
-    # Queued waiter fail-fasts after hold's ~1s hang — not another full deadline.
-    assert elapsed < 2.0
-    # No workspace_op_required for the queued op.
-    assert not _CAPTURE
+    with pytest.raises(WorkspaceIOError, match=r"timed out（活性挂起）"):
+        await t_hold
+    event = await _await_request()
+    assert event.payload["args"]["path"] == "queued.txt"
+    assert registry.resolve(
+        event.payload["request_id"],
+        {"ok": True, "value": "queued-ok"},
+        conversation_id=CONV,
+    )
+    assert await t_queued == "queued-ok"
 
 
 # --- per-op transport deadline (执行门 timeout policy) ----------------------

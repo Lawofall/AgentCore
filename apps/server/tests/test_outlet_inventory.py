@@ -29,16 +29,21 @@ def test_format_outlet_suffix_empty_and_names():
     )
 
 
-def test_format_outlet_line_none_inventory_omits_suffix():
+def test_format_outlet_line_none_inventory_omits_line():
     line = format_outlet_line("约定文档出口·审查：", REVIEWS_DIR, None)
-    assert line == f"约定文档出口·审查：`{REVIEWS_DIR}/`"
-    assert "当前为空" not in line
+    assert line is None
 
 
-def test_format_outlet_line_empty_inventory_says_empty():
+def test_format_outlet_line_empty_inventory_omits_line():
     inv = {d: OutletDirListing() for d in OUTLET_DIRS}
     line = format_outlet_line("约定文档出口·审查：", REVIEWS_DIR, inv)
-    assert line.endswith("（当前为空）")
+    assert line is None
+
+
+def test_format_outlet_line_named_inventory():
+    inv = {REVIEWS_DIR: OutletDirListing(names=("a.md",))}
+    line = format_outlet_line("约定文档出口·审查：", REVIEWS_DIR, inv)
+    assert line == f"约定文档出口·审查：`{REVIEWS_DIR}/`（现有：a.md）"
 
 
 async def test_collect_outlet_inventory_lists_reviews(tmp_path: Path):

@@ -33,7 +33,7 @@ from agentcore.tools.builtin.file_ops.listing import (
     compile_glob_pattern,
     compile_glob_patterns,
 )
-from agentcore.tools.protocol import ToolContext, isolate_file_read_ceiling
+from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 from agentcore.workspace.stage_dirs import REVIEWS_PREFIX
@@ -87,17 +87,6 @@ def _inprocess_extract():
         "agentcore.workspace.attachment_parse._run_extract_subprocess",
         side_effect=_run,
     )
-
-
-def _assert_same_window_hit(result, *, path: str) -> None:
-    assert result.success is True
-    assert not result.contract_failure
-    out = result.output or ""
-    assert f"`{path}`" in out
-    assert "已多次读取" in out
-    assert "不重复灌入全文" in out
-    assert "已有正文" in out
-    assert "勿再读" in out
 
 
 # --- file_write ---
@@ -298,7 +287,7 @@ async def test_outside_workspace_error_is_actionable(tmp_path: Path):
     assert "推荐" in result.error or "导入到云" in result.error
 
 
-# --- file_read (Wave3 B same-path ceiling) ---
+# --- file_read ---
 
 
 async def test_file_read_docx_transparent_extract(tmp_path: Path):
@@ -319,7 +308,6 @@ async def test_file_read_docx_transparent_extract(tmp_path: Path):
     assert "Hello from docx" in (result.output or "")
     assert "Widget" in (result.output or "")
     assert not (tmp_path / "docs" / "brief.docx.md").exists()
-    assert ctx.file_read_counts.get("docs/brief.docx") == 1
 
 
 def test_sniff_bytes_magic():
@@ -398,7 +386,8 @@ async def test_file_read_xlsx_does_not_extract(tmp_path: Path):
         result = await FileReadTool().execute({"path": "report.xlsx"}, _ctx(tmp_path))
     assert result.success is True
     out = result.output or ""
-    assert "code_execute" in out
+    assert "用 run" in out
+    assert "code_execute" not in out
     assert "[观察信封]" in out
     assert "kind: table" in out
     assert not (tmp_path / "report.xlsx.md").exists()
@@ -418,6 +407,7 @@ async def test_file_read_table_without_code_execute_omits_tool_name(tmp_path: Pa
     assert xlsx.success is True
     assert csv.success is True
     assert "code_execute" not in (xlsx.output or "")
+    assert "请用 run" not in (xlsx.output or "")
     assert "code_execute" not in (csv.output or "")
     assert "手抄" in (xlsx.output or "")
     assert "结构报告" in (xlsx.output or "")
@@ -515,7 +505,6 @@ async def test_file_read_office_offset_limit_on_extracted_lines(tmp_path: Path):
     assert "line-4" in out
     assert "line-1" not in out
     assert "共 " in out
-    assert ctx.file_read_counts.get("notes.docx", 0) == 0
 
 
 async def test_file_read_prefers_existing_md_sidecar(tmp_path: Path):
@@ -560,91 +549,48 @@ async def test_file_read_office_extract_failure_soft(tmp_path: Path):
     assert "convert:" not in out
     assert "markitdown" not in out.lower()
     assert "请用 code_execute" not in out
-    assert "不要用 code_execute" in out
+    assert "code_execute" not in out
+    assert "read_image" in out
     assert "请用户" not in out
 
-async def test_file_read_allows_up_to_same_path_max(tmp_path: Path):
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    (tmp_path / "site").mkdir()
-    (tmp_path / "site" / "CONTRACT.md").write_text("# CONTRACT\nbody", encoding="utf-8")
+async def test_file_read_same_path_repeated_reads_return_disk_body(tmp_path: Path):
+    """同一 path 连续多次成功读仍返回磁盘正文。"""
+    (tmp_path / "doc.md").write_text("# Title\nunique-body-marker\n", encoding="utf-8")
     ctx = _ctx(tmp_path)
     tool = FileReadTool()
-    for i in range(FILE_READ_SAME_PATH_MAX):
-        result = await tool.execute({"path": "site/CONTRACT.md"}, ctx)
+    for i in range(6):
+        result = await tool.execute({"path": "doc.md"}, ctx)
         assert result.success is True, i
-        assert "CONTRACT" in (result.output or "")
-    assert ctx.file_read_counts.get("site/CONTRACT.md") == FILE_READ_SAME_PATH_MAX
-    assert "再开窗" not in (result.output or "")
-    assert "已在对话正文中" in (result.output or "")
-    assert "勿再读此文件" not in (result.output or "")
-    assert "已被清理" in (result.output or "")
+        out = result.output or ""
+        assert "unique-body-marker" in out
+        assert "Title" in out
 
 
-async def test_file_read_same_window_hit_over_max(tmp_path: Path):
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    (tmp_path / "site").mkdir()
-    (tmp_path / "site" / "DESIGN.md").write_text("tokens", encoding="utf-8")
-    (tmp_path / "site" / "OTHER.md").write_text("other body", encoding="utf-8")
+async def test_file_read_pagination_windows_return_requested_lines(tmp_path: Path):
+    lines = "\n".join(f"L{i}" for i in range(1, 81))
+    (tmp_path / "page.md").write_text(lines + "\n", encoding="utf-8")
     ctx = _ctx(tmp_path)
     tool = FileReadTool()
-    for _ in range(FILE_READ_SAME_PATH_MAX):
-        assert (await tool.execute({"path": "site/DESIGN.md"}, ctx)).success is True
-    hit = await tool.execute({"path": "site/DESIGN.md"}, ctx)
-    _assert_same_window_hit(hit, path="site/DESIGN.md")
-    assert "tokens" not in (hit.output or "")
-    other = await tool.execute({"path": "site/OTHER.md"}, ctx)
-    assert other.success is True
-    assert "other body" in (other.output or "")
+    first = await tool.execute({"path": "page.md", "offset": 1, "limit": 5}, ctx)
+    assert first.success is True
+    assert "L1" in (first.output or "")
+    expand = await tool.execute({"path": "page.md", "offset": 3, "limit": 8}, ctx)
+    assert expand.success is True
+    assert "L3" in (expand.output or "")
+    for start in (11, 16, 21, 26, 31):
+        result = await tool.execute(
+            {"path": "page.md", "offset": start, "limit": 5}, ctx
+        )
+        assert result.success is True, start
+        assert f"L{start}" in (result.output or "")
 
 
-async def test_file_read_same_path_limit_is_per_path(tmp_path: Path):
-    (tmp_path / "a.md").write_text("A", encoding="utf-8")
-    (tmp_path / "b.md").write_text("B", encoding="utf-8")
-    ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    assert (await tool.execute({"path": "a.md"}, ctx)).success is True
-    assert (await tool.execute({"path": "b.md"}, ctx)).success is True
-    assert (await tool.execute({"path": "a.md"}, ctx)).success is True
-    assert ctx.file_read_counts["a.md"] == 2
-    assert ctx.file_read_counts["b.md"] == 1
-
-
-async def test_file_read_reread_after_clear_allows_recovery(tmp_path: Path):
-    """Cleared ledger: recovery succeeds and does not consume same-path quota."""
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    (tmp_path / "doc.md").write_text("# Doc\nbody", encoding="utf-8")
-    (tmp_path / "peer.md").write_text("peer", encoding="utf-8")
-    ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    for _ in range(FILE_READ_SAME_PATH_MAX):
-        assert (await tool.execute({"path": "doc.md"}, ctx)).success is True
-    ctx.file_read_verbatim_paths = frozenset()
-    ctx.file_read_cleared_paths = frozenset({"doc.md"})
-    ok = await tool.execute({"path": "doc.md"}, ctx)
-    assert ok.success is True
-    assert ctx.file_read_counts["doc.md"] == FILE_READ_SAME_PATH_MAX
-    assert "再读授额已用尽" not in (ok.output or "")
-    recovered = await tool.execute({"path": "doc.md"}, ctx)
-    assert recovered.success is True
-    assert "body" in (recovered.output or "")
-    assert ctx.file_read_counts["doc.md"] == FILE_READ_SAME_PATH_MAX
-    peer = await tool.execute({"path": "peer.md"}, ctx)
-    assert peer.success is True
-
-
-async def test_file_read_after_tool_clear_does_not_consume_quota(tmp_path: Path):
-    """Read → tool_clear fully drops the path → re-read succeeds and does not count."""
+async def test_file_read_after_tool_clear_still_returns_disk_body(tmp_path: Path):
+    """投影把旧结果收成指针后，再读仍给磁盘正文。"""
     import json
 
     from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
-    from agentcore.runtime.engine.tool_clear import (
-        apply_file_read_clear_state,
-        project_cleared_window,
-    )
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
+    from agentcore.runtime.engine.tool_clear import project_cleared_window
 
     def pair(call_id: str, path: str, result: str) -> list[LLMMessage]:
         return [
@@ -671,12 +617,11 @@ async def test_file_read_after_tool_clear_does_not_consume_quota(tmp_path: Path)
     ctx = _ctx(tmp_path)
     tool = FileReadTool()
     outputs: list[str] = []
-    for _ in range(FILE_READ_SAME_PATH_MAX):
+    for _ in range(3):
         result = await tool.execute({"path": "src/target.py"}, ctx)
         assert result.success is True
         outputs.append(result.output or "")
-        assert len(result.output or "") >= 100
-    assert ctx.file_read_counts["src/target.py"] == FILE_READ_SAME_PATH_MAX
+        assert "line-0" in (result.output or "")
 
     msgs: list[LLMMessage] = [LLMMessage(role="user", content="go")]
     for i, output in enumerate(outputs):
@@ -699,234 +644,31 @@ async def test_file_read_after_tool_clear_does_not_consume_quota(tmp_path: Path)
     assert "status=content_cleared" in (stub.content or "")
     assert "reread=allowed" in (stub.content or "")
 
-    synced = apply_file_read_clear_state(
-        ctx,
-        msgs,
-        investigation_tools=frozenset({"file_read"}),
-        keep_recent=2,
-        min_chars=100,
-        summary_max_chars=0,
-    )
-    assert "src/target.py" not in (synced.file_read_verbatim_paths or frozenset())
-    assert "src/target.py" in (synced.file_read_cleared_paths or frozenset())
-
-    recovered = await tool.execute({"path": "src/target.py"}, synced)
+    recovered = await tool.execute({"path": "src/target.py"}, ctx)
     assert recovered.success is True
     assert "line-0" in (recovered.output or "")
-    assert synced.file_read_counts["src/target.py"] == FILE_READ_SAME_PATH_MAX
-
-    msgs += pair("t-recover", "src/target.py", recovered.output or "")
-    after = apply_file_read_clear_state(
-        synced,
-        msgs,
-        investigation_tools=frozenset({"file_read"}),
-        keep_recent=2,
-        min_chars=100,
-        summary_max_chars=0,
-    )
-    assert "src/target.py" in (after.file_read_verbatim_paths or frozenset())
-    assert "src/target.py" not in (after.file_read_cleared_paths or frozenset())
-    blocked = await tool.execute({"path": "src/target.py"}, after)
-    _assert_same_window_hit(blocked, path="src/target.py")
-    assert after.file_read_counts["src/target.py"] == FILE_READ_SAME_PATH_MAX
 
 
-async def test_file_read_reread_grant_overrides_verbatim(tmp_path: Path):
-    """remaining > 0 allows full re-read even while verbatim body is still present."""
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    (tmp_path / "keep.md").write_text("keep-body", encoding="utf-8")
-    (tmp_path / "next.md").write_text("next", encoding="utf-8")
-    ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    for _ in range(FILE_READ_SAME_PATH_MAX):
-        assert (await tool.execute({"path": "keep.md"}, ctx)).success is True
-    ctx.file_read_verbatim_paths = frozenset({"keep.md"})
-    ctx.file_read_reread_remaining["keep.md"] = 1
-    ok = await tool.execute({"path": "keep.md"}, ctx)
-    assert ok.success is True
-    assert "keep-body" in (ok.output or "")
-    assert ctx.file_read_reread_remaining["keep.md"] == 0
-    assert ctx.file_read_counts["keep.md"] == FILE_READ_SAME_PATH_MAX + 1
-    # Grant spent + verbatim still present → cheap hit (use existing body).
-    blocked = await tool.execute({"path": "keep.md"}, ctx)
-    _assert_same_window_hit(blocked, path="keep.md")
-    next_ok = await tool.execute({"path": "next.md"}, ctx)
-    assert next_ok.success is True
-
-
-async def test_file_read_reread_refresh_after_citation_rework(tmp_path: Path):
-    """Citation refresh grant overrides verbatim ceiling after prior grant spent."""
-    from agentcore.runtime.engine.tool_clear import refresh_file_read_reread_grant
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    (tmp_path / "draft.md").write_text("# Draft\nbody with #r1", encoding="utf-8")
-    ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    for _ in range(FILE_READ_SAME_PATH_MAX):
-        assert (await tool.execute({"path": "draft.md"}, ctx)).success is True
-    ctx.file_read_verbatim_paths = frozenset({"draft.md"})
-    ctx.file_read_reread_issued["draft.md"] = True
-    ctx.file_read_reread_remaining["draft.md"] = 0
-    blocked = await tool.execute({"path": "draft.md"}, ctx)
-    _assert_same_window_hit(blocked, path="draft.md")
-
-    refresh_file_read_reread_grant(ctx, ["draft.md"])
-    ok = await tool.execute({"path": "draft.md"}, ctx)
-    assert ok.success is True
-    assert ctx.file_read_reread_remaining["draft.md"] == 0
-
-
-async def test_file_read_pagination_new_windows_never_hit_ceiling(tmp_path: Path):
-    """Consecutive new offset/limit windows neither increment nor reject."""
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    lines = "\n".join(f"L{i}" for i in range(1, 81))
-    (tmp_path / "page.md").write_text(lines + "\n", encoding="utf-8")
-    ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    first = await tool.execute({"path": "page.md", "offset": 1, "limit": 5}, ctx)
-    assert first.success is True
-    assert ctx.file_read_counts.get("page.md", 0) == 0
-    # Extending past the delivered span is a new range (not a repeat).
-    expand = await tool.execute({"path": "page.md", "offset": 3, "limit": 8}, ctx)
-    assert expand.success is True
-    assert ctx.file_read_counts.get("page.md", 0) == 0
-    # More new windows than MAX, each starting after the last delivered end.
-    starts = list(range(11, 11 + 5 * (FILE_READ_SAME_PATH_MAX + 4), 5))
-    for start in starts:
-        result = await tool.execute(
-            {"path": "page.md", "offset": start, "limit": 5}, ctx
-        )
-        assert result.success is True, start
-        assert f"L{start}" in (result.output or "")
-    assert ctx.file_read_counts.get("page.md", 0) == 0
-
-
-async def test_file_read_repeat_delivered_window_hits_ceiling(tmp_path: Path):
-    """Same already-delivered window + body still in projection → counts then cheap-hit."""
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    lines = "\n".join(f"L{i}" for i in range(1, 21))
-    (tmp_path / "rep.md").write_text(lines + "\n", encoding="utf-8")
-    ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    first = await tool.execute({"path": "rep.md", "offset": 3, "limit": 4}, ctx)
-    assert first.success is True
-    assert ctx.file_read_counts.get("rep.md", 0) == 0
-    for i in range(FILE_READ_SAME_PATH_MAX):
-        ok = await tool.execute({"path": "rep.md", "offset": 3, "limit": 4}, ctx)
-        assert ok.success is True, i
-        if i == FILE_READ_SAME_PATH_MAX - 1:
-            assert "再开窗" not in (ok.output or "")
-            assert "已在对话正文中" in (ok.output or "")
-    assert ctx.file_read_counts["rep.md"] == FILE_READ_SAME_PATH_MAX
-    blocked = await tool.execute({"path": "rep.md", "offset": 3, "limit": 4}, ctx)
-    _assert_same_window_hit(blocked, path="rep.md")
-    assert "L3" not in (blocked.output or "")
-    # Subset of an already-delivered span also cheap-hits.
-    subset = await tool.execute({"path": "rep.md", "offset": 4, "limit": 2}, ctx)
-    _assert_same_window_hit(subset, path="rep.md")
-    # A new range is still pagination and must return the body.
-    nxt = await tool.execute({"path": "rep.md", "offset": 10, "limit": 3}, ctx)
-    assert nxt.success is True
-    assert "L10" in (nxt.output or "")
-    assert ctx.file_read_counts["rep.md"] == FILE_READ_SAME_PATH_MAX
-
-
-async def test_file_read_window_inside_prior_full_read_counts(tmp_path: Path):
-    """After a fill-cap read, a window inside that delivered span counts."""
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    lines = "\n".join(f"L{i}" for i in range(1, 21))
-    (tmp_path / "full.md").write_text(lines + "\n", encoding="utf-8")
-    ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    assert (await tool.execute({"path": "full.md"}, ctx)).success is True
-    assert ctx.file_read_counts.get("full.md") == 1
-    for _ in range(FILE_READ_SAME_PATH_MAX - 1):
-        assert (
-            await tool.execute({"path": "full.md", "offset": 5, "limit": 3}, ctx)
-        ).success is True
-    assert ctx.file_read_counts["full.md"] == FILE_READ_SAME_PATH_MAX
-    blocked = await tool.execute({"path": "full.md", "offset": 5, "limit": 3}, ctx)
-    _assert_same_window_hit(blocked, path="full.md")
-
-
-async def test_file_read_cleared_verbatim_window_does_not_hit(tmp_path: Path):
-    """Projection dropped the body: repeating a delivered window is recovery."""
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    lines = "\n".join(f"L{i}" for i in range(1, 16))
-    (tmp_path / "clr.md").write_text(lines + "\n", encoding="utf-8")
-    ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    assert (await tool.execute({"path": "clr.md", "offset": 2, "limit": 3}, ctx)).success
-    for _ in range(FILE_READ_SAME_PATH_MAX):
-        assert (
-            await tool.execute({"path": "clr.md", "offset": 2, "limit": 3}, ctx)
-        ).success is True
-    assert ctx.file_read_counts["clr.md"] == FILE_READ_SAME_PATH_MAX
-    ctx.file_read_verbatim_paths = frozenset()
-    ctx.file_read_cleared_paths = frozenset({"clr.md"})
-    recovered = await tool.execute({"path": "clr.md", "offset": 2, "limit": 3}, ctx)
-    assert recovered.success is True
-    assert "L2" in (recovered.output or "")
-    assert ctx.file_read_counts["clr.md"] == FILE_READ_SAME_PATH_MAX
-
-
-async def test_file_read_reread_grant_allows_delivered_window(tmp_path: Path):
-    """Grant remaining > 0: delivered-window re-read succeeds even at max."""
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    lines = "\n".join(f"L{i}" for i in range(1, 16))
-    (tmp_path / "grant.md").write_text(lines + "\n", encoding="utf-8")
-    ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    assert (await tool.execute({"path": "grant.md", "offset": 1, "limit": 4}, ctx)).success
-    for _ in range(FILE_READ_SAME_PATH_MAX):
-        assert (
-            await tool.execute({"path": "grant.md", "offset": 1, "limit": 4}, ctx)
-        ).success is True
-    ctx.file_read_verbatim_paths = frozenset({"grant.md"})
-    ctx.file_read_reread_remaining["grant.md"] = 1
-    ok = await tool.execute({"path": "grant.md", "offset": 1, "limit": 4}, ctx)
-    assert ok.success is True
-    assert ctx.file_read_reread_remaining["grant.md"] == 0
-    assert ctx.file_read_counts["grant.md"] == FILE_READ_SAME_PATH_MAX + 1
-    blocked = await tool.execute({"path": "grant.md", "offset": 1, "limit": 4}, ctx)
-    _assert_same_window_hit(blocked, path="grant.md")
-
-
-async def test_file_read_write_success_allows_same_window_reread(tmp_path: Path):
-    """Write clears counts + delivered ranges so the same window is not rejected."""
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
+async def test_file_write_then_file_read_returns_new_body(tmp_path: Path):
+    """写成功后核对读仍返回磁盘新正文。"""
     (tmp_path / "draft.md").write_text(
         "\n".join(f"L{i}" for i in range(1, 12)) + "\n", encoding="utf-8"
     )
     ctx = _ctx(tmp_path)
     tool = FileReadTool()
-    assert (await tool.execute({"path": "draft.md", "offset": 2, "limit": 3}, ctx)).success
-    for _ in range(FILE_READ_SAME_PATH_MAX):
-        assert (
-            await tool.execute({"path": "draft.md", "offset": 2, "limit": 3}, ctx)
-        ).success is True
-    blocked = await tool.execute({"path": "draft.md", "offset": 2, "limit": 3}, ctx)
-    _assert_same_window_hit(blocked, path="draft.md")
+    first = await tool.execute({"path": "draft.md", "offset": 2, "limit": 3}, ctx)
+    assert first.success is True
+    assert "L2" in (first.output or "")
 
     w = await FileWriteTool().execute(
         {"path": "draft.md", "content": "\n".join(f"N{i}" for i in range(1, 12)) + "\n"},
         ctx,
     )
     assert w.success is True
-    assert ctx.file_read_counts.get("draft.md", -1) == 0
-    assert "draft.md" not in ctx.file_read_delivered_ranges
-    assert "draft.md" not in ctx.file_read_line_totals
+    assert ctx.landed_artifact_kinds.get("draft.md") is not None
     verify = await tool.execute({"path": "draft.md", "offset": 2, "limit": 3}, ctx)
     assert verify.success is True
     assert "N2" in (verify.output or "")
-    assert ctx.file_read_counts.get("draft.md", 0) == 0
 
 
 async def test_file_read_long_file_window_footer_and_output_limit(tmp_path: Path):
@@ -967,7 +709,6 @@ async def test_file_read_800_lines_returns_full_text(tmp_path: Path):
     assert "已达字符顶" not in out
     assert "     1|line-1" in out
     assert f"line-{total}" in out
-    assert ctx.file_read_counts.get("mid.md") == 1
     assert result.output_limit is not None
     assert result.output_limit >= len(out)
 
@@ -1022,39 +763,6 @@ async def test_file_read_oversized_single_line_kept_whole(tmp_path: Path):
     assert result.output_limit >= len(out)
 
 
-async def test_file_read_from_line1_fill_cap_counts_toward_ceiling(tmp_path: Path):
-    """从第 1 行要满安全顶（双省 / 只传 offset=1 / 只传 limit=顶）计次。"""
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-    from agentcore.tools.builtin.file_ops import FILE_READ_SAFETY_LINE_CAP
-
-    (tmp_path / "cap.md").write_text("body\n", encoding="utf-8")
-    ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    for _ in range(FILE_READ_SAME_PATH_MAX):
-        assert (await tool.execute({"path": "cap.md"}, ctx)).success is True
-    _assert_same_window_hit(
-        await tool.execute({"path": "cap.md"}, ctx), path="cap.md"
-    )
-    _assert_same_window_hit(
-        await tool.execute({"path": "cap.md", "offset": 1}, ctx), path="cap.md"
-    )
-    _assert_same_window_hit(
-        await tool.execute({"path": "cap.md", "limit": FILE_READ_SAFETY_LINE_CAP}, ctx),
-        path="cap.md",
-    )
-    _assert_same_window_hit(
-        await tool.execute(
-            {"path": "cap.md", "offset": 1, "limit": FILE_READ_SAFETY_LINE_CAP},
-            ctx,
-        ),
-        path="cap.md",
-    )
-    # Covered window after fill-cap reads: already delivered + body present → cheap hit.
-    covered = await tool.execute({"path": "cap.md", "offset": 1, "limit": 1}, ctx)
-    _assert_same_window_hit(covered, path="cap.md")
-    assert ctx.file_read_counts.get("cap.md") == FILE_READ_SAME_PATH_MAX
-
-
 async def test_file_read_oversized_message_does_not_teach_offset_limit(tmp_path: Path):
     from agentcore.workspace.limits import WORKSPACE_READ_MAX_BYTES
 
@@ -1087,7 +795,6 @@ async def test_file_read_office_default_uses_same_full_window(tmp_path: Path):
     out = result.output or ""
     assert "全文 800 行" in out
     assert "line-800" in out
-    assert ctx.file_read_counts.get("notes.docx") == 1
 
     over = "\n".join(
         f"line-{i} word extra" for i in range(1, FILE_READ_SAFETY_LINE_CAP + 51)
@@ -1115,14 +822,18 @@ def test_file_read_schema_teaches_default_full_read():
     assert "省略则尽量整读" in limit["description"]
     assert "超安全顶截断" in limit["description"]
     desc = schema.description
-    assert "默认整读" in desc
-    assert "glob" in desc
     assert "grep" in desc or "code_search" in desc
-    assert "开窗" in desc
-    assert "默认不抽文本" in desc
-    assert "请用 code_execute。" not in desc
+    assert "glob" in desc
+    assert "dump" in desc
     assert "read_url" in desc
     assert "read_url" in schema.parameters["properties"]["path"]["description"]
+    assert "默认不抽文本" in schema.parameters["properties"]["path"]["description"]
+    offset = schema.parameters["properties"]["offset"]
+    assert "开窗" in offset["description"]
+    assert "code_execute" not in desc
+    assert "请用 code_execute。" not in desc
+    assert "artifact manifest" not in desc
+    assert "start_page" not in desc
 
 
 @pytest.mark.parametrize(
@@ -1153,127 +864,43 @@ async def test_file_read_http_filename_is_not_a_url(tmp_path: Path):
     assert result.metadata.get("code") != "url_not_workspace_path"
 
 
-async def test_write_hard_rejects_substantial_prose_with_omission(tmp_path: Path):
-    """成篇体量 + 省略标记 → 硬拒（非 soft nudge）。"""
+async def test_write_lands_substantial_prose_with_omission(tmp_path: Path):
+    """省略套话不再硬拒；正文照常落盘。"""
     body = ("完整段落内容填充字。" * 50) + "\n……（中间省略，已保留首尾）……\n" + ("尾段续写。" * 30)
     assert len(body.strip()) >= 400
     result = await FileWriteTool().execute(
         {"path": "essay.md", "content": body}, _ctx(tmp_path)
     )
-    assert result.success is False
-    assert result.contract_failure is True
-    assert "省略标记" in (result.error or "")
-    assert not (tmp_path / "essay.md").exists()
+    assert result.success is True
+    assert (tmp_path / "essay.md").read_text(encoding="utf-8") == body
+    assert "产物疑似不完整" not in (result.output or "")
 
 
-async def test_file_write_resets_read_ceiling_for_verify(tmp_path: Path):
-    """Successful write zeros counts + refreshes grant so post-write verify reads work."""
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    (tmp_path / "draft.md").write_text("v1\n", encoding="utf-8")
-    ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    for _ in range(FILE_READ_SAME_PATH_MAX):
-        assert (await tool.execute({"path": "draft.md"}, ctx)).success is True
-    blocked = await tool.execute({"path": "draft.md"}, ctx)
-    _assert_same_window_hit(blocked, path="draft.md")
-
-    w = await FileWriteTool().execute(
-        {"path": "draft.md", "content": "v2 rewritten\n"}, ctx
-    )
-    assert w.success is True
-    assert ctx.file_read_counts.get("draft.md", -1) == 0
-    assert "draft.md" not in ctx.file_read_delivered_ranges
-    assert "draft.md" not in ctx.file_read_line_totals
-    assert ctx.file_read_reread_remaining.get("draft.md") == 1
-
-    verify = await tool.execute({"path": "draft.md"}, ctx)
-    assert verify.success is True
-    assert "v2 rewritten" in (verify.output or "")
-    assert ctx.file_read_counts.get("draft.md") == 1
-
-
-async def test_str_replace_success_resets_read_ceiling(tmp_path: Path):
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
+async def test_str_replace_then_file_read_returns_new_body(tmp_path: Path):
     (tmp_path / "edit.md").write_text("hello world\n", encoding="utf-8")
     ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    for _ in range(FILE_READ_SAME_PATH_MAX):
-        assert (await tool.execute({"path": "edit.md"}, ctx)).success is True
-    _assert_same_window_hit(
-        await tool.execute({"path": "edit.md"}, ctx), path="edit.md"
-    )
-
     ok = await StrReplaceTool().execute(
         {"path": "edit.md", "old_string": "world", "new_string": "AgentCore"},
         ctx,
     )
     assert ok.success is True
-    assert ctx.file_read_counts.get("edit.md", -1) == 0
-    assert "edit.md" not in ctx.file_read_delivered_ranges
-    assert ctx.file_read_reread_remaining.get("edit.md") == 1
-    verify = await tool.execute({"path": "edit.md"}, ctx)
+    verify = await FileReadTool().execute({"path": "edit.md"}, ctx)
     assert verify.success is True
     assert "AgentCore" in (verify.output or "")
 
 
-async def test_str_replace_failure_does_not_refresh_reread_grant(tmp_path: Path):
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
+async def test_str_replace_failure_does_not_change_disk(tmp_path: Path):
     (tmp_path / "edit.md").write_text("hello world\n", encoding="utf-8")
     ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    for _ in range(FILE_READ_SAME_PATH_MAX):
-        assert (await tool.execute({"path": "edit.md"}, ctx)).success is True
-    ctx.file_read_reread_remaining["edit.md"] = 0
-    ctx.file_read_reread_issued["edit.md"] = True
-    before = dict(ctx.file_read_reread_remaining)
-    before_counts = int(ctx.file_read_counts["edit.md"])
-
     fail = await StrReplaceTool().execute(
         {"path": "edit.md", "old_string": "no-such-token", "new_string": "x"},
         ctx,
     )
     assert fail.success is False
-    assert ctx.file_read_counts["edit.md"] == before_counts
-    assert ctx.file_read_reread_remaining.get("edit.md") == before.get("edit.md")
-
-
-async def test_file_read_ceiling_does_not_retire_tool(tmp_path: Path):
-    """Same-path cheap-hit is success and does not disable file_read."""
-    from agentcore.runtime.loop_controller import LoopController, ToolAttempt
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    (tmp_path / "attachments").mkdir()
-    (tmp_path / "attachments" / "PRD.md").write_text("# PRD\n" + ("x" * 200), encoding="utf-8")
-    (tmp_path / "attachments" / "SPEC.md").write_text("# SPEC\nok", encoding="utf-8")
-    ctx = _ctx(tmp_path)
-    tool = FileReadTool()
-    for _ in range(FILE_READ_SAME_PATH_MAX):
-        assert (await tool.execute({"path": "attachments/PRD.md"}, ctx)).success is True
-    hit = await tool.execute({"path": "attachments/PRD.md"}, ctx)
-    _assert_same_window_hit(hit, path="attachments/PRD.md")
-    assert "retire_tools" not in (hit.metadata or {})
-
-    c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    c.record(
-        [
-            ToolAttempt(
-                "ceil",
-                "file_read",
-                success=True,
-                error_summary="",
-                meta=dict(hit.metadata),
-            )
-        ]
-    )
-    assert not c.tool_circuit_breaker()
-    assert c.tool_failure_count("file_read") == 0
-
-    other = await tool.execute({"path": "attachments/SPEC.md"}, ctx)
-    assert other.success is True
-    assert "SPEC" in (other.output or "")
+    assert (tmp_path / "edit.md").read_text(encoding="utf-8") == "hello world\n"
+    still = await FileReadTool().execute({"path": "edit.md"}, ctx)
+    assert still.success is True
+    assert "hello world" in (still.output or "")
 
 
 async def test_file_read_missing_does_not_trip_circuit_breaker(tmp_path: Path):
@@ -1410,7 +1037,7 @@ async def test_write_skeleton_then_append_allowed(tmp_path: Path):
 
 
 async def test_file_read_allows_author_self_product(tmp_path: Path):
-    """作者写后 body file_read 允许（与读者同 path cap）；计入成功读次数。"""
+    """作者写后 body file_read 允许。"""
     ctx = _ctx(tmp_path)
     w = await FileWriteTool().execute(
         {"path": "out.md", "content": "# Title\n\n## Sec\nbody line\n"}, ctx
@@ -1420,25 +1047,10 @@ async def test_file_read_allows_author_self_product(tmp_path: Path):
     ok = await FileReadTool().execute({"path": "out.md"}, ctx)
     assert ok.success is True
     assert "body line" in (ok.output or "")
-    assert ctx.file_read_counts.get("out.md", 0) == 1
 
 
-async def test_isolate_file_read_ceiling_does_not_share_counters(tmp_path: Path):
-    author = _ctx(tmp_path, agent_id="writer")
-    author.file_read_counts["x.md"] = 5
-    author.file_read_delivered_ranges["x.md"] = [(1, 10)]
-    reader = isolate_file_read_ceiling(replace(author, agent_id="ceo", run_id="ceo-run"))
-    assert reader.file_read_counts is not author.file_read_counts
-    assert reader.file_read_counts == {}
-    assert reader.file_read_delivered_ranges == {}
-    assert author.file_read_counts["x.md"] == 5
-    assert reader.landed_artifact_kinds is author.landed_artifact_kinds
-
-
-async def test_file_read_author_and_reader_isolated_same_path_cap(tmp_path: Path):
-    """同 execution 共享 landed 表；file_read 计数 per-run，读者不被作者顶满。"""
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
+async def test_file_read_author_and_reader_share_landed_ledger(tmp_path: Path):
+    """同 execution 共享 landed 表；作者与读者都能读已落盘文件。"""
     author_ctx = _ctx(tmp_path, agent_id="writer")
     w = await FileWriteTool().execute(
         {"path": "shared.md", "content": "# Shared\n\nbody for downstream\n"},
@@ -1446,39 +1058,22 @@ async def test_file_read_author_and_reader_isolated_same_path_cap(tmp_path: Path
     )
     assert w.success is True
     assert author_ctx.landed_artifact_kinds.get("shared.md") is not None
-    assert author_ctx.file_read_reread_remaining.get("shared.md") == 1
 
-    reader_ctx = isolate_file_read_ceiling(
-        replace(author_ctx, agent_id="ceo", run_id="ceo-run")
-    )
+    reader_ctx = replace(author_ctx, agent_id="ceo", run_id="ceo-run")
     assert reader_ctx.landed_artifact_kinds is author_ctx.landed_artifact_kinds
-    assert reader_ctx.file_read_counts is not author_ctx.file_read_counts
 
     allowed = await FileReadTool().execute({"path": "shared.md"}, reader_ctx)
     assert allowed.success is True
     assert "body for downstream" in allowed.output
-    assert reader_ctx.file_read_counts.get("shared.md", 0) == 1
-
-    while int(author_ctx.file_read_counts.get("shared.md", 0)) < FILE_READ_SAME_PATH_MAX:
-        assert (
-            await FileReadTool().execute({"path": "shared.md"}, author_ctx)
-        ).success is True
-    grant_ok = await FileReadTool().execute({"path": "shared.md"}, author_ctx)
-    assert grant_ok.success is True
-    assert "body for downstream" in (grant_ok.output or "")
-    author_hit = await FileReadTool().execute({"path": "shared.md"}, author_ctx)
-    _assert_same_window_hit(author_hit, path="shared.md")
-
-    still = await FileReadTool().execute({"path": "shared.md"}, reader_ctx)
+    still = await FileReadTool().execute({"path": "shared.md"}, author_ctx)
     assert still.success is True
     assert "body for downstream" in (still.output or "")
 
 
-# --- file_write overwrite integrity nudge ---
+# --- file_write overwrite: no completeness heuristic ---
 
 
-async def test_write_nudge_on_omission_marker(tmp_path: Path):
-    # ≥400 成篇整盖成功，省略标记仅 soft nudge（不硬拒）。
+async def test_write_overwrite_omission_lands_without_nudge(tmp_path: Path):
     old = "A" * 200 + "\n完整中段内容\n" + "B" * 200
     assert len(old) >= 400
     (tmp_path / "draft.md").write_text(old, encoding="utf-8")
@@ -1492,58 +1087,20 @@ async def test_write_nudge_on_omission_marker(tmp_path: Path):
     )
     assert result.success is True
     assert (tmp_path / "draft.md").read_text(encoding="utf-8") == truncated
-    assert "产物疑似不完整" in result.output
-    assert "省略标记" in result.output
-    assert "绝不代派" in result.output
-    assert "绝不拦截本次写入" in result.output
+    assert "产物疑似不完整" not in (result.output or "")
 
 
-async def test_write_nudge_on_severe_shrink(tmp_path: Path):
-    """Near-threshold abs drop stays soft-nudge (not hard reject)."""
-    old = "字" * 500
-    assert len(old) >= 400
-    (tmp_path / "essay.md").write_text(old, encoding="utf-8")
-    short = "字" * 100  # ratio <60% but abs drop 400 < 800 → soft only
-    result = await FileWriteTool().execute(
-        {"path": "essay.md", "content": short}, _ctx(tmp_path)
-    )
-    assert result.success is True
-    assert (tmp_path / "essay.md").read_text(encoding="utf-8") == short
-    assert "产物疑似不完整" in result.output
-    assert "字数骤降" in result.output
-    assert "绝不代派" in result.output
-
-
-async def test_write_hard_rejects_longdoc_severe_shrink(tmp_path: Path):
-    """Longdoc revise thrash sample shape: ~2k→~300 must not land."""
-    from agentcore.tools.builtin.file_ops import is_hard_severe_shrink
-
+async def test_write_overwrite_severe_shrink_lands(tmp_path: Path):
     old = "字" * 2000
     short = "字" * 300
-    assert is_hard_severe_shrink(len(old), len(short))
     (tmp_path / "报告.md").write_text(old, encoding="utf-8")
     result = await FileWriteTool().execute(
         {"path": "报告.md", "content": short}, _ctx(tmp_path)
     )
-    assert result.success is False
-    assert result.contract_failure is True
-    assert "拒绝整篇截断覆盖" in (result.error or "")
-    assert "allow_shrink" in (result.error or "")
-    assert (tmp_path / "报告.md").read_text(encoding="utf-8") == old
-
-
-async def test_write_allow_shrink_overrides_hard_reject(tmp_path: Path):
-    old = "字" * 2000
-    short = "字" * 300
-    (tmp_path / "essay.md").write_text(old, encoding="utf-8")
-    result = await FileWriteTool().execute(
-        {"path": "essay.md", "content": short, "allow_shrink": True},
-        _ctx(tmp_path),
-    )
     assert result.success is True
-    assert (tmp_path / "essay.md").read_text(encoding="utf-8") == short
-    # Soft nudge still fires on success path when ratio < 60%.
-    assert "产物疑似不完整" in (result.output or "")
+    assert (tmp_path / "报告.md").read_text(encoding="utf-8") == short
+    assert "产物疑似不完整" not in (result.output or "")
+    assert "allow_shrink" not in FileWriteTool().schema.parameters["properties"]
 
 
 async def test_write_no_nudge_on_new_file(tmp_path: Path):
@@ -1570,18 +1127,13 @@ async def test_write_no_nudge_on_modest_edit(tmp_path: Path):
 
 
 def test_has_omission_marker_covers_en_and_cn():
-    from agentcore.tools.builtin.file_ops import has_omission_marker, integrity_nudge_text
+    from agentcore.tools.builtin.file_ops import has_omission_marker
 
     assert has_omission_marker("……（中间省略，已保留首尾）……")
     assert has_omission_marker("正文（略）续")
     assert has_omission_marker("see ... omitted details")
     assert has_omission_marker("Truncated for brevity here")
     assert not has_omission_marker("正常全文无省略")
-    text = integrity_nudge_text(
-        path="a.md", reasons=["正文含省略标记"], old_chars=100, new_chars=40
-    )
-    assert "产物疑似不完整" in text
-    assert "绝不代派" in text
 
 
 # --- file_write / append / str_replace: no hard length gate ---
@@ -1687,55 +1239,48 @@ async def test_write_then_append_segmented_path(tmp_path: Path):
     assert merged == skeleton + section + closing
 
 
-def test_write_schema_teaches_hard_rejects():
-    """硬拒留一句在按钮上；反例 / 清参 HOW → consult(long_form_landing)。"""
+def test_write_schema_does_not_teach_completeness_gates():
+    """按钮只留这是什么 + HOW；完整性硬拒不进 schema / landing。"""
+    from agentcore.runtime.skills import build_system_skill_registry
+
     write_desc = FileWriteTool().schema.description
-    assert "主路径" in write_desc and "完整正文" in write_desc
-    assert "不硬拒字数" in write_desc
-    assert "优先" in write_desc and "str_replace" in write_desc
-    assert "省略标记" in write_desc
-    assert "50%" in write_desc and "800" in write_desc
-    assert "括号" in write_desc
-    assert "硬拒" in write_desc
+    assert "写入文件" in write_desc
     assert "HOW→consult(long_form_landing)" in write_desc
-    assert "中间省略" not in write_desc
+    assert "主路径" not in write_desc
+    assert "省略标记" not in write_desc
+    assert "50%" not in write_desc
+    assert "800" not in write_desc
+    assert "括号" not in write_desc
+    assert "硬拒" not in write_desc
     assert "清参后改稿" not in write_desc
-    assert "禁止整篇一次" not in write_desc and "仍建议分段" not in write_desc
-    assert "_landed_summary" not in write_desc
-    # HOW / 回执百科不在按钮上（身份段 + consult 已有）。
-    assert "Artifact-first" not in write_desc
-    assert "次数上限" not in write_desc
-    assert "NoMatch" not in write_desc
+    landing = build_system_skill_registry().get("long_form_landing")
+    assert landing is not None
+    assert "省略标记" not in landing.body
+    assert "allow_shrink" not in landing.body
+    assert "硬拒" not in landing.body
+    assert "HOW→consult(long_form_landing)" in FileAppendTool().schema.description
+    assert "HOW→consult(long_form_landing)" in StrReplaceTool().schema.description
     content_desc = FileWriteTool().schema.parameters["properties"]["content"]["description"]
     assert "完整正文" in content_desc
-    assert "省略标记" in content_desc
-    assert "硬拒" in content_desc
-    assert "_landed_summary" not in content_desc
-    assert "不硬拒字数" not in content_desc
-    assert "已落盘短状态" not in content_desc
-    assert "骨架" not in content_desc
+    assert "硬拒" not in content_desc
+    write_path = FileWriteTool().schema.parameters["properties"]["path"]["description"]
+    append_path = FileAppendTool().schema.parameters["properties"]["path"]["description"]
+    replace_path = StrReplaceTool().schema.parameters["properties"]["path"]["description"]
+    assert "扁平" in write_path
+    assert "扁平" not in append_path
+    assert "扁平" not in replace_path
 
     append_desc = FileAppendTool().schema.description
-    assert "骨架" in append_desc
-    assert "file_write" in append_desc
-    assert "成篇" in append_desc or "禁止" in append_desc
-    assert "str_replace" in append_desc
-    assert "不硬拒" in append_desc
+    assert "追加" in append_desc
+    assert "骨架" not in append_desc
     assert "次数上限" not in append_desc
     assert "Artifact-first" not in append_desc
 
     replace_desc = StrReplaceTool().schema.description
-    assert "优先" in replace_desc
-    assert "整文件覆盖亦允许" in replace_desc or "整盖" in replace_desc
-    assert "完整正文" in replace_desc
-    assert "禁止改用骨架 file_write" not in replace_desc
+    assert "完全匹配" in replace_desc or "精确替换" in replace_desc
+    assert "清参后改稿" not in replace_desc
     assert "_landed_summary" not in replace_desc
-    assert "已落盘短状态" in replace_desc
-    assert "清参后改稿" in replace_desc
-    assert "真文" in replace_desc
-    assert "file_read" in replace_desc
     assert "Artifact-first" not in replace_desc
-    assert "manifest" not in replace_desc
     new_desc = StrReplaceTool().schema.parameters["properties"]["new_string"]["description"]
     assert "不硬拒" in new_desc
     assert "_landed_summary" not in new_desc
@@ -1761,11 +1306,23 @@ def test_classify_write_kind_helpers():
 # --- file_delete ---
 
 
+def test_delete_schema_is_short_trigger():
+    """恢复路径在成功回执，不进每轮 schema。"""
+    schema = FileDeleteTool().schema
+    blob = schema.description + schema.parameters["properties"]["permanent"]["description"]
+    assert "可逆" in schema.description
+    assert "permanent" in schema.description
+    assert "系统回收站" not in blob
+    assert "AgentCore/trash" not in blob
+    assert "一键还原" not in blob
+
+
 async def test_delete_file(tmp_path: Path):
     (tmp_path / "f.txt").write_text("bye", encoding="utf-8")
     result = await FileDeleteTool().execute({"path": "f.txt"}, _ctx(tmp_path))
     assert result.success is True
     assert "可逆删除" in result.output
+    assert "系统回收站" in result.output or "AgentCore/trash" in result.output
     assert not (tmp_path / "f.txt").exists()
     # Soft-deleted into workspace trash with restore metadata.
     trash = tmp_path / "AgentCore" / "trash"
@@ -1799,6 +1356,15 @@ async def test_delete_permanent_hard_removes(tmp_path: Path):
     assert not trash.exists() or not any(trash.iterdir())
 
 
+async def test_delete_allows_substantial_draft(tmp_path: Path):
+    body = "成篇正文。" * 80
+    (tmp_path / "report.md").write_text(body, encoding="utf-8")
+    result = await FileDeleteTool().execute({"path": "report.md"}, _ctx(tmp_path))
+    assert result.success is True
+    assert not (tmp_path / "report.md").exists()
+    assert "可逆删除" in result.output
+
+
 async def test_delete_not_found(tmp_path: Path):
     result = await FileDeleteTool().execute({"path": "nope.txt"}, _ctx(tmp_path))
     assert result.success is False
@@ -1821,8 +1387,8 @@ async def test_delete_refuses_workspace_root(tmp_path: Path):
     (tmp_path / "keep.txt").write_text("keep", encoding="utf-8")
     result = await FileDeleteTool().execute({"path": ""}, _ctx(tmp_path))
     assert result.success is False
-    # Empty path is rejected up-front (成篇 delete gate pre-read); "." still hits
-    # OutsideWorkspace at the backend for genuine root deletes.
+    # Empty path is rejected up-front; "." still hits OutsideWorkspace at the
+    # backend for genuine root deletes.
     assert "path 不能为空" in result.error or "超出了工作区范围" in result.error
     # nothing in the root was removed
     assert (tmp_path / "keep.txt").exists()
@@ -2053,6 +1619,18 @@ def test_compile_glob_pattern_globstar():
     assert compile_glob_pattern("**/observability/**") == GlobPlan(
         "observability", ".", "*", GLOB_DEPTH
     )
+    assert compile_glob_pattern("packages/*/package.json") == GlobPlan(
+        None, "packages", "package.json", 1, True
+    )
+    assert compile_glob_pattern("packages/*/*.package.json") == GlobPlan(
+        None, "packages", "*.package.json", 1, True
+    )
+    assert compile_glob_pattern("*/package.json") == GlobPlan(
+        None, ".", "package.json", 1, True
+    )
+    assert compile_glob_pattern("packages/*/*") == GlobPlan(
+        None, "packages", "*", 1, True
+    )
     assert compile_glob_patterns("*.{ts,tsx}") == [
         GlobPlan(None, ".", "*.ts", GLOB_DEPTH),
         GlobPlan(None, ".", "*.tsx", GLOB_DEPTH),
@@ -2077,6 +1655,8 @@ def test_glob_schema_requires_pattern():
     assert "path" in props
     assert "directory" not in props
     assert "recursive" not in props
+    assert "pkg/*/name" in props["pattern"]["description"]
+    assert "pkg/*/name" in schema.description
 
 
 async def test_glob_finds_nested_files_from_root(tmp_path: Path):
@@ -2128,6 +1708,52 @@ async def test_glob_src_star_py_is_one_level(tmp_path: Path):
     assert result.success is True
     assert "src/a.py" in (result.output or "")
     assert "nested/b.py" not in (result.output or "")
+
+
+async def test_glob_star_dir_segment_matches_one_level_children(tmp_path: Path):
+    """``packages/*/package.json`` expands child dirs; does not treat ``*`` as a name."""
+    core = tmp_path / "packages" / "core"
+    app = tmp_path / "packages" / "app"
+    core.mkdir(parents=True)
+    app.mkdir(parents=True)
+    (core / "package.json").write_text("{}", encoding="utf-8")
+    (app / "package.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "packages" / "package.json").write_text("{}", encoding="utf-8")
+    nested = core / "nested"
+    nested.mkdir()
+    (nested / "package.json").write_text("{}", encoding="utf-8")
+
+    result = await GlobTool().execute(
+        {"pattern": "packages/*/package.json"}, _ctx(tmp_path)
+    )
+    assert result.success is True
+    out = result.output or ""
+    lines = [
+        line.strip().replace("\\", "/")
+        for line in out.splitlines()
+        if line.strip() and not line.startswith("（")
+    ]
+    assert "packages/core/package.json" in lines
+    assert "packages/app/package.json" in lines
+    assert "packages/package.json" not in lines
+    assert not any(line.endswith("nested/package.json") for line in lines)
+
+
+async def test_glob_listing_error_names_failed_path_not_search_root(tmp_path: Path):
+    """list_tree 失败应报后端拒绝的路径，而不是 glob 搜索根 ``.``。"""
+    from agentcore.workspace.protocol import NotADirectory
+
+    ctx = _ctx(tmp_path)
+
+    async def boom(directory: str, **_kwargs: object):
+        raise NotADirectory("packages/*")
+
+    ctx.backend.list_tree = boom  # type: ignore[method-assign]
+    result = await GlobTool().execute({"pattern": "*.py"}, ctx)
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.startswith("不是目录：packages/*")
+    assert not result.error.startswith("不是目录：.")
 
 
 async def test_glob_src_recursive_py(tmp_path: Path):

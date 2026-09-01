@@ -450,24 +450,30 @@ def workspace_channel_for_tools(
     conversation_id: str,
     registry: ClientRequestBridge | None = None,
 ) -> WorkspaceChannel | None:
-    """The ``workspace_op_required`` channel tools use for desktop-held process ops.
+    """The ``workspace_op_required`` channel for desktop-held ops.
 
-    LocalWorkspace already owns a channel (file / execute ops) — reuse it so process
-    ops share root_id + registry. Sidecar uses ServerWorkspace(location=local) with
-    direct Path I/O and no channel; build one so ``terminal`` still leaves the
+    LocalWorkspace already owns a channel (file / execute / diagnostics) — reuse
+    it so process ops and the language service share root_id + registry. Sidecar
+    uses ServerWorkspace(location=local) with direct Path I/O and no owned
+    channel; build one so ``terminal`` and ``diagnostics`` still leave the
     short-lived sidecar for the desktop main process (双模式工作区 §四).
-    Cloud server backends return ``None`` (terminal is not registered there).
+    Cloud server backends return ``None`` (those ops are not registered there).
     """
     if backend.location != "local":
         return None
     existing = getattr(backend, "_channel", None)
     if isinstance(existing, WorkspaceChannel):
-        return existing
-    return WorkspaceChannel(
-        user_id=user_id,
-        conversation_id=conversation_id,
-        registry=registry or default_interaction_registry(),
-        timeout_seconds=settings.workspace_op_timeout_seconds,
-        root_id="",
-        max_inflight=settings.workspace_channel_max_inflight,
-    )
+        channel = existing
+    else:
+        channel = WorkspaceChannel(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            registry=registry or default_interaction_registry(),
+            timeout_seconds=settings.workspace_op_timeout_seconds,
+            root_id="",
+            max_inflight=settings.workspace_channel_max_inflight,
+        )
+    attach = getattr(backend, "attach_desktop_channel", None)
+    if callable(attach):
+        attach(channel)
+    return channel

@@ -17,11 +17,11 @@ NavigateKind = Literal["http", "workspace", "relative", "invalid"]
 WORKSPACE_SCHEME = "workspace"
 _DEFAULT_ROOT_LABEL = "workspace"
 
-# 乙：Sandbox / 无桌面预览 —— 相对路径诚实失败。怎么看页以事实层「产物出口」为准。
+# 乙：Sandbox / 无桌面预览 —— 相对路径诚实失败。怎么看页以 product_help / 工具回执为准。
 RELATIVE_PATH_UNSUPPORTED_MSG = (
     "当前浏览器宿主无法打开本会话工作区 HTML 相对路径"
     "（仅桌面 Local Bridge 支持）。"
-    "请对照 `<工作区>` 产物出口指引用户查看；"
+    "请让用户在「文件」面板查看或下载；桌面可用「完整预览」。"
     "本环境下本工具仅支持公网 http(s) URL。"
 )
 

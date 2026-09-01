@@ -66,8 +66,7 @@ FINALIZE_FORBIDDEN_TOOLS = frozenset(
         "read_url",
         "file_write",
         "str_replace",
-        "code_execute",
-        "terminal",
+        "run",
     }
 )
 

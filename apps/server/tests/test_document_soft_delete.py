@@ -91,3 +91,38 @@ async def test_soft_delete_batch_marks_subtree_and_is_idempotent(monkeypatch):
 
     assert await repo.soft_delete(root.id, user_id=uid) is False
     assert len(updates) == 1  # second call short-circuits on get → None
+
+
+@pytest.mark.asyncio
+async def test_hard_delete_for_folders_issues_one_delete_and_respects_commit():
+    from sqlalchemy.sql.dml import Delete
+
+    session = AsyncMock()
+    deletes: list[Delete] = []
+
+    async def fake_execute(stmt):
+        assert isinstance(stmt, Delete), "folder purge must physically DELETE"
+        deletes.append(stmt)
+        result = AsyncMock()
+        result.rowcount = 3
+        return result
+
+    session.execute = fake_execute
+    session.commit = AsyncMock()
+    session.flush = AsyncMock()
+    repo = DocumentRepository(session)
+
+    assert await repo.hard_delete_for_folders("u1", []) == 0
+    assert await repo.hard_delete_for_folders("u1", [""]) == 0
+    assert deletes == []
+    session.commit.assert_not_called()
+
+    assert await repo.hard_delete_for_folders("u1", ["f1", "", "f2"]) == 3
+    assert len(deletes) == 1
+    session.commit.assert_awaited_once()
+
+    session.commit.reset_mock()
+    session.flush.reset_mock()
+    assert await repo.hard_delete_for_folders("u1", ["f1"], commit=False) == 3
+    session.flush.assert_awaited_once()
+    session.commit.assert_not_called()

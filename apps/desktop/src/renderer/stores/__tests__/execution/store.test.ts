@@ -105,6 +105,45 @@ describe("execution store", () => {
     expect(execRuntime(store(), "msg-server").plan?.id).toBe("exec-1");
     expect(execRuntime(store(), "msg-server").frames).toHaveLength(1);
   });
+
+  it("startExecution keeps userInterjections already on the slot", () => {
+    store().upsertUserInterjection(
+      {
+        interjectionId: "ij-keep",
+        executionId: "exec-1",
+        content: "插一句",
+        status: "received",
+        note: null,
+      },
+      MID,
+    );
+    store().startExecution(plan, MID);
+    expect(execRuntime(store(), MID).userInterjections).toEqual([
+      expect.objectContaining({ interjectionId: "ij-keep", content: "插一句" }),
+    ]);
+    expect(execRuntime(store(), MID).frames).toEqual([]);
+  });
+
+  it("alignTurnKey merges interjections when destination already has a plan", () => {
+    store().startExecution(plan, "msg-server");
+    store().upsertUserInterjection(
+      {
+        interjectionId: "ij-src",
+        executionId: "exec-1",
+        content: "先到的插话",
+        status: "received",
+        note: null,
+      },
+      MID,
+    );
+    store().alignTurnKey(MID, "msg-server");
+    expect(execRuntime(store(), MID).plan).toBeNull();
+    expect(
+      execRuntime(store(), "msg-server").userInterjections.some(
+        (item) => item.interjectionId === "ij-src",
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("hydrateFromJournal (reload replay, §9.3)", () => {

@@ -1,32 +1,26 @@
 // @vitest-environment jsdom
 /**
- * 协作图工具条角落挂手册「?」入口（深链 mechanism?s=legend）。
+ * 全屏画布不挂手册「?」：看这张图时不跳走读图例。
+ * 图例仍从工具箱手册选读章进。
  */
 
-import { MANUAL_HELP } from "@/components/ManualHelpLink";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import { GraphToolbar } from "../GraphToolbar";
 
 afterEach(cleanup);
 
-describe("GraphToolbar manual help", () => {
-  it("挂「看手册说明」入口，深链到图例节", () => {
+describe("GraphToolbar", () => {
+  it("全屏画布不挂「看手册说明」", () => {
     render(
-      <MemoryRouter>
-        <TooltipProvider>
-          <div className="relative h-20 w-40">
-            <GraphToolbar
-              layoutKind="leftright"
-              onLayoutKindChange={() => {}}
-            />
-          </div>
-        </TooltipProvider>
-      </MemoryRouter>,
+      <TooltipProvider>
+        <div className="relative h-20 w-40">
+          <GraphToolbar layoutKind="leftright" onLayoutKindChange={() => {}} />
+        </div>
+      </TooltipProvider>,
     );
-    const btn = screen.getByRole("button", { name: "看手册说明" });
-    expect(btn.getAttribute("data-manual-help")).toBe(MANUAL_HELP.legend);
+    expect(screen.queryByRole("button", { name: "看手册说明" })).toBeNull();
+    expect(screen.getByRole("button", { name: "左右流" })).toBeTruthy();
   });
 });

@@ -313,7 +313,7 @@ function VersionSection() {
 /**
  * 关于（/more/about）— 品牌、版本溯源、软件更新、法律与合规。
  *
- * 开发者 / 诊断模式与「允许本机执行」原本挂在本页（挨着构建溯源），用户找不到，
+ * 「允许本机执行」原本挂在本页（挨着构建溯源），用户找不到，
  * 已搬到「通用」（/more/general）的「进阶」区。
  */
 export function AboutSettings() {

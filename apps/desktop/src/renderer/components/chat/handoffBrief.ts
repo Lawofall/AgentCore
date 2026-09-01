@@ -1,12 +1,13 @@
-import type { MotionCard, ProcessStep, RunDebrief } from "@/types/events";
+import type { ProcessStep, RunDebrief } from "@/types/events";
 
 /** Protocol ack written into the tool result. Never a user-facing peek or expand body. */
 export const HANDOFF_RECEIPT = "已收尾并提交交接简报。";
 
 /**
- * Successful `handoff` tool row ≡ 交接简报卡. Same predicate for ToolLine /
- * ToolResultView (row face) and RunDetailBody (whether the footer DebriefSection
- * still renders). Failed / in-flight rows stay ordinary tool lines.
+ * Successful `handoff` tool row ≡ 交接简报卡 (`HandoffBriefCard`, same chrome
+ * as the run-detail footer). Same predicate for ToolLine and RunDetailBody
+ * (whether the footer card still renders). Failed / in-flight rows stay
+ * ordinary tool lines.
  */
 export function isSuccessfulHandoff(
   toolName: string,
@@ -30,6 +31,18 @@ export function processHasSuccessfulHandoff(
   return process.some(isSuccessfulHandoffStep);
 }
 
+/**
+ * Live SSE carries `degraded` as an extra dict key on the debrief object
+ * (`synthesize_debrief`). It is not on the `RunDebrief` wire type — read it
+ * here, do not widen the contract.
+ */
+export function isDegradedDebrief(debrief: RunDebrief): boolean {
+  return (
+    "degraded" in debrief &&
+    (debrief as { degraded?: unknown }).degraded === true
+  );
+}
+
 function asTrimmedString(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined;
   const t = v.trim();
@@ -45,30 +58,15 @@ function asKeyPoints(v: unknown): string[] | undefined {
   return points.length > 0 ? points : undefined;
 }
 
-function asMotionCard(v: unknown): MotionCard | undefined {
-  if (!v || typeof v !== "object") return undefined;
-  const c = v as Partial<MotionCard>;
-  if (typeof c.motion !== "string" || !c.motion.trim()) return undefined;
-  if (!Array.isArray(c.sides) || typeof c.rationale !== "string") {
-    return undefined;
-  }
-  if (!Array.isArray(c.fact_pointers) || typeof c.form !== "string") {
-    return undefined;
-  }
-  return c as MotionCard;
-}
-
 /** Structured brief lives on the call arguments (not the protocol receipt). */
 export function debriefFromHandoffArgs(
   args: Record<string, unknown>,
 ): RunDebrief {
-  const motion_card = asMotionCard(args.motion_card);
   return {
     summary: asTrimmedString(args.summary) ?? null,
     key_points: asKeyPoints(args.key_points) ?? null,
     assumptions: asTrimmedString(args.assumptions) ?? null,
     next_steps: asTrimmedString(args.next_steps) ?? null,
-    ...(motion_card ? { motion_card } : {}),
   };
 }
 
@@ -76,8 +74,7 @@ export function hasDebriefDetails(debrief: RunDebrief): boolean {
   return Boolean(
     (debrief.key_points && debrief.key_points.length > 0) ||
       debrief.assumptions ||
-      debrief.next_steps ||
-      debrief.motion_card,
+      debrief.next_steps,
   );
 }
 

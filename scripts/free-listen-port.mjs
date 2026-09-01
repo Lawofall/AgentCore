@@ -104,7 +104,9 @@ function listListenerPids(port) {
  * @param {number} port
  */
 function listListenerPidsWin(port) {
-  const r = spawnSync("netstat", ["-ano", "-p", "TCP"], {
+  // No `-p TCP`: that filter drops IPv6 listeners (`[::1]:5174`), so a
+  // dual-stack / v6-only Vite looks "free" and the next strictPort bind fails.
+  const r = spawnSync("netstat", ["-ano"], {
     encoding: "utf8",
     windowsHide: true,
   });

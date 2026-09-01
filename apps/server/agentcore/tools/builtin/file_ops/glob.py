@@ -56,10 +56,8 @@ class GlobTool:
         return ToolSchema(
             name="glob",
             description=(
-                "按 globstar 递归查找。pattern 必填：`*.py`、`*.{ts,tsx}`、`**/*.ts`、"
-                "`src/**/*.py`、`**/name/**`。省略 path=整仓根。"
-                "`*` / `**/*` 在条数顶内递归列举。一层列举用 file_list。"
-                "回执一行一条相对路径，目录尾 `/`。"
+                "按 globstar 递归查找。省略 path=整仓。一层列举用 file_list。"
+                "例：`pkg/*/name`。"
             ),
             parameters={
                 "type": "object",
@@ -68,8 +66,8 @@ class GlobTool:
                         "type": "string",
                         "description": (
                             "globstar。无斜杠=任意深度文件名（`*.py`、`*sidecar*`）；"
-                            "有斜杠=相对路径（`src/*.py` 一层，`src/**/*.py` 递归，"
-                            "`**/name/**` 任意深度该目录下）。"
+                            "有斜杠=相对路径（`src/*.py` 一层，`pkg/*/name` 一层子目录，"
+                            "`src/**/*.py` 递归，`**/name/**` 任意深度该目录下）。"
                         ),
                     },
                     "path": {
@@ -183,8 +181,9 @@ class GlobTool:
             if uniq_warnings:
                 output += "\n" + "\n".join(f"⚠ {w}" for w in uniq_warnings)
         except WorkspaceError as e:
+            failed = _listing_error_directory(e, directory)
             return await map_listing_failure(
-                e, directory=directory, context=context, start=start, verb="查找"
+                e, directory=failed, context=context, start=start, verb="查找"
             )
         finally:
             context.backend.ai_list_reveal_archives = prev_reveal
@@ -249,25 +248,49 @@ async def _run_plan(
                 list(located.warnings),
                 note,
             )
-        merged: dict[str, TreeEntry] = {entry.path: entry for entry in files}
-        truncated = located.truncated
-        elided = located.elided_count
-        warnings = list(located.warnings)
-        for root in dirs:
-            tree, sub_note = await _list_tree_maybe_fallback(
-                backend,
-                root,
-                name_filter=plan.name_filter,
-                max_depth=plan.max_depth,
-                max_entries=max_entries,
+        return await _fanout_named(
+            backend,
+            dirs=dirs,
+            name_filter=plan.name_filter,
+            max_depth=plan.max_depth,
+            max_entries=max_entries,
+            seed_files=files,
+            truncated=located.truncated,
+            elided=located.elided_count,
+            warnings=list(located.warnings),
+            note=note,
+        )
+
+    if plan.star_dirs:
+        parent = join_glob_directory(search_root, plan.directory)
+        located, note = await _list_tree_maybe_fallback(
+            backend,
+            parent,
+            name_filter="*",
+            max_depth=1,
+            max_entries=max_entries,
+        )
+        dirs = [entry.path for entry in located.entries if entry.is_dir]
+        if not dirs:
+            return (
+                [],
+                located.truncated,
+                located.elided_count,
+                list(located.warnings),
+                note,
             )
-            note = note or sub_note
-            for entry in tree.entries:
-                merged[entry.path] = entry
-            truncated = truncated or tree.truncated
-            elided += tree.elided_count
-            warnings.extend(tree.warnings)
-        return list(merged.values()), truncated, elided, warnings, note
+        return await _fanout_named(
+            backend,
+            dirs=dirs,
+            name_filter=plan.name_filter,
+            max_depth=plan.max_depth,
+            max_entries=max_entries,
+            seed_files=[],
+            truncated=located.truncated,
+            elided=located.elided_count,
+            warnings=list(located.warnings),
+            note=note,
+        )
 
     target = join_glob_directory(search_root, plan.directory)
     tree, note = await _list_tree_maybe_fallback(
@@ -278,6 +301,46 @@ async def _run_plan(
         max_entries=max_entries,
     )
     return list(tree.entries), tree.truncated, tree.elided_count, list(tree.warnings), note
+
+
+def _listing_error_directory(exc: BaseException, fallback: str) -> str:
+    """Prefer the path the backend rejected over glob's search root."""
+    if isinstance(exc, (NotADirectory, PathNotFound)):
+        detail = str(exc).strip()
+        if detail:
+            return detail
+    return fallback
+
+
+async def _fanout_named(
+    backend: Any,
+    *,
+    dirs: list[str],
+    name_filter: str,
+    max_depth: int,
+    max_entries: int,
+    seed_files: list[TreeEntry],
+    truncated: bool,
+    elided: int,
+    warnings: list[str],
+    note: str | None,
+) -> tuple[list[TreeEntry], bool, int, list[str], str | None]:
+    merged: dict[str, TreeEntry] = {entry.path: entry for entry in seed_files}
+    for root in dirs:
+        tree, sub_note = await _list_tree_maybe_fallback(
+            backend,
+            root,
+            name_filter=name_filter,
+            max_depth=max_depth,
+            max_entries=max_entries,
+        )
+        note = note or sub_note
+        for entry in tree.entries:
+            merged[entry.path] = entry
+        truncated = truncated or tree.truncated
+        elided += tree.elided_count
+        warnings.extend(tree.warnings)
+    return list(merged.values()), truncated, elided, warnings, note
 
 
 async def _list_tree_maybe_fallback(

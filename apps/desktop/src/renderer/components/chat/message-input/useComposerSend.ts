@@ -334,9 +334,8 @@ export function useComposerSend({
       const outgoingMentions = toOutgoingMentions(agentMentions);
 
       // Mid-flight：生成中发送走独立 POST SSE（steer 插话 / queue 排队）。
-      // queue：ack 后清 composer；条进 QueuedTurnsBar，出队开跑再插用户泡。
-      // steer（经典/协调）不经 addMessage——主时间线由 InterjectionTimeline 投影
-      // execution.userInterjections（user_interjection SSE · DURABLE）。
+      // ack 后清 composer；用户泡由 sendMidFlightMessage 入主时间线。
+      // queue 另 upsert QueuedTurnsBar；steer 过程 marker 有同内容用户泡则折锚点。
       if (isGenerating && activeConvId) {
         if (!acquireComposerSendLatch(draftKey, "sending")) return;
         clearComposerSendError(draftKey);
@@ -365,8 +364,6 @@ export function useComposerSend({
           if (result.kind === "received" || result.kind === "queued") {
             for (const a of pending) forgetAttachmentUpload(a.id);
             clearComposer();
-            // queued：条由 turn_queued → midFlight upsert；出队再插泡。
-            // received：主时间线走 user_interjection SSE 投影（含经典 durable 气泡）。
           }
         } finally {
           releaseComposerSendLatch(draftKey);

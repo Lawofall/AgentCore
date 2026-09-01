@@ -1,6 +1,8 @@
 """Browser assembly / tool-success latch + open-or-login claim detector.
 
-声称已开页 / 右坞直播 / 已登录——须对本回合 browser 成功对账（禁扫用户气泡意图）。
+装配 / 工具成功闩锁仍打（workspace 事实行、transcript 对账）。
+**浏览器声称硬回炉已撤**：不再因正文「已开页 / 已登录」清气泡；
+``claims_browser_open_or_login`` 仍保留（测试 / 观测）。
 """
 
 from __future__ import annotations
@@ -100,20 +102,11 @@ def claims_browser_open_or_login(content: str) -> bool:
 
 
 def _browser_claim_rework(content: str) -> str | None:
-    """声称已开浏览器/已登录须有 browser tool 成功；未装配同禁."""
-    text = content or ""
-    if not text.strip() or not claims_browser_open_or_login(text):
-        return None
-    if turn_has_browser_tool_success():
-        return None
-    if turn_browser_assembled():
-        return (
-            "正文声称已打开浏览器/右坞页面或已登录成功，但本回合没有对应 "
-            "browser 工具成功结果——"
-            "请改为如实说明尚未成功开页/登录，或先调用 browser(action=navigate) 等工具完成后再写；"
-            "禁止口头假开浏览器。"
-        )
-    return (
-        "正文声称已打开浏览器/右坞或已登录，但本回合 browser=未装配且无 browser "
-        "成功证据——请先如实说明未装配与如何接通，禁止假装已打开或直播页面。"
-    )
+    """浏览器声称扫词硬回炉已撤（恒 None）。
+
+    曾：无 browser 成功 / 未装配却称已开页、已登录 → finish_guard 清气泡。
+    与零写落盘声称、产物结构窄闸同构。检测器 ``claims_browser_open_or_login``
+    与装配/成功闩锁仍保留；不改为软提醒、不写进提示词。
+    """
+    _ = content
+    return None

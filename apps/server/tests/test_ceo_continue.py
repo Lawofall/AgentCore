@@ -679,4 +679,5 @@ async def test_continue_ceo_rebuilds_worker_base_not_chat_prompt(monkeypatch):
     assert "对整段对话负责到底" not in prompt
     assert "<怎么对人>" not in prompt
     assert "<按需目录>" in prompt
-    assert "- work_discipline" in prompt
+    assert "- long_form_landing" in prompt
+    assert "- work_discipline" not in prompt

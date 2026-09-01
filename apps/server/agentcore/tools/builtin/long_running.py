@@ -1,9 +1,8 @@
-"""Shared long-running CLI detection for ``code_execute`` ↔ ``terminal`` routing.
+"""Shared long-running CLI detection for the short-exec path → ``run`` background.
 
-Models often put ``npm run dev`` (etc.) into ``code_execute``, which waits for
+Models often put ``npm run dev`` (etc.) into a short command, which waits for
 exit and hits the 60s cap. Patterns are command-shaped so imports like
-``from 'vite'`` do not false-positive. Both tools import this module — keep the
-list the single source of truth.
+``from 'vite'`` do not false-positive. Keep the list the single source of truth.
 """
 
 from __future__ import annotations
@@ -45,14 +44,14 @@ def long_running_command_match(code: str) -> str | None:
 def long_running_redirect_message(
     matched: str, *, location: Literal["server", "local"] | None
 ) -> str:
-    """``code_execute`` refusal: tip the correct tool without running the command."""
+    """Short-path refusal: tip ``run`` background without running the command."""
     del location
     return (
-        f"禁止用 code_execute 启动长驻进程（检测到：{matched}）。"
-        "本工具会等待进程退出，约 60s 必超时，无法托管开发服务器。"
-        "请改用 terminal：subcommand=start，填入同一命令，并设 wait_for"
+        f"请用 run 启动长驻进程（检测到：{matched}）。"
+        "本路径会等待进程退出，约 60s 必超时，无法托管开发服务器。"
+        "设 background=true，填入同一命令，并设 wait_for"
         f"（如 {DEFAULT_DEV_WAIT_FOR}）等到就绪信号后再宣称已启动；"
-        "用 list/read 确认进程仍在跑。"
+        "用 action=read|list 确认进程仍在跑。"
     )
 
 
@@ -61,7 +60,7 @@ def wait_for_required_message(matched: str) -> str:
     return (
         f"启动长驻进程（检测到：{matched}）时必须提供 wait_for，"
         "否则无法验证就绪，禁止仅凭首段输出宣称已启动。"
-        f"请带 wait_for（建议 `{DEFAULT_DEV_WAIT_FOR}`）重试 start。"
+        f"请带 wait_for（建议 `{DEFAULT_DEV_WAIT_FOR}`）重试。"
     )
 
 

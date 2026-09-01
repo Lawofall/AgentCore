@@ -395,8 +395,8 @@ class DeliveryStatusPayload(WirePayload):
     ``state``: delivered = 无 blocking 缺口且有落盘产物; partial = 有产物也有
     blocking 缺口; blocked = 有 blocking 缺口且无落盘产物;
     notes = 仍有 soft 提醒且非「仅 unverified_note」（轻提醒，非「部分未满足」）；
-    声明路径未落盘为 path_mismatch blocking gap，不得 delivered；未声明落盘不进
-    ``artifacts``。
+    声明路径未落盘为 path_mismatch warning，不挡 delivered；声明未命中时实际落盘进
+    ``artifacts``。声明命中时备份仍不进卡。
     ``artifacts``: path-level acceptance (accepted+rejected) for declared landings;
     ``delivered_files`` remains accepted-only for older clients.
     ``promoted``: 历史 ``{from, to}`` 归位行（``promote_product`` 已撤销；新回合不再写入）。

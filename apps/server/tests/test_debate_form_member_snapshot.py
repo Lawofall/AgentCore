@@ -1,14 +1,17 @@
 """Cross-surface DebateForm member-set ratchet.
 
-``DebateForm`` is the single authority for member values. Derived surfaces must
-stay identical:
+两集分开钉，禁止把广告子集与回放全员捆成一次相等：
 
-- tool schema ``form`` enum (``DEBATE_PARAMETERS`` ← ``DEBATE_FORM_VALUES``)
-- wire fields annotated as ``DebateForm`` (not a hand-copied ``Literal[...]``)
-- ``FORM_LABELS`` keys (import-time completeness + this snapshot)
+- 回放 / wire 全员：``DebateForm`` = ``DEBATE_FORM_VALUES`` = ``FORM_LABELS`` 键 =
+  wire ``form``（``DebateForm`` 注解，不是手抄 ``Literal[...]``）
+- schema 广告子集：工具 ``form`` enum = ``DEBATE_SCHEMA_FORM_VALUES`` == {debate}；
+  须是全员的真子集（产品入口只认正反）
 
-Optional: desktop ``FORM_LABEL`` Record keys (same member set as ``DebateForm``).
-Adding a form without updating every surface fails this test — not a behavior vector.
+Optional: desktop ``FORM_LABEL`` Record keys (same member set as ``DebateForm``)
+when a map is present. Handoff motion_card withdrawn — a file without the map
+is skipped, not a failure.
+Adding a replay form without updating wire/labels fails this test; advertising a
+new form to the model is a separate schema-subset change.
 """
 
 from __future__ import annotations
@@ -19,7 +22,11 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal, Union, get_args, get_origin
 
-from agentcore.runtime.debate.constants import DEBATE_FORM_VALUES, FORM_LABELS
+from agentcore.runtime.debate.constants import (
+    DEBATE_FORM_VALUES,
+    DEBATE_SCHEMA_FORM_VALUES,
+    FORM_LABELS,
+)
 from agentcore.runtime.debate.types import DebateForm
 from agentcore.runtime.events.payloads.debate import DebateResultPayload
 from agentcore.runtime.events.payloads.interaction import StageCardRequiredPayload
@@ -35,9 +42,7 @@ _DESKTOP_FORM_LABEL_FILES = (
     / "renderer"
     / "components"
     / "chat"
-    / "detail"
-    / "sections"
-    / "RunDebrief.tsx",
+    / "HandoffBriefCard.tsx",
 )
 
 
@@ -74,16 +79,21 @@ def _assert_wire_uses_debate_form(model: type, field: str = "form") -> None:
 def test_debate_form_member_set_aligned_across_surfaces():
     enum_vals = frozenset(m.value for m in DebateForm)
     schema_vals = frozenset(DEBATE_PARAMETERS["properties"]["form"]["enum"])
+    advertised = frozenset(DEBATE_SCHEMA_FORM_VALUES)
     label_keys = frozenset(f.value for f in FORM_LABELS)
     derived = frozenset(DEBATE_FORM_VALUES)
     wire_result = _wire_form(DebateResultPayload)
     wire_motion = _wire_form(MotionCard)
     wire_stage = _wire_form(StageCardRequiredPayload)
 
-    assert enum_vals == schema_vals == label_keys == derived == wire_result == wire_motion == wire_stage
+    assert enum_vals == label_keys == derived == wire_result == wire_motion == wire_stage
     assert set(FORM_LABELS) == set(DebateForm)
     assert list(DEBATE_FORM_VALUES) == [m.value for m in DebateForm]
-    assert len(enum_vals) >= 3  # ratchet: never silently empty
+    assert len(enum_vals) >= 3  # ratchet: replay set never silently empty
+
+    assert schema_vals == advertised == frozenset({"debate"})
+    assert advertised < enum_vals  # 广告真子集，不是全员拷贝
+    assert list(DEBATE_SCHEMA_FORM_VALUES) == ["debate"]
 
     _assert_wire_uses_debate_form(DebateResultPayload)
     _assert_wire_uses_debate_form(MotionCard)
@@ -91,7 +101,10 @@ def test_debate_form_member_set_aligned_across_surfaces():
 
 
 def test_desktop_form_label_keys_cover_debate_form():
-    """Desktop FORM_LABEL maps must cover DebateForm (text may differ)."""
+    """Desktop FORM_LABEL maps must cover DebateForm (text may differ).
+
+    Optional: no map (handoff motion_card withdrawn) is not a failure.
+    """
     enum_vals = frozenset(m.value for m in DebateForm)
     for path in _DESKTOP_FORM_LABEL_FILES:
         src = path.read_text(encoding="utf-8")
@@ -99,6 +112,7 @@ def test_desktop_form_label_keys_cover_debate_form():
             r"const FORM_LABEL:\s*Record<[^>]+>\s*=\s*\{([^}]+)\}",
             src,
         )
-        assert block is not None, f"FORM_LABEL map not found in {path.name}"
+        if block is None:
+            continue
         keys = frozenset(re.findall(r"^\s*([a-z_]+)\s*:", block.group(1), flags=re.M))
         assert keys == enum_vals, f"{path.name} FORM_LABEL keys {sorted(keys)} != {sorted(enum_vals)}"

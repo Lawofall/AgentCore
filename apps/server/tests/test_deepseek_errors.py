@@ -1049,6 +1049,22 @@ async def test_llm_auth_error_platform_default_message():
     assert "设置 · 服务商" not in err.message
 
 
+def test_balance_error_does_not_pair_platform_copy_with_user_source():
+    mixed = LLMInsufficientBalanceError(
+        LLMInsufficientBalanceError._PLATFORM_MESSAGE,
+        credential_source="user",
+    )
+    assert mixed.details.get("credential_source") == "user"
+    assert "请改用自己的 API Key" not in mixed.message
+    assert "余额不足" in mixed.message
+
+
+def test_balance_error_platform_copy_without_source_is_platform_payer():
+    err = LLMInsufficientBalanceError(LLMInsufficientBalanceError._PLATFORM_MESSAGE)
+    assert err.details.get("credential_source") == "platform"
+    assert err.message == LLMInsufficientBalanceError._PLATFORM_MESSAGE
+
+
 async def test_complete_maps_model_not_allowed_403_to_client_error_not_auth():
     body = json.dumps(
         {

@@ -291,6 +291,23 @@ def test_balance_envelope_keeps_its_code_across_the_relay():
     assert is_latchable_llm_death(ei.value) is True
 
 
+def test_balance_envelope_platform_copy_without_source_stays_platform_payer():
+    with pytest.raises(LLMInsufficientBalanceError) as ei:
+        _leaf(_INFERENCE_BASE)._raise_for_status(
+            502,
+            1.0,
+            {},
+            body=_envelope(
+                "LLM_INSUFFICIENT_BALANCE",
+                LLMInsufficientBalanceError._PLATFORM_MESSAGE,
+            ),
+            attempt=0,
+        )
+    assert ei.value.details.get("credential_source") == "platform"
+    assert ei.value.message == LLMInsufficientBalanceError._PLATFORM_MESSAGE
+    assert ei.value.details.get("credential_source") != "user"
+
+
 def test_relayed_rate_limit_keeps_its_code_and_retry_after():
     with pytest.raises(LLMRateLimitError) as ei:
         _leaf(_INFERENCE_BASE)._raise_for_status(

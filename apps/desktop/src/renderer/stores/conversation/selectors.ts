@@ -1,14 +1,71 @@
-import type { ErrorAction } from "@/lib/errors";
+import { type ErrorAction, visibleMessageText } from "@/lib/errors";
+import { precedingUserMessageId } from "@/lib/supportDiagnostics";
 import type { ProcessStep } from "@/types/events";
-import { activeRuntime, runtimeOf } from "./runtime";
+import { activeRuntime, lastAssistantProjectionId, runtimeOf } from "./runtime";
 import { useConversationStore } from "./store";
 import type { ConversationRuntime, MemoryUpdate, Message } from "./types";
 
 /** Stable empty process — a fresh `[]` per call would re-render every subscriber. */
 const NO_PROCESS: ProcessStep[] = [];
 
+/** Stable empty window — a fresh `[]` per closed-find/outline tick would re-render. */
+export const NO_ACTIVE_MESSAGES: Message[] = [];
+
 export const useActiveMessages = (): Message[] =>
   useConversationStore((s) => activeRuntime(s).messages);
+
+/** Whether the loaded window has any bubbles — stable during a streaming tick. */
+export const useActiveHasMessages = (): boolean =>
+  useConversationStore((s) => activeRuntime(s).messages.length > 0);
+
+export const useActiveFirstMessageId = (): string | null =>
+  useConversationStore((s) => activeRuntime(s).messages[0]?.id ?? null);
+
+/**
+ * Stick-to-bottom key for the live tail (id + content/reasoning lengths).
+ * Isolated so ChatView chrome does not have to subscribe to the whole `messages[]`.
+ */
+export const useActiveStickContentKey = (): string =>
+  useConversationStore((s) => {
+    const last = activeRuntime(s).messages.at(-1);
+    return last
+      ? `${last.id}-${last.content.length}-${last.reasoning?.length ?? 0}`
+      : "";
+  });
+
+export const useActiveUserTurnCount = (): number =>
+  useConversationStore((s) => {
+    let n = 0;
+    for (const m of activeRuntime(s).messages) {
+      if (m.role === "user") n++;
+    }
+    return n;
+  });
+
+export const useActiveLastAssistantProjectionId = (): string | null =>
+  useConversationStore((s) =>
+    lastAssistantProjectionId(activeRuntime(s).messages),
+  );
+
+export const usePrecedingUserMessageId = (
+  assistantMessageId: string | null,
+): string | null =>
+  useConversationStore((s) => {
+    if (!assistantMessageId) return null;
+    return precedingUserMessageId(
+      activeRuntime(s).messages,
+      assistantMessageId,
+    );
+  });
+
+export const useActiveMessageHasVisibleText = (
+  messageId: string | null,
+): boolean =>
+  useConversationStore((s) => {
+    if (!messageId) return false;
+    const m = activeRuntime(s).messages.find((x) => x.id === messageId);
+    return m ? Boolean(visibleMessageText(m)) : false;
+  });
 
 /**
  * The `content` of one message in the active conversation by id (or "" when absent /

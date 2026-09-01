@@ -35,7 +35,7 @@ import {
   updateLlmModelProfile,
 } from "@/services/llmModelProfiles";
 import type { LlmProviderView } from "@/services/llmProviders";
-import { type ModelCatalogItem, findCatalogItem } from "@/services/models";
+import { type ModelCatalogItem, slotHasCatalogVision } from "@/services/models";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -61,18 +61,13 @@ function normalizeSaveWarnings(
   return warnings.map((w) => w.trim()).filter(Boolean);
 }
 
-/** 草稿主模型是否在 curated 目录标有 vision（贴图可直送主模型）。 */
-function mainHasCuratedVision(
+/** 草稿主模型目录是否标有 vision（贴图可直送主模型）。 */
+function mainHasCatalogVision(
   main: ModelProfileSlot | null,
   catalogModels: ModelCatalogItem[],
 ): boolean {
   if (!main) return false;
-  const item = findCatalogItem(catalogModels, {
-    id: main.model,
-    origin: main.origin,
-    providerId: main.provider_id,
-  });
-  return (item?.capabilities ?? []).includes("vision");
+  return slotHasCatalogVision(main, catalogModels);
 }
 
 /** 从分组取第一个可选槽（平台或 BYOK），用于新建种子。 */
@@ -825,7 +820,7 @@ function ProfileEditor({
   const canChoose = canChooseFromGroups(groups);
   const canChooseVision = canChooseFromGroups(visionGroups);
   const showEmptyGuide = !canChoose;
-  const mainVisionCapable = mainHasCuratedVision(main, catalogModels);
+  const mainVisionCapable = mainHasCatalogVision(main, catalogModels);
   const busy = pending || saving;
 
   const handleSave = async () => {

@@ -153,7 +153,7 @@ export interface BackendMessage {
   duration_ms?: number | null;
   /** Server-attested turn result (`turn_metrics.status` / `message_end.outcome`). */
   outcome?: ("ok" | "partial" | "paused" | "error") | null;
-  /** 协作质量 (学·度量 §2.5): orchestration signals for 诊断模式; nested in usage column. */
+  /** 协作质量 (学·度量 §2.5): orchestration signals（采集仍在、产品不展示调度明细）; nested in usage column. */
   collab?: {
     boundary_yields: number;
     scope_signals: number;

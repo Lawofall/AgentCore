@@ -59,8 +59,8 @@ def _delivery_gaps_from_warnings(
     ``files_landed``: 保留给调用方；``degraded_handoff`` 一律 warning。
 
     ``stamped_rows``: contract-source reason/severity keyed by description. Prefer
-    these over copy-marker inference so placeholder self-notes carry
-    ``unverified_note`` before CEO collect/format.
+    these over copy-marker inference so stamped contract rows keep their reason
+    before CEO collect/format.
     """
     _ = files_landed
     from agentcore.runtime.delegate.delivery_status import (
@@ -273,15 +273,13 @@ def _is_hard_failure(
     *,
     files_touched: int = 0,
 ) -> bool:
-    """Whether a contract miss should FAIL the run vs. soft-accept with a warning.
+    """Retired: contract misses never FAIL the node (COMPLETED + warnings).
 
-    Empty body is not a hard miss. ``form=files`` zero landing is already a
-    warning, not ``verdict.failures``. Remaining shortfalls are hard only when
-    the deliverable is ``strict``. ``files_touched`` kept for call-site compatibility.
+    ``strict`` is still parsed on old JSON; it does not flip acceptance.
+    Zero landing is already a warning. ``files_touched`` kept for call-site compatibility.
     """
-    _ = files_touched
-    _ = content
-    return deliverable is not None and deliverable.strict
+    _ = (content, deliverable, files_touched)
+    return False
 
 
 def _apply_finish_interrupt(

@@ -44,7 +44,6 @@ from agentcore.workspace.protocol import (
 
 from .errors import (
     _error,
-    _file_read_same_window_hit,
     _map_workspace_read_error,
     _maybe_channel_dead_error,
     _outside_workspace_error,
@@ -165,7 +164,7 @@ def _spreadsheet_skip_error(path: str, *, code_execute_assembled: bool) -> str:
     if code_execute_assembled:
         return (
             f"`{path}` 是表格/分隔数据文件，file_read 不自动抽文本；"
-            "请用 code_execute（如 openpyxl / pandas）按工作区相对路径解析。"
+            "请用 run（如 openpyxl / pandas）按工作区相对路径解析。"
         )
     return (
         f"`{path}` 是表格/分隔数据文件，file_read 不自动抽文本。"
@@ -188,135 +187,6 @@ def _effective_start_page(start_page: object) -> int:
     if start_page is None:
         return 1
     return max(1, _as_int(start_page))
-
-
-def _is_ceiling_counted_read(
-    offset: object, limit: object, *, start_page: int = 1
-) -> bool:
-    """From line 1 filling the safety cap — counts unless tool_clear recovery.
-
-    双省 / 只传 offset=1 / 只传 limit=行顶 (and offset=1+limit≥行顶) are this
-    shape. ``_file_read_should_count`` skips the increment when the path is
-    fully cleared. Point windows count only when the requested span was
-    already delivered and the path body is still in the projection window.
-    PDF ``start_page`` > 1 is pagination and never counts as a fill-cap read.
-    """
-    if start_page > 1:
-        return False
-    if _effective_offset(offset) > 1:
-        return False
-    if limit is None:
-        return True
-    return _as_int(limit) >= FILE_READ_SAFETY_LINE_CAP
-
-
-def _file_read_body_present(context: ToolContext, path_key: str) -> bool:
-    """``None`` verbatim set = projection not synced → treat body as still present."""
-    verbatim = context.file_read_verbatim_paths
-    return verbatim is None or path_key in verbatim
-
-
-def _file_read_cleared_recovery(context: ToolContext, path_key: str) -> bool:
-    """True when tool_clear recorded this path as fully cleared (stub, no verbatim).
-
-    ``file_read_cleared_paths is None`` = projection not synced → no recovery
-    exemption (same as treating the body as still present for the ceiling).
-    """
-    cleared = context.file_read_cleared_paths
-    if cleared is None or path_key not in cleared:
-        return False
-    return not _file_read_body_present(context, path_key)
-
-
-def _merge_line_range(
-    ranges: list[tuple[int, int]], start: int, end: int
-) -> list[tuple[int, int]]:
-    """Union ``[start, end]`` into sorted inclusive ranges (adjacent merge)."""
-    if end < start:
-        return list(ranges)
-    merged: list[tuple[int, int]] = []
-    pending_start, pending_end = start, end
-    placed = False
-    for a, b in ranges:
-        if b < pending_start - 1:
-            merged.append((a, b))
-            continue
-        if pending_end < a - 1:
-            if not placed:
-                merged.append((pending_start, pending_end))
-                placed = True
-            merged.append((a, b))
-            continue
-        pending_start = min(pending_start, a)
-        pending_end = max(pending_end, b)
-    if not placed:
-        merged.append((pending_start, pending_end))
-    return merged
-
-
-def _line_range_covered(ranges: list[tuple[int, int]], start: int, end: int) -> bool:
-    if end < start:
-        return False
-    return any(a <= start and end <= b for a, b in ranges)
-
-
-def _request_range_already_delivered(
-    context: ToolContext, path_key: str, offset: object, limit: object
-) -> bool:
-    """True when the requested span (clipped to last-seen EOF) is already delivered."""
-    ranges = context.file_read_delivered_ranges.get(path_key)
-    if not ranges:
-        return False
-    start = _effective_offset(offset)
-    end = start + _effective_line_limit(limit) - 1
-    total = context.file_read_line_totals.get(path_key)
-    if total is not None:
-        if start > total:
-            return False
-        end = min(end, total)
-    return _line_range_covered(ranges, start, end)
-
-
-def _file_read_should_count(
-    context: ToolContext,
-    path_key: str,
-    offset: object,
-    limit: object,
-    *,
-    start_page: int = 1,
-) -> bool:
-    """Whether this successful read increments ``file_read_counts``.
-
-    tool_clear recovery (path fully cleared in the projection) never counts.
-    Fill-cap whole reads otherwise count. A point window counts only when the
-    requested line range was already delivered *and* the path body is still in
-    the projection window. A new range (pagination, including PDF start_page)
-    never counts.
-    """
-    if _file_read_cleared_recovery(context, path_key):
-        return False
-    if _is_ceiling_counted_read(offset, limit, start_page=start_page):
-        return True
-    return _file_read_body_present(
-        context, path_key
-    ) and _request_range_already_delivered(context, path_key, offset, limit)
-
-
-def _record_file_read_delivery(
-    context: ToolContext,
-    path_key: str,
-    start_line: int,
-    end_line: int,
-    total_lines: int,
-) -> None:
-    if total_lines > 0:
-        context.file_read_line_totals[path_key] = int(total_lines)
-    if end_line < start_line:
-        return
-    prev = context.file_read_delivered_ranges.get(path_key) or []
-    context.file_read_delivered_ranges[path_key] = _merge_line_range(
-        prev, start_line, end_line
-    )
 
 
 def _trim_to_char_cap(lines: list[str]) -> tuple[list[str], bool]:
@@ -500,41 +370,6 @@ async def _file_not_found_error(
     )
 
 
-def _note_file_read_success(
-    context: ToolContext,
-    path_key: str,
-    output: str,
-    *,
-    using_reread: bool,
-) -> str:
-    """Bump ``file_read_counts`` for a counted read; consume grant; tip.
-
-    Counted = fill-cap whole read, or a window whose requested span was already
-    delivered while the path body is still in the projection window.
-    """
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
-
-    context.file_read_counts[path_key] = int(context.file_read_counts.get(path_key, 0)) + 1
-    if using_reread:
-        remaining = int(context.file_read_reread_remaining.get(path_key, 0))
-        context.file_read_reread_remaining[path_key] = max(0, remaining - 1)
-        if context.file_read_reread_remaining[path_key] <= 0:
-            output += (
-                f"\n\n[系统提示] `{path_key}` 的再读授额已用尽；"
-                "请依据本次正文推进；若正文仍在对话中请勿空转再读，"
-                "正文已被清理时可再读，或落盘 / 换其它文件。"
-            )
-        return output
-    if context.file_read_counts[path_key] >= FILE_READ_SAME_PATH_MAX:
-        output += (
-            f"\n\n[系统提示] 本 run 对 `{path_key}` 的 file_read 已达上限 "
-            f"（{FILE_READ_SAME_PATH_MAX} 次）；请求的行范围已在对话正文中，"
-            "请依据已有正文推进或落盘，勿再读。"
-            "仅当该正文已被清理、对话中不再有全文时才可再读。"
-        )
-    return output
-
-
 def _append_pdf_page_footer(
     output: str,
     *,
@@ -600,25 +435,8 @@ class FileReadTool:
         return ToolSchema(
             name="file_read",
             description=(
-                "仅工作区相对路径。http(s) 公网 URL 用 read_url，不要把网页地址当 path。"
-                "读取工作区内某个文件的内容（相对路径）。"
-                "Office/PDF（docx/pdf/pptx/odt/rtf）自动抽取文本；表格（xlsx/csv 等）"
-                "默认不抽文本（本回合若有 code_execute 用它按路径解析；"
-                "本 run 刚落盘的表格可回读自检）。"
-                "定位请用 grep / code_search；单文件默认整读"
-                "（省略则尽量整读，超安全顶截断）。"
-                "仅当页脚已标明截断或已有行号时再用 offset/limit 开窗。"
-                "PDF 每窗约 40 页；后面的页用 start_page 再读（offset/limit 仍是抽出文本的行号）。"
-                "禁止无目标地整目录逐文件通读。"
-                "看源码正文用本工具，勿改走 code_execute print/dump。"
-                "含糊「根」/ `.` / 仅根标签勿当文件整读——先 glob/grep 钉真实路径。"
-                "回执为编号行；未截断页脚「全文 N 行」，截断为「第 a–b 行，共 N 行」"
-                "并标明行顶或字符顶（视图截断非磁盘残缺，勿把页脚当正文去 str_replace）。"
-                "同一相对路径本 run 对成功 file_read 有次数上限（从第 1 行要满安全顶的整读计次；"
-                "开窗仅当本次请求行范围此前已交付且正文仍在对话中时计次；新范围分页不计）。"
-                "触顶且正文仍在对话中、又无再读授额时不灌全文，只回短指针；其它文件仍可 file_read。"
-                "正文已被清理时可再读且不计次；写成功后可再读核对。"
-                "已落盘产物优先以写/append 回执中的 artifact manifest 验真。"
+                "读取工作区文件。http(s) 用 read_url；定位用 grep / code_search / glob。"
+                "`.` 不是文件。正文用本工具，勿 dump。"
             ),
             parameters={
                 "type": "object",
@@ -629,11 +447,15 @@ class FileReadTool:
                             "工作区相对 POSIX 文件路径（`.`=根；`/<根标签>/…` 与裸 `/`、"
                             "`\\` 视为根；其它绝对路径如 /etc、盘符拒绝）。"
                             "http(s) URL 请用 read_url。"
+                            "Office/PDF 自动抽文本；表格（xlsx/csv 等）默认不抽文本。"
                         ),
                     },
                     "offset": {
                         "type": "integer",
-                        "description": "起始行号（1-based，含）。省略则从第 1 行开始。",
+                        "description": (
+                            "起始行号（1-based，含）。省略则从第 1 行。"
+                            "仅页脚已标明截断或已有行号时再开窗。"
+                        ),
                         "minimum": 1,
                     },
                     "limit": {
@@ -668,13 +490,6 @@ class FileReadTool:
         if looks_like_http_url(str(rel_path or "")):
             return _url_not_workspace_path_error(str(rel_path).strip(), start)
 
-        # Same-path ceiling: fill-cap whole reads always count unless tool_clear
-        # recorded the path as fully cleared (recovery does not consume quota).
-        # A point window counts only when its requested span was already
-        # delivered AND the path body is still in the projected window. New
-        # ranges (pagination) skip the gate. At cap + body present + no grant
-        # → cheap pointer (success, no full dump). Cleared body → recovery.
-        from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
         from agentcore.workspace.project_shell import rewrite_project_shell_relpath
 
         rel_path, _shell_note = await rewrite_project_shell_relpath(
@@ -683,24 +498,6 @@ class FileReadTool:
         path_key = (rel_path or "").strip().replace("\\", "/")
         ext = extension_of(path_key or rel_path)
         pdf_start = _effective_start_page(start_page_arg)
-        should_count = bool(path_key) and _file_read_should_count(
-            context, path_key, offset, limit, start_page=pdf_start
-        )
-        using_reread = False
-        if should_count:
-            prior = int(context.file_read_counts.get(path_key, 0))
-            if prior >= FILE_READ_SAME_PATH_MAX:
-                remaining = int(context.file_read_reread_remaining.get(path_key, 0))
-                if remaining > 0:
-                    # Grant overrides even when stale verbatim is still present.
-                    using_reread = True
-                elif _file_read_body_present(context, path_key):
-                    return _file_read_same_window_hit(
-                        path_key,
-                        max_reads=FILE_READ_SAME_PATH_MAX,
-                        start=start,
-                    )
-                # Cleared: allow recovery read (no grant required).
 
         if ext in SKIP_EXTENSIONS and not _is_run_landed_path(context, path_key):
             assembled = _code_execute_assembled(context)
@@ -727,8 +524,6 @@ class FileReadTool:
                 offset=offset,
                 limit=limit,
                 start_page=pdf_start,
-                should_count=should_count,
-                using_reread=using_reread,
                 start=start,
                 context=context,
             )
@@ -760,8 +555,6 @@ class FileReadTool:
                     offset=offset,
                     limit=limit,
                     start_page=pdf_start,
-                    should_count=should_count,
-                    using_reread=using_reread,
                     start=start,
                     context=context,
                 )
@@ -785,8 +578,6 @@ class FileReadTool:
                 offset=offset,
                 limit=limit,
                 start_page=pdf_start,
-                should_count=should_count,
-                using_reread=using_reread,
                 start=start,
                 context=context,
             )
@@ -797,14 +588,6 @@ class FileReadTool:
             total_lines=result.total_lines,
             cap_kind=cap_kind,
         )
-        if path_key:
-            _record_file_read_delivery(
-                context, path_key, start_line, end_line, result.total_lines
-            )
-            if should_count:
-                output = _note_file_read_success(
-                    context, path_key, output, using_reread=using_reread
-                )
         return _file_read_ok(output, start)
 
     async def _read_office_or_pdf(
@@ -815,8 +598,6 @@ class FileReadTool:
         offset: object,
         limit: object,
         start_page: int = 1,
-        should_count: bool,
-        using_reread: bool,
         start: float,
         context: ToolContext,
         extract_ext: str | None = None,
@@ -933,7 +714,7 @@ class FileReadTool:
             page_total = extracted.page_total
 
         assert text is not None
-        output, start_line, end_line, total = _format_extracted_read(
+        output, *_ = _format_extracted_read(
             text, offset=offset, limit=limit
         )
         output = _append_pdf_page_footer(
@@ -942,12 +723,6 @@ class FileReadTool:
             page_end=page_end,
             page_total=page_total,
         )
-        if path_key:
-            _record_file_read_delivery(context, path_key, start_line, end_line, total)
-            if should_count:
-                output = _note_file_read_success(
-                    context, path_key, output, using_reread=using_reread
-                )
         return _file_read_ok(output, start)
 
     async def _observe_ole(
@@ -998,8 +773,6 @@ class FileReadTool:
         offset: object,
         limit: object,
         start_page: int = 1,
-        should_count: bool,
-        using_reread: bool,
         start: float,
         context: ToolContext,
     ) -> ToolResult:
@@ -1026,8 +799,6 @@ class FileReadTool:
                 offset=offset,
                 limit=limit,
                 start_page=start_page,
-                should_count=should_count,
-                using_reread=using_reread,
                 start=start,
                 context=context,
                 extract_ext=".pdf",
@@ -1080,17 +851,9 @@ class FileReadTool:
 
         decoded = decode_text_bytes(data)
         if decoded is not None:
-            output, start_line, end_line, total = _format_extracted_read(
+            output, *_ = _format_extracted_read(
                 decoded, offset=offset, limit=limit
             )
-            if path_key:
-                _record_file_read_delivery(
-                    context, path_key, start_line, end_line, total
-                )
-                if should_count:
-                    output = _note_file_read_success(
-                        context, path_key, output, using_reread=using_reread
-                    )
             return _file_read_ok(output, start)
         return _observe_ok(
             kind="binary",

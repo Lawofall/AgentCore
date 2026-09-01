@@ -59,5 +59,14 @@ if set(FORM_LABELS) != set(DebateForm):
         f"FORM_LABELS must cover DebateForm exactly; missing={missing!r} extra={extra!r}"
     )
 
-# 工具 schema / 派生面共用的 wire 成员序（= DebateForm 声明序）。
+# 回放 / wire 全员（= DebateForm 声明序）。产品入口广告子集见 DEBATE_SCHEMA_FORM_VALUES。
 DEBATE_FORM_VALUES: tuple[str, ...] = tuple(m.value for m in DebateForm)
+
+# 发给模型的 schema 广告子集。产品入口只认正反；扩 DebateForm 不自动扩本集。
+DEBATE_SCHEMA_FORM_VALUES: tuple[str, ...] = (DebateForm.DEBATE.value,)
+if not set(DEBATE_SCHEMA_FORM_VALUES).issubset(set(DEBATE_FORM_VALUES)):
+    schema_extra = set(DEBATE_SCHEMA_FORM_VALUES) - set(DEBATE_FORM_VALUES)
+    raise RuntimeError(
+        "DEBATE_SCHEMA_FORM_VALUES must be a subset of DEBATE_FORM_VALUES; "
+        f"extra={schema_extra!r}"
+    )

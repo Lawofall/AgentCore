@@ -28,8 +28,7 @@ async def test_md_to_pdf_tool_writes_sibling(tmp_path: Path):
     assert (tmp_path / "note.pdf").is_file()
     assert (tmp_path / "note.pdf").read_bytes()[:4] == b"%PDF"
     assert "note.pdf" in result.output
-    assert "code_execute" in MdToPdfTool().schema.description
-    assert "不要用 code_execute" in MdToPdfTool().schema.description
+    assert "code_execute" not in MdToPdfTool().schema.description
     assert result.metadata is not None
     assert result.metadata["path"] == "note.pdf"
     # 台账事实口径：产物是导出的 pdf，源 md 记在 derived_from（端到端见 test_export_product_ledger）。

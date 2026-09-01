@@ -233,32 +233,17 @@ def format_idle_yield_brief(session: CoordinationSession) -> str:
     )
 
     conversation_id = getattr(session, "conversation_id", None) or ""
+    from agentcore.runtime.resolve.ceo_surface import COORDINATION_PERIOD_HINT
+
     if has_hot_user_pending(conversation_id):
         hold = format_hot_pending_hold_line(conversation_id)
-        lines.append(
-            f"流水线状态：{hold}"
-            "对用户开口属【报告阻塞】：须说明有队员在等你允许、处理完后会继续；"
-            "禁止只回「保持等待/保持静默」而无下文；禁止用进度旁白代替对审批等待的说明。"
-            "报告阻塞后可 wait 听团（队还在）；勿 delegate 与现有计划重叠的队员。"
-        )
+        lines.append(hold)
+        lines.append("向用户说明有队员在等你允许；队还在。")
     elif healthy:
-        lines.append(
-            "流水线状态：正常推进（有队员在跑，其余节点仅因依赖未就绪而阻塞，无失败）。"
-            "这是预期中的等待，不是空闲——【无需追加动作】："
-            "不要 delegate 再派与现有计划重叠的队员；不要为「好像闲着」重复派文案/前端/QA。"
-            "图在转、无新结论时【可静默】——禁止用用户可见正文复述「谁还在跑/仍在检索」"
-            "（协作图是进度真相）；对用户开口仅三选一：请示用户 / 报告阻塞与选项 / "
-            "宣布阶段结论（非纯进度）。禁止只回「保持等待/保持静默」而无下文。"
-            "无需对用户开口时可空响应；等 worker_completed / 波次前进事件再处置；"
-            "仅当出现失败、升级仲裁、老板插话或明确缺口时再出手。"
-            "cancel_worker 可用。"
-        )
+        lines.append("流水线状态：正常推进，无需追加动作。")
+        lines.append(COORDINATION_PERIOD_HINT)
     else:
         lines.append(
-            "协调等待窗口到期且仍有在途工作。【可静默】听团；"
-            "禁止用用户可见正文复述进度；对用户开口仅三选一："
-            "请示用户 / 报告阻塞与选项 / 宣布阶段结论。"
-            "若队员疑似卡死再用 cancel_worker；发现计划缺口且职责/文件目标不与在图节点重叠时"
-            "才可 delegate 追加。勿与未完成流水线节点抢同一交付物。"
+            "等待窗口到期且仍有在途工作。可静默听团；疑似卡死再用 cancel_worker。"
         )
     return "\n".join(lines)

@@ -469,8 +469,10 @@ async def delete_document(
 ) -> DocumentWriteResult:
     """Soft-delete a node and (for a folder) its whole subtree.
 
-    AI-maintained core leaves (偏好 / 画像 / 导航) are undeletable; on-demand
-    AI topics and user-owned entries remain deletable.
+    AI-maintained core leaves (偏好 / 画像 / 导航) keep their protocol names, so
+    this DELETE is refused. Empty the body instead (``PUT …/memory/files/{kind}``
+    with empty content) — injection skips the empty note; the list still shows
+    a placeholder. On-demand AI topics and user-owned entries remain deletable.
     """
     doc = await repo.get(document_id, user_id=user.user_id)
     if doc is None:

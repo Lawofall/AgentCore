@@ -1,19 +1,16 @@
-"""Workspace overview — the CEO's live ``<工作区文件>`` orientation block.
+"""CEO file index — untagged body spliced into ``<工作区>`` before the closing tag.
 
-工作区文件索引（取代「向量 RAG」的轻量方案）。Instead of a pre-built embedding index (which
-goes stale the moment a file changes and needs an embedder + pgvector), this gives the
-entry CEO agent a compact listing of the files already on disk in the conversation's
-workspace, regenerated fresh every turn from the live ``WorkspaceBackend`` — so it is
-never stale and carries zero new infra. The block is PATHS ONLY (no file bodies); the
-agent must call ``file_read`` / ``grep`` for content (agentic retrieval, the主路).
+工作区路径索引（取代「向量 RAG」的轻量方案）。Fresh each turn from the live
+``WorkspaceBackend``; PATHS ONLY (no file bodies, no tool HOW, no auto-detected
+fingerprint). If ``AGENTS.md`` / ``CLAUDE.md`` exists, a one-line pointer
+(name only). Sparse listing
+(双模式工作区): attachments + 裸聊 scratch; project shared trees collapse into
+「另有 N 个文件」plus a newest-first supplement.
 
-清单稀疏化 (双模式工作区): default injection is attachments + 裸聊 scratch files;
-project shared trees collapse non-attachment noise into one「另有 N 个文件」line (with a
-small newest-first supplement). CEO-only; workers do not receive this listing.
-
-Best-effort by contract: no backend, no indexing support, an empty workspace, or a
-listing failure all yield ``""`` (the caller omits the block) — workspace awareness is
-an enhancement, never a hard dependency (same posture as ``memory`` / global search).
+CEO-only: :func:`compose_ceo_chat_prompt` attaches this body; workers never
+receive it. Best-effort: no backend / no ``index_files`` / listing failure →
+``""`` unless a convention file is present. Successful empty index →
+``文件：空``.
 """
 
 from __future__ import annotations
@@ -21,14 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from agentcore.core.logging import get_logger
-from agentcore.runtime.context.workspace_profile import (
-    detect_workspace_profile,
-    render_workspace_profile,
-)
-from agentcore.workspace.sparse_listing import (
-    format_remaining_summary,
-    partition_sparse_paths,
-)
+from agentcore.workspace.sparse_listing import partition_sparse_paths
 
 if TYPE_CHECKING:
     from agentcore.workspace.protocol import WorkspaceBackend
@@ -39,6 +29,28 @@ logger = get_logger(__name__)
 # AND a char budget (whichever binds first). Kept local to this module.
 OVERVIEW_MAX_FILES = 40
 OVERVIEW_CHAR_BUDGET = 1800
+
+_WORKSPACE_CLOSE = "</工作区>"
+FILE_INDEX_EMPTY = "文件：空"
+FILE_INDEX_HEADER = "文件："
+_CONVENTION_FILES = ("AGENTS.md", "CLAUDE.md")
+
+
+def attach_workspace_file_index(prompt: str, file_index: str) -> str:
+    """Insert CEO file-index lines before ``</工作区>``. No-op if either side is empty.
+
+    Does not invent a ``<工作区>`` wrapper — workers and a missing facts block stay
+    without a 文件节. Resume restamp of worker facts must not call this.
+    """
+    index = (file_index or "").strip()
+    if not prompt or not index:
+        return prompt or ""
+    close = prompt.rfind(_WORKSPACE_CLOSE)
+    if close < 0:
+        return prompt
+    before = prompt[:close].rstrip()
+    after = prompt[close:]
+    return f"{before}\n{index}\n{after}"
 
 
 async def _safe_index(backend: WorkspaceBackend) -> list[str] | None:
@@ -57,69 +69,69 @@ async def _safe_index(backend: WorkspaceBackend) -> list[str] | None:
         return None
 
 
+async def _convention_pointer(backend: WorkspaceBackend) -> str:
+    """Name-only pointer when a repo convention file exists. No excerpt, no HOW."""
+    exists = getattr(backend, "exists", None)
+    read = getattr(backend, "read", None)
+    for name in _CONVENTION_FILES:
+        try:
+            found = False
+            if exists is not None:
+                found = bool(await exists(name))
+            elif read is not None:
+                found = bool(await read(name))
+            if found:
+                return f"工程约定：`{name}`"
+        except Exception:  # noqa: BLE001 — pointer is best-effort
+            continue
+    return ""
+
+
 async def build_workspace_overview(
     backend: WorkspaceBackend | None,
     *,
     shared_workspace: bool = False,
 ) -> str:
-    """Build the CEO's ``<工作区文件>`` block, or ``""`` when nothing to show.
+    """Build the untagged CEO file-index body, or ``""`` when the 文件节 should omit.
 
     ``shared_workspace`` is True for project (folder) chats — sparse listing applies.
-    Returns ``""`` for a missing backend, an empty / unindexable workspace with no
-    detectable project profile, or a listing failure. Otherwise renders a best-effort
-    project fingerprint (when detectable) plus a capped sparse file list.
+    Returns ``""`` for a missing backend or a listing failure with no convention
+    pointer. Successful empty index returns ``文件：空``.
     """
     if backend is None:
         return ""
 
-    profile_text = render_workspace_profile(await detect_workspace_profile(backend))
+    pointer = await _convention_pointer(backend)
     paths = await _safe_index(backend)
-    if paths is None:
-        if not profile_text:
-            return ""
-    elif not paths and not profile_text:
-        # Environment mismatch guidance lives in ``<工作区>`` (explicit facts);
-        # this block only states the file-index emptiness so the model does not re-guess.
-        return (
-            "<工作区文件>\n"
-            "工作区当前为空（无文件路径可列）——若本回合为云端会话，这只是会话云端草稿尚无文件，"
-            "不是本机或已打开的仓库工程。若对话历史显示曾委派产出，仍须先 "
-            "file_list 核实后再回答；环境与绑定以本回合 `<工作区>` 为准。\n"
-            "</工作区文件>"
-        )
-
     sections: list[str] = []
-    if profile_text:
-        sections.append(f"当前工作区工程概览：\n{profile_text}")
+    if pointer:
+        sections.append(pointer)
 
-    if paths:
-        sparse_rows, remaining = partition_sparse_paths(
-            paths, shared_workspace=shared_workspace
-        )
-        lines: list[str] = []
-        used = 0
-        for path, label in sparse_rows:
-            line = f"- {path}（{label}）"
-            if len(lines) >= OVERVIEW_MAX_FILES or used + len(line) + 1 > OVERVIEW_CHAR_BUDGET:
-                # Cap hit before finishing sparse rows — fold the unlisted sparse
-                # rows into the shared remaining count (project) or a generic elision.
-                leftover = len(sparse_rows) - len(lines)
-                remaining += leftover
-                break
-            lines.append(line)
-            used += len(line) + 1
+    if paths is None:
+        return "\n\n".join(sections)
 
-        if remaining > 0:
-            lines.append(format_remaining_summary(remaining))
+    if not paths:
+        sections.append(FILE_INDEX_EMPTY)
+        return "\n\n".join(sections)
 
-        if lines:
-            file_intro = (
-                "以下为本对话工作区中相关文件路径索引（附件 / 本对话产出优先；"
-                "工作区共享树不逐条展开）。列表仅为路径，不含正文内容；"
-                "需要了解某个文件的内容时，必须调用 file_read（或 grep）读取："
-            )
-            sections.append(f"{file_intro}\n" + "\n".join(lines))
+    sparse_rows, remaining = partition_sparse_paths(
+        paths, shared_workspace=shared_workspace
+    )
+    lines: list[str] = []
+    used = 0
+    for path, label in sparse_rows:
+        line = f"- {path}（{label}）"
+        if len(lines) >= OVERVIEW_MAX_FILES or used + len(line) + 1 > OVERVIEW_CHAR_BUDGET:
+            leftover = len(sparse_rows) - len(lines)
+            remaining += leftover
+            break
+        lines.append(line)
+        used += len(line) + 1
 
-    body = "\n\n".join(sections)
-    return f"<工作区文件>\n{body}\n</工作区文件>"
+    if remaining > 0:
+        lines.append(f"另有 {remaining} 个文件")
 
+    if lines:
+        sections.append(FILE_INDEX_HEADER + "\n" + "\n".join(lines))
+
+    return "\n\n".join(sections)

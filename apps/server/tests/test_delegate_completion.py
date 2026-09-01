@@ -30,7 +30,7 @@ def test_soft_overlay_typescript_without_verify():
     assert any("不阻断验收" in n and ".ts" in n for n in soft)
 
 
-def test_soft_overlay_skipped_when_test_run_passes():
+def test_soft_overlay_skipped_when_run_verify_passes():
     transcript = [
         LLMMessage(
             role="assistant",
@@ -39,7 +39,9 @@ def test_soft_overlay_skipped_when_test_run_passes():
                 ToolCall(
                     id="1",
                     type="function",
-                    function=ToolCallFunction(name="test_run", arguments='{"check":"test"}'),
+                    function=ToolCallFunction(
+                        name="run", arguments='{"command":"pnpm test"}'
+                    ),
                 )
             ],
         ),

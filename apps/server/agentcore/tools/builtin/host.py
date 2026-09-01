@@ -50,10 +50,8 @@ _ALLOWED_ACTIONS = frozenset(
         _ACTION_INSTALL_PACKAGE,
     }
 )
-_CEO_ACTIONS = frozenset({_ACTION_STATUS, _ACTION_OS_LOG, _ACTION_SHELL})
 _NEVER_APPROVE_ACTIONS = frozenset({_ACTION_STATUS, _ACTION_OS_LOG})
 _APPROVAL_ACTIONS = _ALLOWED_ACTIONS - _NEVER_APPROVE_ACTIONS
-_WORKER_ONLY_ACTIONS = _ALLOWED_ACTIONS - _CEO_ACTIONS
 
 # L1 host_os_log_summary hard caps (desktop clamps again; keep in lockstep).
 _OS_LOG_MINUTES_DEFAULT = 60
@@ -150,10 +148,6 @@ _SHELL_SILENT_INSTALL_REASON = (
     "请改用 host(action=install_package)（manager∈winget/brew/apt + package id）。"
 )
 
-_CEO_DELEGATE_MSG = (
-    "host 的该 action 仅 Worker 可调，请通过 delegate 委派给 Worker 执行。"
-)
-
 HOST_TOOL_PARAMETERS: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -161,11 +155,8 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
             "type": "string",
             "enum": sorted(_ALLOWED_ACTIONS),
             "description": (
-                "status=有界探测（OS/磁盘/电源/网卡/音频/应用抽样）。"
-                "os_log=有界 OS 事件摘要。"
-                "shell=本机短时命令。"
-                "open_settings / set_audio / restart_service / install_package 仅 worker。"
-                "审批见工具说明。"
+                "status / os_log / shell / open_settings / set_audio / "
+                "restart_service / install_package。"
             ),
         },
         "facets": {
@@ -488,14 +479,6 @@ def _fail(error: str, *, contract_failure: bool = False) -> ToolResult:
     )
 
 
-def _is_ceo_context(context: Any) -> bool:
-    """CEO turns carry no worker-only coordination channels (same as git)."""
-    return (
-        context.write_coordinator is None
-        and context.escalation is None
-    )
-
-
 async def _host_call(
     context: ToolContext,
     *,
@@ -807,8 +790,6 @@ class HostTool:
                 f"{', '.join(sorted(_ALLOWED_ACTIONS))}。",
                 contract_failure=True,
             )
-        if action in _WORKER_ONLY_ACTIONS and _is_ceo_context(context):
-            return _fail(_CEO_DELEGATE_MSG, contract_failure=True)
 
         if action == _ACTION_STATUS:
             return await _execute_status(arguments, context)

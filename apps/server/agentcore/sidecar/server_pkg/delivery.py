@@ -18,6 +18,7 @@ from agentcore.runtime.turn.delivery import (
     raise_if_delivery_blocked,
 )
 from agentcore.runtime.turn.queue import QueuedTurn, set_queue_starter
+from agentcore.runtime.turn.runs import turn_runs
 from agentcore.sidecar import protocol
 from agentcore.sidecar.server_pkg.turns import parse_client_turn_ids, rpc_agent_mentions
 
@@ -139,22 +140,8 @@ class DeliveryMixin:
             )
             return
 
-        try:
-            delivered = await deliver_in_flight(
-                conversation_id=conversation_id,
-                content=body.content,
-                delivery=body.delivery,
-                user_id=self._user_id,
-                attachments=[a.model_dump() for a in body.attachments],
-                agent_mentions=[m.model_dump() for m in body.agent_mentions],
-                persist_attachments_fn=None,
-                wait_for_start=False,
-                require_live=True,
-                user_message_id=str(params.get("userMessageId") or "").strip() or None,
-                message_id=str(params.get("messageId") or "").strip() or None,
-                trace_id=str(params.get("traceId") or "").strip() or None,
-            )
-        except NoLiveTurnError:
+        live = turn_runs.get(conversation_id)
+        if live is None or live.task.done():
             await self._send(
                 protocol.make_error(
                     request_id,
@@ -165,7 +152,61 @@ class DeliveryMixin:
             )
             return
 
+        from agentcore.conversation.midflight_persist import (
+            delete_midflight_user_message,
+            persist_midflight_user_message,
+        )
+
+        att_dicts = [a.model_dump() for a in body.attachments]
+        mention_dicts = [m.model_dump() for m in body.agent_mentions]
+        umid = str(params.get("userMessageId") or "").strip() or None
+        try:
+            user_message_id = await persist_midflight_user_message(
+                conversation_id=conversation_id,
+                content=body.content,
+                user_message_id=umid,
+                attachments=att_dicts,
+                agent_mentions=mention_dicts,
+            )
+        except Exception as e:
+            from agentcore.core.logging import get_logger
+
+            get_logger(__name__).exception("chat.stream_error")
+            await self._send(protocol.make_error(request_id, protocol.INTERNAL_ERROR, str(e)))
+            return
+
+        try:
+            delivered = await deliver_in_flight(
+                conversation_id=conversation_id,
+                content=body.content,
+                delivery=body.delivery,
+                user_id=self._user_id,
+                attachments=att_dicts,
+                agent_mentions=mention_dicts,
+                persist_attachments_fn=None,
+                wait_for_start=False,
+                require_live=True,
+                user_message_id=user_message_id,
+                message_id=str(params.get("messageId") or "").strip() or None,
+                trace_id=str(params.get("traceId") or "").strip() or None,
+            )
+        except NoLiveTurnError:
+            await delete_midflight_user_message(conversation_id, user_message_id)
+            await self._send(
+                protocol.make_error(
+                    request_id,
+                    protocol.NO_LIVE_TURN,
+                    "no live turn",
+                    data={"code": "no_live_turn"},
+                )
+            )
+            return
+        except Exception:
+            await delete_midflight_user_message(conversation_id, user_message_id)
+            raise
+
         if delivered is None:
+            await delete_midflight_user_message(conversation_id, user_message_id)
             await self._send(
                 protocol.make_error(
                     request_id,
@@ -207,6 +248,9 @@ class DeliveryMixin:
                 )
             )
             return
+        from agentcore.conversation.midflight_persist import delete_midflight_user_message
+
+        await delete_midflight_user_message(conversation_id, item.user_message_id)
         await self._reply(request_id, {"ok": True, "queueId": queue_id})
 
     async def _on_list_queued_turns(self, request_id: Any, params: dict[str, Any]) -> None:

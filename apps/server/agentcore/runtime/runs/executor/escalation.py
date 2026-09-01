@@ -16,31 +16,6 @@ from agentcore.tools.protocol import EscalationChannel, EscalationOutcome
 logger = get_logger(__name__)
 
 
-def _apply_user_ownership_transfer(
-    *,
-    escalator_run_id: str,
-    paths: list[str],
-    execution_id: str | None,
-) -> None:
-    """Path-level handoff to the escalator when the user picks「移交写权」."""
-    from agentcore.workspace.write_claims import resolve_write_coordinator
-
-    ledger = resolve_write_coordinator(execution_id=execution_id)
-    rid = (escalator_run_id or "").strip()
-    if not rid:
-        return
-    for path in paths:
-        p = (path or "").strip()
-        if p:
-            ledger.transfer(p, rid)
-    logger.info(
-        "file_ownership.user_transfer",
-        run_id=rid,
-        execution_id=execution_id or "",
-        paths=list(paths),
-    )
-
-
 def build_escalation_channel(
     env: AgentExecutorEnv,
     run_id: str,
@@ -248,14 +223,6 @@ def build_escalation_channel(
             elif isinstance(result, dict):
                 status, answer = "resolved", str(result.get("answer") or "").strip()
                 via_user = bool(result.get("via_user"))
-                if result.get("transfer_ownership") and own_paths:
-                    _apply_user_ownership_transfer(
-                        escalator_run_id=run_id,
-                        paths=own_paths,
-                        execution_id=env.base_tool_context.execution_id,
-                    )
-                    if not answer:
-                        answer = "已移交写权：" + "、".join(f"`{p}`" for p in own_paths)
             else:
                 status, answer = "resolved", str(result or "").strip()
         if awaiting_ceo:

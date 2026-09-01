@@ -70,7 +70,7 @@ describe("toolResultPeek", () => {
     ).toBe("");
   });
 
-  it("shows budget exceeded text for test_run over-budget", () => {
+  it("shows 验证未完成 when budget_exceeded has no timeout_kind", () => {
     expect(
       toolResultPeek(
         data({
@@ -85,7 +85,45 @@ describe("toolResultPeek", () => {
           },
         }),
       ),
-    ).toBe("验证未完成（预算耗尽）");
+    ).toBe("验证未完成");
+  });
+
+  it("shows idle hang face for timeout_kind idle", () => {
+    expect(
+      toolResultPeek(
+        data({
+          toolName: "test_run",
+          status: "error",
+          display: {
+            check: "typecheck",
+            stdout: "",
+            stderr: "idle timeout",
+            exit_code: -1,
+            budget_exceeded: true,
+            timeout_kind: "idle",
+          },
+        }),
+      ),
+    ).toBe("执行无响应（无输出已中止）");
+  });
+
+  it("shows disaster wall face for timeout_kind disaster", () => {
+    expect(
+      toolResultPeek(
+        data({
+          toolName: "test_run",
+          status: "error",
+          display: {
+            check: "typecheck",
+            stdout: "",
+            stderr: "forced stop",
+            exit_code: -1,
+            budget_exceeded: true,
+            timeout_kind: "disaster",
+          },
+        }),
+      ),
+    ).toBe("执行已强制中止");
   });
 
   it("names the path for a str_replace edit", () => {

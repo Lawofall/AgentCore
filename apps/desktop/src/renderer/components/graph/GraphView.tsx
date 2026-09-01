@@ -1,7 +1,3 @@
-import {
-  hasParallelTimeline,
-  parallelTimelineMetricsSummary,
-} from "@/components/chat/ParallelTimeline";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { useTurnAudit } from "@/hooks/useTurnAudit";
 import { resolveEffectiveGraphLayout } from "@/lib/graph-layout-utils";
@@ -41,7 +37,6 @@ import {
 import { GraphFlowHost } from "./graphHost";
 import { GraphHoverContext, useGraphHoverState } from "./graphHover";
 import {
-  GraphCaptainAnswerContext,
   GraphCaptainRunIdContext,
   GraphDocumentModeContext,
   GraphInjectPaintContext,
@@ -113,7 +108,6 @@ export const GraphView = memo(function GraphView({
   const setShowAuditInjectFlow = useGraphStore((s) => s.setShowAuditInjectFlow);
   const layoutKind = useGraphStore((s) => s.layoutKind);
   const setLayoutKind = useGraphStore((s) => s.setLayoutKind);
-  const parallelAvailable = !!execution && hasParallelTimeline(execution);
   const effectiveLayoutKind = resolveEffectiveGraphLayout(layoutKind);
   // 内嵌模式：expandedUnits 按对话持久化（与画布 graph-fold 独立）。
   // 默认展开有子队的 unit（对齐画布 / 协作图 UX「默认展开」）；用户点过收起后才记覆盖。
@@ -247,8 +241,8 @@ export const GraphView = memo(function GraphView({
     showRunDetailHere,
     litRunId,
     litEndpointMessageId,
-    finalAnswer,
-    taskMessage,
+    finalAnswerId,
+    taskMessageId,
     captainRun,
   } = useGraphDrillIn(execution, {
     interactive,
@@ -277,13 +271,6 @@ export const GraphView = memo(function GraphView({
   });
 
   const [menuNodeId, setMenuNodeId] = useState<string | null>(null);
-  const metricsSummary = useMemo(
-    () =>
-      parallelAvailable && execution
-        ? parallelTimelineMetricsSummary(execution)
-        : null,
-    [parallelAvailable, execution],
-  );
 
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
@@ -459,8 +446,8 @@ export const GraphView = memo(function GraphView({
       focusAct,
       litRunId,
       litEndpointMessageId,
-      taskMessageId: taskMessage?.id ?? null,
-      finalAnswerId: finalAnswer?.id ?? null,
+      taskMessageId,
+      finalAnswerId,
       turnTerminal,
     }),
     [
@@ -469,8 +456,8 @@ export const GraphView = memo(function GraphView({
       focusAct,
       litRunId,
       litEndpointMessageId,
-      taskMessage?.id,
-      finalAnswer?.id,
+      taskMessageId,
+      finalAnswerId,
       turnTerminal,
     ],
   );
@@ -556,51 +543,43 @@ export const GraphView = memo(function GraphView({
                       <GraphCaptainRunIdContext.Provider
                         value={captainRun?.id ?? null}
                       >
-                        <GraphCaptainAnswerContext.Provider
-                          value={
-                            finalAnswer
-                              ? { content: finalAnswer.content }
-                              : null
-                          }
-                        >
-                          <GraphInjectPaintContext.Provider value={injectPaint}>
-                            <GraphHoverContext.Provider value={hoverState}>
-                              <ReactFlow
-                                nodes={flowNodes}
-                                edges={flowEdges}
-                                nodeTypes={nodeTypes}
-                                edgeTypes={edgeTypes}
-                                onInit={onInit}
-                                onNodesChange={onNodesChange}
-                                onNodeClick={onNodeClick}
-                                onNodeMouseEnter={onNodeMouseEnter}
-                                onNodeMouseLeave={onNodeMouseLeave}
-                                onNodeContextMenu={onNodeContextMenu}
-                                onPaneContextMenu={onPaneContextMenu}
-                                onPaneClick={onPaneClick}
-                                fitView={fitMode === "view"}
-                                nodesDraggable={false}
-                                nodesConnectable={false}
-                                nodesFocusable={false}
-                                elementsSelectable={false}
-                                proOptions={{ hideAttribution: true }}
-                                {...interactionProps}
+                        <GraphInjectPaintContext.Provider value={injectPaint}>
+                          <GraphHoverContext.Provider value={hoverState}>
+                            <ReactFlow
+                              nodes={flowNodes}
+                              edges={flowEdges}
+                              nodeTypes={nodeTypes}
+                              edgeTypes={edgeTypes}
+                              onInit={onInit}
+                              onNodesChange={onNodesChange}
+                              onNodeClick={onNodeClick}
+                              onNodeMouseEnter={onNodeMouseEnter}
+                              onNodeMouseLeave={onNodeMouseLeave}
+                              onNodeContextMenu={onNodeContextMenu}
+                              onPaneContextMenu={onPaneContextMenu}
+                              onPaneClick={onPaneClick}
+                              fitView={fitMode === "view"}
+                              nodesDraggable={false}
+                              nodesConnectable={false}
+                              nodesFocusable={false}
+                              elementsSelectable={false}
+                              proOptions={{ hideAttribution: true }}
+                              {...interactionProps}
+                            >
+                              <Background gap={20} size={1} />
+                              <WaveLanes waves={laneBands} />
+                              <DebateStageBands bands={debateBands} />
+                            </ReactFlow>
+                            {!layoutReady && (
+                              <div
+                                className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/50"
+                                aria-hidden
                               >
-                                <Background gap={20} size={1} />
-                                <WaveLanes waves={laneBands} />
-                                <DebateStageBands bands={debateBands} />
-                              </ReactFlow>
-                              {!layoutReady && (
-                                <div
-                                  className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/50"
-                                  aria-hidden
-                                >
-                                  <div className="h-2 w-24 animate-pulse rounded-full bg-muted" />
-                                </div>
-                              )}
-                            </GraphHoverContext.Provider>
-                          </GraphInjectPaintContext.Provider>
-                        </GraphCaptainAnswerContext.Provider>
+                                <div className="h-2 w-24 animate-pulse rounded-full bg-muted" />
+                              </div>
+                            )}
+                          </GraphHoverContext.Provider>
+                        </GraphInjectPaintContext.Provider>
                       </GraphCaptainRunIdContext.Provider>
                     </GraphSceneContext.Provider>
                   </GraphActionsContext.Provider>
@@ -615,7 +594,6 @@ export const GraphView = memo(function GraphView({
                 <GraphToolbar
                   layoutKind={layoutKind}
                   onLayoutKindChange={setLayoutKind}
-                  metricsSummary={metricsSummary}
                   injectFlowAvailable={injectFlowAvailable}
                   showAuditInjectFlow={showAuditInjectFlow}
                   onShowAuditInjectFlowChange={setShowAuditInjectFlow}
@@ -662,8 +640,8 @@ export const GraphView = memo(function GraphView({
           <GraphContextMenu
             menuNodeId={menuNodeId}
             captainRunId={captainRun?.id}
-            taskMessage={taskMessage}
-            finalAnswer={finalAnswer}
+            taskMessageId={taskMessageId}
+            finalAnswerId={finalAnswerId}
             onNodeSelect={onNodeSelect}
             showRunDetailHere={showRunDetailHere}
             onClose={onClose}

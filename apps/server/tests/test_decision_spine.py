@@ -516,6 +516,74 @@ def test_execution_groups_tools_and_keeps_failures_on_decisions() -> None:
     assert len(text.splitlines()) < 40
 
 
+def test_allowlist_deny_counts_as_exec_error_and_lands_on_decisions() -> None:
+    """Patrol and spine share is_tool_failure: deny is a failure; redirect is a steer."""
+    tid = "k" * 32
+    events = [
+        {
+            "type": "log",
+            "event": "chat.turn_start",
+            "timestamp": "2026-09-01T04:00:00Z",
+            "trace_id": tid,
+            "preview": "deny vs steer",
+        },
+        {
+            "type": "log",
+            "event": "tool.execute_end",
+            "timestamp": "2026-09-01T04:00:01Z",
+            "trace_id": tid,
+            "tool": "glob",
+            "status": "ok",
+            "duration_ms": 5,
+        },
+        {
+            "type": "log",
+            "event": "tool.execute_end",
+            "timestamp": "2026-09-01T04:00:02Z",
+            "trace_id": tid,
+            "tool": "glob",
+            "status": "allowlist_deny",
+            "reason": "工具 'glob' 不在本 run 的允许列表中，未执行。",
+            "duration_ms": 0,
+        },
+        {
+            "type": "log",
+            "event": "tool.execute_end",
+            "timestamp": "2026-09-01T04:00:03Z",
+            "trace_id": tid,
+            "tool": "code_execute",
+            "status": "redirect",
+            "reason": "use run",
+            "duration_ms": 0,
+        },
+        {
+            "type": "log",
+            "event": "chat.turn_complete",
+            "timestamp": "2026-09-01T04:00:04Z",
+            "trace_id": tid,
+            "finish_reason": "stop",
+        },
+    ]
+    spine = build_decision_spine(events, trace_id=tid)
+    tool_decisions = [
+        d for d in spine["decisions"] if d["event"] == "tool.execute_end"
+    ]
+    statuses = [d["detail"]["status"] for d in tool_decisions]
+    assert statuses == ["allowlist_deny", "redirect"]
+    tools = spine["execution"]["tools"]
+    assert tools["calls"] == 3
+    assert tools["ok"] == 2
+    assert tools["error"] == 1
+    by_name = {row["tool"]: row for row in tools["by_tool"]}
+    assert by_name["glob"]["ok"] == 1
+    assert by_name["glob"]["error"] == 1
+    assert by_name["code_execute"]["ok"] == 1
+    assert by_name["code_execute"]["error"] == 0
+    text = format_decision_spine(spine)
+    assert "allowlist_deny" in text
+    assert "Exec  tools=3 ok=2 err=1" in text
+
+
 def test_llm_call_failed_and_prepare_surface_without_listing_every_call() -> None:
     tid = "h" * 32
     events = [
@@ -597,6 +665,73 @@ def test_llm_call_failed_and_prepare_surface_without_listing_every_call() -> Non
     assert "Prep  rules=12ms assemble=80ms" in text
     assert "slowest" in text
     assert "scenario" in text
+
+
+def test_llm_round_exception_surfaces_on_spine_with_error_type() -> None:
+    tid = "j" * 32
+    events = [
+        {
+            "type": "log",
+            "event": "chat.turn_start",
+            "timestamp": "2026-08-31T01:53:26Z",
+            "trace_id": tid,
+            "preview": "图片中是什么内容",
+        },
+        {
+            "type": "log",
+            "event": "llm.call_failed",
+            "timestamp": "2026-08-31T01:53:28Z",
+            "trace_id": tid,
+            "level": "error",
+            "model": "flash",
+            "scenario": "title",
+            "error": "平台模型暂时不可用",
+            "error_type": "LLMInsufficientBalanceError",
+        },
+        {
+            "type": "log",
+            "event": "engine.llm_round_exception",
+            "timestamp": "2026-08-31T01:53:32Z",
+            "trace_id": tid,
+            "level": "error",
+            "error_type": "TypeError",
+            "error_code": "LLM_ERROR",
+            "classified": False,
+            "origin": "stream_round",
+            "error": 'can only concatenate str (not "list") to str',
+        },
+        {
+            "type": "log",
+            "event": "engine.llm_failed_terminal",
+            "timestamp": "2026-08-31T01:53:33Z",
+            "trace_id": tid,
+            "level": "warning",
+            "reason": "error",
+            "has_content": False,
+            "error_type": "TypeError",
+            "origin": "stream_round",
+            "classified": False,
+            "error_code": "LLM_ERROR",
+        },
+        {
+            "type": "log",
+            "event": "chat.turn_complete",
+            "timestamp": "2026-08-31T01:53:33Z",
+            "trace_id": tid,
+            "finish_reason": "error",
+        },
+    ]
+    spine = build_decision_spine(events, trace_id=tid)
+    names = [d["event"] for d in spine["decisions"]]
+    assert "engine.llm_round_exception" in names
+    assert "engine.llm_failed_terminal" in names
+    round_exc = next(d for d in spine["decisions"] if d["event"] == "engine.llm_round_exception")
+    assert round_exc["detail"]["error_type"] == "TypeError"
+    assert round_exc["detail"]["classified"] is False
+    assert round_exc["detail"]["origin"] == "stream_round"
+    text = format_decision_spine(spine)
+    assert "engine.llm_round_exception" in text
+    assert "TypeError" in text
 
 
 def test_obs_turn_spans_runs_fold_without_tool_children() -> None:

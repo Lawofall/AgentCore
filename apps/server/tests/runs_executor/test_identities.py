@@ -190,7 +190,7 @@ async def test_default_worker_is_captain_within_depth_cap():
     sys = provider.system_messages[0]
     # Captain-only markers — the leaf intro carries neither.
     assert "再向下委派一层子团队" in sys
-    assert "薄切片" in sys and "自己干" in sys
+    assert "薄切片" not in sys
 
 
 async def test_depth_two_captain_children_are_leaves():
@@ -214,9 +214,10 @@ async def test_captain_identity_carries_when_to_split_guidance():
     sys = provider.system_messages[0]
     assert "再向下委派一层子团队" in sys
     assert "consult(team_orchestration_advanced)" not in sys
-    assert "薄切片" in sys and "自己干" in sys
-    assert "先招人再整合" in sys
-    assert "≠ 两段" in sys
+    assert "薄切片" not in sys
+    assert "先招人再整合" not in sys
+    assert "写满步骤 ≠ 已切薄" not in sys
+    assert "≠ 两段" not in sys
     assert "【开局】" not in sys
     assert "摸底一页地图" not in sys
     assert "已经做了很久" not in sys
@@ -242,6 +243,7 @@ async def test_captain_identity_carries_when_to_split_guidance():
     assert "<身份>" in leaf and "</身份>" in leaf
     assert "一员" in leaf.split("<身份>", 1)[1].split("</身份>", 1)[0]
     assert "先招人再整合" not in leaf
+    assert "写满步骤 ≠ 已切薄" not in leaf
     assert "≠ 两段" not in leaf
     assert "【开局】" not in leaf
     assert "再向下委派一层子团队" not in leaf
@@ -264,7 +266,7 @@ async def test_depth_three_subworker_keeps_leaf_identity():
 
 async def test_worker_identities_carry_tool_safety_caution():
     # 按角色 right-size (反向): the environment-mutation caution (<写工具谨慎>) moved OUT of
-    # the shared base (where the read-only coordinator CEO carried it inertly) INTO the worker
+    # the shared base (where the CEO carried it as prefix weight) INTO the worker
     # identities — workers hold the mutating tools (file_write / code_execute / file_delete…),
     # so the caution rides them now. Pin it on BOTH the leaf and the captain identity so a
     # refactor can't drop the mutation caution from the agents that can actually act
@@ -362,20 +364,22 @@ async def test_handoff_prompt_splits_by_topology():
     assert "交接勿回灌" in leaf and "交接勿回灌" in upstream
     assert "改文件" in leaf and "症状消失" in leaf
     assert "系统已就绪" in leaf and "界面没改" in leaf
-    assert "最后一次同命令" in leaf and "分项分开写" in leaf
+    assert "勿回读刚写" not in leaf
+    assert "最后一次同命令" not in leaf
+    assert "分项分开写" not in leaf
     assert "修复完成" not in leaf
     assert "现象已消除" not in leaf and "已全部落地" not in leaf
     assert "有工具活动或较长交付" in leaf
     assert "权威文档冲突" not in leaf
     assert "静默改权威稿" not in leaf
-    # 找路径：已给相对路径直接读 ≠ 全仓 glob
-    assert "找路径" in leaf
-    assert "前置结果" in leaf
-    assert "glob" in leaf
+    # 找路径 HOW 归 file_read；身份不复述。
+    assert "找路径" not in leaf
+    assert "前置结果" not in leaf
+    assert "全仓 glob" not in leaf
     assert "file_list" not in leaf
     assert "再整仓" not in leaf
     assert "勿按话题拼接" not in leaf
-    assert "<工作区>" in leaf
+    assert "<工作区>" not in leaf
 
     # Executor wires topology into the live system prompt (not just the helper).
     plan, _ = build_run_plan(
@@ -427,15 +431,16 @@ def test_worker_identity_states_no_execution_capability():
     assert "未运行" in no_exec
     assert "手抄" not in no_exec
     assert "结构报告" not in no_exec
-    assert "consult(data_file_landing)" in no_exec
+    assert "consult(data_file_landing)" not in no_exec
     assert "无法可靠完成" not in no_exec
 
     with_exec = build_worker_identity(has_dependents=False, can_execute=True)
     assert "本回合执行环境未装配" not in with_exec
     assert "手抄" not in with_exec
-    assert "刚落盘的表格" in with_exec
-    assert "file_read" in with_exec
-    assert "consult(data_file_landing)" in with_exec
+    assert "刚落盘的表格" not in with_exec
+    assert "consult(long_form_landing)" not in with_exec
+    assert "consult(data_file_landing)" not in with_exec
+    assert "artifact manifest" in with_exec
     # 默认参数与显式 True 字节一致（不惊扰既有路径）。
     assert with_exec == build_worker_identity(has_dependents=False)
 
@@ -453,11 +458,11 @@ def test_worker_identity_teaches_escalate_blocking_choice():
     assert "再向用户索要" not in body
     assert "已明确拒绝" not in body
     desc = EscalateTool().schema.description
-    assert "报一声" in desc
+    blocking = EscalateTool().schema.parameters["properties"]["blocking"]["description"]
+    assert "报一声" in desc or "报一声" in blocking
     assert "猜错作废" in desc
     assert "权威稿" in desc
     assert "扩范围" in desc
-    blocking = EscalateTool().schema.parameters["properties"]["blocking"]["description"]
     assert "已拒凭据" in blocking
     captain = build_worker_identity(has_dependents=False, captain=True)
     assert "小问题（路径拼写" not in captain
