@@ -28,12 +28,16 @@ async def test_capabilities_returns_full_catalog(client):
     # consult is AUDIENCE_BOTH (步 1 · Skill 对 worker 放开).
     assert "consult" in tools
     assert set(tools["consult"]["available_to"]) == {"ceo", "worker"}
-    # …worker-only mutation + execution + escalate (test_run runs project code through
-    # the same sandbox chain as code_execute, so it is worker-only, not a CEO read tool)…
-    for name in ("file_write", "code_execute", "test_run", "escalate"):
+    # Mutation + unified `run` are CEO+worker (solo CEO writes and executes).
+    # `run` replaced code_execute / test_run / terminal — those names must stay gone.
+    for name in ("file_write", "run"):
         assert name in tools
-        assert tools[name]["available_to"] == ["worker"]
-    # …and shared read/retrieval built-ins.
+        assert set(tools[name]["available_to"]) == {"ceo", "worker"}
+    for retired in ("code_execute", "test_run", "terminal"):
+        assert retired not in tools
+    assert "escalate" in tools
+    assert tools["escalate"]["available_to"] == ["worker"]
+    # Shared read/retrieval built-ins.
     for name in ("web_search",):
         assert name in tools
         assert set(tools[name]["available_to"]) == {"ceo", "worker"}
