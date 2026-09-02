@@ -233,7 +233,6 @@ def format_idle_yield_brief(session: CoordinationSession) -> str:
     )
 
     conversation_id = getattr(session, "conversation_id", None) or ""
-    from agentcore.runtime.resolve.ceo_surface import COORDINATION_PERIOD_HINT
 
     if has_hot_user_pending(conversation_id):
         hold = format_hot_pending_hold_line(conversation_id)
@@ -241,7 +240,6 @@ def format_idle_yield_brief(session: CoordinationSession) -> str:
         lines.append("向用户说明有队员在等你允许；队还在。")
     elif healthy:
         lines.append("流水线状态：正常推进，无需追加动作。")
-        lines.append(COORDINATION_PERIOD_HINT)
     else:
         lines.append(
             "等待窗口到期且仍有在途工作。可静默听团；疑似卡死再用 cancel_worker。"

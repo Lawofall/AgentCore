@@ -36,7 +36,6 @@ def _observe_worker_opening(
     identity: str,
     role: str | None,
     supplement: str | None,
-    working_set: str | None = None,
 ) -> None:
     """COST-004: log worker opening system sections (observe-only; join stays ``\\n\\n``)."""
     from agentcore.config import settings
@@ -49,7 +48,6 @@ def _observe_worker_opening(
         .add("identity", identity, SectionOrder.WORKER_IDENTITY)
         .add("role", role_text, SectionOrder.WORKER_ROLE)
         .add("supplement", supplement, SectionOrder.WORKER_SUPPLEMENT)
-        .add("working_set", working_set, SectionOrder.WORKING_SET)
         .observe(scope="worker_turn", soft_cap=settings.prompt_budget_char_soft_cap)
     )
 
@@ -130,8 +128,6 @@ def _build_messages(
     blocks_sink: list[ContextBlock] | None = None,
     team_brief: str | None = None,
     context_inject: Mapping[str, str] | None = None,
-    conversation_id: str = "",
-    working_set: str = "",
 ) -> list[LLMMessage]:
     """Assemble the worker's OPENING (system, user) messages from its inline role,
     the original request, its upstream dependency products, and its task.
@@ -161,15 +157,12 @@ def _build_messages(
         sys_parts.append(f"你的角色：{spec.role}")
     if spec.system_prompt_supplement:
         sys_parts.append(spec.system_prompt_supplement)
-    if working_set:
-        sys_parts.append(working_set)
     system_content = "\n\n".join(p for p in sys_parts if p)
     _observe_worker_opening(
         worker_base=system_prompt,
         identity=identity,
         role=spec.role,
         supplement=spec.system_prompt_supplement,
-        working_set=working_set,
     )
 
     blocks = _build_context_blocks(
@@ -362,12 +355,13 @@ def _context_block_payloads(blocks: list[ContextBlock]) -> list[dict[str, Any]]:
 def _upstream_intermediate_persist_hint(spec: RunSpec) -> str:
     """A1: where upstream links may park large intermediates for downstream ``file_read``.
 
-    Playbook-pinned ``artifacts`` win (strict task-book paths). Otherwise free-form teams
-    land under ``DRAFTS_DIR`` with a descriptive filename — never workspace-root
-    ``findings-<role>.md``. Does not replace playbook pinning; only guides free teams.
+    Playbook-pinned ``artifacts`` win (strict task-book paths). Otherwise free-form
+    teams self-locate; if they cannot, park under ``DRAFTS_DIR`` with a descriptive
+    filename — never workspace-root ``findings-<role>.md``. Does not replace
+    playbook pinning; only guides free teams.
 
-    落点是「工作稿」而非 ``research/``：大中间产物正是「AI 干活的过程材料」的定义，
-    而 ``research/`` 曾因这类默认指引沦为杂物入口 → [术语表 · 成品归位].
+    不知放哪才进工作稿，不把 ``form=files`` 钉成工作稿义务；``research/`` 仍只接
+    playbook / 显式声明 → [术语表 · 成品归位].
     """
     pinned = [
         p.strip().replace("\\", "/")
@@ -383,8 +377,8 @@ def _upstream_intermediate_persist_hint(spec: RunSpec) -> str:
         )
     return (
         "中间产物怎么交：零散发现直接写进你的文字产出即可（会自动转交下游）；若产物较大、"
-        "值得落盘供下游 file_read 取用，就调 file_write，落在"
-        f" `{DRAFTS_DIR}/` 下【自起描述性文件名】"
+        "值得落盘供下游 file_read 取用，就调 file_write，按桌上已有结构自定位；"
+        f"不知放哪再落 `{DRAFTS_DIR}/` 下【自起描述性文件名】"
         "（勿用工作区根 `findings-<角色>.md`），切勿用空路径。"
     )
 
@@ -547,10 +541,8 @@ def _dep_context_blocks(
         dep_spec = plan.by_id(dep_id)
         label = dep_spec.role if dep_spec and dep_spec.role else dep_id
         author_summary = ""
-        key_points: object = None
         if state and state.debrief:
             author_summary = str((state.debrief or {}).get("summary") or "").strip()
-            key_points = (state.debrief or {}).get("key_points")
         has_brief = bool(author_summary)
         if (
             not state
@@ -570,14 +562,15 @@ def _dep_context_blocks(
                 )
             )
             continue
-        # 完工交接简报: the content is already the pure deliverable (the brief rides the run's
-        # structured ``debrief``, submitted via the handoff tool — never appended to the prose), so
-        # the body sizes on the deliverable alone and the author's own 结论 can LEAD the block.
-        # 同轮 0 字仅简报：升格为下游可读 body；升格路径不再 prepend 同一句结论。
+        # 完工交接简报: debrief.summary is the 便条 (closing-round prose, or
+        # legacy args). 同轮 0 字仅简报：升格为下游可读 body。
         clean = state.content or ""
         promoted_from_brief = False
         if not clean.strip() and has_brief:
-            clean = promote_brief_to_deliverable(author_summary, key_points)
+            clean = promote_brief_to_deliverable(
+                author_summary,
+                (state.debrief or {}).get("key_points"),
+            )
             promoted_from_brief = True
         if state.files_touched:
             mode = "pointer"

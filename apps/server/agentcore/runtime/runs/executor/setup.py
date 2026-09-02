@@ -259,9 +259,6 @@ async def _prepare_agent_node(
         parent_desk = spec.target_folder_id or env.session_folder_id
         if parent_desk:
             child_delegate._default_target_folder_id = parent_desk  # type: ignore[attr-defined]
-        # 父审计员再嵌套：手写 tasks 继承 code_audit 收工纪律（不重跑整本 playbook）。
-        if deliverable is not None and getattr(deliverable, "code_audit_gate", False):
-            child_delegate._inherit_code_audit_discipline = True  # type: ignore[attr-defined]
         opening = tuple(t for t in lead_subteam.tools if t.schema.name != "replan")
         worker_tools = _registry_with(worker_tools, *opening)
         # allowed_tools stays None — "offer all" already includes the opening
@@ -380,13 +377,6 @@ async def _prepare_agent_node(
         )
     else:
         with _prepare_phase("build_messages"):
-            from agentcore.runtime.context.working_set import build_working_set_block
-            from agentcore.runtime.facts import snapshot_fact_log
-
-            working_set = await build_working_set_block(
-                conversation_id=str(getattr(tool_ctx, "conversation_id", "") or ""),
-                live_entries=snapshot_fact_log(),
-            )
             messages[:] = _build_messages(
                 env.plan,
                 spec,
@@ -398,8 +388,6 @@ async def _prepare_agent_node(
                 blocks_sink=received_blocks,
                 team_brief=env.team_brief,
                 context_inject=context_inject or None,
-                conversation_id=str(getattr(tool_ctx, "conversation_id", "") or ""),
-                working_set=working_set,
             )
         # Worker window head (§8.3): journal the opening task-prompt so
         # ``window_from_journal(run_id=…)`` anchors on THIS run's system+user, not the

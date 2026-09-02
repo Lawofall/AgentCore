@@ -27,12 +27,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agentcore.api.dependencies import AccountApiUser, AuthUser, get_db
 from agentcore.config import settings
 from agentcore.conversation.log_export import (
+    DEFAULT_FOCUS,
+    FOCUS_PROCESS,
     MAX_CHUNK_CHARS,
-    chunk_transcript,
-    render_conversation_log,
-    search_snippet_from_messages,
+    normalize_focus,
+    page_conversation,
+    search_hit_from_messages,
 )
 from agentcore.core.errors import NotFoundError
+from agentcore.core.types import is_uuid_id
 from agentcore.db.models import Document
 from agentcore.db.repositories import (
     ConversationRepository,
@@ -97,6 +100,7 @@ class ConversationSearchRow(BaseModel):
     message_count: int = 0
     archived: bool = False
     snippet: str | None = None
+    hit_index: int | None = None
 
 
 class ConversationSearchResponse(BaseModel):
@@ -136,11 +140,16 @@ async def search_account_conversations(
     out_rows: list[ConversationSearchRow] = []
     for row in rows:
         snippet: str | None = None
+        hit_index: int | None = None
         try:
             msgs = await msg_repo.list_all_for_conversation(row["conversation_id"])
-            snippet = search_snippet_from_messages(msgs, (body.query or "").strip()) or None
+            hit = search_hit_from_messages(msgs, (body.query or "").strip())
+            if hit:
+                snippet = hit.snippet
+                hit_index = hit.message_index
         except Exception:  # noqa: BLE001 — snippet is best-effort
             snippet = None
+            hit_index = None
         out_rows.append(
             ConversationSearchRow(
                 conversation_id=row["conversation_id"],
@@ -151,6 +160,7 @@ async def search_account_conversations(
                 message_count=int(row.get("message_count") or 0),
                 archived=bool(row.get("archived")),
                 snippet=snippet,
+                hit_index=hit_index,
             )
         )
     return ConversationSearchResponse(rows=out_rows, folder_miss=False)
@@ -160,6 +170,8 @@ class ConversationReadRequest(BaseModel):
     conversation_id: str
     cursor: str | None = None
     max_chars: int | None = Field(default=None, ge=1, le=MAX_CHUNK_CHARS)
+    focus: str = DEFAULT_FOCUS
+    query: str = ""
 
 
 class ConversationReadResponse(BaseModel):
@@ -172,6 +184,11 @@ class ConversationReadResponse(BaseModel):
     started_at: str | None = None
     ended_at: str | None = None
     message_count: int = 0
+    message_offset: int = 0
+    message_end: int = 0
+    focus: str = DEFAULT_FOCUS
+    query: str | None = None
+    query_hit: bool = False
     char_offset: int = 0
     total_chars: int = 0
 
@@ -239,25 +256,34 @@ async def read_account_conversation(
     user: AccountApiUser,
     session: AsyncSession = Depends(get_db),
 ) -> ConversationReadResponse:
-    """Owner-scoped deep transcript read (account ticket or access). Soft miss on 404."""
+    """Owner-scoped transcript read (account ticket or access). Soft miss on 404.
+
+    Default ``focus=dialogue`` (user/assistant visible text). ``process`` includes
+    tools / debate / thinking. Pages are message-index cursors.
+    """
     cid = (body.conversation_id or "").strip()
-    if not cid:
-        return ConversationReadResponse(status="soft_miss", conversation_id="")
+    if not cid or not is_uuid_id(cid):
+        return ConversationReadResponse(status="soft_miss", conversation_id=cid)
 
     conv = await ConversationRepository(session).get_by_id(cid, user_id=user.user_id)
     if conv is None or conv.mode == "handoff":
         return ConversationReadResponse(status="soft_miss", conversation_id=cid)
 
+    focus_n = normalize_focus(body.focus) or DEFAULT_FOCUS
+    query_s = (body.query or "").strip() or None
     messages = list(await MessageRepository(session).list_all_for_conversation(cid))
-    assistant_ids = [m.id for m in messages if m.role == "assistant"]
-    journal_map = await TurnJournalRepository(session).load_map(assistant_ids)
-    full = render_conversation_log(conv, messages, journal_map)
+    journal_map: dict = {}
+    if focus_n == FOCUS_PROCESS:
+        assistant_ids = [m.id for m in messages if m.role == "assistant"]
+        journal_map = await TurnJournalRepository(session).load_map(assistant_ids)
     cursor_s = (body.cursor or "").strip() or None
-    chunk = chunk_transcript(
-        full,
-        conversation=conv,
-        messages=messages,
+    chunk = page_conversation(
+        conv,
+        messages,
+        journal_map,
+        focus=focus_n,
         cursor=cursor_s,
+        query=query_s,
         max_chars=body.max_chars,
     )
     return ConversationReadResponse(
@@ -270,6 +296,11 @@ async def read_account_conversation(
         started_at=chunk.started_at,
         ended_at=chunk.ended_at,
         message_count=chunk.message_count,
+        message_offset=chunk.message_offset,
+        message_end=chunk.message_end,
+        focus=chunk.focus,
+        query=chunk.query,
+        query_hit=chunk.query_hit,
         char_offset=chunk.char_offset,
         total_chars=chunk.total_chars,
     )

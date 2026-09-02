@@ -419,6 +419,7 @@ async def test_conversation_deep_read_uses_cloud_when_account_creds(monkeypatch)
         assert creds.api_key == "acct-key"
         assert payload["conversation_id"] == "cloud-1"
         assert payload["max_chars"] == ATTACHMENT_INLINE_MAX_CHARS
+        assert payload.get("focus") == "dialogue"
         return {
             "status": "ok",
             "title": "云端场",

@@ -93,6 +93,8 @@ def test_catalog_registers_failure_and_build_provenance_fields():
     started = reg.requires("server.started").fields
     assert "version" in started
     assert "git_sha" in started
+    turn_start = reg.requires("chat.turn_start").fields
+    assert "stream_path_reason" in turn_start
 
 
 def test_execute_end_registers_shell_observe_fields():

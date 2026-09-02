@@ -2,7 +2,7 @@
 
 定案：大纲按章落盘 / 空检索换策略 / 空 handoff 挡写作 /
 成篇审计硬门 / 论文并行拆章须单主文件合并门禁。
-结局分层：``map_fanout`` = 对齐推进（不进成篇硬门）；
+``map_fanout`` = 摸清（不进成篇硬门）；
 ``cite_write_review`` = 成文专线（进硬门）。本模块只放纯谓词与文案常量，
 供 playbook 声明、skill、检索预算、audit gate、delivery_status 复用——不新建子系统。
 
@@ -165,13 +165,9 @@ def deliverable_is_report_delivery(deliverable: Any) -> bool:
     if deliverable is None:
         return False
     if isinstance(deliverable, dict):
-        if deliverable.get("code_audit_gate"):
-            return True
         if deliverable.get("citation_mode") == "two_phase":
             return True
     else:
-        if getattr(deliverable, "code_audit_gate", False):
-            return True
         if getattr(deliverable, "citation_mode", None) == "two_phase":
             return True
     return (
@@ -230,7 +226,7 @@ def brief_may_satisfy_body_floor(*, deliverable_form: str | None) -> bool:
     """Whether ``promote_brief_to_deliverable`` may count toward the upstream floor.
 
     ``form=prose`` + 有下游交接地板：只认 ``round_content_chars`` / 已落盘 prose，
-    summary 不算正文（对齐 identity）。非 prose / 未声明 form 仍允许升格服务其它场景。
+    便条不算交付正文。非 prose / 未声明 form 仍允许升格服务其它场景。
     """
     return (deliverable_form or "") != "prose"
 

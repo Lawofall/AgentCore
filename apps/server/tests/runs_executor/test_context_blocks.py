@@ -28,7 +28,7 @@ def test_team_position_block_four_dag_shapes():
     # not authors the final artifact) and the terminal-ownership boost (a writer learns
     # it IS the final author) can't silently regress. Also pins A1 (递指针 affordance):
     # the upstream branch — and ONLY it — grants intermediate persist guidance:
-    # task-book artifacts (strict) or DRAFTS_DIR + descriptive name (free teams);
+    # task-book artifacts (strict) or self-locate / 不知放哪 → DRAFTS_DIR (free teams);
     # never workspace-root findings-<role>.md. Terminal / parallel / solo must NOT get A1.
     from agentcore.workspace.stage_dirs import DRAFTS_DIR
 
@@ -52,9 +52,10 @@ def test_team_position_block_four_dag_shapes():
     assert "不要自己产出整个最终交付物" in up
     assert "调研员B" in up  # parallel-peer awareness still present
     assert "不一定全是你的活" in up  # request reframed as a team goal, not a mandate
-    # A1 free-team path: DRAFTS_DIR + descriptive name; still names the anti-pattern.
-    # 落点是工作稿而非 research/：大中间产物就是过程材料，research/ 不再当杂物入口。
+    # A1 free-team path: self-locate; 不知放哪 → DRAFTS_DIR + descriptive name.
+    # research/ 不再当杂物入口。
     assert DRAFTS_DIR in up and "自起描述性文件名" in up and "切勿用空路径" in up
+    assert "自定位" in up
     assert "findings-" in up
     assert "工作区根" in up
 
@@ -305,12 +306,9 @@ def test_worker_turn_observe_covers_identity(monkeypatch):
     assert row["sections"]["role"] == len("你的角色：汇报员")
 
 
-def test_build_messages_appends_working_set_on_system_tail():
+def test_build_messages_omits_retired_working_set_xml():
     spec = RunSpec(run_id="x", agent_id="x", role="调研员", task="t")
-    block = "<工作集>\n正文以磁盘为准；需要细节时用 file_read。\n- read src/a.py\n</工作集>"
-    msgs = _build_messages(
-        _plan(spec), spec, {}, "SYS", "原始请求", working_set=block
-    )
+    msgs = _build_messages(_plan(spec), spec, {}, "SYS", "原始请求")
     system = msgs[0].content or ""
-    assert system.endswith(block)
-    assert system.index("SYS") < system.index("<工作集>")
+    assert "<工作集>" not in system
+    assert "正文以磁盘为准" not in system

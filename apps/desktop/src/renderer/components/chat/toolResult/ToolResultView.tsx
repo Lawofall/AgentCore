@@ -26,8 +26,6 @@ import type {
 import {
   BookOpen,
   Brain,
-  FileCode2,
-  FileText,
   type LucideIcon,
   MessagesSquare,
   Terminal,
@@ -38,7 +36,12 @@ import { Favicon } from "../Favicon";
 import { CodeDiagnosticsResult } from "./CodeDiagnosticsResult";
 import { SearchHitResult } from "./SearchHitResult";
 import { codeDiagnosticsPeek, extractCodeDiagnostics } from "./codeDiagnostics";
-import { type DiffLine, lineDiff } from "./diff";
+import { type DiffLine, lineDiff, lineDiffCounts } from "./diff";
+import {
+  isPartialFileReadWindow,
+  parseFileReadWindow,
+  stripFileReadFooter,
+} from "./fileReadWindow";
 import { isSearchHitTool } from "./parseSearchHits";
 import { specificToolFailureMessage } from "./productFailureFace";
 import { isVerifyBudgetExceeded, verifyIncompleteFace } from "./verifyBudget";
@@ -184,6 +187,50 @@ function isFileWrite(d: ToolResultData): boolean {
     d.toolName === "file_write" &&
     asString(d.args.content) !== null
   );
+}
+
+/** Collapsed-title stat: str_replace +/- (omit zeros at render), file_write
+ * line count, or a file_read window (partial reads only — a full file is
+ * silent). Null when the call isn't a finished write/read preview. */
+export type ToolLineTitleStat =
+  | { kind: "diff"; adds: number; dels: number }
+  | { kind: "lines"; lines: number }
+  | { kind: "readWindow"; start: number; end: number; total: number };
+
+export function writeFamilyTitleStat(
+  d: ToolResultData,
+): Extract<ToolLineTitleStat, { kind: "diff" | "lines" }> | null {
+  if (isFileEdit(d)) {
+    const counts = lineDiffCounts(
+      asString(d.args.old_string) ?? "",
+      asString(d.args.new_string) ?? "",
+    );
+    if (counts.adds === 0 && counts.dels === 0) return null;
+    return { kind: "diff", adds: counts.adds, dels: counts.dels };
+  }
+  if (isFileWrite(d)) {
+    const content = asString(d.args.content) ?? "";
+    return { kind: "lines", lines: content.split("\n").length };
+  }
+  return null;
+}
+
+export function fileReadTitleStat(
+  d: ToolResultData,
+): Extract<ToolLineTitleStat, { kind: "readWindow" }> | null {
+  if (d.status !== "success" || d.toolName !== "file_read") return null;
+  const window = parseFileReadWindow(d.result);
+  if (!window || !isPartialFileReadWindow(window)) return null;
+  return {
+    kind: "readWindow",
+    start: window.start,
+    end: window.end,
+    total: window.total,
+  };
+}
+
+export function toolLineTitleStat(d: ToolResultData): ToolLineTitleStat | null {
+  return writeFamilyTitleStat(d) ?? fileReadTitleStat(d);
 }
 
 /** A compact one-line peek for the collapsed row — display-aware so it reads as
@@ -568,31 +615,19 @@ function diffRowClass(type: DiffLine["type"]): string {
 }
 
 /** Red/green line diff for a str_replace edit, derived from the call arguments
- * (old_string → new_string) the client already has — no backend echo needed. */
+ * (old_string → new_string) the client already has — no backend echo needed.
+ * Path and +/- live on the ToolLine title (toolLineTitleStat); this card is
+ * body-only. */
 function FileEditDiff({
-  path,
   oldStr,
   newStr,
 }: {
-  path: string | null;
   oldStr: string;
   newStr: string;
 }) {
   const lines = useMemo(() => lineDiff(oldStr, newStr), [oldStr, newStr]);
-  const adds = lines.reduce((n, l) => (l.type === "add" ? n + 1 : n), 0);
-  const dels = lines.reduce((n, l) => (l.type === "del" ? n + 1 : n), 0);
   return (
     <div className="mt-1 overflow-hidden rounded-lg border border-border">
-      <div className="flex items-center gap-2 border-border/60 border-b bg-muted/40 px-2.5 py-1 text-xs">
-        <FileCode2 size={12} className="shrink-0 text-muted-foreground" />
-        {path && (
-          <span className="truncate font-mono text-foreground">{path}</span>
-        )}
-        <span className="ml-auto flex shrink-0 items-center gap-1.5 tabular-nums">
-          <span className="text-success">+{adds}</span>
-          <span className="text-destructive">-{dels}</span>
-        </span>
-      </div>
       <div className="max-h-72 overflow-auto font-mono text-xs leading-relaxed">
         {lines.map((l, i) => (
           <div
@@ -619,29 +654,14 @@ const FILE_WRITE_PREVIEW_LINES = 300;
 
 /** New/overwritten file card for file_write, with a line-numbered content preview
  * — built from the call's `content` argument (already client-side), no backend
- * echo needed. Neutral framing (we can't tell create from overwrite without an
- * extra probe), so it reads as「写入 N 行到 path」. */
-function FileWriteCard({
-  path,
-  content,
-}: {
-  path: string | null;
-  content: string;
-}) {
+ * echo needed. Path and「N 行」live on the ToolLine title; this card is body-only
+ * (truncation footer stays when the preview is capped). */
+function FileWriteCard({ content }: { content: string }) {
   const allLines = content.split("\n");
   const shown = allLines.slice(0, FILE_WRITE_PREVIEW_LINES);
   const hidden = allLines.length - shown.length;
   return (
     <div className="mt-1 overflow-hidden rounded-lg border border-border">
-      <div className="flex items-center gap-2 border-border/60 border-b bg-muted/40 px-2.5 py-1 text-xs">
-        <FileText size={12} className="shrink-0 text-muted-foreground" />
-        {path && (
-          <span className="truncate font-mono text-foreground">{path}</span>
-        )}
-        <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
-          {allLines.length} 行 · {content.length} 字
-        </span>
-      </div>
       <div className="max-h-72 overflow-auto font-mono text-xs leading-relaxed">
         {shown.map((line, i) => (
           <div
@@ -800,7 +820,6 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
     return (
       <div>
         <FileEditDiff
-          path={asString(data.args.path)}
           oldStr={asString(data.args.old_string) ?? ""}
           newStr={asString(data.args.new_string) ?? ""}
         />
@@ -811,10 +830,7 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
   if (isFileWrite(data)) {
     return (
       <div>
-        <FileWriteCard
-          path={asString(data.args.path)}
-          content={asString(data.args.content) ?? ""}
-        />
+        <FileWriteCard content={asString(data.args.content) ?? ""} />
         {diagnostics && <CodeDiagnosticsResult display={diagnostics} />}
       </div>
     );
@@ -831,6 +847,11 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
     data.result?.trim()
   ) {
     return <SearchHitResult result={data.result} kind={data.toolName} />;
+  }
+  if (data.toolName === "file_read" && data.status === "success") {
+    const body = stripFileReadFooter(data.result ?? "");
+    if (!body.trim()) return null;
+    return <TextResult result={body} status={data.status} />;
   }
   return <TextResult result={data.result ?? ""} status={data.status} />;
 }

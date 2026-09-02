@@ -46,17 +46,11 @@ class AssembledTurn:
     debate_tool: Any
     chat_tools: ToolRegistry
     chat_system_prompt: str
-    # Assemble-time cues for settle-side 阶梯 2 count (no intercept).
-    had_prior_delivery_gaps: bool = False
-    had_recent_team_graph: bool = False
 
 
 def build_chat_system_prompt(
     *,
     ceo_prompt: str,
-    working_set: str,
-    recent_team_graph: str,
-    prior_delivery_gaps: str,
     prior_delegate_retry: str,
     attachment_context: str,
     registered_sources: str,
@@ -64,8 +58,8 @@ def build_chat_system_prompt(
 ) -> str:
     """Render the turn's CEO system prompt from its sections — the ONE assembly point.
 
-    Variable tail AFTER the stable hint stack (working set + recent graph +
-    attachments + 来源台账) so the CEO prefix (base + hints, including ``<工作区>``
+    Variable tail AFTER the stable hint stack (redispatch + attachments +
+    来源台账) so the CEO prefix (base + hints, including ``<工作区>``
     with the CEO file index already spliced) stays byte-identical across turns
     except when those facts themselves change. Empty sections are dropped, so a
     turn with none is byte-identical to the bare CEO prompt.
@@ -84,9 +78,6 @@ def build_chat_system_prompt(
     return (
         ContextAssembler()
         .add("ceo_prompt", ceo_prompt, SectionOrder.BASE)
-        .add("working_set", working_set, SectionOrder.WORKING_SET)
-        .add("recent_team_graph", recent_team_graph, SectionOrder.RECENT_TEAM_GRAPH)
-        .add("prior_delivery_gaps", prior_delivery_gaps, SectionOrder.PRIOR_DELIVERY_GAPS)
         .add("prior_delegate_retry", prior_delegate_retry, SectionOrder.PRIOR_DELEGATE_RETRY)
         .add("attachment_context", attachment_context, SectionOrder.ATTACHMENT)
         .add("registered_sources", registered_sources, SectionOrder.REGISTERED_SOURCES)
@@ -352,52 +343,14 @@ async def assemble_ceo_turn(
         folder_profile_empty_soft=folder_profile_empty_soft,
         attachment_material=attachment_material_scene(prepared.attachment_context),
     )
-    # 跨回合同图追加的回显通道 (CEO-only): history replays no tool I/O, so the newest
-    # appendable graph's execution_id must ride the prompt to stay visible next turn.
-    # "" when the conversation has no team graph yet (section drops out).
-    from agentcore.runtime.delegate.graph_append import build_recent_graph_context
-
-    recent_graph_context = await _timed_phase(
-        "recent_graph",
-        build_recent_graph_context(
-            conversation_id=conversation_id,
-            exclude_message_id=message_id,
-        ),
-    )
-    # 跨回合交付账本 one-shot：上轮 journal delivery_status partial/blocked + blocking
-    # gaps → 易变尾 `<上轮交付缺口>`（不 emit / 不 stamp verdict；不扫用户原文）。
-    from agentcore.runtime.delegate.prior_delivery_gaps import (
-        apply_gaps_vs_redispatch_mutex,
-        build_prior_delivery_gaps_hint,
-    )
+    # 跨轮空委派/无产出：上轮 journal 结构化指纹 → 一次性再派软提示（不扫用户「继续」原文）。
     from agentcore.runtime.delegate.redispatch_hint import (
         build_prior_failure_redispatch_hint,
     )
 
-    prior_delivery_gaps = await build_prior_delivery_gaps_hint(
+    prior_delegate_retry = await build_prior_failure_redispatch_hint(
         conversation_id=conversation_id,
         exclude_message_id=message_id,
-    )
-    # 跨轮空委派/无产出：上轮 journal 结构化指纹 → 一次性再派软提示（不扫用户「继续」原文）。
-    # 同回合若 gaps 软块非空 → 抑制 redispatch（缺口优先；跳过再查 journal）。
-    prior_delegate_retry_raw = (
-        ""
-        if prior_delivery_gaps
-        else await build_prior_failure_redispatch_hint(
-            conversation_id=conversation_id,
-            exclude_message_id=message_id,
-        )
-    )
-    prior_delivery_gaps, prior_delegate_retry = apply_gaps_vs_redispatch_mutex(
-        prior_delivery_gaps,
-        prior_delegate_retry_raw,
-    )
-    # 跨回合文件工作集：历史不回放工具 I/O，journal 抽出仍在场的 path（指针、不回灌正文）。
-    from agentcore.runtime.context.working_set import build_working_set_block
-
-    working_set = await build_working_set_block(
-        conversation_id=conversation_id,
-        exclude_turn_id=message_id,
     )
     # 可用性诚实性 · 甲：偏窄短问 → 复用最近 delivery_status 发卡到本回合答复面。
     from agentcore.runtime.delegate.delivery_status import (
@@ -416,9 +369,6 @@ async def assemble_ceo_turn(
     # for this turn's prompt here.
     chat_system_prompt = build_chat_system_prompt(
         ceo_prompt=chat_system_prompt,
-        working_set=working_set,
-        recent_team_graph=recent_graph_context,
-        prior_delivery_gaps=prior_delivery_gaps,
         prior_delegate_retry=prior_delegate_retry,
         attachment_context=prepared.attachment_context,
         registered_sources=format_registered_sources_prompt(evidence_ledger),
@@ -438,6 +388,4 @@ async def assemble_ceo_turn(
         debate_tool=debate_tool,
         chat_tools=chat_tools,
         chat_system_prompt=chat_system_prompt,
-        had_prior_delivery_gaps=bool((prior_delivery_gaps or "").strip()),
-        had_recent_team_graph=bool((recent_graph_context or "").strip()),
     )

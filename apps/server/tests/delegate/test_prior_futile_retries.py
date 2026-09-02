@@ -15,9 +15,6 @@ def test_ceo_turn_prompt_has_no_futile_retry_section():
 
     out = build_chat_system_prompt(
         ceo_prompt="CEO",
-        working_set="",
-        recent_team_graph="",
-        prior_delivery_gaps="",
         prior_delegate_retry="",
         attachment_context="",
         registered_sources="",

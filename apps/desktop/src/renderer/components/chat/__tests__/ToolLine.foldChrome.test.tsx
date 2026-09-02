@@ -256,7 +256,7 @@ describe("ToolLine · 过程工具折叠一行", () => {
     },
   );
 
-  it("list_folders success inlineMeta shows · N folders", () => {
+  it("list_folders success inlineMeta shows N folders", () => {
     const { container } = renderWithTooltip(
       <ToolLine
         step={step({

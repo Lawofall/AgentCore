@@ -1,3 +1,4 @@
+import { useConversations } from "@/hooks/useConversations";
 import {
   useBackgroundTasks,
   useBackgroundTasksSync,
@@ -19,6 +20,7 @@ import {
 import { useMemo } from "react";
 import { BackgroundTaskCard } from "./BackgroundTaskCard";
 import { BrowserTakeoverCard } from "./BrowserTakeoverCard";
+import { CompactionDivider } from "./CompactionDivider";
 import { MemoryUpdateCard } from "./MemoryUpdateCard";
 import { MessageBubble } from "./MessageBubble";
 import { PermissionChangeLine } from "./PermissionChangeLine";
@@ -28,6 +30,11 @@ import { mergeTimeline } from "./messageTimeline";
 // and only follows new content while the user is already at the bottom.
 export function MessageList() {
   const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversations = useConversations();
+  const compactedThrough = conversationId
+    ? (conversations.find((c) => c.id === conversationId)?.compactedThrough ??
+      null)
+    : null;
   const messages = useActiveMessages();
   // 后台云端任务（交接「方案 B」）：本地模式对话才同步，按时间戳并入时间线，故卡片
   // 与消息一同**原位**渲染、随对话重开重放（数据源是后端持久化的 handoff jobs）。
@@ -56,8 +63,22 @@ export function MessageList() {
 
   const items = useMemo(
     () =>
-      mergeTimeline(messages, tasks, memoryUpdates, takeovers, presetChanges),
-    [messages, tasks, memoryUpdates, takeovers, presetChanges],
+      mergeTimeline(
+        messages,
+        tasks,
+        memoryUpdates,
+        takeovers,
+        presetChanges,
+        compactedThrough,
+      ),
+    [
+      messages,
+      tasks,
+      memoryUpdates,
+      takeovers,
+      presetChanges,
+      compactedThrough,
+    ],
   );
 
   return (
@@ -71,6 +92,8 @@ export function MessageList() {
           <MemoryUpdateCard key={it.key} update={it.update} />
         ) : it.kind === "takeover" ? (
           <BrowserTakeoverCard key={it.key} takeover={it.takeover} />
+        ) : it.kind === "compaction" ? (
+          <CompactionDivider key={it.key} />
         ) : (
           <PermissionChangeLine key={it.key} change={it.change} />
         ),

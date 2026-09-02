@@ -64,7 +64,7 @@ def test_research_first_tool_result_fills_motion_topic():
     text = research_first_tool_result(motion="该不该上四天工作制？", user_message="忽略我")
     assert "先多视角调研再辩" in text
     assert "请勿再次调用 debate" in text
-    assert "consult(deep_multi_lens_research)" in text
+    assert "consult(deep_multi_lens_research)" not in text
     assert "手写" in text
     assert "lens_crosscheck" not in text
     assert "playbook=" not in text

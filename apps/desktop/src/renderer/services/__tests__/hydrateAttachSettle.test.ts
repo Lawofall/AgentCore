@@ -443,7 +443,11 @@ describe("runHydrateAttachSettle (warm reopen / cold adopt)", () => {
     await expect(settled).resolves.toBe("local");
     expect(attachSidecarTurn).toHaveBeenCalledTimes(1);
     expect(projectUnsyncedTurns).toHaveBeenCalledWith(CID, []);
+    expect(hasLocalConversationStream(CID)).toBe(true);
     finishAttach(true);
+    await vi.waitFor(() => {
+      expect(hasLocalConversationStream(CID)).toBe(false);
+    });
   });
 
   it("awaitHydrateAttachSettle runs settle after recovery resolves", async () => {

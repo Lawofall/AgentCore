@@ -96,14 +96,19 @@ node scripts/check-ui-tokens.mjs --src apps/desktop/src/renderer
 | 列表空态同一骨架 | 标题 + 可选一句说明 + 可选主操作 = `EmptyHint`。`DraftEmptyState` 仍是对话草稿特例 |
 | 动作底栏 | Decision / Dialog 右下锚点；不扫输入框、工具条、协作图干预 |
 | 新面先点名 L3 | 新页 / 新交付物须先说用哪套 Primitive / Pattern，禁止第三套壳。工具箱网格 / 白板工具条 / 辩论室保持登记例外 |
+| 消息操作行 | 窄屏常显；md+ hover / focus-within。助手复制·重新生成、用户复制·编辑、IM 回复与时间共用 `MESSAGE_ACTION_REVEAL_CLASS` |
 | 品牌字体 | 仅 BrandMark Latin；正文系统栈 |
 | 品牌文案 | 权威 → [产品定位与品牌](/docs/01-产品/产品定位与品牌.md) |
 
 **否决**：为窄屏另写主回复/文件/IM/设置；全仓一次收编工具箱/白板；缺规范前大改色。触达即收编：不专项清扫其余「暂无…」行内提示 / 选择器空项。
 
+## 运动要点（细节权威 = design-tokens）
+
+时长两档：`--motion-duration-fast` 150ms / `--motion-duration` 200ms。桌面 `@theme` 映射 `duration-fast` / `duration-normal`。尊重 `prefers-reduced-motion`（调用点 `motion-reduce:transition-none`；具名入场动画见 `globals.css`）。**否决**逐字打字机；流式答案尾光标走 `data-stream-caret`。触达即用 token，不专项改已有 `transition-*`。
+
 ## 配色要点（细节权威 = color-tokens）
 
-只用语义 token；禁止硬编码。用户面 / 执行态 / 分类三层与禁令 → `color-tokens.mdc`。tone 预设 → `ui/tone-presets.ts`。
+只用语义 token；禁止硬编码。用户面 / 执行态 / 分类三层与禁令 → `color-tokens.mdc`。tone 预设 → `ui/tone-presets.ts`。暗色：近中性表面 + 亮度层叠，品牌蓝只在 primary；数字 → `packages/design-tokens` `.dark`。
 
 ## 布局规格（细节权威 = desktop-layout）
 

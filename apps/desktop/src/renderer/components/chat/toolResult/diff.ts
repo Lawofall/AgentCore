@@ -74,3 +74,17 @@ export function lineDiff(oldText: string, newText: string): DiffLine[] {
   }
   return out;
 }
+
+/** Add/delete line counts from {@link lineDiff} — ToolLine title stat, omit-zero at render. */
+export function lineDiffCounts(
+  oldText: string,
+  newText: string,
+): { adds: number; dels: number } {
+  let adds = 0;
+  let dels = 0;
+  for (const line of lineDiff(oldText, newText)) {
+    if (line.type === "add") adds++;
+    else if (line.type === "del") dels++;
+  }
+  return { adds, dels };
+}

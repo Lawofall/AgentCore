@@ -114,6 +114,7 @@ def post_close_reject(tool: DelegateTool, plan: RunPlan) -> PostCloseReject | No
     from agentcore.runtime.delegate.team_continuation import (
         classify_batch,
         cold_open_reject_message,
+        format_continuation_candidates,
         gap_fill_admission_error,
     )
 
@@ -133,9 +134,12 @@ def post_close_reject(tool: DelegateTool, plan: RunPlan) -> PostCloseReject | No
     # 冷开那堆单独判大扇出：与续派/补缺口同批时，不再把整批算成「整团重派」。
     if not is_substantial_batch(len(shape.cold), shape.cold_has_deps):
         return None
+    session = _session_for_tool(tool)
+    live = getattr(session, "live_plan", None) if session is not None else None
+    candidates = format_continuation_candidates(plan=live, completed=completed)
     return PostCloseReject(
         kind=POST_CLOSE_REJECT_COLD_OPEN,
-        message=cold_open_reject_message(shape),
+        message=cold_open_reject_message(shape, candidates=candidates),
     )
 
 

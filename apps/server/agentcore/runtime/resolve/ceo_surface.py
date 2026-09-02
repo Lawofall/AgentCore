@@ -7,8 +7,8 @@ Injection aligns with the coordination tools' execution gate
 place — one-time prefix-cache miss is acceptable.
 
 Also owns COST-004 tools-surface observation (exact JSON chars + a token band)
-for ``ceo_turn`` and ``worker_run``, and the coordination-period hint shown in
-CEO event briefs.
+for ``ceo_turn`` and ``worker_run``. The coordination-period hint is owned by
+the ``wait`` tool description (not copied into each inject).
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ COORDINATION_GATED_TOOLS: frozenset[str] = frozenset(
 )
 
 COORDINATION_PERIOD_HINT = (
-    "【协调期】图在转、无新结论可静默；对用户开口只谈请示/阻塞/阶段结论。"
+    "【协调期】图在转、无新结论可静默；对用户开口只谈请示/阻塞/阶段结论/回应中途插话。"
 )
 
 # A tool schema is Chinese prose (every ``description``) wrapped in ASCII JSON, and the two

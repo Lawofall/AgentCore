@@ -1,12 +1,12 @@
 /**
- * Strip desktop.jsonl down to connectivity / recovery diagnostics.
+ * Strip desktop.jsonl down to connectivity / recovery / stream-path diagnostics.
  *
  * The write path already forbids tokens / passwords / message bodies in
  * ``fields``, but a support pack leaves the user's machine — allowlist events
  * and primitive fields so a leaked content/token key cannot ride along.
  */
 
-/** Events that explain disconnect / rejoin. Everything else is dropped. */
+/** Events that explain disconnect / rejoin / why a local-bound turn went cloud. */
 const EVENT_ALLOW_PREFIXES = [
   "server_health.",
   "sse.",
@@ -14,7 +14,11 @@ const EVENT_ALLOW_PREFIXES = [
   "conversation.rejoin_",
 ] as const;
 
-const EVENT_ALLOW_EXACT = new Set(["sidecar.turn_already_running"]);
+const EVENT_ALLOW_EXACT = new Set([
+  "sidecar.turn_already_running",
+  // Local-bound turn took the cloud path — why (probe / switch / no target).
+  "turn.stream_path",
+]);
 
 const FIELD_ALLOW = new Set([
   "timestamp",
@@ -31,6 +35,8 @@ const FIELD_ALLOW = new Set([
   "since_offline_ms",
   "status",
   "failure_threshold",
+  "kind",
+  "http_status",
   "saw_any_event",
   "op",
   "turn_id",
@@ -43,6 +49,12 @@ const FIELD_ALLOW = new Set([
   "idle_timeout_ms",
   "event_type",
   "turn_phase",
+  "via",
+  "bridging",
+  "root_id",
+  "probe_detail",
+  "detail",
+  "regenerate",
 ]);
 
 const SECRET_KEY =
@@ -237,9 +249,10 @@ function isFoldableRecord(record: SanitizedDesktopLogRecord): boolean {
  * Roll rows that share an event and every field except timestamp up into their
  * first occurrence, carrying ``count`` / ``first`` / ``last``.
  *
- * Adjacency is deliberately not required: yielding the stream to a local turn
- * alternates ``follow_closed`` / ``follow_open``, so folding only neighbours
- * would leave every pair intact and shrink nothing.
+ * Adjacency is deliberately not required: a local turn used to abort follow
+ * and alternate ``follow_closed`` / ``follow_open``; current builds mute
+ * (``follow_muted`` / ``follow_unmuted``). Folding only neighbours would
+ * leave every pair intact and shrink nothing.
  */
 export function foldDesktopLogRecords(
   records: readonly SanitizedDesktopLogRecord[],

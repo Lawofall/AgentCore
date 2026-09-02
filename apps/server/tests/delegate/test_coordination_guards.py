@@ -1013,8 +1013,8 @@ def test_healthy_idle_inject_has_progress_and_no_action_guidance():
     assert "依赖阻塞" in brief
     assert "无需追加" in brief
     assert "正常推进" in brief
-    assert "【协调期】" in brief
-    assert "可静默" in brief
+    assert "【协调期】" not in brief
+    assert "可静默" not in brief
     assert "谁还在跑" not in brief
     assert "三选一" not in brief
     assert "谁在后台推进" not in brief
@@ -1032,7 +1032,7 @@ def test_healthy_idle_inject_has_progress_and_no_action_guidance():
     assert len(msgs) == 1
     assert "流水线进度" in (msgs[0].content or "")
     assert "无需追加" in (msgs[0].content or "")
-    assert "可静默" in (msgs[0].content or "")
+    assert "可静默" not in (msgs[0].content or "")
     assert "保持静默即可" not in (msgs[0].content or "")
     assert "cancel_worker" not in (msgs[0].content or "")
     assert "token 顶 4000000" in (msgs[0].content or "")

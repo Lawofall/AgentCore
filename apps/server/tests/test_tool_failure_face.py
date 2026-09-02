@@ -295,7 +295,6 @@ _DETERMINISTIC_CODES = (
     "password_blocked",
     "postcondition_failed",
     "private_address_blocked",
-    "project_verify_redirect",
     "source_dump_redirect",
     "source_grep_redirect",
     "read_url_retired",
@@ -313,7 +312,6 @@ _DETERMINISTIC_CODES = (
     "run_contract",
     "verify_policy_inner",
     "verify_result",
-    "wait_for_required",
 )
 
 # Engine vocabulary + model-channel imperatives that must never reach the user sentence.

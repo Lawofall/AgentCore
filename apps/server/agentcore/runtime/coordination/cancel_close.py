@@ -35,8 +35,6 @@ _STARTED_EVENT_STATUSES = frozenset(
     {"completed", "failed", "cancelled", "running", "retrying"}
 )
 
-_DONT_PASTE = "勿粘贴协调事件 / 队员终态名册 / escalation 原文 / 中间合成草稿"
-
 
 def note_cancel_worker_success(
     session: Any,
@@ -225,35 +223,8 @@ def cancel_event_headline(
     return f"- {prefix}：任务已取消，基于已完成部分收口{count}。"
 
 
-def cancel_close_line(kind: CancelCloseKind) -> str:
-    if kind == "user_stopped":
-        return (
-            "按终稿纪律基于已完成部分向用户交代（走 content_delta）；"
-            f"说明{USER_STOPPED_MARK}，不要接着派活。"
-        )
-    if kind == "drive_cancelled":
-        return (
-            "按终稿纪律基于已完成部分向用户交代（走 content_delta）；"
-            f"说明{DRIVE_INTERRUPTED_MARK}，不要接着派活。"
-        )
-    if kind == "ceo_cancel_started":
-        return (
-            "按终稿纪律基于已完成部分向用户交代（走 content_delta）；"
-            "说明已开工队员被终止，不要接着派活。"
-        )
-    if kind == "not_started":
-        return (
-            "按终稿纪律基于已完成部分向用户交代（走 content_delta）；"
-            f"说明{NOT_STARTED_MARK}的队员已取消，不要接着派活。"
-        )
-    return (
-        "按终稿纪律基于已完成部分向用户交代（走 content_delta）；"
-        "说明已取消，调度已停，不要接着派活。"
-    )
-
-
 def cancel_discipline_sentence(kind: CancelCloseKind | None, session: Any) -> str:
-    """Extra 【终稿纪律】 sentence. Empty on success / failure / unproven leftover."""
+    """Extra cancel-honesty sentence. Empty on success / failure / unproven leftover."""
     if kind == "not_started":
         return ALLOW_NOT_STARTED
     if kind in ("user_stopped", "drive_cancelled", "ceo_cancel_started"):

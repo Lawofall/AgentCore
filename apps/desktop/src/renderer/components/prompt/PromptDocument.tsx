@@ -7,21 +7,31 @@ import { cn } from "@/lib/utils";
 import { useMemo } from "react";
 
 /** Structured prompt / skill body: tagged sections rendered as Markdown.
- * Shared by 工具箱能力图鉴, 收到的上下文, and consult / consult_skill result cards. */
+ * Shared by 工具箱能力图鉴 and consult / consult_skill result cards. */
 export function PromptDocument({
   text,
   className,
   maxHeightClass = "max-h-[32rem]",
+  compact = true,
 }: {
   text: string;
   className?: string;
   /** Tailwind max-height utility for the scroll container. */
   maxHeightClass?: string;
+  /** Catalog / skill cards stay compact (`xs`). Reading surfaces pass `false` (`sm`). */
+  compact?: boolean;
 }) {
   const sections = useMemo(() => parsePromptDocument(text), [text]);
   const structured = hasTaggedSections(sections);
 
   if (!text.trim()) return null;
+
+  const bodyClass = compact
+    ? "markdown-body markdown-body--compact text-foreground/90"
+    : "markdown-body";
+  const titleClass = compact
+    ? "font-medium text-foreground text-xs"
+    : "font-medium text-foreground text-sm";
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -38,12 +48,10 @@ export function PromptDocument({
               className="space-y-1"
             >
               {section.title ? (
-                <h3 className="font-medium text-foreground text-xs">
-                  {section.title}
-                </h3>
+                <h3 className={titleClass}>{section.title}</h3>
               ) : null}
-              <div className="markdown-body markdown-body--compact text-foreground/90">
-                <Markdown content={section.body} muted />
+              <div className={bodyClass}>
+                <Markdown content={section.body} muted={compact} />
               </div>
             </section>
           ))}
@@ -51,11 +59,12 @@ export function PromptDocument({
       ) : (
         <div
           className={cn(
-            "overflow-auto rounded-lg bg-muted/50 px-3 py-2 markdown-body markdown-body--compact text-foreground/90",
+            "overflow-auto rounded-lg bg-muted/50 px-3 py-2",
+            bodyClass,
             maxHeightClass,
           )}
         >
-          <Markdown content={text} muted />
+          <Markdown content={text} muted={compact} />
         </div>
       )}
     </div>

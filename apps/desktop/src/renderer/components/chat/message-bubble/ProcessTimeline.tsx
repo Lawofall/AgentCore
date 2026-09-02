@@ -7,6 +7,7 @@ import {
   ToolLineGroup,
 } from "@/components/chat/ToolLine";
 import { teamGraphVisible } from "@/components/chat/debatePreviewPlacement";
+import { absorbHandoffBriefContent } from "@/components/chat/handoffBrief";
 import { executionGraphCapabilities } from "@/components/graph/planCapabilities";
 import {
   type TimelineNode,
@@ -23,6 +24,7 @@ import { renderTimelineInteractionCard } from "@/stores/interactions/registryUi"
 import type {
   Citation,
   ProcessStep,
+  RunDebrief,
   TurnEvidenceLedgerEntry,
 } from "@/types/events";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -219,6 +221,7 @@ export function ProcessTimeline({
   /** When false, never collapse reasoning/tool rows into a summary (run-detail panel).
    * Default true keeps CEO bubble chrome. */
   collapseProcessSteps = true,
+  handoffDebrief = null,
 }: {
   process: ProcessStep[];
   isStreaming: boolean;
@@ -235,6 +238,8 @@ export function ProcessTimeline({
   planReviews: PlanReviewDisplay[];
   onOpenWorkspacePath?: (path: string) => void;
   collapseProcessSteps?: boolean;
+  /** Harvested `run.debrief` — fills an empty successful handoff row. */
+  handoffDebrief?: RunDebrief | null;
 }) {
   const execution = useMessageExecution(messageId ?? null);
   const last = process[process.length - 1];
@@ -261,7 +266,9 @@ export function ProcessTimeline({
 
   // 摘要步数与可见行同源，避免「Thought 10」展开只剩 3 行。
   // collapseProcessSteps 只控制折叠 chrome，不再 omit wait。
-  const nodes = groupToolRuns(process);
+  const nodes = groupToolRuns(
+    absorbHandoffBriefContent(process, handoffDebrief),
+  );
   // 稳定 key（时间线一期）：insertBeforeTeam 中段插入不再位移后续行的 React key。
   const nodeKeys = timelineNodeKeys(nodes);
 

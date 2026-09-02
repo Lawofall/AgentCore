@@ -34,6 +34,8 @@ from agentcore.tools.protocol import ToolContext
 
 pytestmark = pytest.mark.anyio
 
+_PAST_UUID = "11111111-1111-4111-8111-111111111111"
+
 
 def _ctx() -> ToolContext:
     return ToolContext.create(
@@ -304,11 +306,11 @@ async def test_read_uses_cloud_when_creds_bound(
     monkeypatch.setattr(read_mod, "async_session_factory", lambda: _CM())
 
     async def _fake_read(creds: AccountCredentials, *, payload: dict[str, Any]):
-        assert payload["conversation_id"] == "past-1"
+        assert payload["conversation_id"] == _PAST_UUID
         return {
             "status": "ok",
             "title": "Past",
-            "conversation_id": "past-1",
+            "conversation_id": _PAST_UUID,
             "transcript": "body text",
             "truncated": False,
             "next_cursor": None,
@@ -326,17 +328,17 @@ async def test_read_uses_cloud_when_creds_bound(
 
     with account_credentials_scope(account_creds):
         result = await ReadConversationTool().execute(
-            {"conversation_id": "past-1"}, _ctx()
+            {"conversation_id": _PAST_UUID}, _ctx()
         )
     assert result.success
     assert "body text" in result.output
-    assert result.display["conversation_id"] == "past-1"
+    assert result.display["conversation_id"] == _PAST_UUID
 
 
 async def test_read_cloud_soft_miss(monkeypatch: pytest.MonkeyPatch, account_creds):
     async def _fake_read(creds: AccountCredentials, *, payload: dict[str, Any]):
         del creds, payload
-        return {"status": "soft_miss", "conversation_id": "missing"}
+        return {"status": "soft_miss", "conversation_id": _PAST_UUID}
 
     monkeypatch.setattr(
         "agentcore.account.credentials.cloud_read_conversation",
@@ -344,10 +346,31 @@ async def test_read_cloud_soft_miss(monkeypatch: pytest.MonkeyPatch, account_cre
     )
     with account_credentials_scope(account_creds):
         result = await ReadConversationTool().execute(
-            {"conversation_id": "missing"}, _ctx()
+            {"conversation_id": _PAST_UUID}, _ctx()
         )
     assert result.success is True
     assert "无法打开" in result.output
+
+
+async def test_read_invalid_id_is_soft_miss_without_cloud(
+    monkeypatch: pytest.MonkeyPatch, account_creds
+):
+    async def _boom(creds: AccountCredentials, *, payload: dict[str, Any]):
+        del creds, payload
+        raise AssertionError("non-UUID must not call cloud")
+
+    monkeypatch.setattr(
+        "agentcore.account.credentials.cloud_read_conversation",
+        _boom,
+    )
+    with account_credentials_scope(account_creds):
+        for cid in ("x", "nonexistent"):
+            result = await ReadConversationTool().execute(
+                {"conversation_id": cid}, _ctx()
+            )
+            assert result.success is True
+            assert "无法打开" in result.output
+            assert result.display["conversation_id"] == cid
 
 
 async def test_read_cloud_failure_is_hard_fail(
@@ -363,10 +386,31 @@ async def test_read_cloud_failure_is_hard_fail(
     )
     with account_credentials_scope(account_creds):
         result = await ReadConversationTool().execute(
-            {"conversation_id": "past-1"}, _ctx()
+            {"conversation_id": _PAST_UUID}, _ctx()
         )
     assert result.success is False
     assert result.error == "account_cloud_unreachable"
+
+
+async def test_read_account_route_invalid_id_is_soft_miss():
+    from agentcore.api.routes.account import (
+        ConversationReadRequest,
+        read_account_conversation,
+    )
+
+    class BoomSession:
+        def __getattr__(self, name: str) -> object:
+            raise AssertionError("non-UUID must not use the DB session")
+
+    user = SimpleNamespace(user_id="u1")
+    for cid in ("", "x", "nonexistent"):
+        resp = await read_account_conversation(
+            ConversationReadRequest(conversation_id=cid),
+            user,  # type: ignore[arg-type]
+            BoomSession(),  # type: ignore[arg-type]
+        )
+        assert resp.status == "soft_miss"
+        assert resp.conversation_id == cid
 
 
 async def test_mint_account_token_response():

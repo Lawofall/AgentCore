@@ -3,6 +3,7 @@
  * 无开场仪式主 CTA。打开不预选 `default`；AI 倾向写在选项 label 原文。`default` 走行右灰字「默认」。
  * `questions.length ≥ 2`：体内一次一题，头右侧 {@link AskQuestionPager} 可点切换各题
  * （没写补充也能切）；非末题主 CTA「下一题」（只推进），末题才「提交」才 resume。
+ * 单选首次勾选约 200ms 后自动切下一题；回看改选停在本题；末题不自动交。
  * 不是问卷 Wizard。提交仍须每题有勾选或人话。
  */
 import { ASK_INTENT_META } from "@/components/chat/decision";
@@ -42,12 +43,17 @@ import {
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import type { AskOption, AskQuestion } from "@/types/events";
 import { ArrowRight, FolderOpen, FolderTree, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AskCardFooter, AskCardShell, AskSectionLabel } from "./AskCardShell";
 import { CommenceNote } from "./AskCommenceParts";
 import { type AskRow, AskRowGroup } from "./AskOptionRow";
-import { AskQuestionPager, resolveAskPrimaryAction } from "./AskQuestionPager";
+import {
+  ASK_AUTO_ADVANCE_MS,
+  AskQuestionPager,
+  resolveAskPrimaryAction,
+  shouldAutoAdvanceAskQuestion,
+} from "./AskQuestionPager";
 import {
   type AskUserContent,
   hasExplicitAskReply,
@@ -58,6 +64,34 @@ import {
 import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
 
 const META = ASK_INTENT_META.decision;
+
+function AskTextInput({
+  value,
+  onChange,
+  disabled,
+  placeholder,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  disabled: boolean;
+  placeholder: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!ref.current?.disabled) ref.current?.focus();
+  }, []);
+  return (
+    <input
+      ref={ref}
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      placeholder={placeholder}
+      className="mt-2 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-foreground/25 focus:outline-none disabled:opacity-40"
+    />
+  );
+}
 
 type PickerFailureState = {
   kind: LocalPickerFailureKind;
@@ -97,10 +131,30 @@ export function AskDecisionBody({
     () => new Set([0]),
   );
   const [seenQuestionSig, setSeenQuestionSig] = useState(questionSig);
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearAdvanceTimer = () => {
+    if (advanceTimerRef.current != null) {
+      clearTimeout(advanceTimerRef.current);
+      advanceTimerRef.current = null;
+    }
+  };
+  useEffect(
+    () => () => {
+      if (advanceTimerRef.current != null) {
+        clearTimeout(advanceTimerRef.current);
+        advanceTimerRef.current = null;
+      }
+    },
+    [],
+  );
   if (seenQuestionSig !== questionSig) {
     setSeenQuestionSig(questionSig);
     setStep(0);
     setVisited(new Set([0]));
+    if (advanceTimerRef.current != null) {
+      clearTimeout(advanceTimerRef.current);
+      advanceTimerRef.current = null;
+    }
   }
   const canLocalFs = hasLocalFiles() && !!window.fsApi;
   const canBindAction = !!conversationId && !!onBindResolve && canLocalFs;
@@ -313,6 +367,7 @@ export function AskDecisionBody({
   };
 
   const goToQuestion = (index: number) => {
+    clearAdvanceTimer();
     setStep(index);
     setVisited((prev) => {
       if (prev.has(index)) return prev;
@@ -320,6 +375,14 @@ export function AskDecisionBody({
       next.add(index);
       return next;
     });
+  };
+
+  const scheduleAdvance = (index: number) => {
+    clearAdvanceTimer();
+    advanceTimerRef.current = setTimeout(() => {
+      advanceTimerRef.current = null;
+      goToQuestion(index);
+    }, ASK_AUTO_ADVANCE_MS);
   };
 
   const grantPending = findPendingFolderOption()?.opt.action;
@@ -427,7 +490,26 @@ export function AskDecisionBody({
         disabled: busy || (!!bindBusyLabel && !bindBusy),
         onSelect: () => {
           if (!desktopFolder) {
+            const prev = answer.answers[q.id] ?? [];
+            const already = prev.includes(opt.label);
             answer.toggleChoice(q, opt.label);
+            if (
+              shouldAutoAdvanceAskQuestion({
+                paged,
+                multiple: q.multiple,
+                presentsAsText: questionPresentsAsText(q),
+                selecting: !already,
+                hadPriorPick: prev.length > 0,
+                pendingAdvance: advanceTimerRef.current != null,
+                primaryAction,
+              }) &&
+              (primaryAction.type === "advance" ||
+                primaryAction.type === "jump")
+            ) {
+              scheduleAdvance(primaryAction.index);
+            } else if (already) {
+              clearAdvanceTimer();
+            }
             return;
           }
           // Web / 无本地文件：禁止退化成 toggleChoice（假确认）。
@@ -514,13 +596,11 @@ export function AskDecisionBody({
                 )}
               </p>
               {questionPresentsAsText(q) ? (
-                <input
-                  type="text"
+                <AskTextInput
                   value={(answer.answers[q.id] ?? [])[0] ?? ""}
-                  onChange={(e) => answer.setText(q, e.target.value)}
+                  onChange={(next) => answer.setText(q, next)}
                   disabled={busy}
                   placeholder={q.default || "填写你的答案"}
-                  className="mt-2 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-foreground/25 focus:outline-none disabled:opacity-40"
                 />
               ) : (
                 <>

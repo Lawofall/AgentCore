@@ -206,13 +206,13 @@ describe("ToolLine · 过程工具默认折叠", () => {
         })}
       />,
     );
-    // Already collapsed by default — 计数并入标题行（对齐 read_url 组的「· N sources」），
+    // Already collapsed by default — 计数并入标题行（对齐 read_url 组的「N sources」），
     // 不再另起一行 peek；结果卡标题隐藏。
     expect(screen.getByText(/1 result/)).toBeTruthy();
     expect(screen.queryByText("深圳天气预报")).toBeNull();
   });
 
-  it("keeps str_replace diff collapsed on the running→done edge", () => {
+  it("inlines str_replace +/- into the title and keeps the diff collapsed", () => {
     const { rerender, container } = render(
       <ToolLine
         step={step({
@@ -226,7 +226,6 @@ describe("ToolLine · 过程工具默认折叠", () => {
         })}
       />,
     );
-    // Collapsed peek only — the diff's +/- counts are expanded-only.
     expect(screen.queryByText("+1")).toBeNull();
 
     rerender(
@@ -243,18 +242,56 @@ describe("ToolLine · 过程工具默认折叠", () => {
         })}
       />,
     );
-    expect(screen.queryByText("+1")).toBeNull();
-    expect(screen.queryByText("-1")).toBeNull();
+    expect(screen.getByText("+1")).toBeTruthy();
+    expect(screen.getByText("-1")).toBeTruthy();
     expect(screen.queryByText(/已编辑/)).toBeNull();
     expect(screen.getByText("src/foo.ts")).toBeTruthy();
     expect(collapsedSubline(container)).toBeNull();
 
     fireEvent.click(screen.getByText("Edit file"));
-    expect(screen.getByText("+1")).toBeTruthy();
-    expect(screen.getByText("-1")).toBeTruthy();
+    expect(screen.getAllByText("+1")).toHaveLength(1);
+    expect(screen.getAllByText("-1")).toHaveLength(1);
+    expect(screen.getAllByText("src/foo.ts")).toHaveLength(1);
   });
 
-  it("keeps file_write content card collapsed on the running→done edge", () => {
+  it("omits the zero side of str_replace +/- on the title", () => {
+    const { rerender } = render(
+      <ToolLine
+        step={step({
+          tool_name: "str_replace",
+          arguments: {
+            path: "src/foo.ts",
+            old_string: "a\nc",
+            new_string: "a\nb\nc",
+          },
+          result: "已编辑 src/foo.ts",
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("+1")).toBeTruthy();
+    expect(screen.queryByText("-0")).toBeNull();
+
+    rerender(
+      <ToolLine
+        step={step({
+          tool_name: "str_replace",
+          arguments: {
+            path: "src/foo.ts",
+            old_string: "a\nb\nc",
+            new_string: "a\nc",
+          },
+          result: "已编辑 src/foo.ts",
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("-1")).toBeTruthy();
+    expect(screen.queryByText("+0")).toBeNull();
+    expect(screen.queryByText("+1")).toBeNull();
+  });
+
+  it("inlines file_write line count into the title and keeps the card collapsed", () => {
     const { rerender, container } = render(
       <ToolLine
         step={step({
@@ -264,8 +301,7 @@ describe("ToolLine · 过程工具默认折叠", () => {
         })}
       />,
     );
-    // Line-count footer is expanded-only; collapsed row is title + path only.
-    expect(screen.queryByText(/1 行 ·/)).toBeNull();
+    expect(screen.queryByText(/1 行/)).toBeNull();
 
     rerender(
       <ToolLine
@@ -277,13 +313,16 @@ describe("ToolLine · 过程工具默认折叠", () => {
         })}
       />,
     );
-    expect(screen.queryByText(/1 行 ·/)).toBeNull();
+    expect(screen.getByText(/1 行/)).toBeTruthy();
+    expect(screen.queryByText(/字/)).toBeNull();
     expect(screen.queryByText(/已写入/)).toBeNull();
     expect(screen.getByText("src/new.ts")).toBeTruthy();
     expect(collapsedSubline(container)).toBeNull();
 
     fireEvent.click(screen.getByText("Write file"));
-    expect(screen.getByText(/1 行 ·/)).toBeTruthy();
+    expect(screen.getAllByText(/1 行/)).toHaveLength(1);
+    expect(screen.getAllByText("src/new.ts")).toHaveLength(1);
+    expect(screen.queryByText(/字/)).toBeNull();
   });
 
   it("inlines write diagnostics into the title and stays one line", () => {
@@ -311,6 +350,7 @@ describe("ToolLine · 过程工具默认折叠", () => {
       />,
     );
     expect(screen.getByText(/1 个类型错误/)).toBeTruthy();
+    expect(screen.getByText(/1 行/)).toBeTruthy();
     expect(screen.queryByText(/已写入/)).toBeNull();
     expect(collapsedSubline(container)).toBeNull();
   });
@@ -525,6 +565,50 @@ describe("ToolLine · 过程工具默认折叠", () => {
     expect(screen.getByText("List dir")).toBeTruthy();
     expect(screen.getByText("lv_jasmine_report")).toBeTruthy();
     expect(screen.queryByText(/lv_jasmine_cultural/)).toBeNull();
+  });
+
+  it("inlines a file_read window into the title and strips the footer when expanded", () => {
+    const { container } = render(
+      <ToolLine
+        step={step({
+          tool_name: "file_read",
+          arguments: { path: "src/ui/PropertyPanel.tsx" },
+          result: "191| const x = 1\n\n（第 1–200 行，共 242 行）",
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("Read file")).toBeTruthy();
+    expect(screen.getByText("src/ui/PropertyPanel.tsx")).toBeTruthy();
+    expect(screen.getByText(/1–200 行/)).toBeTruthy();
+    expect(screen.queryByText(/\/ 242/)).toBeNull();
+    expect(screen.queryByText(/第 1/)).toBeNull();
+    expect(collapsedSubline(container)).toBeNull();
+
+    fireEvent.click(screen.getByText("Read file"));
+    expect(screen.getAllByText(/1–200 行/)).toHaveLength(1);
+    expect(screen.getByText(/191\| const x = 1/)).toBeTruthy();
+    expect(screen.queryByText(/共 242 行/)).toBeNull();
+  });
+
+  it("does not hang a full-file line count on a file_read title", () => {
+    render(
+      <ToolLine
+        step={step({
+          tool_name: "file_read",
+          arguments: { path: "src/ui/PropertyPanel.tsx" },
+          result: "const x = 1\n\n（全文 12 行）",
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("src/ui/PropertyPanel.tsx")).toBeTruthy();
+    expect(screen.queryByText(/12 行/)).toBeNull();
+    expect(screen.queryByText(/全文/)).toBeNull();
+
+    fireEvent.click(screen.getByText("Read file"));
+    expect(screen.getByText("const x = 1")).toBeTruthy();
+    expect(screen.queryByText(/全文 12 行/)).toBeNull();
   });
 
   it("omits the green check on nested success rows", () => {
@@ -999,7 +1083,7 @@ describe("ToolLineGroup · 混杂组浏览器 CTA", () => {
 });
 
 describe("ToolLine · handoff brief card", () => {
-  const receipt = "已收尾并提交交接简报。";
+  const receipt = "已收尾。";
 
   it("collapsed face is 交接简报; protocol receipt stays hidden", () => {
     const { container } = render(

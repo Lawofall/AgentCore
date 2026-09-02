@@ -398,7 +398,12 @@ class MkdirTool:
     def schema(self) -> ToolSchema:
         return ToolSchema(
             name="mkdir",
-            description="在工作区创建目录（缺上级一并建）。已存在则失败。",
+            description=(
+                "建工作区根下的结构目录（`src/`、`public/`、`AgentCore/文档/`；"
+                "缺上级一并建）。路径相对根；根已是当前工程（对照 `<工作区>`）。"
+                "写文件含上级，不必先 mkdir。已存在则失败。"
+                "套应用名/话题名当工程根 ≠ 本工具。"
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -424,9 +429,7 @@ class MkdirTool:
             rel_path, context, register_bare=True
         )
         if not rel_path or rel_path == ".":
-            output = "工作区根已存在，无需创建目录"
-            if rename_note:
-                output = f"{output}。{rename_note}"
+            output = rename_note or "目录即工作区根，后续文件直接写在根下即可"
             return ToolResult(
                 tool_call_id="",
                 success=True,

@@ -16,9 +16,9 @@ const BODY_INSET = "mt-1.5 space-y-2 rounded-lg bg-muted px-2.5 py-1.5";
  * Human-facing 交接简报 — same chrome for a successful `handoff` tool row
  * and the run-detail footer (degraded / harvest-without-success-step).
  * Collapsed face is a process row (chevron +「交接简报」, no muted plate).
- * Expand reveals `summary` as an in-flow article title inside a muted inset,
- * then 要点 / 假设 / 下一步. Engine-synthesized (`degraded`) briefs
- * show a notice only, already inset.
+ * Expand reveals `summary` as markdown in a muted inset,
+ * then historical 要点 / 假设 / 下一步 when those fields are present.
+ * Engine-synthesized (`degraded`) briefs show a notice only, already inset.
  */
 export function HandoffBriefCard({
   debrief,
@@ -59,11 +59,7 @@ export function HandoffBriefCard({
           </Button>
           {open && (
             <div className={BODY_INSET}>
-              {summary ? (
-                <p className="whitespace-pre-wrap break-words text-sm font-medium text-foreground">
-                  {summary}
-                </p>
-              ) : null}
+              {summary ? <Markdown content={summary} /> : null}
               {details ? <DebriefDetails debrief={debrief} /> : null}
             </div>
           )}

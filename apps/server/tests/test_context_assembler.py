@@ -166,9 +166,6 @@ def _ceo_turn(**overrides: object) -> str:
 
     sections: dict[str, object] = {
         "ceo_prompt": "CEO",
-        "working_set": "",
-        "recent_team_graph": "",
-        "prior_delivery_gaps": "",
         "prior_delegate_retry": "",
         "attachment_context": "",
         "registered_sources": "",
@@ -188,12 +185,12 @@ def test_ceo_turn_renders_the_source_ledger_after_the_volatile_tail():
     assert out == "CEO\n<attachments/>\n<已登记来源/>"
 
 
-def test_ceo_turn_working_set_sits_after_ceo_before_graph():
-    out = _ceo_turn(
-        working_set="<工作集/>",
-        recent_team_graph="<近期团队图/>",
-    )
-    assert out == "CEO\n<工作集/>\n<近期团队图/>"
+def test_ceo_turn_has_no_working_set_section():
+    out = _ceo_turn()
+    assert out == "CEO"
+    assert "工作集" not in out
+    assert "近期团队图" not in out
+    assert "上轮交付缺口" not in out
 
 
 def test_ceo_turn_prompt_omits_retired_futile_retry_section():

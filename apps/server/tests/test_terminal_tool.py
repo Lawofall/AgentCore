@@ -12,6 +12,7 @@ from agentcore.config import settings
 from agentcore.core.error_codes import ErrorCode
 from agentcore.runtime.events import EventType
 from agentcore.runtime.interaction import InteractionRegistry
+from agentcore.tools.builtin.long_running import DEFAULT_DEV_WAIT_FOR
 from agentcore.tools.builtin.run_process import (
     clamp_wait_timeout_seconds,
     process_manage,
@@ -79,6 +80,9 @@ def _channel(timeout: float = 5.0) -> tuple[WorkspaceChannel, InteractionRegistr
 def test_process_op_timeout_raises_for_wait_for():
     slack = settings.workspace_execute_timeout_slack_seconds
     assert process_op_timeout_seconds({"subcommand": "start", "command": "x"}) == 60.0
+    assert process_op_timeout_seconds(
+        {"subcommand": "start", "command": "pnpm dev"}
+    ) == 30.0 + slack
     wait_args = {
         "subcommand": "start",
         "command": "x",
@@ -144,18 +148,28 @@ async def test_start_emits_process_start_op_and_formats_result():
     }
 
 
-async def test_start_long_running_requires_wait_for():
+async def test_start_long_running_defaults_wait_for():
     channel, registry = _channel()
-    result = await process_manage(
-        {"subcommand": "start", "command": "npm run dev"},
-        _ctx(channel),
+    response = {
+        "ok": True,
+        "value": {
+            "process_id": "p1",
+            "status": "running",
+            "output": "Local: http://localhost:5173/\n",
+            "matched": True,
+        },
+    }
+    result, event = await _round_trip(
+        process_manage(
+            {"subcommand": "start", "command": "npm run dev"},
+            _ctx(channel),
+        ),
+        registry,
+        response,
     )
-    assert result.success is False
-    assert result.contract_failure is True
-    assert result.metadata.get("code") == "wait_for_required"
-    assert "wait_for" in (result.error or "")
-    from tests.client_tool_fulfill_testutil import DELIVERED_EVENTS
-    assert not DELIVERED_EVENTS  # must not open the channel
+    assert event.payload["args"]["wait_for"] == DEFAULT_DEV_WAIT_FOR
+    assert result.success
+    assert "wait_for 已命中" in result.output
 
 
 async def test_start_matched_false_forbids_ready_claim():

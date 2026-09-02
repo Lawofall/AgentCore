@@ -1,19 +1,28 @@
 // @vitest-environment jsdom
 /**
  * 多题通用澄清卡：n≥2 一题一面；编号可点切换（没写补充也能切）；非末题「下一题」不 resume。
+ * 单选首次勾选自动切下一题（末题不交卡；回看改选停在本题）。
  * choice 选项下本题人话。不是 Wizard（无「下一步」、无进度条、可回看已访）。
  */
 import { AskDecisionBody } from "@/components/chat/ask/AskDecisionBody";
 import {
+  ASK_AUTO_ADVANCE_MS,
   AskQuestionPager,
   resolveAskPrimaryAction,
+  shouldAutoAdvanceAskQuestion,
 } from "@/components/chat/ask/AskQuestionPager";
 import {
   ASK_NOTE_PLACEHOLDER,
   type AskUserContent,
   useAskAnswer,
 } from "@/components/chat/ask/AskUserFields";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react-router-dom", () => ({
@@ -91,8 +100,75 @@ describe("resolveAskPrimaryAction", () => {
   });
 });
 
+describe("shouldAutoAdvanceAskQuestion", () => {
+  const advance = {
+    type: "advance" as const,
+    index: 1,
+  };
+  const submit = { type: "submit" as const };
+
+  it("advances a first single pick when the CTA would advance", () => {
+    expect(
+      shouldAutoAdvanceAskQuestion({
+        paged: true,
+        multiple: false,
+        presentsAsText: false,
+        selecting: true,
+        hadPriorPick: false,
+        pendingAdvance: false,
+        primaryAction: advance,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not auto-submit", () => {
+    expect(
+      shouldAutoAdvanceAskQuestion({
+        paged: true,
+        multiple: false,
+        presentsAsText: false,
+        selecting: true,
+        hadPriorPick: false,
+        pendingAdvance: false,
+        primaryAction: submit,
+      }),
+    ).toBe(false);
+  });
+
+  it("stays when changing a prior pick", () => {
+    expect(
+      shouldAutoAdvanceAskQuestion({
+        paged: true,
+        multiple: false,
+        presentsAsText: false,
+        selecting: true,
+        hadPriorPick: true,
+        pendingAdvance: false,
+        primaryAction: advance,
+      }),
+    ).toBe(false);
+  });
+
+  it("still flips when a pending advance is in flight", () => {
+    expect(
+      shouldAutoAdvanceAskQuestion({
+        paged: true,
+        multiple: false,
+        presentsAsText: false,
+        selecting: true,
+        hadPriorPick: true,
+        pendingAdvance: true,
+        primaryAction: advance,
+      }),
+    ).toBe(true);
+  });
+});
+
 describe("AskDecisionBody question pager", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
 
   it("does not paint a pager for a single question", () => {
     render(
@@ -451,5 +527,144 @@ describe("AskDecisionBody question pager", () => {
     expect(primaryButton(/^提交$/).disabled).toBe(true);
     fireEvent.click(primaryButton(/^提交$/));
     expect(onContinue).not.toHaveBeenCalled();
+  });
+
+  it("auto-advances after the first single-choice pick, without resume", () => {
+    vi.useFakeTimers();
+    const onContinue = vi.fn();
+    render(<Harness onContinue={onContinue} />);
+    fireEvent.click(screen.getByText("方案 B"));
+    expect(screen.getByText("开工方式选哪种？")).toBeTruthy();
+    act(() => {
+      vi.advanceTimersByTime(ASK_AUTO_ADVANCE_MS);
+    });
+    expect(screen.getByText("前端技术栈用哪个？")).toBeTruthy();
+    expect(onContinue).not.toHaveBeenCalled();
+    expect(primaryButton(/^提交$/).disabled).toBe(true);
+    expect(screen.getByText("React").closest("button")).toBe(
+      document.activeElement,
+    );
+  });
+
+  it("does not auto-submit on the last question", () => {
+    vi.useFakeTimers();
+    const onContinue = vi.fn();
+    render(<Harness onContinue={onContinue} />);
+    fireEvent.click(screen.getByText("方案 B"));
+    act(() => {
+      vi.advanceTimersByTime(ASK_AUTO_ADVANCE_MS);
+    });
+    fireEvent.click(screen.getByText("Vue"));
+    act(() => {
+      vi.advanceTimersByTime(ASK_AUTO_ADVANCE_MS);
+    });
+    expect(screen.getByText("前端技术栈用哪个？")).toBeTruthy();
+    expect(onContinue).not.toHaveBeenCalled();
+    expect(primaryButton(/^提交$/).disabled).toBe(false);
+  });
+
+  it("stays on a question when changing a prior pick", () => {
+    vi.useFakeTimers();
+    render(<Harness />);
+    fireEvent.click(screen.getByText("方案 B"));
+    act(() => {
+      vi.advanceTimersByTime(ASK_AUTO_ADVANCE_MS);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "第 1 题，共 2 题" }));
+    fireEvent.click(screen.getByText("方案 A（推荐）"));
+    act(() => {
+      vi.advanceTimersByTime(ASK_AUTO_ADVANCE_MS);
+    });
+    expect(screen.getByText("开工方式选哪种？")).toBeTruthy();
+  });
+
+  it("does not auto-advance a multiple-choice question", () => {
+    vi.useFakeTimers();
+    render(
+      <Harness
+        content={{
+          question: "总标题不要画",
+          assumptions: [],
+          questions: [
+            {
+              id: "q0",
+              prompt: "可多选的题",
+              kind: "choice",
+              options: [{ label: "甲" }, { label: "乙" }],
+              multiple: true,
+              default: "",
+            },
+            {
+              id: "q1",
+              prompt: "第二题",
+              kind: "choice",
+              options: [{ label: "丙" }],
+              multiple: false,
+              default: "",
+            },
+          ],
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByText("甲"));
+    act(() => {
+      vi.advanceTimersByTime(ASK_AUTO_ADVANCE_MS);
+    });
+    expect(screen.getByText("可多选的题")).toBeTruthy();
+    expect(screen.queryByText("第二题")).toBeNull();
+  });
+
+  it("does not auto-advance when only writing a note", () => {
+    vi.useFakeTimers();
+    render(<Harness />);
+    fireEvent.change(screen.getByPlaceholderText(ASK_NOTE_PLACEHOLDER), {
+      target: { value: "选项都不对" },
+    });
+    act(() => {
+      vi.advanceTimersByTime(ASK_AUTO_ADVANCE_MS);
+    });
+    expect(screen.getByText("开工方式选哪种？")).toBeTruthy();
+  });
+
+  it("auto-jumps from the last question to the first unvisited", () => {
+    vi.useFakeTimers();
+    const three: AskUserContent = {
+      question: "总标题不要画",
+      assumptions: [],
+      questions: [
+        {
+          id: "q0",
+          prompt: "第一题",
+          kind: "choice",
+          options: [{ label: "A1" }],
+          multiple: false,
+          default: "",
+        },
+        {
+          id: "q1",
+          prompt: "第二题",
+          kind: "choice",
+          options: [{ label: "B1" }],
+          multiple: false,
+          default: "",
+        },
+        {
+          id: "q2",
+          prompt: "第三题",
+          kind: "choice",
+          options: [{ label: "C1" }],
+          multiple: false,
+          default: "",
+        },
+      ],
+    };
+    render(<Harness content={three} />);
+    fireEvent.click(primaryButton("第 3 题，共 3 题"));
+    fireEvent.click(screen.getByText("C1"));
+    act(() => {
+      vi.advanceTimersByTime(ASK_AUTO_ADVANCE_MS);
+    });
+    expect(screen.getByText("第二题")).toBeTruthy();
+    expect(screen.queryByText("第三题")).toBeNull();
   });
 });

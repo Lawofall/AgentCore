@@ -983,7 +983,7 @@ def _remap_path_or_verify_failure(message: str) -> str | None:
     """
     raw = message or ""
     if "跑项目级慢验证" in raw:
-        return "project_verify_redirect"
+        return "project_verify_redirect"  # journal-only; unified run no longer emits
     if "打开源码再正则扫描" in raw:
         return "source_grep_redirect"
     if "把工作区文件 dump 到 stdout" in raw:

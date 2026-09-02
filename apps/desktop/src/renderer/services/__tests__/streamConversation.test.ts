@@ -275,6 +275,34 @@ describe("streamConversation (refused turn)", () => {
         "X-Client-Version": expect.any(String),
       }),
     );
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).not.toHaveProperty(
+      "X-AgentCore-Stream-Path-Reason",
+    );
+  });
+
+  it("sends X-AgentCore-Stream-Path-Reason on a cloud-path turn", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response("", {
+            status: 429,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      ),
+    );
+    await streamConversation({
+      conversationId: "c1",
+      content: "hi",
+      delivery: "steer",
+      streamPathReason: "probe_unhealthy",
+    }).catch(() => undefined);
+    expect(vi.mocked(fetch).mock.calls[0]?.[1]?.headers).toEqual(
+      expect.objectContaining({
+        "X-AgentCore-Stream-Path-Reason": "probe_unhealthy",
+      }),
+    );
   });
 
   it("sets turnCommit.committed when this send's pump sees turn_saved", async () => {

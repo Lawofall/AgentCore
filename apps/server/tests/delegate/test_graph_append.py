@@ -7,13 +7,10 @@ from typing import Any
 import pytest
 
 from agentcore.runtime.delegate.graph_append import (
-    build_recent_graph_context,
     clear_graph_host_registry,
-    format_recent_graph_worker_facts,
     parse_host_captain_run_id,
     peek_graph_host,
     register_graph_host,
-    render_recent_graph_context,
 )
 from agentcore.runtime.events import EventSink, graph_append, run_plan
 from agentcore.runtime.runs.plan import RunPlan
@@ -224,113 +221,6 @@ async def test_delegate_same_turn_memory_append_keeps_eid(monkeypatch):
     assert not any(
         getattr(e.type, "value", e.type) == "graph_append" for e in emitted
     )
-
-
-def test_format_recent_graph_worker_facts_includes_status():
-    """Accident regression: next-turn CEO must see prior worker terminal states."""
-    plan = RunPlan(
-        nodes=[
-            RunSpec(run_id="w1", role="调研员", task="搜集竞品资料"),
-            RunSpec(run_id="w2", role="撰写员", task="写大纲"),
-        ]
-    )
-    completed = {
-        "w1": RunState(phase=RunPhase.CANCELLED),
-        "w2": RunState(phase=RunPhase.COMPLETED, content="ok"),
-    }
-    facts = format_recent_graph_worker_facts(plan, completed)
-    assert "workers=2：" in facts
-    assert "run_id=w1" in facts
-    assert "role=调研员; status=cancelled; task=搜集竞品资料" in facts
-    assert "role=撰写员; status=completed; task=写大纲" in facts
-
-
-def test_format_recent_graph_worker_facts_missing_seed_is_running():
-    plan = RunPlan(nodes=[RunSpec(run_id="w1", role="执行员", task="还在跑")])
-    facts = format_recent_graph_worker_facts(plan, {})
-    assert "role=执行员; status=running; task=还在跑" in facts
-
-
-def test_render_recent_graph_context_keeps_append_channel():
-    block = render_recent_graph_context(
-        execution_id="exec-1",
-        worker_facts="workers=1：\n- run_id=w1; role=A; status=cancelled; task=x",
-    )
-    assert "<近期团队图>" in block
-    assert "exec-1" not in block
-    assert "run_id=w1" in block
-    assert "status=cancelled" in block
-    assert "本对话最近一张协作图" in block
-    assert "append_to_execution_id" not in block
-    assert "continue_from" not in block
-    assert "replaces_run_id" not in block
-    assert "prev_execution_id" not in block
-
-
-@pytest.mark.asyncio
-async def test_build_recent_graph_context_mentions_prev(monkeypatch):
-    async def fake_latest(*, conversation_id: str, exclude_message_id: str | None = None):
-        return "exec-recent"
-
-    async def fake_host(**_k):
-        return None
-
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_latest_appendable_execution",
-        fake_latest,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_host_message_id",
-        fake_host,
-    )
-    note = await build_recent_graph_context(conversation_id="c1")
-    assert "exec-recent" not in note
-    assert "本对话最近一张协作图" in note
-    assert "append_to_execution_id" not in note
-    assert "continue_from" not in note
-    assert "prev_execution_id" not in note
-
-
-@pytest.mark.asyncio
-async def test_build_recent_graph_context_includes_worker_status_facts(monkeypatch):
-    """New-turn volatile tail must carry cancelled/completed worker facts from host journal."""
-
-    async def fake_latest(*, conversation_id: str, exclude_message_id: str | None = None):
-        return "exec-cancelled"
-
-    async def fake_host(*, conversation_id: str, execution_id: str):
-        assert execution_id == "exec-cancelled"
-        return "host-msg-1"
-
-    async def fake_plan_completed(host_message_id: str):
-        assert host_message_id == "host-msg-1"
-        plan = RunPlan(
-            nodes=[
-                RunSpec(run_id="del_1", role="研究员", task="查资料"),
-            ]
-        )
-        completed = {"del_1": RunState(phase=RunPhase.CANCELLED)}
-        return plan, completed
-
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_latest_appendable_execution",
-        fake_latest,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_host_message_id",
-        fake_host,
-    )
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.load_host_plan_and_completed",
-        fake_plan_completed,
-    )
-    note = await build_recent_graph_context(conversation_id="c1")
-    assert "exec-cancelled" not in note
-    assert "workers=1：" in note
-    assert "run_id=del_1" in note
-    assert "role=研究员; status=cancelled; task=查资料" in note
-    assert "append_to_execution_id" not in note
-    assert "continue_from" not in note
 
 
 @pytest.mark.asyncio

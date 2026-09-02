@@ -3,7 +3,7 @@
 Orthogonal to Workspace / Browser. Transport is ``DesktopClientChannel.request_host``
 (ClientTool SSE); HostOp enum values are unchanged. Model surface is one tool with
 an ``action`` policy table (schema ``NEVER``, runtime elevation — same posture as
-``git`` / ``terminal``). ``host_ping`` is transport-only and is not registered.
+``git`` / ``run``). ``host_ping`` is transport-only and is not registered.
 """
 
 from __future__ import annotations
@@ -17,10 +17,7 @@ from typing import Any
 from agentcore.core.logging import get_logger
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.desktop.channel import HostOp, HostOpError
-from agentcore.tools.builtin.long_running import (
-    DEFAULT_DEV_WAIT_FOR,
-    long_running_command_match,
-)
+from agentcore.tools.builtin.long_running import long_running_command_match
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
     AUDIENCE_BOTH,
@@ -618,9 +615,9 @@ async def _execute_shell(
         return _fail(
             f"禁止用 host(action=shell) 启动长驻进程（检测到：{matched_long}）。"
             "host(action=shell) 有超时上限、不托管后台进程。"
-            "请改用 terminal：subcommand=start，填入同一命令，并设 wait_for"
-            f"（如 {DEFAULT_DEV_WAIT_FOR}）等到就绪信号；"
-            "用 list/read 确认进程仍在跑。"
+            "请改用 run：同一命令设 background=true。"
+            "省略 wait_for 时用默认就绪信号；命中前不得宣称已启动。"
+            "用 action=read|list 确认进程仍在跑。"
         )
     timeout_seconds = clamp_shell_timeout(arguments.get("timeout_seconds"))
     channel = context.desktop_channel

@@ -77,12 +77,16 @@ from agentcore.tools.protocol import ToolSchema
 # 当次实测 2537。cap 2540（抬顶=极性与停手，非回潮）。
 # 2026-09-01 schema 同层去重（手册出按钮）：browser 1329、host 2567、run 1004、
 # delegate 2409、ask_user 桌面 2235 / web 1686；git 政策表仍只在 description（2430）。
+# 2026-09-01 已确认约束填法收进 task 参数、deliverable 不再复述。实测 delegate 2380。
+# 2026-09-02 form=files 不再钉工作稿；裸文件名仍 join。实测 delegate 2294。
+# 2026-09-02 run：when-to-use 补进 description（验证直接跑 / dev 后台 / action 管已有进程）；
+# 长驻省略 wait_for 用默认就绪信号。实测 1026。cap 1010→1030（抬顶=when-to-use，非回潮）。
 _CAPS: dict[str, int] = {
     "browser": 1330,
     "git": 2430,
     "host": 2570,
-    "run": 1010,
-    "delegate": 2410,
+    "run": 1030,
+    "delegate": 2300,
     "debate": 1380,
     "ask_user": 2240,
     "list_folders": 240,
@@ -96,17 +100,34 @@ _ASK_USER_WEB_CAP = 1690
 
 # Worker-only：escalate / handoff / 写盘三件套曾把身份段或 consult HOW 再抄一遍到按钮上。
 # 2026-08-29 escalate blocking：已拒凭据→false 短触发（身份段不进按钮）。当次实测 1698。cap 1690→1700。
-# 2026-09-01 handoff 撤 motion_card 字段/广告。实测 756。
+# 2026-09-02 便条改收尾轮正文、参数表清空。实测 192。
+# 2026-09-02 handoff WHEN 收成一句（有下游必须 / 无下游默认不交）。
+# 2026-09-02 便条形状（结论 + 2–4 要点）从空 schema 字段 HOW 挪到 description。
+# 实测 253。cap 200→260（抬顶=字段 HOW 无落点，不是别处再抄）。
+# 2026-09-02 形状改为「现在什么已成立 / 便条 ≠ 文件说明」，去掉 2–4 条配额。实测 247。cap 260→250。
 # 2026-09-01 写盘三件套 / escalate description 去重。实测 write 498 / append 413 /
 # str_replace 632 / escalate 1508。
 # 2026-09-01 常驻文件面：回收站/扁平化手册出按钮，恢复路径留回执。实测
 # delete 353 / read 766 / grep 938 / move 328 / copy 375 / glob 684 /
 # list 404 / mkdir 223。
+# 2026-09-01 mkdir：when-to-use 从 CEO-only skill 下沉到工具 description
+#（结构目录 vs 套应用名当工程根）。实测 321。cap 230→330（抬顶=漏层补 when-to-use）。
 # 2026-09-01 code_search / code_diagnostics：索引与 unavailable 手册出按钮。
 # 实测 search 626 / diagnostics 416。
+# 2026-09-01 协调套件：解析失败候选 / 空 wait 审批手册出按钮。实测
+# wait 271 / update_synthesis 286 / cancel_worker 337 / resolve_escalation 480 /
+# queue_user_message 339。
+# 2026-09-02 wait：开口闭集补插话，非回潮。实测 305。cap 280→310。
+_COORD_CAPS: dict[str, int] = {
+    "wait": 310,
+    "update_synthesis": 290,
+    "cancel_worker": 340,
+    "resolve_escalation": 480,
+    "queue_user_message": 340,
+}
 _WORKER_CAPS: dict[str, int] = {
     "escalate": 1510,
-    "handoff": 760,
+    "handoff": 250,
     "file_write": 500,
     "file_append": 420,
     "str_replace": 640,
@@ -119,9 +140,15 @@ _FILE_CAPS: dict[str, int] = {
     "file_copy": 380,
     "glob": 690,
     "file_list": 410,
-    "mkdir": 230,
+    "mkdir": 330,
     "code_search": 630,
     "code_diagnostics": 420,
+}
+# 2026-09-02 对话稿默认 + query 跳转 + 消息游标（新语义）。
+# 实测 search_conversations 884 / read_conversation 828。
+_LOG_CAPS: dict[str, int] = {
+    "search_conversations": 890,
+    "read_conversation": 830,
 }
 
 
@@ -188,6 +215,29 @@ def _measured_worker() -> dict[str, int]:
         "file_write": measure_openai_tool_chars(FileWriteTool().schema),
         "file_append": measure_openai_tool_chars(FileAppendTool().schema),
         "str_replace": measure_openai_tool_chars(StrReplaceTool().schema),
+    }
+
+
+def _measured_coord() -> dict[str, int]:
+    from agentcore.runtime.coordination.tools import (
+        CancelWorkerTool,
+        QueueUserMessageTool,
+        ResolveEscalationTool,
+        UpdateSynthesisTool,
+        WaitTool,
+    )
+
+    sink = EventSink()
+    return {
+        "wait": measure_openai_tool_chars(WaitTool().schema),
+        "update_synthesis": measure_openai_tool_chars(
+            UpdateSynthesisTool(sink=sink).schema
+        ),
+        "cancel_worker": measure_openai_tool_chars(CancelWorkerTool().schema),
+        "resolve_escalation": measure_openai_tool_chars(ResolveEscalationTool().schema),
+        "queue_user_message": measure_openai_tool_chars(
+            QueueUserMessageTool(sink=sink).schema
+        ),
     }
 
 
@@ -334,7 +384,7 @@ def test_on_demand_faces_point_how_to_consult():
     )
     assert "uvicorn --reload" not in RunTool().schema.description
     wait_desc = RunTool().schema.parameters["properties"]["wait_for"]["description"]
-    assert "background" in wait_desc
+    assert "默认" in wait_desc
     # description 不复述 action 表（取值语义留在 action 参数）。
     assert "navigate/click/type" not in BrowserTool().schema.description
     assert "status/os_log/shell：CEO" not in HostTool().schema.description
@@ -353,6 +403,19 @@ def test_worker_tool_schema_chars_within_cap():
     assert not over, f"worker 工具 schema 变胖（实测, 上限）：{over}"
 
 
+def test_coordination_tool_schema_chars_within_cap():
+    sizes = _measured_coord()
+    assert set(sizes) == set(_COORD_CAPS), (
+        f"协调棘轮覆盖面漂了：{sorted(set(sizes) ^ set(_COORD_CAPS))}"
+    )
+    over = {
+        name: (chars, _COORD_CAPS[name])
+        for name, chars in sizes.items()
+        if chars > _COORD_CAPS[name]
+    }
+    assert not over, f"协调工具 schema 变胖（实测, 上限）：{over}"
+
+
 def test_resident_file_tool_schema_chars_within_cap():
     sizes = _measured_file()
     assert set(sizes) == set(_FILE_CAPS), (
@@ -364,3 +427,28 @@ def test_resident_file_tool_schema_chars_within_cap():
         if chars > _FILE_CAPS[name]
     }
     assert not over, f"常驻文件工具 schema 变胖（实测, 上限）：{over}"
+
+
+def _measured_log() -> dict[str, int]:
+    from agentcore.tools.builtin.read_conversation import ReadConversationTool
+    from agentcore.tools.builtin.search_conversations import SearchConversationsTool
+
+    return {
+        "search_conversations": measure_openai_tool_chars(
+            SearchConversationsTool().schema
+        ),
+        "read_conversation": measure_openai_tool_chars(ReadConversationTool().schema),
+    }
+
+
+def test_conversation_log_tool_schema_chars_within_cap():
+    sizes = _measured_log()
+    assert set(sizes) == set(_LOG_CAPS), (
+        f"历史对话棘轮覆盖面漂了：{sorted(set(sizes) ^ set(_LOG_CAPS))}"
+    )
+    over = {
+        name: (chars, _LOG_CAPS[name])
+        for name, chars in sizes.items()
+        if chars > _LOG_CAPS[name]
+    }
+    assert not over, f"历史对话工具 schema 变胖（实测, 上限）：{over}"

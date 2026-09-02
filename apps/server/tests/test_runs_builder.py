@@ -9,7 +9,6 @@ reject-on-error / reject-when-none-valid contract.
 import agentcore.runtime.runs.builder as builder_mod
 from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.types import RunKind
-from agentcore.workspace.stage_dirs import DRAFTS_DIR
 from tests.conftest import LogSpy
 
 
@@ -557,12 +556,12 @@ def test_deliverable_parsed_onto_policy():
     assert not hasattr(c, "must_contain_soft")
 
 
-def test_no_deliverable_defaults_to_files_with_drafts():
+def test_no_deliverable_defaults_to_files_without_drafts_dir():
     plan, _ = build_run_plan([{"role": "A", "task": "a"}], id_prefix="t")
     d = plan.nodes[0].deliverable
     assert d is not None
     assert d.form == "files"
-    assert d.artifact_dir == DRAFTS_DIR
+    assert d.artifact_dir == ""
 
 
 def test_empty_deliverable_object_defaults_to_files():
@@ -572,7 +571,7 @@ def test_empty_deliverable_object_defaults_to_files():
     d = plan.nodes[0].deliverable
     assert d is not None
     assert d.form == "files"
-    assert d.artifact_dir == DRAFTS_DIR
+    assert d.artifact_dir == ""
 
 
 def test_deliverable_block_with_internal_knob_still_files():

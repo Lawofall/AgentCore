@@ -332,6 +332,10 @@ export const collaborationChapter: ManualChapterContent = {
               desc: "太慢或方向不对，点停止结束当前回合。",
             },
             {
+              title: "团队还在跑时说话",
+              desc: "直接发送马上给主 Agent。要等团队收工后再说，点「排队」。只改某一人仍走详情「立即改此人」。",
+            },
+            {
               title: "纠偏换方向",
               desc: "对某个队员点「立即改此人」：取消当前执行、带已有进度换方向。辩论回合不可用——想改辩题请重开一场。",
             },

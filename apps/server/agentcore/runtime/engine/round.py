@@ -112,9 +112,9 @@ def build_request_window(
             round=round_idx,
         )
         window = exec_cleared
-    # Handoff 缓存崩塌：落盘后的 file_write 等大 body 仍在 assistant tool_calls.args，
-    # 更早的轮（含 handoff）整段 cache_miss。近端 keep_recent 轮留全文供下一刀衔接；
-    # 更早的投影侧压成 path。canonical messages 不动。
+    # Handoff 缓存崩塌：落盘后的 file_write 等大 body 仍在 assistant tool_calls.args。
+    # 近端 keep_recent 条 assistant 消息留全文供下一刀衔接；更早的（含随后的
+    # run / 交接）投影侧压成 path。canonical messages 不动。
     write_cleared = project_cleared_write_args(
         window,
         min_chars=500,

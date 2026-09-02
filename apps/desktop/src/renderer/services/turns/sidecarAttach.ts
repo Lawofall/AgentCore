@@ -113,7 +113,7 @@ export async function attachSidecarTurn(
   // Overlay `isGenerating`（冷 GET running / hydrate chrome）不是活泵——禁止当
   // startTurn 仍活跳过。真占用由外层 `hasLocalConversationStream` 挡住；插队/
   // 停止认 attach 成功后的 `getActiveSidecarTarget`。
-  // 本端在折这个会话 → 对话级订阅让位（桌面执行的云回合两边都有事件流）。
+  // 本端在折这个会话 → 对话级订阅静音（桌面执行的云回合两边都有事件流）。
   const releaseLocalStream = beginLocalConversationStream(conversationId);
   const p = attachSidecarTurnExclusive(conversationId, opts).finally(() => {
     releaseLocalStream();

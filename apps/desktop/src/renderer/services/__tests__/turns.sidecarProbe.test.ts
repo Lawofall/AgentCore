@@ -42,7 +42,7 @@ vi.mock("@/services/streamConversationViaSidecar", () => ({
   streamConversationViaSidecar: vi.fn(),
 }));
 vi.mock("@/services/messages", () => ({ loadLatestWindow: vi.fn() }));
-// notifyError 由 stream 错误路径间接引入；过桥无 toast（ComposerCloudBridgeHint）。
+// notifyError 由 stream 错误路径间接引入；过桥无 toast（CloudBridgeHint 助手泡脚注）。
 vi.mock("@/lib/toast", () => ({ notifyInfo: vi.fn(), notifyError: vi.fn() }));
 
 import { hasLocalEngine } from "@/lib/capabilities";
@@ -184,6 +184,9 @@ describe("sendTurn — 探活路由 / 降级收敛（探活增强）", () => {
         reason: "probe_unhealthy",
       }),
     );
+    expect(streamConversationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ streamPathReason: "probe_unhealthy" }),
+    );
   });
 
   it("探活通过但回合启动期失败(recoverable) → 标坏 + 降级走云", async () => {
@@ -215,6 +218,9 @@ describe("sendTurn — 探活路由 / 降级收敛（探活增强）", () => {
         via: "cloud",
         reason: "sidecar_fallback",
       }),
+    );
+    expect(streamConversationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ streamPathReason: "sidecar_fallback" }),
     );
   });
 
@@ -500,6 +506,7 @@ describe("runRegenerate — 探活路由 / 降级收敛（与 sendTurn 同形）
       expect.objectContaining({
         conversationId: "c1",
         messageId: "u1",
+        streamPathReason: "probe_unhealthy",
       }),
     );
     expect(useConversationStore.getState().byId.c1?.executionVia).toBe(

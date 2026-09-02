@@ -5,8 +5,10 @@
 
 **只陈述本回合选动作要用的短事实**（位置 / 身份 / 根 / 能力格 / 出站网络 /
 通道 / git / 工作台 / 非空挂载 / 非空约定文档出口 / 产物格式）。
-空状态不写。产物出口 UI、约定文档边界、区外工具名、浏览器宿主 HOW、git 探测范围
+空状态不写；空桌根行可加一句操作事实（可见顶层空、入口写在根上），不写禁令。
+产物出口 UI、约定文档边界、区外工具名、浏览器宿主 HOW、git 探测范围
 不在这里（``product_help`` / ``team_delivery_env`` / 工具 description / consult）。
+空桌 when-to-use 在 ``mkdir`` description。
 往本文件加禁令前，先确认它不在 ``resolve/prompt/base.py`` / 工具 schema / 对应 skill 里。
 分层与理由 → docs/03-AI核心/上下文工程.md「提示词设计原则」。
 """
@@ -282,6 +284,7 @@ def build_workspace_context(
     desk_folder_id: str | None = None,
     desk_folder_label: str | None = None,
     desk_is_birth: bool = True,
+    desk_visibly_empty: bool | None = None,
 ) -> str:
     """Render the ``<工作区>`` block for this turn's backend + client.
 
@@ -326,6 +329,11 @@ def build_workspace_context(
     sitting on (conversation birth desk, or a worker's ``target_folder_id``).
     Facts only — no tool HOW. ``desk_is_birth`` distinguishes the conversation's
     birth desk from a per-call target desk.
+
+    ``desk_visibly_empty`` uses the same predicate as empty-desk shell-strip
+    (``desk_is_visibly_empty``). ``True`` adds one operational fact on the root
+    line; ``False`` / ``None`` keep the short root sentence. Callers that already
+    listed the desk should pass the bool; this builder stays sync.
     """
     if backend is None:
         return ""
@@ -498,7 +506,7 @@ def build_workspace_context(
     outlet_lines = [
         line
         for title, rel in (
-            ("约定文档出口·默认落点（无专属出口的产物）：", DRAFTS_DIR),
+            ("约定文档出口·过程稿：", DRAFTS_DIR),
             ("约定文档出口·调研/讨论：", RESEARCH_DIR),
             ("约定文档出口·辩论副产物：", DEBATE_DIR),
             ("约定文档出口·审查：", REVIEWS_DIR),
@@ -520,8 +528,13 @@ def build_workspace_context(
         root_label=root_label,
         desk_is_birth=desk_is_birth,
     )
-    # 事实句，不是禁令。空桌勿套工程壳的 HOW 归 team_delivery_env。
+    # 事实句，不是禁令。空桌 when-to-use → mkdir description。
     root_scope_line = "工作区根：本文件夹根即工作区根。"
+    if desk_visibly_empty:
+        root_scope_line = (
+            "工作区根：本文件夹根即工作区根。"
+            "可见顶层空；工程入口写在根上（如 `package.json`、`src/…`）。"
+        )
 
     body_lines = [
         location_line,

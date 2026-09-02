@@ -125,6 +125,9 @@ class ConversationSummary(BaseModel):
     # True iff ORM has both compaction_summary and compacted_through.
     # Flag only — never expose rolling-summary text to clients.
     context_compacted: bool = False
+    # Last folded message ``created_at``. Present only with ``context_compacted``.
+    # Desktop timeline divider sits after this instant. Not the summary body.
+    compacted_through: datetime | None = None
     # 压缩没跟上，早期对话已经掉出窗口（见 ContextGapModel）。null = 完好或本端点未计算。
     context_gap: ContextGapModel | None = None
 
@@ -148,7 +151,7 @@ def conversation_summary_from_orm(
     last_message_preview: str | None = None,
     first_user_message: str | None = None,
 ) -> ConversationSummary:
-    """Assemble ``ConversationSummary`` with ``context_compacted`` (no summary body).
+    """Assemble ``ConversationSummary`` with ``context_compacted`` + watermark (no summary body).
 
     ``unfolded_messages`` (messages the rolling summary does not cover yet) turns on
     the ``context_gap`` half: omit it on endpoints that do not count messages and the
@@ -162,12 +165,12 @@ def conversation_summary_from_orm(
     truncated first user line (``fallback_title``). It never writes the column.
     """
     summary = ConversationSummary.model_validate(conv)
-    compacted = bool(
-        getattr(conv, "compaction_summary", None)
-        and getattr(conv, "compacted_through", None)
-    )
+    watermark = getattr(conv, "compacted_through", None)
+    compacted = bool(getattr(conv, "compaction_summary", None) and watermark)
     updates: dict[str, object] = {
         "context_compacted": compacted,
+        # Orphan watermark without a summary must not leak a fold boundary.
+        "compacted_through": watermark if compacted else None,
         "last_message_preview": last_message_preview,
     }
     db_title = (summary.title or "").strip()

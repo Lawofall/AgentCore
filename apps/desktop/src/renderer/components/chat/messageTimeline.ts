@@ -13,7 +13,8 @@ export type TimelineItem =
       at: number;
       key: string;
       change: PermissionChange;
-    };
+    }
+  | { kind: "compaction"; at: number; key: string };
 
 // Same-timestamp ordering. message/task form the base timeline (a turn's message first,
 // then any background task it spawned). memory + takeover + preset-change are NOT ordered
@@ -25,6 +26,7 @@ const KIND_ORDER: Record<TimelineItem["kind"], number> = {
   memory: 2,
   takeover: 3,
   "preset-change": 4,
+  compaction: 5,
 };
 
 /**
@@ -56,16 +58,20 @@ export function mergeTimeline(
   memoryUpdates: MemoryUpdate[] = [],
   takeovers: BrowserTakeover[] = [],
   presetChanges: PermissionChange[] = [],
+  compactedThrough?: string | null,
 ): TimelineItem[] {
   const anchoredCount =
     memoryUpdates.length + takeovers.length + presetChanges.length;
   if (tasks.length === 0 && anchoredCount === 0) {
-    return messages.map((msg) => ({
-      kind: "message",
-      at: Date.parse(msg.createdAt) || 0,
-      key: `m:${msg.id}`,
-      msg,
-    }));
+    return insertCompactionDivider(
+      messages.map((msg) => ({
+        kind: "message" as const,
+        at: Date.parse(msg.createdAt) || 0,
+        key: `m:${msg.id}`,
+        msg,
+      })),
+      compactedThrough,
+    );
   }
 
   const base: TimelineItem[] = [
@@ -88,7 +94,9 @@ export function mergeTimeline(
   ];
   base.sort((a, b) => a.at - b.at || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
 
-  if (anchoredCount === 0) return base;
+  if (anchoredCount === 0) {
+    return insertCompactionDivider(base, compactedThrough);
+  }
 
   // Anchored cards (memory 记忆卡 + takeover 接管标记卡 + preset-change 权限模式切换系统行),
   // oldest-first, each dropped just before the NEXT user message that starts after it (= the
@@ -137,5 +145,33 @@ export function mergeTimeline(
   }
   while (ai < anchored.length) result.push(anchored[ai++]);
 
-  return result;
+  return insertCompactionDivider(result, compactedThrough);
+}
+
+/**
+ * Fold boundary sits after the last loaded message whose ``created_at`` is still
+ * at/before ``compacted_through`` (last folded row). Loaded window entirely after
+ * the watermark → no divider (boundary is in not-yet-loaded older turns).
+ */
+function insertCompactionDivider(
+  items: TimelineItem[],
+  compactedThrough?: string | null,
+): TimelineItem[] {
+  if (!compactedThrough) return items;
+  const at = Date.parse(compactedThrough);
+  if (!Number.isFinite(at)) return items;
+
+  let insertAfter = -1;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.kind === "message" && item.at <= at) insertAfter = i;
+  }
+  if (insertAfter < 0) return items;
+
+  const divider: TimelineItem = { kind: "compaction", at, key: "compaction" };
+  return [
+    ...items.slice(0, insertAfter + 1),
+    divider,
+    ...items.slice(insertAfter + 1),
+  ];
 }

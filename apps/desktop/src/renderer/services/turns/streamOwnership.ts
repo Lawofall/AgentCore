@@ -86,11 +86,11 @@ export function waitForPrimaryStreamIdle(
  *
  * primary 栈排的是同端两条连接的 fold **次序**；这里排的是「对话级长订阅
  * （``GET …/stream?follow=true``）不得与本端自己开的回合连接同折一个回合」——
- * 那会把同一回合折两次。
+ * 那会把同一回合折两次。跟播侧静音不断连，见 ``conversationFollow``。
  *
  * 不能复用 primary 栈：midFlight 的 primary claim 必须等 drain 才拿（提前拿会自锁
  * 自己的 ``waitForPrimaryStreamIdle``），可它的 POST 从发出那一刻起，服务端就已经
- * 排出了新回合——对订阅方而言它从那时起就该让位。
+ * 排出了新回合——对订阅方而言它从那时起就该静音。
  */
 type LocalStreamSlot = {
   /** 当前打开的本端连接数（回合流嵌套 / midFlight 并发）。 */
@@ -124,7 +124,7 @@ function dropLocalSlotIfEmpty(conversationId: string): void {
 /**
  * 声明本端为该会话开了自有 SSE（POST 回合流 / 回合级 attach / midFlight 排队连接）。
  *
- * 同步通知订阅者（对话级订阅据此立刻让位），故必须在**发出请求之前**调用；返回的释放
+ * 同步通知订阅者（对话级订阅据此立刻**静音**，不断 SSE），故必须在**发出请求之前**调用；返回的释放
  * 函数幂等，调用方在 ``finally`` 里调一次即可。
  */
 export function beginLocalConversationStream(

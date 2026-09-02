@@ -427,7 +427,7 @@ class ToolContext:
     # ``None`` in tests / paths with no vision billing.
     cost_sink: list[RunCost] | None = None
     # 项目共享工作区 (folder 绑定): True ⇒ CEO overview / worker manifest 用稀疏清单
-    # (附件 + 少量最近触达 + 「另有 N 个」)；False ⇒ 裸聊 scratch，非附件文件照常列入。
+    # (附件 + 「另有 N 个」)；False ⇒ 裸聊 scratch，非附件文件照常列入。
     # Set on the pipeline base context from ``folder_id``; inherited by workers via
     # ``dataclasses.replace``. Defaults False for tests / evals / 裸聊.
     shared_workspace: bool = False

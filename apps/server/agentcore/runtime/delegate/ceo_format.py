@@ -17,6 +17,34 @@ DelegateTool = Any
 logger = get_logger(__name__)
 
 
+def _inline_path_manifest(
+    files: list[str],
+    rejected: list[tuple[str, str]],
+    *,
+    cap: int,
+) -> str:
+    """CEO body suffix: accepted / rejected paths, remainder counted not listed."""
+    chunks: list[str] = []
+    if files:
+        listed = files[:cap]
+        produced = "、".join(f"`{p}`" for p in listed)
+        extra = len(files) - len(listed)
+        if extra:
+            produced += f"（另有 {extra} 个）"
+        chunks.append(f"> 文件产出（路径已核）：{produced}")
+    if rejected:
+        shown = rejected[:cap]
+        bits = [
+            f"`{p}`" + (f"（{detail}）" if detail else "") for p, detail in shown
+        ]
+        line = f"> 路径未核：{'、'.join(bits)}"
+        extra = len(rejected) - len(shown)
+        if extra:
+            line += f"（另有 {extra} 个）"
+        chunks.append(line)
+    return ("\n\n" + "\n\n".join(chunks)) if chunks else ""
+
+
 def escalation_block(tool: DelegateTool, plan: RunPlan, results: dict) -> str:
     """The CEO-facing「队员升级」section, or "" when no worker escalated."""
     pending: list[tuple[bool, str]] = []
@@ -71,6 +99,7 @@ def worker_products(tool: DelegateTool, plan: RunPlan, results: dict) -> list[di
     """Each worker's product folded back to the CEO — SINGLE SOURCE for synthesis + run_context."""
     from agentcore.runtime.runs.constants import (
         CEO_SYNTHESIS_BUDGET,
+        CEO_SYNTHESIS_FILE_LIST_MAX,
         CEO_SYNTHESIS_POINTER_CHARS,
     )
     from agentcore.runtime.runs.contract import node_has_dependents
@@ -166,7 +195,6 @@ def worker_products(tool: DelegateTool, plan: RunPlan, results: dict) -> list[di
         mode = modes[node.run_id]
         clean, debrief = cleaned[node.run_id]
         author_summary = (debrief or {}).get("summary", "") if debrief else ""
-        next_steps = (debrief or {}).get("next_steps", "") if debrief else ""
         raw_points = (debrief or {}).get("key_points") if debrief else None
         key_points = (
             [str(p).strip() for p in raw_points if str(p).strip()]
@@ -177,22 +205,23 @@ def worker_products(tool: DelegateTool, plan: RunPlan, results: dict) -> list[di
         truncated = False
         if mode == "pointer":
             # Prefer structured handoff (summary + key_points + files) over a long
-            # prose digest — full artifact is on disk / in the UI.
+            # prose digest when this node has dependents — full artifact is on disk
+            # / in the UI, and CEO only needs the brief. Leaves: captain reads the
+            # pointer body / landed paths; a missing brief is not a hole.
             body = _compact_worker_body(
                 clean=clean,
                 author_summary=author_summary,
                 key_points=key_points,
                 prose_limit=CEO_SYNTHESIS_POINTER_CHARS,
-                prefer_brief=True,
+                prefer_brief=node_has_dependents(plan, node.run_id),
             )
             fidelity, truncated = "pointer", True
         elif mode == "pass_through":
             allowance = next(allowances)
-            # Leaves (no files, no downstream): after debrief de-conclusioning the
-            # conclusion lives in the body — include it, sized to the shared budget
-            # (do not clip to CEO_SYNTHESIS_POINTER_CHARS). Intermediate nodes:
-            # downstream already read the full body via the 16k dep-context pool;
-            # CEO only needs the brief.
+            # Leaves (no files, no downstream): conclusion lives in the body —
+            # include it, sized to the shared budget (do not clip to
+            # CEO_SYNTHESIS_POINTER_CHARS). Intermediate nodes: downstream already
+            # read the full body via the 16k dep-context pool; CEO only needs the brief.
             prefer_brief = bool(author_summary or key_points) and node_has_dependents(
                 plan, node.run_id
             )
@@ -247,14 +276,9 @@ def worker_products(tool: DelegateTool, plan: RunPlan, results: dict) -> list[di
                 elif row.get("status") == "rejected":
                     detail = str(row.get("detail") or row.get("reason") or "").strip()
                     rejected_files.append((path, detail))
-        if files:
-            produced = "、".join(f"`{p}`" for p in files)
-            body += f"\n\n> 文件产出（路径已核）：{produced}"
-        if rejected_files:
-            bits = []
-            for p, detail in rejected_files[:8]:
-                bits.append(f"`{p}`" + (f"（{detail}）" if detail else ""))
-            body += f"\n\n> 路径未核：{'、'.join(bits)}"
+        body += _inline_path_manifest(
+            files, rejected_files, cap=CEO_SYNTHESIS_FILE_LIST_MAX
+        )
         tool_failures = (
             [dict(row) for row in state.tool_failures if isinstance(row, dict)]
             if state and state.tool_failures
@@ -269,7 +293,6 @@ def worker_products(tool: DelegateTool, plan: RunPlan, results: dict) -> list[di
                 "fidelity": fidelity,
                 "truncated": truncated,
                 "files": files,
-                "next_steps": next_steps,
                 "replaces_run_id": node.replaces_run_id,
                 "tool_failures": tool_failures,
             }
@@ -475,7 +498,6 @@ def build_ceo_synthesis(
     results: dict,
     *,
     call_idx: int | None = None,
-    audit_json_by_path: dict[str, str] | None = None,
 ) -> CeoSynthesis:
     """Render the workers' products as the CEO's overview input, split by loss policy."""
     lines = ["## 团队执行结果（据此写一段简短概览交给用户；完整详情用户自行查看）"]
@@ -520,40 +542,24 @@ def build_ceo_synthesis(
         lines.append(tool_failures_block)
     roster_facts = _roster_facts(plan, results, products)
     roster_text = render_roster_block(roster_facts)
-    from agentcore.runtime.runs.audit_ledger import render_audit_ledger
-
-    ledger = render_audit_ledger(audit_json_by_path or {})
-    if ledger:
-        roster_text = f"{roster_text.rstrip()}\n\n{ledger}"
     head_lines = list(lines)
     lines = []
     emit_captain_readback(tool, products)
-    # 完工交接简报: surface each worker's 建议下一步 (proactive, non-blocking — distinct from the
-    # escalation block's 待决问题) as ONE advisory section so the CEO can relay the worthwhile
-    # ones to the user. Empty when nobody suggested anything.
-    suggestions = [(wp["role"], wp["next_steps"]) for wp in products if wp.get("next_steps")]
-    if suggestions:
-        lines.append(
-            "\n### 队员建议的下一步（供参考，由你与用户定夺，非必须执行）\n"
-            "以下是各队员完工时顺带提的后续方向（非阻塞、不是待决问题）。择其有价值者，在你给"
-            "用户的概览里自然带出『团队建议接下来可以…』即可；无价值的忽略，不要逐条复述。\n"
-            + "\n".join(f"- {role}：{ns}" for role, ns in suggestions)
-        )
     for wp in products:
         lines.append(
             f"\n### {wp['role']}（{wp['status']}） · run_id: `{wp['run_id']}`\n{wp['body']}"
         )
-    # Lean footer (unconditional): keep 防幻觉 / 文件产出判据 / 名册铁律.
+    # Lean footer: product-format facts the model cannot invent. HOW
+    # (过程简述 / 粘名册 / replan) lives on wait / replan description.
     closing_text = (
         "\n---\n以上为团队产出。「文件产出（路径已核）」= 落盘且路径核对通过的地面真相。\n"
         "⚠️ 防幻觉铁律：是否真交付文件只看「文件产出（路径已核）」行——"
-        "正文声称写了却无此行 = 未真正落盘【未达成】，用 continue_from_run_id 续派或冷委派；"
+        "正文声称写了却无此行 = 未真正落盘【未达成】；"
         "「路径未核」不得当已交付；纯文本无文件属正常。"
         "路径已核 ≠ 脚本已跑通 / 内容已校验。\n"
         "相互依赖时【语义边界对账】（冲突/缺口/重复）；"
         "【完工核验】对照用户请求：未达成就补，已达成则短概览收口。\n"
-        "【终稿纪律】交付物在前、过程简述从简；对照【队员终态名册】"
-        "（名册是对账输入，禁止整段粘进终稿），"
+        "【终稿纪律】对照【队员终态名册】："
         "失败/跳过/接替必须写入，禁止编造「全部交付」。"
     )
     if any(wp["status"] != "completed" for wp in products) or any(
@@ -561,12 +567,6 @@ def build_ceo_synthesis(
     ):
         closing_text += (
             "\n---\n**有队员失败/被跳过/被接替。** 终稿须点名说明，不得写成全员成功。"
-            "如需补跑，请在同一计划用 `replan(add=[...])` **按缺口点名**追加"
-            "（设 `replaces_run_id` 或 `continue_from_run_id` 指向失败/跳过节点；"
-            "单次条数受缺口硬闸，勿整团重开、勿另开无关大派）。"
-            "若无需补跑，直接如实回复用户即可。"
-            "已完成但质量不够（软验收 / 需改同一落盘路径）：**同座位**再派即可"
-            "（系统会 auto-replaces），勿另起 `-v2` 角色名。"
         )
     prose = "\n".join([*head_lines, *lines])
     from agentcore.runtime.delegate.terminal_output import compose_all_completed_output

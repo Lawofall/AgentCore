@@ -24,7 +24,7 @@ import {
  *     与探活**共用**同一「记坏 → 命中缓存」出口，不形成第二条降级路径。
  *   - {@link clearSidecarHealth}：用户在设置里重新开启本地引擎时清空，给「修好环境后重试」机会。
  *
- * 过桥可感知面 = ComposerCloudBridgeHint（executionVia），无 toast 节流槽。
+ * 过桥可感知面 = CloudBridgeHint（executionVia → 最新助手泡脚注），无 toast 节流槽。
  *
  * 探活成功留存的进程正好被随后的首个回合复用（主进程 `ensure` 命中缓存），故探活不浪费拉起。
  */

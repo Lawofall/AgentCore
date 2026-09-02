@@ -34,6 +34,7 @@ export {
   IconButton,
   type IconButtonProps,
   type IconButtonSize,
+  type IconButtonTone,
 } from "./icon-button";
 export {
   HorizontalTabStrip,

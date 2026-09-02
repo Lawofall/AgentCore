@@ -28,7 +28,7 @@ _LONG_RUNNING_COMMAND_RES: tuple[re.Pattern[str], ...] = tuple(
     )
 )
 
-# Suggested wait_for for the most common JS/Python ready banners.
+# Default ready banner for JS/Python dev servers when the model omits wait_for.
 DEFAULT_DEV_WAIT_FOR = r"Local:|ready in|Listening|Uvicorn running"
 
 
@@ -41,6 +41,16 @@ def long_running_command_match(code: str) -> str | None:
     return None
 
 
+def effective_wait_for(command: str, wait_for: object) -> str:
+    """Ready regex for a start: explicit value, else default when long-running."""
+    text = str(wait_for or "").strip()
+    if text:
+        return text
+    if command and long_running_command_match(command):
+        return DEFAULT_DEV_WAIT_FOR
+    return ""
+
+
 def long_running_redirect_message(
     matched: str, *, location: Literal["server", "local"] | None
 ) -> str:
@@ -49,18 +59,8 @@ def long_running_redirect_message(
     return (
         f"请用 run 启动长驻进程（检测到：{matched}）。"
         "本路径会等待进程退出，约 60s 必超时，无法托管开发服务器。"
-        "设 background=true，填入同一命令，并设 wait_for"
-        f"（如 {DEFAULT_DEV_WAIT_FOR}）等到就绪信号后再宣称已启动；"
+        "设 background=true，填入同一命令（省略 wait_for 时用默认就绪信号）；"
         "用 action=read|list 确认进程仍在跑。"
-    )
-
-
-def wait_for_required_message(matched: str) -> str:
-    """``terminal.start`` refusal when a long-running command lacks ``wait_for``."""
-    return (
-        f"启动长驻进程（检测到：{matched}）时必须提供 wait_for，"
-        "否则无法验证就绪，禁止仅凭首段输出宣称已启动。"
-        f"请带 wait_for（建议 `{DEFAULT_DEV_WAIT_FOR}`）重试。"
     )
 
 
@@ -71,7 +71,7 @@ def readiness_footer(
     had_wait_for: bool,
     exit_code: object = None,
 ) -> str:
-    """Model-facing ready/not-ready note appended to ``terminal`` start/read output."""
+    """Model-facing ready/not-ready note appended to start/read output."""
     if status == "exited":
         suffix = f"（exit_code={exit_code}）" if exit_code is not None else ""
         return (

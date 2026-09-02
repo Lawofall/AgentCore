@@ -34,7 +34,7 @@ def research_first_tool_result(*, motion: str = "", user_message: str = "") -> s
     topic = topic.replace('"', "'")
     return (
         "用户在开赛确认中选择「先多视角调研再辩」。本场辩论未授权，请勿再次调用 debate。"
-        f"本回合必须立即 consult(deep_multi_lens_research) 并手写 delegate："
+        f"本回合必须立即手写 delegate："
         f"围绕【{topic}】异质透镜并行 + 汇总分析师 depends_on 全部透镜"
         "（未点名视角可用法律 / 品牌商业 / 舆情公关 / 文化社会）；"
         "调研与呈报完成、用户拍板后再开辩。"

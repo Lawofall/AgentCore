@@ -4,8 +4,9 @@ A worker's product is accepted only if it satisfies its node's delivery spec
 (:class:`Deliverable`). 阶段2 第一刀做「机械校验」——看产出的*形*而非*质*：非空（系统
 兜底，始终生效）、必备小标题、（声明
 ``output_format="json"`` 时）能否解析为 JSON、以及声明式 ``artifacts`` 路径清单相对
-工作区的存在性对账。当 ``output_format=json`` 与 ``artifacts`` 同用时，JSON 可解析性
-改验工作区文件（结构化文件通道），不再要求聊天正文是 JSON。``output_format=json`` 与
+工作区的存在性对账（``artifact_dir`` 未命中不提醒）。当 ``output_format=json`` 与
+``artifacts`` 同用时，JSON 可解析性改验工作区文件（结构化文件通道），不再要求
+聊天正文是 JSON。``output_format=json`` 与
 ``required_sections``（Markdown 小标题语义）混用时跳过章节校验，避免自相矛盾的假失败。
 
 交付形态对齐：文件形态交付（:func:`is_file_deliverable` — ``form=files`` /
@@ -53,11 +54,9 @@ from agentcore.workspace.stage_dirs import DRAFTS_DIR
 _ARTIFACT_ROOT_LABEL = "workspace"
 
 # Handoff minimum when the node has downstream dependents (协作模式 handoff 门禁).
+# Floor measures the closing-round 便条 (stored as debrief.summary). Historical
+# key_points-only briefs no longer satisfy the gate.
 MIN_HANDOFF_SUMMARY_CHARS = 50
-MIN_HANDOFF_KEY_POINTS = 2
-# Leaf workers: longer prose (no tools) still expects a CEO-facing brief.
-# Short pure-body leaves stay exempt (勿误伤短答).
-LEAF_SUBSTANTIAL_BODY_CHARS = 200
 
 
 @dataclass
@@ -109,8 +108,6 @@ def needs_file_contents(
     if deliverable is None:
         return False
     if deliverable.output_format == "json" and deliverable.artifacts:
-        return True
-    if deliverable.code_audit_gate:
         return True
     if not is_file_deliverable(deliverable):
         return False
@@ -294,8 +291,6 @@ def check_contract(
     non-empty ``artifacts`` with zero successful landing becomes a soft ``warnings`` tip
     (甲⁺：不再契约 fail / 短写盘 pass). ``landing_failure_kind`` (optional)
     attributes the soft tip: ``channel_dead`` / ``write_failed`` vs paste framing.
-    When ``code_audit_gate`` is on, the same kind also demotes missing/unreadable
-    audit-JSON structure hard-fails (field semantics on loaded JSON still apply).
     Stays a pure function (the caller derives the count / kind) so it remains
     trivially unit-testable.
 
@@ -332,7 +327,7 @@ def check_contract(
     (``deliverable_only`` rolls back narration before non-terminal tools). The
     baseline therefore also accepts alternate product signals: workspace file writes
     (``files_written > 0``) or a usable ``handoff`` debrief (``debrief`` from
-    ``debrief_from_transcript`` — summary / key_points / etc.).
+    ``debrief_from_transcript`` — typically ``summary`` = closing-round 便条).
     """
     text = content.strip()
     if not _has_product_signal(text, files_written, debrief, deliverable, artifact_contents):
@@ -406,22 +401,14 @@ def check_contract(
         zero_files_warnings.append(
             zero_files_gap_message(landing_failure_kind=landing_failure_kind)
         )
-    # artifacts / artifact_dir 路径对账：有落盘即过；对不上降为 warnings（不阻断）。
+    # 声明的具体 artifacts 对账：有落盘即过；点名路径未命中 → warning（不阻断）。
+    # artifact_dir 是写时 / sibling 分键，未命中不提醒、不催搬——收口认实际路径。
     path_mismatch_warnings: list[str] = []
     if deliverable.artifacts:
         missing = missing_artifacts(deliverable.artifacts, workspace_paths or [])
         if missing:
             listed = "、".join(f"`{p}`" for p in missing)
             path_mismatch_warnings.append(f"声明的交付物路径未落盘：{listed}")
-    # 约定文档目录对账（与归属分键）：artifact_dir 不进 ownership；不对齐仅提醒。
-    if deliverable.artifact_dir and expects_files:
-        from agentcore.runtime.runs.artifact_dir import normalize_artifact_dir
-
-        dir_pat = f"{normalize_artifact_dir(deliverable.artifact_dir)}/"
-        if dir_pat != "/" and not artifact_present(dir_pat, workspace_paths or []):
-            path_mismatch_warnings.append(
-                f"产物未写入约定文档目录 `{dir_pat}`（建议落在此目录下，勿写到工作区根）"
-            )
     # 引用 / 书目：落盘成文闸（citation_quality_reworks）；仅台账接通时扫内容类落盘。
     # 调研阶段 A（enforce_citations=False）跳过成稿引用闸。
     if enforce_citations:
@@ -432,56 +419,6 @@ def check_contract(
                 citable_ids=citable_ids,
             )
         )
-    # code_audit 结构闸（L2b）：配套 *.audit.json 字段语义；与成篇硬门正交。
-    # 写盘不可用 / Markdown 已落仅缺配套 JSON：缺产物不硬拒（部分交付）；已读到的仍验语义。
-    if deliverable.code_audit_gate:
-        from agentcore.runtime.runs.code_audit_gate import (
-            code_audit_json_failures,
-            code_audit_report_landed,
-            is_code_audit_landing_absence_failure,
-        )
-
-        gate_fails = code_audit_json_failures(
-            artifacts=deliverable.artifacts,
-            workspace_paths=workspace_paths or [],
-            artifact_contents=artifact_contents,
-        )
-        write_unavailable = landing_failure_kind in ("channel_dead", "write_failed")
-        report_landed = code_audit_report_landed(
-            artifacts=deliverable.artifacts,
-            workspace_paths=workspace_paths,
-            artifact_contents=artifact_contents,
-        )
-        demote_absence = write_unavailable or report_landed
-        if demote_absence:
-            demoted = False
-            for msg in gate_fails:
-                if is_code_audit_landing_absence_failure(msg):
-                    demoted = True
-                    continue
-                failures.append(msg)
-            if demoted and not zero_files_warnings:
-                # 已有部分落盘时零写 tip 不响；补写盘/缺 JSON 归因，避免静默跳过。
-                if write_unavailable and landing_failure_kind == "channel_dead":
-                    zero_files_warnings.append(
-                        f"{_MEMBER_WAVE_UNDELIVERED}：写盘通道不可用"
-                        "（工作区/本地文件连不上），"
-                        "已跳过 audit JSON 缺产物结构硬闸——请恢复通道后补齐配套 *.audit.json"
-                    )
-                elif write_unavailable:
-                    zero_files_warnings.append(
-                        f"{_MEMBER_WAVE_UNDELIVERED}：写盘未成功落盘，"
-                        "已跳过 audit JSON 缺产物结构硬闸——"
-                        "请修复写盘后补齐配套 *.audit.json"
-                    )
-                else:
-                    # Markdown 已落、仅缺配套 JSON → 部分交付（可补写），勿整节点 failed。
-                    zero_files_warnings.append(
-                        f"{_MEMBER_WAVE_UNDELIVERED}：Markdown 报告已落盘，仅缺配套 *.audit.json——"
-                        "已降为部分交付（可补写 JSON 骨架/定稿，勿整轮重审）"
-                    )
-        else:
-            failures.extend(gate_fails)
     from agentcore.runtime.delegate.delivery_status import (
         REASON_FILES_NOT_LANDED,
         REASON_PATH_HINT,
@@ -841,27 +778,18 @@ def is_format_repairable(verdict: ContractVerdict) -> bool:
     ``contract.retry`` that re-opens investigation. Mixed or non-format failures
     (空产出 / JSON …) return False. 已删字数 / 必含词
     不再出现在 ``failures``。
-
-    写盘形态下仅缺配套 ``*.audit.json``（:func:`is_code_audit_landing_absence_failure`）
-    也走定向修复（读已落报告 + 写盘），不升格为全量调查返工。
     """
     if verdict.ok or not verdict.failures or verdict.soft_failures or verdict.visual_failures:
         return False
-    from agentcore.runtime.runs.code_audit_gate import (
-        is_code_audit_landing_absence_failure,
-    )
-
     for failure in verdict.failures:
         text = str(failure).strip()
         if text.startswith(_FORMAT_REPAIR_SECTION_PREFIX):
-            continue
-        if is_code_audit_landing_absence_failure(text):
             continue
         return False
     return True
 
 
-# JSON 结构不可解析（与 code_audit / 缺章节同属「格式/结构」脸，非结论质量）。
+# JSON 结构不可解析（与缺章节同属「格式/结构」脸，非结论质量）。
 _JSON_STRUCTURE_FAILURES = frozenset(
     {
         "产出不是可解析的 JSON",
@@ -876,16 +804,12 @@ _JSON_STRUCTURE_PREFIXES = (
 def is_contract_structure_failure(message: str) -> bool:
     """True when a hard-failure string is structure/format (not conclusion quality).
 
-    Classifies **backend-stamped** gate messages only (code_audit ``结构闸：`` prefix,
-    section format markers, JSON parse gates). Callers must not regex-scan model prose.
+    Classifies **backend-stamped** gate messages only (section format markers,
+    JSON parse gates). Callers must not regex-scan model prose.
     """
-    from agentcore.runtime.runs.code_audit_gate import is_code_audit_structure_failure
-
     text = str(message or "").strip()
     if not text:
         return False
-    if is_code_audit_structure_failure(text):
-        return True
     if text.startswith(_FORMAT_REPAIR_SECTION_PREFIX):
         return True
     if text in _JSON_STRUCTURE_FAILURES:
@@ -898,7 +822,7 @@ def contract_run_failure_kind(
 ) -> Literal["format", "quality"]:
     """Wire ``run_failed.failure_kind`` for contract hard-fail.
 
-    ``format`` = every failure is structure/schema（code_audit / 缺章节 / JSON 形）→
+    ``format`` = every failure is structure/schema（缺章节 / JSON 形）→
     UI「格式未过」；``quality`` = 内容/结论/硬缺口或混合 →「未达标」。
     """
     if not verdict.failures:
@@ -917,15 +841,11 @@ def format_light_repair_feedback(
     """Correction prompt for one format-only light repair (no re-investigation).
 
     Carries the prior deliverable so the model backfills missing sections
-    in place instead of restarting research. Investigation tools stay withheld by
-    the executor for this pass.
+    in place instead of restarting research. Billed retrieval stays withheld;
+    local inspect / run remain for this pass.
     """
     if verdict.ok or not verdict.failures:
         return ""
-    from agentcore.runtime.runs.code_audit_gate import (
-        is_code_audit_landing_absence_failure,
-    )
-
     items = "\n".join(f"- {f}" for f in verdict.failures)
     coverage = ""
     if checked_files:
@@ -940,17 +860,6 @@ def format_light_repair_feedback(
         if prior
         else ""
     )
-    absence_only = all(
-        is_code_audit_landing_absence_failure(str(f)) for f in verdict.failures
-    )
-    if absence_only:
-        return (
-            "你上一次的产出只差配套 `*.audit.json`（Markdown 报告可能已落盘），"
-            f"不必重新调查：\n{items}{coverage}{prior_block}\n\n"
-            "请 file_read 自己已落的报告（如需对照），再用 file_write / str_replace "
-            "补写配套 `*.audit.json` 骨架或定稿后 handoff。"
-            "不要重新检索、不要道歉、不要附带说明。"
-        )
     return (
         "你上一次的产出只差格式补全（缺章节），"
         f"不必重新调查：\n{items}{coverage}{prior_block}\n\n"
@@ -1130,8 +1039,8 @@ def describe_deliverable(deliverable: Deliverable | None) -> str:
     """This node's instance facts for the worker opening (paths / sections).
 
     Form HOW (look / land files / edit the project) lives on worker identity.
-    Default ``工作稿/`` lives on the workspace fact line. Empty → omit the
-    「交付物规格」channel. JSON / audit-gate / strict / retrieval budget are
+    The process-draft drawer lives on the workspace fact line. Empty → omit the
+    「交付物规格」channel. JSON / strict / retrieval budget are
     not rendered here.
     """
     if deliverable is None:
@@ -1197,105 +1106,47 @@ def _has_product_signal(
 
 
 def debrief_meets_minimum(debrief: dict[str, Any] | None) -> bool:
-    """True when a handoff brief meets the downstream-gate information floor."""
+    """True when a handoff brief meets the downstream-gate information floor.
+
+    Floor is the 便条 length (``summary``). Historical ``key_points`` do not
+    substitute — new rounds write the whole note into ``summary``.
+    """
     if not debrief:
         return False
     summary = str(debrief.get("summary") or "").strip()
-    if len(summary) >= MIN_HANDOFF_SUMMARY_CHARS:
-        return True
-    raw_points = debrief.get("key_points") or []
-    if isinstance(raw_points, str):
-        raw_points = [raw_points]
-    points = [str(p).strip() for p in raw_points if str(p).strip()]
-    return len(points) >= MIN_HANDOFF_KEY_POINTS
+    return len(summary) >= MIN_HANDOFF_SUMMARY_CHARS
 
 
-def leaf_did_substantial_work(
-    content: str,
-    *,
-    messages: list[Any] | tuple[Any, ...] | None = None,
-    files_touched: list[str] | None = None,
-) -> bool:
-    """True when a leaf ran tools / landed files / wrote longer prose.
+def worker_expects_handoff(plan: Any, run_id: str) -> bool:
+    """Whether this node must submit a minimum-quality handoff brief.
 
-    Short pure-body leaves stay False so they may finish without handoff.
+    One sentence: has a next hop → must; last hop → skip (incremental only,
+    never gated). CEO already sees the leaf body or landed paths.
     """
-    if transcript_has_tool_inventory(messages):
-        return True
-    if files_touched:
-        return True
-    return len((content or "").strip()) >= LEAF_SUBSTANTIAL_BODY_CHARS
+    return node_has_dependents(plan, run_id)
 
 
-def worker_expects_handoff(
-    plan: Any,
-    run_id: str,
-    *,
-    content: str = "",
-    messages: list[Any] | tuple[Any, ...] | None = None,
-    files_touched: list[str] | None = None,
-) -> bool:
-    """Whether this node should submit a minimum-quality handoff brief.
-
-    Upstream (has dependents) always. Leaves only after substantial work so
-    CEO / ``delivery_status`` can see incomplete reports — not a hard fail of
-    every short leaf body.
-    """
-    if node_has_dependents(plan, run_id):
-        return True
-    return leaf_did_substantial_work(
-        content, messages=messages, files_touched=files_touched
-    )
+def handoff_expectation_met(debrief: dict[str, Any] | None) -> bool:
+    """Whether an expected (downstream) brief meets the information floor."""
+    return debrief_meets_minimum(debrief)
 
 
-def handoff_expectation_met(
-    debrief: dict[str, Any] | None, *, for_dependents: bool
-) -> bool:
-    """Whether the brief satisfies the node's handoff expectation.
-
-    Upstream needs the information floor (:func:`debrief_meets_minimum`).
-    Leaves only need an author-submitted brief (any non-empty harvest) — thin
-    is still visible to CEO; missing is what we补要 / degrade.
-    """
-    if for_dependents:
-        return debrief_meets_minimum(debrief)
-    return debrief is not None
-
-
-def format_handoff_feedback(
-    *, present_but_thin: bool = False, for_dependents: bool = True
-) -> str:
+def format_handoff_feedback(*, present_but_thin: bool = False) -> str:
     """Correction instruction that forces one handoff (or a richer one).
 
-    ``for_dependents``: upstream relay wording vs leaf→CEO 汇报补要.
+    Only issued when the node has dependents — leaves are not gated.
     """
+    floor = (
+        f"请在收尾轮正文写一句话结论（现在什么已成立），"
+        f"并写清下一棒要接的路径/数字/决定（至少 {MIN_HANDOFF_SUMMARY_CHARS} 字），"
+        "再调用 handoff。调用即收尾。"
+    )
     if present_but_thin:
-        audience = (
-            "下游队员要靠它接手"
-            if for_dependents
-            else "主管要对账看见完整汇报"
-        )
         return (
-            f"你提交的 handoff 交接简报信息量不足（{audience}）。"
-            f"请重新调用 handoff：summary 至少 {MIN_HANDOFF_SUMMARY_CHARS} 字，"
-            f"或提供不少于 {MIN_HANDOFF_KEY_POINTS} 条具体 key_points"
-            "（文件路径 / 关键决定 / 数字，别空泛）。"
-            "调用 handoff 即收尾；不要只写正文不交简报。"
-        )
-    if for_dependents:
-        return (
-            "你有下游队员依赖本次交接，但尚未调用 handoff。"
-            "请在本轮调用 handoff 提交交接简报："
-            f"summary 至少 {MIN_HANDOFF_SUMMARY_CHARS} 字，"
-            f"或提供不少于 {MIN_HANDOFF_KEY_POINTS} 条具体 key_points"
-            "（文件路径 / 关键决定 / 数字）。调用即代表收尾完成。"
+            "你提交的交接便条信息量不足（下游队员要靠它接手）。" + floor
         )
     return (
-        "你已完成实质工作（工具活动或较长产出），但尚未调用 handoff。"
-        "请在本轮调用 handoff 提交交接简报给主管："
-        f"summary 至少 {MIN_HANDOFF_SUMMARY_CHARS} 字，"
-        f"或提供不少于 {MIN_HANDOFF_KEY_POINTS} 条具体 key_points"
-        "（文件路径 / 关键决定 / 数字）。调用即代表收尾完成。"
+        "你有下游队员依赖本次交接，但尚未调用 handoff。" + floor
     )
 
 

@@ -297,8 +297,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='ceo.unclosed_cue',
         description=(
-            '阶梯 2 记账：本轮提示装了上轮交付缺口和/或近期团队图。delegated=false 表示线索在、这轮'
-            '一次没派。不拦截、不改成功路径。'
+            '历史兼容：曾在提示装了上轮交付缺口时记账；跨轮缺口易变尾已撤，不再发此事件。delegated '
+            '/ prior_gaps / recent_graph 字段保留兼容旧 JSONL'
         ),
         fields={
             'delegated': FieldType('bool'),
@@ -437,12 +437,16 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='chat.turn_paused'),
     EventSpec(
         name='chat.turn_start',
-        description='回合起点（preview/chars/history）',
+        description=(
+            '回合起点（preview/chars/history）。stream_path_reason = 桌面过桥枚举（探活失败 / 强制'
+            '关 / 无本机根等），仅云 POST 携带'
+        ),
         fields={
             'chars': FieldType('int'),
             'history': FieldType('int'),
             'location': FieldType('str'),
             'preview': FieldType('str'),
+            'stream_path_reason': FieldType('str'),
             'via': FieldType('str'),
         },
     ),
@@ -996,7 +1000,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='delegate.graph_append_skip_node'),
     EventSpec(name='delegate.graph_prev'),
     EventSpec(name='delegate.isomorphic_rejected'),
-    EventSpec(name='delegate.nested_code_audit_discipline'),
     EventSpec(name='delegate.partial_failure_stashed'),
     EventSpec(name='delegate.paused'),
     EventSpec(name='delegate.plan_only'),
@@ -1944,7 +1947,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='memory.scope_state_save_skipped_prepare_cache_only'),
     EventSpec(name='memory.semantic_consolidated'),
     EventSpec(name='memory.semantic_failed'),
-    EventSpec(name='memory.semantic_injection_dropped'),
     EventSpec(name='memory.semantic_leak_scan_failed'),
     EventSpec(name='memory.semantic_navigation_sanitized'),
     EventSpec(name='memory.semantic_parse_failed'),
@@ -1952,6 +1954,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='memory.semantic_rewrite_rejected'),
     EventSpec(name='memory.semantic_save_quota_denied'),
     EventSpec(name='memory.semantic_timeout'),
+    EventSpec(name='memory.semantic_topic_ops_dropped'),
     EventSpec(name='memory.semantic_updated'),
     EventSpec(name='memory.topic_cap_reached'),
     EventSpec(name='memory.user_maintain_failed'),
@@ -2604,7 +2607,7 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(
         name='tool.args_salvaged',
-        description='handoff 参数 JSON 窄 salvage 成功（裸字符串字段 / 截断闭合）',
+        description='参数 JSON 结构修复成功（完整值后的尾部多余字符被丢掉）',
         fields={
             'args_preview': FieldType('str'),
         },
@@ -2771,12 +2774,9 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(
         name='worker.handoff',
-        description='worker 交接（chars=summary 长；body_chars=交付正文长）',
+        description='worker 收尾（body_chars=同轮交付正文长）',
         fields={
             'body_chars': FieldType('int'),
-            'chars': FieldType('int'),
-            'has_motion_card': FieldType('bool'),
-            'has_summary': FieldType('bool'),
             'run_id': FieldType('str'),
         },
     ),

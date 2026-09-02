@@ -40,9 +40,6 @@ ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
         "archive_extract",
         "archive_create",
         "download_url",
-        # Cross-conversation logs (product-always-on; still on-demand when wired).
-        "search_conversations",
-        "read_conversation",
         # Rare CEO folder admin (list/resolve/peek stay resident).
         "create_folder",
         "delete_folder",
@@ -60,8 +57,6 @@ ON_DEMAND_SUMMARIES: dict[str, str] = {
     "archive_extract": "工作区 zip 解压到指定目录",
     "archive_create": "工作区文件/目录打成 zip",
     "download_url": "HTTP(S) URL 落盘到工作区相对路径",
-    "search_conversations": "检索用户历史对话目录",
-    "read_conversation": "深读一条历史对话全文",
     "create_folder": "新建云文件夹",
     "delete_folder": "软删文件夹",
     "desktop_notify": "向本机桌面发一条通知",
@@ -69,14 +64,12 @@ ON_DEMAND_SUMMARIES: dict[str, str] = {
 
 # Consulting any member offers every assembled sibling in the same family.
 _FAMILIES: tuple[frozenset[str], ...] = (
-    frozenset({"search_conversations", "read_conversation"}),
     frozenset({"md_to_docx", "md_to_pdf"}),
     frozenset({"archive_extract", "archive_create"}),
     frozenset({"create_folder", "delete_folder"}),
 )
 
 _FAMILY_LABELS: dict[frozenset[str], str] = {
-    frozenset({"search_conversations", "read_conversation"}): "历史对话",
     frozenset({"md_to_docx", "md_to_pdf"}): "导出 Word/PDF",
     frozenset({"archive_extract", "archive_create"}): "压缩包",
     frozenset({"create_folder", "delete_folder"}): "文件夹增删",

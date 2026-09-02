@@ -493,10 +493,9 @@ async def _build_attachment_prompt(
 
     notes = dict(
         conversation_note=(
-            " A Conversation block is a server-rendered deep transcript (messages +"
-            " process layer); when truncated, delegate a Worker with"
-            " ``read_conversation`` to continue — do not treat a truncated block as"
-            " the full log."
+            " A Conversation block is the user/assistant transcript of a past chat;"
+            " when truncated, continue with read_conversation using conversation_id"
+            " and next_cursor. Do not treat a truncated block as the full log."
             if has_conversation
             else ""
         ),

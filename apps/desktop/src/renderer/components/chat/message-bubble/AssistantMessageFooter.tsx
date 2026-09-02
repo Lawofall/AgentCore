@@ -11,6 +11,7 @@ import {
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { copyText } from "@/lib/clipboard";
 import { formatCompact, formatDuration } from "@/lib/format";
+import { MESSAGE_ACTION_REVEAL_CLASS } from "@/lib/messageActionReveal";
 import { formatMessageExport } from "@/lib/messageExport";
 import {
   buildSupportDiagnosticPack,
@@ -19,6 +20,7 @@ import {
   supportDiagnosticExtrasFromError,
 } from "@/lib/supportDiagnostics";
 import { notifyError, notifySuccess } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 import { setMessageFeedback } from "@/services/messages";
 import type { UsageBreakdown } from "@/services/usage";
 import { useBookmarkStore } from "@/stores/bookmarks";
@@ -377,7 +379,12 @@ export function AssistantMessageFooter({
   );
   return (
     <div className="mt-1 flex items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-0.5",
+          MESSAGE_ACTION_REVEAL_CLASS,
+        )}
+      >
         {hasProcess ? (
           <DropdownMenu>
             <SimpleTooltip label={copied || copiedProcess ? "已复制" : "复制"}>

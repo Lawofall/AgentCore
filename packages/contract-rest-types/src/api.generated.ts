@@ -150,7 +150,10 @@ export interface paths {
         put?: never;
         /**
          * Read Account Conversation
-         * @description Owner-scoped deep transcript read (account ticket or access). Soft miss on 404.
+         * @description Owner-scoped transcript read (account ticket or access). Soft miss on 404.
+         *
+         *     Default ``focus=dialogue`` (user/assistant visible text). ``process`` includes
+         *     tools / debate / thinking. Pages are message-index cursors.
          */
         post: operations["read_account_conversation_v1_account_conversations_read_post"];
         delete?: never;
@@ -8471,8 +8474,18 @@ export interface components {
             conversation_id: string;
             /** Cursor */
             cursor?: string | null;
+            /**
+             * Focus
+             * @default dialogue
+             */
+            focus: string;
             /** Max Chars */
             max_chars?: number | null;
+            /**
+             * Query
+             * @default
+             */
+            query: string;
         };
         /** ConversationReadResponse */
         ConversationReadResponse: {
@@ -8489,12 +8502,34 @@ export interface components {
             /** Ended At */
             ended_at?: string | null;
             /**
+             * Focus
+             * @default dialogue
+             */
+            focus: string;
+            /**
              * Message Count
              * @default 0
              */
             message_count: number;
+            /**
+             * Message End
+             * @default 0
+             */
+            message_end: number;
+            /**
+             * Message Offset
+             * @default 0
+             */
+            message_offset: number;
             /** Next Cursor */
             next_cursor?: string | null;
+            /** Query */
+            query?: string | null;
+            /**
+             * Query Hit
+             * @default false
+             */
+            query_hit: boolean;
             /** Started At */
             started_at?: string | null;
             /**
@@ -8583,6 +8618,8 @@ export interface components {
             folder_id?: string | null;
             /** Folder Name */
             folder_name?: string | null;
+            /** Hit Index */
+            hit_index?: number | null;
             /**
              * Message Count
              * @default 0
@@ -8602,6 +8639,8 @@ export interface components {
              * @default false
              */
             archived: boolean;
+            /** Compacted Through */
+            compacted_through?: string | null;
             /**
              * Context Compacted
              * @default false

@@ -1,16 +1,18 @@
-"""约定文档 ``artifact_dir``：布局常量 → 委派交付默认目录 + 验收前缀。
+"""约定文档 ``artifact_dir``：布局常量 → 委派交付目录 + 验收前缀。
 
 工作区布局事实见 ``workspace_context``；本模块只在 ``form=files`` /
-已声明 ``artifacts`` 时按 ``stage_dirs`` 填默认落盘目录。Worker 只定文件名。
-``form=workspace``（及入参 ``workspace_native`` 升档）无约定文档落点，默认
-``工作稿/`` 只给 ``files``，leftover ``artifact_dir`` 不得把 workspace 拧进工作稿。
+已声明 ``artifacts`` 时按 ``stage_dirs`` 填落盘目录。Worker 自定位文件名。
+``form=workspace``（及入参 ``workspace_native`` 升档）无约定文档落点，
+leftover ``artifact_dir`` 不得把 workspace 拧进工作稿。
 
 **落点只认显式来源**（按序）：``form=workspace`` / ``workspace_native``（无约定落点）
-→ 已声明 ``artifacts`` 推导出的目录 → 显式 ``deliverable.artifact_dir`` → 默认
-``DRAFTS_DIR``（仅 ``form=files``）。运行时**不**扫 role / task 自由文。
+→ 已声明 ``artifacts`` 推导出的目录 → 显式 ``deliverable.artifact_dir`` →
+裸文件名才填 ``DRAFTS_DIR``（仅 ``form=files``）。空 ``artifacts`` 不钉目录。
+运行时**不**扫 role / task 自由文。
 
-**验收 vs 归属分键**：``artifact_dir`` / 目录前缀 / 通配 = 验收覆盖；具体文件
-路径 = C3 归属与 sibling 互斥。裸目录**永不**注入 ``artifacts`` 冒充归属键。
+**验收 vs 归属分键**：``artifact_dir`` / 目录前缀 / 通配 = 写时目录与 sibling
+分键，**不是**收口催搬。仅目录未命中且已有落盘 → 认实际路径，不发软待办。
+具体文件路径 = C3 归属与 sibling 互斥。裸目录**永不**注入 ``artifacts`` 冒充归属键。
 
 **与声明产物对齐**：非空 ``artifacts`` 若已落在 ``AgentCore/文档/…``（含自定义
 子目录如 ``AI开发/``，不限于约定 stage 目录），案卷核对目录由这些路径推导；
@@ -160,7 +162,14 @@ def resolve_artifact_dir(deliverable: Deliverable) -> str:
     if any(_looks_like_business_artifact(a) for a in deliverable.artifacts):
         return ""
 
-    return DRAFTS_DIR
+    # Bare filenames still join under 工作稿. Empty artifacts: no pin.
+    for a in deliverable.artifacts or []:
+        if not isinstance(a, str):
+            continue
+        norm = normalize_artifact_dir(a)
+        if norm and "/" not in norm:
+            return DRAFTS_DIR
+    return ""
 
 
 def is_acceptance_only_artifact_pattern(path: str) -> bool:
@@ -185,14 +194,14 @@ def is_file_ownership_path(path: str) -> bool:
 def apply_artifact_dir_defaults(deliverable: Deliverable) -> None:
     """Fill ``artifact_dir``; relocate bare filenames under it (in-place).
 
-    Empty ``artifacts`` stays empty — acceptance uses ``artifact_dir`` directly;
-    do not inject ``[dir/]`` (that falsely exclusivizes a shared dossier).
+    Empty ``artifacts`` stays empty — no ``artifact_dir`` pin, no injected
+    ``[dir/]`` (that falsely exclusivizes a shared dossier).
 
     ``form=workspace`` (and ``workspace_native``) never takes a dossier default:
     leftover ``artifact_dir`` is cleared so workspace is not twisted into
     ``工作稿/``. Bare filenames stay where the worker locates them.
-    ``form=files`` still joins bare names under an explicit leftover dir
-    (path contract).
+    ``form=files`` still joins bare names under the resolved dir (``DRAFTS_DIR``
+    when the name has no path).
     """
     if is_workspace_landing(deliverable):
         deliverable.form = "workspace"

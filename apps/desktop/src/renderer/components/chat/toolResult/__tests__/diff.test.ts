@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lineDiff } from "../diff";
+import { lineDiff, lineDiffCounts } from "../diff";
 
 describe("lineDiff", () => {
   it("marks a changed line as del+add and keeps surrounding context", () => {
@@ -41,5 +41,23 @@ describe("lineDiff", () => {
       { type: "add", text: "c" },
       { type: "add", text: "d" },
     ]);
+  });
+});
+
+describe("lineDiffCounts", () => {
+  it("counts a changed line as one del and one add", () => {
+    expect(lineDiffCounts("a\nb\nc", "a\nB\nc")).toEqual({ adds: 1, dels: 1 });
+  });
+
+  it("counts a pure insertion", () => {
+    expect(lineDiffCounts("a\nc", "a\nb\nc")).toEqual({ adds: 1, dels: 0 });
+  });
+
+  it("counts a pure deletion", () => {
+    expect(lineDiffCounts("a\nb\nc", "a\nc")).toEqual({ adds: 0, dels: 1 });
+  });
+
+  it("is zero on identical text", () => {
+    expect(lineDiffCounts("x\ny", "x\ny")).toEqual({ adds: 0, dels: 0 });
   });
 });

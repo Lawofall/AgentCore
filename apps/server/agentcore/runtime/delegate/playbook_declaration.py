@@ -29,8 +29,7 @@ _RETIRED_SHORTCUT_HINTS: dict[str, str] = {
     "build_website": _WEBSITE_HANDWRITE_HINT,
     "build_website_verify": _WEBSITE_HANDWRITE_HINT,
     "build_app": (
-        "做软件请手写 `tasks`；HOW → consult(building_software)。"
-        "不要再传该 playbook 名。"
+        "做软件请手写 `tasks`。不要再传该 playbook 名。"
     ),
 }
 

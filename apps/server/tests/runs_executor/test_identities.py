@@ -295,11 +295,11 @@ async def test_worker_identities_carry_tool_safety_caution():
 
 
 async def test_handoff_prompt_splits_by_topology():
-    """Identity handoff wording tracks DAG dependents (接力契约 + 增量交代).
+    """Identity handoff wording tracks DAG dependents.
 
-    Upstream (has_dependents) gets the imperative「必须调用」; a leaf gets
-    substantial-work guidance + short-answer exemption「不必为交而交」— aligned
-    with the engine gate and the handoff tool description.
+    Upstream (has_dependents) gets「必须调用」only; a leaf gets
+    「默认不调用」+ 仅增量才补 — writing shape stays on the
+    handoff tool description.
     """
     from agentcore.runtime.runs.executor.identities import build_worker_identity
     from agentcore.tools.builtin.handoff import HandoffTool
@@ -307,8 +307,8 @@ async def test_handoff_prompt_splits_by_topology():
     upstream = build_worker_identity(has_dependents=True, captain=False)
     leaf = build_worker_identity(has_dependents=False, captain=False)
     assert "必须调用 handoff" in upstream
-    assert "接力契约 + 增量交代" in upstream
-    assert "不必为交而交" not in upstream
+    assert "须写清这次做出了什么" not in upstream
+    assert "默认不调用" not in upstream
 
     prose_up = build_worker_identity(
         has_dependents=True, captain=False, form="prose"
@@ -324,40 +324,32 @@ async def test_handoff_prompt_splits_by_topology():
     assert "我来为你生成" not in files_leaf
     assert "粘在回复正文" not in files_leaf
     assert "聊天粘贴" not in files_leaf
-    # files 叶子：简报是 CEO 唯一信息源。
-    assert "主管唯一信息源" in files_leaf
-    assert "须写清这次做出了什么" in files_leaf
-    assert "summary（结论）" not in files_leaf
-    assert "一行标题" not in files_leaf
+    # files 叶子：队长读正文或落盘路径，简报不是唯一信息源。
+    assert "主管唯一信息源" not in files_leaf
+    assert "须写清这次做出了什么" not in files_leaf
+    assert "默认不调用" in files_leaf
     artifacts_leaf = build_worker_identity(
         has_dependents=False, artifacts=["report.md"]
     )
     assert "form=files" in artifacts_leaf
-    assert "须写清这次做出了什么" in artifacts_leaf
-    assert "正文里已经写过的结论" not in artifacts_leaf
+    assert "须写清这次做出了什么" not in artifacts_leaf
+    assert "默认不调用" in artifacts_leaf
 
     prose_leaf = build_worker_identity(
         has_dependents=False, captain=False, form="prose"
     )
     assert "结论、根因、关键取舍" in prose_leaf
-    assert "一行标题" in prose_leaf
-    assert "接力状态" in prose_leaf
-    assert "正文里已经写过的结论" in prose_leaf
+    assert "默认不调用" in prose_leaf
+    assert "增量" in prose_leaf
     assert "主管唯一信息源" not in prose_leaf
+    assert "必须调用 handoff" not in prose_leaf
 
-    assert "不必为交而交" in leaf
-    assert "接力契约 + 增量交代" in leaf
+    assert "默认不调用" in leaf
     assert "必须调用 handoff" not in leaf
-    # 省略 form = files：叶子走 pointer，简报保留结论性。
     assert "form=files" in leaf
     assert "自包含可读" in leaf
     assert "结论、根因、关键取舍" in leaf
-    assert "须写清这次做出了什么" in leaf
-    assert "正文里已经写过的结论" not in leaf
-    assert "一行标题" not in leaf
-    assert "正文里已经写过的结论" not in upstream
-    assert "须写清这次做出了什么" in upstream
-    assert "一行标题" not in upstream
+    assert "须写清这次做出了什么" not in leaf
     assert "它与 escalate 不同" not in leaf
     assert "它与 escalate 不同" not in upstream
     # 队员合同：原则标题 + 结构真相；不守卫完成话术近义词必须在场
@@ -369,7 +361,7 @@ async def test_handoff_prompt_splits_by_topology():
     assert "分项分开写" not in leaf
     assert "修复完成" not in leaf
     assert "现象已消除" not in leaf and "已全部落地" not in leaf
-    assert "有工具活动或较长交付" in leaf
+    assert "有工具活动或较长交付" not in leaf
     assert "权威文档冲突" not in leaf
     assert "静默改权威稿" not in leaf
     # 找路径 HOW 归 file_read；身份不复述。
@@ -403,14 +395,28 @@ async def test_handoff_prompt_splits_by_topology():
         plan.by_id("t_impl"), {}
     )
     assert "必须调用 handoff" in up_provider.system_messages[0]
-    assert "不必为交而交" in leaf_provider.system_messages[0]
+    assert "默认不调用" in leaf_provider.system_messages[0]
     assert "必须调用 handoff" not in leaf_provider.system_messages[0]
 
     # Tool description covers both branches so it never fights either prompt.
+    # Writing shape (结论 + 接缝) lives only on the button, not identity.
     desc = HandoffTool().schema.description
-    assert "接力契约 + 增量交代" in desc
+    assert "便条写在这一轮正文" in desc
     assert "必须" in desc
-    assert "不必为交而交" in desc or "短答自明可省" in desc
+    assert "默认不调用" in desc
+    assert "下一棒要接" in desc
+    assert "现在什么已成立" in desc
+    assert "便条 ≠ 文件说明" in desc
+    assert "未验证" in desc
+    assert "2–4" not in desc
+    assert "勿贴长文" not in desc
+    assert "下一棒要接" not in upstream
+    assert "现在什么已成立" not in upstream
+    assert "便条 ≠ 文件说明" not in upstream
+    assert "下一棒要接" not in leaf
+    assert "便条 ≠ 文件说明" not in leaf
+    assert "有工具活动或较长交付" not in desc
+    assert HandoffTool().schema.parameters.get("properties") == {}
 
 
 def test_worker_identity_states_no_execution_capability():

@@ -202,15 +202,14 @@ def test_run_description_routes_long_running_to_background():
 
     desc = run_description("local")
     assert "HOW→consult(run)" in desc
-    assert "background" not in desc
-    assert "wait_for" not in desc
+    assert "background=true" in desc
     schema = RunTool().schema
     assert "wait_for" in schema.parameters["properties"]
     assert "background" in schema.parameters["properties"]
     wait_desc = schema.parameters["properties"]["wait_for"]["description"]
     bg_desc = schema.parameters["properties"]["background"]["description"]
-    assert "background" in wait_desc
-    assert "wait_for" in bg_desc
+    assert "默认" in wait_desc
+    assert "dev" in bg_desc.lower() or "watch" in bg_desc
     assert "pnpm" in schema.parameters["properties"]["command"]["description"]
     assert "仅本地" not in RunTool(location="server").schema.description
 

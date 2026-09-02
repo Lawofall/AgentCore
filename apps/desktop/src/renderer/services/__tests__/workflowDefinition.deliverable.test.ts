@@ -14,11 +14,10 @@ const FULL_DELIVERABLE = {
   form: "files",
   output_format: "json",
   required_sections: ["结论", "证据", "风险"],
-  artifacts: ["docs/report.md", "docs/*.audit.json"],
+  artifacts: ["docs/report.md"],
   artifact_dir: "docs",
   strict: true,
   citation_mode: "two_phase",
-  code_audit_gate: true,
 };
 
 function definitionWith(deliverable: unknown) {
@@ -58,7 +57,7 @@ describe("parseWorkflowDefinition · deliverable 保真", () => {
   it("wire → domain（列表 / 详情读取）同样不丢字段", () => {
     const w = toUserWorkflow({
       id: "wf-1",
-      name: "代码审计",
+      name: "审查报告",
       description: null,
       definition: definitionWith(FULL_DELIVERABLE),
       version: 3,

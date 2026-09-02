@@ -599,14 +599,16 @@ def test_soft_unverified_note_only_is_delivered_not_notes():
     assert payload["actions"] == []
 
 
-def test_unverified_note_mixed_with_path_mismatch_is_delivered():
-    """声明目录未命中但已落盘：文件进卡，path_mismatch 为 warning，不挡 delivered。"""
+def test_unverified_note_mixed_with_declared_path_mismatch_is_delivered():
+    """声明文件未命中但已落盘：文件进卡，path_mismatch 为 warning，不挡 delivered。"""
     plan = _plan(
         RunSpec(
             run_id="w1",
             task="写调研",
             role="调研员",
-            deliverable=Deliverable(form="files", artifact_dir="docs/research"),
+            deliverable=Deliverable(
+                form="files", artifacts=["docs/research/findings.md"]
+            ),
         )
     )
     results = {
@@ -618,10 +620,7 @@ def test_unverified_note_mixed_with_path_mismatch_is_delivered():
             warnings=["含示例/虚构自注（1 处）：`findings.md` · 示例数据 · 「示例」。"],
             delivery_gaps=[
                 {
-                    "description": (
-                        "产物未写入约定文档目录 `docs/research/`"
-                        "（建议落在此目录下，勿写到工作区根）"
-                    ),
+                    "description": "声明的交付物路径未落盘：`docs/research/findings.md`",
                     "severity": "warning",
                     "reason": "path_hint",
                 }
@@ -947,7 +946,7 @@ def test_workspace_prefix_declared_matches_relative_landing():
 
 
 def test_artifact_dir_landed_outside_is_the_product():
-    """仅声明 artifact_dir 且目录未命中：目录外落盘进卡，失配 warning 不挡 delivered。"""
+    """仅声明 artifact_dir 且目录未命中：目录外落盘进卡，不发约定目录待办，不挡 delivered。"""
     plan = _plan(
         RunSpec(
             run_id="w1",
@@ -962,16 +961,6 @@ def test_artifact_dir_landed_outside_is_the_product():
             content="ok",
             files_touched=["miro-research.md"],
             file_acceptance=_accepted("miro-research.md"),
-            delivery_gaps=[
-                {
-                    "description": (
-                        "产物未写入约定文档目录 `docs/research/`"
-                        "（建议落在此目录下，勿写到工作区根）"
-                    ),
-                    "severity": "warning",
-                    "reason": "path_hint",
-                }
-            ],
         )
     }
     payload = build_delivery_status(plan, results, execution_id="e-adir")
@@ -979,22 +968,19 @@ def test_artifact_dir_landed_outside_is_the_product():
     assert payload["state"] == "delivered"
     assert "miro-research.md" in payload["delivered_files"]
     assert any(a.get("path") == "miro-research.md" for a in payload["artifacts"])
-    assert any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])
-    assert all(
-        g.get("severity") == "warning"
-        for g in payload["gaps"]
-        if g.get("reason") == REASON_PATH_MISMATCH
-    )
+    assert not any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])
 
 
-def test_artifact_dir_path_mismatch_from_warnings_alone_is_soft():
-    """未预盖 severity 的契约文案经 marker 升为 path_mismatch warning，不挡 delivered。"""
+def test_declared_artifact_path_mismatch_from_warnings_alone_is_soft():
+    """点名 artifacts 未命中的契约文案经 marker 升为 path_mismatch warning，不挡 delivered。"""
     plan = _plan(
         RunSpec(
             run_id="w1",
             task="调研",
             role="研究员",
-            deliverable=Deliverable(form="files", artifact_dir="docs/research"),
+            deliverable=Deliverable(
+                form="files", artifacts=["docs/research/notes.md"]
+            ),
         )
     )
     results = {
@@ -1003,12 +989,10 @@ def test_artifact_dir_path_mismatch_from_warnings_alone_is_soft():
             content="ok",
             files_touched=["notes.md"],
             file_acceptance=_accepted("notes.md"),
-            warnings=[
-                "产物未写入约定文档目录 `docs/research/`（建议落在此目录下，勿写到工作区根）"
-            ],
+            warnings=["声明的交付物路径未落盘：`docs/research/notes.md`"],
         )
     }
-    payload = build_delivery_status(plan, results, execution_id="e-adir-warn")
+    payload = build_delivery_status(plan, results, execution_id="e-declared-warn")
     assert payload is not None
     assert payload["state"] == "delivered"
     assert "notes.md" in payload["delivered_files"]

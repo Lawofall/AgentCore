@@ -29,6 +29,7 @@ import {
   formatCostCaption,
   pickCostMoney,
 } from "@/lib/format";
+import { MESSAGE_ACTION_REVEAL_CLASS } from "@/lib/messageActionReveal";
 import { formatMessageExport } from "@/lib/messageExport";
 import { openWorkspaceDeliverable } from "@/lib/openWorkspaceDeliverable";
 import {
@@ -62,6 +63,7 @@ import {
   AssistantMessageFooter,
   AssistantMessageMetaSummary,
 } from "./AssistantMessageFooter";
+import { CloudBridgeHint } from "./CloudBridgeHint";
 import { MessageTime } from "./MessageActions";
 import { ComposingToolLine, ProcessTimeline } from "./ProcessTimeline";
 import { SyncStatusHint } from "./SyncStatusHint";
@@ -503,7 +505,9 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
       {/* 底部堆叠回退已废除（时间线一期）：交互卡只在 ProcessTimeline 标记槽渲染。
           不变量「有交互卡必有时间线标记」由 live 盖章 + reload journal 补标记保证。 */}
       {message.isStreaming && message.content.length > 0 && (
-        <div className="mt-1 flex items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <div
+          className={cn("mt-1 flex items-center", MESSAGE_ACTION_REVEAL_CLASS)}
+        >
           {(message.process?.length ?? 0) > 0 ? (
             <DropdownMenu>
               <SimpleTooltip
@@ -556,6 +560,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
           <MessageTime iso={message.createdAt} />
         </div>
       )}
+      <CloudBridgeHint messageId={message.id} />
       {outcome.showFooter && (
         <AssistantMessageFooter
           message={message}

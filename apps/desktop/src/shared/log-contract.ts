@@ -15,8 +15,9 @@
  * heartbeat|api_outage|browser_offline|bootstrap，`reason`/`last_ok_at`/`from`；
  * heartbeat 另可带 `consecutive_failures`）/ `server_health.online`（仅从 offline
  * 恢复；`since_offline_ms`）。心跳探活成功不打。软失败（未达阈值、UI 未翻红）：
- * `server_health.probe_failed`（`consecutive_failures`/`failure_threshold`/`reason`/
- * `status`）→ 自愈未翻红则 `server_health.probe_recovered`。会话中 API 5xx/断传输
+ * `server_health.probe_failed`（第 1 次 `debug`、之后 `warn`；`consecutive_failures`/
+ * `failure_threshold`/`reason`/`kind`/`duration_ms`/`http_status?`/`status`）→
+ * 自愈未翻红则 `server_health.probe_recovered`。会话中 API 5xx/断传输
  * 但 `/readyz` 仍健康：`server_health.api_outage_ignored`（不标 offline）。
  * 自动更新可观测（主进程直写）：`updater.configure` / `updater.schedule_start` /
  * `updater.policy` / `updater.check_begin|end` / `updater.phase` /
@@ -39,7 +40,10 @@
  *（debug）/ `workspace_op.resolve`（`outcome`=ok|stale_404|fail；可含
  * `resolve_attempts` / `resolve_ms`）/ `workspace_op.resolve_retry` /
  * 回合掉线重连（GET attach，禁止 POST 重发）：`conversation.rejoin_retry` /
- * `conversation.rejoin_closed`。
+ * `conversation.rejoin_closed`。对话级跟播：`conversation.follow_open` /
+ * `conversation.follow_closed`（切走 / 卸订）/ `conversation.follow_muted` /
+ * `conversation.follow_unmuted`（本端自有连接占用时静音不断连，`reason`=
+ * `local_stream_handoff`）。旧日志里让位曾 abort 成 `follow_closed` 同 reason。
  * `workspace_op.settle_exhausted`（`stream_nudged`）/ `sse.idle_stall`（泵空闲 60s）/
  * `sse.forced_transport_drop`（settle 耗尽后踢泵 → rejoin）。字段对齐服务端
  * `workspace.op_timeout`：`conversation_id` / `request_id` / `op`。

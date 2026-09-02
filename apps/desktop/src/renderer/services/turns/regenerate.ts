@@ -35,6 +35,7 @@ import {
   resumeConversationViaSidecar,
   streamConversationViaSidecar,
 } from "@/services/streamConversationViaSidecar";
+import type { CloudStreamPathReason } from "@/services/streamPathReason";
 import {
   type AgentMentionMeta,
   type MessageAttachmentMeta,
@@ -191,7 +192,7 @@ export async function runRegenerate(
   store.setAbort(ac, conversationId);
   beginTurnPreflight(conversationId);
 
-  const runCloud = async () => {
+  const runCloud = async (streamPathReason: CloudStreamPathReason) => {
     throwIfCannotOpenStream(conversationId, ac.signal);
     enterTurnStreaming(conversationId);
     await regenerateConversation({
@@ -206,6 +207,7 @@ export async function runRegenerate(
         : undefined,
       replaceMaterials,
       signal: ac.signal,
+      streamPathReason,
     });
   };
 
@@ -262,7 +264,7 @@ export async function runRegenerate(
           root_id: sidecarTarget.rootId,
           detail: fallbackDetail,
         });
-        await runCloud();
+        await runCloud("sidecar_fallback");
       }
     } else {
       const bridging =
@@ -287,7 +289,7 @@ export async function runRegenerate(
         root_id: sidecarTarget?.rootId ?? null,
         probe_detail: probe?.detail ?? null,
       });
-      await runCloud();
+      await runCloud(reason);
     }
   } catch (err) {
     if (isAbort(err)) {

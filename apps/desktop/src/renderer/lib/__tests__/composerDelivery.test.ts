@@ -25,7 +25,7 @@ describe("composerDelivery", () => {
     expect(resolveDefaultDelivery(true, CID)).toBe("queue");
   });
 
-  it("协调活跃（有 plan）→ queue", () => {
+  it("协调活跃（有 plan）+ 生成中 → steer", () => {
     useConversationStore.getState().createAssistantMessage(CID);
     const messages = useConversationStore.getState().byId[CID]?.messages ?? [];
     const aid = messages[0]?.id;
@@ -52,6 +52,6 @@ describe("composerDelivery", () => {
       },
     });
     expect(isCoordinationActive(CID)).toBe(true);
-    expect(resolveDefaultDelivery(true, CID)).toBe("queue");
+    expect(resolveDefaultDelivery(true, CID)).toBe("steer");
   });
 });

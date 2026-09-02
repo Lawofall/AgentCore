@@ -525,7 +525,7 @@ def test_software_greenfield_vue_spa_from_scratch_none_allowed():
 
 
 def test_software_greenfield_named_build_app_unknown():
-    """具名工厂图纸已撤：走未知闸，拒文教手写 + consult(building_software)。"""
+    """具名工厂图纸已撤：走未知闸，拒文教手写。"""
     name, err = resolve_playbook_declaration(
         {
             "playbook": "build_app",
@@ -536,8 +536,8 @@ def test_software_greenfield_named_build_app_unknown():
     assert err is not None
     assert "未知" in err
     assert "手写" in err
-    assert "consult(building_software)" in err
     assert "不要再传" in err
+    assert "consult(team_orchestration_advanced)" not in err
     assert "绿场推荐" not in err
     assert "绿场软件推荐" not in err
     assert "可用：" not in err

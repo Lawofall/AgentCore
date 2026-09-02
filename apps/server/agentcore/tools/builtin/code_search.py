@@ -176,7 +176,7 @@ def _render(result: CodeSearchResult, *, query: str, path_prefix: str) -> str:
 
     summary = (
         f"（共 {len(result.chunks)} 条结果；单文件默认 file_read 整读；"
-        "仅页脚已截断或已有行号时开窗）"
+        "仅页脚已达安全顶或已有行号时开窗）"
     )
     body = "\n\n".join(lines) + f"\n\n{summary}"
     body += _status_footer(status)

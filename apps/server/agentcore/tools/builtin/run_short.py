@@ -18,10 +18,6 @@ from agentcore.tools.builtin.long_running import (
     long_running_redirect_message,
 )
 from agentcore.tools.builtin.package_install import permission_allows_restricted_network
-from agentcore.tools.builtin.project_verify import (
-    project_verify_command_match,
-    project_verify_redirect_message,
-)
 from agentcore.tools.builtin.source_inspect import (
     source_inspect_match,
     source_inspect_redirect_message,
@@ -36,8 +32,6 @@ __all__ = [
     "execute_short",
     "long_running_command_match",
     "long_running_redirect_message",
-    "project_verify_command_match",
-    "project_verify_redirect_message",
     "source_inspect_match",
     "source_inspect_redirect_message",
 ]
@@ -173,22 +167,6 @@ async def execute_short(
             error=msg,
             duration_ms=int((time.monotonic() - start) * 1000),
             metadata={"code": "long_running_redirect", "matched": matched},
-            contract_failure=True,
-        )
-
-    verify_matched = project_verify_command_match(code)
-    if verify_matched is not None:
-        msg = project_verify_redirect_message(
-            verify_matched,
-            verify_policy=getattr(context, "verify_policy", "") or "",
-        )
-        return ToolResult(
-            tool_call_id="",
-            success=False,
-            output="",
-            error=msg,
-            duration_ms=int((time.monotonic() - start) * 1000),
-            metadata={"code": "project_verify_redirect", "matched": verify_matched},
             contract_failure=True,
         )
 

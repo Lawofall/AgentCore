@@ -251,11 +251,8 @@ async def handle_partial_failure(
         backend=backend,
         promotion_ledger=tool._base_tool_context.promotion_ledger,
     )
-    from agentcore.runtime.runs.audit_ledger import load_audit_json_by_path
-
-    audit_json = await load_audit_json_by_path(plan, results, backend)
     synthesis = build_ceo_synthesis(
-        tool, plan, results, call_idx=call_idx, audit_json_by_path=audit_json
+        tool, plan, results, call_idx=call_idx
     )
     partial_output = synthesis.text
     # Coordination terminal: workers are all marked done; without ALL_COMPLETED the
@@ -358,11 +355,8 @@ async def finalize_successful_drive(
         promotion_ledger=tool._base_tool_context.promotion_ledger,
     )
 
-    from agentcore.runtime.runs.audit_ledger import load_audit_json_by_path
-
-    audit_json = await load_audit_json_by_path(plan, results, backend)
     synthesis = build_ceo_synthesis(
-        tool, plan, results, call_idx=call_idx, audit_json_by_path=audit_json
+        tool, plan, results, call_idx=call_idx
     )
     output = synthesis.text
     if session is not None:

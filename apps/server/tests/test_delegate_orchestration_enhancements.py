@@ -389,6 +389,36 @@ def test_project_cleared_write_args_collapses_older_keeps_recent():
     assert new_body not in (out[2].content or "")
 
 
+def test_project_cleared_write_args_collapses_after_non_write_round():
+    """写完去 run / 说话：写参应收成 path，不必再写一次才清。"""
+    body = "整份内核" * 200
+    msgs = (
+        [LLMMessage(role="user", content="go")]
+        + _write_round("w0", "src/main.ts", body)
+        + [
+            LLMMessage(
+                role="assistant",
+                tool_calls=[
+                    ToolCall(
+                        id="r1",
+                        function=ToolCallFunction(
+                            name="run",
+                            arguments=json.dumps({"command": "npm run build"}),
+                        ),
+                    )
+                ],
+            ),
+            LLMMessage(role="tool", content="ok", tool_call_id="r1"),
+        ]
+    )
+    out = project_cleared_write_args(msgs, min_chars=100)
+    assert out is not msgs
+    collapsed = json.loads(out[1].tool_calls[0].function.arguments)
+    assert collapsed == {"path": "src/main.ts"}
+    assert body not in out[1].tool_calls[0].function.arguments
+    assert "已落盘" in (out[2].content or "")
+
+
 def test_project_cleared_write_args_keeps_parallel_writes_in_same_round():
     """同一 assistant 消息里并行两刀写：keep_recent=1 都留（都是刚落下的那一轮）。"""
     a = "AAAA" * 200

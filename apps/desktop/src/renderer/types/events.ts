@@ -89,7 +89,7 @@ export interface UnifiedConsultDisplay {
  * metadata only in `display` (title / conversation_id / truncated / result_count) — the
  * transcript or hit list rides `result` so display stays under the ~6000-char wire cap.
  * Search typically sets `result_count` (+ optional `scope`); read sets `title` /
- * `conversation_id` / `truncated` (+ optional `depth: "full"`).
+ * `conversation_id` / `truncated` (+ optional `depth: "dialogue" | "process"`).
  */
 export interface ConversationLogDisplay {
   title?: string;

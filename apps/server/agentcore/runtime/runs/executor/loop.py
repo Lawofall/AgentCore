@@ -27,7 +27,6 @@ from agentcore.runtime.runs.contract import (
     handoff_expectation_met,
     is_zero_files_gap,
     needs_file_contents,
-    node_has_dependents,
     partition_citation_failures,
     strip_invalid_ledger_refs_from_surfaces,
     worker_expects_handoff,
@@ -224,7 +223,8 @@ async def run_contract_loop(
         pass_allowed = allowed_tools
         if is_light_pass:
             # Dedicated short-pass cap (not leftover from a main-pool formula).
-            # Tools narrow; run_rounds still accumulates whatever this pass spends.
+            # Retrieval stays off; local inspect/run remain. run_rounds still
+            # accumulates whatever this pass spends.
             pass_tools, pass_allowed = _narrow_for_light_repair(
                 worker_tools,
                 allowed_tools,
@@ -319,16 +319,33 @@ async def run_contract_loop(
         # Handoff-only / tool-only correction passes often stream no prose —
         # keep the prior non-empty body so contract checks and the terminal
         # RunState still see the already-qualified product.
-        # Promote path: handoff may put a brief into final_text when round
-        # body_chars==0; that must not wipe retained prior prose on a
-        # handoff-only light_repair pass.
+        # Closing-round 便条 is also streamed content: if a prior body exists,
+        # do not replace it with the brief.
         streamed = "".join(streamed_content).strip()
+        # ``_react_and_capture`` always appends a trailing no-tool assistant with
+        # this pass's content, so "last assistant has handoff" is false even when
+        # the pass just finished via handoff. Look back to the last user turn.
+        this_pass_handoff = False
+        for msg in reversed(messages):
+            if msg.role == "user":
+                break
+            if msg.role != "assistant" or not msg.tool_calls:
+                continue
+            if any(
+                getattr(tc.function, "name", "") == HANDOFF_TOOL_NAME
+                for tc in msg.tool_calls
+            ):
+                this_pass_handoff = True
+                break
         if streamed:
-            retained_content = content if (content or "").strip() else streamed
+            if retained_content and this_pass_handoff:
+                content = retained_content
+            else:
+                retained_content = content if (content or "").strip() else streamed
         elif retained_content:
             content = retained_content
         elif (content or "").strip():
-            # No prior body: accept this pass (incl. promoted brief as sole product).
+            # No prior body: accept this pass (incl. a brief as sole product).
             retained_content = content
         # files_written backs form=files / artifacts landing; workspace_paths
         # reconciles declarative artifacts against the live workspace (+ this
@@ -341,8 +358,8 @@ async def run_contract_loop(
             touched_now, product_landing_artifacts
         )
         product_files_written = len(product_touched_now)
-        # Always classify failed landing attempts so code_audit can demote
-        # absence hard-fails when the channel died mid-landing (not only zero-disk).
+        # Always classify failed landing attempts so zero-disk tips can
+        # attribute channel_dead / write_failed (not only true zero-attempt).
         landing_fail_kind = landing_write_failure_kind(messages)
         debrief_now = debrief_from_transcript(messages)
         # Re-index the live workspace only when reconciling declarative
@@ -410,20 +427,12 @@ async def run_contract_loop(
         # Handoff gate only forces a correction shot when the tool is actually
         # offered (production worker registry). Empty-registry unit tests still
         # get a degraded synth below without burning an extra LLM round.
-        # Leaves: substantial work (tools / longer body) also expects a brief so
-        # CEO / delivery_status can see incomplete reports — short pure-body exempt.
-        has_dependents = node_has_dependents(env.plan, spec.run_id)
-        needs_handoff = worker_expects_handoff(
-            env.plan,
-            spec.run_id,
-            content=content,
-            messages=messages,
-            files_touched=touched_now,
-        )
+        # One sentence: has dependents → must; last hop is not gated.
+        needs_handoff = worker_expects_handoff(env.plan, spec.run_id)
         handoff_offered = worker_tools.get_optional(HANDOFF_TOOL_NAME) is not None
         handoff_ok = (
             (not needs_handoff)
-            or handoff_expectation_met(debrief_now, for_dependents=has_dependents)
+            or handoff_expectation_met(debrief_now)
             or not handoff_offered
         )
         checked_files = (
@@ -516,11 +525,10 @@ async def run_contract_loop(
                             checked_files=checked_files,
                         )
                     ]
-                    if needs_handoff and handoff_offered and not handoff_expectation_met(debrief_now, for_dependents=has_dependents):
+                    if needs_handoff and handoff_offered and not handoff_expectation_met(debrief_now):
                         parts.append(
                             format_handoff_feedback(
                                 present_but_thin=debrief_now is not None,
-                                for_dependents=has_dependents,
                             )
                         )
                     messages.append(
@@ -613,11 +621,10 @@ async def run_contract_loop(
                         checked_files=checked_files,
                     )
                 )
-            if needs_handoff and handoff_offered and not handoff_expectation_met(debrief_now, for_dependents=has_dependents):
+            if needs_handoff and handoff_offered and not handoff_expectation_met(debrief_now):
                 parts.append(
                     format_handoff_feedback(
                         present_but_thin=debrief_now is not None,
-                        for_dependents=has_dependents,
                     )
                 )
             messages.append(_retry_message("\n\n".join(p for p in parts if p)))
@@ -641,11 +648,10 @@ async def run_contract_loop(
             write_pass_used = True
             light_mode = True  # reuse narrow write/handoff surface + short rounds
             parts = [format_write_pass_feedback(verdict)]
-            if needs_handoff and handoff_offered and not handoff_expectation_met(debrief_now, for_dependents=has_dependents):
+            if needs_handoff and handoff_offered and not handoff_expectation_met(debrief_now):
                 parts.append(
                     format_handoff_feedback(
                         present_but_thin=debrief_now is not None,
-                        for_dependents=has_dependents,
                     )
                 )
             messages.append(_retry_message("\n\n".join(p for p in parts if p)))
@@ -693,11 +699,10 @@ async def run_contract_loop(
             parts.append(format_interrupted_pass_note())
         if not verdict.ok:
             parts.append(format_feedback(verdict, checked_files=checked_files))
-        if needs_handoff and handoff_offered and not handoff_expectation_met(debrief_now, for_dependents=has_dependents):
+        if needs_handoff and handoff_offered and not handoff_expectation_met(debrief_now):
             parts.append(
                 format_handoff_feedback(
                     present_but_thin=debrief_now is not None,
-                    for_dependents=has_dependents,
                 )
             )
         messages.append(_retry_message("\n\n".join(p for p in parts if p)))

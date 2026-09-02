@@ -4,12 +4,12 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import and_, case, delete, func, select, update
+from sqlalchemy import and_, case, delete, exists, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agentcore.core.types import new_id
+from agentcore.core.types import is_uuid_id, new_id
 from agentcore.db.models import (
     Conversation,
     ConversationExternalGrant,
@@ -292,7 +292,11 @@ class ConversationRepository:
         ``user_id`` is mandatory so owner-scoping is the structural default rather than
         a caller convention (SEC-002). Trusted internal / admin callers that legitimately
         cross owners use :meth:`get_by_id_unscoped`.
+
+        Non-UUID ids never hit Postgres (``id`` is ``PG_UUID``); treat as unknown.
         """
+        if not is_uuid_id(conversation_id):
+            return None
         result = await self._session.execute(
             select(Conversation).where(
                 Conversation.id == conversation_id,
@@ -316,7 +320,11 @@ class ConversationRepository:
         ``include_deleted`` is for admin tombstone views (名册默认含软删，复盘必须对得上).
         The turn pipeline and other product callers must keep the default (False) so a
         soft-deleted conversation stays invisible to owner-scoped work.
+
+        Non-UUID ids never hit Postgres; treat as unknown.
         """
+        if not is_uuid_id(conversation_id):
+            return None
         cond = [Conversation.id == conversation_id]
         if not include_deleted:
             cond.append(Conversation.deleted_at.is_(None))
@@ -506,12 +514,18 @@ class ConversationRepository:
         include_archived: bool = False,
         global_chats_only: bool = False,
         exclude_conversation_id: str | None = None,
+        match_message_body: bool = False,
     ) -> Sequence[Conversation]:
-        """Owner-scoped title substring search (全局搜索 Tier 1 / 跨会话日志工具).
+        """Owner-scoped conversation search (全局搜索 Tier 1 / 跨会话日志工具).
 
-        ILIKE over ``title``, newest-activity first, capped at ``limit``. Excludes
-        soft-deleted and hidden handoff-host conversations — the same visibility as
-        the sidebar list, so a hit is always something the user can actually open.
+        Default: ILIKE over ``title``. With ``match_message_body``, also hit when any
+        message ``content`` matches (same substring as ``MessageRepository.search`` /
+        GET /v1/search 的消息面，但收成对话行). Newest-activity first, capped at
+        ``limit``. Excludes soft-deleted and hidden handoff/standing hosts — the same
+        visibility as the sidebar, so a hit is always something the user can open.
+
+        GET /v1/search 的 conversation 段保持默认（只搜标题）；跨会话日志工具走
+        ``search_with_projections``（有 query 时开正文）。
 
         The optional facets (搜索结果过滤) narrow the same result set server-side so
         the cap is spent on matching rows rather than filtered-away ones:
@@ -521,7 +535,7 @@ class ConversationRepository:
         Cross-session log tool extras (跨会话对话日志访问定案):
         ``include_archived`` (default False), ``global_chats_only`` (``folder_id IS NULL``),
         ``exclude_conversation_id`` (host turn's own chat). Empty ``query`` lists by
-        ``updated_at`` without a title filter.
+        ``updated_at`` without a title or body filter.
         """
         stmt = select(Conversation).where(
             Conversation.user_id == user_id,
@@ -530,7 +544,18 @@ class ConversationRepository:
         )
         q = (query or "").strip()
         if q:
-            stmt = stmt.where(Conversation.title.ilike(_ilike_pattern(q)))
+            title_hit = Conversation.title.ilike(_ilike_pattern(q))
+            if match_message_body:
+                body_hit = exists(
+                    select(Message.id).where(
+                        Message.conversation_id == Conversation.id,
+                        Message.content.is_not(None),
+                        Message.content.ilike(_ilike_pattern(q)),
+                    )
+                )
+                stmt = stmt.where(or_(title_hit, body_hit))
+            else:
+                stmt = stmt.where(title_hit)
         if not include_archived:
             stmt = stmt.where(Conversation.archived.is_(False))
         if global_chats_only:
@@ -560,7 +585,8 @@ class ConversationRepository:
     ) -> list[dict]:
         """Like :meth:`search` but projects ``folder_name`` + ``message_count``.
 
-        Returns plain dicts for the Worker log tools (no ORM leakage into tool JSON).
+        Returns plain dicts for the conversation-log tools (no ORM leakage into
+        tool JSON). Non-empty ``query`` matches title **or** message body.
         Message counts come from one grouped query (same as sidebar
         ``counts_for_conversations``).
         """
@@ -574,6 +600,7 @@ class ConversationRepository:
                 global_chats_only=global_chats_only,
                 exclude_conversation_id=exclude_conversation_id,
                 updated_after=updated_after,
+                match_message_body=bool((query or "").strip()),
             )
         )
         if not convs:

@@ -485,14 +485,7 @@ async def finalize_stopped(
 
         output = format_kickoff_cancel_result(primitive="delegate", note=note)
     else:
-        from agentcore.runtime.runs.audit_ledger import load_audit_json_by_path
-
-        audit_json = await load_audit_json_by_path(
-            plan, results, tool._base_tool_context.backend
-        )
-        output = build_ceo_synthesis(
-            tool, plan, results, audit_json_by_path=audit_json
-        ).text
+        output = build_ceo_synthesis(tool, plan, results).text
     return ToolResult(
         tool_call_id="",
         success=True,

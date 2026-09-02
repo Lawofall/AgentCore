@@ -25,6 +25,7 @@ import {
   streamConversation,
 } from "@/services/streamConversation";
 import { streamConversationViaSidecar } from "@/services/streamConversationViaSidecar";
+import type { CloudStreamPathReason } from "@/services/streamPathReason";
 import { traceTurnEnd, traceTurnMilestone } from "@/services/turnTrace";
 import { restoreComposerDraft } from "@/stores/composer";
 import { getRuntime, useConversationStore } from "@/stores/conversation";
@@ -68,14 +69,8 @@ function setExecutionVia(
   useConversationStore.getState().setExecutionVia(via, conversationId);
 }
 
-/** 云端分支原因——写入 turnTrace + desktop.jsonl，对照服务端 via=cloud。 */
-type CloudPathReason =
-  | "switch_off"
-  | "no_local_engine"
-  | "probe_unhealthy"
-  | "probe_cache_bad"
-  | "no_local_target"
-  | "sidecar_fallback";
+/** 云端分支原因——写入 turnTrace + desktop.jsonl + 云 POST 头，对照服务端 via=cloud。 */
+type CloudPathReason = CloudStreamPathReason;
 
 function resolveCloudPathReason(args: {
   hadSidecarTarget: boolean;
@@ -298,11 +293,12 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
           delivery,
           signal: ac.signal,
           turnCommit,
+          streamPathReason: "sidecar_fallback",
         });
       }
     } else {
       // 云链路：探活失败 / bad 缓存 / 显式强制关 / 纯云会话。
-      // 绑本机工作区却走云 = 云端过桥 → 写 executionVia（ComposerCloudBridgeHint）。
+      // 绑本机工作区却走云 = 云端过桥 → 写 executionVia（CloudBridgeHint 助手泡脚注）。
       const bridging =
         sidecarTarget !== null ||
         (await resolveConversationLocalTarget(conversationId)) !== null;
@@ -330,6 +326,7 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
         delivery,
         signal: ac.signal,
         turnCommit,
+        streamPathReason: reason,
       });
     }
     const zero = inspectZeroOutputSendRollback(

@@ -139,12 +139,15 @@ async def _build_ceo_context(
     skill_registry = build_system_skill_registry()
     stats = _seed_workspace(root, tier=workspace)
     backend = ServerWorkspace(root=root, sandbox=SubprocessSandbox())
+    from agentcore.workspace.project_shell import desk_is_visibly_empty
+
     workspace_facts = build_workspace_context(
         backend,
         desktop_online=True,
         run_enabled=code_execute,
         browser_enabled=browser,
         outlet_inventory=await collect_outlet_inventory(backend),
+        desk_visibly_empty=await desk_is_visibly_empty(backend),
     )
     base = assemble_system_prompt()
     ctx = ToolContext.create(

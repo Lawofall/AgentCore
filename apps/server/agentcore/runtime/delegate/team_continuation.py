@@ -140,14 +140,100 @@ def gap_fill_admission_error(
     return None
 
 
-def cold_open_reject_message(shape: ContinuationShape) -> str:
+_MAX_CONTINUATION_CANDIDATES = 12
+
+
+def _continuation_status_label(phase: Any) -> str:
+    from agentcore.runtime.runs.types import RunPhase
+
+    if phase is None:
+        return "running"
+    value = phase.value if isinstance(phase, RunPhase) else str(phase).strip().lower()
+    if value in ("completed", "failed", "cancelled", "skipped"):
+        return value
+    return "running"
+
+
+def format_continuation_candidates(
+    *,
+    plan: RunPlan | None = None,
+    completed: Mapping[str, RunState] | None = None,
+    max_n: int = _MAX_CONTINUATION_CANDIDATES,
+) -> str:
+    """Reject-copy roster (run_id / role / status). Empty when nothing to list."""
+    seed = dict(completed or {})
+    lines: list[str] = []
+    seen: set[str] = set()
+    nodes = list(getattr(plan, "nodes", None) or [])
+    for node in nodes:
+        if str(getattr(node, "kind", "") or "") == "captain":
+            continue
+        run_id = str(getattr(node, "run_id", "") or "").strip()
+        if not run_id or run_id in seen:
+            continue
+        seen.add(run_id)
+        role = (
+            str(getattr(node, "role", "") or "").strip()
+            or str(getattr(node, "agent_name", "") or "").strip()
+            or run_id
+        )
+        state = seed.get(run_id)
+        phase = getattr(state, "phase", None) if state is not None else None
+        lines.append(
+            f"- run_id={run_id}; role={role}; status={_continuation_status_label(phase)}"
+        )
+        if len(lines) >= max_n:
+            break
+    if not lines:
+        for run_id, state in seed.items():
+            rid = str(run_id or "").strip()
+            if not rid:
+                continue
+            phase = getattr(state, "phase", None) if state is not None else None
+            lines.append(f"- run_id={rid}; status={_continuation_status_label(phase)}")
+            if len(lines) >= max_n:
+                break
+    extra = 0
+    if nodes:
+        countable = [
+            n
+            for n in nodes
+            if str(getattr(n, "kind", "") or "") != "captain"
+            and str(getattr(n, "run_id", "") or "").strip()
+        ]
+        extra = max(0, len(countable) - len(lines))
+    elif seed:
+        extra = max(0, len(seed) - len(lines))
+    if extra > 0:
+        lines.append(f"- …另有 {extra} 个未列出")
+    return "\n".join(lines)
+
+
+def cold_open_reject_message(
+    shape: ContinuationShape,
+    *,
+    candidates: str = "",
+) -> str:
     """收口后冷开整团重派的拒绝正文——指向真实可用的续派入口。"""
     from agentcore.runtime.runs.constants import MAX_GAP_FILL_ADDS
 
+    roster = (candidates or "").strip()
+    if roster:
+        continue_clause = (
+            "`continue_from_run_id`（条数不限；填上轮 delegate 回执名册里的 run_id，"
+            "或下列候选）"
+        )
+        roster_tail = f"\n可续候选：\n{roster}"
+    else:
+        continue_clause = (
+            "`continue_from_run_id`（条数不限；填上轮 delegate 回执「队员终态名册」里的 run_id）"
+        )
+        roster_tail = ""
     return (
         f"收口后拒绝整团重派：本批有 {len(shape.cold)} 个既不续派、也不补缺口的冷开节点。"
         "要动同一支团队请走续派入口——让原作者接着干用 "
-        "`continue_from_run_id`（条数不限，run_id 见 `<近期团队图>`）；"
+        f"{continue_clause}；"
         f"补失败/跳过缺口用 `replaces_run_id`（单次≤{MAX_GAP_FILL_ADDS}）。"
         "已有产出够交代就直接向老板交代。"
+        f"{roster_tail}"
     )

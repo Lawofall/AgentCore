@@ -82,7 +82,7 @@ describe("statusFaceLabel", () => {
         undefined,
         null,
         false,
-        "结构闸：findings[0] severity 无效",
+        "缺少必备章节：结论",
         null,
         null,
         "format",
@@ -419,9 +419,8 @@ describe("buildAgentNodePresentation revision face", () => {
     });
   });
 
-  it("never leaks raw run.error into the peek (infra / 结构闸 text)", () => {
-    const gateError =
-      "结构闸：缺少 audit JSON 产物：`AgentCore/文档/reviews/x.audit.json`";
+  it("never leaks raw run.error into the peek (infra / format-gate text)", () => {
+    const gateError = "缺少必备章节：结论";
     const p = buildAgentNodePresentation(
       baseNode({
         status: "failed",
@@ -431,8 +430,8 @@ describe("buildAgentNodePresentation revision face", () => {
       }),
     );
     expect(p.peekActivity?.text).toBe(failureDetailSentence("format", null));
-    expect(p.peekActivity?.text).not.toContain("结构闸");
-    expect(p.peekActivity?.text).not.toContain(".audit.json");
+    expect(p.peekActivity?.text).not.toContain("缺少必备章节");
+    expect(p.peekActivity?.text).not.toContain("结论");
   });
 
   it("peek keeps the saved-files fact when the run landed products", () => {

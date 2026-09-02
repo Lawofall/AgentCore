@@ -1,9 +1,13 @@
 import { IconButton } from "@/components/ui";
 import { copyText } from "@/lib/clipboard";
 import { clampScale, fitContainView } from "@/lib/diagramView";
-import { inlineMermaidWidthPx } from "@/lib/inlineMermaidWidth";
+import {
+  inlineMermaidBoxPx,
+  mermaidInlineMaxHeightPx,
+} from "@/lib/inlineMermaidBox";
+import { mermaidRenderConfig } from "@/lib/mermaidConfig";
 import { normalizeMermaidSource } from "@/lib/mermaidNormalize";
-import { normalizeMermaidSvg, readMermaidSvgWidth } from "@/lib/mermaidSvg";
+import { normalizeMermaidSvg, readMermaidSvgSize } from "@/lib/mermaidSvg";
 import { sanitizeMarkmapTree } from "@/lib/sanitizeMarkmap";
 import { notifyActionError } from "@/lib/toast";
 import { useIsDark } from "@/lib/useIsDark";
@@ -520,35 +524,70 @@ function DiagramCard({
   );
 }
 
+function mermaidInlineMaxHeightFromViewport(): number {
+  const rem = Number.parseFloat(
+    getComputedStyle(document.documentElement).fontSize,
+  );
+  return mermaidInlineMaxHeightPx(
+    window.innerHeight,
+    Number.isFinite(rem) && rem > 0 ? rem : 16,
+  );
+}
+
+/**
+ * Explicit contain-fit box. Do not put max-height + width/height:auto on the
+ * SVG — Chromium resolves that to 0×0 (blank card). Do not stretch with
+ * width:100% of the column — that is what enlarged compact TD stacks.
+ */
 function MermaidInlineSvg({ svg }: { svg: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const nativeW = readMermaidSvgWidth(svg);
-  const [widthPx, setWidthPx] = useState(() =>
-    nativeW > 0 ? inlineMermaidWidthPx(nativeW, 0) : undefined,
+  const native = readMermaidSvgSize(svg);
+  const [box, setBox] = useState(() =>
+    inlineMermaidBoxPx(native.w, native.h, 0, mermaidInlineMaxHeightPx(0, 16)),
   );
 
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     const apply = () => {
-      const w = inlineMermaidWidthPx(nativeW, host.clientWidth);
-      if (w > 0) setWidthPx(w);
+      setBox(
+        inlineMermaidBoxPx(
+          native.w,
+          native.h,
+          host.clientWidth,
+          mermaidInlineMaxHeightFromViewport(),
+        ),
+      );
     };
     apply();
-    if (typeof ResizeObserver === "undefined") return;
+    window.addEventListener("resize", apply);
+    if (typeof ResizeObserver === "undefined") {
+      return () => window.removeEventListener("resize", apply);
+    }
     const ro = new ResizeObserver(apply);
     ro.observe(host);
-    return () => ro.disconnect();
-  }, [nativeW]);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", apply);
+    };
+  }, [native.w, native.h]);
 
   return (
-    <div ref={hostRef} className="w-full">
-      <div
-        className="mx-auto [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
-        style={widthPx ? { width: widthPx } : undefined}
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid strict mode sanitizes the SVG via DOMPurify.
-        dangerouslySetInnerHTML={{ __html: svg }}
-      />
+    <div ref={hostRef} className="flex w-full justify-center">
+      {box ? (
+        <div
+          className="overflow-hidden [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+          style={{ width: box.w, height: box.h }}
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid strict mode sanitizes the SVG via DOMPurify.
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+      ) : (
+        <div
+          className="max-h-[min(50vh,36rem)] max-w-full overflow-auto [&>svg]:block [&>svg]:h-auto [&>svg]:max-w-full"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid strict mode sanitizes the SVG via DOMPurify.
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+      )}
     </div>
   );
 }
@@ -575,12 +614,7 @@ function MermaidDiagram({ code }: { code: string }) {
       }
       try {
         const normalized = normalizeMermaidSource(code);
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: "strict",
-          theme: dark ? "dark" : "default",
-          fontFamily: "inherit",
-        });
+        mermaid.initialize(mermaidRenderConfig(dark));
         // parse() is a cheap, side-effect-free syntax gate; render() then throws
         // on any render-time failure — both land in the catch below and degrade
         // to source. We deliberately do NOT sniff the returned SVG for

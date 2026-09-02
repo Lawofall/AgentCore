@@ -1,9 +1,9 @@
-"""LLM consolidation of preference / profile / navigation / topic memory — NOT vector search.
+"""LLM consolidation of preference / profile / navigation memory — NOT vector search.
 
-Rewrites always-files (偏好 / 画像 / folder 导航) as whole documents and applies
-structured ops to topic notes from undigested episodic digests + current semantic
-markdown. Uses a chat LLM ``complete()`` pass only; no embeddings, no vector index,
-no similarity retrieval. Never runs on a single conversation window.
+Rewrites always-files (偏好 / 画像 / folder 导航) as whole documents from undigested
+episodic digests + current semantic markdown. Does **not** write ``主题/*.md`` (explore /
+file page / daily review do). Uses a chat LLM ``complete()`` pass only; no embeddings,
+no vector index, no similarity retrieval. Never runs on a single conversation window.
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ from agentcore.memory.always_quota import (
 from agentcore.memory.episodic import EpisodeRecord, merge_episode_actions
 from agentcore.memory.maintenance import (
     MemoryUpdateItem,
-    _enforce_topic_cap,
     _item_from_op,
     _memory_file_label,
     _memory_leaf_target,
@@ -38,8 +37,6 @@ from agentcore.memory.store import (
     PREFERENCES_MEMORY_FILE,
     MemoryScope,
     MemoryStore,
-    is_topic_path,
-    topic_slug,
 )
 from agentcore.memory.user_memory import (
     _GLOBAL_ONLY_PROFILE_SECTIONS,
@@ -50,9 +47,7 @@ from agentcore.memory.user_memory import (
     MemoryApplier,
     MemoryOp,
     _bullet_key,
-    _coerce_op,
     _extract_json_object,
-    _injection_style_marker,
     _MemoryDoc,
     _parse,
     _render,
@@ -93,7 +88,7 @@ class SemanticConsolidateInput:
 
 @dataclass
 class SemanticConsolidateResult:
-    """Parsed LLM output: full always-file rewrites + topic ops."""
+    """Parsed LLM output: full always-file rewrites. ``ops`` is always empty (not this pass)."""
 
     preferences: str | None = None  # None = leave file unchanged
     profile: str | None = None
@@ -110,16 +105,18 @@ class SemanticConsolidator(Protocol):
 _SEMANTIC_SYSTEM_PROMPT = """\
 You maintain a user's long-term SEMANTIC memory from recent SESSION SUMMARIES (episodic
 digests). You are given the current preference/profile markdown files and a list of
-undigested session summaries. Produce an UPDATED memory that merges durable knowledge,
-deduplicates across sessions, and drops one-off chat trivia.
+undigested session summaries. Merge durable knowledge about the USER and their FOLDERS,
+deduplicate across sessions, and drop one-off chat trivia. Product capabilities
+(playbooks, tools, skills, handbook answers) live in the product ≠ this memory.
+This pass rewrites 偏好.md / 画像.md / 导航.md only. 主题/*.md is written by explore,
+the file page, or daily review — not this pass.
 
 Output ONLY a JSON object:
 {
   "preferences": "<FULL rewritten 偏好.md markdown, or null to leave unchanged>",
   "profile": "<FULL rewritten GLOBAL 画像.md markdown, or null to leave unchanged>",
   "folder_profile": "<FULL rewritten FOLDER 画像.md, or null; only when a folder exists>",
-  "navigation": "<FULL rewritten FOLDER 导航.md, or null; only when a folder exists>",
-  "ops": [ <zero or more TOPIC-ONLY ops> ]
+  "navigation": "<FULL rewritten FOLDER 导航.md, or null; only when a folder exists>"
 }
 
 Always-file rules (preferences / profile / folder_profile):
@@ -141,7 +138,7 @@ Navigation (navigation field — FOLDER 导航.md short entry ONLY):
   leave navigation null.
 - 导航 is a SHORT pointer file: optional one-line定位 + a route table of ONE-line bullets
   shaped like「我要 X → 先读/先查 Y」(path or command). Never paste long bodies; thick
-  content goes to 主题/<slug>.md via ops.
+  folder knowledge is not this pass.
 - Write a route ONLY when a session summary's verified folder facts / action inventory
   prove it — next session can skip one action because of it. Chat-only / preference-only
   sessions → leave navigation null (zero change).
@@ -149,7 +146,7 @@ Navigation (navigation field — FOLDER 导航.md short entry ONLY):
   invent paths or commands.
 - Hard cap: at most __MAX_NAV_ROUTES__ route bullets. When over the cap, MERGE similar
   routes (do not append unboundedly). Preserve still-useful existing routes.
-- Do NOT put folder ops knowledge into folder_profile / 画像 — navigation + topics only.
+- Do NOT put folder ops knowledge into folder_profile / 画像 — navigation only.
 
 Scope routing (profile vs folder_profile — position = scope):
 - 项目约束 and THIS folder's tech stack / folder-only facts belong ONLY in
@@ -169,22 +166,11 @@ Preference promotion rule (strict — 偏好.md only):
 - If a summary merely describes what the user asked this session to do, leave
   preferences null (or unchanged) — do not invent durable habits from the genre.
 
-Domain split (write-side — 偏好.md vs 主题/*.md):
+Domain split (write-side — 偏好.md):
 - 偏好.md is LIMITED to communication style and work habits only (language, brevity,
   interaction cadence, review style, etc.).
-- Topic / domain / genre preferences must NOT stay in 偏好.md — durable topic
-  knowledge that will change later action goes to the matching 主题/<slug>.md via
-  ops (on_demand; consult only).
-- When CURRENT preferences still contain such genre/domain bullets, REWRITE preferences
-  without them and ADD/UPDATE only still-actionable bits into the appropriate
-  主题/*.md op(s).
-
-Topic ops (ops array) — ONLY for 主题/<slug>.md notes:
-  {"action":"add|remove|update","file":"主题/<slug>.md","scope":"global|folder",
-   "section":"<optional>","content":"...","match":"..."}
-Record only content that will change later action (以后行动): durable facts and
-one-line vetoes (方案 + 为何否). No process diary or completed steps.
-Do NOT put 偏好.md / 画像.md / 导航.md changes into ops — those go in the rewrite fields above.
+- Topic / domain / genre preferences must NOT stay in 偏好.md. When CURRENT preferences
+  still contain such bullets, REWRITE preferences without them. 主题/*.md is not this pass.
 
 Privacy: never record government IDs, passwords/keys, precise home address, payment,
 health, religion, sexual orientation, or political affiliation unless a summary says the
@@ -199,18 +185,13 @@ def _render_semantic_prompt(data: SemanticConsolidateInput) -> str:
         )
         or "(none)"
     )
-    topics = "\n".join(f"- 主题/{s}.md" for s in data.topic_files) or "(none)"
     sections = [
         f"# Today's date\n{data.today.strip() or '(unknown)'}",
         f"# CURRENT GLOBAL preferences (偏好.md)\n{data.current_preferences.strip() or '(empty)'}",
         f"# CURRENT GLOBAL profile (画像.md)\n{data.current_profile.strip() or '(empty)'}",
-        f"# Existing GLOBAL topic notes\n{topics}",
         f"# Undigested session summaries (episodic)\n{episodes_block}",
     ]
     if data.folder_id:
-        folder_topics = (
-            "\n".join(f"- 主题/{s}.md" for s in data.folder_topic_files) or "(none)"
-        )
         sections.append(
             f"# CURRENT FOLDER profile (画像.md)\n"
             f"{data.current_folder_profile.strip() or '(empty)'}"
@@ -219,7 +200,6 @@ def _render_semantic_prompt(data: SemanticConsolidateInput) -> str:
             f"# CURRENT FOLDER navigation (导航.md)\n"
             f"{data.current_navigation.strip() or '(empty)'}"
         )
-        sections.append(f"# Existing FOLDER topic notes\n{folder_topics}")
         inv = data.action_inventory or TurnActionInventory()
         from agentcore.memory.action_inventory import render_action_inventory_for_prompt
 
@@ -436,41 +416,20 @@ def sanitize_profile_rewrite(markdown: str, *, scope: MemoryScope) -> str:
 def parse_semantic_result(
     raw: str, *, folder_id: str | None = None
 ) -> SemanticConsolidateResult:
-    """Parse the consolidator's JSON into rewrite fields + topic-only ops."""
+    """Parse the consolidator's JSON into rewrite fields. Topic ``ops`` are dropped."""
+    del folder_id  # ops path retired; kept so callers/tests still pass folder_id
     payload = _extract_json_object(raw)
     if payload is None:
         return SemanticConsolidateResult(parse_failed=True)
-    ops: list[MemoryOp] = []
     raw_ops = payload.get("ops")
-    if isinstance(raw_ops, list):
-        for item in raw_ops:
-            op = _coerce_op(item, folder_id)
-            if op is None:
-                continue
-            # Always-files must not ride the ops path (rewrite fields own them).
-            if op.file in (
-                PREFERENCES_MEMORY_FILE,
-                CORE_MEMORY_FILE,
-                NAVIGATION_MEMORY_FILE,
-            ):
-                continue
-            if not is_topic_path(op.file):
-                continue
-            marker = _injection_style_marker(op.content) if op.content else None
-            if marker is not None:
-                logger.warning(
-                    "memory.semantic_injection_dropped",
-                    marker=marker,
-                    content_preview=(op.content or "")[:120],
-                )
-                continue
-            ops.append(op)
+    if isinstance(raw_ops, list) and raw_ops:
+        logger.info("memory.semantic_topic_ops_dropped", count=len(raw_ops))
     return SemanticConsolidateResult(
         preferences=_normalize_rewrite(payload.get("preferences")),
         profile=_normalize_rewrite(payload.get("profile")),
         folder_profile=_normalize_rewrite(payload.get("folder_profile")),
         navigation=_normalize_rewrite(payload.get("navigation")),
-        ops=ops,
+        ops=[],
         parse_failed=False,
     )
 
@@ -615,28 +574,25 @@ async def consolidate_semantic_memory(
     folder_id: str | None = None,
     collect_items: list[MemoryUpdateItem] | None = None,
 ) -> bool | None:
-    """Merge undigested episodes into semantic files.
+    """Merge undigested episodes into 偏好 / 画像 / 导航.
 
     Returns True if a file changed, False if the pass completed with no durable change,
     or None if the consolidator failed (parse/timeout/exception) — caller must NOT mark
-    episodes digested on None.
+    episodes digested on None. Topic ``ops`` on the result are ignored (not this pass).
 
     A full always pool refuses only the entry it would have grown (CTX-A2): the pass keeps
-    going, every other file still lands, and the refusals ride one card that names them.
+    going, every other always file still lands, and the refusals ride one card that names them.
+    ``applier`` / ``section_cap`` / ``max_topic_files`` are accepted for call-site
+    compatibility and unused.
     """
     if not episodes:
         return False
-    applier = applier or MarkdownMemoryApplier(section_cap=section_cap)
+    _ = (applier, section_cap, max_topic_files)
     try:
-        global_topics = {m.path for m in await store.list(user_id) if is_topic_path(m.path)}
-        folder_topics: set[str] = set()
         folder_profile = ""
         current_navigation = ""
         batch_actions = merge_episode_actions(episodes)
         if folder_id:
-            folder_topics = {
-                m.path for m in await store.list(user_id, scope=folder_id) if is_topic_path(m.path)
-            }
             folder_profile = await store.load(user_id, CORE_MEMORY_FILE, scope=folder_id)
             current_navigation = await store.load(
                 user_id, NAVIGATION_MEMORY_FILE, scope=folder_id
@@ -653,14 +609,15 @@ async def consolidate_semantic_memory(
                 current_navigation=current_navigation,
                 folder_id=folder_id,
                 today=today,
-                topic_files=sorted(topic_slug(p) for p in global_topics),
-                folder_topic_files=sorted(topic_slug(p) for p in folder_topics),
                 action_inventory=batch_actions,
             )
         )
         if result.parse_failed:
             logger.info("memory.semantic_parse_failed", user_id=user_id)
             return None
+        leftover = len(result.ops or [])
+        if leftover:
+            logger.info("memory.semantic_topic_ops_dropped", user_id=user_id, count=leftover)
 
         changed = False
 
@@ -738,7 +695,6 @@ async def consolidate_semantic_memory(
                     diff_memory_markdown(old, updated, file=file, scope=scope)
                 )
 
-        ops = list(result.ops or [])
         with collect_always_quota_denials() as denials:
             await _apply_rewrite(
                 PREFERENCES_MEMORY_FILE,
@@ -762,27 +718,6 @@ async def consolidate_semantic_memory(
                     result.navigation,
                     scope=folder_id,
                 )
-
-            if ops:
-                existing_by_scope: dict[MemoryScope, set[str]] = {None: global_topics}
-                if folder_id:
-                    existing_by_scope[folder_id] = folder_topics
-                ops = _enforce_topic_cap(ops, existing_by_scope, max_topic_files)
-                by_target: dict[tuple[MemoryScope, str], list[MemoryOp]] = defaultdict(list)
-                for op in ops:
-                    by_target[(op.scope, op.file)].append(op)
-                for (scope, file), file_ops in by_target.items():
-                    current = await store.load(user_id, file, scope=scope)
-                    updated = applier.apply(current, file_ops)
-                    if updated != current:
-                        if not await _save_note(file, updated, scope=scope):
-                            continue
-                        changed = True
-                        if collect_items is not None:
-                            collect_items.extend(
-                                _item_from_op(op, file=file, scope=scope)
-                                for op in file_ops
-                            )
         if denials:
             await push_always_quota_card(user_id, denials[-1].usage, denials)
 
@@ -791,7 +726,7 @@ async def consolidate_semantic_memory(
                 "memory.semantic_updated",
                 user_id=user_id,
                 episodes=len(episodes),
-                topic_ops=len(ops),
+                topic_ops=0,
             )
         return changed
     except Exception as e:

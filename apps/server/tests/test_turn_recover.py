@@ -1304,6 +1304,9 @@ async def test_production_crash_factory_base_prompt_lists_system_skills(monkeypa
     monkeypatch.setattr(
         rebuild_mod, "collect_outlet_inventory", AsyncMock(return_value=())
     )
+    monkeypatch.setattr(
+        rebuild_mod, "desk_is_visibly_empty", AsyncMock(return_value=False)
+    )
     monkeypatch.setattr(crash_mod, "async_session_factory", lambda: _FakeSession())
     monkeypatch.setattr(crash_mod, "ConversationRepository", _FakeConvRepo)
     monkeypatch.setattr(crash_mod, "BoardRepository", _FakeBoardRepo)

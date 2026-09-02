@@ -145,7 +145,7 @@ const mockExecution: Execution = {
   debatePretrial: null,
 };
 
-const HANDOFF_RECEIPT = "已收尾并提交交接简报。";
+const HANDOFF_RECEIPT = "已收尾。";
 
 const handoffStep = {
   kind: "tool" as const,

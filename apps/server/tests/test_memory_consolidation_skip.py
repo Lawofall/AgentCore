@@ -82,9 +82,10 @@ def test_semantic_prompt_tightens_preferences_promotion():
 
 
 def test_semantic_prompt_domain_split_keeps_genre_out_of_preferences():
-    """M2: 题材/领域偏好 → 主题/*.md；偏好.md 限沟通风格与工作方式。"""
+    """题材/领域偏好不得留在偏好.md；主题不是本场巩固的出口。"""
     text = _SEMANTIC_SYSTEM_PROMPT
     assert "Domain split" in text
     assert "communication style" in text.lower() or "工作习惯" in text
-    assert "主题/<slug>.md" in text or "主题/" in text
     assert "must NOT stay in 偏好.md" in text or "不得" in text
+    assert "not this pass" in text
+    assert '"ops"' not in text

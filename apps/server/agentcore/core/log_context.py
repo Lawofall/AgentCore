@@ -21,6 +21,8 @@ Canonical keys (bound where they first become known):
     (``RequestAttributionMiddleware``; request-scoped)
   - ``client_platform`` / ``client_version``  raw ``X-Client-*`` headers
     (same middleware; ``-`` = header absent, ``""`` = present but empty)
+  - ``stream_path_reason``  optional allowlisted ``X-AgentCore-Stream-Path-Reason``
+    (desktop overbridge enum; unbound when absent / unknown — not a ``-`` sentinel)
 
 ``attempt_id`` is the N-th run of a turn (fresh on resume). It is deliberately
 *not* named ``turn_id`` — that name belongs to the durable journal/audit identity

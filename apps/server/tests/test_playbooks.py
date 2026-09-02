@@ -8,19 +8,12 @@ expanded ``tasks`` list is actually runnable: it round-trips through the REAL
 
 from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.playbooks import (
-    CODE_AUDIT_FANOUT,
     PLAYBOOKS,
     available_playbooks,
     expand_playbook,
     playbook_args_schema_description,
 )
 from agentcore.runtime.runs.playbooks._common import Playbook
-from agentcore.runtime.runs.playbooks.audit import (
-    CODE_AUDIT_REQUIRED_SECTIONS,
-    CODE_AUDIT_SECTION_BY_DESIGN,
-    apply_inherited_code_audit_discipline,
-)
-from agentcore.workspace.stage_dirs import REVIEWS_DIR
 
 
 def _roles(tasks: list[dict]) -> list[str]:
@@ -31,293 +24,20 @@ def _by_id(tasks: list[dict]) -> dict[str, dict]:
     return {t["id"]: t for t in tasks}
 
 
-# ── code_audit ────────────────────────────────────────────────────────────────
+# ── retired: code_audit ─────────────────────────────────────────────────────
 
 
-def test_code_audit_single_module_one_auditor():
-    tasks, errors = expand_playbook("code_audit", {"scope": "apps/desktop/src/preload"})
-    assert errors == []
-    assert len(tasks) == 1
-    t = tasks[0]
-    assert t["role"] == "代码审计员"
-    assert not t.get("depends_on")
-    d = t["deliverable"]
-    assert d["form"] == "files"
-    assert d.get("strict") is not True
-    assert d["code_audit_gate"] is True
-    assert "P0" in t["task"] and "P3" in t["task"]
-    assert "观察·工程" in t["task"]
-    assert len(d["artifacts"]) == 2
-    assert d["artifacts"][0] == f"{REVIEWS_DIR}/code-audit-0-main.md"
-    assert d["artifacts"][1].endswith(".audit.json")
-    assert "〇、人审速览" in d["required_sections"]
-    assert d["required_sections"] == list(CODE_AUDIT_REQUIRED_SECTIONS)
-    assert CODE_AUDIT_SECTION_BY_DESIGN in t["task"]
-    assert "验证方式" in t["task"] and "定案" in t["task"]
-    assert "must_contain" not in d
-    assert "name" not in d
-    assert "requires_files" not in d
-    assert "min_length" not in d
-    assert "两阶段" in t["task"] or "A 宽扫" in t["task"]
-    assert "K=8" in t["task"] or "最多定案 K=8" in t["task"]
-    assert ".audit.json" in t["task"]
-    assert "缺陷id|严重度|一句话" in t["task"]
-    assert "不得以 handoff 替代落盘" in t["task"]
-    assert "一次交接" in t["task"]
-    assert "二次 handoff" in t["task"]
-    assert "收口口径" in t["task"]
-    assert "全程只读" not in t["task"]
-    assert "通过验收" not in t["task"]
-    assert "未改业务源码" in t["task"]
-    assert "cite_write_review" not in t["task"]
-    # 分段交付：骨架先落 → 边查边填；artifacts 声明仍为 [md, .audit.json]
-    assert "骨架先落 → 边查边填" in t["task"]
-    assert "分段交付" in t["task"]
-    assert "Phase A 结束" in t["task"] and "骨架" in t["task"]
-    assert "五章空壳" in t["task"]
-    assert "禁止读完再一次性成文" in t["task"]
-    assert d["artifacts"] == [
-        f"{REVIEWS_DIR}/code-audit-0-main.md",
-        f"{REVIEWS_DIR}/code-audit-0-main.audit.json",
-    ]
-    plan, plan_errs = build_run_plan(tasks)
-    assert plan_errs == []
-    assert len(plan.nodes) == 1
-    assert plan.nodes[0].deliverable is not None
-    assert plan.nodes[0].deliverable.strict is False
-    assert plan.nodes[0].deliverable.code_audit_gate is True
-
-
-def test_code_audit_section_titles_literal_across_playbook_inherit_skill():
-    """契约定义 / 继承函数 / skill 三处小标题必须同字面。"""
-    from agentcore.runtime.skills import build_system_skill_registry
-
-    tasks, errors = expand_playbook("code_audit", {"scope": "x"})
-    assert errors == []
-    playbook_secs = tasks[0]["deliverable"]["required_sections"]
-    assert playbook_secs == list(CODE_AUDIT_REQUIRED_SECTIONS)
-    handwritten = apply_inherited_code_audit_discipline(
-        [
-            {
-                "role": "审计员",
-                "task": "审",
-                "deliverable": {
-                    "form": "files",
-                    "artifacts": ["AgentCore/文档/reviews/a.md"],
-                },
-            }
-        ],
-        only_shaped=True,
-    )
-    assert handwritten[0]["deliverable"]["required_sections"] == playbook_secs
-    body = build_system_skill_registry().get("team_orchestration_advanced").body
-    json_lit = "[" + ", ".join(f'"{s}"' for s in CODE_AUDIT_REQUIRED_SECTIONS) + "]"
-    assert json_lit in body
-    for title in CODE_AUDIT_REQUIRED_SECTIONS:
-        assert title in tasks[0]["task"]
-        assert title in body
-
-
-def test_code_audit_two_modules_parallel_no_synth():
-    """2 路并行：只有审计员，不上主管（CEO 收口）。"""
-    tasks, errors = expand_playbook(
-        "code_audit",
-        {"scope": "AgentCore", "modules": ["server", "desktop"]},
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert set(by_id) == {"audit_0", "audit_1"}
-    assert all(by_id[i]["role"] == "代码审计员" for i in ("audit_0", "audit_1"))
-    assert "audit_synth" not in by_id
-    plan, plan_errs = build_run_plan(tasks)
-    assert plan_errs == []
-    assert len(plan.nodes) == 2
-    assert len(plan.waves()) == 1
-
-
-def test_code_audit_three_modules_parallel_no_synth():
-    """≥3 路仍只扩审计员；跨模块表由引擎在 CEO 收口注入，不派主管。"""
-    tasks, errors = expand_playbook(
-        "code_audit",
-        {"scope": "AgentCore monorepo", "modules": ["server", "desktop", "admin"]},
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert set(by_id) == {"audit_0", "audit_1", "audit_2"}
-    assert all(by_id[i]["role"] == "代码审计员" for i in ("audit_0", "audit_1", "audit_2"))
-    assert "audit_synth" not in by_id
-    assert all(t["role"] != "审计主管" for t in tasks)
-    assert all(
-        "code-audit-summary.md" not in str(t.get("deliverable", {}).get("artifacts", []))
-        for t in tasks
-    )
-    assert by_id["audit_0"]["deliverable"]["artifacts"][0] == (
-        f"{REVIEWS_DIR}/code-audit-0-server.md"
-    )
-    assert by_id["audit_1"]["deliverable"]["artifacts"][0] == (
-        f"{REVIEWS_DIR}/code-audit-1-desktop.md"
-    )
-    plan, plan_errs = build_run_plan(tasks)
-    assert plan_errs == []
-    assert len(plan.nodes) == 3
-    assert len(plan.waves()) == 1
-
-
-def test_code_audit_artifact_uses_task_id_slug_not_essay_filename():
-    """Long module essays must not become truncated filenames (dogfood d3b6f1b8)."""
-    essay = (
-        "desktop-renderer：apps_desktop_src_renderer 的流式订阅与 UI 更新"
-        "（stores_hooks_services_lib）"
-    )
-    tasks, errors = expand_playbook(
-        "code_audit",
-        {
-            "scope": "前端刷新",
-            "modules": [
-                essay,
-                "desktop-sidecar：apps_desktop_src_main 的 sidecar 事件链",
-            ],
-        },
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    md0 = by_id["audit_0"]["deliverable"]["artifacts"][0]
-    md1 = by_id["audit_1"]["deliverable"]["artifacts"][0]
-    assert md0 == f"{REVIEWS_DIR}/code-audit-0-desktop-renderer.md"
-    assert md1 == f"{REVIEWS_DIR}/code-audit-1-desktop-sidecar.md"
-    assert essay in by_id["audit_0"]["task"]
-    assert md0.endswith(".md")
-    assert by_id["audit_0"]["deliverable"]["artifacts"][1] == md0[:-3] + ".audit.json"
-
-
-def test_code_audit_slug_matches_write_sanitize_for_dunder_dir_and_file_ext():
-    """Declared artifacts must be write-sanitizer fixpoints (dogfood ace942af).
-
-    ``__tests__`` must not keep collapsed-vs-raw underscore drift; a ``.tsx``
-    module must not land as ``Name..md`` / ``Name..audit.json``.
-    """
-    from agentcore.runtime.runs.playbooks.audit import _module_slug
-    from agentcore.workspace._paths import sanitize_write_relpath
-
-    dunder = "apps/admin/src/pages/__tests__/AnalyticsPage.tsx"
-    tsx = "apps/admin/src/components/GoWindowsCard.tsx"
-    assert "___" not in _module_slug(dunder)
-    assert _module_slug(dunder) == "apps_admin_src_pages_tests_AnalyticsPage"
-    assert _module_slug(tsx) == "apps_admin_src_components_GoWindowsCard"
-    assert not _module_slug(tsx).endswith(".")
-    assert ".tsx" not in _module_slug(tsx)
-
-    tasks, errors = expand_playbook(
-        "code_audit",
-        {"scope": "apps/admin", "modules": [dunder, tsx]},
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    md0, json0 = by_id["audit_0"]["deliverable"]["artifacts"]
-    md1, json1 = by_id["audit_1"]["deliverable"]["artifacts"]
-    assert md0 == (
-        f"{REVIEWS_DIR}/code-audit-0-apps_admin_src_pages_tests_AnalyticsPage.md"
-    )
-    assert json0 == md0[:-3] + ".audit.json"
-    assert "___tests___" not in md0
-    assert md1 == (
-        f"{REVIEWS_DIR}/code-audit-1-apps_admin_src_components_GoWindowsCard.md"
-    )
-    assert json1 == md1[:-3] + ".audit.json"
-    assert ".." not in md1
-    assert ".." not in json1
-    assert ".tsx" not in md1
-    for path in (md0, json0, md1, json1):
-        assert sanitize_write_relpath(path) == path
-
-
-def test_code_audit_requires_scope_and_rejects_single_module_list():
-    tasks, errors = expand_playbook("code_audit", {"modules": ["a", "b"]})
+def test_code_audit_playbook_is_unknown():
+    tasks, errors = expand_playbook("code_audit", {"scope": "apps/server"})
     assert tasks == []
-    assert any("scope" in e for e in errors)
-    tasks2, errors2 = expand_playbook(
-        "code_audit", {"scope": "x", "modules": ["only-one"]}
-    )
-    assert tasks2 == []
-    assert any("≥2" in e or "modules" in e for e in errors2)
-
-
-def test_code_audit_fans_out_up_to_eight_modules_without_fold():
-    """code_audit 扇出上限 8：恰好 8 个模块不折叠（全局 MAX_PLAYBOOK_FANOUT 仍为 6）。"""
-    from agentcore.runtime.runs.playbooks import (
-        CODE_AUDIT_FANOUT,
-        MAX_PLAYBOOK_FANOUT,
-        collect_playbook_notes,
-    )
-
-    assert CODE_AUDIT_FANOUT == 8
-    assert MAX_PLAYBOOK_FANOUT == 6
-    modules = [f"m{i}" for i in range(CODE_AUDIT_FANOUT)]
-    tasks, errors = expand_playbook(
-        "code_audit", {"scope": "monorepo", "modules": modules}
-    )
-    assert errors == []
-    auditors = [t for t in tasks if t["role"] == "代码审计员"]
-    assert len(auditors) == CODE_AUDIT_FANOUT
-    for i, mod in enumerate(modules):
-        assert f"audit_{i}" in {t["id"] for t in auditors}
-        assert mod in _by_id(tasks)[f"audit_{i}"]["task"]
-    assert collect_playbook_notes(tasks) == []
-    assert "audit_synth" not in {t["id"] for t in tasks}
-    assert all(t["role"] == "代码审计员" for t in tasks)
-
-
-def test_code_audit_folds_modules_beyond_eight_into_last_slot():
-    """>8 模块：折叠进末审计槽（合并不丢弃），带 playbook_note。"""
-    from agentcore.runtime.runs.playbooks import CODE_AUDIT_FANOUT, collect_playbook_notes
-
-    n = CODE_AUDIT_FANOUT + 3
-    modules = [f"m{i}" for i in range(n)]
-    tasks, errors = expand_playbook(
-        "code_audit", {"scope": "monorepo", "modules": modules}
-    )
-    assert errors == []
-    auditors = [t for t in tasks if t["role"] == "代码审计员"]
-    assert len(auditors) == CODE_AUDIT_FANOUT
-    last = auditors[-1]
-    for i in range(CODE_AUDIT_FANOUT - 1, n):
-        assert f"m{i}" in last["task"]
-    notes = collect_playbook_notes(tasks)
-    assert notes and "扇出折叠" in notes[0]
-    assert f"m{CODE_AUDIT_FANOUT}" in notes[0]
-    assert str(CODE_AUDIT_FANOUT) in notes[0]
-    assert "audit_synth" not in {t["id"] for t in tasks}
-    assert all(t["role"] == "代码审计员" for t in tasks)
-
-
-def test_available_playbooks_lists_code_audit():
+    assert errors and "未知 playbook" in errors[0]
+    assert "code_audit" not in PLAYBOOKS
     listing = available_playbooks()
-    assert "code_audit" in listing
-    assert "代码审计" in listing
-    assert "2–3" in listing or "2-3" in listing
-    assert "产品缝" in listing or "能少则少" in listing
-    assert "上限" in listing and str(CODE_AUDIT_FANOUT) in listing
-
-
-def test_playbook_args_schema_surfaces_code_audit_modules():
-    """CEO 工具面必须看见 code_audit.modules（扇出靠填槽；引擎不从 scope 拆）。"""
+    assert "code_audit" not in listing
     desc = playbook_args_schema_description()
-    slots = PLAYBOOKS["code_audit"].slots
-    assert "modules(" in slots
-    assert "modules" in desc
-    assert "code_audit" in desc
-    assert "可选" in desc
-    assert "不从 scope 自动拆" in desc
-    assert "并行" in desc or "扇出" in desc
-    assert "整仓" in desc or "多子系统" in desc
-    # 上限 / 单缝 / 折叠 HOW 在 slots（校验报错）+ 编排 skill，不占每轮 schema
-    assert str(CODE_AUDIT_FANOUT) in slots
-    assert "单缝省略" in slots
-    # 必填抽取仍在（常驻路径勿先 consult）
-    assert "code_audit→scope" in desc
+    assert "code_audit" not in desc
     assert "diagnose_fix_verify" not in desc
     assert "lens_crosscheck" not in desc
-    assert "build_website" not in desc
 
 
 # ── map_fanout ────────────────────────────────────────────────────────────
@@ -402,9 +122,9 @@ def test_available_playbooks_lists_map_fanout_before_cite_write_review_semantics
     assert "一句目标" in listing or "必读文件" in listing
     assert "cite_write_review" in listing
     assert "成文专线" in listing
-    assert "明示" in listing
-    assert "正式长文" in listing or "可提交" in listing or "审校满编" in listing
-    assert "形态未定" in listing or "勿默认学术审校" in listing
+    assert "点名审校" in listing or "可提交" in listing
+    assert "正式长文" in listing or "可提交" in listing
+    assert "勿默认学术审校" in listing
     assert "consult(team_delivery_env)" in listing
     assert "reportlab" not in listing
 
@@ -521,7 +241,7 @@ def test_cite_write_review_without_angles_uses_single_researcher():
     assert errors == []
     by_id = _by_id(tasks)
     assert by_id["outline"]["depends_on"] == ["research_0"]
-    assert by_id["outline"]["checkpoint_after"] is True  # default: checkpoint on outline
+    assert by_id["outline"]["checkpoint_after"] is False  # default: 明文要看才停
     assert by_id["review"]["depends_on"] == ["write"]
     assert "#rN" not in by_id["research_0"]["task"]
     assert "待核实" not in by_id["research_0"]["task"]
@@ -663,6 +383,7 @@ def test_renamed_playbook_ids_are_unknown():
         "lens_crosscheck",
         "repair_code",
         "diagnose_fix_verify",
+        "code_audit",
     ):
         tasks, errors = expand_playbook(name, {"topic": "X"})
         assert tasks == []
@@ -717,7 +438,6 @@ def test_expand_playbook_missing_packaged_resource_lists_error(monkeypatch):
 def test_available_playbooks_lists_all_registered():
     listing = available_playbooks()
     assert set(PLAYBOOKS) == {
-        "code_audit",
         "map_fanout",
         "cite_write_review",
     }
@@ -732,12 +452,10 @@ def test_available_playbooks_lists_all_registered():
 
 def test_every_playbook_expansion_builds_a_valid_run_plan():
     samples = {
-        "code_audit": {"scope": "apps/server", "modules": ["auth", "storage"]},
         "map_fanout": {"topic": "T", "angles": ["a", "b", "c"]},
-        "cite_write_review": {"topic": "T", "angles": ["a", "b"], "checkpoint": True},
+        "cite_write_review": {"topic": "T", "angles": ["a", "b"]},
     }
     expected_nodes = {
-        "code_audit": 2,  # 2 auditors, no synth
         "map_fanout": 3,
         "cite_write_review": 5,
     }

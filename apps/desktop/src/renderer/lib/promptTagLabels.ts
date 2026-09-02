@@ -17,9 +17,7 @@ export const PROMPT_TAG_LABELS: Record<string, string> = {
   tool_safety: "工具安全",
   team_orchestration_advanced: "团队编排进阶",
   debate_and_review: "辩论与交叉审查",
-  revising_a_product: "定向修订",
   asking_the_user: "向用户提问",
-  delegate_checkpoint: "委派波间挂起",
   legal_answer_brief: "法律答复要点",
   legal_case_analysis: "法律案情分析",
 };

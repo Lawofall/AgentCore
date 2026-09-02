@@ -456,7 +456,7 @@ function buildWaveOrDelegateBands(
       bands.push({
         id: `delegate-${batchKey}`,
         kind: "delegate",
-        label: `第 ${i + 1} 次委派（${runIds.length} 节点）`,
+        label: `第 ${i + 1} 次委派`,
         memberRunIds: runIds,
       });
     }
@@ -479,7 +479,7 @@ function buildWaveOrDelegateBands(
     return {
       id: `wave-${i}`,
       kind: "wave" as const,
-      label: `批次 ${i + 1}（${runIds.length} 节点）`,
+      label: `批次 ${i + 1}`,
       memberRunIds: runIds,
     };
   });

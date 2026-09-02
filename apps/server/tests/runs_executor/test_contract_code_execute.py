@@ -1,5 +1,5 @@
 """交付事实口径 (executor wiring): a worker that lands its deliverable ONLY through
-``code_execute`` (sandbox copy-out) satisfies ``requires_files`` — no wasted rewrite
+``run`` (sandbox copy-out) satisfies ``requires_files`` — no wasted rewrite
 forcing it to regenerate the whole product via ``file_write``.
 
 Reproduces the collab-graph waste: the product really landed (staging write-back), a
@@ -99,10 +99,12 @@ async def test_requires_files_satisfied_by_code_execute_landing(tmp_path):
     )
     reg = ToolRegistry()
     reg.register(RunTool(location="server"))
-    provider = _RunThenNote(
-        "print()\n"
+    script = (
         "open('report.md', 'w', encoding='utf-8')"
-        ".write('# 报告\\n扎实可信的分析正文。')",
+        ".write('# 报告\\n扎实可信的分析正文。')"
+    )
+    provider = _RunThenNote(
+        f"python -c {script!r}",
         "报告已生成，见 report.md",
     )
     executor = build_agent_executor(
@@ -121,9 +123,9 @@ async def test_requires_files_satisfied_by_code_execute_landing(tmp_path):
     assert state.phase is RunPhase.COMPLETED
     # The script really wrote the workspace (no fake copy-out staging it for us).
     assert "扎实可信" in (root / "report.md").read_text(encoding="utf-8")
-    # form=files satisfied by the code_execute landing → no contract shortfall / retry.
-    # 落在工作区根 → 只剩默认落点软提示（不挡、不重试），无欠交类 warning。
-    assert [w for w in state.warnings if "约定文档目录" not in w] == []
+    # form=files satisfied by the run landing → no contract shortfall / retry.
+    # 落在工作区根：收口认盘，不再发约定目录软提醒。
+    assert state.warnings == []
     assert provider.calls == 2  # no wasted regenerate-via-file_write round
     assert state.files_touched == ["report.md"]
     # CEO handoff manifest (collect_delivered_files reads files_touched) inherits it.
@@ -131,7 +133,7 @@ async def test_requires_files_satisfied_by_code_execute_landing(tmp_path):
 
 
 async def test_files_form_soft_completes_on_pure_prose_no_landing():
-    """甲⁺：无 code_execute / file_write，仅散文；strict+form=files 仍 soft-complete。"""
+    """甲⁺：无 run / file_write，仅散文；strict+form=files 仍 soft-complete。"""
     plan, _ = build_run_plan(
         [
             {

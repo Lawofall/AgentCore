@@ -84,9 +84,9 @@ export async function runHydrateAttachSettle(
     branch: useLocal ? "local" : "cloud",
   });
   // 对话级订阅由揭窗立刻 sync(id)。unsynced 仍卸订（服务端没有 run）。
-  // 本机 sidecar 活着不拆 slot：本端连接闸挂起，回合结束后 follow 自动连回。
+  // 本机 sidecar 活着不拆 slot：本端连接闸静音，回合结束后同一条 follow 接着收。
   // 迟到的 hydrate 不抢订：已切走则不动全局那一条。
-  // 卸订 ≠ 用户切走：follow_closed.reason 必须是让位因由，禁止冒充 switched_away。
+  // 卸订 ≠ 用户切走：follow_closed.reason 必须是卸订因由，禁止冒充 switched_away。
   if (
     useConversationStore.getState().currentConversationId === conversationId
   ) {
@@ -101,12 +101,14 @@ export async function runHydrateAttachSettle(
     return useLocal ? "local" : "cloud";
   }
   if (useLocal) {
-    // 判定与 attachSidecarTurn.beginLocal 之间 follow 仍活着；先占闸，避免
-    // 段首 full_replay 被跟播再被 sidecar 快照折一遍。嵌套 claim，回合结束才放。
-    const releaseSidecarYield =
-      waitForAttach && recovery.sidecarLive && recovery.pausedCount === 0
-        ? beginLocalConversationStream(conversationId)
-        : null;
+    // 揭窗可能已经订了 follow：先占闸静音，避免 sidecar 快照与跟播 dual-fold。
+    // schedule 路径 hydrate 立刻返回，闸必须跟 attach 同寿，不能在这里 finally 放掉。
+    const occupyUntilAttach =
+      recovery.sidecarLive && recovery.pausedCount === 0;
+    const releaseSidecarYield = occupyUntilAttach
+      ? beginLocalConversationStream(conversationId)
+      : null;
+    let yieldHeldAcrossReturn = false;
     try {
       projectUnsyncedTurns(conversationId, recovery.unsynced);
       // Paused local turns skip attach (no live buffer). Cloud pause writeback
@@ -116,15 +118,21 @@ export async function runHydrateAttachSettle(
       }
       // After unsynced project: seal any blank open/ghost assistants as「已中断」.
       settleOrphanEmptyAssistants(conversationId);
-      if (recovery.sidecarLive && recovery.pausedCount === 0) {
+      if (occupyUntilAttach) {
         // 切会话不卸观察泵 — 无页级 signal。
         const attached = attachSidecarTurn(conversationId);
-        if (waitForAttach) await attached;
-        else void attached;
+        if (waitForAttach) {
+          await attached;
+        } else {
+          yieldHeldAcrossReturn = true;
+          void attached.finally(() => {
+            releaseSidecarYield?.();
+          });
+        }
       }
       return "local";
     } finally {
-      releaseSidecarYield?.();
+      if (!yieldHeldAcrossReturn) releaseSidecarYield?.();
     }
   }
   const last = getRuntime(conversationId).messages.at(-1);

@@ -267,7 +267,9 @@ interface Props {
    */
   citationToDisplay?: ReadonlyMap<number, number>;
   /** While true, defer rendering ```mermaid/```markmap blocks (a half-written
-   * diagram is a syntax error) — they show source until the turn finishes. */
+   * diagram is a syntax error) — they show source until the turn finishes.
+   * Non-muted live answer also paints a tail caret (`data-stream-caret`).
+   * **Not** a typewriter: tokens still land via rAF; caret is decorative. */
   isStreaming?: boolean;
   /** Render in a muted tone for secondary content (a turn's reasoning), so the
    * structured thinking reads as quieter than the answer body. */
@@ -509,9 +511,12 @@ export const Markdown = memo(function Markdown({
   const rehype = isStreaming ? rehypeStreaming : rehypeHighlighted;
   const blocks = isStreaming ? splitMarkdownBlocks(content) : null;
 
+  const streamCaret = isStreaming && !muted && content.trim().length > 0;
+
   return (
     <div
       className={`markdown-body min-w-0 max-w-full [overflow-wrap:anywhere] ${muted ? "text-muted-foreground" : "text-foreground"}`}
+      {...(streamCaret ? { "data-stream-caret": "" } : {})}
     >
       {blocks ? (
         blocks.map((block, i) => (

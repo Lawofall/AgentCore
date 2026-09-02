@@ -788,4 +788,5 @@ def test_ceo_deliverable_schema_omits_internal_qa_knobs():
     assert "form" in props and "artifacts" in props
     for banned in ("strict", "required_sections", "output_format", "citation_mode"):
         assert banned not in props
-    assert "team_orchestration_advanced" in deliverable_props["description"]
+    assert "【看】" in props["form"]["description"]
+    assert "team_orchestration_advanced" in t.schema.description

@@ -181,3 +181,40 @@ def test_classify_batch_splits_by_structure_only():
     assert [n.run_id for n in shape.gap_fill] == ["b", "c"]
     assert [n.run_id for n in shape.cold] == ["d"]
     assert shape.is_pure_continuation is False
+
+
+def test_format_continuation_candidates_skips_captain_and_task():
+    from agentcore.runtime.delegate.team_continuation import format_continuation_candidates
+    from agentcore.runtime.runs.types import RunKind
+
+    plan = RunPlan(
+        nodes=[
+            RunSpec(run_id="cap", role="CEO", task="主持", kind=RunKind.CAPTAIN),
+            RunSpec(run_id="w1", role="调研员", task="秘密任务"),
+        ]
+    )
+    completed = {"w1": RunState(phase=RunPhase.COMPLETED, content="ok")}
+    text = format_continuation_candidates(plan=plan, completed=completed)
+    assert "run_id=w1" in text
+    assert "role=调研员" in text
+    assert "status=completed" in text
+    assert "秘密任务" not in text
+    assert "run_id=cap" not in text
+
+
+def test_cold_open_reject_message_omits_retired_graph_tag():
+    from agentcore.runtime.delegate.team_continuation import (
+        ContinuationShape,
+        cold_open_reject_message,
+    )
+
+    shape = ContinuationShape(cold=(object(), object(), object()))
+    err = cold_open_reject_message(shape)
+    assert "<近期团队图>" not in err
+    assert "队员终态名册" in err
+    with_c = cold_open_reject_message(
+        shape, candidates="- run_id=w1; role=A; status=completed"
+    )
+    assert "可续候选" in with_c
+    assert "run_id=w1" in with_c
+    assert "<近期团队图>" not in with_c

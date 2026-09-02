@@ -73,7 +73,8 @@ def _delivery_gaps_from_warnings(
         reason_for_warning,
     )
 
-    # Keep in sync with delivery_status._SOFT_PATH_HINT_MARKERS (contract warning-only).
+    # Keep in sync with delivery_status._PATH_MISMATCH_MARKERS.
+    # 「产物未写入约定文档目录」已停发；留下只为历史 warnings 仍标 path_hint。
     path_hint_markers = ("产物未写入约定文档目录", "声明的交付物路径未落盘")
     # 甲⁺：零落盘 soft tip（与 delivery_status._ZERO_LANDING_MARKERS 对齐）。
     zero_landing_markers = ("本队员本波未交卷", "未把产物写入工作区", "本批未见落盘")

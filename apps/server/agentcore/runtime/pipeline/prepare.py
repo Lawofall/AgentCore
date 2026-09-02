@@ -212,6 +212,12 @@ async def prepare_fresh_turn(
             "outlet_inventory",
             await_prepare_local_io(collect_outlet_inventory(backend)),
         )
+        from agentcore.workspace.project_shell import desk_is_visibly_empty
+
+        desk_visibly_empty = await _timed_phase(
+            "desk_empty",
+            await_prepare_local_io(desk_is_visibly_empty(backend)),
+        )
     workspace_facts = build_workspace_context(
         backend,
         desktop_online=desktop_online,
@@ -224,6 +230,7 @@ async def prepare_fresh_turn(
         desk_folder_id=folder_id,
         desk_folder_label=desk_folder_label,
         desk_is_birth=True,
+        desk_visibly_empty=desk_visibly_empty,
     )
     system_prompt = assemble_system_prompt(
         rules_markdown=rules_markdown,

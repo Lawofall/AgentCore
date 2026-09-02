@@ -365,11 +365,14 @@ def test_always_on_tools_not_in_gated_set():
 
 
 def test_coordination_period_hint_posture_not_tool_manual():
+    from agentcore.runtime.coordination.tools import WaitTool
+
     assert "【协调期】" in COORDINATION_PERIOD_HINT
     assert "可静默" in COORDINATION_PERIOD_HINT
     assert "请示" in COORDINATION_PERIOD_HINT
     assert "阻塞" in COORDINATION_PERIOD_HINT
     assert "阶段结论" in COORDINATION_PERIOD_HINT
+    assert "插话" in COORDINATION_PERIOD_HINT
     assert "三选一" not in COORDINATION_PERIOD_HINT
     assert "ceiling" not in COORDINATION_PERIOD_HINT
     assert "max_rounds" not in COORDINATION_PERIOD_HINT
@@ -382,6 +385,7 @@ def test_coordination_period_hint_posture_not_tool_manual():
     assert "短说谁在后台" not in COORDINATION_PERIOD_HINT
     assert "谁在后台、完成后会再汇报" not in COORDINATION_PERIOD_HINT
     assert "人已派出" not in COORDINATION_PERIOD_HINT  # 派完收束在 host/core，不在协调期 hint
+    assert COORDINATION_PERIOD_HINT in WaitTool().schema.description
 
 
 def test_wait_in_gated_set():

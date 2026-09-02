@@ -143,6 +143,7 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "history": "int",
         "location": "str",
         "via": "str",
+        "stream_path_reason": "str",
     },
     "chat.turn_complete": {
         "finish_reason": "str",
@@ -428,10 +429,7 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
     "tool.read_url_error": {"url": "str", "host": "str", "error": "str"},
     "worker.handoff": {
         "run_id": "str",
-        "has_summary": "bool",
-        "chars": "int",
         "body_chars": "int",
-        "has_motion_card": "bool",
     },
     "worker.prepare_phase": {
         "phase": "str",
@@ -971,16 +969,16 @@ HISTORICAL_COMPAT: dict[str, str] = {
     "contract.failed": (
         "历史兼容：曾作 logger 事件名；现为 RunPhase.FAILED 的 error 字面，不再 emit"
     ),
+    "ceo.unclosed_cue": (
+        "历史兼容：曾在提示装了上轮交付缺口时记账；跨轮缺口易变尾已撤，不再发此事件。"
+        "delegated / prior_gaps / recent_graph 字段保留兼容旧 JSONL"
+    ),
 }
 
 KEY_DESC: dict[str, str] = {
     "checkpoint.finalized": (
         "ask_user 挂起已落帧。n_questions / n_options 为 normalize 后卡面结构"
         "（空 choice 已降为 text；题上误写的 label 已收进 options）"
-    ),
-    "ceo.unclosed_cue": (
-        "阶梯 2 记账：本轮提示装了上轮交付缺口和/或近期团队图。"
-        "delegated=false 表示线索在、这轮一次没派。不拦截、不改成功路径。"
     ),
     "llm.rate_limit_no_retry": (
         "429 冷却超出本次调用能等的上限，放弃重试。cooldown_sec / cooldown_source = 判定所依据的"
@@ -1014,7 +1012,10 @@ KEY_DESC: dict[str, str] = {
     "chat.zero_output_send_delete_failed": (
         "本发零产出回滚硬删失败（助手或 user 行未去掉）；客户端仍可能撤泡，重载以库为准"
     ),
-    "chat.turn_start": "回合起点（preview/chars/history）",
+    "chat.turn_start": (
+        "回合起点（preview/chars/history）。"
+        "stream_path_reason = 桌面过桥枚举（探活失败 / 强制关 / 无本机根等），仅云 POST 携带"
+    ),
     "chat.turn_complete": "回合收尾（含 Phase-0 延迟：prepare/assemble/ttft_*；model/credential_source）",
     "chat.resume_complete": "暂停恢复回合收尾（终态带协作计数；STOP 终结不带）",
     "chat.regenerate_rejected": (
@@ -1066,8 +1067,8 @@ KEY_DESC: dict[str, str] = {
     "tool.execute_start": "工具开始执行（read_url/download_url 带 url/host）",
     "tool.execute_end": "工具执行结束（status/duration_ms；error 时带 reason；URL 工具带 url/host）",
     "tool.read_url_error": "read_url 抓取失败（url/host/error）",
-    "tool.args_salvaged": "handoff 参数 JSON 窄 salvage 成功（裸字符串字段 / 截断闭合）",
-    "worker.handoff": "worker 交接（chars=summary 长；body_chars=交付正文长）",
+    "tool.args_salvaged": "参数 JSON 结构修复成功（完整值后的尾部多余字符被丢掉）",
+    "worker.handoff": "worker 收尾（body_chars=同轮交付正文长）",
     "worker.prepare_phase": "worker 冷开分段耗时（phase + ms；每 phase 一行）",
     "react.round_end": "ReAct 轮结束（reasoning_tokens/tools）",
     "engine.loop_nudge": "收敛治理：循环提醒",

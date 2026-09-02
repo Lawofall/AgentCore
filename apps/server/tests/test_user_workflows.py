@@ -261,6 +261,7 @@ def test_playbook_template_catalog():
     assert ids == list(WORKFLOW_PLAYBOOK_IDS)
     assert ids == ["map_fanout", "cite_write_review"]
     assert set(ids) <= set(PLAYBOOKS)
+    assert "code_audit" not in ids
     assert "build_app" not in ids
     assert "build_website" not in ids
     assert "compare_options" not in ids
@@ -306,7 +307,7 @@ def test_from_playbook_success_cite_write_review():
     tasks = expand_workflow_to_tasks(definition)
     by_id = {t["id"]: t for t in tasks}
     assert "outline" in by_id
-    assert by_id["outline"].get("checkpoint_after") is True
+    assert by_id["outline"].get("checkpoint_after") is not True
     assert by_id["write"]["depends_on"] == ["outline"]
     # tools on review dropped from canvas
     assert "tools" not in by_id["review"]
@@ -315,15 +316,22 @@ def test_from_playbook_success_cite_write_review():
     assert all(pid in PLAYBOOKS for pid in WORKFLOW_PLAYBOOK_IDS)
 
 
-def test_from_playbook_rejects_not_in_catalog():
-    # Non-catalog CEO books stay 暂未列入 (in PLAYBOOKS, not toolbox templates).
-    with pytest.raises(PlaybookTemplateError) as ei:
-        merge_playbook_slots("code_audit", {"scope": "x"})
-    assert "暂未列入" in str(ei.value)
-    assert "code_audit" in PLAYBOOKS
+def test_from_playbook_rejects_not_in_catalog(monkeypatch):
+    # Names in PLAYBOOKS but not toolbox → 暂未列入 (keep the branch live).
+    from agentcore.runtime.runs.playbooks._common import Playbook
 
+    dummy = Playbook(
+        name="ceo_only_shape",
+        summary="x",
+        slots="t(必填)",
+        build=lambda a: ([], []),
+    )
+    monkeypatch.setitem(PLAYBOOKS, "ceo_only_shape", dummy)
+    with pytest.raises(PlaybookTemplateError) as ei:
+        merge_playbook_slots("ceo_only_shape", {"t": "x"})
+    assert "暂未列入" in str(ei.value)
     with pytest.raises(PlaybookTemplateError) as ei2:
-        instantiate_from_playbook("code_audit", {"scope": "x"})
+        instantiate_from_playbook("ceo_only_shape", {"t": "x"})
     assert "暂未列入" in str(ei2.value)
 
     # Old names (incl. retired CEO books): unknown (not 暂未列入) — no aliases.
@@ -334,6 +342,7 @@ def test_from_playbook_rejects_not_in_catalog():
         ("lens_crosscheck", {"topic": "x"}),
         ("repair_code", {"problem": "x", "verify": "pytest"}),
         ("diagnose_fix_verify", {"problem": "x", "verify": "pytest"}),
+        ("code_audit", {"scope": "x"}),
     ):
         with pytest.raises(PlaybookTemplateError) as ei_old:
             merge_playbook_slots(pid, slots)
@@ -398,7 +407,7 @@ def test_from_playbook_optional_name_and_defaults():
     tasks = expand_workflow_to_tasks(definition)
     assert len(tasks) == 2
     assert tasks[0]["id"] == "brief_0"
-    # Default optional checkpoint on cite_write_review is applied via soft merge
+    # Toolbox copy uses the same builder default（checkpoint 关）as CEO expand.
     pb_tasks, err = expand_playbook("cite_write_review", {"topic": "X"})
     assert err == []
     _, _, defn = instantiate_from_playbook("cite_write_review", {"topic": "X"})

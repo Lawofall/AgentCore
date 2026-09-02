@@ -5,26 +5,16 @@ from __future__ import annotations
 from collections.abc import Collection
 
 from agentcore.runtime.skills.ask_user import _ASKING_THE_USER
-from agentcore.runtime.skills.building_software import _BUILDING_SOFTWARE
 from agentcore.runtime.skills.data_file_landing import _DATA_FILE_LANDING
 from agentcore.runtime.skills.debate_and_review import _DEBATE_AND_REVIEW
-from agentcore.runtime.skills.deep_multi_lens_research import _DEEP_MULTI_LENS_RESEARCH
-from agentcore.runtime.skills.delegate_checkpoint import _DELEGATE_CHECKPOINT
-from agentcore.runtime.skills.long_form_writing import (
-    _LONG_FORM_LANDING,
-    _LONG_FORM_WRITING,
-)
-from agentcore.runtime.skills.product_help import (
-    _PRODUCT_BUG_TRIAGE,
-    _PRODUCT_HELP,
-)
+from agentcore.runtime.skills.long_form_writing import _LONG_FORM_LANDING
+from agentcore.runtime.skills.product_help import _PRODUCT_HELP
 from agentcore.runtime.skills.registry import (
     AUDIENCE_CEO_ONLY,
     AUDIENCE_WORKER_ONLY,
     SkillRegistry,
     SystemSkill,
 )
-from agentcore.runtime.skills.revising_a_product import _REVISING_A_PRODUCT
 from agentcore.runtime.skills.run import _RUN
 from agentcore.runtime.skills.team_cross_folder import _TEAM_CROSS_FOLDER
 from agentcore.runtime.skills.team_delivery_env import _TEAM_DELIVERY_ENV
@@ -38,7 +28,7 @@ from agentcore.runtime.skills.team_orchestration import (
 _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     SystemSkill(
         name="team_orchestration_advanced",
-        summary="团队拆法 / 成文编制",
+        summary="团队拆法",
         body=_TEAM_ORCHESTRATION_ADVANCED,
         # 派单 / 协调 / 跨路复核：队员开场目录与 consult 共用此滤，避免叶子与嵌套 lead 两套前缀。
         audience=AUDIENCE_CEO_ONLY,
@@ -62,29 +52,10 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
-        name="product_bug_triage",
-        summary="产品故障排查",
-        body=_PRODUCT_BUG_TRIAGE,
-        audience=AUDIENCE_CEO_ONLY,
-    ),
-    SystemSkill(
-        name="building_software",
-        summary="做软件",
-        body=_BUILDING_SOFTWARE,
-        requires_tools=("delegate",),
-        audience=AUDIENCE_CEO_ONLY,
-    ),
-    SystemSkill(
         name="debate_and_review",
         summary="正反辩论",
         body=_DEBATE_AND_REVIEW,
         requires_tools=("debate",),
-    ),
-    SystemSkill(
-        name="revising_a_product",
-        summary="续派改稿",
-        body=_REVISING_A_PRODUCT,
-        audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="asking_the_user",
@@ -92,27 +63,11 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         body=_ASKING_THE_USER,
         requires_tools=("ask_user",),
     ),
-    # Outline / mid-pipeline user gate: pauses for USER review — only meaningful
-    # with a live user. Gate on ``ask_user`` (the live-user proxy, same as
-    # asking_the_user) so it never advertises on the autonomous path.
-    SystemSkill(
-        name="delegate_checkpoint",
-        summary="提纲过目",
-        body=_DELEGATE_CHECKPOINT,
-        requires_tools=("ask_user",),
-    ),
     SystemSkill(
         name="run",
         summary="跑命令 / 启服",
         body=_RUN,
         requires_tools=("run",),
-    ),
-    SystemSkill(
-        name="long_form_writing",
-        summary="超长成篇 / 多源合并",
-        body=_LONG_FORM_WRITING,
-        requires_tools=("delegate",),
-        audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="long_form_landing",
@@ -127,13 +82,6 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         # Consult is CEO+worker. Body is the worker loop; CEO still consults to brief.
         # Do not gate on ``run``: this turn may have no execution assembled; the
         # brief still belongs in the supervisor catalog.
-    ),
-    SystemSkill(
-        name="deep_multi_lens_research",
-        summary="多维公共事件调研",
-        body=_DEEP_MULTI_LENS_RESEARCH,
-        requires_tools=("delegate",),
-        audience=AUDIENCE_CEO_ONLY,
     ),
 )
 

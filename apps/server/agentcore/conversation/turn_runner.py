@@ -118,6 +118,7 @@ async def run_and_persist(
             cost_role="captain",
             persona="CEO",
         ):
+            path_reason = get_log_value("stream_path_reason")
             logger.info(
                 "chat.turn_start",
                 chars=len(user_message or ""),
@@ -128,6 +129,7 @@ async def run_and_persist(
                 via="cloud",
                 message_id=message_id,
                 continuing=continuing,
+                **({"stream_path_reason": path_reason} if path_reason else {}),
             )
             if not continuing:
                 await create_assistant_placeholder(

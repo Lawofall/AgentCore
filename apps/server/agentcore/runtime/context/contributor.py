@@ -27,8 +27,8 @@ class SectionOrder(IntEnum):
 
     One ordering universe so every assembler renders sections in the same relative order
     regardless of the sequence that contributed them. Spaced by 100 to leave room for
-    future sections to slot between without renumbering. The tail (working set,
-    attachment) is deliberately LAST so the foundation/hint prefix can stay
+    future sections to slot between without renumbering. The tail (attachment and
+    later volatile sections) is deliberately LAST so the foundation/hint prefix can stay
     byte-identical across turns — a **cost optimization** for exact-prefix cache
     billing (e.g. DeepSeek), not a product invariant. CEO file index rides the end
     of ``WORKSPACE_FACTS`` (same ``<工作区>``), not a second tag. Discipline: new
@@ -44,8 +44,9 @@ class SectionOrder(IntEnum):
     the volatile section. Facts used to ride the shared-base blob (order 250) in front
     of the core, so a location / capability restamp invalidated the whole core.
     Catalog already sits after the core (570). Moving facts after the core, adjacent
-    to the volatile tail (working set = 810), makes shared-base + resident core one
-    uninterrupted byte-stable prefix. CEO and workers share that base and add facts
+    to the volatile tail (slot 810, retired working-set XML), makes shared-base +
+    resident core one uninterrupted byte-stable prefix. CEO and workers share that
+    base and add facts
     at this same key — do not fork a second facts section. Do not revert this to
     restore "never reorder" without a new measurement showing the gap closed.
     """
@@ -80,17 +81,20 @@ class SectionOrder(IntEnum):
     # subsection of ``<工作区>`` (attached into WORKSPACE_FACTS). Slot kept so
     # billed prefix keys are not reshuffled.
     WORKSPACE_OVERVIEW = 800
-    # Conversation working set (CEO + workers): paths still in play after history
-    # drops tool I/O. Pointers only — body stays on disk. Volatile tail.
+    # Retired 2026-09-01: per-turn ``<工作集>`` XML removed. Path ledger still
+    # feeds compaction only (``working_set.py``). Slot kept so billed prefix
+    # keys are not reshuffled.
     WORKING_SET = 810
-    # CEO-only conversation state: the newest appendable team graph (跨回合同图追加's
-    # cross-turn id echo — history replays no tool I/O, so it rides the volatile tail).
+    # Retired 2026-09-01: per-turn ``<近期团队图>`` XML removed. ``run_id`` lives
+    # on the same-turn delegate ToolResult roster; post-close reject may list
+    # candidates. Slot kept so billed prefix keys are not reshuffled.
     RECENT_TEAM_GRAPH = 850
-    # Cross-turn soft ledger when the prior turn journal has partial/blocked delivery
-    # with blocking gaps (one-shot; mutual-excl. with PRIOR_DELEGATE_RETRY — gaps win).
+    # Retired 2026-09-02: next-turn ``<上轮交付缺口>`` XML removed. ``delivery_status``
+    # still stamps the same-turn ledger (合回 / finish_guard). Slot kept unused so
+    # later sections keep their prefix-cache order.
     PRIOR_DELIVERY_GAPS = 855
     # Cross-turn soft nudge when the prior turn journal fingerprints empty-delegate /
-    # unproductive (history drops tool I/O — same volatile-tail reason as recent graph).
+    # unproductive (history drops tool I/O, so the fingerprint rides the volatile tail).
     PRIOR_DELEGATE_RETRY = 860
     # Cross-turn futile-retry hint retired; slot kept unused so later sections
     # keep their prefix-cache order.

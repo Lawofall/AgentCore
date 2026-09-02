@@ -53,10 +53,11 @@ _BRIEF_ACCEPTANCE = (
 
 
 def map_fanout(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
-    """A 档·对齐推进：N 路并行摸底 → 方向笔记落盘；无提纲/撰稿/审校（交回 CEO 对话综述）.
+    """摸清：N 路并行摸底 → 方向笔记落盘；无提纲/撰稿/审校（交回 CEO 对话综述）.
 
-    与 ``cite_write_review``（B/重成文专线）划界：本形状是默认——一起弄懂 / 多路摸清 /
-    讨论对齐；未明示成文勿升 ``cite_write_review``。仅确有 ≥2 独立缝才用；人数跟缝走。
+    与 ``cite_write_review``（成文满编）划界：本形状是摸清——一起弄懂 / 多路摸清。
+    可提交长文 / 用户点名审校才用 ``cite_write_review``。
+    仅确有 ≥2 独立方向才用；angles 按真正独立方向填。
     验收口径见 ``_BRIEF_ACCEPTANCE``（一页地图 + 够用即停 + handoff 必交；非完成硬闸）。
     """
     topic = clean_str(args.get("topic"))
@@ -66,7 +67,7 @@ def map_fanout(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
     if len(angles_raw) < 2:
         return [], [
             "map_fanout 需要 slot『angles』且 ≥2 个可并行方向"
-            "（单方向请手写 1 人 task，或明示成文走 cite_write_review）"
+            "（单方向请手写 1 人 task，或可提交长文 / 点名审校走 cite_write_review）"
         ]
     angle_slots, angle_fold_note = fold_fanout_slots(angles_raw, label="摸底方向")
     fold_hint = f" {angle_fold_note}" if angle_fold_note else ""
@@ -109,7 +110,7 @@ def map_fanout(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
 
 
 def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
-    """B/重成文专线：N×并行调研 → 提纲（默认 checkpoint）→ 写作 → 学术审校.
+    """B/重成文专线：N×并行调研 → 提纲 → 写作 → 学术审校（checkpoint 默认关）.
 
     仅用户明示成文且需正式长文/可提交（或已确认要审校满编）时用；讨论/形态未定勿首派；
     普通构想勿默认学术审校。一起弄懂/多路摸清/仅提论文开源当资料默认 ``map_fanout``。
@@ -133,7 +134,7 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
         return [], ["cite_write_review 需要 slot『topic』（要调研并成文的主题）"]
     angles_raw = clean_str_list(args.get("angles"), cap=None)
     angle_slots, angle_fold_note = fold_fanout_slots(angles_raw, label="调研子方向")
-    checkpoint = bool(args.get("checkpoint", True))
+    checkpoint = bool(args.get("checkpoint", False))
     audience = clean_str(args.get("audience"))
     deliverable = clean_str(args.get("deliverable")) or f"一篇关于【{topic}】的完整报告"
     main_path = research_report_main_artifact(clean_str(args.get("output_path")) or None)

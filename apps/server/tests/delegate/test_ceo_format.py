@@ -37,7 +37,62 @@ def test_format_for_ceo_surfaces_file_manifest():
     assert "已验收" not in out
     assert "`dashboard.html`" in out
     assert "`assets/styles.css`" in out
+    assert "另有" not in out
     assert "地面真相" in out
+
+
+def test_format_for_ceo_elides_long_accepted_file_list():
+    """CEO body lists a cap of accepted paths; remainder is a count, not a tree."""
+    from agentcore.runtime.runs.constants import CEO_SYNTHESIS_FILE_LIST_MAX
+
+    t = tool(Provider([]))
+    plan = RunPlan(nodes=[RunSpec(run_id="w1", task="建工程", role="骨架")])
+    paths = [f"src/f{i}.ts" for i in range(CEO_SYNTHESIS_FILE_LIST_MAX + 4)]
+    results = {
+        "w1": RunState(
+            phase=RunPhase.COMPLETED,
+            content="骨架已落",
+            files_touched=paths,
+            file_acceptance=_accepted(*paths),
+        )
+    }
+    out = format_for_ceo(t, plan, results)
+    products = worker_products(t, plan, results)
+    assert products[0]["files"] == paths
+    line = next(ln for ln in out.splitlines() if "文件产出（路径已核）" in ln)
+    assert f"`src/f{CEO_SYNTHESIS_FILE_LIST_MAX - 1}.ts`" in line
+    assert f"`src/f{CEO_SYNTHESIS_FILE_LIST_MAX}.ts`" not in line
+    assert "另有 4 个" in line
+    assert "> 路径未核：" not in out
+
+
+def test_format_for_ceo_landed_outside_drafts_is_disk_truth():
+    """收口认盘：文件不在工作稿也不发质检待办、不催搬。"""
+    t = tool(Provider([]))
+    plan = RunPlan(
+        nodes=[
+            RunSpec(
+                run_id="w1",
+                task="写 GDD",
+                role="游戏设计主笔",
+                deliverable=Deliverable(form="files"),
+            )
+        ]
+    )
+    path = "docs/法庭迷局侦探游戏_GDD.md"
+    results = {
+        "w1": RunState(
+            phase=RunPhase.COMPLETED,
+            content="GDD 已落盘",
+            files_touched=[path],
+            file_acceptance=_accepted(path),
+        )
+    }
+    out = format_for_ceo(t, plan, results)
+    assert f"`{path}`" in out
+    assert "质检提醒" not in out
+    assert "约定文档目录" not in out
+    assert "归位" not in out
 
 
 def test_format_for_ceo_no_acceptance_without_stamp_still_counts_failed_landings():
@@ -290,10 +345,9 @@ def test_format_for_ceo_short_prose_passes_through_whole():
     assert "中间省略" not in out
 
 
-def test_format_for_ceo_surfaces_next_steps_advisory_and_leads_with_summary():
+def test_format_for_ceo_leads_with_summary_and_keeps_leaf_body():
     # 完工交接简报: structured brief still leads; a leaf (no files, no dependents)
-    # also keeps the body — conclusions now live there after debrief de-conclusioning.
-    # The 240-char pointer cap must not clip that body, and truncated follows allowance.
+    # also keeps the body. The 240-char pointer cap must not clip that body.
     t = tool(Provider([]))
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="调研", role="研究员")])
     long_tail = "详" * 300
@@ -312,8 +366,8 @@ def test_format_for_ceo_surfaces_next_steps_advisory_and_leads_with_summary():
     assert products[0]["fidelity"] == "pass_through"
     assert products[0]["truncated"] is False
     out = format_for_ceo(t, plan, results)
-    assert "队员建议的下一步" in out
-    assert "补做竞品对比" in out
+    assert "队员建议的下一步" not in out
+    assert "补做竞品对比" not in out
     assert "交接结论：结论是甲" in out
     assert "要点一" in out and "要点二" in out
     assert "一段研究综述正文。" in out
@@ -360,23 +414,23 @@ def test_format_for_ceo_no_next_steps_section_when_none():
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="调研", role="研究员")])
     results = {"w1": RunState(phase=RunPhase.COMPLETED, content="只有正文，没有交接简报小节。")}
     out = format_for_ceo(t, plan, results)
-    # The advisory SECTION (its unique intro) is absent; the closing instruction's conditional
-    # mention of 『队员建议的下一步』 may still appear and is fine.
     assert "顺带提的后续方向" not in out
+    assert "队员建议的下一步" not in out
 
 
 def test_format_for_ceo_includes_final_synthesis_discipline():
-    # 终稿纪律（瘦 footer）：交付物在前、过程简述从简、名册铁律。
+    # 终稿纪律：路径已核图例 + 失败须写入；不写过程简述 / 粘名册 / replan HOW。
     t = tool(Provider([]))
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="做课件", role="课件工程师")])
     results = {"w1": RunState(phase=RunPhase.COMPLETED, content="脚本已写好")}
     out = format_for_ceo(t, plan, results)
     assert "【终稿纪律】" in out
-    assert "交付物在前" in out
-    assert "过程简述从简" in out
+    assert "交付物在前" not in out
+    assert "过程简述从简" not in out
     assert "至多一段" not in out
     assert "队员终态名册" in out
-    assert "禁止整段粘进终稿" in out
+    assert "禁止整段粘进终稿" not in out
+    assert "replan(add=" not in out
     assert "禁止编造" in out and "全部交付" in out
     assert "禁止写「PPT 已落盘」" not in out
     # 无命题卡时不塞开辩死文案
@@ -447,7 +501,8 @@ def test_worker_products_empty_body_with_files_and_debrief_is_pointer():
     assert "交接结论" not in fail["body"]  # 勿把失败装成已交付 pointer
     out = format_for_ceo(t, plan, results)
     assert "交接结论：报告已落盘" in out
-    assert "可做竞品对比" in out  # debrief.next_steps 仍进建议区
+    assert "可做竞品对比" not in out
+    assert "队员建议的下一步" not in out
 
 
 def test_format_for_ceo_footer_is_lean_but_keeps_iron_laws():
@@ -464,6 +519,9 @@ def test_format_for_ceo_footer_is_lean_but_keeps_iron_laws():
     assert "未真正落盘" in footer or "未达成" in footer
     assert "队员终态名册" in footer or "全部交付" in footer
     assert "失败" in footer or "接替" in footer or "禁止编造" in footer
+    assert "过程简述从简" not in footer
+    assert "禁止整段粘进终稿" not in footer
+    assert "replan(add=" not in footer
     # Old footer was ~900+ chars of packaging; lean target stays well under that.
     assert len(footer) < 550
     assert "工作日志" not in footer
@@ -589,46 +647,3 @@ def test_format_for_ceo_caps_short_raw_expansion_ratio():
     assert "交接结论" in out and "要点：" in out
     assert "队员终态名册" in out or "写手0" in out
     assert "文件产出" in out or "out/0.md" in out
-
-
-def test_build_ceo_synthesis_injects_audit_ledger_into_roster():
-    """Merged audit table rides the roster so harvest cannot budget-trim it."""
-    from agentcore.runtime.runs.audit_ledger import AUDIT_LEDGER_HEADING
-
-    t = tool(Provider([]))
-    json_path = "AgentCore/文档/reviews/code-audit-0-server.audit.json"
-    plan = RunPlan(
-        nodes=[
-            RunSpec(
-                run_id="audit_0",
-                task="审",
-                role="代码审计员",
-                deliverable=Deliverable(
-                    form="files",
-                    artifacts=[json_path],
-                    code_audit_gate=True,
-                ),
-            )
-        ]
-    )
-    results = {
-        "audit_0": RunState(
-            phase=RunPhase.COMPLETED,
-            files_touched=[json_path],
-            file_acceptance=_accepted(json_path),
-            debrief={"summary": "共 1 条属实", "key_points": ["H1|高|注入"]},
-        )
-    }
-    texts = {
-        json_path: (
-            '{"findings":[{"id":"H1","summary":"注入","severity":"高",'
-            '"verdict":"属实","verification":"全文精读","evidence":"a.py:1",'
-            '"trigger_path":"user→a"}]}'
-        )
-    }
-    synth = build_ceo_synthesis(t, plan, results, audit_json_by_path=texts)
-    assert AUDIT_LEDGER_HEADING in synth.roster_text
-    assert "属实中+ N=1" in synth.roster_text
-    assert "H1" in synth.roster_text
-    assert AUDIT_LEDGER_HEADING in synth.text
-    assert AUDIT_LEDGER_HEADING not in synth.prose

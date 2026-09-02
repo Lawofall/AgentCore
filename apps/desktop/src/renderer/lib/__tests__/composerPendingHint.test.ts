@@ -7,7 +7,6 @@ import { usePausedTurnStore } from "@/stores/pausedTurns";
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  COMPOSER_PENDING_HINT,
   COMPOSER_PENDING_SEND_CONFIRM,
   ackSendDespitePending,
   confirmSendDespitePendingIfNeeded,
@@ -27,11 +26,7 @@ beforeEach(() => {
 });
 
 describe("composerPendingHint", () => {
-  it("exposes short zh copy", () => {
-    expect(COMPOSER_PENDING_HINT).toContain("待你确认");
-    expect(COMPOSER_PENDING_HINT).toContain("另开一轮");
-    expect(COMPOSER_PENDING_HINT).toContain("确认卡仍保留");
-    expect(COMPOSER_PENDING_HINT).not.toContain("取消等待");
+  it("exposes short zh confirm copy", () => {
     expect(COMPOSER_PENDING_SEND_CONFIRM).toContain("另开一轮");
     expect(COMPOSER_PENDING_SEND_CONFIRM).toContain("确认卡仍保留");
     expect(COMPOSER_PENDING_SEND_CONFIRM).not.toContain("取消等待");

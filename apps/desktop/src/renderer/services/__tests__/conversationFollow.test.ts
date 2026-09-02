@@ -2,7 +2,7 @@
  * 对话级订阅（云对话多端同权 B2 · 验收 4）。
  *
  * 覆盖三条硬边界：空闲不转圈、另一端开跑能自动出现 + 跟播、与本端自有连接互斥
- * （同一回合绝不折两次）。
+ * （同一回合绝不折两次；本端占用时静音不断连）。
  */
 import * as logMod from "@/lib/log";
 import { getRuntime, useConversationStore } from "@/stores/conversation";
@@ -93,6 +93,15 @@ function followLifecycle(logs: { mock: { calls: unknown[][] } }): Array<{
     } else if (event === "conversation.follow_closed") {
       const fields = call[2] as { reason?: string } | undefined;
       out.push({ event: "conversation.follow_closed", reason: fields?.reason });
+    } else if (event === "conversation.follow_muted") {
+      const fields = call[2] as { reason?: string } | undefined;
+      out.push({ event: "conversation.follow_muted", reason: fields?.reason });
+    } else if (event === "conversation.follow_unmuted") {
+      const fields = call[2] as { reason?: string } | undefined;
+      out.push({
+        event: "conversation.follow_unmuted",
+        reason: fields?.reason,
+      });
     }
   }
   return out;
@@ -369,7 +378,7 @@ describe("syncConversationFollow (对话级订阅)", () => {
     syncConversationFollow(CID);
     await tick();
     expect(fetchMock).not.toHaveBeenCalled();
-    // 从来没建连：让位不得凭空打 follow_closed。
+    // 从来没建连：静音不得凭空打 follow_muted / follow_closed。
     expect(followLifecycle(logs)).toEqual([]);
 
     release();
@@ -381,7 +390,7 @@ describe("syncConversationFollow (对话级订阅)", () => {
     close();
   });
 
-  it("本端开回合流时立刻让位：让位后到达的帧一律不折（同一回合不双折）", async () => {
+  it("本端开回合流时立刻静音：静音后到达的帧一律不折（同一回合不双折）", async () => {
     const { response, push, close } = sseStream();
     vi.stubGlobal(
       "fetch",
@@ -402,11 +411,11 @@ describe("syncConversationFollow (对话级订阅)", () => {
     expect(followLifecycle(logs)).toEqual([
       { event: "conversation.follow_open" },
       {
-        event: "conversation.follow_closed",
+        event: "conversation.follow_muted",
         reason: "local_stream_handoff",
       },
     ]);
-    // 让位是挂起不是拆 slot：闲下来还要自己连回。
+    // 静音不断连：闲下来还是这一条。
     expect(followedConversationIds()).toEqual([CID]);
     push(frame("message_start", { message_id: "srv-2" }));
     push(frame("content_delta", { delta: "x" }));
@@ -574,92 +583,67 @@ describe("syncConversationFollow (对话级订阅)", () => {
     live.close();
   });
 
-  it("本机回合流结束后 follow 自动连回", async () => {
-    const first = sseStream();
-    const second = sseStream();
-    let n = 0;
-    const fetchMock = vi.fn(() =>
-      Promise.resolve(n++ === 0 ? first.response : second.response),
-    );
+  it("本机回合流结束后 follow 同一条连接接着收，不重连", async () => {
+    const { response, close } = sseStream();
+    const fetchMock = vi.fn(() => Promise.resolve(response));
     vi.stubGlobal("fetch", fetchMock);
     const logs = vi.spyOn(logMod, "logEvent");
 
     syncConversationFollow(CID);
     await tick();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    first.push(": attach-caught-up\n\n");
-    await tick();
-    expect(followLifecycle(logs)).toEqual([
-      { event: "conversation.follow_open" },
-    ]);
 
     const release = beginLocalConversationStream(CID);
     expect(followLifecycle(logs)).toEqual([
       { event: "conversation.follow_open" },
       {
-        event: "conversation.follow_closed",
-        reason: "local_stream_handoff",
-      },
-    ]);
-    // mock fetch 不响应 AbortSignal；显式断流 = 生产里闸 abort 关掉这条跟播。
-    first.close();
-    await tick();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    // 流自然结束不得再补一条关闭；slot 仍挂着。
-    expect(followLifecycle(logs)).toEqual([
-      { event: "conversation.follow_open" },
-      {
-        event: "conversation.follow_closed",
+        event: "conversation.follow_muted",
         reason: "local_stream_handoff",
       },
     ]);
     expect(followedConversationIds()).toEqual([CID]);
 
     release();
-    await vi.waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-    });
+    await tick();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(followedConversationIds()).toEqual([CID]);
     expect(followLifecycle(logs)).toEqual([
       { event: "conversation.follow_open" },
       {
-        event: "conversation.follow_closed",
+        event: "conversation.follow_muted",
         reason: "local_stream_handoff",
       },
-      { event: "conversation.follow_open" },
+      {
+        event: "conversation.follow_unmuted",
+        reason: "local_stream_handoff",
+      },
     ]);
-    second.close();
+    close();
   });
 
-  it("让位窗口内同一回合不双折：hydrate sidecarLive 到 attach 占闸前 full_replay 不进 follow", async () => {
-    const first = sseStream();
-    const second = sseStream();
-    let n = 0;
-    const fetchMock = vi.fn(() =>
-      Promise.resolve(n++ === 0 ? first.response : second.response),
-    );
+  it("静音窗口内同一回合不双折：hydrate sidecarLive 到 attach 占闸前 full_replay 不进 follow", async () => {
+    const { response, push, close } = sseStream();
+    const fetchMock = vi.fn(() => Promise.resolve(response));
     vi.stubGlobal("fetch", fetchMock);
 
     const attachSpy = vi
       .spyOn(sidecarAttach, "attachSidecarTurn")
       .mockImplementation(async () => {
         expect(hasLocalConversationStream(CID)).toBe(true);
-        first.push(
+        push(
           frame("message_start", { message_id: "srv-1", full_replay: true }),
         );
-        first.push(frame("content_delta", { delta: "叠" }));
-        first.push(frame("message_end", { finish_reason: "end_turn" }));
+        push(frame("content_delta", { delta: "叠" }));
+        push(frame("message_end", { finish_reason: "end_turn" }));
         await tick();
         expect(dispatched).toEqual([]);
-        first.close();
-        await tick();
         return true;
       });
 
     syncConversationFollow(CID);
     await tick();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    first.push(": attach-caught-up\n\n");
+    push(": attach-caught-up\n\n");
     await tick();
 
     await runHydrateAttachSettle(CID, {
@@ -673,11 +657,8 @@ describe("syncConversationFollow (对话级订阅)", () => {
     expect(attachSpy).toHaveBeenCalledTimes(1);
     expect(dispatched).toEqual([]);
     expect(hasLocalConversationStream(CID)).toBe(false);
-
-    await vi.waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(followedConversationIds()).toEqual([CID]);
-    second.close();
+    close();
   });
 });

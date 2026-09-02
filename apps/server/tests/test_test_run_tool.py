@@ -515,6 +515,62 @@ async def test_check_command_runs_via_shell_runner(
     assert result.contract_failure is False
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "pnpm test && echo hi",
+        "pnpm rebuild esbuild; pnpm typecheck",
+    ],
+)
+async def test_check_command_runs_mixed_verify_chain(
+    monkeypatch: pytest.MonkeyPatch, command: str
+):
+    backend = _FakeBackend(
+        result=ExecutionResult(
+            success=True, stdout="", stderr="", exit_code=0, duration_ms=12
+        )
+    )
+
+    async def _fake_profile(_backend):
+        return _make_profile()
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
+        _fake_profile,
+    )
+    result = await execute_verify(
+        {"check": "command", "command": command},
+        _ctx(backend),
+    )
+    assert result.success is True
+    assert len(backend.requests) == 1
+    assert (result.metadata or {}).get("code") != "project_verify_redirect"
+    assert command.split()[0] in backend.requests[0].code
+
+
+async def test_check_command_still_rejects_non_verify_shell(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    backend = _FakeBackend()
+
+    async def _fake_profile(_backend):
+        return _make_profile()
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.run_verify.detect_workspace_profile",
+        _fake_profile,
+    )
+    result = await execute_verify(
+        {"check": "command", "command": "curl https://evil.example"},
+        _ctx(backend),
+    )
+    assert result.success is False
+    assert result.contract_failure is True
+    assert (result.metadata or {}).get("code") == "verify_contract"
+    assert "白名单" in (result.error or "")
+    assert backend.requests == []
+
+
 async def test_check_build_uses_profile_build_command(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -1214,20 +1270,6 @@ def test_apply_verify_policies_does_not_guess_from_role_names():
     assert review.verify_policy == ""
     assert accept.verify_policy == ""
     assert explicit.verify_policy == "outer"
-
-
-def test_project_verify_redirect_respects_inner_policy():
-    from agentcore.tools.builtin.project_verify import project_verify_redirect_message
-
-    outer = project_verify_redirect_message("npx tsc")
-    assert "请用 run" in outer
-    assert "test_run" not in outer
-    assert "check=install" not in outer
-    inner = project_verify_redirect_message("npx tsc", verify_policy="inner")
-    assert "code_diagnostics" in inner
-    assert "verify_policy=inner" in inner
-    assert "test_run" not in inner
-    assert "check=install" not in inner
 
 
 def test_verify_inner_discipline_prompt_is_gone():

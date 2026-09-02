@@ -14,7 +14,7 @@ alwaysApply: false
 
 | 层 | 语义 | 色 |
 |---|---|---|
-| A 用户面提示 | 横幅 / Toast / 表单失败行 | 蓝 `primary` = 需要你（去配置 / 拍板）；灰 `noticeChipNeutral` = 可恢复中断（限流 / 请稍候 / 发送失败）；红 `destructive` = 危险操作（删除 / 覆盖 / 拒绝 / 停止） |
+| A 用户面提示 | 横幅 / Toast / 表单失败行 | 蓝 `primary` = 需要你（去配置 / 拍板）；灰 `noticeChipNeutral` = 可恢复中断（限流 / 请稍候 / 发送失败）；红 `destructive` = 危险操作（删除 / 覆盖 / 拒绝）。停止生成（输入区主控件）走 `IconButton` `inverse`（前景实心底），不占用红 |
 | B 执行态 | run / 工具 / 节点 | pending→muted、running→primary、completed→success、**failed→destructive 红点**。整卡用户提示走 A，禁因 failed 把横幅刷红 |
 | C 分类 | git 字母、风险高中低、截断、弱源、录音中、diff 删行 | 可用 `--warning` / 红当分类色，≠ 状态。**禁把 `--warning` token 改成灰** |
 
@@ -23,6 +23,8 @@ alwaysApply: false
 ## 单一定义源
 
 OKLCH 语义色单源：**`packages/design-tokens/`**（`tokens.css` 桌面 / `mobile-light.css` 手机）。需要新颜色 → 先加进 `packages/design-tokens/tokens.css`，再视需要映射 Tailwind 类。
+
+暗色大面近中性（chroma ≤0.006），品牌蓝只走 `primary` / 状态；层叠 canvas < card < popover；侧栏深于画布。数字只改 `tokens.css` `.dark`。禁把暗色表面重新涂满 255 蓝；禁借表面调整回头推高 primary 彩度。
 
 ## 禁止
 

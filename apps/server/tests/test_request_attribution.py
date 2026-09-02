@@ -19,6 +19,7 @@ from agentcore.middleware.request_attribution import (
     MISSING_CLIENT_HEADER,
     RequestAttributionMiddleware,
     client_header_for_log,
+    stream_path_reason_for_log,
 )
 
 
@@ -88,6 +89,36 @@ async def test_middleware_missing_headers_use_sentinel_not_empty() -> None:
     # Sentinel is truthy so get_log_value does not collapse it to default "".
     assert seen["via_get"]["platform"] == MISSING_CLIENT_HEADER
     assert seen["via_get"]["version"] == MISSING_CLIENT_HEADER
+
+
+def test_stream_path_reason_for_log_allowlists() -> None:
+    assert stream_path_reason_for_log(None) is None
+    assert stream_path_reason_for_log("") is None
+    assert stream_path_reason_for_log("not-a-reason") is None
+    assert stream_path_reason_for_log("probe_unhealthy") == "probe_unhealthy"
+    assert stream_path_reason_for_log("  Probe_Unhealthy  ") == "probe_unhealthy"
+
+
+async def test_middleware_binds_stream_path_reason_when_allowlisted() -> None:
+    seen = await _seen_from_request(
+        **{
+            "X-Client-Platform": "desktop",
+            "X-AgentCore-Stream-Path-Reason": "probe_unhealthy",
+        }
+    )
+    assert seen["ctx"]["stream_path_reason"] == "probe_unhealthy"
+
+
+async def test_middleware_ignores_unknown_stream_path_reason() -> None:
+    seen = await _seen_from_request(
+        **{"X-AgentCore-Stream-Path-Reason": "please-inject"}
+    )
+    assert "stream_path_reason" not in seen["ctx"]
+
+
+async def test_middleware_omits_stream_path_reason_when_absent() -> None:
+    seen = await _seen_from_request(**{"X-Client-Platform": "desktop"})
+    assert "stream_path_reason" not in seen["ctx"]
 
 
 async def test_middleware_empty_headers_stay_empty_string() -> None:

@@ -47,9 +47,6 @@ def test_deliverable_is_report_delivery_structured_or():
     from agentcore.workspace.stage_dirs import DEBATE_DIR, RESEARCH_DIR, REVIEWS_DIR
 
     assert deliverable_is_report_delivery(
-        Deliverable(code_audit_gate=True, form="files", artifacts=["x.audit.json"])
-    )
-    assert deliverable_is_report_delivery(
         Deliverable(citation_mode="two_phase", form="files", artifacts=["a.md"])
     )
     assert deliverable_is_report_delivery(
@@ -264,8 +261,10 @@ def test_promote_brief_to_deliverable():
 
 
 @pytest.mark.asyncio
-async def test_handoff_promotes_brief_when_empty_body_min0(tmp_path: Path):
-    """非 prose + 有下游 + min=0 + 正文 0 字 + 非空 summary → 升格成功。"""
+async def test_handoff_execute_ignores_arguments_and_does_not_promote(tmp_path: Path):
+    """参数已清空：execute 不升格、final_text 恒空。升格改由 harvest 后的 terminal 做。"""
+    from agentcore.tools.builtin.handoff import HANDOFF_RECEIPT
+
     ctx = _ctx(
         tmp_path,
         handoff_requires_body=True,
@@ -276,8 +275,8 @@ async def test_handoff_promotes_brief_when_empty_body_min0(tmp_path: Path):
         {"summary": "Greeter 问好", "key_points": ["已完成打招呼"]},
         ctx)
     assert result.success is True
-    assert "Greeter 问好" in (result.final_text or "")
-    assert "已完成打招呼" in (result.final_text or "")
+    assert (result.final_text or "") == ""
+    assert result.output == HANDOFF_RECEIPT
 
 
 @pytest.mark.asyncio
@@ -307,7 +306,7 @@ async def test_handoff_promotes_short_brief_when_below_floor(tmp_path: Path):
         round_content_chars=0)
     result = await HandoffTool().execute({"summary": "太短"}, ctx)
     assert result.success is True
-    assert (result.final_text or "") == "太短"
+    assert (result.final_text or "") == ""
 
 
 @pytest.mark.asyncio
@@ -323,7 +322,7 @@ async def test_handoff_promotes_brief_when_meets_floor_non_prose(tmp_path: Path)
         round_content_chars=0)
     result = await HandoffTool().execute({"summary": summary}, ctx)
     assert result.success is True
-    assert (result.final_text or "") == summary
+    assert (result.final_text or "") == ""
 
 
 @pytest.mark.asyncio
@@ -376,16 +375,12 @@ async def test_handoff_real_body_keeps_empty_final_text(tmp_path: Path):
     assert (result.final_text or "") == ""
 
 
-def test_handoff_schema_brief_field_bounds():
-    """B2：summary/assumptions/next_steps maxLength；key_points maxItems+item maxLength。"""
+def test_handoff_schema_has_no_brief_fields():
+    """便条在收尾轮正文，参数表为空。"""
     schema = HandoffTool().schema.parameters
-    props = schema["properties"]
-    assert props["summary"]["maxLength"] == 300
-    assert props["assumptions"]["maxLength"] == 300
-    assert props["next_steps"]["maxLength"] == 300
-    assert props["key_points"]["maxItems"] == 4
-    assert props["key_points"]["items"]["maxLength"] == 120
-    assert "motion_card" not in props
+    assert schema.get("properties") == {}
+    assert "required" in schema
+    assert schema.get("required") == []
 
 
 @pytest.mark.asyncio

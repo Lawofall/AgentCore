@@ -408,7 +408,6 @@ async def test_partial_failure_stashes_plan_and_replan_add_resumes(monkeypatch):
 
     assert first.success is True
     assert "failed" in first.output
-    assert "replan(add" in first.output
     assert t._supervised is not None
     assert t._supervised.reason is BoundaryReason.SCOPE
     a_id = next(n.run_id for n in t._supervised.plan.nodes if n.role == "A")

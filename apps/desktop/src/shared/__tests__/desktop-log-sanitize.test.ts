@@ -40,6 +40,42 @@ describe("sanitizeDesktopLogRecord", () => {
     });
   });
 
+  it("keeps probe_failed kind / duration / http_status", () => {
+    expect(
+      sanitizeDesktopLogRecord({
+        timestamp: "2026-08-17T00:00:00.000Z",
+        level: "debug",
+        event: "server_health.probe_failed",
+        build: "prod",
+        version: "1.2.3",
+        fields: {
+          consecutive_failures: 1,
+          failure_threshold: 3,
+          reason: "连不上 AgentCore 服务，请稍后重试。",
+          kind: "timeout",
+          duration_ms: 10012,
+          http_status: 200,
+          status: "online",
+          last_ok_at: 1,
+        },
+      }),
+    ).toEqual({
+      timestamp: "2026-08-17T00:00:00.000Z",
+      level: "debug",
+      event: "server_health.probe_failed",
+      build: "prod",
+      version: "1.2.3",
+      consecutive_failures: 1,
+      failure_threshold: 3,
+      reason: "连不上 AgentCore 服务，请稍后重试。",
+      kind: "timeout",
+      duration_ms: 10012,
+      http_status: 200,
+      status: "online",
+      last_ok_at: 1,
+    });
+  });
+
   it("drops conversation body, tokens, and file paths even if present", () => {
     expect(
       sanitizeDesktopLogRecord({
@@ -67,6 +103,32 @@ describe("sanitizeDesktopLogRecord", () => {
         fields: { action: "load_latest_window", conversation_id: "c1" },
       }),
     ).toBeNull();
+  });
+
+  it("keeps turn.stream_path overbridge reason fields", () => {
+    expect(
+      sanitizeDesktopLogRecord({
+        event: "turn.stream_path",
+        fields: {
+          conversation_id: "c1",
+          via: "cloud",
+          reason: "probe_unhealthy",
+          bridging: true,
+          root_id: "r1",
+          probe_detail: "spawn uv ENOENT",
+          subpath: "conversations/c1",
+          content: "用户提问不应出机",
+        },
+      }),
+    ).toEqual({
+      event: "turn.stream_path",
+      conversation_id: "c1",
+      via: "cloud",
+      reason: "probe_unhealthy",
+      bridging: true,
+      root_id: "r1",
+      probe_detail: "spawn uv ENOENT",
+    });
   });
 
   it("keeps sse.event_dropped enum fields and still strips bodies", () => {

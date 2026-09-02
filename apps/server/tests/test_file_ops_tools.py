@@ -574,6 +574,8 @@ async def test_file_read_pagination_windows_return_requested_lines(tmp_path: Pat
     first = await tool.execute({"path": "page.md", "offset": 1, "limit": 5}, ctx)
     assert first.success is True
     assert "L1" in (first.output or "")
+    assert "未达安全顶，省略 limit 可整读" in (first.output or "")
+    assert "已达行顶" not in (first.output or "")
     expand = await tool.execute({"path": "page.md", "offset": 3, "limit": 8}, ctx)
     assert expand.success is True
     assert "L3" in (expand.output or "")
@@ -618,10 +620,13 @@ async def test_file_read_after_tool_clear_still_returns_disk_body(tmp_path: Path
     tool = FileReadTool()
     outputs: list[str] = []
     for _ in range(3):
-        result = await tool.execute({"path": "src/target.py"}, ctx)
+        result = await tool.execute(
+            {"path": "src/target.py", "offset": 1, "limit": 40}, ctx
+        )
         assert result.success is True
         outputs.append(result.output or "")
         assert "line-0" in (result.output or "")
+        assert "全文" not in (result.output or "")
 
     msgs: list[LLMMessage] = [LLMMessage(role="user", content="go")]
     for i, output in enumerate(outputs):
@@ -642,7 +647,8 @@ async def test_file_read_after_tool_clear_still_returns_disk_body(tmp_path: Path
     assert (stub.content or "").startswith("[已清理")
     assert "path='src/target.py'" in (stub.content or "")
     assert "status=content_cleared" in (stub.content or "")
-    assert "reread=allowed" in (stub.content or "")
+    assert "disk=intact" in (stub.content or "")
+    assert "reread=omit_offset_limit" in (stub.content or "")
 
     recovered = await tool.execute({"path": "src/target.py"}, ctx)
     assert recovered.success is True
@@ -1561,6 +1567,18 @@ async def test_copy_refuses_overwrite(tmp_path: Path):
     )
     assert result.success is False
     assert "已存在" in result.error
+
+
+def test_mkdir_schema_teaches_structure_not_app_shell():
+    desc = MkdirTool().schema.description
+    assert "结构目录" in desc
+    assert "src/" in desc
+    assert "不必先 mkdir" in desc
+    assert "套应用名/话题名当工程根" in desc
+    assert "≠" in desc
+    assert "whiteboard" not in desc
+    assert "court-game" not in desc
+    assert "禁止" not in desc
 
 
 async def test_mkdir_creates_and_refuses_existing(tmp_path: Path):

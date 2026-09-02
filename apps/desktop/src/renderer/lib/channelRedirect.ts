@@ -9,7 +9,7 @@
 export const CHANNEL_REDIRECT_CODES = new Set([
   "source_grep_redirect",
   "source_dump_redirect",
-  "project_verify_redirect",
+  "project_verify_redirect", // journal-only; unified `run` no longer emits
   "long_running_redirect",
   "not_a_web_url",
   "url_not_workspace_path",
@@ -23,7 +23,6 @@ export const CHANNEL_REDIRECT_FACE: Record<
 > = {
   source_grep_redirect: { label: "改用搜索", toolName: "grep" },
   source_dump_redirect: { label: "改用读文件", toolName: "file_read" },
-  project_verify_redirect: { label: "改用项目检查", toolName: "test_run" },
   long_running_redirect: { label: "改用终端", toolName: "terminal" },
   not_a_web_url: { label: "改用读文件", toolName: "file_read" },
   url_not_workspace_path: { label: "改用读网页", toolName: "read_url" },

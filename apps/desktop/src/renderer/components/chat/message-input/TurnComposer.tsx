@@ -1,7 +1,6 @@
 import { DraftWorkspaceAssignPrompt } from "@/components/chat/DraftWorkspaceAssignPrompt";
 import { MentionMenu } from "@/components/chat/MentionMenu";
 import { Button, IconButton } from "@/components/ui";
-import { useConversations } from "@/hooks/useConversations";
 import { useFolders } from "@/hooks/useFolders";
 import { copyText } from "@/lib/clipboard";
 import {
@@ -9,6 +8,7 @@ import {
   COMPOSER_EMPTY_INTERRUPTED_HINT,
   isContinuableAssistant,
 } from "@/lib/composerContinueHint";
+import { useCoordinationActive } from "@/lib/composerDelivery";
 import {
   dropInlineIndex,
   insertInlineToken,
@@ -52,10 +52,8 @@ import {
   ComposerBodyEditor,
   type ComposerBodyHandle,
 } from "./ComposerBodyEditor";
-import { ComposerCloudBridgeHint } from "./ComposerCloudBridgeHint";
 import { ComposerContextCompactedHint } from "./ComposerContextCompactedHint";
 import { ComposerGitStatusChip } from "./ComposerGitStatusChip";
-import { ComposerPendingHintNotice } from "./ComposerPendingHintNotice";
 import {
   ComposerPlusMenu,
   useComposerPlusClose,
@@ -145,15 +143,11 @@ export function TurnComposer({
     ? MIN_COMPOSER_HEIGHT_BAR
     : MIN_COMPOSER_HEIGHT_CARD;
   const isGenerating = useActiveGenerating();
+  const coordinationActive = useCoordinationActive();
   const liveDebate = useLiveDebateSteer();
   const turnPhase = useActiveTurnPhase();
   const isStopping = turnPhase === "stopping";
   const conversationId = useConversationStore((s) => s.currentConversationId);
-  const conversations = useConversations();
-  const contextCompacted = Boolean(
-    conversationId &&
-      conversations.find((c) => c.id === conversationId)?.contextCompacted,
-  );
   const byId = useInteractionStore((s) => s.byId);
   const pausedPending = usePausedTurnStore((s) => s.pending);
   const recoveryState = usePausedTurnStore((s) =>
@@ -563,13 +557,15 @@ export function TurnComposer({
 
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      // 辩论进行中一律 continue（不走插队 sendTurn）。其余：生成中强制 steer；
+      // 辩论进行中一律 continue。经典生成中 = 插队；协调空窗生成中 = 排队。
       // 空闲与 Enter 同路径（默认 steer），勿伪装传 queue。
       if (serverUnhealthy) return;
       if (liveDebate) {
         void handleSend();
       } else if (isGenerating) {
-        void handleSend({ delivery: "steer" });
+        void handleSend({
+          delivery: coordinationActive ? "queue" : "steer",
+        });
       } else {
         void handleSend();
       }
@@ -580,7 +576,7 @@ export function TurnComposer({
       e.preventDefault();
       // N4-A：离线硬禁用（与发送按钮一致；handleSend 仍有兜底）。
       if (serverUnhealthy) return;
-      // 辩论进行中 continue。其余：空闲默认 steer；生成中默认 queue。插队见 Ctrl/Cmd+Enter / 「插队」。
+      // 辩论进行中 continue。其余不传 delivery：空闲/协调空窗默认 steer；经典生成中默认 queue。
       void handleSend();
     }
   };
@@ -593,7 +589,7 @@ export function TurnComposer({
 
   // 左簇顺序：工作区 · Git? · 模型 · 权限 · @
   // bar：整簇收进 ComposerPlusMenu（权限/@ 带文案）；card：底栏摊开（iconOnly）。
-  // 否决 Composer 并排「本地引擎/云端过桥」切换器；过桥事后弱提示见 ComposerCloudBridgeHint。
+  // 否决 Composer 并排「本地引擎/云端过桥」切换器；过桥事后弱提示见助手泡脚注 CloudBridgeHint。
   const sessionChrome = (
     <>
       <ComposerWorkspaceChip conversationId={conversationId} />
@@ -619,9 +615,9 @@ export function TurnComposer({
     </>
   );
 
-  // 生成中：停止常显；有草稿时再加「插队」次级 +「排队」主键。辩论进行中改走掌舵
-  // （发送=continue，「出结论」=conclude），隐藏排队/插队。
-  // 插队 = 显式 steer（下一步生效），不把主槽改成 Stop&send。
+  // 生成中：停止常显。经典：有草稿时「插队」次级 +「排队」主键。
+  // 协调空窗：有草稿时复用空闲「发送」主键（默认立刻给主 Agent）+ 次级「排队」。
+  // 辩论进行中改走掌舵（发送=continue，「出结论」=conclude），隐藏排队/插队。
   // N4-A：只读离线硬禁用发送。
   const sendBlocked = serverUnhealthy;
   // 辩论进行中主框是「对这场说话」：发送只看正文。@ 入口已藏，mention 芯片不得单独点亮发送。
@@ -635,7 +631,7 @@ export function TurnComposer({
   const stopButton = (
     <IconButton
       size="sm"
-      tone="destructive"
+      tone="inverse"
       onClick={stopGeneration}
       aria-label={stopLabel}
       title={stopLabel}
@@ -652,7 +648,7 @@ export function TurnComposer({
   const primarySendButton = (
     <IconButton
       size="sm"
-      tone="primary"
+      tone={hasDraft && !sendBlocked ? "inverse" : "default"}
       onClick={() => void handleSend()}
       disabled={!hasDraft || sendBlocked || isSending}
       aria-label="发送"
@@ -681,6 +677,53 @@ export function TurnComposer({
       出结论
     </Button>
   );
+  const classicMidFlightSend = (
+    <div className="flex items-center gap-1.5">
+      <Button
+        variant="neutral"
+        size="sm"
+        className="border-border text-foreground"
+        onClick={() => void handleSend({ delivery: "steer" })}
+        disabled={queueDisabled}
+        aria-label="插队"
+        title={
+          sendBlocked ? "离线时无法发送" : "插队：下一步生效（Ctrl/Cmd+Enter）"
+        }
+        data-testid="composer-steer-link"
+      >
+        插队
+      </Button>
+      <Button
+        variant="primary"
+        size="sm"
+        icon={<ListPlus size={14} aria-hidden />}
+        onClick={() => void handleSend()}
+        disabled={queueDisabled}
+        aria-label={midFlightLabel}
+        title={sendBlocked ? "离线时无法发送" : midFlightHint}
+      >
+        排队
+      </Button>
+      {stopButton}
+    </div>
+  );
+  const coordinationMidFlightSend = (
+    <div className="flex items-center gap-1.5">
+      <Button
+        variant="neutral"
+        size="sm"
+        className="border-border text-foreground"
+        onClick={() => void handleSend({ delivery: "queue" })}
+        disabled={queueDisabled}
+        aria-label="排队"
+        title={sendBlocked ? "离线时无法发送" : "等团队收工后再说"}
+      >
+        排队
+      </Button>
+      {primarySendButton}
+      {stopButton}
+    </div>
+  );
   // 辩论进行中：隐藏排队/插队；发送=continue，出结论=conclude。勿扫正文猜「够了收」。
   const sendControls = liveDebate ? (
     <div className="flex items-center gap-1.5">
@@ -690,36 +733,11 @@ export function TurnComposer({
     </div>
   ) : isGenerating ? (
     hasDraft ? (
-      <div className="flex items-center gap-1.5">
-        <Button
-          variant="neutral"
-          size="sm"
-          className="border-border text-foreground"
-          onClick={() => void handleSend({ delivery: "steer" })}
-          disabled={queueDisabled}
-          aria-label="插队"
-          title={
-            sendBlocked
-              ? "离线时无法发送"
-              : "插队：下一步生效（Ctrl/Cmd+Enter）；协调模式下 CEO 仍可能改排队"
-          }
-          data-testid="composer-steer-link"
-        >
-          插队
-        </Button>
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<ListPlus size={14} aria-hidden />}
-          onClick={() => void handleSend()}
-          disabled={queueDisabled}
-          aria-label={midFlightLabel}
-          title={sendBlocked ? "离线时无法发送" : midFlightHint}
-        >
-          排队
-        </Button>
-        {stopButton}
-      </div>
+      coordinationActive ? (
+        coordinationMidFlightSend
+      ) : (
+        classicMidFlightSend
+      )
     ) : (
       stopButton
     )
@@ -860,17 +878,11 @@ export function TurnComposer({
       {/* 断连提示：仅在心跳判定服务器不可达时出现，主动告知「发送前」状态。 */}
       <ComposerConnectionNotice />
 
-      {/* 本机绑定却本轮过桥：弱状态（非引擎切换器；强制关路径不展示）。 */}
-      <ComposerCloudBridgeHint />
-
       {/* 草稿有图且当前组合不能看图、也没识图槽：发送前轻提示（不拦发送）。 */}
       <ComposerVisionHint />
 
-      {/* 会话字段徽章：较早对话已压缩（旗标 only，无摘要正文）。 */}
-      <ComposerContextCompactedHint show={contextCompacted} />
-
-      {/* 挂起弱提示：有待确认/续跑卡时常驻；不强拦发送（发送前二次确认见 useComposerSend）。 */}
-      <ComposerPendingHintNotice show={showPendingHint} />
+      {/* 压缩没跟上才出声（成功态在时间线隔断，不占输入区）。 */}
+      <ComposerContextCompactedHint />
 
       {/* 输入区轻提示：空中断 send_next / 部分完成+限流 wait_then_retry。发送下一条即恢复。报障跟 supportPackHost。 */}
       {showComposerHint && (

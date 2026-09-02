@@ -19,7 +19,6 @@ from agentcore.workspace._paths import (
 )
 from agentcore.workspace.server import ServerWorkspace
 from agentcore.workspace.sparse_listing import (
-    PROJECT_RECENT_SUPPLEMENT,
     collect_turn_material_paths,
     format_remaining_summary,
     is_ai_list_hidden_file,
@@ -151,16 +150,14 @@ def test_partition_bare_lists_all_with_labels():
     ]
 
 
-def test_partition_project_keeps_attachments_and_recent_supplement():
-    others = [f"f{i}.py" for i in range(PROJECT_RECENT_SUPPLEMENT + 3)]
+def test_partition_project_keeps_attachments_and_collapses_rest():
+    others = [f"f{i}.py" for i in range(8)]
     rows, remaining = partition_sparse_paths(
         ["attachments/x.md", *others],
         shared_workspace=True,
     )
-    assert rows[0] == ("attachments/x.md", "附件·含历轮")
-    assert all(label == "最近触达" for _, label in rows[1:])
-    assert len(rows) == 1 + PROJECT_RECENT_SUPPLEMENT
-    assert remaining == 3
+    assert rows == [("attachments/x.md", "附件·含历轮")]
+    assert remaining == 8
     assert "file_list" in format_remaining_summary(remaining)
 
 

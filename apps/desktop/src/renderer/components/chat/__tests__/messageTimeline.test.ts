@@ -261,4 +261,52 @@ describe("mergeTimeline", () => {
       "m:u2",
     ]);
   });
+
+  it("inserts a compaction divider after the last folded message", () => {
+    const messages = [
+      um("u1", "2026-01-01T00:00:00Z"),
+      am("a1", "2026-01-01T01:00:00Z"),
+      um("u2", "2026-01-01T02:00:00Z"),
+      am("a2", "2026-01-01T03:00:00Z"),
+    ];
+    const items = mergeTimeline(
+      messages,
+      [],
+      [],
+      [],
+      [],
+      "2026-01-01T01:00:00Z",
+    );
+    expect(items.map((i) => i.key)).toEqual([
+      "m:u1",
+      "m:a1",
+      "compaction",
+      "m:u2",
+      "m:a2",
+    ]);
+  });
+
+  it("does not show a compaction divider when the fold is above the loaded window", () => {
+    const messages = [
+      um("u2", "2026-01-01T02:00:00Z"),
+      am("a2", "2026-01-01T03:00:00Z"),
+    ];
+    const items = mergeTimeline(
+      messages,
+      [],
+      [],
+      [],
+      [],
+      "2026-01-01T01:00:00Z",
+    );
+    expect(items.map((i) => i.key)).toEqual(["m:u2", "m:a2"]);
+  });
+
+  it("keeps the compaction divider off the composer when the chat is not folded", () => {
+    const items = mergeTimeline(
+      [um("u1", "2026-01-01T00:00:00Z"), am("a1", "2026-01-01T01:00:00Z")],
+      [],
+    );
+    expect(items.some((i) => i.kind === "compaction")).toBe(false);
+  });
 });

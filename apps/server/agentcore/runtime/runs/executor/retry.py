@@ -20,16 +20,6 @@ from agentcore.runtime.runs.contract import (
 from agentcore.runtime.runs.executor.shared import _registry_without
 from agentcore.runtime.runs.retrieval_budget import RETRIEVAL_TOOL_NAMES
 
-# Light-repair allow-list: format backfill / handoff enrichment only — no re-investigation.
-_LIGHT_REPAIR_TOOL_NAMES: frozenset[str] = frozenset(
-    {
-        HANDOFF_TOOL_NAME,
-        "file_write",
-        "file_append",
-        "str_replace",
-        "file_read",
-    }
-)
 _LIGHT_REPAIR_MAX_ROUNDS = 4
 
 # Pass-boundary cap announcement (light_repair / contract retry). Not a live
@@ -257,28 +247,16 @@ def _narrow_for_light_repair(
     worker_tools: Any,
     allowed_tools: list[str] | None,
 ) -> tuple[Any, list[str]]:
-    """Strip investigation tools for a format-only light repair pass.
+    """Keep local read/write/run; withhold billed retrieval only.
 
-    Unrestricted (``None``) → explicit light-repair allow-list ∩ registry.
-    Explicit lists are intersected with :data:`_LIGHT_REPAIR_TOOL_NAMES` (already
-    includes persist writes). 真纯丙后不再有「名单缺写盘 → 补写」半成品。
+    Round cap still bounds the pass. Empty-handoff salvage needs grep /
+    file_list / run; ``web_search`` / ``read_url`` stay off.
     """
-    withhold = tuple(
-        sorted(
-            RETRIEVAL_TOOL_NAMES
-            | frozenset({"grep", "code_search", "file_list", "run"})
-        )
-    )
-    narrowed_registry = _registry_without(worker_tools, *withhold)
+    narrowed_registry = _registry_without(worker_tools, *RETRIEVAL_TOOL_NAMES)
     if allowed_tools is None:
-        # Unrestricted → explicit light-repair allow-list (intersect registry).
-        present = {
-            s.name
-            for s in narrowed_registry.list_all()
-            if s.name in _LIGHT_REPAIR_TOOL_NAMES
-        }
+        present = {s.name for s in narrowed_registry.list_all()}
         return narrowed_registry, sorted(present)
-    narrowed_allowed = [t for t in allowed_tools if t in _LIGHT_REPAIR_TOOL_NAMES]
+    narrowed_allowed = [t for t in allowed_tools if t not in RETRIEVAL_TOOL_NAMES]
     if HANDOFF_TOOL_NAME not in narrowed_allowed:
         narrowed_allowed = [*narrowed_allowed, HANDOFF_TOOL_NAME]
     return narrowed_registry, narrowed_allowed

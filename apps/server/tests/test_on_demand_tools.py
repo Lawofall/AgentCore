@@ -99,6 +99,8 @@ def test_resident_tools_are_not_on_the_roster():
         "list_folders",
         "remember",
         "run",
+        "search_conversations",
+        "read_conversation",
     ):
         assert not is_on_demand_tool(name), name
     # Dynamic MCP names are not in the static set, but still ride the same gate.
@@ -501,7 +503,7 @@ async def test_stuffed_worker_opening_table_omits_mcp_tools():
 
 
 def test_ceo_chat_tools_after_assemble_wire_hold_deferred_work_tools():
-    """CEO holds notify + logs + mcp_* (deferred); escalate/handoff absent; opening omits them."""
+    """CEO holds notify + logs + mcp_*; notify/mcp deferred; logs opening-resident."""
     from agentcore.llm.profiles import default_turn_profiles
     from agentcore.runtime.events import EventSink
     from agentcore.runtime.resolve.prepare import (
@@ -549,15 +551,11 @@ def test_ceo_chat_tools_after_assemble_wire_hold_deferred_work_tools():
     assert len(mcp_names) == 2
     assert names.isdisjoint({"escalate", "handoff"})
 
-    on_demand = {
-        "desktop_notify",
-        "search_conversations",
-        "read_conversation",
-        *mcp_names,
-    }
-    assert on_demand <= set(chat_tools.deferred_names)
+    deferred = {"desktop_notify", *mcp_names}
+    assert deferred <= set(chat_tools.deferred_names)
     offered = _def_names(chat_tools)
-    assert on_demand.isdisjoint(offered)
+    assert deferred.isdisjoint(offered)
+    assert {"search_conversations", "read_conversation"} <= offered
 
 
 async def test_mcp_directory_lists_assembled_tools_and_consult_promotes_server_family():

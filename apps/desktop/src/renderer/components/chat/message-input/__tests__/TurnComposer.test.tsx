@@ -247,6 +247,7 @@ import { COMPOSER_DEBATE_STEER_PLACEHOLDER } from "../liveDebateSteer";
 
 const OUTCOME_CID = "conv-composer-outcome";
 const DEBATE_MID = "a-debate-1";
+const COORD_MID = "a-coord-1";
 
 const LIVE_DEBATE_PLAN: ExecutionPlan = {
   id: "exec-d",
@@ -302,6 +303,44 @@ function seedLastAssistant(
       },
     },
   });
+}
+
+const TEAM_PLAN: ExecutionPlan = {
+  id: "exec-team",
+  planType: "multi_agent",
+  taskSummary: "调研",
+  agents: [{ id: "a-w", role: "研究员" }],
+  runs: [
+    {
+      id: "r-w",
+      agentId: "a-w",
+      task: "查资料",
+      dependsOn: [],
+    },
+  ],
+};
+
+function seedCoordinationActive() {
+  useConversationStore.setState({
+    currentConversationId: OUTCOME_CID,
+    byId: {
+      [OUTCOME_CID]: {
+        ...EMPTY_RUNTIME,
+        isGenerating: true,
+        messages: [
+          {
+            id: COORD_MID,
+            role: "assistant",
+            content: "",
+            createdAt: new Date().toISOString(),
+            executionId: "exec-team",
+            isStreaming: true,
+          },
+        ],
+      },
+    },
+  });
+  useExecutionStore.getState().startExecution(TEAM_PLAN, COORD_MID);
 }
 
 function seedLiveDebate() {
@@ -451,6 +490,7 @@ describe("TurnComposer variants", () => {
     renderComposer("bar");
     const send = screen.getByRole("button", { name: "发送" });
     expect((send as HTMLButtonElement).disabled).toBe(true);
+    expect(send.className).not.toContain("bg-foreground");
     const offline = screen.getByText(/可浏览已缓存的对话与本机文件（只读）/);
     expect(offline.className).toContain("text-muted-foreground");
     expect(offline.className).not.toContain("destructive");
@@ -470,7 +510,9 @@ describe("TurnComposer variants", () => {
     expect(screen.queryByRole("button", { name: "插入" })).toBeNull();
     expect(screen.queryByRole("button", { name: "排队发送" })).toBeNull();
     expect(screen.queryByRole("button", { name: "插队" })).toBeNull();
-    expect(screen.getByRole("button", { name: "停止生成" })).toBeTruthy();
+    const stop = screen.getByRole("button", { name: "停止生成" });
+    expect(stop.className).toContain("bg-foreground");
+    expect(stop.className).not.toContain("bg-destructive");
   });
 
   it("stopping: stop button shows 停止中… spinner and stays clickable", () => {
@@ -582,6 +624,42 @@ describe("TurnComposer variants", () => {
     const body = screen.getByTestId("composer-body");
     fireEvent.keyDown(body, { key: "Enter", ctrlKey: true });
     expect(handleSendMock).toHaveBeenCalledWith({ delivery: "steer" });
+  });
+
+  it("协调活跃 + 草稿：发送主按钮 + 排队，无插队", async () => {
+    genMock.value = true;
+    seedCoordinationActive();
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    useComposerDraftStore.getState().setValue(OUTCOME_CID, "补一句");
+    renderComposer("bar");
+    expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();
+    const queue = screen.getByRole("button", { name: "排队" });
+    expect(queue).toBeTruthy();
+    expect(queue.getAttribute("title")).toBe("等团队收工后再说");
+    expect(screen.queryByRole("button", { name: "排队发送" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "插队" })).toBeNull();
+    expect(screen.getByRole("button", { name: "停止生成" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    expect(handleSendMock).toHaveBeenCalledWith();
+
+    handleSendMock.mockClear();
+    fireEvent.click(queue);
+    expect(handleSendMock).toHaveBeenCalledWith({ delivery: "queue" });
+  });
+
+  it("协调活跃 + 草稿：Enter 走默认，Ctrl/Cmd+Enter 传 queue", async () => {
+    genMock.value = true;
+    seedCoordinationActive();
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    useComposerDraftStore.getState().setValue(OUTCOME_CID, "补一句");
+    renderComposer("bar");
+    const body = screen.getByTestId("composer-body");
+    fireEvent.keyDown(body, { key: "Enter" });
+    expect(handleSendMock).toHaveBeenCalledWith();
+    handleSendMock.mockClear();
+    fireEvent.keyDown(body, { key: "Enter", ctrlKey: true });
+    expect(handleSendMock).toHaveBeenCalledWith({ delivery: "queue" });
   });
 
   it("idle: Ctrl/Cmd+Enter matches Enter (no fake queue)", async () => {
@@ -707,6 +785,18 @@ describe("TurnComposer variants", () => {
     renderComposer("bar");
     const send = screen.getByRole("button", { name: "发送" });
     expect((send as HTMLButtonElement).disabled).toBe(true);
+    expect(send.className).not.toContain("bg-primary");
+    expect(send.className).not.toContain("bg-foreground");
+  });
+
+  it("idle: draft fills 发送 with inverse ink, not brand blue", async () => {
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    useComposerDraftStore.getState().setValue("__draft__", "试试效果");
+    renderComposer("bar");
+    const send = screen.getByRole("button", { name: "发送" });
+    expect((send as HTMLButtonElement).disabled).toBe(false);
+    expect(send.className).toContain("bg-foreground");
+    expect(send.className).not.toContain("bg-primary");
   });
 
   it("has no composer textarea; body editor is the textbox", () => {
@@ -946,6 +1036,7 @@ describe("TurnComposer variants", () => {
     expect(send.getAttribute("data-sending")).toBe("true");
     expect(send.getAttribute("aria-busy")).toBe("true");
     expect((send as HTMLButtonElement).disabled).toBe(true);
+    expect(send.className).toContain("bg-foreground");
     fireEvent.click(send);
     expect(handleSendMock).not.toHaveBeenCalled();
   });

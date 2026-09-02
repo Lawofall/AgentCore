@@ -1065,7 +1065,6 @@ def _deliverable_from_dict(raw: dict[str, Any]) -> Deliverable:
         workspace_native=workspace_native,
         strict=bool(raw.get("strict", False)),
         citation_mode=citation_mode,  # type: ignore[arg-type]
-        code_audit_gate=bool(raw.get("code_audit_gate", False)),
     )
 
 

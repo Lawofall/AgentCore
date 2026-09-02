@@ -246,7 +246,8 @@ async def test_inject_close_then_adopt_does_not_reopen():
         msgs = await await_coordination_injection([])
         assert session.active is False
         assert "勿做最终合成" not in (msgs[0].content or "")
-        assert "报告本波结果" in (msgs[0].content or "")
+        assert "报告本波结果" not in (msgs[0].content or "")
+        assert "团队已全部结束" in (msgs[0].content or "")
         assert product in (msgs[0].content or "")
         assert active_coordination_for_conversation("conv-p1") is None
         assert adopt_active_execution("conv-p1") is None

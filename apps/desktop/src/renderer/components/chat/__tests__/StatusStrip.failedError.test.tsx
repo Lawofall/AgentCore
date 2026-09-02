@@ -4,7 +4,7 @@
  * 回退会话级 error（与底栏 RetryBanner 同源），禁止仍写「未获取到具体错误信息。」
  *
  * 有 failedRun 时改按 failureKind 出人话——`run.error` 是模型面（基础设施路径上就是
- * `str(exception)`，契约路径上是「结构闸：…」这类引擎词），照抄给用户会让他以为是自己
+ * `str(exception)`，契约路径上是「缺少必备章节：…」这类引擎词），照抄给用户会让他以为是自己
  * 少放了材料。
  */
 import { failureDetailSentence } from "@/components/graph/agentNode/shared";
@@ -23,8 +23,7 @@ import { StatusStrip } from "../StatusStrip";
 
 const MID = "msg-failed-error-strip";
 const INTERRUPT_COPY = "模型响应中断，已保留已生成内容，可继续。";
-const GATE_ERROR =
-  "结构闸：缺少 audit JSON 产物：`AgentCore/文档/reviews/code-audit-1-server_conversation.audit.json`";
+const GATE_ERROR = "缺少必备章节：结论";
 
 let sessionError: string | null = null;
 
@@ -194,9 +193,9 @@ describe("StatusStrip · FailureStrip error detail", () => {
     const exec = projectExecution(plan, frames, "failed");
     const { container } = renderStrip(exec);
 
-    // The user must not read「结构闸」/ an artifact path and conclude they forgot to
+    // The user must not read engine chapter-gate jargon / an artifact path and conclude they forgot to
     // hand something in — that reason is ours to act on, not theirs.
-    expect(container.textContent).not.toContain("结构闸");
+    expect(container.textContent).not.toContain("缺少必备章节");
     expect(container.textContent).not.toContain(".audit.json");
     expect(
       screen.getByText(failureDetailSentence("format", null)),

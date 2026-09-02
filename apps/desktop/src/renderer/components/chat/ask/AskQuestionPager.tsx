@@ -3,6 +3,7 @@
  * 不是问卷 Wizard：无进度条、不禁止回看、无第二套题目 accordion。
  * 非末题主 CTA 文案是「下一题」不是「下一步」。仅 `questions.length ≥ 2` 时挂上。
  * 提交仍须每题有勾选或人话——编号切题 ≠ 交卡。
+ * 单选首次勾选可自动切下一题（末题不自动交；回看改选停在本题）。
  */
 import { ASK_ROW_TONE } from "./AskOptionRow";
 
@@ -29,6 +30,33 @@ export function resolveAskPrimaryAction(
   const jump = firstUnvisitedAskIndex(questionCount, visited);
   if (jump !== null) return { type: "jump", index: jump };
   return { type: "submit" };
+}
+
+/** Delay before flipping so the selected row is visible. */
+export const ASK_AUTO_ADVANCE_MS = 200;
+
+/** Single-choice first pick on a paged card: flip after {@link ASK_AUTO_ADVANCE_MS}. */
+export function shouldAutoAdvanceAskQuestion({
+  paged,
+  multiple,
+  presentsAsText,
+  selecting,
+  hadPriorPick,
+  pendingAdvance,
+  primaryAction,
+}: {
+  paged: boolean;
+  multiple: boolean;
+  presentsAsText: boolean;
+  selecting: boolean;
+  hadPriorPick: boolean;
+  pendingAdvance: boolean;
+  primaryAction: ReturnType<typeof resolveAskPrimaryAction>;
+}): boolean {
+  if (!paged || !selecting || multiple || presentsAsText) return false;
+  if (primaryAction.type === "submit") return false;
+  if (hadPriorPick && !pendingAdvance) return false;
+  return primaryAction.type === "advance" || primaryAction.type === "jump";
 }
 
 export function AskQuestionPager({

@@ -215,7 +215,9 @@ def test_placeholder_names_the_call():
     ph = cleared_placeholder("file_read", json.dumps({"path": "src/foo.py"}), 8421)
     assert "file_read" in ph and "src/foo.py" in ph and "8421" in ph
     assert "status=content_cleared" in ph
-    assert "reread=allowed" in ph
+    assert "disk=intact" in ph
+    assert "reread=omit_offset_limit" in ph
+    assert "非全文" not in ph
     assert "path='src/foo.py'" in ph
     # deterministic
     assert ph == cleared_placeholder("file_read", json.dumps({"path": "src/foo.py"}), 8421)
@@ -377,7 +379,8 @@ def test_file_read_clear_keeps_structural_summary_under_min_chars():
         assert len(m.content or "") < 200
         # file_read of the md path should carry a digest when room allows
         if "docs/spec.md" in (m.content or ""):
-            assert "自动" in (m.content or "") or "标题" in (m.content or "")
+            assert "磁盘未截" in (m.content or "")
+            assert "非全文" not in (m.content or "")
     # pure + idempotent
     digest = structural_file_read_summary(path, md, max_chars=400)
     assert digest is not None and "Title" in digest
@@ -389,6 +392,44 @@ def test_file_read_clear_keeps_structural_summary_under_min_chars():
         once, clearable_tools=CLEARABLE, keep_recent=1, min_chars=200, summary_max_chars=1200
     )
     assert [m.content for m in twice] == [m.content for m in once]
+
+
+def test_complete_file_read_view_not_cleared():
+    """Footer「全文 N 行」is a complete disk view — do not collapse it."""
+    body = ("line\n" * 80) + "\n（全文 80 行）"
+    assert len(body) > 100
+    msgs = [LLMMessage(role="user", content="go")]
+    for i in range(8):
+        msgs += _read_pair(f"c{i}", f"src/f{i}.py", body)
+    out = project_cleared_window(
+        msgs, clearable_tools=CLEARABLE, keep_recent=2, min_chars=100
+    )
+    assert out is msgs
+    assert _cleared_ids(out) == []
+
+
+def test_windowed_file_read_still_cleared():
+    """Safety-cap / requested windows are still the stacking tax."""
+    body = ("line\n" * 80) + "\n（第 1–200 行，共 500 行；已达行顶）"
+    assert len(body) > 100
+    msgs = [LLMMessage(role="user", content="go")]
+    for i in range(8):
+        msgs += _read_pair(f"c{i}", f"src/f{i}.py", body)
+    out = project_cleared_window(
+        msgs, clearable_tools=CLEARABLE, keep_recent=2, min_chars=100
+    )
+    assert _cleared_ids(out) == [f"c{i}" for i in range(6)]
+
+
+def test_file_read_digest_marks_disk_intact():
+    from agentcore.runtime.engine.tool_clear import structural_file_read_summary
+
+    digest = structural_file_read_summary(
+        "a.py", "class Foo:\n    pass\n", max_chars=400
+    )
+    assert digest is not None
+    assert "磁盘未截" in digest
+    assert "非全文" not in digest
 
 
 def test_file_read_summary_max_chars_zero_is_pointer_only():
@@ -506,7 +547,8 @@ def test_exec_and_investigation_windows_independent(monkeypatch):
     read_stub = next(m for m in out if m.tool_call_id == "r0")
     assert "path='src/f0.py'" in (read_stub.content or "")
     assert "status=content_cleared" in (read_stub.content or "")
-    assert "reread=allowed" in (read_stub.content or "")
+    assert "disk=intact" in (read_stub.content or "")
+    assert "reread=omit_offset_limit" in (read_stub.content or "")
 
 
 def test_build_request_window_leaves_code_execute(monkeypatch):

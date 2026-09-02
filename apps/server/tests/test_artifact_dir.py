@@ -1,4 +1,4 @@
-"""约定文档 ``artifact_dir``：默认填入 + 任务书描述 + 验收前缀闸。"""
+"""约定文档 ``artifact_dir``：裸文件名 join 工作稿；空 artifacts 不钉目录；收口认盘。"""
 
 from __future__ import annotations
 
@@ -12,16 +12,21 @@ from agentcore.runtime.runs.types import Deliverable
 from agentcore.workspace.stage_dirs import DRAFTS_DIR, RESEARCH_DIR, REVIEWS_DIR
 
 
-def test_resolve_defaults_to_drafts_without_declared_path():
+def test_resolve_empty_artifacts_does_not_pin_drafts():
     d = Deliverable(form="files")
+    assert resolve_artifact_dir(d) == ""
+
+
+def test_resolve_bare_filename_pins_drafts():
+    d = Deliverable(form="files", artifacts=["GDD.md"])
     assert resolve_artifact_dir(d) == DRAFTS_DIR
 
 
 def test_resolve_workspace_native_has_no_dossier_landing():
-    """盖上「工作区原生」→ 无落点；不盖的同形交付仍落工作稿。"""
+    """盖上「工作区原生」→ 无落点；不盖的空 artifacts 也不钉工作稿。"""
     native = Deliverable(form="files", workspace_native=True)
     assert resolve_artifact_dir(native) == ""
-    assert resolve_artifact_dir(Deliverable(form="files")) == DRAFTS_DIR
+    assert resolve_artifact_dir(Deliverable(form="files")) == ""
 
 
 def test_workspace_native_outranks_declared_dossier_paths():
@@ -129,10 +134,10 @@ def test_apply_flattens_nested_drafts_artifact_name():
 
 
 def test_apply_empty_artifacts_keeps_shared_dir_without_fake_artifact():
-    """裸目录只进 artifact_dir（验收），不注入 artifacts 冒充归属键。"""
+    """空 artifacts 不钉目录、不注入 artifacts 冒充归属键。"""
     d = Deliverable(form="files")
     apply_artifact_dir_defaults(d)
-    assert d.artifact_dir == DRAFTS_DIR
+    assert d.artifact_dir == ""
     assert d.artifacts == []
 
 
@@ -144,7 +149,8 @@ def test_describe_mentions_artifact_dir_filename_only():
     assert "勿写到工作区根" not in desc
 
 
-def test_contract_root_write_warns_under_artifact_dir():
+def test_contract_landed_outside_artifact_dir_is_silent():
+    """有落盘即过：仅 artifact_dir 未命中不发约定目录软提醒、不催搬。"""
     d = Deliverable(form="files", artifact_dir=RESEARCH_DIR, artifacts=[])
     root = check_contract(
         "已写",
@@ -153,7 +159,8 @@ def test_contract_root_write_warns_under_artifact_dir():
         workspace_paths=["miro-research.md"],
     )
     assert root.ok
-    assert any("约定文档目录" in w for w in root.warnings)
+    assert not any("约定文档目录" in w for w in root.warnings)
+    assert not any("勿写到工作区根" in w for w in root.warnings)
 
     ok = check_contract(
         "已写",
@@ -165,8 +172,8 @@ def test_contract_root_write_warns_under_artifact_dir():
     assert not any("约定文档目录" in w for w in ok.warnings)
 
 
-def test_artifact_dir_mismatch_is_soft_on_delivery_status():
-    """Contract artifact_dir 文案仍可 warning 盖戳；错位文件进卡，失配不挡 delivered。"""
+def test_artifact_dir_mismatch_is_delivered_without_todo():
+    """仅 artifact_dir 未命中且已落盘：认实际路径，不发 path_hint 待办，不挡 delivered。"""
     from agentcore.runtime.delegate.delivery_status import build_delivery_status
     from agentcore.runtime.runs.executor.shared import _delivery_gaps_from_warnings
     from agentcore.runtime.runs.file_acceptance import (
@@ -184,9 +191,9 @@ def test_artifact_dir_mismatch_is_soft_on_delivery_status():
         workspace_paths=["miro-research.md"],
     )
     assert verdict.ok
+    assert verdict.warnings == []
     gaps = _delivery_gaps_from_warnings(list(verdict.warnings), None)
-    assert any(g.get("severity") == "warning" for g in gaps)
-    assert any(g.get("reason") == "path_hint" for g in gaps)
+    assert not any(g.get("reason") == "path_hint" for g in gaps)
 
     plan = RunPlan(
         nodes=[
@@ -214,16 +221,11 @@ def test_artifact_dir_mismatch_is_soft_on_delivery_status():
     assert payload is not None
     assert payload["state"] == "delivered"
     assert "miro-research.md" in payload["delivered_files"]
-    assert any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])
-    assert all(
-        g.get("severity") == "warning"
-        for g in payload["gaps"]
-        if g.get("reason") == REASON_PATH_MISMATCH
-    )
+    assert not any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])
 
 
-def test_build_run_plan_injects_default_drafts_dir():
-    """无显式路径的 files 交付 → 默认落 工作稿/，不再按 role·task 猜 research。"""
+def test_build_run_plan_empty_files_does_not_inject_drafts_dir():
+    """无显式路径的 files 交付 → 不钉工作稿，也不按 role·task 猜 research。"""
     plan, errors = build_run_plan(
         [
             {
@@ -236,7 +238,7 @@ def test_build_run_plan_injects_default_drafts_dir():
     assert errors == []
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.artifact_dir == DRAFTS_DIR
+    assert d.artifact_dir == ""
     assert d.artifacts == []
     desc = describe_deliverable(d)
     assert desc == ""
@@ -244,7 +246,7 @@ def test_build_run_plan_injects_default_drafts_dir():
 
 
 def test_build_run_plan_workspace_native_skips_default_drafts_dir():
-    """派单两态对照：盖上 → 无落点；同一批不盖的节点仍落工作稿。"""
+    """派单两态对照：盖上 → 无落点；同一批不盖的空 artifacts 也不钉工作稿。"""
     plan, errors = build_run_plan(
         [
             {
@@ -265,16 +267,16 @@ def test_build_run_plan_workspace_native_skips_default_drafts_dir():
     assert coder.form == "workspace"
     assert coder.workspace_native is True
     assert coder.artifact_dir == ""
-    assert researcher.artifact_dir == DRAFTS_DIR
+    assert researcher.artifact_dir == ""
 
 
-def test_build_run_plan_omit_form_gets_default_drafts_dir():
+def test_build_run_plan_omit_form_is_files_without_drafts_dir():
     plan, errors = build_run_plan([{"role": "写手", "task": "写笔记"}])
     assert errors == []
     d = plan.nodes[0].deliverable
     assert d is not None
     assert d.form == "files"
-    assert d.artifact_dir == DRAFTS_DIR
+    assert d.artifact_dir == ""
 
 
 def test_build_run_plan_workspace_form_skips_default_drafts_dir():
@@ -425,8 +427,8 @@ def test_landing_never_reads_role_or_task_free_text():
         "审查后端方案并写审查报告",
         f"阅读 `{RESEARCH_DIR}/旧笔记.md` 后继续调研竞品并落盘",
     ):
-        assert _plan_artifact_dir(task) == DRAFTS_DIR
-    assert _plan_artifact_dir("审查后端方案", role="审查官") == DRAFTS_DIR
+        assert _plan_artifact_dir(task) == ""
+    assert _plan_artifact_dir("审查后端方案", role="审查官") == ""
 
 
 def test_resolve_keeps_explicit_dossier_artifacts():

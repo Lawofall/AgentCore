@@ -19,9 +19,8 @@ from agentcore.config import settings
 from agentcore.core.error_codes import ErrorCode
 from agentcore.core.errors import SandboxError
 from agentcore.tools.builtin.long_running import (
-    long_running_command_match,
+    effective_wait_for,
     readiness_footer,
-    wait_for_required_message,
 )
 from agentcore.tools.protocol import ToolContext, ToolResult
 from agentcore.tools.sandbox.desk_process import (
@@ -77,7 +76,9 @@ def process_op_timeout_seconds(arguments: dict[str, Any] | None) -> float:
     slack = float(settings.workspace_execute_timeout_slack_seconds)
     if not arguments:
         return _FAST_TIMEOUT_SECONDS
-    wait_for = str(arguments.get("wait_for") or "").strip()
+    wait_for = effective_wait_for(
+        str(arguments.get("command") or ""), arguments.get("wait_for")
+    )
     if not wait_for:
         return _FAST_TIMEOUT_SECONDS
     return clamp_wait_timeout_seconds(arguments.get("wait_timeout_seconds")) + slack
@@ -381,19 +382,7 @@ async def _cloud_start(
     command = str(arguments.get("command") or "").strip()
     if not command:
         return _arg_error("start 需要 command 参数", start)
-    wait_for = str(arguments.get("wait_for") or "").strip()
-    if not wait_for:
-        detected = long_running_command_match(command)
-        if detected is not None:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error=wait_for_required_message(detected),
-                duration_ms=int((time.monotonic() - start) * 1000),
-                metadata={"code": "wait_for_required", "matched": detected},
-                contract_failure=True,
-            )
+    wait_for = effective_wait_for(command, arguments.get("wait_for"))
     value = await start_desk_process(
         context.backend,
         conversation_id=context.conversation_id or "",
@@ -416,20 +405,7 @@ async def _cmd_start(
     if not command:
         return _arg_error("start 需要 command 参数", start)
 
-    wait_for = str(arguments.get("wait_for") or "").strip()
-    # 就绪验收闸：长驻 CLI 无 wait_for → 拒启动，逼模型带 ready 信号。
-    if not wait_for:
-        detected = long_running_command_match(command)
-        if detected is not None:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error=wait_for_required_message(detected),
-                duration_ms=int((time.monotonic() - start) * 1000),
-                metadata={"code": "wait_for_required", "matched": detected},
-                contract_failure=True,
-            )
+    wait_for = effective_wait_for(command, arguments.get("wait_for"))
 
     args: dict[str, Any] = {"command": command}
     cwd = str(arguments.get("cwd") or "").strip()

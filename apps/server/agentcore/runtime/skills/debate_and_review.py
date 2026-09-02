@@ -1,18 +1,23 @@
-"""Skill body: debate_and_review."""
+"""Skill body: debate_and_review (+ courtroom trigger constants)."""
 
 from __future__ import annotations
 
-from agentcore.runtime.skills.deep_multi_lens_research import MULTI_LENS_COURTROOM_TRIGGERS
+from typing import Final
 
+# 点名终局对抗触发词（与辩论入口同源，禁止另抄字面量）。
+MULTI_LENS_COURTROOM_TRIGGERS: Final[tuple[str, ...]] = (
+    "模拟法庭",
+    "庭审对抗",
+    "对簿公堂",
+)
 _COURTROOM = "/".join(MULTI_LENS_COURTROOM_TRIGGERS)
 
 _DEBATE_AND_REVIEW = """\
 <正反辩论>
-【入口分流】用户点名开辩 / 模拟庭审 / 终局对抗（含【""" + _COURTROOM + """】等）→ 本 skill，直调 \
-`debate`（正反）。未点名 → 不调 `debate`。挑刺 / 压测走 `delegate` 审校岗；多视角对比走 `delegate`。取证由辩论机制保证（约定文档桥 / Evidence Pack / 发言期台账），非开工前先拦调研，\
-勿先拦 `deep_multi_lens_research`。公共事件跨域研判 → `consult(deep_multi_lens_research)`\
-（MLR → 综述收场；开辩须用户点名，是一场新的重活）。一起弄懂、未明示成文 → `map_fanout`；明示成文 → `cite_write_review`。\
-既像研判又像开辩（意图模糊）→ 保守走 MLR，回复里说明「也可直接开辩」。
+【入口】用户点名开辩 / 模拟庭审 / 终局对抗（含【""" + _COURTROOM + """】等）→ 直调 \
+`debate`（正反）。未点名 → 不调 `debate`。挑刺 / 压测走 `delegate` 审校岗；多视角对比走 `delegate`。\
+取证由辩论机制保证（约定文档桥 / Evidence Pack / 发言期台账），非开工前先拦调研。\
+摸清 / 成文编制 → `consult(team_orchestration_advanced)`。
 
 `debate` 是主持人驱动的正反交锋，交回【决策简报 + 交锋叙事线】（非终结）。\
 `delegate` 是各方独立产出由你综合；无对立面 / 单点事实勿用。
@@ -30,16 +35,15 @@ sides：`key` 英文短词；`name` 对称立场名，勿塞模型名（走 `mod
 
 stance：每方一句立场倾向（硬上限 80 字；非单句 / 含论证展开会拒绝调用）。\
 正例：「支持一审判决正确」。客观事实归 `background`；「核心论点包括…系统论证」是辩手工作产出，\
-预写会退化成剧本。论点清单勿写进 stance。
+论点清单勿写进 stance。
 
-background（可选）：具体案件 / 真实事件建议传入已核实客观事实，每条带来源与日期。\
-纯价值观命题不必传。「被告表示将上诉」≠「案件处于二审」。
+background（可选）：具体案件 / 真实事件建议传入已核实客观事实，每条带来源与日期；\
+未决 / 推断勿当既定。纯价值观命题不必传。
 
-开辩前：忠于用户点名的对立极，不得砍掉或偷换一极；可补没想到的视角。关键指代模糊先澄清，\
+开辩前：忠于用户点名的对立极，不得砍掉或偷换一极。关键指代模糊先澄清，\
 用 `ask_user` 确认，勿自挑一解开辩。
 
-【入口冲突】仅当会话已有调研产物且用户点名开辩：以开辩为准并说明一句。\
-本条非跳过调研通行证；需不需要先取证以【入口分流】为准。
+【入口冲突】仅当会话已有调研产物且用户点名开辩：以开辩为准并说明一句 ≠ 跳过调研。
 
 【收尾】结论在辩论室，不要重写简报。用一两句点出需用户拍板的价值之争，适合 `ask_user`。\
 别抹平证据状态：简报里【待核实】/ 二手来源转述须保留核实状态，不得升格为既定事实。\

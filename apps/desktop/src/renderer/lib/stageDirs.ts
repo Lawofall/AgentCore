@@ -22,7 +22,7 @@ export const REVIEWS_DIR = `${DOCS_PREFIX}/reviews`;
  */
 export const AGENTCORE_ROOT_LABEL = ".agentcore";
 
-export const AGENTCORE_ROOT_TOOLTIP = `这个文件夹里给 AI 用的条目和过程稿（盘上 ${AGENTCORE_ROOT}/）；成品会归位到工作区`;
+export const AGENTCORE_ROOT_TOOLTIP = `这个文件夹里给 AI 用的条目和过程稿（盘上 ${AGENTCORE_ROOT}/）`;
 
 /** 是否工作区根下那个 ``AgentCore/``（嵌套的同名目录不算，它不是约定根）。 */
 export function isAgentCoreRootDir(path: string): boolean {
@@ -43,7 +43,7 @@ const STAGE_DIRS: Record<string, StageDirMeta> = {
   [DRAFTS_DIR]: {
     key: "工作稿",
     label: "工作稿",
-    tooltip: "AI 干活的过程材料默认落点；成品会归位到工作区",
+    tooltip: "不知放哪的过程材料；裸文件名会进这里",
   },
   [RESEARCH_DIR]: {
     key: "research",

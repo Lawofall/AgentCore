@@ -6,8 +6,6 @@ Classification is ours: long-running / verify / short. Not three tools.
 
 from __future__ import annotations
 
-import re
-from dataclasses import replace
 from typing import Any, Literal
 
 from agentcore.core.types import ToolApproval, ToolCategory
@@ -46,11 +44,6 @@ from agentcore.tools.sandbox.exec_env import _ENGINE_TIMEOUT_SLACK_SECONDS
 
 _PROCESS_ACTIONS = frozenset({"read", "stop", "list"})
 
-_PY_INLINE = re.compile(
-    r"^\s*(?:import\s|from\s|print\s*\(|def\s|class\s|async\s+def\s)",
-    re.MULTILINE,
-)
-
 
 def run_description(location: Literal["server", "local"] | None = None) -> str:
     if location == "local":
@@ -59,7 +52,12 @@ def run_description(location: Literal["server", "local"] | None = None) -> str:
         where = "在云桌执行环境跑命令。"
     else:
         where = "在当前工作区跑命令。"
-    return where + "HOW→consult(run)。"
+    return (
+        where
+        + "验证与短命令直接跑；dev/watch 设 background=true；"
+        + "已有进程 action=read|stop|list。"
+        + "HOW→consult(run)。"
+    )
 
 
 def run_op_timeout_seconds(arguments: dict[str, Any] | None) -> float:
@@ -69,6 +67,7 @@ def run_op_timeout_seconds(arguments: dict[str, Any] | None) -> float:
     if action in _PROCESS_ACTIONS or _wants_background(args):
         return process_op_timeout_seconds(
             {
+                "command": args.get("command"),
                 "wait_for": args.get("wait_for"),
                 "wait_timeout_seconds": args.get("wait_timeout_seconds"),
             }
@@ -87,10 +86,15 @@ def _wants_background(arguments: dict[str, Any]) -> bool:
 
 
 def _is_verify_command(command: str) -> bool:
+    """True when any payload looks like install / test / typecheck / build.
+
+    Companion segments (echo, rebuild, …) ride the same human command into the
+    verify kernel. Classification picks timeout policy, not a second model tool.
+    """
     payloads = command_payload_argvs(command)
     if not payloads:
         return False
-    return all(
+    return any(
         is_install_shaped_argv(argv) or _is_allowed_verify_argv(argv)
         for argv in payloads
     )
@@ -134,21 +138,17 @@ class RunTool:
                     "background": {
                         "type": "boolean",
                         "default": False,
-                        "description": (
-                            "true=挂起不等结束（dev server / watch）。"
-                            "宣称就绪须同时给 wait_for。"
-                        ),
+                        "description": "true=挂起不等结束（dev server / watch）。",
                     },
                     "wait_for": {
                         "type": "string",
                         "description": (
-                            "background 时等待输出匹配此正则再返回"
-                            "（如 Local:|ready in|Listening）。"
+                            "可选。匹配此正则再返回；长驻省略则用默认就绪信号。"
                         ),
                     },
                     "wait_timeout_seconds": {
                         "type": "number",
-                        "description": "wait_for 最长等待秒数。",
+                        "description": "可选。就绪等待上限（秒）；前台命令忽略。",
                     },
                     "action": {
                         "type": "string",
@@ -182,21 +182,14 @@ class RunTool:
         command = str(arguments.get("command") or "").strip()
 
         if action in _PROCESS_ACTIONS:
-            return _surface_result(
-                await self._dispatch_process(action, arguments, context)
-            )
+            return await self._dispatch_process(action, arguments, context)
         if _wants_background(arguments):
             if not command:
                 return _arg_error("background 启动需要 command")
             cd_err = reject_workspace_cd(command)
             if cd_err:
                 return _arg_error(cd_err)
-            return _surface_result(await self._dispatch_start(arguments, context))
-        if arguments.get("wait_timeout_seconds") is not None:
-            return _arg_error(
-                "wait_timeout_seconds 仅用于 background 且同时给 wait_for，"
-                "或 action=read；前台验证/短执行不要带这个参数。"
-            )
+            return await self._dispatch_start(arguments, context)
         if not command:
             return _arg_error("请提供 command，或用 action=list|read|stop 管理后台进程")
         cwd = str(arguments.get("cwd") or "").strip() or None
@@ -208,8 +201,8 @@ class RunTool:
         if cd_err:
             return _arg_error(cd_err)
         if _is_verify_command(command):
-            return _surface_result(await self._dispatch_verify(arguments, context))
-        return _surface_result(await self._dispatch_short(arguments, context))
+            return await self._dispatch_verify(arguments, context)
+        return await self._dispatch_short(arguments, context)
 
     async def _dispatch_process(
         self,
@@ -270,17 +263,6 @@ class RunTool:
     ) -> ToolResult:
         command = str(arguments.get("command") or "").strip()
         cwd = str(arguments.get("cwd") or "").strip() or None
-        if _PY_INLINE.search(command) and not _looks_like_shell(command):
-            payload = {
-                "code": command,
-                "language": "python",
-                "purpose": arguments.get("purpose"),
-            }
-            return await execute_short(
-                {k: v for k, v in payload.items() if v is not None},
-                context,
-                location=self._location,
-            )
         payloads = command_payload_argvs(command)
         install_payloads = [p for p in payloads if is_install_shaped_argv(p)]
         for payload_argv in install_payloads:
@@ -314,53 +296,6 @@ class RunTool:
             context,
             location=self._location,
         )
-
-
-def _looks_like_shell(command: str) -> bool:
-    first = (command.strip().split(None, 1) or [""])[0].lower()
-    return first in {
-        "python",
-        "python3",
-        "py",
-        "node",
-        "npm",
-        "pnpm",
-        "yarn",
-        "uv",
-        "pip",
-        "git",
-        "cargo",
-        "go",
-    }
-
-
-_INTERNAL_EXEC_NAMES = frozenset({"code_execute", "test_run", "terminal"})
-
-
-def _surface_result(result: ToolResult) -> ToolResult:
-    """Map internal-class retire/error names onto the model-facing `run`."""
-    meta = dict(result.metadata or {})
-    retired = meta.get("retire_tools")
-    changed = False
-    if isinstance(retired, list) and any(
-        n in _INTERNAL_EXEC_NAMES or n == "run" for n in retired
-    ):
-        others = [n for n in retired if n not in _INTERNAL_EXEC_NAMES and n != "run"]
-        meta["retire_tools"] = ["run", *others]
-        changed = True
-    error = result.error
-    if error:
-        rewritten = (
-            error.replace("code_execute", "run")
-            .replace("test_run", "run")
-            .replace("terminal", "run")
-        )
-        if rewritten != error:
-            error = rewritten
-            changed = True
-    if not changed:
-        return result
-    return replace(result, metadata=meta, error=error)
 
 
 def _arg_error(error: str) -> ToolResult:

@@ -63,8 +63,49 @@ def test_post_close_rejects_unnamed_substantial_fanout():
     assert "收口后拒绝整团重派" in err
     # 拒绝正文指向真实可用的续派入口；无跳闸旁路，不得再教 force。
     assert "continue_from_run_id" in err
+    assert "<近期团队图>" not in err
+    assert "可续候选" not in err
+    assert "队员终态名册" in err
     assert 'force=["post_close"]' not in err
     assert "force=true" not in err
+
+
+def test_post_close_cold_open_reject_lists_prior_roster_candidates():
+    """收口后冷开拒：附上轮 live_plan 的 run_id/role/status，不抄 task、不点名近期团队图。"""
+    from agentcore.runtime.coordination.session import (
+        CoordinationSession,
+        clear_active_coordination,
+        set_active_coordination,
+    )
+
+    clear_active_coordination()
+    session = CoordinationSession(execution_id="exec-post-close", total_workers=2)
+    session.conversation_id = "conv-post-close"
+    session.completed_run_ids = {"w1", "w2"}
+    session.active = False
+    session.live_plan = RunPlan(
+        nodes=[
+            RunSpec(run_id="w1", role="调研员", task="不要出现在拒文里的长任务"),
+            RunSpec(run_id="w2", role="撰写员", task="另一条也不该出现"),
+        ]
+    )
+    set_active_coordination(session)
+    try:
+        reject = post_close_reject(
+            _tool(origin=EXECUTION_HARVEST_ORIGIN),
+            _substantial_unnamed(n=3),
+        )
+        assert reject is not None
+        err = reject.message
+        assert "可续候选" in err
+        assert "run_id=w1" in err
+        assert "role=调研员" in err
+        assert "run_id=w2" in err
+        assert "不要出现在拒文里的长任务" not in err
+        assert "<近期团队图>" not in err
+        assert "n0" not in err  # 新冷开 plan 不进候选
+    finally:
+        clear_active_coordination("exec-post-close")
 
 
 def test_post_close_allows_named_gap_fill_within_cap(monkeypatch):

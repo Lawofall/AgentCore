@@ -5038,6 +5038,11 @@
             ],
             "title": "Cursor"
           },
+          "focus": {
+            "default": "dialogue",
+            "title": "Focus",
+            "type": "string"
+          },
           "max_chars": {
             "anyOf": [
               {
@@ -5050,6 +5055,11 @@
               }
             ],
             "title": "Max Chars"
+          },
+          "query": {
+            "default": "",
+            "title": "Query",
+            "type": "string"
           }
         },
         "required": [
@@ -5081,9 +5091,24 @@
             ],
             "title": "Ended At"
           },
+          "focus": {
+            "default": "dialogue",
+            "title": "Focus",
+            "type": "string"
+          },
           "message_count": {
             "default": 0,
             "title": "Message Count",
+            "type": "integer"
+          },
+          "message_end": {
+            "default": 0,
+            "title": "Message End",
+            "type": "integer"
+          },
+          "message_offset": {
+            "default": 0,
+            "title": "Message Offset",
             "type": "integer"
           },
           "next_cursor": {
@@ -5096,6 +5121,22 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "query_hit": {
+            "default": false,
+            "title": "Query Hit",
+            "type": "boolean"
           },
           "started_at": {
             "anyOf": [
@@ -5266,6 +5307,17 @@
             ],
             "title": "Folder Name"
           },
+          "hit_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit Index"
+          },
           "message_count": {
             "default": 0,
             "title": "Message Count",
@@ -5311,6 +5363,18 @@
             "default": false,
             "title": "Archived",
             "type": "boolean"
+          },
+          "compacted_through": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compacted Through"
           },
           "context_compacted": {
             "default": false,
@@ -17622,7 +17686,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.11"
+    "version": "0.7.12"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -17819,7 +17883,7 @@
     },
     "/v1/account/conversations/read": {
       "post": {
-        "description": "Owner-scoped deep transcript read (account ticket or access). Soft miss on 404.",
+        "description": "Owner-scoped transcript read (account ticket or access). Soft miss on 404.\n\nDefault ``focus=dialogue`` (user/assistant visible text). ``process`` includes\ntools / debate / thinking. Pages are message-index cursors.",
         "operationId": "read_account_conversation_v1_account_conversations_read_post",
         "parameters": [
           {

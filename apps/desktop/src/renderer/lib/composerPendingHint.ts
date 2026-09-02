@@ -4,11 +4,8 @@ import {
   useInteractionStore,
 } from "@/stores/interactions";
 
-/** Persistent composer hint while a decision card is waiting (弱提示 · 不强拦). */
-export const COMPOSER_PENDING_HINT =
-  "当前有待你确认的事项；另开一轮，确认卡仍保留";
-
-/** Confirm copy on first send while pending (同会话确认一次后不再弹). */
+/** Confirm copy on first send while pending (同会话确认一次后不再弹).
+ *  Decision cards above the composer are the waiting surface — no grey line. */
 export const COMPOSER_PENDING_SEND_CONFIRM =
   "仍有待确认事项。发送将另开一轮，确认卡仍保留，确定继续？";
 

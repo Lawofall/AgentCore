@@ -28,12 +28,15 @@ from agentcore.evals.types import EvalConfigError
 
 _LEGACY_EXPECT = {
     "research_brief_parallel": "map_fanout",
-    "code_audit_report": "code_audit",
     "research_mit_vs_gpl_chat": "map_fanout",
     "research_knowledge_base_chat": "map_fanout",
-    "audit_check_bugs_save_file": "code_audit",
-    "audit_find_issues_workspace_doc": "code_audit",
 }
+
+_AUDIT_HANDWRITTEN = (
+    "code_audit_report",
+    "audit_check_bugs_save_file",
+    "audit_find_issues_workspace_doc",
+)
 
 _GREENFIELD_HANDWRITTEN = (
     "greenfield_spa_build_app",
@@ -50,6 +53,7 @@ def test_scenarios_lint_ok():
     keys = {s.key for s in SCENARIOS}
     assert set(_LEGACY_EXPECT) <= keys
     assert set(_GREENFIELD_HANDWRITTEN) <= keys
+    assert set(_AUDIT_HANDWRITTEN) <= keys
     assert "discuss_license_no_doc_waiver" in keys
     assert "discuss_license_round2_short_answers" in keys
     assert "write_prd_save_file" in keys
@@ -72,6 +76,17 @@ def test_legacy_named_playbook_scenarios_unchanged():
     assert "先别写成文档" not in by_key["discuss_license_no_doc_waiver"].user_message
     assert "存成文件" in by_key["write_prd_save_file"].user_message
     assert "落盘" not in by_key["write_prd_save_file"].user_message
+
+
+def test_audit_expects_handwritten_delegate():
+    by_key = {s.key: s for s in SCENARIOS}
+    for key in _AUDIT_HANDWRITTEN:
+        sc = by_key[key]
+        assert sc.expect_playbook == ""
+        assert sc.expect_action == "DELEGATE"
+        assert sc.expect_form == "files"
+        assert sc.category == "code_audit"
+        assert sc.workspace == "codebase"
 
 
 def test_greenfield_expects_handwritten_delegate():
@@ -224,7 +239,7 @@ def test_parse_delegate_reads_deliverable_form_and_max_workers():
 def test_classify_landing_variants():
     offered = True
     expected = classify_landing(
-        action="DELEGATE", playbook="code_audit", expect="code_audit", offered=offered, task_count=0
+        action="DELEGATE", playbook="map_fanout", expect="map_fanout", offered=offered, task_count=0
     )
     assert expected["landing"] == "selected_expected"
     other = classify_landing(
@@ -232,7 +247,7 @@ def test_classify_landing_variants():
     )
     assert other["landing"] == "selected_other"
     hand = classify_landing(
-        action="DELEGATE", playbook=None, expect="code_audit", offered=offered, task_count=1
+        action="DELEGATE", playbook=None, expect="map_fanout", offered=offered, task_count=1
     )
     assert hand["landing"] == "handwritten_tasks"
     ask = classify_landing(

@@ -372,8 +372,8 @@ def test_intentional_dead_manual_links_fail_gate():
 # Desktop product copy uses「设置 · {侧栏}」；narrow hub is 底栏「我的」+ MorePage 行。
 # Cheap fork gate: each desktop page name must share a sentence with 手机,
 # and every「我的 → X」must be a real narrow-visible MorePage label.
-# Bug triage is in scope too — its L3 names 反馈, which is wide-only.
-_SURFACE_FORK_SKILL_NAMES = _PRODUCT_HELP_SKILL_NAMES + ("product_bug_triage",)
+# 「设置 → 反馈」在 product_help FAQ；手机无此入口，须写在同一句。
+_SURFACE_FORK_SKILL_NAMES = _PRODUCT_HELP_SKILL_NAMES
 _DESKTOP_SETTINGS_PAGES = ("设置 · 服务商", "设置 · 模型", "设置 · 用量", "设置 → 反馈")
 _DESKTOP_MORE_PAGE = (
     _REPO_ROOT / "apps" / "desktop" / "src" / "renderer" / "pages" / "MorePage.tsx"

@@ -1,9 +1,8 @@
 """Short-exec dump/grep → ``file_read`` / ``grep`` when the snippet is browsing source.
 
-Same shape as :mod:`project_verify` (slow CLI → ``run``) and :mod:`long_running`
-(dev servers → ``run`` + ``background``): the file tools already exist for this
-job. Patterns are snippet-shaped so table parsing, AST analysis, and
-read-then-write transforms do not false-positive.
+Same shape as :mod:`long_running` (dev servers → ``run`` + ``background``): the
+file tools already exist for this job. Patterns are snippet-shaped so table
+parsing, AST analysis, and read-then-write transforms do not false-positive.
 """
 
 from __future__ import annotations

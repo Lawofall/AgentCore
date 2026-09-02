@@ -1,7 +1,7 @@
 """Delegate tool schema and constants.
 
 Schema layer (工具面瘦身): short trigger + 拆任务合同 + playbook/tasks 互斥.
-何时用写在本 description；编制自选 / 结局分层 HOW lives in
+何时用写在本 description；编制 HOW lives in
 ``consult(team_orchestration_advanced)``.
 """
 
@@ -18,16 +18,15 @@ from agentcore.runtime.runs.playbooks import PLAYBOOKS, playbook_args_schema_des
 TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
     "type": "object",
     "description": (
-        "交付形态。省略或空对象=form=files（默认工作稿/）。"
-        "已拍板验收写入「已确认约束」；细则→team_orchestration_advanced。"
+        "交付形态。省略或空对象=form=files。"
     ),
     "properties": {
         "form": {
             "type": "string",
             "enum": ["prose", "files", "workspace"],
             "description": (
-                "【看】prose；【存文档】files（默认，落工作稿）；"
-                "【改工程】workspace。漏填=files。"
+                "【看】prose；【存文档】files（默认）；"
+                "【改工程】workspace。漏填=files。裸文件名进工作稿。"
             ),
         },
         "artifacts": {
@@ -41,7 +40,7 @@ TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
 # Trigger + when-to-use polarity. XOR → playbook 参数一句；探路/编制 HOW → consult.
 DELEGATE_DESCRIPTION = (
     f"拆任务给临时团队（默认手写顶层 tasks：role+task，≤{MAX_DELEGATION_TASKS}；非终结）。"
-    "默认用本工具（成篇落盘、可运行应用、成规模查证、要并行、要交叉验证、实质讨论尤然）；"
+    "默认用本工具（成篇落盘、可运行应用、成规模查证、要并行、实质讨论尤然）；"
     "闲聊、窗口里已有证据的一问一答、一眼写完的短文或小落盘、纯启服不必派。"
     "有写权 ≠ 自己做完。"
     "HOW→consult(team_orchestration_advanced)。"
@@ -65,8 +64,8 @@ DELEGATE_PARAMETERS = {
                         "type": "string",
                         "description": (
                             "自包含=目标+边界+验收（worker 看不到完整历史）。"
-                            "本回合已给凭据写入 task 供队员填 env。"
-                            "已拍板写入「已确认约束」。"
+                            "凭据写入 task 供队员填 env。"
+                            "已拍板写同一行「已确认约束：①…；②…」；无则「（无）」；自拟默认标假设不进本行。"
                             "未装配能力 ≠ 写进 task。"
                         ),
                     },

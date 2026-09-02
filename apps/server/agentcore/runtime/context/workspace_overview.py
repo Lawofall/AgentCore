@@ -5,7 +5,7 @@
 fingerprint). If ``AGENTS.md`` / ``CLAUDE.md`` exists, a one-line pointer
 (name only). Sparse listing
 (双模式工作区): attachments + 裸聊 scratch; project shared trees collapse into
-「另有 N 个文件」plus a newest-first supplement.
+「另有 N 个文件」with no mtime path sample.
 
 CEO-only: :func:`compose_ceo_chat_prompt` attaches this body; workers never
 receive it. Best-effort: no backend / no ``index_files`` / listing failure →

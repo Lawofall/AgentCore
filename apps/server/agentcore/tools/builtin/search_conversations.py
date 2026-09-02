@@ -2,7 +2,7 @@
 
 ``AUDIENCE_BOTH`` + ``ToolSurface.WORKER_ONLY`` + ``manual_wire``. Wired after
 ``build_*_registry`` by ``_wire_conversation_log_tools`` (CEO and worker).
-Product-always-on; still on-demand until consult.
+Product-always-on; opening-table resident (not on-demand).
 
 With account narrow-ticket creds (sidecar), calls the cloud HTTP API instead of
 the local ConversationRepository (大众桌面无本机 PG).
@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from agentcore.conversation.log_export import search_snippet_from_messages
+from agentcore.conversation.log_export import search_hit_from_messages
 from agentcore.core.logging import get_logger
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.db.base import async_session_factory
@@ -75,7 +75,12 @@ def _format_search_output(
             f"{folder_bit}{arch}"
         )
         if row.get("snippet"):
-            lines.append(f"  摘要：{row['snippet']}")
+            hit_idx = row.get("hit_index")
+            total = int(row.get("message_count") or 0)
+            if isinstance(hit_idx, int) and total > 0:
+                lines.append(f"  摘要（第 {hit_idx + 1}/{total} 条）：{row['snippet']}")
+            else:
+                lines.append(f"  摘要：{row['snippet']}")
     output = "\n".join(lines)
     return ToolResult(
         tool_call_id="",
@@ -164,9 +169,11 @@ async def _search_via_db(
         for row in rows:
             try:
                 msgs = await msg_repo.list_all_for_conversation(row["conversation_id"])
-                snippet = search_snippet_from_messages(msgs, query)
+                snippet = search_hit_from_messages(msgs, query)
                 if snippet:
-                    row["snippet"] = snippet
+                    row["snippet"] = snippet.snippet
+                    if snippet.message_index is not None:
+                        row["hit_index"] = snippet.message_index
             except Exception:  # noqa: BLE001 — snippet is best-effort
                 pass
     return rows, False
@@ -192,24 +199,27 @@ class SearchConversationsTool:
         return ToolSchema(
             name="search_conversations",
             description=(
-                "检索当前用户账号下的历史对话目录（标题匹配；query 为空则按最近更新列出）。"
-                "用于查阅「上次 / 以前」某场讨论的原文与过程——先搜到 conversation_id，再"
-                "用 read_conversation 打开。不含本回合正在进行的宿主会话；不含已软删 / handoff"
-                "宿主。偏好与巩固后的事实请用记忆主题（consult），不要用本工具代替。"
+                "检索本账号历史对话目录（标题或对话正文子串；空 query 按最近更新列出）。"
+                "同文件夹续做、用户提到以前、或判断可能依赖旧场时用："
+                "先搜到 conversation_id，再 read_conversation"
+                "（有 query 时带同一 query，从命中处读）。"
+                "默认当前文件夹（裸聊无文件夹则按 all）。不含本场宿主。"
+                "偏好与巩固事实走记忆主题，不是本工具。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "可选；标题关键词。空 = 按更新时间列最近对话。",
+                        "description": "可选；标题或正文关键词。空 = 按更新时间列最近对话。",
                     },
                     "scope": {
                         "type": "string",
                         "enum": ["all", "folder", "global_chats"],
+                        "default": "folder",
                         "description": (
-                            "all=全账号（默认）；folder=宿主对话所在文件夹；"
-                            "global_chats=仅裸聊（无文件夹）。"
+                            "folder=宿主所在文件夹（默认）；all=全账号；"
+                            "global_chats=仅裸聊。"
                         ),
                     },
                     "folder_id": {
@@ -242,7 +252,7 @@ class SearchConversationsTool:
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         query = str(arguments.get("query") or "").strip()
-        scope = str(arguments.get("scope") or "all").strip() or "all"
+        scope = str(arguments.get("scope") or "folder").strip() or "folder"
         if scope not in {"all", "folder", "global_chats"}:
             return ToolResult(
                 tool_call_id="",

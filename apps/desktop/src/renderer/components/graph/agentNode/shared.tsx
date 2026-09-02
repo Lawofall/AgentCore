@@ -206,7 +206,7 @@ export function failureFaceLabel(
  * the detail line under it).
  *
  * `run.error` is a **model** face: on the infra paths it is `str(exception)` and on the
- * contract paths it names engine gates (「结构闸：缺少 audit JSON 产物：…」), which reads to
+ * contract paths it names engine gates (「缺少必备章节：…」), which reads to
  * the user as if *they* forgot to hand something in. So curate by the machine-readable
  * `failureKind` and never render the raw text; it stays in logs / run detail for us.
  */

@@ -73,9 +73,14 @@ export interface Conversation {
   modelProfileId?: string | null;
   /**
    * 较早对话已压缩（`ConversationSummary.context_compacted`）。
-   * true 时展示轻提示；不携带摘要正文。
+   * 时间线隔断以 ``compactedThrough`` 为准；不携带摘要正文。
    */
   contextCompacted?: boolean;
+  /**
+   * 滚动压缩水印（`ConversationSummary.compacted_through`）。
+   * 最后一条被折进摘要的消息 ``created_at``；有值时时间线在其后插隔断。
+   */
+  compactedThrough?: string | null;
   /**
    * 压缩没跟上，早期对话已掉出上下文窗口（`ConversationSummary.context_gap`）。
    * 非空 = 后端已证明「这一轮 AI 读不到那段」，展示降级提示；缺省 = 完好或未计算，保持安静。
@@ -289,7 +294,7 @@ export interface ConversationRuntime {
   /**
    * 桌面：本会话最近一回合的执行路径（绑本机工作区时有意义）。
    * `sidecar` = 本地引擎；`cloud_bridge` = 云端过桥（含探活失败 / 显式强制关）；
-   * `null` = 纯云会话或尚未判定。不落盘；驱动 Composer 弱状态（非引擎切换器）。
+   * `null` = 纯云会话或尚未判定。不落盘；驱动最新助手泡脚注（非引擎切换器）。
    */
   executionVia: "sidecar" | "cloud_bridge" | null;
   /**

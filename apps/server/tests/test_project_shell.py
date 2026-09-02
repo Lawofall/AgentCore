@@ -228,6 +228,10 @@ async def test_mkdir_bare_slug_then_write_strips(tmp_path: Path):
     assert made.success is True
     assert not (tmp_path / "court-game").exists()
     assert ctx.project_shell.stripped_slug == "court-game"
+    assert "空桌" not in made.output
+    assert "工程壳" not in made.output
+    assert "无需创建" not in made.output
+    assert "`court-game/` 即工作区根" in made.output
 
     write = await FileWriteTool().execute(
         {"path": "court-game/x", "content": "hello"}, ctx
@@ -235,6 +239,8 @@ async def test_mkdir_bare_slug_then_write_strips(tmp_path: Path):
     assert write.success is True
     assert (tmp_path / "x").read_text(encoding="utf-8") == "hello"
     assert not (tmp_path / "court-game").exists()
+    assert "空桌" not in write.output
+    assert "工程壳" not in write.output
 
 
 async def test_bare_file_write_does_not_register_filename_as_slug(tmp_path: Path):

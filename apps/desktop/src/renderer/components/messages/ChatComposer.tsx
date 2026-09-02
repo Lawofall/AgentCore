@@ -654,7 +654,7 @@ export function ChatComposer({
           />
           <IconButton
             size="md"
-            tone="primary"
+            tone={canSubmit || sending ? "inverse" : "default"}
             onClick={handleSend}
             disabled={!canSubmit}
             aria-label={isEditing ? "保存" : "发送"}

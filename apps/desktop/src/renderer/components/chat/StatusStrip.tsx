@@ -656,7 +656,7 @@ function FailureStrip({
   showSupportPack: boolean;
 }) {
   const detached = useActiveExecField((rt) => rt.executionDetached);
-  // Long task briefs (e.g. code_audit instructions) must not explode the strip —
+  // Long task briefs must not explode the strip —
   // default clamp; click to expand.
   const [detailOpen, setDetailOpen] = useState(false);
 

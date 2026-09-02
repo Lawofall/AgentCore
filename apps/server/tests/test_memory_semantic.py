@@ -55,7 +55,7 @@ def test_diff_memory_markdown_detects_add_and_remove():
     assert MemoryAction.REMOVE.value in actions
 
 
-def test_parse_semantic_result_topic_ops_only():
+def test_parse_semantic_result_drops_topic_ops():
     raw = """
     {
       "preferences": null,
@@ -70,9 +70,7 @@ def test_parse_semantic_result_topic_ops_only():
     result = parse_semantic_result(raw)
     assert result.profile is not None
     assert result.preferences is None
-    assert result.ops is not None
-    assert len(result.ops) == 1
-    assert result.ops[0].file.startswith("主题/")
+    assert result.ops == []
 
 
 def test_sanitize_global_profile_strips_project_constraints():
@@ -300,8 +298,8 @@ async def test_episodic_then_semantic_count_path(tmp_path):
     )
 
 
-async def test_genre_preference_migrates_to_topic_not_preferences(tmp_path):
-    """M2: 偏好含题材条目时，巩固结果应写入主题/*.md，偏好.md 仅留沟通风格。"""
+async def test_genre_preference_stripped_without_writing_topic(tmp_path):
+    """题材条目退出偏好.md；巩固不把它们写进主题/*.md。"""
     store = FileMemoryStore(tmp_path)
     # Keep ≥50% bullets so rewrite_preserves_enough accepts the domain-split rewrite.
     stale_prefs = (
@@ -346,5 +344,4 @@ async def test_genre_preference_migrates_to_topic_not_preferences(tmp_path):
     assert "用中文" in prefs
     assert "偏好法律分析" not in prefs
     assert "模拟法庭" not in prefs
-    topic = await store.load("u1", "主题/法律.md")
-    assert "偏好法律分析" in topic or "模拟法庭" in topic
+    assert await store.load("u1", "主题/法律.md") == ""

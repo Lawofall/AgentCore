@@ -192,9 +192,7 @@ async def test_wire_worker_consult_when_topics_exist(tmp_path, monkeypatch):
     assert "部署流程" in names
     assert "team_orchestration_advanced" not in names
     assert "product_help" not in names
-    assert "revising_a_product" not in names
     assert "long_form_landing" in names
-    assert "long_form_writing" not in names
 
 
 async def test_merged_source_directory_and_fetch_agree(tmp_path):

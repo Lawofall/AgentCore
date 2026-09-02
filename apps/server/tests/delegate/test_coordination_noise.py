@@ -361,19 +361,58 @@ def test_update_synthesis_tool_is_milestone_only():
     tool = UpdateSynthesisTool(sink=EventSink())
     desc = tool.schema.description
     assert "里程碑" in desc
-    assert "例行的单个 worker 完成" in desc
-    assert "禁止" in desc and "纯进度播报" in desc
+    assert "例行完成" in desc
     assert "新结论" in desc or "方向修正" in desc
+    assert "谁还在跑" not in desc
+    assert "content_delta" not in desc
     draft_desc = tool.schema.parameters["properties"]["draft"]["description"]
-    assert "禁止纯进度播报" in draft_desc
+    assert "新结论" in draft_desc
+    assert "纯进度播报" not in draft_desc
+
+
+def test_coordination_tool_schemas_are_short_triggers():
+    """协调套件 when-to-use 留按钮；手册（解析失败候选、空 wait 审批）走回执。"""
+    from agentcore.runtime.coordination.tools import (
+        CancelWorkerTool,
+        QueueUserMessageTool,
+        ResolveEscalationTool,
+        WaitTool,
+    )
+
+    wait_desc = WaitTool().schema.description
+    assert "无需处置" in wait_desc
+    assert "可静默" in wait_desc
+    assert "请示" in wait_desc
+    assert "delegate" in wait_desc
+    assert "假装推进" not in wait_desc
+    assert "同构再派" not in wait_desc
+
+    cancel = CancelWorkerTool().schema
+    assert "终止" in cancel.description
+    assert "delegate" in cancel.description
+    run_id = cancel.parameters["properties"]["run_id"]["description"]
+    assert "完整 run_id" in run_id
+    assert "同时匹配" not in run_id
+    assert "不会自动改目标" not in run_id
+
+    resolve_desc = ResolveEscalationTool().schema.description
+    assert "ask_user" in resolve_desc
+    assert "via_user" in resolve_desc
+    assert "唯一兑现路径" not in resolve_desc
+    assert "过滤器不是墙" not in resolve_desc
+
+    queue_desc = QueueUserMessageTool(sink=EventSink()).schema.description
+    assert "无关" in queue_desc
+    assert "FIFO" not in queue_desc
+    assert "update_synthesis / delegate / cancel_worker" not in queue_desc
 
 
 def test_inject_footer_does_not_repeat_tool_how():
-    """Mid-run inject: facts + 协调期一句. HOW stays on wait / update_synthesis."""
+    """Mid-run inject: facts only. 可静默 stays on wait description."""
     session = CoordinationSession(execution_id="e", total_workers=3)
     text = format_coordination_events(session, [_wc("w1")])
-    assert "【协调期】" in text
-    assert "可静默" in text
+    assert "【协调期】" not in text
+    assert "可静默" not in text
     assert "worker_completed" in text
     assert "只在【里程碑】写合成草稿" not in text
     assert "可用工具：wait" not in text
@@ -382,7 +421,7 @@ def test_inject_footer_does_not_repeat_tool_how():
     assert "谁在后台、完成后会再汇报" not in text
 
 
-def test_inject_interjection_requires_user_first_reply():
+def test_inject_interjection_keeps_text_and_queue_entry():
     session = CoordinationSession(execution_id="e", total_workers=2)
     text = format_coordination_events(
         session,
@@ -393,9 +432,13 @@ def test_inject_interjection_requires_user_first_reply():
             )
         ],
     )
-    assert "先回用户" in text or "先】用可见正文" in text or "响应该句" in text
-    assert "旧进度旁白" in text
     assert "优先做登录页" in text
+    assert "先开口" in text
+    assert "queue_user_message(interjection_id=inj-1)" in text
+    assert "旧进度旁白" not in text
+    assert "收到，仍按原计划" not in text
+    assert "update_synthesis / delegate" not in text
+    assert "勿假装已办" not in text
 
 
 # --- suspect_missing_dep 搭车注入通道（Task 5）--------------------------------

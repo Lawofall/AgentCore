@@ -162,4 +162,17 @@ describe("MemoryUpdateItemRow 这条不对", () => {
     );
     expect(screen.queryByText("这条不对")).toBeNull();
   });
+
+  it("keeps 这条不对 outside the open-leaf button, so a click does not navigate", async () => {
+    const onOpenLeaf = vi.fn();
+    render(<MemoryUpdateItemRow item={globalItem} onOpenLeaf={onOpenLeaf} />);
+
+    const dispute = screen.getByText("这条不对");
+    const openLeaf = screen.getByTitle("在设定中打开画像");
+    expect(openLeaf.contains(dispute)).toBe(false);
+
+    fireEvent.click(dispute);
+    expect(onOpenLeaf).not.toHaveBeenCalled();
+    await waitFor(() => expect(disputeMemoryLine).toHaveBeenCalled());
+  });
 });

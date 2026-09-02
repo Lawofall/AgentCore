@@ -45,7 +45,7 @@ def test_select_fold_keeps_recency_window():
 
 
 def test_conversation_summary_context_compacted_flag_only():
-    """REST summary exposes a boolean flag, never the rolling-summary body."""
+    """REST summary exposes the fold watermark, never the rolling-summary body."""
     from agentcore.api.schemas.conversations import (
         ConversationSummary,
         conversation_summary_from_orm,
@@ -57,11 +57,12 @@ def test_conversation_summary_context_compacted_flag_only():
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
         updated_at=datetime(2026, 1, 2, tzinfo=UTC),
     )
+    watermark = datetime(2026, 1, 1, 12, tzinfo=UTC)
     both = conversation_summary_from_orm(
         SimpleNamespace(
             **base,
             compaction_summary="## 事实\n- X",
-            compacted_through=datetime(2026, 1, 1, 12, tzinfo=UTC),
+            compacted_through=watermark,
             folder_id=None,
             local_container_root_id=None,
             pinned=False,
@@ -72,9 +73,10 @@ def test_conversation_summary_context_compacted_flag_only():
         )
     )
     assert both.context_compacted is True
+    assert both.compacted_through == watermark
     dumped = both.model_dump()
     assert "compaction_summary" not in dumped
-    assert "compacted_through" not in dumped
+    assert dumped["compacted_through"] == watermark
 
     missing = conversation_summary_from_orm(
         SimpleNamespace(
@@ -91,7 +93,25 @@ def test_conversation_summary_context_compacted_flag_only():
         )
     )
     assert missing.context_compacted is False
+    assert missing.compacted_through is None
     assert ConversationSummary.model_fields["context_compacted"].default is False
+
+    orphan_watermark = conversation_summary_from_orm(
+        SimpleNamespace(
+            **base,
+            compaction_summary=None,
+            compacted_through=watermark,
+            folder_id=None,
+            local_container_root_id=None,
+            pinned=False,
+            archived=False,
+            permission_axes={},
+            deep_research_auto=False,
+            model_profile_id=None,
+        )
+    )
+    assert orphan_watermark.context_compacted is False
+    assert orphan_watermark.compacted_through is None
 
 
 def test_select_fold_noop_when_tail_within_recency():
@@ -215,7 +235,7 @@ def test_compact_prompt_has_structure_and_guards():
     # 现行检验：摘要只留会改变以后行动的信息（原则句，不点名废字段）。
     assert "会改变以后行动" in _COMPACT_SYSTEM_PROMPT
     assert "已完成步骤" in _COMPACT_SYSTEM_PROMPT
-    assert "文件工作集不是过程" in _COMPACT_SYSTEM_PROMPT
+    assert "路径清单不是过程" in _COMPACT_SYSTEM_PROMPT
     assert "本批涉及的文件" in _COMPACT_SYSTEM_PROMPT
     assert "仍生效的决定与否决" in _COMPACT_SYSTEM_PROMPT
     assert "废选项" in _COMPACT_SYSTEM_PROMPT

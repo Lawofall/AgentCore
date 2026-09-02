@@ -54,7 +54,7 @@ _WORKER_STRUCTURE_OWNERSHIP = (
     "专业结构由你定：task 里的骨架 / 关注点只是起点线索，不是填字模板或答题边界。"
 )
 _WORKER_NO_PREAMBLE = "直接以产出本身开头。"
-# Landing contract. HOW for long-form / tables lives in consult; field checklists on handoff schema.
+# Landing contract. HOW for long-form / tables lives in consult; brief writing shape on handoff description.
 _WORKER_LANDING_DISCIPLINE = (
     "写文件工具（file_write / file_append / str_replace）返回成功即已落盘（回执为 artifact manifest）。"
 )
@@ -98,33 +98,19 @@ _WORKER_DELIVERY_HONESTY = """\
 
 
 def _handoff_policy_with_dependents(form: DeliverableForm | None) -> str:
-    """Topology only. Field cues live on the handoff tool schema."""
-    body = (
-        "完成后必须调用 handoff（【接力契约 + 增量交代】；字段见该工具）。"
-        "同一轮先交付再交。"
-    )
+    """Topology only. Writing shape lives on the handoff tool description."""
+    body = "有下游：完成后必须调用 handoff。"
     if form == "prose":
-        body += (
-            "结论与根因写在正文；summary 是给下游的短接力，不算正文。"
-            "正文非空即可，不设字数门槛。"
-        )
-    else:
-        body += "简报须写清这次做出了什么。"
+        body += "结论与根因写在正文。正文非空即可，不设字数门槛。"
     return body
 
 
-def _handoff_policy_leaf(form: DeliverableForm | None) -> str:
-    """Topology only. Field cues live on the handoff tool schema."""
-    body = (
-        "简报是【接力契约 + 增量交代】（给主管看，不是正文复述）。"
-        "有工具活动或较长交付时须调用 handoff；短答自明、无工具时写完正文即可，不必为交而交。"
-        "同一轮先交付再交。"
+def _handoff_policy_leaf() -> str:
+    """Topology only. Writing shape lives on the handoff tool description."""
+    return (
+        "无下游：默认不调用 handoff。"
+        "仅当有正文或文件里没有的增量才补交。"
     )
-    if form == "prose":
-        body += "简报只写接力状态（一行标题），不要复述正文里已经写过的结论。"
-    else:
-        body += "简报是主管唯一信息源，须写清这次做出了什么。"
-    return body
 
 
 def _form_block(form: DeliverableForm | None) -> str:
@@ -161,7 +147,7 @@ def _deliverable_policy(
     handoff = (
         _handoff_policy_with_dependents(form)
         if has_dependents
-        else _handoff_policy_leaf(form)
+        else _handoff_policy_leaf()
     )
     return f"{_form_block(form)}\n\n{handoff}\n\n{_WORKER_DELIVERY_HONESTY}"
 
@@ -231,8 +217,9 @@ def build_worker_identity(
     """Assemble a worker's identity preamble (topology-split handoff + leaf/captain).
 
     ``has_dependents`` comes from the DAG at identity-build time (``node_has_dependents``):
-    upstream nodes get the imperative handoff relay; leaves get the conditional
-    「有增量才写」wording. ``captain`` selects the nested-delegation intro;
+    upstream nodes must call handoff; writing shape lives on the tool description.
+    Leaves skip unless they have incremental briefing beyond the body or files.
+    ``captain`` selects the nested-delegation intro;
     ``depth`` (when captain) picks honest child-nesting copy vs ``MAX_DELEGATION_DEPTH``.
     ``form`` selects the deliverable-form block (omit = files).
     Non-empty ``artifacts`` still select the files-form prompt.

@@ -17,6 +17,10 @@ import {
   flushPendingContent,
   flushPendingFrames,
 } from "@/services/sse/dispatch";
+import {
+  type CloudStreamPathReason,
+  streamPathReasonHeaders,
+} from "@/services/streamPathReason";
 import { traceTurnMilestone } from "@/services/turnTrace";
 import {
   beginLocalConversationStream,
@@ -445,6 +449,7 @@ async function runMessageStream(
   conversationId: string,
   signal?: AbortSignal,
   turnCommit?: TurnCommitReport,
+  streamPathReason?: CloudStreamPathReason,
 ): Promise<void> {
   clearInteractionPrompts(conversationId);
   throwIfCannotOpenStream(conversationId, signal);
@@ -460,6 +465,7 @@ async function runMessageStream(
         "Content-Type": "application/json",
         Accept: "text/event-stream",
         ...clientHeaders(),
+        ...streamPathReasonHeaders(streamPathReason),
         ...bearerAuthHeader(),
         ...getCsrfHeaders("POST"),
       },
@@ -588,6 +594,8 @@ export interface StreamConversationOptions {
   signal?: AbortSignal;
   /** 本发泵到 `turn_saved` 时置 `committed`。Class B 回滚读这个事实，不嗅消息 id。 */
   turnCommit?: TurnCommitReport;
+  /** Cloud-path reason for ``X-AgentCore-Stream-Path-Reason`` (local-bound overbridge). */
+  streamPathReason?: CloudStreamPathReason;
 }
 
 /** Send a user message and consume the SSE response stream (发送即有流).
@@ -602,6 +610,7 @@ export async function streamConversation({
   delivery,
   signal,
   turnCommit,
+  streamPathReason,
 }: StreamConversationOptions): Promise<void> {
   const payload: Record<string, unknown> = { content, delivery };
   if (attachments && attachments.length > 0) payload.attachments = attachments;
@@ -614,6 +623,7 @@ export async function streamConversation({
     conversationId,
     signal,
     turnCommit,
+    streamPathReason,
   );
 }
 
@@ -626,6 +636,7 @@ export interface RegenerateConversationOptions {
   /** When true, send materials arrays (including empty) so dropped chips persist. */
   replaceMaterials?: boolean;
   signal?: AbortSignal;
+  streamPathReason?: CloudStreamPathReason;
 }
 
 export async function regenerateConversation({
@@ -636,6 +647,7 @@ export async function regenerateConversation({
   agentMentions,
   replaceMaterials,
   signal,
+  streamPathReason,
 }: RegenerateConversationOptions): Promise<void> {
   const payload: Record<string, unknown> = {};
   if (content !== undefined) payload.content = content;
@@ -649,6 +661,8 @@ export async function regenerateConversation({
     body,
     conversationId,
     signal,
+    undefined,
+    streamPathReason,
   );
 }
 

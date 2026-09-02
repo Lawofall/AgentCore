@@ -115,14 +115,14 @@ def format_file_landing_tools_slash() -> str:
 def landing_write_failure_kind(
     transcript: list[LLMMessage] | None,
 ) -> str | None:
-    """Classify failed file-landing attempts for zero-disk / audit-JSON attribution.
+    """Classify failed file-landing attempts for zero-disk attribution.
 
     Returns ``channel_dead`` when any failed landing-tool result is a presence
     disconnect (desk fulfiller gone); ``write_failed`` when landing tools failed
     for other reasons (including a settle timeout); ``None`` when no failed
     landing-tool result is observed (true zero-attempt / paste-into-prose case).
     Successful landings are ignored here — callers may still pass the kind when
-    some files landed (e.g. the desk dropped before companion ``*.audit.json``).
+    some files landed.
     """
     if not transcript:
         return None
@@ -270,20 +270,16 @@ def escalations_from_transcript(transcript: list[LLMMessage]) -> list[dict[str, 
     return out
 
 
-# 完工交接简报 (worker → 下游/CEO): a delegated worker ends its run by calling the terminal
-# ``handoff`` tool with a STRUCTURED brief (summary / key_points / assumptions / next_steps) — a
-# wrap-up for its READERS, not more deliverable prose. Because it is structured, it is read
-# STRAIGHT OFF the call's arguments here (never parsed back out of markdown prose — its former,
-# fragile「## 交接简报」form): a downstream dep block can LEAD with the author's own 结论 (cheapest
-# to read, survives budget-trim) and the CEO aggregate can surface 建议下一步 to relay to the user,
-# instead of every reader re-deriving the gist from raw prose. Same discipline as the sibling
-# transcript harvesters (escalations_from_transcript; files_touched_from_transcript for the
-# call→result correlation): pure, unit-testable. Nodes with downstream dependents
-# **require** a minimum-quality handoff
-# (executor injects one correction shot; still missing → synthesize_debrief with ``degraded``);
-# leaf nodes (no dependents) may finish without handoff when the deliverable is short and
-# tool-free; after substantial work (tools / longer body) they share the same补要 / degraded
-# path so CEO / ``delivery_status`` can see incomplete reports.
+# 完工交接简报 (worker → 下游/CEO): a delegated worker ends its run by calling the
+# terminal ``handoff`` tool. The 便条 is that assistant message's ``content``
+# (new rounds; arguments are empty). Historical transcripts that stuffed
+# summary / key_points / assumptions / next_steps into arguments still fall
+# back to those fields so stored runs re-harvest. Never parsed out of a
+# 「## 交接简报」markdown section (its former, fragile form).
+#
+# Last usable brief wins (re-worked run may submit more than once). A call with
+# neither closing-round prose nor usable args is skipped. None when there is
+# no usable handoff at all.
 #
 # The tool name is the literal ``"handoff"`` (= ``HANDOFF_TOOL_NAME``); kept inline here to keep
 # this serialization module dependency-light, exactly as ``escalations_from_transcript`` keeps
@@ -342,12 +338,16 @@ def _debrief_from_handoff_args(args: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def debrief_from_transcript(transcript: list[LLMMessage]) -> dict[str, Any] | None:
-    """The worker's 交接简报, harvested from its ``handoff`` tool call, or None.
+    """The worker's 交接简报, harvested from its ``handoff`` round, or None.
 
-    Walks the transcript for ``handoff`` calls and parses the LAST valid one's arguments (a
-    re-worked / revised run may submit more than once — the final brief wins). Mirrors
-    :func:`escalations_from_transcript`: read off the call itself, a call with malformed args or
-    no usable field is skipped. None when there is no ``handoff`` call at all."""
+    Walks the transcript for ``handoff`` calls. For each call: non-empty assistant
+    ``content`` is the brief (new rounds; schema has no fields). Arguments
+    four-grid only fill in when content is empty (old transcripts with no body).
+    Last usable brief wins. A call with malformed args and empty content is
+    skipped. None when nothing usable.
+    """
+    from agentcore.runtime.engine.tool_protocol_sanitize import sanitize_protocol_text
+
     result: dict[str, Any] | None = None
     for msg in transcript:
         if msg.role != "assistant" or not msg.tool_calls:
@@ -355,15 +355,22 @@ def debrief_from_transcript(transcript: list[LLMMessage]) -> dict[str, Any] | No
         for tc in msg.tool_calls:
             if tc.function.name != "handoff":
                 continue
+            parsed: Any = None
             try:
                 parsed = json.loads(tc.function.arguments or "{}")
             except (ValueError, TypeError):
+                parsed = None
+            args_debrief = (
+                _debrief_from_handoff_args(parsed)
+                if isinstance(parsed, dict)
+                else None
+            )
+            text = sanitize_protocol_text(llm_content_text(msg.content)).strip()
+            if text:
+                result = {"summary": text}
                 continue
-            if not isinstance(parsed, dict):
-                continue
-            debrief = _debrief_from_handoff_args(parsed)
-            if debrief is not None:
-                result = debrief  # last valid handoff wins
+            if args_debrief is not None:
+                result = args_debrief
     return result
 
 

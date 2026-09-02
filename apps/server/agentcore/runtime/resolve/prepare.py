@@ -40,7 +40,7 @@ def _wire_conversation_log_tools(
 
     ``search_conversations`` / ``read_conversation`` are ``manual_wire`` —
     never auto-registered by ``build_worker_registry`` / ``build_ceo_tool_registry``.
-    Product-always-on (跨会话对话日志访问定案 A); still on-demand until consult.
+    Product-always-on (跨会话对话日志访问定案 A); opening-table resident.
     """
     tools.register(SearchConversationsTool(folder_id=folder_id))
     tools.register(ReadConversationTool())

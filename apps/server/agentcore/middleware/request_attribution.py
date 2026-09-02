@@ -12,6 +12,10 @@ per-event kwargs — low cardinality, no extra emit sites. Missing header is
 ``-``; a present-but-empty (or whitespace-only) header is ``""`` so the two
 never collapse.
 
+Optional ``X-AgentCore-Stream-Path-Reason`` (desktop cloud-path enum) binds
+``stream_path_reason`` only when the value is allowlisted; unknown / absent
+headers are left unbound so GET/sidecar traffic does not stamp a dummy ``-``.
+
 Pure ASGI (not BaseHTTPMiddleware) so it shares the same task as the route
 handler — the place where ``get_session`` checkouts actually happen.
 """
@@ -29,10 +33,23 @@ MISSING_CLIENT_HEADER = "-"
 
 _PLATFORM_HEADER = b"x-client-platform"
 _VERSION_HEADER = b"x-client-version"
+_STREAM_PATH_REASON_HEADER = b"x-agentcore-stream-path-reason"
 # Hard cap so a junk header cannot inflate every log line; real values are short
 # (``desktop`` / ``0.9.4`` / ``dev``).
 _MAX_PLATFORM_LEN = 32
 _MAX_VERSION_LEN = 64
+
+# Desktop ``CloudStreamPathReason`` — same enum as ``streamPathReason.ts``.
+STREAM_PATH_REASONS = frozenset(
+    {
+        "switch_off",
+        "no_local_engine",
+        "probe_unhealthy",
+        "probe_cache_bad",
+        "no_local_target",
+        "sidecar_fallback",
+    }
+)
 
 
 def _raw_header(scope: Scope, name: bytes) -> str | None:
@@ -63,6 +80,19 @@ def client_header_for_log(raw: str | None, *, max_len: int) -> str:
     return stripped
 
 
+def stream_path_reason_for_log(raw: str | None) -> str | None:
+    """Allowlisted desktop cloud-path reason, or ``None`` to leave unbound.
+
+    Unknown / empty values are dropped (not truncated into a fake enum).
+    """
+    if raw is None:
+        return None
+    value = raw.strip().lower()
+    if value in STREAM_PATH_REASONS:
+        return value
+    return None
+
+
 class RequestAttributionMiddleware:
     """Stamp request identity + client headers onto the request task."""
 
@@ -83,6 +113,9 @@ class RequestAttributionMiddleware:
         version = client_header_for_log(
             _raw_header(scope, _VERSION_HEADER), max_len=_MAX_VERSION_LEN
         )
+        path_reason = stream_path_reason_for_log(
+            _raw_header(scope, _STREAM_PATH_REASON_HEADER)
+        )
 
         task = asyncio.current_task()
         if task is not None:
@@ -90,11 +123,14 @@ class RequestAttributionMiddleware:
             # answer "which request" from ``task_name`` alone.
             task.set_name(f"http:{method} {path}")
 
-        with bound_contextvars(
-            http_method=method,
-            http_path=path,
-            http_req_id=req_id,
-            client_platform=platform,
-            client_version=version,
-        ):
+        ctx: dict[str, str] = {
+            "http_method": method,
+            "http_path": path,
+            "http_req_id": req_id,
+            "client_platform": platform,
+            "client_version": version,
+        }
+        if path_reason:
+            ctx["stream_path_reason"] = path_reason
+        with bound_contextvars(**ctx):
             await self.app(scope, receive, send)

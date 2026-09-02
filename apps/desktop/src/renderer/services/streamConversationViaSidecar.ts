@@ -589,7 +589,7 @@ async function runSidecarTurn({
   });
 
   const primaryToken = claimPrimaryStream(conversationId);
-  // 本端在折这个会话 → 对话级订阅让位（云侧若也有 run，两边同折会叠字）。
+  // 本端在折这个会话 → 对话级订阅静音（云侧若也有 run，两边同折会叠字）。
   const releaseLocalStream = beginLocalConversationStream(conversationId);
   try {
     // 开流门禁：已 abort / stopping|terminal → 不 invoke（H1）。

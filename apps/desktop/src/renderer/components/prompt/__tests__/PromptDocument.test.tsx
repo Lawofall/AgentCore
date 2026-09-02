@@ -18,5 +18,22 @@ describe("PromptDocument", () => {
     expect(screen.getByText("输出风格")).toBeTruthy();
     expect(screen.getByText("第一条")).toBeTruthy();
     expect(screen.getByText("第二条")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "输出风格" }).className,
+    ).toContain("text-xs");
+  });
+
+  it("uses reading density when compact is false", () => {
+    render(
+      <PromptDocument
+        compact={false}
+        text={`<output_style>
+- 第一条
+</output_style>`}
+      />,
+    );
+    expect(
+      screen.getByRole("heading", { name: "输出风格" }).className,
+    ).toContain("text-sm");
   });
 });

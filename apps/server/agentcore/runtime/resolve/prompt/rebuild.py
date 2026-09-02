@@ -24,6 +24,7 @@ from agentcore.runtime.resolve.prompt.compose import (
 from agentcore.runtime.skills import build_system_skill_registry
 from agentcore.tools.builtin import build_worker_registry
 from agentcore.tools.sandbox.exec_languages import resolve_exec_languages
+from agentcore.workspace.project_shell import desk_is_visibly_empty
 from agentcore.workspace.protocol import WorkspaceBackend
 
 
@@ -54,6 +55,7 @@ async def rebuild_fresh_worker_base_prompt(
         desk_folder_id=folder_id,
         desk_folder_label=(getattr(backend, "root_label", None) or "").strip() or None,
         desk_is_birth=True,
+        desk_visibly_empty=await desk_is_visibly_empty(backend),
     )
     system_prompt = assemble_system_prompt(
         rules_markdown=rules_markdown,

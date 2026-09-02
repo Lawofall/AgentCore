@@ -118,6 +118,9 @@ CEO_SYNTHESIS_BUDGET = 3600
 # Per file-producer digest in CEO synthesis (tighter than DEP_POINTER_SUMMARY_CHARS —
 # CEO only needs orientation; full artifact is on disk / in the UI).
 CEO_SYNTHESIS_POINTER_CHARS = 240
+# Per-worker accepted / rejected paths inlined into CEO synthesis body. Remainder
+# counted as「另有 N 个」; the product ``files`` field still carries the full list.
+CEO_SYNTHESIS_FILE_LIST_MAX = 8
 
 # Canonical name of the worker-only「向上升级」tool (worker → CEO clarification)
 # channel). One source of truth shared by three sites that must agree without coupling
@@ -126,13 +129,12 @@ CEO_SYNTHESIS_POINTER_CHARS = 240
 # serialize's transcript harvest (escalations_from_transcript). 见 docs/03-AI核心/Agent协作模式.md.
 ESCALATE_TOOL_NAME = "escalate"
 
-# Canonical name of the worker-only「交接简报 + 收尾」tool (完工交接简报单一源). A delegated worker
-# ends its run by calling this terminal tool ONCE, in the same turn as its finished deliverable,
-# to submit a STRUCTURED brief (summary / key_points / assumptions / next_steps) — so the brief
-# travels in a structured channel and is read straight off the call args
-# (serialize.debrief_from_transcript), never parsed back out of markdown prose (its former,
-# fragile「## 交接简报」form). Same single-source posture as ESCALATE_TOOL_NAME: the HandoffTool's
-# schema name + serialize's transcript harvest. 见 docs/03-AI核心/Agent协作模式.md.
+# Canonical name of the worker-only「收尾」tool (完工交接简报单一源). A delegated worker
+# ends its run by calling this terminal tool; the 便条 is that round's assistant
+# ``content``, harvested by serialize.debrief_from_transcript (args four-grid
+# only when that content is empty). Same single-source
+# posture as ESCALATE_TOOL_NAME: the HandoffTool's schema name + serialize's
+# transcript harvest. 见 docs/03-AI核心/Agent协作模式.md.
 HANDOFF_TOOL_NAME = "handoff"
 
 # Default per-node failure strategy (see RunPolicy.on_failure).

@@ -76,7 +76,7 @@ def build_capability_catalog() -> list[CatalogTool]:
         available = audience_by_name.get(schema.name, (AVAILABLE_TO_WORKER,))
         catalog.append(CatalogTool(schema=schema, available_to=available))
     # manual_wire conversation log tools: catalog-advertised; runtime wires after
-    # ``build_*_registry`` (CEO + worker). Product-always-on, still on-demand.
+    # ``build_*_registry`` (CEO + worker). Product-always-on, opening-table resident.
     for tool_cls in declared_tools(surface=ToolSurface.WORKER_ONLY):
         reg = tool_registration(tool_cls)
         if not reg.manual_wire:

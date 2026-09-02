@@ -12,6 +12,7 @@ from agentcore.runtime.runs.contract import (
     describe_deliverable,
     format_cite_upgrade_feedback,
     format_feedback,
+    format_handoff_feedback,
     format_light_repair_feedback,
     format_write_pass_feedback,
     has_salvageable_half_product,
@@ -568,6 +569,21 @@ def test_artifact_path_mismatch_is_warning_not_zero_gap():
     assert not is_zero_files_gap(v)
 
 
+def test_artifact_dir_miss_with_landing_is_silent():
+    """仅 artifact_dir 未命中但已落盘 → 不发约定目录软提醒。"""
+    from agentcore.workspace.stage_dirs import DRAFTS_DIR
+
+    v = check_contract(
+        "已写",
+        Deliverable(form="files", artifact_dir=DRAFTS_DIR, artifacts=[]),
+        files_written=1,
+        workspace_paths=["docs/法庭迷局侦探游戏_GDD.md"],
+    )
+    assert v.ok
+    assert v.warnings == []
+    assert not is_zero_files_gap(v)
+
+
 def test_prose_form_ignores_file_count():
     # 显式 prose 从不因零写失败。
     assert check_contract("纯文字分析", RunContract(form="prose"), files_written=0).ok
@@ -693,30 +709,32 @@ def test_describe_deliverable_renders_artifacts():
     assert "examples/*" in desc
 
 
-def test_debrief_meets_minimum_summary_or_key_points():
+def test_debrief_meets_minimum_measures_summary_only():
     assert not debrief_meets_minimum(None)
     assert not debrief_meets_minimum({"summary": "太短"})
     assert debrief_meets_minimum({"summary": "x" * 50})
-    assert debrief_meets_minimum({"summary": "短", "key_points": ["a", "b"]})
+    assert not debrief_meets_minimum({"summary": "短", "key_points": ["a", "b"]})
+    assert not debrief_meets_minimum({"key_points": ["a", "b"]})
 
 
-def test_leaf_did_substantial_work_and_worker_expects_handoff():
-    from agentcore.llm.provider.protocol import LLMMessage
+def test_format_handoff_feedback_asks_established_state_not_activity():
+    missing = format_handoff_feedback()
+    thin = format_handoff_feedback(present_but_thin=True)
+    for text in (missing, thin):
+        assert "现在什么已成立" in text
+        assert "下一棒要接" in text
+        assert "做出了什么" not in text
+        assert "2–4" not in text
+        assert "再调用 handoff" in text
+
+
+def test_worker_expects_handoff_only_with_dependents():
     from agentcore.runtime.runs.contract import (
-        LEAF_SUBSTANTIAL_BODY_CHARS,
         handoff_expectation_met,
-        leaf_did_substantial_work,
         worker_expects_handoff,
     )
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import RunSpec
-
-    short = "调研结论一段"
-    assert not leaf_did_substantial_work(short)
-    assert leaf_did_substantial_work("x" * LEAF_SUBSTANTIAL_BODY_CHARS)
-    assert leaf_did_substantial_work("", files_touched=["a.md"])
-    msgs = [LLMMessage(role="tool", content="ok: listed")]
-    assert leaf_did_substantial_work("", messages=msgs)
 
     plan = RunPlan(
         nodes=[
@@ -724,18 +742,13 @@ def test_leaf_did_substantial_work_and_worker_expects_handoff():
             RunSpec(run_id="b", task="t", depends_on=["a"]),
         ]
     )
-    assert worker_expects_handoff(plan, "a", content=short)  # upstream
-    assert not worker_expects_handoff(plan, "b", content=short)  # short leaf
-    assert worker_expects_handoff(plan, "b", content=short, files_touched=["n.md"])
-    assert worker_expects_handoff(
-        plan, "b", content="x" * LEAF_SUBSTANTIAL_BODY_CHARS
-    )
+    assert worker_expects_handoff(plan, "a")  # upstream
+    assert not worker_expects_handoff(plan, "b")  # leaf, even after tools / long body
 
-    # Leaf: any author brief counts; upstream still needs the floor.
     thin = {"summary": "短"}
-    assert handoff_expectation_met(thin, for_dependents=False)
-    assert not handoff_expectation_met(thin, for_dependents=True)
-    assert not handoff_expectation_met(None, for_dependents=False)
+    assert not handoff_expectation_met(thin)
+    assert not handoff_expectation_met(None)
+    assert handoff_expectation_met({"summary": "x" * 50})
 
 def test_synthesize_debrief_marks_degraded():
     d = synthesize_debrief("正文结论一段", ["a.py", "b.py"])

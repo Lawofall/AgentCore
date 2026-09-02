@@ -283,6 +283,8 @@ async def _wire_continuation_toolset(
     # backend from the CURRENT binding, so workers must not inherit a stale cloud
     # ``<工作区>``. Worker restamp is facts-only — do not attach the CEO file index.
     git_fact = await detect_workspace_git(backend)
+    from agentcore.workspace.project_shell import desk_is_visibly_empty
+
     refreshed_base = restamp_workspace_facts(
         base_system_prompt,
         build_workspace_context(
@@ -297,6 +299,7 @@ async def _wire_continuation_toolset(
             desk_folder_id=folder_id,
             desk_folder_label=(getattr(backend, "root_label", None) or "").strip() or None,
             desk_is_birth=True,
+            desk_visibly_empty=await desk_is_visibly_empty(backend),
         ),
     )
     # Look up via ``resume.pipeline`` so any module-level monkeypatch on that

@@ -193,7 +193,7 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 │   ├── 导航.md           always · 仅文件夹层 · 短入口（一句话定位 + 任务路由）✅
 │   └── 主题/<slug>.md    on_demand · <按需目录> + consult（单次软顶 5；总数≤memory_max_topic_files）✅
 └── 文档/                 工作区盘 · 永不进 <设定> · 按需 file_read
-    ├── 工作稿/…          ✅ 无显式路径产物的默认落点（取代旧「兜底进 research」）
+    ├── 工作稿/…          ✅ 过程稿抽屉（裸文件名 / 不知放哪；空 artifacts 不钉）
     └── research/ debate/ reviews/  运行产物（无 `项目/`）
 ```
 
@@ -205,7 +205,7 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 - 冲突：靠措辞 + 就近相关性。读侧平权；层内槽位先于该层用户常驻（稳定顺序，不是「规则压过画像」）。
 - `文档/` 与同树旁路 `AgentCore/index/`（code_search；系统噪音）正交：索引管符号检索；导航/主题管叙事路由。勿与 `~/Documents/AgentCore/` 工作区容器混淆。
 - 主题继续 `name=主题/<slug>.md`（非真实嵌套 folder）——有意设计。
-- **约定常量**：约定文档子目录 `research`/`debate`/`reviews`（默认落点 `工作稿`）→ 代码 `workspace/stage_dirs.py`；`文档/` 已无 `项目/`。`AgentCore/` 整体 UI = **`.agentcore`**；用户要拿走的文件在派单时写入工作区，否则留在抽屉、从终稿路径或工作区树打开 → [工作区 §四](/docs/02-架构/双模式工作区.md#四约定文档目录约定)。
+- **约定常量**：约定文档子目录 `research`/`debate`/`reviews`（过程稿抽屉 `工作稿`）→ 代码 `workspace/stage_dirs.py`；`文档/` 已无 `项目/`。`AgentCore/` 整体 UI = **`.agentcore`**；用户要拿走的文件在派单时写入工作区，否则留在抽屉、从终稿路径或工作区树打开 → [工作区 §四](/docs/02-架构/双模式工作区.md#四约定文档目录约定)。
 
 → 见代码：`memory/document_store.py`、`memory/migrate_agentcore.py`
 
@@ -229,12 +229,12 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 
 ## 三、维护协议（情景沉淀 → 语义巩固）
 
-> 巩固形态 ⏳：目标是按 `description` 归位的增删改（受常驻配额约束）；现状仍是整文件重写偏好/画像。这是**重写**不是改造；`remember` 与巩固合流成同一条「写条目」路径，无理由留两套。冷启动第一条条目无模板可依，只能靠沉淀 prompt 给「好条目长什么样」的示例约束，**不得预置空条目**（等同系统槽位复辟）。
+> 巩固形态 ⏳：目标是按 `description` 归位的增删改（受常驻配额约束）；现状仍是整文件重写偏好/画像。这是**重写**不是改造；`remember` 与巩固合流成同一条「写条目」路径，无理由留两套。冷启动第一条条目无模板可依，只能靠沉淀 prompt 给「好条目长什么样」的示例约束，**不得预置空条目**（等同系统槽位复辟）。✅ **主题不由闲聊巩固写**：巩固不新建、不补、不删 `主题/*.md`；正途见下表。
 
 | 层 | 触发 | 行为 | 前端 |
 |---|---|---|---|
 | **情景沉淀** | 每场收尾（闲置防抖 / turn-cap） | ≤200 字摘要 + 可选「本场证实的项目事实」；输入**只取水位之后的新增消息**（上限 40 条）+ turn_journal 动作清单（路径/命令/搜索，命令先脱敏）；**不注入 prompt** | **不出卡、不 toast**。超时/空摘要仍落 episode、推进水位、**不**立刻巩固；拼接用户前 3 条原文的 fallback 只当语义素材，**永不进会话流** |
-| **语义巩固** | 本场 LLM **真写出摘要**后立刻（eager，绕过 3/24h）；未消化扫漏仍 ≥3 场 **或** ≥24h | 整文件重写偏好/画像；**文件夹导航增量合并**（一行一条路由；路径/命令须本批动作清单实证，超硬上限合并）；主题保留 ops；**逐条写、常驻配额只拒它挡下的那条**（其余照常落地，被拒的攒成一张 `quota` 卡）。无增删改 → 不出卡、仍标记已消化；parse/超时/异常 → 不消化 | 有 items 才出 diff 卡（live 带 `anchor_at`）；不在当前对话时 toast |
+| **语义巩固** | 本场 LLM **真写出摘要**后立刻（eager，绕过 3/24h）；未消化扫漏仍 ≥3 场 **或** ≥24h | 整文件重写偏好/画像；**文件夹导航增量合并**（一行一条路由；路径/命令须本批动作清单实证，超硬上限合并）。主题 ops 丢弃不落盘。**逐条写、常驻配额只拒它挡下的那条**（其余照常落地，被拒的攒成一张 `quota` 卡）。无增删改 → 不出卡、仍标记已消化；parse/超时/异常 → 不消化 | 有 items 才出 diff 卡（live 带 `anchor_at`）；不在当前对话时 toast |
 
 - 异常回合（cancelled / interrupted / error）跳过沉淀仍推进 watermark。开回合（新鲜 TurnLease / `paused_turns` / 最新助手 `usage.paused`）推迟且不推水位。本机 occupy 占云 lease 并心跳；挂起只打 `usage.paused`、不写 `paused_turns`。无 lease 且非 paused 的 RUNNING 仍当僵尸推水位。
 - **窗口按水位裁剪，不回看固定条数**：固定回看最近 40 条会让相邻 episode 输入重叠。水位既 gate 又裁剪后摘要互不包含；动作清单同轨裁剪，否则「本场证实的项目事实」照样逐条重复。
@@ -243,6 +243,18 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 - 偏好只能来自用户**明示或纠正**，禁止从任务题材推断。
 - 空重写 / 保留率 <50% → 拒落盘；巩固失败不标记已消化。
 - 导航写入判据：一条有用 ⟺ 下次能省掉一个动作；闲聊/纯偏好场导航零变化；探索幕仍是导航首建者，巩固只做增量。
+
+**写什么**：记忆的主语是**用户和文件夹**，不是产品和本场任务。「记」只为下一轮「说」更短。四条写入面的证据与入口：
+
+| 写到哪 | 记什么 | 够格的证据 | 谁写 |
+|---|---|---|---|
+| 偏好.md | 怎么跟我合作 | 用户明示或当场纠正 | 语义巩固（一场即可） |
+| 画像.md | 我是谁 / 这桌是什么 | 用户陈述；文件夹层另加探索摸仓 | 巩固 + 探索幕 |
+| 导航.md | 下次能省掉的一步 | 本场动作清单实证 | 探索幕首建；巩固只增量 |
+| 主题/*.md | 以后还会来查的厚知识 | 不能从产品或工作区当场拿到 | ✅ 巩固不写。正途：探索幕（含旁路刷新）· 文件页 · 每日复盘勾选。`remember` 仍只写用户规则 |
+
+**能从产品或工作区当场拿到的，不准写进用户记忆。** playbook / 工具 / Skill / 手册答案的真源在产品（`consult` / `delegate` / 手册）；路径与代码的真源在工作区（`file_read` / `code_search`）。旧场原文用 `search_conversations`，不升格成设定。抄进主题不会改变以后怎么做，只会过时、挤按需目录 → [现行信息](/docs/01-产品/现行信息.md)。闲聊 / 查产品功能 / 一次性试写：摘要仍落库，巩固跑完应**零卡片、零新主题**。
+
 - 用户明示指令 → `remember` 直写**用户规则**（`ai_maintained=false`）✅：支持**追加 / 替换 / 删除 / 列出**；改删在对话内真生效。文件页仍可人手改删（与对话内操作双轨，非互斥）。冲突：同 key 归一化去重；「改为」走替换去掉旧条，不以矛盾并存 + 措辞碰运气为主路径。**内容完整性**：半截/`…` 收尾或中段残缺标记 → 拒写入（与 [工具参数契约](/docs/03-AI核心/工具与能力系统.md) 同纪律）。
 - 记忆能力**产品层恒开**（无用户总闸）；内容由对话内 `remember` 与文件页编辑/清空双轨控制。异常回合仍跳过沉淀并推进 watermark。
 
@@ -251,7 +263,7 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 | | **巩固冷启动** `_is_cold_start` | **冷启动探索幕**（含指纹脏标记 / 旁路重探） |
 |---|---|---|
 | 闸看 | **全局** `偏好.md`+`画像.md` 皆空 | 见下表「探索触发」 |
-| 行为 | 巩固抽取降门槛 | CEO 组队探索 → 合并写文件夹画像 + **导航** + 主题；禁经 `remember` 落规则 |
+| 行为 | 巩固抽取降门槛（仅偏好 / 画像；不降主题新建门槛——巩固本就不写主题） | CEO 组队探索 → 合并写文件夹画像 + **导航** + 主题；禁经 `remember` 落规则 |
 
 #### 探索触发与挡请求（✅ 软硬分层）
 
@@ -283,11 +295,11 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 
 ## 四、跨会话对话日志
 
-Worker 经 `search_conversations` / `read_conversation` 按需检索本账号历史原文（messages + turn_journal）；CEO 可自己 search/read（按需 `consult`，与工人同形）；成规模查阅仍可派。`search_conversations` 支持 `updated_within_hours`（日复盘等）。用户 `@` 对话附件走服务端 `log_export` 深读。能力**产品层恒开**（无独立隐私闸；运行时不再穿 `memory_enabled` / `conversation_history_access`，两列已 drop）。控制面为编辑/清空长期记忆与删除对话，而非总开关。
+Worker / CEO 开场即持 `search_conversations` / `read_conversation`，检索本账号历史原文。短查询自己搜读，成规模查阅仍可派。`query` 匹配标题或对话正文（GET `/v1/search` 的消息面收成对话行；侧栏全局搜的 conversation 段仍只搜标题）。默认 `scope=folder`（裸聊无文件夹则按 all）。`search_conversations` 支持 `updated_within_hours`（日复盘等）。有 query 时摘要带命中条序；`read_conversation` 带同一 query 从第一条命中读起。默认 `focus=dialogue`（用户/助手可见正文）；工具/辩论/思考走 `focus=process`。超长按**消息下标**分页（`m:N`），10 万字是病态安全阀不是内容整形。用户 `@` 对话附件走同一套对话稿（不信客户端浅文）。能力**产品层恒开**（无独立隐私闸；运行时不再穿 `memory_enabled` / `conversation_history_access`，两列已 drop）。控制面为编辑/清空长期记忆与删除对话，而非总开关。
 
-**系统模板 · 每日对话复盘** ✅：站立任务 `template_key=daily_conversation_review`（引导开、默认日跑）。作用域可配（全局裸聊 / 多个云文件夹 / 回看小时）。**无新料硬闸**：作用域内无近期对话则收件箱直接「今日无新料」、不跑 LLM。有料时代跑 brief 要求 `ask_user card=daily_review`；用户勾选确认后**服务端直接**写记忆 / 用户规则 / `AgentCore/文档/reviews/`（不再依赖 LLM 再调 remember）。与语义巩固并存。→ `standing_tasks/templates.py` · `review_apply.py` · `review_preflight.py`；桌面 Toolbox → 自动化。
+**系统模板 · 每日对话复盘** ✅：站立任务 `template_key=daily_conversation_review`（引导开、默认日跑）。作用域可配（全局裸聊 / 多个云文件夹 / 回看小时）。**无新料硬闸**：作用域内无近期对话则收件箱直接「今日无新料」、不跑 LLM。有料时代跑 brief 要求 `ask_user card=daily_review`；用户勾选确认后**服务端直接**写记忆 / 用户规则 / `AgentCore/文档/reviews/`（不再依赖 LLM 再调 remember）。勾选可写主题——闲聊巩固不再写主题之后，这是主题的人审入口之一。与语义巩固并存。→ `standing_tasks/templates.py` · `review_apply.py` · `review_preflight.py`；桌面 Toolbox → 自动化。
 
-**对外口径**（CEO 对用户说话）：白话三层——当前会话 / 偏好与笔记 / 旧场原文（可自己查；成规模可派）；不报工具名与内部角色；禁止装不知道或空口编造。「需要派人去查」仅当选择 `delegate`，不是能力锁。→ 见代码：`runtime/resolve/prompt/`（【记忆/历史·对外口径】【跨会话原文】）
+**对外口径**（CEO 对用户说话）：白话三层——当前会话 / 偏好与笔记 / 旧场原文（可自己查；成规模可派）；不报工具名与内部角色；禁止装不知道或空口编造。「需要派人去查」仅当选择 `delegate`，不是能力锁。→ 见代码：`runtime/skills/product_help.py`（【记忆/历史·对外口径】）
 
 → 见代码：`conversation/log_export.py`、`tools/builtin/search_conversations.py`
 
@@ -345,6 +357,10 @@ Worker 经 `search_conversations` / `read_conversation` 按需检索本账号历
 | 「仅手动」第三档生效方式 | 省下的只是目录里一行 token；`@` 已能把按需条目临时提升 |
 | 对话内「本场摘记」（情景层出卡） | 情景是巩固素材、不注入；出卡会让用户把原料回执当成已生效记忆。新对话也不复制旧摘记 |
 | 等满 3 场 / 24h 才首次写入长期记忆 | 「记」要让下一轮「说」更短；一场有料收尾就应尝试巩固。3/24h 只扫 live 失败后的未消化 |
+| 每场对话摘要自动灌或补主题 | 主题是厚知识不是闲聊 wiki；会把产品目录和过程渣记成用户设定，下一轮「说」更长 |
+| 巩固可补已有主题、只禁新建 | 主题重新变成溢出桶；产品说明书一旦进了主题，下次 FAQ 还会再补 |
+| 把产品能力目录写入用户记忆 | 真源在产品（`consult` / `delegate` / 手册）；抄进记忆会过时且挤按需目录 |
+| 扫用户原文猜「是不是在问功能」再跳过巩固 | 意图分类器；正确滤网是主题不在巩固出口，不是给对话分类 |
 | 条目正文指向盘上路径（挂牌用户仓库 md） | 第一版不做：模型本就能 `file_read`，增量收益仅一行 `description`；疼了再加 |
 
 查看/编辑：对话内 `remember`（增改删列）与文件页「全局设定」+ 各文件夹 ``.agentcore``、右坞工作区同一 ``.agentcore`` 扁平条目 + CAS 双轨；semantic diff 可搬层纠错。→ 见代码：`fileWorkbench/AgentCoreSection.tsx` · `EntriesSection.tsx` · `workspace/WorkspacePanel.tsx`

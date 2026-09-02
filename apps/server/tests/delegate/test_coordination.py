@@ -1590,7 +1590,7 @@ def test_coordination_budget_scales_with_batch_size():
 
 
 def test_first_turn_all_completed_inject_asks_final_synthesis():
-    """首回合 ALL_COMPLETED：当场写终稿；禁止与「勿做最终合成」同块并存。"""
+    """首回合 ALL_COMPLETED：叫醒 + 成品事实；禁止与「勿做最终合成」同块并存。"""
     from agentcore.runtime.coordination.inject import format_coordination_events
 
     session = CoordinationSession(execution_id="e", total_workers=2)
@@ -1609,8 +1609,9 @@ def test_first_turn_all_completed_inject_asks_final_synthesis():
     assert "本回合可见面只留人已派出" not in text
     assert "可见收口由系统收口回合完成" not in text
     assert "全部完成后做最终合成" not in text
-    assert "报告本波结果" in text
-    assert "本波结果按终稿纪律向用户交代" in text
+    assert "报告本波结果" not in text
+    assert "按终稿纪律向用户交代" not in text
+    assert "走 content_delta" not in text
     assert "团队成品" in text
     assert product in text
     assert "团队已全部结束" in text
@@ -1689,8 +1690,8 @@ def test_all_completed_inject_write_form_without_files_is_not_delivery():
     )
     assert "队员回合结束不是用户交付" in text
     assert "不得向用户宣称完成" in text
-    assert "不得宣称已交付" in text
-    assert "不要把队员回合结束当成用户交付" in text
+    assert "不得宣称已交付" not in text
+    assert "不要把队员回合结束当成用户交付" not in text
     assert "已接受落盘" not in text
     assert "活没干完就接着干" not in text
     from agentcore.runtime.coordination.inject import format_coordination_events
@@ -1713,7 +1714,7 @@ def test_all_completed_inject_write_form_without_files_is_not_delivery():
     assert "已接受落盘" in text
     assert "`工作稿/报告.md`" in text
     assert "`工作稿/附录.md`" in text
-    assert "禁止整段粘贴本清单当产物卡" in text
+    assert "禁止整段粘贴本清单当产物卡" not in text
 
 
 def test_all_completed_inject_skips_audit_nudge_for_brief_and_writing():
@@ -1781,7 +1782,7 @@ def test_all_completed_inject_skips_audit_nudge_for_brief_and_writing():
     assert "先派审计再收尾" not in writing_text
 
 
-def test_all_completed_inject_keeps_audit_nudge_for_audit_wave():
+def test_all_completed_inject_omits_audit_nudge_even_for_audit_wave():
     from agentcore.runtime.coordination.inject import format_coordination_events
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import Deliverable, RunSpec
@@ -1796,7 +1797,6 @@ def test_all_completed_inject_keeps_audit_nudge_for_audit_wave():
                 deliverable=Deliverable(
                     form="files",
                     artifacts=["AgentCore/文档/reviews/code-audit.md"],
-                    code_audit_gate=True,
                 ),
             )
         ]
@@ -1806,12 +1806,12 @@ def test_all_completed_inject_keeps_audit_nudge_for_audit_wave():
         [
             CoordinationEvent(
                 kind=CoordinationEventKind.ALL_COMPLETED,
-                payload={"completed": 1, "total": 1, "playbook": "code_audit"},
+                payload={"completed": 1, "total": 1},
             )
         ],
     )
-    assert "独立审计" in text
-    assert "先派审计再收尾" in text
+    assert "独立审计" not in text
+    assert "先派审计再收尾" not in text
 
     by_playbook = CoordinationSession(execution_id="e-rr", total_workers=1)
     rr_text = format_coordination_events(
@@ -1823,11 +1823,11 @@ def test_all_completed_inject_keeps_audit_nudge_for_audit_wave():
             )
         ],
     )
-    assert "先派审计再收尾" in rr_text
+    assert "先派审计再收尾" not in rr_text
 
 
-def test_inject_carries_final_synthesis_discipline():
-    # 收口当场面才带终稿纪律：交付物在前、过程简述从简、不整段粘事件/名册。
+def test_inject_close_omits_closing_how():
+    # 收口 HOW 不进注入：终稿纪律只在综述脚；叫醒只带场面事实。
     from agentcore.runtime.coordination.inject import format_coordination_events
 
     session = CoordinationSession(execution_id="e", total_workers=2)
@@ -1840,19 +1840,20 @@ def test_inject_carries_final_synthesis_discipline():
             )
         ],
     )
-    assert "【终稿纪律】" in text
-    assert "交付物在前" in text
-    assert "过程简述从简" in text
-    assert "至多一段" not in text
-    assert "禁止整段粘进终稿" in text
-    assert "未交付的承诺产物" in text
-    assert "报告本波结果" in text
-    assert "活没干完就接着干" in text
+    assert "【终稿纪律】" not in text
+    assert "交付物在前" not in text
+    assert "过程简述从简" not in text
+    assert "禁止整段粘进终稿" not in text
+    assert "未交付的承诺产物" not in text
+    assert "报告本波结果" not in text
+    assert "活没干完就接着干" not in text
+    assert "走 content_delta" not in text
+    assert "团队已全部结束" in text
     assert "然后退出协调" not in text
     assert "可用工具：wait" not in text
 
 
-def test_all_completed_inject_without_output_skips_audit_unless_review_wave():
+def test_all_completed_inject_without_output_never_nudges_audit():
     from agentcore.runtime.coordination.inject import format_coordination_events
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import RunSpec
@@ -1888,7 +1889,7 @@ def test_all_completed_inject_without_output_skips_audit_unless_review_wave():
             )
         ],
     )
-    assert "先派审计再收尾" in review_text
+    assert "先派审计再收尾" not in review_text
 
 
 def test_all_completed_criteria_unmet_inject_steers_reuse_not_respawn():
@@ -1909,11 +1910,12 @@ def test_all_completed_criteria_unmet_inject_steers_reuse_not_respawn():
             )
         ],
     )
-    assert "有队员失败则不得视为成功交付" in text
-    assert "勿向用户宣称全部完成" in text
-    assert "调度已结束" in text
-    assert "勿再启同服" in text
-    assert "复用" in text or "只补浏览器" in text
+    assert "团队调度结束" in text
+    assert "失败 0" in text
+    assert "有队员失败则不得视为成功交付" not in text
+    assert "勿向用户宣称全部完成" not in text
+    assert "勿再启同服" not in text
+    assert "只补浏览器" not in text
     assert "批次验收" not in text
     assert "completion_criteria" not in text
     assert "团队已全部结束" not in text
@@ -1933,7 +1935,8 @@ def test_harvest_inject_close_line_differs_by_outcome():
             )
         ],
     )
-    assert "活没干完就接着干" in ok_text
+    assert "团队已全部结束" in ok_text
+    assert "活没干完就接着干" not in ok_text
     assert "然后退出协调" not in ok_text
 
     fail = CoordinationSession(execution_id="e-fail", total_workers=2)
@@ -1947,7 +1950,10 @@ def test_harvest_inject_close_line_differs_by_outcome():
             )
         ],
     )
-    assert "不要把失败当成功继续铺开" in fail_text
+    assert "团队调度结束" in fail_text
+    assert "失败 1" in fail_text
+    assert "不要把失败当成功继续铺开" not in fail_text
+    assert "团队已全部结束" not in fail_text
     assert "活没干完就接着干" not in fail_text
 
     cancelled = CoordinationSession(execution_id="e-c", total_workers=1)
@@ -1960,8 +1966,10 @@ def test_harvest_inject_close_line_differs_by_outcome():
             )
         ],
     )
-    assert "不要接着派活" in cancelled_text
+    assert "协调被打断" in cancelled_text
+    assert "不要接着派活" not in cancelled_text
     assert "活没干完就接着干" not in cancelled_text
+    assert "团队已全部结束" not in cancelled_text
 
     paused = CoordinationSession(execution_id="e-soft", total_workers=1)
     paused.soft_stop = True
@@ -1974,9 +1982,10 @@ def test_harvest_inject_close_line_differs_by_outcome():
             )
         ],
     )
-    assert "不要自行接着干" in paused_text
+    assert "不要自行接着干" not in paused_text
     assert "请示用户而暂停" in paused_text
     assert "报告本波结果" not in paused_text
+    assert "团队已全部结束" not in paused_text
     assert "活没干完就接着干" not in paused_text
 
 
@@ -2079,7 +2088,7 @@ async def test_wait_shortcircuit_guard_when_terminal_missing(monkeypatch):
     assert len(msgs) == 1
     assert "all_completed" in (msgs[0].content or "")
     assert "团队已全部结束" in (msgs[0].content or "")
-    assert "报告本波结果" in (msgs[0].content or "")
+    assert "报告本波结果" not in (msgs[0].content or "")
     assert "勿做最终合成" not in (msgs[0].content or "")
     assert "已开工队员禁止说成" not in (msgs[0].content or "")
     assert "尚未启动" not in (msgs[0].content or "")

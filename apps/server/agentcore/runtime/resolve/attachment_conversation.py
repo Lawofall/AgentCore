@@ -66,6 +66,7 @@ async def _deep_read_conversation_attachment_via_cloud(
         "conversation_id": cid,
         "cursor": None,
         "max_chars": ATTACHMENT_INLINE_MAX_CHARS,
+        "focus": "dialogue",
     }
     try:
         data = await cloud_read_conversation(creds, payload=payload)
@@ -119,7 +120,7 @@ async def _deep_read_conversation_attachment(
     user_id: str | None,
     host_conversation_id: str | None,
 ) -> str:
-    """Server-side deep transcript for ``kind=conversation`` — never client shallow text.
+    """Server-side dialogue transcript for ``kind=conversation`` — never client shallow text.
 
     Missing id / owner soft-miss / handoff / host → explicit note.
     With sidecar account ticket → cloud read (``cloud_read_conversation``); else local DB.
@@ -127,17 +128,10 @@ async def _deep_read_conversation_attachment(
     Over-long → first prompt-capped chunk + Worker ``read_conversation`` continuation hint.
     """
     from agentcore.account.credentials import get_account_credentials
-    from agentcore.conversation.log_export import (
-        chunk_transcript,
-        render_conversation_log,
-    )
+    from agentcore.conversation.log_export import DEFAULT_FOCUS, page_conversation
     from agentcore.db.base import async_session_factory
     from agentcore.db.errors import is_db_connectivity_error
-    from agentcore.db.repositories import (
-        ConversationRepository,
-        MessageRepository,
-        TurnJournalRepository,
-    )
+    from agentcore.db.repositories import ConversationRepository, MessageRepository
 
     cid = str(att.get("conversation_id") or "").strip()
     if not cid:
@@ -159,13 +153,11 @@ async def _deep_read_conversation_attachment(
             messages = list(
                 await MessageRepository(session).list_all_for_conversation(cid)
             )
-            assistant_ids = [m.id for m in messages if m.role == "assistant"]
-            journal_map = await TurnJournalRepository(session).load_map(assistant_ids)
-            full = render_conversation_log(conv, messages, journal_map)
-            chunk = chunk_transcript(
-                full,
-                conversation=conv,
-                messages=messages,
+            chunk = page_conversation(
+                conv,
+                messages,
+                {},
+                focus=DEFAULT_FOCUS,
                 cursor=None,
                 max_chars=ATTACHMENT_INLINE_MAX_CHARS,
             )

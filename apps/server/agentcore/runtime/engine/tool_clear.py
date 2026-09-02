@@ -34,15 +34,24 @@ keeps the whole batch until that round falls out — same unit as write-args
 clear. Exec clear = ``EXEC_OUTPUT_CLEAR_TOOLS`` on a separate pass. Never
 cleared: ``file_write`` / interaction cards / steers / assistant / system.
 
-R1 (file_read): cleared ``file_read`` results become a structured stub (path /
-content_cleared / reread=allowed) plus an optional deterministic digest (no LLM).
+R1 (file_read): complete views (footer ``（全文 N 行）``) stay — clearing them
+made models treat a context digest as a truncated file. Windowed / grep /
+search results still collapse. Cleared ``file_read`` stubs are structured
+(path / content_cleared / disk=intact / reread=omit_offset_limit) plus an
+optional deterministic digest (no LLM).
 """
 
 from __future__ import annotations
 
 import json
+import re
 
 from agentcore.llm.provider.protocol import LLMMessage
+
+# Last non-empty line of a complete file_read view (`_format_line_window`).
+_COMPLETE_FILE_FOOTER = re.compile(r"^（全文 \d+ 行）$")
+FILE_READ_DIGEST_STRUCTURE = "【结构摘录·磁盘未截】 "
+FILE_READ_DIGEST_PREVIEW = "【摘录·磁盘未截】 "
 
 # Argument keys, in priority order, that identify WHICH call was cleared.
 _HINT_KEYS = (
@@ -105,6 +114,15 @@ def _path_from_arguments(arguments: str) -> str:
     return raw.strip().replace("\\", "/")
 
 
+def _is_complete_file_read_view(content: str) -> bool:
+    """True when the last non-empty line is the complete-file footer (not a window)."""
+    for line in reversed((content or "").splitlines()):
+        stripped = line.strip()
+        if stripped:
+            return bool(_COMPLETE_FILE_FOOTER.match(stripped))
+    return False
+
+
 def cleared_placeholder(
     tool_name: str,
     arguments: str,
@@ -120,8 +138,8 @@ def cleared_placeholder(
     ``already_executed``: exec-family stdout (host / run). The command
     already ran; the pointer must not invite a re-issue just to recover text.
 
-    ``file_read`` stubs are structured (path / content_cleared / reread=allowed)
-    so the model can re-read from disk after the body leaves the projection.
+    ``file_read`` stubs are structured (path / content_cleared / disk=intact /
+    reread=omit_offset_limit) so the model re-reads the whole file from disk.
     """
     hint = _key_arg(arguments)
     head = f"{tool_name}({hint})" if hint else tool_name
@@ -136,7 +154,8 @@ def cleared_placeholder(
         path_part = f" path={path!r}" if path else ""
         return (
             f"{_CLEARED_PREFIX}: file_read{path_part} "
-            f"chars={original_len} status=content_cleared reread=allowed]"
+            f"chars={original_len} status=content_cleared disk=intact "
+            "reread=omit_offset_limit]"
         )
     return (
         f"{_CLEARED_PREFIX}: {head} 的输出（{original_len} 字符）"
@@ -158,13 +177,13 @@ def structural_file_read_summary(path: str, content: str, *, max_chars: int) -> 
 
     structure = structural_write_summary(path, content)
     if structure:
-        text = f"【自动结构摘录，非全文】 {structure}"
+        text = f"{FILE_READ_DIGEST_STRUCTURE}{structure}"
     else:
         lines = [ln.strip() for ln in content.strip().splitlines() if ln.strip()][:4]
         if not lines:
             return None
         preview = " | ".join(ln[:80] for ln in lines)
-        text = f"【自动摘录，非全文】 {preview}"
+        text = f"{FILE_READ_DIGEST_PREVIEW}{preview}"
     if len(text) <= max_chars:
         return text
     if max_chars <= 1:
@@ -267,7 +286,11 @@ def project_cleared_window(
         name, _arguments, assistant_index = info
         if name not in clearable_tools:
             continue
+        if is_cleared_tool_content(message.content or ""):
+            continue
         if len(message.content or "") < min_chars:
+            continue
+        if name == "file_read" and _is_complete_file_read_view(message.content or ""):
             continue
         clearable.append((index, assistant_index))
 

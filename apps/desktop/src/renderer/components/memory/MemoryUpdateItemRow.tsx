@@ -31,7 +31,8 @@ import { useState } from "react";
  * folder name is unknown). P2-b: optional「移到本文件夹 / 移到全局」on add/update rows
  * when a current folder is known and the section allows the move.
  *
- *「这条不对」sits on the same control row (纠错通道·行级). It belongs HERE rather than only
+ *「这条不对」sits with the move actions at the top-right of the row (纠错通道·行级), as a
+ * sibling of the open-leaf button so the two never nest. It belongs HERE rather than only
  * in the memory editor because this card is where the user meets the sentence — sending him
  * to a file to reject what he is already looking at is what made the entry-level channel a
  * choice between collateral damage and giving up. One click, no confirm dialog: the line he
@@ -291,7 +292,7 @@ export function MemoryUpdateItemRow({
 
   const rowControls =
     showToProject || showToGlobal || showDispute ? (
-      <div className="mt-1 flex flex-wrap items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2 pt-0.5">
         {showToProject && (
           <button
             type="button"
@@ -300,7 +301,7 @@ export function MemoryUpdateItemRow({
               e.stopPropagation();
               void runMove("to_project");
             }}
-            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+            className="whitespace-nowrap text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
           >
             移到本文件夹
           </button>
@@ -313,7 +314,7 @@ export function MemoryUpdateItemRow({
               e.stopPropagation();
               void runMove("to_global");
             }}
-            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+            className="whitespace-nowrap text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
           >
             移到全局
           </button>
@@ -327,7 +328,7 @@ export function MemoryUpdateItemRow({
               void runDispute();
             }}
             title="把这句话从记忆里移走（可撤销）"
-            className="text-xs text-muted-foreground underline-offset-2 hover:text-destructive hover:underline disabled:opacity-50"
+            className="whitespace-nowrap text-xs text-muted-foreground underline-offset-2 hover:text-destructive hover:underline disabled:opacity-50"
           >
             这条不对
           </button>
@@ -340,8 +341,10 @@ export function MemoryUpdateItemRow({
 
   const metaBlock = (
     <>
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <span className="truncate">{leafLabel}</span>
+      <div className="flex min-w-0 items-center gap-1.5 text-xs">
+        <span className="min-w-0 truncate font-medium text-foreground">
+          {leafLabel}
+        </span>
         <span className={countPillMuted}>
           {memoryScopePillLabel(item.scope, item.projectId)}
         </span>
@@ -358,40 +361,40 @@ export function MemoryUpdateItemRow({
     </>
   );
 
-  if (item.target) {
-    return (
-      <li className="rounded-lg px-1.5 py-1 hover:bg-accent/50">
+  const main = (
+    <>
+      <span className={`shrink-0 ${statusPillInline[meta.tone]}`}>
+        {meta.label}
+      </span>
+      <div className="min-w-0 flex-1">{metaBlock}</div>
+      {item.target ? (
+        <ChevronRight
+          size={14}
+          className="mt-0.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+        />
+      ) : null}
+    </>
+  );
+
+  return (
+    <li
+      className={`flex items-start gap-2 px-1.5 py-1 ${
+        item.target ? "rounded-lg hover:bg-accent/50" : ""
+      }`}
+    >
+      {item.target ? (
         <button
           type="button"
           onClick={() => onOpenLeaf(item.target, item.projectId)}
           title={`在设定中打开${item.file}`}
-          className="group flex w-full items-start gap-2 text-left"
+          className="group flex min-w-0 flex-1 items-start gap-2 text-left"
         >
-          <span className={`shrink-0 ${statusPillInline[meta.tone]}`}>
-            {meta.label}
-          </span>
-          <div className="min-w-0 flex-1">{metaBlock}</div>
-          <ChevronRight
-            size={14}
-            className="mt-0.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-          />
+          {main}
         </button>
-        {rowControls ? <div className="pl-14">{rowControls}</div> : null}
-      </li>
-    );
-  }
-
-  return (
-    <li className="px-1.5 py-1">
-      <div className="flex items-start gap-2">
-        <span className={`shrink-0 ${statusPillInline[meta.tone]}`}>
-          {meta.label}
-        </span>
-        <div className="min-w-0 flex-1">
-          {metaBlock}
-          {rowControls}
-        </div>
-      </div>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-start gap-2">{main}</div>
+      )}
+      {rowControls}
     </li>
   );
 }

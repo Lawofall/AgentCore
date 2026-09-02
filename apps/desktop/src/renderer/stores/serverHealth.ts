@@ -15,7 +15,7 @@ import { create } from "zustand";
  * Edge-only product logs (`server_health.offline` / `server_health.online`) land in
  * `desktop.jsonl` so dogfood dumps can explain the composer's disconnect banner.
  * Soft probe misses before the failure threshold log `server_health.probe_failed`
- * (see `services/serverHealth`); mid-session API blips that `/readyz` rejects as
+ * (1st=`debug`, later=`warn`; see `services/serverHealth`); mid-session API blips that `/readyz` rejects as
  * outages log `server_health.api_outage_ignored`. First `checking → online` is
  * silent (cold-start noise); only offline edges and recoveries are recorded on
  * the store itself.

@@ -90,4 +90,22 @@ describe("toConversation last_message_preview", () => {
       (await listGrouped()).conversations[0].lastMessagePreview,
     ).toBeNull();
   });
+
+  it("maps compacted_through for the timeline divider, never a summary body", async () => {
+    const mark = "2026-01-01T12:00:00Z";
+    get.mockResolvedValue({
+      folders: [],
+      ungrouped: [
+        {
+          ...summary(SERVER_PREVIEW),
+          context_compacted: true,
+          compacted_through: mark,
+        },
+      ],
+    });
+
+    const { conversations } = await listGrouped();
+    expect(conversations[0].contextCompacted).toBe(true);
+    expect(conversations[0].compactedThrough).toBe(mark);
+  });
 });

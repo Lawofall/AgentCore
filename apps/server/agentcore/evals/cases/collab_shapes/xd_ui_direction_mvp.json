@@ -15,7 +15,7 @@
   ],
   "path": "team",
   "mode": "economy",
-  "_note": "方向选定≠全量实现：默认 1 人两段或契约/MVP 切片；勿再填已删的 completion_criteria。对照产品失败样：选方案三后双人串行+npm build 触顶。",
+  "_note": "方向选定即派该方案：桌上结果是什么就派什么；勿再问方向、勿另切交付档。对照产品失败样：选方案三后双人串行+npm build 触顶。",
   "checks": [
     { "name": "FinishReason" },
     { "name": "Delegated" },
@@ -29,7 +29,7 @@
     "min_roles": 1
   },
   "milestones": [
-    { "id": "scoped", "desc": "交付边界是 MVP 或设计/API 契约，而非一次做完全套面板", "weight": 2 },
+    { "id": "scoped", "desc": "按已选定的方案三动手（UX/信息架构重构），不另问方向、不自行改成另一档范围", "weight": 2 },
     { "id": "delegated", "desc": "已委派动手（非再问一轮方向）", "weight": 1 }
   ]
 }

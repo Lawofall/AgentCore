@@ -99,19 +99,23 @@ def _format_line_window(
 ) -> str:
     """Numbered lines + honest footer. No transport elision in body text.
 
-    Untruncated full file → ``（全文 N 行）``. Truncated → ``（第 a–b 行，共 N 行）``
-    and, when the safety cap stopped us, mark 行顶 or 字符顶.
+    Untruncated full file → ``（全文 N 行）``. Safety-cap stop → ``已达行顶`` /
+    ``已达字符顶``. Requested window that has not hit a cap → ``未达安全顶，省略
+    limit 可整读`` (not a disk truncation).
     """
     body = _format_numbered_lines(lines, start_line) if lines else ""
     full = cap_kind is None and start_line == 1 and end_line == total_lines
     if full:
         footer = f"（全文 {total_lines} 行）"
+    elif cap_kind == "line":
+        footer = f"（第 {start_line}–{end_line} 行，共 {total_lines} 行；已达行顶）"
+    elif cap_kind == "char":
+        footer = f"（第 {start_line}–{end_line} 行，共 {total_lines} 行；已达字符顶）"
     else:
-        footer = f"（第 {start_line}–{end_line} 行，共 {total_lines} 行）"
-        if cap_kind == "line":
-            footer = f"（第 {start_line}–{end_line} 行，共 {total_lines} 行；已达行顶）"
-        elif cap_kind == "char":
-            footer = f"（第 {start_line}–{end_line} 行，共 {total_lines} 行；已达字符顶）"
+        footer = (
+            f"（第 {start_line}–{end_line} 行，共 {total_lines} 行；"
+            "未达安全顶，省略 limit 可整读）"
+        )
     return body + "\n\n" + footer if body else footer
 
 
@@ -454,7 +458,7 @@ class FileReadTool:
                         "type": "integer",
                         "description": (
                             "起始行号（1-based，含）。省略则从第 1 行。"
-                            "仅页脚已标明截断或已有行号时再开窗。"
+                            "仅页脚已达安全顶或已有行号时再开窗。"
                         ),
                         "minimum": 1,
                     },

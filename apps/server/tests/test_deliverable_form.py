@@ -216,10 +216,10 @@ def test_identity_handoff_topology_preserved_with_form():
     up = build_worker_identity(has_dependents=True, form="prose")
     leaf = build_worker_identity(has_dependents=False, form="prose")
     assert "必须调用 handoff" in up
-    assert "不必为交而交" in leaf
+    assert "默认不调用" in leaf
     assert "必须调用 handoff" not in leaf
-    # 交付真相项4：有下游 prose — summary 不算 body；leaf 不抬此提示
-    assert "不算正文" in up
+    assert "结论与根因写在正文" in up
+    assert "不算正文" not in up
     assert "不算正文" not in leaf
 
 def test_describe_deliverable_form_split():
@@ -305,9 +305,9 @@ def test_schema_exposes_form_enum():
     assert "build_app→app" not in pa
     assert "建站→build_website" not in pa
     assert "快捷" in pa or "手写" in pa
-    # code_audit.modules 必须出现在 CEO 工具面（扇出靠填槽，不从 scope 推断）
-    assert "code_audit" in pa and "modules" in pa
-    assert "不从 scope 自动拆" in pa
+    # playbook_args 只列现行本必填槽；废名不进工具面
+    assert "code_audit" not in pa
+    assert "modules" not in pa
     deps = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["depends_on"][
         "description"
     ]
@@ -316,9 +316,10 @@ def test_schema_exposes_form_enum():
     props_task = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]
     assert "require_upstream" not in props_task
     assert "retrieval_budget" not in props_task  # CEO 不可配置；额度走结构化默认
-    # 已确认约束钉在 task / deliverable；team_brief 只填共享口径，可省略。
+    # 已确认约束钉在 task；team_brief 只填共享口径，可省略。
     assert "已确认约束" in props_task["task"]["description"]
-    assert "已确认约束" in str(TASK_DELIVERABLE_SCHEMA.get("description") or "")
+    assert "同一行" in props_task["task"]["description"]
+    assert "已确认约束" not in str(TASK_DELIVERABLE_SCHEMA.get("description") or "")
     brief = DELEGATE_PARAMETERS["properties"]["team_brief"]["description"]
     assert "共享口径" in brief
     assert "省略" in brief
@@ -521,7 +522,7 @@ async def test_cold_start_pending_allows_single_worker_delegate():
     assert "至少两" not in err
 
 def test_cold_start_allows_artifacts():
-    """裸 artifacts 文件名仍迁入默认落点（与节点数闸无关）。"""
+    """裸 artifacts 文件名仍迁入工作稿（与节点数闸无关）。"""
     plan, errs = build_run_plan(
         [
             {
@@ -535,6 +536,6 @@ def test_cold_start_allows_artifacts():
     )
     assert errs == []
     assert plan.nodes[0].deliverable is not None
-    # 裸文件名迁入默认落点（无显式路径 → 工作稿/）。
+    # 裸文件名迁入工作稿（无路径 → 工作稿/）。
     assert plan.nodes[0].deliverable.artifacts == ["AgentCore/文档/工作稿/brief.md"]
 

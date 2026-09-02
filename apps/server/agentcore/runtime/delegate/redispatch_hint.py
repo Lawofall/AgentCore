@@ -3,8 +3,7 @@
 When the previous turn ended with structured failure (``finish_reason=unproductive``
 or a failed ``delegate`` whose declaration gate is ``empty``), the next fresh CEO
 turn gets a single ignorable nudge to re-issue top-level non-empty ``tasks`` —
-history replays no tool I/O, so the fingerprint must ride the volatile prompt
-tail (same pattern as ``<近期团队图>``).
+history replays no tool I/O, so the fingerprint must ride the volatile prompt tail.
 
 Hard rules (intercept-discipline):
 - Structured signals only — never scan user「继续」/ long free text for intent.

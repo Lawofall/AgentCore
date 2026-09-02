@@ -67,6 +67,7 @@ export function conversationSummary(
     archived: partial.archived ?? false,
     deep_research_auto: partial.deep_research_auto ?? false,
     context_compacted: partial.context_compacted ?? false,
+    compacted_through: partial.compacted_through ?? null,
     permission_axes: partial.permission_axes ?? {
       file_write: "session",
       command: "auto",

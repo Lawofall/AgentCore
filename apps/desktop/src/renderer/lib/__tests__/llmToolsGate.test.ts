@@ -17,7 +17,9 @@ describe("llmToolsGate", () => {
     expect(TOOL_CALLING_TOOL_NAMES.has("delegate")).toBe(true);
     expect(TOOL_CALLING_TOOL_NAMES.has("debate")).toBe(true);
     expect(TOOL_CALLING_TOOL_NAMES.has("debate_and_review")).toBe(false);
-    expect(TOOL_CALLING_TOOL_NAMES.has("delegate_checkpoint")).toBe(false);
+    expect(TOOL_CALLING_TOOL_NAMES.has("team_orchestration_advanced")).toBe(
+      false,
+    );
   });
 
   it("uses non-absolute soft copy (no hard「不支持」assertion)", () => {

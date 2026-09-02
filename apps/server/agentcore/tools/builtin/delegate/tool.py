@@ -185,8 +185,6 @@ class DelegateTool:
         self._active_playbook: str | None = None
         # 当前 playbook_args（kickoff headline 只读 intensity；手写 tasks 为 None）。
         self._active_playbook_args: dict[str, Any] | None = None
-        # 父 worker 带 code_audit_gate 时：嵌套手写 tasks 继承收工纪律（见 audit.apply_*）。
-        self._inherit_code_audit_discipline: bool = False
         # Turn user-message provenance (historical ``execution_harvest`` origin).
         from agentcore.runtime.delegate.post_close_gate import current_user_message_origin
 
@@ -396,27 +394,6 @@ class DelegateTool:
         # 立刻定格，透传给 drive → format_for_ceo 用于完成侧日志。
         call_idx = self._calls
         prefix = f"del_{new_id()}"
-        if getattr(self, "_inherit_code_audit_discipline", False) and isinstance(
-            tasks_raw, list
-        ):
-            from agentcore.runtime.runs.playbooks.audit import (
-                apply_inherited_code_audit_discipline,
-            )
-
-            tasks_raw = apply_inherited_code_audit_discipline(tasks_raw)
-            logger.info(
-                "delegate.nested_code_audit_discipline",
-                tasks=len(tasks_raw),
-                depth=self._depth,
-            )
-        elif playbook is None and isinstance(tasks_raw, list):
-            from agentcore.runtime.runs.playbooks.audit import (
-                apply_inherited_code_audit_discipline,
-            )
-
-            tasks_raw = apply_inherited_code_audit_discipline(
-                tasks_raw, only_shaped=True
-            )
         if isinstance(tasks_raw, list) and tasks_raw:
             from agentcore.runtime.delegate.task_models import (
                 ensure_delegate_route_extras,

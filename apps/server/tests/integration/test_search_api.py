@@ -171,3 +171,36 @@ async def test_search_is_owner_scoped(client, new_client, session_factory):
     # The owner still finds all three.
     body = (await client.get("/v1/search", params={"q": "confidential"})).json()
     assert set(_sections(body)) == {"conversation", "message", "folder"}
+
+
+async def test_ui_conversation_section_stays_title_only(client, session_factory):
+    """GET /v1/search conversation 段仍只搜标题；正文命中只出现在 message 段。"""
+    await register_and_login(client, "searchuser_titleonly")
+    conv = await _new_conversation(client, "unrelated sidebar title")
+    await _seed_message(session_factory, conv, "uniquebodytokenxyz")
+
+    body = (await client.get("/v1/search", params={"q": "uniquebodytokenxyz"})).json()
+    sections = _sections(body)
+    assert "conversation" not in sections
+    assert {i["conversation_id"] for i in sections["message"]} == {conv}
+
+
+async def test_log_search_matches_message_body(client, session_factory):
+    """search_with_projections（日志工具 / account 窄票）标题或正文均可命中。"""
+    from agentcore.db.repositories import ConversationRepository
+
+    await register_and_login(client, "logsearch_body")
+    conv = await _new_conversation(client, "unrelated sidebar title")
+    await _seed_message(session_factory, conv, "uniquebodytokenxyz")
+
+    async with session_factory() as session:
+        row = await ConversationRepository(session).get_by_id_unscoped(conv)
+        assert row is not None
+        hits = await ConversationRepository(session).search_with_projections(
+            row.user_id, "uniquebodytokenxyz", limit=10
+        )
+        assert {h["conversation_id"] for h in hits} == {conv}
+        title_only = await ConversationRepository(session).search(
+            row.user_id, "uniquebodytokenxyz", limit=10
+        )
+        assert [c.id for c in title_only] == []

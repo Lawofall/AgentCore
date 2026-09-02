@@ -873,15 +873,15 @@ async def test_execute_tools_keeps_truncated_args_on_the_honest_failure_path():
     assert tracked.seen_args is None
 
 
-async def test_execute_tools_salvages_handoff_bare_next_steps():
-    """handoff 脏 JSON（裸 next_steps）→ salvage → 工具照常执行，打点 tool.args_salvaged。"""
+async def test_execute_tools_does_not_salvage_handoff_bare_fields():
+    """handoff 脏 JSON 不再 salvage：走 args_parse_failed，工具不执行。"""
     tracked = _CapturingArgsTool("handoff")
     reg = ToolRegistry()
     reg.register(tracked)
     bad = '{"summary":"调研完成","key_points":["a"],"next_steps": 请下游去做某事}'
     sink = EventSink()
     with capture_logs() as logs:
-        messages, terminal, attempts = await execute_tools(
+        _messages, terminal, attempts = await execute_tools(
             [_call("c1", "handoff", bad)],
             reg,
             _ctx(),
@@ -889,15 +889,12 @@ async def test_execute_tools_salvages_handoff_bare_next_steps():
             approval_gate=None,
             run_id="r1",
         )
-    assert attempts[0].success is True
-    assert attempts[0].parse_failure is False
-    assert tracked.seen_args is not None
-    assert tracked.seen_args["next_steps"] == "请下游去做某事"
-    assert isinstance(tracked.seen_args["next_steps"], str)
-    assert any(entry.get("event") == "tool.args_salvaged" for entry in logs)
-    assert not any(entry.get("event") == "tool.args_parse_failed" for entry in logs)
-    starts = [e for e in sink._history if e.type == EventType.TOOL_USE_START]  # noqa: SLF001
-    assert starts and starts[0].payload.get("arguments", {}).get("next_steps") == "请下游去做某事"
+    assert terminal is None
+    assert attempts[0].success is False
+    assert attempts[0].parse_failure is True
+    assert tracked.seen_args is None
+    assert any(entry.get("event") == "tool.args_parse_failed" for entry in logs)
+    assert not any(entry.get("event") == "tool.args_salvaged" for entry in logs)
 
 
 async def test_execute_tools_handoff_unsalvageable_still_parse_fails():

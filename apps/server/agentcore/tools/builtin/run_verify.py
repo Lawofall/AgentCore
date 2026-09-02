@@ -1136,30 +1136,53 @@ async def execute_verify(arguments: dict[str, Any], context: ToolContext) -> Too
                 metadata={"code": "verify_contract"},
             )
 
-    denied = next(
-        (
-            p
-            for p in payloads
-            if not is_install_shaped_argv(p) and not _is_allowed_verify_argv(p)
-        ),
-        None,
-    )
-    if denied is not None:
-        shown = shell_command if use_shell else _argv_to_shell(denied)
-        return ToolResult(
-            tool_call_id="",
-            success=False,
-            output="",
-            error=(
-                f"命令不在验证白名单内：{shown}。"
-                "验收请用 run，command 写成项目检查"
-                "（如 `pnpm test`、`pnpm --filter <包> test`、`pnpm typecheck`）；"
-                "子目录用 cwd。"
-            ),
-            duration_ms=int((time.monotonic() - start) * 1000),
-            contract_failure=True,
-            metadata={"code": "verify_contract"},
+    if use_shell:
+        # Human ``command=``: classified because a verify/install segment is present.
+        # Run the whole string (echo / rebuild companions included). Engine-resolved
+        # check=test|typecheck|… still require every argv on the allow list.
+        has_verify_segment = any(
+            is_install_shaped_argv(p) or _is_allowed_verify_argv(p) for p in payloads
         )
+        if not has_verify_segment:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="",
+                error=(
+                    f"命令不在验证白名单内：{shell_command}。"
+                    "验收请用 run，command 写成项目检查"
+                    "（如 `pnpm test`、`pnpm --filter <包> test`、`pnpm typecheck`）；"
+                    "子目录用 cwd。"
+                ),
+                duration_ms=int((time.monotonic() - start) * 1000),
+                contract_failure=True,
+                metadata={"code": "verify_contract"},
+            )
+    else:
+        denied = next(
+            (
+                p
+                for p in payloads
+                if not is_install_shaped_argv(p) and not _is_allowed_verify_argv(p)
+            ),
+            None,
+        )
+        if denied is not None:
+            shown = _argv_to_shell(denied)
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="",
+                error=(
+                    f"命令不在验证白名单内：{shown}。"
+                    "验收请用 run，command 写成项目检查"
+                    "（如 `pnpm test`、`pnpm --filter <包> test`、`pnpm typecheck`）；"
+                    "子目录用 cwd。"
+                ),
+                duration_ms=int((time.monotonic() - start) * 1000),
+                contract_failure=True,
+                metadata={"code": "verify_contract"},
+            )
 
     needs_install_net = bool(install_payloads) or check == "install"
     allows_restricted = permission_allows_restricted_network(context.permission_axes)

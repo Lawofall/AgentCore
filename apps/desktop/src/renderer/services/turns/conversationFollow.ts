@@ -9,8 +9,9 @@
  * 三条边界：
  *
  * - **不与本端自有连接同折一个回合**。本端 POST 回合流 / 回合级 attach / midFlight
- *   排队连接一开，这条订阅立刻让位（关流），闲下来再自动连回——重连时服务端整段重放
- *   当前 live run，所以让位期间漏掉的帧会补齐。互斥闸见 ``streamOwnership`` 的
+ *   排队连接一开，这条订阅**静音**（连接不断、帧不折、游标不推进），闲下来同一条
+ *   流接着收——直到下一段 ``full_replay``（别人开的新回合）才再折。禁止 abort 重连
+ *   再整段重放：那会把本机刚折完的回合闪一次。互斥闸见 ``streamOwnership`` 的
  *   ``beginLocalConversationStream``。
  * - **空闲不是「生成中」**。真空闲时本模块一个 store 都不写：不开气泡、不置
  *   ``isGenerating``、不占 abort 槽，也不因掉线弹横幅（后台观察者，静默退避重连）。
@@ -55,10 +56,17 @@ type FollowSlot = {
   attempts: number;
   ac: AbortController | null;
   /**
-   * 当前这条 SSE 已经打过 ``follow_open``。让位 abort 时据此成对打
+   * 当前这条 SSE 已经打过 ``follow_open``。拆 slot 时据此成对打
    * ``follow_closed``；没建连不打，避免排查包里凭空多一条关闭。
    */
   opened: boolean;
+  /**
+   * 本端闸亮过：静音期间与放闸后的同回合云投影都不折，直到下一段别人的
+   * ``full_replay``（或自回放段的 ``attach-caught-up`` 丢完）。
+   */
+  ignoreUntilFullReplay: boolean;
+  /** 正在丢掉本端刚写完的那一轮云侧 catch-up，不入屏。 */
+  drainingSelfReplay: boolean;
   unsubBusy: () => void;
   /** 唤醒当前的等待（退避 sleep / 让位挂起）。 */
   wake: (() => void) | null;
@@ -66,23 +74,27 @@ type FollowSlot = {
 
 const slots = new Map<string, FollowSlot>();
 
-/** 本端自有连接一开就 abort 掉订阅；帧的丢弃另由 ``slot.suspended`` 同步兜住
- * （abort 只让读循环报错，已解码进微任务的那一片仍会回调）。
- * 已 ``follow_open`` 的连接在此成对打 ``follow_closed``（``local_stream_handoff``），
- * 不拆 slot——让位是挂起，闲下来由本循环自己连回。 */
+/** 本端自有连接一开就静音订阅，不断 SSE。
+ * 帧的丢弃由 ``slot.suspended`` / ``ignoreUntilFullReplay`` 兜住（已解码进微任务
+ * 的那一片仍会回调，但不折）。不拆 slot——闲下来同一条连接接着收。 */
 function onLocalStreamBusy(slot: FollowSlot, busy: boolean): void {
   slot.suspended = busy;
   if (busy) {
-    const hadOpen = slot.opened && slot.ac !== null;
-    slot.ac?.abort();
-    if (hadOpen) {
-      slot.opened = false;
-      logEvent("info", "conversation.follow_closed", {
+    slot.ignoreUntilFullReplay = true;
+    slot.drainingSelfReplay = false;
+    if (slot.opened) {
+      logEvent("info", "conversation.follow_muted", {
         conversation_id: slot.conversationId,
         reason: "local_stream_handoff",
       });
     }
     return;
+  }
+  if (slot.opened) {
+    logEvent("info", "conversation.follow_unmuted", {
+      conversation_id: slot.conversationId,
+      reason: "local_stream_handoff",
+    });
   }
   slot.wake?.();
 }
@@ -146,6 +158,18 @@ function segmentStart(segment: SSEEvent[]): MessageStartPayload | undefined {
   return start ? (start.payload as MessageStartPayload) : undefined;
 }
 
+function assistantTurnOnScreen(
+  conversationId: string,
+  turnId: string | undefined,
+): boolean {
+  if (!turnId) return false;
+  return getRuntime(conversationId).messages.some(
+    (m) =>
+      m.role === "assistant" &&
+      (m.serverMessageId === turnId || m.id === turnId),
+  );
+}
+
 /**
  * 折这一段之前要不要先把消息窗拉齐？
  *
@@ -160,12 +184,7 @@ function needsWindowBackfill(
   conversationId: string,
   turnId: string | undefined,
 ): boolean {
-  if (!turnId) return false; // 没有段首身份 → 没有哪一轮的历史要补
-  return !getRuntime(conversationId).messages.some(
-    (m) =>
-      m.role === "assistant" &&
-      (m.serverMessageId === turnId || m.id === turnId),
-  );
+  return !assistantTurnOnScreen(conversationId, turnId) && Boolean(turnId);
 }
 
 /**
@@ -282,7 +301,28 @@ async function pumpFollowBody(
       response,
       conversationId,
       (event) => {
-        if (slot.stopped || slot.suspended) return;
+        if (slot.stopped) return;
+        if (slot.suspended) {
+          buffer.length = 0;
+          buffering = false;
+          return;
+        }
+        if (slot.drainingSelfReplay) return;
+        if (slot.ignoreUntilFullReplay) {
+          if (event.type === "message_start" && opensFullReplaySegment(event)) {
+            const mid = (event.payload as MessageStartPayload).message_id;
+            if (assistantTurnOnScreen(conversationId, mid)) {
+              // 本端刚折完的同一轮云回放：丢掉整段，避免 full_replay 把屏幕闪一次。
+              slot.drainingSelfReplay = true;
+              buffer.length = 0;
+              buffering = false;
+              return;
+            }
+            slot.ignoreUntilFullReplay = false;
+          } else {
+            return;
+          }
+        }
         if (buffering) {
           buffer.push(event);
           return;
@@ -299,6 +339,14 @@ async function pumpFollowBody(
       (comment) => {
         if (slot.stopped) return;
         if (comment === ATTACH_CAUGHT_UP_COMMENT) {
+          if (slot.drainingSelfReplay) {
+            slot.drainingSelfReplay = false;
+            slot.ignoreUntilFullReplay = false;
+            buffer.length = 0;
+            buffering = false;
+            return;
+          }
+          if (slot.suspended) return;
           openGate();
         }
       },
@@ -347,7 +395,7 @@ async function runFollowConnection(
     await pumpFollowBody(slot, response);
     return "ok";
   } catch {
-    return "retry"; // abort（让位 / 关闭）与传输失败同路：外层按状态决定
+    return "retry"; // 传输失败；让位静音不断这条连接，abort 只来自拆 slot
   } finally {
     if (slot.ac === ac) slot.ac = null;
     slot.opened = false;
@@ -383,6 +431,8 @@ function startSlot(conversationId: string): void {
     attempts: 0,
     ac: null,
     opened: false,
+    ignoreUntilFullReplay: false,
+    drainingSelfReplay: false,
     unsubBusy: () => {},
     wake: null,
   };
@@ -400,7 +450,7 @@ function startSlot(conversationId: string): void {
  *
  * ``closeReason`` 写入 ``follow_closed.reason``。默认 ``switched_away`` = 订阅跟到
  * 另一个会话（含切草稿）。调用方卸订须显式传入 ``local_sidecar`` / ``unsynced``，
- * 不得冒充用户切走。本机 sidecar 活着由 ``beginLocalConversationStream`` 挂起，
+ * 不得冒充用户切走。本机 sidecar 活着由 ``beginLocalConversationStream`` 静音，
  * hydrate 不再为此拆 slot。
  *
  * 只管当前会话的回合跟播。跨会话的账号态（队列、被别处结掉的挂起卡）走设备长连接

@@ -12,6 +12,7 @@ from agentcore.runtime.coordination.session import resolve_coordination_session
 from agentcore.runtime.coordination.vacate import vacate_never_started_seat
 from agentcore.runtime.events import team_synthesis_preview
 from agentcore.runtime.interaction import default_interaction_registry
+from agentcore.runtime.resolve.ceo_surface import COORDINATION_PERIOD_HINT
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 
 logger = get_logger(__name__)
@@ -42,13 +43,9 @@ class WaitTool:
         return ToolSchema(
             name="wait",
             description=(
-                "【仅协调模式·无操作】本批事件无需处置时调用——确认继续静默等待团队事件。"
-                "图在转、无新结论时【可静默】，勿另写用户可见进度旁白。"
-                "无副作用、立即返回；比空响应更稳（模型被迫发工具时优先用本工具）。"
-                "【禁止】用 delegate / update_synthesis 占位等待；"
-                "同构再派会被拒绝。有真实动作时改调对应工具，勿调 wait。"
-                "有待用户审批/授权时禁止空 wait 假装推进；正确姿势是向用户"
-                "报告阻塞（等你允许）后 wait 听团——队还在，禁止整队收场。"
+                "协调中无需处置时调用：确认继续等团队事件。"
+                f"{COORDINATION_PERIOD_HINT}"
+                "勿用 delegate / update_synthesis 占位等待。"
             ),
             parameters={
                 "type": "object",
@@ -128,24 +125,16 @@ class UpdateSynthesisTool:
         return ToolSchema(
             name="update_synthesis",
             description=(
-                "【仅协调模式】更新你对团队进展的合成草稿（进展中，非终稿）。"
-                "只在【里程碑】调用——仅新结论 / 冲突仲裁记录 / 方向修正 / "
-                "一波或一阶段收束 / 长跑阶段性收束。例行的单个 worker 完成【不要】调用——"
-                "完成计数 n/m 与各队员完成摘要已由系统自动展示给用户，"
-                "【禁止】纯进度播报（「谁还在跑 / 已完成 n/m / 仍在检索」）或微调措辞；"
-                "无里程碑增量时调 wait（或空响应），勿写「静默等待」类正文（会原样显示给用户），"
-                "也勿用本工具占位。"
-                "草稿会推给用户预览；全部完成后请用正文写出最终合成（content_delta），不要再用本工具。"
+                "协调中更新合成草稿（用户可见预览，非终稿）。"
+                "只在里程碑：新结论、冲突、方向修正、阶段收束。"
+                "例行完成不要调；终稿用正文。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "draft": {
                         "type": "string",
-                        "description": (
-                            "当前合成草稿全文（覆盖上一版）。须含新结论/冲突/方向修正；"
-                            "禁止纯进度播报。"
-                        ),
+                        "description": "合成草稿全文（覆盖上一版）。须含新结论或方向变化。",
                     },
                 },
                 "required": ["draft"],
@@ -227,24 +216,15 @@ class CancelWorkerTool:
         return ToolSchema(
             name="cancel_worker",
             description=(
-                "【仅协调模式】终止某个仍在运行的 worker，或撤出排队未开跑的计划节点。"
-                "协调进行中要追加【全新角色/任务】队员：再调 delegate（合并进同一张协作图），"
-                "不必等全队完成；禁止对在跑任务同构重派。"
-                "若刚收到『计划已让出』波边界简报，则用 replan(add=…) 接到当前暂停计划。"
+                "协调中终止一名在跑或排队未开的队员。"
+                "追加全新队员用 delegate；波边界让出后用 replan。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "run_id": {
                         "type": "string",
-                        "description": (
-                            "要终止的 worker。填完整 run_id 最稳（见 timeout / escalation "
-                            "事件里的 run_id=…）；也接受角色名 / 短名，系统会解析为唯一在跑 "
-                            "或唯一排队未开跑节点。排队节点命中则正式撤出队列；"
-                            "目标已终态（完成/失败/跳过/已取消）时幂等成功；"
-                            "多义或找不到时会报错并列出当前可取消的在跑 worker（同角色唯一在跑者"
-                            "仅作提示，不自动改目标）。"
-                        ),
+                        "description": "完整 run_id，或能唯一对应的角色名。",
                     },
                     "reason": {
                         "type": "string",
@@ -420,14 +400,8 @@ class ResolveEscalationTool:
         return ToolSchema(
             name="resolve_escalation",
             description=(
-                "【仅协调模式】兑现队员的【阻塞升级】——把你的裁决回传给挂起的 worker，"
-                "它经 escalate 恢复后继续。这是阻塞仲裁的【唯一兑现路径】。\n"
-                "非协调时不可用（finalize / 嵌套 lead / coordinate=false / 把关闸开阻塞时"
-                "升级直挂用户，你波内已停在 delegate 上）。\n"
-                "直裁：对技术/范围类问题直接给 answer。\n"
-                "转交用户：偏好 / 授权 / 花钱类须先 ask_user 征询用户，拿到答复后再调本工具，"
-                "并设 via_user=true（你是过滤器不是墙）。\n"
-                "run_id 见阻塞仲裁事件中的 run_id。"
+                "协调中兑现队员阻塞升级。技术/范围直接答；"
+                "偏好、授权、花钱先 ask_user 再调，并 via_user=true。"
             ),
             parameters={
                 "type": "object",
@@ -585,10 +559,7 @@ class QueueUserMessageTool:
         return ToolSchema(
             name="queue_user_message",
             description=(
-                "【协调模式】把老板的中途插话转入对话级排队（排到当前回合结束后的下一回合）。"
-                "仅当插话与当前团队任务无关、应独立开新回合时使用。"
-                "相关插话请图内处置（update_synthesis / delegate / cancel_worker），不要调本工具。"
-                "协调已收口时仍可调用：系统会写入对话 FIFO 或确认已消化，勿因「不在协调」而放弃。"
+                "把与当前团队无关的插话排到下一回合。相关插话图内处置。"
             ),
             parameters={
                 "type": "object",

@@ -425,7 +425,7 @@ async def test_full_pool_denies_one_entry_but_pass_continues(
         )
 
     class _Consolidator:
-        """Rewrites the always profile (will be refused) AND adds a topic (must land)."""
+        """Rewrites the always profile (will be refused) AND emits a topic op (must not land)."""
 
         async def consolidate(self, data):
             from agentcore.memory.semantic import SemanticConsolidateResult
@@ -466,13 +466,13 @@ async def test_full_pool_denies_one_entry_but_pass_continues(
         finally:
             memory_write_conversation_id.reset(token)
 
-    # The refused always write did not abort the pass: the on-demand topic still landed.
-    assert changed is True
+    # Always rewrite refused; topic ops are not this pass. Pass still completes (not None).
+    assert changed is False
     async with session_factory() as session:
         repo = DocumentRepository(session)
         topic = await repo.get_memory_note(uid, topic_path("部署流程"), None)
         profile = await repo.get_memory_note(uid, CORE_MEMORY_FILE, None)
-    assert topic is not None and "先 build 再 deploy" in topic.content
+    assert topic is None
     assert profile is None  # the denied entry was never created
 
     async with session_factory() as session:

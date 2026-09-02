@@ -1,6 +1,11 @@
 import { logEvent } from "@/lib/log";
-import { diagnoseOutage } from "@/services/auth";
+import {
+  type ReadyzDiagnosis,
+  diagnoseOutage,
+  probeReadyz,
+} from "@/services/auth";
 import { useServerHealthStore } from "@/stores/serverHealth";
+import type { LogLevel } from "@shared/log-contract";
 
 /**
  * Ambient backend-connectivity heartbeat.
@@ -8,19 +13,20 @@ import { useServerHealthStore } from "@/stores/serverHealth";
  * The app used to learn the server was down only *reactively* — either at
  * startup (AuthGate bootstrap) or when a request happened to fail. So a user had
  * no way to know the backend was unreachable **before** hitting send. This
- * monitor proactively probes `/readyz` on a cadence (via {@link diagnoseOutage},
+ * monitor proactively probes `/readyz` on a cadence (via {@link probeReadyz},
  * the same readiness diagnosis the AuthGate uses), tightening while offline /
  * degraded so a recovery (or a confirming outage) is picked up quickly, and also
  * probes on tab focus / browser online-offline events. It folds each verdict into
  * {@link useServerHealthStore}, which the composer's connection indicator renders.
  *
- * `diagnoseOutage` uses a raw `fetch` (not the `api` layer), so these background
+ * The probe uses a raw `fetch` (not the `api` layer), so these background
  * probes never trip the AuthGate's reactive full-screen outage takeover — the
  * ambient indicator and the hard-outage screen stay independent.
  *
  * Hysteresis (align with `deploy/scripts/healthcheck.sh` FAIL_THRESHOLD=3 and
  * common k8s probe defaults): a single flaky `/readyz` does **not** flip the UI
- * to offline. Soft failures log `server_health.probe_failed`; only after
+ * to offline. Soft failures log `server_health.probe_failed` (1st=`debug`,
+ * later=`warn`, with `kind`/`duration_ms`); only after
  * {@link SERVER_HEALTH_FAILURE_THRESHOLD} consecutive failures (or an already-
  * offline refresh) do we mark offline. Recovery is eager (one success → online).
  * True browser `offline` and a mid-session API outage that `/readyz` confirms
@@ -59,13 +65,36 @@ function currentProbeDelayMs(): number {
   return ONLINE_INTERVAL_MS;
 }
 
+function softProbeFailedLevel(failures: number): LogLevel {
+  return failures <= 1 ? "debug" : "warn";
+}
+
+function probeFailedFields(
+  failures: number,
+  diagnosis: Extract<ReadyzDiagnosis, { ok: false }>,
+  store: { status: string; lastOkAt: number | null },
+): Record<string, unknown> {
+  return {
+    consecutive_failures: failures,
+    failure_threshold: SERVER_HEALTH_FAILURE_THRESHOLD,
+    reason: diagnosis.reason,
+    kind: diagnosis.kind,
+    duration_ms: diagnosis.duration_ms,
+    ...(diagnosis.http_status != null
+      ? { http_status: diagnosis.http_status }
+      : {}),
+    status: store.status,
+    last_ok_at: store.lastOkAt,
+  };
+}
+
 /** Probe `/readyz` once (deduped) and fold the verdict into the health store. */
 export async function probeServerHealth(): Promise<boolean> {
   if (probeInFlight) return probeInFlight;
   probeInFlight = (async () => {
-    const reason = await diagnoseOutage(); // null = healthy
+    const diagnosis = await probeReadyz();
     const store = useServerHealthStore.getState();
-    if (reason === null) {
+    if (diagnosis.ok) {
       const wasDegraded = consecutiveFailures > 0;
       consecutiveFailures = 0;
       if (wasDegraded && store.status !== "offline") {
@@ -85,18 +114,16 @@ export async function probeServerHealth(): Promise<boolean> {
       failures >= SERVER_HEALTH_FAILURE_THRESHOLD ||
       store.status === "offline"
     ) {
-      store.markOffline(reason, "heartbeat", {
+      store.markOffline(diagnosis.reason, "heartbeat", {
         consecutive_failures: failures,
       });
       return false;
     }
-    logEvent("warn", "server_health.probe_failed", {
-      consecutive_failures: failures,
-      failure_threshold: SERVER_HEALTH_FAILURE_THRESHOLD,
-      reason,
-      status: store.status,
-      last_ok_at: store.lastOkAt,
-    });
+    logEvent(
+      softProbeFailedLevel(failures),
+      "server_health.probe_failed",
+      probeFailedFields(failures, diagnosis, store),
+    );
     return false;
   })().finally(() => {
     probeInFlight = null;

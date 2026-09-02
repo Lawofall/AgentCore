@@ -6,10 +6,12 @@ vi.mock("@/lib/log", () => ({
 
 vi.mock("@/services/auth", () => ({
   diagnoseOutage: vi.fn(),
+  probeReadyz: vi.fn(),
 }));
 
 import { logEvent } from "@/lib/log";
-import { diagnoseOutage } from "@/services/auth";
+import { diagnoseOutage, probeReadyz } from "@/services/auth";
+import type { ReadyzDiagnosis } from "@/services/auth";
 import {
   SERVER_HEALTH_FAILURE_THRESHOLD,
   confirmMidSessionOutage,
@@ -20,13 +22,27 @@ import { useServerHealthStore } from "@/stores/serverHealth";
 
 const logEventMock = vi.mocked(logEvent);
 const diagnoseOutageMock = vi.mocked(diagnoseOutage);
+const probeReadyzMock = vi.mocked(probeReadyz);
 
 const OUTAGE_REASON = "连不上 AgentCore 服务，请稍后重试。";
+
+function unreachableDiagnosis(
+  extras: Partial<Extract<ReadyzDiagnosis, { ok: false }>> = {},
+): ReadyzDiagnosis {
+  return {
+    ok: false,
+    reason: OUTAGE_REASON,
+    kind: "network",
+    duration_ms: 8,
+    ...extras,
+  };
+}
 
 describe("serverHealth probe hysteresis + api outage confirm", () => {
   beforeEach(() => {
     logEventMock.mockReset();
     diagnoseOutageMock.mockReset();
+    probeReadyzMock.mockReset();
     resetServerHealthProbeStateForTests();
     useServerHealthStore.setState({
       status: "checking",
@@ -38,18 +54,20 @@ describe("serverHealth probe hysteresis + api outage confirm", () => {
   });
 
   it("does not mark offline before consecutive failure threshold", async () => {
-    diagnoseOutageMock.mockResolvedValue(OUTAGE_REASON);
+    probeReadyzMock.mockResolvedValue(unreachableDiagnosis());
 
     for (let i = 1; i < SERVER_HEALTH_FAILURE_THRESHOLD; i++) {
       await expect(probeServerHealth()).resolves.toBe(false);
       expect(useServerHealthStore.getState().status).toBe("checking");
       expect(logEventMock).toHaveBeenCalledWith(
-        "warn",
+        i <= 1 ? "debug" : "warn",
         "server_health.probe_failed",
         expect.objectContaining({
           consecutive_failures: i,
           failure_threshold: SERVER_HEALTH_FAILURE_THRESHOLD,
           reason: OUTAGE_REASON,
+          kind: "network",
+          duration_ms: 8,
         }),
       );
     }
@@ -59,7 +77,7 @@ describe("serverHealth probe hysteresis + api outage confirm", () => {
   });
 
   it("marks offline on the Nth consecutive heartbeat failure", async () => {
-    diagnoseOutageMock.mockResolvedValue(OUTAGE_REASON);
+    probeReadyzMock.mockResolvedValue(unreachableDiagnosis());
 
     for (let i = 1; i < SERVER_HEALTH_FAILURE_THRESHOLD; i++) {
       await probeServerHealth();
@@ -80,9 +98,9 @@ describe("serverHealth probe hysteresis + api outage confirm", () => {
   });
 
   it("resets the soft-failure streak on a healthy probe without offline edge", async () => {
-    diagnoseOutageMock
-      .mockResolvedValueOnce(OUTAGE_REASON)
-      .mockResolvedValueOnce(null);
+    probeReadyzMock
+      .mockResolvedValueOnce(unreachableDiagnosis())
+      .mockResolvedValueOnce({ ok: true, duration_ms: 4 });
 
     await probeServerHealth();
     expect(useServerHealthStore.getState().status).toBe("checking");

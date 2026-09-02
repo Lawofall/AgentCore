@@ -19,7 +19,6 @@ from agentcore.runtime.runs.contract import (
     ContractVerdict,
     handoff_expectation_met,
     has_salvageable_half_product,
-    node_has_dependents,
     synthesize_debrief,
     worker_expects_handoff,
 )
@@ -109,12 +108,11 @@ def build_terminal_run_state(
     # (best-effort; None when it finished without one) so downstream dep injection / CEO
     # synthesis read the author's own 结论 + 建议下一步 instead of re-deriving them from
     # prose. Contract misses stay COMPLETED with warnings and still carry this brief.
-    # Nodes that expect a handoff (has dependents, or leaf after substantial work) but
-    # still lack a minimum-quality brief get an engine-synthesized degraded debrief so
-    # CEO / delivery_status can see「汇报不完整」. Upstream: only when salvageable
-    # half-product (body / disk / qualified brief) — empty inventory must not mint an
-    # empty ``degraded_synth``. Leaf substantial (tools / longer body): always stamp
-    # degraded when missing.
+    # Nodes that expect a handoff (has dependents) but still lack a minimum-quality
+    # brief get an engine-synthesized degraded debrief so CEO / delivery_status can
+    # see「汇报不完整」. Only when salvageable half-product (body / disk / qualified
+    # brief) — empty inventory must not mint an empty ``degraded_synth``. Leaves
+    # are not gated: missing brief stays missing (CEO reads body or landed paths).
     debrief = debrief_from_transcript(messages)
     products = merge_file_products(
         file_products_from_transcript(messages),
@@ -122,21 +120,11 @@ def build_terminal_run_state(
     )
     touched = [p.path for p in products]
     author_brief = debrief
-    expects_handoff = worker_expects_handoff(
-        env.plan,
-        spec.run_id,
-        content=content,
-        messages=messages,
-        files_touched=touched,
-    )
-    has_dependents = node_has_dependents(env.plan, spec.run_id)
-    # Debate speech (research_then_draft): empty发言不得靠 leaf handoff 降级合成冒充正文。
-    can_synth = has_salvageable_half_product(content, touched, author_brief) or (
-        expects_handoff and not has_dependents and not spec.research_then_draft
-    )
+    expects_handoff = worker_expects_handoff(env.plan, spec.run_id)
+    can_synth = has_salvageable_half_product(content, touched, author_brief)
     if (
         expects_handoff
-        and not handoff_expectation_met(debrief, for_dependents=has_dependents)
+        and not handoff_expectation_met(debrief)
         and can_synth
     ):
         debrief = synthesize_debrief(content, touched)
@@ -182,7 +170,7 @@ def build_terminal_run_state(
     # 认 tool_ctx.landed_artifact_kinds（跨 replace 存活）；勿用 has_landed_files /
     # 泛 files_touched（骨架落盘会误豁免）。地板固定非空（不跟合同字数字段）。
     # 非 prose：正文空但 debrief.summary 在 → 先升格再验地板。
-    # prose + 有下游：summary 不算正文，禁止升格顶地板。
+    # prose + 有下游：便条不算交付正文，禁止升格顶地板。
     from agentcore.runtime.runs.research_quality import (
         brief_may_satisfy_body_floor,
         promote_brief_to_deliverable,
@@ -201,7 +189,8 @@ def build_terminal_run_state(
         brief_summary = str((debrief or {}).get("summary") or "").strip()
         if brief_summary:
             candidate = promote_brief_to_deliverable(
-                brief_summary, (debrief or {}).get("key_points")
+                brief_summary,
+                (debrief or {}).get("key_points"),
             )
             if upstream_body_floor_satisfied(
                 body_chars=len(candidate),

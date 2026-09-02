@@ -6,8 +6,9 @@
 另起一行；禁止按能力复写成「装包事实 / 执行事实 / Host / MCP / 浏览器事实」散文。
 「该怎么做 / 禁止什么 / 怎么装上」的 HOW：
 按需面（host / run / browser / 区外授权）归 consult（``capability_how_suffix``；
-run HOW → ``consult(run)``）；本机进桌 / 通道复检 / 打开本对话 / 授权姿势 / 空桌 /
-Office / 路径 / 约定文档布局 HOW 归 ``team_delivery_env``；产物出口 UI 归 ``product_help``；
+run HOW → ``consult(run)``）；本机进桌 / 通道复检 / 打开本对话 / 授权姿势 /
+Office / 路径 / 约定文档布局 HOW 归 ``team_delivery_env``；空桌 when-to-use 归
+``mkdir`` description，空桌操作事实（可见顶层空）当场进 ``<工作区>``；产物出口 UI 归 ``product_help``；
 跨文件夹百科归 ``team_cross_folder``；出卡 HOW 归 ``asking_the_user``；git 无仓政策归 git 工具描述；其余归共享基座。
 因此这里的用例成对写：事实留在 ``out``，HOW 断言指向 consult / skill / 基座/核。
 """
@@ -212,8 +213,9 @@ def test_cloud_scratch_facts():
     assert "禁猜最近" not in hint
     delivery = _TEAM_DELIVERY_ENV
     assert "【空桌落盘】" not in hint
-    assert "工程壳" in delivery
-    assert "同名" in delivery and ("顶层" in delivery or "再套" in delivery)
+    assert "【空桌勿套工程壳】" not in delivery
+    assert "工程壳" not in delivery
+    assert "create_folder" in delivery and "桌内工程根" in delivery
     assert "要不要再套一层" not in delivery
     cross = _TEAM_CROSS_FOLDER
     assert "list_folders" in cross and "resolve_folder" in cross
@@ -223,7 +225,7 @@ def test_cloud_scratch_facts():
     assert "scratch" in cross
     assert "协作图不改" in cross or "并行支线" in cross
     assert "先建后派" in cross
-    assert "拒后禁塌缩" in cross
+    assert "拒后禁塌缩" not in cross
     assert "list_folder_dir" in cross and "read_folder_file" in cross
     assert "认桌" in cross or "抽样" in cross
     assert "云端读不到本地" in cross
@@ -340,6 +342,41 @@ def test_cloud_scratch_facts():
     assert "init_baseline" in GitTool().schema.description
 
 
+def test_empty_desk_adds_operational_root_fact():
+    """空桌操作事实当场进根行；满桌 / 未探测不加；事实层不写 mkdir HOW。"""
+    empty = build_workspace_context(
+        _FakeBackend("server"),
+        desktop_online=True,
+        run_enabled=False,
+        desk_visibly_empty=True,
+    )
+    assert "本文件夹根即工作区根" in empty
+    assert "可见顶层空" in empty
+    assert "工程入口写在根上" in empty
+    assert "`package.json`" in empty
+    assert "mkdir" not in empty
+    assert "工程壳" not in empty
+    assert "禁止" not in empty
+    assert "本文件夹尚无用户文件" not in empty
+
+    full = build_workspace_context(
+        _FakeBackend("server"),
+        desktop_online=True,
+        run_enabled=False,
+        desk_visibly_empty=False,
+    )
+    assert "本文件夹根即工作区根" in full
+    assert "可见顶层空" not in full
+    assert "package.json" not in full
+
+    unknown = build_workspace_context(
+        _FakeBackend("server"),
+        desktop_online=True,
+        run_enabled=False,
+    )
+    assert "可见顶层空" not in unknown
+
+
 def test_cloud_folder_desk_identity_is_not_scratch():
     """已建云桌：身份是云端文件夹，勿再写成 scratch「草稿/临时」。"""
     backend = _FakeBackend("server", root_label="我的白板")
@@ -360,7 +397,9 @@ def test_cloud_folder_desk_identity_is_not_scratch():
     hint = _CEO_CORE_HINT
     delivery = _TEAM_DELIVERY_ENV
     assert "【空桌落盘】" not in hint
-    assert "工程壳" in delivery
+    assert "【空桌勿套工程壳】" not in delivery
+    assert "工程壳" not in delivery
+    assert "create_folder" in delivery and "桌内工程根" in delivery
 
 
 def test_cloud_conv_root_stays_scratch_identity():

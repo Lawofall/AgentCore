@@ -74,6 +74,8 @@ async def rebuild_worker_prompt_for_target(
 
     exec_languages = await resolve_exec_languages(backend)
     git_fact = await detect_workspace_git(backend)
+    from agentcore.workspace.project_shell import desk_is_visibly_empty
+
     workspace_facts = build_workspace_context(
         backend,
         desktop_online=desktop_online,
@@ -84,6 +86,7 @@ async def rebuild_worker_prompt_for_target(
         desk_folder_id=folder_id,
         desk_folder_label=(getattr(backend, "root_label", None) or "").strip() or None,
         desk_is_birth=False,
+        desk_visibly_empty=await desk_is_visibly_empty(backend),
     )
     shared_base = assemble_system_prompt(
         rules_markdown=rules_markdown,

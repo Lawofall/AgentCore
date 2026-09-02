@@ -208,29 +208,6 @@ def test_long_running_command_match_ignores_async_http_poll():
     assert long_running_command_match(poll) is None
 
 
-def test_project_verify_command_match_routes_to_test_run():
-    from agentcore.tools.builtin.run_short import project_verify_command_match
-
-    assert project_verify_command_match("npm install") is not None
-    assert project_verify_command_match("pnpm install") is not None
-    assert project_verify_command_match("pip install -r requirements.txt") is not None
-    assert project_verify_command_match("uv sync") is not None
-    assert project_verify_command_match("uv pip install requests") is not None
-    assert project_verify_command_match("poetry install") is not None
-    assert project_verify_command_match("python -m pip install flask") is not None
-    assert project_verify_command_match("npx tsc --noEmit") is not None
-    assert project_verify_command_match("tsc --noEmit") is not None
-    assert project_verify_command_match("npm run build") is not None
-    assert project_verify_command_match("npm test") is not None
-    assert project_verify_command_match("pytest tests/") is not None
-    # Short / lookalike — must not trip.
-    assert project_verify_command_match("print(1+1)") is None
-    assert project_verify_command_match("import { defineConfig } from 'vite'") is None
-    assert project_verify_command_match("from 'vitest'") is None
-    assert project_verify_command_match("npm run dev") is None  # long_running owns this
-    assert project_verify_command_match("import pip") is None
-
-
 def test_source_inspect_match_reexport():
     from agentcore.tools.builtin.run_short import source_inspect_match
 
@@ -307,49 +284,11 @@ async def test_code_execute_allows_pandas_after_source_inspect_gate():
     assert len(backend.requests) == 1
 
 
-async def test_code_execute_blocks_project_verify_without_sandbox():
-    backend = _FakeBackend(
-        ExecutionResult(success=True, stdout="should-not-run\n", stderr="", exit_code=0, duration_ms=1)
-    )
-    result = await execute_short(
-        {"code": "npx tsc --noEmit", "language": "bash"},
-        _ctx(backend),
-        location="local",
-    )
-
-    assert result.success is False
-    assert result.contract_failure is True
-    assert result.metadata.get("code") == "project_verify_redirect"
-    err = result.error or ""
-    assert "请用 run" in err
-    assert "test_run" not in err
-    assert "check=install" not in err
-    assert backend.requests == []
-
-
-async def test_code_execute_blocks_npm_install_to_test_run():
-    backend = _FakeBackend(
-        ExecutionResult(success=True, stdout="should-not-run\n", stderr="", exit_code=0, duration_ms=1)
-    )
-    result = await execute_short(
-        {"code": "npm install", "language": "bash"},
-        _ctx(backend),
-        location="server",
-    )
-
-    assert result.success is False
-    assert result.contract_failure is True
-    assert result.metadata.get("code") == "project_verify_redirect"
-    err = result.error or ""
-    assert "请用 run" in err
-    assert "test_run" not in err
-    assert "check=install" not in err
-    assert backend.requests == []
-
-
 @pytest.mark.parametrize(
     "code",
     [
+        "npx tsc --noEmit",
+        "npm install",
         "pip install -r requirements.txt",
         "uv sync",
         "uv pip install requests",
@@ -357,24 +296,20 @@ async def test_code_execute_blocks_npm_install_to_test_run():
         "python -m pip install flask",
     ],
 )
-async def test_code_execute_blocks_python_install_to_test_run(code: str):
+async def test_short_kernel_does_not_refuse_project_verify_commands(code: str):
+    """Classification belongs on unified ``run``; the short kernel just executes."""
     backend = _FakeBackend(
-        ExecutionResult(success=True, stdout="should-not-run\n", stderr="", exit_code=0, duration_ms=1)
+        ExecutionResult(success=True, stdout="ok\n", stderr="", exit_code=0, duration_ms=1)
     )
     result = await execute_short(
         {"code": code, "language": "bash"},
         _ctx(backend),
-        location="server",
+        location="local",
     )
 
-    assert result.success is False
-    assert result.contract_failure is True
-    assert result.metadata.get("code") == "project_verify_redirect"
-    err = result.error or ""
-    assert "请用 run" in err
-    assert "test_run" not in err
-    assert "check=install" not in err
-    assert backend.requests == []
+    assert result.success is True
+    assert (result.metadata or {}).get("code") != "project_verify_redirect"
+    assert len(backend.requests) == 1
 
 
 async def test_code_execute_blocks_long_running_without_sandbox():
@@ -397,7 +332,7 @@ async def test_code_execute_blocks_long_running_without_sandbox():
     assert backend.requests == []
 
 
-async def test_code_execute_long_running_server_message_points_to_terminal():
+async def test_code_execute_long_running_server_message_points_to_run():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="", stderr="", exit_code=0, duration_ms=1)
     )

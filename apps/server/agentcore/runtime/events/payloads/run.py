@@ -20,7 +20,7 @@ ActKind = Literal["multi_agent", "debate"]
 ActAuthorizedBy = Literal["stage_card", "auto", "preview"]
 # run_failed 可机读原因类（additive）：协作图脸优先按此类贴文案。
 # quality=内容契约/硬缺口→「未达标」；
-# format=结构/格式闸（code_audit·缺章节·JSON）→「格式未过」；
+# format=结构/格式闸（缺章节·JSON）→「格式未过」；
 # model=中断/停滞/降级交接→「模型中断」；call=LLM/超时→「调用失败」；
 # 缺省→「失败」/空 error「调用失败」。禁前端扫正文猜脸。
 RunFailureKind = Literal["quality", "format", "model", "call"]

@@ -1,6 +1,6 @@
 """Sparse workspace file listing for CEO overview + worker manifests.
 
-Default injection is relevance-first (双模式工作区 · 清单稀疏化):
+Default injection (双模式工作区 · 清单稀疏化):
 
 - **附件·含历轮** — paths under ``attachments/`` (disk-resident across turns, not
   this-message-only)
@@ -11,8 +11,8 @@ Default injection is relevance-first (双模式工作区 · 清单稀疏化):
   handled in this module
 - **项目共享其余文件** — never enumerated; one summary line with the count
 
-Project mode optionally surfaces a few newest non-attachment paths as
-「最近触达」so the model still sees recent activity without dumping the tree.
+Project mode never enumerates shared non-attachment paths — only a count
+line — so a write does not restamp five mtime samples into the CEO prefix.
 """
 
 from __future__ import annotations
@@ -27,10 +27,6 @@ from agentcore.workspace._paths import (
 )
 from agentcore.workspace.attachments import ATTACHMENTS_DIR
 from agentcore.workspace.external_mounts import EXTERNAL_PREFIX
-
-# Newest non-attachment paths kept as an explicit supplement in project mode
-# (beyond attachments). The rest collapse into the summary line.
-PROJECT_RECENT_SUPPLEMENT = 5
 
 _MATERIAL_PATH_KEYS = ("workspace_path", "path", "parsed_workspace_path")
 
@@ -146,11 +142,10 @@ def partition_sparse_paths(
 ) -> tuple[list[tuple[str, str]], int]:
     """Split an index into (labeled rows to list, remaining shared count).
 
-    ``index_paths`` should already be newest-first when order matters (project
-    supplement). Each row is ``(path, label)``:
+    Each row is ``(path, label)``:
 
     - attachments → 「附件·含历轮」
-    - bare-chat scratch / project recent supplement → 「工作区已有」/「最近触达」
+    - bare-chat scratch → 「工作区已有」
     - ``remaining`` is the count of shared project files *not* listed (0 for 裸聊)
     """
     attachments: list[str] = []
@@ -167,11 +162,8 @@ def partition_sparse_paths(
         rows.extend((p, "工作区已有") for p in others)
         return rows, 0
 
-    # Project shared space: keep a few recent non-attachments, summarize the rest.
-    keep = others[:PROJECT_RECENT_SUPPLEMENT]
-    rows.extend((p, "最近触达") for p in keep)
-    remaining = max(0, len(others) - len(keep))
-    return rows, remaining
+    # Project shared space: attachments only; the rest collapse into the summary.
+    return rows, len(others)
 
 
 def format_remaining_summary(remaining: int) -> str:

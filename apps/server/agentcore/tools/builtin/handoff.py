@@ -1,44 +1,33 @@
-"""handoff — a worker's structured 交接简报 + finish signal (完工交接简报单一源).
+"""handoff — worker finish signal; the brief is the closing round's prose.
 
-Worker-only, terminal. Semantics: 简报 = 【接力契约 + 增量交代】. A delegated worker calls
-``handoff`` ONCE, in the SAME turn as its finished deliverable, to submit a STRUCTURED brief.
-Topology splits the brief's job (identity copy; this schema stays shared):
-- Nodes with dependents, or leaves that may land files: brief stays conclusion-bearing
-  (CEO / 下游 may only see the brief).
-- ``form=prose`` leaves: brief is relay status only；结论在正文 (CEO reads the body).
-可选 ``motion_card`` 已撤（开辩由用户点名，不靠交接卡催场）。
+Worker-only, terminal. The call itself only means「写完了」. The 便条 lives in
+that same assistant message's ``content`` (harvested by
+:func:`~agentcore.runtime.runs.serialize.debrief_from_transcript`), not in
+tool arguments — stuffing a wrap-up into JSON is how argument parse used to
+fail after a long ``file_write``.
 
-Topology (prompt + this description say the same thing; engine gate unchanged):
-- Nodes with downstream dependents **must** handoff — downstream relays on the brief
-  (executor injects one correction shot; still missing → degraded synth).
-- Leaf nodes (no dependents): call only when there is incremental briefing beyond the
-  body (assumptions / risks / next steps / files list); a short self-evident deliverable
-  may finish with a plain no-tool answer — no debrief, deliverable stands alone.
+When to call (identity + this description + engine gate say the same sentence):
+- Has dependents: **must** handoff; the closing-round prose carries the conclusion.
+- No dependents: **skip** by default; call only for incremental briefing the body
+  or files do not already carry.
 
-Why a tool, not a「## 交接简报」markdown section (its former form): the brief is structured DATA
-for READERS (下游依赖注入 / CEO 综述 / run-detail 卡), so it travels in a structured channel and is
-read straight off the call's arguments
-(:func:`~agentcore.runtime.runs.serialize.debrief_from_transcript`),
-never parsed back out of prose. The deliverable stays the worker's streamed ``content``; this tool
-carries ONLY the brief and signals the run is done — so the run-detail「输出」(the deliverable) and
-「交接简报」(this brief) can never overlap the way a retained-in-prose section did.
+Terminal by design (``ToolEffect.HANDOFF``): content of the handoff round is kept
+(Fork-B rolls back prose only before a NON-terminal tool). Write the deliverable
+first; the closing round's content is the short brief.
 
-Terminal by design (``ToolEffect.HANDOFF``): the worker writes its deliverable as content and calls
-``handoff`` in the same round to finish. A terminal effect KEEPS that round's content (only prose
-before a NON-terminal tool is rolled back as narration, Fork-B) — so ``content`` == the deliverable
-and the brief rides the tool args. ``final_text`` is normally empty (deliverable already streamed);
-when the round has 0 body chars but a non-empty brief that meets the upstream floor, ``final_text``
-carries the promoted brief so downstream still gets a readable product.
+``final_text`` stays empty — a 0-body round with a brief in content already kept
+that prose as the deliverable. Historical runs that stuffed the brief into
+arguments still harvest via serialize's args fallback.
 
 Wired into the delegated worker toolset (``build_worker_registry``) and NOT into
-``build_builtin_registry`` — so it never reaches the CEO's own toolset (``build_ceo_tool_registry``
-derives the CEO subset from the builtins) or the read-only ``GET /tools`` capability catalog,
-mirroring how ``escalate`` is wired in only where it belongs.
+``build_builtin_registry`` — so it never reaches the CEO's own toolset
+(``build_ceo_tool_registry`` derives the CEO subset from the builtins) or the
+read-only ``GET /tools`` capability catalog, mirroring how ``escalate`` is wired
+in only where it belongs.
 """
 
 from __future__ import annotations
 
-import contextlib
 from typing import Any
 
 from agentcore.core.logging import get_logger
@@ -53,20 +42,13 @@ from agentcore.tools.registration import (
 
 logger = get_logger(__name__)
 
-
-def _body_chars(context: ToolContext) -> int:
-    """Deliverable prose length for this round (0 when unset / unknown)."""
-    n = context.round_content_chars
-    return int(n) if isinstance(n, int) and n >= 0 else 0
+# Protocol ack on the tool result. Frontend HANDOFF_RECEIPT must stay in lockstep.
+# Never a user-facing peek or expand body.
+HANDOFF_RECEIPT = "已收尾。"
 
 
 class HandoffTool:
-    """The worker's structured 交接简报 + finish primitive (terminal).
-
-    Stateless: the call returns a terminal ``ToolResult`` that ends the run; the brief itself is
-    read off THIS call's arguments by the executor's transcript harvest, so the tool owns only the
-    done-signal + a short ack (the executor owns event shape / RunState, 引擎纯化).
-    """
+    """The worker's finish primitive (terminal). Brief rides closing-round content."""
 
     registration = ToolRegistration(
         surface=ToolSurface.WORKER_ONLY,
@@ -75,118 +57,31 @@ class HandoffTool:
 
     @property
     def schema(self) -> ToolSchema:
-        # Schema layer: topology one-liners + field cues. Identity only says
-        # must-vs-may-skip; field meanings stay here.
+        # Schema layer: when-to-use + channel + writing shape.
+        # Identity only says must-vs-may; empty parameters — do not restore JSON fields.
         return ToolSchema(
             name=HANDOFF_TOOL_NAME,
             description=(
-                "提交交接简报并收尾。简报=【接力契约 + 增量交代】（给主管/下游，不是正文复述）。"
-                "有下游：完成后必须调用。无下游：有工具活动或较长交付须交短摘要；短答自明可省。"
-                "先写完交付再同一轮调用。form=files：summary 须含路径。"
+                "收尾。便条写在这一轮正文（给主管/下游）。"
+                "有下游：必须调用；一句话结论（现在什么已成立）；"
+                "下一棒要接的路径/数字/决定。便条 ≠ 文件说明。"
+                "无下游：默认不调用；仅盘上没有的假设/风险/未验证才补。"
+                "先写完交付再调用。"
             ),
-            parameters={
-                "type": "object",
-                "properties": {
-                    "summary": {
-                        "type": "string",
-                        "maxLength": 300,
-                        "description": (
-                            "结论：一句话说清你这次做出了什么 / 核心结论（短句，勿贴长文）。"
-                        ),
-                    },
-                    "key_points": {
-                        "type": "array",
-                        "maxItems": 4,
-                        "items": {"type": "string", "maxLength": 120},
-                        "description": (
-                            "关键要点：下游或主管最该知道的 2-4 条短句（具体数字 / 文件路径 / "
-                            "关键决定，别空泛；勿塞长文）。"
-                        ),
-                    },
-                    "assumptions": {
-                        "type": "string",
-                        "maxLength": 300,
-                        "description": (
-                            "关键假设：信息不足时你采用的关键假设（没有就省略此条；短述即可）。"
-                        ),
-                    },
-                    "next_steps": {
-                        "type": "string",
-                        "maxLength": 300,
-                        "description": (
-                            "建议下一步：基于你这一环的发现，团队 / 用户接下来值得考虑做什么"
-                            "（没有就省略此条；短述即可）。"
-                        ),
-                    },
-                },
-                "required": ["summary"],
-            },
+            parameters={"type": "object", "properties": {}, "required": []},
             category=ToolCategory.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
-        from agentcore.runtime.engine.tool_protocol_sanitize import (
-            sanitize_protocol_text,
-            sanitize_tool_args,
-        )
-
-        # Defense in depth: strip vendor protocol tags from brief fields (tool_exec
-        # already cleans before invoke; harvest path may still see raw transcript).
-        cleaned = sanitize_tool_args(arguments) if isinstance(arguments, dict) else arguments
-        if isinstance(cleaned, dict):
-            arguments = cleaned
-            # key_points: tolerate markdown bullet string / JSON-array-as-string via the
-            # shared coerce path (ask_user.schema); truly bad JSON still fails at parse.
-            if "key_points" in arguments:
-                from agentcore.tools.builtin.ask_user.schema import (
-                    ListArgError,
-                    coerce_list_arg,
-                )
-
-                with contextlib.suppress(ListArgError):
-                    arguments["key_points"] = [
-                        str(p).strip()
-                        for p in coerce_list_arg(
-                            arguments.get("key_points"),
-                            field="key_points",
-                            allow_markdown_bullets=True,
-                        )
-                        if str(p).strip()
-                    ]
-        summary = sanitize_protocol_text(str(arguments.get("summary") or "")).strip()
-        # 空交不再硬拒（实测误伤多，行业也不拦「没写出东西」）。
-        # 正文空时仍可把 summary 升格成下游可读正文，有真实正文则不覆盖。
-        promoted_body = ""
-        body_chars = _body_chars(context)
-        if body_chars == 0 and summary:
-            from agentcore.runtime.runs.research_quality import (
-                brief_may_satisfy_body_floor,
-                promote_brief_to_deliverable,
-            )
-
-            form = context.handoff_deliverable_form
-            if brief_may_satisfy_body_floor(deliverable_form=form):
-                promoted_body = promote_brief_to_deliverable(
-                    summary, arguments.get("key_points")
-                )
-        logger.info(
-            "worker.handoff",
-            run_id=context.run_id,
-            has_summary=bool(summary),
-            chars=len(summary),
-            body_chars=body_chars,
-            has_motion_card=False,
-            promoted_body=bool(promoted_body),
-        )
-        # Terminal (HANDOFF): 有真实正文时 final_text 为空（交付已在 streamed content）。
-        # 同轮 0 字且简报升格成功时，final_text=候选正文，供引擎并入下游可读产出。
-        # The structured brief is still read off THIS call's arguments by
-        # serialize.debrief_from_transcript.
+        _ = arguments
+        n = context.round_content_chars
+        body_chars = int(n) if isinstance(n, int) and n >= 0 else 0
+        logger.info("worker.handoff", run_id=context.run_id, body_chars=body_chars)
         return ToolResult(
             tool_call_id="",
             success=True,
-            output="已收尾并提交交接简报。",
+            output=HANDOFF_RECEIPT,
             effect=ToolEffect.HANDOFF,
-            final_text=promoted_body,
+            final_text="",
         )

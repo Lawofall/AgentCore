@@ -15,7 +15,7 @@ import pytest
 
 from agentcore.conversation.log_export import (
     MAX_CHUNK_CHARS,
-    chunk_transcript,
+    page_conversation,
     render_conversation_log,
 )
 from agentcore.runtime.resolve.prepare import _wire_conversation_log_tools
@@ -145,45 +145,140 @@ def test_ceo_assemble_and_wire_holds_log_tools():
         for d in chat_tools.get_openai_definitions()
     }
     assert "desktop_notify" not in offered
-    assert "search_conversations" not in offered
-    assert "read_conversation" not in offered
+    assert "search_conversations" in offered
+    assert "read_conversation" in offered
+
+
+def _conv(**kw: object) -> SimpleNamespace:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    base = dict(
+        id="c1",
+        title="旧案讨论",
+        created_at=now,
+        updated_at=now,
+    )
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def _msg(
+    *,
+    id: str = "m1",
+    role: str = "user",
+    content: str = "",
+    **kw: object,
+) -> SimpleNamespace:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    base = dict(
+        id=id,
+        role=role,
+        content=content,
+        reasoning_content=None,
+        attachments=None,
+        evidence_ledger=None,
+        citations=None,
+        usage=None,
+        created_at=now,
+    )
+    base.update(kw)
+    return SimpleNamespace(**base)
 
 
 # --- log_export chunking / output_limit --------------------------------------
 
 
-def test_chunk_and_reassemble_full_transcript():
-    conv = SimpleNamespace(
-        id="c1",
-        title="旧案讨论",
-        created_at=datetime(2026, 1, 1, tzinfo=UTC),
-        updated_at=datetime(2026, 1, 2, tzinfo=UTC),
-    )
-    # Force multi-chunk by using a tiny max_chars.
-    body = "ABCDEFGHIJ" * 50  # 500 chars
-    full = f"# title\n\n{body}\n"
-    messages: list = []
-    first = chunk_transcript(full, conversation=conv, messages=messages, max_chars=120)
+def test_page_and_reassemble_by_message():
+    conv = _conv()
+    messages = [
+        _msg(id="m1", content="first-page-user"),
+        _msg(id="m2", role="assistant", content="first-page-asst"),
+        _msg(id="m3", content="second-page-user"),
+    ]
+    first = page_conversation(conv, messages, max_chars=80)
     assert first.truncated is True
-    assert first.next_cursor
-    second = chunk_transcript(
-        full,
-        conversation=conv,
-        messages=messages,
-        cursor=first.next_cursor,
-        max_chars=120,
-    )
-    # Keep reading until done.
+    assert first.next_cursor and first.next_cursor.startswith("m:")
     pieces = [first.transcript]
     cursor = first.next_cursor
     while cursor:
-        page = chunk_transcript(
-            full, conversation=conv, messages=messages, cursor=cursor, max_chars=120
-        )
+        page = page_conversation(conv, messages, cursor=cursor, max_chars=80)
         pieces.append(page.transcript)
         cursor = page.next_cursor
-    assert "".join(pieces) == full
-    assert second.transcript  # smoke
+    joined = "".join(pieces)
+    assert "first-page-user" in joined
+    assert "first-page-asst" in joined
+    assert "second-page-user" in joined
+    assert first.message_offset == 0
+    assert "second-page-user" not in first.transcript
+
+
+def test_dialogue_omits_process_layer():
+    conv = _conv(title="T")
+    msg = _msg(
+        id="m1",
+        role="assistant",
+        content="成稿正文",
+        reasoning_content="思考片段",
+        evidence_ledger=[{"id": "#r1", "title": "证1"}],
+        citations=[{"title": "源", "url": "https://ex.ample"}],
+    )
+    journal = [
+        {
+            "kind": "tool_use_start",
+            "payload": {"tool_name": "web_search", "arguments": {"query": "q"}},
+        },
+        {
+            "kind": "tool_use_end",
+            "payload": {"tool_name": "web_search", "success": True, "output": "hits"},
+        },
+    ]
+    chunk = page_conversation(conv, [msg], {"m1": journal}, focus="dialogue")
+    assert "#### Tool:" not in chunk.transcript
+    assert "思考片段" not in chunk.transcript
+    assert "成稿正文" in chunk.transcript
+    assert chunk.focus == "dialogue"
+
+
+def test_process_includes_tools_and_thinking():
+    conv = _conv(title="T")
+    msg = _msg(
+        id="m1",
+        role="assistant",
+        content="成稿正文",
+        reasoning_content="思考片段",
+    )
+    journal = [
+        {
+            "kind": "tool_use_start",
+            "payload": {"tool_name": "web_search", "arguments": {"query": "q"}},
+        },
+    ]
+    chunk = page_conversation(conv, [msg], {"m1": journal}, focus="process")
+    assert "#### Tool: web_search" in chunk.transcript
+    assert "思考片段" in chunk.transcript
+    assert chunk.focus == "process"
+
+
+def test_query_seeks_to_first_matching_message():
+    conv = _conv()
+    messages = [
+        _msg(id="m1", content="开场闲聊"),
+        _msg(id="m2", role="assistant", content="好的"),
+        _msg(id="m3", content="讨论做一个白板软件"),
+        _msg(id="m4", role="assistant", content="先定画布模型"),
+    ]
+    chunk = page_conversation(conv, messages, query="白板")
+    assert chunk.query_hit is True
+    assert chunk.message_offset == 2
+    assert "白板软件" in chunk.transcript
+    assert "开场闲聊" not in chunk.transcript
+
+
+def test_legacy_char_cursor_restarts_at_zero():
+    conv = _conv()
+    messages = [_msg(id="m1", content="hello"), _msg(id="m2", content="later")]
+    chunk = page_conversation(conv, messages, cursor="c:100000")
+    assert chunk.message_offset == 0
+    assert "hello" in chunk.transcript
 
 
 def test_tool_result_output_limit_covers_chunk_not_default_4k():
@@ -314,9 +409,30 @@ async def test_read_soft_miss_for_other_or_deleted(monkeypatch):
         "agentcore.tools.builtin.read_conversation.async_session_factory",
         lambda: _AsyncCm(),
     )
-    result = await tool.execute({"conversation_id": "other"}, _ctx())
+    result = await tool.execute(
+        {"conversation_id": "11111111-1111-4111-8111-111111111111"},
+        _ctx(),
+    )
     assert result.success is True
     assert "无法打开" in result.output
+
+
+@pytest.mark.asyncio
+async def test_read_invalid_id_is_soft_miss_without_db(monkeypatch):
+    tool = ReadConversationTool()
+
+    def _boom_factory():
+        raise AssertionError("non-UUID must not open a DB session")
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.async_session_factory",
+        _boom_factory,
+    )
+    for cid in ("x", "nonexistent"):
+        result = await tool.execute({"conversation_id": cid}, _ctx())
+        assert result.success is True
+        assert "无法打开" in result.output
+        assert result.display["conversation_id"] == cid
 
 
 class _AsyncCm:
@@ -365,11 +481,25 @@ async def test_search_excludes_host_and_respects_global_chats(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_by_id_non_uuid_skips_postgres():
+    from agentcore.db.repositories.conversations import ConversationRepository
+
+    class BoomSession:
+        async def execute(self, stmt):
+            raise AssertionError("non-UUID must not hit Postgres")
+
+    repo = ConversationRepository(BoomSession())  # type: ignore[arg-type]
+    assert await repo.get_by_id("x", user_id="u1") is None
+    assert await repo.get_by_id("nonexistent", user_id="u1") is None
+    assert await repo.get_by_id_unscoped("x") is None
+
+
+@pytest.mark.asyncio
 async def test_read_sets_output_limit_above_chunk(monkeypatch):
     tool = ReadConversationTool()
     now = datetime(2026, 1, 1, tzinfo=UTC)
     conv = SimpleNamespace(
-        id="past-1",
+        id="11111111-1111-4111-8111-111111111111",
         title="旧对话",
         mode="chat",
         created_at=now,
@@ -426,13 +556,78 @@ async def test_read_sets_output_limit_above_chunk(monkeypatch):
         lambda: _AsyncCm(),
     )
 
-    result = await tool.execute({"conversation_id": "past-1"}, _ctx())
+    result = await tool.execute(
+        {"conversation_id": "11111111-1111-4111-8111-111111111111"},
+        _ctx(),
+    )
     assert result.success is True
     assert result.output_limit is not None
     assert result.output_limit >= len(result.output)
     assert len(result.output) > 4000
     # Default 4k truncate must not have fired.
     assert long_body[:100] in result.output or "Z" * 100 in result.output
+    assert "focus: dialogue" in result.output
+    assert result.display["depth"] == "dialogue"
+
+
+@pytest.mark.asyncio
+async def test_read_default_dialogue_does_not_load_journal(monkeypatch):
+    tool = ReadConversationTool()
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    conv = SimpleNamespace(
+        id="11111111-1111-4111-8111-111111111111",
+        title="旧对话",
+        mode="chat",
+        created_at=now,
+        updated_at=now,
+    )
+    msg = _msg(id="m1", role="assistant", content="结论：用方案 B")
+
+    class FakeConvRepo:
+        def __init__(self, session):
+            pass
+
+        async def get_by_id(self, cid, *, user_id):
+            return conv
+
+    class FakeMsgRepo:
+        def __init__(self, session):
+            pass
+
+        async def list_all_for_conversation(self, cid):
+            return [msg]
+
+    class BoomJournal:
+        def __init__(self, session):
+            pass
+
+        async def load_map(self, ids):
+            raise AssertionError("dialogue focus must not load turn journal")
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.ConversationRepository",
+        FakeConvRepo,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.MessageRepository",
+        FakeMsgRepo,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.TurnJournalRepository",
+        BoomJournal,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.async_session_factory",
+        lambda: _AsyncCm(),
+    )
+
+    result = await tool.execute(
+        {"conversation_id": "11111111-1111-4111-8111-111111111111"},
+        _ctx(),
+    )
+    assert result.success is True
+    assert "方案 B" in result.output
+    assert "#### Tool" not in result.output
 
 
 @pytest.mark.asyncio
@@ -482,3 +677,144 @@ async def test_search_tool_excludes_host(monkeypatch):
     assert result.success is True
     assert "other" in result.output
     assert result.display and result.display.get("result_count") == 1
+
+
+def test_search_schema_is_folder_default_and_body_when():
+    schema = SearchConversationsTool().schema
+    assert "正文" in schema.description
+    assert "续做" in schema.description
+    scope = schema.parameters["properties"]["scope"]
+    assert scope.get("default") == "folder"
+    assert "标题或正文" in schema.parameters["properties"]["query"]["description"]
+
+
+@pytest.mark.asyncio
+async def test_search_default_scope_uses_host_folder(monkeypatch):
+    captured: dict = {}
+
+    class FakeConvRepo:
+        def __init__(self, session):
+            pass
+
+        async def search_with_projections(self, *a, **kw):
+            captured.update(kw)
+            return []
+
+    class FakeMsgRepo:
+        def __init__(self, session):
+            pass
+
+        async def list_all_for_conversation(self, cid):
+            return []
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.search_conversations.ConversationRepository",
+        FakeConvRepo,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.search_conversations.MessageRepository",
+        FakeMsgRepo,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.search_conversations.async_session_factory",
+        lambda: _AsyncCm(),
+    )
+    tool = SearchConversationsTool(folder_id="F1")
+    result = await tool.execute({"query": "oauth"}, _ctx())
+    assert result.success is True
+    assert captured.get("folder_id") == "F1"
+
+
+@pytest.mark.asyncio
+async def test_search_title_only_sql_omits_message_body():
+    from agentcore.db.repositories.conversations import ConversationRepository
+
+    captured: dict = {}
+
+    class FakeResult:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return []
+
+    class FakeSession:
+        async def execute(self, stmt):
+            captured["stmt"] = stmt
+            return FakeResult()
+
+    repo = ConversationRepository(FakeSession())  # type: ignore[arg-type]
+    await repo.search("u1", "oauth", limit=5, match_message_body=False)
+    title_sql = str(captured["stmt"]).lower()
+    assert "title" in title_sql
+    assert "content" not in title_sql
+    await repo.search("u1", "oauth", limit=5, match_message_body=True)
+    body_sql = str(captured["stmt"]).lower()
+    assert "content" in body_sql
+
+
+@pytest.mark.asyncio
+async def test_search_snippet_includes_hit_index(monkeypatch):
+    tool = SearchConversationsTool(folder_id=None)
+    rows = [
+        {
+            "conversation_id": "other",
+            "title": "白板",
+            "folder_id": None,
+            "folder_name": None,
+            "updated_at": "2026-01-01T00:00:00",
+            "message_count": 4,
+            "archived": False,
+        }
+    ]
+
+    class FakeConvRepo:
+        def __init__(self, session):
+            pass
+
+        async def search_with_projections(self, *a, **kw):
+            return rows
+
+    class FakeMsgRepo:
+        def __init__(self, session):
+            pass
+
+        async def list_all_for_conversation(self, cid):
+            del cid
+            return [
+                _msg(id="m1", content="开场"),
+                _msg(id="m2", role="assistant", content="嗯"),
+                _msg(id="m3", content="讨论做一个白板软件"),
+            ]
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.search_conversations.ConversationRepository",
+        FakeConvRepo,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.search_conversations.MessageRepository",
+        FakeMsgRepo,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.search_conversations.async_session_factory",
+        lambda: _AsyncCm(),
+    )
+
+    result = await tool.execute({"query": "白板"}, _ctx())
+    assert result.success is True
+    assert "第 3/4 条" in result.output
+    assert "白板软件" in result.output
+
+
+@pytest.mark.asyncio
+async def test_read_rejects_invalid_focus():
+    tool = ReadConversationTool()
+    result = await tool.execute(
+        {
+            "conversation_id": "11111111-1111-4111-8111-111111111111",
+            "focus": "dump",
+        },
+        _ctx(),
+    )
+    assert result.success is False
+    assert "focus" in (result.error or "")

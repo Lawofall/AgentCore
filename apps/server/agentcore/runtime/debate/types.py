@@ -787,8 +787,8 @@ class DebateResult:
     def to_ceo_output(self) -> str:
         """折算回 CEO 循环的 markdown：决策简报 + L1 焦点小结流（按形态调顺序）。
 
-        尾部只提醒用自己的声音收尾并指向 skill；铁律与跨维骨架正文留在
-        ``debate_and_review`` / ``deep_multi_lens_research``，不贴进 tool result。
+        尾部只提醒用自己的声音收尾并指向 skill；铁律正文留在
+        ``debate_and_review``，不贴进 tool result。
         """
         brief_md = _render_brief(self.brief, self.config)
         narrative_md = _render_narrative_l1(self.rounds)
@@ -801,7 +801,7 @@ class DebateResult:
         tail = (
             "\n\n---\n以上为本场辩论的**决策简报 + 交锋叙事线**（用户可在界面展开逐轮攻防与"
             "各方全文）。用自己的声音收尾，不要粘贴本段指令。"
-            "收尾铁律与跨维骨架见 skill `debate_and_review` / `deep_multi_lens_research`。"
+            "收尾铁律见 skill `debate_and_review`。"
         )
         return head + "\n\n".join(p for p in body if p.strip()) + tail
 

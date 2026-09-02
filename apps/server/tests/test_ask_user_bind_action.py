@@ -714,6 +714,8 @@ def test_ask_user_organize_how_lives_in_skill():
     assert "grant_organize_folder" in desk.body
     assert "consult(external_mount_readonly)" in desk.body
     assert "consult(external_mount_readonly)" in ask.body
+    assert "consult(team_delivery_env)" in ask.body
     assert "整题授权" in ask.body
-    assert "区外旁根" in ask.body
+    assert "区外旁根" in desk.body
+    assert "区外旁根" in granted
     assert "非写当前工作区" in granted

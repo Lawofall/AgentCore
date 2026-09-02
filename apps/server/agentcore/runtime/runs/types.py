@@ -82,21 +82,22 @@ class Deliverable:
     output_format: str = "text"
     required_sections: list[str] = field(default_factory=list)
     # Structured deliverable form (always set after parse): ``prose`` = text body
-    # only; ``files`` = land documents (default ``工作稿/``); ``workspace`` = edit
-    # the user project tree in place (swallows ``workspace_native``; no dossier
-    # landing). Missing / empty / invalid form → ``files``. Write-disk recognition
-    # = ``files`` ∪ ``workspace`` ∪ non-empty ``artifacts``.
+    # only; ``files`` = land documents (bare filenames join under ``工作稿/``;
+    # empty artifacts do not pin a dir); ``workspace`` = edit the user project
+    # tree in place (swallows ``workspace_native``; no dossier landing). Missing /
+    # empty / invalid form → ``files``. Write-disk recognition = ``files`` ∪
+    # ``workspace`` ∪ non-empty ``artifacts``.
     form: Literal["prose", "files", "workspace"] = "files"
     # Declarative artifact path list (files / dirs / globs). When non-empty, the
     # contract gate reconciles each pattern against the live workspace (existence),
     # and a batch that declares any artifacts auto-enables completion acceptance.
     # Omit = no path enforcement.
     artifacts: list[str] = field(default_factory=list)
-    # Dossier landing directory (workspace-relative, no trailing slash). Runtime may
-    # fill from ``stage_dirs`` when form=files / files_written is dossier-semantic;
-    # worker picks filenames under this dir. Acceptance: empty artifacts →
-    # prefix-match this dir; non-empty artifacts → exact / trailing-/ / glob on
-    # those paths only (this field is not a fallback).
+    # Dossier landing directory (workspace-relative, no trailing slash). Runtime
+    # fills from explicit ``artifact_dir``, derived docs paths, or bare filenames
+    # (join under ``工作稿/``). Empty artifacts leave this empty. Acceptance:
+    # empty artifacts → no path pin; non-empty artifacts → exact / trailing-/ /
+    # glob on those paths only (this field is not a fallback).
     artifact_dir: str = ""
     # Playbook-internal alias swallowed into ``form=workspace`` at parse
     # (``form=workspace`` ⇔ no dossier landing). Leftover ``artifact_dir`` must
@@ -112,9 +113,6 @@ class Deliverable:
     # 省略 / None = 现状（每次合同检查都跑引用闸）。draft 仅内部态，不进
     # ``delivery_status.artifacts`` / ``delivered_files``。
     citation_mode: Literal["two_phase"] | None = None
-    # ``code_audit`` 报告结构闸（L2b）：验配套 ``*.audit.json`` 字段语义
-    # （未读全不得中+、高须触发路径等）。与成篇审计硬门正交。
-    code_audit_gate: bool = False
 
     def __post_init__(self) -> None:
         if self.form not in DELIVERABLE_FORMS:
@@ -483,16 +481,12 @@ class RunState:
     # CEO synthesis folds these into a structured ``tool_failures`` section — not a hard
     # gate (run may still COMPLETED). Distinct from ``warnings`` (contract soft-fails).
     tool_failures: list[dict[str, Any]] = field(default_factory=list)
-    # 完工交接简报 (worker → 下游/CEO): a structured wrap-up the worker submits by calling the
-    # ``handoff`` terminal tool (一句话结论 / 关键要点 / 采用的假设 / 建议下一步), harvested once
-    # from that tool call at run finish (mirrors ``files_touched`` / ``escalations`` — all read
-    # off the transcript). It is structured DATA, never re-parsed out of the prose, so the output
-    # stays the pure deliverable and the brief can't overlap it. Lets a downstream dep block LEAD
-    # with the author's own 结论 — most likely to survive budget-trim, cheapest to read — and the
-    # CEO aggregate surface 建议下一步 to relay to the user, instead of every reader re-deriving
-    # the gist from raw prose. ``None`` when the worker never called handoff (or its args were
-    # unusable; harvest degrades gracefully). Keys: summary / key_points / assumptions /
-    # next_steps (each present only when non-empty). Best-effort signal, never load-bearing.
+    # 完工交接简报 (worker → 下游/CEO): wrap-up the worker submits by calling
+    # ``handoff``. New rounds: ``summary`` is the closing-round 便条 (full text).
+    # Historical JSON may still carry key_points / assumptions / next_steps.
+    # Harvested once at run finish. ``None`` when the worker never called
+    # handoff (or the round had no usable prose / args). Best-effort, never
+    # load-bearing.
     debrief: dict[str, Any] | None = None
     usage: dict[str, int] = field(default_factory=dict)
     cost: dict[str, int] = field(default_factory=dict)

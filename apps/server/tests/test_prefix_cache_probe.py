@@ -806,9 +806,6 @@ def test_a_growing_source_ledger_is_attributable_to_its_own_section():
     def _turn(sources: str) -> None:
         build_chat_system_prompt(
             ceo_prompt="CEO",
-            working_set="",
-            recent_team_graph="",
-            prior_delivery_gaps="",
             prior_delegate_retry="",
             attachment_context="",
             registered_sources=sources,

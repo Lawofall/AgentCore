@@ -62,6 +62,8 @@
   --shadow-raised: var(--elevation-raised);
   --shadow-overlay: var(--elevation-overlay);
   --shadow-modal: var(--elevation-modal);
+  --duration-fast: var(--motion-duration-fast);
+  --duration-normal: var(--motion-duration);
 }
 
 /* Semantic OKLCH values: @agentcore/design-tokens/tokens.css (imported above). */
@@ -128,6 +130,24 @@
 }
 .markdown-body p:last-child {
   margin-bottom: 0;
+}
+
+/* Live-answer tail caret (ChatGPT-style). Not a typewriter — rAF still owns
+ * token arrival. Thinking / muted markdown do not set data-stream-caret. */
+.markdown-body[data-stream-caret] > :last-child > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 0.85em;
+  margin-left: 0.15em;
+  vertical-align: -0.1em;
+  background-color: currentColor;
+  animation: stream-caret 1.05s step-end infinite;
+}
+@keyframes stream-caret {
+  50% {
+    opacity: 0;
+  }
 }
 .markdown-body pre {
   margin: 0.75rem 0;
@@ -605,6 +625,10 @@
   }
   .react-flow__node.graph-layout-morphing {
     transition: none;
+  }
+  .markdown-body[data-stream-caret] > :last-child > :last-child::after {
+    animation: none;
+    opacity: 0.7;
   }
 }
 

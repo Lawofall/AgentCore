@@ -402,6 +402,80 @@ interface ReadinessResponse {
   database: boolean;
 }
 
+/** Why `/readyz` failed — for `server_health.probe_failed`, not user copy. */
+export type ReadyzFailureKind = "timeout" | "network" | "http" | "parse";
+
+export type ReadyzDiagnosis =
+  | { ok: true; duration_ms: number }
+  | {
+      ok: false;
+      reason: string;
+      kind: ReadyzFailureKind;
+      duration_ms: number;
+      http_status?: number;
+    };
+
+const READY_UNREACHABLE = "连不上 AgentCore 服务，请稍后重试。";
+const READY_UNAVAILABLE = "AgentCore 服务暂时不可用，请稍后重试。";
+
+function isTimeoutCause(err: unknown): boolean {
+  let cur: unknown = err;
+  for (let i = 0; i < 4 && cur != null; i++) {
+    if (cur instanceof DOMException && cur.name === "TimeoutError") return true;
+    if (cur instanceof Error && cur.name === "TimeoutError") return true;
+    if (cur instanceof NetworkError) {
+      cur = cur.detail;
+      continue;
+    }
+    break;
+  }
+  return false;
+}
+
+/**
+ * Probe `/readyz` with a classified failure. Heartbeat logs the `kind` /
+ * `duration_ms` / `http_status`; user-facing copy stays the two mass-user
+ * sentences (no「请确认数据库已启动」).
+ */
+export async function probeReadyz(): Promise<ReadyzDiagnosis> {
+  const started = Date.now();
+  const durationMs = () => Date.now() - started;
+  try {
+    const res = await fetchWithTimeout(`${BASE_URL}/readyz`, {
+      credentials: sessionCredentials(),
+    });
+    let ready: ReadinessResponse;
+    try {
+      ready = (await res.json()) as ReadinessResponse;
+    } catch {
+      return {
+        ok: false,
+        reason: READY_UNAVAILABLE,
+        kind: "parse",
+        duration_ms: durationMs(),
+        http_status: res.status,
+      };
+    }
+    if (res.ok && ready.database) {
+      return { ok: true, duration_ms: durationMs() };
+    }
+    return {
+      ok: false,
+      reason: READY_UNAVAILABLE,
+      kind: "http",
+      duration_ms: durationMs(),
+      http_status: res.status,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: READY_UNREACHABLE,
+      kind: isTimeoutCause(err) ? "timeout" : "network",
+      duration_ms: durationMs(),
+    };
+  }
+}
+
 /**
  * Probe backend readiness via `/readyz`. Returns null when everything is
  * reachable, or a user-facing reason when it isn't. Uses raw fetch so the 503
@@ -411,17 +485,8 @@ interface ReadinessResponse {
  * mid-session outage before taking over the screen.
  */
 export async function diagnoseOutage(): Promise<string | null> {
-  try {
-    const res = await fetchWithTimeout(`${BASE_URL}/readyz`, {
-      credentials: sessionCredentials(),
-    });
-    const ready = (await res.json()) as ReadinessResponse;
-    if (res.ok && ready.database) return null;
-    // Mass-user copy: no「请确认数据库已启动 / 请起后端」. Dev sees real cause in logs.
-    return "AgentCore 服务暂时不可用，请稍后重试。";
-  } catch {
-    return "连不上 AgentCore 服务，请稍后重试。";
-  }
+  const diagnosis = await probeReadyz();
+  return diagnosis.ok ? null : diagnosis.reason;
 }
 
 type DevLoginResult =

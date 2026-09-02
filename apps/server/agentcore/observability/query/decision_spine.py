@@ -691,7 +691,18 @@ def build_decision_spine(
             "source": str(start.get("event") or _PRIMARY_START_EVENT),
             "timestamp": start.get("timestamp", ""),
             "preview": start.get("preview", ""),
-            **_pick(start, ("chars", "history", "location", "via", "rounds", "message_id")),
+            **_pick(
+                start,
+                (
+                    "chars",
+                    "history",
+                    "location",
+                    "via",
+                    "stream_path_reason",
+                    "rounds",
+                    "message_id",
+                ),
+            ),
         }
 
     if turn_metrics is not None:
@@ -909,6 +920,8 @@ def format_decision_spine(spine: dict[str, Any]) -> str:
     extras = []
     if head.get("via") is not None:
         extras.append(f"via={head['via']}")
+    if head.get("stream_path_reason"):
+        extras.append(f"path_reason={head['stream_path_reason']}")
     if head.get("location") is not None:
         extras.append(f"location={head['location']}")
     if head.get("history") is not None:

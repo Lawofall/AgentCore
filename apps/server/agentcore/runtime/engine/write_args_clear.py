@@ -7,9 +7,12 @@ rounds re-pay that body as cache_miss (case: handoff round ~28k in / ~27k miss).
 This projection — applied at request-assembly time only, like ``tool_clear`` — keeps the
 **original write tool name**. Writes that have fallen out of the near window reduce args
 to ``{"path": …}`` and append a size / structure digest to that call's **tool result**.
-The latest ``keep_recent`` assistant rounds that contain a completed bulky write keep
-full ``content`` / ``old_string`` / ``new_string`` so the next thought can chain an edit.
-Canonical ``messages`` / journal keep the full args; resume rebuilds then re-applies.
+The latest ``keep_recent`` **assistant messages** (every thought, not only write
+rounds) keep full ``content`` / ``old_string`` / ``new_string`` so the immediately
+next thought can chain an edit. Older completed writes collapse even if the model
+then only ``run`` / talks / handoff — waiting for the next write left bodies in
+the window for the rest of the job. Canonical ``messages`` / journal keep the full
+args; resume rebuilds then re-applies.
 
 定案：掉出近端窗的写，参数槽只留 path（模型不能把摘要当正文回灌）。近端保留全文。
 历代投影（``content:"[已清理]"`` 假稿纸 → ``_landed_summary`` 模板 → 合成名
@@ -396,13 +399,13 @@ def project_cleared_write_args(
     """Collapse bulky write-tool args once their tool result is present.
 
     Keeps the original write ``function.name``. Completed bulky writes **older than**
-    the last ``keep_recent`` assistant messages that contain such a write reduce args
-    to ``path`` alone, and append a size / structure digest to that call's tool result.
-    The near window keeps full bodies so the next thought can chain ``str_replace``.
-    ``keep_recent=0`` collapses every completed bulky write (legacy). ``keep_recent<0``
-    is a no-op. Also migrates leftover ``_write_landed`` names back to ``via``.
-    Returns the same list when nothing qualifies. Prefix-cache safe for a given
-    collapsed write: the projection is a pure function of (path, body, original_len).
+    the last ``keep_recent`` assistant messages (all thoughts, not write-only rounds)
+    reduce args to ``path`` alone, and append a size / structure digest to that call's
+    tool result. The near window keeps full bodies so the next thought can chain
+    ``str_replace``. ``keep_recent=0`` collapses every completed bulky write (legacy).
+    ``keep_recent<0`` is a no-op. Also migrates leftover ``_write_landed`` names back
+    to ``via``. Returns the same list when nothing qualifies. Prefix-cache safe for a
+    given collapsed write: the projection is a pure function of (path, body, original_len).
     """
     if min_chars < 0 or keep_recent < 0:
         return messages
@@ -442,19 +445,15 @@ def project_cleared_write_args(
     if not completed_ids and not bait_ids:
         return messages
 
-    # Near window = last N assistant messages that contain a completed bulky write
-    # (one ReAct round may issue several writes in parallel; all stay until the
-    # next write-round). keep_recent=0 → collapse all. Do not use lst[-0:].
-    write_round_indices: list[int] = []
-    for mi, message in enumerate(messages):
-        if message.role != "assistant" or not message.tool_calls:
-            continue
-        if any(call.id in completed_ids for call in message.tool_calls):
-            write_round_indices.append(mi)
+    # Near window = last N assistant messages in the transcript (run / talk /
+    # handoff count). A parallel write batch in one message stays together; a
+    # later non-write thought ages the batch out. keep_recent=0 → collapse all.
+    # Do not use lst[-0:].
+    assistant_indices = [
+        mi for mi, message in enumerate(messages) if message.role == "assistant"
+    ]
     keep_rounds: set[int] = (
-        set()
-        if keep_recent == 0
-        else set(write_round_indices[-keep_recent:])
+        set() if keep_recent == 0 else set(assistant_indices[-keep_recent:])
     )
     collapse_ids = {
         cid for cid in completed_ids if call_meta[cid][2] not in keep_rounds

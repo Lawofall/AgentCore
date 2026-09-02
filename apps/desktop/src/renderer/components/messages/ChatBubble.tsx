@@ -11,7 +11,9 @@ import {
   IM_BUBBLE_MAX_CLASS,
   type ImBubbleLayout,
 } from "@/lib/imMessageLayout";
+import { MESSAGE_ACTION_REVEAL_CLASS } from "@/lib/messageActionReveal";
 import { notifyActionError } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 import {
   type ChatMessageDetail,
   type MessageReplyTo,
@@ -488,7 +490,7 @@ export function ChatBubble({
               size="sm"
               onClick={() => onReply?.(message)}
               aria-label="回复"
-              className="mt-0.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+              className={cn("mt-0.5 shrink-0", MESSAGE_ACTION_REVEAL_CLASS)}
             >
               <Reply size={14} />
             </IconButton>
@@ -507,7 +509,9 @@ export function ChatBubble({
             <SimpleTooltip
               label={new Date(message.created_at).toLocaleString()}
             >
-              <span className="cursor-default opacity-0 transition-opacity group-hover:opacity-100">
+              <span
+                className={cn("cursor-default", MESSAGE_ACTION_REVEAL_CLASS)}
+              >
                 {time}
               </span>
             </SimpleTooltip>

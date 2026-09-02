@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 /**
- * Mermaid SVG display normalize: drop useMaxWidth's max-width cap so the chat
- * column can scale small charts up. jsdom required for DOMParser.
+ * Mermaid SVG display normalize: pin native px (drop useMaxWidth's max-width
+ * cap) so the lightbox can contain-fit. jsdom required for DOMParser.
  */
 import { describe, expect, it } from "vitest";
-import { normalizeMermaidSvg, readMermaidSvgWidth } from "../mermaidSvg";
+import {
+  normalizeMermaidSvg,
+  readMermaidSvgSize,
+  readMermaidSvgWidth,
+} from "../mermaidSvg";
 
 describe("normalizeMermaidSvg", () => {
   it("replaces width=100% + max-width cap with native pixel size", () => {
@@ -50,11 +54,20 @@ describe("normalizeMermaidSvg", () => {
   });
 });
 
-describe("readMermaidSvgWidth", () => {
+describe("readMermaidSvgSize", () => {
   it("reads the pinned pixel width after normalize", () => {
     const out = normalizeMermaidSvg(
       '<svg width="100%" style="max-width: 320px;" viewBox="0 0 320 120"></svg>',
     );
     expect(readMermaidSvgWidth(out)).toBe(320);
+    expect(readMermaidSvgSize(out)).toEqual({ w: 320, h: 120 });
+  });
+
+  it("falls back to viewBox when height is omitted", () => {
+    expect(
+      readMermaidSvgSize(
+        '<svg width="200" viewBox="0 0 200 1000" class="flowchart"></svg>',
+      ),
+    ).toEqual({ w: 200, h: 1000 });
   });
 });

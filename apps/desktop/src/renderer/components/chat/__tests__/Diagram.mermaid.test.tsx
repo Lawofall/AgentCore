@@ -11,6 +11,10 @@
  * file-leading past organizeImports.
  */
 
+import {
+  inlineMermaidBoxPx,
+  mermaidInlineMaxHeightPx,
+} from "@/lib/inlineMermaidBox";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DiagramBlock, __resetMermaidLoaderForTests } from "../Diagram";
@@ -77,7 +81,56 @@ describe("MermaidDiagram · 合法图不得误报渲染失败", () => {
     if (!svg) throw new Error("expected flowchart svg");
     expect(svg.getAttribute("width")).toBe("320");
     expect(svg.getAttribute("style") ?? "").not.toMatch(/max-width/i);
-    expect(svg.parentElement?.className).toContain("mx-auto");
+    const wrap = svg.parentElement;
+    expect(wrap).not.toBeNull();
+    if (!wrap) throw new Error("expected mermaid wrap");
+    // 320×120 already fits the preview ceiling; explicit box, no column stretch.
+    expect(wrap.style.width).toBe("320px");
+    expect(wrap.style.height).toBe("120px");
+    expect(mermaidApi.initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        flowchart: expect.objectContaining({
+          nodeSpacing: 32,
+          rankSpacing: 36,
+          useMaxWidth: true,
+        }),
+      }),
+    );
+  });
+
+  it("contain-fits a tall native SVG into an explicit pixel box", async () => {
+    mermaidApi.render.mockResolvedValueOnce({
+      svg:
+        '<svg class="flowchart" width="200" height="1000" viewBox="0 0 200 1000">' +
+        "<style>#acmmd-1 .error-icon{fill:#552222;}</style></svg>",
+    });
+    const { container } = render(
+      <DiagramBlock kind="mermaid" code={sampleCode} streaming={false} />,
+    );
+    await waitFor(() =>
+      expect(container.querySelector("svg.flowchart")).not.toBeNull(),
+    );
+    const svg = container.querySelector("svg.flowchart");
+    const wrap = svg?.parentElement;
+    expect(wrap).not.toBeNull();
+    if (!wrap) throw new Error("expected mermaid wrap");
+    const host = wrap.parentElement;
+    const rem = Number.parseFloat(
+      getComputedStyle(document.documentElement).fontSize,
+    );
+    const expected = inlineMermaidBoxPx(
+      200,
+      1000,
+      host?.clientWidth ?? 0,
+      mermaidInlineMaxHeightPx(
+        window.innerHeight,
+        Number.isFinite(rem) && rem > 0 ? rem : 16,
+      ),
+    );
+    expect(expected).not.toBeNull();
+    if (!expected) throw new Error("expected contain box");
+    expect(wrap.style.width).toBe(`${expected.w}px`);
+    expect(wrap.style.height).toBe(`${expected.h}px`);
   });
 });
 

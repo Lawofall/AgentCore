@@ -191,7 +191,7 @@ describe("ToolResultView · search_conversations / read_conversation", () => {
             title: "上周方案复盘",
             conversation_id: "conv_abc123",
             truncated: true,
-            depth: "full",
+            depth: "dialogue",
           },
           result: "### User\n上次结论是什么？\n### Assistant\n采用方案 B。",
         })}
@@ -213,7 +213,7 @@ describe("ToolResultView · search_conversations / read_conversation", () => {
             title: "旧案",
             conversation_id: "conv_deeplink",
             truncated: false,
-            depth: "full",
+            depth: "dialogue",
           },
           result: "### User\nhi",
         })}
@@ -532,5 +532,75 @@ describe("ToolResultView · code_diagnostics", () => {
       />,
     );
     expect(container.textContent).toContain("未发现类型错误");
+  });
+});
+
+describe("ToolResultView · write-family cards have no path header", () => {
+  it("renders a str_replace diff without repeating the path or +/-", () => {
+    render(
+      <ToolResultView
+        data={data({
+          toolName: "str_replace",
+          args: {
+            path: "src/lib/store.ts",
+            old_string: "a",
+            new_string: "b",
+          },
+        })}
+      />,
+    );
+    expect(screen.queryByText("src/lib/store.ts")).toBeNull();
+    expect(screen.queryByText("+1")).toBeNull();
+    expect(screen.queryByText("-1")).toBeNull();
+    expect(screen.getByText("a")).toBeTruthy();
+    expect(screen.getByText("b")).toBeTruthy();
+  });
+
+  it("renders a file_write preview without path / 字 chrome", () => {
+    render(
+      <ToolResultView
+        data={data({
+          toolName: "file_write",
+          args: { path: "src/new.ts", content: "export const x = 1" },
+        })}
+      />,
+    );
+    expect(screen.queryByText("src/new.ts")).toBeNull();
+    expect(screen.queryByText(/行/)).toBeNull();
+    expect(screen.queryByText(/字/)).toBeNull();
+    expect(screen.getByText("export const x = 1")).toBeTruthy();
+  });
+});
+
+describe("ToolResultView · file_read strips the line-window footer", () => {
+  it("keeps the body and drops the window footer", () => {
+    render(
+      <ToolResultView
+        data={data({
+          toolName: "file_read",
+          args: { path: "src/ui/PropertyPanel.tsx" },
+          result: "191| const x = 1\n\n（第 1–200 行，共 242 行）",
+        })}
+      />,
+    );
+    expect(screen.getByText(/191\| const x = 1/)).toBeTruthy();
+    expect(screen.queryByText(/共 242 行/)).toBeNull();
+    expect(screen.queryByText(/第 1/)).toBeNull();
+  });
+
+  it("keeps a following PDF page HOW after stripping the line footer", () => {
+    render(
+      <ToolResultView
+        data={data({
+          toolName: "file_read",
+          args: { path: "doc.pdf" },
+          result:
+            "extracted\n\n（第 1–200 行，共 500 行）\n\n抽取第 1–3 页，共 12 页。后面的页请用 start_page=4 再读",
+        })}
+      />,
+    );
+    expect(screen.getByText(/extracted/)).toBeTruthy();
+    expect(screen.getByText(/抽取第 1–3 页/)).toBeTruthy();
+    expect(screen.queryByText(/共 500 行/)).toBeNull();
   });
 });

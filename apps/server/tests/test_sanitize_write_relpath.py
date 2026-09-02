@@ -50,7 +50,7 @@ def test_dossier_flattens_nested_to_filename():
         sanitize_write_relpath(f"{DEBATE_PREFIX}子题\\笔记.md")
         == f"{DEBATE_PREFIX}子题_笔记.md"
     )
-    # 默认落点同样扁平（无显式路径的产物都堆这里，禁 worker 自造子树）。
+    # 工作稿同样扁平（柜内禁自造子树）。
     assert (
         sanitize_write_relpath(f"{DRAFTS_PREFIX}某案/起诉状.md")
         == f"{DRAFTS_PREFIX}某案_起诉状.md"

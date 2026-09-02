@@ -35,6 +35,7 @@ _LIST_CAP = 256
 
 __all__ = [
     "CONVENTION_PROJECT_DIRS",
+    "desk_is_visibly_empty",
     "project_shell_of",
     "rewrite_deliverable_shell",
     "rewrite_plan_project_shell",
@@ -197,9 +198,11 @@ async def _direct_child_folder_names(context: ToolContext) -> frozenset[str]:
 
 
 def _shell_note(slug: str, actual: str) -> str:
+    # User process card shares ``output`` with the model: path fact only, no
+    # empty-desk / project-shell jargon and no "need not create" refusal tone.
     if not actual or actual == ".":
-        return f"注意：空桌已去掉工程壳前缀 `{slug}/`，路径即工作区根。"
-    return f"注意：空桌已去掉工程壳前缀 `{slug}/`，实际路径 `{actual}`。"
+        return f"`{slug}/` 即工作区根，文件直接写在根下。"
+    return f"`{slug}/` 已对齐到工作区根，实际路径 `{actual}`。"
 
 
 async def rewrite_project_shell_relpath(

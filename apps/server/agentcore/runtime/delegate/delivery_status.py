@@ -167,7 +167,7 @@ class DeliveryVerdict:
     # Structured gap reasons from the same delivery_status payload (no prose).
     # Shadow honesty logs read this; path reconciliation does not.
     gap_reasons: tuple[str, ...] = ()
-    # Declared artifacts / artifact_dir with no accepted on-disk match.
+    # Named artifacts with no accepted on-disk match.
     missing_declared: tuple[str, ...] = ()
     # Claimed accepted paths rejected because workspace.exists is false.
     absent_claimed: tuple[str, ...] = ()
@@ -266,8 +266,9 @@ _SOFT_REMINDER_MARKERS = (
     "素材覆盖提醒（软）",
     "契约软提醒",
 )
-# Contract path-reconciliation copy (artifacts / artifact_dir). Delivery card
+# Contract path-reconciliation copy (declared artifacts). Delivery card
 # treats these as path_mismatch warning — not blocking / 不挡 delivered.
+# 「产物未写入约定文档目录」已停发；留下只为历史事件仍 warning 不挡 delivered。
 _PATH_MISMATCH_MARKERS = (
     "产物未写入约定文档目录",
     "声明的交付物路径未落盘",
@@ -571,29 +572,24 @@ def _accepted_declared_paths(
 
 
 def _missing_declared_for_node(node: Any, state: RunState) -> list[str]:
-    """Declared patterns with no accepted on-disk (acceptance) match."""
-    from agentcore.runtime.runs.file_acceptance import (
-        declaration_allows_landed,
-        landed_matches_declared,
-    )
+    """Named ``artifacts`` with no accepted on-disk match.
+
+    ``artifact_dir`` is a write-time default, not a close-out pin: miss + other
+    landings → empty (收口认盘). Zero-write is ``files_not_landed``, not this list.
+    """
+    from agentcore.runtime.runs.file_acceptance import landed_matches_declared
 
     artifacts, artifact_dir = _path_declaration_of(node)
-    if not artifacts and not artifact_dir:
+    if not artifacts:
         return []
     accepted = _accepted_declared_paths(
         state, artifacts=artifacts, artifact_dir=artifact_dir
     )
-    if artifacts:
-        return [
-            pat
-            for pat in artifacts
-            if not any(landed_matches_declared(p, pat) for p in accepted)
-        ]
-    if not any(
-        declaration_allows_landed(p, artifacts=[], artifact_dir=artifact_dir) for p in accepted
-    ):
-        return [f"{artifact_dir.rstrip('/')}/"]
-    return []
+    return [
+        pat
+        for pat in artifacts
+        if not any(landed_matches_declared(p, pat) for p in accepted)
+    ]
 
 
 def _missing_declared_paths(
@@ -661,10 +657,11 @@ def _declared_path_mismatch_gaps(
     plan: RunPlan,
     results: dict[str, RunState],
 ) -> list[dict[str, Any]]:
-    """Warning gaps when declared artifacts / artifact_dir have no accepted match.
+    """Warning gaps when named artifacts have no accepted match.
 
-    Does not block ``delivered`` when other files landed. Zero-write still
-    emits so the batch is not silent, and latches ``requires_draft_ack``.
+    Does not treat ``artifact_dir`` as a pin. Does not block ``delivered`` when
+    other files landed. Zero-write still emits so the batch is not silent, and
+    latches ``requires_draft_ack``.
     """
     gaps: list[dict[str, Any]] = []
     for node in plan.nodes:

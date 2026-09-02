@@ -310,7 +310,8 @@ async def test_host_shell_rejects_long_running_dev_server():
     result = await HostTool().execute({"action": "shell", "command": "npm run dev"}, ctx)
     assert not result.success
     assert "长驻" in (result.error or "")
-    assert "terminal" in (result.error or "")
+    assert "run" in (result.error or "")
+    assert "terminal" not in (result.error or "")
     ctx.desktop_channel.request_host.assert_not_called()
 
 

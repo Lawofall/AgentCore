@@ -33,8 +33,8 @@ skip_if:
 - **`user_interjection`**（✅ DURABLE）：运行中插话（经典 steer + 协调共用）；同 `interjection_id` 保最新 `status`。协调：`received` → `injected` → `addressed` / `queued` / `failed`；经典：`received` → `injected`（终态）/ `queued` / `failed`（无 `addressed`）。`injected` = 内容真正进模型上下文。POST 短流 ack 看 `received`。可选 `attachments`（名字 + 路径 + 二进制标记）与可选 `agent_mentions`（`{agent_id, role}` 软芯片，非硬路由；旧客户端忽略）。→ 见代码：`runtime/events/run.py:user_interjection` · `runtime/turn/steer.py` · `runtime/coordination/interjections.py`
 - **`workspace_lock_wait`**（✅ EPHEMERAL）：同 folder 写锁短等（A′ 后仅写路径争用）；`waiting` 进出。桌面空气泡「等待工作区…」——**不得静默等锁** / 禁空 Thinking… 冒充。与同对话 `turn_queued` 正交。→ 见代码：`workspace/locks.py` · `runtime/events/run.py:workspace_lock_wait`
 - **`replace`**（✅ additive；四条正文类 delta：`content_delta` / `reasoning_delta` / `run_output_delta` / `run_reasoning_delta`）：帧级标记，`true` = 本帧携带该通道**末尾那个尚未闭合的文本块**的完整内容，客户端换掉那一块而非追加（末尾已被工具/标记步闭合时当普通新块折）。attach 回放段专用，覆盖两种全文帧——按通道合成的整块，以及增量段里跨游标那步 `process_*` 行携带的整步全文（客户端手里只有它的前半截）；两者互斥（已被 process 覆盖的通道不再出合成块），故一个语义够用。live 帧永不带。→ 见代码：`runtime/events/attach_replay.py`
-- **`run_failed.failure_kind`**（✅ additive）：协作图失败脸优先按此类贴文案——`quality`→「未达标」、`format`→「格式未过」（结构/格式闸：code_audit·缺章节·JSON）、`model`→「模型中断」、`call`→「调用失败」；缺省→「失败」/空 error「调用失败」。禁前端扫正文猜脸。→ 见代码：`RunFailureKind` · `runtime/events/payloads/run.py`
-- **`tool_use_end.status=redirect`（✅ additive）**：选错工具通道（`code_execute` 当 grep / dump、项目级验证走错、`read_url`↔`file_read` 互斥等）运行时拒执行并改道。模型面 `result` 仍是失败回执；过程步不是 `error`。旧 journal 的 `status=error` + 改道 `failure.code` 由 fold 归一为 `redirect`。→ 见代码：`runtime/engine/tool_channel_redirect.py`
+- **`run_failed.failure_kind`**（✅ additive）：协作图失败脸优先按此类贴文案——`quality`→「未达标」、`format`→「格式未过」（结构/格式闸：缺章节·JSON）、`model`→「模型中断」、`call`→「调用失败」；缺省→「失败」/空 error「调用失败」。禁前端扫正文猜脸。→ 见代码：`RunFailureKind` · `runtime/events/payloads/run.py`
+- **`tool_use_end.status=redirect`（✅ additive）**：选错工具通道（短执行里 dump/grep 源码、`read_url`↔`file_read` 互斥、长驻走错短核等）运行时拒执行并改道。项目级 install/test/typecheck **不是**改道——统一 `run` 按命令分类进验证核直接跑。模型面 `result` 仍是失败回执；过程步不是 `error`。旧 journal 的 `status=error` + 改道 `failure.code`（含已停发的 `project_verify_redirect`）由 fold 归一为 `redirect`。→ 见代码：`runtime/engine/tool_channel_redirect.py`
 - **`message_end.team_batch`**（✅）：本回合团队状态，turn journal 派生。`no_batch` | `in_flight` | `settled`。没派工是确定态。不进 ProjectedTurn（旁路字段，与 `collab` 同）；**用户面不渲染**。→ [执行引擎 · 团队状态](/docs/03-AI核心/执行引擎架构设计.md)
 
 `finish_reason` → 见代码 `FinishReason`。
@@ -48,7 +48,7 @@ skip_if:
 **跟播** = 同一回合的事件流被多个客户端同时或先后订阅观看。桌面与手机共用同一端点 `GET …/stream?follow=true`（对话级长订阅：空闲只收心跳，此后每个新回合自动重放 + 跟播）。
 
 - **扇出**（✅）：每订阅者一条独立有界队列，同帧逐个投递——不瓜分、一端断开不连坐、`seq` 在 emit 侧一次性回填故各端编号一致。→ 见代码 `runtime/events/sink.py`
-- **接入姿势**（✅）：重放段 → `: attach-caught-up` 边界 → 实时段。客户端据此把首段整段缓冲后一次折，否则已完成的 worker 会再演一遍 running→completed。一次折约束的是**协作图**；打开/刷新时消息窗正文先揭开，不等这条回放。**边界注释是唯一折段闸**：注释前断流 = 传输失败（跟播丢缓冲后重连，回合级 attach 抛 network 由调用方重试）；游标只在折/dispatch 后推进，半段不入屏。**否决**流结束仍无注释就把缓冲当完整段折（旧后端兼容）。
+- **接入姿势**（✅）：重放段 → `: attach-caught-up` 边界 → 实时段。客户端据此把首段整段缓冲后一次折，否则已完成的 worker 会再演一遍 running→completed。一次折约束的是**协作图**；打开/刷新时消息窗正文先揭开，不等这条回放。**边界注释是唯一折段闸**：注释前断流 = 传输失败（跟播丢缓冲后重连，回合级 attach 抛 network 由调用方重试）；游标只在折/dispatch 后推进，半段不入屏。**否决**流结束仍无注释就把缓冲当完整段折（旧后端兼容）。**执行端同会话**：本端 POST / sidecar 泵占用时对话级 follow **静音不断连**（帧不折、游标不推进），放闸后同一条 SSE 接着收；禁止 abort 再全量 `full_replay` 把本机刚折完的回合闪一次。
 - **增量重放**（✅）：`Last-Event-ID` 决定**发什么、不决定读什么**——服务端照旧读整回合 journal，因为四处判定（是否结构化回合 / 已覆盖的 run 集 / `agent_id` 回填 / worker 全文拼接）必须扫过全表才成立，改成 `seq > 游标` 查会让它们翻面成「worker 正文整段重发或静默丢失」。贵的是网络与客户端折，不是那一次主键索引扫描，故**过滤发生在产出事件之后**。attach 下发的 `tool_use_end.result` 与过程车道同为 8k 预览（live 主连接仍全文；完整 stdout 在 `tool_call`）。→ 见代码 `runtime/events/attach_replay.py`
 
 **两条指令都由服务端下达，客户端不拿屏上状态猜**——没有它们的年代，桌面 follow 重连分支猜错把正文折了两遍：

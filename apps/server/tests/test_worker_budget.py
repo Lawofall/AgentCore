@@ -344,8 +344,8 @@ def test_factory_delivery_idle_not_finalize():
     assert files.delivery_idle_rounds == 0
 
 
-def test_narrow_for_light_repair_strips_investigation():
-    """Light repair 去掉调查工具，保留 light-repair 集（含写盘）；无名单补写半成品。"""
+def test_narrow_for_light_repair_keeps_local_inspect_strips_retrieval():
+    """Light repair 留 grep/run/file_list；只卸 billed retrieval；无名单不补写。"""
     from agentcore.core.types import ToolCategory
     from agentcore.runtime.runs.executor.node import _narrow_for_light_repair
     from agentcore.tools.protocol import ToolResult, ToolSchema
@@ -375,6 +375,8 @@ def test_narrow_for_light_repair_strips_investigation():
         "file_write",
         "str_replace",
         "web_search",
+        "run",
+        "file_list",
     ):
         reg.register(_T(n))
 
@@ -382,20 +384,23 @@ def test_narrow_for_light_repair_strips_investigation():
     assert "file_write" in unrestricted
     assert "str_replace" in unrestricted
     assert "handoff" in unrestricted
-    assert "grep" not in unrestricted
+    assert "grep" in unrestricted
+    assert "run" in unrestricted
+    assert "file_list" in unrestricted
     assert "web_search" not in unrestricted
 
     _r2, narrowed = _narrow_for_light_repair(
-        reg, ["file_read", "grep", "handoff", "file_write"]
+        reg, ["file_read", "grep", "handoff", "file_write", "run"]
     )
     assert "file_write" in narrowed
     assert "handoff" in narrowed
-    assert "grep" not in narrowed
+    assert "grep" in narrowed
+    assert "run" in narrowed
     # 缺写盘的显式名单不再补写（真纯丙退役 merge_persist）
     _r3, no_grant = _narrow_for_light_repair(reg, ["file_read", "grep", "handoff"])
     assert "file_write" not in no_grant
     assert "handoff" in no_grant
-    assert "grep" not in no_grant
+    assert "grep" in no_grant
 
 
 def test_should_skip_contract_retry_for_budget_handoff_ok_wind_down():

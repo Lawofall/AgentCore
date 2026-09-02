@@ -50,6 +50,7 @@ function toConversation(c: BackendConversation): Conversation {
     permissionAxes: normalizeAxes(c.permission_axes ?? undefined),
     modelProfileId: c.model_profile_id ?? null,
     contextCompacted: c.context_compacted ?? false,
+    compactedThrough: c.compacted_through ?? null,
     ...(c.context_gap
       ? {
           contextGap: {

@@ -269,9 +269,8 @@ export function RunDetailBody({
 
       {contextBlocks.length > 0 && (
         <ReceivedContextSection
+          key={runId}
           blocks={contextBlocks}
-          defaultExpanded={false}
-          keyBase={`run:${runId}`}
           onNavigate={(rid) => {
             const target = execution.runs.find((r) => r.id === rid);
             if (!target) return;
@@ -319,6 +318,7 @@ export function RunDetailBody({
             checkpoints={[]}
             planReviews={[]}
             collapseProcessSteps={false}
+            handoffDebrief={run.debrief}
             onOpenWorkspacePath={(path) =>
               openWorkspaceDeliverable(conversationId, path)
             }

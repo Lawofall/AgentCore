@@ -1,4 +1,4 @@
-"""Conversation working set: extract / merge / render (no full file bytes)."""
+"""Journal file-path ledger: extract / merge / compact fold (no product-prompt XML)."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from agentcore.runtime.context.working_set import (
     extract_working_set_items,
     file_working_set_digest,
     item_from_tool_call,
+    load_working_set_items,
     merge_working_set,
     render_file_ledger,
-    render_working_set,
 )
 from agentcore.runtime.facts import FactKind
 
@@ -108,6 +108,7 @@ def test_file_working_set_digest_from_read_result():
     assert digest
     assert "Loader" in digest or "load_chat_context" in digest
     assert "【自动" not in digest
+    assert "非全文" not in digest
     assert "\n" not in digest
     assert len(digest) <= 120
 
@@ -159,71 +160,42 @@ def test_extract_keeps_persisted_digest():
     ]
 
 
-def test_render_working_set_empty_drops_section():
-    assert render_working_set([]) == ""
-    text = render_working_set(
-        [
-            WorkingSetItem(path="src/foo.py", action="read", start_line=10, end_line=30),
-            WorkingSetItem(path="docs/a.md", action="write"),
-        ]
-    )
-    assert text.startswith("<工作集>")
-    assert text.endswith("</工作集>")
-    assert "正文以磁盘为准" in text
-    assert "file_read" in text
-    assert "- read src/foo.py:10-30" in text
-    assert "- write docs/a.md" in text
-    with_digest = render_working_set(
-        [WorkingSetItem(path="src/foo.py", action="read", digest="Foo, bar()")]
-    )
-    assert "- read src/foo.py  ·  Foo, bar()" in with_digest
-    # 补集禁止：正向已覆盖「要细节就重读」，不写「不要凭记忆」。
-    assert "不要" not in text
-    assert "禁止" not in text
-
-
 @pytest.mark.asyncio
-async def test_build_working_set_block_empty_without_hits(monkeypatch):
+async def test_load_working_set_items_empty_without_hits(monkeypatch):
     async def _empty(**_kwargs):
         return []
 
     monkeypatch.setattr(
         "agentcore.runtime.context.working_set._load_hits_from_db", _empty
     )
-    from agentcore.runtime.context.working_set import build_working_set_block
-
-    assert await build_working_set_block(conversation_id="c1") == ""
+    assert await load_working_set_items(conversation_id="c1") == []
 
 
 @pytest.mark.asyncio
-async def test_build_working_set_block_merges_live_entries(monkeypatch):
+async def test_load_working_set_items_merges_live_entries(monkeypatch):
     async def _empty(**_kwargs):
         return []
 
     monkeypatch.setattr(
         "agentcore.runtime.context.working_set._load_hits_from_db", _empty
     )
-    from agentcore.runtime.context.working_set import build_working_set_block
-
-    text = await build_working_set_block(
+    items = await load_working_set_items(
         conversation_id="c1",
         live_entries=[_entry("file_read", '{"path":"live.py"}')],
     )
-    assert "- read live.py" in text
-    assert text.startswith("<工作集>")
+    assert [i.path for i in items] == ["live.py"]
+    assert items[0].action == "read"
 
 
 @pytest.mark.asyncio
-async def test_build_working_set_block_survives_db_failure(monkeypatch):
+async def test_load_working_set_items_survives_db_failure(monkeypatch):
     async def _boom(**_kwargs):
         raise RuntimeError("db down")
 
     monkeypatch.setattr(
         "agentcore.runtime.context.working_set._load_hits_from_db", _boom
     )
-    from agentcore.runtime.context.working_set import build_working_set_block
-
-    assert await build_working_set_block(conversation_id="c1") == ""
+    assert await load_working_set_items(conversation_id="c1") == []
 
 
 def test_render_file_ledger_is_bare_list():

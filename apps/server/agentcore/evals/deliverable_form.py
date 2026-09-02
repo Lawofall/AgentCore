@@ -2,7 +2,7 @@
 
 背景：委派 worker 的交付形态曾靠提示词两段式措辞，同任务时对时错（打招呼被乱落盘）。
 已决策把 ``deliverable.form`` 升为结构化契约；CEO 侧用三档分流：
-【看】→prose / 【存文档】→files（默认，落工作稿）/ 【改工程】→workspace。漏填=files。
+【看】→prose / 【存文档】→files（默认）/ 【改工程】→workspace。漏填=files。
 
 本模块把「CEO 是否按分流正确声明 form、落盘任务是否点明写文件」变成可复跑信号：
 
@@ -48,7 +48,7 @@ _CLASSIFIER_SYSTEM = (
     "分流（三档；漏填=files；禁止扫用户原话补 prose）：\n"
     "- 【看】（回答 / 分析 / 汇报 / 创意文字 / 打招呼）→ form=prose；"
     "task 写清用正文交付，不要要求落盘。\n"
-    "- 【存文档】（报告 / 笔记 / 网页成品等要保存的文件，默认落工作稿）→ form=files；"
+    "- 【存文档】（报告 / 笔记 / 网页成品等要保存的文件）→ form=files；"
     "task 必须点明用 file_write 把产物写进工作区。\n"
     "- 【改工程】（改用户工程树：源码 / 测试 / 配置）→ form=workspace；"
     "task 必须点明用 file_write 把改动写进工作区。\n"
@@ -197,12 +197,10 @@ def check_prompt_contract() -> list[str]:
     # Form routing lives in team_orchestration_advanced skill (not CEO core).
     orch = build_system_skill_registry().get("team_orchestration_advanced")
     orch_body = orch.body if orch is not None else ""
-    if "form=prose" not in orch_body and "【看】" not in orch_body:
-        gaps.append("team_orchestration_missing_form_routing")
-    if "【存文档】" not in orch_body and "form=files" not in orch_body:
-        gaps.append("team_orchestration_missing_files_tier")
-    if "【改工程】" not in orch_body and "form=workspace" not in orch_body:
-        gaps.append("team_orchestration_missing_workspace_tier")
+    if "form 三档" not in orch_body and "form=files" not in orch_body:
+        gaps.append("team_orchestration_missing_form_pointer")
+    # workspace / prose 档权威在 schema「【看】/【改工程】」；
+    # 做软件专段已撤，skill 不再点名 form=workspace。
     if "自动静态质检" in orch_body or "可开 web_quality_scan" in orch_body:
         gaps.append("team_orchestration_still_teaches_web_quality_scan")
     if "required_sections" in orch_body:

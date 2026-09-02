@@ -124,7 +124,9 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         key="code_audit_report",
         phrasing="textbook",
         category="code_audit",
-        expect_playbook="code_audit",
+        expect_playbook="",
+        expect_action="DELEGATE",
+        expect_form="files",
         user_message="请对当前工作区做一次代码审计，找出 bug，并把审计报告落盘。",
         workspace="codebase",
     ),
@@ -164,7 +166,9 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         key="audit_check_bugs_save_file",
         phrasing="colloquial",
         category="code_audit",
-        expect_playbook="code_audit",
+        expect_playbook="",
+        expect_action="DELEGATE",
+        expect_form="files",
         user_message=(
             "帮我把这个项目好好检查一遍，看看有没有明显的 bug，"
             "最后写一份检查报告存成文件给我。"
@@ -175,7 +179,9 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         key="audit_find_issues_workspace_doc",
         phrasing="colloquial",
         category="code_audit",
-        expect_playbook="code_audit",
+        expect_playbook="",
+        expect_action="DELEGATE",
+        expect_form="files",
         user_message=(
             "这堆代码我不太放心，你帮忙找找问题，"
             "整理成文档放到工作区里，我之后还要看。"

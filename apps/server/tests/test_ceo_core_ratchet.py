@@ -51,7 +51,7 @@ from agentcore.runtime.resolve.prompt import (
 # 当次实测 24324。
 #
 # 2026-08-20 降水位（不是抬顶）：五项迁出常驻核——本轮材料收窄+附件缺件改场面门、
-# 删冷启动探索幕核内副本、产品面地图→product_help_map、成品文件只装成品→long_form_writing、
+# 删冷启动探索幕核内副本、产品面地图→product_help_map、成品文件只装成品→编排手册、
 # 删执行事实行复述（核只留对照指针）。cap 保持 24330。当次实测 23448，
 # 2026-08-25 本波：开工卡退役文案 / 工具失败脸 / rebuild 提示进入常驻前缀。
 # 当次实测 24465。cap 提到 24470（向上取整到十位）。
@@ -290,7 +290,6 @@ def test_capability_how_has_no_ceo_must_delegate_leftovers():
 
 def test_honesty_floors_stay_resident():
     """诚实底线不跟门走：核留对照结构面元规则；装包/格式细则在 skill，已装配反向在基座。"""
-    from agentcore.runtime.skills.building_software import _BUILDING_SOFTWARE
     from agentcore.runtime.skills.team_delivery_env import _TEAM_DELIVERY_ENV
 
     hint = _CEO_CORE_HINT
@@ -300,8 +299,8 @@ def test_honesty_floors_stay_resident():
     assert "未对照则不得声称" not in hint
     assert "已落盘" not in base
     assert "已落盘" in hint
-    assert "结构自检" in _BUILDING_SOFTWARE
-    assert "export_to_local" in _BUILDING_SOFTWARE
+    assert "结构自检" in _TEAM_DELIVERY_ENV
+    assert "export_to_local" in _TEAM_DELIVERY_ENV
     assert "不可产" in _TEAM_DELIVERY_ENV and "等效替代" in _TEAM_DELIVERY_ENV
     assert "已装配" in base and "通道在" in base
     assert "邻格" in base

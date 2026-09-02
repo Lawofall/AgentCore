@@ -284,8 +284,8 @@ describe("buildGraphScene · golden", () => {
       "delegate",
     ]);
     expect(scene.bands.lanes.map((b) => b.label)).toEqual([
-      "第 1 次委派（2 节点）",
-      "第 2 次委派（2 节点）",
+      "第 1 次委派",
+      "第 2 次委派",
     ]);
     expect(scene.fold.folded.size).toBe(0);
     expect(snapshotScene(scene)).toMatchSnapshot();
@@ -296,8 +296,8 @@ describe("buildGraphScene · golden", () => {
       inputId: INPUT_ID,
     });
     expect(scene.bands.lanes.map((b) => b.label)).toEqual([
-      "第 1 次委派（2 节点）",
-      "第 2 次委派（2 节点）",
+      "第 1 次委派",
+      "第 2 次委派",
     ]);
     expect(scene.bands.lanes.map((b) => b.memberRunIds)).toEqual([
       ["a", "b"],

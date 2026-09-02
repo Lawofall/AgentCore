@@ -1,258 +1,34 @@
-"""Cross-turn partial/blocked delivery → one-shot prior_delivery_gaps soft block."""
+"""跨回合 ``<上轮交付缺口>`` 易变尾已撤：对账仍 stamp ``delivery_status``，不抄进下一轮提示。"""
 
 from __future__ import annotations
 
 import pytest
 
-from agentcore.runtime.delegate.prior_delivery_gaps import (
-    apply_gaps_vs_redispatch_mutex,
-    extract_prior_turn_delivery_status,
-    prior_turn_has_blocking_delivery_gaps,
-    render_prior_delivery_gaps,
-)
-from agentcore.runtime.events.types import EventType
-from agentcore.runtime.facts import FactKind
-from agentcore.runtime.journal.entries import KIND_TURN_END
+from agentcore.runtime.pipeline.assemble import build_chat_system_prompt
+from agentcore.runtime.skills import build_system_skill_registry
 
 
-def _delivery(
-    *,
-    state: str,
-    execution_id: str = "exec-1",
-    delivered_files: list[str] | None = None,
-    gaps: list[dict] | None = None,
-) -> dict:
-    return {
-        "kind": EventType.DELIVERY_STATUS.value,
-        "payload": {
-            "execution_id": execution_id,
-            "state": state,
-            "summary": "test",
-            "delivered_files": list(delivered_files or []),
-            "gaps": list(gaps or []),
-            "actions": [],
-            "artifacts": [],
-        },
-        "ts": None,
-    }
+def test_prior_delivery_gaps_module_is_gone():
+    with pytest.raises(ImportError):
+        from agentcore.runtime.delegate import prior_delivery_gaps  # noqa: F401
 
 
-def _blocking_gap(*, role: str = "验证员", description: str = "测试未绿", reason: str = "verify_failed") -> dict:
-    return {"role": role, "description": description, "reason": reason}
-
-
-def _warning_gap(*, role: str = "作者", description: str = "待核实备注") -> dict:
-    return {
-        "role": role,
-        "description": description,
-        "severity": "warning",
-        "reason": "unverified_note",
-    }
-
-
-def test_no_gaps_when_journal_empty_or_clean():
-    assert prior_turn_has_blocking_delivery_gaps(None) is False
-    assert prior_turn_has_blocking_delivery_gaps([]) is False
-    assert (
-        prior_turn_has_blocking_delivery_gaps(
-            [
-                {
-                    "kind": KIND_TURN_END,
-                    "payload": {"finish_reason": "end_turn"},
-                }
-            ]
-        )
-        is False
+def test_ceo_turn_prompt_has_no_prior_delivery_gaps_section():
+    out = build_chat_system_prompt(
+        ceo_prompt="CEO",
+        prior_delegate_retry="",
+        attachment_context="",
+        registered_sources="",
+        soft_cap=None,
     )
-    assert (
-        prior_turn_has_blocking_delivery_gaps(
-            [
-                _delivery(
-                    state="delivered",
-                    delivered_files=["a.md"],
-                    gaps=[],
-                )
-            ]
-        )
-        is False
-    )
+    assert "上轮交付缺口" not in out
+    assert "prior_delivery_gaps" not in out
 
 
-def test_warning_only_does_not_inject():
-    """notes / warning-only gaps must not trip the soft ledger."""
-    assert (
-        prior_turn_has_blocking_delivery_gaps(
-            [
-                _delivery(
-                    state="notes",
-                    gaps=[_warning_gap()],
-                )
-            ]
-        )
-        is False
-    )
-    # Even if state were mislabeled partial with only warnings — still no blocking rows.
-    assert (
-        prior_turn_has_blocking_delivery_gaps(
-            [
-                _delivery(
-                    state="partial",
-                    delivered_files=["a.md"],
-                    gaps=[_warning_gap()],
-                )
-            ]
-        )
-        is False
-    )
-
-
-def test_partial_with_blocking_gaps_injects():
-    entries = [
-        _delivery(
-            state="partial",
-            execution_id="exec-abc",
-            delivered_files=["docs/out.md"],
-            gaps=[_warning_gap(), _blocking_gap()],
-        )
-    ]
-    assert prior_turn_has_blocking_delivery_gaps(entries) is True
-    payload = extract_prior_turn_delivery_status(entries)
-    assert payload is not None
-    text = render_prior_delivery_gaps(payload)
-    assert "<上轮交付缺口>" in text
-    assert "</上轮交付缺口>" in text
-    assert "state=partial" in text
-    assert "execution_id=" not in text
-    assert "exec-abc" not in text
-    assert "docs/out.md" in text
-    assert "role=验证员" in text
-    assert "测试未绿" in text
-    assert "reason=verify_failed" in text
-    assert "一次性" in text and "可忽略" in text
-    assert "新目标优先" in text
-    assert "continue_from_run_id" in text
-    assert "整锅重派" in text
-    assert "路径已核" in text
-
-
-def test_blocked_with_blocking_gaps_injects():
-    entries = [
-        _delivery(
-            state="blocked",
-            gaps=[_blocking_gap(role="工程师", description="契约未满足", reason="")],
-        )
-    ]
-    assert prior_turn_has_blocking_delivery_gaps(entries) is True
-    text = render_prior_delivery_gaps(extract_prior_turn_delivery_status(entries) or {})
-    assert "state=blocked" in text
-    line = next(ln for ln in text.splitlines() if ln.startswith("- role=工程师"))
-    assert "契约未满足" in line
-    # Empty reason omitted from the gap line.
-    assert "reason=" not in line
-
-
-def test_one_shot_fingerprint_uses_latest_delivery_in_prior_journal():
-    """Shape: read prior-turn journal entries; keep last delivery_status only."""
-    entries = [
-        _delivery(state="delivered", execution_id="old", gaps=[]),
-        {
-            "kind": FactKind.TOOL_CALL.value,
-            "payload": {"name": "delegate", "success": True, "result": "ok"},
-        },
-        _delivery(
-            state="partial",
-            execution_id="new",
-            delivered_files=["x.py"],
-            gaps=[_blocking_gap()],
-        ),
-    ]
-    payload = extract_prior_turn_delivery_status(entries)
-    assert payload is not None
-    assert payload["execution_id"] == "new"
-    assert prior_turn_has_blocking_delivery_gaps(entries) is True
-
-
-def test_gaps_vs_redispatch_mutex():
-    gaps = "<上轮交付缺口>\nx\n</上轮交付缺口>"
-    retry = "<上轮重派>\ny\n</上轮重派>"
-    g, r = apply_gaps_vs_redispatch_mutex(gaps, retry)
-    assert g == gaps
-    assert r == ""
-    g2, r2 = apply_gaps_vs_redispatch_mutex("", retry)
-    assert g2 == ""
-    assert r2 == retry
-    g3, r3 = apply_gaps_vs_redispatch_mutex("   ", retry)
-    assert r3 == retry
-
-
-@pytest.mark.asyncio
-async def test_build_hint_injects_once_only_on_fingerprint(monkeypatch):
-    from agentcore.runtime.delegate import prior_delivery_gaps as mod
-
-    async def _empty(**_kwargs):
-        return []
-
-    async def _hit(**_kwargs):
-        return [
-            _delivery(
-                state="partial",
-                execution_id="e1",
-                delivered_files=["a.md"],
-                gaps=[_blocking_gap()],
-            )
-        ]
-
-    async def _warning_only(**_kwargs):
-        return [_delivery(state="partial", gaps=[_warning_gap()])]
-
-    monkeypatch.setattr(mod, "_load_latest_prior_journal", _empty)
-    assert await mod.build_prior_delivery_gaps_hint(conversation_id="c1") == ""
-
-    monkeypatch.setattr(mod, "_load_latest_prior_journal", _warning_only)
-    assert await mod.build_prior_delivery_gaps_hint(conversation_id="c1") == ""
-
-    monkeypatch.setattr(mod, "_load_latest_prior_journal", _hit)
-    text = await mod.build_prior_delivery_gaps_hint(
-        conversation_id="c1",
-        exclude_message_id="msg-current",
-    )
-    assert "<上轮交付缺口>" in text
-    assert text.count("<上轮交付缺口>") == 1
-    assert "execution_id=" not in text
-    assert "e1" not in text
-
-
-def test_events_include_delegate_only_counts_delegate_end():
-    from agentcore.runtime.delegate.prior_delivery_gaps import events_include_delegate
-
-    assert events_include_delegate([]) is False
-    assert (
-        events_include_delegate(
-            [{"type": "tool_use_end", "payload": {"tool_name": "file_read"}}]
-        )
-        is False
-    )
-    assert (
-        events_include_delegate(
-            [{"type": "tool_use_end", "payload": {"tool_name": "delegate"}}]
-        )
-        is True
-    )
-
-
-def test_observe_unclosed_cue_logs_only_when_cue_present():
-    from structlog.testing import capture_logs
-
-    from agentcore.runtime.delegate.prior_delivery_gaps import observe_unclosed_cue
-
-    with capture_logs() as logs:
-        observe_unclosed_cue(prior_gaps=False, recent_graph=False, delegated=False)
-    assert not any(row.get("event") == "ceo.unclosed_cue" for row in logs)
-
-    with capture_logs() as logs:
-        observe_unclosed_cue(prior_gaps=True, recent_graph=True, delegated=False)
-    hits = [row for row in logs if row.get("event") == "ceo.unclosed_cue"]
-    assert len(hits) == 1
-    assert hits[0]["prior_gaps"] is True
-    assert hits[0]["recent_graph"] is True
-    assert hits[0]["delegated"] is False
+def test_ask_user_kickoff_does_not_force_gap_continue():
+    skill = build_system_skill_registry().get("asking_the_user")
+    assert skill is not None
+    body = skill.body
+    assert "短确认·只补缺口" not in body
+    assert "<上轮交付缺口>" not in body
+    assert "整锅重派" not in body

@@ -54,7 +54,6 @@ async def test_capabilities_lists_system_skills_with_body(client):
     assert "asking_the_user" in skills
     assert "ask_user_kickoff" not in skills
     assert "verify_and_fix" not in skills
-    assert "long_form_writing" in skills
     assert "long_form_landing" in skills
     for skill in skills.values():
         assert skill["summary"]

@@ -4,6 +4,8 @@ import {
 } from "@/components/chat/debate/CollapsibleSpeech";
 import { Button } from "@/components/ui";
 import { hasInlineMarkers, renderInlineLabels } from "@/lib/inlineBody";
+import { MESSAGE_ACTION_REVEAL_CLASS } from "@/lib/messageActionReveal";
+import { cn } from "@/lib/utils";
 import { runRegenerate } from "@/services/turns";
 import {
   useActiveGenerating,
@@ -200,7 +202,12 @@ export function UserMessage({ message }: MessageBubbleProps) {
         </div>
       )}
       {!isGenerating && (
-        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <div
+          className={cn(
+            "flex items-center gap-0.5",
+            MESSAGE_ACTION_REVEAL_CLASS,
+          )}
+        >
           <MessageAction
             icon={copied ? <Check size={13} /> : <Copy size={13} />}
             label={copied ? "已复制" : "复制"}

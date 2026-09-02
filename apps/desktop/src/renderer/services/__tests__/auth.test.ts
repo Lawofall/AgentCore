@@ -10,6 +10,7 @@ import {
   listSessions,
   login,
   logout,
+  probeReadyz,
   resetPassword,
   revokeOtherSessions,
   revokeSession,
@@ -186,6 +187,75 @@ describe("bootstrapAuth", () => {
     if (result.kind === "unavailable") {
       expect(result.reason).toContain("连不上 AgentCore");
     }
+  });
+});
+
+describe("probeReadyz", () => {
+  it("classifies a JSON parse failure as parse, not unreachable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response("<html>bad gateway</html>", {
+            status: 200,
+            headers: { "Content-Type": "text/html" },
+          }),
+        ),
+      ),
+    );
+
+    const diagnosis = await probeReadyz();
+    expect(diagnosis.ok).toBe(false);
+    if (diagnosis.ok) return;
+    expect(diagnosis.kind).toBe("parse");
+    expect(diagnosis.http_status).toBe(200);
+    expect(diagnosis.reason).toContain("暂时不可用");
+    expect(diagnosis.reason).not.toContain("连不上");
+  });
+
+  it("classifies a 503 /readyz body as http", async () => {
+    mockFetch((url) => {
+      if (url.endsWith(READYZ))
+        return json({ status: "not_ready", database: false }, 503);
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    const diagnosis = await probeReadyz();
+    expect(diagnosis.ok).toBe(false);
+    if (diagnosis.ok) return;
+    expect(diagnosis.kind).toBe("http");
+    expect(diagnosis.http_status).toBe(503);
+    expect(diagnosis.reason).toContain("暂时不可用");
+  });
+
+  it("classifies a fetch TypeError as network", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))),
+    );
+
+    const diagnosis = await probeReadyz();
+    expect(diagnosis.ok).toBe(false);
+    if (diagnosis.ok) return;
+    expect(diagnosis.kind).toBe("network");
+    expect(diagnosis.reason).toContain("连不上 AgentCore");
+  });
+
+  it("classifies AbortSignal timeout as timeout", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.reject(
+          new DOMException("The operation timed out.", "TimeoutError"),
+        ),
+      ),
+    );
+
+    const diagnosis = await probeReadyz();
+    expect(diagnosis.ok).toBe(false);
+    if (diagnosis.ok) return;
+    expect(diagnosis.kind).toBe("timeout");
+    expect(diagnosis.reason).toContain("连不上 AgentCore");
   });
 });
 

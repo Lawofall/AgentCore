@@ -142,7 +142,7 @@ export function buildAgentNodePresentation(
           : d.status === "failed" && d.error
             ? {
                 heading: "失败原因",
-                // d.error is engine/infra text (str(exception), 结构闸 paths…) — same
+                // d.error is engine/infra text (str(exception), 合同失败原文) — same
                 // curation as FailureStrip, never the raw string.
                 text: failureDetailSentence(d.failureKind, d.productLanded),
               }

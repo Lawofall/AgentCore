@@ -92,11 +92,11 @@ async def test_project_mode_summarizes_shared_files():
         _FakeBackend(paths), shared_workspace=True
     )
     listed = [ln for ln in out.splitlines() if ln.startswith("- ")]
-    assert len(listed) == 5
-    assert "最近触达" in out
-    assert "另有 7 个文件" in out
+    assert listed == []
+    assert "最近触达" not in out
+    assert "src/f0.py" not in out
+    assert "另有 12 个文件" in out
     assert "file_list" not in out
-    assert "attachments/" not in out or "附件" in out
 
 
 async def test_project_mode_keeps_attachments_and_summarizes_rest():
@@ -105,7 +105,9 @@ async def test_project_mode_keeps_attachments_and_summarizes_rest():
         _FakeBackend(paths), shared_workspace=True
     )
     assert "attachments/brief.md（附件·含历轮）" in out
-    assert "另有 5 个文件" in out
+    assert "另有 10 个文件" in out
+    assert "最近触达" not in out
+    assert "lib/0.py" not in out
     assert "file_list" not in out
 
 
@@ -178,6 +180,21 @@ async def test_convention_file_is_name_pointer_not_excerpt_or_fingerprint():
     assert "当前工作区工程概览" not in out
     assert "常用命令" not in out
     assert "file_read" not in out
+
+
+async def test_project_mode_convention_pointer_without_listing_src():
+    out = await build_workspace_overview(
+        _FakeBackend(
+            ["src/main.ts"],
+            files={"AGENTS.md": "do not dump"},
+        ),
+        shared_workspace=True,
+    )
+    assert "工程约定：`AGENTS.md`" in out
+    assert "src/main.ts" not in out
+    assert "最近触达" not in out
+    assert "另有 1 个文件" in out
+    assert "do not dump" not in out
 
 
 async def test_convention_pointer_survives_index_failure():

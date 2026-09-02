@@ -452,7 +452,7 @@ def _assert_ceo_short_tail(out: str) -> None:
     assert "用自己的声音收尾" in out
     assert "不要粘贴本段指令" in out
     assert "debate_and_review" in out
-    assert "deep_multi_lens_research" in out
+    assert "deep_multi_lens_research" not in out
     assert "【收尾铁律·别抹平证据状态】" not in out
     assert "【收尾铁律·原样传达裁决】" not in out
     assert "【收尾铁律·不引入场外量化】" not in out
@@ -715,7 +715,7 @@ def test_cx_draft_brief_carries_output_budget():
 
 
 def test_background_schema_requires_source_date_and_bans_inference_as_fact():
-    """background：schema 短触发留来源/日期/未决；硬化反例在 debate_and_review skill。"""
+    """background：schema 短触发留来源/日期/未决；个案判例不进 skill。"""
     from agentcore.runtime.skills import build_system_skill_registry
 
     bg_desc = DEBATE_PARAMETERS["properties"]["background"]["description"]
@@ -726,8 +726,10 @@ def test_background_schema_requires_source_date_and_bans_inference_as_fact():
     skill = build_system_skill_registry().get("debate_and_review")
     assert skill is not None
     body = skill.body
-    assert "二审" in body  # 反例：表示将上诉 ≠ 已进入二审
+    assert "二审" not in body
+    assert "被告表示将上诉" not in body
     assert "来源" in body and "日期" in body
+    assert "未决" in body or "推断" in body
 
 
 def test_background_block_prompt_bans_rewriting_pending_as_fact():

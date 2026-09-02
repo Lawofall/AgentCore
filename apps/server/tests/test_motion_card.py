@@ -151,24 +151,21 @@ async def test_handoff_execute_ignores_extra_motion_card():
 
 
 @pytest.mark.asyncio
-async def test_handoff_logs_body_chars_distinct_from_summary_chars():
-    """worker.handoff：chars=summary 长；body_chars=同轮交付正文长（勿把 chars 当正文）。"""
+async def test_handoff_logs_body_chars():
+    """worker.handoff：body_chars=同轮交付正文长。"""
     from dataclasses import replace
 
     from structlog.testing import capture_logs
 
     t = HandoffTool()
-    summary = "简报结论十字"
     body = "这是交付正文，比简报长很多——" + ("字" * 40)
     ctx = replace(_ctx(), round_content_chars=len(body))
     with capture_logs() as logs:
-        res = await t.execute({"summary": summary}, ctx)
+        res = await t.execute({}, ctx)
     assert res.success is True
     handoffs = [e for e in logs if e.get("event") == "worker.handoff"]
     assert len(handoffs) == 1
-    assert handoffs[0]["chars"] == len(summary)
     assert handoffs[0]["body_chars"] == len(body)
-    assert handoffs[0]["chars"] != handoffs[0]["body_chars"]
 
 
 @pytest.mark.asyncio
@@ -358,5 +355,4 @@ def test_format_for_ceo_no_motion_card_section_when_absent():
     # 专节 intro 缺席（收尾指引里的条件句「上方若有【建议开辩】」仍可出现）
     assert "队员提交的命题卡" not in out
     assert "消费指引" not in out
-    # 无卡时既有下一步专节仍在
-    assert "队员建议的下一步" in out
+    assert "队员建议的下一步" not in out

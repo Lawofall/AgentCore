@@ -383,7 +383,7 @@ exports[`buildGraphScene · golden > multi-delegate → two 委派 lane bands, n
     {
       "id": "delegate-1",
       "kind": "delegate",
-      "label": "第 1 次委派（2 节点）",
+      "label": "第 1 次委派",
       "memberRunIds": [
         "a",
         "b",
@@ -392,7 +392,7 @@ exports[`buildGraphScene · golden > multi-delegate → two 委派 lane bands, n
     {
       "id": "delegate-2",
       "kind": "delegate",
-      "label": "第 2 次委派（2 节点）",
+      "label": "第 2 次委派",
       "memberRunIds": [
         "c",
         "d",

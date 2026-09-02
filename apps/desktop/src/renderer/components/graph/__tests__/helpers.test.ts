@@ -162,7 +162,7 @@ describe("computeWaves", () => {
     expect(bands).toEqual([]);
   });
 
-  it("labels topological waves with node counts", () => {
+  it("labels topological waves as 批次 N", () => {
     const execution = minimalExecution([run("a"), run("b", ["a"])]);
     const bands = computeWaves(
       execution,
@@ -172,8 +172,8 @@ describe("computeWaves", () => {
       "captain",
     );
     expect(bands).toHaveLength(2);
-    expect(bands[0]?.label).toBe("批次 1（1 节点）");
-    expect(bands[1]?.label).toBe("批次 2（1 节点）");
+    expect(bands[0]?.label).toBe("批次 1");
+    expect(bands[1]?.label).toBe("批次 2");
   });
 
   it("prefers 第 N 次委派 bands over topo waves when ≥2 delegate batches", () => {
@@ -198,8 +198,8 @@ describe("computeWaves", () => {
       "captain",
     );
     expect(bands).toHaveLength(2);
-    expect(bands[0]?.label).toBe("第 1 次委派（2 节点）");
-    expect(bands[1]?.label).toBe("第 2 次委派（2 节点）");
+    expect(bands[0]?.label).toBe("第 1 次委派");
+    expect(bands[1]?.label).toBe("第 2 次委派");
     // Cross-axis (row) strips in leftright — not the topo column strips.
     expect(bands[0]?.h).toBeLessThan(bands[0]?.w ?? 0);
     expect(bands[1]?.y).toBeGreaterThan(bands[0]?.y ?? 0);
@@ -227,7 +227,7 @@ describe("computeWaves", () => {
 
   it("excludes continuations from 委派 members when cold + continue share a graph", () => {
     // Two cold batches plus a continuation on batch1 — continuation must not
-    // appear in member lists or inflate node counts / open an extra column.
+    // appear in member lists or open an extra column.
     const execution = minimalExecution([
       run("a", [], { delegateBatch: 1 }),
       run("b", ["a"], { delegateBatch: 1 }),
@@ -253,8 +253,8 @@ describe("computeWaves", () => {
       "captain",
     );
     expect(bands).toHaveLength(2);
-    expect(bands[0]?.label).toBe("第 1 次委派（2 节点）");
-    expect(bands[1]?.label).toBe("第 2 次委派（2 节点）");
+    expect(bands[0]?.label).toBe("第 1 次委派");
+    expect(bands[1]?.label).toBe("第 2 次委派");
     const lanes = buildGraphScene(execution).bands.lanes;
     expect(lanes.map((b) => b.memberRunIds)).toEqual([
       ["a", "b"],

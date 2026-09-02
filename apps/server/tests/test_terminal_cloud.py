@@ -277,17 +277,16 @@ async def test_close_all_desk_sessions_drops_ledger(tmp_path: Path):
     assert "无后台进程" in listed.output
 
 
-async def test_cloud_wait_for_required_does_not_launch(tmp_path: Path):
-    sandbox = _FakeDesk(tmp_path / "scratch")
+async def test_cloud_long_running_defaults_wait_for(tmp_path: Path):
+    sandbox = _FakeDesk(tmp_path / "scratch", auto_log="Local: http://localhost:5173/\n")
     backend = _backend(tmp_path, sandbox)
     result = await process_manage(
         {"subcommand": "start", "command": "npm run dev"},
         _ctx(backend),
     )
-    assert result.success is False
-    assert result.contract_failure is True
-    assert result.metadata.get("code") == "wait_for_required"
-    assert sandbox.execs == []
+    assert result.success is True
+    assert sandbox.execs != []
+    assert "wait_for 已命中" in result.output
 
 
 async def test_subprocess_sandbox_start_is_cloud_desk_required(tmp_path: Path):

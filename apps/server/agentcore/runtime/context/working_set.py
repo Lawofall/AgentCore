@@ -1,13 +1,10 @@
-"""Conversation working set: files still in play after history drops tool I/O.
+"""File-path ledger for long-conversation compaction (not a per-turn prompt).
 
-History reconstruction replays no tool I/O; long-conversation compaction only sees
-user/assistant prose. File bytes stay on disk. This module keeps the *structure*
-(path + last action + optional read window) so the next CEO turn and workers can
-re-read instead of inventing. Same volatile-tail reason as ``<近期团队图>``.
-
-Injection is 当场 facts + one posture (上下文工程 · 渐进披露). No HOW handbook,
-no complement-prohibition, no user-utterance scan. Empty → drop the section
-(prefix-cache).
+History reconstruction replays no tool I/O; the compact summarizer otherwise only
+sees user/assistant prose. This module extracts path + last action + optional
+digest from journal so ``_render_fold`` can keep identifiers. Product models do
+not get a ``<工作集>`` block each turn — CEO uses the workspace file index;
+workers use glob / file_read.
 """
 
 from __future__ import annotations
@@ -17,7 +14,11 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from agentcore.core.logging import get_logger
-from agentcore.runtime.engine.tool_clear import structural_file_read_summary
+from agentcore.runtime.engine.tool_clear import (
+    FILE_READ_DIGEST_PREVIEW,
+    FILE_READ_DIGEST_STRUCTURE,
+    structural_file_read_summary,
+)
 from agentcore.runtime.facts import FactKind
 
 logger = get_logger(__name__)
@@ -28,7 +29,7 @@ READ_TOOLS = frozenset({"file_read"})
 WRITE_TOOLS = frozenset({"file_write", "file_append", "str_replace"})
 FILE_TOOLS = READ_TOOLS | WRITE_TOOLS
 
-# Newest unique paths kept in the prompt / compaction ledger.
+# Newest unique paths kept in the compaction ledger.
 MAX_WORKING_SET_PATHS = 16
 # Raw journal hits scanned before unique-merge (lean rows, no result body).
 MAX_WORKING_SET_HITS = 64
@@ -36,11 +37,7 @@ MAX_WORKING_SET_HITS = 64
 DIGEST_MAX_CHARS = 120
 DIGEST_KEY = "working_set_digest"
 _WRITE_BODY_KEYS = ("content", "new_str", "new_string", "replacement")
-_DIGEST_PREFIXES = ("【自动结构摘录，非全文】 ", "【自动摘录，非全文】 ")
-
-_TAG_OPEN = "<工作集>"
-_TAG_CLOSE = "</工作集>"
-_POSTURE = "正文以磁盘为准；需要细节时用 file_read。"
+_DIGEST_PREFIXES = (FILE_READ_DIGEST_STRUCTURE, FILE_READ_DIGEST_PREVIEW)
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,14 +232,6 @@ def _format_item(item: WorkingSetItem) -> str:
     return loc
 
 
-def render_working_set(items: Sequence[WorkingSetItem]) -> str:
-    """``<工作集>`` block, or ``\"\"`` when empty (section dropped)."""
-    if not items:
-        return ""
-    lines = [_TAG_OPEN, _POSTURE, *(_format_item(i) for i in items), _TAG_CLOSE]
-    return "\n".join(lines)
-
-
 def render_file_ledger(items: Sequence[WorkingSetItem]) -> str:
     """Compaction-fold ledger (no XML). Empty when nothing to keep."""
     if not items:
@@ -350,21 +339,6 @@ async def load_working_set_items(
     if live_entries:
         hits.extend(extract_working_set_items(live_entries))
     return merge_working_set(hits, max_paths=max_paths)
-
-
-async def build_working_set_block(
-    *,
-    conversation_id: str = "",
-    exclude_turn_id: str | None = None,
-    live_entries: Sequence[dict[str, Any]] | None = None,
-) -> str:
-    """Rendered ``<工作集>`` for CEO / worker injection, or ``\"\"``."""
-    items = await load_working_set_items(
-        conversation_id=conversation_id,
-        exclude_turn_id=exclude_turn_id,
-        live_entries=live_entries,
-    )
-    return render_working_set(items)
 
 
 async def build_fold_file_ledger(turn_ids: Sequence[str]) -> str:

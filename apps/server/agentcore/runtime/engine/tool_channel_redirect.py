@@ -19,7 +19,7 @@ CHANNEL_REDIRECT_CODES: frozenset[str] = frozenset(
     {
         "source_grep_redirect",
         "source_dump_redirect",
-        "project_verify_redirect",
+        "project_verify_redirect",  # journal-only; unified ``run`` no longer emits
         "long_running_redirect",
         "not_a_web_url",
         "url_not_workspace_path",

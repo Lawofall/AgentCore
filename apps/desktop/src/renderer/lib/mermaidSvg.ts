@@ -1,9 +1,9 @@
 /**
  * Mermaid v11 `useMaxWidth` (default) emits width="100%" + inline
- * `max-width: <native>px`. That only shrinks wide charts — it never scales a
- * small flowchart up. Strip the cap and pin pixel width/height so the inline
- * figure can size from native px (see inlineMermaidWidth) while the lightbox
- * still measures the true SVG.
+ * `max-width: <native>px`. Strip the cap and pin pixel width/height so the
+ * lightbox can contain-fit native px. Inline preview sizes a pixel box from
+ * those native dimensions (see inlineMermaidBox) — do not stretch to column
+ * width and do not put max-height + width/height:auto on the SVG (Chromium 0×0).
  */
 
 function parsePxLen(raw: string | null): number {
@@ -72,20 +72,28 @@ export function normalizeMermaidSvg(svg: string): string {
   }
 }
 
-/** Native CSS-pixel width after {@link normalizeMermaidSvg}, else 0. */
-export function readMermaidSvgWidth(svg: string): number {
-  if (!svg) return 0;
+/** Native CSS-pixel size after {@link normalizeMermaidSvg}, else `{w:0,h:0}`. */
+export function readMermaidSvgSize(svg: string): { w: number; h: number } {
+  if (!svg) return { w: 0, h: 0 };
   try {
     const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
     const el = doc.documentElement;
-    if (!el || el.tagName.toLowerCase() !== "svg") return 0;
-    return (
+    if (!el || el.tagName.toLowerCase() !== "svg") return { w: 0, h: 0 };
+    const vb = parseViewBoxSize(el.getAttribute("viewBox"));
+    const style = el.getAttribute("style") ?? "";
+    const w =
       parsePxLen(el.getAttribute("width")) ||
-      styleMaxWidthPx(el.getAttribute("style") ?? "") ||
-      parseViewBoxSize(el.getAttribute("viewBox"))?.w ||
-      0
-    );
+      styleMaxWidthPx(style) ||
+      vb?.w ||
+      0;
+    const h = parsePxLen(el.getAttribute("height")) || vb?.h || 0;
+    return { w, h };
   } catch {
-    return 0;
+    return { w: 0, h: 0 };
   }
+}
+
+/** Native CSS-pixel width after {@link normalizeMermaidSvg}, else 0. */
+export function readMermaidSvgWidth(svg: string): number {
+  return readMermaidSvgSize(svg).w;
 }

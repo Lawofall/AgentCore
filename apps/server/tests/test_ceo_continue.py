@@ -585,6 +585,9 @@ async def test_continue_ceo_rebuilds_worker_base_not_chat_prompt(monkeypatch):
         rebuild_mod, "collect_outlet_inventory", AsyncMock(return_value=())
     )
     monkeypatch.setattr(
+        rebuild_mod, "desk_is_visibly_empty", AsyncMock(return_value=False)
+    )
+    monkeypatch.setattr(
         rebuild_mod, "assemble_turn_rules", AsyncMock(return_value="")
     )
     monkeypatch.setattr(

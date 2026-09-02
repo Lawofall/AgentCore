@@ -2,8 +2,12 @@
  * AgentCore semantic OKLCH tokens — single source for desktop (+ mobile mirrors
  * light values in mobile-light.css). Hue 255 = brand blue.
  *
- * Dark = luminance stacking (Material / Linear): higher elevation → lighter
- * surface; borders = white alpha; body text soft white (~0.93). Mobile: light only.
+ * Dark = luminance stacking (Material 3 / Linear / GitHub Dark):
+ *   near-neutral surfaces (chroma ≤0.006); brand hue 255 only on primary/status.
+ *   canvas < card < popover/muted < accent; sidebar darker than canvas.
+ *   borders = white alpha ~12%; body text soft white (~0.93).
+ *   Dark lift stays luminance; do not invent a heavier dark shadow.
+ * Mobile: light only.
  *
  * Elevation aliases (raised / overlay / modal) = Tailwind default shadow-sm / lg
  * so `shadow-raised` etc. are names, not a restyle. Focus width/offset are
@@ -11,7 +15,7 @@
  *
  * Brand migration (方案 3 · 分步)：
  * - Step 0 ✅ sidebar cool gray (hue 250)
- * - Step 1–2 ↩ reverted — surfaces + primary back to pre-migration
+ * - Step 1–2 ↩ reverted — do not retune primary chroma with a surface pass
  */
 :root {
   --background: oklch(1 0 0);
@@ -110,23 +114,33 @@
   --elevation-modal: var(--elevation-overlay);
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
+
+  /* Motion — Linear / Material short craft. Two named durations so 0.15s / 150ms
+   * / 200ms do not scatter. Desktop @theme maps duration-fast / duration-normal.
+   * Honor prefers-reduced-motion at the call site (motion-reduce:transition-none);
+   * do not invent character-level streaming here. */
+  --motion-duration-fast: 150ms;
+  --motion-duration: 200ms;
+  --motion-ease: ease-out;
 }
 
 .dark {
-  /* Surfaces: bg → card (+0.03) → popover (+0.06); chroma kept low. */
-  --background: oklch(0.145 0.008 255);
+  /* Near-neutral surfaces (chroma ≤0.006). Brand 255 stays on primary/status.
+   * Elevation: canvas 0.13 → card +0.055 → popover/muted +0.095 → accent +0.14.
+   * Sidebar darker than canvas (chat/IDE chrome). Borders 12% white. */
+  --background: oklch(0.13 0.004 255);
   --foreground: oklch(0.93 0.005 255);
-  --card: oklch(0.175 0.008 255);
+  --card: oklch(0.185 0.004 255);
   --card-foreground: var(--foreground);
-  --popover: oklch(0.205 0.009 255);
+  --popover: oklch(0.225 0.005 255);
   --popover-foreground: var(--foreground);
   --primary: oklch(0.70 0.155 255);
   --primary-foreground: oklch(0.985 0.01 255);
-  --muted: oklch(0.215 0.01 255);
+  --muted: oklch(0.225 0.005 255);
   --secondary: var(--muted);
   --secondary-foreground: var(--foreground);
-  --muted-foreground: oklch(0.68 0.015 255);
-  --accent: oklch(0.24 0.012 255);
+  --muted-foreground: oklch(0.72 0.01 255);
+  --accent: oklch(0.27 0.006 255);
   --accent-foreground: var(--foreground);
   --destructive: oklch(0.65 0.19 27);
   --destructive-foreground: oklch(0.985 0.01 27);
@@ -134,26 +148,26 @@
   --success-foreground: oklch(0.16 0.03 155);
   --warning: oklch(0.8 0.14 75);
   --warning-foreground: oklch(0.2 0.04 75);
-  --border: oklch(1 0 0 / 0.09);
+  --border: oklch(1 0 0 / 0.12);
   --input: var(--border);
   --ring: var(--primary);
   --overlay: oklch(0 0 0 / 0.65);
-  --scrollbar-thumb: oklch(0.45 0.012 255 / 0.7);
-  --scrollbar-thumb-hover: oklch(0.58 0.016 255 / 0.85);
+  --scrollbar-thumb: oklch(0.40 0.008 255 / 0.7);
+  --scrollbar-thumb-hover: oklch(0.55 0.01 255 / 0.85);
 
-  /* Sidebar chrome: cool gray (hue 250), distinct from brand blue 255. */
-  --sidebar: oklch(0.155 0.006 250);
+  /* Sidebar chrome: cooler (hue 250) and darker than canvas. */
+  --sidebar: oklch(0.10 0.003 250);
   --sidebar-foreground: oklch(0.93 0.003 250);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: oklch(0.215 0.008 250);
+  --sidebar-accent: oklch(0.17 0.004 250);
   --sidebar-accent-foreground: oklch(0.78 0.13 255);
-  --sidebar-border: oklch(1 0 0 / 0.09);
+  --sidebar-border: oklch(1 0 0 / 0.10);
   --sidebar-ring: var(--primary);
   --sidebar-gradient: linear-gradient(
     180deg,
-    oklch(0.16 0.006 250),
-    oklch(0.14 0.005 255)
+    oklch(0.115 0.003 250),
+    oklch(0.095 0.002 255)
   );
 
   --syntax-keyword: oklch(0.78 0.13 300);

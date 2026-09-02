@@ -1,7 +1,9 @@
-"""协作图身份辅助：解析上一张图、加载宿主 journal、CEO 回显。
+"""协作图身份辅助：解析上一张图、加载宿主 journal。
 
 跨回合 divert（同 execution 续写宿主 journal / ``graph_append`` 事件）已退役。
 新回合 = 新 ``execution_id`` + 可选 ``prev_execution_id`` 图间链。
+``<近期团队图>`` 每回合注入已撤：``run_id`` 在当轮 delegate 回执名册，
+收口后冷开拒收口可附候选。
 
 与同回合二次 ``delegate``（协调 session merge / ``_last_graph_*`` 内存合入）正交。
 ``continue_from_run_id`` / ``replaces_run_id`` 出现时引擎自动写 ``prev_execution_id``，
@@ -220,132 +222,6 @@ async def load_host_journal_entries(host_message_id: str) -> list[dict[str, Any]
         return []
 
 
-# CEO-only volatile-tail note (跨回合可见回显通道): history replays only user/assistant
-# text, so the tool-result echo alone would be dropped next turn. This block rides the
-# CEO system prompt's volatile tail (assemble.py) — never the shared worker base.
-#
-# Facts only: worker count / role / terminal-or-running status / task brief.
-# append_to_execution_id / continue_from fill lives on the delegate schema.
-# No talk-script, completion heuristics, or "don't lie" instructions.
-_MAX_RECENT_GRAPH_WORKERS = 12
-_MAX_RECENT_GRAPH_TASK_CHARS = 80
-
-_RECENT_GRAPH_APPEND_NOTE = ""
-
-
-def _worker_status_label(phase: Any) -> str:
-    """Map a RunPhase (or missing → running) to the CEO-facing status token."""
-    from agentcore.runtime.runs.types import RunPhase
-
-    if phase is None:
-        return "running"
-    value = phase.value if isinstance(phase, RunPhase) else str(phase).strip().lower()
-    if value in ("completed", "failed", "cancelled", "skipped"):
-        return value
-    # queued / running / retrying / unknown → still in flight from the next turn's view
-    return "running"
-
-
-def _task_brief(task: str) -> str:
-    text = " ".join((task or "").split())
-    if not text:
-        return "—"
-    if len(text) > _MAX_RECENT_GRAPH_TASK_CHARS:
-        return text[:_MAX_RECENT_GRAPH_TASK_CHARS] + "…"
-    return text
-
-
-def format_recent_graph_worker_facts(
-    plan: Any,
-    completed: dict[str, Any] | None,
-) -> str:
-    """Minimal worker fact lines (role / status / task) for ``<近期团队图>``.
-
-    ``plan`` is a :class:`~agentcore.runtime.runs.plan.RunPlan` (or None).
-    Returns ``""`` when there are no worker nodes to list.
-    """
-    if plan is None:
-        return ""
-    nodes = getattr(plan, "nodes", None) or []
-    if not nodes:
-        return ""
-    seed = completed or {}
-    lines: list[str] = []
-    for node in nodes[:_MAX_RECENT_GRAPH_WORKERS]:
-        role = (
-            str(getattr(node, "role", "") or "").strip()
-            or str(getattr(node, "agent_name", "") or "").strip()
-            or str(getattr(node, "run_id", "") or "").strip()
-            or "—"
-        )
-        run_id = str(getattr(node, "run_id", "") or "").strip()
-        state = seed.get(run_id) if run_id else None
-        phase = getattr(state, "phase", None) if state is not None else None
-        status = _worker_status_label(phase)
-        task = _task_brief(str(getattr(node, "task", "") or ""))
-        # run_id 是续派 / 补缺口入口的必填项——不给出来，收口后就只剩会被拒的冷派。
-        lines.append(f"- run_id={run_id or '—'}; role={role}; status={status}; task={task}")
-    extra = len(nodes) - _MAX_RECENT_GRAPH_WORKERS
-    if extra > 0:
-        lines.append(f"- …另有 {extra} 名 worker 未列出")
-    return f"workers={len(nodes)}：\n" + "\n".join(lines)
-
-
-def render_recent_graph_context(
-    *,
-    execution_id: str,
-    worker_facts: str = "",
-) -> str:
-    """Assemble the ``<近期团队图>`` block (facts only)."""
-    eid = (execution_id or "").strip()
-    if not eid:
-        return ""
-    parts = [
-        "<近期团队图>",
-        "本对话最近一张协作图（团队执行）。",
-    ]
-    facts = (worker_facts or "").strip()
-    if facts:
-        parts.append(facts)
-    note = _RECENT_GRAPH_APPEND_NOTE.strip()
-    if note:
-        parts.append(note)
-    parts.append("</近期团队图>")
-    return "\n".join(parts)
-
-
-async def build_recent_graph_context(
-    *,
-    conversation_id: str,
-    exclude_message_id: str | None = None,
-) -> str:
-    """The ``<近期团队图>`` prompt note, or ``""`` when the conversation has no graph.
-
-    Resolves the newest appendable execution, then loads its host journal for a
-    compact worker roster (count / role / status / task brief). Missing journal
-    still yields the graph-exists header. Does not print the graph execution_id
-    to the model.
-    """
-    execution_id = await resolve_latest_appendable_execution(
-        conversation_id=conversation_id,
-        exclude_message_id=exclude_message_id,
-    )
-    if not execution_id:
-        return ""
-    worker_facts = ""
-    host_mid = await resolve_host_message_id(
-        conversation_id=conversation_id,
-        execution_id=execution_id,
-    )
-    if host_mid:
-        plan, completed = await load_host_plan_and_completed(host_mid)
-        worker_facts = format_recent_graph_worker_facts(plan, completed)
-    return render_recent_graph_context(
-        execution_id=execution_id,
-        worker_facts=worker_facts,
-    )
-
-
 def parse_host_captain_run_id(entries: list[dict[str, Any]] | None) -> str | None:
     """Parse the scene-level captain run id from host journal ``run_plan`` frames.
 
@@ -381,29 +257,3 @@ def parse_host_captain_run_id(entries: list[dict[str, Any]] | None) -> str | Non
         if fallback is None:
             fallback = captain_id
     return fallback
-
-
-async def load_host_plan_and_completed(
-    host_message_id: str,
-) -> tuple[Any | None, dict[str, Any]]:
-    """Load host ``RunPlan`` + completed seed from the host turn journal."""
-    from agentcore.runtime.journal.fold import completed_from_journal, plan_from_journal
-
-    entries: list[dict[str, Any]] = []
-    try:
-        from agentcore.db.base import async_session_factory
-        from agentcore.db.repositories import TurnJournalRepository
-
-        async with async_session_factory() as session:
-            repo = TurnJournalRepository(session)
-            entries = await repo.load(host_message_id)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "graph_append.host_journal_load_failed",
-            host_message_id=host_message_id,
-            error=str(exc),
-        )
-        return None, {}
-    plan = plan_from_journal(entries)
-    completed = completed_from_journal(entries)
-    return plan, completed

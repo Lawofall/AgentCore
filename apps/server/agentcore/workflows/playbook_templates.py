@@ -101,11 +101,7 @@ PRIMARY_SLOTS: dict[str, tuple[str, ...]] = {
     pid: tuple(s.key for s in slots if s.required) for pid, slots in _SLOT_DEFS.items()
 }
 
-# Soft optional defaults merged under user slots (user wins). Builders already default
-# many optionals when omitted; these only make the snapshot more explicit / stable.
-_DEFAULT_OPTIONAL_SLOTS: dict[str, dict[str, Any]] = {
-    "cite_write_review": {"checkpoint": True},
-}
+# Optional slot defaults live in playbook builders（cite_write_review.checkpoint 默认关）.
 
 _TITLE: dict[str, str] = {
     "map_fanout": "多角摸底",
@@ -181,7 +177,7 @@ def list_playbook_templates() -> list[PlaybookTemplateItem]:
 
 
 def merge_playbook_slots(playbook: str, slots: dict[str, Any] | None) -> dict[str, Any]:
-    """Validate catalog membership + primary slots; merge soft optional defaults."""
+    """Validate catalog membership + primary slots."""
     if not is_workflow_playbook(playbook):
         if playbook in PLAYBOOKS:
             raise PlaybookTemplateError(
@@ -194,8 +190,7 @@ def merge_playbook_slots(playbook: str, slots: dict[str, Any] | None) -> dict[st
     if slots is not None and not isinstance(slots, dict):
         raise PlaybookTemplateError("slots 必须是对象")
 
-    merged: dict[str, Any] = dict(_DEFAULT_OPTIONAL_SLOTS.get(playbook) or {})
-    merged.update(dict(slots or {}))
+    merged: dict[str, Any] = dict(slots or {})
 
     # List slots: coerce UI string → list before missing/expand checks.
     list_key = _LIST_SLOTS.get(playbook)

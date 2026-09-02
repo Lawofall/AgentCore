@@ -12,7 +12,7 @@
  */
 import { interactiveCheckpointTone } from "@/components/ui/tone-presets";
 import { ArrowRight, Check } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { AskTone } from "./AskUserFields";
 
 /** 灰阶为主 —— 卡内不出现品牌色，强调只靠选中态。 */
@@ -55,6 +55,11 @@ export function AskRowGroup({
     const next = (from + delta + rows.length) % rows.length;
     rowRefs.current[next]?.focus();
   };
+
+  useEffect(() => {
+    const first = rowRefs.current.find((el) => el && !el.disabled);
+    first?.focus();
+  }, []);
 
   return (
     <div className={className}>

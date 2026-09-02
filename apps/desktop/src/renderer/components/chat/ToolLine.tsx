@@ -4,9 +4,11 @@ import {
   isSuccessfulHandoff,
 } from "@/components/chat/handoffBrief";
 import {
+  type ToolLineTitleStat,
   type ToolResultData,
   ToolResultView,
   hasToolResultBody,
+  toolLineTitleStat,
   toolResultPeek,
 } from "@/components/chat/toolResult/ToolResultView";
 import {
@@ -253,6 +255,34 @@ function WebSearchSkeleton() {
   );
 }
 
+/** str_replace +/- (omit zeros), file_write「N 行」, or a file_read window
+ * (`42–53 行`) — shrink-0 so the path truncates first. Diagnostics stay in
+ * inlineMeta (warning) after this. */
+function ToolLineStat({ stat }: { stat: ToolLineTitleStat }) {
+  if (stat.kind === "diff") {
+    return (
+      <span className="ml-1.5 flex shrink-0 items-center gap-1.5 tabular-nums">
+        {stat.adds > 0 && <span className="text-success">+{stat.adds}</span>}
+        {stat.dels > 0 && (
+          <span className="text-destructive">-{stat.dels}</span>
+        )}
+      </span>
+    );
+  }
+  if (stat.kind === "readWindow") {
+    return (
+      <span className="ml-1.5 shrink-0 tabular-nums text-muted-foreground/70">
+        {stat.start}–{stat.end} 行
+      </span>
+    );
+  }
+  return (
+    <span className="ml-1.5 shrink-0 tabular-nums text-muted-foreground/70">
+      {stat.lines} 行
+    </span>
+  );
+}
+
 /** 行尾指示（顶层工具行对齐「Read page · N sources」）：进行中用已运行秒数（取代脉冲点，
  *  折叠保持一行）；否则失败打红✗，验证未完成走 warning 三角（非故障红）；顶层可展开
  *  行补折叠 chevron。成功完成不再挂绿✓——标题本身已表明做完。 */
@@ -389,7 +419,9 @@ export function ToolLine({
   const elapsed = useRunningElapsed(running, startedAt);
   const phaseText = running ? toolPhaseText(step.phase) : null;
   // 完成态元信息并进标题行、不另起 peek：web_search「N results」、grep 匹配计数、
-  // list_folders「N folders」、write 家族 / code_diagnostics 类型诊断、browser_* detail。
+  // list_folders「N folders」、str_replace +/-、file_write「N 行」、file_read 窗口
+  // 「a–b 行」、write 家族 / code_diagnostics 类型诊断、browser_* detail。
+  const titleStat = toolLineTitleStat(data);
   const writeDiagPeek =
     status === "success" && WRITE_FAMILY_TOOLS.has(step.tool_name)
       ? writeFamilyDiagnosticPeek(data)
@@ -478,6 +510,7 @@ export function ToolLine({
                   </span>
                 )}
               </span>
+              {titleStat && <ToolLineStat stat={titleStat} />}
               {inlineMeta && (
                 <span
                   className={`ml-1.5 min-w-0 max-w-[40%] truncate ${
@@ -486,7 +519,7 @@ export function ToolLine({
                       : "text-muted-foreground/70"
                   }`}
                 >
-                  · {inlineMeta}
+                  {inlineMeta}
                 </span>
               )}
               <ToolRowTail
