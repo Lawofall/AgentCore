@@ -1,6 +1,6 @@
 """Engine-level wall-clock ceilings for tool execution."""
 
-from typing import Any
+from typing import Any, Literal
 
 from agentcore.config import settings
 from agentcore.core.types import ToolCategory
@@ -13,7 +13,7 @@ def resolve_tool_timeout(
     schema: ToolSchema,
     arguments: dict[str, Any] | None = None,
     *,
-    location: str | None = None,
+    location: Literal["server", "local"] | None = None,
 ) -> float | None:
     """The engine-level wall-clock ceiling (seconds) for one call of this tool.
 
