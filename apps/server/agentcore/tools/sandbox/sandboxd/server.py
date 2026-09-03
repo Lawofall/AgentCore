@@ -48,6 +48,22 @@ from agentcore.tools.sandbox.sandboxd.protocol import (
 logger = get_logger(__name__)
 
 _SO_PEERCRED = 17  # Linux SOL_SOCKET / SO_PEERCRED
+# Fallback when settings are unavailable. Live knob:
+# ``settings.gvisor_desk_start_timeout_seconds``. Minutes-scale, not the 60s
+# exec cap (that bound is only for ``exec`` after the desk is up).
+_START_DETACH_PROC_TIMEOUT = 180.0
+
+
+def _start_detach_proc_timeout() -> float:
+    """``runsc run -detach`` wait. Same budget as the API-side RPC wait."""
+    try:
+        from agentcore.config import settings
+
+        return float(settings.gvisor_desk_start_timeout_seconds)
+    except Exception:  # noqa: BLE001 — import/settings must not break boot wait
+        return _START_DETACH_PROC_TIMEOUT
+
+
 _HOST_BIND_PATHS = ("/usr", "/lib", "/lib64", "/bin", "/etc")
 _SUBNET_RE = re.compile(r"^[0-9]{1,3}\.[0-9]{1,3}$")
 _CONTAINER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -662,12 +678,24 @@ class SandboxdServer:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+        timeout = _start_detach_proc_timeout()
+        started = time.monotonic()
         try:
-            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60.0)
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except TimeoutError:
+            elapsed = time.monotonic() - started
+            logger.warning(
+                "sandboxd.start_detach_timeout",
+                container_id=container_id,
+                timeout_seconds=timeout,
+                elapsed_seconds=round(elapsed, 3),
+            )
             await self._kill_proc(proc)
             await self._runsc_aux("delete", "--force", container_id)
-            raise RpcDeniedError("start-detach timed out", code="sandboxd_timeout") from None
+            raise RpcDeniedError(
+                "start-detach timed out",
+                code="sandboxd_start_timeout",
+            ) from None
         if proc.returncode != 0:
             detail = (stderr or b"").decode("utf-8", errors="replace").strip()[:200]
             await self._runsc_aux("delete", "--force", container_id)

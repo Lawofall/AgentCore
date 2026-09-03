@@ -117,8 +117,8 @@ class WorkspaceSettings(BaseModel):
     # ``gvisor_desk_start_timeout_seconds``).
     gvisor_slot_wait_seconds: float = 15.0
     # Lazy guest create (sandboxd ``start_detach``). Minutes-scale, not the 60s
-    # exec cap / 90s engine EXECUTION default. Engine wait_for for cloud
-    # ``code_execute`` / ``test_run`` must cover this + the exec ceiling.
+    # exec cap / 90s engine EXECUTION default. Cloud ``run`` engine wait_for is
+    # the op ceiling plus this (short 90 + boot; verify disaster + boot).
     gvisor_desk_start_timeout_seconds: float = 180.0
     # Per-execution hard resource caps enforced by the OCI spec. Authoritative for
     # cloud runs: an ExecutionRequest cannot exceed them. Memory default sized for

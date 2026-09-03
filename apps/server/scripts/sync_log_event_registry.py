@@ -769,6 +769,11 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
     "sandboxd.start_detach": {
         "container_id": "str",
     },
+    "sandboxd.start_detach_timeout": {
+        "container_id": "str",
+        "timeout_seconds": "float",
+        "elapsed_seconds": "float",
+    },
     "sandboxd.exec": {
         "container_id": "str",
         "bin": "str",
@@ -1190,6 +1195,9 @@ KEY_DESC: dict[str, str] = {
     "sandbox.desk_reaper_error": "桌级 idle reap 扫一轮失败（不打死 browser_reaper 循环）",
     "sandbox.desk_reaper_swept": "桌级 idle reap 扫到并关掉了若干空闲 guest",
     "sandboxd.start_detach": "sandboxd 已 ``runsc run -d`` 拉起长寿命 guest",
+    "sandboxd.start_detach_timeout": (
+        "sandboxd ``runsc run -d`` 超过开机预算；已杀进程并 force-delete"
+    ),
     "sandboxd.exec": "sandboxd 已 ``runsc exec`` 进允许表解释器",
     "sandboxd.exec_stdio": "sandboxd 已 ``runsc exec`` stdio 进桌内驱动（不另起 guest）",
     "compaction.shutdown_timeout": "停机 flush 在飞 fold 超时（best-effort，取消剩余 task）",

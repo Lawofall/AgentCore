@@ -456,7 +456,12 @@ async def run_one_tool(
     ctx = replace(context, on_phase=_emit_phase, on_progress=_emit_progress)
 
     started = time.monotonic()
-    timeout = resolve_tool_timeout(tool.schema, args)
+    backend = getattr(context, "backend", None)
+    timeout = resolve_tool_timeout(
+        tool.schema,
+        args,
+        location=getattr(backend, "location", None),
+    )
     deadline_token = set_tool_deadline(timeout)
     coalesce_key = _file_read_round_coalesce_key(args) if name == "file_read" else None
     try:

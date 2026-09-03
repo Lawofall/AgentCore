@@ -24,6 +24,7 @@ from agentcore.tools.sandbox.limits import reset_execution_slots
 from agentcore.tools.sandbox.protocol import ExecutionRequest
 from agentcore.tools.sandbox.sandboxd import (
     SandboxdError,
+    SandboxdRpcError,
     SandboxdUnavailableError,
     set_sandboxd_client_for_tests,
 )
@@ -526,6 +527,55 @@ async def test_start_detach_timeout_is_not_exec_forced_stop(tmp_path: Path):
     assert "forced stop after 30s" not in msg
     assert "forced stop after 60s" not in msg
     assert failed.value.details.get("code") == "exec_env_sandbox_unavailable"
+
+
+@pytest.mark.parametrize("rpc_code", ["sandboxd_start_timeout", "sandboxd_timeout"])
+@pytest.mark.asyncio
+async def test_desk_start_rpc_timeout_closes_host_health(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rpc_code: str
+):
+    from agentcore.tools.sandbox.cloud_health import (
+        cloud_sandbox_health,
+        set_cloud_sandbox_health_for_tests,
+    )
+    from agentcore.tools.sandbox.exec_env import EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
+
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
+    set_cloud_sandbox_health_for_tests(True)
+
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
+    starts: list[int] = []
+
+    class _BootRpcTimeout(LoopbackRunscClient):
+        async def start_detach(self, **kwargs):  # noqa: ANN003, ARG002
+            starts.append(1)
+            raise SandboxdRpcError("start-detach timed out", code=rpc_code)
+
+        async def exec_wait(self, **kwargs):  # noqa: ANN003, ARG002
+            raise AssertionError("exec_wait must not run before desk is ready")
+
+        async def kill(self, container_id: str, signal: str = "SIGKILL") -> None:
+            return None
+
+        async def delete(self, container_id: str, *, force: bool = True) -> None:
+            return None
+
+    set_sandboxd_client_for_tests(
+        _BootRpcTimeout(
+            runsc_path=sandbox._runsc,  # noqa: SLF001
+            runtime_root=sandbox._runtime_root,  # noqa: SLF001
+        )
+    )
+    with pytest.raises(SandboxError, match="云端隔离执行环境当前不可用") as failed:
+        await sandbox.ensure_workspace_desk(str(ws))
+    assert failed.value.details.get("code") == EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
+    assert cloud_sandbox_health() is False
+    assert starts == [1]
+    with pytest.raises(SandboxError, match="云端隔离执行环境当前不可用"):
+        await sandbox.ensure_workspace_desk(str(ws))
+    assert starts == [1]
 
 
 async def test_exec_sandboxd_error_is_not_desk_start_failure(tmp_path: Path):

@@ -105,6 +105,8 @@ def _desk_start_error(
         ) or code in (
             "sandboxd_unavailable",
             "sandboxd_start_timeout",
+            # Start-path only. Old sandboxd reused the exec-wait code for -detach.
+            "sandboxd_timeout",
         )
     if host_unhealthy:
         note_cloud_sandbox_unhealthy(

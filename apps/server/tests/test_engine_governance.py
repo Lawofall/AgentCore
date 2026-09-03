@@ -841,6 +841,45 @@ def test_resolve_tool_timeout_by_category():
     assert resolve_tool_timeout(_schema(ToolCategory.EXECUTION, 5.0)) == 5.0
 
 
+def _run_schema() -> ToolSchema:
+    return ToolSchema(
+        name="run",
+        description="d",
+        parameters={"type": "object", "properties": {}},
+        category=ToolCategory.EXECUTION,
+    )
+
+
+def test_cloud_short_run_engine_timeout_covers_desk_boot():
+    from agentcore.tools.builtin.run import run_op_timeout_seconds
+
+    args = {"command": "python -c 'print(1)'"}
+    local = run_op_timeout_seconds(args, location="local")
+    cloud = run_op_timeout_seconds(args, location="server")
+    assert local == 90.0
+    assert cloud == 90.0 + settings.gvisor_desk_start_timeout_seconds
+    assert resolve_tool_timeout(_run_schema(), args, location="server") == cloud
+    assert resolve_tool_timeout(_run_schema(), args, location="local") == local
+
+
+def test_cloud_verify_run_engine_timeout_covers_desk_boot():
+    from agentcore.tools.builtin.run import run_op_timeout_seconds
+
+    args = {"command": "pnpm test"}
+    local = run_op_timeout_seconds(args, location="local")
+    cloud = run_op_timeout_seconds(args, location="server")
+    assert cloud == local + settings.gvisor_desk_start_timeout_seconds
+
+
+def test_cloud_process_manage_engine_timeout_skips_desk_boot():
+    from agentcore.tools.builtin.run import run_op_timeout_seconds
+
+    args = {"action": "read", "process_id": "p1"}
+    assert run_op_timeout_seconds(args, location="server") == run_op_timeout_seconds(
+        args, location="local"
+    )
+
+
 class _SlowTool:
     """A tool that sleeps well past its declared ceiling, to trip the engine timeout."""
 

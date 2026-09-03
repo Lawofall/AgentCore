@@ -10,7 +10,10 @@ from .constants import TIMEOUT_EXEMPT_CATEGORIES
 
 
 def resolve_tool_timeout(
-    schema: ToolSchema, arguments: dict[str, Any] | None = None
+    schema: ToolSchema,
+    arguments: dict[str, Any] | None = None,
+    *,
+    location: str | None = None,
 ) -> float | None:
     """The engine-level wall-clock ceiling (seconds) for one call of this tool.
 
@@ -30,7 +33,7 @@ def resolve_tool_timeout(
     if schema.name == "run":
         from agentcore.tools.builtin.run import run_op_timeout_seconds
 
-        return run_op_timeout_seconds(arguments)
+        return run_op_timeout_seconds(arguments, location=location)
     if schema.name == "git":
         from agentcore.tools.builtin.git_ops import git_tool_timeout_seconds
 

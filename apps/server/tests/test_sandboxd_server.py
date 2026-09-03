@@ -51,6 +51,7 @@ async def _running(
     monkeypatch: pytest.MonkeyPatch,
     *,
     run_script: str = _WAIT_SCRIPT,
+    detach_script: str = "raise SystemExit(0)",
 ) -> AsyncIterator[tuple[SandboxdServer, UnixSandboxdClient, list[list[str]], list[dict]]]:
     runtime_root = tmp_path / "rt"
     netns_dir = tmp_path / "netns"
@@ -69,7 +70,7 @@ async def _running(
                 bundles.append(json.loads(cfg_path.read_text(encoding="utf-8")))
         script = "raise SystemExit(0)"
         if "-detach" in argv_s or "--detach" in argv_s:
-            script = "raise SystemExit(0)"
+            script = detach_script
         elif "exec" in argv_s or "run" in argv_s:
             script = run_script
         return await _REAL_EXEC(sys.executable, "-c", script, **kwargs)
@@ -156,6 +157,37 @@ async def test_ping_and_start_detach_uses_net_argv(tmp_path, monkeypatch):
         )
         assert "--rootless" not in run
         assert "-detach" in run
+
+
+def test_start_detach_proc_budget_is_minutes_not_exec_cap():
+    from agentcore.config import settings
+    from agentcore.tools.sandbox.sandboxd.server import _start_detach_proc_timeout
+
+    timeout = _start_detach_proc_timeout()
+    assert timeout == settings.gvisor_desk_start_timeout_seconds
+    assert timeout > 60.0
+    assert timeout < 1200.0
+
+
+@pytest.mark.asyncio
+async def test_start_detach_timeout_code_is_start_timeout(tmp_path, monkeypatch):
+    monkeypatch.setattr(server_mod, "_start_detach_proc_timeout", lambda: 0.05)
+    async with _running(tmp_path, monkeypatch, detach_script=_HANG_SCRIPT) as (
+        server,
+        client,
+        _c,
+        _b,
+    ):
+        bundle = Path(server._runtime_root) / "b"
+        bundle.mkdir()
+        netns = Path(server._netns_run_dir) / "acpkg0"
+        with pytest.raises(SandboxdRpcError) as failed:
+            await client.start_detach(
+                bundle_dir=str(bundle),
+                container_id="agentcore-desk1",
+                netns_path=str(netns),
+            )
+        assert failed.value.code == "sandboxd_start_timeout"
 
 
 @pytest.mark.asyncio

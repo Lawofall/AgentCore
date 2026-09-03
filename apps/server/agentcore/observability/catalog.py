@@ -2328,6 +2328,15 @@ EVENTS: list[EventSpec] = [
             'container_id': FieldType('str'),
         },
     ),
+    EventSpec(
+        name='sandboxd.start_detach_timeout',
+        description='sandboxd ``runsc run -d`` 超过开机预算；已杀进程并 force-delete',
+        fields={
+            'container_id': FieldType('str'),
+            'elapsed_seconds': FieldType('float'),
+            'timeout_seconds': FieldType('float'),
+        },
+    ),
     EventSpec(name='sandboxd.started'),
     EventSpec(name='sandboxd.stopped'),
     EventSpec(name='search.backend_aclose_failed'),

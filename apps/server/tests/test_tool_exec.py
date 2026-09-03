@@ -2085,7 +2085,7 @@ async def test_cloud_code_execute_outer_timeout_is_sandbox_unavailable(
 
     monkeypatch.setattr(
         "agentcore.tools.builtin.run.run_op_timeout_seconds",
-        lambda _args=None: 0.05,
+        lambda _args=None, **_kw: 0.05,
     )
 
     class _HangExec:
