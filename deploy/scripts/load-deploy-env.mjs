@@ -327,7 +327,7 @@ export async function assertBackendContractSatisfied({ apiBaseUrl, force = false
     `  本次构建 HEAD    : ${webSha.slice(0, 7)}`,
     `  线上后端 /version: ${backendSha}`,
     "  前端可能调用后端还没有的接口（如 记忆·主题 → 404）。",
-    "  先部署后端：pnpm deploy:backend <short-sha>，待 /api/version 追上后再发前端。",
+    "  先切流后端：pnpm deploy:backend:switch <short-sha>（须已预构建），待 /api/version 追上后再发前端。",
     "  确需强发（纯前端改动、确认无新接口）：加 --force 或设 DEPLOY_SKIP_CONTRACT_GATE=1。",
     "",
   ].join("\n");

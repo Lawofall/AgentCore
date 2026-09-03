@@ -7,10 +7,11 @@
  *   pnpm release:ship -- --sha abc1234
  *   pnpm release:ship -- --check      # 额外探测：git / 桌面·Android draft 资产（需 gh）/ updater feed
  *
- * 公告两段式（定案 D · 工作流 A）：
- *   预告 = 人定「今天发 + 约时」后立刻 → pnpm release:notice -- --phase preview …
- *         （与 release:gate / 修拦阻并行；红了改约时或归档预告；部署前仍须 gate 全绿）
- *   收口 = 桌面转正 + 官网（或 api-only 验收）后 → --phase done
+ * 准备 / 切流拆开（默认不发预告）：
+ *   准备 = CI 绿后立刻：后端预构建、桌面/Android 打进 draft（不停 api、不转正）
+ *   切流 = 空闲时同一坐席：后端 --switch → 桌面/Android 转正 → 官网/admin/web
+ *   收口 = 验收后 --phase done（全端必发；纯后端可感知再发）
+ *   预告 = 例外（破坏性迁移 / 无法空闲切）才 --phase preview
  *
  * 权威命令细节 → .cursor/rules/cursor-deploy.mdc · docs/05 发布与门禁 / 产品公告文案模板
  */
@@ -239,15 +240,7 @@ async function main() {
   );
 
   let n = 1;
-  printStep(n++, "【公告·预告】人定约时后立刻发（工作流 A · 与门禁并行）", [
-    track === "full"
-      ? `pnpm release:notice -- --phase preview --kind release --at HH:MM --highlights "亮点1；亮点2；亮点3；亮点4；亮点5"`
-      : `pnpm release:notice -- --phase preview --kind hotfix --at HH:MM --summary "一句话变更"`,
-    "勿等 gate 全绿才预告；门禁不过 → 改约时或 Admin 归档预告",
-    "dry-run 可先: 同上命令加 --dry-run",
-  ]);
-
-  printStep(n++, "本地门禁（部署前必须全量非 lite 全绿）", [
+  printStep(n++, "本地门禁（切流前必须全量非 lite 全绿）", [
     win
       ? "Win 默认串行（避免 contracts∥desktop 写盘撞锁）：pnpm release:gate"
       : "pnpm release:gate",
@@ -271,41 +264,54 @@ async function main() {
     "gh run watch <id> --exit-status   # 红灯或未跑完不得上后端",
   ]);
 
-  printStep(n++, "后端上线（必须先于客户端）", [
-    `pnpm deploy:backend ${sha}`,
-    "验收: GET /readyz · GET /version → git_sha 对齐（勿在 chat 回显主机）",
-  ]);
-
+  const prepareLines = [
+    `pnpm deploy:backend ${sha}   # 只打 api:<sha>，不停 api、不推 latest`,
+    "进度: pnpm deploy:backend:status",
+  ];
   if (track === "full") {
-    printStep(n++, "桌面 Win + Mac（可并行）", [
+    prepareLines.push(
       "pnpm -C apps/desktop release:win",
       'gh workflow run "Release Desktop" --repo Lawofall/AgentCore -f platform=mac',
-      `齐资产后转正: gh release edit v${v.desktop} --repo Lawofall/AgentCore-releases --draft=false --latest`,
-    ]);
+      "pnpm -C apps/mobile release:android   # draft；CDN 末尾 sync；出包前自动 CORS 预检",
+      "真机冒烟仅原生面变更（签名安装 / WebView / SSE）；纯 renderer/协议跟发可跳过",
+      "桌面/Android 停在 draft，此步不要 gh release edit --draft=false",
+    );
+  } else {
+    prepareLines.push("纯后端通常不必打桌面/Android；协议/UI 混改走 --track full");
+  }
+  prepareLines.push(
+    "例外才预告（破坏性迁移 / 无法空闲切）: pnpm release:notice -- --phase preview …",
+  );
+  printStep(n++, "【准备】CI 绿后立刻做（用户无感；默认不发预告）", prepareLines);
 
-    printStep(n++, "Android APK（与桌面 tag 分轨 android-v*）", [
-      "pnpm -C apps/mobile release:android   # 打签 APK → draft upload；CDN 由脚本末尾 sync；出包前自动跑公网 Capacitor CORS 预检",
-      "真机冒烟（签名安装 / 系统 WebView 渲染 / 端到端 SSE）",
-      `冒烟绿后转正: gh release edit android-v${v.mobile} --repo Lawofall/AgentCore-releases --draft=false`,
-      "本清单不自动跑 release:android；漏 Publish 则官网/CDN 停在旧版",
-    ]);
-
-    printStep(n++, "客户端静态面（后端已上后即可；官网等桌面 Publish）", [
+  const cutoverLines = [
+    `pnpm deploy:backend:switch ${sha}   # finish-server；镜像已在则不重建`,
+    "验收: GET /readyz · GET /version → git_sha 对齐（勿在 chat 回显主机）",
+  ];
+  if (track === "full") {
+    cutoverLines.push(
+      `桌面转正: gh release edit v${v.desktop} --repo Lawofall/AgentCore-releases --draft=false --latest`,
+      `Android 转正: gh release edit android-v${v.mobile} --repo Lawofall/AgentCore-releases --draft=false`,
+      "其它轨不等 APK；漏 Publish 则官网/CDN 停在旧版",
       "pnpm -C apps/admin deploy:production",
       "pnpm -C apps/desktop deploy:web",
-      "pnpm -C apps/website deploy:pages   # 须在桌面 release 已 Publish 之后；Android 链亦须 android-v* 已转正",
-    ]);
+      "pnpm -C apps/website deploy:pages   # 须在桌面 release 已 Publish 之后",
+    );
   } else {
-    printStep(n++, "客户端", [
+    cutoverLines.push(
       "纯后端热修通常不必跟发桌面/官网；协议变更则同日跟 admin（见发布与门禁 §7.4）",
-    ]);
+    );
   }
+  cutoverLines.push(
+    "紧急才一把做完: pnpm deploy:backend:now <sha>（构建完立刻停 api）",
+  );
+  printStep(n++, "【切流】确认空闲后同一坐席（后端必须先于客户端）", cutoverLines);
 
   printStep(n++, "【公告·收口】验收通过后", [
     track === "full"
       ? `pnpm release:notice -- --phase done --kind release --versions "api ${v.api} / 桌面 ${v.desktop} / 手机 ${v.mobile}"`
-      : `pnpm release:notice -- --phase done --kind hotfix --summary "一句话变更"`,
-    "可选: Admin 归档预告条，避免双横幅叠放",
+      : `pnpm release:notice -- --phase done --kind hotfix --summary "一句话变更"（纯后端可感知再发；无感可省略）`,
+    "默认不发预告。若发过预告：Admin 归档预告条，避免双横幅",
   ]);
 
   printStep(n++, "发布点 tag（仅标记，不触发部署）", [

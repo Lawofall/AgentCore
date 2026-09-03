@@ -26,6 +26,8 @@
     "test:server:cov": "cd apps/server && uv run pytest --cov=agentcore --cov-report=term-missing --ignore=tests/integration --tb=short -q",
     "test:server:slow": "cd apps/server && uv run pytest --durations=20 -q",
     "deploy:backend": "node deploy/scripts/remote-build-deploy.mjs",
+    "deploy:backend:switch": "node deploy/scripts/remote-build-deploy.mjs --switch",
+    "deploy:backend:now": "node deploy/scripts/remote-build-deploy.mjs --now",
     "deploy:backend:status": "node deploy/scripts/check-remote-build.mjs",
     "publish:notice": "node deploy/scripts/publish-product-notice.mjs",
     "publish:notice:help": "node scripts/release-notice.mjs --help",

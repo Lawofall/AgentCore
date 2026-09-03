@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 查看生产机 docker buildx 是否在跑（remote-build-deploy 耗时长时用）。
+ * 查看生产机 docker buildx 是否在跑（`pnpm deploy:backend` 预构建耗时长时用）。
  *
  *   node deploy/scripts/check-remote-build.mjs
  */

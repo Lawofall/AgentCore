@@ -8,7 +8,9 @@
  *   pnpm release:notice -- --phase preview --kind hotfix --at 14:30 --summary "修复登录超时"
  *   pnpm release:notice -- --dry-run --phase done --kind hotfix
  *
- * 预告 = 人定约时后立刻（工作流 A，与 gate 并行）；收口 = 桌面转正+官网后（或 api-only 验收后）。
+ * 默认只发收口（--phase done）。预告（--phase preview）仅例外：破坏性迁移 / 无法空闲切流。
+ * 准备/切流工作流 → docs/05-平台与运维/发布与门禁.md · release:ship
+ * 文案权威 → docs/05-平台与运维/产品公告文案模板.md
  * Win：标题/正文走临时文件（--title-file / --body-file），避免 shell:true 拆碎空格标题。
  * 维护/政策/故障仍走 Admin UI，不进本脚本。
  * 默认 CTA：检查更新 → /more/about（可用 --no-cta 关闭，或 --cta-label/--cta-url 覆盖）。

@@ -1,8 +1,8 @@
 name: Promote Backend
 
-# 将 master 当前 HEAD（或指定 ref）部署到生产：SSH → finish-server.sh。
-# 等价于打 prod-* tag 触发 deploy-backend，但不强制写 git tag。
-# 镜像须已由 build-backend.yml 推 ACR（push master 后）。
+# 将已预构建的镜像切到生产：SSH → finish-server.sh。
+# 日常等价于 `pnpm deploy:backend:switch <sha>`。镜像须已由本地 `pnpm deploy:backend <sha>`
+# 或备用 build-backend.yml 推 ACR。
 on:
   workflow_dispatch:
     inputs:
