@@ -53,8 +53,10 @@ def build_request_window(
     messages: list[LLMMessage],
     investigation_tools: frozenset[str],
     round_idx: int,
+    *,
+    run_id: str = "",
 ) -> list[LLMMessage]:
-    """Project the LLM window with optional tool-result / write-args clearing."""
+    """Project the LLM window: tool-result / write-args clearing, then window compact."""
     # B1：在投影清理前用完整 transcript 闩锁 browser_* 成功（收口对账真源）。
     from agentcore.runtime.closing_posture import note_browser_tool_success_from_messages
 
@@ -149,6 +151,19 @@ def build_request_window(
             round=round_idx,
         )
         window = browser_cleared
+    if run_id:
+        from .window_compact import apply_stored_window_compact
+
+        compacted = apply_stored_window_compact(window, run_id)
+        if compacted is not window:
+            logger.info(
+                "engine.window_compact_project",
+                run_id=run_id,
+                before=len(window),
+                after=len(compacted),
+                round=round_idx,
+            )
+            window = compacted
     return window
 
 
@@ -232,7 +247,9 @@ async def run_llm_round(
     on_reset: Callable[[], None] | None = None,
 ) -> LlmRoundOutput | LlmRoundFailure:
     """Stream one LLM round; record facts and round_end log on success."""
-    request_window = build_request_window(messages, investigation_tools, round_idx)
+    request_window = build_request_window(
+        messages, investigation_tools, round_idx, run_id=run_id
+    )
     request = build_selected_request(
         SelectedCall(model=active_model, profile=profile),
         request_window,

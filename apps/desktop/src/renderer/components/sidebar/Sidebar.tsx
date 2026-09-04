@@ -8,6 +8,7 @@ import {
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { isWebClient } from "@/lib/capabilities";
 import { startNewConversation } from "@/lib/newConversation";
+import { RailHotkeySlotsProvider } from "@/lib/railHotkeys";
 import { useUnreadTotal } from "@/stores/messaging";
 import { SIDEBAR_COLLAPSED_WIDTH, useSidebarStore } from "@/stores/sidebar";
 import { useUIStore } from "@/stores/ui";
@@ -209,12 +210,12 @@ export function Sidebar() {
           (前端UX §一 方案C). */}
       <div className="flex-1 overflow-y-auto">
         {!collapsed && (
-          <>
+          <RailHotkeySlotsProvider>
             <PinnedConversations />
             <WorkspaceGroups />
             <RecentConversations />
             <ViewAllConversations />
-          </>
+          </RailHotkeySlotsProvider>
         )}
       </div>
 

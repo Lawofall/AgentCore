@@ -15,12 +15,10 @@ export function WitnessExamSection({
   exchanges,
   messageId,
   sceneKey,
-  moderatorModel,
 }: {
   exchanges: DebateWitnessExamView[];
   messageId: string;
   sceneKey: string;
-  moderatorModel?: string | null;
 }) {
   if (exchanges.length === 0) return null;
   return (
@@ -28,11 +26,7 @@ export function WitnessExamSection({
       <div className="mt-3 border-t border-border pt-3 text-center">
         <h4 className="text-base font-semibold text-foreground">证人答问</h4>
         <p className="mt-1 flex flex-wrap items-center justify-center gap-1.5 text-xs text-muted-foreground">
-          <ModeratorIdentity
-            model={moderatorModel}
-            gavelSize={13}
-            className="text-xs"
-          />
+          <ModeratorIdentity gavelSize={13} className="text-xs" />
           <span>点名证人澄清事实</span>
         </p>
       </div>

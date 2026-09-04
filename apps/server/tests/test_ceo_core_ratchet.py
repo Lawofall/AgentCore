@@ -9,8 +9,8 @@
 
 比体积更要紧的是**权威归属**：同一件事只能有一处权威。
 
-- 环境能不能做某事 = **算出来的事实**，住 ``<工作区>``（``本回合执行能力`` /
-  ``产物格式`` / ``出站网络`` …）。核里复述一份就会漂——案 0a71 就是核里
+- 环境能不能做某事 = **算出来的事实**，住 ``<工作区>``（执行 / 桌 / 缺口 /
+  Git …）。核里复述一份就会漂——案 0a71 就是核里
   散文断言「``md_to_docx`` / ``md_to_pdf`` 无条件装配」，而 CEO 并不持这两把工具、在自己的
   工具列表里看不见它们，模型于是花了整段思考链猜「队员到底有没有」，最后把用户的三个选项
   连同提问一起丢了。**下面那条 assembly-claim 测试就是这个 bug 的回归守卫。**
@@ -181,7 +181,9 @@ from agentcore.runtime.resolve.prompt import (
 # 2026-08-31 规模句改为短答和单点 ≠ 成件事。当次实测 1518。cap 1520。
 # 2026-09-01 身份问路由句出核；基座删只读审计句；run HOW 出 capability_how_suffix。
 # 当次实测 1443。cap 降到 1450。
-_RESIDENT_CAP = 1450
+# 2026-09-04 `<工作区>` 坐标化：诚实改对照开场表+缺口（能力行散文出基座）。
+# 当次实测 1436。cap 降到 1440。
+_RESIDENT_CAP = 1440
 
 # (门工具, 该手册的签名字面) —— 手册只在门开的回合出现，不许常驻。
 # run 的 HOW 在 skill body（consult(run) 命中 skill），不进 capability_how_suffix。
@@ -218,12 +220,12 @@ def test_core_states_no_tool_assembly_claims():
     """案 0a71 回归守卫：装配态只能由 `<工作区>` 算，核里不许用散文断言。"""
     hint = _CEO_CORE_HINT
     assert "无条件装配" not in hint
-    # 专用导出器的名字出现在核里，几乎总是为了断言「它一定在」——装没装配看产物格式行。
+    # 专用导出器的名字出现在核里，几乎总是为了断言「它一定在」——装没装配看开场表。
     for exporter in ("md_to_docx", "md_to_pdf"):
-        assert exporter not in hint, f"{exporter} 的装配态归 `产物格式：` 行，核不点名"
-    # 后缀枚举同理：能产什么由注册表 + 本回合闸算出来，核只教怎么读那行。
+        assert exporter not in hint, f"{exporter} 的装配态归开场表，核不点名"
+    # 后缀枚举同理：能产什么由开场表 + 缺口表达，核只教对照结构面。
     for suffix in ("pptx", "xlsx", "docx"):
-        assert suffix not in hint.lower(), f"核不枚举 .{suffix}；对照 `产物格式：` 行"
+        assert suffix not in hint.lower(), f"核不枚举 .{suffix}；对照开场表"
     assert "产物格式" in hint
     assert "产物格式" not in assemble_system_prompt()
 
@@ -231,7 +233,7 @@ def test_core_states_no_tool_assembly_claims():
 def test_core_does_not_restate_computed_workspace_facts():
     """已在事实行算出来的事实，核里不留第二份（第三份就是漂移的开始）。"""
     hint = _CEO_CORE_HINT
-    # 「无原生生图工具」两条 egress 分支都已陈述；核只留「对照出站网络行」+ 出图路由。
+    # 「无原生生图工具」已下沉 consult(run)；核只留用户可见面「出站网络」，对照开场表/缺口。
     assert "无原生生图工具" not in hint
     assert "出站网络" in hint
     assert "出站网络" not in assemble_system_prompt()

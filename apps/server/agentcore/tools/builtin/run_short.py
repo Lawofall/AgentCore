@@ -129,7 +129,7 @@ async def execute_short(
         avail = "、".join(allowed) if allowed else "无"
         msg = (
             f"本机未装配 language={language}；可用：{avail}"
-            "（见 `<工作区>` 可用解释器）。"
+            "（见 `<工作区>` 解释器）。"
         )
         return ToolResult(
             tool_call_id="",

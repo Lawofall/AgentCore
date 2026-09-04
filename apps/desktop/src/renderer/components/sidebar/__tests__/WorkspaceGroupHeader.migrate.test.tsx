@@ -141,4 +141,21 @@ describe("WorkspaceGroupHeader · local traditional (no migrate debt badge)", ()
     expect(await screen.findByText("导入到「我的文件」")).toBeTruthy();
     expect(screen.queryByText("成员")).toBeNull();
   });
+
+  it("owner desk with a roster shows 协作 · N 人, never 已共享", () => {
+    renderHeader("cloud", { collaboratorCount: 2 });
+    expect(screen.getByText("协作 · 2 人")).toBeTruthy();
+    expect(screen.queryByText("已共享")).toBeNull();
+  });
+
+  it("solo owner desk has no people mark", () => {
+    renderHeader("cloud");
+    expect(screen.queryByLabelText(/协作 ·/)).toBeNull();
+  });
+
+  it("member desk shows 可编辑, not the people mark", () => {
+    renderHeader("cloud", { myRole: "editor", collaboratorCount: 2 });
+    expect(screen.getByText("可编辑")).toBeTruthy();
+    expect(screen.queryByLabelText(/协作 ·/)).toBeNull();
+  });
 });

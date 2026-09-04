@@ -9,12 +9,21 @@
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { FileSource } from "@/lib/fileSource";
+import type { FolderMeta } from "@/services/folders";
 import type { WorkspaceInfo } from "@/services/workspaces";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { getFoldersMock } = vi.hoisted(() => ({
+  getFoldersMock: vi.fn((): FolderMeta[] => []),
+}));
 
 vi.mock("@/components/files/FileTree", () => ({
   FileTree: () => <div data-testid="tree" />,
+}));
+
+vi.mock("@/components/folders/FolderMembersDialog", () => ({
+  FolderMembersDialog: () => null,
 }));
 
 vi.mock("react-router-dom", () => ({
@@ -32,7 +41,7 @@ vi.mock("@/hooks/useConversations", () => ({
 }));
 
 vi.mock("@/hooks/useFolders", () => ({
-  getFolders: () => [],
+  getFolders: () => getFoldersMock(),
   releaseFolderConversations: vi.fn(),
   useDeleteFolder: () => ({ mutateAsync: vi.fn() }),
   useFolderTrash: () => ({ data: undefined }),
@@ -107,6 +116,10 @@ function renderSection(opts: {
     </TooltipProvider>,
   );
 }
+
+beforeEach(() => {
+  getFoldersMock.mockReturnValue([]);
+});
 
 describe("云端文件夹的版本 / 软删区 / 导出入口", () => {
   it("版本与软删区各开一个带工作区名的标签页", async () => {
@@ -185,5 +198,41 @@ describe("云端文件夹的版本 / 软删区 / 导出入口", () => {
     fireEvent.contextMenu(screen.getByText("季度报告"));
     await waitFor(() => expect(screen.queryByText("版本…")).toBeNull());
     expect(screen.queryByText("导出 ZIP")).toBeNull();
+  });
+});
+
+describe("云端文件夹的协作人图标", () => {
+  it("owner desk with a roster shows 协作 · N 人, never 已共享", () => {
+    getFoldersMock.mockReturnValue([
+      {
+        id: "f1",
+        name: "季度报告",
+        mode: "cloud",
+        localRootId: null,
+        localSubpath: null,
+        myRole: "owner",
+        collaboratorCount: 2,
+      },
+    ]);
+    renderSection({});
+    expect(screen.getByText("协作 · 2 人")).toBeTruthy();
+    expect(screen.queryByText("已共享")).toBeNull();
+  });
+
+  it("member desk shows 可编辑, not the people mark", () => {
+    getFoldersMock.mockReturnValue([
+      {
+        id: "f1",
+        name: "季度报告",
+        mode: "cloud",
+        localRootId: null,
+        localSubpath: null,
+        myRole: "editor",
+        collaboratorCount: 2,
+      },
+    ]);
+    renderSection({});
+    expect(screen.getByText("可编辑")).toBeTruthy();
+    expect(screen.queryByLabelText(/协作 ·/)).toBeNull();
   });
 });

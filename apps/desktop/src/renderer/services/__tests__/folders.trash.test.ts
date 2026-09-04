@@ -72,6 +72,7 @@ describe("最近删除 (folder trash)", () => {
       myRole: null,
       myState: null,
       ownerUserId: null,
+      collaboratorCount: 0,
     });
   });
 });

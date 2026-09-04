@@ -27,6 +27,13 @@ from agentcore.tools.catalog import build_capability_catalog
 from agentcore.tools.registration import declared_tool_name, declared_tools, tool_registration
 
 
+def _gaps(ctx: str) -> set[str]:
+    for line in ctx.splitlines():
+        if line.startswith("缺口："):
+            return {p.strip() for p in line.removeprefix("缺口：").split("、") if p.strip()}
+    return set()
+
+
 @pytest.fixture(autouse=True)
 def _unprobed_git_binary():
     """Default every case to "never probed" — the binary axis is tested explicitly."""
@@ -134,8 +141,8 @@ def test_capability_catalog_still_advertises_git():
 
 def test_capability_line_git_unassembled_when_desktop_offline():
     out = build_workspace_context(_ChannelLocalBackend(), desktop_online=False)
-    assert "git=未装配" in out
-    assert "未装配 git" in out
+    assert "git" in _gaps(out)
+    assert "Git：" not in out
     assert "装配启用" not in out
     assert "在桌面客户端打开【本对话】" not in out
     assert "文件读写与其它已装配工具不受影响" not in out
@@ -152,7 +159,7 @@ def test_capability_line_git_unassembled_when_desktop_offline():
 
 def test_capability_line_git_assembled_when_desktop_online():
     out = build_workspace_context(_ChannelLocalBackend(), desktop_online=True)
-    assert "git=已装配" in out
+    assert "git" not in _gaps(out)
     assert "未装配 git" not in out
 
 
@@ -161,7 +168,7 @@ def test_capability_line_git_assembled_for_cloud_and_sidecar(tmp_path):
         out = build_workspace_context(
             _rooted_backend(tmp_path, location=location), desktop_online=False
         )
-        assert "git=已装配" in out, location
+        assert "git" not in _gaps(out), location
 
 
 def test_capability_line_matches_registry_across_environments(tmp_path):
@@ -177,8 +184,7 @@ def test_capability_line_matches_registry_across_environments(tmp_path):
             backend=backend, desktop_online=desktop_online
         ).names
         out = build_workspace_context(backend, desktop_online=desktop_online)
-        expected = "git=已装配" if assembled else "git=未装配"
-        assert expected in out, (backend.location, desktop_online)
+        assert ("git" not in _gaps(out)) is assembled, (backend.location, desktop_online)
 
 
 # ---- binary axis: the in-process transport also needs a real ``git`` on PATH ----
@@ -206,7 +212,7 @@ def test_missing_binary_never_touches_the_channel_transport():
     backend = _ChannelLocalBackend()
     assert git_execution_enabled_for(backend, desktop_online=True) is True
     assert "git" in build_worker_registry(backend=backend, desktop_online=True).names
-    assert "git=已装配" in build_workspace_context(backend, desktop_online=True)
+    assert "git" not in _gaps(build_workspace_context(backend, desktop_online=True))
 
 
 def test_missing_binary_keeps_catalog_listing():
@@ -230,4 +236,4 @@ def test_capability_line_matches_registry_when_binary_missing(tmp_path):
     assembled = "git" in build_worker_registry(backend=backend, desktop_online=False).names
     out = build_workspace_context(backend, desktop_online=False)
     assert assembled is False
-    assert "git=未装配" in out
+    assert "git" in _gaps(out)

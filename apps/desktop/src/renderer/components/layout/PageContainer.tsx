@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
 /**
@@ -18,26 +19,40 @@ interface PageContainerProps {
   children: ReactNode;
   /** 宽度档位，默认 `content`。 */
   width?: PageWidth;
+  /**
+   * 填满宿主高度、禁止整页滚动（左右分栏阅读器）。默认整页滚动。
+   * 内层变成 `flex-col` 填满剩余高度，由子项自己 `min-h-0 flex-1` 分栏滚。
+   */
+  fill?: boolean;
   /** 合并到外层滚动容器（如作为 flex 子项时传 `flex-1`）。 */
   className?: string;
 }
 
 /**
  * 统一页面外壳：外层全宽滚动，内层按档位居中并套用标准 `px-6 py-8` 留白。
- * 窄屏占满、宽屏到档位上限后居中。
+ * 窄屏占满、宽屏到档位上限后居中。`fill` 时外层不滚、内层撑满。
  */
 export function PageContainer({
   children,
   width = "content",
+  fill = false,
   className,
 }: PageContainerProps) {
-  const outer = ["h-full w-full overflow-y-auto", className]
-    .filter(Boolean)
-    .join(" ");
-
   return (
-    <div className={outer}>
-      <div className={`mx-auto w-full px-6 py-8 ${WIDTH_CLASS[width]}`}>
+    <div
+      className={cn(
+        "h-full w-full",
+        fill ? "flex min-h-0 flex-col overflow-hidden" : "overflow-y-auto",
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          "mx-auto w-full px-6 py-8",
+          WIDTH_CLASS[width],
+          fill && "flex min-h-0 flex-1 flex-col",
+        )}
+      >
         {children}
       </div>
     </div>

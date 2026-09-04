@@ -43,6 +43,17 @@ class FolderMemberRepository:
         )
         return int(result.scalar_one())
 
+    async def count_by_folder_ids(self, folder_ids: Sequence[str]) -> dict[str, int]:
+        """Pending + accepted roster rows per folder (owner is not in this table)."""
+        if not folder_ids:
+            return {}
+        result = await self._session.execute(
+            select(FolderMember.folder_id, func.count())
+            .where(FolderMember.folder_id.in_(folder_ids))
+            .group_by(FolderMember.folder_id)
+        )
+        return {folder_id: int(n) for folder_id, n in result.all()}
+
     async def add_member(
         self,
         *,

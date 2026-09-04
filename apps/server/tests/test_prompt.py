@@ -255,7 +255,7 @@ def test_charting_affordance_is_mermaid_not_a_resident_classifier():
 
 def test_core_states_coordinator_tool_boundary():
     # 默认交团队、协调收口；自己做只限短答和单点。何时派在 delegate description，不进核。
-    # 「全套工具 / 已装配」是能力行事实，不进核。
+    # 「全套工具 / 已装配」是开场表事实，不进核。
     from agentcore.tools.builtin.delegate.schema import DELEGATE_DESCRIPTION
 
     hint = _CEO_CORE_HINT
@@ -532,7 +532,8 @@ def test_core_teaches_split_criterion_over_count():
     assert "薄旁路" not in _TEAM_ORCHESTRATION_ADVANCED
     assert "形态跟桌上结果" not in _TEAM_ORCHESTRATION_ADVANCED
     assert "单 lead" in _TEAM_ORCHESTRATION_ADVANCED
-    assert "能力行" in _DEFAULT_SYSTEM_PROMPT
+    assert "能力行" not in _DEFAULT_SYSTEM_PROMPT
+    assert "开场工具表" in _DEFAULT_SYSTEM_PROMPT
     assert "交付状态" not in _DEFAULT_SYSTEM_PROMPT
     assert "文件面板" not in _DEFAULT_SYSTEM_PROMPT
     assert "交付状态" in hint
@@ -1048,9 +1049,7 @@ def test_core_teaches_outline_checkpoint_prefers_structured_path():
 
 
 def test_core_worker_capability_follows_workspace_facts():
-    # Prompt 事实对齐（能力闸门与交付诚实性）：核不宣称「全套工具」；以
-    # <工作区> 的「本回合执行能力」行为准——run=未装配 时 worker
-    # 同样没有执行环境（能写文件、不能运行 / 生成二进制产物）。
+    # Prompt 事实对齐：核不宣称「全套工具」；装配看开场表 / ``<工作区>`` 缺口。
     hint = _CEO_CORE_HINT
     assert "全套工具" not in hint
     assert "本回合执行能力" not in hint
@@ -1069,8 +1068,8 @@ def test_core_worker_capability_follows_workspace_facts():
     assert "表质量基线" in delivery
     assert "冒充表结构" in delivery
     assert "源数据文件下一步" in delivery
-    assert "无法可靠解析的源数据文件" in delivery
-    assert "另编" in delivery
+    assert "无法可靠解析的源数据文件" not in delivery
+    assert "源数据文件下一步" in delivery
     assert "源数据文件下一步" not in orch
     # 工程/代码无执行补救权威在交付手册，不进事实行、不进核。
     assert "export_to_local" not in hint
@@ -1240,7 +1239,7 @@ def test_shared_base_teaches_unassembled_capability_honesty():
 
 
 def test_shared_base_teaches_assembled_capability_not_a_refusal_essay():
-    """已装配不许假装没有：同一能力行按格诚实；不在开场表 ≠ 未装配；邻格 ≠ 否决本格。"""
+    """已装配不许假装没有：开场表有的就是通道；不在开场表 ≠ 未装配；邻格 ≠ 否决本格。"""
     base = assemble_system_prompt()
     worker = compose_worker_base_prompt(base)
     assert "【能力已装配·禁止否决论文】" not in _DEFAULT_SYSTEM_PROMPT
@@ -1308,12 +1307,10 @@ def test_core_teaches_presentation_honesty():
 
 
 def test_core_defers_format_capability_to_facts_not_prose():
-    """`.docx`/`.pdf` 与执行正交这条知识，权威在事实行 + 编排 skill，不在常驻核。
+    """`.docx`/`.pdf` 与执行正交这条知识，权威在编排 skill + 开场表，不在常驻核。
 
     原为 test_core_teaches_word_pdf_orthogonal_to_execution：核里散文断言
-    「md_to_docx / md_to_pdf 无条件装配」，而 CEO 不持这两把工具、在自己的工具列表里
-    看不到它们（案 0a71 的思考链有三轮在猜 worker 有没有）。现在装配态由
-    `<工作区>` 的 `产物格式：` 行按注册表真实闸算出来，核只负责怎么用那行。
+    「md_to_docx / md_to_pdf 无条件装配」。装配态由开场工具表与 ``<工作区>`` 缺口表达。
     """
     hint = _CEO_CORE_HINT
     assert "md_to_docx" not in hint and "md_to_pdf" not in hint
@@ -1324,7 +1321,7 @@ def test_core_defers_format_capability_to_facts_not_prose():
     assert "确定性导出器" in delivery
     assert "md_to_docx" in delivery and "md_to_pdf" in delivery
     assert "与执行正交" in delivery
-    assert "产物格式" in delivery
+    assert "开场" in delivery or "开场表" in delivery
     assert "无条件装配" not in delivery
     assert "与执行正交" not in orch
 
@@ -1404,7 +1401,7 @@ def test_windows_bat_how_lives_in_run_not_shared_base():
 def test_core_teaches_image_gen_egress_and_key_boundary():
     """案 20260803-image-gen-byok-egress-boundary A+B：无 egress 禁代调出图；Key 不落盘。
 
-    出图边界对照事实行「出站网络」；凭据本身怎么处理归共享基座 ``<工作权威>``。
+    出图边界对照开场表 / 缺口（用户可见面仍叫「出站网络」）；凭据本身怎么处理归共享基座 ``<工作权威>``。
     """
     hint = _CEO_CORE_HINT
     assert "出站网络" in hint
@@ -1486,7 +1483,7 @@ def test_skill_teaches_environment_capability_constraint():
     skill = _TEAM_ORCHESTRATION_ADVANCED
     delivery = _TEAM_DELIVERY_ENV
     assert "环境能力约束" in skill
-    assert "run=未装配" in delivery
+    assert "缺口含 `run`" in delivery or "缺口含 run" in delivery
     assert "交付缺口" in delivery
     assert "bind_local_folder" in _TEAM_CROSS_FOLDER
     assert "consult(team_delivery_env)" in _TEAM_CROSS_FOLDER

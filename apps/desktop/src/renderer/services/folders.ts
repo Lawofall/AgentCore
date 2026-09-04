@@ -35,6 +35,11 @@ export interface FolderMeta {
   myRole?: FolderMemberRole | null;
   myState?: FolderMemberState | null;
   ownerUserId?: string | null;
+  /**
+   * Invited people on this desk (pending + accepted). Owner is not counted.
+   * Missing on older cache rows → treat as 0 (private desk).
+   */
+  collaboratorCount?: number;
 }
 
 /**
@@ -52,6 +57,7 @@ export interface FolderSummaryWire {
   my_role?: FolderMemberRole | null;
   my_state?: FolderMemberState | null;
   owner_user_id?: string | null;
+  collaborator_count?: number;
 }
 
 /** Roster row (`GET /v1/folders/{id}/members`). */
@@ -82,6 +88,7 @@ export function toFolder(
     myRole: wire.my_role ?? opts?.defaultRole ?? null,
     myState: wire.my_state ?? null,
     ownerUserId: wire.owner_user_id ?? null,
+    collaboratorCount: wire.collaborator_count ?? 0,
   };
 }
 
@@ -113,6 +120,19 @@ export function canWriteFolder(folder: FolderMeta): boolean {
 
 export function isFolderOwner(folder: FolderMeta): boolean {
   return folderMyRole(folder) === "owner";
+}
+
+/** Owner's own cloud desk with a non-empty roster (pending counts). */
+export function folderHasCollaborators(folder: FolderMeta): boolean {
+  return (
+    folder.mode === "cloud" &&
+    isFolderOwner(folder) &&
+    (folder.collaboratorCount ?? 0) > 0
+  );
+}
+
+export function folderCollaboratorsLabel(count: number): string {
+  return `协作 · ${count} 人`;
 }
 
 /** Invite / roster — cloud only; local traditional is not shareable. */

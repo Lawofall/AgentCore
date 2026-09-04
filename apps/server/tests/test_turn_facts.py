@@ -18,6 +18,7 @@ from agentcore.runtime.facts import (
     TurnFactLog,
     TurnPausedFact,
     TurnStartedFact,
+    WindowCompactFact,
     current_fact_log,
     pre_pause_from_journal,
     snapshot_fact_log,
@@ -207,6 +208,18 @@ def test_note_and_message_final_fact_shapes():
     assert final["kind"] == "message_final"
     assert final["payload"] == {"run_id": "w1", "content": "全文产出", "reasoning": "思考全文"}
 
+    compact = (
+        WindowCompactFact(run_id="w1", summary="已完成读盘", folded_rounds=4)
+        .to_fact()
+        .entry()
+    )
+    assert compact["kind"] == "window_compact"
+    assert compact["payload"] == {
+        "run_id": "w1",
+        "summary": "已完成读盘",
+        "folded_rounds": 4,
+    }
+
 
 def test_to_fact_accepts_optional_timestamp():
     fact = NoteFact(role="user", content="x").to_fact(ts="2026-06-18T00:00:00.000Z")
@@ -237,6 +250,8 @@ def test_execution_only_kinds_match_enum():
         "automation_delivery_confirmed",
         # 回合态挂起归宿: resumable turn-state snapshot (process / controller / content).
         "turn_paused",
+        # Worker mid-run window compact watermark (projection-only; journal stays full).
+        "window_compact",
     } == EXECUTION_ONLY_KINDS
     assert frozenset(k.value for k in FactKind) | {"website_style_confirmed"} == (
         EXECUTION_ONLY_KINDS

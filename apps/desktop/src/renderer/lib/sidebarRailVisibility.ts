@@ -78,3 +78,97 @@ export function isGroupExpanded(opts: {
   if (opts.hasRequired) return true;
   return opts.stored !== undefined ? opts.stored : opts.isActiveFolder;
 }
+
+/** Ctrl/Cmd+1…9 对应侧栏从上到下当前看得见的对话行（不含组头 /「更多」/「查看全部」）。 */
+export const RAIL_HOTKEY_SLOTS = 9;
+
+function byRecency(a: Conversation, b: Conversation): number {
+  return (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0);
+}
+
+/** Folder group as the rail renders it — only `folder.id` + member chats are needed. */
+export interface RailVisibilityGroup {
+  folder: { id: string };
+  convs: readonly Conversation[];
+}
+
+/**
+ * 侧栏对话行的视觉序：置顶 → 已展开的自有组 → 已展开的「与我共享」组 → 裸聊。
+ * 折叠组、组头、「更多」、归档回拉都不进列——与侧栏三区看见的行同一套。
+ */
+export function listVisibleRailConversations(opts: {
+  conversations: readonly Conversation[];
+  ownedGroups: readonly RailVisibilityGroup[];
+  sharedGroups: readonly RailVisibilityGroup[];
+  expandedSections: Record<string, boolean | undefined>;
+  currentId: string | null;
+  requiredIds: ReadonlySet<string>;
+}): Conversation[] {
+  const {
+    conversations,
+    ownedGroups,
+    sharedGroups,
+    expandedSections,
+    currentId,
+    requiredIds,
+  } = opts;
+
+  const out: Conversation[] = [
+    ...conversations.filter((c) => c.pinned).sort(byRecency),
+  ];
+
+  const active = conversations.find((c) => c.id === currentId);
+  const activeFolderId =
+    active && !active.pinned ? (active.folderId ?? null) : null;
+
+  const appendExpandedGroupRows = (groups: readonly RailVisibilityGroup[]) => {
+    for (const { folder, convs } of groups) {
+      const visible = convs.filter((c) => !c.pinned);
+      const expanded = isGroupExpanded({
+        stored: expandedSections[folder.id],
+        isActiveFolder: folder.id === activeFolderId,
+        hasRequired: visible.some((c) => requiredIds.has(c.id)),
+      });
+      if (!expanded) continue;
+      out.push(...pickGroupVisible(visible, requiredIds));
+    }
+  };
+
+  appendExpandedGroupRows(ownedGroups);
+  appendExpandedGroupRows(sharedGroups);
+
+  const hasGroups = ownedGroups.length > 0 || sharedGroups.length > 0;
+  const bare = conversations
+    .filter((c) => !c.folderId && !c.pinned)
+    .sort(byRecency);
+  out.push(
+    ...pickBareVisible(bare, {
+      limit: hasGroups ? BARE_LIMIT_WITH_GROUPS : BARE_LIMIT_SOLO,
+      currentId,
+      requiredIds,
+    }),
+  );
+  return out;
+}
+
+/** First {@link RAIL_HOTKEY_SLOTS} visible rows → 1-based index by conversation id. */
+export function railHotkeySlots(
+  visible: readonly Conversation[],
+): Map<string, number> {
+  const map = new Map<string, number>();
+  const cap = Math.min(visible.length, RAIL_HOTKEY_SLOTS);
+  for (let i = 0; i < cap; i++) {
+    const row = visible[i];
+    if (row) map.set(row.id, i + 1);
+  }
+  return map;
+}
+
+/** `digit` is `"1"`…`"9"`. Missing / out of range → `undefined` (caller must not steal the chord). */
+export function conversationAtRailHotkey(
+  digit: string,
+  visible: readonly Conversation[],
+): Conversation | undefined {
+  if (!/^[1-9]$/.test(digit)) return undefined;
+  return visible[Number(digit) - 1];
+}

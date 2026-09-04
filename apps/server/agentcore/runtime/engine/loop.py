@@ -350,6 +350,21 @@ async def react_loop(
     emit_reasoning = on_reasoning or (lambda delta: sink.emit(reasoning_delta(delta)))
 
     total_usage = TokenUsage()
+    last_prompt_tokens = 0
+    if role == "worker" and run_id:
+        from .window_compact import last_prompt_tokens_from_facts
+
+        last_prompt_tokens = last_prompt_tokens_from_facts(run_id)
+
+    def _note_last_prompt(usage: TokenUsage | None) -> None:
+        nonlocal last_prompt_tokens
+        if usage is None:
+            return
+        if usage.last_prompt_tokens:
+            last_prompt_tokens = usage.last_prompt_tokens
+        elif usage.input_tokens:
+            last_prompt_tokens = usage.input_tokens
+
     final_content = ""
     final_reasoning = ""
 
@@ -697,6 +712,19 @@ async def react_loop(
             _maybe_retire_workspace_channel_dead()
             _maybe_retire_exec_env_dead()
             try:
+                if role == "worker" and run_id and turn_evidence_ledger is None:
+                    from .window_compact import maybe_compact_worker_window
+
+                    await maybe_compact_worker_window(
+                        messages,
+                        run_id=run_id,
+                        role=role,
+                        round_idx=round_idx,
+                        last_prompt_tokens=last_prompt_tokens,
+                        conversation_id=tool_context.conversation_id or "",
+                        user_id=tool_context.user_id or "",
+                        model_id=active_model,
+                    )
                 round_result = await run_llm_round(
                     llm=llm,
                     profile=profile,
@@ -759,6 +787,7 @@ async def react_loop(
                 usage = round_result.usage
                 if usage:
                     total_usage = total_usage + usage
+                    _note_last_prompt(usage)
                 if usage_sink is not None:
                     usage_sink[:] = [total_usage]
                 if round_result.content:
@@ -789,6 +818,7 @@ async def react_loop(
                 usage = round_result.usage
                 if usage:
                     total_usage = total_usage + usage
+                    _note_last_prompt(usage)
                 if usage_sink is not None:
                     usage_sink[:] = [total_usage]
 

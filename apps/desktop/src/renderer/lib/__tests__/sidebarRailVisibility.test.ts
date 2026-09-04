@@ -3,16 +3,24 @@ import {
   BARE_LIMIT_WITH_GROUPS,
   MAX_GROUP_VISIBLE,
   MAX_PER_GROUP,
+  conversationAtRailHotkey,
   isGroupExpanded,
+  listVisibleRailConversations,
   pickBareVisible,
   pickGroupVisible,
+  railHotkeySlots,
 } from "@/lib/sidebarRailVisibility";
 import type { Conversation } from "@/stores/conversation";
 import { describe, expect, it } from "vitest";
 
 const conv = (
   id: string,
-  opts: { at?: string; archived?: boolean } = {},
+  opts: {
+    at?: string;
+    archived?: boolean;
+    pinned?: boolean;
+    folderId?: string | null;
+  } = {},
 ): Conversation => ({
   id,
   title: id,
@@ -20,6 +28,8 @@ const conv = (
   messageCount: 0,
   lastMessagePreview: null,
   archived: opts.archived,
+  pinned: opts.pinned,
+  folderId: opts.folderId,
 });
 
 function ids(list: Conversation[]): string[] {
@@ -167,5 +177,102 @@ describe("isGroupExpanded", () => {
         hasRequired: false,
       }),
     ).toBe(true);
+  });
+});
+
+describe("listVisibleRailConversations", () => {
+  const pin = conv("pin", {
+    pinned: true,
+    at: "2026-08-01T00:00:00Z",
+    folderId: "f1",
+  });
+  const inGroup = conv("g1", {
+    folderId: "f1",
+    at: "2026-07-01T00:00:00Z",
+  });
+  const bare = conv("bare", { at: "2026-06-01T00:00:00Z" });
+  const owned = [{ folder: { id: "f1" }, convs: [pin, inGroup] }];
+
+  it("置顶在前，折叠组内不计，裸聊在后", () => {
+    expect(
+      ids(
+        listVisibleRailConversations({
+          conversations: [bare, inGroup, pin],
+          ownedGroups: owned,
+          sharedGroups: [],
+          expandedSections: {},
+          currentId: null,
+          requiredIds: new Set(),
+        }),
+      ),
+    ).toEqual(["pin", "bare"]);
+  });
+
+  it("展开组才计入组内未置顶行", () => {
+    expect(
+      ids(
+        listVisibleRailConversations({
+          conversations: [bare, inGroup, pin],
+          ownedGroups: owned,
+          sharedGroups: [],
+          expandedSections: { f1: true },
+          currentId: null,
+          requiredIds: new Set(),
+        }),
+      ),
+    ).toEqual(["pin", "g1", "bare"]);
+  });
+
+  it("当前对话所在组无 persist 时默认展开", () => {
+    expect(
+      ids(
+        listVisibleRailConversations({
+          conversations: [bare, inGroup, pin],
+          ownedGroups: owned,
+          sharedGroups: [],
+          expandedSections: {},
+          currentId: "g1",
+          requiredIds: new Set(),
+        }),
+      ),
+    ).toEqual(["pin", "g1", "bare"]);
+  });
+
+  it("共享组排在自有组之后", () => {
+    const sharedChat = conv("shared", {
+      folderId: "sf",
+      at: "2026-09-01T00:00:00Z",
+    });
+    expect(
+      ids(
+        listVisibleRailConversations({
+          conversations: [bare, inGroup, pin, sharedChat],
+          ownedGroups: owned,
+          sharedGroups: [{ folder: { id: "sf" }, convs: [sharedChat] }],
+          expandedSections: { f1: true, sf: true },
+          currentId: null,
+          requiredIds: new Set(),
+        }),
+      ),
+    ).toEqual(["pin", "g1", "shared", "bare"]);
+  });
+});
+
+describe("railHotkeySlots / conversationAtRailHotkey", () => {
+  const rows = Array.from({ length: 12 }, (_, i) => conv(`c${i}`));
+
+  it("只给前 9 行编号", () => {
+    const slots = railHotkeySlots(rows);
+    expect(slots.get("c0")).toBe(1);
+    expect(slots.get("c8")).toBe(9);
+    expect(slots.get("c9")).toBeUndefined();
+  });
+
+  it("空槽 / 非法键不命中", () => {
+    expect(conversationAtRailHotkey("1", rows)?.id).toBe("c0");
+    expect(conversationAtRailHotkey("9", rows)?.id).toBe("c8");
+    expect(conversationAtRailHotkey("1", [])).toBeUndefined();
+    expect(conversationAtRailHotkey("0", rows)).toBeUndefined();
+    expect(conversationAtRailHotkey("a", rows)).toBeUndefined();
   });
 });

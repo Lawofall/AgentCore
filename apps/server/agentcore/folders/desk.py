@@ -109,6 +109,14 @@ async def resolve_conversation_access(
     return ConversationAccess(conversation=conv, desk=None)
 
 
+async def caller_is_desk_member(*, user_id: str, folder_id: str | None) -> bool:
+    """True when this turn sits a live folder owned by someone else."""
+    if not folder_id:
+        return False
+    owner = await resolve_folder_owner_user_id(folder_id)
+    return bool(owner) and owner != user_id
+
+
 async def resolve_folder_owner_user_id(
     folder_id: str | None, *, session: AsyncSession | None = None
 ) -> str | None:

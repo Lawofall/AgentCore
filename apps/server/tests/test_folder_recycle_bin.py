@@ -108,6 +108,13 @@ def _fake_folder(**overrides: Any) -> SimpleNamespace:
     return SimpleNamespace(**base)
 
 
+class _StubDesk:
+    """Direct route calls skip FastAPI injection; restore still asks for counts."""
+
+    async def collaborator_counts(self, _ids: object) -> dict[str, int]:
+        return {}
+
+
 def _soft_delete_session(folder: Any) -> _RecordingSession:
     """``soft_delete`` 读两次文件夹：自己一次，``list_live_subtree_ids`` 一次。"""
     return _RecordingSession([_Result(scalar=folder), _Result(scalar=folder)])
@@ -470,11 +477,14 @@ async def test_restore_returns_the_live_project(monkeypatch: pytest.MonkeyPatch)
     repo = _StubRepo(deleted=deleted)
     _spy_on_tree_restore(monkeypatch, restored=_fake_folder(name="报告"))
 
-    summary = await restore_deleted_folder(FOLDER_ID, _user(), repo=repo, session=object())
+    summary = await restore_deleted_folder(
+        FOLDER_ID, _user(), repo=repo, session=object(), desk=_StubDesk()
+    )
 
     assert summary.id == FOLDER_ID
     assert summary.name == "报告"
     assert summary.mode == "cloud"
+    assert summary.collaborator_count == 0
 
 
 async def test_trash_list_computes_purge_moment_server_side(

@@ -4,7 +4,6 @@ import { type DebateClashView, type DebateModel, isFlatRound } from "../model";
 import { CrossExamSection } from "./CrossExamSection";
 import { FindingThreads } from "./FindingThreads";
 import { JudgeNote } from "./JudgeNote";
-import { resolveModeratorModel } from "./ModeratorIdentity";
 import { OpeningNote } from "./OpeningNote";
 import { SectionHeader } from "./SectionHeader";
 import { SpeakerBlock, speechStageLabel } from "./SpeakerBlock";
@@ -32,7 +31,6 @@ export function Transcript({
 }) {
   const topicMotion = model.motion ?? model.rounds[0]?.focus ?? "";
   const openingLine = openingText(model);
-  const moderatorModel = resolveModeratorModel(model, execution);
 
   const lastRoundBySideKey = new Map<string, number>();
   for (const r of model.rounds) {
@@ -90,7 +88,7 @@ export function Transcript({
 
   return (
     <div className="space-y-1">
-      {openingLine && <OpeningNote text={openingLine} model={moderatorModel} />}
+      {openingLine && <OpeningNote text={openingLine} />}
 
       {model.rounds.map((round) => {
         const flat = isFlatRound(round);
@@ -193,7 +191,6 @@ export function Transcript({
                 messageId={messageId}
                 sceneKey={`${messageId}:cx:r${round.roundNo}`}
                 layoutMode={layoutMode}
-                moderatorModel={moderatorModel}
               />
             )}
 
@@ -202,26 +199,15 @@ export function Transcript({
                 exchanges={round.witnessExam}
                 messageId={messageId}
                 sceneKey={`${messageId}:wit:r${round.roundNo}`}
-                moderatorModel={moderatorModel}
               />
             )}
 
             {round.summary && !round.inFlight ? (
-              <JudgeNote
-                text={round.summary}
-                round={round}
-                form={model.form}
-                model={moderatorModel}
-              />
+              <JudgeNote text={round.summary} round={round} form={model.form} />
             ) : (
               showModeratorPending &&
               !crossExamRunning && (
-                <JudgeNote
-                  text=""
-                  pending
-                  pendingKind={pendingKind}
-                  model={moderatorModel}
-                />
+                <JudgeNote text="" pending pendingKind={pendingKind} />
               )
             )}
           </div>

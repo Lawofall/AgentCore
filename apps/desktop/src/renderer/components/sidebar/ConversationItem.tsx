@@ -35,6 +35,11 @@ import {
 } from "@/lib/conversationDeleteCopy";
 import { buildMessagePreview } from "@/lib/conversationListPreview";
 import { shouldShowConversationCloudIcon } from "@/lib/conversationWorkspaceMode";
+import { isMac } from "@/lib/platform";
+import {
+  useRailHotkeyHintVisible,
+  useRailHotkeyIndex,
+} from "@/lib/railHotkeys";
 import { notifyError, notifyInfo } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -155,6 +160,9 @@ export function ConversationItem({
   const navigate = useNavigate();
   const isActive = conversation.id === currentId;
   const showRowActions = hovered || moreOpen;
+  const hotkeyIndex = useRailHotkeyIndex(conversation.id);
+  const showHotkeyIndex =
+    useRailHotkeyHintVisible() && !showRowActions && hotkeyIndex != null;
 
   // 等你灯 > 云 running > 本端 isGenerating。sidecar / 本地容器忽略云 running，
   // 免得本机引擎对话被账号级集合再点一次灯。
@@ -361,6 +369,11 @@ export function ConversationItem({
               <div
                 role="button"
                 tabIndex={0}
+                aria-keyshortcuts={
+                  hotkeyIndex != null
+                    ? `${isMac ? "Meta" : "Control"}+${hotkeyIndex}`
+                    : undefined
+                }
                 className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 onClick={openConversation}
                 onDoubleClick={(e) => {
@@ -401,21 +414,16 @@ export function ConversationItem({
                   {conversation.title}
                 </span>
               </div>
+              {showHotkeyIndex ? (
+                <span
+                  aria-hidden
+                  className="w-3.5 shrink-0 text-center text-xs tabular-nums text-sidebar-foreground/40"
+                >
+                  {hotkeyIndex}
+                </span>
+              ) : null}
               {showRowActions ? (
                 <span className="flex shrink-0 items-center gap-0.5">
-                  <SimpleTooltip label="重命名">
-                    <IconButton
-                      tone="sidebar"
-                      aria-label="重命名"
-                      className={rowActionClass}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startEdit();
-                      }}
-                    >
-                      <Pencil size={13} />
-                    </IconButton>
-                  </SimpleTooltip>
                   <SimpleTooltip label="归档">
                     <IconButton
                       tone="sidebar"
@@ -446,6 +454,11 @@ export function ConversationItem({
                       className="min-w-52"
                       onClick={(e) => e.stopPropagation()}
                     >
+                      <DropdownMenuItem onSelect={() => startEdit()}>
+                        <Pencil size={14} className="shrink-0" />
+                        <span className="flex-1 truncate">重命名</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem onSelect={() => togglePin()}>
                         {conversation.pinned ? (
                           <PinOff size={14} className="shrink-0" />

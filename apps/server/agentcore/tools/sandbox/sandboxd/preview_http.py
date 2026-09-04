@@ -325,8 +325,8 @@ class PreviewHttpServer:
         if self._server is not None:
             return
         self._server = await asyncio.start_server(self._handle, host, port)
-        sockets = self._server.sockets
-        bound = int(sockets[0].getsockname()[1]) if sockets else port
+        bound_sockets = self._server.sockets
+        bound = int(bound_sockets[0].getsockname()[1]) if bound_sockets else port
         self._host, self._port = host, bound
         logger.info("sandboxd.preview_proxy_started", host=host, port=bound)
 
@@ -374,7 +374,7 @@ class PreviewHttpServer:
                 await writer.drain()
                 return
             try:
-                up_reader, opened = await asyncio.wait_for(
+                up_reader, connected = await asyncio.wait_for(
                     asyncio.open_connection(entry.upstream_ip, entry.upstream_port),
                     timeout=_CONNECT_TIMEOUT,
                 )
@@ -383,14 +383,14 @@ class PreviewHttpServer:
                 writer.write(_http_empty("502 Bad Gateway"))
                 await writer.drain()
                 return
-            up_writer = opened
+            up_writer = connected
             rewritten = _rewrite_headers(
                 headers, app_port=entry.app_port, websocket=_is_websocket(headers)
             )
-            up_writer.write(_serialize_request(method, target, version, rewritten))
-            await up_writer.drain()
+            connected.write(_serialize_request(method, target, version, rewritten))
+            await connected.drain()
             await asyncio.gather(
-                _pump(reader, up_writer),
+                _pump(reader, connected),
                 _pump(up_reader, writer),
                 return_exceptions=True,
             )

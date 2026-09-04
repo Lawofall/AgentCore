@@ -517,15 +517,15 @@ def test_brief_prompt_keeps_reversal_condition_after_grounding_insert():
 
 
 def test_brief_prompt_handoffs_questionify_value_and_length_discipline():
-    """交接清单：value 问句化 + 影响结论；三键去水压成单句（对齐 strongest_points）。"""
+    """交接清单：value 只出问句；三键去水压成单句（对齐 strongest_points）。"""
     user = _brief_user_prompt()
     assert "问句" in user
-    assert "你的选择如何影响结论" in user
+    assert "你的选择如何影响结论" not in user
+    assert "你选 A→" not in user
     assert "去水压成单句" in user and "只留命门" in user
     assert "禁复合长句堆叠" in user
-    # 判别铁律与证据状态内联仍在场（不被问句化覆盖回归）。
     assert "按解决路径互斥归类" in user
-    assert "内联在条目文本" in user or "证据状态语内联" in user
+    assert "内联在条目文本" in user or "证据状态语" in user
 
 
 def test_brief_prompt_field_mutex_and_length_discipline():

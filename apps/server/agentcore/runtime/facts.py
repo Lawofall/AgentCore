@@ -5,7 +5,7 @@ stream of facts from which everything replayable / resumable is a projection. Th
 conceptual model is fact kinds including::
 
     turn_started | run_head | round_boundary | llm_call | tool_call | interaction
-                 | note | run_event | message_final | turn_end
+                 | note | window_compact | run_event | message_final | turn_end
 
 Display events (SSE kinds from the sink) and execution-level facts (this module)
 share **one** ordered ``turn_journal``. Display fold skips
@@ -42,6 +42,9 @@ This module owns the execution-level kinds (执行级事件溯源；as-built →
   FINALIZE instruction): part of the real LLM window, so the fold needs it. Carries
   ``run_id`` (Phase 2 边界②) so a captain note injected mid-delegate (while a worker is
   the active run) is still attributed to the captain window.
+- :class:`WindowCompactFact` — worker mid-run rolling summary + ``folded_rounds``
+  watermark. Projection-only (``build_request_window``); ``window_from_journal``
+  still rebuilds the full transcript.
 - :class:`MessageFinalFact` — a run's / the turn's **full** output text (vs the
   ``run_completed`` summary), so resume feeds a worker's product back from facts
   rather than from the frame.
@@ -112,6 +115,9 @@ class FactKind(StrEnum):
     # 回合态挂起归宿 (P0): the resumable turn-state snapshot recorded at a durable
     # pause — see :class:`TurnPausedFact`.
     TURN_PAUSED = "turn_paused"
+    # Worker mid-run window compact: rolling summary + folded_rounds watermark.
+    # Projection-only — ``window_from_journal`` still rebuilds the full transcript.
+    WINDOW_COMPACT = "window_compact"
 
 
 # The execution-only kinds the DISPLAY projection (runs_from_entries) must skip: they
@@ -394,6 +400,32 @@ class NoteFact:
                 "content": self.content,
                 "reason": self.reason,
                 "run_id": self.run_id,
+            },
+            ts=ts,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class WindowCompactFact:
+    """Worker ReAct-window compact watermark (projection-only).
+
+    Canonical messages / journal stay full. ``build_request_window`` replaces the
+    first ``folded_rounds`` assistant rounds after the task head with ``summary``.
+    Last write per ``run_id`` wins. Not part of ``window_from_journal``.
+    """
+
+    run_id: str
+    summary: str
+    folded_rounds: int
+    kind: ClassVar[FactKind] = FactKind.WINDOW_COMPACT
+
+    def to_fact(self, ts: str | None = None) -> Fact:
+        return Fact(
+            kind=self.kind.value,
+            payload={
+                "run_id": self.run_id,
+                "summary": self.summary,
+                "folded_rounds": self.folded_rounds,
             },
             ts=ts,
         )

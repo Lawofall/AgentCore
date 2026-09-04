@@ -1,15 +1,12 @@
 """Tests for ``<工作区>`` environment-facts injection.
 
-去重定案（一条纪律只留一个权威位置）：本块**只陈述本回合选动作要用的短事实**——
-位置、身份、根、能力格、出站网络、通道、git、工作台、非空挂载、非空约定文档出口、
-产物格式。空状态不写。能力格写不出的真事实（执行环境探测 / 无执行表格与源数据）
-另起一行；禁止按能力复写成「装包事实 / 执行事实 / Host / MCP / 浏览器事实」散文。
+去重定案（一条纪律只留一个权威位置）：本块**只陈述开场表看不出来的短坐标**——
+执行、桌、系统、Git、客户端、缺口（只报未装配）、非空挂载、非空约定文档出口。
+空状态不写。沙箱探测失败另起一行。禁止按能力复写成「装包事实 / 执行事实」散文。
 「该怎么做 / 禁止什么 / 怎么装上」的 HOW：
-按需面（host / run / browser / 区外授权）归 consult（``capability_how_suffix``；
-run HOW → ``consult(run)``）；本机进桌 / 通道复检 / 打开本对话 / 授权姿势 /
-Office / 路径 / 约定文档布局 HOW 归 ``team_delivery_env``；空桌 when-to-use 归
-``mkdir`` description，空桌操作事实（可见顶层空）当场进 ``<工作区>``；产物出口 UI 归 ``product_help``；
-跨文件夹百科归 ``team_cross_folder``；出卡 HOW 归 ``asking_the_user``；git 无仓政策归 git 工具描述；其余归共享基座。
+按需面归 consult；本机进桌 / 通道复检归 ``team_delivery_env``；空桌 when-to-use 归
+``mkdir`` description；产物出口 UI 归 ``product_help``；
+跨文件夹百科归 ``team_cross_folder``；git 无仓政策归 git 工具描述；其余归共享基座。
 因此这里的用例成对写：事实留在 ``out``，HOW 断言指向 consult / skill / 基座/核。
 """
 
@@ -35,6 +32,14 @@ from agentcore.runtime.skills import (
     build_system_skill_registry,
 )
 from agentcore.tools.builtin import build_ceo_tool_registry
+
+
+def _gaps(ctx: str) -> set[str]:
+    for line in ctx.splitlines():
+        if line.startswith("缺口："):
+            body = line.removeprefix("缺口：").rstrip("。")
+            return {p.strip() for p in body.split("、") if p.strip()}
+    return set()
 
 
 def _assert_no_capability_restatements(ctx: str) -> None:
@@ -111,6 +116,23 @@ def test_resolve_channel_profile_fail_closed_and_surfaces():
     assert admin.desktop_online is False
 
 
+def test_channel_profile_for_turn_drops_desktop_for_members():
+    desktop = resolve_channel_profile("desktop")
+    owner = desktop.for_turn(member_turn=False)
+    assert owner is desktop
+    assert owner.desktop_online is True
+    assert owner.can_bind_folder is True
+
+    member = desktop.for_turn(member_turn=True)
+    assert member.surface == "desktop"
+    assert member.desktop_online is False
+    assert member.can_bind_folder is False
+
+    web = resolve_channel_profile("web").for_turn(member_turn=True)
+    assert web.desktop_online is False
+    assert web.can_bind_folder is False
+
+
 def test_web_and_missing_header_ceo_registry_omits_host():
     """Acceptance: web / missing header → no ``host`` on CEO registry (web-safe)."""
     web_names = {s.name for s in build_ceo_tool_registry(desktop_online=False).list_all()}
@@ -145,8 +167,9 @@ def test_birth_desk_facts_include_folder_id_without_tool_how():
         desk_folder_label="白板",
         desk_is_birth=True,
     )
-    assert "本会话出生桌=`白板`" in out
-    assert "folder_id=`fid-board`" in out
+    assert "本会话出生桌=`白板`" not in out
+    assert "folder_id=`fid-board`" not in out
+    assert "桌：白板（云端文件夹）" in out
     assert "file_list" not in out
     assert "list_folders" not in out
     assert "resolve_folder" not in out
@@ -160,8 +183,8 @@ def test_birth_desk_facts_include_folder_id_without_tool_how():
         desk_folder_label="设计/图标",
         desk_is_birth=False,
     )
-    assert "默认工作区=`设计/图标`" in worker
-    assert "folder_id=`fid-icon`" in worker
+    assert "桌：设计/图标（云端文件夹）" in worker
+    assert "folder_id=`fid-icon`" not in worker
     assert "本会话出生桌=" not in worker
 
 
@@ -172,16 +195,19 @@ def test_cloud_scratch_facts():
         run_enabled=False,
     )
     assert out.startswith("<工作区>")
-    assert "执行位置：云端沙箱" in out
-    assert "云端草稿/临时文件空间" in out
-    assert "本文件夹根即工作区根" in out
+    assert "执行：云端沙箱" in out
+    assert "桌：本会话草稿（云端）" in out
+    assert "本文件夹根即工作区根" not in out
     assert "工程壳" not in out
-    assert "非本机目录" in out
+    assert "非本机目录" not in out
     assert "不是用户本机已打开的仓库" not in out
     assert "空树" not in out
     assert "本机空工程" not in out
     assert "触达不了用户的电脑" not in out
-    assert "host=已装配" in out
+    assert "host" not in _gaps(out)  # desktop_online
+    assert "run" in _gaps(out)
+    assert "host=已装配" not in out
+    assert "run=未装配" not in out
     # Host 面细则归 consult(host)；事实层不列短命令百科。
     assert "短命令" not in out
     assert "音响/系统信息" not in out
@@ -200,7 +226,7 @@ def test_cloud_scratch_facts():
     assert "本机传统" in mid
     assert "改导" not in out  # skill/context 不得写 Ask 改导导入
     # 跨文件夹：事实层只留「默认坐哪张桌」；整条 HOW 归 team_cross_folder（核不常驻钩）
-    assert "出生桌" in out
+    assert "出生桌" not in out
     assert "跨文件夹指挥" not in out
     assert "target_folder_id" not in out
     assert "list_folders" not in out and "resolve_folder" not in out
@@ -235,7 +261,7 @@ def test_cloud_scratch_facts():
     assert "external_mount_readonly" not in out
     assert "grant_organize_folder" not in out
     assert "grant_attach_folder" not in out
-    assert "与工作区绑定正交" in out
+    assert "与工作区绑定正交" not in out
     assert "先写工作区" not in out
     assert "file_copy" not in out
     assert "区外目录授权需先处在本地工作区" not in out
@@ -256,7 +282,7 @@ def test_cloud_scratch_facts():
     assert "在哪工作" in mid
     assert "仅新建会话" in mid
     assert "grant_organize_folder" in mid
-    assert "与工作区绑定正交" in out
+    assert "与工作区绑定正交" not in out
     assert "勿引导用户去设置改模式" not in out
     assert "勿引导用户去设置改模式" in mid
     # 定案 A：优化项目 ≠ 默认催开项目；附件收窄范围时先干活（后半句场面门，不进事实层）。
@@ -272,16 +298,16 @@ def test_cloud_scratch_facts():
     assert "本机草稿" not in out
     assert "勿推销本机草稿" in mid
     assert "本会话发绑定卡" not in out  # 旧口径：已改为意图分流
-    assert "run=未装配" in out
-    assert "package_install=未装配" in out
-    assert "browser=未装配" in out
-    assert "local_open=未装配" in out
+    assert "run" in _gaps(out)
+    assert "package_install" in _gaps(out)
+    assert "browser" in _gaps(out)
+    assert "local_open" in _gaps(out)
     _assert_no_capability_restatements(out)
     assert "导入到云" not in out
     assert "连接 Git" not in out
     assert "不会让沙箱" not in out
     assert "装配启用" not in out
-    assert "host=已装配" in out
+    assert "host" not in _gaps(out)
     # 产物出口 UI / 完整预览：唯一所有者 product_help，事实层不抄。
     assert "产物出口" not in out
     assert "完整预览" not in out
@@ -294,8 +320,8 @@ def test_cloud_scratch_facts():
     assert "产物出口" in help_map
     assert "【交付指引】" not in hint
     assert "浏览器宿主：" not in out
-    assert "browser=未装配" in out
-    assert "host=已装配" in out
+    assert "browser" in _gaps(out)
+    assert "host" not in _gaps(out)
     assert "host(action=status/os_log/shell)" not in out
     assert "install_package" not in out
     assert "host_info" not in out
@@ -310,10 +336,11 @@ def test_cloud_scratch_facts():
     assert "Get-WinEvent" in host_how
     assert "host_os_log_summary" not in hint
     # 案 20260803-image-gen-byok-egress-boundary A：云沙箱无任意 HTTPS 出口事实行
-    assert "出站网络" in out
-    assert "包装源" in out or "allowlist" in out
-    assert "无任意 HTTPS" in out
-    assert "无原生生图工具" in out
+    assert "出站网络" not in out
+    assert "包装源" not in out
+    assert "allowlist" not in out
+    assert "无任意 HTTPS" not in out
+    assert "无原生生图工具" not in out
     # 出图对照事实行；Key 不落明文归共享基座
     assert "代调" not in out
     assert "API Key" not in out and "明文" not in out
@@ -350,10 +377,10 @@ def test_empty_desk_adds_operational_root_fact():
         run_enabled=False,
         desk_visibly_empty=True,
     )
-    assert "本文件夹根即工作区根" in empty
-    assert "可见顶层空" in empty
-    assert "工程入口写在根上" in empty
-    assert "`package.json`" in empty
+    assert "本文件夹根即工作区根" not in empty
+    assert "顶层空" in empty
+    assert "工程入口写在根上" not in empty
+    assert "`package.json`" not in empty
     assert "mkdir" not in empty
     assert "工程壳" not in empty
     assert "禁止" not in empty
@@ -365,8 +392,8 @@ def test_empty_desk_adds_operational_root_fact():
         run_enabled=False,
         desk_visibly_empty=False,
     )
-    assert "本文件夹根即工作区根" in full
-    assert "可见顶层空" not in full
+    assert "本文件夹根即工作区根" not in full
+    assert "顶层空" not in full
     assert "package.json" not in full
 
     unknown = build_workspace_context(
@@ -387,12 +414,12 @@ def test_cloud_folder_desk_identity_is_not_scratch():
         desktop_online=True,
         run_enabled=False,
     )
-    assert "工作区身份：云端文件夹" in out
-    assert "本文件夹根即工作区根" in out
-    assert "非本机目录" in out
+    assert "桌：我的白板（云端文件夹）" in out
+    assert "本文件夹根即工作区根" not in out
+    assert "非本机目录" not in out
     assert "本文件夹尚无用户文件" not in out
     assert "云端草稿/临时文件空间" not in out
-    assert "本会话云端草稿尚无文件" not in out
+    assert "桌：本会话草稿" not in out
     assert "工程壳" not in out
     hint = _CEO_CORE_HINT
     delivery = _TEAM_DELIVERY_ENV
@@ -412,9 +439,9 @@ def test_cloud_conv_root_stays_scratch_identity():
         desktop_online=True,
         run_enabled=False,
     )
-    assert "云端草稿/临时文件空间" in out
-    assert "工作区身份：云端文件夹" not in out
-    assert "本文件夹根即工作区根" in out
+    assert "桌：本会话草稿（云端）" in out
+    assert "桌：workspace（云端文件夹）" not in out
+    assert "本文件夹根即工作区根" not in out
 
 
 def test_cloud_host_off_capability():
@@ -426,8 +453,9 @@ def test_cloud_host_off_capability():
         run_enabled=False,
         host_axis=HostAxis.OFF,
     )
-    assert "host=未装配" in out
-    assert "桌面端在线" in out
+    assert "host" in _gaps(out)
+    assert "客户端：桌面已连接" in out
+    assert "客户端：未连接" not in out
     assert "桌面回填通道未连接" not in out
     _assert_no_capability_restatements(out)
 
@@ -452,8 +480,9 @@ def test_no_desktop_host_unassembled():
         desktop_online=False,
         run_enabled=False,
     )
-    assert "host=未装配" in out
-    assert "桌面回填通道未连接" in out
+    assert "host" in _gaps(out)
+    assert "客户端：未连接" in out
+    assert "桌面回填通道未连接" not in out
     _assert_no_capability_restatements(out)
 
 
@@ -464,17 +493,17 @@ def test_local_remote_channel_facts():
         run_enabled=True,
         browser_enabled=False,
     )
-    assert "执行位置：用户本机（经桌面通道遥控）" in out
-    assert "本地目录（根标签 `MyProject`）" in out
-    assert "本文件夹根即工作区根" in out
+    assert "执行：用户本机" in out
+    assert "桌：MyProject" in out
+    assert "本文件夹根即工作区根" not in out
     assert "工程壳" not in out
-    assert "run=已装配" in out
-    assert "package_install=已装配" in out
-    assert "browser=未装配" in out
-    assert "local_open=已装配" in out
+    assert "run" not in _gaps(out)
+    assert "package_install" not in _gaps(out)
+    assert "browser" in _gaps(out)
+    assert "local_open" not in _gaps(out)
     assert "产物出口" not in out
     # 本机传统工程：通道在线是事实；跑当前 / 勿再弹 open 归 team_delivery_env
-    assert "客户端通道：桌面端在线" in out
+    assert "客户端：桌面已连接" in out
     assert "open_local_project" not in out
     assert "跑**当前**" not in out
     mid = _desk_how()
@@ -491,8 +520,8 @@ def test_browser_capability_override():
         run_enabled=True,
         browser_enabled=True,
     )
-    assert "browser=已装配" in out
-    assert "local_open=未装配" in out
+    assert "browser" not in _gaps(out)
+    assert "local_open" in _gaps(out)
     # 事实层：装没装配。相对路径 / 完整预览 HOW 在 browser url description。
     assert "CEO 可直持" not in out
     assert "仅 worker" not in out
@@ -525,7 +554,7 @@ def test_local_browser_guide_mentions_workspace_relative_path():
         run_enabled=True,
         browser_enabled=True,
     )
-    assert "browser=已装配" in out
+    assert "browser" not in _gaps(out)
     assert "浏览器宿主：" not in out
     from agentcore.tools.builtin.browser import BrowserTool
 
@@ -554,7 +583,7 @@ def test_bridge_session_sandbox_browser_guide_no_relative_html(monkeypatch):
         run_enabled=True,
         # 不 override browser_enabled — 走真实闸与 host_kind
     )
-    assert "browser=已装配" in out
+    assert "browser" not in _gaps(out)
     assert "云端沙箱浏览器" not in out
     assert "浏览器宿主：" not in out
     assert "相对路径" not in out
@@ -570,7 +599,7 @@ def test_browser_unassembled_guide_mentions_bind_or_gvisor():
         run_enabled=False,
         browser_enabled=False,
     )
-    assert "browser=未装配" in out
+    assert "browser" in _gaps(out)
     _assert_no_capability_restatements(out)
     assert "浏览器宿主：" not in out
     # 本机传统可教非默认；云协作仍推荐——HOW 在 team_delivery_env，事实层不写装配步骤
@@ -615,7 +644,7 @@ def test_local_browser_unassembled_guide_splits_reason_no_sandbox_teaser():
         run_enabled=True,
         browser_enabled=False,
     )
-    assert "browser=未装配" in out
+    assert "browser" in _gaps(out)
     _assert_no_capability_restatements(out)
     assert "浏览器宿主：" not in out
     assert "或启用云端沙箱浏览器" not in out
@@ -633,9 +662,9 @@ def test_host_mcp_unassembled_states_facts_and_defers_posture_to_core():
         run_enabled=False,
         browser_enabled=False,
     )
-    assert "host=未装配" in out
-    assert "mcp=未装配" in out
-    assert "桌面回填通道未连接" in out
+    assert "host" in _gaps(out)
+    assert "mcp" in _gaps(out)
+    assert "客户端：未连接" in out
     _assert_no_capability_restatements(out)
     assert "同轮可开工" not in out
     hint = _CEO_CORE_HINT
@@ -654,7 +683,8 @@ def test_mcp_assembled_states_channel_not_who_holds():
         run_enabled=False,
         mcp_enabled=True,
     )
-    assert "mcp=已装配" in out
+    assert "mcp" not in _gaps(out)
+    assert "mcp=" not in out
     _assert_no_capability_restatements(out)
     assert "mcp_<server>_<tool>" not in out
     assert "CEO 不直持" not in out
@@ -667,8 +697,9 @@ def test_sidecar_local_without_channel():
         desktop_online=True,
         run_enabled=True,
     )
-    assert "本机引擎 / sidecar" in out
-    assert "当前目录已可写" in out
+    assert "执行：用户本机" in out
+    assert "sidecar" not in out
+    assert "当前目录已可写" not in out
     assert "grant_attach_folder" not in out
     mid = _desk_how()
     assert "grant_attach_folder" in mid
@@ -680,13 +711,13 @@ def test_mobile_session_omits_bind_nudge():
         desktop_online=False,
         run_enabled=False,
     )
-    assert "桌面回填通道未连接" in out
+    assert "客户端：未连接" in out
     # Must not accuse a device form when the channel is merely offline / fail-closed.
     assert "Web / 移动端" not in out
     assert "Web / 手机" not in out
     assert "当前为 Web" not in out
-    assert "授权仅桌面端可用" in out
-    assert "官方桌面客户端" in out
+    assert "授权仅桌面端可用" not in out
+    assert "官方桌面客户端" not in out
     assert "https://fashitianxia.xyz/download" not in out
     assert "勿发 grant_* / bind_local_folder / open_local_project" not in out
     # 禁止语里可点名 action；不得写成可履约的 action= 分流广告
@@ -723,8 +754,8 @@ def test_channel_offline_self_claim_desktop_recheck_honesty():
         desktop_online=False,
         run_enabled=False,
     )
-    assert "host=未装配" in out
-    assert "local_open=未装配" in out
+    assert "host" in _gaps(out)
+    assert "local_open" in _gaps(out)
     assert "通道复检铁律" not in out
     assert "正在用客户端" not in out
     assert "口述不得覆盖" not in out
@@ -768,9 +799,9 @@ def test_cloud_desktop_online_allows_external_grant_without_bind():
         desktop_online=True,
         run_enabled=False,
     )
-    assert "执行位置：云端沙箱" in out
+    assert "执行：云端沙箱" in out
     assert "external_mount_readonly" not in out
-    assert "与工作区绑定正交" in out
+    assert "与工作区绑定正交" not in out
     assert "本机某目录" not in out
     assert "区外目录授权需先处在本地工作区" not in out
     assert "选择器兜底" not in out
@@ -843,8 +874,7 @@ def test_git_fact_present_line_no_soft_init_tip(tmp_path):
         run_enabled=False,
         git_fact=fact,
     )
-    assert "版本控制：Git" in out
-    assert "分支 `main`" in out
+    assert "Git：main" in out
     assert "init_baseline" not in out
     assert "不扫嵌套" not in out
     assert "不上溯" not in out
@@ -859,7 +889,7 @@ def test_git_absent_soft_tip_visible_with_explicit_fact():
         run_enabled=False,
         git_fact=WorkspaceGitFact(present=False),
     )
-    assert "工作区根无 Git" in out
+    assert "Git：无" in out
     assert "init_baseline" not in out
     assert "no_repo" not in out
     assert "不挡派工" not in out
@@ -879,12 +909,13 @@ def test_git_unassembled_states_channel_without_enable_steps():
         git_tool_enabled=False,
         git_fact=WorkspaceGitFact(present=True, branch="main"),
     )
-    assert "未装配 git" in out
+    assert "git" in _gaps(out)
+    assert "Git：" not in out
     assert "装配启用" not in out
     assert "打开本对话" not in out
     assert "init_baseline" not in out
     assert "no_repo" not in out
-    assert "分支 `main`" not in out
+    assert "main" not in out
 
 
 def test_cloud_package_install_tracks_code_execute():
@@ -895,8 +926,8 @@ def test_cloud_package_install_tracks_code_execute():
         run_enabled=True,
         package_install_enabled=False,
     )
-    assert "run=已装配" in out_off
-    assert "package_install=未装配" in out_off
+    assert "run" not in _gaps(out_off)
+    assert "package_install" in _gaps(out_off)
     _assert_no_capability_restatements(out_off)
 
     out_on = build_workspace_context(
@@ -905,23 +936,24 @@ def test_cloud_package_install_tracks_code_execute():
         run_enabled=True,
         package_install_enabled=True,
     )
-    assert "run=已装配" in out_on
-    assert "package_install=已装配" in out_on
-    assert "allowlist" in out_on or "chokepoint" in out_on or "云桌" in out_on
+    assert "run" not in _gaps(out_on)
+    assert "package_install" not in _gaps(out_on)
+    assert "allowlist" not in out_on
+    assert "chokepoint" not in out_on
 
     out_same = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=True,
         run_enabled=True,
     )
-    assert "package_install=已装配" in out_same
+    assert "package_install" not in _gaps(out_same)
 
     out_both_off = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=True,
         run_enabled=False,
     )
-    assert "package_install=未装配" in out_both_off
+    assert "package_install" in _gaps(out_both_off)
 
 
 def test_local_package_install_follows_execution_class():
@@ -932,8 +964,8 @@ def test_local_package_install_follows_execution_class():
         run_enabled=True,
         browser_enabled=False,
     )
-    assert "run=已装配" in out
-    assert "package_install=已装配" in out
+    assert "run" not in _gaps(out)
+    assert "package_install" not in _gaps(out)
     _assert_no_capability_restatements(out)
     assert "registry_egress" not in out
 
@@ -942,29 +974,21 @@ def test_local_package_install_follows_execution_class():
         desktop_online=True,
         run_enabled=False,
     )
-    assert "package_install=未装配" in out_off
+    assert "package_install" in _gaps(out_off)
 
 
-def _xlsx_clause(block: str) -> str:
-    for part in block.split("产物格式：", 1)[-1].split("；"):
-        if part.startswith(".xlsx="):
-            return part
-    raise AssertionError(f"no .xlsx clause in {block!r}")
-
-
-def test_no_execution_states_table_structure_facts():
-    """无 run：能力行陈述结构面已在附件块；有执行环境时不注入该句。"""
+def test_no_execution_omits_table_structure_facts():
+    """无 run：表格 HOW 在 data_file_landing；事实层只报缺口。"""
     off = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=True,
         run_enabled=False,
     )
-    assert "表格解析" in off
-    assert "结构面" in off
-    assert "列名" in off
-    assert "自产表格可回读" in off
-    assert "不可靠" not in off
-    assert "手抄" not in off  # HOW 归 data_file_landing，事实层不写禁令
+    assert "表格解析" not in off
+    assert "列名" not in off
+    assert "自产表格可回读" not in off
+    assert "run" in _gaps(off)
+    assert "手抄" not in off
 
     on = build_workspace_context(
         _FakeBackend("server"),
@@ -975,43 +999,28 @@ def test_no_execution_states_table_structure_facts():
     assert "结构面（列名" not in on
 
 
-def test_artifact_formats_without_execution_mark_office_honesty():
-    """无执行环境：.xlsx/.pptx 不可产；.docx/.pdf 经 md_to_* 可产。"""
+def test_workspace_omits_artifact_format_catalog():
+    """产物格式不进 ``<工作区>``：Word/PDF HOW 在 team_delivery_env，装配看开场表。"""
     out = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=True,
         run_enabled=False,
     )
-    assert "产物格式：" in out
-    assert ".xlsx=不可产" in out
-    assert ".pptx=不可产" in out
-    assert "run" in _xlsx_clause(out)
-    assert ".docx=可产" in out and "md_to_docx" in out
-    assert ".pdf=可产" in out and "md_to_pdf" in out
-    assert "不吃沙箱" in out
+    assert "产物格式：" not in out
+    assert ".xlsx=" not in out
+    assert "md_to_docx" not in out
+    assert "run" in _gaps(out)
+    delivery = _TEAM_DELIVERY_ENV
+    assert "md_to_docx" in delivery and "md_to_pdf" in delivery
+    assert "与执行正交" in delivery
 
 
 def test_artifact_formats_follow_real_assembly_not_constants(monkeypatch):
-    """装配态变化时表随之变化——读的是注册表+闸，不是写死的格式清单。"""
+    """注册表辅助函数仍按闸算格式——不再注入 ``<工作区>``。"""
     from dataclasses import replace
 
     from agentcore.runtime.context.artifact_formats import build_artifact_format_line
     from agentcore.tools.builtin.md_to_docx import MdToDocxTool
-
-    off = build_workspace_context(
-        _FakeBackend("server"),
-        desktop_online=True,
-        run_enabled=False,
-    )
-    on = build_workspace_context(
-        _FakeBackend("server"),
-        desktop_online=True,
-        run_enabled=True,
-    )
-    assert ".xlsx=不可产" in off
-    assert ".xlsx=可产" in on
-    assert "run" in _xlsx_clause(on)
-    assert ".docx=可产" in on and "md_to_docx" in on
 
     exporters_only = build_artifact_format_line({"md_to_docx", "md_to_pdf"})
     with_exec = build_artifact_format_line({"md_to_docx", "md_to_pdf", "run"})
@@ -1045,22 +1054,17 @@ def test_env_examples_gvisor_timeout_does_not_clamp_outer_verify():
         assert "夹死" in text or "外环" in text
 
 
-def test_no_exec_opaque_source_omits_local_run_from_exec_fact():
-    """无执行 + 源数据文件：事实行只报有无法解析的源数据；下一步 HOW 在编排 skill。"""
+def test_no_exec_opaque_source_stays_out_of_facts():
+    """无执行 + 源数据：事实层不写源数据行；下一步 HOW 在编排 skill。"""
     out = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=True,
         run_enabled=False,
-        opaque_source_data_paths=["attachments/synthetic_bill.csv"],
     )
-    fact = out
-    assert "本回合有无法可靠解析的源数据文件" in fact
-    assert "表格解析" in fact
-    assert "源数据文件下一步" not in fact
-    assert "稍后重试" not in fact
-    assert "本机跑 / 本机传统" not in fact
-    assert "open/bind 合法非默认" not in fact
-    assert "可选稍后重试 / export_to_local" not in fact
+    assert "本回合有无法可靠解析的源数据文件" not in out
+    assert "表格解析" not in out
+    assert "源数据文件下一步" not in out
+    assert "稍后重试" not in out
     assert "源数据文件下一步" in _TEAM_DELIVERY_ENV
     assert "稍后重试" in _TEAM_DELIVERY_ENV
     assert "export_to_local" in _TEAM_DELIVERY_ENV
@@ -1083,8 +1087,8 @@ def test_no_exec_engineering_keeps_local_remediation():
     assert "export_to_local" in _TEAM_DELIVERY_ENV
 
 
-def test_opaque_source_reads_backend_this_turn_materials():
-    """生产路径：prepare 写入的 ai_list_materials 即 no_exec_table 同源判据。"""
+def test_opaque_source_does_not_read_backend_materials_into_facts():
+    """附件材料不进 ``<工作区>``；无执行表交付走 data_file_landing。"""
     backend = _FakeBackend("server")
     backend.ai_list_materials = frozenset({"attachments/synthetic_bill.csv"})
     out = build_workspace_context(
@@ -1092,16 +1096,8 @@ def test_opaque_source_reads_backend_this_turn_materials():
         desktop_online=True,
         run_enabled=False,
     )
-    assert "本回合有无法可靠解析的源数据文件" in out
-
-    md_only = _FakeBackend("server")
-    md_only.ai_list_materials = frozenset({"attachments/note.md"})
-    md_out = build_workspace_context(
-        md_only,
-        desktop_online=True,
-        run_enabled=False,
-    )
-    assert "本回合有无法可靠解析的源数据文件" not in md_out
+    assert "本回合有无法可靠解析的源数据文件" not in out
+    assert "synthetic_bill" not in out
 
 
 def test_cloud_exec_probe_failure_is_one_fact_line(monkeypatch):
@@ -1115,9 +1111,9 @@ def test_cloud_exec_probe_failure_is_one_fact_line(monkeypatch):
         desktop_online=True,
         run_enabled=False,
     )
-    assert "执行环境：沙箱不可用（探测=not_linux（platform=win32））。" in out
+    assert "沙箱：不可用（not_linux（platform=win32））" in out
     _assert_no_capability_restatements(out)
-    assert "run=未装配" in out
+    assert "run" in _gaps(out)
 
 
 def test_cloud_exec_withheld_omits_env_line_without_probe(monkeypatch):
@@ -1133,7 +1129,7 @@ def test_cloud_exec_withheld_omits_env_line_without_probe(monkeypatch):
     )
     assert "执行环境：" not in out
     assert "沙箱不可用" not in out
-    assert "run=未装配" in out
+    assert "run" in _gaps(out)
     _assert_no_capability_restatements(out)
 
 
@@ -1145,7 +1141,7 @@ def test_local_exec_withheld_never_claims_sandbox_probe():
         run_enabled=False,
     )
     assert "执行环境：" not in out
-    assert "run=未装配" in out
+    assert "run" in _gaps(out)
     _assert_no_capability_restatements(out)
 
 
@@ -1174,6 +1170,7 @@ def test_outlet_inventory_empty_and_named_suffixes():
         outlet_inventory=named,
     )
     assert "（现有：协作图审计-架构.md；协作图审计-渲染链路.md）" in named_out
-    assert "约定文档出口·审查：" in named_out
-    assert "约定文档出口·调研/讨论：" not in named_out
+    assert "审查：" in named_out
+    assert "调研：" not in named_out
+    assert "约定文档出口" not in named_out
     assert "记忆注入审计.md" not in named_out

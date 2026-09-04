@@ -353,6 +353,10 @@ class FolderSummary(BaseModel):
     owner_user_id: str
     my_role: Literal["owner", "editor", "viewer"] = "owner"
     my_state: Literal["accepted", "pending"] = "accepted"
+    # Invited people on this desk (pending + accepted). Owner is not in
+    # folder_members, so 0 means a private desk. Sidebar only paints the
+    # people mark on the owner's own cloud row when this is > 0.
+    collaborator_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -365,6 +369,7 @@ class FolderSummary(BaseModel):
         *,
         my_role: Literal["owner", "editor", "viewer"] = "owner",
         my_state: Literal["accepted", "pending"] = "accepted",
+        collaborator_count: int = 0,
     ) -> "FolderSummary":
         from agentcore.workspace.cloud_tree import parent_rel_path
 
@@ -380,6 +385,7 @@ class FolderSummary(BaseModel):
             owner_user_id=folder.user_id,
             my_role=my_role,
             my_state=my_state,
+            collaborator_count=collaborator_count,
             created_at=folder.created_at,
             updated_at=folder.updated_at,
         )
@@ -465,6 +471,7 @@ class FolderGroup(BaseModel):
     owner_user_id: str
     my_role: Literal["owner", "editor", "viewer"] = "owner"
     my_state: Literal["accepted", "pending"] = "accepted"
+    collaborator_count: int = 0
     conversations: list[ConversationSummary]
 
 

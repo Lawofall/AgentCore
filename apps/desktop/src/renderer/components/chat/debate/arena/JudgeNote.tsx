@@ -13,7 +13,6 @@ export function JudgeNote({
   form,
   pending,
   pendingKind = "summary",
-  model,
 }: {
   text: string;
   round?: DebateRoundModel;
@@ -21,13 +20,11 @@ export function JudgeNote({
   pending?: boolean;
   /** pending 文案分流：拟质询空窗 vs 小结空窗。缺省小结（向后兼容）。 */
   pendingKind?: "cross_exam" | "summary";
-  /** 主持人模型；直播态 null → 身份行无徽章。 */
-  model?: string | null;
 }) {
   if (pending) {
     return (
       <div className="flex items-center gap-2 border-y border-border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
-        <ModeratorIdentity model={model} gavelSize={13} className="text-xs" />
+        <ModeratorIdentity gavelSize={13} className="text-xs" />
         <Loader2 size={13} className="animate-spin shrink-0" />
         <span>
           {pendingKind === "cross_exam" ? "主持人正在拟质询…" : "正在小结…"}
@@ -42,7 +39,7 @@ export function JudgeNote({
   return (
     <div className="border-y border-border bg-muted/20 px-3 py-2.5">
       <div className="mb-1">
-        <ModeratorIdentity model={model} gavelSize={14} className="text-xs" />
+        <ModeratorIdentity gavelSize={14} className="text-xs" />
       </div>
       <div className="min-w-0">
         <p className="text-sm text-foreground">{text}</p>

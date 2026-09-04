@@ -29,7 +29,6 @@ def get_git_credential_service(
 def _to_response(view: ServiceView) -> GitCredentialView:
     return GitCredentialView(
         configured=view.configured,
-        username=view.username,
         masked_token=view.masked_token,
         updated_at=view.updated_at,
     )
@@ -51,9 +50,7 @@ async def upsert_git_credentials(
     service: GitCredentialService = Depends(get_git_credential_service),
 ):
     """Create or replace the account Git PAT (encrypted at rest)."""
-    return _to_response(
-        await service.upsert(user.user_id, token=body.token, username=body.username)
-    )
+    return _to_response(await service.upsert(user.user_id, token=body.token))
 
 
 @router.delete("", response_model=StatusResponse)

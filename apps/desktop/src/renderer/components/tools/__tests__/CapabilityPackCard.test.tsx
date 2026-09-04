@@ -2,7 +2,7 @@ import type { CapabilityPack } from "@/services/capabilities";
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { CapabilityPackCard } from "../CapabilityPackCard";
+import { PackOverview } from "../CapabilityPackCard";
 
 const legalPack: CapabilityPack = {
   id: "legal",
@@ -19,9 +19,9 @@ const legalPack: CapabilityPack = {
 
 afterEach(cleanup);
 
-describe("CapabilityPackCard 纯展示", () => {
+describe("PackOverview 纯展示", () => {
   it("展示名称、简介与包内技能，无启用/停用交互", () => {
-    render(<CapabilityPackCard pack={legalPack} />);
+    render(<PackOverview pack={legalPack} />);
     expect(
       document.querySelector('[data-capability-pack="legal"]'),
     ).toBeTruthy();

@@ -30,7 +30,6 @@ class GitCredentialView:
     """Settings view — never the plaintext token."""
 
     configured: bool
-    username: str | None = None
     masked_token: str | None = None
     updated_at: datetime | None = None
 
@@ -99,18 +98,11 @@ class GitCredentialService:
                 masked = "••••"
         return GitCredentialView(
             configured=True,
-            username=row.username or _DEFAULT_USERNAME,
             masked_token=masked,
             updated_at=row.updated_at,
         )
 
-    async def upsert(
-        self,
-        user_id: str,
-        *,
-        token: str,
-        username: str | None = None,
-    ) -> GitCredentialView:
+    async def upsert(self, user_id: str, *, token: str) -> GitCredentialView:
         token = token.strip()
         if not token:
             raise ValidationError("PAT 不能为空")
@@ -118,12 +110,7 @@ class GitCredentialService:
             raise ValidationError("PAT 过长")
         enc = _encryptor()
         if enc is None:
-            raise KeyStorageUnavailableError(
-                "凭据加密密钥未配置，无法保存 Git PAT。请联系管理员。"
-            )
-        uname = (username or "").strip() or _DEFAULT_USERNAME
-        if len(uname) > 200:
-            raise ValidationError("用户名过长")
+            raise KeyStorageUnavailableError("凭据加密密钥未配置，无法保存 Git PAT。请联系管理员。")
         ciphertext = enc.encrypt(token.encode())
         row = await self._session.get(UserGitCredential, user_id)
         now = datetime.now(UTC)
@@ -131,14 +118,14 @@ class GitCredentialService:
             row = UserGitCredential(
                 user_id=user_id,
                 token_enc=ciphertext,
-                username=uname,
+                username=_DEFAULT_USERNAME,
                 created_at=now,
                 updated_at=now,
             )
             self._session.add(row)
         else:
             row.token_enc = ciphertext
-            row.username = uname
+            row.username = _DEFAULT_USERNAME
             row.updated_at = now
         await self._session.commit()
         logger.info("git_credential.upserted", user_id=user_id)
@@ -196,9 +183,7 @@ async def delete_git_credentials_for_user(
     session: AsyncSession, user_id: str, *, commit: bool = True
 ) -> None:
     """注销 cascade — drop ciphertext so it does not outlive the account."""
-    await session.execute(
-        delete(UserGitCredential).where(UserGitCredential.user_id == user_id)
-    )
+    await session.execute(delete(UserGitCredential).where(UserGitCredential.user_id == user_id))
     if commit:
         await session.commit()
     else:

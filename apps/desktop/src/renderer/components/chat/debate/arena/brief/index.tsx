@@ -1,10 +1,10 @@
+import { Card, SectionLabel } from "@/components/ui";
 import {
-  brandPanelPrimary,
   confidenceLabel,
   confidencePill,
   statusPillInline,
-  surfaceSubtle,
 } from "@/components/ui/tone-presets";
+import { cn } from "@/lib/utils";
 import type {
   DebateBriefInfo,
   DebateHandoffInfo,
@@ -41,6 +41,12 @@ import {
   riskCounts,
 } from "../../severity";
 import { ConsensusMap } from "../ConsensusMap";
+import {
+  type StanceSide,
+  splitFactDisplay,
+  splitLeaning,
+  splitValueCall,
+} from "./split";
 
 /** 交接清单 kind；坏 kind 容错归 question（契约不变）。 */
 type HandoffKind = "value" | "fact" | "question";
@@ -69,18 +75,29 @@ export function BriefCard({
 }) {
   if (form === "red_team") return <RedTeamBrief brief={brief} sides={sides} />;
   if (form === "roundtable") return <RoundtableBrief brief={brief} />;
-  return <DebateBrief brief={brief} />;
+  return <DebateBrief brief={brief} sides={sides} />;
 }
 
-/** 正反：① 裁决卡 → ② 留给你的（有交接则不展建议） */
-function DebateBrief({ brief }: { brief: DebateBriefInfo }) {
+/** 正反：同一套 Card——裁决 + 交接，不再分蓝底/白底两壳。 */
+function DebateBrief({
+  brief,
+  sides,
+}: {
+  brief: DebateBriefInfo;
+  sides: DebateSideInfo[];
+}) {
   const handoffs = briefHandoffs(brief);
   const rec = handoffs.length === 0 ? brief.recommendation : undefined;
   return (
-    <div className="space-y-4">
-      <VerdictCard brief={brief} form="debate" />
-      <YourCallZone handoffs={handoffs} recommendation={rec} form="debate" />
-    </div>
+    <Card className="p-4">
+      <VerdictCard brief={brief} form="debate" sides={sides} />
+      <YourCallZone
+        divided
+        handoffs={handoffs}
+        recommendation={rec}
+        form="debate"
+      />
+    </Card>
   );
 }
 
@@ -100,7 +117,9 @@ function RedTeamBrief({
   const mustFix = brief.must_fix ?? [];
   return (
     <div className="space-y-4">
-      <VerdictCard brief={brief} form="red_team" />
+      <Card className="p-4">
+        <VerdictCard brief={brief} form="red_team" sides={sides} />
+      </Card>
       {hasFindings ? (
         <BriefFindingBoard
           findings={findings}
@@ -129,6 +148,7 @@ function RedTeamBrief({
         </div>
       )}
       <YourCallZone
+        shell="card"
         handoffs={briefHandoffs(brief)}
         recommendation={brief.recommendation}
         form="red_team"
@@ -200,29 +220,38 @@ function BriefFindingBoard({
 }
 
 /**
- * ① 裁决卡（带边框）：纯判断区——结论倾向大字 + 置信；
- * 胜负手作卡内次级「理由」行；争点仅红队保留（正反不渲染）。
- * recommendation 已迁至 YourCallZone。
+ * 裁决区：站队徽章 + 命题 + 反转次行 + 胜负手。外壳由父级 Card 提供。
  */
 function VerdictCard({
   brief,
   form,
+  sides,
 }: {
   brief: DebateBriefInfo;
   form: "debate" | "red_team";
+  sides?: DebateSideInfo[];
 }) {
   const label = form === "red_team" ? "方案评定" : "结论倾向";
   const level = confidenceLevel(brief.confidence);
   const gate = form === "red_team" ? gateLabel(brief.gate) : null;
   const showCrux = form === "red_team" && !!brief.crux;
+  const { stanceLabel, stanceSide, thesis, reversal } = splitLeaning(
+    brief.leaning,
+    sides,
+  );
+  const heading = thesis || stanceLabel || brief.leaning;
+  const showStancePill = Boolean(stanceLabel && thesis);
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
+    <div>
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+        <SectionLabel className="flex items-center gap-1">
           <Scale size={13} />
           {label}
-        </span>
+        </SectionLabel>
         <div className="flex shrink-0 items-center gap-1.5">
+          {showStancePill && stanceLabel ? (
+            <StancePill label={stanceLabel} side={stanceSide} />
+          ) : null}
           {gate && <span className={statusPillInline.primary}>{gate}</span>}
           <span
             className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${confidencePill[level]}`}
@@ -231,9 +260,26 @@ function VerdictCard({
           </span>
         </div>
       </div>
-      <p className="mt-2 text-xl font-semibold leading-snug text-foreground">
-        {brief.leaning}
-      </p>
+      {heading ? (
+        <p
+          className="mt-2 text-base font-semibold leading-snug text-foreground"
+          style={
+            !showStancePill && stanceSide
+              ? {
+                  color:
+                    stanceSide === "pro"
+                      ? "var(--debate-side-pro)"
+                      : "var(--debate-side-con)",
+                }
+              : undefined
+          }
+        >
+          {heading}
+        </p>
+      ) : null}
+      {reversal ? (
+        <p className="mt-1.5 text-sm text-muted-foreground">{reversal}</p>
+      ) : null}
       {(brief.decisive || showCrux) && (
         <div className="mt-3 space-y-1.5 border-t border-border pt-3">
           {brief.decisive && (
@@ -252,6 +298,39 @@ function VerdictCard({
         </div>
       )}
     </div>
+  );
+}
+
+function StancePill({
+  label,
+  side,
+}: {
+  label: string;
+  side: StanceSide;
+}) {
+  const colorVar =
+    side === "pro"
+      ? "var(--debate-side-pro)"
+      : side === "con"
+        ? "var(--debate-side-con)"
+        : null;
+  return (
+    <span
+      className={cn(
+        "rounded-full px-1.5 py-0.5 text-xs font-medium",
+        !colorVar && statusPillInline.muted,
+      )}
+      style={
+        colorVar
+          ? {
+              color: colorVar,
+              background: `color-mix(in oklch, ${colorVar} 14%, transparent)`,
+            }
+          : undefined
+      }
+    >
+      {label}
+    </span>
   );
 }
 
@@ -397,7 +476,7 @@ function RoundtableBrief({
     return null;
   }
   return (
-    <div className="space-y-4">
+    <Card className="space-y-4 p-4">
       {brief.crux && (
         <p className="flex items-start gap-1.5 text-sm text-foreground">
           <Target size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
@@ -407,28 +486,27 @@ function RoundtableBrief({
           </span>
         </p>
       )}
-      <YourCallZone handoffs={handoffs} />
-    </div>
+      <YourCallZone divided={!!brief.crux} handoffs={handoffs} />
+    </Card>
   );
 }
 
 /**
- * ③ 留给你的：顶部 AI 建议位，其后按 kind 三种形态——
- *   value → 问句卡置顶高光；
- *   fact → 还撑不牢的事实列表；
- *   question → 脚注一行收尾（不与前两者平级）。
- * 不挂关口按钮；收场后接着干走主输入框对 CEO 说话。
- * handoffs 全空但有 recommendation 时仍渲染面板。
- * 圆桌不传 recommendation（建议仍留在 RoundtableSpectrum「综合观察」）。
+ * 留给你的：与裁决同一套 SectionLabel + 列表，不另起蓝底壳、不挂关口按钮。
+ * value = 问句（对照小条不是选项）；fact = 还没核实；question = 只能等。
  */
 function YourCallZone({
   handoffs,
   recommendation,
   form,
+  divided = false,
+  shell = "plain",
 }: {
   handoffs: DebateHandoffInfo[];
   recommendation?: string;
   form?: "debate" | "red_team";
+  divided?: boolean;
+  shell?: "plain" | "card";
 }) {
   const values = handoffs.filter((h) => asHandoffKind(h.kind) === "value");
   const facts = handoffs.filter((h) => asHandoffKind(h.kind) === "fact");
@@ -443,12 +521,14 @@ function YourCallZone({
 
   const recLabel = form === "red_team" ? "加固建议" : "建议";
 
-  return (
-    <div className={brandPanelPrimary}>
-      <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-        <UserRound size={15} className="text-primary" />
+  const inner = (
+    <div
+      className={cn("space-y-3", divided && "mt-3 border-t border-border pt-3")}
+    >
+      <SectionLabel className="flex items-center gap-1">
+        <UserRound size={13} />
         留给你的
-      </h3>
+      </SectionLabel>
       {recommendation && (
         <p className="flex items-start gap-1.5 text-sm text-foreground">
           <Lightbulb
@@ -462,55 +542,79 @@ function YourCallZone({
         </p>
       )}
       {values.length > 0 && (
-        <div
-          className={
-            recommendation
-              ? "space-y-2 border-t border-primary/15 pt-3"
-              : "space-y-2"
-          }
-        >
+        <ul className="space-y-3">
           {values.map((it) => (
-            <ValueCallCard key={it.text} text={it.text} />
-          ))}
-        </div>
-      )}
-      {facts.length > 0 && (
-        <ul
-          className={
-            values.length > 0 || recommendation
-              ? "space-y-2 border-t border-primary/15 pt-3"
-              : "space-y-2"
-          }
-        >
-          {facts.map((it) => (
-            <li key={it.text} className="text-sm text-foreground">
-              {it.text}
+            <li key={it.text}>
+              <ValueCallItem text={it.text} />
             </li>
           ))}
         </ul>
       )}
+      {facts.length > 0 && (
+        <div className="space-y-2">
+          <SectionLabel>还没核实</SectionLabel>
+          <ul className="space-y-2">
+            {facts.map((it) => (
+              <li key={it.text}>
+                <FactItem text={it.text} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {questions.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          只能等的：{questions.map((h) => h.text).join("；")}
-        </p>
+        <div className="space-y-1.5">
+          <SectionLabel>只能等</SectionLabel>
+          <p className="text-sm text-muted-foreground">
+            {questions.map((h) => h.text).join("；")}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
+  return shell === "card" ? <Card className="p-4">{inner}</Card> : inner;
+}
+
+/** value：问句 + 可选对照条（不是可点选项）。 */
+function ValueCallItem({ text }: { text: string }) {
+  const { question, mappings } = splitValueCall(text);
+  const questionMark = /[？?。！!…]$/.test(question) ? "" : "？";
+  return (
+    <div className="space-y-1.5">
+      <p className="text-sm font-medium leading-snug text-foreground">
+        {question}
+        {questionMark ? (
+          <span className="text-muted-foreground">{questionMark}</span>
+        ) : null}
+      </p>
+      {mappings.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {mappings.map((m) => (
+            <span
+              key={m}
+              className="rounded-lg bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+            >
+              {m}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
-/** value：整场化简出的选择题——问句形态高光卡。
- *  问号兜底仅当末尾无终结标点（历史数据是「。」收尾的陈述句，别拼成「。？」）。 */
-function ValueCallCard({ text }: { text: string }) {
-  const questionMark = /[？?。！!…]$/.test(text) ? "" : "？";
+function FactItem({ text }: { text: string }) {
+  const { body, statusLabels } = splitFactDisplay(text);
   return (
-    <div className={`rounded-lg border p-3 ${surfaceSubtle.primary}`}>
-      <p className="text-base font-medium leading-snug text-foreground">
-        {text}
-        {questionMark ? (
-          <span className="text-primary">{questionMark}</span>
-        ) : null}
-      </p>
-    </div>
+    <p className="flex flex-wrap items-baseline gap-1.5 text-sm text-foreground">
+      {statusLabels.map((label) => (
+        <span key={label} className={statusPillInline.muted}>
+          {label}
+        </span>
+      ))}
+      <span>{body || text}</span>
+    </p>
   );
 }
 

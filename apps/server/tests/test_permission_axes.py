@@ -23,6 +23,13 @@ from agentcore.runtime.sandbox_approval import (
 from agentcore.tools.builtin import build_worker_registry
 
 
+def _gaps(ctx: str) -> set[str]:
+    for line in ctx.splitlines():
+        if line.startswith("缺口："):
+            return {p.strip() for p in line.removeprefix("缺口：").split("、") if p.strip()}
+    return set()
+
+
 class _LocalBackend:
     location = "local"
 
@@ -162,10 +169,10 @@ def test_command_ask_capability_line_matches_registry():
     out = build_workspace_context(
         backend, desktop_online=True, permission_axes=axes
     )
-    assert "run=未装配" in out
+    assert "run" in _gaps(out)
     assert "code_execute=" not in out
     assert "terminal=" not in out
-    assert "run=已装配" in build_workspace_context(backend, desktop_online=True)
+    assert "run" not in _gaps(build_workspace_context(backend, desktop_online=True))
 
 
 def test_command_auto_skips_kickoff_and_local_exec_auto_pass():

@@ -57,9 +57,8 @@ function renderPage() {
   );
 }
 
-describe("GuidelinesPage 能力包向后兼容", () => {
-  it("packs 缺失时与现状一致：不渲染能力包区，仍显示准则与薄技能", async () => {
-    // Simulate older backends that omit `packs` (OpenAPI marks it optional with default []).
+describe("GuidelinesPage 提示词阅读器", () => {
+  it("packs 缺失时不渲染能力包区，目录仍有准则与薄技能", async () => {
     const { packs: _packs, ...withoutPacks } = base;
     vi.mocked(getCapabilities).mockResolvedValue(withoutPacks as Capabilities);
     renderPage();
@@ -68,8 +67,9 @@ describe("GuidelinesPage 能力包向后兼容", () => {
       expect(screen.getByText("全员共享准则")).toBeTruthy();
     });
     expect(screen.queryByTestId("capability-packs")).toBeNull();
-    expect(screen.getByText("工具进阶用法（薄技能）")).toBeTruthy();
-    expect(screen.getByText("delegate_playbook")).toBeTruthy();
+    expect(screen.getByText("按需注入")).toBeTruthy();
+    expect(screen.getByText("派单进阶")).toBeTruthy();
+    expect(screen.queryByText("工具进阶用法（薄技能）")).toBeNull();
   });
 
   it("packs 为空数组时不渲染能力包区", async () => {
@@ -82,7 +82,35 @@ describe("GuidelinesPage 能力包向后兼容", () => {
     expect(screen.queryByTestId("capability-packs")).toBeNull();
   });
 
-  it("有 packs 时渲染纯展示卡片，并从薄技能区去重包内技能", async () => {
+  it("默认打开角色身份 · 主 Agent，点目录才换正文", async () => {
+    vi.mocked(getCapabilities).mockResolvedValue(base);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("主 Agent 身份正文")).toBeTruthy();
+    });
+    expect(screen.queryByText("共享准则正文")).toBeNull();
+
+    fireEvent.click(screen.getByText("全员共享准则"));
+    expect(screen.getByText("共享准则正文")).toBeTruthy();
+    expect(screen.queryByText("主 Agent 身份正文")).toBeNull();
+  });
+
+  it("薄技能目录用人话摘要，详情才露出内部名", async () => {
+    vi.mocked(getCapabilities).mockResolvedValue(base);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("派单进阶")).toBeTruthy();
+    });
+    expect(screen.queryByText("delegate_playbook")).toBeNull();
+
+    fireEvent.click(screen.getByText("派单进阶"));
+    expect(screen.getByText("delegate_playbook")).toBeTruthy();
+    expect(screen.getByText("body")).toBeTruthy();
+  });
+
+  it("有 packs 时进目录分组，包内技能从按需区去重", async () => {
     vi.mocked(getCapabilities).mockResolvedValue({
       ...base,
       skills: [
@@ -116,9 +144,13 @@ describe("GuidelinesPage 能力包向后兼容", () => {
     expect(screen.getByText("能力包")).toBeTruthy();
     expect(screen.getByText("法律能力")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /启用|停用/ })).toBeNull();
-    // Pack skill shown once under the pack card, not again in thin-skills strip.
-    expect(screen.getAllByText("contract_review")).toHaveLength(1);
-    expect(screen.getByText("delegate_playbook")).toBeTruthy();
+    expect(screen.getAllByText("审查合同")).toHaveLength(1);
+    expect(screen.getByText("派单进阶")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("法律能力"));
+    expect(screen.getByText("合同审查与合规")).toBeTruthy();
+    expect(screen.getByText("包内技能")).toBeTruthy();
+    expect(screen.getByText("contract_review")).toBeTruthy();
   });
 
   it("渲染三选一角色身份，不把身份叠成四层", async () => {
@@ -126,7 +158,7 @@ describe("GuidelinesPage 能力包向后兼容", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText("角色身份")).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "角色身份" })).toBeTruthy();
     });
     expect(screen.getByRole("tab", { name: "主 Agent" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "可再委派的队员" })).toBeTruthy();
@@ -157,7 +189,7 @@ describe("GuidelinesPage 能力包向后兼容", () => {
       expect(screen.getByText("主 Agent 核。")).toBeTruthy();
     });
     expect(screen.queryByText("lead_subteam：子队拆法")).toBeNull();
-    expect(screen.getByText("队员交付合同")).toBeTruthy();
+    expect(screen.getAllByText("队员交付合同")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("tab", { name: "叶子队员" }));
     expect(screen.getByText("叶子身份。")).toBeTruthy();

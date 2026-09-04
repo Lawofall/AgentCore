@@ -16,7 +16,7 @@ def test_compose_ceo_omits_folder_catalog_tag():
         skill_registry=build_system_skill_registry(),
         ceo_tool_names={"delegate", "consult"},
         workspace_context=(
-            "<工作区>\n工作台：本会话出生桌=`设计/图标`（folder_id=`f1`）。\n</工作区>"
+            "<工作区>\n桌：设计/图标（云端文件夹）。\n</工作区>"
         ),
     )
     assert "<文件夹清单>" not in ceo

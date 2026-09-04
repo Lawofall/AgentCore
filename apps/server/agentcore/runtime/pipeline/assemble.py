@@ -173,7 +173,9 @@ async def assemble_ceo_turn(
     from agentcore.runtime.pipeline import run as run_mod
 
     # ChannelProfile is orthogonal to workspace location (no local lift).
-    channel = resolve_channel_profile(x_client_platform)
+    channel = resolve_channel_profile(x_client_platform).for_turn(
+        member_turn=prepared.member_turn
+    )
     delegate_tool, debate_tool, chat_tools = run_mod._assemble_ceo_toolset(
         llm=prepared.llm,
         sink=sink,
@@ -198,10 +200,8 @@ async def assemble_ceo_turn(
         folder_id=folder_id,
         permission_axes=permission_axes,
         # Same live-user gate as ask_user itself, plus desktop-only: web/mobile omit.
-        advertise_bind_local_folder=checkpoint_enabled
-        and channel.can_bind_folder
-        and not prepared.member_turn,
-        desktop_online=channel.desktop_online and not prepared.member_turn,
+        advertise_bind_local_folder=checkpoint_enabled and channel.can_bind_folder,
+        desktop_online=channel.desktop_online,
     )
     from agentcore.runtime.resolve.prepare import _wire_conversation_log_tools
     from agentcore.tools.ceo_toolset import wire_ceo_consult

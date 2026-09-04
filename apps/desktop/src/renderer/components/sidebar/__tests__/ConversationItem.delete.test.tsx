@@ -198,3 +198,25 @@ describe("ConversationItem delete", () => {
     expect(mocks.restoreMutate).toHaveBeenCalledWith("c1");
   });
 });
+
+describe("ConversationItem hover actions", () => {
+  it("keeps rename in 更多, not as a hover icon", async () => {
+    renderItem();
+
+    const surface = screen.getByRole("button", {
+      name: /当前会话/,
+    }).parentElement;
+    if (!surface) throw new Error("conversation row surface missing");
+    fireEvent.mouseEnter(surface);
+
+    expect(screen.queryByLabelText("重命名")).toBeNull();
+    expect(screen.getByLabelText("归档")).toBeTruthy();
+
+    const more = screen.getByLabelText("更多操作");
+    fireEvent.pointerDown(more);
+    fireEvent.click(more);
+    expect(
+      await screen.findByRole("menuitem", { name: "重命名" }),
+    ).toBeTruthy();
+  });
+});

@@ -146,15 +146,15 @@ async def test_package_json_alone_does_not_inject_fingerprint():
 
 
 def test_attach_inserts_before_workspace_close():
-    facts = "<工作区>\n执行位置：用户本机\n</工作区>"
+    facts = "<工作区>\n执行：用户本机\n</工作区>"
     out = attach_workspace_file_index(facts, FILE_INDEX_EMPTY)
-    assert out == "<工作区>\n执行位置：用户本机\n文件：空\n</工作区>"
+    assert out == "<工作区>\n执行：用户本机\n文件：空\n</工作区>"
     assert out.count("<工作区>") == 1
     assert "<工作区文件>" not in out
 
 
 def test_attach_noops_without_facts_or_index():
-    facts = "<工作区>\n执行位置：用户本机\n</工作区>"
+    facts = "<工作区>\n执行：用户本机\n</工作区>"
     assert attach_workspace_file_index(facts, "") == facts
     assert attach_workspace_file_index("", FILE_INDEX_EMPTY) == ""
     assert attach_workspace_file_index("no tag here", FILE_INDEX_EMPTY) == "no tag here"

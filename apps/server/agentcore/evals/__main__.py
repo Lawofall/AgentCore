@@ -12,6 +12,7 @@
     python -m agentcore.evals --compare        # 对比评估：团队 vs 单体（成对裁判，诊断）
     python -m agentcore.evals --calibrate      # 裁判校准：gold-set 算判↔人 kappa（kappa<门 即非 0）
     python -m agentcore.evals --playbook-routing  # playbook 路由回归（报告型，真跑 LLM，不卡门禁）
+    python -m agentcore.evals --compaction-fidelity  # 摘要保真：生产压缩 prompt 合成探针（报告型）
 
 ``--baseline`` 与 ``--out`` 同给时，相对基线观测写进报告 JSON 的 ``ratchet`` 段——夜跑摘要
 据此渲染。这是观测不是门禁：不因「看起来像退化」改退出码（真跑步骤的
@@ -21,7 +22,7 @@
 真跑（非 ``--lint-only``）会调真实 DeepSeek，需 ``EVAL_DEEPSEEK_API_KEY``。L1 绝对分裁判默认
 固定 Pro 档（Pro 评 Flash，压同家族自偏好），可经 ``EVAL_JUDGE_MODEL`` 覆盖模型。
 退出码：全过/裁判可信=0；用例未过或 kappa<门=1；配置/加载错误=2。
-相对基线观测与 ``--playbook-routing`` 都不改退出码。
+相对基线观测与 ``--playbook-routing`` / ``--compaction-fidelity`` 都不改退出码。
 """
 
 from __future__ import annotations
@@ -40,6 +41,21 @@ from agentcore.evals.calibration import (
     format_calibration_report,
     load_gold_set,
 )
+from agentcore.evals.compaction_fidelity import (
+    SAMPLES as COMPACTION_FIDELITY_SAMPLES,
+)
+from agentcore.evals.compaction_fidelity import (
+    _fidelity_provider_and_model as _compaction_fidelity_provider_and_model,
+)
+from agentcore.evals.compaction_fidelity import (
+    compaction_fidelity_to_dict,
+    format_compaction_fidelity_report,
+    run_compaction_fidelity,
+)
+from agentcore.evals.compaction_fidelity import (
+    lint_samples as lint_compaction_fidelity_samples,
+)
+from agentcore.evals.compaction_fidelity import select_samples as select_compaction_fidelity_samples
 from agentcore.evals.comparison import (
     build_default_pairwise_judge,
     comparison_report_to_dict,
@@ -258,9 +274,17 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--compaction-fidelity",
+        action="store_true",
+        help=(
+            "摘要保真（报告型，不卡门禁）：生产压缩 prompt 合成探针，"
+            "查硬标识 / 仍生效决策 / 已关闭项是否进未决"
+        ),
+    )
+    p.add_argument(
         "--keys",
         default=None,
-        help="只跑指定场景 key（逗号分隔）；--playbook-routing 用",
+        help="只跑指定场景 key（逗号分隔）；--playbook-routing / --compaction-fidelity 用",
     )
     p.add_argument(
         "--retries",
@@ -478,6 +502,36 @@ async def _run_deliverable_form(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _run_compaction_fidelity(args: argparse.Namespace) -> int:
+    """摘要保真：生产 compact prompt + 合成探针 → complete → 子串检查。
+
+    诊断性（与 ``--deliverable-form`` 同）：``--lint-only`` 零 LLM；真跑出保真率。
+    失败禁止把判例写入压缩器常驻。
+    """
+    samples = select_compaction_fidelity_samples(COMPACTION_FIDELITY_SAMPLES, args.keys)
+    lint_compaction_fidelity_samples(COMPACTION_FIDELITY_SAMPLES)
+    if args.lint_only:
+        print(
+            f"[lint] OK — {len(COMPACTION_FIDELITY_SAMPLES)} 个摘要保真样本 + 生产契约合法"
+            + (f"（本跑 {len(samples)} 条 --keys）" if args.keys else "")
+        )
+        return 0
+
+    provider, model = _compaction_fidelity_provider_and_model(args.judge_mode)
+    result = await run_compaction_fidelity(provider, model, samples)
+    print(format_compaction_fidelity_report(result))
+
+    if args.out:
+        out = Path(args.out)
+        out.write_text(
+            json.dumps(compaction_fidelity_to_dict(result), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"\n[report] 已写出 JSON -> {out}")
+
+    return 0
+
+
 async def _run_playbook_routing(args: argparse.Namespace) -> int:
     """Playbook 路由回归：真跑 LLM，报告型（退出码不跟落点走）。"""
     from datetime import UTC, datetime
@@ -544,6 +598,8 @@ async def _run(args: argparse.Namespace) -> int:
         return _run_diff_reports(args)
     if args.playbook_routing:
         return await _run_playbook_routing(args)
+    if args.compaction_fidelity:
+        return await _run_compaction_fidelity(args)
     if args.deliverable_form:
         return await _run_deliverable_form(args)
     if args.debate_speech_format:

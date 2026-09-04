@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * 主持人身份壳：法槌 + 「主持人」+ 可得时的模型徽章；直播态无徽章。
+ * 主持人身份壳：法槌 + 「主持人」；模型徽章只挂记分牌。
  */
 
 import type { RunNode } from "@/stores/execution";
@@ -17,17 +17,11 @@ afterEach(() => {
 });
 
 describe("ModeratorIdentity", () => {
-  it("渲染法槌 + 主持人；无 model 时不出现厂商徽章", () => {
+  it("渲染法槌 + 主持人，不挂厂商徽章", () => {
     const { container } = render(<ModeratorIdentity />);
     expect(screen.getByText("主持人")).toBeTruthy();
     expect(container.querySelector("svg")).toBeTruthy();
     expect(screen.queryByText("DeepSeek")).toBeNull();
-  });
-
-  it("有 model 时附带厂商徽章", () => {
-    render(<ModeratorIdentity model="deepseek/deepseek-v4-flash" />);
-    expect(screen.getByText("主持人")).toBeTruthy();
-    expect(screen.getByText("DeepSeek")).toBeTruthy();
   });
 });
 
@@ -50,21 +44,11 @@ describe("resolveModeratorModel", () => {
 });
 
 describe("OpeningNote 主持人入场", () => {
-  it("身份壳 + 原文；无 model 时无徽章", () => {
+  it("身份壳 + 原文，不挂模型徽章", () => {
     render(<OpeningNote text="今天我们讨论方案 A。" />);
     expect(screen.getByText("主持人")).toBeTruthy();
     expect(screen.getByText("今天我们讨论方案 A。")).toBeTruthy();
     expect(screen.queryByText("DeepSeek")).toBeNull();
-  });
-
-  it("有 model 时显示徽章", () => {
-    render(
-      <OpeningNote
-        text="今天我们讨论方案 A。"
-        model="deepseek/deepseek-v4-flash"
-      />,
-    );
-    expect(screen.getByText("DeepSeek")).toBeTruthy();
   });
 });
 
@@ -95,7 +79,7 @@ describe("JudgeNote 完成态身份", () => {
 });
 
 describe("CrossExamSection 质询报幕", () => {
-  it("报幕含法槌身份壳 + 必答质询文案", () => {
+  it("报幕含法槌身份壳 + 必答质询文案，不挂模型徽章", () => {
     const cx: DebateCrossExamView = {
       targetKey: "pro",
       stance: null,
@@ -105,18 +89,13 @@ describe("CrossExamSection 质询报幕", () => {
       answerRun: null,
     };
     const { container } = render(
-      <CrossExamSection
-        exchanges={[cx]}
-        messageId="m1"
-        sceneKey="m1:cx"
-        moderatorModel="deepseek/deepseek-v4-flash"
-      />,
+      <CrossExamSection exchanges={[cx]} messageId="m1" sceneKey="m1:cx" />,
     );
 
     expect(screen.getByText("质询")).toBeTruthy();
     expect(screen.getByText("主持人")).toBeTruthy();
     expect(screen.getByText("发出必答质询")).toBeTruthy();
-    expect(screen.getByText("DeepSeek")).toBeTruthy();
+    expect(screen.queryByText("DeepSeek")).toBeNull();
     expect(container.querySelector("svg")).toBeTruthy();
   });
 });

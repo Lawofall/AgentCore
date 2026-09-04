@@ -6,12 +6,12 @@ from agentcore.runtime.pipeline.resume.pipeline import _restamp_workspace_facts
 def test_restamp_replaces_stale_cloud_facts_with_local():
     old = (
         "<运行时>\n当前日期：2026-07-12\n</运行时>\n"
-        "<工作区>\n执行位置：云端沙箱（服务端）\n</工作区>\n"
+        "<工作区>\n执行：云端沙箱\n</工作区>\n"
         "rest of prompt"
     )
     new = (
         "<工作区>\n"
-        "执行位置：用户本机（经桌面通道遥控）\n"
+        "执行：用户本机\n"
         "</工作区>"
     )
     out = _restamp_workspace_facts(old, new)
@@ -29,7 +29,7 @@ def test_restamp_inserts_before_attachment_tail():
         "<按需目录>\n- terminal\n</按需目录>\n"
         "<附件>\nfile.md\n</附件>"
     )
-    new = "<工作区>\n执行位置：用户本机\n</工作区>"
+    new = "<工作区>\n执行：用户本机\n</工作区>"
     out = _restamp_workspace_facts(old, new)
     assert out.index("</按需目录>") < out.index("<工作区>")
     assert out.index("</工作区>") < out.index("<附件>")

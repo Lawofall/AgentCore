@@ -8119,6 +8119,11 @@
       "FolderGroup": {
         "description": "A project plus the conversations it holds (grouped sidebar payload).",
         "properties": {
+          "collaborator_count": {
+            "default": 0,
+            "title": "Collaborator Count",
+            "type": "integer"
+          },
           "conversations": {
             "items": {
               "$ref": "#/components/schemas/ConversationSummary"
@@ -8298,6 +8303,11 @@
       },
       "FolderSummary": {
         "properties": {
+          "collaborator_count": {
+            "default": 0,
+            "title": "Collaborator Count",
+            "type": "integer"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -8636,17 +8646,6 @@
               }
             ],
             "title": "Updated At"
-          },
-          "username": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Username"
           }
         },
         "required": [
@@ -16580,19 +16579,6 @@
             "minLength": 1,
             "title": "Token",
             "type": "string"
-          },
-          "username": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Remote username (default x-access-token for GitHub PAT).",
-            "title": "Username"
           }
         },
         "required": [
@@ -17479,7 +17465,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.13"
+    "version": "0.7.14"
   },
   "openapi": "3.1.0",
   "paths": {

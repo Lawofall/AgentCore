@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   switchConversation: vi.fn(),
+  hintVisible: false,
 }));
 
 vi.mock("@/hooks/useConversations", () => ({
@@ -65,6 +66,11 @@ vi.mock("@/stores/share", () => ({
   useShareStore: { getState: () => ({ open: vi.fn() }) },
 }));
 
+vi.mock("@/lib/railHotkeys", () => ({
+  useRailHotkeyIndex: () => 3,
+  useRailHotkeyHintVisible: () => mocks.hintVisible,
+}));
+
 import { ConversationItem } from "@/components/sidebar/ConversationItem";
 
 const conv: Conversation = {
@@ -78,6 +84,7 @@ const conv: Conversation = {
 afterEach(() => {
   cleanup();
   mocks.switchConversation.mockReset();
+  mocks.hintVisible = false;
 });
 
 describe("ConversationItem onActivate", () => {
@@ -96,5 +103,55 @@ describe("ConversationItem onActivate", () => {
 
     expect(mocks.switchConversation).toHaveBeenCalledWith("c1");
     expect(onActivate).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the rail chord on the row without showing the digit by default", () => {
+    render(
+      <MemoryRouter initialEntries={["/conversations/c1"]}>
+        <TooltipProvider>
+          <ConversationItem conversation={conv} />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("3")).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: /当前会话/ })
+        .getAttribute("aria-keyshortcuts"),
+    ).toBe("Control+3");
+  });
+
+  it("shows the rail hotkey index while the modifier hint is armed", () => {
+    mocks.hintVisible = true;
+    render(
+      <MemoryRouter initialEntries={["/conversations/c1"]}>
+        <TooltipProvider>
+          <ConversationItem conversation={conv} />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("3")).toBeTruthy();
+  });
+
+  it("hides the rail hotkey index while hover actions are open", () => {
+    mocks.hintVisible = true;
+    render(
+      <MemoryRouter initialEntries={["/conversations/c1"]}>
+        <TooltipProvider>
+          <ConversationItem conversation={conv} />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+
+    const surface = screen.getByRole("button", {
+      name: /当前会话/,
+    }).parentElement;
+    if (!surface) throw new Error("conversation row surface missing");
+    fireEvent.mouseEnter(surface);
+
+    expect(screen.queryByText("3")).toBeNull();
+    expect(screen.getByLabelText("归档")).toBeTruthy();
   });
 });

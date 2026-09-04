@@ -62,9 +62,7 @@ class UserLlmProvider(Base):
         Index("ix_user_llm_providers_user", "user_id"),
     )
 
-    id: Mapped[str] = mapped_column(
-        PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid
-    )
+    id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     # Owning account (app-level FK → users; account注销 cascades these rows).
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
     # Human-facing display name for this provider (e.g. "DeepSeek", "火山方舟").
@@ -108,10 +106,9 @@ class UserGitCredential(Base):
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
     # AES-256-GCM ciphertext (nonce ‖ ct+tag); never the plaintext PAT.
     token_enc: Mapped[bytes] = mapped_column(LargeBinary)
-    # Optional remote username (GitHub PAT commonly uses ``x-access-token``).
-    username: Mapped[str] = mapped_column(
-        String(200), server_default=text("'x-access-token'")
-    )
+    # HTTP basic-auth username for cloud http(s). Product always writes
+    # ``x-access-token`` (GitHub PAT); not a public API field.
+    username: Mapped[str] = mapped_column(String(200), server_default=text("'x-access-token'"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )

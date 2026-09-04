@@ -1125,7 +1125,8 @@ def test_team_delivery_env_skill_teaches_presentation_pptx_honesty():
     assert "点名载体/手段" in body
     assert "顾问短对齐" not in body
     assert "源数据文件下一步" in body
-    assert "无法可靠解析的源数据文件" in body
+    assert "无法可靠解析的源数据文件" not in body
+    assert "无法可靠解析的源数据文件" in _body("data_file_landing")
     assert "表质量基线" in body
     assert "冒充表结构" in body
     assert "落盘回执" in body
@@ -1140,7 +1141,7 @@ def test_team_delivery_env_skill_teaches_deterministic_word_pdf_export():
     orch = _body("team_orchestration_advanced")
     assert "md_to_docx" in body
     assert "python-docx" in body  # 只作禁用主路径出现
-    assert "目标格式标不可产" in body
+    assert "目标格式不可产" in body
     assert "与执行正交" in body
     assert "确定性导出器" in body
     assert "`.docx`/`.pptx`/`.xlsx` 等且能力行" not in body
@@ -1847,7 +1848,7 @@ def test_ask_user_skill_teaches_fork_and_annotate():
     assert "https://fashitianxia.xyz/download" in help_body
     assert "consult(product_help)" in desk
     assert "授权已确认" in desk
-    assert "本对话已授权区外目录" in desk
+    assert "区外：" in desk
     assert "consult(external_mount_readonly)" in desk
     assert "授权后发现" not in desk
     assert "口头同意" not in desk
@@ -2050,7 +2051,8 @@ def test_data_file_landing_skill_teaches_script_transform_and_invariants():
     assert "改口" in body
     assert "人质" in body
     assert "先交" in body
-    assert "未装配" in body
+    assert "缺口含" in body
+    assert "无法可靠解析的源数据文件" in body
     assert "账单" in body and "报表" in body and "导出记录" in body
     assert "看原件" in body
     assert "认形态" not in body

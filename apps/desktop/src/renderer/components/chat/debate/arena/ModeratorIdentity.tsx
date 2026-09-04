@@ -1,19 +1,15 @@
 import type { Execution } from "@/stores/execution";
 import { Gavel } from "lucide-react";
-import { ModelBadge } from "../ModelBadge";
 import type { DebateModel } from "../model";
 
 /**
- * 主持人身份符号（贯穿全场）：法槌 + 「主持人」+ 可得时的模型徽章。
- * 终审舞台用更大标题变体（「主持人终审」），其余触点复用此壳，勿各造一套。
+ * 主持人身份符号（贯穿剧本主列）：法槌 + 「主持人」。
+ * 模型徽章只挂记分牌，此处不重复。终审舞台用更大标题变体（「主持人终审」）。
  */
 export function ModeratorIdentity({
-  model,
   gavelSize = 13,
   className = "",
 }: {
-  /** 模型 id；空 / null → 不渲染徽章（直播态渐进增强）。 */
-  model?: string | null;
   gavelSize?: number;
   className?: string;
 }) {
@@ -23,12 +19,11 @@ export function ModeratorIdentity({
     >
       <Gavel size={gavelSize} className="shrink-0" aria-hidden />
       <span className="font-medium text-foreground">主持人</span>
-      <ModelBadge model={model} />
     </span>
   );
 }
 
-/** 与终审同一数据源：`moderatorRunId` → `execution.runs` → `model`。直播态 id 为空 → null。 */
+/** 记分牌用：`moderatorRunId` → `execution.runs` → `model`。直播态 id 为空 → null。 */
 export function resolveModeratorModel(
   debate: Pick<DebateModel, "moderatorRunId">,
   execution: Pick<Execution, "runs">,

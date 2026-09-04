@@ -74,7 +74,23 @@ class EngineSettings(BaseModel):
     # pointer+summary strictly below engine_tool_clear_min_chars (idempotency).
     engine_tool_clear_file_read_summary_max_chars: int = 1200
 
-    # Worker 累计 token 硬顶 (loose backstop): compaction (tool_clear) 挑大梁做
+    # Worker mid-run window compact (lossy summary of older ReAct rounds).
+    # Orthogonal to tool_clear (same-window tool bodies) and to conversation
+    # compaction (cross-user-turn chat). Journal / UI stay full; projection only.
+    # Captain / solo loops ignore this. 64k last-prompt is rot, not 1M overflow;
+    # recency=2 matches investigation tool_clear so the live tool pair stays.
+    engine_window_compact_enabled: bool = True
+    engine_window_compact_prompt_tokens: int = 64_000
+    engine_window_compact_recency_rounds: int = 2
+    engine_window_compact_min_fold_rounds: int = 4
+    engine_window_compact_trigger_fold_rounds: int = 8
+    engine_window_compact_max_fold_rounds: int = 12
+    engine_window_compact_summary_char_budget: int = 4_000
+    engine_window_compact_near_ratio: float = 0.8
+    engine_window_compact_near_tokens: int = 200_000
+    engine_window_compact_cooldown_rounds: int = 2
+
+    # Worker 累计 token 硬顶 (loose backstop): tool_clear + window compact 挑大梁做
     # 上下文瘦身,这只是防失控的安全阀。每轮末比对 ``TokenUsage.fuse_tokens``
     # （新读入 + 新写出；缓存前言不计），到顶即收口。
     # 经 ``apply_worker_budgets`` 统一回填到各 worker；CEO 显式 ``token_ceiling`` 优先。

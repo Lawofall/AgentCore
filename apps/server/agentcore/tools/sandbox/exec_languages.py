@@ -35,17 +35,18 @@ def language_labels(languages: Sequence[str]) -> str:
 
 
 def format_interpreters_line(languages: Sequence[str]) -> str:
-    """One-line fact for ``<工作区>`` about probed interpreters."""
+    """Short ``解释器：`` line when the probed set is not the full surface.
+
+    Full set (cloud guest / complete local PATH) is omitted — the opening
+    ``run`` schema is the channel. Incomplete local probes are the unusual fact.
+    """
     available = [lang for lang in ALL_EXEC_LANGUAGES if lang in languages]
     missing = [lang for lang in ALL_EXEC_LANGUAGES if lang not in languages]
     if not missing:
-        return f"可用解释器：{language_labels(available)}。"
+        return ""
     if not available:
-        return f"可用解释器：无（不可用：{language_labels(missing)}）。"
-    return (
-        f"可用解释器：{language_labels(available)}"
-        f"（不可用：{language_labels(missing)}）。"
-    )
+        return "解释器：无"
+    return f"解释器：{language_labels(available)}"
 
 
 def probe_host_languages() -> tuple[ExecLanguage, ...]:

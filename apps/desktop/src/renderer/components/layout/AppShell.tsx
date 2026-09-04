@@ -6,7 +6,12 @@ import {
 import { startAndroidUpdates } from "@/lib/androidUpdates";
 import { isWebClient } from "@/lib/capabilities";
 import { NarrowLayoutProvider, useNarrowLayoutState } from "@/lib/narrowLayout";
-import { GLOBAL_SHORTCUTS, shouldRunGlobalShortcut } from "@/lib/shortcuts";
+import { isRailHotkeyHintModifier } from "@/lib/railHotkeys";
+import {
+  GLOBAL_SHORTCUTS,
+  resolveShortcutKey,
+  shouldRunGlobalShortcut,
+} from "@/lib/shortcuts";
 import { useApplyTheme } from "@/lib/theme";
 import { primeDeviceId } from "@/services/deviceIdentity";
 import {
@@ -148,8 +153,8 @@ function AppShellFrame() {
 
   // Global keyboard shortcuts (§二) — dispatched off the single-source table in
   // lib/shortcuts.ts (also rendered by the 快捷键 settings page, so behavior and
-  // the documented chord never drift). Chords yield to editable focus (input /
-  // textarea / contenteditable) except Cmd/Ctrl+K command palette; navigate is
+  // the documented chord never drift). Chords yield to editable focus except
+  // those marked allowInEditable (Cmd/Ctrl+K, Ctrl/Cmd+1–9); navigate is
   // read via a ref so the effect needn't resubscribe on every route change.
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
@@ -169,12 +174,20 @@ function AppShellFrame() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-      const key = e.key.toLowerCase();
+      const key = resolveShortcutKey(e);
       const match = GLOBAL_SHORTCUTS.find((s) => s.keys.includes(key));
       if (!match) return;
       if (!shouldRunGlobalShortcut(match.id, e.target)) return;
+      // Rail 1–9 uses the same platform-mod as the digit hint (Win Ctrl / Mac Cmd).
+      if (
+        match.id === "switch-rail-conversation" &&
+        !isRailHotkeyHintModifier(e)
+      ) {
+        return;
+      }
+      const handled = match.run(navigateRef.current, key);
+      if (handled === false) return;
       e.preventDefault();
-      match.run(navigateRef.current);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

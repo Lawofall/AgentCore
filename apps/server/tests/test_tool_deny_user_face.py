@@ -356,8 +356,7 @@ async def test_tool_off_this_surface_keeps_role_steer_off_the_user_face():
 
     model, user = _faces(sink)
     assert model == (
-        "工具 'run' 本回合未装配执行类工具（见 `<工作区>` 的"
-        "「本回合执行能力」），勿空转重试。"
+        "工具 'run' 本回合未装配执行类工具（见 `<工作区>` 缺口），勿空转重试。"
     )
     assert_user_face_clean(user)
     assert user == _CURATED_BY_CODE["allowlist_deny"]

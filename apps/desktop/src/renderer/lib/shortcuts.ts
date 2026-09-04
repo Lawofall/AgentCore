@@ -1,5 +1,6 @@
 import { startNewConversation } from "@/lib/newConversation";
 import { isMac } from "@/lib/platform";
+import { switchRailConversationByDigit } from "@/lib/railHotkeys";
 import { openCurrentConversationTerminal } from "@/services/terminalActions";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useUIStore } from "@/stores/ui";
@@ -26,7 +27,7 @@ const NON_TEXT_INPUT_TYPES = new Set([
 /**
  * True when the event target is a text-editing surface (input / textarea /
  * contenteditable / select). Global AppShell chords must not steal keys there —
- * except the command palette (see {@link shouldRunGlobalShortcut}).
+ * except chords marked {@link GlobalShortcut.allowInEditable}.
  */
 export function isEditableKeyboardTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -57,14 +58,27 @@ export function isEditableKeyboardTarget(target: EventTarget | null): boolean {
 
 /**
  * Whether an AppShell global shortcut should fire for this keydown target.
- * Cmd/Ctrl+K (command palette) always runs; other chords yield to editable focus.
+ * Chords with {@link GlobalShortcut.allowInEditable} always run; others yield
+ * to editable focus.
  */
 export function shouldRunGlobalShortcut(
   shortcutId: string,
   target: EventTarget | null,
 ): boolean {
-  if (shortcutId === "command-palette") return true;
+  const shortcut = GLOBAL_SHORTCUTS.find((s) => s.id === shortcutId);
+  if (shortcut?.allowInEditable) return true;
   return !isEditableKeyboardTarget(target);
+}
+
+/**
+ * Canonical key for AppShell matching. Digit chords prefer `e.code` (`Digit1`)
+ * so AZERTY / similar layouts still map Ctrl+physical-1 to slot 1; Shift is
+ * left to the host (`e.key` of `"!"` must not steal Ctrl+Shift+1).
+ */
+export function resolveShortcutKey(e: KeyboardEvent): string {
+  const digit = /^Digit([1-9])$/.exec(e.code)?.[1];
+  if (digit && !e.shiftKey) return digit;
+  return e.key.toLowerCase();
 }
 
 /** Render a modifier chord the way the host OS shows it (⌘K on macOS, Ctrl+K
@@ -82,7 +96,16 @@ export interface GlobalShortcut {
   /** Lowercased `e.key` values that fire it (with the platform mod key); the
    * first is canonical, any others are accepted alternates. */
   keys: string[];
-  run: (navigate: NavigateFunction) => void;
+  /**
+   * `false` = chord matched but this slot is empty; AppShell must not
+   * preventDefault (browser tab switch still works). Other handlers return
+   * `undefined` (always consume).
+   */
+  run: (navigate: NavigateFunction, key?: string) => boolean | undefined;
+  /** Fire even when focus is in an input / textarea / contenteditable. */
+  allowInEditable?: boolean;
+  /** Settings page: show first…last as one chord (`Ctrl+1 … Ctrl+9`). */
+  compactRange?: boolean;
 }
 
 /**
@@ -99,19 +122,37 @@ export const GLOBAL_SHORTCUTS: GlobalShortcut[] = [
     id: "command-palette",
     label: "命令面板 / 全局搜索",
     keys: ["k"],
-    run: () => useUIStore.getState().toggleSearch(),
+    allowInEditable: true,
+    run: () => {
+      useUIStore.getState().toggleSearch();
+      return undefined;
+    },
+  },
+  {
+    id: "switch-rail-conversation",
+    label: "切换左侧第 1–9 个对话",
+    keys: ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+    allowInEditable: true,
+    compactRange: true,
+    run: (navigate, key) => switchRailConversationByDigit(key ?? "", navigate),
   },
   {
     id: "new-conversation",
     label: "新建对话",
     keys: ["n"],
-    run: (navigate) => startNewConversation(navigate),
+    run: (navigate) => {
+      startNewConversation(navigate);
+      return undefined;
+    },
   },
   {
     id: "toggle-sidebar",
     label: "收起 / 展开侧栏",
     keys: ["b", "\\"],
-    run: () => useSidebarStore.getState().toggleCollapsed(),
+    run: () => {
+      useSidebarStore.getState().toggleCollapsed();
+      return undefined;
+    },
   },
   {
     id: "open-workspace-terminal",
@@ -119,11 +160,17 @@ export const GLOBAL_SHORTCUTS: GlobalShortcut[] = [
     keys: ["`"],
     run: () => {
       void openCurrentConversationTerminal();
+      return undefined;
     },
   },
 ];
 
 /** Display chords for a shortcut (canonical first, then any alternates). */
 export function shortcutChords(s: GlobalShortcut): string[] {
+  const first = s.keys[0];
+  const last = s.keys[s.keys.length - 1];
+  if (s.compactRange && first && last && s.keys.length >= 2) {
+    return [`${chord(first)} … ${chord(last)}`];
+  }
   return s.keys.map(chord);
 }

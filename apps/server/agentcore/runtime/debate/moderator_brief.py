@@ -37,9 +37,9 @@ _BRIEF_SYSTEM = (
     "你是一场结构化辩论的主持人。辩论收场时你产出【决策简报】，为用户的决策负责到底：去水提炼"
     "各方最强论点、按【解决路径】分流交接清单（证据能闭合的事实分歧 / 只有用户价值观能闭合的需你"
     "定夺 / 两者都闭合不了的待解问题）、给出带置信度与成立条件的倾向判断。【决定性事实若只有二手"
-    "来源 / tier=weak 弱源 / 仍待核实，须在结论里保留其证据状态与台账 tier、不抹成既定事实】——"
-    "宁可诚实降置信度，不可拿未核实的事实当定论；unknown 不是弱源实锤，但单一 unknown 撑决定性"
-    "事实同样不得写成既定。务实、诚实，不回避不确定性。严格只输出要求的 JSON。"
+    "来源 / 弱源 / 仍待核实，须在结论里保留证据状态人话（【待核实】/【二手来源】/弱源）、不抹成既定"
+    "事实】——宁可诚实降置信度，不可拿未核实的事实当定论；unknown 不是弱源实锤，但单一 unknown 撑"
+    "决定性事实同样不得写成既定。务实、诚实，不回避不确定性。严格只输出要求的 JSON。"
 )
 
 
@@ -301,7 +301,8 @@ async def build_brief(
             '诚实认输不算回避）；不重讲倾向、禁抄记分",\n'
         )
         leaning_field = (
-            '  "leaning": "倾向 + 可选「若…则翻」一句；禁复述记分数字",\n'
+            '  "leaning": "倾向方向（正方/反方）+ 命题一句；反转用「若…则翻」紧跟句号或分号后；'
+            '禁复述记分数字",\n'
         )
         confidence_field = '  "confidence": "high 或 medium 或 low，只填档、不写散文",\n'
         recommendation_field = (
@@ -309,7 +310,7 @@ async def build_brief(
         )
         field_mutex = (
             "【正反简报·各司其职】："
-            "leaning = 倾向 + 可选反转条件，一句；"
+            "leaning = 倾向方向 + 命题一句，反转用「若…则翻」紧跟句号或分号后；"
             "decisive = 一个交锋点，不重讲倾向；"
             "confidence = 只填 high|medium|low；"
             "交接三键 = 该你拍 / 去查证 / 只能等；"
@@ -339,7 +340,7 @@ async def build_brief(
     handoff_taxonomy = (
         "【交接清单三键·按解决路径互斥归类，勿重叠】："
         "value_disputes = 只有用户的价值观/偏好能闭合（需你定夺）——每条须是用户可直接回答的"
-        "【一个问句】，并紧跟一句「你的选择如何影响结论」（禁抽象陈述、禁复合长句堆叠）；"
+        "【一个问句】；"
         "factual_disputes = 证据能闭合的事实分歧（可查证；关键事实的【待核实】/【二手来源】"
         "状态语【内联在条目文本里】、不得抹平）；"
         "open_questions = 两者都闭合不了——等外部事件 / 预测验证 / 后续观察（待解问题）。"
@@ -369,8 +370,8 @@ async def build_brief(
             if is_debate
             else "要么在 confidence 里显式降级并标【需一手核实】，要么把它移进交接清单"
         )
-        + "（factual_disputes 或 open_questions，证据状态语与 tier 人话内联在条目文本）；"
-        "结论文字里引用这类事实时【保留证据状态词与 tier】（如「若 X 属实——目前仅二手报道 / "
+        + "（factual_disputes 或 open_questions，证据状态语人话内联在条目文本）；"
+        "结论文字里引用这类事实时【保留证据状态词】（如「若 X 属实——目前仅二手报道 / "
         "弱源、待一手核实——则…」）、别写成板上钉钉。"
         f"{handoff_taxonomy}只输出 JSON：\n"
         "{\n"
@@ -381,8 +382,8 @@ async def build_brief(
         )
         + f'  "strongest_points": {{"<side_key∈[{sides_keys}]>": '
         '"该方命门单句≤60字，禁分号堆叠"}},\n'
-        '  "value_disputes": ["问句？ 你选 A→结论偏 X；选 B→结论偏 Y"],\n'
-        '  "factual_disputes": ["可查证的事实分歧单句（证据状态语内联、勿抹平）"],\n'
+        '  "value_disputes": ["用户可直接回答的一个问句？"],\n'
+        '  "factual_disputes": ["可查证的事实分歧单句（【待核实】/【二手来源】内联）"],\n'
         f"{decisive_field}"
         f"{leaning_field}"
         f"{confidence_field}"

@@ -120,7 +120,8 @@ export const DEMO_DEBATE_MODEL: DebateModel = {
   subtopics: null,
   rounds: DEMO_ROUNDS,
   brief: {
-    leaning: "倾向加速派",
+    leaning:
+      "倾向加速派：可以先做云端试点。若合规成本核实后不可接受，则翻向审慎派。",
     confidence: "high",
     decisive: "分阶段试点能同时控成本与验证价值",
     crux: "试点范围与回滚门槛",

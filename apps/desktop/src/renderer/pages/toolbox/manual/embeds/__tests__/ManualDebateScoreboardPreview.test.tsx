@@ -16,5 +16,6 @@ describe("ManualDebateScoreboardPreview", () => {
     expect(screen.getByText("是否先做云端试点，再扩本地引擎？")).toBeTruthy();
     expect(screen.getAllByText("加速派").length).toBeGreaterThan(0);
     expect(screen.getAllByText("审慎派").length).toBeGreaterThan(0);
+    expect(screen.getByText("主持人")).toBeTruthy();
   });
 });

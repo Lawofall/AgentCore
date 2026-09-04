@@ -2,6 +2,7 @@ import {
   type FolderMeta,
   dedupeFoldersByLocalBinding,
   findLocalFolderByBinding,
+  folderHasCollaborators,
 } from "@/services/folders";
 import { describe, expect, it } from "vitest";
 
@@ -48,5 +49,30 @@ describe("local folder binding helpers", () => {
       "other",
       "c2",
     ]);
+  });
+});
+
+describe("folderHasCollaborators", () => {
+  it("is true only for the owner's own cloud desk with a roster", () => {
+    expect(
+      folderHasCollaborators({ ...cloud("a"), collaboratorCount: 2 }),
+    ).toBe(true);
+    expect(
+      folderHasCollaborators({ ...cloud("a"), collaboratorCount: 0 }),
+    ).toBe(false);
+    expect(folderHasCollaborators(cloud("a"))).toBe(false);
+    expect(
+      folderHasCollaborators({
+        ...cloud("a"),
+        myRole: "editor",
+        collaboratorCount: 2,
+      }),
+    ).toBe(false);
+    expect(
+      folderHasCollaborators({
+        ...local("a", "root-1"),
+        collaboratorCount: 2,
+      }),
+    ).toBe(false);
   });
 });

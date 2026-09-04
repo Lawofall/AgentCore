@@ -534,8 +534,8 @@ class ServerWorkspace:
     def _internal_root_for(self, mount_root: Path) -> Path | None:
         """Zone container for whichever root an op resolved against.
 
-        Only the primary root has an out-of-tree container; other resolved roots
-        (``external/<alias>/``) keep zones in-tree.
+        Only the primary root has an out-of-tree container; session external
+        mounts keep their zones in-tree.
         """
         try:
             if mount_root.resolve() == self._root.resolve():
@@ -604,10 +604,10 @@ class ServerWorkspace:
         """Map an absolute path back to a model-facing relative path.
 
         Prefer the caller's logical ``external/<alias>/…`` namespace; if that
-        fails (or is absent), reverse-lookup mounts by abs containment so a
-        mount file never falls through to ``relpath(…, primary_root)`` which
-        would leak ``../``-shaped paths into model-visible list/grep output.
-        ``shared/foo`` is an ordinary relative path under the workspace root.
+        fails (or is absent), reverse-lookup mounts by abs
+        containment so a mount file never falls through to
+        ``relpath(…, primary_root)`` which would leak ``../``-shaped paths into
+        model-visible list/grep output.
         """
         resolved = abs_path.resolve()
         if logical and parse_external_path(logical) is not None:
@@ -1022,9 +1022,10 @@ class ServerWorkspace:
                     return
                 raise WorkspaceIOError(str(e)) from e
 
-            # Prefer model-facing ``external/<alias>/…`` when the list root is in
-            # that namespace — mount abs may sit under the primary tree in tests /
-            # edge layouts, which would otherwise hide archives as workspace AI-noise.
+            # Prefer model-facing ``external/<alias>/…`` when the list root is
+            # in that namespace — mount abs may sit under the primary tree in
+            # tests / edge layouts, which would otherwise hide archives as
+            # workspace AI-noise.
             if parse_external_path(directory) is not None:
                 parent_rel = self._model_path(dir_path, logical=directory)
             else:

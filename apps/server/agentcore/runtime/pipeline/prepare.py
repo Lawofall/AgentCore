@@ -15,6 +15,7 @@ from agentcore.core.types import new_id
 from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import FolderRepository
 from agentcore.desktop.channel import DesktopClientChannel
+from agentcore.folders.desk import caller_is_desk_member, resolve_folder_owner_user_id
 from agentcore.llm.credentials import LLMCredentials
 from agentcore.llm.profiles import TurnProfiles
 from agentcore.memory import assemble_turn_rules
@@ -109,7 +110,7 @@ class PreparedTurn:
     bound_execution_id: str
     execution_id_token: object
     mcp_discover: McpDiscoverResult
-    member_turn: bool = False
+    member_turn: bool
 
 
 async def prepare_fresh_turn(
@@ -140,14 +141,13 @@ async def prepare_fresh_turn(
     from agentcore.runtime.pipeline import run as run_mod
 
     memory_store = run_mod.default_memory_store()
-    from agentcore.folders.desk import resolve_folder_owner_user_id
-
     desk_owner_id = await resolve_folder_owner_user_id(folder_id)
-    member_turn = bool(desk_owner_id and desk_owner_id != user_id)
     folder_rules_user_id = desk_owner_id or user_id
+    member_turn = await caller_is_desk_member(user_id=user_id, folder_id=folder_id)
     # Read-side full injection (Agent记忆与知识系统 · 目标形态): every always-on entry in
     # display order; write-side quota owns「常驻满了」. AI memory rides the (patchable) store
     # seam; user rules degrade to none on failure so this can never break a turn.
+    # Member turns still inject the owner's folder-layer 规则/记忆; account-level stays private.
     rules_markdown = await _timed_phase(
         "rules",
         assemble_turn_rules(
@@ -170,8 +170,11 @@ async def prepare_fresh_turn(
     # so a turn carrying attached files does not bust DeepSeek's prefix cache for
     # the hints (缓存友好: 易变内容置于稳定前缀之后).
     # Host / MCP backfill needs a desktop client — orthogonal to workspace location.
-    channel = resolve_channel_profile(x_client_platform)
-    desktop_online = channel.desktop_online and not member_turn
+    # Member turns: same client header, but no desktop fulfill (协作桌 · 否决本地共享).
+    channel = resolve_channel_profile(x_client_platform).for_turn(
+        member_turn=member_turn
+    )
+    desktop_online = channel.desktop_online
     # Presence gate + prepare local IO budget. The span adopts turn_runner's
     # turn-wide deadline (baseline already spent part of it) and starts its own
     # when prepare is invoked alone, e.g. tests / stage-card / workflow entries.

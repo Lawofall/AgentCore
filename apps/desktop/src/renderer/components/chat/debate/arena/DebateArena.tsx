@@ -63,6 +63,7 @@ export function DebateArena({
       >
         <Scoreboard
           model={model}
+          execution={execution}
           onScrollTo={scrollToAnchor}
           canSplit={canSplit}
           layoutMode={effectiveLayout}

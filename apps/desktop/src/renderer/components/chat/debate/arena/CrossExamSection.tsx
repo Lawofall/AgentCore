@@ -25,20 +25,17 @@ export function CrossExamSection({
   messageId,
   sceneKey,
   layoutMode = "stack",
-  moderatorModel,
 }: {
   exchanges: DebateCrossExamView[];
   messageId: string;
   sceneKey: string;
   layoutMode?: DebateArenaLayout;
-  /** 主持人模型；直播态 null → 报幕无徽章。 */
-  moderatorModel?: string | null;
 }) {
   const useSplit = layoutMode === "split";
 
   return (
     <div className="space-y-3">
-      <ModeratorCrossExamCue model={moderatorModel} />
+      <ModeratorCrossExamCue />
       {useSplit ? (
         <SplitCrossExamColumns
           exchanges={exchanges}
@@ -60,12 +57,12 @@ export function CrossExamSection({
 }
 
 /** 质询阶段报幕：居中环节标题 + 主持人身份壳，低于轮次大标题一级。 */
-function ModeratorCrossExamCue({ model }: { model?: string | null }) {
+function ModeratorCrossExamCue() {
   return (
     <div className="mt-3 border-t border-border pt-3 text-center">
       <h4 className="text-base font-semibold text-foreground">质询</h4>
       <p className="mt-1 flex flex-wrap items-center justify-center gap-1.5 text-xs text-muted-foreground">
-        <ModeratorIdentity model={model} gavelSize={13} className="text-xs" />
+        <ModeratorIdentity gavelSize={13} className="text-xs" />
         <span>发出必答质询</span>
       </p>
     </div>

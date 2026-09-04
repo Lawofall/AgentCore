@@ -1,4 +1,5 @@
 import { MANUAL_HELP, ManualHelpLink } from "@/components/ManualHelpLink";
+import type { Execution } from "@/stores/execution";
 import { ModelBadge } from "../ModelBadge";
 import { FINDING_STATUS, findingStatusCounts, gateLabel } from "../findings";
 import {
@@ -14,7 +15,7 @@ import {
   buildRiskItems,
   riskCounts,
 } from "../severity";
-import { HowToReadPopover } from "./HowToReadPopover";
+import { ModeratorIdentity, resolveModeratorModel } from "./ModeratorIdentity";
 import { closingAnchorId, finaleAnchorId, roundAnchorId } from "./anchors";
 import {
   DEBATE_ARENA_PAGE_MAX,
@@ -23,12 +24,14 @@ import {
 
 export function Scoreboard({
   model,
+  execution,
   onScrollTo,
   canSplit,
   layoutMode,
   onLayoutChange,
 }: {
   model: DebateModel;
+  execution?: Pick<Execution, "runs">;
   onScrollTo: (anchorId: string) => void;
   canSplit?: boolean;
   layoutMode?: DebateArenaLayout;
@@ -67,13 +70,12 @@ export function Scoreboard({
               currentRoundNo={currentRoundNo}
               totalRounds={totalRounds}
             />
-            <HowToReadPopover form={model.form} />
             <ManualHelpLink to={MANUAL_HELP.debate} />
           </div>
         </div>
 
         <div className="mt-2">
-          <ScoreboardRow2 model={model} />
+          <ScoreboardRow2 model={model} execution={execution} />
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -132,13 +134,21 @@ function StatusLine({
   );
 }
 
-function ScoreboardRow2({ model }: { model: DebateModel }) {
+function ScoreboardRow2({
+  model,
+  execution,
+}: {
+  model: DebateModel;
+  execution?: Pick<Execution, "runs">;
+}) {
   const roster = debateRoster(model.rounds);
   const isVersus = model.form === "debate" && roster.length === 2;
+  const moderatorModel = scoreboardModeratorModel(model, execution);
 
   if (model.form === "roundtable" && model.sides) {
     return (
       <div className="flex flex-wrap items-center gap-3">
+        <ModeratorChip model={moderatorModel} />
         {model.sides.map((s) => (
           <span
             key={s.key}
@@ -173,6 +183,7 @@ function ScoreboardRow2({ model }: { model: DebateModel }) {
     return (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3 text-sm">
+          <ModeratorChip model={moderatorModel} />
           {subject && (
             <span>
               <span className="text-muted-foreground">方案方 </span>
@@ -237,19 +248,22 @@ function ScoreboardRow2({ model }: { model: DebateModel }) {
     const proModel = sideRunModel(model, proRoster.sideKey);
     const conModel = sideRunModel(model, conRoster.sideKey);
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
         <VersusSide
           name={proRoster.name}
           model={proModel}
           colorVar={debateSideColorVar(proRoster.sideKey, proRoster.name)}
           align="left"
         />
-        <VersusSide
-          name={conRoster.name}
-          model={conModel}
-          colorVar={debateSideColorVar(conRoster.sideKey, conRoster.name)}
-          align="right"
-        />
+        <ModeratorChip model={moderatorModel} />
+        <div className="justify-self-end">
+          <VersusSide
+            name={conRoster.name}
+            model={conModel}
+            colorVar={debateSideColorVar(conRoster.sideKey, conRoster.name)}
+            align="right"
+          />
+        </div>
       </div>
     );
   }
@@ -257,6 +271,7 @@ function ScoreboardRow2({ model }: { model: DebateModel }) {
   if (model.form === "debate" && roster.length > 0) {
     return (
       <div className="flex flex-wrap items-center gap-1.5">
+        <ModeratorChip model={moderatorModel} />
         {roster.map((r) => {
           const runModel = sideRunModel(model, r.sideKey);
           return (
@@ -282,6 +297,25 @@ function ScoreboardRow2({ model }: { model: DebateModel }) {
   }
 
   return null;
+}
+
+function scoreboardModeratorModel(
+  model: DebateModel,
+  execution?: Pick<Execution, "runs">,
+): string | undefined {
+  const wire = (model.moderatorModel ?? "").trim();
+  if (wire) return wire;
+  if (!execution) return undefined;
+  return resolveModeratorModel(model, execution) ?? undefined;
+}
+
+function ModeratorChip({ model }: { model?: string | null }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-sm">
+      <ModeratorIdentity gavelSize={13} className="text-sm" />
+      {modelVendorLabel(model) && <ModelBadge model={model ?? ""} />}
+    </span>
+  );
 }
 
 /** 从各轮发言格取某方的实际执行 model（run.model），忽略 roster 声称的 per-side model。 */

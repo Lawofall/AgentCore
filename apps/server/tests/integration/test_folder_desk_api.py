@@ -54,6 +54,7 @@ async def test_owner_solo_folder_does_not_regress(client):
     folder = await _cloud_folder(client, "独用")
     assert folder["my_role"] == "owner"
     assert folder["owner_user_id"]
+    assert folder["collaborator_count"] == 0
     members = (await client.get(f"/v1/folders/{folder['id']}/members")).json()
     assert members["total"] == 1
     assert members["data"][0]["role"] == "owner"
@@ -284,3 +285,45 @@ async def test_pins_are_per_user(client, new_client):
 
     owner_got = (await client.get(f"/v1/conversations/{cid}")).json()
     assert owner_got["pinned"] is True
+
+
+async def test_collaborator_count_excludes_owner(client, new_client):
+    await register_and_login(client, "desk_count_owner")
+    solo = await _cloud_folder(client, "独用计数")
+    collab = await _cloud_folder(client, "协作计数")
+    assert solo["collaborator_count"] == 0
+    assert collab["collaborator_count"] == 0
+
+    async with new_client() as editor_client:
+        editor_id = await register_and_login(editor_client, "desk_count_editor")
+        r = await client.post(
+            f"/v1/folders/{collab['id']}/invites",
+            json={"user_id": editor_id, "role": "editor"},
+        )
+        assert r.status_code == 201, r.text
+
+        listed = {
+            f["id"]: f["collaborator_count"]
+            for f in (await client.get("/v1/folders")).json()
+        }
+        assert listed[solo["id"]] == 0
+        assert listed[collab["id"]] == 1
+
+        grouped = (await client.get("/v1/conversations/grouped")).json()
+        by_id = {g["id"]: g["collaborator_count"] for g in grouped["folders"]}
+        assert by_id[solo["id"]] == 0
+        assert by_id[collab["id"]] == 1
+
+        got = (await client.get(f"/v1/folders/{collab['id']}")).json()
+        assert got["collaborator_count"] == 1
+
+        r = await editor_client.post(f"/v1/folders/{collab['id']}/invites/accept")
+        assert r.status_code == 200, r.text
+        assert r.json()["collaborator_count"] == 1
+
+        listed = {
+            f["id"]: f["collaborator_count"]
+            for f in (await client.get("/v1/folders")).json()
+        }
+        assert listed[collab["id"]] == 1
+

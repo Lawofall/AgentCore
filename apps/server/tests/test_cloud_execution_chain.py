@@ -28,6 +28,13 @@ from agentcore.tools.builtin import build_worker_registry, code_execution_enable
 from agentcore.tools.builtin.run import RunTool
 from agentcore.tools.sandbox.cloud_python import format_cloud_python_libs
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
+
+
+def _gaps(ctx: str) -> set[str]:
+    for line in ctx.splitlines():
+        if line.startswith("缺口："):
+            return {p.strip() for p in line.removeprefix("缺口：").split("、") if p.strip()}
+    return set()
 from agentcore.workspace.server import ServerWorkspace
 
 
@@ -59,7 +66,7 @@ def test_cloud_when_gvisor_off_chain_stays_withheld(
     names = build_worker_registry(backend=backend).names
     assert "run" not in names
     ctx = build_workspace_context(backend, desktop_online=True)
-    assert "run=未装配" in ctx
+    assert "run" in _gaps(ctx)
     warn = execution_capability_warning(_pptx_plan(), backend)
     assert warn is not None
     assert execution_approval_posture(backend) is ExecutionApprovalPosture.UNAVAILABLE
@@ -86,7 +93,7 @@ def test_cloud_escape_hatch_registers_execution_chain(
     names = build_worker_registry(backend=backend).names
     assert "run" in names
     ctx = build_workspace_context(backend, desktop_online=True)
-    assert "run=已装配" in ctx
+    assert "run" not in _gaps(ctx)
     plan = _pptx_plan()
     assert execution_capability_warning(plan, backend) is None
     assert execution_approval_posture(backend) is ExecutionApprovalPosture.UNAVAILABLE
@@ -104,8 +111,8 @@ def test_cloud_gvisor_on_chain_flips_end_to_end(tmp_path: Path, monkeypatch: pyt
     # ② 能力自述：workspace_context 能力行翻「已装配」。
     # 装包另位：无 netns egress 时 package_install 保持未装配（能跑 ≠ 能装）。
     ctx = build_workspace_context(backend, desktop_online=True)
-    assert "run=已装配" in ctx
-    assert "package_install=" in ctx
+    assert "run" not in _gaps(ctx)
+    assert "package_install=" not in ctx
 
 
     # ③ 委派能力闸：S3 后无 code_verified kind 硬放行；二进制产物启发不再软警告。
@@ -135,7 +142,7 @@ def test_cloud_probe_failed_withholds_execution_chain(
     names = build_worker_registry(backend=backend).names
     assert "run" not in names
     ctx = build_workspace_context(backend, desktop_online=True)
-    assert "run=未装配" in ctx
+    assert "run" in _gaps(ctx)
 
 
 def test_cloud_probe_ok_keeps_execution_chain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -150,7 +157,7 @@ def test_cloud_probe_ok_keeps_execution_chain(tmp_path: Path, monkeypatch: pytes
     names = build_worker_registry(backend=backend).names
     assert "run" in names
     ctx = build_workspace_context(backend, desktop_online=True)
-    assert "run=已装配" in ctx
+    assert "run" not in _gaps(ctx)
 
 
 def test_cloud_unprobed_keeps_config_only_semantics(
@@ -167,7 +174,7 @@ def test_cloud_unprobed_keeps_config_only_semantics(
     names = build_worker_registry(backend=backend).names
     assert "run" in names
     ctx = build_workspace_context(backend, desktop_online=True)
-    assert "run=已装配" in ctx
+    assert "run" not in _gaps(ctx)
 
 
 def test_server_tool_description_declares_libs_and_write_back():

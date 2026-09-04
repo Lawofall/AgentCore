@@ -418,7 +418,7 @@ async def _prepare_agent_node(
             run_context(spec.run_id, agent_id, _context_block_payloads(received_blocks))
         )
 
-    # Worker 累计 token 硬顶 (loose backstop · 真执行): compaction (tool_clear)
+    # Worker 累计 token 硬顶 (loose backstop · 真执行): tool_clear + window compact
     # 挑大梁做上下文瘦身,这只在失控时收口。≤0 = 关闭。
     # react_loop 每轮末比对累计 usage。CEO / solo 路径不经此分支,保持 0。
     # 辩论辩手两阶段检索与普通 worker 共用 ``engine_worker_token_ceiling``：

@@ -11,6 +11,7 @@ from agentcore.board.channel import BoardChannel
 from agentcore.config import settings
 from agentcore.core.types import DEFAULT_PERMISSION_AXES, PermissionAxes, new_id
 from agentcore.desktop.channel import DesktopClientChannel
+from agentcore.folders.desk import caller_is_desk_member
 from agentcore.llm.profiles import TurnProfiles
 from agentcore.runtime.context import (
     build_workspace_context,
@@ -127,14 +128,12 @@ async def _wire_continuation_toolset(
     raise_if_local_workspace_fulfiller_absent(user_id=user_id, backend=backend)
     exec_languages = await resolve_exec_languages(backend)
     # Host / MCP backfill needs a desktop client — orthogonal to workspace location.
-    channel = resolve_channel_profile(x_client_platform)
+    # Member turns: same client header, but no desktop fulfill (协作桌 · 否决本地共享).
+    member_turn = await caller_is_desk_member(user_id=user_id, folder_id=folder_id)
+    channel = resolve_channel_profile(x_client_platform).for_turn(
+        member_turn=member_turn
+    )
     desktop_online = channel.desktop_online
-    if folder_id:
-        from agentcore.folders.desk import resolve_folder_owner_user_id
-
-        desk_owner = await resolve_folder_owner_user_id(folder_id)
-        if desk_owner and desk_owner != user_id:
-            desktop_online = False
     desktop_channel = (
         DesktopClientChannel(
             user_id=user_id,

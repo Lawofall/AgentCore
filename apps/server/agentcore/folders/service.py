@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -90,6 +91,10 @@ class FolderDeskService:
             max_requests=invite_rate_max,
             window_seconds=invite_rate_window_seconds,
         )
+
+    async def collaborator_counts(self, folder_ids: Sequence[str]) -> dict[str, int]:
+        """Invited people per desk (pending + accepted). Owner is not counted."""
+        return await self._members.count_by_folder_ids(folder_ids)
 
     async def invite(
         self,

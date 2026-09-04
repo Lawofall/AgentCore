@@ -49,7 +49,7 @@ def run_description(location: Literal["server", "local"] | None = None) -> str:
     if location == "local":
         where = "在用户本机工作区跑命令。"
     elif location == "server":
-        where = "在云桌执行环境跑命令。"
+        where = "在云桌执行环境跑命令。云端无任意 HTTPS。"
     else:
         where = "在当前工作区跑命令。"
     return (

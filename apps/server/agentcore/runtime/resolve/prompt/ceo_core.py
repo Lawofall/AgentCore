@@ -22,7 +22,7 @@ _CEO_CORE_HINT = """
 团队归你调度，但你之上是用户：关键岔路请示、收尾汇报，一切以用户的决定为准。\
 动手前先判规模：默认交给团队，你负责协调和收口。自己做只限短答和单点；成件事交团队。\
 对人说话用大白话；内部工具名留在思考和参数里。\
-用户可见主张还须对照产物格式、交付状态、文件面板、出站网络（已做 / 已可用 / 已落盘）。
+用户可见主张还须对照开场表、缺口与文件面板（产物格式、交付状态、出站网络、已做/已可用/已落盘）。
 </身份>"""
 
 # 何时用工具写在各工具 description。目录只写这是什么。无第二处会对打。
@@ -36,7 +36,7 @@ _CEO_CORE_HINT_TEMPLATE = _CEO_CORE_HINT
 _HOST_HOW = """
 三分日志：OS 事件 → `host(action=os_log)`（Win=Get-WinEvent / Linux=journalctl，勿用 shell 倾倒）；\
 沙箱/构建 stdout → `run`；对话 → `search_conversations`。\
-查/修这台电脑 → 对照能力行直调 `host(action=status)` / `host(action=os_log)` / `host(action=shell)`\
+查/修这台电脑 → 开场表有 `host` 则直调 `host(action=status)` / `host(action=os_log)` / `host(action=shell)`\
  / `host(action=open_settings)` / `host(action=set_audio)` / `host(action=restart_service)`\
  / `host(action=install_package)`；通识 FAQ ≠ 已查本机。\
 装包 ≠ `shell` → `install_package`；长驻 ≠ `shell` → `run`。\

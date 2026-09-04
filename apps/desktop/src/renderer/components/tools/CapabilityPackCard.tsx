@@ -1,44 +1,71 @@
-import { CatalogIconShell } from "@/components/ui";
-import { catalogCategoryColorVar } from "@/lib/catalogColors";
+import { cn } from "@/lib/utils";
 import type { CapabilityPack } from "@/services/capabilities";
-import { Layers } from "lucide-react";
-import { SkillCard } from "./SkillCard";
 
 /**
- * One capability-pack tile in the 能力图鉴: name / summary / nested skills.
- * Display-only — deployment gate decides availability; no user toggle.
+ * Capability-pack overview: name / summary / nested skills as a list.
+ * Display-only availability — deployment gate decides listing; no user toggle.
+ * In the 提示词阅读器, click a skill to open it in the detail pane.
  */
-export function CapabilityPackCard({ pack }: { pack: CapabilityPack }) {
-  const packColor = catalogCategoryColorVar("skill");
-
+export function PackOverview({
+  pack,
+  onSelectSkill,
+  heading = true,
+}: {
+  pack: CapabilityPack;
+  onSelectSkill?: (skillName: string) => void;
+  heading?: boolean;
+}) {
   return (
-    <div
-      data-capability-pack={pack.id}
-      className="rounded-xl border border-border bg-card p-4"
-    >
-      <div className="flex items-start gap-3">
-        <CatalogIconShell
-          colorVar={packColor}
-          className="mt-0.5 size-8 rounded-lg"
-        >
-          <Layers size={14} />
-        </CatalogIconShell>
-        <div className="min-w-0 flex-1">
+    <div data-capability-pack={pack.id}>
+      {heading ? (
+        <div className="mb-3">
           <h3 className="font-medium text-foreground text-sm">{pack.name}</h3>
           <p className="mt-1 text-muted-foreground text-xs">{pack.summary}</p>
         </div>
-      </div>
+      ) : null}
 
-      {pack.skills.length > 0 && (
-        <div className="mt-4 space-y-2">
-          <p className="text-muted-foreground text-xs">包内技能</p>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {pack.skills.map((skill) => (
-              <SkillCard key={skill.name} skill={skill} />
-            ))}
-          </div>
+      {pack.skills.length > 0 ? (
+        <div>
+          <p className="mb-1.5 text-muted-foreground text-xs">包内技能</p>
+          <ul className="flex flex-col gap-0.5">
+            {pack.skills.map((skill) => {
+              const rowClass = cn(
+                "flex w-full flex-col rounded-lg px-2 py-1.5 text-left",
+                onSelectSkill &&
+                  "transition-colors hover:bg-accent hover:text-accent-foreground",
+              );
+              const body = (
+                <>
+                  <span className="text-foreground text-sm">
+                    {skill.summary}
+                  </span>
+                  <span className="font-mono text-muted-foreground text-xs">
+                    {skill.name}
+                  </span>
+                </>
+              );
+              return (
+                <li key={skill.name}>
+                  {onSelectSkill ? (
+                    <button
+                      type="button"
+                      className={rowClass}
+                      onClick={() => onSelectSkill(skill.name)}
+                    >
+                      {body}
+                    </button>
+                  ) : (
+                    <div className={rowClass}>{body}</div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
+
+/** Alias for the offline capability-pack preview import path. */
+export const CapabilityPackCard = PackOverview;

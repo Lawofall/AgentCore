@@ -9779,6 +9779,11 @@ export interface components {
          * @description A project plus the conversations it holds (grouped sidebar payload).
          */
         FolderGroup: {
+            /**
+             * Collaborator Count
+             * @default 0
+             */
+            collaborator_count: number;
             /** Conversations */
             conversations: components["schemas"]["ConversationSummary"][];
             /** Id */
@@ -9841,6 +9846,11 @@ export interface components {
         };
         /** FolderSummary */
         FolderSummary: {
+            /**
+             * Collaborator Count
+             * @default 0
+             */
+            collaborator_count: number;
             /**
              * Created At
              * Format: date-time
@@ -9967,8 +9977,6 @@ export interface components {
             masked_token?: string | null;
             /** Updated At */
             updated_at?: string | null;
-            /** Username */
-            username?: string | null;
         };
         /**
          * GrantExternalReadonlyRequest
@@ -13487,11 +13495,6 @@ export interface components {
              * @description Plaintext PAT / OAuth token (AES-256-GCM at rest; never returned).
              */
             token: string;
-            /**
-             * Username
-             * @description Remote username (default x-access-token for GitHub PAT).
-             */
-            username?: string | null;
         };
         /**
          * UsageBreakdown

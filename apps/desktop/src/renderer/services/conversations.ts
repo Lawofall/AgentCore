@@ -94,6 +94,7 @@ export async function listGrouped(): Promise<{
       owner_user_id?: string | null;
       rel_path?: string | null;
       parent_rel_path?: string | null;
+      collaborator_count?: number;
     };
     return toFolder(
       {
@@ -107,6 +108,7 @@ export async function listGrouped(): Promise<{
         my_role: row.my_role,
         my_state: row.my_state,
         owner_user_id: row.owner_user_id,
+        collaborator_count: row.collaborator_count,
       },
       { defaultRole: "owner" },
     );

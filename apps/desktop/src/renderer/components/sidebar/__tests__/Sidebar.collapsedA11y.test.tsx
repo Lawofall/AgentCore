@@ -42,6 +42,14 @@ vi.mock("@/lib/capabilities", () => ({
   isWebClient: () => false,
 }));
 
+vi.mock("@/lib/railHotkeys", () => ({
+  RailHotkeySlotsProvider: ({
+    children,
+  }: {
+    children: React.ReactNode;
+  }) => children,
+}));
+
 function renderSidebar() {
   return render(
     <MemoryRouter>

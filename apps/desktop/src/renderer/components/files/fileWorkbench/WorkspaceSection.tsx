@@ -8,6 +8,7 @@ import {
 import type { FileSortBy } from "@/components/files/fileTreeTypes";
 import { IconButton } from "@/components/files/parts";
 import { DeleteFolderDialog } from "@/components/folders/DeleteFolderDialog";
+import { FolderCollabMark } from "@/components/folders/FolderCollabMark";
 import { FolderMembersDialog } from "@/components/folders/FolderMembersDialog";
 import { Button } from "@/components/ui";
 import {
@@ -41,6 +42,7 @@ import { notifyActionError, notifyError, notifyInfo } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
   canShareFolder,
+  folderHasCollaborators,
   folderMyRole,
   folderRoleLabel,
   isFolderOwner,
@@ -437,6 +439,9 @@ export function WorkspaceSection({
           <Folder size={14} className="shrink-0 text-muted-foreground" />
         )}
         <span className="min-w-0 flex-1 truncate font-medium">{ws.name}</span>
+        {folder && folderHasCollaborators(folder) && (
+          <FolderCollabMark count={folder.collaboratorCount ?? 0} />
+        )}
         {shareable && !folderOwner && (
           <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
             {folderRoleLabel(folderRole)}

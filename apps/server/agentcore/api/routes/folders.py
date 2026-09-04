@@ -13,6 +13,7 @@ Permanent delete / rename / timeline / 最近删除 remain access-session only: 
 删不能恢复）。
 """
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -84,7 +85,9 @@ def _purge_at(folder) -> datetime:
     return folder.deleted_at + timedelta(days=settings.workspace_retention_days)
 
 
-def _summary_from_desk(view: FolderDeskView) -> FolderSummary:
+def _summary_from_desk(
+    view: FolderDeskView, *, collaborator_count: int = 0
+) -> FolderSummary:
     from agentcore.workspace.cloud_tree import parent_rel_path
 
     rel_path = view.rel_path or None
@@ -99,9 +102,24 @@ def _summary_from_desk(view: FolderDeskView) -> FolderSummary:
         owner_user_id=view.owner_user_id,
         my_role=view.my_role,
         my_state=view.my_state,
+        collaborator_count=collaborator_count,
         created_at=view.created_at,
         updated_at=view.updated_at,
     )
+
+
+async def _summaries_from_desk(
+    desk: FolderDeskService, views: Sequence[FolderDeskView]
+) -> list[FolderSummary]:
+    counts = await desk.collaborator_counts([v.id for v in views])
+    return [
+        _summary_from_desk(v, collaborator_count=counts.get(v.id, 0)) for v in views
+    ]
+
+
+async def _summary_from_owned(desk: FolderDeskService, folder) -> FolderSummary:
+    n = (await desk.collaborator_counts([folder.id])).get(folder.id, 0)
+    return FolderSummary.from_folder(folder, collaborator_count=n)
 
 
 def _member_summary(view: FolderMemberView) -> FolderMemberSummary:
@@ -194,9 +212,14 @@ async def create_folder(
 async def list_folders(
     user: FoldersApiUser,
     repo: FolderRepository = Depends(get_folder_repo),
+    desk: FolderDeskService = Depends(get_folder_desk_service),
 ):
     folders = await repo.list_by_user(user.user_id)
-    return [FolderSummary.from_folder(f) for f in folders]
+    counts = await desk.collaborator_counts([f.id for f in folders])
+    return [
+        FolderSummary.from_folder(f, collaborator_count=counts.get(f.id, 0))
+        for f in folders
+    ]
 
 
 # --- 最近删除 (project recycle bin) ---
@@ -230,6 +253,7 @@ async def restore_deleted_folder(
     user: AuthUser,
     repo: FolderRepository = Depends(get_folder_repo),
     session: AsyncSession = Depends(get_db),
+    desk: FolderDeskService = Depends(get_folder_desk_service),
 ):
     """恢复一个已删项目：项目行复活，删除时连带归档的对话解档。
 
@@ -265,7 +289,7 @@ async def restore_deleted_folder(
         folder_id=folder_id,
         user_id=user.user_id,
     )
-    return FolderSummary.from_folder(restored)
+    return await _summary_from_owned(desk, restored)
 
 
 @router.get("/shared-with-me", response_model=list[FolderSummary])
@@ -274,7 +298,8 @@ async def list_shared_with_me(
     desk: FolderDeskService = Depends(get_folder_desk_service),
 ):
     """Cloud folders the caller joined as editor/viewer (not owned)."""
-    return [_summary_from_desk(v) for v in await desk.list_shared_with_me(user_id=user.user_id)]
+    views = await desk.list_shared_with_me(user_id=user.user_id)
+    return await _summaries_from_desk(desk, views)
 
 
 @router.get("/invites/pending", response_model=list[FolderSummary])
@@ -282,7 +307,8 @@ async def list_pending_folder_invites(
     user: AuthUser,
     desk: FolderDeskService = Depends(get_folder_desk_service),
 ):
-    return [_summary_from_desk(v) for v in await desk.list_pending_invites(user_id=user.user_id)]
+    views = await desk.list_pending_invites(user_id=user.user_id)
+    return await _summaries_from_desk(desk, views)
 
 
 @router.get("/{folder_id}", response_model=FolderSummary)
@@ -293,7 +319,8 @@ async def get_folder(
 ):
     """Accepted desk member fetch (owner or editor/viewer). Outsiders 404."""
     view = await desk.get_desk(folder_id=folder_id, user_id=user.user_id)
-    return _summary_from_desk(view)
+    summaries = await _summaries_from_desk(desk, [view])
+    return summaries[0]
 
 
 @router.post("/{folder_id}/invites", response_model=FolderMemberSummary, status_code=201)
@@ -319,7 +346,8 @@ async def accept_folder_invite(
     desk: FolderDeskService = Depends(get_folder_desk_service),
 ):
     view = await desk.accept_invite(folder_id=folder_id, user_id=user.user_id)
-    return _summary_from_desk(view)
+    summaries = await _summaries_from_desk(desk, [view])
+    return summaries[0]
 
 
 @router.post("/{folder_id}/invites/reject", response_model=StatusResponse)
@@ -384,6 +412,7 @@ async def update_folder(
     user: AuthUser,
     repo: FolderRepository = Depends(get_folder_repo),
     session: AsyncSession = Depends(get_db),
+    desk: FolderDeskService = Depends(get_folder_desk_service),
 ):
     """Rename and/or re-parent a folder — DB rows and the directory move together.
 
@@ -417,7 +446,7 @@ async def update_folder(
         folder = await repo.get_by_id(folder_id, user_id=user.user_id)
     if not folder:
         raise NotFoundError("文件夹不存在")
-    return FolderSummary.from_folder(folder)
+    return await _summary_from_owned(desk, folder)
 
 
 @router.delete("/{folder_id}", response_model=StatusResponse)

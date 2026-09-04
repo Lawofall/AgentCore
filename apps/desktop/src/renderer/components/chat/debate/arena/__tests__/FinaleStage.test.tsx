@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
  * 终审区钻取惯例（全场统一「名字/身份行 = 打开 run 详情侧栏」）：
- * - 「主持人终审」标题 + 模型徽章这组身份行在 moderatorRun 在时是钻取按钮，
- *   侧栏标题沿用「主持人」；
+ * - 「主持人终审」标题在 moderatorRun 在时是钻取按钮，侧栏标题沿用「主持人」；
+ * - 终审不挂模型徽章 / 三方署名（模型名只留记分牌）；
  * - 「裁决过程」文字链接已删（文字链接只留给就地展开）；
  * - moderatorRun 缺席（进行中 / 旧产物）时标题退回纯文本。
  *
@@ -98,7 +98,7 @@ afterEach(() => {
 });
 
 describe("FinaleStage 钻取惯例", () => {
-  it("身份行（标题 + 模型徽章）是钻取按钮，裁决过程链接已删", () => {
+  it("标题是钻取按钮，不挂模型徽章，裁决过程链接已删", () => {
     const showRunDetail = vi.fn();
     useSidePanelStore.setState({ showRunDetail });
     render(
@@ -114,6 +114,7 @@ describe("FinaleStage 钻取惯例", () => {
     fireEvent.click(screen.getByRole("button", { name: /主持人终审/ }));
 
     expect(showRunDetail).toHaveBeenCalledWith("m1", "moderator", "主持人");
+    expect(screen.queryByText("DeepSeek")).toBeNull();
   });
 
   it("无 moderatorRun 时标题退回纯文本", () => {
@@ -129,7 +130,7 @@ describe("FinaleStage 钻取惯例", () => {
     expect(screen.queryByRole("button", { name: /主持人终审/ })).toBeNull();
   });
 
-  it("wire 有模型字段时简报抬头署三方", () => {
+  it("终审抬头不署三方模型名单", () => {
     render(
       <FinaleStage
         model={settledBriefModel({
@@ -158,20 +159,9 @@ describe("FinaleStage 钻取惯例", () => {
         messageId="m1"
       />,
     );
-    expect(screen.getByTestId("debate-roster-line").textContent).toBe(
-      "正方 豆包 · 反方 DeepSeek · 裁判 DeepSeek",
-    );
-  });
-
-  it("wire 无模型字段时不展示跨模型署名", () => {
-    render(
-      <FinaleStage
-        model={settledBriefModel()}
-        execution={executionWith([moderatorRun()])}
-        messageId="m1"
-      />,
-    );
     expect(screen.queryByTestId("debate-roster-line")).toBeNull();
+    expect(screen.queryByText(/正方 豆包/)).toBeNull();
+    expect(screen.queryByText(/裁判 DeepSeek/)).toBeNull();
   });
 });
 
@@ -201,12 +191,56 @@ describe("FinaleStage 终审布局", () => {
     expect(screen.getByText("留给你的")).toBeTruthy();
     expect(screen.getByText(/要不要牺牲速度/)).toBeTruthy();
     expect(screen.getByText("实际成本")).toBeTruthy();
-    expect(screen.getByText(/只能等的：试点范围/)).toBeTruthy();
+    expect(screen.getByText("还没核实")).toBeTruthy();
+    expect(screen.getByText("只能等")).toBeTruthy();
+    expect(screen.getByText("试点范围")).toBeTruthy();
+    expect(screen.queryByText(/只能等的：/)).toBeNull();
     expect(screen.queryByRole("button", { name: "回复拍板" })).toBeNull();
     expect(screen.queryByRole("button", { name: "派查证" })).toBeNull();
     expect(screen.queryByText(/需你定夺/)).toBeNull();
     expect(screen.queryByText("事实分歧")).toBeNull();
     expect(screen.queryByText("待解问题")).toBeNull();
+  });
+
+  it("正反：倾向拆站队与反转，价值题拆对照，事实去掉机器串", () => {
+    render(
+      <FinaleStage
+        model={settledBriefModel({
+          brief: {
+            leaning:
+              "倾向反方：AI 人格论尚未证成；若未来实证证明能闭合缺口，则翻向正方。",
+            confidence: "medium",
+            decisive: "正方未回应归责如何操作",
+            crux: "",
+            recommendation: "不要出现",
+            strongest_points: {},
+            handoffs: [
+              {
+                kind: "value",
+                text: "损失如何分担？选社会共担→正方；选部署者兜底→反方",
+              },
+              {
+                kind: "fact",
+                text: "EU 责任框架是否存在缺口（#e12, tier=unknown待评）【待核实】",
+              },
+            ],
+          },
+        })}
+        execution={executionWith([moderatorRun()])}
+        messageId="m1"
+      />,
+    );
+    expect(screen.getByText("倾向反方")).toBeTruthy();
+    expect(screen.getByText("AI 人格论尚未证成")).toBeTruthy();
+    expect(screen.getByText(/若未来实证证明能闭合缺口/)).toBeTruthy();
+    expect(screen.getByText("损失如何分担？")).toBeTruthy();
+    expect(screen.getByText("社会共担 → 正方")).toBeTruthy();
+    expect(screen.getByText("部署者兜底 → 反方")).toBeTruthy();
+    expect(screen.getByText("EU 责任框架是否存在缺口")).toBeTruthy();
+    expect(screen.getByText("待核实")).toBeTruthy();
+    expect(screen.queryByText(/tier=unknown/)).toBeNull();
+    expect(screen.queryByText(/#e12/)).toBeNull();
+    expect(screen.queryByText("不要出现")).toBeNull();
   });
 
   it("正反：无交接时降级展示建议，仍不展最强论点", () => {

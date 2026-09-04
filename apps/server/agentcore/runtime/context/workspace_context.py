@@ -1,21 +1,18 @@
-"""Per-turn ``<工作区>`` — structured environment facts for CEO and workers.
+"""Per-turn ``<工作区>`` — short environment coordinates for CEO and workers.
 
-根治「模型环境盲」：每回合把执行位置、工作区身份、桌面通道、本回合可执行能力写成显式
-事实块注入 system prompt，避免 CEO 在云端 scratch 上规划「打开本机软件」并空跑委派。
+只写开场工具表看不出来的现场：执行、桌、系统、Git、客户端、未装配缺口、
+已挂区外、非空约定文档出口。已装配不报（开场表就是通道）；产物格式 / 出站 HOW /
+表格解析 / 通道履约剧本不在这里。
 
-**只陈述本回合选动作要用的短事实**（位置 / 身份 / 根 / 能力格 / 出站网络 /
-通道 / git / 工作台 / 非空挂载 / 非空约定文档出口 / 产物格式）。
-空状态不写；空桌根行可加一句操作事实（可见顶层空、入口写在根上），不写禁令。
-产物出口 UI、约定文档边界、区外工具名、浏览器宿主 HOW、git 探测范围
-不在这里（``product_help`` / ``team_delivery_env`` / 工具 description / consult）。
-空桌 when-to-use 在 ``mkdir`` description。
-往本文件加禁令前，先确认它不在 ``resolve/prompt/base.py`` / 工具 schema / 对应 skill 里。
-分层与理由 → docs/03-AI核心/上下文工程.md「提示词设计原则」。
+空状态不写。空桌只标「顶层空」。CEO 文件索引仍拼在本块末节（工人不加）。
+HOW → ``product_help`` / ``team_delivery_env`` / 工具 description / consult。
+分层 → docs/03-AI核心/上下文工程.md「提示词设计原则」。
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -117,53 +114,23 @@ async def detect_workspace_git(backend: WorkspaceBackend | None) -> WorkspaceGit
     return WorkspaceGitFact(present=True, branch=branch)
 
 
-_GIT_UNASSEMBLED_LINE = "版本控制：本回合未装配 git。"
-
-# Capability fact when execution class is withheld (HOW → worker identity / skill).
-_NO_EXEC_TABLE_FACT = (
-    "表格解析：xlsx/csv/tsv 本回合无代码解析路径；"
-    "结构面（列名/行数/类型/样例）已在附件块；"
-    "file_read 不对用户表格抽文本；本 run 已落盘的自产表格可回读。"
-)
-
-# Same structural premise as ``no_exec_table`` (this-turn attachments / workspace
-# type signal — not a body scan). Next-step HOW lives in team_delivery_env.
-_OPAQUE_SOURCE_FACT = "本回合有无法可靠解析的源数据文件。"
-
-def _opaque_source_data_present(
-    backend: WorkspaceBackend,
-    *,
-    opaque_source_data_paths: Sequence[str] | None,
-) -> bool:
-    """True when this turn has source files workers cannot parse without execution."""
-    from agentcore.runtime.runs.contract import collect_opaque_source_data_paths
-
-    materials: Iterable[str] | None
-    if opaque_source_data_paths is not None:
-        materials = opaque_source_data_paths
-    else:
-        materials = getattr(backend, "ai_list_materials", None)
-    return bool(collect_opaque_source_data_paths(material_paths=materials))
+_OS_LABEL = {"win32": "Windows", "darwin": "macOS", "linux": "Linux"}
 
 
 def format_workspace_git_line(
     fact: WorkspaceGitFact, *, tool_enabled: bool = True
 ) -> str:
-    """Single git fact line for ``<工作区>`` (never a kickoff gate).
+    """Single git coordinate for ``<工作区>`` (never a kickoff gate).
 
-    ``tool_enabled`` is the same verdict the registries use
-    (``tools.builtin.git_execution_enabled_for``): when the tool is not assembled
-    the line states that fact only. Repo-policy (``no_repo`` / ``init_baseline``)
-    lives on the git tool description — not here.
+    Unassembled git is a 缺口, not a Git line — do not name the branch
+    when the model does not hold the tool. Repo-policy (``no_repo`` /
+    ``init_baseline``) lives on the git tool description.
     """
-    if not tool_enabled:
-        return _GIT_UNASSEMBLED_LINE
+    if not tool_enabled or fact.present is None:
+        return ""
     if fact.present is True:
-        branch_bit = f"，分支 `{fact.branch}`" if fact.branch else ""
-        return f"版本控制：Git{branch_bit}。"
-    if fact.present is False:
-        return "版本控制：工作区根无 Git。"
-    return "版本控制：未能确认根 `.git`。"
+        return f"Git：{fact.branch}" if fact.branch else "Git：有"
+    return "Git：无"
 
 _WEB_SURFACES: frozenset[str] = frozenset({"web", "mobile-web"})
 _MOBILE_SURFACES: frozenset[str] = frozenset({"mobile", "android", "ios"})
@@ -181,6 +148,19 @@ class ChannelProfile:
     surface: ChannelSurface
     desktop_online: bool
     can_bind_folder: bool
+
+    def for_turn(self, *, member_turn: bool) -> ChannelProfile:
+        """Member turns never fulfill desktop tools or advertise bind-local.
+
+        Surface stays (they still opened the desktop app); capability flags drop.
+        """
+        if not member_turn:
+            return self
+        return ChannelProfile(
+            surface=self.surface,
+            desktop_online=False,
+            can_bind_folder=False,
+        )
 
 
 def resolve_channel_profile(x_client_platform: str | None) -> ChannelProfile:
@@ -237,22 +217,66 @@ def _is_cloud_folder_desk(backend: WorkspaceBackend) -> bool:
     return False
 
 
-def _format_desk_line(
+def _system_line(
     *,
+    is_local: bool,
+    is_remote_local: bool,
+    langs: Sequence[str] | None,
+) -> str:
+    """OS · shell. Cloud is the guest; remote-local does not use the API host OS."""
+    if not is_local:
+        return "系统：Linux · bash"
+    os_name = None if is_remote_local else _OS_LABEL.get(sys.platform)
+    if langs is not None:
+        shell = "bash" if "bash" in langs else "PowerShell"
+    elif os_name == "Windows":
+        shell = "PowerShell"
+    elif os_name in ("Linux", "macOS"):
+        shell = "bash"
+    else:
+        shell = None
+    if os_name and shell:
+        return f"系统：{os_name} · {shell}"
+    if shell:
+        return f"系统：{shell}"
+    if os_name:
+        return f"系统：{os_name}"
+    return ""
+
+
+def _desk_line(
+    *,
+    backend: WorkspaceBackend,
+    is_local: bool,
     desk_folder_id: str | None,
     desk_folder_label: str | None,
     root_label: str,
-    desk_is_birth: bool,
+    desk_visibly_empty: bool | None,
 ) -> str:
-    """One fact line: which folder this agent sits on this turn."""
+    """Which desk this agent sits on. No folder_id, no 出生桌."""
+    empty = "；顶层空" if desk_visibly_empty else ""
+    if is_local:
+        root = getattr(backend, "root", None)
+        shown = str(root) if root is not None else (
+            (desk_folder_label or "").strip() or root_label
+        )
+        if empty:
+            return f"桌：{shown}（顶层空）"
+        return f"桌：{shown}"
     fid = (desk_folder_id or "").strip()
     label = (desk_folder_label or "").strip() or (root_label if fid else "")
-    if fid:
-        shown = label or fid
-        if desk_is_birth:
-            return f"工作台：本会话出生桌=`{shown}`（folder_id=`{fid}`）。"
-        return f"工作台：默认工作区=`{shown}`（folder_id=`{fid}`）。"
-    return "工作台：默认工作区=本会话出生桌。"
+    if fid or _is_cloud_folder_desk(backend):
+        shown = label or fid or root_label
+        return f"桌：{shown}（云端文件夹{empty}）"
+    return f"桌：本会话草稿（云端{empty}）"
+
+
+def _gap_line(flags: Sequence[tuple[str, bool]]) -> str:
+    """Only names that are unassembled. Omit the line when none."""
+    missing = [name for name, on in flags if not on]
+    if not missing:
+        return ""
+    return "缺口：" + "、".join(missing)
 
 
 def desktop_client_can_bind(x_client_platform: str | None) -> bool:
@@ -279,7 +303,6 @@ def build_workspace_context(
     mcp_enabled: bool = False,
     mcp_label: str | None = None,
     git_fact: WorkspaceGitFact | None = None,
-    opaque_source_data_paths: Sequence[str] | None = None,
     outlet_inventory: Mapping[str, OutletDirListing] | None = None,
     desk_folder_id: str | None = None,
     desk_folder_label: str | None = None,
@@ -291,50 +314,35 @@ def build_workspace_context(
     Always returns a non-empty block when ``backend`` is set (environment is a fact,
     even for an empty cloud scratch). ``backend is None`` → ``""`` (caller omits).
 
-    Capability line uses the same predicates as worker registry assembly
+    Gap line uses the same predicates as worker registry assembly
     (``execution_class_enabled_for`` / ``browser_execution_enabled_for``, including
     ``command=ask`` withhold); optional ``*_enabled`` overrides are for tests /
-    probes only — not a second truth source.
+    probes only — not a second truth source. Assembled faces are omitted
+    (the opening tool table is the channel).
 
     ``permission_axes`` folds ask-withhold into ``run`` /
-    ``browser`` so the line never contradicts the worker toolset or identity
-    (案 20260803-docx-office-exec-capability-lie A). When ``host_axis`` is omitted,
-    it is taken from ``permission_axes.host``.
+    ``browser`` so the line never contradicts the worker toolset.
+    When ``host_axis`` is omitted, it is taken from ``permission_axes.host``.
 
-    ``package_install`` on cloud uses the same predicate as ``run``
-    (desk/net guest can start). Local follows execution-class only (pinned
-    registry env, no host egress gate). Override ``package_install_enabled``
+    ``package_install`` on cloud uses the same predicate as ``run``.
+    Local follows execution-class only. Override ``package_install_enabled``
     is tests/probes only.
 
     ``exec_languages`` is the probed (local/sidecar) or fixed (cloud) language
-    surface advertised on ``run``; when set and execution is on, a one-line
-    interpreter fact is appended so the model never plans against a missing launcher.
+    surface advertised on ``run``. Incomplete local probes get a short
+    ``解释器：`` line; the full set is omitted.
 
-    ``git_fact`` is the root-``.git`` probe (same rule as the ``git`` tool). Callers
-    that already awaited :func:`detect_workspace_git` should pass it; otherwise a
-    sync root probe runs. Soft tip only — never a kickoff / durable-pause gate.
-    Whether the ``git`` TOOL is assembled at all is a separate fact
-    (``git_execution_enabled_for`` — the same predicate the registries use), stamped on
-    the capability line; override ``git_tool_enabled`` is tests / probes only.
+    ``git_fact`` is the root-``.git`` probe. Unassembled git is a gap, not a
+    Git line. Repo-policy lives on the git tool description.
 
-    ``opaque_source_data_paths`` is the same this-turn source list
-    ``collect_opaque_source_data_paths`` uses for ``no_exec_table`` (tests).
-    Production omits it and reads ``backend.ai_list_materials``.
+    ``outlet_inventory`` lists the four 约定文档出口 dirs. Empty / ``None`` omit
+    (layout HOW → ``team_delivery_env``).
 
-    ``outlet_inventory`` is the live basename listing for the four 约定文档出口
-    dirs (from :func:`collect_outlet_inventory`). Empty dirs and ``None`` omit
-    the line (layout HOW → ``team_delivery_env``).
-
-    ``desk_folder_id`` / ``desk_folder_label`` name the folder this agent is
-    sitting on (conversation birth desk, or a worker's ``target_folder_id``).
-    Facts only — no tool HOW. ``desk_is_birth`` distinguishes the conversation's
-    birth desk from a per-call target desk.
-
-    ``desk_visibly_empty`` uses the same predicate as empty-desk shell-strip
-    (``desk_is_visibly_empty``). ``True`` adds one operational fact on the root
-    line; ``False`` / ``None`` keep the short root sentence. Callers that already
-    listed the desk should pass the bool; this builder stays sync.
+    ``desk_folder_id`` / ``desk_folder_label`` name the sitting desk.
+    ``desk_is_birth`` is accepted for call-site compatibility; the label is enough.
+    ``desk_visibly_empty`` adds「顶层空」on the desk line.
     """
+    del desk_is_birth
     if backend is None:
         return ""
 
@@ -343,81 +351,28 @@ def build_workspace_context(
 
     location: Literal["server", "local"] = backend.location
     root_label = (getattr(backend, "root_label", None) or "workspace").strip() or "workspace"
-    # Sidecar reuses ServerWorkspace(location=local) with direct Path I/O; LocalWorkspace
-    # is the remote desktop-channel path. Both are "用户本机" for the model.
     is_local = location == "local"
     channel = getattr(backend, "_channel", None)
     is_remote_local = is_local and channel is not None
 
-    if is_local:
-        location_line = (
-            "执行位置：用户本机"
-            + ("（经桌面通道遥控）" if is_remote_local else "（本机引擎 / sidecar）")
-        )
-        identity_line = (
-            f"工作区身份：本地目录（根标签 `{root_label}`）；当前目录已可写。"
-        )
-        # 事实面：本机有出口 + 无原生生图。Key 明文禁令归共享基座 <工作权威>。
-        egress_line = (
-            "出站网络：本机 run 可走用户机器网络；无原生生图工具。"
-        )
-    else:
-        location_line = "执行位置：云端沙箱（服务端）"
-        # 已建云桌（tree / internal/folder）勿写成 scratch「草稿/临时」。
-        # 「非本机目录」是云 vs 本机的对比边界（A≠A′），只写一次。
-        if _is_cloud_folder_desk(backend):
-            identity_line = (
-                f"工作区身份：云端文件夹（根标签 `{root_label}`；非本机目录）。"
-            )
-        else:
-            identity_line = (
-                f"工作区身份：本会话云端草稿/临时文件空间"
-                f"（根标签 `{root_label}`；非本机目录）。"
-            )
-        # 案 20260803-image-gen-byok-egress-boundary A：云桌 guest 出站经包装源
-        # allowlist chokepoint，不是任意 HTTPS。事实面只陈述出口。
-        egress_line = (
-            "出站网络：云端 run 无任意 HTTPS 出口（包装源 allowlist "
-            "chokepoint 仅装包，≠通用出网）；无原生生图工具；"
-            "browser 另计（隔离浏览器，≠ run 出网）。"
-        )
-
-    if desktop_online:
-        # 工具名 / 口头同意 / 先写再 copy → consult(external_mount_readonly)。
-        grant_line = "区外目录：可授权（与工作区绑定正交）。"
-        if is_local:
-            desktop_line = "客户端通道：桌面端在线（本机执行通道可用）。"
-        else:
-            desktop_line = "客户端通道：桌面端在线。"
-    else:
-        # desktop_online=False covers missing header, unknown surface, and true
-        # non-desktop clients — never accuse a device form (Web/手机) by default.
-        # 通道复检 / 打开本对话 / 勿发卡冒充 / 禁臆造入口 → team_delivery_env；此处只报通道事实。
-        desktop_line = (
-            "客户端通道：桌面回填通道未连接——"
-            "打开本机文件夹、本机文件夹绑定、区外目录授权均须官方桌面客户端且通道已连接，"
-            "当前会话无法履约。"
-        )
-        grant_line = "区外目录：授权仅桌面端可用；当前客户端无法履行。"
+    location_line = "执行：用户本机" if is_local else "执行：云端沙箱"
+    desktop_line = "客户端：桌面已连接" if desktop_online else "客户端：未连接"
 
     mounts = getattr(backend, "_mounts", None) or {}
+    mounts_line: str | None = None
     if mounts:
         parts = []
-        for a, m in mounts.items():
-            mode = getattr(m, "mode", None) or (
-                "readonly" if getattr(m, "readonly", True) else "organize"
+        for alias, mount in mounts.items():
+            mode = getattr(mount, "mode", None) or (
+                "readonly" if getattr(mount, "readonly", True) else "organize"
             )
             mode_zh = (
                 "只读"
                 if mode == "readonly"
                 else ("可读写" if mode == "attach_rw" else "整理")
             )
-            parts.append(
-                f"`external/{a}/`（{getattr(m, 'label', a)}，{mode_zh}）"
-            )
-        mounts_line = "本对话已授权区外目录：" + "；".join(parts) + "。"
-    else:
-        mounts_line = None
+            parts.append(f"`external/{alias}/`（{mode_zh}）")
+        mounts_line = "区外：" + "；".join(parts)
 
     if run_enabled is not None:
         exec_on = run_enabled
@@ -430,128 +385,91 @@ def build_workspace_context(
     else:
         from agentcore.tools.builtin import browser_execution_enabled_for
 
-        # Registry: include_browser = include_execution ∧ browser_execution_enabled_for.
         browser_on = exec_on and browser_execution_enabled_for(backend)
-    # B1：装配事实闩锁 → 收口禁在未装配时声称已开浏览器（结构化对账，非扫气泡）。
     from agentcore.runtime.closing_posture import note_browser_assembled
 
     note_browser_assembled(browser_on)
-    # local_open = 本机工作区可让用户直接打开产物（非 L3 浏览器工具；与 location 同事实）。
     local_open_on = is_local
-    # Host 已装配 ⇔ host≠off ∧ 桌面回填通道可达（desktop_online）。
     host_off = False
     if host_axis is not None:
         host_val = getattr(host_axis, "value", None) or str(host_axis)
         host_off = host_val == "off"
     host_on = desktop_online and not host_off
-    mcp_cap = mcp_label if mcp_label is not None else ("已装配" if mcp_enabled else "未装配")
-    # 装包与跑代码同一装配谓词（云桌 guest）；本机不吃主机 egress 门。
+    mcp_on = mcp_enabled if mcp_label is None else mcp_label != "未装配"
     pkg_on = (
         package_install_enabled if package_install_enabled is not None else exec_on
     )
-    caps: list[str] = []
-    caps.append(f"run={'已装配' if exec_on else '未装配'}")
-    caps.append(f"package_install={'已装配' if pkg_on else '未装配'}")
-    # git 与执行类正交：云/sidecar 直接 spawn，本机远程工作区须桌面通道在线。
     if git_tool_enabled is not None:
         git_on = git_tool_enabled
     else:
         from agentcore.tools.builtin import git_execution_enabled_for
 
         git_on = git_execution_enabled_for(backend, desktop_online=desktop_online)
-    caps.append(f"git={'已装配' if git_on else '未装配'}")
-    caps.append(f"browser={'已装配' if browser_on else '未装配'}")
-    caps.append(f"local_open={'已装配' if local_open_on else '未装配'}")
-    caps.append(f"host={'已装配' if host_on else '未装配'}")
-    caps.append(f"mcp={mcp_cap}")
-    capability_line = "本回合执行能力：" + "；".join(caps) + "。"
-    from agentcore.runtime.context.artifact_formats import format_artifact_capability_line
 
-    artifact_format_line = format_artifact_capability_line(
-        include_execution=exec_on,
-        include_browser=browser_on,
-        include_host=host_on,
-        include_git=git_on,
-        desktop_online=desktop_online,
-        location=location,
-    )
     leftover_lines: list[str] = []
-    if not exec_on:
-        has_opaque_source = _opaque_source_data_present(
-            backend, opaque_source_data_paths=opaque_source_data_paths
+    if not exec_on and not is_local:
+        from agentcore.runtime.delegate.exec_env_remediation import (
+            cloud_sandbox_failure_hint,
         )
-        if not is_local:
-            from agentcore.runtime.delegate.exec_env_remediation import (
-                cloud_sandbox_failure_hint,
-            )
 
-            failure = cloud_sandbox_failure_hint()
-            if failure:
-                leftover_lines.append(f"执行环境：沙箱不可用（探测={failure}）。")
-        if has_opaque_source:
-            leftover_lines.append(_OPAQUE_SOURCE_FACT)
-        leftover_lines.append(_NO_EXEC_TABLE_FACT)
+        failure = cloud_sandbox_failure_hint()
+        if failure:
+            leftover_lines.append(f"沙箱：不可用（{failure}）")
 
-    # Prefer explicit languages; else a probe cached on the backend.
     langs = exec_languages
     if langs is None:
         langs = getattr(backend, "_exec_languages", None)
-    interpreters_line: str | None = None
+    interpreters_line = ""
     if exec_on and langs is not None:
         from agentcore.tools.sandbox.exec_languages import format_interpreters_line
 
         interpreters_line = format_interpreters_line(tuple(langs))
 
-    # 约定文档出口：非空才写。布局 HOW → team_delivery_env。
     outlet_lines = [
         line
         for title, rel in (
-            ("约定文档出口·过程稿：", DRAFTS_DIR),
-            ("约定文档出口·调研/讨论：", RESEARCH_DIR),
-            ("约定文档出口·辩论副产物：", DEBATE_DIR),
-            ("约定文档出口·审查：", REVIEWS_DIR),
+            ("过程稿：", DRAFTS_DIR),
+            ("调研：", RESEARCH_DIR),
+            ("辩论：", DEBATE_DIR),
+            ("审查：", REVIEWS_DIR),
         )
         if (line := format_outlet_line(title, rel, outlet_inventory))
     ]
-    # Git fact: prefer caller probe (async Local); else sync root; never gates kickoff.
-    # Repo presence and tool assembly are separate facts — an unassembled turn must
-    # not name ``init_baseline`` (the model does not hold the tool).
     resolved_git = git_fact if git_fact is not None else detect_workspace_git_sync(backend)
     git_line = format_workspace_git_line(resolved_git, tool_enabled=git_on)
-
-    # 跨文件夹指挥 HOW 归 team_cross_folder（工具面机制另在
-    # delegate / list_folders / resolve_folder / create_folder / folder_fs 的 schema 里，
-    # 队员持哪把工具就看哪条 schema）；此处只留一行事实：这张桌的路径和 id。
-    desk_line = _format_desk_line(
+    desk_line = _desk_line(
+        backend=backend,
+        is_local=is_local,
         desk_folder_id=desk_folder_id,
         desk_folder_label=desk_folder_label,
         root_label=root_label,
-        desk_is_birth=desk_is_birth,
+        desk_visibly_empty=desk_visibly_empty,
     )
-    # 事实句，不是禁令。空桌 when-to-use → mkdir description。
-    root_scope_line = "工作区根：本文件夹根即工作区根。"
-    if desk_visibly_empty:
-        root_scope_line = (
-            "工作区根：本文件夹根即工作区根。"
-            "可见顶层空；工程入口写在根上（如 `package.json`、`src/…`）。"
-        )
-
     body_lines = [
         location_line,
-        identity_line,
-        root_scope_line,
-        egress_line,
-        *outlet_lines,
-        git_line,
         desk_line,
+        _system_line(
+            is_local=is_local,
+            is_remote_local=is_remote_local,
+            langs=tuple(langs) if langs is not None else None,
+        ),
+        git_line,
         desktop_line,
-        grant_line,
+        *outlet_lines,
         *([mounts_line] if mounts_line else []),
-        capability_line,
-        *([artifact_format_line] if artifact_format_line else []),
+        _gap_line(
+            (
+                ("run", exec_on),
+                ("package_install", pkg_on),
+                ("git", git_on),
+                ("browser", browser_on),
+                ("local_open", local_open_on),
+                ("host", host_on),
+                ("mcp", mcp_on),
+            )
+        ),
         *leftover_lines,
+        interpreters_line,
     ]
-    if interpreters_line is not None:
-        body_lines.append(interpreters_line)
     body = "\n".join(line for line in body_lines if line)
     return f"<工作区>\n{body}\n</工作区>"

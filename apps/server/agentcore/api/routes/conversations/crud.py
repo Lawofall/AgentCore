@@ -373,6 +373,7 @@ async def list_conversations_grouped(
         else:
             ungrouped.append(summary)
 
+    collab_counts = await desk.collaborator_counts([f.id for f in folders])
     return GroupedConversationsResponse(
         folders=[
             FolderGroup(
@@ -384,6 +385,7 @@ async def list_conversations_grouped(
                 owner_user_id=desk_role[f.id][2],
                 my_role=desk_role[f.id][0],  # type: ignore[arg-type]
                 my_state=desk_role[f.id][1],  # type: ignore[arg-type]
+                collaborator_count=collab_counts.get(f.id, 0),
                 conversations=buckets[f.id],
             )
             for f in folders

@@ -13,6 +13,7 @@ from agentcore.core.types import new_id
 from agentcore.folders.desk import (
     DeskAccess,
     billing_actor_user_id,
+    caller_is_desk_member,
     desk_workspace_user_id,
 )
 from agentcore.folders.service import FolderDeskService
@@ -129,6 +130,14 @@ class FakeMembers:
     async def count_members(self, folder_id):
         return len([m for m in self._rows if m.folder_id == folder_id])
 
+    async def count_by_folder_ids(self, folder_ids):
+        wanted = set(folder_ids)
+        out: dict[str, int] = {}
+        for m in self._rows:
+            if m.folder_id in wanted:
+                out[m.folder_id] = out.get(m.folder_id, 0) + 1
+        return out
+
     async def add_member(self, *, folder_id, user_id, role, state, invited_by):
         member = SimpleNamespace(
             folder_id=folder_id,
@@ -242,6 +251,8 @@ async def test_invite_accept_lifecycle(monkeypatch):
     peer = users.add("peer")
     folder = folders.add(user_id=owner.user_id, name="协作桌")
 
+    assert await svc.collaborator_counts([folder.id]) == {}
+
     invited = await svc.invite(
         folder_id=folder.id,
         actor_id=owner.user_id,
@@ -250,6 +261,7 @@ async def test_invite_accept_lifecycle(monkeypatch):
     )
     assert invited.state == "pending"
     assert invited.role == "editor"
+    assert await svc.collaborator_counts([folder.id]) == {folder.id: 1}
 
     pending = await svc.list_pending_invites(user_id=peer.user_id)
     assert len(pending) == 1
@@ -264,6 +276,7 @@ async def test_invite_accept_lifecycle(monkeypatch):
 
     roster = await svc.list_members(folder_id=folder.id, user_id=owner.user_id)
     assert [m.role for m in roster] == ["owner", "editor"]
+    assert await svc.collaborator_counts([folder.id]) == {folder.id: 1}
 
 
 @pytest.mark.asyncio
@@ -381,3 +394,17 @@ async def test_resolve_folder_owner_user_id_skips_non_uuid():
     assert await resolve_folder_owner_user_id("test_birth", session=session) is None
     assert await resolve_folder_owner_user_id(None, session=session) is None
     assert await resolve_folder_owner_user_id("", session=session) is None
+
+
+@pytest.mark.asyncio
+async def test_caller_is_desk_member_matches_owner_lookup(monkeypatch):
+    async def _owner(folder_id, *, session=None):
+        return "owner-1" if folder_id == "desk-1" else None
+
+    monkeypatch.setattr(
+        "agentcore.folders.desk.resolve_folder_owner_user_id", _owner
+    )
+    assert await caller_is_desk_member(user_id="owner-1", folder_id="desk-1") is False
+    assert await caller_is_desk_member(user_id="member-1", folder_id="desk-1") is True
+    assert await caller_is_desk_member(user_id="member-1", folder_id=None) is False
+    assert await caller_is_desk_member(user_id="member-1", folder_id="missing") is False

@@ -237,8 +237,8 @@ def _missing_tool_feedback(
     if missing in execution:
         return (
             (
-                f"工具 '{missing}' 本回合未装配执行类工具（见 `<工作区>` 的"
-                "「本回合执行能力」），勿空转重试。"
+                f"工具 '{missing}' 本回合未装配执行类工具（见 `<工作区>` 缺口），"
+                "勿空转重试。"
             ),
             "not_assembled",
             True,

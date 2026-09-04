@@ -39,14 +39,13 @@ def test_format_interpreters_line_marks_missing_bash():
     line = format_interpreters_line(("python", "javascript"))
     assert "Python" in line
     assert "JavaScript" in line
-    assert "Bash" in line
-    assert "不可用" in line
+    assert "Bash" not in line
+    assert line.startswith("解释器：")
 
 
 def test_format_interpreters_line_all_available():
     line = format_interpreters_line(ALL_EXEC_LANGUAGES)
-    assert "不可用" not in line
-    assert "Python" in line and "Bash" in line
+    assert line == ""
 
 
 async def test_execute_short_rejects_unprobed_bash():

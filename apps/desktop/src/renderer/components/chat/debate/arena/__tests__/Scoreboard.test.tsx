@@ -5,8 +5,11 @@
 
 import { MANUAL_HELP } from "@/components/ManualHelpLink";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { DEMO_DEBATE_MODEL } from "@/pages/toolbox/manual/embeds/demoDebate";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  DEMO_DEBATE_EXECUTION,
+  DEMO_DEBATE_MODEL,
+} from "@/pages/toolbox/manual/embeds/demoDebate";
+import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DebateModel } from "../../model";
@@ -48,23 +51,28 @@ describe("Scoreboard manual help", () => {
     expect(btn.getAttribute("data-manual-help")).toBe(MANUAL_HELP.debate);
   });
 
-  it("正反行只留双方身份，不展示比分、站队、掌舵、动量图", () => {
+  it("正反行双方身份 + 居中主持人，不展示比分、站队、掌舵、动量图", () => {
     render(
       <MemoryRouter>
         <TooltipProvider>
-          <Scoreboard model={DEMO_DEBATE_MODEL} onScrollTo={() => {}} />
+          <Scoreboard
+            model={DEMO_DEBATE_MODEL}
+            execution={DEMO_DEBATE_EXECUTION}
+            onScrollTo={() => {}}
+          />
         </TooltipProvider>
       </MemoryRouter>,
     );
     expect(screen.getAllByText("加速派").length).toBeGreaterThan(0);
     expect(screen.getAllByText("审慎派").length).toBeGreaterThan(0);
+    expect(screen.getByText("主持人")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "掌舵" })).toBeNull();
     expect(screen.queryByText("你站")).toBeNull();
     expect(screen.queryByLabelText("动量图例")).toBeNull();
     expect(screen.queryByRole("button", { name: /净分构成/ })).toBeNull();
   });
 
-  it("这场怎么读：不用你收场", () => {
+  it("页头不挂「这场怎么读」", () => {
     render(
       <MemoryRouter>
         <TooltipProvider>
@@ -72,7 +80,6 @@ describe("Scoreboard manual help", () => {
         </TooltipProvider>
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "这场怎么读" }));
-    expect(screen.getByText(/不用你收场/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "这场怎么读" })).toBeNull();
   });
 });

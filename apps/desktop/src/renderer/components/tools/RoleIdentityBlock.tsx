@@ -1,7 +1,6 @@
 import { PromptDocument } from "@/components/prompt/PromptDocument";
 import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { ScrollText } from "lucide-react";
 import { useState } from "react";
 
 type RoleId = "ceo" | "nested" | "leaf";
@@ -14,13 +13,12 @@ const ROLES: readonly {
   {
     id: "ceo",
     label: "主 Agent",
-    caption:
-      "用户只跟你说话，对整段对话负责。组队 HOW 在薄技能 team_orchestration_advanced。",
+    caption: "用户只跟你说话，对整段对话负责。",
   },
   {
     id: "nested",
     label: "可再委派的队员",
-    caption: "对节点交差，还可再带一层子队。拆法 HOW 在薄技能 lead_subteam。",
+    caption: "对节点交差，还可再带一层子队。",
   },
   {
     id: "leaf",
@@ -29,7 +27,7 @@ const ROLES: readonly {
   },
 ];
 
-/** Mutually exclusive role `<身份>` — one tab at a time, never stacked layers. */
+/** Mutually exclusive role `<身份>` switcher — one tab at a time, never stacked. */
 export function RoleIdentityBlock({
   ceoIdentity,
   nestedIdentity,
@@ -49,62 +47,50 @@ export function RoleIdentityBlock({
         : leafIdentity;
 
   return (
-    <div className="rounded-xl border border-border bg-card">
-      <div className="px-4 py-3">
-        <div className="flex items-start gap-2">
-          <ScrollText
-            size={16}
-            className="mt-0.5 shrink-0 text-muted-foreground"
-          />
-          <div className="min-w-0 flex-1">
-            <span className="block font-medium text-foreground text-sm">
-              角色身份
-            </span>
-            <p className="text-muted-foreground text-xs">
-              本回合三选一，不是叠加上去的三层。主 Agent
-              对用户负责；队员对节点交差。
-            </p>
-          </div>
-        </div>
-        <div
-          role="tablist"
-          aria-label="角色身份"
-          className="scrollbar-hidden mt-3 flex min-w-0 overflow-x-auto rounded-lg border border-border p-0.5"
-        >
-          {ROLES.map((item) => {
-            const active = item.id === role;
-            return (
-              <Button
-                key={item.id}
-                variant="ghost"
-                role="tab"
-                aria-selected={active}
-                aria-controls="role-identity-panel"
-                id={`role-tab-${item.id}`}
-                onClick={() => setRole(item.id)}
-                className={cn(
-                  "h-8 min-w-0 flex-1 shrink-0 rounded-lg px-3 text-sm",
-                  active
-                    ? "bg-accent text-foreground hover:bg-accent"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {item.label}
-              </Button>
-            );
-          })}
-        </div>
-        <p className="mt-2 text-muted-foreground text-xs">{selected.caption}</p>
+    <div>
+      <div
+        role="tablist"
+        aria-label="角色身份"
+        className="scrollbar-hidden flex min-w-0 overflow-x-auto rounded-lg border border-border p-0.5"
+      >
+        {ROLES.map((item) => {
+          const active = item.id === role;
+          return (
+            <Button
+              key={item.id}
+              variant="ghost"
+              role="tab"
+              aria-selected={active}
+              aria-controls="role-identity-panel"
+              id={`role-tab-${item.id}`}
+              onClick={() => setRole(item.id)}
+              className={cn(
+                "h-8 min-w-0 flex-1 shrink-0 rounded-lg px-3 text-sm",
+                active
+                  ? "bg-accent text-foreground hover:bg-accent"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {item.label}
+            </Button>
+          );
+        })}
       </div>
+      <p className="mt-2 text-muted-foreground text-xs">{selected.caption}</p>
       <div
         id="role-identity-panel"
         role="tabpanel"
         aria-labelledby={`role-tab-${role}`}
+        className="mt-3"
       >
         {text ? (
-          <PromptDocument text={text} className="mx-4 mb-4" />
+          <PromptDocument
+            text={text}
+            compact={false}
+            maxHeightClass="max-h-none"
+          />
         ) : (
-          <p className="mx-4 mb-4 text-muted-foreground text-xs">
+          <p className="text-muted-foreground text-xs">
             本角色身份未在模板中单独标出。
           </p>
         )}
