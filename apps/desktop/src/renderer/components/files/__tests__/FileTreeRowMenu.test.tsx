@@ -77,10 +77,10 @@ describe("FileTreeRowMenu 目录下载", () => {
     expect(download).toHaveBeenCalledWith("docs", "docs.zip", { isDir: true });
   });
 
-  it("只读共享空间（无 edit）目录行仍可下载", async () => {
+  it("只读协作桌（无 edit）目录行仍可下载", async () => {
     const download = vi.fn().mockResolvedValue(undefined);
     openMenu(
-      { path: "shared-dir", name: "shared-dir", isDir: true },
+      { path: "docs", name: "docs", isDir: true },
       stubSource({
         caps: { watch: false, transfer: true, edit: false, snapshots: false },
         download,

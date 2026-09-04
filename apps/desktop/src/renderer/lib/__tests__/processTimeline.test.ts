@@ -10,9 +10,11 @@ import {
   isOrchestrationTool,
   isWaitIdleReasoning,
   omitCoordinationIdleSteps,
+  processFoldMask,
   promoteScalarContentIntoProcess,
   replaceTrailingContentStep,
   timelineNodeKeys,
+  trailingAnswerContentIndices,
 } from "@/lib/processTimeline";
 import type { ProcessStep } from "@/types/events";
 import { describe, expect, it } from "vitest";
@@ -370,5 +372,104 @@ describe("PROCESS_STEP_KIND", () => {
     expect(PROCESS_STEP_KIND.reasoning).toBe(true);
     expect(PROCESS_STEP_KIND.user_interjection).toBe(true);
     expect(Object.keys(PROCESS_STEP_KIND).length).toBeGreaterThan(10);
+  });
+});
+
+describe("processFoldMask · 非末段正文进过程折", () => {
+  const checkpoint = (checkpoint_id: string): ProcessStep => ({
+    kind: "checkpoint",
+    checkpoint_id,
+  });
+  const planReview = (checkpoint_id: string): ProcessStep => ({
+    kind: "plan_review",
+    checkpoint_id,
+  });
+  const graphAppend = (execution_id: string): ProcessStep => ({
+    kind: "graph_append",
+    execution_id,
+    host_message_id: "m1",
+    added_count: 1,
+  });
+
+  function maskOf(process: ProcessStep[], pending: string[] = []) {
+    return processFoldMask(groupToolRuns(process), new Set(pending));
+  }
+
+  it("folds mid-content with tools and keeps the trailing answer out", () => {
+    const process = [
+      content("我先找日志"),
+      tool("a"),
+      content("清晰度是 1080p"),
+    ];
+    expect(maskOf(process)).toEqual([true, true, false]);
+    const nodes = groupToolRuns(process);
+    expect([...trailingAnswerContentIndices(nodes)]).toEqual([2]);
+  });
+
+  it("folds every content step when the timeline ends on a tool", () => {
+    expect(maskOf([content("还在找"), tool("a")])).toEqual([true, true]);
+  });
+
+  it("folds CEO lead-in before the team graph when there is no trailing answer", () => {
+    expect(maskOf([content("我派了设计师"), team("e1")])).toEqual([
+      true,
+      false,
+    ]);
+  });
+
+  it("keeps the final answer after the graph and folds the lead-in", () => {
+    expect(
+      maskOf([content("先派出去"), team("e1"), content("结论：用方案 B")]),
+    ).toEqual([true, false, false]);
+  });
+
+  it("keeps content immediately before a pending checkpoint", () => {
+    expect(
+      maskOf([content("你选哪个？"), checkpoint("cp1"), tool("a")], ["cp1"]),
+    ).toEqual([false, false, true]);
+  });
+
+  it("folds content before a resolved checkpoint", () => {
+    expect(
+      maskOf([content("你选哪个？"), checkpoint("cp1"), tool("a")]),
+    ).toEqual([true, false, true]);
+  });
+
+  it("treats content before a trailing plan_review as the answer", () => {
+    const process = [tool("a"), content("请过目这份提纲"), planReview("pr1")];
+    expect(maskOf(process)).toEqual([true, false, false]);
+    expect([...trailingAnswerContentIndices(groupToolRuns(process))]).toEqual([
+      1,
+    ]);
+  });
+
+  it("skips trailing graph_append when finding the answer", () => {
+    expect(maskOf([tool("a"), content("最终答案"), graphAppend("e1")])).toEqual(
+      [true, false, false],
+    );
+  });
+
+  it("does not fold team / checkpoint / interjection / escalation", () => {
+    expect(
+      maskOf([
+        team("e1"),
+        checkpoint("cp1"),
+        { kind: "user_interjection", interjection_id: "inj-1" },
+        { kind: "escalation", escalation_id: "esc-1" },
+      ]),
+    ).toEqual([false, false, false, false]);
+  });
+
+  it("folds reasoning, tool-groups, and weak decision traces", () => {
+    expect(
+      maskOf([
+        reasoning("想"),
+        tool("a"),
+        tool("b"),
+        { kind: "approval", approval_id: "ap1" },
+        { kind: "stage_card", stage_card_id: "sc1" },
+        content("答案"),
+      ]),
+    ).toEqual([true, true, true, true, false]);
   });
 });

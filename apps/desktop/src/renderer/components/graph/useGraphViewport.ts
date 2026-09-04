@@ -66,6 +66,18 @@ export function useGraphViewport({
     });
   }, []);
 
+  // Fullscreen camera: fit once when structure bbox identity is ready / changes.
+  // Do not leave ReactFlow `fitView={true}` on — that re-queues StoreUpdater.
+  useEffect(() => {
+    if (fitMode !== "view" || !rfInstance || !layoutReady || !bboxKey) return;
+    const animate = viewportSettledRef.current && !prefersReducedMotion();
+    rfInstance.fitView({
+      padding: 0.2,
+      duration: animate ? 300 : 0,
+    });
+    viewportSettledRef.current = true;
+  }, [fitMode, rfInstance, layoutReady, bboxKey]);
+
   useEffect(() => {
     if (fitMode !== "width") return;
     const el = containerRef.current;

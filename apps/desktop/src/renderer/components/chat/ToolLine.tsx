@@ -24,6 +24,8 @@ import {
 } from "@/lib/channelRedirect";
 import { formatDurationSec } from "@/lib/format";
 import { runningElapsedSec } from "@/lib/runningElapsed";
+import { notifyActionError } from "@/lib/toast";
+import { openCloudPreview } from "@/services/openCloudPreview";
 import { runtimeOf, useConversationStore } from "@/stores/conversation";
 import {
   usePersistentDisclosure,
@@ -36,6 +38,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   Radio,
   X,
 } from "lucide-react";
@@ -77,7 +80,7 @@ const PEEK_SUPPRESSED = new Set([
   "consult_memory",
   "consult_rule",
   "consult",
-  // 跨会话对话日志：标题已自解释（query / conversation_id），正文在展开卡。
+  // 跨会话对话日志：标题已自解释；search 场数 / read 对话标题走 inlineMeta。
   "search_conversations",
   // read_url / read_conversation：peek 并进标题 inlineMeta，折叠无第二行。
   "read_url",
@@ -133,7 +136,7 @@ const PEEK_SUPPRESSED = new Set([
   // grep 计数走标题 inlineMeta；未知结果形状不得再起一行贴正则/命中原文。
   "grep",
   "desktop_notify",
-  // 本机 Host：标题已自解释；正文是 untrusted JSON，勿 peek 刷屏。
+  // 本机 Host：标题已自解释；折叠不 peek。
   "host",
   // 单工具 browser 的 peek 由 isBrowserTool 覆盖（精确名 + 历史 browser_*）。
   // 历史会话：旧 host_* 仍抑制 peek。
@@ -342,6 +345,67 @@ function ToolRowTail({
   );
 }
 
+/** `run` display 上的云端预览入口（后端 `preview_available` + `process_id`）。 */
+function runCloudPreview(
+  step: Extract<ProcessStep, { kind: "tool" }>,
+  conversationId: string | null | undefined,
+): { conversationId: string; processId: string; ports: number[] } | null {
+  if (step.tool_name !== "run" || !conversationId) return null;
+  const display = step.display;
+  if (!display || typeof display !== "object") return null;
+  const rec = display as Record<string, unknown>;
+  if (rec.preview_available !== true) return null;
+  const processId =
+    typeof rec.process_id === "string" ? rec.process_id.trim() : "";
+  if (!processId) return null;
+  const raw = rec.http_ports;
+  const ports: number[] = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const n = typeof item === "number" ? item : Number(item);
+      if (Number.isInteger(n) && n > 0 && n <= 65535) ports.push(n);
+    }
+  }
+  return { conversationId, processId, ports };
+}
+
+/** 混杂组「打开浏览器」同款 chip：换票后在系统浏览器打开。 */
+function CloudPreviewButtons({
+  conversationId,
+  processId,
+  ports,
+}: {
+  conversationId: string;
+  processId: string;
+  ports: number[];
+}) {
+  const items =
+    ports.length > 1
+      ? ports.map((port) => ({ port, label: `打开预览 · ${port}` }))
+      : [{ port: undefined, label: "打开预览" }];
+  return (
+    <>
+      {items.map(({ port, label }) => (
+        <button
+          key={port ?? "default"}
+          type="button"
+          onClick={() => {
+            void openCloudPreview({
+              conversationId,
+              processId,
+              port,
+            }).catch((e) => notifyActionError("打开预览失败", e));
+          }}
+          className="flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/15"
+        >
+          <ExternalLink size={12} className="shrink-0" />
+          {label}
+        </button>
+      ))}
+    </>
+  );
+}
+
 /** Single tool invocation row in the process timeline. */
 export function ToolLine({
   step,
@@ -357,7 +421,7 @@ export function ToolLine({
    *  （text-sm·灰·不加粗），与思考过程/工具组/过程摘要同级；组内子行（true）保留
    *  明细规格（text-sm·深色·加粗），靠 pl-3 缩进与父摘要行区分层级。 */
   nested?: boolean;
-  /** 所属对话（= conversationId）：仅 browser 结果用它懒加载关键帧；其余工具忽略。 */
+  /** 所属对话（= conversationId）：browser 关键帧懒加载；云端 run「打开预览」换票。 */
   conversationId?: string | null;
 }) {
   const [open, setOpen] = usePersistentDisclosure(
@@ -419,8 +483,8 @@ export function ToolLine({
   const elapsed = useRunningElapsed(running, startedAt);
   const phaseText = running ? toolPhaseText(step.phase) : null;
   // 完成态元信息并进标题行、不另起 peek：web_search「N results」、grep 匹配计数、
-  // list_folders「N folders」、str_replace +/-、file_write「N 行」、file_read 窗口
-  // 「a–b 行」、write 家族 / code_diagnostics 类型诊断、browser_* detail。
+  // list_folders「N folders」、search_conversations「N 场对话」、str_replace +/-、
+  // file_write「N 行」、file_read 窗口「a–b 行」、write 家族 / code_diagnostics、browser_* detail。
   const titleStat = toolLineTitleStat(data);
   const writeDiagPeek =
     status === "success" && WRITE_FAMILY_TOOLS.has(step.tool_name)
@@ -434,6 +498,7 @@ export function ToolLine({
         return peek || null;
       if (step.tool_name === "grep") return peek || null;
       if (step.tool_name === "list_folders") return peek || null;
+      if (step.tool_name === "search_conversations") return peek || null;
       if (step.tool_name === "code_diagnostics") {
         const diag = extractCodeDiagnostics(data.display);
         if (diag) {
@@ -478,67 +543,82 @@ export function ToolLine({
       />
     );
   }
-  return (
-    <div className="min-w-0 max-w-full">
-      <Button
-        variant="ghost"
-        onClick={() => hasBody && setOpen((v) => !v)}
-        className={`h-auto min-w-0 w-full justify-start gap-2 overflow-hidden px-0 py-0 hover:bg-transparent ${
-          hasBody ? "cursor-pointer" : "cursor-default"
-        }`}
-      >
-        <span className="flex min-w-0 w-full items-start gap-2 overflow-hidden text-left">
-          <Icon size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 overflow-hidden">
-            <span
-              className={`flex min-w-0 items-center overflow-hidden ${
-                nested
-                  ? "text-sm text-foreground"
-                  : "text-sm text-muted-foreground"
-              }`}
-            >
-              <span className="min-w-0 flex-1 truncate">
-                <span className={nested ? "font-medium" : undefined}>
-                  {label}
-                </span>
-                {detail && (
-                  <span className="ml-1.5 text-muted-foreground">{detail}</span>
-                )}
-                {phaseText && (
-                  <span className="ml-1.5 text-muted-foreground/70">
-                    {phaseText}
-                  </span>
-                )}
+  const preview = runCloudPreview(step, conversationId);
+  const titleBtn = (
+    <Button
+      variant="ghost"
+      onClick={() => hasBody && setOpen((v) => !v)}
+      className={`h-auto min-w-0 w-full justify-start gap-2 overflow-hidden px-0 py-0 hover:bg-transparent ${
+        hasBody ? "cursor-pointer" : "cursor-default"
+      }`}
+    >
+      <span className="flex min-w-0 w-full items-start gap-2 overflow-hidden text-left">
+        <Icon size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 overflow-hidden">
+          <span
+            className={`flex min-w-0 items-center overflow-hidden ${
+              nested
+                ? "text-sm text-foreground"
+                : "text-sm text-muted-foreground"
+            }`}
+          >
+            <span className="min-w-0 flex-1 truncate">
+              <span className={nested ? "font-medium" : undefined}>
+                {label}
               </span>
-              {titleStat && <ToolLineStat stat={titleStat} />}
-              {inlineMeta && (
-                <span
-                  className={`ml-1.5 min-w-0 max-w-[40%] truncate ${
-                    inlineMetaWarning
-                      ? "text-warning/80"
-                      : "text-muted-foreground/70"
-                  }`}
-                >
-                  {inlineMeta}
+              {detail && (
+                <span className="ml-1.5 text-muted-foreground">{detail}</span>
+              )}
+              {phaseText && (
+                <span className="ml-1.5 text-muted-foreground/70">
+                  {phaseText}
                 </span>
               )}
-              <ToolRowTail
-                status={status}
-                nested={nested}
-                hasBody={hasBody}
-                open={open}
-                verifyBudgetExceeded={verifyBudgetExceeded}
-                elapsedSec={elapsed}
-              />
             </span>
-            {hasBody && !open && !inlineMeta && !suppressesPeek && (
-              <span className="block truncate text-xs text-muted-foreground/70">
-                {peek}
+            {titleStat && <ToolLineStat stat={titleStat} />}
+            {inlineMeta && (
+              <span
+                className={`ml-1.5 min-w-0 max-w-[40%] truncate ${
+                  inlineMetaWarning
+                    ? "text-warning/80"
+                    : "text-muted-foreground/70"
+                }`}
+              >
+                {inlineMeta}
               </span>
             )}
+            <ToolRowTail
+              status={status}
+              nested={nested}
+              hasBody={hasBody}
+              open={open}
+              verifyBudgetExceeded={verifyBudgetExceeded}
+              elapsedSec={elapsed}
+            />
           </span>
+          {hasBody && !open && !inlineMeta && !suppressesPeek && (
+            <span className="block truncate text-xs text-muted-foreground/70">
+              {peek}
+            </span>
+          )}
         </span>
-      </Button>
+      </span>
+    </Button>
+  );
+  return (
+    <div className="min-w-0 max-w-full">
+      {preview ? (
+        <div className="flex min-w-0 items-center gap-1.5">
+          <div className="min-w-0 flex-1 overflow-hidden">{titleBtn}</div>
+          <CloudPreviewButtons
+            conversationId={preview.conversationId}
+            processId={preview.processId}
+            ports={preview.ports}
+          />
+        </div>
+      ) : (
+        titleBtn
+      )}
       {running && isWebSearch && <WebSearchSkeleton />}
       {open && hasBody && <ToolResultView data={data} />}
     </div>

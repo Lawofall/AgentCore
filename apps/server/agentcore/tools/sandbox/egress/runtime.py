@@ -14,7 +14,6 @@ from agentcore.config import settings
 from agentcore.core.errors import SandboxError
 from agentcore.core.logging import get_logger
 from agentcore.tools.sandbox.egress.netns import PackageNetns, PackageNetnsError
-from agentcore.tools.sandbox.egress.proxy import ensure_package_egress_proxy
 from agentcore.tools.sandbox.egress.ready import (
     EGRESS_UNAVAILABLE_CODE,
     registry_egress_available,
@@ -121,6 +120,10 @@ class PackageEgressSession:
     def host_ip(self) -> str:
         return self.netns.host_ip
 
+    @property
+    def sbx_ip(self) -> str:
+        return self.netns.sbx_ip
+
     async def close(self) -> None:
         with contextlib.suppress(Exception):
             await self.netns.teardown()
@@ -131,7 +134,11 @@ class PackageEgressSession:
 
 
 async def open_package_egress(*, cache_bucket: str | None = None) -> PackageEgressSession:
-    """Allocate netns + ensure allowlist proxy; caller must ``await session.close()``."""
+    """Allocate netns + bind the sandboxd-resident allowlist proxy URL.
+
+    The proxy process itself runs inside sandboxd (veth host IP lives there).
+    The API must not bind it. Caller must ``await session.close()``.
+    """
     if not registry_egress_available():
         raise SandboxError(
             "无法云端装包：主机不具备包装源白名单出网能力（需 Linux gVisor + netns）。"
@@ -142,7 +149,6 @@ async def open_package_egress(*, cache_bucket: str | None = None) -> PackageEgre
     slot = await _alloc_slot()
     netns = PackageNetns(slot=slot, subnet_base=settings.package_veth_subnet_base)
     try:
-        proxy = await ensure_package_egress_proxy()
         await netns.setup()
     except PackageNetnsError as exc:
         await _free_slot(slot)
@@ -156,7 +162,7 @@ async def open_package_egress(*, cache_bucket: str | None = None) -> PackageEgre
         await _free_slot(slot)
         raise
 
-    proxy_url = f"http://{netns.host_ip}:{proxy.port}"
+    proxy_url = f"http://{netns.host_ip}:{int(settings.package_egress_proxy_port)}"
     bucket = resolve_cache_bucket(cache_bucket)
     # Pass the resolved name so package_cache_host_dir does not mint another ephemeral.
     cache_dir = package_cache_host_dir(bucket)

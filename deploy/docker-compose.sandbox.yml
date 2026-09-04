@@ -1,13 +1,14 @@
-# 云端代码执行沙箱叠加（gVisor，默认开）— 与 server + app compose 三文件合并使用。
+# 云端执行面（gVisor）— 与 server + app compose 三文件合并使用。
 #
-# 作用：给 api 容器补齐「容器内跑 runsc」+「云端 browser_*/package_install 的
-# ip netns + veth」所需的运行时权限与资源余量。
-# 护栏 GVISOR_* 与紧急关闭 GVISOR_ENABLED=false 放 deploy/config/production.env
-# （见 production.env.example「云端代码执行」段）。
-# deploy-server.sh / finish-server.sh **默认叠加**本文件；仅显式 GVISOR_ENABLED=false 跳过。
-# 不叠本文件时沙箱起不来，启动期健康探测失败**不拒启**（fail-safe）：打
-# sandbox.cloud_health_failed / browser.netns_health_failed warning、执行类与
-# browser_* 整类不装配、能力行如实显示未装配，不悄悄回落 subprocess / Bridge。
+# 独立 sandboxd 服务持有 runsc / netns / 装包代理 / 云端 Chromium。
+# API 只经 Unix socket RPC；不叠本文件时沙箱起不来，启动期健康探测失败
+# 不拒启（fail-safe）：打 sandbox.cloud_health_failed、执行类不装配。
+# 紧急关闭：GVISOR_ENABLED=false 后 finish（见 production.env.example）。
+# deploy-server.sh / finish-server.sh 默认叠加本文件。
+#
+# 切流替换：不把 sandboxd 叠进 api，不留 in-API guest 回落。
+# 预览 HTTP：本文件发 127.0.0.1:8787（勿 0.0.0.0）；宿主 nginx 独立 origin 反代。
+# API 不提供预览字节。
 #
 # 手动用法（服务器）：
 #   docker compose \
@@ -19,27 +20,64 @@
 #
 # 部署后人工验证清单见 部署拓扑与环境.md §云端执行（gVisor）。
 # 发布前自检：python apps/server/scripts/verify_gvisor_sandbox.py [--live]
+
+x-logging: &sandbox-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
-  api:
-    # rootless runsc 在容器内需要创建 user/mount namespace 等被 Docker 默认
-    # seccomp/AppArmor profile 拦截的系统调用。宿主侧前置：内核开启非特权用户
-    # 命名空间（sysctl kernel.unprivileged_userns_clone=1，多数现代发行版默认开）。
-    security_opt:
-      - seccomp:unconfined
-      - apparmor:unconfined
-    # Root 只给入口脚本：准备容器私有 /run/netns（保持 root 所有，不 chown 给
-    # app），以 uid 0 起 sandboxd，再 setpriv 降为 app 且不保留 ambient cap。
-    # API 进程无 NET_ADMIN/SYS_ADMIN。禁止 privileged:true；不要挂宿主
-    # /run/netns。cap_add 留给同容器 sandboxd（唯一 exec runsc/ip 的进程）。
+  sandboxd:
+    image: ${IMAGE_REGISTRY:-agentcore}/api:${IMAGE_TAG:-latest}
+    container_name: agentcore-sandboxd
+    restart: unless-stopped
+    stop_grace_period: 40s
+    logging: *sandbox-logging
     user: "0:0"
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    env_file:
+      - ./config/production.env
+    environment:
+      DATA_DIR: /data
+      GVISOR_RUNTIME_ROOT: /data/sandbox
+      SANDBOXD_SOCKET: /run/agentcore/sandboxd.sock
+      # Container must bind 0.0.0.0 to receive the published port. Host publish
+      # stays 127.0.0.1:8787 (not 0.0.0.0). Code default 127.0.0.1 is for non-container.
+      PREVIEW_BIND_HOST: "0.0.0.0"
+      PREVIEW_BIND_PORT: "8787"
     volumes:
-      - ./api-sandbox-entrypoint.sh:/usr/local/bin/api-sandbox-entrypoint.sh:ro
-    entrypoint: ["/bin/sh", "/usr/local/bin/api-sandbox-entrypoint.sh"]
-    # Compose 覆盖 entrypoint 时会丢掉镜像 CMD；不写 command 则容器空跑、秒退、重启循环。
-    command: ["python", "-m", "agentcore"]
-    # 沙箱内存记在 api 容器 cgroup 名下：基线 ~1G + 1×浏览器 + 并发 2 ×
-    # 单次 512MB 执行 + 余量。覆盖 app compose 的 mem_limit=1024m。
+      - appdata:/data
+      - sandbox-run:/run/agentcore
+      - ./sandboxd-entrypoint.sh:/usr/local/bin/sandboxd-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/sandboxd-entrypoint.sh"]
+    command: ["python", "-m", "agentcore.tools.sandbox.sandboxd"]
     mem_limit: 4g
+    mem_reservation: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /run/agentcore/sandboxd.sock"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    # Preview HTTP: host nginx (separate preview origin) → this bind. Not 0.0.0.0.
+    # API does not serve preview bytes; RPC stays on the Unix socket.
+    ports:
+      - "127.0.0.1:8787:8787"
+
+  api:
+    environment:
+      SANDBOXD_SOCKET: /run/agentcore/sandboxd.sock
+    volumes:
+      - sandbox-run:/run/agentcore
+    depends_on:
+      sandboxd:
+        condition: service_started
+
+volumes:
+  sandbox-run:

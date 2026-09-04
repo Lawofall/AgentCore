@@ -71,14 +71,16 @@ import {
   MAX_AGENT_MENTIONS,
   composerHasSendableDraft,
 } from "./composerAttachments";
+import {
+  COMPOSER_FOLDER_READ_ONLY_HINT,
+  isCurrentComposerFolderWriteBlocked,
+} from "./composerFolderWrite";
 import { dispatchBackgroundTask } from "./dispatchBackgroundTask";
 import { liveDebateSteerTarget } from "./liveDebateSteer";
 import { settleAttachments } from "./settleAttachments";
 
 export type ComposerSendOpts = {
   delivery?: MessageDelivery;
-  /** 辩论进行中主框：continue=对这场说话；conclude=出结论。勿走 sendTurn。 */
-  debateSteer?: "continue" | "conclude";
 };
 
 /**
@@ -263,51 +265,45 @@ export function useComposerSend({
       const activeConvId =
         useConversationStore.getState().currentConversationId;
       const liveDebate = liveDebateSteerTarget(activeConvId);
-      const debateKind =
-        opts?.debateSteer === "conclude"
-          ? "conclude"
-          : liveDebate
-            ? "continue"
-            : null;
 
-      if (debateKind === "conclude" && !liveDebate) return;
-      if (
-        debateKind !== "conclude" &&
-        !composerHasSendableDraft(value, attachments, agentMentions)
-      ) {
+      if (!composerHasSendableDraft(value, attachments, agentMentions)) {
         return;
       }
 
-      // N4-A：只读离线硬禁用（按钮已 disabled；此处兜底防键盘/程序化触发）。
+      // 只读离线硬禁用（按钮已 disabled；此处兜底防键盘/程序化触发）。
       if (isReadOnlyOffline()) {
         notifyError("离线时无法发送，请恢复连接后再试");
         return;
       }
 
+      // 只读协作桌（viewer）：按钮已 disabled；此处兜底防键盘/程序化触发。
+      if (isCurrentComposerFolderWriteBlocked(activeConvId)) {
+        notifyError(COMPOSER_FOLDER_READ_ONLY_HINT);
+        return;
+      }
+
       const draftKey = draftKeyFor(activeConvId);
 
-      // 辩论进行中：主框对这场说话，走 debate-steer（轮边界非阻塞）。
+      // 辩论进行中：主框对这场说话，走 debate-steer continue（轮边界非阻塞）。
       // 禁止 sendTurn / mid-flight——那会进 CEO 插话或排队，主持人捞不到。
-      if (liveDebate && debateKind) {
+      // 产品面不发 conclude：收场靠裁判收敛；勿扫正文猜「够了收」。
+      if (liveDebate) {
         if (attachments.length > 0) {
           notifyError("辩论进行中不能带附件，请去掉后再对这场说话");
           return;
         }
-        if (debateKind === "continue" && !preview) return;
+        if (!preview) return;
         if (!acquireComposerSendLatch(draftKey, "sending")) return;
         clearComposerSendError(draftKey);
         try {
           const accepted = await submitDebateSteer(liveDebate.conversationId, {
             executionId: liveDebate.executionId,
-            decision:
-              debateKind === "continue"
-                ? {
-                    kind: "continue",
-                    focus: "",
-                    ask: preview,
-                    askTarget: "",
-                  }
-                : { kind: "conclude", ask: preview, askTarget: "" },
+            decision: {
+              kind: "continue",
+              focus: "",
+              ask: preview,
+              askTarget: "",
+            },
           });
           if (accepted) {
             clearComposer();

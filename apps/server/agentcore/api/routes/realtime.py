@@ -7,7 +7,7 @@ sending stays POST). Carries ``chat_message``, ``chat_message_updated`` (recall/
 ``presence`` (online transitions
 to co-chat users), ``friend_request`` (created/accepted/rejected/cancelled),
 ``memory_updated``, ``ai_attention`` (a conversation's AI stopped and is waiting on
-this user — signal only, no card content; 云对话多端同权 B2 §2.2), and shared-space
+this user — signal only, no card content; 云对话多端同权 B2 §2.2), and folder-invite
 nudges. Typing remains ⏳ (消息IM.md §七).
 
 Clients may declare ``device_id`` + ``platform`` at open. Both are optional (older

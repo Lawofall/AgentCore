@@ -15,7 +15,7 @@ import fnmatch
 import os
 import shutil
 from collections import deque
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -89,19 +89,6 @@ from agentcore.workspace.protocol import (
     WorkspaceIOError,
 )
 from agentcore.workspace.rg_grep import run_grep_rg
-from agentcore.workspace.shared_mounts import (
-    SharedMount,
-    SharedMountMode,
-    parse_shared_path,
-    readonly_write_error,
-    revoked_error,
-    route_shared,
-    shared_ns,
-)
-from agentcore.workspace.shared_paths import (
-    shared_workspace_root_path,
-    shared_workspace_storage_key,
-)
 from agentcore.workspace.sparse_listing import is_ai_list_hidden_file
 from agentcore.workspace.stage_dirs import INDEX_ZONE_NAME, internal_zone_path
 from agentcore.workspace.text_replace import (
@@ -403,7 +390,7 @@ class ServerWorkspace:
         self._sandbox = sandbox
         # Where ``{index,trash,baselines}`` live for this root. ``None`` = in-tree
         # under ``root/AgentCore/`` — correct for sidecar / local (root IS the
-        # user's own directory) and shared spaces (flat namespace). Cloud
+        # user's own directory). Cloud
         # conversation workspaces pass an out-of-tree, id-keyed path: cloud folders
         # nest for real, so an ancestor folder must not see a child's deleted
         # files / baseline zips / index DB as ordinary content, and the zones must
@@ -428,14 +415,6 @@ class ServerWorkspace:
         self._external_bridge: LocalWorkspace | None = None
         # Sidecar location=local: desktop-held ops (diagnostics). File I/O stays Path.
         self._desktop_channel: WorkspaceChannel | None = None
-        # Shared-space cloud second roots (``shared/<alias>/…``).
-        self._shared_mounts: dict[str, SharedMount] = {}
-        # Realtime membership gate: space_id → current mount mode, or None if gone.
-        self._shared_gate: Callable[[str], Awaitable[SharedMountMode | None]] | None = None
-        # Optional hook after a successful shared mutation (firehose / event log).
-        self._on_shared_mutation: (
-            Callable[[str, str, str], Awaitable[None]] | None
-        ) = None  # (space_id, action, path)
         # Turn material paths for AI ``list_tree`` AI-noise reveal (∪ attachments/).
         # Set by prepare/wire from ``collect_turn_material_paths``; default empty.
         self.ai_list_materials: frozenset[str] = frozenset()
@@ -518,18 +497,6 @@ class ServerWorkspace:
         """
         self._desktop_channel = channel
 
-    def attach_shared_mounts(
-        self,
-        mounts: dict[str, SharedMount],
-        *,
-        gate: Callable[[str], Awaitable[SharedMountMode | None]] | None = None,
-        on_mutation: Callable[[str, str, str], Awaitable[None]] | None = None,
-    ) -> None:
-        """Attach session-scoped shared-space mounts (cloud second root)."""
-        self._shared_mounts = dict(mounts)
-        self._shared_gate = gate
-        self._on_shared_mutation = on_mutation
-
     def _external_needs_channel(self, *paths: str) -> bool:
         """True when any path is ``external/`` without ``abs_path`` (desktop channel).
 
@@ -567,9 +534,8 @@ class ServerWorkspace:
     def _internal_root_for(self, mount_root: Path) -> Path | None:
         """Zone container for whichever root an op resolved against.
 
-        Only the primary root has an out-of-tree container; shared-space second
-        roots keep their zones in-tree, so a delete inside ``shared/<alias>/`` lands
-        in that space's own trash — 谁执行删除落谁的.
+        Only the primary root has an out-of-tree container; other resolved roots
+        (``external/<alias>/``) keep zones in-tree.
         """
         try:
             if mount_root.resolve() == self._root.resolve():
@@ -578,50 +544,19 @@ class ServerWorkspace:
             pass
         return None
 
-    async def _gate_shared(self, path: str, *, write: bool) -> None:
-        """Realtime role check for ``shared/<alias>/…`` (tool-call granularity)."""
-        if parse_shared_path(path) is None:
-            return
-        routed = route_shared(path, self._shared_mounts)
-        if routed is None:
-            raise PathNotFound(path)
-        mode: SharedMountMode | None = routed.mount.mode
-        if self._shared_gate is not None:
-            mode = await self._shared_gate(routed.mount.space_id)
-        if mode is None:
-            raise OutsideWorkspace(revoked_error(path))
-        if write and mode == "readonly":
-            raise OutsideWorkspace(readonly_write_error(path))
-
     @asynccontextmanager
-    async def _mutation_lock(self, path: str):
+    async def _mutation_lock(self, _path: str):
         """Single-layer lock for one mutating op (A′).
 
-        Shared mounts serialize on the space key; primary tree uses ``lock_key``
-        when set. Never nest with an outer same-key ``workspace_lock``.
-        Contended waits notify ``_on_lock_waiting`` (honest SSE; 不得静默等锁).
+        Primary tree uses ``lock_key`` when set. Never nest with an outer
+        same-key ``workspace_lock``. Contended waits notify ``_on_lock_waiting``
+        (honest SSE; 不得静默等锁).
         """
-        routed = route_shared(path, self._shared_mounts) if parse_shared_path(path) else None
-        if routed is not None:
-            async with workspace_lock(
-                shared_workspace_storage_key(routed.mount.space_id),
-                on_waiting=self._on_lock_waiting,
-            ):
-                yield
-            return
         if self._lock_key:
             async with workspace_lock(self._lock_key, on_waiting=self._on_lock_waiting):
                 yield
             return
         yield
-
-    async def _emit_shared_mutation(self, path: str, action: str) -> None:
-        if self._on_shared_mutation is None or parse_shared_path(path) is None:
-            return
-        routed = route_shared(path, self._shared_mounts)
-        if routed is None:
-            return
-        await self._on_shared_mutation(routed.mount.space_id, action, path)
 
     def _safe(
         self,
@@ -631,23 +566,6 @@ class ServerWorkspace:
         op: str | None = None,
         permanent: bool = False,
     ) -> Path:
-        shared_parsed = parse_shared_path(rel)
-        if shared_parsed is not None:
-            routed = route_shared(rel, self._shared_mounts)
-            if routed is None:
-                raise PathNotFound(rel)
-            if write and routed.mount.mode == "readonly":
-                # Sync fallback when gate wasn't awaited yet (should be gated first).
-                raise OutsideWorkspace(readonly_write_error(rel))
-            mount_root = shared_workspace_root_path(routed.mount.space_id)
-            mount_root.mkdir(parents=True, exist_ok=True)
-            mount_rel = routed.rel if routed.rel not in ("", ".") else "."
-            resolved = resolve_safe_path(mount_root, mount_rel if mount_rel != "." else ".")
-            if resolved is None:
-                if mount_rel in ("", "."):
-                    return mount_root.resolve()
-                raise OutsideWorkspace(rel)
-            return resolved
         if is_external_namespace(rel):
             routed = route_external(rel, self._mounts)
             if routed is None:
@@ -685,22 +603,13 @@ class ServerWorkspace:
     def _model_path(self, abs_path: Path, *, logical: str | None = None) -> str:
         """Map an absolute path back to a model-facing relative path.
 
-        Prefer the caller's logical ``external/<alias>/…`` or ``shared/<alias>/…``
-        namespace; if that fails (or is absent), reverse-lookup mounts by abs
-        containment so a mount file never falls through to
-        ``relpath(…, primary_root)`` which would leak ``../``-shaped paths into
-        model-visible list/grep output.
+        Prefer the caller's logical ``external/<alias>/…`` namespace; if that
+        fails (or is absent), reverse-lookup mounts by abs containment so a
+        mount file never falls through to ``relpath(…, primary_root)`` which
+        would leak ``../``-shaped paths into model-visible list/grep output.
+        ``shared/foo`` is an ordinary relative path under the workspace root.
         """
         resolved = abs_path.resolve()
-        if logical and parse_shared_path(logical) is not None:
-            routed = route_shared(logical, self._shared_mounts)
-            if routed:
-                mount_root = shared_workspace_root_path(routed.mount.space_id).resolve()
-                try:
-                    rel = resolved.relative_to(mount_root)
-                    return shared_ns(routed.mount.alias, _posix(str(rel)))
-                except ValueError:
-                    pass
         if logical and parse_external_path(logical) is not None:
             routed = route_external(logical, self._mounts)
             if routed and routed.mount.abs_path:
@@ -710,13 +619,6 @@ class ServerWorkspace:
                     return external_ns(routed.mount.alias, _posix(str(rel)))
                 except ValueError:
                     pass
-        for mount in self._shared_mounts.values():
-            mount_root = shared_workspace_root_path(mount.space_id).resolve()
-            try:
-                rel = resolved.relative_to(mount_root)
-                return shared_ns(mount.alias, _posix(str(rel)))
-            except ValueError:
-                continue
         for mount in self._mounts.values():
             if not mount.abs_path:
                 continue
@@ -765,7 +667,6 @@ class ServerWorkspace:
         # Windows (sidecar). ``WORKSPACE_READ_MAX_BYTES`` caps the loop stall.
         if self._external_needs_channel(path):
             return await self._require_external_bridge().read(path)
-        await self._gate_shared(path, write=False)
         target = self._safe(path)
         if not target.exists():
             raise PathNotFound(path)
@@ -783,14 +684,12 @@ class ServerWorkspace:
             self._mark_mutated()
             return n
         async with self._mutation_lock(path):
-            await self._gate_shared(path, write=True)
             target = self._safe(path, write=True, op="write")
             try:
                 await asyncio.to_thread(_write_text_sync, target, content)
             except OSError as e:
                 raise WorkspaceIOError(str(e)) from e
             self._mark_mutated()
-            await self._emit_shared_mutation(path, "file_written")
             return len(content)
 
     async def append(self, path: str, content: str) -> int:
@@ -799,7 +698,6 @@ class ServerWorkspace:
             self._mark_mutated()
             return n
         async with self._mutation_lock(path):
-            await self._gate_shared(path, write=True)
             target = self._safe(path, write=True, op="append")
             try:
                 if target.exists() and not target.is_file():
@@ -810,7 +708,6 @@ class ServerWorkspace:
             except OSError as e:
                 raise WorkspaceIOError(str(e)) from e
             self._mark_mutated()
-            await self._emit_shared_mutation(path, "file_written")
             return len(content)
 
     async def resolve_for_download(self, path: str, *, max_bytes: int) -> Path:
@@ -822,7 +719,6 @@ class ServerWorkspace:
         """
         if self._external_needs_channel(path):
             raise WorkspaceIOError("会话授权目录在本机引擎外不可直读")
-        await self._gate_shared(path, write=False)
         target = self._safe(path)
         if not target.exists():
             raise PathNotFound(path)
@@ -839,13 +735,12 @@ class ServerWorkspace:
     async def resolve_dir_for_download(self, path: str) -> Path:
         """Resolve a directory for HTTP subtree-zip download (selected dir as zip root).
 
-        Same traversal / shared-mount gates as :meth:`resolve_for_download`. Does
+        Same traversal gates as :meth:`resolve_for_download`. Does
         not apply a byte ceiling here — ``zip_dir`` gates uncompressed source
         bytes at the panel upload cap. GET ``.../files/{path}`` stays file-only.
         """
         if self._external_needs_channel(path):
             raise WorkspaceIOError("会话授权目录在本机引擎外不可直读")
-        await self._gate_shared(path, write=False)
         target = self._safe(path)
         if not target.exists():
             raise PathNotFound(path)
@@ -858,7 +753,6 @@ class ServerWorkspace:
             return await self._require_external_bridge().read_bytes(
                 path, max_bytes=max_bytes
             )
-        await self._gate_shared(path, write=False)
         target = self._safe(path)
         if not target.exists():
             raise PathNotFound(path)
@@ -877,7 +771,6 @@ class ServerWorkspace:
             return await self._require_external_bridge().read_head(
                 path, max_bytes=max_bytes
             )
-        await self._gate_shared(path, write=False)
         target = self._safe(path)
         if not target.exists():
             raise PathNotFound(path)
@@ -902,7 +795,6 @@ class ServerWorkspace:
             return await self._require_external_bridge().extract_office(
                 path, ext=ext, start_page=start_page
             )
-        await self._gate_shared(path, write=False)
         target = self._safe(path)
         if not target.exists():
             raise PathNotFound(path)
@@ -919,14 +811,12 @@ class ServerWorkspace:
             self._mark_mutated()
             return n
         async with self._mutation_lock(path):
-            await self._gate_shared(path, write=True)
             target = self._safe(path, write=True, op="write_bytes")
             try:
                 await asyncio.to_thread(_write_bytes_sync, target, data)
             except OSError as e:
                 raise WorkspaceIOError(str(e)) from e
             self._mark_mutated()
-            await self._emit_shared_mutation(path, "file_written")
             return len(data)
 
     async def read_for_edit(self, path: str) -> tuple[str, int, Literal["lf", "crlf"]]:
@@ -939,7 +829,6 @@ class ServerWorkspace:
         Raises ``OutsideWorkspace`` / ``PathNotFound`` / ``NotAFile`` / ``NotUTF8`` /
         ``WorkspaceIOError``.
         """
-        await self._gate_shared(path, write=False)
         target = self._safe(path)
         if not target.exists():
             raise PathNotFound(path)
@@ -976,11 +865,10 @@ class ServerWorkspace:
         ``OutsideWorkspace`` / ``NotAFile`` / ``WorkspaceIOError``.
 
         Best-effort against external writers; this method holds ``workspace_lock``
-        (via ``lock_key`` / shared space key) for the CAS so an Agent write can't
+        (via ``lock_key``) for the CAS so an Agent write can't
         interleave mid-check — callers must not nest another same-key hold.
         """
         async with self._mutation_lock(path):
-            await self._gate_shared(path, write=True)
             target = self._safe(path, write=True, op="write")
             exists = target.exists()
             if exists and not target.is_file():
@@ -1001,7 +889,6 @@ class ServerWorkspace:
             except OSError as e:
                 raise WorkspaceIOError(str(e)) from e
             self._mark_mutated()
-            await self._emit_shared_mutation(path, "file_written")
             return True, new_ms
 
     async def list(
@@ -1011,7 +898,6 @@ class ServerWorkspace:
             bridge = self._require_external_bridge()
             bridge.ai_list_reveal_archives = self.ai_list_reveal_archives
             return await bridge.list(directory, pattern, cap=cap)
-        await self._gate_shared(directory, write=False)
         base = self._safe(directory)
         if not base.is_dir():
             # Declared stage / attachments trees: writes mkdir parents — missing
@@ -1042,7 +928,6 @@ class ServerWorkspace:
         """True iff ``path`` is an existing regular file (unfiltered by AI-noise)."""
         if self._external_needs_channel(path):
             return await self._require_external_bridge().exists(path)
-        await self._gate_shared(path, write=False)
         target = self._safe(path)
         try:
             return target.is_file()
@@ -1137,13 +1022,10 @@ class ServerWorkspace:
                     return
                 raise WorkspaceIOError(str(e)) from e
 
-            # Prefer model-facing ``external/<alias>/…`` (or shared) when the
-            # list root is in that namespace — mount abs may sit under the
-            # primary tree in tests / edge layouts, which would otherwise hide
-            # archives as workspace AI-noise.
-            if parse_external_path(directory) is not None or parse_shared_path(
-                directory
-            ) is not None:
+            # Prefer model-facing ``external/<alias>/…`` when the list root is in
+            # that namespace — mount abs may sit under the primary tree in tests /
+            # edge layouts, which would otherwise hide archives as workspace AI-noise.
+            if parse_external_path(directory) is not None:
                 parent_rel = self._model_path(dir_path, logical=directory)
             else:
                 try:
@@ -1242,7 +1124,6 @@ class ServerWorkspace:
             self._mark_mutated()
             return
         async with self._mutation_lock(path):
-            await self._gate_shared(path, write=True)
             target = self._safe(path, write=True, op="mkdir")
             # Refuse mkdir of the primary workspace root itself; external mount roots
             # are also "already there" as the grant target.
@@ -1255,9 +1136,6 @@ class ServerWorkspace:
                 and target == Path(routed.mount.abs_path).resolve()
             ):
                 raise OutsideWorkspace(path)
-            shared = route_shared(path, self._shared_mounts) if parse_shared_path(path) else None
-            if shared and target == shared_workspace_root_path(shared.mount.space_id).resolve():
-                raise OutsideWorkspace(path)
             if target.exists():
                 raise AlreadyExists(path)
             try:
@@ -1265,7 +1143,6 @@ class ServerWorkspace:
             except OSError as e:
                 raise WorkspaceIOError(str(e)) from e
             self._mark_mutated()
-            await self._emit_shared_mutation(path, "dir_created")
 
     async def delete(self, path: str, *, permanent: bool = False) -> None:
         if self._external_needs_channel(path):
@@ -1273,7 +1150,6 @@ class ServerWorkspace:
             self._mark_mutated()
             return
         async with self._mutation_lock(path):
-            await self._gate_shared(path, write=True)
             target = self._safe(path, write=True, op="delete", permanent=permanent)
             if target == self._root.resolve():
                 raise OutsideWorkspace(path)  # never delete the workspace root
@@ -1283,17 +1159,7 @@ class ServerWorkspace:
                 if target == mount_root:
                     raise OutsideWorkspace(path)
             else:
-                shared = (
-                    route_shared(path, self._shared_mounts)
-                    if parse_shared_path(path)
-                    else None
-                )
-                if shared:
-                    mount_root = shared_workspace_root_path(shared.mount.space_id).resolve()
-                    if target == mount_root:
-                        raise OutsideWorkspace(path)
-                else:
-                    mount_root = self._root.resolve()
+                mount_root = self._root.resolve()
             if not target.exists():
                 raise PathNotFound(path)
             # Soft-delete into AgentCore/trash cannot nest under itself; treat
@@ -1315,17 +1181,8 @@ class ServerWorkspace:
             )
             if will_clear_index or will_expand_agentcore:
                 await self._release_code_index_for_tree_delete()
-            shared_routed = (
-                route_shared(path, self._shared_mounts) if parse_shared_path(path) else None
-            )
             trash_rel = (
-                routed.rel
-                if routed is not None
-                else (
-                    shared_routed.rel
-                    if shared_routed is not None
-                    else path.replace("\\", "/")
-                )
+                routed.rel if routed is not None else path.replace("\\", "/")
             ) or path.replace("\\", "/")
             try:
                 await asyncio.to_thread(
@@ -1339,7 +1196,6 @@ class ServerWorkspace:
             except OSError as e:
                 raise WorkspaceIOError(str(e)) from e
             self._mark_mutated()
-            await self._emit_shared_mutation(path, "file_deleted")
 
     async def _copy_workspace_to_channel_dest(self, src: str, dst: str) -> None:
         """Workspace-on-server → desktop organize: COPY carries bytes, not a path.
@@ -1378,9 +1234,7 @@ class ServerWorkspace:
 
     async def copy(self, src: str, dst: str) -> None:
         dst_on_channel = self._external_needs_channel(dst)
-        src_is_workspace = (
-            not is_external_namespace(src) and parse_shared_path(src) is None
-        )
+        src_is_workspace = not is_external_namespace(src)
         if dst_on_channel and src_is_workspace:
             await self._copy_workspace_to_channel_dest(src, dst)
             self._mark_mutated()
@@ -1390,8 +1244,6 @@ class ServerWorkspace:
             self._mark_mutated()
             return
         async with self._mutation_lock(dst):
-            await self._gate_shared(src, write=False)
-            await self._gate_shared(dst, write=True)
             source = self._safe(src, write=False)
             dest = self._safe(dst, write=True, op="copy")
             src_ext = parse_external_path(src)
@@ -1423,7 +1275,6 @@ class ServerWorkspace:
             except OSError as e:
                 raise WorkspaceIOError(str(e)) from e
             self._mark_mutated()
-            await self._emit_shared_mutation(dst, "file_written")
 
     async def move(self, src: str, dst: str) -> None:
         if self._external_needs_channel(src, dst):
@@ -1431,8 +1282,6 @@ class ServerWorkspace:
             self._mark_mutated()
             return
         async with self._mutation_lock(dst):
-            await self._gate_shared(src, write=True)
-            await self._gate_shared(dst, write=True)
             source = self._safe(src, write=True, op="move")
             dest = self._safe(dst, write=True, op="move")
             src_ext = parse_external_path(src)
@@ -1457,7 +1306,6 @@ class ServerWorkspace:
             except OSError as e:
                 raise WorkspaceIOError(str(e)) from e
             self._mark_mutated()
-            await self._emit_shared_mutation(dst, "file_moved")
 
     async def replace(self, path: str, old: str, new: str, *, all_: bool) -> ReplaceOutcome:
         if self._external_needs_channel(path):
@@ -1467,7 +1315,6 @@ class ServerWorkspace:
             self._mark_mutated()
             return outcome
         async with self._mutation_lock(path):
-            await self._gate_shared(path, write=True)
             target = self._safe(path, write=True, op="replace")
             if not target.exists():
                 raise PathNotFound(path)
@@ -1498,7 +1345,6 @@ class ServerWorkspace:
                 raise WorkspaceIOError(str(e)) from e
 
             self._mark_mutated()
-            await self._emit_shared_mutation(path, "file_written")
             return ReplaceOutcome(count=result.count, first_line=result.first_line)
 
     async def grep(self, query: GrepQuery) -> GrepResult:
@@ -1601,10 +1447,9 @@ class ServerWorkspace:
         return external_ns(alias, path)
 
     async def execute(self, req: ExecutionRequest) -> ExecutionResult:
-        # Boot the cloud desk without holding the file-mutation lock — guest
-        # create is not a workspace write. ``code_execute`` also calls this
-        # before its per-conversation lock so boot does not serialize siblings.
-        await self.ensure_workspace_desk()
+        # Cloud desk must already be up (prepare / resume). Guest create is not
+        # a workspace write and must not ride this mutation lock or the chat
+        # path's ``run`` wait_for.
         # Run code in the workspace root so relative file paths resolve against
         # the same files the file tools see.
         #
@@ -1679,6 +1524,18 @@ class ServerWorkspace:
         if not callable(ensure):
             return
         await ensure(str(self._root.resolve()))
+
+    def cloud_desk_ready(self) -> bool:
+        """True when this workspace already holds a started gVisor guest.
+
+        Subprocess (escape hatch / test doubles) has no guest map — the health
+        / config gate stays authoritative.
+        """
+        from agentcore.tools.sandbox.gvisor import GVisorSandbox, has_running_desk
+
+        if not isinstance(self._sandbox, GVisorSandbox):
+            return True
+        return has_running_desk(str(self._root.resolve()))
 
     async def _probe_exec_env(self, language: str | None) -> ExecEnvProbeVerdict:
         """gVisor / backend-wide runtime smoke (``language`` is always ``None``).

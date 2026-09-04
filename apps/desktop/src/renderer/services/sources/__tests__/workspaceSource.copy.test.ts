@@ -79,7 +79,7 @@ describe("cloud FileSource.copy", () => {
   });
 
   it("readonly ws-id source omits copy (aligned with caps.edit)", () => {
-    const source = createCloudWorkspaceSource("shared:s1", "共享空间", {
+    const source = createCloudWorkspaceSource("folder:f1", "项目", {
       readonly: true,
     });
     expect(source.caps.edit).toBe(false);

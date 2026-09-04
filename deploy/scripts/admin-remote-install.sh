@@ -73,13 +73,13 @@ if [[ "$_gvisor_off" -eq 0 ]]; then
     echo "ERROR: 云执行默认开但找不到 docker-compose.sandbox.yml（或设 GVISOR_ENABLED=false）"
     exit 1
   fi
-  _sandbox_entrypoint="$(dirname "$_sandbox_yml")/api-sandbox-entrypoint.sh"
+  _sandbox_entrypoint="$(dirname "$_sandbox_yml")/sandboxd-entrypoint.sh"
   if [[ ! -f "$_sandbox_entrypoint" ]]; then
-    echo "ERROR: $_sandbox_yml 需要同目录 api-sandbox-entrypoint.sh（或设 GVISOR_ENABLED=false）"
+    echo "ERROR: $_sandbox_yml 需要同目录 sandboxd-entrypoint.sh（或设 GVISOR_ENABLED=false）"
     exit 1
   fi
   # Compose 把 overlay 的 ./ 卷解析到第一个 -f 所在目录（=$DEPLOY）。
-  _ep_dst="$DEPLOY/api-sandbox-entrypoint.sh"
+  _ep_dst="$DEPLOY/sandboxd-entrypoint.sh"
   if [[ -d "$_ep_dst" ]]; then
     echo "WARN: $_ep_dst 是目录（Docker 缺文件时的占位）— 删除后写入入口脚本"
     rm -rf "$_ep_dst"

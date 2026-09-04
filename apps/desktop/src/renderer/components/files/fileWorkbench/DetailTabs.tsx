@@ -1,4 +1,4 @@
-import { IconButton } from "@/components/ui";
+import { TabChip } from "@/components/ui";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -6,7 +6,6 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { cn } from "@/lib/utils";
 import { FileText, X } from "lucide-react";
 import { type Tab, tabKey } from "./storage";
 
@@ -39,52 +38,16 @@ export function DetailTabs({
         return (
           <ContextMenu key={key}>
             <ContextMenuTrigger asChild>
-              <div
-                role="tab"
-                aria-selected={active}
-                tabIndex={0}
+              <TabChip
+                variant="strip"
+                active={active}
+                icon={<FileText size={13} className="shrink-0 opacity-60" />}
+                label={t.name}
                 title={t.path}
-                onPointerDown={(e) => {
-                  if (e.button === 1) {
-                    e.preventDefault();
-                    onClose(key);
-                  } else if (e.button === 0) {
-                    onActivate(key);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onActivate(key);
-                  } else if (e.key === "Delete" || e.key === "Backspace") {
-                    e.preventDefault();
-                    onClose(key);
-                  }
-                }}
-                className={cn(
-                  "group flex min-w-0 max-w-[180px] shrink-0 cursor-pointer items-center gap-1.5 border-r px-3 py-1.5 text-sm",
-                  active
-                    ? "bg-background text-foreground"
-                    : "bg-muted/40 text-muted-foreground hover:bg-muted",
-                )}
-              >
-                <FileText size={13} className="shrink-0 opacity-60" />
-                <span className="min-w-0 flex-1 truncate">{t.name}</span>
-                <IconButton
-                  aria-label={`关闭 ${t.name}`}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClose(key);
-                  }}
-                  className={cn(
-                    "size-6 shrink-0",
-                    active ? "opacity-70" : "opacity-0 group-hover:opacity-70",
-                  )}
-                >
-                  <X size={13} />
-                </IconButton>
-              </div>
+                onSelect={() => onActivate(key)}
+                onClose={() => onClose(key)}
+                className="max-w-[180px]"
+              />
             </ContextMenuTrigger>
             <ContextMenuContent className="min-w-40">
               <ContextMenuItem onSelect={() => onClose(key)}>

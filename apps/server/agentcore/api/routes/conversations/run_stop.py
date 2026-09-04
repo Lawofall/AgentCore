@@ -7,7 +7,7 @@ from agentcore.api.schemas import SubmitRunStopRequest, SubmitRunStopResponse
 from agentcore.db.repositories import ConversationRepository
 from agentcore.runtime.runs.intervene import accept_run_stop
 
-from ._helpers import _require_owned_conversation
+from ._helpers import _require_conversation_write
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -29,7 +29,7 @@ async def submit_run_stop(
     Not fire-and-forget: the response says whether the engine actually took it
     (``accepted``) — 够不着的 run 上不入队，也不拿整条执行的排队计数冒充成功。
     """
-    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, conv_repo._session)
     ack = accept_run_stop(
         execution_id=body.execution_id,
         run_id=body.run_id,

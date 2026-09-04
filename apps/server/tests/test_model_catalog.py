@@ -869,6 +869,9 @@ async def test_patch_conversation_persists_model_profile_id(monkeypatch):
         async def get_by_id(self, _cid, *, user_id):
             return conv
 
+        async def preference_flags_for(self, _user_id, _ids):
+            return {}
+
         async def set_model_profile(self, _cid, model_profile_id, *, user_id):
             written["model_profile_id"] = model_profile_id
             conv.model_profile_id = model_profile_id
@@ -878,6 +881,7 @@ async def test_patch_conversation_persists_model_profile_id(monkeypatch):
         "agentcore.llm.model_profiles.LlmModelProfileService.ensure_profile_usable",
         AsyncMock(return_value=None),
     )
+    monkeypatch.setattr(crud, "_require_conversation_write", AsyncMock())
     body = UpdateConversationRequest(model_profile_id="prof-1")
     result = await crud.update_conversation(
         "c1", body, SimpleNamespace(user_id="u1"), repo=_Repo()
@@ -914,6 +918,9 @@ async def test_patch_conversation_null_repins_account_default(monkeypatch):
         async def get_by_id(self, _cid, *, user_id):
             return conv
 
+        async def preference_flags_for(self, _user_id, _ids):
+            return {}
+
         async def set_model_profile(self, _cid, model_profile_id, *, user_id):
             written["model_profile_id"] = model_profile_id
             conv.model_profile_id = model_profile_id
@@ -923,6 +930,7 @@ async def test_patch_conversation_null_repins_account_default(monkeypatch):
         "agentcore.llm.model_profiles.LlmModelProfileService.snapshot_default_profile_id",
         AsyncMock(return_value="sys-default"),
     )
+    monkeypatch.setattr(crud, "_require_conversation_write", AsyncMock())
     body = UpdateConversationRequest(model_profile_id=None)
     # Explicit null is in model_fields_set.
     assert "model_profile_id" in body.model_fields_set

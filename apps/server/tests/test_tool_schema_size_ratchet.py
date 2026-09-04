@@ -371,6 +371,12 @@ def test_on_demand_faces_point_how_to_consult():
     assert "HOW→consult(browser)" in BrowserTool().schema.description
     assert "HOW→consult(debate_and_review)" in DEBATE_DESCRIPTION
     assert "HOW→consult(team_orchestration_advanced)" in DELEGATE_DESCRIPTION
+    from agentcore.tools.builtin.delegate.schema import NESTED_DELEGATE_DESCRIPTION
+
+    assert "HOW→consult(lead_subteam)" in NESTED_DELEGATE_DESCRIPTION
+    assert "team_orchestration_advanced" not in NESTED_DELEGATE_DESCRIPTION
+    assert "lead_subteam" not in DELEGATE_DESCRIPTION
+    assert "等到子队收工" in NESTED_DELEGATE_DESCRIPTION
     host_action = HostTool().schema.parameters["properties"]["action"]["description"]
     assert "Get-WinEvent" not in host_action
     assert "仅 worker" not in host_action

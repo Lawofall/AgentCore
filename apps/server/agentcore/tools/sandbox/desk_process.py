@@ -14,11 +14,13 @@ honestly instead of being reconstructed from leftover files.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import hashlib
 import re
 import shlex
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -35,7 +37,11 @@ _LAUNCH_TIMEOUT_SECONDS = 15.0
 
 CLOUD_DESK_REQUIRED = "cloud_desk_required"
 PROCESS_NOT_REGISTERED = "process_not_registered"
+PROCESS_NOT_RUNNING = "process_not_running"
+PREVIEW_PORT_NOT_READY = "preview_port_not_ready"
+PREVIEW_UPSTREAM_UNAVAILABLE = "preview_upstream_unavailable"
 _WORKSPACE_IO = "workspace_io_error"
+_BRIDGE_GUEST = "/scratch/preview_bridge.py"
 
 
 class DeskProcessError(Exception):
@@ -53,6 +59,16 @@ class DeskProcessError(Exception):
         self.contract_failure = contract_failure
 
 
+@dataclass(frozen=True)
+class CloudPreview:
+    """Mint-route view of a conversation-scoped long-running process."""
+
+    conversation_id: str
+    process_id: str
+    status: str
+    http_ports: tuple[int, ...]
+
+
 @dataclass
 class _Record:
     process_id: str
@@ -66,6 +82,9 @@ class _Record:
     exit_code: int | None
     host_dir: Path
     guest_dir: str
+    http_ports: tuple[int, ...] = ()
+    # advertised app port → guest listen port for that process's TCP bridge
+    bridge_ports: dict[int, int] = field(default_factory=dict)
 
 
 _records: dict[str, _Record] = {}
@@ -77,18 +96,20 @@ def reset_desk_processes_for_tests() -> None:
     _records.clear()
 
 
-def drop_processes_for_desk_keys(keys: list[str] | tuple[str, ...]) -> int:
+async def drop_processes_for_desk_keys(keys: list[str] | tuple[str, ...]) -> int:
     """Forget ledger rows for desks being torn down. Guest kill reaps pids."""
     wanted = {str(key) for key in keys}
-    dropped = [pid for pid, rec in list(_records.items()) if rec.desk_key in wanted]
-    for pid in dropped:
-        _records.pop(pid, None)
+    dropped = [rec for rec in list(_records.values()) if rec.desk_key in wanted]
+    for rec in dropped:
+        _records.pop(rec.process_id, None)
     if dropped:
         logger.info(
             "sandbox.desk_processes_dropped",
             count=len(dropped),
             desks=len(wanted),
         )
+    for rec in dropped:
+        await _preview_unregister_best_effort(rec)
     return len(dropped)
 
 
@@ -127,6 +148,14 @@ def _tail_log(path: Path, tail_lines: int) -> str:
     return "\n".join(lines)
 
 
+def _remember_http_ports(rec: _Record, output: str) -> None:
+    from agentcore.tools.sandbox.preview_port import parse_preview_http_ports
+
+    ports = parse_preview_http_ports(output)
+    if ports:
+        rec.http_ports = ports
+
+
 def _compile_wait_for(pattern: str) -> re.Pattern[str]:
     try:
         return re.compile(pattern)
@@ -151,6 +180,8 @@ def _snapshot(rec: _Record, *, output: str = "", matched: bool | None = None) ->
         value["cwd"] = rec.cwd
     if rec.exit_code is not None:
         value["exit_code"] = rec.exit_code
+    if rec.http_ports:
+        value["http_ports"] = list(rec.http_ports)
     if output or matched is not None:
         value["output"] = output
     if matched is not None:
@@ -236,6 +267,138 @@ def _alive_script(*, guest_dir: str) -> str:
         'kill -0 "$pid" 2>/dev/null && echo alive || echo dead\n'
         "exit 0\n"
     )
+
+
+def _bridge_port_for(process_id: str, app_port: int) -> int:
+    digest = hashlib.sha256(f"{process_id}:{int(app_port)}".encode()).digest()
+    return 28000 + int.from_bytes(digest, "big") % 20000
+
+
+def _bridge_pid_name(app_port: int) -> str:
+    return f"bridge-{int(app_port)}.pid"
+
+
+def _bridge_launch_script(*, guest_dir: str, bridge_port: int, app_port: int) -> str:
+    pid_q = shlex.quote(f"{guest_dir}/{_bridge_pid_name(app_port)}")
+    log_q = shlex.quote(f"{guest_dir}/bridge-{int(app_port)}.log")
+    py_q = shlex.quote(_BRIDGE_GUEST)
+    return (
+        "set -eu\n"
+        f"PIDF={pid_q}\n"
+        f"LOG={log_q}\n"
+        ': > "$LOG"\n'
+        f"setsid nohup python3 {py_q} {int(bridge_port)} {int(app_port)}"
+        ' >>"$LOG" 2>&1 < /dev/null &\n'
+        'echo $! > "$PIDF"\n'
+    )
+
+
+def _bridge_stop_all_script(*, guest_dir: str) -> str:
+    dir_q = shlex.quote(guest_dir)
+    return (
+        "set +e\n"
+        f"DIR={dir_q}\n"
+        'for PIDF in "$DIR"/bridge-*.pid; do\n'
+        '  [ -f "$PIDF" ] || continue\n'
+        '  pid=$(cat "$PIDF")\n'
+        '  [ -n "$pid" ] || continue\n'
+        '  kill -TERM -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null\n'
+        '  kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null\n'
+        "done\n"
+        "exit 0\n"
+    )
+
+
+def _bridge_alive_script(*, guest_dir: str, app_port: int) -> str:
+    pid_q = shlex.quote(f"{guest_dir}/{_bridge_pid_name(app_port)}")
+    return (
+        "set +e\n"
+        f"PIDF={pid_q}\n"
+        '[ -f "$PIDF" ] || { echo dead; exit 0; }\n'
+        'pid=$(cat "$PIDF")\n'
+        '[ -n "$pid" ] || { echo dead; exit 0; }\n'
+        'kill -0 "$pid" 2>/dev/null && echo alive || echo dead\n'
+        "exit 0\n"
+    )
+
+
+def _gvisor_sandbox() -> Any:
+    from agentcore.tools.sandbox.gvisor import GVisorSandbox
+
+    return GVisorSandbox()
+
+
+def _preview_bridge_source() -> str:
+    path = Path(__file__).with_name("preview_bridge.py")
+    return path.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
+def _write_preview_bridge(scratch: Path) -> None:
+    scratch.mkdir(parents=True, exist_ok=True)
+    (scratch / "preview_bridge.py").write_text(
+        _preview_bridge_source(),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+async def _preview_unregister_best_effort(rec: _Record) -> None:
+    with contextlib.suppress(Exception):
+        await _sandboxd_client().preview_unregister(
+            rec.conversation_id, rec.process_id
+        )
+
+
+def _sandboxd_client() -> Any:
+    from agentcore.tools.sandbox.sandboxd import get_sandboxd_client
+
+    return get_sandboxd_client()
+
+
+async def _bridge_is_alive(
+    sandbox: Any,
+    rec: _Record,
+    workspace: str,
+    cache_bucket: str | None,
+    app_port: int,
+) -> bool:
+    if rec.bridge_ports.get(app_port) is None:
+        return False
+    code, stdout, _err = await _short_bash(
+        sandbox,
+        workspace,
+        host_dir=rec.host_dir,
+        guest_dir=rec.guest_dir,
+        filename=f"bridge_alive_{int(app_port)}.sh",
+        body=_bridge_alive_script(guest_dir=rec.guest_dir, app_port=app_port),
+        cache_bucket=cache_bucket,
+    )
+    if code != 0:
+        return False
+    tokens = (stdout or "").split()
+    return "alive" in tokens and "dead" not in tokens
+
+
+async def _kill_bridge_best_effort(
+    sandbox: Any,
+    rec: _Record,
+    workspace: str,
+    cache_bucket: str | None,
+) -> None:
+    has_pid = any(rec.host_dir.glob("bridge-*.pid")) if rec.host_dir.is_dir() else False
+    if not rec.bridge_ports and not has_pid:
+        return
+    with contextlib.suppress(Exception):
+        await _short_bash(
+            sandbox,
+            workspace,
+            host_dir=rec.host_dir,
+            guest_dir=rec.guest_dir,
+            filename="bridge_stop_all.sh",
+            body=_bridge_stop_all_script(guest_dir=rec.guest_dir),
+            cache_bucket=cache_bucket,
+        )
+    rec.bridge_ports.clear()
 
 
 async def _short_bash(
@@ -403,6 +566,7 @@ async def start_desk_process(
         )
     else:
         output = _tail_log(log_path, _DEFAULT_TAIL_LINES)
+    _remember_http_ports(rec, output)
     mark = getattr(backend, "_mark_mutated", None)
     if callable(mark):
         mark()
@@ -441,6 +605,7 @@ async def read_desk_process(
         )
     else:
         output = _tail_log(log_path, tail_lines)
+    _remember_http_ports(rec, output)
     return _snapshot(rec, output=output, matched=matched)
 
 
@@ -463,6 +628,8 @@ async def stop_desk_process(
     from agentcore.tools.sandbox.gvisor import touch_workspace_desk
 
     touch_workspace_desk(workspace)
+    await _preview_unregister_best_effort(rec)
+    await _kill_bridge_best_effort(sandbox, rec, workspace, cache_bucket)
     await _short_bash(
         sandbox,
         workspace,
@@ -500,3 +667,118 @@ async def _require_record(conversation_id: str, process_id: str) -> _Record:
             code=PROCESS_NOT_REGISTERED,
         )
     return rec
+
+
+def lookup_cloud_preview(conversation_id: str, process_id: str) -> CloudPreview | None:
+    """Return this conversation's process, or None (other conversations cannot see it)."""
+    conv = (conversation_id or "").strip()
+    pid = (process_id or "").strip()
+    rec = _records.get(pid)
+    if rec is None or rec.conversation_id != conv:
+        return None
+    return CloudPreview(
+        conversation_id=rec.conversation_id,
+        process_id=rec.process_id,
+        status=rec.status,
+        http_ports=tuple(rec.http_ports),
+    )
+
+
+def _as_cloud_preview(rec: _Record) -> CloudPreview:
+    return CloudPreview(
+        conversation_id=rec.conversation_id,
+        process_id=rec.process_id,
+        status=rec.status,
+        http_ports=tuple(rec.http_ports),
+    )
+
+
+async def ensure_cloud_preview(
+    workspace: str,
+    conversation_id: str,
+    process_id: str,
+    port: int,
+) -> CloudPreview:
+    """Start the guest TCP bridge if needed, then register the upstream with sandboxd."""
+    rec = await _require_record(conversation_id, process_id)
+    try:
+        app_port = int(port)
+    except (TypeError, ValueError) as exc:
+        raise DeskProcessError(
+            "预览端口必须是整数。",
+            code="VALIDATION_ERROR",
+            contract_failure=True,
+        ) from exc
+    if rec.status != "running":
+        raise DeskProcessError(
+            "进程不在运行中，无法打开预览。",
+            code=PROCESS_NOT_RUNNING,
+        )
+    if app_port not in rec.http_ports:
+        raise DeskProcessError(
+            "该端口不在进程就绪输出解析到的 HTTP 端口里，没有预览入口。",
+            code=PREVIEW_PORT_NOT_READY,
+            contract_failure=True,
+        )
+    if rec.desk_key != _desk_key(workspace):
+        raise DeskProcessError(
+            "云桌没有可达的沙箱地址，无法把预览接到执行面。",
+            code=PREVIEW_UPSTREAM_UNAVAILABLE,
+        )
+    from agentcore.tools.sandbox.gvisor import desk_preview_upstream, touch_workspace_desk
+
+    upstream = desk_preview_upstream(workspace)
+    if upstream is None:
+        raise DeskProcessError(
+            "云桌没有可达的沙箱地址，无法把预览接到执行面。",
+            code=PREVIEW_UPSTREAM_UNAVAILABLE,
+        )
+    sbx_ip, _container_id = upstream
+    sandbox = _gvisor_sandbox()
+    scratch = sandbox.host_scratch_dir(workspace)
+    if scratch is None:
+        raise DeskProcessError(
+            "云桌没有可达的沙箱地址，无法把预览接到执行面。",
+            code=PREVIEW_UPSTREAM_UNAVAILABLE,
+        )
+    touch_workspace_desk(workspace)
+    _write_preview_bridge(scratch)
+    current = rec.bridge_ports.get(app_port)
+    if current is None or not await _bridge_is_alive(
+        sandbox, rec, str(Path(workspace).resolve()), None, app_port
+    ):
+        bridge_port = current or _bridge_port_for(rec.process_id, app_port)
+        code, _out, err = await _short_bash(
+            sandbox,
+            str(Path(workspace).resolve()),
+            host_dir=rec.host_dir,
+            guest_dir=rec.guest_dir,
+            filename=f"bridge_launch_{app_port}.sh",
+            body=_bridge_launch_script(
+                guest_dir=rec.guest_dir,
+                bridge_port=bridge_port,
+                app_port=app_port,
+            ),
+            cache_bucket=None,
+        )
+        if code != 0:
+            raise DeskProcessError(
+                (err or _out or "预览桥接未能在云桌 guest 里启动。").strip()
+                or "预览桥接未能在云桌 guest 里启动。",
+                code=_WORKSPACE_IO,
+            )
+        pid_path = rec.host_dir / _bridge_pid_name(app_port)
+        if not pid_path.is_file() or not pid_path.read_text(encoding="utf-8").strip():
+            raise DeskProcessError(
+                "预览桥接已返回但没有记下进程号，未登记为存活。",
+                code=_WORKSPACE_IO,
+            )
+        rec.bridge_ports[app_port] = bridge_port
+    await _sandboxd_client().preview_register(
+        rec.conversation_id,
+        rec.process_id,
+        upstream_ip=sbx_ip,
+        upstream_port=rec.bridge_ports[app_port],
+        app_port=app_port,
+    )
+    return _as_cloud_preview(rec)

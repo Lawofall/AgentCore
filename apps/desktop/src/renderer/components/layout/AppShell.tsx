@@ -1,4 +1,8 @@
 import { useGroupedConversations } from "@/hooks/useConversations";
+import {
+  usePendingFolderInvites,
+  useSharedWithMeFolders,
+} from "@/hooks/useFolderSharing";
 import { startAndroidUpdates } from "@/lib/androidUpdates";
 import { isWebClient } from "@/lib/capabilities";
 import { NarrowLayoutProvider, useNarrowLayoutState } from "@/lib/narrowLayout";
@@ -71,6 +75,8 @@ function AppShellFrame() {
   // halves now (folders via useFolders, conversations via useConversations), so
   // there's no store to hydrate here; this call only kicks off the shared fetch.
   useGroupedConversations();
+  useSharedWithMeFolders();
+  usePendingFolderInvites();
 
   // Load the account usage summary once on mount so the 用量 dashboard has a
   // warm snapshot before the user opens it. Best-effort: soft error on failure.

@@ -45,6 +45,7 @@ from .documents import DocumentRepository
 from .email_auth import EmailChallengeRepository, PendingRegistrationRepository
 from .external_grants import ExternalGrantRepository
 from .feedback import FeedbackRepository
+from .folder_members import FolderMemberRepository
 from .folders import FolderRepository
 from .friends import FriendRepository
 from .llm_profiles import LlmModelProfileRepository
@@ -60,7 +61,6 @@ from .runs import (
     TurnJournalRepository,
     TurnMetricsRepository,
 )
-from .shared_spaces import SharedSpaceRepository
 from .standing_tasks import StandingTaskRepository, StandingTaskRunRepository
 from .stream_state import TurnStreamStateRepository
 from .user_workflows import UserWorkflowRepository
@@ -88,6 +88,7 @@ __all__ = [
     "CredentialsRepository",
     "ExternalGrantRepository",
     "FeedbackRepository",
+    "FolderMemberRepository",
     "FolderRepository",
     "HandoffJobRepository",
     "LlmModelProfileRepository",
@@ -101,7 +102,6 @@ __all__ = [
     "PushDeviceRepository",
     "RefreshTokenRepository",
     "RunSessionRepository",
-    "SharedSpaceRepository",
     "StandingTaskRepository",
     "StandingTaskRunRepository",
     "TurnJournalRepository",

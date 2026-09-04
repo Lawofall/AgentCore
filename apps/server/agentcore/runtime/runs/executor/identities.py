@@ -181,9 +181,9 @@ _WORKER_LEAF_INTRO = """\
 你是 AgentCore（一个多 Agent AI 工作台）的一员，团队中的一名专家 worker。你只负责一个划定好的任务，外加完成它所需的上下文；\
 你不能再向下委派。够不到用户；信息不足就标假设继续。"""
 
-# Captain intro: identity + nest honesty. Staffing HOW → team_orchestration_advanced.
-# Nested-lead HOW cannot ride the shared skill catalog (leaf/captain prefix) or the
-# CEO's delegate description. Depth honesty branches on MAX_DELEGATION_DEPTH.
+# Captain intro: identity + nest honesty. Depth honesty branches on MAX_DELEGATION_DEPTH.
+# Staffing HOW → consult(lead_subteam) (requires_tools=delegate, worker-only).
+# Not the CEO encyclopedia and not identity.
 
 
 def _worker_captain_intro(*, depth: int) -> str:

@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui";
 import {
   brandPanelPrimary,
   confidenceLabel,
@@ -6,7 +5,6 @@ import {
   statusPillInline,
   surfaceSubtle,
 } from "@/components/ui/tone-presets";
-import { useComposerDraftStore } from "@/stores/composer";
 import type {
   DebateBriefInfo,
   DebateHandoffInfo,
@@ -16,7 +14,6 @@ import {
   Lightbulb,
   MessagesSquare,
   Scale,
-  SearchCheck,
   ShieldAlert,
   ShieldCheck,
   Swords,
@@ -59,16 +56,6 @@ function briefHandoffs(brief: DebateBriefInfo): DebateHandoffInfo[] {
     kind: asHandoffKind(h.kind),
     text: h.text,
   }));
-}
-
-function prefillDecide(text: string): void {
-  useComposerDraftStore
-    .getState()
-    .fill(`关于「${text}」，我的取舍是：`, "append");
-}
-
-function prefillVerify(text: string): void {
-  useComposerDraftStore.getState().fill(`帮我查证：${text}`, "append");
 }
 
 export function BriefCard({
@@ -426,10 +413,11 @@ function RoundtableBrief({
 }
 
 /**
- * ③ 留给你的（完整行动面板）：顶部 AI 建议位，其后按 kind 三种异质形态——
- *   value → 问句卡置顶高光 +「回复拍板」；
- *   fact → 可查证任务列表 +「派查证」；
+ * ③ 留给你的：顶部 AI 建议位，其后按 kind 三种形态——
+ *   value → 问句卡置顶高光；
+ *   fact → 还撑不牢的事实列表；
  *   question → 脚注一行收尾（不与前两者平级）。
+ * 不挂关口按钮；收场后接着干走主输入框对 CEO 说话。
  * handoffs 全空但有 recommendation 时仍渲染面板。
  * 圆桌不传 recommendation（建议仍留在 RoundtableSpectrum「综合观察」）。
  */
@@ -495,7 +483,9 @@ function YourCallZone({
           }
         >
           {facts.map((it) => (
-            <FactVerifyRow key={it.text} text={it.text} />
+            <li key={it.text} className="text-sm text-foreground">
+              {it.text}
+            </li>
           ))}
         </ul>
       )}
@@ -508,47 +498,19 @@ function YourCallZone({
   );
 }
 
-/** value：整场化简出的选择题——问句形态高光卡 + 回复拍板预填。
+/** value：整场化简出的选择题——问句形态高光卡。
  *  问号兜底仅当末尾无终结标点（历史数据是「。」收尾的陈述句，别拼成「。？」）。 */
 function ValueCallCard({ text }: { text: string }) {
   const questionMark = /[？?。！!…]$/.test(text) ? "" : "？";
   return (
-    <div
-      className={`flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between ${surfaceSubtle.primary}`}
-    >
-      <p className="min-w-0 flex-1 text-base font-medium leading-snug text-foreground">
+    <div className={`rounded-lg border p-3 ${surfaceSubtle.primary}`}>
+      <p className="text-base font-medium leading-snug text-foreground">
         {text}
         {questionMark ? (
           <span className="text-primary">{questionMark}</span>
         ) : null}
       </p>
-      <Button
-        variant="primary"
-        size="sm"
-        className="shrink-0 self-start"
-        onClick={() => prefillDecide(text)}
-      >
-        回复拍板
-      </Button>
     </div>
-  );
-}
-
-/** fact：还撑不牢的事实——任务行 + 派查证预填（AI 可接手）。 */
-function FactVerifyRow({ text }: { text: string }) {
-  return (
-    <li className="flex items-start justify-between gap-2">
-      <span className="min-w-0 flex-1 text-sm text-foreground">{text}</span>
-      <Button
-        variant="neutral"
-        size="sm"
-        className="shrink-0 border border-border"
-        icon={<SearchCheck size={13} />}
-        onClick={() => prefillVerify(text)}
-      >
-        派查证
-      </Button>
-    </li>
   );
 }
 

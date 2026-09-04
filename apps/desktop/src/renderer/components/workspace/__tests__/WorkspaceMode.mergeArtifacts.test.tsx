@@ -58,10 +58,6 @@ vi.mock("@/components/workspace/ExternalMountsSection", () => ({
   ExternalMountsSection: () => null,
 }));
 
-vi.mock("@/components/workspace/SharedMountsSection", () => ({
-  SharedMountsSection: () => null,
-}));
-
 vi.mock("@/components/workspace/WorkspaceModeBar", () => ({
   WorkspaceModeBar: () => null,
 }));

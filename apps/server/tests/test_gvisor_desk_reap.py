@@ -1,4 +1,4 @@
-"""Idle cloud-desk reap: kill guest (no freeze), keep disk, lazy-create next use."""
+"""Idle cloud-desk reap: kill guest (no freeze), keep disk, next prepare/attach recreates."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from agentcore.tools.sandbox.desk_process import (
 from agentcore.tools.sandbox.gvisor import (
     GVisorSandbox,
     attach_workspace_desk,
+    desk_preview_upstream,
     reap_idle_desks,
     reset_desk_sessions_for_tests,
 )
@@ -98,6 +99,7 @@ def _desk_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
             cache_host_dir = tmp_path / "pkg-cache" / "b"
             proxy_url = "http://10.0.0.1:8898"
             host_ip = "10.0.0.1"
+            sbx_ip = "10.0.0.2"
 
             async def close(self):
                 return None
@@ -147,6 +149,10 @@ async def test_idle_desk_is_reaped(_desk_env):
     await sandbox.ensure_workspace_desk(str(ws))
     assert sandbox.host_scratch_dir(str(ws)) is not None
     assert len(client.start_calls) == 1
+    upstream = desk_preview_upstream(str(ws))
+    assert upstream is not None
+    assert upstream[0] == "10.0.0.2"
+    assert upstream[1] == client.start_calls[0]["container_id"]
     first_bundle = client.start_calls[0]["bundle_dir"]
     first_id = client.start_calls[0]["container_id"]
 
@@ -327,6 +333,11 @@ async def test_stale_desk_delete_force_retries_start_once(_desk_env, stderr: str
     _clock, _old, sandbox, ws = _desk_env
     client = _StaleThenOk(stderr)
     set_sandboxd_client_for_tests(client)  # type: ignore[arg-type]
+    await sandbox.ensure_workspace_desk(str(ws))
+    assert len(client.start_calls) == 2
+    assert len(client.deletes) == 1
+    assert client.delete_forced == [True]
+    assert client.start_calls[0]["container_id"] == client.deletes[0]
     result = await sandbox.execute(
         ExecutionRequest(
             code="print(1)",
@@ -336,10 +347,6 @@ async def test_stale_desk_delete_force_retries_start_once(_desk_env, stderr: str
         )
     )
     assert result.success is True
-    assert len(client.start_calls) == 2
-    assert len(client.deletes) == 1
-    assert client.delete_forced == [True]
-    assert client.start_calls[0]["container_id"] == client.deletes[0]
     assert client.exec_timeouts == [9.0]
     assert sandbox.host_scratch_dir(str(ws)) is not None
 
@@ -350,14 +357,7 @@ async def test_stale_desk_retry_still_fails_is_start_failure_and_stops(_desk_env
     client = _AlwaysStale()
     set_sandboxd_client_for_tests(client)  # type: ignore[arg-type]
     with pytest.raises(SandboxError, match="云端隔离执行环境当前不可用") as failed:
-        await sandbox.execute(
-            ExecutionRequest(
-                code="print(1)",
-                language="python",
-                cwd=str(ws),
-                timeout_seconds=15,
-            )
-        )
+        await sandbox.ensure_workspace_desk(str(ws))
     assert "forced stop after" not in str(failed.value)
     assert len(client.start_calls) == 2
     assert len(client.deletes) == 1
@@ -367,6 +367,7 @@ async def test_stale_desk_retry_still_fails_is_start_failure_and_stops(_desk_env
 @pytest.mark.asyncio
 async def test_exec_wait_uses_request_timeout_not_boot_rpc(_desk_env):
     _clock, client, sandbox, ws = _desk_env
+    await sandbox.ensure_workspace_desk(str(ws))
     result = await sandbox.execute(
         ExecutionRequest(
             code="print(1)",

@@ -46,9 +46,17 @@ const grouped = vi.hoisted(() => ({
   },
 }));
 
+const sharedWithMe = vi.hoisted(() => ({
+  value: [] as FolderMeta[],
+}));
+
 vi.mock("@/hooks/useConversations", () => ({
   useGroupedConversations: () => ({ data: grouped.value }),
   getConversations: () => grouped.value.conversations,
+}));
+
+vi.mock("@/hooks/useFolderSharing", () => ({
+  useSharedWithMeFolders: () => ({ data: sharedWithMe.value }),
 }));
 
 vi.mock("@/lib/bindLocalFolder", () => ({
@@ -204,6 +212,7 @@ function confirmCloudCopyStart() {
 
 beforeEach(() => {
   grouped.value = { folders: [], conversations: [] };
+  sharedWithMe.value = [];
   setHasLocalDisk(true);
   setComposerChannelPreference("cloud");
   useFoldersStore.setState({ draftWorkspaceIntent: { kind: "quick_cloud" } });
@@ -247,7 +256,7 @@ describe("DraftChip pick view · 选地方", () => {
     expect(dividers).toHaveLength(1);
     const separator = dividers[0];
 
-    expect(precedes(menu.getByText("文件夹"), separator)).toBe(true);
+    expect(precedes(menu.getByText("我的文件"), separator)).toBe(true);
     expect(precedes(separator, menu.getByText("新建或加入…"))).toBe(true);
     expect(precedes(separator, menu.getByText("了解区别"))).toBe(true);
   });
@@ -517,6 +526,29 @@ describe("DraftChip pick view · 选地方", () => {
     });
     expect(menu.queryByText("直接改这个文件夹")).toBeNull();
   });
+
+  it("成员桌出现在与我共享分区", () => {
+    grouped.value = {
+      folders: [cloudFolder("f-own", "我的项目")],
+      conversations: [],
+    };
+    sharedWithMe.value = [
+      {
+        ...cloudFolder("f-shared", "队友桌"),
+        myRole: "editor",
+      },
+    ];
+    const menu = within(openPicker());
+    expect(menu.getByText("我的文件")).toBeTruthy();
+    expect(menu.getByText("与我共享")).toBeTruthy();
+    expect(menu.getByRole("button", { name: /我的项目/ })).toBeTruthy();
+    expect(menu.getByRole("button", { name: /队友桌/ })).toBeTruthy();
+    expect(
+      within(menu.getByRole("button", { name: /队友桌/ })).getByTitle(
+        "与我共享",
+      ),
+    ).toBeTruthy();
+  });
 });
 
 describe("BoundChip · 借用原件", () => {
@@ -623,7 +655,11 @@ describe("folderLocationHint · 通道图标与祖先路径", () => {
     expect(menu.getByText("图标")).toBeTruthy();
     expect(menu.getByText("设计")).toBeTruthy();
     expect(menu.queryByText("我的文件 · 设计")).toBeNull();
-    expect(menu.queryByText("我的文件")).toBeNull();
+    expect(
+      within(menu.getByRole("button", { name: /图标/ })).queryByText(
+        "我的文件",
+      ),
+    ).toBeNull();
   });
 
   it("没有 subpath 的本机行不写通道副标题", () => {

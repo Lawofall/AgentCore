@@ -3,6 +3,7 @@ from dataclasses import replace
 from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.executor.context import (
     _CONTEXT_BLOCK_BODY_CAP,
+    _WORKER_SYSTEM_HEADING,
     _build_captain_context_blocks,
     _build_context_blocks,
     _build_messages,
@@ -236,11 +237,10 @@ def test_team_brief_block_injected_before_task():
 
 
 def test_context_block_payloads_exempts_system_block_from_cap():
-    # The captain `system` block (verbatim CEO system prompt) is EXEMPT from the 决策④ cap:
-    # the desktop「收到的上下文」dialog shows it in full (having folded in the old「提示词」
-    # button), and it's bounded internal content — not the unbounded user/dep body the cap
-    # guards. A non-system block of the same size is still capped, proving the carve-out is
-    # channel-scoped.
+    # Any `channel=system` block (CEO or worker verbatim system prompt) is EXEMPT from
+    # the 决策④ cap: the desktop「收到的上下文」dialog shows it in full, and it's bounded
+    # internal content — not the unbounded user/dep body the cap guards. A non-system
+    # block of the same size is still capped, proving the carve-out is channel-scoped.
     long_prompt = "甲" * (_CONTEXT_BLOCK_BODY_CAP + 5000)
     blocks = [
         ContextBlock(channel="system", heading="CEO 系统提示", body=long_prompt),
@@ -254,6 +254,29 @@ def test_context_block_payloads_exempts_system_block_from_cap():
     # request of identical size: still capped + flagged.
     assert payloads[1]["truncated"] is True
     assert len(payloads[1]["body"]) <= _CONTEXT_BLOCK_BODY_CAP
+
+
+def test_worker_run_context_mirrors_system_without_double_inject():
+    # Dual projection: sink starts with the verbatim system message; the user message
+    # is still only the material blocks (joining the system block would double-inject).
+    spec = RunSpec(run_id="x", agent_id="x", role="调研员", task="调研竞品")
+    sink: list[ContextBlock] = []
+    msgs = _build_messages(
+        _plan(spec), spec, {}, "SYS", "原始请求", blocks_sink=sink
+    )
+    assert msgs[0].role == "system"
+    assert sink[0].channel == "system"
+    assert sink[0].heading == _WORKER_SYSTEM_HEADING
+    assert sink[0].body == msgs[0].content
+    assert "SYS" in sink[0].body
+    assert "<身份>" in sink[0].body
+    user = msgs[1].content or ""
+    assert f"## {_WORKER_SYSTEM_HEADING}" not in user
+    assert "<身份>" not in user
+    assert "## 你的任务" in user
+    material = _build_context_blocks(_plan(spec), spec, {}, "原始请求", None)
+    assert all(b.channel != "system" for b in material)
+    assert [b.channel for b in sink[1:]] == [b.channel for b in material]
 
 
 def test_captain_context_blocks_channels_order_and_single_source():

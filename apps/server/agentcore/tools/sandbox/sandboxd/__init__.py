@@ -1,4 +1,4 @@
-"""Same-container privileged helper: runsc + ip netns, Unix socket only."""
+"""Independent uid-0 helper: runsc + ip netns, Unix socket only. Not in the API process."""
 
 from agentcore.tools.sandbox.sandboxd.argv import build_runsc_cmd, build_runsc_exec_cmd
 from agentcore.tools.sandbox.sandboxd.client import (

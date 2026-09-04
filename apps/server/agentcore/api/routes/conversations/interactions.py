@@ -15,7 +15,7 @@ from agentcore.api.schemas import (
     StatusResponse,
     interaction_result_from_body,
 )
-from agentcore.core.errors import NotFoundError
+from agentcore.core.errors import AuthorizationError, NotFoundError
 from agentcore.core.logging import get_logger
 from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import ConversationRepository, TurnJournalRepository
@@ -29,7 +29,7 @@ from agentcore.runtime.journal.pending_interactions import fold_pending_interact
 from agentcore.runtime.settlement import already_settled_in_writer, prewrite_settlement
 from agentcore.runtime.turn.runs import turn_runs
 
-from ._helpers import _require_owned_conversation
+from ._helpers import _require_conversation_write
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -124,7 +124,9 @@ async def resolve_interaction(
     Cold-path ``ask_user`` / ``plan_review`` 不在此 endpoint。
     Leftover ``team_preview`` resume is 410 on ``POST …/resume``.
     """
-    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    access = await _require_conversation_write(conversation_id, user.user_id, session)
+    if access.is_member_turn and body.kind == "client_tool":
+        raise AuthorizationError("不能代结桌主的本机审批")
 
     if isinstance(body, ResolveStageCardInteraction):
         return await _resolve_stage_card(

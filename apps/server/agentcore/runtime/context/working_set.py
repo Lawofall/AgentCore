@@ -3,7 +3,8 @@
 History reconstruction replays no tool I/O; the compact summarizer otherwise only
 sees user/assistant prose. This module extracts path + last action + optional
 digest from journal so ``_render_fold`` can keep identifiers. Product models do
-not get a ``<工作集>`` block each turn — CEO uses the workspace file index;
+not get a ``<工作集>`` block each turn — CEO uses the workspace file index
+(folder chats name this-conversation mutations via ``conversation_edits``);
 workers use glob / file_read.
 """
 
@@ -136,8 +137,9 @@ def file_working_set_digest(
 ) -> str:
     """Deterministic one-line hint for a successful file tool (no LLM).
 
-    Reads use the tool result; writes use the argument body (fallback: result).
-    Empty when the call is not a file hit or no structure/preview can be made.
+    Product models do not get a ``<工作集>`` block each turn — CEO uses the
+workspace file index (folder chats name this-conversation mutations separately;
+see ``conversation_edits``); workers use glob / file_read.
     """
     if not _success(success):
         return ""

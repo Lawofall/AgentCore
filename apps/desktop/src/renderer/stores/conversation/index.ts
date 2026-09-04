@@ -23,6 +23,7 @@ export {
   useActiveMessages,
   useActiveHasMessages,
   useActiveFirstMessageId,
+  stickContentKey,
   useActiveStickContentKey,
   useActiveUserTurnCount,
   useActiveLastAssistantProjectionId,

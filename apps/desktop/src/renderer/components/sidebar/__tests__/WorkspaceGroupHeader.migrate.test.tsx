@@ -8,6 +8,9 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceGroupHeader } from "../WorkspaceGroupHeader";
 
+vi.mock("@/components/folders/FolderMembersDialog", () => ({
+  FolderMembersDialog: () => null,
+}));
 vi.mock("@/hooks/useConversations", () => ({
   useArchiveConversation: () => ({ mutateAsync: vi.fn() }),
 }));
@@ -123,5 +126,19 @@ describe("WorkspaceGroupHeader · local traditional (no migrate debt badge)", ()
     renderHeader("cloud", { relPath: "设计/图标", parentRelPath: "设计" });
     expect(screen.getByText("DemoProj")).toBeTruthy();
     expect(screen.getByText("设计")).toBeTruthy();
+  });
+
+  it("cloud group menu has 成员; local does not", async () => {
+    renderHeader("cloud");
+    fireEvent.pointerDown(screen.getByLabelText("文件夹操作"));
+    fireEvent.click(screen.getByLabelText("文件夹操作"));
+    expect(await screen.findByText("成员")).toBeTruthy();
+
+    cleanup();
+    renderHeader("local");
+    fireEvent.pointerDown(screen.getByLabelText("文件夹操作"));
+    fireEvent.click(screen.getByLabelText("文件夹操作"));
+    expect(await screen.findByText("导入到「我的文件」")).toBeTruthy();
+    expect(screen.queryByText("成员")).toBeNull();
   });
 });

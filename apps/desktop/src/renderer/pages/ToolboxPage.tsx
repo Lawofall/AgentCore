@@ -70,7 +70,7 @@ const CAPABILITIES: ToolboxEntry[] = [
     id: "guidelines",
     title: "AI 提示词",
     description:
-      "AI 遵循的提示词：全员准则 + CEO 完整提示词 + 工具进阶用法（薄技能）",
+      "全员准则、三选一角色身份、队员交付合同，以及按需注入的工具进阶用法",
     icon: ScrollText,
     color: "guidelines",
     to: APP_PATHS.toolbox.guidelines,

@@ -239,7 +239,7 @@ export function WorkspaceModeMenu({
     : borrowActive
       ? "原件尚未改动"
       : viaFolder
-        ? "云端共享空间"
+        ? "云端文件夹"
         : "云端对话";
 
   const landing =

@@ -283,4 +283,91 @@ describe("useChatScroll layout follow", () => {
     expect(ready.scrollEl.scrollTop).toBe(900);
     expect(box.api?.atBottom).toBe(true);
   });
+
+  it("re-pins on contentKey change while stuck (settle / process fold shrink)", () => {
+    const box: { api: ChatApi | null; scroll: HTMLElement | null } = {
+      api: null,
+      scroll: null,
+    };
+
+    const { rerender } = render(
+      <ChatHarness
+        messages={[MSG]}
+        resetKey="chat-1"
+        contentKey="m1-10-0-1"
+        onReady={(a, scroll) => {
+          box.api = a;
+          box.scroll = scroll;
+        }}
+      />,
+    );
+
+    const ready = requireReady(box.api, box.scroll);
+    stubHeights(ready.scrollEl, { scrollHeight: 2000, scrollTop: 1800 });
+    // Same commit as isStreaming→false: bubble shrinks, then layout-effect pin.
+    stubHeights(ready.scrollEl, {
+      scrollHeight: 400,
+      scrollTop: ready.scrollEl.scrollTop,
+    });
+    rerender(
+      <ChatHarness
+        messages={[MSG]}
+        resetKey="chat-1"
+        contentKey="m1-10-0-0"
+        onReady={(a, scroll) => {
+          box.api = a;
+          box.scroll = scroll;
+        }}
+      />,
+    );
+
+    expect(ready.scrollEl.scrollTop).toBe(400);
+    expect(box.api?.atBottom).toBe(true);
+  });
+
+  it("does not re-pin on contentKey change after detach", () => {
+    const box: { api: ChatApi | null; scroll: HTMLElement | null } = {
+      api: null,
+      scroll: null,
+    };
+
+    const { rerender } = render(
+      <ChatHarness
+        messages={[MSG]}
+        resetKey="chat-1"
+        contentKey="m1-10-0-1"
+        onReady={(a, scroll) => {
+          box.api = a;
+          box.scroll = scroll;
+        }}
+      />,
+    );
+
+    const ready = requireReady(box.api, box.scroll);
+    stubHeights(ready.scrollEl, { scrollHeight: 2000, scrollTop: 1800 });
+    act(() => {
+      ready.scrollEl.dispatchEvent(new WheelEvent("wheel", { deltaY: -40 }));
+    });
+    expect(box.api?.atBottom).toBe(false);
+    const topBefore = ready.scrollEl.scrollTop;
+
+    stubHeights(ready.scrollEl, {
+      scrollHeight: 400,
+      scrollTop: ready.scrollEl.scrollTop,
+    });
+    rerender(
+      <ChatHarness
+        messages={[MSG]}
+        resetKey="chat-1"
+        contentKey="m1-10-0-0"
+        onReady={(a, scroll) => {
+          box.api = a;
+          box.scroll = scroll;
+        }}
+      />,
+    );
+
+    expect(ready.scrollEl.scrollTop).toBe(topBefore);
+    expect(box.api?.atBottom).toBe(false);
+  });
 });

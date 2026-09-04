@@ -490,16 +490,12 @@ async def test_code_execute_cloud_desk_down_is_not_contract_failure():
             self.ensure_calls = 0
             self.execute_calls = 0
 
-        async def ensure_workspace_desk(self) -> None:
-            self.ensure_calls += 1
-            raise SandboxError(
-                "代码执行环境启动失败",
-                code=EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
-            )
-
         async def execute(self, request: ExecutionRequest) -> ExecutionResult:
             self.execute_calls += 1
-            return await super().execute(request)
+            raise SandboxError(
+                EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+                code=EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+            )
 
     backend = _Down()
     result = await execute_short(
@@ -513,5 +509,5 @@ async def test_code_execute_cloud_desk_down_is_not_contract_failure():
     assert "retire_tools" not in (result.metadata or {})
     assert result.error == EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE
     assert "本机" not in (result.error or "")
-    assert backend.ensure_calls == 1
-    assert backend.execute_calls == 0
+    assert backend.ensure_calls == 0
+    assert backend.execute_calls == 1

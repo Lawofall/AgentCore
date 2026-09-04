@@ -14,6 +14,7 @@ import { cleanSourceTitle } from "@/lib/citations";
 import type {
   CodeExecDisplay,
   ConversationLogDisplay,
+  HostDisplay,
   MemoryConsultDisplay,
   ReadUrlDisplay,
   RuleConsultDisplay,
@@ -23,19 +24,17 @@ import type {
   UnifiedConsultDisplay,
   WebSearchDisplay,
 } from "@/types/events";
-import {
-  BookOpen,
-  Brain,
-  type LucideIcon,
-  MessagesSquare,
-  Terminal,
-} from "lucide-react";
+import { Terminal } from "lucide-react";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Favicon } from "../Favicon";
 import { CodeDiagnosticsResult } from "./CodeDiagnosticsResult";
 import { SearchHitResult } from "./SearchHitResult";
-import { codeDiagnosticsPeek, extractCodeDiagnostics } from "./codeDiagnostics";
+import {
+  codeDiagnosticsErrorCount,
+  codeDiagnosticsPeek,
+  extractCodeDiagnostics,
+} from "./codeDiagnostics";
 import { type DiffLine, lineDiff, lineDiffCounts } from "./diff";
 import {
   isPartialFileReadWindow,
@@ -87,6 +86,29 @@ function isCodeExecDisplay(d: unknown): d is CodeExecDisplay {
   );
 }
 
+function isHostDisplay(d: unknown): d is HostDisplay {
+  if (!d || typeof d !== "object") return false;
+  const x = d as { kind?: unknown; action?: unknown; body?: unknown };
+  return (
+    x.kind === "host" &&
+    typeof x.action === "string" &&
+    typeof x.body === "string"
+  );
+}
+
+function isHostToolName(name: string): boolean {
+  return name === "host" || name.startsWith("host_");
+}
+
+/** Historical Host journals wrapped model JSON in ``<不可信内容>``; strip for the person. */
+function stripHostUntrustedFrame(text: string): string {
+  const trimmed = text.trim();
+  const open = "<不可信内容>";
+  const close = "</不可信内容>";
+  if (!trimmed.startsWith(open) || !trimmed.endsWith(close)) return text;
+  return trimmed.slice(open.length, trimmed.length - close.length).trim();
+}
+
 function isSkillConsultDisplay(d: unknown): d is SkillConsultDisplay {
   return !!d && typeof (d as { skill_name?: unknown }).skill_name === "string";
 }
@@ -117,10 +139,17 @@ function isUnifiedConsultDisplay(d: unknown): d is UnifiedConsultDisplay {
   return true;
 }
 
-function unifiedConsultBadge(origin: UnifiedConsultDisplay["origin"]): string {
-  if (origin === "system") return "能力指引";
-  if (origin === "user") return "设定";
-  return "查阅";
+function isConsultDisplay(d: ToolResultData): boolean {
+  if (isSkillConsultDisplay(d.display)) return true;
+  if (isMemoryConsultDisplay(d.display)) return true;
+  if (isRuleConsultDisplay(d.display)) return true;
+  return d.toolName === "consult" && isUnifiedConsultDisplay(d.display);
+}
+
+/** Expand body for consult: result text, or historical consult_skill summary. */
+function consultHasExpandBody(d: ToolResultData): boolean {
+  if (d.result?.trim()) return true;
+  return isSkillConsultDisplay(d.display) && Boolean(d.display.summary?.trim());
 }
 
 function isListFoldersCountDisplay(d: unknown): d is { count: number } {
@@ -165,7 +194,19 @@ export function hasToolResultBody(d: ToolResultData): boolean {
   }
   // Successful wait: receipt-only — one line, no chevron (same as summary-only handoff).
   if (d.toolName === "wait" && d.status === "success") return false;
-  if (d.display) return true;
+  const diagForBody = extractCodeDiagnostics(d.display);
+  if (d.toolName === "code_diagnostics" && diagForBody) {
+    if (
+      diagForBody.status === "unavailable" ||
+      codeDiagnosticsErrorCount(diagForBody) > 0
+    ) {
+      return true;
+    }
+  } else if (isConsultDisplay(d)) {
+    if (consultHasExpandBody(d)) return true;
+  } else if (d.display) {
+    return true;
+  }
   if (isFileEdit(d)) return true;
   if (isFileWrite(d)) return true;
   if (specificToolFailureMessage(d)) return true;
@@ -350,12 +391,8 @@ function clampLine(line: string): string {
  * the system browser — mirrors {@link SourceCards} so a search step reads the same
  * as the answer's sources. */
 function WebSearchResult({ display }: { display: WebSearchDisplay }) {
-  const query = asString(display.query);
   return (
     <div className="mt-1 space-y-1">
-      {query && (
-        <div className="px-1 text-xs text-muted-foreground">搜索：{query}</div>
-      )}
       <div className="flex max-h-72 flex-col gap-0.5 overflow-y-auto pr-1">
         {display.results.map((r, i) => (
           <a
@@ -436,9 +473,8 @@ function ReadUrlResult({ display }: { display: ReadUrlDisplay }) {
   );
 }
 
-/** Terminal-style stdout/stderr view + exit-code badge.
- *  Hard fail → stderr destructive; ``budget_exceeded`` → incomplete banner + muted/warning
- *  (Timeout stderr is not painted as fault red). Face copy follows ``timeout_kind``. */
+/** Terminal-style stdout/stderr. Language / failure exit code / incomplete face
+ * live on the ToolLine; success keeps「退出码 0」on this bar (not a second title). */
 function CodeExecResult({ display }: { display: CodeExecDisplay }) {
   const exitCode =
     typeof display.exit_code === "number" ? display.exit_code : 0;
@@ -447,27 +483,17 @@ function CodeExecResult({ display }: { display: CodeExecDisplay }) {
   const stdout = (display.stdout ?? "").replace(/\n+$/, "");
   const stderr = (display.stderr ?? "").replace(/\n+$/, "");
   const empty = !stdout && !stderr;
-  const exitTone = incomplete
-    ? "text-warning"
-    : failed
-      ? "text-destructive"
-      : "text-success";
+  const showExitBar = !failed && !incomplete;
   return (
     <div className="mt-1 overflow-hidden rounded-lg border border-border">
-      {incomplete && (
-        <div className="border-border/60 border-b bg-warning/10 px-2.5 py-1.5 text-xs text-warning">
-          {verifyIncompleteFace(display)}
+      {showExitBar && (
+        <div className="flex items-center gap-2 border-border/60 border-b bg-muted/40 px-2.5 py-1 text-xs">
+          <Terminal size={12} className="shrink-0 text-muted-foreground" />
+          <span className="ml-auto tabular-nums text-success">
+            退出码 {exitCode}
+          </span>
         </div>
       )}
-      <div className="flex items-center gap-2 border-border/60 border-b bg-muted/40 px-2.5 py-1 text-xs">
-        <Terminal size={12} className="shrink-0 text-muted-foreground" />
-        <span className="text-muted-foreground">
-          {display.language || display.check || "shell"}
-        </span>
-        <span className={`ml-auto tabular-nums ${exitTone}`}>
-          退出码 {exitCode}
-        </span>
-      </div>
       <div className="max-h-72 overflow-auto bg-muted/30 px-3 py-2 font-mono text-xs leading-relaxed">
         {empty && <span className="text-muted-foreground/60">（无输出）</span>}
         {stdout && (
@@ -489,38 +515,30 @@ function CodeExecResult({ display }: { display: CodeExecDisplay }) {
   );
 }
 
-/** Shared consult expand card: entry name + right-side origin badge + body.
- * Historical consult_skill may also show a one-line summary under the header. */
+/** Consult expand body. Entry name lives on the ToolLine (same as file_write /
+ * str_replace); historical consult_skill may still show its one-line summary. */
 function ConsultEntryCard({
-  name,
-  badge,
-  Icon,
   result,
   summary,
 }: {
-  name: string;
-  badge: string;
-  Icon: LucideIcon;
   result: string;
   summary?: string;
 }) {
+  const body = result.trim();
+  const lead = summary?.trim();
+  if (!lead && !body) return null;
   return (
     <div className="mt-1 overflow-hidden rounded-lg border border-border">
-      <div className="flex items-center gap-2 border-border/60 border-b bg-muted/40 px-2.5 py-1 text-xs">
-        <Icon size={12} className="shrink-0 text-muted-foreground" />
-        <span className="truncate font-mono text-foreground">{name}</span>
-        <span className="ml-auto shrink-0 text-muted-foreground">{badge}</span>
-      </div>
-      {summary ? (
+      {lead ? (
         <div className="border-border/60 border-b px-2.5 py-1.5 text-xs text-muted-foreground">
-          {summary}
+          {lead}
         </div>
       ) : null}
-      {result.trim() && (
+      {body ? (
         <div className="px-1 pb-1">
           <PromptDocument text={result} maxHeightClass="max-h-72" />
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -530,9 +548,28 @@ function ConsultEntryCard({
  * Aligns with the display wire-cap (~6000) discipline (跨会话对话日志定案). */
 const CONVERSATION_LOG_PREVIEW_CHARS = 6000;
 
-/** Worker conversation-log card (`search_conversations` / `read_conversation`):
- * display carries title / id / truncated / result_count; body from `result`.
- * Mirrors {@link ConsultEntryCard}. */
+/** Worker conversation-log expand body. Title / hit-count live on the ToolLine;
+ * read keeps conversation id +「打开对话」(not on the line). */
+function ConversationLogOpenRow({
+  conversationId,
+}: { conversationId: string }) {
+  const navigate = useNavigate();
+  return (
+    <div className="flex items-center gap-2 border-border/60 border-b bg-muted/40 px-2.5 py-1 text-xs">
+      <span className="min-w-0 truncate font-mono text-muted-foreground">
+        {conversationId}
+      </span>
+      <button
+        type="button"
+        onClick={() => navigate(`/conversations/${conversationId}`)}
+        className="ml-auto shrink-0 text-xs text-muted-foreground hover:text-foreground hover:underline"
+      >
+        打开对话
+      </button>
+    </div>
+  );
+}
+
 function ConversationLogResult({
   display,
   result,
@@ -540,59 +577,26 @@ function ConversationLogResult({
   display: ConversationLogDisplay;
   result: string;
 }) {
-  const navigate = useNavigate();
   const isRead = typeof display.conversation_id === "string";
   const conversationId = isRead ? display.conversation_id : undefined;
-  const title = display.title?.trim();
   const preview =
     result.length > CONVERSATION_LOG_PREVIEW_CHARS
       ? `${result.slice(0, CONVERSATION_LOG_PREVIEW_CHARS)}\n…`
       : result;
   const previewClipped = result.length > CONVERSATION_LOG_PREVIEW_CHARS;
+  const body = preview.trim();
+  if (!isRead && !body) return null;
 
   return (
     <div className="mt-1 overflow-hidden rounded-lg border border-border">
-      <div className="flex items-center gap-2 border-border/60 border-b bg-muted/40 px-2.5 py-1 text-xs">
-        <MessagesSquare size={12} className="shrink-0 text-muted-foreground" />
-        {isRead ? (
-          <>
-            <span className="text-muted-foreground">查阅对话：</span>
-            <span className="min-w-0 truncate font-medium text-foreground">
-              {title || display.conversation_id || "（无标题）"}
-            </span>
-            {display.truncated && (
-              <span className="shrink-0 text-warning">已截断</span>
-            )}
-            {conversationId && (
-              <button
-                type="button"
-                onClick={() => navigate(`/conversations/${conversationId}`)}
-                className="ml-auto shrink-0 text-xs text-muted-foreground hover:text-foreground hover:underline"
-              >
-                打开对话
-              </button>
-            )}
-          </>
-        ) : (
-          <>
-            <span className="text-muted-foreground">检索对话</span>
-            <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
-              {display.result_count ?? 0} 场
-              {display.scope ? ` · ${display.scope}` : ""}
-            </span>
-          </>
-        )}
-      </div>
-      {isRead && conversationId && (
-        <div className="border-border/60 border-b px-2.5 py-1 font-mono text-xs text-muted-foreground">
-          {conversationId}
-        </div>
-      )}
-      {preview.trim() && (
+      {conversationId ? (
+        <ConversationLogOpenRow conversationId={conversationId} />
+      ) : null}
+      {body ? (
         <div className="px-1 pb-1">
           <PromptDocument text={preview} maxHeightClass="max-h-72" />
         </div>
-      )}
+      ) : null}
       {previewClipped && (
         <div className="border-border/60 border-t bg-muted/40 px-2.5 py-1 text-muted-foreground text-xs">
           预览已截断（完整内容在工具结果中，可续读拼回）
@@ -762,43 +766,19 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
   if (isSkillConsultDisplay(data.display)) {
     return (
       <ConsultEntryCard
-        name={data.display.skill_name}
-        badge="能力指引"
-        Icon={BookOpen}
         summary={data.display.summary}
         result={data.result ?? ""}
       />
     );
   }
   if (isMemoryConsultDisplay(data.display)) {
-    return (
-      <ConsultEntryCard
-        name={data.display.topic}
-        badge="查阅记忆"
-        Icon={Brain}
-        result={data.result ?? ""}
-      />
-    );
+    return <ConsultEntryCard result={data.result ?? ""} />;
   }
   if (isRuleConsultDisplay(data.display)) {
-    return (
-      <ConsultEntryCard
-        name={data.display.rule}
-        badge="设定"
-        Icon={BookOpen}
-        result={data.result ?? ""}
-      />
-    );
+    return <ConsultEntryCard result={data.result ?? ""} />;
   }
   if (data.toolName === "consult" && isUnifiedConsultDisplay(data.display)) {
-    return (
-      <ConsultEntryCard
-        name={data.display.name}
-        badge={unifiedConsultBadge(data.display.origin)}
-        Icon={BookOpen}
-        result={data.result ?? ""}
-      />
-    );
+    return <ConsultEntryCard result={data.result ?? ""} />;
   }
   if (isConversationLogDisplay(data.display)) {
     return (
@@ -815,6 +795,9 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
         conversationId={data.conversationId ?? null}
       />
     );
+  }
+  if (isHostDisplay(data.display)) {
+    return <TextResult result={data.display.body} status={data.status} />;
   }
   if (isFileEdit(data)) {
     return (
@@ -853,5 +836,9 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
     if (!body.trim()) return null;
     return <TextResult result={body} status={data.status} />;
   }
-  return <TextResult result={data.result ?? ""} status={data.status} />;
+  const raw = data.result ?? "";
+  const text = isHostToolName(data.toolName)
+    ? stripHostUntrustedFrame(raw)
+    : raw;
+  return <TextResult result={text} status={data.status} />;
 }

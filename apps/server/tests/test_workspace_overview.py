@@ -7,6 +7,7 @@ count and a char budget. The second XML tag ``<工作区文件>`` is gone.
 """
 
 from agentcore.runtime.context import attach_workspace_file_index, build_workspace_overview
+from agentcore.runtime.context.conversation_edits import ConversationEdit
 from agentcore.runtime.context.workspace_overview import (
     FILE_INDEX_EMPTY,
     OVERVIEW_CHAR_BUDGET,
@@ -203,3 +204,58 @@ async def test_convention_pointer_survives_index_failure():
     )
     assert out == "工程约定：`CLAUDE.md`"
     assert "do not dump" not in out
+
+
+async def test_project_mode_names_conversation_edits_and_reduces_remaining():
+    paths = [f"src/f{i}.py" for i in range(12)]
+    out = await build_workspace_overview(
+        _FakeBackend(paths),
+        shared_workspace=True,
+        conversation_edits=[
+            ConversationEdit(path="src/f0.py", label="写过"),
+            ConversationEdit(
+                path="AgentCore/文档/工作稿/修订稿.docx",
+                label="已转 Word",
+            ),
+        ],
+    )
+    assert "- src/f0.py（写过）" in out
+    assert "- AgentCore/文档/工作稿/修订稿.docx（已转 Word）" in out
+    assert "另有 11 个文件" in out
+    assert "src/f1.py" not in out
+    assert "最近触达" not in out
+    assert "<工作集>" not in out
+    assert "file_list" not in out
+    assert "md_to_docx" not in out
+
+
+async def test_bare_chat_does_not_add_conversation_edits():
+    out = await build_workspace_overview(
+        _FakeBackend(["notes.md"]),
+        shared_workspace=False,
+        conversation_edits=[ConversationEdit(path="notes.md", label="写过")],
+    )
+    assert "notes.md（工作区已有）" in out
+    assert "写过" not in out
+
+
+async def test_conversation_edits_skipped_when_already_listed_as_attachment():
+    out = await build_workspace_overview(
+        _FakeBackend(["attachments/a.pdf", "src/x.py"]),
+        shared_workspace=True,
+        conversation_edits=[ConversationEdit(path="attachments/a.pdf", label="写过")],
+    )
+    assert out.count("attachments/a.pdf") == 1
+    assert "附件·含历轮" in out
+    assert "写过" not in out
+    assert "另有 1 个文件" in out
+
+
+async def test_index_failure_still_names_conversation_edits():
+    out = await build_workspace_overview(
+        _FakeBackend([], fail=True),
+        shared_workspace=True,
+        conversation_edits=[ConversationEdit(path="稿.md", label="写过")],
+    )
+    assert "- 稿.md（写过）" in out
+    assert "工程约定" not in out

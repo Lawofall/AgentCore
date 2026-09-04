@@ -13,5 +13,7 @@ describe("ManualDebateFinalePreview", () => {
     expect(screen.getByText("留给你的")).toBeTruthy();
     expect(screen.getByText(/要不要牺牲速度换更稳的回滚/)).toBeTruthy();
     expect(screen.queryByText(/建议：/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "回复拍板" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "派查证" })).toBeNull();
   });
 });

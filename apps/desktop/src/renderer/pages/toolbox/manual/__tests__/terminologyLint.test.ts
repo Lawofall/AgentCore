@@ -19,6 +19,13 @@ describe("manual terminology lint", () => {
     expect(failures, failures.join("\n")).toEqual([]);
   });
 
+  it("协作桌「邀请成员」豁免（名册，不是 worker）", () => {
+    const hits = findRetiredTermHits(
+      "在自己的云文件夹上邀请成员。对方在「与我共享」看见这张桌。",
+    );
+    expect(hits.filter((h) => h.term === "成员")).toEqual([]);
+  });
+
   it("定义性提及（口语也叫「热修」）豁免生效", () => {
     const hits = findRetiredTermHits(
       "CEO 唤回原队员接着改（口语有时叫「热修」），不是从零重来。",

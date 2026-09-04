@@ -64,7 +64,6 @@ async function probe(page) {
     return {
       reactFlow: document.querySelectorAll(".react-flow").length,
       reactFlowNodes: document.querySelectorAll(".react-flow__node").length,
-      debateProgress: !!document.querySelector("[data-testid=debate-progress-line]"),
       openDebate: /打开辩论室/.test(text),
       waitKickoff: /等待开工确认|授权开赛|开工卡/.test(text),
       authorize: /授权开赛|授权并开工|开做/.test(text),
@@ -283,7 +282,6 @@ async function main() {
       reactFlow: p.reactFlow,
       nodes: p.reactFlowNodes,
       openDebate: p.openDebate,
-      debateProgress: p.debateProgress,
     });
 
     // Open debate room (turn detail) then switch to 协作图 tab for canvas graph.
@@ -346,14 +344,13 @@ async function main() {
       );
       await page.waitForTimeout(1500);
     } else {
-      // Stay in chat; wait for debate progress line
       for (let i = 0; i < 40; i++) {
         p = await probe(page);
-        if (p.debateProgress || p.openDebate) break;
+        if (p.openDebate) break;
         await page.waitForTimeout(500);
       }
       summary.shots.debateChat = await shot(page, "05-debate-chat");
-      beats["4_debate_room"] = !!(p.debateProgress || p.openDebate);
+      beats["4_debate_room"] = !!p.openDebate;
     }
 
     // Wait for turn end (composer send enabled / no 停止生成) + CEO wrap text
@@ -410,7 +407,7 @@ async function main() {
     summary.shots.navBack = await shot(page, "07-nav-back");
     summary.probeLog.push({ t: "navBack", ...p });
     beats["6_navigate_back"] =
-      (p.reactFlow > 0 || p.openDebate || p.debateProgress) && p.userMsg;
+      (p.reactFlow > 0 || p.openDebate) && p.userMsg;
     // If graph collapsed after hydrate, still count checkpoint/messages correct
     if (!beats["6_navigate_back"] && p.userMsg && /LV|茉莉|商标|维持|改判/.test(p.textSnippet)) {
       beats["6_navigate_back"] = true;

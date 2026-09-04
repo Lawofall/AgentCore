@@ -109,6 +109,7 @@ class PreparedTurn:
     bound_execution_id: str
     execution_id_token: object
     mcp_discover: McpDiscoverResult
+    member_turn: bool = False
 
 
 async def prepare_fresh_turn(
@@ -139,6 +140,11 @@ async def prepare_fresh_turn(
     from agentcore.runtime.pipeline import run as run_mod
 
     memory_store = run_mod.default_memory_store()
+    from agentcore.folders.desk import resolve_folder_owner_user_id
+
+    desk_owner_id = await resolve_folder_owner_user_id(folder_id)
+    member_turn = bool(desk_owner_id and desk_owner_id != user_id)
+    folder_rules_user_id = desk_owner_id or user_id
     # Read-side full injection (Agent记忆与知识系统 · 目标形态): every always-on entry in
     # display order; write-side quota owns「常驻满了」. AI memory rides the (patchable) store
     # seam; user rules degrade to none on failure so this can never break a turn.
@@ -149,11 +155,12 @@ async def prepare_fresh_turn(
             user_id,
             folder_id=folder_id,
             enabled=True,
+            folder_user_id=folder_rules_user_id,
         ),
     )
     desk_folder_label = await _timed_phase(
         "desk_folder_label",
-        resolve_desk_folder_label(user_id, folder_id),
+        resolve_desk_folder_label(folder_rules_user_id, folder_id),
     )
     # Clean, stable base (base + date + workspace facts + memory): NO attachments,
     # NO CEO hints. This is the cacheable prefix shared by the CEO and reused
@@ -164,7 +171,7 @@ async def prepare_fresh_turn(
     # the hints (缓存友好: 易变内容置于稳定前缀之后).
     # Host / MCP backfill needs a desktop client — orthogonal to workspace location.
     channel = resolve_channel_profile(x_client_platform)
-    desktop_online = channel.desktop_online
+    desktop_online = channel.desktop_online and not member_turn
     # Presence gate + prepare local IO budget. The span adopts turn_runner's
     # turn-wide deadline (baseline already spent part of it) and starts its own
     # when prepare is invoked alone, e.g. tests / stage-card / workflow entries.
@@ -218,6 +225,11 @@ async def prepare_fresh_turn(
             "desk_empty",
             await_prepare_local_io(desk_is_visibly_empty(backend)),
         )
+    from agentcore.tools.sandbox.desk_provision import provision_server_desk
+
+    # Outside the local-IO span: cloud guest boot is minutes-scale and must
+    # not spend the 20s local presence budget. Chat-path ``run`` never waits this.
+    await _timed_phase("cloud_desk", provision_server_desk(backend))
     workspace_facts = build_workspace_context(
         backend,
         desktop_online=desktop_online,
@@ -451,4 +463,5 @@ async def prepare_fresh_turn(
         bound_execution_id=bound_execution_id,
         execution_id_token=execution_id_token,
         mcp_discover=mcp_discover,
+        member_turn=member_turn,
     )

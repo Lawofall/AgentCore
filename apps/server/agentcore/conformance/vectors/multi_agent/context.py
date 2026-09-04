@@ -21,7 +21,7 @@ from .._common import _CONV, _COST, _USAGE, _ctx_block
 def _multi_agent_received_context() -> list[SSEEvent]:
     """多 Agent：收到的上下文 (上下文传递可视化)。每个 worker 在 ``run_started`` 后 emit 一条
     ``run_context``——结构化承载它被喂进 LLM 的开场（单一源：用户看到的 == LLM 吃到的）。r1
-    研究员收到【原始请求 + 团队位置 + 任务】三通道；r2 撰写员还多一条【前置结果】依赖块，带来源
+    研究员收到【系统提示 + 原始请求 + 团队位置 + 任务】；r2 撰写员还多一条【前置结果】依赖块，带来源
     溯源（``source_role``/``source_run_id``）、保真度（``fidelity=pass_through``）与是否被预算截断
     （``truncated``）。三端 fold + oracle 必须把 blocks verbatim 折到对应 run 的 ``receivedContext``
     （conformance pins them equal）。"""
@@ -57,6 +57,11 @@ def _multi_agent_received_context() -> list[SSEEvent]:
             "w1",
             [
                 _ctx_block(
+                    "system",
+                    "队员系统提示（本回合实际遵循的系统指令）",
+                    "你是专家 worker。你只负责一个划定好的任务。",
+                ),
+                _ctx_block(
                     "request",
                     "原始用户请求（老板交给整个团队的目标，不一定全是你的活；你的具体职责见下方「你的任务」）",
                     "调研主流竞品的定价并给出我们的定价建议。",
@@ -85,6 +90,11 @@ def _multi_agent_received_context() -> list[SSEEvent]:
             "r2",
             "w2",
             [
+                _ctx_block(
+                    "system",
+                    "队员系统提示（本回合实际遵循的系统指令）",
+                    "你是专家 worker。你只负责一个划定好的任务。",
+                ),
                 _ctx_block(
                     "request",
                     "原始用户请求（老板交给整个团队的目标，不一定全是你的活；你的具体职责见下方「你的任务」）",
@@ -187,6 +197,11 @@ def _multi_agent_captain_context() -> list[SSEEvent]:
             "r1",
             "w1",
             [
+                _ctx_block(
+                    "system",
+                    "队员系统提示（本回合实际遵循的系统指令）",
+                    "你是专家 worker。你只负责一个划定好的任务。",
+                ),
                 _ctx_block(
                     "request",
                     "原始用户请求（老板交给整个团队的目标，不一定全是你的活；你的具体职责见下方「你的任务」）",

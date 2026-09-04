@@ -6,6 +6,7 @@
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { FileSource } from "@/lib/fileSource";
 import type { WorkspaceInfo } from "@/services/workspaces";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
   fireEvent,
@@ -46,7 +47,16 @@ vi.mock("@/hooks/useConversations", () => ({
 }));
 
 vi.mock("@/hooks/useFolders", () => ({
-  getFolders: () => [],
+  getFolders: () => [
+    {
+      id: "f1",
+      name: "季度报告",
+      mode: "cloud",
+      localRootId: null,
+      localSubpath: null,
+      myRole: "owner" as const,
+    },
+  ],
   releaseFolderConversations: vi.fn(),
   useDeleteFolder: () => ({ mutateAsync: mocks.deleteFolder }),
   useFolderTrash: () => ({ data: undefined }),
@@ -106,18 +116,23 @@ function ws(over: Partial<WorkspaceInfo> = {}): WorkspaceInfo {
 }
 
 function renderSection(over: Partial<WorkspaceInfo> = {}) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, retryDelay: 0, gcTime: 0 } },
+  });
   return render(
-    <TooltipProvider>
-      <WorkspaceSection
-        ws={ws(over)}
-        source={source()}
-        activePath={null}
-        expanded={false}
-        onToggle={() => {}}
-        onOpenFile={() => {}}
-        flashing={false}
-      />
-    </TooltipProvider>,
+    <QueryClientProvider client={client}>
+      <TooltipProvider>
+        <WorkspaceSection
+          ws={ws(over)}
+          source={source()}
+          activePath={null}
+          expanded={false}
+          onToggle={() => {}}
+          onOpenFile={() => {}}
+          flashing={false}
+        />
+      </TooltipProvider>
+    </QueryClientProvider>,
   );
 }
 

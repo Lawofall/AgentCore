@@ -102,8 +102,9 @@ class WorkspaceSettings(BaseModel):
     # Local default tracks ``data_dir``; compose sets ``/data/sandbox`` when
     # ``DATA_DIR=/data``.
     gvisor_runtime_root: str = "./data/sandbox"
-    # Same-container sandboxd Unix socket (overlay entrypoint). API never execs
-    # runsc/ip; missing socket is fail-closed (unassembled), not None-pass.
+    # Unix socket to the independent sandboxd service (compose overlay). API
+    # never execs runsc/ip; missing socket is fail-closed (unassembled), not
+    # None-pass.
     sandboxd_socket: str = "/run/agentcore/sandboxd.sock"
 
     # ── gVisor 灰度护栏（部署与运维.md §云端执行灰度 / 安全权限与治理.md §五）──
@@ -116,9 +117,9 @@ class WorkspaceSettings(BaseModel):
     # gvisor_timeout_max. Desk boot is a separate clock (see
     # ``gvisor_desk_start_timeout_seconds``).
     gvisor_slot_wait_seconds: float = 15.0
-    # Lazy guest create (sandboxd ``start_detach``). Minutes-scale, not the 60s
-    # exec cap / 90s engine EXECUTION default. Cloud ``run`` engine wait_for is
-    # the op ceiling plus this (short 90 + boot; verify disaster + boot).
+    # Guest create (sandboxd ``start_detach``) in prepare / resume / attach.
+    # Minutes-scale, not the 60s exec cap / 90s engine EXECUTION default.
+    # Cloud ``run`` engine wait_for is the op ceiling only — not boot.
     gvisor_desk_start_timeout_seconds: float = 180.0
     # Per-execution hard resource caps enforced by the OCI spec. Authoritative for
     # cloud runs: an ExecutionRequest cannot exceed them. Memory default sized for
@@ -128,10 +129,10 @@ class WorkspaceSettings(BaseModel):
     # so bounded project verify (test_run outer loop) is not silently truncated on
     # cloud gVisor. Covers disaster wall (1200s) + engine slack (30s).
     gvisor_timeout_max_seconds: int = 1230
-    # Idle cloud-desk guest reap (kill+delete; disk stays; next use lazy-creates).
-    # Default matches browser session idle (10min). A desk with inflight
-    # execute/short_exec, a running desk_process (e.g. vite), or a live sandbox
-    # browser (including a watched live tab) is never reaped. Not freeze/pause.
+    # Idle cloud-desk guest reap (kill+delete; disk stays; next prepare/attach
+    # recreates). Default matches browser session idle (10min). A desk with
+    # inflight execute/short_exec, a running desk_process (e.g. vite), or a live
+    # sandbox browser (including a watched live tab) is never reaped. Not freeze/pause.
     gvisor_desk_idle_ttl_seconds: float = 10 * 60.0
 
     # ── L3 团队浏览器 M0（内置浏览器与Agent浏览器提案.md · D9–D11）────────────
@@ -214,3 +215,9 @@ class WorkspaceSettings(BaseModel):
     # single injection round so a malformed / oversized batch is rejected (422) rather than
     # wedging the driver; the client coalesces typing into batches under this cap.
     browser_input_max_events: int = 256
+
+    # Cloud user preview (安全 · 五、第二刀): execution-face reverse-proxy bind.
+    # Empty public_base_url = unconfigured → PreviewUnavailableError (HTTP 503).
+    preview_bind_host: str = "127.0.0.1"
+    preview_bind_port: int = 8787
+    preview_public_base_url: str = ""

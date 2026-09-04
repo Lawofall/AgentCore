@@ -587,6 +587,7 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(name='conversation.permission_axes_changed'),
     EventSpec(name='conversation.restored'),
+    EventSpec(name='conversation_edits.load_failed'),
     EventSpec(name='conversation_log.read'),
     EventSpec(name='conversation_log.read_failed'),
     EventSpec(name='conversation_log.search'),
@@ -1432,6 +1433,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='firehose.unsubscribe'),
     EventSpec(name='folder.tombstone_move_failed'),
     EventSpec(name='folder.tombstone_restore_failed'),
+    EventSpec(name='folder_desk.cleanup_account'),
+    EventSpec(name='folder_desk.pending_cleared_on_block'),
     EventSpec(name='folder_fs.bind_failed'),
     EventSpec(name='folder_fs.target_opened'),
     EventSpec(name='folders.cloud_create_failed'),
@@ -2254,8 +2257,15 @@ EVENTS: list[EventSpec] = [
         },
     ),
     EventSpec(
+        name='sandbox.desk_provision_failed',
+        description='回合外开通云桌失败（不中断回合；execute 要求已注册桌）',
+        fields={
+            'error': FieldType('str'),
+        },
+    ),
+    EventSpec(
         name='sandbox.desk_reaped',
-        description='空闲云桌 guest 已 kill+delete（盘保留；下次懒创建）',
+        description='空闲云桌 guest 已 kill+delete（盘保留；下次 prepare/attach 再创建）',
         fields={
             'container_id': FieldType('str'),
             'workspace': FieldType('str'),
@@ -2316,7 +2326,50 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(name='sandboxd.netns_setup'),
     EventSpec(name='sandboxd.netns_teardown'),
+    EventSpec(
+        name='sandboxd.package_proxy_failed',
+        description='sandboxd 启动装包 allowlist 代理失败（仍监听 socket）',
+        fields={
+            'error': FieldType('str'),
+        },
+    ),
     EventSpec(name='sandboxd.peer_denied'),
+    EventSpec(
+        name='sandboxd.preview_proxy_failed',
+        description='sandboxd 启动用户预览 HTTP/WS 反代失败（仍监听 socket）',
+        fields={
+            'error': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='sandboxd.preview_proxy_started',
+        description='sandboxd 用户预览 HTTP/WS 反代已监听',
+        fields={
+            'host': FieldType('str'),
+            'port': FieldType('int'),
+        },
+    ),
+    EventSpec(
+        name='sandboxd.preview_proxy_stopped',
+        description='sandboxd 用户预览 HTTP/WS 反代已停止',
+    ),
+    EventSpec(
+        name='sandboxd.preview_registered',
+        description='sandboxd 已登记一条用户预览上游（guest bridge）',
+        fields={
+            'app_port': FieldType('int'),
+            'conversation_id': FieldType('str'),
+            'process_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='sandboxd.preview_unregistered',
+        description='sandboxd 已去掉一条用户预览上游',
+        fields={
+            'conversation_id': FieldType('str'),
+            'process_id': FieldType('str'),
+        },
+    ),
     EventSpec(name='sandboxd.ready'),
     EventSpec(name='sandboxd.rpc_denied'),
     EventSpec(name='sandboxd.rpc_error'),
@@ -2417,9 +2470,6 @@ EVENTS: list[EventSpec] = [
             'persist': FieldType('bool'),
         },
     ),
-    EventSpec(name='shared_space.cleanup_account'),
-    EventSpec(name='shared_space.deleted'),
-    EventSpec(name='shared_space.pending_cleared_on_block'),
     EventSpec(name='sidecar.create_workspace_version_failed'),
     EventSpec(name='sidecar.dispatch_failed'),
     EventSpec(name='sidecar.exiting'),

@@ -54,10 +54,9 @@ elif ! docker pull "$IMAGE" 2>/dev/null; then
   docker tag "${IMAGE_REGISTRY}/api:latest" "$IMAGE"
 fi
 
-# One-shots (probe / tar / alembic / migrate) must not use the sandbox overlay:
-# that entrypoint is for the long-running api. `compose run` through it can
-# exit with empty stdout, which the workspace probe treats as "cannot prove
-# no data will be lost" and aborts — while the live api is still serving.
+# One-shots (probe / tar / alembic / migrate) must not include the sandbox overlay:
+# sandboxd is a long-running service. `compose run` through that file is not the
+# oneshot api identity. Workspace probe empty-stdout abort still applies.
 COMPOSE_BASE=( docker compose -p agentcore -f "$DEPLOY/docker-compose.server.yml" -f "$DEPLOY/docker-compose.app.yml" --env-file "$ENVF" )
 COMPOSE=( "${COMPOSE_BASE[@]}" )
 # gVisor 默认开（代码/内测默认 true）：除非 env 显式 GVISOR_ENABLED=false，否则叠 sandbox。
@@ -81,22 +80,22 @@ if [[ "$_gvisor_off" -eq 0 ]]; then
     echo "ERROR: 云执行默认开但找不到 docker-compose.sandbox.yml（或设 GVISOR_ENABLED=false）"
     exit 1
   fi
-  _sandbox_entrypoint="$(dirname "$_sandbox_yml")/api-sandbox-entrypoint.sh"
+  _sandbox_entrypoint="$(dirname "$_sandbox_yml")/sandboxd-entrypoint.sh"
   if [[ ! -f "$_sandbox_entrypoint" ]]; then
-    echo "ERROR: $_sandbox_yml 需要同目录 api-sandbox-entrypoint.sh（或设 GVISOR_ENABLED=false）"
+    echo "ERROR: $_sandbox_yml 需要同目录 sandboxd-entrypoint.sh（或设 GVISOR_ENABLED=false）"
     exit 1
   fi
   # Compose 把 overlay 里的 ./ 卷解析到「第一个 -f」所在目录（=$DEPLOY），
   # 不是 sandbox yml 自己的目录。活栈目录若缺该文件，Docker 会建成同名空目录，
-  # 入口变成目录 → api 空跑秒退（exit 0、无日志）。
-  _ep_dst="$DEPLOY/api-sandbox-entrypoint.sh"
+  # 入口变成目录 → sandboxd 空跑秒退。
+  _ep_dst="$DEPLOY/sandboxd-entrypoint.sh"
   if [[ -d "$_ep_dst" ]]; then
     echo "WARN: $_ep_dst 是目录（Docker 缺文件时的占位）— 删除后写入入口脚本"
     rm -rf "$_ep_dst"
   fi
   if [[ "$_sandbox_entrypoint" != "$_ep_dst" ]]; then
     cp -f "$_sandbox_entrypoint" "$_ep_dst"
-    echo "sandbox entrypoint -> $_ep_dst"
+    echo "sandboxd entrypoint -> $_ep_dst"
   fi
   COMPOSE+=(-f "$_sandbox_yml")
   echo "gVisor sandbox overlay: $_sandbox_yml"
@@ -178,7 +177,7 @@ fi
 echo "== [6/13] 停 api（关闭旧代码 + 新 schema 窗口）=="
 # 须与 compose stop_grace_period=40s 对齐。裸 stop 默认 10s 会砍断
 # 排空 5s + 抢救 20s + 收尾 8s，制造孤儿 lease。
-"${COMPOSE[@]}" stop --timeout 40 api 2>/dev/null || true
+"${COMPOSE[@]}" stop --timeout 40 api sandboxd 2>/dev/null || true
 
 echo "== [7/13] alembic upgrade head =="
 "${COMPOSE_BASE[@]}" run --rm api alembic upgrade head

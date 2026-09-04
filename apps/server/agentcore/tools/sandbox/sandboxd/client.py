@@ -23,6 +23,8 @@ from agentcore.tools.sandbox.sandboxd.protocol import (
     METHOD_NETNS_SETUP,
     METHOD_NETNS_TEARDOWN,
     METHOD_PING,
+    METHOD_PREVIEW_REGISTER,
+    METHOD_PREVIEW_UNREGISTER,
     METHOD_RUN,
     NetFamily,
     NetnsInfo,
@@ -179,6 +181,20 @@ class SandboxdClient:
         raise NotImplementedError
 
     async def kill(self, container_id: str, signal: str = "SIGKILL") -> None:
+        raise NotImplementedError
+
+    async def preview_register(
+        self,
+        conversation_id: str,
+        process_id: str,
+        *,
+        upstream_ip: str,
+        upstream_port: int,
+        app_port: int,
+    ) -> None:
+        raise NotImplementedError
+
+    async def preview_unregister(self, conversation_id: str, process_id: str) -> None:
         raise NotImplementedError
 
 
@@ -395,6 +411,32 @@ class UnixSandboxdClient(SandboxdClient):
 
     async def kill(self, container_id: str, signal: str = "SIGKILL") -> None:
         await self._rpc(METHOD_KILL, {"container_id": container_id, "signal": signal})
+
+    async def preview_register(
+        self,
+        conversation_id: str,
+        process_id: str,
+        *,
+        upstream_ip: str,
+        upstream_port: int,
+        app_port: int,
+    ) -> None:
+        await self._rpc(
+            METHOD_PREVIEW_REGISTER,
+            {
+                "conversation_id": conversation_id,
+                "process_id": process_id,
+                "upstream_ip": upstream_ip,
+                "upstream_port": upstream_port,
+                "app_port": app_port,
+            },
+        )
+
+    async def preview_unregister(self, conversation_id: str, process_id: str) -> None:
+        await self._rpc(
+            METHOD_PREVIEW_UNREGISTER,
+            {"conversation_id": conversation_id, "process_id": process_id},
+        )
 
 
 async def _read_wait_stream(

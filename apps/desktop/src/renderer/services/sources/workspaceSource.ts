@@ -86,13 +86,18 @@ function adaptPreview(p: WorkspacePreview): FilePreviewResult {
   };
 }
 
+/** Cloud desks that snapshot / preview — folder projects and conversation scratch. */
+function isCloudDeskWsId(wsId: string): boolean {
+  return wsId.startsWith("folder:") || wsId.startsWith("conv:");
+}
+
 /**
  * Hang HTML full-effect exits on a cloud {@link FileSource}.
  *
  * - `openInAppPreview` 跟落地 desk：传当前源的 `folder:` / `conv:` wsId（缺省
  *   `conv:{conversationId}`）；hub `folder:` 在有能力位时同样挂上。
  * - `openInBrowser` via conversation snapshot, or ws-id snapshot for hub
- *   `folder:` / `conv:` (shared spaces refuse snapshots in v1).
+ *   `folder:` / `conv:`。
  */
 function withCloudHtmlEntries(
   source: FileSource,
@@ -107,19 +112,15 @@ function withCloudHtmlEntries(
       withExtras.openInBrowser = (path) =>
         openWorkspaceInBrowser(conversationId, path);
     }
-  } else if (
-    wsId &&
-    !wsId.startsWith("shared:") &&
-    window.fsApi?.previewArchive
-  ) {
+  } else if (wsId?.startsWith("folder:") && window.fsApi?.previewArchive) {
     withExtras.openInBrowser = (path) =>
       openCloudWorkspaceInBrowser(wsId, path);
   }
 
-  // 完整预览跟桌：落地 wsId = 显式 desk，否则会话 `conv:{cid}`；shared 无 desk 预览。
+  // 完整预览跟桌：落地 wsId = 显式 desk，否则会话 `conv:{cid}`；仅 folder: / conv:。
   const landingWsId =
     wsId ?? (conversationId ? `conv:${conversationId}` : undefined);
-  if (hasInAppPreview() && landingWsId && !landingWsId.startsWith("shared:")) {
+  if (hasInAppPreview() && landingWsId && isCloudDeskWsId(landingWsId)) {
     // hub `folder:` 无会话时用 folder id 作页/分区作用域；desk 仍走 workspaceId。
     const cid =
       conversationId ??
@@ -144,7 +145,7 @@ const CLOUD_CAPS = {
   snapshots: true,
 } as const;
 
-/** Viewer / readonly shared-space: browse + download, no mutate / in-panel edit. */
+/** Viewer / readonly collaboration desk: browse + download, no mutate / in-panel edit. */
 const CLOUD_READONLY_CAPS = {
   watch: false,
   transfer: true,
@@ -393,14 +394,17 @@ export function createCloudWorkspaceSource(
     },
     readonly ? CLOUD_READONLY_CAPS : CLOUD_CAPS,
   );
-  // Hub cloud sources: `conv:` / `folder:` → 完整预览跟桌；`shared:` → 无快照/预览。
+  // Hub cloud sources: `conv:` / `folder:` → 完整预览跟桌。
   if (wsId.startsWith("conv:")) {
     return withCloudHtmlEntries(source, {
       conversationId: wsId.slice("conv:".length),
       wsId,
     });
   }
-  return withCloudHtmlEntries(source, { wsId });
+  if (wsId.startsWith("folder:")) {
+    return withCloudHtmlEntries(source, { wsId });
+  }
+  return source;
 }
 
 /**

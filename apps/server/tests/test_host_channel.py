@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -90,7 +91,12 @@ async def test_host_status_fanout_all_facets():
     channel.request_host = AsyncMock(side_effect=_reply)
     result = await HostTool().execute({"action": "status"}, _ctx(channel=channel))
     assert result.success
-    assert "<不可信内容>" in result.output
+    payload = json.loads(result.output)
+    assert "<不可信内容>" not in result.output
+    assert payload["info"]["ok"] is True
+    assert result.display is not None
+    assert result.display["kind"] == "host"
+    assert result.display["action"] == "status"
     ops = [c.args[0] for c in channel.request_host.await_args_list]
     assert ops == [
         HostOp.INFO,
@@ -346,6 +352,14 @@ async def test_host_shell_forwards_with_timeout():
     )
     assert result.success
     assert "ok" in result.output
+    assert "<不可信内容>" not in result.output
+    assert json.loads(result.output)["exit_code"] == 0
+    assert result.display == {
+        "stdout": "ok",
+        "stderr": "",
+        "exit_code": 0,
+        "language": "host",
+    }
     channel.request_host.assert_awaited_once()
     call = channel.request_host.await_args
     assert call.args[0] is HostOp.SHELL

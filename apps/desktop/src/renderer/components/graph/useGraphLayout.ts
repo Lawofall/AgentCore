@@ -17,7 +17,6 @@ import {
 } from "@/services/graphTrace";
 import type { Execution } from "@/stores/execution";
 import type { GraphEdge, GraphLayout } from "@/stores/graph";
-import type { NodeChange } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ActCardLayout, computeActLodLayout } from "./actLod";
 import { INPUT_ID } from "./constants";
@@ -51,11 +50,6 @@ export interface TurnLayoutSlice {
   layoutReady: boolean;
   /** ELK 失败时非空；与 layoutReady=false 同时出现，避免永久空白占位。 */
   layoutError: string | null;
-  /**
-   * RF measured heights (optional telemetry). Must not drive ELK / fit /
-   * soft-center — layout footprint is always NODE_WIDTH × NODE_HEIGHT.
-   */
-  nodeHeights: Record<string, number>;
   nodeSizes: Record<string, { width: number; height: number }>;
   groups: GroupLayout[];
   subTeams: SubTeam[];
@@ -91,32 +85,13 @@ function expandedUnitsFromFold(
   return expanded;
 }
 
-function applyDimensionChanges(
-  prev: Record<string, number>,
-  changes: NodeChange[],
-): Record<string, number> | null {
-  let next = prev;
-  for (const c of changes) {
-    if (c.type === "dimensions" && c.dimensions) {
-      const h = c.dimensions.height;
-      if (h > 0 && prev[c.id] !== h) {
-        if (next === prev) next = { ...prev };
-        next[c.id] = h;
-      }
-    }
-  }
-  return next === prev ? null : next;
-}
-
 export function useGraphLayout(
   execution: Execution | null,
   layoutKind: GraphLayout,
   fitMode: GraphFitMode = "view",
   expandedUnits: ReadonlySet<string> = new Set(),
   focusedActId: string | null = null,
-): TurnLayoutSlice & {
-  onNodesChange: (changes: NodeChange[]) => void;
-} {
+): TurnLayoutSlice {
   const projectedRunsRef = useRef(execution?.runs);
   projectedRunsRef.current = execution?.runs;
   const executionRef = useRef(execution);
@@ -134,7 +109,6 @@ export function useGraphLayout(
   >({});
   const [layoutReady, setLayoutReady] = useState(false);
   const [layoutError, setLayoutError] = useState<string | null>(null);
-  const [nodeHeights, setNodeHeights] = useState<Record<string, number>>({});
   const [groups, setGroups] = useState<GroupLayout[]>([]);
   const [actCards, setActCards] = useState<ActCardLayout[]>([]);
 
@@ -151,11 +125,6 @@ export function useGraphLayout(
     },
     [],
   );
-
-  // RF dimensions may still write here; they must not trigger layout / viewport.
-  const onNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodeHeights((prev) => applyDimensionChanges(prev, changes) ?? prev);
-  }, []);
 
   const structuralKey = useMemo(() => {
     if (!execution) return "";
@@ -396,9 +365,7 @@ export function useGraphLayout(
     bbox,
     layoutReady,
     layoutError,
-    nodeHeights,
     nodeSizes,
-    onNodesChange,
     groups,
     subTeams,
     foldInfo,

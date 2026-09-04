@@ -30,8 +30,8 @@ vi.mock("@/stores/messaging", () => ({
   },
 }));
 
-vi.mock("@/hooks/useSharedSpaces", () => ({
-  invalidateAllSharedSpaces: vi.fn(),
+vi.mock("@/hooks/useFolderSharing", () => ({
+  invalidateAllFolderSharing: vi.fn(),
 }));
 
 const CID = "conv-attention";

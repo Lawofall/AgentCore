@@ -22,7 +22,13 @@ vi.mock("@/services/capabilities", async (importOriginal) => {
 const { getCapabilities } = await import("@/services/capabilities");
 
 const catalog: Capabilities = {
-  guidelines: { shared_base: "共享准则", ceo_addon: "CEO 附加", ceo: "CEO" },
+  guidelines: {
+    shared_base: "共享准则",
+    worker_leaf: "叶子身份",
+    worker_captain: "可再委派队员身份",
+    ceo_addon: "CEO 附加",
+    ceo: "CEO",
+  },
   skills: [],
   tools: [],
   packs: [],

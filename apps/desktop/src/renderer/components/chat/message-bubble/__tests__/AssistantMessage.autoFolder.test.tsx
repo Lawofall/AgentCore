@@ -7,7 +7,7 @@ import { workspaceKeys } from "@/lib/queryKeys";
 import type { Message } from "@/stores/conversation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -71,10 +71,6 @@ vi.mock("@/components/chat/Markdown", () => ({
   Markdown: ({ content }: { content: string }) => (
     <div data-testid="assistant-body">{content}</div>
   ),
-}));
-
-vi.mock("@/components/chat/debate/CollapsibleSpeech", () => ({
-  CollapsibleSpeech: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("@/stores/disclosure", () => ({

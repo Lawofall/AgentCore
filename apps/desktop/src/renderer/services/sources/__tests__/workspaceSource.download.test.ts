@@ -89,15 +89,15 @@ describe("cloud FileSource.download 文件夹走 archive", () => {
     );
   });
 
-  it("ws-id（含共享空间）：目录走 archive 而不是 snapshots", async () => {
-    const source = createCloudWorkspaceSource("shared:s1", "共享", {
+  it("只读 folder:：目录走 archive 而不是 snapshots", async () => {
+    const source = createCloudWorkspaceSource("folder:f1", "项目", {
       readonly: true,
     });
     expect(source.caps.transfer).toBe(true);
     expect(source.caps.snapshots).toBe(false);
     await source.download?.("pack", "pack.zip", { isDir: true });
     expect(wsDownloadArchive).toHaveBeenCalledWith(
-      "shared:s1",
+      "folder:f1",
       "pack",
       "pack.zip",
     );

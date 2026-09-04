@@ -65,8 +65,8 @@ export interface ExecutionAct {
   authorizedBy: ActAuthorizedBy | null;
 }
 
-/** Display labels for a 辩论/审查 side (前端UX设计.md §四) — the single source the
- * graph node badge and the strip title share, so正/反 read consistently. */
+/** Display labels for a 辩论/审查 side — debate-room copy and custom-name peek.
+ * Graph nodes use 阵营色 + 头像字 for the default 正方/反方 names. */
 export const STANCE_META: Record<Stance, { label: string; short: string }> = {
   pro: { label: "正方", short: "正" },
   con: { label: "反方", short: "反" },

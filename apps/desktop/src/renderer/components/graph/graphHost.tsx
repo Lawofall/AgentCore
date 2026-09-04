@@ -6,7 +6,8 @@
  * 2. 尺寸：容器 ResizeObserver 测宽（width）或由外层定高；bbox 来自
  *    computeLayout 的结构包围盒（固定 NODE_* footprint；原点钉在 padding）。
  * 3. Fit：必须按结构 bbox，不得因测高 / soft-center / originY / 宿主回读高度伺服相机。
- *    - view：ReactFlow fitView（全屏基准，勿回归）
+ *    - view：bbox 就绪 / 容器改宽时调 instance.fitView（一次）。禁止 ReactFlow
+ *      `fitView={true}` 常驻——StoreUpdater 会把新节点引用写成无限 setState。
  *    - width：fit-to-width；zoom/目标高只由结构 bbox × 列宽（fitWidthBox）决定，
  *      onMeasure 写出宿主高度，禁止再把 colHeight 读回缩 zoom
  * 4. Overflow：内联卡片可 overflow-hidden 做圆角裁切；图区须先装下内容（缩 zoom），

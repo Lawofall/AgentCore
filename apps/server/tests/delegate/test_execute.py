@@ -790,3 +790,12 @@ def test_ceo_deliverable_schema_omits_internal_qa_knobs():
         assert banned not in props
     assert "【看】" in props["form"]["description"]
     assert "team_orchestration_advanced" in t.schema.description
+
+
+def test_nested_delegate_description_points_at_lead_subteam():
+    t = tool(Provider([]))
+    assert "HOW→consult(team_orchestration_advanced)" in t.schema.description
+    t._depth = 1
+    assert "HOW→consult(lead_subteam)" in t.schema.description
+    assert "等到子队收工" in t.schema.description
+    assert "team_orchestration_advanced" not in t.schema.description

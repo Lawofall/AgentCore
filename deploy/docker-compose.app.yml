@@ -16,7 +16,8 @@
 # 注：worker 容器（部署与运维.md §三 当前容器清单）暂不纳入——当前执行引擎是
 # 进程内 asyncio 协程，无独立 worker 入口；贸然起第二个 `python -m agentcore`
 # 会重复跑后台循环（如 retention sweep），是 bug 而非扩容。待有专用 worker 入口再加。
-# 因此 compose 仍保持单个 api 容器。容器内也**不能**靠 WEB_CONCURRENCY>1 扩 uvicorn
+# 因此 compose 仍保持单个 api 容器。云执行 overlay 另起 **sandboxd**（不是
+# 第二份 `python -m agentcore`）。容器内也**不能**靠 WEB_CONCURRENCY>1 扩 uvicorn
 # worker：履约中枢与对话事件流是进程内单例，多 worker 启动即拒（见部署拓扑 §六）。
 
 # 日志：json-file 驱动 + 轮转，封顶单容器 10m×5=50MB（部署与运维.md §7.8「可观测·日志」）。
@@ -40,8 +41,7 @@ services:
     # 停机预算（宽限期 40s 不动）：uvicorn 排空 5s + 抢救 20s + 收尾硬顶 8s + 余量 7s。
     # Docker 默认 10s 会中途 SIGKILL、制造孤儿 lease。
     stop_grace_period: 40s
-    # 与 Dockerfile CMD 对齐。sandbox overlay 会换 entrypoint；Compose 此时若
-    # 未显式 command，会把镜像 CMD 清成 null，api 空跑秒退。
+    # 与 Dockerfile CMD 对齐。sandbox overlay 不换 api entrypoint。
     command: ["python", "-m", "agentcore"]
     logging: *default-logging
     mem_limit: 1024m

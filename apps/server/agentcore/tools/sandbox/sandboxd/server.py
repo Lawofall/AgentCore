@@ -29,6 +29,10 @@ from agentcore.tools.sandbox.sandboxd.netns_ops import (
 )
 from agentcore.tools.sandbox.sandboxd.netns_ops import setup as netns_setup_ops
 from agentcore.tools.sandbox.sandboxd.netns_ops import teardown as netns_teardown_ops
+from agentcore.tools.sandbox.sandboxd.preview_http import (
+    register_preview,
+    unregister_preview,
+)
 from agentcore.tools.sandbox.sandboxd.protocol import (
     CONTAINER_ID_PREFIX,
     DEFAULT_SOCKET_PATH,
@@ -39,6 +43,8 @@ from agentcore.tools.sandbox.sandboxd.protocol import (
     METHOD_NETNS_SETUP,
     METHOD_NETNS_TEARDOWN,
     METHOD_PING,
+    METHOD_PREVIEW_REGISTER,
+    METHOD_PREVIEW_UNREGISTER,
     METHOD_RUN,
     SOCKET_ENV,
     NetFamily,
@@ -390,6 +396,16 @@ class SandboxdServer:
             writer.write(_json_bytes(_ok(req_id)))
             await writer.drain()
             return False
+        if method == METHOD_PREVIEW_REGISTER:
+            self._preview_register(params)
+            writer.write(_json_bytes(_ok(req_id)))
+            await writer.drain()
+            return False
+        if method == METHOD_PREVIEW_UNREGISTER:
+            self._preview_unregister(params)
+            writer.write(_json_bytes(_ok(req_id)))
+            await writer.drain()
+            return False
         if method == METHOD_RUN:
             return await self._run(params, req_id, reader, writer)
         if method == METHOD_EXEC:
@@ -410,6 +426,53 @@ class SandboxdServer:
         if not isinstance(raw, str) or not _SUBNET_RE.fullmatch(raw):
             raise RpcDeniedError("subnet_base must be two dotted octets")
         return raw
+
+    def _parse_preview_id(self, raw: Any, *, label: str) -> str:
+        if not isinstance(raw, str) or not raw or len(raw) > 200:
+            raise RpcDeniedError(f"{label} is required")
+        if "\n" in raw or "\x00" in raw:
+            raise RpcDeniedError(f"{label} is invalid")
+        return raw
+
+    def _parse_preview_port(self, raw: Any, *, label: str) -> int:
+        if isinstance(raw, bool) or not isinstance(raw, int) or not (1 <= raw <= 65535):
+            raise RpcDeniedError(f"{label} must be an int 1–65535")
+        return raw
+
+    def _parse_preview_ip(self, raw: Any) -> str:
+        if not isinstance(raw, str) or not raw or "\n" in raw or "\x00" in raw:
+            raise RpcDeniedError("upstream_ip is required")
+        try:
+            socket.inet_pton(socket.AF_INET, raw)
+            return raw
+        except OSError:
+            pass
+        try:
+            socket.inet_pton(socket.AF_INET6, raw)
+            return raw
+        except OSError as exc:
+            raise RpcDeniedError("upstream_ip must be an IP address") from exc
+
+    def _preview_register(self, params: dict[str, Any]) -> None:
+        register_preview(
+            conversation_id=self._parse_preview_id(
+                params.get("conversation_id"), label="conversation_id"
+            ),
+            process_id=self._parse_preview_id(
+                params.get("process_id"), label="process_id"
+            ),
+            upstream_ip=self._parse_preview_ip(params.get("upstream_ip")),
+            upstream_port=self._parse_preview_port(
+                params.get("upstream_port"), label="upstream_port"
+            ),
+            app_port=self._parse_preview_port(params.get("app_port"), label="app_port"),
+        )
+
+    def _preview_unregister(self, params: dict[str, Any]) -> None:
+        unregister_preview(
+            self._parse_preview_id(params.get("conversation_id"), label="conversation_id"),
+            self._parse_preview_id(params.get("process_id"), label="process_id"),
+        )
 
     async def _netns_setup(self, params: dict[str, Any]) -> dict[str, Any]:
         family = self._parse_family(params.get("family"))

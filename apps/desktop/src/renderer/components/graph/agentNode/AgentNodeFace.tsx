@@ -5,14 +5,11 @@ import {
 } from "@/components/chat/message-bubble/constants";
 import {
   graphBadgeMuted,
-  graphBadgeMutedPlain,
   graphBadgePrimary,
 } from "@/components/ui/tone-presets";
-import { agentColorVar, agentGlyph } from "@/lib/agentIdentity";
 import { runningElapsedSec } from "@/lib/runningElapsed";
 import { useActiveTurnPhase } from "@/stores/conversation";
 import {
-  STANCE_META,
   projectRuntime,
   toolLabel,
   useExecutionScope,
@@ -51,8 +48,6 @@ export function AgentNodeCardFace({
   flashColor: string;
   flashing: boolean;
 }) {
-  const identityColor = agentColorVar(d.role);
-  const identityGlyph = agentGlyph(d.role);
   const isRunning = d.status === "running";
   const statusOverride = useAgentNodeStopOverride(d.runId, d.status);
 
@@ -111,8 +106,6 @@ export function AgentNodeCardFace({
       <AgentNodeHeader
         d={d}
         p={p}
-        identityColor={identityColor}
-        identityGlyph={identityGlyph}
         pulsePresence={isRunning}
         statusOverride={statusOverride}
       />
@@ -143,18 +136,15 @@ export function AgentNodeCardFace({
 function AgentNodeHeader({
   d,
   p,
-  identityColor,
-  identityGlyph,
   pulsePresence,
   statusOverride,
 }: {
   d: AgentNodeData;
   p: AgentNodePresentation;
-  identityColor: string;
-  identityGlyph: string;
   pulsePresence: boolean;
   statusOverride: string | null;
 }) {
+  const { color, glyph, showRoleTitle } = p.identity;
   return (
     <>
       <div className="flex items-center gap-2.5">
@@ -162,11 +152,11 @@ function AgentNodeHeader({
           <div
             className="flex size-7 items-center justify-center rounded-full text-sm font-semibold"
             style={{
-              backgroundColor: `color-mix(in oklab, ${identityColor} 18%, transparent)`,
-              color: identityColor,
+              backgroundColor: `color-mix(in oklab, ${color} 18%, transparent)`,
+              color,
             }}
           >
-            {identityGlyph}
+            {glyph}
           </div>
           <span
             className={`absolute -bottom-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full ring-2 ring-card ${p.presence.cls} ${pulsePresence ? "animate-pulse" : ""}`}
@@ -174,11 +164,20 @@ function AgentNodeHeader({
             {p.presence.icon}
           </span>
         </div>
-        <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-          {d.role}
-        </p>
+        {showRoleTitle ? (
+          <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+            {d.role}
+          </p>
+        ) : (
+          <AgentNodeStatusLine d={d} p={p} statusOverride={statusOverride} />
+        )}
       </div>
-      <AgentNodeMeta d={d} p={p} statusOverride={statusOverride} />
+      <AgentNodeMeta
+        d={d}
+        p={p}
+        statusOverride={statusOverride}
+        hideStatus={!showRoleTitle}
+      />
     </>
   );
 }
@@ -216,19 +215,20 @@ function useAgentNodeStopOverride(
 }
 
 /**
- * Meta 行：左侧身份 chip（立场 / 含质询 / 复核 / 检查点 / 待拍板，`flex-wrap`
- * 整块换行、每个 chip `whitespace-nowrap`），右侧状态（`ml-auto` 右靠、保留右
- * 边缘扫读锚点）。状态挪出标题行 → 标题独占整行不再被截断（长角色名如「LV方
- * （原告）」）。chip 多到放不下时状态整块换行、仍右对齐。
+ * Meta 行：左侧功能 chip（含质询 / 复核 / 检查点 / 待拍板），右侧状态。
+ * 默认辩手无标题时状态改挂头像行，本行只留 chip；无 chip 则整行不画。
+ * 有自定义角色名时状态仍在本行（标题独占上一行，避免长名被截断）。
  */
 function AgentNodeMeta({
   d,
   p,
   statusOverride,
+  hideStatus,
 }: {
   d: AgentNodeData;
   p: AgentNodePresentation;
   statusOverride: string | null;
+  hideStatus: boolean;
 }) {
   const showEscalationPending =
     (d.escalationPending ?? 0) > 0 && p.visibleFaceBadges.has("escalation");
@@ -236,13 +236,21 @@ function AgentNodeMeta({
     d.debateCrossExamMark?.mode === "suffix" &&
     d.onActivateCrossExam != null &&
     p.visibleFaceBadges.has("crossExam");
+  const showRaised =
+    (d.escalationPending ?? 0) === 0 &&
+    (d.escalationRaised ?? 0) > 0 &&
+    Boolean(d.escalationKind) &&
+    d.escalationKind !== "normal" &&
+    p.visibleFaceBadges.has("escalation");
+  const hasChips =
+    showCrossExam ||
+    Boolean(p.reviewConcernFace && p.visibleFaceBadges.has("reviewConcern")) ||
+    Boolean(p.checkpointFace && p.visibleFaceBadges.has("checkpoint")) ||
+    showEscalationPending ||
+    showRaised;
+  if (hideStatus && !hasChips) return null;
   return (
     <div className="mt-1 flex max-h-10 flex-wrap items-center gap-1.5 overflow-hidden text-xs text-muted-foreground">
-      {d.stance && (
-        <span className={`${graphBadgeMutedPlain} whitespace-nowrap`}>
-          {STANCE_META[d.stance].label}
-        </span>
-      )}
       {showCrossExam && d.debateCrossExamMark && d.onActivateCrossExam && (
         <CrossExamMarkButton
           mark={d.debateCrossExamMark}
@@ -275,17 +283,15 @@ function AgentNodeMeta({
           {(d.escalationPending ?? 0) > 1 ? ` ${d.escalationPending}` : ""}
         </span>
       )}
-      {(d.escalationPending ?? 0) === 0 &&
-        (d.escalationRaised ?? 0) > 0 &&
-        d.escalationKind &&
-        d.escalationKind !== "normal" &&
-        p.visibleFaceBadges.has("escalation") && (
-          <span className={`${graphBadgeMuted} whitespace-nowrap`}>
-            <ArrowUp size={10} />
-            {escalationKindLabel(d.escalationKind)}
-          </span>
-        )}
-      <AgentNodeStatusLine d={d} p={p} statusOverride={statusOverride} />
+      {showRaised && (
+        <span className={`${graphBadgeMuted} whitespace-nowrap`}>
+          <ArrowUp size={10} />
+          {escalationKindLabel(d.escalationKind ?? undefined)}
+        </span>
+      )}
+      {!hideStatus && (
+        <AgentNodeStatusLine d={d} p={p} statusOverride={statusOverride} />
+      )}
     </div>
   );
 }
@@ -373,7 +379,7 @@ function AgentNodeStatusLine({
   const mark = d.debateCrossExamMark;
 
   // replace 态（质询作答失败）整行归因、可点直达质询 run；
-  // suffix「含质询」已移到头部第二行（立场后），状态行不再拼后缀。
+  // suffix「含质询」在 meta 行，状态行不再拼后缀。
   // 停止请求覆盖优先于正常进行中用时，不覆盖质询失败归因行。
   if (mark?.mode === "replace" && d.onActivateCrossExam) {
     return (

@@ -1,5 +1,6 @@
 """Compose / assemble system prompts from prompt fragments."""
 
+import re
 import time
 from collections.abc import Sequence
 
@@ -177,6 +178,27 @@ def render_on_demand_directory(
     return "\n".join(lines)
 
 
+_ON_DEMAND_BLOCK = re.compile(r"<按需目录>.*?</按需目录>", re.DOTALL)
+
+
+def splice_on_demand_directory(prompt: str, block: str) -> str:
+    """Replace or insert the ``<按需目录>`` block after a nested-lead consult refresh.
+
+    Leaf/captain catalogs may diverge by one skill row; do not rebuild the whole
+    worker base (workspace / attachments stay). Empty ``block`` is a no-op.
+    """
+    text = (block or "").strip()
+    if not text:
+        return prompt
+    if _ON_DEMAND_BLOCK.search(prompt):
+        return _ON_DEMAND_BLOCK.sub(text, prompt, count=1)
+    marker = "<工作区>"
+    idx = prompt.find(marker)
+    if idx >= 0:
+        return f"{prompt[:idx]}{text}\n\n{prompt[idx:]}"
+    return f"{prompt.rstrip()}\n\n{text}\n"
+
+
 def compose_worker_base_prompt(
     shared_base: str,
     *,
@@ -285,7 +307,7 @@ def compose_ceo_chat_prompt(
         ]
         # Test / catalog bridge: skills from registry when no merged entries passed.
         if skill_registry is not None and hasattr(skill_registry, "available"):
-            for skill in skill_registry.available(ceo_tool_names):  # type: ignore[union-attr]
+            for skill in skill_registry.available(ceo_tool_names, audience="ceo"):  # type: ignore[union-attr]
                 entries.append(
                     ConsultDirectoryEntry(
                         name=skill.name, summary=skill.summary, section="skill"

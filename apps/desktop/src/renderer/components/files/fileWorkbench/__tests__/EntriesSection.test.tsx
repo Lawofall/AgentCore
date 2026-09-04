@@ -48,6 +48,8 @@ import {
   entryOpenTarget,
   formatAlwaysChars,
   isAiCoreMemoryLeaf,
+  isTopicEntryName,
+  topicEntryDisplayName,
 } from "../EntriesSection";
 
 const entry = (over: Partial<DocumentNode> = {}): DocumentNode => ({
@@ -74,7 +76,10 @@ const entryDetail = (over: Partial<DocumentDetail> = {}): DocumentDetail => ({
   ...over,
 });
 
-function renderScope(scope: "global" | "folder" = "global") {
+function renderScope(
+  scope: "global" | "folder" = "global",
+  extra?: { memoryActivePath?: string | null },
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, retryDelay: 0, gcTime: 0 } },
   });
@@ -91,7 +96,7 @@ function renderScope(scope: "global" | "folder" = "global") {
               ? { kind: "global" }
               : { kind: "folder", folderId: "F1" }
           }
-          memoryActivePath={null}
+          memoryActivePath={extra?.memoryActivePath ?? null}
           documentActivePath={null}
           onOpen={onOpen}
           onDeleted={onDeleted}
@@ -136,6 +141,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  localStorage.clear();
 });
 
 describe("always usage copy helpers", () => {
@@ -611,5 +617,84 @@ describe("EntriesSection (project)", () => {
       name: "画像.md",
     });
     expect(deleteDocument).not.toHaveBeenCalled();
+  });
+});
+
+describe("topicEntryDisplayName / isTopicEntryName", () => {
+  it("strips the 主题/ prefix for rail labels", () => {
+    expect(isTopicEntryName("主题/部署.md")).toBe(true);
+    expect(isTopicEntryName("画像.md")).toBe(false);
+    expect(topicEntryDisplayName("主题/部署.md")).toBe("部署.md");
+    expect(topicEntryDisplayName("语气.md")).toBe("语气.md");
+  });
+});
+
+describe("EntriesSection topic folder", () => {
+  it("nests topics under a collapsed 主题 row and keeps user rules at the top", async () => {
+    vi.mocked(listScopeEntries).mockResolvedValue([
+      entry({
+        id: "g1",
+        name: "语气.md",
+        applyMode: "always",
+        description: "回复语气",
+      }),
+      entry({
+        id: "t1",
+        name: "主题/部署.md",
+        aiMaintained: true,
+        applyMode: "on_demand",
+        description: "怎么发",
+        alwaysChars: null,
+      }),
+      entry({
+        id: "t2",
+        name: "主题/直播伴侣.md",
+        aiMaintained: true,
+        applyMode: "on_demand",
+        alwaysChars: null,
+      }),
+    ]);
+    renderScope("global");
+
+    expect(await screen.findByText("语气.md")).toBeTruthy();
+    expect(screen.getByText("主题 · 2")).toBeTruthy();
+    expect(screen.queryByText("部署.md")).toBeNull();
+    expect(screen.queryByText("主题/部署.md")).toBeNull();
+    expect(screen.queryByText("直播伴侣.md")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "主题，2 条" }));
+    expect(await screen.findByText("部署.md")).toBeTruthy();
+    expect(screen.getByText("直播伴侣.md")).toBeTruthy();
+    expect(screen.getByText("怎么发")).toBeTruthy();
+    expect(screen.queryByText("主题/部署.md")).toBeNull();
+  });
+
+  it("expands the topic folder when a topic leaf is the active path", async () => {
+    vi.mocked(listScopeEntries).mockResolvedValue([
+      entry({
+        id: "t1",
+        name: "主题/部署.md",
+        aiMaintained: true,
+        applyMode: "on_demand",
+        alwaysChars: null,
+      }),
+    ]);
+    renderScope("global", { memoryActivePath: "global/topics/部署" });
+    expect(await screen.findByText("部署.md")).toBeTruthy();
+  });
+
+  it("does not expand a folder 主题 row for a global topic path", async () => {
+    vi.mocked(listScopeEntries).mockResolvedValue([
+      entry({
+        id: "t1",
+        name: "主题/部署.md",
+        aiMaintained: true,
+        applyMode: "on_demand",
+        alwaysChars: null,
+      }),
+    ]);
+    renderScope("folder", { memoryActivePath: "global/topics/部署" });
+    expect(await screen.findByText("主题 · 1")).toBeTruthy();
+    expect(screen.queryByText("部署.md")).toBeNull();
   });
 });

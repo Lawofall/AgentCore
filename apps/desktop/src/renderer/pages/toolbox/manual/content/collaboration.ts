@@ -345,7 +345,7 @@ export const collaborationChapter: ManualChapterContent = {
             },
             {
               title: "辩论进行中说话",
-              desc: "辩论还在跑时，主输入框就是对这场说话（下一轮生效）；「出结论」提前收场。",
+              desc: "辩论还在跑时，主输入框就是对这场说话（下一轮生效）。交锋够了会自己出结论；停止等于取消本回合，不会出简报。",
             },
             {
               title: "续聊或再发",

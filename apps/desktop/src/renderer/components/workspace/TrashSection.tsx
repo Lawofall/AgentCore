@@ -164,8 +164,8 @@ export function TrashSection({ conversationId }: { conversationId: string }) {
 /**
  * Cloud AgentCore/trash addressed by workspace id — the 文件页 twin of
  * {@link TrashSection}. Same zone, same copy; the hub just has no conversation
- * to address it with. Cloud, non-`shared:` workspaces only (the server refuses
- * the rest), so the caller gates the entry point.
+ * to address it with. Cloud `folder:` / `conv:` workspaces only (the server
+ * refuses local), so the caller gates the entry point.
  */
 export function WorkspaceTrashSection({ wsId }: { wsId: string }) {
   const load = useCallback(() => wsListTrash(wsId), [wsId]);

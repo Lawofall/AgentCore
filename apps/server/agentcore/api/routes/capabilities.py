@@ -3,9 +3,9 @@
 One aggregate endpoint over the platform's agent capabilities — every tool (CEO +
 worker, annotated with who may call it), the system Skills registered at runtime
 (platform + deployment-enabled packs; identical for every user), deployment-listed
-capability packs as a display catalog, and the CEO system-prompt template. Skills /
-packs are derived from the SAME sources the runtime wires so the 图鉴 never drifts
-from the live turn.
+capability packs as a display catalog, the CEO system-prompt template, and worker
+identity templates. Skills / packs are derived from the SAME sources the runtime
+wires so the 图鉴 never drifts from the live turn.
 """
 
 from fastapi import APIRouter
@@ -24,6 +24,7 @@ from agentcore.runtime.resolve.prompt import (
     compose_ceo_chat_prompt,
     derive_ceo_addon,
 )
+from agentcore.runtime.runs.executor.identities import build_worker_identity
 from agentcore.runtime.skills import build_system_skill_registry
 from agentcore.tools.catalog import AVAILABLE_TO_CEO, build_capability_catalog
 
@@ -33,7 +34,7 @@ router = APIRouter(prefix="/capabilities", tags=["capabilities"])
 @router.get("", response_model=CapabilitiesResponse)
 async def get_capabilities(_user: AuthUser) -> CapabilitiesResponse:
     """The complete capability picture: tools, runtime skills, listed packs,
-    and the CEO system-prompt template — the data behind 工具箱 → 能力图鉴."""
+    and the CEO / worker system-prompt templates — the data behind 工具箱 → 能力图鉴."""
     catalog = build_capability_catalog()
     tools = [
         CapabilityTool(
@@ -67,9 +68,10 @@ async def get_capabilities(_user: AuthUser) -> CapabilitiesResponse:
         for pack in listed_packs()
     ]
 
-    # The CEO prompt template: composed with the catalog's CEO tool names so the 按需目录
-    # reflects the full repertoire (e.g. asking_the_user shows because ask_user is a CEO
-    # tool). Memory / attachments stay out — this is the deployment-wide blueprint.
+    # Templates, not per-turn prompts: CEO compose uses the catalog's CEO tool names
+    # so the 按需目录 reflects the full repertoire; worker identities use the same
+    # ``build_worker_identity`` the live turn uses (default files form, no dependents).
+    # Memory / attachments stay out — this is the deployment-wide blueprint.
     ceo_tool_names = {
         entry.schema.name for entry in catalog if AVAILABLE_TO_CEO in entry.available_to
     }
@@ -81,6 +83,8 @@ async def get_capabilities(_user: AuthUser) -> CapabilitiesResponse:
     )
     guidelines = CapabilityGuidelines(
         shared_base=shared_base,
+        worker_leaf=build_worker_identity(has_dependents=False, captain=False),
+        worker_captain=build_worker_identity(has_dependents=False, captain=True),
         ceo_addon=derive_ceo_addon(shared_base, ceo),
         ceo=ceo,
     )

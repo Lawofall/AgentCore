@@ -1,4 +1,5 @@
 import { DeleteFolderDialog } from "@/components/folders/DeleteFolderDialog";
+import { FolderMembersDialog } from "@/components/folders/FolderMembersDialog";
 import {
   IconButton,
   NO_TAB_DRAG_ATTR,
@@ -31,7 +32,13 @@ import { folderAncestorNames } from "@/lib/folderTree";
 import { startNewConversation } from "@/lib/newConversation";
 import { notifyError, notifyInfo } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import type { FolderMeta } from "@/services/folders";
+import {
+  type FolderMeta,
+  canShareFolder,
+  folderMyRole,
+  folderRoleLabel,
+  isFolderOwner,
+} from "@/services/folders";
 import type { Conversation } from "@/stores/conversation";
 import { useConversationStore } from "@/stores/conversation";
 import { useFoldersStore } from "@/stores/folders";
@@ -44,6 +51,7 @@ import {
   Plus,
   Trash2,
   Upload,
+  Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -81,6 +89,7 @@ export function WorkspaceGroupHeader({
   const narrow = surface === "narrow";
   const [moreOpen, setMoreOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
   const navigate = useNavigate();
   const archiveMutation = useArchiveConversation();
   const deleteFolderMutation = useDeleteFolder();
@@ -96,6 +105,10 @@ export function WorkspaceGroupHeader({
     () => deriveGroupWorkspaceIsLocal(folder),
     [folder],
   );
+  const shareable = canShareFolder(folder);
+  const owner = isFolderOwner(folder);
+  const myRole = folderMyRole(folder);
+  const isViewer = myRole === "viewer";
   /** 「设计 / 图标」— only for a nested folder; the zone itself stays flat. */
   const ancestorLabel = useMemo(
     () => folderAncestorNames(folder).join(" / "),
@@ -186,6 +199,11 @@ export function WorkspaceGroupHeader({
     ? "在此本机文件夹中新开对话"
     : "在此文件夹中新开对话";
 
+  const openMembers = () => {
+    setMoreOpen(false);
+    setMembersOpen(true);
+  };
+
   const showImport = groupIsLocal && !narrow;
   const importMenuItem = showImport ? (
     <>
@@ -210,10 +228,12 @@ export function WorkspaceGroupHeader({
   const menuItems = (
     <>
       {importMenuItem}
-      <ContextMenuItem onSelect={newChatInFolder}>
-        <Plus size={14} className="shrink-0" />
-        <span className="flex-1 truncate">新建对话</span>
-      </ContextMenuItem>
+      {!isViewer && (
+        <ContextMenuItem onSelect={newChatInFolder}>
+          <Plus size={14} className="shrink-0" />
+          <span className="flex-1 truncate">新建对话</span>
+        </ContextMenuItem>
+      )}
       {!narrow && (
         <ContextMenuItem onSelect={viewAllConversations}>
           <MessageSquare size={14} className="shrink-0" />
@@ -226,7 +246,13 @@ export function WorkspaceGroupHeader({
           <span className="flex-1 truncate">浏览文件</span>
         </ContextMenuItem>
       )}
-      {!narrow && (
+      {shareable && (
+        <ContextMenuItem onSelect={openMembers}>
+          <Users size={14} className="shrink-0" />
+          <span className="flex-1 truncate">成员</span>
+        </ContextMenuItem>
+      )}
+      {!narrow && owner && (
         <>
           <ContextMenuSeparator />
           <ContextMenuItem
@@ -252,10 +278,12 @@ export function WorkspaceGroupHeader({
   const dropdownItems = (
     <>
       {importDropdownItem}
-      <DropdownMenuItem onSelect={newChatInFolder}>
-        <Plus size={14} className="shrink-0" />
-        <span className="flex-1 truncate">新建对话</span>
-      </DropdownMenuItem>
+      {!isViewer && (
+        <DropdownMenuItem onSelect={newChatInFolder}>
+          <Plus size={14} className="shrink-0" />
+          <span className="flex-1 truncate">新建对话</span>
+        </DropdownMenuItem>
+      )}
       {!narrow && (
         <DropdownMenuItem onSelect={viewAllConversations}>
           <MessageSquare size={14} className="shrink-0" />
@@ -268,7 +296,13 @@ export function WorkspaceGroupHeader({
           <span className="flex-1 truncate">浏览文件</span>
         </DropdownMenuItem>
       )}
-      {!narrow && (
+      {shareable && (
+        <DropdownMenuItem onSelect={openMembers}>
+          <Users size={14} className="shrink-0" />
+          <span className="flex-1 truncate">成员</span>
+        </DropdownMenuItem>
+      )}
+      {!narrow && owner && (
         <>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -334,7 +368,14 @@ export function WorkspaceGroupHeader({
                 />
               </span>
               <span className="flex min-w-0 flex-1 flex-col justify-center">
-                <span className="truncate">{folder.name}</span>
+                <span className="flex min-w-0 items-center gap-1">
+                  <span className="truncate">{folder.name}</span>
+                  {shareable && !owner && (
+                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                      {folderRoleLabel(myRole)}
+                    </span>
+                  )}
+                </span>
                 {ancestorLabel && (
                   <span className="truncate text-xs leading-tight text-sidebar-foreground/40">
                     {ancestorLabel}
@@ -344,11 +385,12 @@ export function WorkspaceGroupHeader({
             </div>
             <span
               {...{ [NO_TAB_DRAG_ATTR]: "" }}
-              className={`flex shrink-0 items-center gap-0.5 ${
+              className={cn(
+                "shrink-0 items-center gap-0.5",
                 narrow || moreOpen
-                  ? "opacity-100"
-                  : "opacity-0 transition-opacity group-hover:opacity-100"
-              }`}
+                  ? "flex"
+                  : "hidden group-hover:flex group-focus-within:flex",
+              )}
             >
               <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
                 <DropdownMenuTrigger asChild>
@@ -370,18 +412,20 @@ export function WorkspaceGroupHeader({
                   {dropdownItems}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <IconButton
-                tone="sidebar"
-                aria-label={newChatLabel}
-                title={newChatLabel}
-                className={rowActionClass}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  newChatInFolder();
-                }}
-              >
-                <Plus size={13} />
-              </IconButton>
+              {!isViewer && (
+                <IconButton
+                  tone="sidebar"
+                  aria-label={newChatLabel}
+                  title={newChatLabel}
+                  className={rowActionClass}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    newChatInFolder();
+                  }}
+                >
+                  <Plus size={13} />
+                </IconButton>
+              )}
             </span>
           </SurfaceRow>
         </ContextMenuTrigger>
@@ -398,6 +442,15 @@ export function WorkspaceGroupHeader({
         onConfirm={() => void confirmDeleteFolder()}
         onPermanentConfirm={confirmPermanentDelete}
       />
+      {shareable && (
+        <FolderMembersDialog
+          open={membersOpen}
+          onClose={() => setMembersOpen(false)}
+          folderId={folder.id}
+          folderName={folder.name}
+          myRole={myRole}
+        />
+      )}
     </>
   );
 }

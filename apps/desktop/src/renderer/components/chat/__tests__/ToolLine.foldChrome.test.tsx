@@ -289,6 +289,28 @@ describe("ToolLine · 过程工具折叠一行", () => {
     expect(screen.getByText(/1 folder$/)).toBeTruthy();
   });
 
+  it("search_conversations success inlineMeta shows N 场对话", () => {
+    const { container } = renderWithTooltip(
+      <ToolLine
+        step={step({
+          tool_name: "search_conversations",
+          arguments: { query: "部署" },
+          result: "1. 上周方案 · abc",
+          display: { result_count: 3, scope: "all" },
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("Search conversations")).toBeTruthy();
+    expect(screen.getByText("部署")).toBeTruthy();
+    expect(screen.getByText(/3 场对话/)).toBeTruthy();
+    expect(collapsedSubline(container)).toBeNull();
+    fireEvent.click(screen.getByText("Search conversations"));
+    expect(screen.getByText(/上周方案/)).toBeTruthy();
+    expect(screen.queryByText("检索对话")).toBeNull();
+    expect(screen.getAllByText(/3 场对话/)).toHaveLength(1);
+  });
+
   it("file_list / list_folder_dir chip directory; '.' stays off the title", () => {
     const { rerender, container } = renderWithTooltip(
       <ToolLine
@@ -450,5 +472,7 @@ describe("ToolLine · 过程工具折叠一行", () => {
     expect(collapsedSubline(container)).toBeNull();
     fireEvent.click(screen.getByText("Check types"));
     expect(screen.getByText("boom")).toBeTruthy();
+    expect(screen.queryByText("类型诊断")).toBeNull();
+    expect(screen.getAllByText(/1 个类型错误/)).toHaveLength(1);
   });
 });

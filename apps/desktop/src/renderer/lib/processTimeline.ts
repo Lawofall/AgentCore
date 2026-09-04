@@ -651,6 +651,9 @@ export function timelineNodeKeys(nodes: TimelineNode[]): string[] {
  *
  * The trailing content step (the final answer) is a `content` node, never a tool —
  * the answer can never be hidden inside a collapsed group.
+ *
+ * CEO-bubble *process summary* collapse is a separate gate ({@link processFoldMask}):
+ * non-trailing content (旁白) folds with reasoning/tools; the trailing answer does not.
  */
 export function groupToolRuns(process: ProcessStep[]): TimelineNode[] {
   const nodes: TimelineNode[] = [];
@@ -677,4 +680,84 @@ export function groupToolRuns(process: ProcessStep[]): TimelineNode[] {
   }
   flush();
   return nodes;
+}
+
+const EMPTY_PENDING_CHECKPOINTS: ReadonlySet<string> = new Set();
+
+/** 气泡不画的标记：邻接与末段正文判定跳过，避免把答案算成「还在过程里」。 */
+function isUnpaintedCeoNode(node: TimelineNode): boolean {
+  return node.kind === "graph_append" || node.kind === "plan_review";
+}
+
+function nextPaintedIndex(
+  nodes: readonly TimelineNode[],
+  fromExclusive: number,
+): number {
+  for (let i = fromExclusive + 1; i < nodes.length; i++) {
+    if (!isUnpaintedCeoNode(nodes[i])) return i;
+  }
+  return -1;
+}
+
+/**
+ * Indices of the trailing painted content run — the answer.
+ * Unpainted markers after the answer are skipped so a trailing plan_review
+ * does not hide the prose that is the visible question/context.
+ */
+export function trailingAnswerContentIndices(
+  nodes: readonly TimelineNode[],
+): ReadonlySet<number> {
+  const out = new Set<number>();
+  let i = nodes.length - 1;
+  while (i >= 0 && isUnpaintedCeoNode(nodes[i])) i--;
+  while (i >= 0 && nodes[i].kind === "content") {
+    out.add(i);
+    i--;
+  }
+  return out;
+}
+
+function isContentBeforePendingCheckpoint(
+  nodes: readonly TimelineNode[],
+  index: number,
+  pendingCheckpointIds: ReadonlySet<string>,
+): boolean {
+  if (nodes[index]?.kind !== "content" || pendingCheckpointIds.size === 0) {
+    return false;
+  }
+  const j = nextPaintedIndex(nodes, index);
+  if (j < 0) return false;
+  const n = nodes[j];
+  return n.kind === "checkpoint" && pendingCheckpointIds.has(n.checkpoint_id);
+}
+
+/**
+ * CEO 气泡完成态过程折：true = 收进「Thought · Used tools」摘要。
+ * 末段正文、待拍板检查点前的正文、强交互/图/插话不进折。
+ * 纯渲染；不改 process[] / journal / conformance。
+ */
+export function processFoldMask(
+  nodes: readonly TimelineNode[],
+  pendingCheckpointIds: ReadonlySet<string> = EMPTY_PENDING_CHECKPOINTS,
+): boolean[] {
+  const trailing = trailingAnswerContentIndices(nodes);
+  return nodes.map((node, index) => {
+    switch (node.kind) {
+      case "reasoning":
+      case "tool":
+      case "tool-group":
+      case "approval":
+      case "stage_card":
+        return true;
+      case "content":
+        if (trailing.has(index)) return false;
+        return !isContentBeforePendingCheckpoint(
+          nodes,
+          index,
+          pendingCheckpointIds,
+        );
+      default:
+        return false;
+    }
+  });
 }

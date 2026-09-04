@@ -448,10 +448,69 @@ def host_tool_timeout_seconds(arguments: dict[str, Any] | None = None) -> float:
     return _ACTION_TIMEOUTS.get(action, _STATUS_FACETS["apps"][1])
 
 
-def _untrusted(payload: dict[str, Any]) -> str:
-    """Frame Host probe results as untrusted OS-reported facts (禁催密码)."""
-    body = json.dumps(payload, ensure_ascii=False, indent=2)
-    return f"<不可信内容>\n{body}\n</不可信内容>"
+def _as_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    return {"value": value}
+
+
+def _model_json(payload: dict[str, Any]) -> str:
+    """Compact model-facing JSON. Treat-as-data lives in ``<输入>``, not a wrapper tag."""
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _process_display(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Reuse the code-exec terminal card when the host op returned a process envelope."""
+    if not any(key in payload for key in ("stdout", "stderr", "exit_code")):
+        return None
+    stdout = payload.get("stdout")
+    stderr = payload.get("stderr")
+    exit_raw = payload.get("exit_code")
+    timed_out = bool(payload.get("timed_out"))
+    if isinstance(exit_raw, int):
+        exit_code = exit_raw
+    elif timed_out:
+        exit_code = -1
+    else:
+        exit_code = 0
+    display: dict[str, Any] = {
+        "stdout": stdout if isinstance(stdout, str) else "",
+        "stderr": stderr if isinstance(stderr, str) else "",
+        "exit_code": exit_code,
+        "language": "host",
+    }
+    if timed_out:
+        display["budget_exceeded"] = True
+        display["timeout_kind"] = "idle"
+    return display
+
+
+def _host_display(payload: dict[str, Any], *, action: str) -> dict[str, Any]:
+    process = _process_display(payload)
+    if process is not None:
+        return process
+    return {
+        "kind": "host",
+        "action": action,
+        "body": json.dumps(payload, ensure_ascii=False, indent=2),
+    }
+
+
+def _host_result(
+    value: Any,
+    *,
+    action: str,
+    success: bool = True,
+    error: str | None = None,
+) -> ToolResult:
+    payload = _as_dict(value)
+    return ToolResult(
+        tool_call_id="",
+        success=success,
+        output=_model_json(payload),
+        error=error,
+        display=_host_display(payload, action=action),
+    )
 
 
 def _no_channel_error() -> ToolResult:
@@ -480,6 +539,7 @@ async def _host_call(
     context: ToolContext,
     *,
     op: HostOp,
+    action: str,
     args: dict[str, Any] | None = None,
     timeout: float | None = None,
 ) -> ToolResult:
@@ -504,11 +564,7 @@ async def _host_call(
             output="",
             error=str(e),
         )
-    return ToolResult(
-        tool_call_id="",
-        success=True,
-        output=_untrusted(value),
-    )
+    return _host_result(value, action=action)
 
 
 async def _execute_status(
@@ -545,17 +601,13 @@ async def _execute_status(
         if isinstance(value, dict) and value.get("error")
     ]
     if failed and len(failed) == len(pairs):
-        return ToolResult(
-            tool_call_id="",
+        return _host_result(
+            payload,
+            action=_ACTION_STATUS,
             success=False,
-            output=_untrusted(payload),
             error="; ".join(failed),
         )
-    return ToolResult(
-        tool_call_id="",
-        success=True,
-        output=_untrusted(payload),
-    )
+    return _host_result(payload, action=_ACTION_STATUS)
 
 
 async def _execute_os_log(
@@ -566,6 +618,7 @@ async def _execute_os_log(
     return await _host_call(
         context,
         op=HostOp.OS_LOG_SUMMARY,
+        action=_ACTION_OS_LOG,
         args=payload,
         timeout=_ACTION_TIMEOUTS[_ACTION_OS_LOG],
     )
@@ -638,11 +691,7 @@ async def _execute_shell(
         )
     except HostOpError as e:
         return _fail(str(e))
-    return ToolResult(
-        tool_call_id="",
-        success=True,
-        output=_untrusted(value),
-    )
+    return _host_result(value, action=_ACTION_SHELL)
 
 
 async def _execute_open_settings(
@@ -658,6 +707,7 @@ async def _execute_open_settings(
     return await _host_call(
         context,
         op=HostOp.OPEN_SETTINGS,
+        action=_ACTION_OPEN_SETTINGS,
         args={"panel": panel},
         timeout=_ACTION_TIMEOUTS[_ACTION_OPEN_SETTINGS],
     )
@@ -682,6 +732,7 @@ async def _execute_set_audio(
     return await _host_call(
         context,
         op=HostOp.AUDIO_SET_DEFAULT,
+        action=_ACTION_SET_AUDIO,
         args=args,
         timeout=_ACTION_TIMEOUTS[_ACTION_SET_AUDIO],
     )
@@ -700,6 +751,7 @@ async def _execute_restart_service(
     return await _host_call(
         context,
         op=HostOp.SERVICE_RESTART,
+        action=_ACTION_RESTART_SERVICE,
         args={"service": "Audiosrv"},
         timeout=_ACTION_TIMEOUTS[_ACTION_RESTART_SERVICE],
     )
@@ -744,11 +796,7 @@ async def _execute_install_package(
         )
     except HostOpError as e:
         return _fail(str(e))
-    return ToolResult(
-        tool_call_id="",
-        success=True,
-        output=_untrusted(value),
-    )
+    return _host_result(value, action=_ACTION_INSTALL_PACKAGE)
 
 
 class HostTool:

@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import mimetypes
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -32,7 +31,6 @@ from agentcore.api.dependencies import (
     AuthUser,
     get_conversation_repo,
     get_folder_repo,
-    get_shared_space_service,
 )
 from agentcore.api.download_headers import download_headers
 from agentcore.api.schemas import (
@@ -66,7 +64,7 @@ from agentcore.api.schemas import (
 )
 from agentcore.config import settings
 from agentcore.conversation.scratch import bare_chat_local_subpath
-from agentcore.core.errors import ConflictError, NotFoundError, ValidationError
+from agentcore.core.errors import AuthorizationError, ConflictError, NotFoundError, ValidationError
 from agentcore.db.repositories import ConversationRepository, FolderRepository
 from agentcore.docs_export.md_to_docx import (
     convert_markdown_to_docx,
@@ -81,8 +79,7 @@ from agentcore.docs_export.workspace_export import (
     export_markdown_path,
     export_markdown_to_pdf_path,
 )
-from agentcore.shared_spaces.service import SharedSpaceService
-from agentcore.shared_spaces.types import can_write
+from agentcore.folders.desk import resolve_desk_access
 from agentcore.storage import SnapshotNotFound
 from agentcore.storage._archive import ArchiveLimitError
 from agentcore.workspace.files import (
@@ -99,16 +96,12 @@ from agentcore.workspace.files import (
     resolve_download_file,
     upload_file,
     write_file_text,
-    zip_resolved_dir,
     zip_subtree_for_download,
 )
 from agentcore.workspace.git import CloneError, clone_repo
-from agentcore.workspace.limits import WORKSPACE_BROWSE_LIST_MAX
 from agentcore.workspace.locate import (
     WorkspaceCoords,
     build_server_workspace,
-    build_shared_workspace,
-    format_shared_workspace_id,
     parse_workspace_id,
     workspace_has_entries,
     workspace_internal_root,
@@ -124,10 +117,6 @@ from agentcore.workspace.protocol import (
     OutsideWorkspace,
     PathNotFound,
     WorkspaceIOError,
-)
-from agentcore.workspace.shared_paths import (
-    shared_workspace_has_entries,
-    shared_workspace_storage_key,
 )
 from agentcore.workspace.snapshots import (
     create_snapshot,
@@ -148,7 +137,7 @@ router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
 @dataclass(frozen=True)
 class _WsTarget:
-    """A resolved workspace — folder/conv (owner-scope) or shared space (membership)."""
+    """A resolved workspace — folder/conv (owner-scope or desk membership)."""
 
     ws_id: str
     folder_id: str | None
@@ -161,8 +150,8 @@ class _WsTarget:
     # would be a second lookup on a possibly different session, and a placement that
     # comes back empty silently demotes the request to the conversation scratch.
     rel_path: str | None = None
-    space_id: str | None = None
-    member_role: str | None = None
+    owner_user_id: str | None = None
+    folder_role: str | None = None
 
 
 async def _resolve_owned_workspace(
@@ -170,34 +159,12 @@ async def _resolve_owned_workspace(
     user_id: str,
     conv_repo: ConversationRepository,
     folder_repo: FolderRepository,
-    shared_svc: SharedSpaceService | None = None,
 ) -> _WsTarget:
-    """Resolve a ws id to an owned project/scratch or a shared space, or 404.
-
-    Owner-scope folder/conv resolution is unchanged. ``shared:`` is an additive
-    membership branch (independent of owner-scope repos).
-    """
+    """Resolve a ws id to an owned or desk-member project/scratch, or 404."""
     try:
         parsed = parse_workspace_id(ws_id)
     except ValueError as e:
         raise NotFoundError("工作区不存在") from e
-
-    if parsed.kind == "shared":
-        if shared_svc is None:
-            raise NotFoundError("工作区不存在")
-        space, member = await shared_svc.require_member_for_ws(
-            space_id=parsed.ident, user_id=user_id
-        )
-        return _WsTarget(
-            ws_id=ws_id,
-            folder_id=None,
-            conversation_id="",
-            name=space.name,
-            location="cloud",
-            root_id=None,
-            space_id=space.id,
-            member_role=member.role,
-        )
 
     if parsed.kind == "conv":
         conv = await conv_repo.get_by_id(parsed.ident, user_id=user_id)
@@ -206,9 +173,12 @@ async def _resolve_owned_workspace(
         # Project chats address via folder:<id>; a bare conv: id that somehow
         # carries folder_id still resolves to the conversation row for alias paths.
         if conv.folder_id:
-            folder = await folder_repo.get_by_id(conv.folder_id, user_id=user_id)
-            if not folder:
+            access = await resolve_desk_access(
+                folder_repo._session, folder_id=conv.folder_id, user_id=user_id
+            )
+            if access is None:
                 raise NotFoundError("工作区不存在")
+            folder = access.folder
             return _WsTarget(
                 ws_id=f"folder:{folder.id}",
                 folder_id=folder.id,
@@ -217,6 +187,8 @@ async def _resolve_owned_workspace(
                 location="local" if folder.local_root_id else "cloud",
                 root_id=folder.local_root_id,
                 rel_path=folder.rel_path,
+                owner_user_id=access.owner_user_id,
+                folder_role=access.role,
             )
         return _WsTarget(
             ws_id=ws_id,
@@ -225,11 +197,16 @@ async def _resolve_owned_workspace(
             name=conv.title or "未命名对话",
             location="local" if conv.local_root_id else "cloud",
             root_id=conv.local_root_id,
+            owner_user_id=conv.user_id,
+            folder_role="owner",
         )
 
-    folder = await folder_repo.get_by_id(parsed.ident, user_id=user_id)
-    if not folder:
+    access = await resolve_desk_access(
+        folder_repo._session, folder_id=parsed.ident, user_id=user_id
+    )
+    if access is None:
         raise NotFoundError("工作区不存在")
+    folder = access.folder
     return _WsTarget(
         ws_id=ws_id,
         folder_id=folder.id,
@@ -238,6 +215,8 @@ async def _resolve_owned_workspace(
         location="local" if folder.local_root_id else "cloud",
         root_id=folder.local_root_id,
         rel_path=folder.rel_path,
+        owner_user_id=access.owner_user_id,
+        folder_role=access.role,
     )
 
 
@@ -252,15 +231,9 @@ def _require_cloud(target: _WsTarget) -> None:
         raise ConflictError("本地工作区的文件请在桌面端访问")
 
 
-def _require_shared_write(target: _WsTarget) -> None:
-    if target.space_id and not can_write(target.member_role or "viewer"):  # type: ignore[arg-type]
-        raise ConflictError("只读成员不能写入共享空间")
-
-
-def _refuse_shared_extra(target: _WsTarget) -> None:
-    """v1: shared spaces support file CRUD only (no clone / snapshot)."""
-    if target.space_id:
-        raise ConflictError("共享空间暂不支持此操作")
+def _require_desk_write(target: _WsTarget) -> None:
+    if target.folder_role == "viewer":
+        raise AuthorizationError("只读成员不能写入工作区")
 
 
 def _workspace_coords(user_id: str, target: _WsTarget) -> WorkspaceCoords:
@@ -271,7 +244,7 @@ def _workspace_coords(user_id: str, target: _WsTarget) -> WorkspaceCoords:
     without a database.
     """
     return {
-        "user_id": user_id,
+        "user_id": target.owner_user_id or user_id,
         "folder_id": target.folder_id,
         "folder_rel_path": target.rel_path,
         "conversation_id": target.conversation_id,
@@ -279,81 +252,11 @@ def _workspace_coords(user_id: str, target: _WsTarget) -> WorkspaceCoords:
 
 
 def _storage_key(user_id: str, target: _WsTarget) -> str:
-    if target.space_id:
-        return shared_workspace_storage_key(target.space_id)
     return workspace_storage_key(
-        user_id=user_id,
+        user_id=target.owner_user_id or user_id,
         folder_id=target.folder_id,
         conversation_id=target.conversation_id,
     )
-
-
-async def _list_shared_entries(space_id: str, *, path: str, recursive: bool):
-    backend = build_shared_workspace(space_id)
-    pattern = "**/*" if recursive else "*"
-    return await backend.list(path or ".", pattern, cap=WORKSPACE_BROWSE_LIST_MAX)
-
-
-async def _shared_upload(space_id: str, path: str, data: bytes) -> int:
-    backend = build_shared_workspace(space_id)
-    return await backend.write_bytes(path, data)
-
-
-async def _shared_resolve_download(space_id: str, path: str, *, max_bytes: int) -> Path:
-    backend = build_shared_workspace(space_id)
-    return await backend.resolve_for_download(path, max_bytes=max_bytes)
-
-
-async def _shared_zip_archive(space_id: str, path: str, *, max_bytes: int) -> bytes:
-    """Subtree zip for a shared space — same file-download path, not snapshots."""
-    backend = build_shared_workspace(space_id)
-    target = await backend.resolve_dir_for_download(path)
-    return await zip_resolved_dir(target, max_bytes=max_bytes)
-
-
-async def _shared_read_edit(space_id: str, path: str):
-    backend = build_shared_workspace(space_id)
-    return await backend.read_for_edit(path)
-
-
-async def _shared_write_cas(
-    space_id: str,
-    path: str,
-    content: str,
-    *,
-    baseline_mtime_ms: int,
-    eol: Literal["lf", "crlf"],
-):
-    backend = build_shared_workspace(space_id)
-    return await backend.write_text_cas(
-        path, content, baseline_mtime_ms=baseline_mtime_ms, eol=eol
-    )
-
-
-async def _shared_mkdir(space_id: str, path: str) -> None:
-    backend = build_shared_workspace(space_id)
-    await backend.mkdir(path)
-
-
-async def _shared_delete(space_id: str, path: str) -> None:
-    backend = build_shared_workspace(space_id)
-    await backend.delete(path)
-
-
-async def _shared_move(space_id: str, src: str, dst: str) -> None:
-    backend = build_shared_workspace(space_id)
-    await backend.move(src, dst)
-
-
-async def _shared_copy(space_id: str, src: str, dst: str) -> None:
-    backend = build_shared_workspace(space_id)
-    await backend.copy(src, dst)
-
-
-async def _shared_index(space_id: str) -> tuple[list[str], bool]:
-    backend = build_shared_workspace(space_id)
-    result = await backend.index_files()
-    return result.paths, result.truncated
 
 
 @router.get("", response_model=WorkspaceListResponse)
@@ -361,9 +264,8 @@ async def list_workspaces(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
-    """Enumerate project workspaces + bare-chat scratches + shared spaces."""
+    """Enumerate project workspaces + bare-chat scratches."""
     folders = await folder_repo.list_by_user(user.user_id)
     items: list[WorkspaceSummary] = []
     for folder in folders:
@@ -415,17 +317,6 @@ async def list_workspaces(
             )
         )
 
-    for space_view in await shared_svc.list_spaces(user_id=user.user_id):
-        items.append(
-            WorkspaceSummary(
-                ws_id=format_shared_workspace_id(space_view.id),
-                name=space_view.name,
-                location="cloud",
-                root_id=None,
-                subpath=None,
-                has_files=shared_workspace_has_entries(space_view.id),
-            )
-        )
     return WorkspaceListResponse(data=items, total=len(items))
 
 
@@ -440,23 +331,17 @@ async def list_workspace_files(
     path: str = Query(".", description="工作区相对目录（`.` = 根）"),
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """List one directory of a cloud workspace (or its whole tree)."""
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    if target.space_id:
-        listing = await _list_shared_entries(
-            target.space_id, path=path, recursive=recursive
-        )
-    else:
-        listing = await list_files(
-            **_workspace_coords(user.user_id, target),
-            path=path,
-            recursive=recursive,
-        )
+    listing = await list_files(
+        **_workspace_coords(user.user_id, target),
+        path=path,
+        recursive=recursive,
+    )
     return WorkspaceFileListResponse(
         data=[WorkspaceFileEntry.model_validate(e) for e in listing.entries],
         total=len(listing.entries),
@@ -470,7 +355,6 @@ async def list_workspace_file_index(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Flat file-path list for @ mentions over a cloud workspace (文件中枢统一 F4).
 
@@ -479,15 +363,12 @@ async def list_workspace_file_index(
     (their files aren't here), so they are refused with 409 like other file ops.
     """
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    if target.space_id:
-        paths, truncated = await _shared_index(target.space_id)
-    else:
-        paths, truncated = await list_file_index(
-            **_workspace_coords(user.user_id, target),
-        )
+    paths, truncated = await list_file_index(
+        **_workspace_coords(user.user_id, target),
+    )
     return WorkspaceFileIndexResponse(data=paths, total=len(paths), truncated=truncated)
 
 
@@ -499,7 +380,6 @@ async def upload_workspace_file(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Upload (create/overwrite) a workspace file from the raw request body.
 
@@ -508,10 +388,10 @@ async def upload_workspace_file(
     workspace is rejected (422).
     """
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _require_shared_write(target)
+    _require_desk_write(target)
 
     max_bytes = settings.workspace_upload_max_bytes
     declared = request.headers.get("content-length")
@@ -521,25 +401,12 @@ async def upload_workspace_file(
     if len(data) > max_bytes:
         raise ValidationError(f"文件超出 {max_bytes} 字节的上传上限")
 
-    if target.space_id:
-        shared_svc.check_capacity(target.space_id, incoming_bytes=len(data))
-
     try:
-        if target.space_id:
-            written = await _shared_upload(target.space_id, path, data)
-            await shared_svc.record_file_change(
-                space_id=target.space_id,
-                actor_user_id=user.user_id,
-                actor_via="user",
-                action="file_written",
-                path=path,
-            )
-        else:
-            written = await upload_file(
-                **_workspace_coords(user.user_id, target),
-                path=path,
-                data=data,
-            )
+        written = await upload_file(
+            **_workspace_coords(user.user_id, target),
+            path=path,
+            data=data,
+        )
     except OutsideWorkspace as e:
         raise ValidationError("路径非法：超出工作区范围") from e
     return UploadFileResponse(path=path, size_bytes=written)
@@ -585,29 +452,17 @@ async def export_workspace_docx(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Export workspace Markdown to a sibling ``.docx`` (shared ``md_to_docx`` converter)."""
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _require_shared_write(target)
+    _require_desk_write(target)
 
     try:
-        if target.space_id:
-            backend = build_shared_workspace(target.space_id)
-        else:
-            backend = build_server_workspace(**_workspace_coords(user.user_id, target))
+        backend = build_server_workspace(**_workspace_coords(user.user_id, target))
         result = await export_markdown_path(backend, body.path)
-        if target.space_id:
-            await shared_svc.record_file_change(
-                space_id=target.space_id,
-                actor_user_id=user.user_id,
-                actor_via="user",
-                action="file_written",
-                path=result.output_path,
-            )
     except ExportMarkdownError as e:
         raise ValidationError(e.message) from e
 
@@ -648,29 +503,17 @@ async def export_workspace_pdf(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Export workspace Markdown to a sibling ``.pdf`` (shared ``md_to_pdf`` converter)."""
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _require_shared_write(target)
+    _require_desk_write(target)
 
     try:
-        if target.space_id:
-            backend = build_shared_workspace(target.space_id)
-        else:
-            backend = build_server_workspace(**_workspace_coords(user.user_id, target))
+        backend = build_server_workspace(**_workspace_coords(user.user_id, target))
         result = await export_markdown_to_pdf_path(backend, body.path)
-        if target.space_id:
-            await shared_svc.record_file_change(
-                space_id=target.space_id,
-                actor_user_id=user.user_id,
-                actor_via="user",
-                action="file_written",
-                path=result.output_path,
-            )
     except ExportMarkdownError as e:
         raise ValidationError(e.message) from e
 
@@ -689,7 +532,6 @@ async def read_workspace_file_for_edit(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Read a cloud workspace file for in-panel editing (full text + mtime baseline).
 
@@ -697,17 +539,14 @@ async def read_workspace_file_for_edit(
     whole file. Local ids are reached over desktop IPC, so they 409 like other ops.
     """
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
     try:
-        if target.space_id:
-            text, mtime_ms, eol = await _shared_read_edit(target.space_id, path)
-        else:
-            text, mtime_ms, eol = await read_file_for_edit(
-                **_workspace_coords(user.user_id, target),
-                path=path,
-            )
+        text, mtime_ms, eol = await read_file_for_edit(
+            **_workspace_coords(user.user_id, target),
+            path=path,
+        )
     except OutsideWorkspace as e:
         raise ValidationError("路径非法：超出工作区范围") from e
     except (PathNotFound, NotAFile) as e:
@@ -725,7 +564,6 @@ async def write_workspace_file_text(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Conditionally write editor text back to a cloud workspace file (mtime CAS).
 
@@ -733,43 +571,24 @@ async def write_workspace_file_text(
     instead of clobbering it (云端硬化 §九). Local ids 409 (desktop owns the bytes).
     """
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _require_shared_write(target)
+    _require_desk_write(target)
 
     max_bytes = settings.workspace_upload_max_bytes
     encoded = body.content.encode("utf-8")
     if len(encoded) > max_bytes:
         raise ValidationError(f"文件超出 {max_bytes} 字节的上传上限")
-    if target.space_id:
-        shared_svc.check_capacity(target.space_id, incoming_bytes=len(encoded))
 
     try:
-        if target.space_id:
-            ok, mtime_ms = await _shared_write_cas(
-                target.space_id,
-                path,
-                body.content,
-                baseline_mtime_ms=body.baseline_mtime_ms,
-                eol=body.eol,
-            )
-            if ok:
-                await shared_svc.record_file_change(
-                    space_id=target.space_id,
-                    actor_user_id=user.user_id,
-                    actor_via="user",
-                    action="file_written",
-                    path=path,
-                )
-        else:
-            ok, mtime_ms = await write_file_text(
-                **_workspace_coords(user.user_id, target),
-                path=path,
-                content=body.content,
-                baseline_mtime_ms=body.baseline_mtime_ms,
-                eol=body.eol,
-            )
+        ok, mtime_ms = await write_file_text(
+            **_workspace_coords(user.user_id, target),
+            path=path,
+            content=body.content,
+            baseline_mtime_ms=body.baseline_mtime_ms,
+            eol=body.eol,
+        )
     except OutsideWorkspace as e:
         raise ValidationError("路径非法：超出工作区范围") from e
     except NotAFile as e:
@@ -784,7 +603,6 @@ async def download_workspace_file(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Download a single file from a cloud workspace.
 
@@ -792,21 +610,16 @@ async def download_workspace_file(
     the AI ``read_bytes`` 5 MiB gate.
     """
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
     max_bytes = settings.workspace_upload_max_bytes
     try:
-        if target.space_id:
-            file_path = await _shared_resolve_download(
-                target.space_id, path, max_bytes=max_bytes
-            )
-        else:
-            file_path = await resolve_download_file(
-                **_workspace_coords(user.user_id, target),
-                path=path,
-                max_bytes=max_bytes,
-            )
+        file_path = await resolve_download_file(
+            **_workspace_coords(user.user_id, target),
+            path=path,
+            max_bytes=max_bytes,
+        )
     except OutsideWorkspace as e:
         raise ValidationError("路径非法：超出工作区范围") from e
     except (PathNotFound, NotAFile) as e:
@@ -830,30 +643,23 @@ async def download_workspace_archive(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Download a directory subtree as zip (selected dir as archive root).
 
     Independent of GET ``/{ws_id}/files/{path}`` (preview / single file). Capacity
-    is the panel upload ceiling, not snapshot retention. Shared spaces that can
-    download a file can download a folder zip — this is not the snapshot 409.
+    is the panel upload ceiling, not snapshot retention.
     """
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
     max_bytes = settings.workspace_upload_max_bytes
     try:
-        if target.space_id:
-            data = await _shared_zip_archive(
-                target.space_id, path, max_bytes=max_bytes
-            )
-        else:
-            data = await zip_subtree_for_download(
-                **_workspace_coords(user.user_id, target),
-                path=path,
-                max_bytes=max_bytes,
-            )
+        data = await zip_subtree_for_download(
+            **_workspace_coords(user.user_id, target),
+            path=path,
+            max_bytes=max_bytes,
+        )
     except OutsideWorkspace as e:
         raise ValidationError("路径非法：超出工作区范围") from e
     except PathNotFound as e:
@@ -879,29 +685,18 @@ async def delete_workspace_file(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Delete a file or directory from a cloud workspace."""
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _require_shared_write(target)
+    _require_desk_write(target)
     try:
-        if target.space_id:
-            await _shared_delete(target.space_id, path)
-            await shared_svc.record_file_change(
-                space_id=target.space_id,
-                actor_user_id=user.user_id,
-                actor_via="user",
-                action="file_deleted",
-                path=path,
-            )
-        else:
-            await delete_file(
-                **_workspace_coords(user.user_id, target),
-                path=path,
-            )
+        await delete_file(
+            **_workspace_coords(user.user_id, target),
+            path=path,
+        )
     except OutsideWorkspace as e:
         raise ValidationError("路径非法：超出工作区范围") from e
     except PathNotFound as e:
@@ -918,31 +713,19 @@ async def move_workspace_file(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Move/rename a file or directory within a cloud workspace."""
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _require_shared_write(target)
+    _require_desk_write(target)
     try:
-        if target.space_id:
-            await _shared_move(target.space_id, body.src, body.dst)
-            await shared_svc.record_file_change(
-                space_id=target.space_id,
-                actor_user_id=user.user_id,
-                actor_via="user",
-                action="file_moved",
-                path=body.dst,
-                detail={"src": body.src},
-            )
-        else:
-            await move_file(
-                **_workspace_coords(user.user_id, target),
-                src=body.src,
-                dst=body.dst,
-            )
+        await move_file(
+            **_workspace_coords(user.user_id, target),
+            src=body.src,
+            dst=body.dst,
+        )
     except OutsideWorkspace as e:
         raise ValidationError("路径非法：超出工作区范围") from e
     except PathNotFound as e:
@@ -959,31 +742,19 @@ async def copy_workspace_file(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Copy a file or directory within a cloud workspace (recursive; no clobber)."""
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _require_shared_write(target)
+    _require_desk_write(target)
     try:
-        if target.space_id:
-            await _shared_copy(target.space_id, body.src, body.dst)
-            await shared_svc.record_file_change(
-                space_id=target.space_id,
-                actor_user_id=user.user_id,
-                actor_via="user",
-                action="file_written",
-                path=body.dst,
-                detail={"src": body.src, "op": "copy"},
-            )
-        else:
-            await copy_file(
-                **_workspace_coords(user.user_id, target),
-                src=body.src,
-                dst=body.dst,
-            )
+        await copy_file(
+            **_workspace_coords(user.user_id, target),
+            src=body.src,
+            dst=body.dst,
+        )
     except OutsideWorkspace as e:
         raise ValidationError("路径非法：超出工作区范围") from e
     except PathNotFound as e:
@@ -1002,29 +773,18 @@ async def create_workspace_dir(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Create a directory in a cloud workspace."""
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _require_shared_write(target)
+    _require_desk_write(target)
     try:
-        if target.space_id:
-            await _shared_mkdir(target.space_id, body.path)
-            await shared_svc.record_file_change(
-                space_id=target.space_id,
-                actor_user_id=user.user_id,
-                actor_via="user",
-                action="dir_created",
-                path=body.path,
-            )
-        else:
-            await create_dir(
-                **_workspace_coords(user.user_id, target),
-                path=body.path,
-            )
+        await create_dir(
+            **_workspace_coords(user.user_id, target),
+            path=body.path,
+        )
     except OutsideWorkspace as e:
         raise ValidationError("路径非法：超出工作区范围") from e
     except AlreadyExists as e:
@@ -1039,14 +799,13 @@ async def clone_repo_into_workspace(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Clone a public git repository into a cloud workspace (决策⑤ · G3)."""
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _refuse_shared_extra(target)
+    _require_desk_write(target)
     from agentcore.db.base import async_session_factory
     from agentcore.workspace.git_credentials import load_git_auth
 
@@ -1079,14 +838,12 @@ async def list_workspace_snapshots(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """List a workspace's snapshots (newest first). Allowed for local too —
     snapshots are object-store backed and keyed by ws (§五)."""
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
-    _refuse_shared_extra(target)
     refs = await list_snapshots(
         user_id=user.user_id,
         folder_id=target.folder_id,
@@ -1105,16 +862,15 @@ async def create_workspace_snapshot(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Take a manual snapshot of a cloud workspace (a ``label`` keeps it as a
     version). Local workspaces snapshot via the desktop archive channel, not
     here (§五), so they are rejected with 409."""
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _refuse_shared_extra(target)
+    _require_desk_write(target)
     # create_snapshot holds workspace_lock at the sink (A′).
     ref = await create_snapshot(
         **_workspace_coords(user.user_id, target),
@@ -1130,17 +886,15 @@ async def restore_workspace_snapshot(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Restore a cloud workspace to a snapshot (overwrites current files).
 
     Refused (409) for local workspaces: it would rewrite the unused server-side
     mirror, not the user's machine."""
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _refuse_shared_extra(target)
     # restore_snapshot holds workspace_lock at the sink (A′).
     try:
         await restore_snapshot(
@@ -1159,13 +913,11 @@ async def download_workspace_snapshot(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Download a snapshot archive (zip). Allowed for local too (read-only)."""
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
-    _refuse_shared_extra(target)
     try:
         data = await read_snapshot(
             user_id=user.user_id,
@@ -1192,7 +944,6 @@ async def list_workspace_trash(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """List reversible soft-deletes under ``AgentCore/trash`` (newest first).
 
@@ -1201,17 +952,17 @@ async def list_workspace_trash(
     (retention = ``workspace_retention_days``).
     """
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _refuse_shared_extra(target)
+    disk_user = target.owner_user_id or user.user_id
     root = workspace_root_path(
-        user_id=user.user_id,
+        user_id=disk_user,
         folder_rel_path=target.rel_path,
         conversation_id=target.conversation_id,
     )
     internal_root = workspace_internal_root(
-        user_id=user.user_id,
+        user_id=disk_user,
         folder_id=target.folder_id,
         conversation_id=target.conversation_id,
     )
@@ -1240,7 +991,6 @@ async def restore_workspace_trash(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
-    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
 ):
     """Restore one ``AgentCore/trash`` entry to its original relative path.
 
@@ -1249,17 +999,18 @@ async def restore_workspace_trash(
     confuse with OS ``shell.trashItem``.
     """
     target = await _resolve_owned_workspace(
-        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+        ws_id, user.user_id, conv_repo, folder_repo
     )
     _require_cloud(target)
-    _refuse_shared_extra(target)
+    _require_desk_write(target)
+    disk_user = target.owner_user_id or user.user_id
     root = workspace_root_path(
-        user_id=user.user_id,
+        user_id=disk_user,
         folder_rel_path=target.rel_path,
         conversation_id=target.conversation_id,
     )
     internal_root = workspace_internal_root(
-        user_id=user.user_id,
+        user_id=disk_user,
         folder_id=target.folder_id,
         conversation_id=target.conversation_id,
     )

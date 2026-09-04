@@ -88,12 +88,6 @@ vi.mock("@/components/chat/Markdown", () => ({
   Markdown: ({ content }: { content: string }) => <div>{content}</div>,
 }));
 
-vi.mock("@/components/chat/debate/CollapsibleSpeech", () => ({
-  CollapsibleSpeech: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-}));
-
 import { AssistantMessage } from "../AssistantMessage";
 
 function settledMessage(overrides: Partial<Message> = {}): Message {

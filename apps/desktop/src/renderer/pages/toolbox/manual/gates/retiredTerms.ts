@@ -110,12 +110,12 @@ export function isDefinitionalMention(
 }
 
 /**
- * 「成员」合法所指：子成员、群成员、Team 成员、结构成员、成员名单等非 worker gloss。
+ * 「成员」合法所指：子成员、群成员、Team 成员、结构成员、邀请成员（协作桌名册）等非 worker gloss。
  * 裸「成员」指 worker 时不豁免。
  */
 export function isExemptMemberUsage(text: string, index: number): boolean {
   const prefix = text.slice(Math.max(0, index - 4), index);
-  if (/(?:子|群|IM|Team|团队结构|结构)$/.test(prefix)) return true;
+  if (/(?:子|群|IM|Team|团队结构|结构|邀请)$/.test(prefix)) return true;
   // 「captain + 成员」类结构说明
   const around = windowAround(text, index, 12);
   if (/captain\s*\+\s*成员/.test(around)) return true;

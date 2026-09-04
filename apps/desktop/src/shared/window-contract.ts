@@ -5,12 +5,7 @@
  */
 
 /** 预设 id；`free` = 解除比例锁，恢复自由缩放。 */
-export type WindowFramePreset =
-  | "free"
-  | "16:9-720"
-  | "16:9-1080"
-  | "4:3-xga"
-  | "4:3-uxga";
+export type WindowFramePreset = "free" | "16:9-1080" | "4:3-uxga";
 
 export interface WindowFramePresetInfo {
   id: Exclude<WindowFramePreset, "free">;
@@ -23,25 +18,11 @@ export interface WindowFramePresetInfo {
 /** 渲染层菜单展示用；尺寸与主进程 `window-frame.ts` 保持同步。 */
 export const WINDOW_FRAME_PRESETS: readonly WindowFramePresetInfo[] = [
   {
-    id: "16:9-720",
-    label: "16:9 · 1280×720",
-    width: 1280,
-    height: 720,
-    aspect: 16 / 9,
-  },
-  {
     id: "16:9-1080",
     label: "16:9 · 1920×1080",
     width: 1920,
     height: 1080,
     aspect: 16 / 9,
-  },
-  {
-    id: "4:3-xga",
-    label: "4:3 · 1024×768",
-    width: 1024,
-    height: 768,
-    aspect: 4 / 3,
   },
   {
     id: "4:3-uxga",
@@ -51,6 +32,14 @@ export const WINDOW_FRAME_PRESETS: readonly WindowFramePresetInfo[] = [
     aspect: 4 / 3,
   },
 ] as const;
+
+/** Click a ratio: lock it from free, switch if another is locked, unlock if it is already active. */
+export function toggleWindowFramePreset(
+  current: WindowFramePreset,
+  clicked: Exclude<WindowFramePreset, "free">,
+): WindowFramePreset {
+  return current === clicked ? "free" : clicked;
+}
 
 export const WINDOW_CHANNELS = {
   applyFramePreset: "window:applyFramePreset",

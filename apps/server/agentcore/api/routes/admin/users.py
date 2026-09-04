@@ -21,8 +21,8 @@ from agentcore.api.dependencies import (
     get_conversation_share_repo,
     get_cost_event_repo,
     get_db,
+    get_folder_desk_service,
     get_message_repo,
-    get_shared_space_service,
     get_turn_metrics_repo,
     get_user_llm_provider_repo,
     get_user_repo,
@@ -235,7 +235,7 @@ async def delete_user(
     shares: ConversationShareRepository = Depends(get_conversation_share_repo),
     llm_providers: UserLlmProviderRepository = Depends(get_user_llm_provider_repo),
     assets: AssetStorage = Depends(get_asset_storage),
-    shared_space_svc=Depends(get_shared_space_service),
+    folder_desk_svc=Depends(get_folder_desk_service),
     db: AsyncSession = Depends(get_db),
 ) -> AdminUserResponse:
     """注销 (soft-delete + anonymize) an account, admin-initiated (用户管理 强操作).
@@ -260,7 +260,7 @@ async def delete_user(
         shares=shares,
         llm_providers=llm_providers,
         assets=assets,
-        shared_spaces=shared_space_svc,
+        folder_desk=folder_desk_svc,
     )
     await record_admin_audit(
         db,

@@ -1,4 +1,3 @@
-import { agentColorVar, agentGlyph } from "@/lib/agentIdentity";
 import { FileText } from "lucide-react";
 import {
   type AgentNodeData,
@@ -15,8 +14,7 @@ export function AgentNodePeek({
   d: AgentNodeData;
   p: AgentNodePresentation;
 }) {
-  const identityColor = agentColorVar(d.role);
-  const identityGlyph = agentGlyph(d.role);
+  const { color, glyph, showRoleTitle } = p.identity;
 
   return (
     <div className="space-y-2 py-1">
@@ -24,15 +22,19 @@ export function AgentNodePeek({
         <span
           className="flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
           style={{
-            backgroundColor: `color-mix(in oklab, ${identityColor} 18%, transparent)`,
-            color: identityColor,
+            backgroundColor: `color-mix(in oklab, ${color} 18%, transparent)`,
+            color,
           }}
         >
-          {identityGlyph}
+          {glyph}
         </span>
-        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-          {d.role}
-        </span>
+        {showRoleTitle ? (
+          <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+            {d.role}
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1" />
+        )}
         <span className="shrink-0 text-muted-foreground">
           {statusLabel(d.status)}
         </span>

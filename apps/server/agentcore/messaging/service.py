@@ -166,7 +166,7 @@ class MessagingService:
         directory: UserDirectoryRepository,
         friends: FriendRepository | None = None,
         events: ChatEventPublisher | None = None,
-        shared_spaces: Any | None = None,
+        folder_members: Any | None = None,
     ) -> None:
         self._users = users
         self._chats = chats
@@ -176,9 +176,7 @@ class MessagingService:
         # always injects FriendRepository via get_messaging_service.
         self._friends = friends
         self._events: ChatEventPublisher = events or NullChatEventPublisher()
-        # Optional SharedSpaceRepository — when set, blocking auto-rejects
-        # pending shared-space invites between the pair (D3); does not kick members.
-        self._shared_spaces = shared_spaces
+        self._folder_members = folder_members
 
     def _require_friends(self) -> FriendRepository:
         if self._friends is None:
@@ -1070,8 +1068,15 @@ class MessagingService:
             cancelled = await self._friends.cancel_pending_between(user_id, target_id)
             for req in cancelled:
                 await self._publish_friend_request(req, action="cancelled")
-        if self._shared_spaces is not None:
-            await self._shared_spaces.delete_pending_between(user_id, target_id)
+        if self._folder_members is not None:
+            n = await self._folder_members.delete_pending_between(user_id, target_id)
+            if n:
+                logger.info(
+                    "folder_desk.pending_cleared_on_block",
+                    user_a=user_id,
+                    user_b=target_id,
+                    count=n,
+                )
         logger.info("dm.user_blocked", user=user_id, target=target_id)
 
     async def unblock_user(self, *, user_id: str, target_id: str) -> None:

@@ -24,7 +24,8 @@ import { type ReactNode, useRef, useState } from "react";
  * 不再 swap 掉树。文件中枢页仍用 {@link FileWorkbench} 左右分栏。
  *
  * 单行面板头：左侧 `leading`（文件夹·本地/云端 chip）、中段先新建再装入（上传/克隆）、
- * 右侧看树（折叠）+ `trailing`（导出 / 软删）。树跟 SSE / watch / focus 静默补丁，不挂人手刷新。
+ * 右侧看树（折叠）+ `trailing`（导出 / 软删）。树跟 SSE / watch / focus
+ * 静默补丁，不挂人手刷新。协作桌与自有云夹同一棵 `folder:` 树，不再叠第二根。
  */
 export function FileBrowser({
   source,
@@ -66,24 +67,26 @@ export function FileBrowser({
 
         {source ? (
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1">
-              <SimpleTooltip label="新建文件">
-                <IconButton
-                  onClick={() => treeRef.current?.startCreate("file")}
-                  aria-label="新建文件"
-                >
-                  <FilePlus size={14} />
-                </IconButton>
-              </SimpleTooltip>
-              <SimpleTooltip label="新建文件夹">
-                <IconButton
-                  onClick={() => treeRef.current?.startCreate("dir")}
-                  aria-label="新建文件夹"
-                >
-                  <FolderPlus size={14} />
-                </IconButton>
-              </SimpleTooltip>
-            </div>
+            {source.caps.edit ? (
+              <div className="flex items-center gap-1">
+                <SimpleTooltip label="新建文件">
+                  <IconButton
+                    onClick={() => treeRef.current?.startCreate("file")}
+                    aria-label="新建文件"
+                  >
+                    <FilePlus size={14} />
+                  </IconButton>
+                </SimpleTooltip>
+                <SimpleTooltip label="新建文件夹">
+                  <IconButton
+                    onClick={() => treeRef.current?.startCreate("dir")}
+                    aria-label="新建文件夹"
+                  >
+                    <FolderPlus size={14} />
+                  </IconButton>
+                </SimpleTooltip>
+              </div>
+            ) : null}
             {source.caps.transfer || onCloneGit ? (
               <div className="flex items-center gap-1">
                 {source.caps.transfer ? (
@@ -129,6 +132,7 @@ export function FileBrowser({
           <FileTree
             ref={treeRef}
             source={source}
+            chrome
             hideToolbar
             emptyText={emptyTreeHint}
             onChromeState={setChrome}

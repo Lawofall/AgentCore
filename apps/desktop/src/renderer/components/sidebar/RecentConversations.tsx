@@ -1,6 +1,9 @@
 import { SurfaceRowButton } from "@/components/ui";
 import { useConversations } from "@/hooks/useConversations";
-import { useWorkspaceGroups } from "@/hooks/useWorkspaceGroups";
+import {
+  useSharedWithMeWorkspaceGroups,
+  useWorkspaceGroups,
+} from "@/hooks/useWorkspaceGroups";
 import {
   BARE_LIMIT_SOLO,
   BARE_LIMIT_WITH_GROUPS,
@@ -29,7 +32,9 @@ function byRecency(a: Conversation, b: Conversation): number {
  */
 export function RecentConversations() {
   const conversations = useConversations();
-  const hasGroups = useWorkspaceGroups().length > 0;
+  const ownedGroups = useWorkspaceGroups();
+  const sharedGroups = useSharedWithMeWorkspaceGroups();
+  const hasGroups = ownedGroups.length > 0 || sharedGroups.length > 0;
   const hasPinned = conversations.some((c) => c.pinned);
   const currentId = useConversationStore((s) => s.currentConversationId);
   const requiredIds = useRequiredConversationIds();
@@ -43,6 +48,7 @@ export function RecentConversations() {
   }, [conversations, currentId, hasGroups, requiredIds]);
 
   if (conversations.length === 0) {
+    if (hasGroups) return null;
     return (
       <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
         <MessageSquare size={24} className="text-sidebar-foreground/30" />

@@ -1,14 +1,13 @@
-import { CreateSharedSpaceDialog } from "@/components/files/sharedSpaces/CreateSharedSpaceDialog";
 import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { pickAndOpenLocalFolder } from "@/lib/openLocalFolder";
 import { useFoldersStore } from "@/stores/folders";
-import { FolderPlus, HardDrive, Plus } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { FolderPlus, HardDrive } from "lucide-react";
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 /**
- * A rail zone title (我的文件 / 本机文件夹 / 共享空间) plus its one create
+ * A rail zone title (我的文件 / 本机文件夹 / 与我共享) plus its one create
  * action. §5.4 leaves exactly two ways to make a container — build a folder
  * in 我的文件, or open one off the local disk — so each zone owns the action
  * that belongs to it instead of one combined「新建」menu.
@@ -72,34 +71,7 @@ export function LocalFoldersRailHeader() {
   );
 }
 
-/** 共享空间 — member-based cloud spaces, a container parallel to 我的文件 (§八). */
-export function SharedSpacesRailHeader({
-  onSharedCreated,
-}: {
-  onSharedCreated?: (spaceId: string) => void;
-}) {
-  const [createOpen, setCreateOpen] = useState(false);
-
-  return (
-    <>
-      <RailSectionHeader
-        label="共享空间"
-        action={
-          <SimpleTooltip label="新建共享空间">
-            <IconButton
-              aria-label="新建共享空间"
-              onClick={() => setCreateOpen(true)}
-            >
-              <Plus size={13} />
-            </IconButton>
-          </SimpleTooltip>
-        }
-      />
-      <CreateSharedSpaceDialog
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={onSharedCreated}
-      />
-    </>
-  );
+/** 与我共享 — cloud desks this user joined. Invite lives on the owner's folder. */
+export function SharedWithMeRailHeader() {
+  return <RailSectionHeader label="与我共享" />;
 }

@@ -23,6 +23,7 @@ vi.mock("@/hooks/useConversations", () => ({
   patchConversationCache: vi.fn(),
   upsertConversationFront: vi.fn(),
   applyDeletedConversationLocally,
+  getConversations: () => [],
 }));
 vi.mock("@/lib/composerPendingHint", () => ({
   confirmSendDespitePendingIfNeeded: () => true,

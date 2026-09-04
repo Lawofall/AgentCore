@@ -69,6 +69,9 @@ describe("最近删除 (folder trash)", () => {
       localSubpath: "cases",
       relPath: null,
       parentRelPath: null,
+      myRole: null,
+      myState: null,
+      ownerUserId: null,
     });
   });
 });

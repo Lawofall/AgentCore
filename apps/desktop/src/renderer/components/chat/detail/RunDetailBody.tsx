@@ -15,17 +15,15 @@ import { revisionChains, useMessageExecution } from "@/stores/execution";
 import { useSidePanelStore } from "@/stores/sidePanel";
 import { turnDetailPath } from "@/stores/ui";
 import { isLiveRunStatus } from "@agentcore/protocol-fold-kit";
-import { Shield, Square } from "lucide-react";
+import { MessagesSquare, Shield, Square } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
-  buildModeratorLedger,
   isDebateModeratorRun,
   isThinkingLivePlaceholder,
 } from "./debateModerator";
 import { receivedContextForList, selectRunTaskSection } from "./runTaskSection";
 import { DebriefSection } from "./sections/RunDebrief";
 import { EscalationSection } from "./sections/RunEscalations";
-import { RunModeratorLedger } from "./sections/RunModeratorLedger";
 import { RunOutcomeAcceptSection } from "./sections/RunOutcomeAccept";
 import { ResourceSection } from "./sections/RunResources";
 import {
@@ -62,7 +60,7 @@ function turnPresetSnapshot(
 
 /**
  * Single-run detail content — hybrid layout aligned with the CEO bubble timeline:
- * header anchors (role / 接手 chip / status / task / moderator / revision /
+ * header anchors (role / 接手 chip / status / 打开辩论室 / task / revision /
  * escalation / context) → interleaved ProcessTimeline body → footer (debrief /
  * resources). Topology (depends / parent / children) lives on the
  * collab graph, not this inspector.
@@ -141,7 +139,6 @@ export function RunDetailBody({
   const thinkingLive = isThinkingLivePlaceholder(agent);
 
   const isModerator = isDebateModeratorRun(execution, run.id);
-  const moderatorLedger = isModerator ? buildModeratorLedger(execution) : null;
   const chain =
     revisionChains(execution).find((c) =>
       c.versions.some((v) => v.run.id === run.id),
@@ -156,6 +153,7 @@ export function RunDetailBody({
   const turnPresetLabel = rawTurnPreset;
 
   const process = run.process;
+  // 主持人 thinking 声明 false：working 且无 process 时不出空时间线；有 process 与其它 run 相同。
   const showTimeline =
     process.length > 0 ||
     thinkingLive ||
@@ -195,6 +193,18 @@ export function RunDetailBody({
             {(run.durationMs / 1000).toFixed(1)}s
           </span>
         )}
+        {isModerator && conversationId != null && (
+          <Button
+            variant="ghost"
+            className="h-auto shrink-0 px-0 py-0 text-xs text-primary hover:bg-transparent"
+            icon={<MessagesSquare size={12} />}
+            onClick={() => {
+              navigate(turnDetailPath(conversationId, messageId, "debate"));
+            }}
+          >
+            打开辩论室
+          </Button>
+        )}
       </div>
 
       {/* 进行中用 live 底托住干预按钮；排队中无底托。终局 `intervene` 为 null，
@@ -220,19 +230,6 @@ export function RunDetailBody({
           <Markdown content={taskSection.body} />
         </CollapsibleSpeech>
       </Section>
-
-      {moderatorLedger && (
-        <RunModeratorLedger
-          ledger={moderatorLedger}
-          onOpenDebateRoom={
-            conversationId
-              ? () => {
-                  navigate(turnDetailPath(conversationId, messageId, "debate"));
-                }
-              : undefined
-          }
-        />
-      )}
 
       {chain && (
         <RevisionChainSection

@@ -81,9 +81,11 @@ class _FakeFolder:
         name: str,
         local_root_id: str | None = None,
         rel_path: str | None = None,
+        user_id: str = "u1",
     ) -> None:
         self.id = id
         self.name = name
+        self.user_id = user_id
         self.local_root_id = local_root_id
         self.local_subpath = None
         self.rel_path = None if local_root_id else (rel_path or name)
@@ -115,7 +117,6 @@ def _patch_repo(
             del session
 
         async def get_by_id(self, folder_id: str, *, user_id: str) -> _FakeFolder | None:
-            calls.loaded.append((folder_id, user_id))
             folder = folders.get(folder_id)
             return folder if folder is not None else None
 
@@ -141,8 +142,21 @@ def _patch_repo(
             raise delete_raises
         return delete_returns and folder_id in folders
 
+    async def _fake_desk_access(session: Any, *, folder_id: str, user_id: str):
+        from agentcore.folders.desk import DeskAccess
+
+        del session
+        calls.loaded.append((folder_id, user_id))
+        folder = folders.get(folder_id)
+        if folder is None:
+            return None
+        return DeskAccess(folder=folder, role="owner")
+
     monkeypatch.setattr(folders_mod, "async_session_factory", lambda: _CM())
     monkeypatch.setattr(folders_mod, "FolderRepository", _Repo)
+    monkeypatch.setattr(
+        "agentcore.folders.desk.resolve_desk_access", _fake_desk_access
+    )
     # The tool must not soft-delete the row without moving the directory out of the
     # user tree, so it goes through tree_ops — patch there, not at the repository.
     monkeypatch.setattr(tree_ops, "soft_delete_folder_tree", _fake_tree_delete)

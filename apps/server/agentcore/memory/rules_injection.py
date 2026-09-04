@@ -512,6 +512,7 @@ async def assemble_injected_rules(
     folder_id: str | None,
     enabled: bool,
     scope_chain: Sequence[str] | None = None,
+    folder_user_id: str | None = None,
 ) -> str:
     """Load + compose this turn's ``<设定>`` body (read-side full injection).
 
@@ -525,37 +526,38 @@ async def assemble_injected_rules(
     :func:`assemble_turn_rules`.
     """
     chain = tuple(scope_chain) if scope_chain is not None else own_scope_chain(folder_id)
+    folder_actor = folder_user_id or user_id
     global_disputed = (
         await disputed_memory_paths(store, user_id, None) if enabled else frozenset()
     )
     ancestor_layers: list[tuple[str | None, Sequence[str]]] = []
     for scope in ancestor_scopes(chain):
         disputed = (
-            await disputed_memory_paths(store, user_id, scope) if enabled else frozenset()
+            await disputed_memory_paths(store, folder_actor, scope) if enabled else frozenset()
         )
         profile = (
-            await _slot_body(store, user_id, CORE_MEMORY_FILE, scope, disputed)
+            await _slot_body(store, folder_actor, CORE_MEMORY_FILE, scope, disputed)
             if enabled
             else None
         )
-        ancestor_layers.append((profile, await _rule_bodies(repo, user_id, scope)))
+        ancestor_layers.append((profile, await _rule_bodies(repo, folder_actor, scope)))
     current_profile = current_nav = None
     current_rules: list[str] = []
     if chain:
         current_id = chain[-1]
         disputed = (
-            await disputed_memory_paths(store, user_id, current_id)
+            await disputed_memory_paths(store, folder_actor, current_id)
             if enabled
             else frozenset()
         )
         if enabled:
             current_profile = await _slot_body(
-                store, user_id, CORE_MEMORY_FILE, current_id, disputed
+                store, folder_actor, CORE_MEMORY_FILE, current_id, disputed
             )
             current_nav = await _slot_body(
-                store, user_id, NAVIGATION_MEMORY_FILE, current_id, disputed
+                store, folder_actor, NAVIGATION_MEMORY_FILE, current_id, disputed
             )
-        current_rules = await _rule_bodies(repo, user_id, current_id)
+        current_rules = await _rule_bodies(repo, folder_actor, current_id)
     return compose_injected_rules(
         _join_frags(
             global_pref=(
@@ -643,6 +645,7 @@ async def assemble_turn_rules(
     *,
     folder_id: str | None,
     enabled: bool,
+    folder_user_id: str | None = None,
 ) -> str:
     """Turn-time convenience over :func:`assemble_injected_rules` (the pipeline entry point).
 
@@ -661,8 +664,9 @@ async def assemble_turn_rules(
     from agentcore.memory.account_prepare_cache import get_account_rules_memory_snapshot
 
     try:
+        folder_actor = folder_user_id or user_id
         creds = get_account_credentials()
-        if creds is not None:
+        if creds is not None and folder_actor == user_id:
             snap = get_account_rules_memory_snapshot(user_id, folder_id)
             if snap is None:
                 return ""
@@ -670,7 +674,7 @@ async def assemble_turn_rules(
                 _fragments_from_snapshot(snap, folder_id=folder_id, enabled=enabled)
             )
         async with async_session_factory() as session:
-            chain = await db_scope_chain(user_id, folder_id, session=session)
+            chain = await db_scope_chain(folder_actor, folder_id, session=session)
             return await assemble_injected_rules(
                 store,
                 DocumentRepository(session),
@@ -678,6 +682,7 @@ async def assemble_turn_rules(
                 folder_id=folder_id,
                 enabled=enabled,
                 scope_chain=chain,
+                folder_user_id=folder_actor,
             )
     except Exception as e:  # noqa: BLE001 - user rules must never break a turn's assembly
         logger.warning("memory.user_rules_load_failed", user_id=user_id, error=str(e))

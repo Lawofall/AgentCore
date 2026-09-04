@@ -28,7 +28,6 @@ from . import (
     messages,
     run_redirect,
     run_stop,
-    shared_mounts,
     snapshots,
     trash,
     turn_files_diff,
@@ -51,7 +50,6 @@ router.include_router(run_stop.router)
 router.include_router(debate_steer.router)
 router.include_router(binding.router)
 router.include_router(external_grants.router)
-router.include_router(shared_mounts.router)
 router.include_router(handoff.router)
 router.include_router(turns.router)
 router.include_router(snapshots.router)

@@ -70,6 +70,8 @@ def readiness_footer(
     matched: bool | None,
     had_wait_for: bool,
     exit_code: object = None,
+    cloud: bool = False,
+    http_ports: tuple[int, ...] = (),
 ) -> str:
     """Model-facing ready/not-ready note appended to start/read output."""
     if status == "exited":
@@ -79,6 +81,17 @@ def readiness_footer(
         )
     if had_wait_for:
         if matched is True:
+            if cloud:
+                if http_ports:
+                    return (
+                        "\n\n【就绪判定】wait_for 已命中。用户从产品「打开预览」进入；"
+                        "禁止把 127.0.0.1 / localhost 说成用户能打开的地址。"
+                        "建议 list 确认 status=running。"
+                    )
+                return (
+                    "\n\n【就绪判定】wait_for 已命中，但输出里没有可预览的 HTTP 端口——"
+                    "没有产品预览入口。禁止把 localhost 说成用户能打开的地址。"
+                )
             return (
                 "\n\n【就绪判定】wait_for 已命中，可报告访问地址；"
                 "建议 list 确认 status=running。"

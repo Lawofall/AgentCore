@@ -66,7 +66,7 @@ fi
 # ── 3. 停应用（避免并发写；app 若在宿主机运行则无此 service，warn 跳过）──
 # --timeout 40 与 compose stop_grace_period 对齐，避免默认 10s 砍断排空/抢救/收尾。
 log "停应用容器（避免并发写）"
-dc stop --timeout 40 api 2>/dev/null || warn "未停到 api 容器（app 可能在宿主机运行）——请自行确保无实例在写库。"
+dc stop --timeout 40 api sandboxd 2>/dev/null || warn "未停到 api/sandboxd（app 可能在宿主机运行）——请自行确保无实例在写库。"
 
 # ── 4. 破坏性干净恢复：DROP SCHEMA + 回灌 ──
 log "DROP SCHEMA public CASCADE + CREATE SCHEMA"

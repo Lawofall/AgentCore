@@ -134,7 +134,7 @@ def migrate_cloud_workspace_tree(*, src_root: Path, dst_root: Path) -> int:
 
 
 def transfer_backend_affines(src: WorkspaceBackend, dst: WorkspaceBackend) -> None:
-    """Copy list-materials + external/shared mounts from ``src`` onto ``dst``."""
+    """Copy list-materials + external mounts from ``src`` onto ``dst``."""
     materials = getattr(src, "ai_list_materials", None)
     if isinstance(materials, frozenset):
         dst.ai_list_materials = materials
@@ -150,15 +150,6 @@ def transfer_backend_affines(src: WorkspaceBackend, dst: WorkspaceBackend) -> No
         attach_ch = getattr(dst, "attach_external_channel", None)
         if channel is not None and callable(attach_ch):
             attach_ch(channel)
-
-    shared = getattr(src, "_shared_mounts", None)
-    attach_shared = getattr(dst, "attach_shared_mounts", None)
-    if shared and callable(attach_shared):
-        attach_shared(
-            dict(shared),
-            gate=getattr(src, "_shared_gate", None),
-            on_mutation=getattr(src, "_on_shared_mutation", None),
-        )
 
 
 def migrate_and_transfer_cloud_backend(

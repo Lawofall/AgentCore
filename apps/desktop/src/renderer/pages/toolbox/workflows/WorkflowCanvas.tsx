@@ -18,6 +18,7 @@ import {
   type Edge,
   MarkerType,
   type Node,
+  type OnSelectionChangeParams,
   ReactFlow,
   ReactFlowProvider,
   addEdge,
@@ -36,6 +37,9 @@ import {
   type WorkflowCanvasNodeData,
   workflowNodeTypes,
 } from "./workflowNodes";
+
+const FIT_VIEW_OPTIONS = { padding: 0.2 } as const;
+const RF_PRO_OPTIONS = { hideAttribution: true } as const;
 
 function WorkflowCanvasInner({
   definition,
@@ -188,6 +192,14 @@ function WorkflowCanvasInner({
     [defMap, edges, emit, nodes, setEdges],
   );
 
+  const onSelectionChange = useCallback(
+    ({ nodes: sel }: OnSelectionChangeParams) => {
+      const id = sel[0]?.id ?? null;
+      if (id !== selectedId) onSelect(id);
+    },
+    [onSelect, selectedId],
+  );
+
   return (
     <div className={cn("flex h-full min-h-[420px] flex-col", className)}>
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
@@ -222,13 +234,11 @@ function WorkflowCanvasInner({
           isValidConnection={isValidConnection}
           onNodesDelete={onNodesDelete}
           onEdgesDelete={onEdgesDelete}
-          onSelectionChange={({ nodes: sel }) => {
-            onSelect(sel[0]?.id ?? null);
-          }}
+          onSelectionChange={onSelectionChange}
           fitView
-          fitViewOptions={{ padding: 0.2 }}
+          fitViewOptions={FIT_VIEW_OPTIONS}
           deleteKeyCode={["Backspace", "Delete"]}
-          proOptions={{ hideAttribution: true }}
+          proOptions={RF_PRO_OPTIONS}
         >
           <Background gap={16} size={1} />
         </ReactFlow>

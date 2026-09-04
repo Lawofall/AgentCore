@@ -150,6 +150,8 @@ def conversation_summary_from_orm(
     unfolded_messages: int | None = None,
     last_message_preview: str | None = None,
     first_user_message: str | None = None,
+    pinned: bool | None = None,
+    archived: bool | None = None,
 ) -> ConversationSummary:
     """Assemble ``ConversationSummary`` with ``context_compacted`` + watermark (no summary body).
 
@@ -191,6 +193,10 @@ def conversation_summary_from_orm(
                 dropped_messages=gap.dropped_messages,
                 recovery_at=gap.recovery_at,
             )
+    if pinned is not None:
+        updates["pinned"] = pinned
+    if archived is not None:
+        updates["archived"] = archived
     return summary.model_copy(update=updates)
 
 
@@ -344,13 +350,22 @@ class FolderSummary(BaseModel):
     # without parsing paths. Derived, never stored — there is no ``parent_id``
     # column to drift out of sync with the path.
     parent_rel_path: str | None = None
+    owner_user_id: str
+    my_role: Literal["owner", "editor", "viewer"] = "owner"
+    my_state: Literal["accepted", "pending"] = "accepted"
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
 
     @classmethod
-    def from_folder(cls, folder) -> "FolderSummary":
+    def from_folder(
+        cls,
+        folder,
+        *,
+        my_role: Literal["owner", "editor", "viewer"] = "owner",
+        my_state: Literal["accepted", "pending"] = "accepted",
+    ) -> "FolderSummary":
         from agentcore.workspace.cloud_tree import parent_rel_path
 
         rel_path = folder.rel_path or None
@@ -362,9 +377,36 @@ class FolderSummary(BaseModel):
             local_subpath=folder.local_subpath,
             rel_path=rel_path,
             parent_rel_path=(parent_rel_path(rel_path) or None) if rel_path else None,
+            owner_user_id=folder.user_id,
+            my_role=my_role,
+            my_state=my_state,
             created_at=folder.created_at,
             updated_at=folder.updated_at,
         )
+
+
+class InviteFolderMemberRequest(BaseModel):
+    user_id: str = Field(..., min_length=1)
+    role: Literal["editor", "viewer"] = "editor"
+
+
+class UpdateFolderMemberRequest(BaseModel):
+    role: Literal["editor", "viewer"]
+
+
+class FolderMemberSummary(BaseModel):
+    user_id: str
+    role: Literal["owner", "editor", "viewer"]
+    state: Literal["accepted", "pending"]
+    invited_by: str | None = None
+    joined_at: datetime | None = None
+    display_name: str | None = None
+    username: str | None = None
+
+
+class FolderMemberListResponse(BaseModel):
+    data: list[FolderMemberSummary]
+    total: int
 
 
 class DeletedFolderSummary(BaseModel):
@@ -420,6 +462,9 @@ class FolderGroup(BaseModel):
     mode: Literal["local", "cloud"]
     local_root_id: str | None = None
     local_subpath: str | None = None
+    owner_user_id: str
+    my_role: Literal["owner", "editor", "viewer"] = "owner"
+    my_state: Literal["accepted", "pending"] = "accepted"
     conversations: list[ConversationSummary]
 
 

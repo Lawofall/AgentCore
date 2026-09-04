@@ -116,7 +116,7 @@ def omit_browser_tree_fields(
     """Strip tree fields and mark ``omitted: true``; stable for the same original.
 
     Preserves small payload fields (action / final_url / snapshot_version / keyframe / …)
-    and non-tree ``untrusted_web_content`` keys (source_url / title / note / visible_text / …).
+    and non-tree ``untrusted_web_content`` keys (source_url / title / visible_text / …).
     When provided, attaches top-level ``ref_delta`` (projection artifact).
     """
     data = _parse_payload(content)

@@ -11,6 +11,7 @@ import {
   useWorkspaceModeState,
 } from "@/components/workspace/WorkspaceModeControl";
 import { useGroupedConversations } from "@/hooks/useConversations";
+import { useSharedWithMeFolders } from "@/hooks/useFolderSharing";
 import {
   notifyLocalPickerFailure,
   pickLocalFolderRoot,
@@ -31,6 +32,8 @@ import { formatWorkspaceChipTitle } from "@/lib/workspaceEffectiveMode";
 import {
   type FolderMeta,
   dedupeFoldersByLocalBinding,
+  isSharedWithMeFolder,
+  mergeAccessibleFolders,
 } from "@/services/folders";
 import { type DraftWorkspaceIntent, useFoldersStore } from "@/stores/folders";
 import type { FsRoot } from "@shared/ipc-contract";
@@ -182,11 +185,15 @@ function folderLocationHint(f: FolderMeta): string | undefined {
   return above.length > 0 ? above.join("/") : undefined;
 }
 
-function FolderChannelIcon({ mode }: { mode: FolderMeta["mode"] }) {
-  const title = mode === "local" ? "本机文件夹" : "我的文件";
+function FolderChannelIcon({ folder }: { folder: FolderMeta }) {
+  const title = isSharedWithMeFolder(folder)
+    ? "与我共享"
+    : folder.mode === "local"
+      ? "本机文件夹"
+      : "我的文件";
   return (
     <span title={title} aria-hidden>
-      {mode === "local" ? <HardDrive size={14} /> : <Cloud size={14} />}
+      {folder.mode === "local" ? <HardDrive size={14} /> : <Cloud size={14} />}
     </span>
   );
 }
@@ -242,12 +249,23 @@ function DraftChip() {
   const lastWasLocal = lastChannel === "local_traditional";
 
   const grouped = useGroupedConversations().data;
+  const sharedWithMe = useSharedWithMeFolders().data ?? [];
   const folders = useMemo(() => {
-    const list = dedupeFoldersByLocalBinding(grouped?.folders ?? []);
+    const owned = dedupeFoldersByLocalBinding(grouped?.folders ?? []);
+    const list = mergeAccessibleFolders(owned, sharedWithMe);
     return isDesktop ? list : list.filter((f) => f.mode === "cloud");
-  }, [grouped?.folders, isDesktop]);
+  }, [grouped?.folders, sharedWithMe, isDesktop]);
 
   const selectedFolderId = intent.kind === "folder" ? intent.folderId : null;
+
+  const ownedFolders = useMemo(
+    () => folders.filter((f) => !isSharedWithMeFolder(f)),
+    [folders],
+  );
+  const sharedFolders = useMemo(
+    () => folders.filter(isSharedWithMeFolder),
+    [folders],
+  );
 
   const {
     visible: folderRows,
@@ -257,13 +275,31 @@ function DraftChip() {
   } = useMemo(
     () =>
       visibleDraftFolders({
-        folders,
+        folders: ownedFolders,
         conversations: grouped?.conversations ?? [],
         query,
         expanded: foldersExpanded,
         selectedFolderId,
       }),
-    [folders, grouped?.conversations, query, foldersExpanded, selectedFolderId],
+    [
+      ownedFolders,
+      grouped?.conversations,
+      query,
+      foldersExpanded,
+      selectedFolderId,
+    ],
+  );
+
+  const { visible: sharedRows, matchCount: sharedMatchCount } = useMemo(
+    () =>
+      visibleDraftFolders({
+        folders: sharedFolders,
+        conversations: grouped?.conversations ?? [],
+        query,
+        expanded: true,
+        selectedFolderId,
+      }),
+    [sharedFolders, grouped?.conversations, query, selectedFolderId],
   );
 
   const { icon, text } = draftLabel(intent, folders);
@@ -440,7 +476,7 @@ function DraftChip() {
   const folderList = (
     <>
       <div className="mx-2.5 mb-1 pt-1">
-        <p className="mb-1 text-xs text-muted-foreground">文件夹</p>
+        <p className="mb-1 text-xs text-muted-foreground">我的文件</p>
         <SearchField
           value={query}
           onValueChange={setQuery}
@@ -453,14 +489,31 @@ function DraftChip() {
       {folderRows.map((f) => (
         <DraftRow
           key={f.id}
-          icon={<FolderChannelIcon mode={f.mode} />}
+          icon={<FolderChannelIcon folder={f} />}
           label={f.name}
           hint={folderLocationHint(f)}
           selected={intent.kind === "folder" && intent.folderId === f.id}
           onClick={() => pickFolder(f)}
         />
       ))}
-      {matchCount === 0 && (
+      {sharedMatchCount > 0 && (
+        <>
+          <p className="mx-2.5 mb-1 mt-1 text-xs text-muted-foreground">
+            与我共享
+          </p>
+          {sharedRows.map((f) => (
+            <DraftRow
+              key={f.id}
+              icon={<FolderChannelIcon folder={f} />}
+              label={f.name}
+              hint={folderLocationHint(f)}
+              selected={intent.kind === "folder" && intent.folderId === f.id}
+              onClick={() => pickFolder(f)}
+            />
+          ))}
+        </>
+      )}
+      {matchCount === 0 && sharedMatchCount === 0 && (
         <p className="px-2.5 py-2 text-xs text-muted-foreground">
           {query.trim() ? "没有匹配的文件夹" : "还没有文件夹"}
         </p>

@@ -86,6 +86,7 @@ from agentcore.runtime.turn.runs import turn_runs
 
 from ._helpers import (
     _preflight_owned_chat_turn,
+    _require_conversation_write,
     _require_owned_conversation,
     emit_preflight_warnings,
 )
@@ -354,7 +355,7 @@ async def delete_message(
     message). Append-only ``cost_events`` are intentionally preserved — deleting a
     message never rewrites real spend (不变量 #1).
     """
-    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, conv_repo._session)
     deleted = await repo.delete_by_id(message_id, conversation_id=conversation_id)
     if not deleted:
         raise NotFoundError("消息不存在")
@@ -377,7 +378,7 @@ async def set_message_feedback(
     ``"up"`` / ``"down"`` to rate, or ``null`` to clear the rating (toggling the same side
     off). 404 when the message isn't in this conversation.
     """
-    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, conv_repo._session)
     updated = await repo.set_feedback(
         message_id, conversation_id=conversation_id, feedback=body.feedback
     )
@@ -636,7 +637,7 @@ async def cancel_queued_turn(
     outlives its host turn (drain not yet armed / deferred owns the next slot), and until
     now cancelling in that window told the other端 nothing.
     """
-    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, conv_repo._session)
     from agentcore.runtime.turn.delivery import cancel_queued_item
 
     item = cancel_queued_item(conversation_id, queue_id)
@@ -661,7 +662,7 @@ async def stop_message(
     is running. Does **not** clear FIFO queued turns — cancel those via
     ``POST …/queued-turns/{queue_id}/cancel``.
     """
-    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, conv_repo._session)
     from agentcore.runtime.events.client_tool_reattach import cancel_pending_client_tools
     from agentcore.runtime.interaction_orphan import orphan_live_turn_hot_pending
 
@@ -847,7 +848,7 @@ async def begin_local_turn_endpoint(
     Does not start a cloud SSE turn, mint a title, compact, or go through
     ``POST /messages``. Owner Bearer, same as ``POST …/local-turns``.
     """
-    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, conv_repo._session)
     result = await begin_local_turn(
         conversation_id=conversation_id,
         user_id=user.user_id,

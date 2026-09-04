@@ -46,8 +46,8 @@ def moderator_plan_event(
         {
             "id": moderator_run_id,
             "role": "主持人",
-            # 主持人是工具内确定性编排循环（§7.1）：从不对本节点发 run_reasoning_delta，
-            # thinking 必须如实声明 False——前端详情面板据此不渲染「思考中」占位。
+            # 等辩手时不准出假「思考中」：run_plan 仍 thinking=False。判定 complete 带回的
+            # 思考走既有 run_reasoning_delta（整段，非打字机），不改本声明。
             "thinking": False,
         }
     ]

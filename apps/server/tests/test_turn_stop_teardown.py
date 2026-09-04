@@ -181,7 +181,7 @@ async def test_stop_marks_user_stop_before_orphaning_pending_cards(monkeypatch):
         "agentcore.runtime.interaction_orphan.emit_orphan_fact", fake_emit
     )
     monkeypatch.setattr(
-        messages_route, "_require_owned_conversation", _allow_owner
+        messages_route, "_require_conversation_write", _allow_owner
     )
 
     first = registry.create(
@@ -206,7 +206,9 @@ async def test_stop_marks_user_stop_before_orphaning_pending_cards(monkeypatch):
     await asyncio.sleep(0)
 
     try:
-        await messages_route.stop_message(cid, SimpleNamespace(user_id="u1"), None)
+        await messages_route.stop_message(
+            cid, SimpleNamespace(user_id="u1"), SimpleNamespace(_session=None)
+        )
         with pytest.raises(asyncio.CancelledError):
             await task
         # Without the pre-mark the salvage would orphan the lease (sweeper re-drive)

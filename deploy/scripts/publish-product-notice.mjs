@@ -101,8 +101,8 @@ from agentcore.db.base import async_session_factory
 from agentcore.db.models import User
 from agentcore.db.repositories import (
     ChatRepository,
+    FolderMemberRepository,
     ProductNoticeRepository,
-    SharedSpaceRepository,
     UserBlockRepository,
     UserDirectoryRepository,
     UserRepository,
@@ -153,7 +153,7 @@ async def main() -> None:
                 blocks=UserBlockRepository(session),
                 directory=UserDirectoryRepository(session),
                 events=HubChatEventPublisher(default_chat_hub()),
-                shared_spaces=SharedSpaceRepository(session),
+                folder_members=FolderMemberRepository(session),
             )
             await messaging.publish_product_notice(
                 notice_id=published.id,

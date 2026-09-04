@@ -14,12 +14,15 @@ import {
   createFolder,
   deleteFolder,
   listFolderTrash,
+  mergeAccessibleFolders,
   permanentDeleteFolder,
   restoreFolder,
   updateFolder,
 } from "@/services/folders";
 import { scheduleAccountRulesMemoryRefresh } from "@/services/refreshAccountRulesMemory";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useSharedWithMeFolders } from "./useFolderSharing";
 
 /**
  * Folders as React Query data — folders share the `/grouped` query (and its
@@ -31,10 +34,12 @@ const EMPTY_FOLDERS: FolderMeta[] = [];
 
 /** Imperative read of the cached folder list (for non-React callers). */
 export function getFolders(): FolderMeta[] {
-  return (
+  const owned =
     queryClient.getQueryData<GroupedConversations>(conversationKeys.grouped)
-      ?.folders ?? []
-  );
+      ?.folders ?? [];
+  const shared =
+    queryClient.getQueryData<FolderMeta[]>(folderKeys.sharedWithMe) ?? [];
+  return mergeAccessibleFolders(owned, shared);
 }
 
 /** Rewrite the cached folder list, leaving the conversations half untouched. */
@@ -65,9 +70,11 @@ export function removeFolderFromCache(id: string): void {
   writeFolders((list) => list.filter((f) => f.id !== id));
 }
 
-/** Reactive folder list (server-ordered). */
+/** Reactive folder list: owned (grouped) ∪ shared-with-me. */
 export function useFolders(): FolderMeta[] {
-  return useGroupedConversations().data?.folders ?? EMPTY_FOLDERS;
+  const owned = useGroupedConversations().data?.folders ?? EMPTY_FOLDERS;
+  const shared = useSharedWithMeFolders().data ?? EMPTY_FOLDERS;
+  return useMemo(() => mergeAccessibleFolders(owned, shared), [owned, shared]);
 }
 
 /** Create a folder (= workspace), then add it to the cache. */

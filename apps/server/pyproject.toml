@@ -1,6 +1,6 @@
 [project]
 name = "agentcore"
-version = "0.7.12"
+version = "0.7.13"
 description = "AgentCore - Multi-Agent AI Workspace Backend"
 requires-python = ">=3.12"
 dependencies = [
@@ -264,7 +264,6 @@ module = [
     "agentcore.db.repositories.devices",
     "agentcore.db.repositories.messages",
     "agentcore.db.repositories.runs",
-    "agentcore.db.repositories.shared_spaces",
     "agentcore.db.repositories.stream_state",
     "agentcore.db.repositories.users",
     "agentcore.demo_tape.catalog",

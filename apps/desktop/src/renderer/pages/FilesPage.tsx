@@ -5,10 +5,10 @@ import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 
 /**
- * The 文件 hub (跨工作区文件总览) — one place to browse files across folder and
- * shared-space roots (`folder:<id>` + `shared:<id>`，云 + 本地) without first
+ * The 文件 hub (跨工作区文件总览) — one place to browse files across folder
+ * roots (`folder:<id>`，云 + 本地 + 与我共享) without first
  * opening a conversation. Layout is VSCode 式左树右详情: the left rail stacks
- * 我的文件（嵌套树）/ 本机文件夹 / 共享空间 as collapsible sections over their
+ * 我的文件（嵌套树）/ 本机文件夹 / 与我共享 as collapsible sections over their
  * own {@link FileSource}. `conv:` scratch is not a hub zone — 裸聊写盘进自动建桌.
  *
  * 文件夹（Folder）生命周期删除入口在本页各 `folder:` 根的右键菜单；对话列表页

@@ -22,16 +22,29 @@ export const useActiveFirstMessageId = (): string | null =>
   useConversationStore((s) => activeRuntime(s).messages[0]?.id ?? null);
 
 /**
- * Stick-to-bottom key for the live tail (id + content/reasoning lengths).
+ * Stick-to-bottom key for the live tail.
  * Isolated so ChatView chrome does not have to subscribe to the whole `messages[]`.
+ *
+ * `isStreaming` is part of the key so a settle (live → 收场过程折, height
+ * drops with no content/reasoning length change) still hits the layout-effect
+ * pin in {@link useChatScroll} instead of waiting for a later ResizeObserver.
  */
+export function stickContentKey(
+  last:
+    | (Pick<Message, "id" | "content" | "isStreaming"> & {
+        reasoning?: string | null;
+      })
+    | null
+    | undefined,
+): string {
+  if (!last) return "";
+  return `${last.id}-${last.content.length}-${last.reasoning?.length ?? 0}-${last.isStreaming ? "1" : "0"}`;
+}
+
 export const useActiveStickContentKey = (): string =>
-  useConversationStore((s) => {
-    const last = activeRuntime(s).messages.at(-1);
-    return last
-      ? `${last.id}-${last.content.length}-${last.reasoning?.length ?? 0}`
-      : "";
-  });
+  useConversationStore((s) =>
+    stickContentKey(activeRuntime(s).messages.at(-1)),
+  );
 
 export const useActiveUserTurnCount = (): number =>
   useConversationStore((s) => {

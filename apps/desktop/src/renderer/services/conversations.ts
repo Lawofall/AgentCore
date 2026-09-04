@@ -87,17 +87,30 @@ export async function listGrouped(): Promise<{
   const res = await api.get<GroupedConversationsResponse>(
     "/v1/conversations/grouped",
   );
-  const folders = res.folders.map((f) =>
-    toFolder({
-      id: f.id,
-      name: f.name,
-      mode: f.mode,
-      local_root_id: f.local_root_id,
-      local_subpath: f.local_subpath,
-      created_at: "",
-      updated_at: "",
-    }),
-  );
+  const folders = res.folders.map((f) => {
+    const row = f as typeof f & {
+      my_role?: FolderMeta["myRole"];
+      my_state?: FolderMeta["myState"];
+      owner_user_id?: string | null;
+      rel_path?: string | null;
+      parent_rel_path?: string | null;
+    };
+    return toFolder(
+      {
+        id: f.id,
+        name: f.name,
+        mode: f.mode,
+        local_root_id: f.local_root_id,
+        local_subpath: f.local_subpath,
+        rel_path: row.rel_path,
+        parent_rel_path: row.parent_rel_path,
+        my_role: row.my_role,
+        my_state: row.my_state,
+        owner_user_id: row.owner_user_id,
+      },
+      { defaultRole: "owner" },
+    );
+  });
   const conversations = [
     ...res.folders.flatMap((f) => f.conversations.map(toConversation)),
     ...res.ungrouped.map(toConversation),

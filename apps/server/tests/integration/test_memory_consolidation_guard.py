@@ -47,7 +47,7 @@ def episodic_calls(monkeypatch, session_factory) -> list[str]:
         def __init__(self, *_a, **_k) -> None:
             pass
 
-        async def summarize(self, messages, *, max_chars: int, actions=None) -> str:
+        async def summarize(self, messages, *, max_chars: int, actions=None, **_kw) -> str:
             return "测试摘要"
 
     async def fake_append(_store, **kwargs):

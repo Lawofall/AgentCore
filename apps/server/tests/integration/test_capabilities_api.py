@@ -1,8 +1,8 @@
 """End-to-end API integration tests for GET /v1/capabilities (能力图鉴).
 
 Covers auth gating + the complete shape: the full tool catalog (CEO orchestration +
-worker mutation, annotated with reach), the system Skills (summary + body), and the CEO
-system-prompt template — the data the desktop 能力图鉴 renders.
+worker mutation, annotated with reach), the system Skills (summary + body), and the
+CEO / worker system-prompt templates — the data the desktop 能力图鉴 renders.
 """
 
 from tests.integration.conftest import register_and_login
@@ -51,6 +51,8 @@ async def test_capabilities_lists_system_skills_with_body(client):
     body = (await client.get("/v1/capabilities")).json()
     skills = {s["name"]: s for s in body["skills"]}
     assert "team_orchestration_advanced" in skills
+    assert "lead_subteam" in skills
+    assert skills["lead_subteam"]["summary"] == "子队拆法"
     assert "asking_the_user" in skills
     assert "ask_user_kickoff" not in skills
     assert "verify_and_fix" not in skills
@@ -79,3 +81,12 @@ async def test_capabilities_exposes_prompt_template(client):
     assert "CEO" in addon
     assert addon == ceo[len(guidelines["shared_base"]) :].lstrip("\n")
     assert ceo == guidelines["shared_base"] + ceo[len(guidelines["shared_base"]) :]
+    # Worker identity templates: leaf cannot nest; captain can. Not the per-turn prompt.
+    leaf = guidelines["worker_leaf"]
+    captain = guidelines["worker_captain"]
+    assert "<身份>" in leaf
+    assert "不能再向下委派" in leaf
+    assert "还可以再向下委派一层子团队" not in leaf
+    assert "<身份>" in captain
+    assert "还可以再向下委派一层子团队" in captain
+    assert leaf != captain

@@ -16,6 +16,7 @@ from agentcore.db.models import (
     PausedTurnRow,
     TurnLeaseRow,
 )
+from agentcore.db.repositories._desk_visibility import conversation_visible_clause
 
 from ._audit_cascade import delete_audit_after, delete_audit_for_message
 from ._base import _ilike_pattern, commit_or_flush, strip_nul
@@ -563,7 +564,7 @@ class MessageRepository:
             select(Message, Conversation.title)
             .join(Conversation, Conversation.id == Message.conversation_id)
             .where(
-                Conversation.user_id == user_id,
+                conversation_visible_clause(user_id),
                 Conversation.deleted_at.is_(None),
                 Conversation.mode != "handoff",
                 Message.content.is_not(None),

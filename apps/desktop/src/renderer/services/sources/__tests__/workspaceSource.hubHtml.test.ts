@@ -115,14 +115,6 @@ describe("createCloudWorkspaceSource — hub HTML 外开 / 完整预览", () => 
     );
   });
 
-  it("shared: → 不挂 openInBrowser / openInAppPreview", () => {
-    window.fsApi = { previewArchive: vi.fn() } as unknown as FsApi;
-    vi.mocked(hasInAppPreview).mockReturnValue(true);
-    const source = createCloudWorkspaceSource("shared:s1", "共享");
-    expect(source.openInBrowser).toBeUndefined();
-    expect(source.openInAppPreview).toBeUndefined();
-  });
-
   it("无 previewArchive → 不挂 openInBrowser", () => {
     const source = createCloudWorkspaceSource("folder:f1", "项目");
     expect(source.openInBrowser).toBeUndefined();

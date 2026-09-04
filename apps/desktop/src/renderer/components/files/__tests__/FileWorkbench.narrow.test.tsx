@@ -11,10 +11,6 @@ vi.mock("@/lib/narrowLayout", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useSharedSpaces", () => ({
-  useSharedSpaces: () => ({ data: [], isLoading: false, isError: false }),
-}));
-
 vi.mock("@/hooks/useConversations", () => ({
   useConversations: () => [],
   getConversations: () => [],
@@ -25,8 +21,8 @@ vi.mock("@/hooks/useFolders", () => ({
   getFolders: () => [],
 }));
 
-vi.mock("@/components/files/sharedSpaces/PendingSharedInvites", () => ({
-  PendingSharedInvites: () => null,
+vi.mock("@/components/folders/PendingFolderInvites", () => ({
+  PendingFolderInvites: () => null,
 }));
 
 import { FileWorkbench } from "@/components/files/FileWorkbench";

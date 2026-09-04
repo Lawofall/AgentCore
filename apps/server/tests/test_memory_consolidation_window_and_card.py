@@ -87,7 +87,7 @@ class _RecordingSummarizer:
     def __init__(self, provider, *, model=None, role="memory"):
         pass
 
-    async def summarize(self, messages, *, max_chars, actions=None):
+    async def summarize(self, messages, *, max_chars, actions=None, **_kw):
         type(self).windows.append([str(m["content"]) for m in messages])
         return type(self).reply
 

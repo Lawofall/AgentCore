@@ -327,6 +327,29 @@ class MergedConsultSource:
         return None
 
 
+def expand_skill_tool_names(
+    source: MergedConsultSource, extra_tools: Collection[str]
+) -> MergedConsultSource:
+    """Copy a merged source with extra names on the skill filter (nested ``delegate``).
+
+    Does not mutate the original — leaf workers share the prepare-time source.
+    Rule / memory / on-demand-tool slices stay as-is.
+    """
+    skill = source.skill
+    if skill is None or not extra_tools:
+        return source
+    return MergedConsultSource(
+        skill=SkillConsultSource(
+            registry=skill.registry,
+            tool_names=set(skill.tool_names) | set(extra_tools),
+            audience=skill.audience,
+        ),
+        tool=source.tool,
+        rule=source.rule,
+        memory=source.memory,
+    )
+
+
 def build_merged_consult_source(
     *,
     skill_registry: SkillRegistry | None,

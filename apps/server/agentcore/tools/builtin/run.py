@@ -67,32 +67,26 @@ def run_op_timeout_seconds(
 ) -> float:
     """Engine wall: process manage / start follow terminal; verify uses disaster cap.
 
-    Cloud lazy-starts the desk inside this same ``run`` call. The outer wait_for
-    must cover ``gvisor_desk_start_timeout_seconds`` plus the op ceiling — short
-    exec's 90s default is only the command wall, not boot.
+    Cloud desk boot lives in prepare / resume, not inside this ``run`` call.
+    Engine wait_for is the op ceiling on both local and cloud.
+    ``location`` remains on the signature for engine call sites; it no longer
+    extends the wall for guest boot.
     """
+    del location
     args = arguments or {}
     action = str(args.get("action") or "").strip().lower()
     if action in _PROCESS_ACTIONS or _wants_background(args):
-        base = process_op_timeout_seconds(
+        return process_op_timeout_seconds(
             {
                 "command": args.get("command"),
                 "wait_for": args.get("wait_for"),
                 "wait_timeout_seconds": args.get("wait_timeout_seconds"),
             }
         )
-    else:
-        command = str(args.get("command") or "")
-        if _is_verify_command(command):
-            base = float(_VERIFY_DISASTER_SECONDS + _ENGINE_TIMEOUT_SLACK_SECONDS)
-        else:
-            base = 90.0
-    # read/stop/list talk to an already-running guest; they do not start_detach.
-    if location == "server" and action not in _PROCESS_ACTIONS:
-        from agentcore.config import settings
-
-        return base + float(settings.gvisor_desk_start_timeout_seconds)
-    return base
+    command = str(args.get("command") or "")
+    if _is_verify_command(command):
+        return float(_VERIFY_DISASTER_SECONDS + _ENGINE_TIMEOUT_SLACK_SECONDS)
+    return 90.0
 
 
 def _wants_background(arguments: dict[str, Any]) -> bool:

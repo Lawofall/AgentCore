@@ -22,6 +22,26 @@ function IconChip({ children }: { children: ReactNode }) {
   );
 }
 
+function StanceGlyph({
+  glyph,
+  colorVar,
+}: {
+  glyph: string;
+  colorVar: string;
+}) {
+  return (
+    <span
+      className="flex size-6 items-center justify-center rounded-full text-xs font-semibold"
+      style={{
+        backgroundColor: `color-mix(in oklab, ${colorVar} 18%, transparent)`,
+        color: colorVar,
+      }}
+    >
+      {glyph}
+    </span>
+  );
+}
+
 /** 连线样本：复刻 StepEdge 的描边语义（实线/虚线/点线 + 运行中 primary 粒子）。 */
 function EdgeSample({
   variant,
@@ -203,9 +223,14 @@ export function GraphLegend() {
           desc="辩论续轮角标（与侧栏轮次轨一致），不是带现场续派。"
         />
         <LegendRow
-          sample={<span className={graphBadgeMutedPlain}>正方</span>}
+          sample={
+            <span className="flex items-center gap-1">
+              <StanceGlyph glyph="正" colorVar="var(--debate-side-pro)" />
+              <StanceGlyph glyph="反" colorVar="var(--debate-side-con)" />
+            </span>
+          }
           name="辩论立场"
-          desc="正方 / 反方，图上左右对置后汇到裁决。"
+          desc="蓝 / 红阵营色 + 头像字；默认不写「正方 / 反方」。图上分带对置。"
         />
         <LegendRow
           sample={<span className={graphBadgeMutedPlain}>子任务</span>}

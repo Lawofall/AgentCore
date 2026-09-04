@@ -41,6 +41,8 @@ describe("ManualCollaboration", () => {
     expect(sectionText("debate")).not.toMatch(/三种形态/);
     expect(sectionText("debate")).not.toMatch(/站队/);
     expect(sectionText("debate")).not.toMatch(/掌舵/);
+    expect(sectionText("control")).not.toMatch(/「出结论」/);
+    expect(sectionText("control")).toMatch(/自己出结论/);
     expect(document.getElementById("autonomy")?.textContent).toMatch(/自主度/);
     expect(document.getElementById("control")?.textContent).toMatch(/中途插手/);
     expect(document.getElementById("checkpoint")?.textContent).toMatch(

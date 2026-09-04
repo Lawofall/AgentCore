@@ -8,7 +8,7 @@ import { hasInAppPreview, hasLocalFiles } from "@/lib/capabilities";
 import type { FileSource } from "@/lib/fileSource";
 import { useReadOnlyOffline } from "@/lib/offlineMode";
 import { openWorkspaceHtmlInBrowser } from "@/lib/openWorkspaceHtmlInBrowser";
-import type { FolderMeta } from "@/services/folders";
+import { type FolderMeta, canWriteFolder } from "@/services/folders";
 import { asReadOnlyFileSource } from "@/services/sources/readOnlyFileSource";
 import {
   createCloudWorkspaceSource,
@@ -33,6 +33,17 @@ type LocalFallback = "idle" | "pending" | FileSource | null;
 export interface FileSourceState {
   source: FileSource | null;
   pending: boolean;
+}
+
+function withFolderWriteCaps(
+  source: FileSource | null,
+  folder: FolderMeta | null | undefined,
+): FileSource | null {
+  if (!source || !folder || folder.mode !== "cloud") return source;
+  if (canWriteFolder(folder)) return source;
+  return createCloudWorkspaceSource(`folder:${folder.id}`, folder.name, {
+    readonly: true,
+  });
 }
 
 const UNAVAILABLE: FileSourceState = { source: null, pending: false };
@@ -131,7 +142,10 @@ export function useConversationFileSourceState(
       if (ws) {
         // N4-A: cloud workspaces unavailable offline (hub greys them; side panel too).
         if (offline && ws.location === "cloud") return null;
-        const src = resolveWorkspaceSource(ws, fsAvailable);
+        const src = withFolderWriteCaps(
+          resolveWorkspaceSource(ws, fsAvailable),
+          folder,
+        );
         if (offline && src && ws.location === "local") {
           return asReadOnlyFileSource(src);
         }
@@ -146,16 +160,19 @@ export function useConversationFileSourceState(
       }
       if (offline) return null;
       if (folder && folder.mode === "cloud") {
-        return resolveWorkspaceSource(
-          {
-            wsId: `folder:${folder.id}`,
-            name: folder.name,
-            location: "cloud",
-            rootId: null,
-            subpath: "",
-            hasFiles: true,
-          },
-          fsAvailable,
+        return withFolderWriteCaps(
+          resolveWorkspaceSource(
+            {
+              wsId: `folder:${folder.id}`,
+              name: folder.name,
+              location: "cloud",
+              rootId: null,
+              subpath: "",
+              hasFiles: true,
+            },
+            fsAvailable,
+          ),
+          folder,
         );
       }
       return createWorkspaceSource(conversationId);
@@ -262,7 +279,12 @@ export function useFileTabSourceState(
     const info = workspaceInfoForDesk(desk, workspaces, folders);
     if (info) {
       if (offline && info.location === "cloud") return UNAVAILABLE;
-      const src = resolveWorkspaceSource(info, fsAvailable);
+      const src = withFolderWriteCaps(
+        resolveWorkspaceSource(info, fsAvailable),
+        desk.startsWith("folder:")
+          ? folders.find((f) => f.id === desk.slice("folder:".length))
+          : null,
+      );
       if (!src) return UNAVAILABLE;
       if (offline && info.location === "local") {
         return { source: asReadOnlyFileSource(src), pending: false };

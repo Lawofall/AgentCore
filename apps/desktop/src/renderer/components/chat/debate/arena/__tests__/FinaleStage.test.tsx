@@ -200,10 +200,10 @@ describe("FinaleStage 终审布局", () => {
     expect(screen.queryByText("你的倾向与 AI 不同")).toBeNull();
     expect(screen.getByText("留给你的")).toBeTruthy();
     expect(screen.getByText(/要不要牺牲速度/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "回复拍板" })).toBeTruthy();
     expect(screen.getByText("实际成本")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "派查证" })).toBeTruthy();
     expect(screen.getByText(/只能等的：试点范围/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "回复拍板" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "派查证" })).toBeNull();
     expect(screen.queryByText(/需你定夺/)).toBeNull();
     expect(screen.queryByText("事实分歧")).toBeNull();
     expect(screen.queryByText("待解问题")).toBeNull();
@@ -231,36 +231,6 @@ describe("FinaleStage 终审布局", () => {
     expect(screen.getByText("先做试点")).toBeTruthy();
     expect(screen.queryByText("最强论点")).toBeNull();
     expect(screen.queryByText("ROI 清晰")).toBeNull();
-  });
-
-  it("回复拍板 / 派查证 预填主输入框 draft", async () => {
-    const { useComposerDraftStore, draftKeyFor } = await import(
-      "@/stores/composer"
-    );
-    const { useConversationStore } = await import("@/stores/conversation");
-    useConversationStore.setState({ currentConversationId: "c-handoff" });
-    useComposerDraftStore.setState({
-      drafts: {},
-      fillToken: 0,
-    });
-
-    render(
-      <FinaleStage
-        model={settledBriefModel()}
-        execution={executionWith([moderatorRun()])}
-        messageId="m1"
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "回复拍板" }));
-    expect(
-      useComposerDraftStore.getState().drafts[draftKeyFor("c-handoff")]?.value,
-    ).toBe("关于「要不要牺牲速度」，我的取舍是：");
-
-    fireEvent.click(screen.getByRole("button", { name: "派查证" }));
-    expect(
-      useComposerDraftStore.getState().drafts[draftKeyFor("c-handoff")]?.value,
-    ).toBe("关于「要不要牺牲速度」，我的取舍是：\n帮我查证：实际成本");
   });
 
   it("红队：裁决卡为方案评定（无加固建议），handoffs 空仍渲染「留给你的」加固建议 + 风险清单", () => {

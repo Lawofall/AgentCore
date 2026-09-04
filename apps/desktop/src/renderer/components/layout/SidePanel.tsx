@@ -8,7 +8,7 @@ import {
   TerminalPanelBody,
   useTerminalRegion,
 } from "@/components/terminal/TerminalPanel";
-import { Button, IconButton } from "@/components/ui";
+import { Button, IconButton, TabChip } from "@/components/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   HorizontalTabStrip,
-  NO_TAB_DRAG_ATTR,
   SortableTab,
   useSortableTabIds,
 } from "@/components/ui/horizontal-tab-strip";
@@ -63,13 +62,11 @@ import {
   FolderOpen,
   MessageSquare,
   PanelRight,
-  PictureInPicture2,
   Plus,
   Radio,
   Sparkles,
   Terminal,
   UserRound,
-  X,
 } from "lucide-react";
 import {
   type ReactNode,
@@ -431,9 +428,9 @@ export function SidePanel() {
           aria-label="侧面板标签"
         >
           {workspaceInDock && (
-            <FixedTab
+            <TabChip
               active={workspaceActive}
-              onClick={() => setActiveTab(WORKSPACE_TAB_ID)}
+              onSelect={() => setActiveTab(WORKSPACE_TAB_ID)}
               onPopOut={
                 floatsDisabled ? undefined : () => onPopOut(WORKSPACE_TAB_ID)
               }
@@ -442,9 +439,9 @@ export function SidePanel() {
             />
           )}
           {changesInDock && (
-            <FixedTab
+            <TabChip
               active={changesActive}
-              onClick={() => setActiveTab(CHANGES_TAB_ID)}
+              onSelect={() => setActiveTab(CHANGES_TAB_ID)}
               onClose={closeChanges}
               onPopOut={
                 floatsDisabled ? undefined : () => onPopOut(CHANGES_TAB_ID)
@@ -456,13 +453,17 @@ export function SidePanel() {
           <div className="mx-0.5 h-4 w-px shrink-0 bg-border" aria-hidden />
           {visibleTabs.map((tab) => (
             <SortableTab key={tab.id} id={tab.id} getItemProps={getItemProps}>
-              <ContentTabChip
-                tab={tab}
+              <TabChip
                 active={tab.id === activeTab?.id}
-                canPopOut={!floatsDisabled && canFloatTabId(tab.id, tabs)}
+                icon={detailTabIcon(tab)}
+                label={tab.title}
                 onSelect={() => setActiveTab(tab.id)}
                 onClose={() => onCloseContentTab(tab.id)}
-                onPopOut={floatsDisabled ? undefined : () => onPopOut(tab.id)}
+                onPopOut={
+                  !floatsDisabled && canFloatTabId(tab.id, tabs)
+                    ? () => onPopOut(tab.id)
+                    : undefined
+                }
               />
             </SortableTab>
           ))}
@@ -610,61 +611,27 @@ export function SidePanel() {
   );
 }
 
-function FixedTab({
-  active,
-  onClick,
-  onClose,
-  onPopOut,
-  icon,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  onClose?: () => void;
-  onPopOut?: () => void;
-  icon: ReactNode;
-  label: string;
-}) {
-  return (
-    <div
-      className={`group/tab flex shrink-0 items-center rounded-lg ${
-        active
-          ? "bg-accent text-foreground"
-          : "text-muted-foreground hover:bg-accent/50"
-      }`}
-    >
-      <Button
-        variant="ghost"
-        onClick={onClick}
-        className="h-auto gap-1.5 rounded-none px-2.5 py-1 text-sm font-medium"
-        icon={icon}
-      >
-        {label}
-      </Button>
-      {onPopOut && (
-        <SimpleTooltip label="弹出为浮窗">
-          <IconButton
-            {...{ [NO_TAB_DRAG_ATTR]: "" }}
-            onClick={onPopOut}
-            aria-label={`弹出 ${label}`}
-            className="mr-1 size-5 opacity-0 group-hover/tab:opacity-100"
-          >
-            <PictureInPicture2 size={12} />
-          </IconButton>
-        </SimpleTooltip>
-      )}
-      {onClose && (
-        <IconButton
-          {...{ [NO_TAB_DRAG_ATTR]: "" }}
-          onClick={onClose}
-          aria-label={`关闭 ${label}`}
-          className="mr-1 size-5 opacity-0 group-hover/tab:opacity-100"
-        >
-          <X size={12} />
-        </IconButton>
-      )}
-    </div>
-  );
+function detailTabIcon(tab: DetailTab): ReactNode {
+  if (tab.kind === "content") {
+    return tab.endpoint === "prompt" ? (
+      <UserRound size={14} className="shrink-0" />
+    ) : (
+      <Sparkles size={14} className="shrink-0" />
+    );
+  }
+  if (tab.kind === "simple-turn") {
+    return <MessageSquare size={14} className="shrink-0" />;
+  }
+  if (tab.kind === "terminal") {
+    return <Terminal size={14} className="shrink-0" />;
+  }
+  if (tab.kind === "file") {
+    return <FileTypeIcon name={tab.name} path={tab.path} size={14} />;
+  }
+  if (tab.kind === "browser") {
+    return <Radio size={14} className="shrink-0" />;
+  }
+  return null;
 }
 
 /** Closable content-tab chip (terminal / file / browser / run / endpoint / Q&A). */
@@ -680,83 +647,12 @@ export function RunTabChip({
   onClose: () => void;
 }) {
   return (
-    <ContentTabChip
-      tab={tab}
+    <TabChip
       active={active}
+      icon={detailTabIcon(tab)}
+      label={tab.title}
       onSelect={onSelect}
       onClose={onClose}
     />
-  );
-}
-
-function ContentTabChip({
-  tab,
-  active,
-  onSelect,
-  onClose,
-  onPopOut,
-  canPopOut = false,
-}: {
-  tab: DetailTab;
-  active: boolean;
-  onSelect: () => void;
-  onClose: () => void;
-  onPopOut?: () => void;
-  canPopOut?: boolean;
-}) {
-  const icon =
-    tab.kind === "content" ? (
-      tab.endpoint === "prompt" ? (
-        <UserRound size={14} className="shrink-0" />
-      ) : (
-        <Sparkles size={14} className="shrink-0" />
-      )
-    ) : tab.kind === "simple-turn" ? (
-      <MessageSquare size={14} className="shrink-0" />
-    ) : tab.kind === "terminal" ? (
-      <Terminal size={14} className="shrink-0" />
-    ) : tab.kind === "file" ? (
-      <FileTypeIcon name={tab.name} path={tab.path} size={14} />
-    ) : tab.kind === "browser" ? (
-      <Radio size={14} className="shrink-0" />
-    ) : null;
-
-  return (
-    <div
-      className={`group/tab flex shrink-0 items-center rounded-lg ${
-        active
-          ? "bg-accent text-foreground"
-          : "text-muted-foreground hover:bg-accent/50"
-      }`}
-    >
-      <Button
-        variant="ghost"
-        onClick={onSelect}
-        icon={icon ?? undefined}
-        className="h-auto max-w-[140px] truncate rounded-none py-1 pl-2.5 pr-1 text-sm font-normal"
-      >
-        {tab.title}
-      </Button>
-      {canPopOut && onPopOut && (
-        <SimpleTooltip label="弹出为浮窗">
-          <IconButton
-            {...{ [NO_TAB_DRAG_ATTR]: "" }}
-            onClick={onPopOut}
-            aria-label={`弹出 ${tab.title}`}
-            className="size-5 opacity-0 group-hover/tab:opacity-100"
-          >
-            <PictureInPicture2 size={12} />
-          </IconButton>
-        </SimpleTooltip>
-      )}
-      <IconButton
-        {...{ [NO_TAB_DRAG_ATTR]: "" }}
-        onClick={onClose}
-        aria-label={`关闭 ${tab.title}`}
-        className="mr-1 size-5 opacity-0 group-hover/tab:opacity-100"
-      >
-        <X size={12} />
-      </IconButton>
-    </div>
   );
 }

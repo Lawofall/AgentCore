@@ -71,6 +71,17 @@
         "agent_id": "w1",
         "blocks": [
           {
+            "channel": "system",
+            "heading": "队员系统提示（本回合实际遵循的系统指令）",
+            "body": "你是专家 worker。你只负责一个划定好的任务。",
+            "chars": 25,
+            "truncated": false,
+            "source_role": "",
+            "source_run_id": "",
+            "fidelity": "",
+            "files": []
+          },
+          {
             "channel": "request",
             "heading": "原始用户请求（老板交给整个团队的目标，不一定全是你的活；你的具体职责见下方「你的任务」）",
             "body": "调研主流竞品的定价并给出我们的定价建议。",
@@ -159,6 +170,17 @@
         "run_id": "r2",
         "agent_id": "w2",
         "blocks": [
+          {
+            "channel": "system",
+            "heading": "队员系统提示（本回合实际遵循的系统指令）",
+            "body": "你是专家 worker。你只负责一个划定好的任务。",
+            "chars": 25,
+            "truncated": false,
+            "source_role": "",
+            "source_run_id": "",
+            "fidelity": "",
+            "files": []
+          },
           {
             "channel": "request",
             "heading": "原始用户请求（老板交给整个团队的目标，不一定全是你的活；你的具体职责见下方「你的任务」）",
@@ -363,6 +385,17 @@
         "checkpoint": null,
         "receivedContext": [
           {
+            "channel": "system",
+            "heading": "队员系统提示（本回合实际遵循的系统指令）",
+            "body": "你是专家 worker。你只负责一个划定好的任务。",
+            "chars": 25,
+            "truncated": false,
+            "source_role": "",
+            "source_run_id": "",
+            "fidelity": "",
+            "files": []
+          },
+          {
             "channel": "request",
             "heading": "原始用户请求（老板交给整个团队的目标，不一定全是你的活；你的具体职责见下方「你的任务」）",
             "body": "调研主流竞品的定价并给出我们的定价建议。",
@@ -446,6 +479,17 @@
         "actId": "act-1",
         "checkpoint": null,
         "receivedContext": [
+          {
+            "channel": "system",
+            "heading": "队员系统提示（本回合实际遵循的系统指令）",
+            "body": "你是专家 worker。你只负责一个划定好的任务。",
+            "chars": 25,
+            "truncated": false,
+            "source_role": "",
+            "source_run_id": "",
+            "fidelity": "",
+            "files": []
+          },
           {
             "channel": "request",
             "heading": "原始用户请求（老板交给整个团队的目标，不一定全是你的活；你的具体职责见下方「你的任务」）",

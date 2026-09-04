@@ -7,8 +7,9 @@
     当场作废且事后追不回。自赋值
     ``updated_at=Conversation.updated_at`` 钉住位次——这是编译期性质，
     所以直接断言编译出来的 SQL。
-  * **只给「删除时尚未归档」的行打标**——``archived`` 是裸 bool，用户自己归档的
-    对话与项目连带归档的对话今天逐字节相同；无脑全解档会把前者也拽回侧栏。
+  * **只给「删除时尚未归档」的行打标**——legacy ``Conversation.archived`` 与文件夹
+    所有者 ``conversation_preferences.archived`` 都算已归档；无脑全解档会把用户
+    自己归档的帖拽回侧栏。
   * **回收站只列用户删的**——``reclaim_orphan_auto_desk_folder`` 调同一个
     ``soft_delete``，而它铸的文件夹名字来自对话标题、看起来像正常项目。
   * **过了保留期返 409**——工作区文件可能已经没了，不许静默成功。
@@ -21,7 +22,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from sqlalchemy import Select, Update
+from sqlalchemy import Delete, Select, Update
 from sqlalchemy.dialects import postgresql
 
 from agentcore.api.routes.folders import (
@@ -31,6 +32,7 @@ from agentcore.api.routes.folders import (
 )
 from agentcore.config import settings
 from agentcore.core.errors import ConflictError, NotFoundError
+from agentcore.db.repositories.conversations import ConversationRepository
 from agentcore.db.repositories.folders import (
     FOLDER_DELETE_ORIGIN_AUTO_DESK_RECLAIM,
     FOLDER_DELETE_ORIGIN_USER,
@@ -208,9 +210,14 @@ async def test_soft_delete_marks_only_unarchived_visible_live_rows():
     assert "archived_by_folder_delete=true" in set_clause
     # 用户自己归档的对话不打标 ⇒ 恢复时不会被拽回侧栏。
     assert "conversations.archived IS false" in where_clause
+    assert "conversation_preferences.archived IS true" in where_clause
+    assert f"conversation_preferences.user_id = '{USER_ID}'" in where_clause
+    assert "conversations.id NOT IN" in where_clause
     assert "conversations.deleted_at IS NULL" in where_clause
     assert "conversations.mode NOT IN ('handoff', 'standing')" in where_clause
-    assert f"conversations.user_id = '{USER_ID}'" in where_clause
+    # Desk archive is every thread on the folder (incl. members' Conversation.user_id),
+    # not owner-scoped. Prefs exclusion is keyed on conversation_preferences.user_id.
+    assert "conversations.user_id" not in where_clause
     # ``IN`` 而非 ``=``：软删连带整棵子树（UUID 列渲染带 ``::UUID`` 后缀，故不比整段）。
     assert f"conversations.folder_id IN ('{FOLDER_ID}'" in where_clause
 
@@ -501,3 +508,52 @@ def test_trash_routes_are_registered_before_the_folder_id_matcher():
     """FastAPI 按注册顺序匹配：``/trash`` 晚于 ``/{folder_id}`` 就会被当成项目 id。"""
     paths = [getattr(r, "path", "") for r in router.routes]
     assert paths.index("/folders/trash") < paths.index("/folders/{folder_id}")
+
+
+# --- 彻底删除：名册与成员开的帖 ----------------------------------------------------
+
+
+async def test_list_ids_by_folder_does_not_filter_conversation_user_id():
+    """彻底删除须含成员开的帖：SQL 只按 folder_id，不滤 Conversation.user_id。"""
+    session = _RecordingSession()
+
+    await ConversationRepository(session).list_ids_by_folder(FOLDER_ID, user_id=USER_ID)
+
+    sql = _selects(session)[0]
+    assert f"conversations.folder_id = '{FOLDER_ID}'" in sql
+    assert "conversations.mode NOT IN ('handoff', 'standing')" in sql
+    assert "conversations.user_id" not in sql
+
+
+async def test_hard_delete_clears_membership_roster_in_same_transaction():
+    session = _RecordingSession()
+
+    await FolderRepository(session).hard_delete(FOLDER_ID)
+
+    deletes = [s for s in session.statements if isinstance(s, Delete)]
+    assert [s.table.name for s in deletes] == ["folder_members", "folders"]
+    assert session.commits == 1
+    members_sql = _sql(deletes[0])
+    folders_sql = _sql(deletes[1])
+    assert f"folder_members.folder_id IN ('{FOLDER_ID}'" in members_sql
+    assert f"folders.id IN ('{FOLDER_ID}'" in folders_sql
+
+
+async def test_hard_delete_many_clears_membership_roster_before_folders():
+    session = _RecordingSession()
+    other = "99999999-8888-4777-8666-555555555555"
+
+    await FolderRepository(session).hard_delete_many([FOLDER_ID, other])
+
+    deletes = [s for s in session.statements if isinstance(s, Delete)]
+    assert [s.table.name for s in deletes] == ["folder_members", "folders"]
+    assert session.commits == 1
+
+
+async def test_hard_delete_many_empty_writes_nothing():
+    session = _RecordingSession()
+
+    await FolderRepository(session).hard_delete_many([])
+
+    assert session.statements == []
+    assert session.commits == 0

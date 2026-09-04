@@ -6,7 +6,6 @@
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Message } from "@/stores/conversation";
 import { cleanup, render, screen, within } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -80,10 +79,6 @@ vi.mock("../AssistantMessageFooter", () => ({
 
 vi.mock("@/components/chat/Markdown", () => ({
   Markdown: ({ content }: { content: string }) => <div>{content}</div>,
-}));
-
-vi.mock("@/components/chat/debate/CollapsibleSpeech", () => ({
-  CollapsibleSpeech: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 import { AssistantMessage } from "../AssistantMessage";

@@ -69,6 +69,9 @@ def _summary(
         "local_root_id": local_root_id,
         "local_subpath": local_subpath,
         "rel_path": rel_path if rel_path is not None else name,
+        "owner_user_id": "u1",
+        "my_role": "owner",
+        "my_state": "accepted",
         "created_at": now,
         "updated_at": now,
     }
@@ -237,6 +240,7 @@ async def test_list_folders_uses_db_without_creds(monkeypatch: pytest.MonkeyPatc
     class _Folder:
         id = "db-1"
         name = "FromDB"
+        user_id = "u1"
         local_root_id = None
         local_subpath = None
         rel_path = "FromDB"

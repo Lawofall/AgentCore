@@ -476,6 +476,27 @@ describe("buildAgentNodePresentation revision face", () => {
     expect(p.revisionBadge?.label).toBe("第 2 轮");
   });
 
+  it("generic 正方 identity hides title and skips peek stance tag", () => {
+    const p = buildAgentNodePresentation(
+      baseNode({ role: "正方", stance: "pro", group: "debate:debate" }),
+    );
+    expect(p.identity).toEqual({
+      color: "var(--debate-side-pro)",
+      glyph: "正",
+      showRoleTitle: false,
+    });
+    expect(p.peekTags).not.toContain("正方");
+  });
+
+  it("custom debate name keeps title and peek stance tag", () => {
+    const p = buildAgentNodePresentation(
+      baseNode({ role: "原告", stance: "pro", group: "debate:debate" }),
+    );
+    expect(p.identity.showRoleTitle).toBe(true);
+    expect(p.identity.color).toBe("var(--debate-side-pro)");
+    expect(p.peekTags).toContain("正方");
+  });
+
   it("run_phase waiting/winding suppresses residual thinking preview", () => {
     const waiting = buildAgentNodePresentation(
       baseNode({

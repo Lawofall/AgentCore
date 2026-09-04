@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import {
   WINDOW_FRAME_PRESETS,
   type WindowFramePreset,
+  toggleWindowFramePreset,
 } from "@shared/window-contract";
 import { Check, Scan } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -84,35 +85,14 @@ export function WindowFrameMenu() {
           onSelect={() => apply("free")}
         />
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs text-muted-foreground">
-          16:9
-        </DropdownMenuLabel>
-        {WINDOW_FRAME_PRESETS.filter((p) => p.id.startsWith("16:9")).map(
-          (p) => (
-            <PresetRow
-              key={p.id}
-              active={preset === p.id}
-              label={p.label}
-              onSelect={() => apply(p.id)}
-            />
-          ),
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs text-muted-foreground">
-          4:3
-        </DropdownMenuLabel>
-        {WINDOW_FRAME_PRESETS.filter((p) => p.id.startsWith("4:3")).map((p) => (
+        {WINDOW_FRAME_PRESETS.map((p) => (
           <PresetRow
             key={p.id}
             active={preset === p.id}
             label={p.label}
-            onSelect={() => apply(p.id)}
+            onSelect={() => apply(toggleWindowFramePreset(preset, p.id))}
           />
         ))}
-        <DropdownMenuSeparator />
-        <p className="px-3 py-1 text-xs text-muted-foreground">
-          锁定后拖边角仍保持比例；最大化时暂不强制。
-        </p>
       </DropdownMenuContent>
     </DropdownMenu>
   );

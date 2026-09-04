@@ -80,6 +80,8 @@ class ErrorCode(StrEnum):
     TOOL_NOT_FOUND = "TOOL_NOT_FOUND"
     SANDBOX_ERROR = "SANDBOX_ERROR"
     SANDBOX_TIMEOUT = "SANDBOX_TIMEOUT"
+    # Cloud user preview unconfigured or execution-face proxy down (HTTP 503).
+    PREVIEW_UNAVAILABLE = "PREVIEW_UNAVAILABLE"
 
     # ── Handoff (跨端接力) ─────────────────────────────────────────────────
     HANDOFF_DISPATCH_FAILED = "HANDOFF_DISPATCH_FAILED"

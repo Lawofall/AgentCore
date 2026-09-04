@@ -2,7 +2,6 @@ import { Markdown } from "@/components/chat/Markdown";
 import { PausedContinueSurface } from "@/components/chat/PausedContinueSurface";
 import { SourceCards } from "@/components/chat/SourceCards";
 import { TurnWarningBanner } from "@/components/chat/TurnWarningBanner";
-import { CollapsibleSpeech } from "@/components/chat/debate/CollapsibleSpeech";
 import { Button, IconButton } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -71,9 +70,6 @@ import { ThinkingDots, ThinkingPanel } from "./Thinking";
 import { WholeFilePasteHint } from "./WholeFilePasteHint";
 import type { MessageBubbleProps } from "./types";
 import { useCopyAction } from "./useCopyAction";
-
-/** 长回答折叠阈值（px）：远高于用户气泡，只夹真正超长的答案。 */
-const ANSWER_COLLAPSED_MAX_H = 640;
 
 /**
  * 「曾中断恢复」：这条回合中途崩过、由系统重驱跑完，成果仍在本条消息里。
@@ -365,40 +361,18 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
       {/* 不变量（时间线一期）：多 Agent 回合必有 `team` 标记（live 由
           setLastAssistantExecutionId 盖章，reload 由 journal 补齐）→ hasProcess 恒真、
           协作图只在 ProcessTimeline 的标记槽渲染；此分支仅剩单 Agent 纯文本回合。 */}
-      {/* 长回答折叠 (对话基础功能补齐): while streaming, render full so the user watches
-          it grow; once settled, cap a truly long answer to a fade + 展开全文 so it doesn't
-          dominate the viewport (短/中答案原样全展). */}
-      {message.isStreaming && !hideContentForCheckpoint ? (
-        displayContent.trim() ? (
-          <Markdown
-            content={displayContent}
-            conversationId={conversationId}
-            citations={citations}
-            citationToDisplay={citationDisplay.toDisplay}
-            knownLedgerIds={knownLedgerIds}
-            evidenceLedger={evidenceLedger}
-            isStreaming={message.isStreaming}
-            onOpenWorkspacePath={onOpenWorkspacePath}
-          />
-        ) : null
-      ) : hideContentForCheckpoint || !displayContent.trim() ? null : (
-        <CollapsibleSpeech
-          contentKey={displayContent}
-          fadeToClass="from-background"
-          collapsedMaxH={ANSWER_COLLAPSED_MAX_H}
-          sceneKey={`answer:${message.id}`}
-        >
-          <Markdown
-            content={displayContent}
-            conversationId={conversationId}
-            citations={citations}
-            citationToDisplay={citationDisplay.toDisplay}
-            knownLedgerIds={knownLedgerIds}
-            evidenceLedger={evidenceLedger}
-            isStreaming={false}
-            onOpenWorkspacePath={onOpenWorkspacePath}
-          />
-        </CollapsibleSpeech>
+      {/* 终稿全文：过程折进摘要，答案不夹「展开全文」。复盘扫读夹层只在 admin。 */}
+      {hideContentForCheckpoint || !displayContent.trim() ? null : (
+        <Markdown
+          content={displayContent}
+          conversationId={conversationId}
+          citations={citations}
+          citationToDisplay={citationDisplay.toDisplay}
+          knownLedgerIds={knownLedgerIds}
+          evidenceLedger={evidenceLedger}
+          isStreaming={message.isStreaming}
+          onOpenWorkspacePath={onOpenWorkspacePath}
+        />
       )}
       {message.isStreaming &&
         (message.composingTool && message.executionId === null ? (

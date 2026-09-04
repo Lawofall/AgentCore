@@ -317,11 +317,15 @@ async def list_folder_collaboration_timeline(
     session: AsyncSession,
     *,
     folder_id: str,
-    user_id: str,
+    user_id: str,  # noqa: ARG001 — caller already authorized; do not filter creator
     limit: int = 20,
     offset: int = 0,
 ) -> TimelineResult:
-    """Owner-scoped read projection: folder → conversations with execution → act summary."""
+    """Desk-scoped read projection: folder → conversations with execution → act summary.
+
+    ``user_id`` is the authorized caller (route already 404'd outsiders). Do not
+    filter ``Conversation.user_id`` — member-opened threads belong on this desk.
+    """
     lim = max(1, min(int(limit), 50))
     off = max(0, int(offset))
 
@@ -338,9 +342,8 @@ async def list_folder_collaboration_timeline(
         select(Conversation)
         .where(
             Conversation.folder_id == folder_id,
-            Conversation.user_id == user_id,
             Conversation.deleted_at.is_(None),
-            Conversation.archived.is_(False),
+            Conversation.archived_by_folder_delete.is_(False),
             Conversation.mode != "handoff",
             has_plan,
         )

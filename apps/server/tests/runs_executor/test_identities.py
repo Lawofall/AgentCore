@@ -235,6 +235,7 @@ async def test_captain_identity_carries_when_to_split_guidance():
     identity = build_worker_identity(has_dependents=False, captain=True)
     assert "<身份>" in identity and "一员" in identity
     assert "优先先嵌套" not in identity
+    assert "consult(lead_subteam)" not in identity
     assert "未嵌套禁写" not in identity
     assert "凡大活" not in identity
     assert "共写同一目标文件" not in identity

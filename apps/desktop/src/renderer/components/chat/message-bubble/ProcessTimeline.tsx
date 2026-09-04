@@ -12,6 +12,7 @@ import { executionGraphCapabilities } from "@/components/graph/planCapabilities"
 import {
   type TimelineNode,
   groupToolRuns,
+  processFoldMask,
   timelineNodeKeys,
 } from "@/lib/processTimeline";
 import type {
@@ -31,17 +32,8 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { Fragment, memo } from "react";
 import { ThinkingDots, ThinkingHeader } from "./Thinking";
 
-/** Thought 折叠覆盖面：推理/工具 + 弱式决策痕迹（批准/委派授权/推进卡）。
- * 强交互卡（checkpoint/ask/escalation/…）仍外置可见。 */
-function isProcessNode(node: TimelineNode): boolean {
-  return (
-    node.kind === "reasoning" ||
-    node.kind === "tool" ||
-    node.kind === "tool-group" ||
-    node.kind === "approval" ||
-    node.kind === "stage_card"
-  );
-}
+/** Thought 折叠覆盖面：推理/工具/非末段正文 + 弱式决策痕迹（批准/委派授权/推进卡）。
+ * 末段正文、强交互卡、协作图、插话仍外置可见。 */
 
 function countProcessStats(nodes: TimelineNode[]) {
   let reasoningCount = 0;
@@ -273,6 +265,11 @@ export function ProcessTimeline({
   const nodeKeys = timelineNodeKeys(nodes);
 
   const { reasoningCount, toolCount } = countProcessStats(nodes);
+  const pendingCheckpointIds = new Set(
+    checkpoints.filter((c) => c.status === "pending").map((c) => c.id),
+  );
+  const foldMask = processFoldMask(nodes, pendingCheckpointIds);
+  const firstFoldIndex = foldMask.indexOf(true);
   // 仅有弱痕迹、无推理/工具时不折叠（避免空摘要按钮）；单段纯 Thought 也不折。
   const shouldCollapseProcess =
     collapseProcessSteps &&
@@ -401,11 +398,10 @@ export function ProcessTimeline({
             ? renderFallback("fallback-before-team")
             : null;
         if (shouldCollapseProcess) {
-          const isFirstProcess =
-            isProcessNode(node) && !nodes.slice(0, i).some(isProcessNode);
+          const isFirstProcess = i === firstFoldIndex;
 
           if (!processExpanded) {
-            if (isProcessNode(node)) {
+            if (foldMask[i]) {
               if (!isFirstProcess) return null;
               return (
                 <Fragment key={`sum-${nodeKeys[i]}`}>

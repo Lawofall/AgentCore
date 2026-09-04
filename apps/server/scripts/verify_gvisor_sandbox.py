@@ -15,13 +15,13 @@
 
 Docker 用法（推荐在生产镜像上验证，不在 Windows 宿主机）：
 
-验收身份必须是生产身份（``USER app`` + 已起的 ``sandboxd``）。
+验收身份必须是生产身份（``USER app`` 的 api + 独立 ``sandboxd`` 服务）。
 **禁止** ``--user 0`` 直跑本脚本冒烟当放行——API 只走 Unix 客户端，
 root 直跑 ``runsc`` 不能代表生产。
 
 .. code-block:: bash
 
-   # 叠 sandbox overlay 后进入已在跑的 api 容器（entrypoint 已起 sandboxd 并降为 app）
+   # 叠 sandbox overlay 后进入已在跑的 api 容器（sandboxd 是独立服务）
    docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.sandbox.yml \\
      exec api python apps/server/scripts/verify_gvisor_sandbox.py --live
 
@@ -87,7 +87,7 @@ def check_repo_assets() -> list[str]:
         SERVER_ROOT / "agentcore" / "tools" / "sandbox" / "gvisor.py",
         SERVER_ROOT / "agentcore" / "tools" / "sandbox" / "limits.py",
         REPO_ROOT / "deploy" / "docker-compose.sandbox.yml",
-        REPO_ROOT / "deploy" / "api-sandbox-entrypoint.sh",
+        REPO_ROOT / "deploy" / "sandboxd-entrypoint.sh",
         REPO_ROOT / "deploy" / "config" / "production.env.example",
     ]
     for path in required:
@@ -111,7 +111,7 @@ def check_repo_assets() -> list[str]:
     for needle in (
         "NET_ADMIN",
         "SYS_ADMIN",
-        "api-sandbox-entrypoint.sh",
+        "sandboxd-entrypoint.sh",
         'user: "0:0"',
     ):
         if needle in sandbox_yml:
@@ -144,11 +144,11 @@ def check_settings_defaults() -> list[str]:
 
     errors: list[str] = []
     expected = {
-        "gvisor_enabled": False,
+        "gvisor_enabled": True,
         "gvisor_max_concurrent_executions": 2,
         "gvisor_slot_wait_seconds": 15.0,
         "gvisor_memory_limit_mb": 512,
-        "gvisor_timeout_max_seconds": 60,
+        "gvisor_timeout_max_seconds": 1230,
     }
     for attr, want in expected.items():
         got = getattr(settings, attr)

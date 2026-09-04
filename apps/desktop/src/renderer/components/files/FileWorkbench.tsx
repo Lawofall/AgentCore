@@ -18,7 +18,7 @@ import {
 import {
   LocalFoldersRailHeader,
   MyFilesRailHeader,
-  SharedSpacesRailHeader,
+  SharedWithMeRailHeader,
 } from "@/components/files/fileWorkbench/RailHeaders";
 import { WorkspaceVersionsPanel } from "@/components/files/fileWorkbench/WorkspaceVersionsPanel";
 import { createAndOpenScopeEntry } from "@/components/files/fileWorkbench/createScopeEntry";
@@ -37,14 +37,12 @@ import {
   tabKey,
 } from "@/components/files/fileWorkbench/storage";
 import { EmptyHint, InlineError } from "@/components/files/parts";
-import { PendingSharedInvites } from "@/components/files/sharedSpaces/PendingSharedInvites";
-import { SharedSpaceSection } from "@/components/files/sharedSpaces/SharedSpaceSection";
+import { PendingFolderInvites } from "@/components/folders/PendingFolderInvites";
 import { NarrowBackHeader } from "@/components/layout/NarrowBackHeader";
 import { SearchField } from "@/components/ui";
 import { WorkspaceTrashSection } from "@/components/workspace/TrashSection";
 import { useConversations } from "@/hooks/useConversations";
 import { getFolders, useFolders } from "@/hooks/useFolders";
-import { useSharedSpaces } from "@/hooks/useSharedSpaces";
 import { hasLocalFiles } from "@/lib/capabilities";
 import { sortFoldersByRecentActivity } from "@/lib/draftWorkspaceFolders";
 import type { FileSource } from "@/lib/fileSource";
@@ -56,12 +54,11 @@ import {
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { useReadOnlyOffline } from "@/lib/offlineMode";
 import { cn } from "@/lib/utils";
-import { dedupeFoldersByLocalBinding } from "@/services/folders";
 import {
-  type SharedSpaceSummary,
-  canWriteSharedSpace,
-  sharedWsId,
-} from "@/services/sharedSpaces";
+  canWriteFolder,
+  dedupeFoldersByLocalBinding,
+  isSharedWithMeFolder,
+} from "@/services/folders";
 import { createDocumentSource } from "@/services/sources/documentSource";
 import {
   MEMORY_UPDATES_PATH,
@@ -92,16 +89,12 @@ const MEMORY_WS = "__memory__";
 const RULES_WS = "__rules__";
 
 /**
- * The 文件 hub's **split** file UI (VSCode 式左树右详情). The left rail is three
- * zones (双模式工作区 §5.4 — 界面上没有「项目」，容器只有文件夹):
+ * The 文件 hub's **split** file UI (VSCode 式左树右详情). The left rail is
+ * zones (双模式工作区 §5.4 / §八 — 界面上没有「项目」，容器只有文件夹):
  *
- * - **我的文件** — the cloud folder tree, nested for real by `rel_path`. A folder
- *   row expands into its child folders, then its ``AgentCore/`` conventions, then
- *   its files. Child folders are hidden from the parent's {@link FileTree}
- *   (`hideRootDirs`) because their directories physically live inside it and
- *   would otherwise appear twice.
+ * - **我的文件** — the cloud folder tree the user owns, nested by `rel_path`.
  * - **本机文件夹** — disk folders, most recently active first (VS Code 语义).
- * - **共享空间** — member-based cloud file disk, not a third container (§八).
+ * - **与我共享** — cloud desks this user joined (flat roots; same `folder:` tree).
  *
  * `conv:` scratch is conversation-panel addressing, not a hub zone: 裸聊写盘
  * 自动建桌，产物进「我的文件」。
@@ -127,7 +120,7 @@ const RULES_WS = "__rules__";
  * builds a cloud folder (nested via a row's「在此新建文件夹」), 本机文件夹「+」opens
  * one off the disk. Chats live on `/conversations`; the two cross-link — a root's
  * 「查看对话」jumps here→there, and「浏览文件」jumps there→here (via `focusWsId`
- * = `folder:<id>` or `shared:<id>`, which expands + highlights the target root).
+ * = `folder:<id>`，which expands + highlights the target root).
  */
 export function FileWorkbench({
   workspaces,
@@ -187,22 +180,13 @@ export function FileWorkbench({
   const appliedFocusRef = useRef<string | null>(null);
   const appliedMemoryLeafRef = useRef<string | null>(null);
 
-  const sharedQuery = useSharedSpaces();
-  const sharedSpaces = useMemo(
-    () => sharedQuery.data ?? [],
-    [sharedQuery.data],
-  );
   const conversations = useConversations();
   const folders = useFolders();
   const openCreateFolder = useFoldersStore((s) => s.openCreateFolder);
 
-  /** Folder workspaces only — `shared:` from {@link useSharedSpaces}; `conv:`
-   * scratch is conversation-panel addressing, not a hub zone. */
+  /** Folder workspaces only — `conv:` scratch is conversation-panel addressing. */
   const personalWorkspaces = useMemo(
-    () =>
-      workspaces.filter(
-        (w) => !w.wsId.startsWith("shared:") && !w.wsId.startsWith("conv:"),
-      ),
+    () => workspaces.filter((w) => w.wsId.startsWith("folder:")),
     [workspaces],
   );
 
@@ -297,12 +281,9 @@ export function FileWorkbench({
   };
 
   // 工作区被删/消失 → 关掉它名下的标签页，并修正激活项。记忆 tab（合成 ws）不属任何工作区，
-  // 故豁免，否则它会被立刻清掉。共享空间以 `shared:` ws_id 计。
+  // 故豁免，否则它会被立刻清掉。协作桌与自有夹都是 `folder:` ws_id。
   useEffect(() => {
-    const liveWsIds = new Set([
-      ...railWorkspaces.map((w) => w.wsId),
-      ...sharedSpaces.map((s) => s.ws_id || sharedWsId(s.id)),
-    ]);
+    const liveWsIds = new Set(railWorkspaces.map((w) => w.wsId));
     const live = tabs.filter(
       (t) =>
         t.wsId === MEMORY_WS || t.wsId === RULES_WS || liveWsIds.has(t.wsId),
@@ -312,7 +293,7 @@ export function FileWorkbench({
     if (activeKey && !live.some((t) => tabKey(t.wsId, t.path) === activeKey)) {
       setActiveKey(live.length ? tabKey(live[0].wsId, live[0].path) : null);
     }
-  }, [railWorkspaces, sharedSpaces, tabs, activeKey]);
+  }, [railWorkspaces, tabs, activeKey]);
 
   // 从 /conversations「浏览文件」跳来：自动展开 + 高亮 + 滚入目标工作区（段默认折叠，故这里
   // 主动展开那一个）。每个 focusKey（导航键）只应用一次，但等到工作区列表就绪后才生效（冷进入
@@ -320,9 +301,7 @@ export function FileWorkbench({
   useEffect(() => {
     if (!focusWsId || !focusKey) return;
     if (appliedFocusRef.current === focusKey) return;
-    const known =
-      railWorkspaces.some((w) => w.wsId === focusWsId) ||
-      sharedSpaces.some((s) => (s.ws_id || sharedWsId(s.id)) === focusWsId);
+    const known = railWorkspaces.some((w) => w.wsId === focusWsId);
     if (!known) return;
     appliedFocusRef.current = focusKey;
     setFilter(""); // 清掉过滤，避免目标工作区被筛掉而看不到
@@ -335,7 +314,7 @@ export function FileWorkbench({
     setFlashWsId(focusWsId);
     const t = setTimeout(() => setFlashWsId(null), 1500);
     return () => clearTimeout(t);
-  }, [focusWsId, focusKey, railWorkspaces, sharedSpaces, folders, expandWs]);
+  }, [focusWsId, focusKey, railWorkspaces, folders, expandWs]);
 
   // 对话页「记忆已更新」卡片深链跳来：打开目标记忆叶子的 tab（记忆更新对话内可见 §1.6）。每个
   // focusKey（导航键）只应用一次。记忆源与工作区列表无关，故无需等 workspaces 就绪即可打开；
@@ -360,32 +339,30 @@ export function FileWorkbench({
   // N4-A：离线时本地源只读包装；云源仍解析但 UI 灰显（不隐藏）。
   const sourceByWs = useMemo(() => {
     const m = new Map<string, FileSource | null>();
+    const folderById = new Map(folders.map((f) => [f.id, f]));
     for (const w of railWorkspaces) {
+      const folderId = folderIdOf(w.wsId);
+      const folder = folderId ? folderById.get(folderId) : undefined;
+      if (offline && w.location === "cloud") {
+        m.set(w.wsId, null);
+        continue;
+      }
+      if (folder?.mode === "cloud" && !canWriteFolder(folder)) {
+        m.set(
+          w.wsId,
+          createCloudWorkspaceSource(w.wsId, w.name, { readonly: true }),
+        );
+        continue;
+      }
       const src = resolveWorkspaceSource(w, fsAvailable);
       if (offline && src && w.location === "local") {
         m.set(w.wsId, asReadOnlyFileSource(src));
-      } else if (offline && w.location === "cloud") {
-        // Keep a null source so the section renders the offline-cloud hint.
-        m.set(w.wsId, null);
       } else {
         m.set(w.wsId, src);
       }
     }
-    for (const s of sharedSpaces) {
-      const wsId = s.ws_id || sharedWsId(s.id);
-      if (offline) {
-        m.set(wsId, null);
-      } else {
-        m.set(
-          wsId,
-          createCloudWorkspaceSource(wsId, s.name, {
-            readonly: !canWriteSharedSpace(s.my_role),
-          }),
-        );
-      }
-    }
     return m;
-  }, [railWorkspaces, sharedSpaces, fsAvailable, offline]);
+  }, [railWorkspaces, folders, fsAvailable, offline]);
 
   // 记忆叶子的路径感知单一源（所有记忆叶子共用一例，按 tab path 解析作用域；与工作区源同构，
   // 故复用 FileDetail/编辑器）。
@@ -407,7 +384,9 @@ export function FileWorkbench({
 
   /** 我的文件 = 云端文件夹的真嵌套树；命中项的祖先一并保留，否则深处的匹配会没了路径。 */
   const cloudFolderNodes = useMemo(() => {
-    const tree = buildFolderTree(folders.filter((f) => f.mode === "cloud"));
+    const tree = buildFolderTree(
+      folders.filter((f) => f.mode === "cloud" && !isSharedWithMeFolder(f)),
+    );
     if (!filter.trim()) return tree;
     return pruneFolderTree(tree, (f) =>
       matchesFilter(f.name, `folder:${f.id}`),
@@ -424,19 +403,16 @@ export function FileWorkbench({
     );
   }, [folders, conversations, matchesFilter]);
 
-  const visibleShared = useMemo(() => {
-    return sharedSpaces.filter((s) =>
-      matchesFilter(s.name, s.ws_id || sharedWsId(s.id)),
-    );
-  }, [sharedSpaces, matchesFilter]);
+  const sharedWithMeFolders = useMemo(() => {
+    return sortFoldersByRecentActivity(
+      folders.filter(isSharedWithMeFolder),
+      conversations,
+    ).filter((f) => matchesFilter(f.name, `folder:${f.id}`));
+  }, [folders, conversations, matchesFilter]);
 
   const treeFilterQuery = filter.trim();
 
-  const railEmpty =
-    folders.length === 0 &&
-    personalWorkspaces.length === 0 &&
-    sharedSpaces.length === 0 &&
-    !sharedQuery.isLoading;
+  const railEmpty = folders.length === 0 && personalWorkspaces.length === 0;
 
   const activeTab = useMemo(
     () => tabs.find((t) => tabKey(t.wsId, t.path) === activeKey) ?? null,
@@ -571,7 +547,7 @@ export function FileWorkbench({
         )}
       >
         {/* Rail header: name + in-tree path filter（新建走各段标题的「+」；
-            段级 CRUD 在各 WorkspaceSection / SharedSpaceSection 右键菜单). */}
+            段级 CRUD 在各 WorkspaceSection 右键菜单). */}
         <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2">
           <SearchField
             value={filter}
@@ -613,41 +589,36 @@ export function FileWorkbench({
           </div>
         )}
 
-        <PendingSharedInvites
-          onAccepted={(space: SharedSpaceSummary) => {
-            const wsId = space.ws_id || sharedWsId(space.id);
+        <PendingFolderInvites
+          onAccepted={(folder) => {
+            const wsId = `folder:${folder.id}`;
             expandWs(wsId);
             setFlashWsId(wsId);
             window.setTimeout(() => setFlashWsId(null), 1500);
           }}
         />
 
-        {isLoading || sharedQuery.isLoading ? (
+        {isLoading ? (
           <div className="flex flex-1 items-center justify-center">
             <Loader2
               size={18}
               className="animate-spin text-muted-foreground/50"
             />
           </div>
-        ) : isError && sharedQuery.isError ? (
-          <InlineError
-            onRetry={() => {
-              onRetry();
-              void sharedQuery.refetch();
-            }}
-          />
+        ) : isError ? (
+          <InlineError onRetry={onRetry} />
         ) : railEmpty ? (
           <EmptyHint
             icon={<FolderOpen size={24} className="text-muted-foreground/40" />}
             title="还没有文件夹"
-            hint="在「我的文件」里新建文件夹、打开本机文件夹或新建共享空间；对话里产生的文件也会出现在这里。"
+            hint="在「我的文件」里新建文件夹或打开本机文件夹；别人邀请你的协作桌会出现在「与我共享」。"
           />
         ) : (
           <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 py-1">
             {filter.trim() &&
             cloudFolderNodes.length === 0 &&
             localFolders.length === 0 &&
-            visibleShared.length === 0 ? (
+            sharedWithMeFolders.length === 0 ? (
               <p className="px-2 py-6 text-center text-xs text-muted-foreground">
                 没有匹配「{filter.trim()}」的文件夹或已展开树中的文件
               </p>
@@ -683,41 +654,17 @@ export function FileWorkbench({
                     ))
                   ))}
 
-                {(visibleShared.length > 0 || !filter.trim()) && (
-                  <SharedSpacesRailHeader
-                    onSharedCreated={(spaceId) => {
-                      const wsId = sharedWsId(spaceId);
-                      expandWs(wsId);
-                      setFlashWsId(wsId);
-                      window.setTimeout(() => setFlashWsId(null), 1500);
-                    }}
-                  />
-                )}
-                {visibleShared.length === 0 && !filter.trim() ? (
-                  <p className="px-2 py-2 text-xs text-muted-foreground/70">
-                    还没有共享空间
-                  </p>
-                ) : (
-                  visibleShared.map((space) => {
-                    const wsId = space.ws_id || sharedWsId(space.id);
-                    return (
-                      <SharedSpaceSection
-                        key={space.id}
-                        space={space}
-                        source={sourceByWs.get(wsId) ?? null}
-                        offlineUnavailable={offline}
-                        activePath={
-                          activeTab?.wsId === wsId ? activeTab.path : null
-                        }
-                        expanded={expandedWs.has(wsId)}
-                        onToggle={() => toggleWs(wsId)}
-                        onOpenFile={(path, name) => openFile(wsId, path, name)}
-                        flashing={wsId === flashWsId}
-                        filterQuery={treeFilterQuery}
-                        sortBy={sortBy}
+                {sharedWithMeFolders.length > 0 && (
+                  <>
+                    <SharedWithMeRailHeader />
+                    {sharedWithMeFolders.map((folder) => (
+                      <FolderRailRow
+                        key={folder.id}
+                        folder={folder}
+                        host={railHost}
                       />
-                    );
-                  })
+                    ))}
+                  </>
                 )}
               </>
             )}

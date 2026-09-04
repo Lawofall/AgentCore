@@ -1,7 +1,7 @@
-"""JWT access and inference tokens (python-jose)."""
+"""JWT access, inference, folders, account, and preview tokens (python-jose)."""
 
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from jose import JWTError, jwt
 
@@ -265,3 +265,76 @@ def decode_account_token(token: str) -> str:
     if not sub:
         raise AuthenticationError("Token missing subject")
     return sub
+
+
+class PreviewTokenClaims(NamedTuple):
+    """Decoded ``type=preview`` JWT: who, which conversation, which process, which port."""
+
+    user_id: str
+    conversation_id: str
+    process_id: str
+    port: int
+
+
+def create_preview_token(
+    user_id: str,
+    *,
+    conversation_id: str,
+    process_id: str,
+    port: int,
+    expires_delta: timedelta | None = None,
+) -> str:
+    """Mint a short-lived ticket for the cloud user-preview URL (安全 · 五、第二刀).
+
+    Desktop / web exchanges the current access session for THIS token and opens
+    the preview origin with it. Distinct ``type`` ("preview") means it can ONLY
+    authorize that origin — never cookie-auth APIs, inference, folders, or
+    account logs. ``decode_preview_token`` / the other decoders refuse each
+    other's types.
+
+    Claims: ``sub`` (user_id), ``cid`` (conversation_id), ``pid`` (process_id),
+    ``port`` (guest HTTP port). Never log the JWT; it is a capability ticket,
+    not a session cookie — do not put it in model context or the journal.
+    """
+    now = datetime.now(UTC)
+    expire = now + (expires_delta or timedelta(minutes=settings.preview_token_expire_minutes))
+    claims = {
+        "sub": user_id,
+        "type": "preview",
+        "cid": conversation_id,
+        "pid": process_id,
+        "port": port,
+        "iat": int(now.timestamp()),
+        "exp": int(expire.timestamp()),
+    }
+    return jwt.encode(claims, settings.jwt_secret_key, algorithm=_JWT_ALGORITHM)
+
+
+def decode_preview_token(token: str) -> PreviewTokenClaims:
+    """Return ``(user_id, conversation_id, process_id, port)`` from a valid preview JWT.
+
+    Raises ``AuthenticationError`` for any invalid, tampered, expired, or
+    wrong-type token (including ``access``, ``inference``, ``folders``, and
+    ``account``).
+    """
+    try:
+        claims = jwt.decode(token, settings.jwt_secret_key, algorithms=[_JWT_ALGORITHM])
+    except JWTError as exc:
+        raise AuthenticationError("Invalid or expired preview token") from exc
+
+    if claims.get("type") != "preview":
+        raise AuthenticationError("Wrong token type")
+    sub = claims.get("sub")
+    if not sub or not isinstance(sub, str):
+        raise AuthenticationError("Token missing subject")
+    cid = claims.get("cid")
+    if not cid or not isinstance(cid, str):
+        raise AuthenticationError("Token missing conversation")
+    pid = claims.get("pid")
+    if not pid or not isinstance(pid, str):
+        raise AuthenticationError("Token missing process")
+    port = claims.get("port")
+    # ``bool`` is an ``int`` subclass — a JSON ``true`` must not pass as a port.
+    if type(port) is not int or not (1 <= port <= 65535):
+        raise AuthenticationError("Token missing port")
+    return PreviewTokenClaims(sub, cid, pid, port)

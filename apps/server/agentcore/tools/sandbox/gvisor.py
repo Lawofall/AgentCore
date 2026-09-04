@@ -144,6 +144,24 @@ def _desk_key(workspace: str) -> str:
     return str(Path(workspace).resolve())
 
 
+def has_running_desk(workspace: str) -> bool:
+    """True when this process already holds a started guest for ``workspace``."""
+    return _desk_key(workspace) in _desks
+
+
+def desk_preview_upstream(workspace: str) -> tuple[str, str] | None:
+    """Sandbox-side IP + guest id for preview dial, or None if this desk is down."""
+    session = _desks.get(_desk_key(workspace))
+    if session is None:
+        return None
+    container_id = getattr(session, "container_id", None)
+    egress = getattr(session, "egress", None)
+    sbx_ip = getattr(egress, "sbx_ip", None) if egress is not None else None
+    if not container_id or not sbx_ip:
+        return None
+    return str(sbx_ip), str(container_id)
+
+
 def _desk_ids(key: str) -> tuple[str, str]:
     digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
     return f"agentcore-desk-{digest[:16]}", digest[:32]
@@ -281,9 +299,10 @@ def _can_reap_desk(session: _DeskSession, *, now: float, ttl: float) -> bool:
 
 
 async def reap_idle_desks() -> int:
-    """Kill idle cloud-desk guests (memory path). Disk stays; next use lazy-creates.
+    """Kill idle cloud-desk guests (memory path). Disk stays; next provision recreates.
 
     Never freeze/pause. Local Bridge / sidecar never populate ``_desks``.
+    ``execute`` does not start-detach a reaped desk — prepare / attach does.
     """
     ttl = float(settings.gvisor_desk_idle_ttl_seconds)
     now = _now()
@@ -302,7 +321,7 @@ async def reap_idle_desks() -> int:
             _desks.pop(key, None)
             from agentcore.tools.sandbox.desk_process import drop_processes_for_desk_keys
 
-            drop_processes_for_desk_keys((key,))
+            await drop_processes_for_desk_keys((key,))
             await _close_sandbox_browsers_for_desk(session.container_id)
             await session.close()
             reaped += 1
@@ -339,14 +358,14 @@ async def _unpin_desk(workspace: str) -> None:
 
 
 async def close_all_desk_sessions() -> None:
-    """Lifespan shutdown: tear down every lazy-started cloud-desk guest."""
+    """Lifespan shutdown: tear down every cloud-desk guest this process started."""
     async with _registry_lock:
         sessions = list(_desks.values())
         _desks.clear()
         _desk_locks.clear()
     from agentcore.tools.sandbox.desk_process import drop_processes_for_desk_keys
 
-    drop_processes_for_desk_keys(tuple(session.key for session in sessions))
+    await drop_processes_for_desk_keys(tuple(session.key for session in sessions))
     for session in sessions:
         with contextlib.suppress(Exception):
             await session.close()
@@ -482,7 +501,7 @@ class GVisorSandbox:
         return min(int(request.timeout_seconds), int(settings.gvisor_timeout_max_seconds))
 
     async def _execute_in_slot(
-        self, request: ExecutionRequest, start: float, *, _desk_retry: bool = False
+        self, request: ExecutionRequest, start: float
     ) -> ExecutionResult:
         workspace_root = request.cwd or self._workspace_root
         if not workspace_root:
@@ -501,14 +520,10 @@ class GVisorSandbox:
         timeout_seconds = self._effective_timeout(request)
         pinned = False
         try:
-            desk = await self._ensure_desk(
-                workspace, cache_bucket=request.cache_bucket, pin=True
-            )
+            desk = await self._pin_running_desk(workspace)
             pinned = True
         except SandboxError:
             raise
-        except (TimeoutError, SandboxTimeoutError, SandboxdError, OSError) as exc:
-            raise _desk_start_error(exc) from exc
 
         try:
             script_name = f"exec-{uuid.uuid4().hex[:12]}{_FILE_EXTENSIONS[request.language]}"
@@ -554,13 +569,9 @@ class GVisorSandbox:
                     exit_code=-1,
                     duration_ms=duration_ms,
                 )
-            if not _desk_retry and _is_dead_desk_error(exc):
+            if _is_dead_desk_error(exc):
                 pinned = False
                 await _drop_desk_session(workspace)
-                return await self._execute_in_slot(
-                    request, start, _desk_retry=True
-                )
-            if _is_dead_desk_error(exc):
                 raise _desk_start_error(exc, host_unhealthy=False) from exc
             raise SandboxError(f"云桌执行失败：{exc}") from exc
         except OSError as e:
@@ -641,7 +652,9 @@ class GVisorSandbox:
 
         Holds the global execution slot only for this wait. Callers that start
         long-running children must background them inside the script.
+        Desk must already be up; ``cache_bucket`` is unused (provision bound it).
         """
+        del cache_bucket
         if not _IS_LINUX:
             raise SandboxError("GVisor sandbox is only available on Linux")
         if not guest_script.startswith("/scratch/") or ".." in guest_script:
@@ -653,14 +666,7 @@ class GVisorSandbox:
             return busy.exit_code, busy.stdout, busy.stderr
         pinned = False
         try:
-            try:
-                desk = await self._ensure_desk(
-                    workspace, cache_bucket=cache_bucket, pin=True
-                )
-            except SandboxError:
-                raise
-            except (TimeoutError, SandboxTimeoutError, SandboxdError, OSError) as exc:
-                raise _desk_start_error(exc) from exc
+            desk = await self._pin_running_desk(workspace)
             pinned = True
             argv = ["bash", guest_script]
             env_pairs = self._desk_env_pairs(desk)
@@ -678,6 +684,8 @@ class GVisorSandbox:
             if exc.code == "sandboxd_timeout":
                 raise SandboxError("云桌短执行超时") from exc
             if _is_dead_desk_error(exc):
+                pinned = False
+                await _drop_desk_session(workspace)
                 raise _desk_start_error(exc, host_unhealthy=False) from exc
             raise SandboxError(f"云桌执行失败：{exc}") from exc
         except OSError as exc:
@@ -686,6 +694,20 @@ class GVisorSandbox:
             if pinned:
                 await _unpin_desk(workspace)
             release()
+
+    async def _pin_running_desk(self, workspace: str) -> _DeskSession:
+        """Pin an already-started guest. Never ``start_detach``."""
+        del self
+        key = _desk_key(workspace)
+        async with _registry_lock:
+            lock = _desk_locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            existing = _desks.get(key)
+            if existing is None:
+                raise _cloud_desk_unavailable_error()
+            existing.last_used = _now()
+            existing.inflight += 1
+            return existing
 
     async def _ensure_desk(
         self, workspace: str, *, cache_bucket: str | None, pin: bool = False

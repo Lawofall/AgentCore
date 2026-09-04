@@ -7,6 +7,7 @@ from collections.abc import Collection
 from agentcore.runtime.skills.ask_user import _ASKING_THE_USER
 from agentcore.runtime.skills.data_file_landing import _DATA_FILE_LANDING
 from agentcore.runtime.skills.debate_and_review import _DEBATE_AND_REVIEW
+from agentcore.runtime.skills.lead_subteam import _LEAD_SUBTEAM
 from agentcore.runtime.skills.long_form_writing import _LONG_FORM_LANDING
 from agentcore.runtime.skills.product_help import _PRODUCT_HELP
 from agentcore.runtime.skills.registry import (
@@ -30,8 +31,16 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         name="team_orchestration_advanced",
         summary="团队拆法",
         body=_TEAM_ORCHESTRATION_ADVANCED,
-        # 派单 / 协调 / 跨路复核：队员开场目录与 consult 共用此滤，避免叶子与嵌套 lead 两套前缀。
+        # 根 CEO 编制 / 协调。嵌套 lead 的拆法不在此本 → ``lead_subteam``。
         audience=AUDIENCE_CEO_ONLY,
+    ),
+    SystemSkill(
+        name="lead_subteam",
+        summary="子队拆法",
+        body=_LEAD_SUBTEAM,
+        # 持 delegate 的队员队长才进目录；叶子与 CEO 都不广告。
+        audience=AUDIENCE_WORKER_ONLY,
+        requires_tools=("delegate",),
     ),
     SystemSkill(
         name="team_cross_folder",

@@ -45,7 +45,7 @@ export function liveDebateSteerTarget(
   return { conversationId, executionId: execution.id };
 }
 
-/** 主框 chrome：进行中隐藏排队/插队、出示结论。 */
+/** 主框 chrome：进行中隐藏排队/插队，发送即对这场说话。 */
 export function useLiveDebateSteer(): boolean {
   const conversationId = useConversationStore((s) => s.currentConversationId);
   const lastKey = useConversationStore((s) => {

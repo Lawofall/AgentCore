@@ -564,6 +564,7 @@ def test_core_teaches_split_criterion_over_count():
     assert "多源合并" in lf and "成篇优先" in lf
     orch_sum = build_system_skill_registry().get("team_orchestration_advanced").summary
     assert orch_sum == "团队拆法"
+    assert build_system_skill_registry().get("lead_subteam").summary == "子队拆法"
     skill = _TEAM_ORCHESTRATION_ADVANCED
     assert "形状词汇" not in skill
     assert "默认用本工具" in DELEGATE_DESCRIPTION
@@ -593,7 +594,11 @@ def test_core_teaches_split_criterion_over_count():
 
 
 def test_resident_prompts_omit_retired_working_set_xml():
-    """每回合 ``<工作集>`` / 「最近触达」 / ``<近期团队图>`` 已撤；路径账只喂压缩器，不进常驻 / 核。"""
+    """每回合 ``<工作集>`` / 「最近触达」 / ``<近期团队图>`` 已撤；压缩路径账不进常驻 / 核。
+
+    文件夹对话 CEO ``<工作区>`` 文件节可点名本对话写/改/导出（``conversation_edits``），
+    不是本条否决的 XML / mtime 抽样。
+    """
     base = assemble_system_prompt()
     ceo = compose_ceo_chat_prompt(
         base,
@@ -656,6 +661,7 @@ def test_consult_hook_lives_only_in_the_core():
     orch_sum = build_system_skill_registry().get("team_orchestration_advanced").summary
     assert orch_sum == "团队拆法"
     assert orch_sum in directory
+    assert "lead_subteam" not in ceo
     delivery_sum = build_system_skill_registry().get("team_delivery_env").summary
     assert delivery_sum == "交付环境"
     assert "Office" in _TEAM_DELIVERY_ENV
@@ -1531,8 +1537,8 @@ def test_shared_base_teaches_delivery_honesty():
     assert "概览契约" not in orch
 
 
-def test_worker_opening_drops_captain_only_context():
-    """队员开场不含派单/协调/跨路复核语境；叶子与嵌套 lead 目录同名（前缀一致）。"""
+def test_worker_opening_drops_ceo_orchestration_context():
+    """叶子开场不含主管编制手册；嵌套 lead 仅多 ``lead_subteam``（持 delegate 才进目录）。"""
     from agentcore.runtime.context.consultable import ConsultDirectoryEntry
     from agentcore.runtime.skills.registry import AUDIENCE_WORKER
 
@@ -1545,6 +1551,7 @@ def test_worker_opening_drops_captain_only_context():
         "概览契约",
         "派持",
         "team_orchestration_advanced",
+        "lead_subteam",
         "team_cross_folder",
         "team_delivery_env",
         "build_website",
@@ -1556,7 +1563,8 @@ def test_worker_opening_drops_captain_only_context():
     reg = build_system_skill_registry()
     leaf_names = {s.name for s in reg.available(set(), audience=AUDIENCE_WORKER)}
     lead_names = {s.name for s in reg.available({"delegate"}, audience=AUDIENCE_WORKER)}
-    assert leaf_names == lead_names
+    assert "lead_subteam" not in leaf_names
+    assert lead_names == leaf_names | {"lead_subteam"}
     for captain_manual in (
         "team_orchestration_advanced",
         "team_cross_folder",
@@ -1566,6 +1574,7 @@ def test_worker_opening_drops_captain_only_context():
         "deep_multi_lens_research",
     ):
         assert captain_manual not in leaf_names
+        assert captain_manual not in lead_names
     worker_dir = compose_worker_base_prompt(
         base,
         on_demand_entries=[
@@ -1574,10 +1583,21 @@ def test_worker_opening_drops_captain_only_context():
         ],
     )
     assert "team_orchestration_advanced" not in worker_dir
+    assert "lead_subteam" not in worker_dir
     assert "team_cross_folder" not in worker_dir
     assert "team_delivery_env" not in worker_dir
     assert "work_discipline" not in worker_dir
     assert "long_form_landing" in worker_dir
+    lead_dir = compose_worker_base_prompt(
+        base,
+        on_demand_entries=[
+            ConsultDirectoryEntry(name=s.name, summary=s.summary)
+            for s in reg.available({"delegate"}, audience=AUDIENCE_WORKER)
+        ],
+    )
+    assert "lead_subteam" in lead_dir
+    assert "子队拆法" in lead_dir
+    assert "team_orchestration_advanced" not in lead_dir
 
 
 def test_shared_base_teaches_claim_evidence_soft_constraint():

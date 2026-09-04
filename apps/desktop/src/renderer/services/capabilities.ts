@@ -20,8 +20,8 @@ export type CapabilityPack = Schemas["CapabilityPack"];
 export type Capabilities = Schemas["CapabilitiesResponse"];
 
 /** Load the platform's complete capability catalog (read-only): every tool with its
- * CEO/worker reach, the system Skills, and the CEO system-prompt template. Single
- * fetch backing 工具箱 → 能力图鉴. */
+ * CEO/worker reach, the system Skills, and the system-prompt templates (shared base,
+ * worker identities, CEO). Single fetch backing 工具箱 → 能力图鉴. */
 export async function getCapabilities(): Promise<Capabilities> {
   return api.get<Capabilities>("/v1/capabilities");
 }

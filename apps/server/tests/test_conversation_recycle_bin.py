@@ -22,7 +22,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from sqlalchemy import Select, Update
+from sqlalchemy import Delete, Select, Update
 from sqlalchemy.dialects import postgresql
 
 from agentcore.api.routes.conversations.crud import (
@@ -236,7 +236,9 @@ async def test_get_deleted_by_id_ignores_retention_window():
 
 
 def _restore_session(*, rowcount: int, restored: Any = None) -> _RecordingSession:
-    results = [_Result(rowcount=rowcount)]
+    # restore(): get_deleted_by_id SELECT → conditional UPDATE → optional reread.
+    results = [_Result(scalar=_fake_conversation())]
+    results.append(_Result(rowcount=rowcount))
     if rowcount == 1:
         results.append(_Result(scalar=restored or _fake_conversation()))
     return _RecordingSession(results)
@@ -256,8 +258,9 @@ async def test_restore_only_clears_deleted_at():
     for untouched in ("folder_id", "pinned", "archived"):
         assert untouched not in set_clause
     # 保留期判据必须在同一条 UPDATE 上，否则「查得到」和「改得动」各算各的。
+    # 成员桌上的行 Conversation.user_id 可能不是调用者；可见性已由 get_deleted_by_id 闸过。
     assert "conversations.deleted_at > <ts:2026-01-01" in where_clause
-    assert f"conversations.user_id = '{USER_ID}'" in where_clause
+    assert f"conversations.id = '{CONV_ID}'" in where_clause
     assert session.commits == 1
 
 
@@ -270,7 +273,7 @@ async def test_restore_losing_the_purge_race_commits_nothing():
     )
 
     assert restored is None
-    assert not _selects(session)
+    assert len(_selects(session)) == 1
     assert session.commits == 0
 
 
@@ -282,8 +285,8 @@ async def test_restore_rereads_with_populate_existing():
         CONV_ID, user_id=USER_ID, not_before=datetime(2026, 1, 1, tzinfo=UTC)
     )
 
-    reread = next(s for s in session.statements if isinstance(s, Select))
-    assert reread.get_execution_options().get("populate_existing") is True
+    rereads = [s for s in session.statements if isinstance(s, Select)]
+    assert rereads[-1].get_execution_options().get("populate_existing") is True
 
 
 # --- 路由：过期 409、竞态 409、未知 404 ---------------------------------------------
@@ -426,3 +429,20 @@ def test_trash_routes_are_registered_before_the_conversation_id_matcher():
     assert paths.index("/conversations/trash") < paths.index(
         "/conversations/{conversation_id}"
     )
+
+
+# --- 硬删：先清 per-user prefs ------------------------------------------------------
+
+
+async def test_hard_delete_clears_conversation_preferences_first():
+    session = _RecordingSession()
+
+    await ConversationRepository(session).hard_delete(CONV_ID)
+
+    deletes = [s for s in session.statements if isinstance(s, Delete)]
+    tables = [s.table.name for s in deletes]
+    assert tables[0] == "conversation_preferences"
+    assert tables.index("conversation_preferences") < tables.index("conversations")
+    sql = _sql(deletes[0])
+    assert f"conversation_preferences.conversation_id = '{CONV_ID}'" in sql
+    assert session.commits == 1

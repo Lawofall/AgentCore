@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.billing.gate import preflight_llm_credentials
-from agentcore.core.errors import BYOK_KEY_REQUIRED_MESSAGE, NotFoundError
+from agentcore.core.errors import BYOK_KEY_REQUIRED_MESSAGE, AuthorizationError, NotFoundError
 from agentcore.db.models import Conversation, User
 from agentcore.db.repositories import (
     ConversationRepository,
@@ -45,7 +45,7 @@ def emit_preflight_warnings(sink: EventSink, preflight: TurnPreflightResult) -> 
 async def _require_owned_conversation(
     conversation_id: str, user_id: str, repo: ConversationRepository
 ) -> None:
-    """404 unless the conversation exists and belongs to the user."""
+    """404 unless the conversation exists and the caller may see it."""
     conv = await repo.get_by_id(conversation_id, user_id=user_id)
     if not conv:
         raise NotFoundError("对话不存在")
@@ -54,7 +54,7 @@ async def _require_owned_conversation(
 async def _get_owned_conversation(
     conversation_id: str, user_id: str, repo: ConversationRepository
 ) -> Conversation:
-    """Return the conversation (for its ``folder_id``) or 404 if not owned.
+    """Return the conversation if the caller may see it (owner or accepted desk member).
 
     Snapshot routes need ``folder_id`` to resolve the right workspace: a folder's
     conversations share its space; an ungrouped one has its own (workspace.locate).
@@ -63,6 +63,22 @@ async def _get_owned_conversation(
     if not conv:
         raise NotFoundError("对话不存在")
     return conv
+
+
+async def _require_conversation_write(
+    conversation_id: str, user_id: str, session: AsyncSession
+):
+    """404 if invisible; 403 if viewer (read-only desk member)."""
+    from agentcore.folders.desk import resolve_conversation_access
+
+    access = await resolve_conversation_access(
+        session, conversation_id=conversation_id, user_id=user_id
+    )
+    if access is None:
+        raise NotFoundError("对话不存在")
+    if not access.can_write:
+        raise AuthorizationError("只读成员不能执行此操作")
+    return access
 
 
 async def _tools_support_warnings(
@@ -157,6 +173,7 @@ async def _preflight_owned_chat_turn(
     conv = await conv_repo.get_by_id(conversation_id, user_id=user.user_id)
     if not conv:
         raise NotFoundError("对话不存在")
+    await _require_conversation_write(conversation_id, user.user_id, session)
     return await _preflight_turn_llm(
         session=session,
         user=user,

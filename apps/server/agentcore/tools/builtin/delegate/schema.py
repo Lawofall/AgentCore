@@ -1,8 +1,8 @@
 """Delegate tool schema and constants.
 
 Schema layer (工具面瘦身): short trigger + 拆任务合同 + playbook/tasks 互斥.
-何时用写在本 description；编制 HOW lives in
-``consult(team_orchestration_advanced)``.
+何时用写在本 description；根 CEO 编制 HOW →
+``consult(team_orchestration_advanced)``；嵌套 lead → ``consult(lead_subteam)``.
 """
 
 from __future__ import annotations
@@ -44,6 +44,16 @@ DELEGATE_DESCRIPTION = (
     "闲聊、窗口里已有证据的一问一答、一眼写完的短文或小落盘、纯启服不必派。"
     "有写权 ≠ 自己做完。"
     "HOW→consult(team_orchestration_advanced)。"
+)
+
+# Nested captain: blocking wait, not coordination. HOW is a different consult.
+NESTED_DELEGATE_DESCRIPTION = (
+    f"把当前任务拆给由你指挥的子团队（手写 tasks：role+task，≤{MAX_DELEGATION_TASKS}；"
+    "调用后等到子队收工）。"
+    "成果级目标·约束·验收、尚未钉成单切片时优先用本工具再整合；"
+    "单文件 / 已钉薄壳 / 强耦合同 run 切片 / 小修·机械单步自己干。"
+    "有写权 ≠ 自己做完。"
+    "HOW→consult(lead_subteam)。"
 )
 
 DELEGATE_PARAMETERS = {

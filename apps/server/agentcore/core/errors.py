@@ -863,6 +863,22 @@ class DatabaseUnavailableError(AgentCoreError):
         super().__init__(message, **kwargs)
 
 
+class PreviewUnavailableError(AgentCoreError):
+    """Cloud user-preview is unconfigured or the execution-face proxy is down.
+
+    Empty ``preview_public_base_url`` or a down reverse-proxy bind — not the
+    user's fault. 503 so clients can retry after the operator configures the
+    public origin / the proxy recovers. Distinct from sandbox tool failures
+    (those stay on the turn as ``SANDBOX_ERROR``).
+    """
+
+    code = ErrorCode.PREVIEW_UNAVAILABLE
+    status_code = 503
+
+    def __init__(self, message: str = "云端预览暂不可用，请稍后重试", **kwargs):
+        super().__init__(message, **kwargs)
+
+
 class ClientTooOldError(AgentCoreError):
     """Client build is below its platform floor (HTTP 426).
 

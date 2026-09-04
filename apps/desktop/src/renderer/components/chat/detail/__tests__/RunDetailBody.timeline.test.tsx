@@ -4,7 +4,7 @@
  */
 import { RunDetailBody } from "@/components/chat/detail/RunDetailBody";
 import type { AgentState, Execution, RunNode } from "@/stores/execution";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -31,8 +31,21 @@ vi.mock("@/stores/sidePanel", () => ({
     sel({ showRunDetail: vi.fn() }),
 }));
 
+const navigate = vi.hoisted(() => vi.fn());
+
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return {
+    ...actual,
+    useNavigate: () => navigate,
+  };
+});
+
 vi.mock("@/stores/ui", () => ({
-  turnDetailPath: () => "/t",
+  turnDetailPath: (conversationId: string, turnId: string, view?: string) => {
+    const path = `/conversations/${conversationId}/turn/${turnId}`;
+    return view ? `${path}?view=${view}` : path;
+  },
 }));
 
 vi.mock("@/hooks/useTurnAudit", () => ({
@@ -44,7 +57,10 @@ vi.mock("@/stores/disclosure", () => ({
   usePersistentDisclosure: () => [false, vi.fn()],
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  navigate.mockClear();
+});
 
 const agent: AgentState = {
   id: "w1",
@@ -236,5 +252,76 @@ describe("RunDetailBody process timeline", () => {
     // Old partitioned section titles must not appear as standalone section chrome.
     expect(screen.queryByText("输出")).toBeNull();
     expect(screen.queryByText("工具调用")).toBeNull();
+  });
+
+  it("主持人 run 带 process 走同一套时间线，无主持台账，打开辩论室会 navigate", () => {
+    const prevPlanType = mockExecution.planType;
+    const prevAgents = mockExecution.agents;
+    const prevRuns = mockExecution.runs;
+    mockExecution.planType = "debate";
+    mockExecution.agents = [
+      {
+        ...agent,
+        id: "a-mod",
+        role: "主持人",
+        thinking: false,
+        outputChunks: ["终审：暂缓上微服务。"],
+        reasoningChunks: ["先听双方。"],
+        toolCalls: [],
+      },
+    ];
+    mockExecution.runs = [
+      {
+        ...run,
+        id: "mod",
+        agentId: "a-mod",
+        role: null,
+        task: "主持本场辩论",
+        outputSummary: null,
+        process: [
+          { kind: "reasoning", text: "先听双方。" },
+          { kind: "content", text: "终审：暂缓上微服务。" },
+        ],
+      },
+      {
+        ...run,
+        id: "mod_r1_pro",
+        agentId: "a-pro",
+        parentRunId: "mod",
+        stance: "pro",
+        group: "debate:debate",
+        round: 1,
+        process: [],
+      },
+      {
+        ...run,
+        id: "mod_r1_con",
+        agentId: "a-con",
+        parentRunId: "mod",
+        stance: "con",
+        group: "debate:debate",
+        round: 1,
+        process: [],
+      },
+    ];
+    try {
+      render(
+        <MemoryRouter>
+          <RunDetailBody messageId="m1" runId="mod" />
+        </MemoryRouter>,
+      );
+      expect(screen.getByText("主持人")).toBeTruthy();
+      expect(screen.getAllByText("Thought").length).toBeGreaterThan(0);
+      expect(screen.getByText(/终审：暂缓上微服务/)).toBeTruthy();
+      expect(screen.queryByText("主持台账")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: /打开辩论室/ }));
+      expect(navigate).toHaveBeenCalledWith(
+        "/conversations/c1/turn/m1?view=debate",
+      );
+    } finally {
+      mockExecution.planType = prevPlanType;
+      mockExecution.agents = prevAgents;
+      mockExecution.runs = prevRuns;
+    }
   });
 });

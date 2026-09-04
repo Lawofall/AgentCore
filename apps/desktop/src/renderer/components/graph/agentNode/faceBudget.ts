@@ -6,7 +6,8 @@
  * 被挤出的（多为过程性）标记归 hover peek 与 run 详情——而 aria 播报恒含全部状态
  * （a11y 不因视觉降级而回归）。
  *
- * 身份类标记（立场 / 辩论轮次角标）不属这三桶，是 face 的「角色」层，恒显、不计预算。
+ * 身份层：辩论立场走阵营色 + 头像字（默认不写正方/反方字标）；辩论轮次角标
+ * 仍恒显、不计预算。
  *
  * 纯函数、无 React——{@link buildAgentNodePresentation} 调 {@link pickFaceBadges}
  * 得可见键集合，`AgentNodeFace` 据此 gate 每枚徽标；单测直接钉选择逻辑。
@@ -15,7 +16,7 @@
 /** 三优先级桶：待拍板（decision）> 异常（anomaly）> 过程性（process）。 */
 export type FaceBadgeBucket = "decision" | "anomaly" | "process";
 
-/** face 上受预算约束的功能徽标键（身份类 stance / debate round 不在内）。 */
+/** face 上受预算约束的功能徽标键（辩论轮次角标不在内；立场不再占字标）。 */
 export type FaceBadgeKey =
   | "escalation"
   | "checkpoint"

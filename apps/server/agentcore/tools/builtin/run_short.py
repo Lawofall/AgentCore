@@ -215,14 +215,9 @@ async def execute_short(
     if context.on_phase:
         context.on_phase("executing")
     try:
-        # Boot the cloud desk before the per-conversation exec lock so a
-        # minutes-scale start_detach does not queue sibling workers.
-        if location == "server":
-            ensure = getattr(context.backend, "ensure_workspace_desk", None)
-            if callable(ensure):
-                await ensure()
         # Per-conversation serial: same-session workers queue on short-exec only
         # (empty conversation_id → no lock; verify / long-running bypass this).
+        # Cloud desk boot is prepare / resume — not this lock and not this call.
         async with code_execute_lock(context.conversation_id):
             result = await context.backend.execute(request)
     except SandboxError as e:

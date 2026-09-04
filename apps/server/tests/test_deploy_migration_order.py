@@ -69,13 +69,18 @@ def _first_exact(lines: list[str], text: str) -> int:
 
 
 # 同一流程的两个入口；停 / 起 api 的写法各自不同，故随文件名一起带上。
+# 停机必须带上 sandboxd：guest 占工作区盘，只停 api 迁树会和 bind 打架。
 _SCRIPTS = [
     (
         "finish-server.sh",
-        '"${COMPOSE[@]}" stop --timeout 40 api 2>/dev/null || true',
+        '"${COMPOSE[@]}" stop --timeout 40 api sandboxd 2>/dev/null || true',
         '"${COMPOSE[@]}" up -d',
     ),
-    ("deploy-server.sh", "dc stop --timeout 40 api 2>/dev/null || true", "dc up -d"),
+    (
+        "deploy-server.sh",
+        "dc stop --timeout 40 api sandboxd 2>/dev/null || true",
+        "dc up -d",
+    ),
 ]
 
 
@@ -229,6 +234,6 @@ def test_rollback_does_not_repeat_the_workspace_backup():
         lines, '$IS_ROLLBACK" -eq 0 && "${SKIP_WORKSPACE_SNAPSHOT:-0}" != "1"'
     )
     archived = _first_containing(lines, _WORKSPACE_ARCHIVE)
-    stopped = _first_exact(lines, "dc stop --timeout 40 api 2>/dev/null || true")
+    stopped = _first_exact(lines, "dc stop --timeout 40 api sandboxd 2>/dev/null || true")
     assert guard < archived < stopped
     assert "${SKIP_WORKSPACE_SNAPSHOT:-0}" in lines[guard]

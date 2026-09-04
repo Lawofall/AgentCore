@@ -21,6 +21,9 @@ export const nodeTypes = {
 
 export const edgeTypes = { step: StepEdge };
 
+/** Stable identity — never pass `{ hideAttribution: true }` inline to ReactFlow. */
+export const RF_PRO_OPTIONS = { hideAttribution: true } as const;
+
 export const LAYOUT_OPTIONS: {
   kind: GraphLayout;
   label: string;

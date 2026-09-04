@@ -2,7 +2,6 @@
 export const PROMPT_TAG_LABELS: Record<string, string> = {
   output_style: "输出风格",
   tool_use: "工具使用",
-  untrusted_content: "不可信内容",
   system_feedback: "系统反馈",
   runtime_context: "运行时上下文",
   citing_sources: "引用规范",

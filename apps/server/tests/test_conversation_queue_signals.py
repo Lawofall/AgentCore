@@ -236,13 +236,13 @@ async def _cancel(cid: str, queue_id: str) -> None:
         conversation_id=cid,
         queue_id=queue_id,
         user=SimpleNamespace(user_id="u1"),
-        conv_repo=None,
+        conv_repo=SimpleNamespace(_session=None),
     )
 
 
 @pytest.fixture
 def owned_conversation(monkeypatch):
-    monkeypatch.setattr(messages_mod, "_require_owned_conversation", AsyncMock())
+    monkeypatch.setattr(messages_mod, "_require_conversation_write", AsyncMock())
 
 
 async def test_cancel_with_no_live_run_still_reaches_watchers(hub, owned_conversation):

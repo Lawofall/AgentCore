@@ -62,18 +62,51 @@ vi.mock("@/hooks/useLlmModelProfiles", () => ({
     refetch: vi.fn(),
   }),
 }));
+const folderLists = vi.hoisted(() => ({
+  accessible: [] as {
+    id: string;
+    name: string;
+    mode: "local" | "cloud";
+    localRootId: string | null;
+    localSubpath: string | null;
+    myRole?: "owner" | "editor" | "viewer" | null;
+  }[],
+  grouped: [] as {
+    id: string;
+    name: string;
+    mode: "local" | "cloud";
+    localRootId: string | null;
+    localSubpath: string | null;
+    myRole?: "owner" | "editor" | "viewer" | null;
+  }[],
+  conversations: [] as {
+    id: string;
+    title: string;
+    updatedAt: string;
+    messageCount: number;
+    lastMessagePreview: string | null;
+    folderId?: string | null;
+  }[],
+}));
+
 vi.mock("@/hooks/useFolders", () => ({
-  useFolders: () => [],
-  getFolders: () => [],
+  useFolders: () => folderLists.accessible,
+  getFolders: () => folderLists.accessible,
   useCreateFolder: () => ({ mutateAsync: vi.fn() }),
 }));
 vi.mock("@/hooks/useConversations", () => ({
-  useConversations: () => [],
-  getConversations: () => [],
+  useConversations: () => folderLists.conversations,
+  getConversations: () => folderLists.conversations,
   useGroupedConversations: () => ({
-    data: { folders: [], conversations: [] },
+    data: {
+      folders: folderLists.grouped,
+      conversations: folderLists.conversations,
+    },
   }),
   patchConversationCache: vi.fn(),
+}));
+vi.mock("@/hooks/useFolderSharing", () => ({
+  useSharedWithMeFolders: () => ({ data: [] }),
 }));
 vi.mock("@/hooks/useModels", () => ({
   useModels: () => ({
@@ -230,6 +263,7 @@ import {
 } from "@/lib/composerContinueHint";
 import { useComposerProfileDraftStore } from "@/lib/composerModelProfile";
 import { LLM_RATE_LIMIT_MESSAGE, LLM_RATE_LIMIT_WHY } from "@/lib/errors";
+import type { FolderMeta } from "@/services/folders";
 import {
   setComposerSendError,
   useComposerSendErrorStore,
@@ -241,8 +275,10 @@ import {
 } from "@/stores/conversation";
 import { DRAFT_KEY, EMPTY_RUNTIME } from "@/stores/conversation/runtime";
 import { type ExecutionPlan, useExecutionStore } from "@/stores/execution";
+import { useFoldersStore } from "@/stores/folders";
 import { useServerHealthStore } from "@/stores/serverHealth";
 import { TurnComposer } from "../TurnComposer";
+import { COMPOSER_FOLDER_READ_ONLY_HINT } from "../composerFolderWrite";
 import { COMPOSER_DEBATE_STEER_PLACEHOLDER } from "../liveDebateSteer";
 
 const OUTCOME_CID = "conv-composer-outcome";
@@ -376,6 +412,39 @@ function renderComposer(variant?: "card" | "bar") {
   );
 }
 
+function cloudDesk(
+  id: string,
+  name: string,
+  myRole: "owner" | "editor" | "viewer",
+): FolderMeta {
+  return {
+    id,
+    name,
+    mode: "cloud",
+    localRootId: null,
+    localSubpath: null,
+    myRole,
+  };
+}
+
+function listedConv(id: string, folderId: string | null) {
+  return {
+    id,
+    title: "对话",
+    updatedAt: "2026-01-01T00:00:00Z",
+    messageCount: 1,
+    lastMessagePreview: null,
+    folderId,
+  };
+}
+
+function seedOpenConversation(id: string) {
+  useConversationStore.setState({
+    currentConversationId: id,
+    byId: { [id]: { ...EMPTY_RUNTIME } },
+  });
+}
+
 beforeEach(async () => {
   genMock.value = false;
   sendingMock.value = false;
@@ -402,6 +471,10 @@ beforeEach(async () => {
     dockFlipToken: 0,
   });
   useComposerProfileDraftStore.setState({ profileId: null });
+  useFoldersStore.setState({ draftWorkspaceIntent: { kind: "quick_cloud" } });
+  folderLists.accessible = [];
+  folderLists.grouped = [];
+  folderLists.conversations = [];
 });
 
 afterEach(cleanup);
@@ -671,7 +744,7 @@ describe("TurnComposer variants", () => {
     expect(handleSendMock).toHaveBeenCalledWith();
   });
 
-  it("live debate + generating: hides 排队/插队, shows 出结论", async () => {
+  it("live debate + generating: hides 排队/插队/出结论, send+stop", async () => {
     genMock.value = true;
     seedLiveDebate();
     const { useComposerDraftStore } = await import("@/stores/composer");
@@ -679,17 +752,13 @@ describe("TurnComposer variants", () => {
     renderComposer("bar");
     expect(screen.queryByRole("button", { name: "排队发送" })).toBeNull();
     expect(screen.queryByRole("button", { name: "插队" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "出结论" })).toBeNull();
     expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "出结论" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "停止生成" })).toBeTruthy();
     expect(
       screen.getByRole("textbox", { name: COMPOSER_DEBATE_STEER_PLACEHOLDER }),
     ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "出结论" }));
-    expect(handleSendMock).toHaveBeenCalledWith({ debateSteer: "conclude" });
-
-    handleSendMock.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
     expect(handleSendMock).toHaveBeenCalledWith();
   });
@@ -709,14 +778,14 @@ describe("TurnComposer variants", () => {
     expect(handleSendMock).not.toHaveBeenCalledWith({ delivery: "steer" });
   });
 
-  it("live debate + empty draft: 出结论 still available, no 排队/插队", () => {
+  it("live debate + empty draft: no 发送/出结论/排队/插队, stop only", () => {
     genMock.value = true;
     seedLiveDebate();
     renderComposer("bar");
     expect(screen.queryByRole("button", { name: "排队发送" })).toBeNull();
     expect(screen.queryByRole("button", { name: "插队" })).toBeNull();
     expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
-    expect(screen.getByRole("button", { name: "出结论" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "出结论" })).toBeNull();
     expect(screen.getByRole("button", { name: "停止生成" })).toBeTruthy();
   });
 
@@ -745,7 +814,7 @@ describe("TurnComposer variants", () => {
       ]);
     renderComposer("bar");
     expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
-    expect(screen.getByRole("button", { name: "出结论" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "出结论" })).toBeNull();
   });
 
   it("idle: single 发送, no mid-flight / 停止", () => {
@@ -797,6 +866,18 @@ describe("TurnComposer variants", () => {
     expect((send as HTMLButtonElement).disabled).toBe(false);
     expect(send.className).toContain("bg-foreground");
     expect(send.className).not.toContain("bg-primary");
+  });
+
+  it("does not show a live character count on card or bar", async () => {
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    useComposerDraftStore.getState().setValue("__draft__", "试试效果");
+    const { unmount } = renderComposer("card");
+    expect(screen.queryByText(/^\d+字$/)).toBeNull();
+    expect(screen.queryByText(/^\d+\/32,?000$/)).toBeNull();
+    unmount();
+    renderComposer("bar");
+    expect(screen.queryByText(/^\d+字$/)).toBeNull();
+    expect(screen.queryByText(/^\d+\/32,?000$/)).toBeNull();
   });
 
   it("has no composer textarea; body editor is the textbox", () => {
@@ -1039,5 +1120,109 @@ describe("TurnComposer variants", () => {
     expect(send.className).toContain("bg-foreground");
     fireEvent.click(send);
     expect(handleSendMock).not.toHaveBeenCalled();
+  });
+
+  it("viewer on 与我共享 desk: 发送 disabled + title；Enter 不发", async () => {
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    seedOpenConversation("c-view");
+    folderLists.conversations = [listedConv("c-view", "f-shared")];
+    folderLists.accessible = [cloudDesk("f-shared", "队友桌", "viewer")];
+    folderLists.grouped = [];
+    useComposerDraftStore.getState().setValue("c-view", "想发一条");
+    renderComposer("bar");
+    expect(screen.getByTestId("composer-body")).toBeTruthy();
+    const send = screen.getByRole("button", { name: "发送" });
+    expect((send as HTMLButtonElement).disabled).toBe(true);
+    expect(send.getAttribute("title")).toBe(COMPOSER_FOLDER_READ_ONLY_HINT);
+    fireEvent.keyDown(screen.getByTestId("composer-body"), { key: "Enter" });
+    expect(handleSendMock).not.toHaveBeenCalled();
+  });
+
+  it("viewer draft folder intent: 发送 disabled + title", async () => {
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    folderLists.accessible = [cloudDesk("f-view", "只读桌", "viewer")];
+    useFoldersStore.setState({
+      draftWorkspaceIntent: { kind: "folder", folderId: "f-view" },
+    });
+    useComposerDraftStore.getState().setValue("__draft__", "草稿");
+    renderComposer("bar");
+    const send = screen.getByRole("button", { name: "发送" });
+    expect((send as HTMLButtonElement).disabled).toBe(true);
+    expect(send.getAttribute("title")).toBe(COMPOSER_FOLDER_READ_ONLY_HINT);
+  });
+
+  it("viewer generating: 插队 / 排队 disabled；Enter 不发", async () => {
+    genMock.value = true;
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    seedOpenConversation("c-view");
+    folderLists.conversations = [listedConv("c-view", "f-shared")];
+    folderLists.accessible = [cloudDesk("f-shared", "队友桌", "viewer")];
+    useComposerDraftStore.getState().setValue("c-view", "下一句");
+    renderComposer("bar");
+    const steer = screen.getByRole("button", { name: "插队" });
+    const queue = screen.getByRole("button", { name: "排队发送" });
+    expect((steer as HTMLButtonElement).disabled).toBe(true);
+    expect((queue as HTMLButtonElement).disabled).toBe(true);
+    expect(steer.getAttribute("title")).toBe(COMPOSER_FOLDER_READ_ONLY_HINT);
+    expect(queue.getAttribute("title")).toBe(COMPOSER_FOLDER_READ_ONLY_HINT);
+    fireEvent.keyDown(screen.getByTestId("composer-body"), { key: "Enter" });
+    fireEvent.keyDown(screen.getByTestId("composer-body"), {
+      key: "Enter",
+      ctrlKey: true,
+    });
+    expect(handleSendMock).not.toHaveBeenCalled();
+  });
+
+  it("owner / editor / 裸聊 / 找不到 folder: 发送仍可用", async () => {
+    const { useComposerDraftStore } = await import("@/stores/composer");
+
+    seedOpenConversation("c-own");
+    folderLists.conversations = [listedConv("c-own", "f-own")];
+    folderLists.accessible = [cloudDesk("f-own", "我的桌", "owner")];
+    useComposerDraftStore.getState().setValue("c-own", "可发");
+    const own = renderComposer("bar");
+    expect(
+      (screen.getByRole("button", { name: "发送" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    own.unmount();
+
+    seedOpenConversation("c-edit");
+    folderLists.conversations = [listedConv("c-edit", "f-edit")];
+    folderLists.accessible = [cloudDesk("f-edit", "可编桌", "editor")];
+    useComposerDraftStore.getState().setValue("c-edit", "可发");
+    const edit = renderComposer("bar");
+    expect(
+      (screen.getByRole("button", { name: "发送" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    edit.unmount();
+
+    useConversationStore.setState({
+      currentConversationId: null,
+      byId: {},
+    } as never);
+    folderLists.conversations = [];
+    folderLists.accessible = [];
+    useFoldersStore.setState({
+      draftWorkspaceIntent: { kind: "quick_cloud" },
+    });
+    useComposerDraftStore.getState().setValue("__draft__", "裸聊");
+    const bare = renderComposer("bar");
+    expect(
+      (screen.getByRole("button", { name: "发送" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    bare.unmount();
+
+    seedOpenConversation("c-gone");
+    folderLists.conversations = [listedConv("c-gone", "f-missing")];
+    folderLists.accessible = [];
+    useComposerDraftStore.getState().setValue("c-gone", "仍可发");
+    renderComposer("bar");
+    expect(
+      (screen.getByRole("button", { name: "发送" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
   });
 });

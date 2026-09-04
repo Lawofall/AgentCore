@@ -21,7 +21,11 @@ def _stub_placement(monkeypatch):
     async def _placement(folder_id, **_kw):
         return FolderPlacement(folder_id=folder_id, rel_path=folder_id)
 
+    async def _owner(_folder_id, **_kw):
+        return None
+
     monkeypatch.setattr(files_mod, "resolve_folder_placement", _placement)
+    monkeypatch.setattr(files_mod, "resolve_folder_owner_user_id", _owner)
 
 
 def test_file_workspace_prefers_birth_over_auto_desk():
@@ -52,6 +56,7 @@ async def test_list_uses_auto_desk_not_scratch():
             user=user,
             recursive=False,
             conv_repo=conv_repo,
+            session=None,
         )
 
     listed.assert_awaited_once()
@@ -69,13 +74,17 @@ async def test_upload_uses_auto_desk_not_scratch():
         body=AsyncMock(return_value=b"hello"),
     )
 
-    with patch.object(files_mod, "upload_file", new=AsyncMock(return_value=5)) as uploaded:
+    with (
+        patch.object(files_mod, "_require_conversation_write", new=AsyncMock()),
+        patch.object(files_mod, "upload_file", new=AsyncMock(return_value=5)) as uploaded,
+    ):
         resp = await files_mod.upload_workspace_file(
             conversation_id="c1",
             path="attachments/a.txt",
             request=request,
             user=user,
             conv_repo=conv_repo,
+            session=None,
         )
 
     uploaded.assert_awaited_once()
@@ -100,6 +109,7 @@ async def test_download_uses_auto_desk_not_scratch(tmp_path):
             path="out.bin",
             user=user,
             conv_repo=conv_repo,
+            session=None,
         )
 
     resolved.assert_awaited_once()
@@ -120,6 +130,7 @@ async def test_archive_download_uses_auto_desk_not_scratch():
             path="docs",
             user=user,
             conv_repo=conv_repo,
+            session=None,
         )
 
     zipped.assert_awaited_once()
@@ -140,6 +151,7 @@ async def test_list_birth_folder_unchanged():
             user=user,
             recursive=True,
             conv_repo=conv_repo,
+            session=None,
         )
 
     assert listed.await_args.kwargs["folder_id"] == "birth-f"

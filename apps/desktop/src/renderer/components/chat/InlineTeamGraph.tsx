@@ -1,4 +1,3 @@
-import { DebateProgressLine } from "@/components/chat/DebateProgressLine";
 import { StatusStrip } from "@/components/chat/StatusStrip";
 import { teamGraphVisible } from "@/components/chat/debatePreviewPlacement";
 import { GraphView } from "@/components/graph/GraphView";
@@ -90,7 +89,7 @@ export function InlineTeamGraph({
 
   const execution = useMessageExecution(messageId);
   // 「打开辩论室」/「在画布打开」→ 全屏回合详情；辩论回合传 view=debate
-  //（与右坞 RunDetailBody / RunModeratorLedger 深链一致）。
+  //（与右坞 RunDetailBody 顶栏深链一致）。
   const openInCanvas = useCallback(() => {
     if (!conversationId) return;
     const view =
@@ -156,12 +155,6 @@ export function InlineTeamGraph({
 
   const graphHeight = measured?.height ?? fallbackHeight;
   const mountHost = shouldMountInlineGraphHost({ expanded, inView });
-  // 推进线（认知轨迹）位置随辩论状态分治：进行中留在标题下方，让用户不点开也能瞥当前轮焦点；
-  // 收场后标题已给出结论，推进线降权下移到协作图之后，头部只留一条结论行（前端UX设计.md §三）。
-  const debateLive =
-    isDebate(execution) &&
-    (execution.status === "running" || execution.status === "paused");
-  const debateSettled = isDebate(execution) && !debateLive;
 
   return (
     <ExecutionScopeContext.Provider value={messageId}>
@@ -180,12 +173,6 @@ export function InlineTeamGraph({
             onToggle={() => setExpanded(!expanded)}
             onMaximize={openInCanvas}
           />
-          {debateLive && (
-            <DebateProgressLine
-              execution={execution}
-              disclosureKey={`${messageId}:debate-progress`}
-            />
-          )}
           {expanded && (
             <div
               className="w-full select-none border-t border-border"
@@ -196,12 +183,6 @@ export function InlineTeamGraph({
                 <GraphArea messageId={messageId} onMeasure={onMeasure} />
               ) : null}
             </div>
-          )}
-          {debateSettled && (
-            <DebateProgressLine
-              execution={execution}
-              disclosureKey={`${messageId}:debate-progress`}
-            />
           )}
         </div>
       </ContextualTip>

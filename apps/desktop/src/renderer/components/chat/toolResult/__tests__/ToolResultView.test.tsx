@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
  * Render test for consult expand cards: historical consult_memory / consult_rule
- * plus unified `consult` origin badges (能力指引 / 设定 / 查阅).
+ * plus unified `consult`. Entry name / origin badge live on the ToolLine;
+ * expand is body-only.
  * The block comment here detaches the @vitest-environment directive from
  * the import block so organizeImports keeps it file-leading.
  */
@@ -42,7 +43,7 @@ function data(p: Partial<ToolResultData>): ToolResultData {
 }
 
 describe("ToolResultView · consult_memory", () => {
-  it("renders the pulled memory note as a name +「查阅记忆」badge card", () => {
+  it("renders the pulled memory note as body-only (name stays on the ToolLine)", () => {
     render(
       <ToolResultView
         data={data({
@@ -52,14 +53,14 @@ describe("ToolResultView · consult_memory", () => {
         })}
       />,
     );
-    expect(screen.getByText("查阅记忆")).toBeTruthy();
+    expect(screen.queryByText("查阅记忆")).toBeNull();
     expect(screen.queryByText("查阅记忆：")).toBeNull();
-    expect(screen.getByText("部署流程")).toBeTruthy();
+    expect(screen.queryByText("部署流程")).toBeNull();
     expect(screen.getByText(/用 pnpm dev 起前端/)).toBeTruthy();
   });
 
-  it("shows the header even when the note body is empty", () => {
-    render(
+  it("renders nothing when the note body is empty", () => {
+    const { container } = render(
       <ToolResultView
         data={data({
           toolName: "consult_memory",
@@ -68,13 +69,12 @@ describe("ToolResultView · consult_memory", () => {
         })}
       />,
     );
-    expect(screen.getByText("查阅记忆")).toBeTruthy();
-    expect(screen.getByText("项目背景")).toBeTruthy();
+    expect(container.textContent).toBe("");
   });
 });
 
 describe("ToolResultView · consult (unified)", () => {
-  it("paints missing origin as「查阅」, never「查阅记忆」", () => {
+  it("renders the body without repeating the entry name or origin badge", () => {
     render(
       <ToolResultView
         data={data({
@@ -84,14 +84,14 @@ describe("ToolResultView · consult (unified)", () => {
         })}
       />,
     );
-    expect(screen.getByText("查阅")).toBeTruthy();
+    expect(screen.queryByText("查阅")).toBeNull();
     expect(screen.queryByText("查阅记忆")).toBeNull();
     expect(screen.queryByText("查阅记忆：")).toBeNull();
-    expect(screen.getByText("部署流程")).toBeTruthy();
+    expect(screen.queryByText("部署流程")).toBeNull();
     expect(screen.getByText(/用 pnpm dev 起前端/)).toBeTruthy();
   });
 
-  it("paints origin=system as「能力指引」", () => {
+  it("does not paint origin=system as an expand-card badge", () => {
     render(
       <ToolResultView
         data={data({
@@ -101,12 +101,14 @@ describe("ToolResultView · consult (unified)", () => {
         })}
       />,
     );
-    expect(screen.getByText("能力指引")).toBeTruthy();
-    expect(screen.getByText("debate_and_review")).toBeTruthy();
-    expect(screen.queryByText("查阅记忆")).toBeNull();
+    expect(screen.queryByText("能力指引")).toBeNull();
+    expect(screen.queryByText("debate_and_review")).toBeNull();
+    expect(
+      screen.getByText(/对需对抗性多视角思考的问题用 debate/),
+    ).toBeTruthy();
   });
 
-  it("paints origin=user as「设定」", () => {
+  it("does not paint origin=user as an expand-card badge", () => {
     render(
       <ToolResultView
         data={data({
@@ -116,9 +118,9 @@ describe("ToolResultView · consult (unified)", () => {
         })}
       />,
     );
-    expect(screen.getByText("设定")).toBeTruthy();
-    expect(screen.getByText("合规附录")).toBeTruthy();
-    expect(screen.queryByText("查阅记忆")).toBeNull();
+    expect(screen.queryByText("设定")).toBeNull();
+    expect(screen.queryByText("合规附录")).toBeNull();
+    expect(screen.getByText(/不得外泄客户数据/)).toBeTruthy();
   });
 
   it("does not paint resolve_folder display.name as a consult card", () => {
@@ -146,7 +148,7 @@ describe("ToolResultView · consult (unified)", () => {
 });
 
 describe("ToolResultView · consult_rule (historical)", () => {
-  it("maps display.rule onto the consult card with「设定」", () => {
+  it("renders the rule body without repeating the name or「设定」badge", () => {
     render(
       <ToolResultView
         data={data({
@@ -156,16 +158,39 @@ describe("ToolResultView · consult_rule (historical)", () => {
         })}
       />,
     );
-    expect(screen.getByText("设定")).toBeTruthy();
+    expect(screen.queryByText("设定")).toBeNull();
     expect(screen.queryByText("查阅记忆")).toBeNull();
     expect(screen.queryByText("查阅记忆：")).toBeNull();
-    expect(screen.getByText("合规附录")).toBeTruthy();
+    expect(screen.queryByText("合规附录")).toBeNull();
     expect(screen.getByText(/不得外泄客户数据/)).toBeTruthy();
   });
 });
 
+describe("ToolResultView · consult_skill (historical)", () => {
+  it("renders summary + body without repeating the skill name", () => {
+    render(
+      <ToolResultView
+        data={data({
+          toolName: "consult_skill",
+          display: {
+            skill_name: "debate_and_review",
+            summary: "对需对抗性多视角思考的问题用 debate。",
+          },
+          result: "完整能力指引正文…",
+        })}
+      />,
+    );
+    expect(screen.queryByText("能力指引")).toBeNull();
+    expect(screen.queryByText("debate_and_review")).toBeNull();
+    expect(
+      screen.getByText("对需对抗性多视角思考的问题用 debate。"),
+    ).toBeTruthy();
+    expect(screen.getByText(/完整能力指引正文/)).toBeTruthy();
+  });
+});
+
 describe("ToolResultView · search_conversations / read_conversation", () => {
-  it("renders a search card with result_count and hit-list body in result", () => {
+  it("renders a search hit-list body without repeating the verb or count", () => {
     render(
       <ToolResultView
         data={data({
@@ -175,14 +200,13 @@ describe("ToolResultView · search_conversations / read_conversation", () => {
         })}
       />,
     );
-    expect(screen.getByText("检索对话")).toBeTruthy();
-    expect(screen.getByText(/2 场/)).toBeTruthy();
+    expect(screen.queryByText("检索对话")).toBeNull();
+    expect(screen.queryByText(/2 场/)).toBeNull();
     expect(screen.getByText(/上周方案/)).toBeTruthy();
-    // Search cards have no conversation_id — no deep-link button.
     expect(screen.queryByRole("button", { name: "打开对话" })).toBeNull();
   });
 
-  it("renders a read card with title, conversation_id, truncated badge, body from result", () => {
+  it("renders a read body with id + open, without repeating the title", () => {
     render(
       <ToolResultView
         data={data({
@@ -197,10 +221,10 @@ describe("ToolResultView · search_conversations / read_conversation", () => {
         })}
       />,
     );
-    expect(screen.getByText("查阅对话：")).toBeTruthy();
-    expect(screen.getByText("上周方案复盘")).toBeTruthy();
+    expect(screen.queryByText("查阅对话：")).toBeNull();
+    expect(screen.queryByText("上周方案复盘")).toBeNull();
+    expect(screen.queryByText("已截断")).toBeNull();
     expect(screen.getByText("conv_abc123")).toBeTruthy();
-    expect(screen.getByText("已截断")).toBeTruthy();
     expect(screen.getByText(/采用方案 B/)).toBeTruthy();
   });
 
@@ -353,7 +377,7 @@ describe("ToolResultView · error / redirect faces", () => {
 });
 
 describe("ToolResultView · test_run incomplete", () => {
-  it("shows 验证未完成 banner when budget_exceeded has no timeout_kind", () => {
+  it("expand is output-only; incomplete face stays on the ToolLine", () => {
     const { container } = render(
       <ToolResultView
         data={data({
@@ -371,7 +395,8 @@ describe("ToolResultView · test_run incomplete", () => {
         })}
       />,
     );
-    expect(container.textContent).toContain("验证未完成");
+    expect(container.textContent).not.toContain("验证未完成");
+    expect(container.textContent).not.toContain("typecheck");
     expect(container.textContent).not.toContain("预算耗尽");
     const stderr = Array.from(container.querySelectorAll("pre")).find((p) =>
       p.textContent?.includes("Timeout"),
@@ -380,7 +405,7 @@ describe("ToolResultView · test_run incomplete", () => {
     expect(stderr?.className).not.toContain("text-destructive");
   });
 
-  it("shows idle hang banner for timeout_kind idle", () => {
+  it("idle hang expand keeps stderr muted, not the ToolLine face", () => {
     const { container } = render(
       <ToolResultView
         data={data({
@@ -399,13 +424,13 @@ describe("ToolResultView · test_run incomplete", () => {
         })}
       />,
     );
-    expect(container.textContent).toContain("执行无响应（无输出已中止）");
+    expect(container.textContent).not.toContain("执行无响应（无输出已中止）");
     expect(container.textContent).not.toContain("预算耗尽");
-    expect(container.innerHTML).toContain("text-warning");
     expect(container.querySelector(".text-destructive")).toBeNull();
+    expect(screen.getByText(/idle timeout/)).toBeTruthy();
   });
 
-  it("shows disaster wall banner for timeout_kind disaster", () => {
+  it("disaster wall expand keeps stderr muted, not the ToolLine face", () => {
     const { container } = render(
       <ToolResultView
         data={data({
@@ -424,10 +449,10 @@ describe("ToolResultView · test_run incomplete", () => {
         })}
       />,
     );
-    expect(container.textContent).toContain("执行已强制中止");
+    expect(container.textContent).not.toContain("执行已强制中止");
     expect(container.textContent).not.toContain("预算耗尽");
-    expect(container.innerHTML).toContain("text-warning");
     expect(container.querySelector(".text-destructive")).toBeNull();
+    expect(screen.getByText(/forced stop/)).toBeTruthy();
   });
 });
 
@@ -455,7 +480,7 @@ describe("ToolResultView · code_diagnostics", () => {
         })}
       />,
     );
-    expect(container.textContent).toContain("类型诊断");
+    expect(container.textContent).not.toContain("类型诊断");
     expect(container.textContent).toContain("a.ts:12");
     expect(container.textContent).toContain("Property 'foo' does not exist");
     expect(container.textContent).not.toContain("验证未完成");
@@ -491,7 +516,7 @@ describe("ToolResultView · code_diagnostics", () => {
       />,
     );
     expect(container.textContent).toContain("a.ts");
-    expect(container.textContent).toContain("类型诊断");
+    expect(container.textContent).not.toContain("类型诊断");
     expect(container.textContent).toContain("Property 'foo' does not exist");
     expect(container.textContent).not.toContain("验证未完成");
   });
@@ -512,12 +537,12 @@ describe("ToolResultView · code_diagnostics", () => {
         })}
       />,
     );
-    expect(container.textContent).toContain("类型诊断");
+    expect(container.textContent).not.toContain("类型诊断");
     expect(container.textContent).toContain("LSP 未就绪");
     expect(container.textContent).not.toContain("验证未完成");
   });
 
-  it("renders clean ok as 未发现类型错误", () => {
+  it("renders clean ok as empty expand (face lives on the ToolLine)", () => {
     const { container } = render(
       <ToolResultView
         data={data({
@@ -531,7 +556,7 @@ describe("ToolResultView · code_diagnostics", () => {
         })}
       />,
     );
-    expect(container.textContent).toContain("未发现类型错误");
+    expect(container.textContent).toBe("");
   });
 });
 
@@ -602,5 +627,58 @@ describe("ToolResultView · file_read strips the line-window footer", () => {
     expect(screen.getByText(/extracted/)).toBeTruthy();
     expect(screen.getByText(/抽取第 1–3 页/)).toBeTruthy();
     expect(screen.queryByText(/共 500 行/)).toBeNull();
+  });
+});
+
+describe("ToolResultView · host", () => {
+  it("renders status from display.body, not the model JSON", () => {
+    render(
+      <ToolResultView
+        data={data({
+          toolName: "host",
+          result: '{"info":{"ok":true}}',
+          display: {
+            kind: "host",
+            action: "status",
+            body: '{\n  "hostname": "DESKTOP-1"\n}',
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText(/DESKTOP-1/)).toBeTruthy();
+    expect(screen.queryByText(/"info"/)).toBeNull();
+  });
+
+  it("renders shell via the terminal card", () => {
+    render(
+      <ToolResultView
+        data={data({
+          toolName: "host",
+          result: '{"exit_code":0,"stdout":"ok"}',
+          display: {
+            stdout: "listed logs",
+            stderr: "",
+            exit_code: 0,
+            language: "host",
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText("listed logs")).toBeTruthy();
+    expect(screen.getByText(/退出码 0/)).toBeTruthy();
+    expect(screen.queryByText(/不可信内容/)).toBeNull();
+  });
+
+  it("strips historical untrusted XML when display is absent", () => {
+    render(
+      <ToolResultView
+        data={data({
+          toolName: "host",
+          result: '<不可信内容>\n{"ok":true}\n</不可信内容>',
+        })}
+      />,
+    );
+    expect(screen.getByText(/"ok":true/)).toBeTruthy();
+    expect(screen.queryByText(/不可信内容/)).toBeNull();
   });
 });

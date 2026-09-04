@@ -25,8 +25,10 @@ from .chat import Chat, ChatMember, ChatMessage
 from .conversations import (
     Conversation,
     ConversationExternalGrant,
+    ConversationPreference,
     ConversationShare,
     Folder,
+    FolderMember,
     MemoryUpdateRow,
     Message,
     MessageBookmark,
@@ -53,7 +55,6 @@ from .runs import (
     TurnMetricsRow,
     TurnStreamStateRow,
 )
-from .shared_spaces import SharedSpace, SharedSpaceEvent, SharedSpaceMember
 from .standing_tasks import StandingTask, StandingTaskRun
 from .user_workflows import UserWorkflow
 from .users import (
@@ -75,7 +76,9 @@ __all__ = [
     "ChatMessage",
     "Conversation",
     "ConversationExternalGrant",
+    "ConversationPreference",
     "ConversationShare",
+    "FolderMember",
     "CostCall",
     "CostEvent",
     "CostLedgerOutbox",
@@ -105,9 +108,6 @@ __all__ = [
     "PushDeviceRow",
     "RefreshToken",
     "RunSessionRow",
-    "SharedSpace",
-    "SharedSpaceEvent",
-    "SharedSpaceMember",
     "StandingTask",
     "StandingTaskRun",
     "TurnJournalRow",

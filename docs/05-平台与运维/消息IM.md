@@ -69,7 +69,7 @@ skip_if:
 | 防遍历 | 搜索按**精确**用户名 / ID，不做模糊枚举 |
 | 隐私自决 | `discoverable`（可否被搜到）/ `who_can_friend`（anyone / group_members / nobody，默认 anyone）/ `who_can_dm`（anyone / friends，默认 anyone；原 `contacts` → `friends`） |
 | 防骚扰 | **默认**：非好友不能开自由 DM（须先加好友）。对方 `who_can_dm=anyone` 时仍允许陌生人开 DM，peer 进 `pending` 消息请求（与好友申请分轨）。好友申请另受限流 |
-| 拉黑 | `user_blocks` 对称，断 DM + 互隐搜索 + **解除好友 + 取消双方 pending 申请**；共享空间联动：挡新邀请 + 自动拒双方 pending（不自动移除已有成员，见 [双模式工作区 §八](/docs/02-架构/双模式工作区.md)） |
+| 拉黑 | `user_blocks` 对称，断 DM + 互隐搜索 + **解除好友 + 取消双方 pending 申请**；协作桌联动：挡新邀请 + 自动拒双方 pending（不自动移除已有成员，见 [双模式工作区 · §八、协作桌（文件夹成员）](/docs/02-架构/双模式工作区.md)） |
 | 限流 | 发消息复用按用户限流（`conversation/rate_limit.py`）；好友申请按用户限流（防刷申请） |
 | IDOR | → 见 [`认证与会话.md` §八](/docs/05-平台与运维/认证与会话.md) |
 

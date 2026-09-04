@@ -21,7 +21,7 @@ packages/       protocol-conformance + contract-types + design-tokens + protocol
 
 ## 硬规则
 
-1. **产品页不另写**——对话 / 文件 / IM / 设置 / 登录禁止在 `apps/mobile` 再做一套业务实现。窄屏改 `AppShell` + 页面响应式，不新建 ChatPage。
+1. **产品页不另写**——对话 / 文件 / IM / 设置 / 登录禁止在 `apps/mobile` 再做一套业务实现。窄屏改 `AppShell` + 页面响应式，不新建 ChatPage。查功能是否在窄屏 / 手机 = 搜 `apps/desktop/src/renderer`；`apps/mobile` 零命中 ≠ 缺席（那边没有业务页）。
 2. **壳自适应、不是缩桌面**——宽屏侧栏 + 右坞；窄屏（<768px）底栏 4-tab + ☰ 会话抽屉 + 右坞全屏 sheet。禁把侧栏和 ≥280px 坞原样挤进 390px。禁再养一套长期 `TabLayout`。
 3. **能力减法**——禁 `if (platform === "mobile")` 开产品叉。本机盘 / sidecar / MCP / 热键走 `capabilities.ts`（与生产 web 同一套）。窄屏不上工具箱 / 白板 / 手册 / 站立任务。
 4. **fold 一套**——生产 fold 只留桌面。改 fold 必过 `pnpm conformance`（见 `protocol-conformance.mdc`）。契约只走后端单一源。

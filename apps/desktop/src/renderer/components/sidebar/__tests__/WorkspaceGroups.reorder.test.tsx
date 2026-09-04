@@ -36,6 +36,7 @@ vi.mock("@/hooks/useConversations", () => ({
 
 vi.mock("@/hooks/useWorkspaceGroups", () => ({
   useWorkspaceGroups: () => groups,
+  useSharedWithMeWorkspaceGroups: () => [],
 }));
 
 vi.mock("@/stores/aiAttention", () => ({

@@ -33,6 +33,10 @@ export function HowToReadPopover({ form }: { form: DebateForm }) {
               <span className="font-medium text-foreground">质询</span>
               ：主持人发出必答追问，辩手逐条作答。
             </li>
+            <li>
+              <span className="font-medium text-foreground">收场</span>
+              ：不用你收场——交锋够了会自己出结论。要拧方向，回对话输入框说（下一轮生效）。
+            </li>
           </ul>
         )}
         <p className="mt-3 border-t border-border pt-2">

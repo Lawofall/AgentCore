@@ -5,7 +5,7 @@ export const CONTEXT_CHANNEL_META: Record<
   string,
   { label: string; hint: string }
 > = {
-  system: { label: "系统提示", hint: "本回合 CEO 实际遵循的系统指令" },
+  system: { label: "系统提示", hint: "本回合实际遵循的系统指令" },
   history: { label: "对话历史", hint: "本回合之前的往来" },
   request: { label: "原始请求", hint: "老板交给整个团队的目标" },
   team_position: { label: "团队位置", hint: "队友与产出去向" },

@@ -73,6 +73,17 @@ def test_episodic_prompt_forbids_inferring_preference_from_task_genre():
     assert "禁止从本场任务题材、体裁、一次性诉求形状推断沟通偏好" in text
 
 
+def test_episodic_verified_facts_only_when_folder_bound():
+    from agentcore.memory.episodic import episodic_system_prompt
+
+    folder = episodic_system_prompt(allow_verified_facts=True)
+    naked = episodic_system_prompt(allow_verified_facts=False)
+    assert "## 本场证实的项目事实" in folder
+    assert "Folder-bound" in folder
+    assert "## 本场证实的项目事实" not in naked
+    assert "no bound" in naked.lower() or "Folder-bound: no" in naked
+
+
 def test_semantic_prompt_tightens_preferences_promotion():
     text = _SEMANTIC_SYSTEM_PROMPT
     assert "Preference promotion rule" in text
@@ -89,3 +100,34 @@ def test_semantic_prompt_domain_split_keeps_genre_out_of_preferences():
     assert "must NOT stay in 偏好.md" in text or "不得" in text
     assert "not this pass" in text
     assert '"ops"' not in text
+
+
+def test_semantic_prompt_cross_topic_bar_keeps_one_shot_out_of_profile():
+    text = _SEMANTIC_SYSTEM_PROMPT
+    assert "Cross-topic rule" in text
+    assert "UNRELATED topic" in text
+    assert "One-shot lookups" in text
+    assert "AppData" in text
+    assert "must not fill 画像 from a one-off ask" in text
+
+
+def test_semantic_user_prompt_no_folder_does_not_park_host_paths_in_profile():
+    from agentcore.memory.episode_store import EpisodeRecord
+    from agentcore.memory.semantic import SemanticConsolidateInput, _render_semantic_prompt
+
+    text = _render_semantic_prompt(
+        SemanticConsolidateInput(
+            user_id="u1",
+            episodes=[
+                EpisodeRecord(
+                    id="e1",
+                    conversation_id="c1",
+                    summary="查了直播伴侣日志",
+                    created_at="2026-09-04T00:00:00+00:00",
+                )
+            ],
+        )
+    )
+    assert "No current folder" in text
+    assert "host/shell" in text
+    assert "global 画像" in text

@@ -1,4 +1,6 @@
+// @vitest-environment jsdom
 import {
+  GitChangesSection,
   canDiscardChange,
   groupGitChangesByDir,
   isUntrackedChange,
@@ -7,7 +9,15 @@ import {
   statusCharClass,
   statusSummaryParts,
 } from "@/components/workspace/GitChangesSection";
-import { describe, expect, it } from "vitest";
+import type { PresentGitRepoStatus } from "@/lib/gitRepoStatus";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/stores/sidePanel", () => ({
+  useSidePanelStore: (
+    sel: (s: { openFileTab: (rel: string, name: string) => void }) => unknown,
+  ) => sel({ openFileTab: vi.fn() }),
+}));
 
 describe("GitChangesSection status helpers", () => {
   it("primaryStatusChar picks staged / unstaged / untracked letter", () => {
@@ -74,5 +84,58 @@ describe("GitChangesSection status helpers", () => {
       { ch: "D", n: 1 },
       { ch: "?", n: 2 },
     ]);
+  });
+});
+
+function expectHoverOnlyCluster(el: Element | null) {
+  expect(el).toBeTruthy();
+  const cls = el?.className ?? "";
+  expect(cls).toMatch(/\bhidden\b/);
+  expect(cls).toContain("group-hover:flex");
+  expect(cls).toContain("group-focus-within:flex");
+  expect(cls).not.toMatch(/opacity-0/);
+}
+
+const dirtyUnstaged: PresentGitRepoStatus = {
+  present: true,
+  branch: "main",
+  dirty: true,
+  ahead: 0,
+  behind: 0,
+  staged: [],
+  unstaged: [
+    { path: "apps/a.ts", code: " M" },
+    { path: "new.ts", code: "??" },
+  ],
+  conflicted: [],
+};
+
+describe("GitChangesSection hover-only chrome", () => {
+  afterEach(cleanup);
+
+  it("idle discard/delete and dir actions are hidden; stage stays in flow", () => {
+    render(
+      <GitChangesSection
+        rootId="r1"
+        status={dirtyUnstaged}
+        onRefresh={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /未暂存/ }));
+
+    expectHoverOnlyCluster(screen.getByLabelText("丢弃改动").parentElement);
+    expectHoverOnlyCluster(
+      screen.getByLabelText("删除未跟踪文件").parentElement,
+    );
+    for (const btn of screen.getAllByLabelText("暂存本组")) {
+      expectHoverOnlyCluster(btn.parentElement);
+    }
+
+    const stageButtons = screen.getAllByLabelText("暂存");
+    expect(stageButtons.length).toBeGreaterThan(0);
+    for (const btn of stageButtons) {
+      expect(btn.className).not.toMatch(/\bhidden\b/);
+      expect(btn.parentElement?.className).not.toMatch(/\bhidden\b/);
+    }
   });
 });

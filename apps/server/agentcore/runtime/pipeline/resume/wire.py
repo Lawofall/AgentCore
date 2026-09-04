@@ -129,6 +129,12 @@ async def _wire_continuation_toolset(
     # Host / MCP backfill needs a desktop client — orthogonal to workspace location.
     channel = resolve_channel_profile(x_client_platform)
     desktop_online = channel.desktop_online
+    if folder_id:
+        from agentcore.folders.desk import resolve_folder_owner_user_id
+
+        desk_owner = await resolve_folder_owner_user_id(folder_id)
+        if desk_owner and desk_owner != user_id:
+            desktop_online = False
     desktop_channel = (
         DesktopClientChannel(
             user_id=user_id,
@@ -148,6 +154,10 @@ async def _wire_continuation_toolset(
     from agentcore.runtime.capability_packs import enabled_packs
 
     skill_registry = build_system_skill_registry(enabled_packs=enabled_packs())
+    from agentcore.runtime.pipeline.prepare import _timed_phase
+    from agentcore.tools.sandbox.desk_provision import provision_server_desk
+
+    await _timed_phase("cloud_desk", provision_server_desk(backend))
     worker_tools = build_worker_registry(
         backend=backend,
         permission_axes=permission_axes,

@@ -408,7 +408,7 @@ async def test_cancel_queued_turn_route_404_and_success(monkeypatch):
 
     monkeypatch.setattr(
         messages_mod,
-        "_require_owned_conversation",
+        "_require_conversation_write",
         AsyncMock(return_value=None),
     )
     started = asyncio.get_running_loop().create_future()

@@ -11,6 +11,7 @@ vi.mock("@/hooks/useConversations", () => ({
   patchConversationCache: vi.fn(),
   upsertConversationFront: vi.fn(),
   applyDeletedConversationLocally: vi.fn(),
+  getConversations: () => [],
 }));
 vi.mock("@/lib/composerPendingHint", () => ({
   confirmSendDespitePendingIfNeeded: () => true,
@@ -204,22 +205,6 @@ describe("useComposerSend 辩论进行中", () => {
     expect(useConversationStore.getState().byId[CONV]?.messages).toHaveLength(
       1,
     );
-  });
-
-  it("出结论 enqueue conclude", async () => {
-    seedLiveDebate();
-    const { result } = renderHook(() => useSendHarness({ initialValue: "" }));
-
-    await act(async () => {
-      await result.current.send.handleSend({ debateSteer: "conclude" });
-    });
-
-    expect(steer).toHaveBeenCalledWith(CONV, {
-      executionId: "exec-d",
-      decision: { kind: "conclude", ask: "", askTarget: "" },
-    });
-    expect(turn).not.toHaveBeenCalled();
-    expect(midFlight).not.toHaveBeenCalled();
   });
 
   it("accepted=false：toast 未生效，不清草稿、不说已发送", async () => {

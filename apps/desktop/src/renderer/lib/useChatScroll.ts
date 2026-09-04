@@ -27,9 +27,12 @@ import {
  *   re-attach. In a historical window sticking is disabled. Async layout growth
  *   (images / Markdown / process timelines) is followed via ResizeObserver on
  *   `contentRef` and the viewport, batched on rAF — same path as
- *   {@link useStickToBottom}. Follow writes `scrollTop` directly so CSS
- *   `scroll-behavior` cannot animate and lose the pin. Observation re-binds
- *   when the transcript wrapper appears (empty → first message).
+ *   {@link useStickToBottom}. Settling a turn (process fold shrinks the
+ *   bubble with no token-length change) is keyed by `isStreaming` on
+ *   {@link stickContentKey} so the same layout-effect pin runs in that commit.
+ *   Follow writes `scrollTop` directly so CSS `scroll-behavior` cannot animate
+ *   and lose the pin. Observation re-binds when the transcript wrapper appears
+ *   (empty → first message).
  * - **Load older on scroll-up**: near the top, fetch the previous page and
  *   prepend it; the inflated top is anchored so the viewport stays on the same
  *   line instead of jumping.

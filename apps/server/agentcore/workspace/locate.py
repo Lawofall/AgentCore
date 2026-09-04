@@ -64,10 +64,6 @@ from agentcore.workspace.layout import (
 from agentcore.workspace.local import LocalWorkspace
 from agentcore.workspace.protocol import WorkspaceBackend
 from agentcore.workspace.server import ServerWorkspace
-from agentcore.workspace.shared_paths import (
-    resolve_shared_workspace_root,
-    shared_workspace_storage_key,
-)
 
 
 class WorkspaceCoords(TypedDict):
@@ -131,9 +127,9 @@ _WORKSPACE_ID_SEP = ":"
 
 @dataclass(frozen=True)
 class WorkspaceId:
-    """A parsed workspace id: folder project, bare-chat scratch, or shared space."""
+    """A parsed workspace id: folder project or bare-chat scratch."""
 
-    kind: Literal["folder", "conv", "shared"]
+    kind: Literal["folder", "conv"]
     ident: str
 
 
@@ -144,21 +140,15 @@ def format_workspace_id(*, folder_id: str | None, conversation_id: str) -> str:
     return f"conv{_WORKSPACE_ID_SEP}{conversation_id}"
 
 
-def format_shared_workspace_id(space_id: str) -> str:
-    """Public workspace id for a shared space: ``shared:<space_id>``."""
-    return f"shared{_WORKSPACE_ID_SEP}{space_id}"
-
-
 def parse_workspace_id(ws_id: str) -> WorkspaceId:
     """Parse a public workspace id, or raise ``ValueError`` if malformed.
 
     Pure (no DB / owner check): the API layer resolves the ``ident`` against the
-    user's folders/conversations (or shared-space membership) for authorization.
-    Rejects unknown kinds and empty / slash-bearing idents so a id can address
-    only one path segment.
+    user's folders/conversations for authorization. Rejects unknown kinds and
+    empty / slash-bearing idents so a id can address only one path segment.
     """
     kind, sep, ident = ws_id.partition(_WORKSPACE_ID_SEP)
-    if not sep or not ident or "/" in ident or kind not in ("folder", "conv", "shared"):
+    if not sep or not ident or "/" in ident or kind not in ("folder", "conv"):
         raise ValueError(f"非法工作区 id：{ws_id!r}")
     return WorkspaceId(kind=kind, ident=ident)  # type: ignore[arg-type]
 
@@ -323,21 +313,6 @@ def build_chat_workspace(
         root=root,
         sandbox=sandbox or _default_server_sandbox(),
         lock_key=f"{WORKSPACES_SEGMENT}/{IM_SEGMENT}/{chat_id}",
-    )
-
-
-def build_shared_workspace(
-    space_id: str, *, sandbox: SandboxProvider | None = None
-) -> ServerWorkspace:
-    """Construct a ``ServerWorkspace`` rooted at ``workspaces/shared/<space_id>/``.
-
-    Callers must authorize membership *before* building (mkdir on resolve).
-    """
-    root = resolve_shared_workspace_root(space_id)
-    return ServerWorkspace(
-        root=root,
-        sandbox=sandbox or _default_server_sandbox(),
-        lock_key=shared_workspace_storage_key(space_id),
     )
 
 

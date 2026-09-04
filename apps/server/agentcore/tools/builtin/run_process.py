@@ -160,7 +160,7 @@ def _workspace_error(e: WorkspaceError, start: float) -> ToolResult:
 
 
 def _format_process_output(
-    value: dict[str, Any], *, had_wait_for: bool = False
+    value: dict[str, Any], *, had_wait_for: bool = False, cloud: bool = False
 ) -> str:
     process_id = value.get("process_id", "")
     status = str(value.get("status", ""))
@@ -184,11 +184,63 @@ def _format_process_output(
         matched_flag = False
     else:
         matched_flag = None
+    raw_ports = value.get("http_ports") or ()
+    ports = tuple(int(p) for p in raw_ports if isinstance(p, int) or str(p).isdigit())
     return body + readiness_footer(
         status=status,
         matched=matched_flag,
         had_wait_for=had_wait_for,
         exit_code=exit_code,
+        cloud=cloud,
+        http_ports=ports,
+    )
+
+
+def _process_display(
+    subcommand: str, value: dict[str, Any], *, cloud: bool = False
+) -> dict[str, Any]:
+    display: dict[str, Any] = {"subcommand": subcommand}
+    for key in ("process_id", "status", "output", "matched", "exit_code", "command", "name"):
+        if key in value:
+            display[key] = value[key]
+    if "processes" in value:
+        display["processes"] = value["processes"]
+    ports = value.get("http_ports")
+    if ports:
+        display["http_ports"] = ports
+    if cloud and value.get("status") == "running" and ports:
+        display["preview_available"] = True
+    return display
+
+
+def _process_result(
+    subcommand: str,
+    value: Any,
+    start: float,
+    *,
+    had_wait_for: bool,
+    cloud: bool = False,
+) -> ToolResult:
+    if not isinstance(value, dict) or not value.get("process_id"):
+        return _error(f"桌面返回了无效的 {subcommand} 结果", start, code=_WORKSPACE_IO_ERROR)
+    duration_ms = int((time.monotonic() - start) * 1000)
+    # stop：目标就是退出，不加「就绪判定」脚注。
+    if subcommand == "stop":
+        process_id = value.get("process_id", "")
+        status = value.get("status", "")
+        exit_code = value.get("exit_code")
+        lines = [f"process_id: {process_id}", f"status: {status}"]
+        if exit_code is not None:
+            lines.append(f"exit_code: {exit_code}")
+        output = "\n".join(lines)
+    else:
+        output = _format_process_output(value, had_wait_for=had_wait_for, cloud=cloud)
+    return ToolResult(
+        tool_call_id="",
+        success=True,
+        output=output,
+        duration_ms=duration_ms,
+        display=_process_display(subcommand, value, cloud=cloud),
     )
 
 
@@ -213,46 +265,6 @@ def _format_list_output(processes: list[Any]) -> str:
             line += f" exit_code={exit_code}"
         lines.append(line)
     return "\n".join(lines) if lines else "（本对话无后台进程）"
-
-
-def _process_display(subcommand: str, value: dict[str, Any]) -> dict[str, Any]:
-    display: dict[str, Any] = {"subcommand": subcommand}
-    for key in ("process_id", "status", "output", "matched", "exit_code", "command", "name"):
-        if key in value:
-            display[key] = value[key]
-    if "processes" in value:
-        display["processes"] = value["processes"]
-    return display
-
-
-def _process_result(
-    subcommand: str,
-    value: Any,
-    start: float,
-    *,
-    had_wait_for: bool,
-) -> ToolResult:
-    if not isinstance(value, dict) or not value.get("process_id"):
-        return _error(f"桌面返回了无效的 {subcommand} 结果", start, code=_WORKSPACE_IO_ERROR)
-    duration_ms = int((time.monotonic() - start) * 1000)
-    # stop：目标就是退出，不加「就绪判定」脚注。
-    if subcommand == "stop":
-        process_id = value.get("process_id", "")
-        status = value.get("status", "")
-        exit_code = value.get("exit_code")
-        lines = [f"process_id: {process_id}", f"status: {status}"]
-        if exit_code is not None:
-            lines.append(f"exit_code: {exit_code}")
-        output = "\n".join(lines)
-    else:
-        output = _format_process_output(value, had_wait_for=had_wait_for)
-    return ToolResult(
-        tool_call_id="",
-        success=True,
-        output=output,
-        duration_ms=duration_ms,
-        display=_process_display(subcommand, value),
-    )
 
 
 async def process_manage(arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -347,7 +359,9 @@ async def _cloud_dispatch(
             tail_lines=tail_lines,
             cache_bucket=bucket,
         )
-        return _process_result("read", value, start, had_wait_for=bool(wait_for))
+        return _process_result(
+            "read", value, start, had_wait_for=bool(wait_for), cloud=True
+        )
     if subcommand == "stop":
         process_id = str(arguments.get("process_id") or "").strip()
         if not process_id:
@@ -358,7 +372,7 @@ async def _cloud_dispatch(
             process_id=process_id,
             cache_bucket=bucket,
         )
-        return _process_result("stop", value, start, had_wait_for=False)
+        return _process_result("stop", value, start, had_wait_for=False, cloud=True)
     value = await list_desk_processes(conversation_id=conv)
     processes = value.get("processes") or []
     if not isinstance(processes, list):
@@ -395,7 +409,7 @@ async def _cloud_start(
         ),
         cache_bucket=cache_bucket,
     )
-    return _process_result("start", value, start, had_wait_for=bool(wait_for))
+    return _process_result("start", value, start, had_wait_for=bool(wait_for), cloud=True)
 
 
 async def _cmd_start(

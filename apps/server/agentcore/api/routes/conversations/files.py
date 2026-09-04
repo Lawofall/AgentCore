@@ -33,6 +33,7 @@ from agentcore.core.errors import NotFoundError, ValidationError
 from agentcore.db.models import Conversation
 from agentcore.db.repositories import ConversationRepository
 from agentcore.docs_export.workspace_export import ExportMarkdownError, export_markdown_path
+from agentcore.folders.desk import desk_workspace_user_id, resolve_folder_owner_user_id
 from agentcore.folders.placement import resolve_folder_placement
 from agentcore.storage._archive import ArchiveLimitError
 from agentcore.workspace.files import (
@@ -62,7 +63,7 @@ from agentcore.workspace.protocol import (
     WorkspaceIOError,
 )
 
-from ._helpers import _get_owned_conversation
+from ._helpers import _get_owned_conversation, _require_conversation_write
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -91,8 +92,11 @@ async def _workspace_coords(
     """
     folder_id = _file_workspace_folder_id(conv)
     placement = await resolve_folder_placement(folder_id, session=session)
+    owner_id = await resolve_folder_owner_user_id(folder_id, session=session)
     return {
-        "user_id": user_id,
+        "user_id": desk_workspace_user_id(
+            folder_owner_user_id=owner_id, caller_user_id=user_id
+        ),
         "folder_id": folder_id,
         "folder_rel_path": placement.rel_path,
         "conversation_id": conv.id,
@@ -138,6 +142,7 @@ async def upload_workspace_file(
     memory. A path that escapes the workspace is rejected (422).
     """
     conv = await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, session)
 
     max_bytes = settings.workspace_upload_max_bytes
     declared = request.headers.get("content-length")
@@ -171,6 +176,7 @@ async def export_conversation_workspace_docx(
 ):
     """Export a conversation-workspace Markdown file to a sibling ``.docx``."""
     conv = await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, session)
     try:
         backend = build_server_workspace(**await _workspace_coords(user.user_id, conv, session))
         result = await export_markdown_path(backend, body.path)
@@ -233,6 +239,7 @@ async def write_workspace_file(
     return ``conflict`` instead of clobbering it.
     """
     conv = await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, session)
 
     max_bytes = settings.workspace_upload_max_bytes
     if len(body.content.encode("utf-8")) > max_bytes:
@@ -337,6 +344,7 @@ async def delete_workspace_file(
 ):
     """Delete a file or directory from the conversation's scratch workspace."""
     conv = await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, session)
     try:
         await delete_file(
             **await _workspace_coords(user.user_id, conv, session),
@@ -359,6 +367,7 @@ async def move_workspace_file(
 ):
     """Move/rename a file or directory within the conversation's scratch workspace."""
     conv = await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, session)
     try:
         await move_file(
             **await _workspace_coords(user.user_id, conv, session),
@@ -384,6 +393,7 @@ async def copy_workspace_file(
 ):
     """Copy a file or directory within the conversation's scratch workspace."""
     conv = await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, session)
     try:
         await copy_file(
             **await _workspace_coords(user.user_id, conv, session),
@@ -411,6 +421,7 @@ async def create_workspace_dir(
 ):
     """Create a directory in the conversation's scratch workspace."""
     conv = await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, session)
     try:
         await create_dir(
             **await _workspace_coords(user.user_id, conv, session),
@@ -433,6 +444,7 @@ async def clone_repo_into_workspace(
 ):
     """Clone a public git repository into the conversation's scratch workspace (决策⑤ · G3)."""
     conv = await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, session)
     from agentcore.db.base import async_session_factory
     from agentcore.workspace.git_credentials import load_git_auth
 

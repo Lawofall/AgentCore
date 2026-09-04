@@ -17,6 +17,7 @@ from agentcore.api.dependencies import (
     AuthUser,
     get_conversation_repo,
     get_conversation_share_repo,
+    get_folder_desk_service,
     get_folder_repo,
     get_message_repo,
     get_turn_journal_repo,
@@ -47,7 +48,7 @@ from agentcore.conversation.export import (
     conversation_to_json,
     conversation_to_markdown,
 )
-from agentcore.core.errors import ConflictError, NotFoundError
+from agentcore.core.errors import AuthorizationError, ConflictError, NotFoundError
 from agentcore.core.logging import get_logger
 from agentcore.db.models import Conversation
 from agentcore.db.repositories import (
@@ -57,9 +58,11 @@ from agentcore.db.repositories import (
     MessageRepository,
     TurnJournalRepository,
 )
+from agentcore.folders.desk import resolve_desk_access
+from agentcore.folders.service import FolderDeskService
 from agentcore.workspace.retention import retention_cutoff
 
-from ._helpers import _get_owned_conversation
+from ._helpers import _get_owned_conversation, _require_conversation_write
 
 logger = get_logger(__name__)
 
@@ -76,6 +79,7 @@ def _summary_with_count(
     unfolded: dict[str, int] | None = None,
     previews: dict[str, str] | None = None,
     first_user_messages: dict[str, str] | None = None,
+    prefs: dict[str, tuple[bool, bool]] | None = None,
 ) -> ConversationSummary:
     """Build a conversation summary, filling ``message_count`` from a counts map.
 
@@ -92,23 +96,32 @@ def _summary_with_count(
     ``unfolded`` is the same trick for the un-folded backlog (:func:`_unfolded_counts`),
     and only its keys get a ``context_gap`` verdict — a conversation left out was never
     a candidate, which is not the same as one proven intact.
+
+    ``prefs`` is the caller's per-user pin/archive (missing → unpinned / unarchived).
     """
     preview = None if previews is None else previews.get(conv.id)
     first_user = None if first_user_messages is None else first_user_messages.get(conv.id)
+    pinned = archived = None
+    if prefs is not None:
+        pinned, archived = prefs.get(conv.id, (False, False))
+        archived = archived or bool(getattr(conv, "archived_by_folder_delete", False))
+    kwargs: dict = {
+        "message_count": counts.get(conv.id, 0),
+        "last_message_preview": preview,
+        "first_user_message": first_user,
+        "pinned": pinned,
+        "archived": archived,
+    }
     if unfolded is not None and conv.id in unfolded:
-        return conversation_summary_from_orm(
-            conv,
-            message_count=counts.get(conv.id, 0),
-            unfolded_messages=unfolded[conv.id],
-            last_message_preview=preview,
-            first_user_message=first_user,
-        )
-    return conversation_summary_from_orm(
-        conv,
-        message_count=counts.get(conv.id, 0),
-        last_message_preview=preview,
-        first_user_message=first_user,
-    )
+        kwargs["unfolded_messages"] = unfolded[conv.id]
+    return conversation_summary_from_orm(conv, **kwargs)
+
+
+async def _orm_summary(repo: ConversationRepository, user_id: str, conv: Conversation, **kwargs):
+    flags = await repo.preference_flags_for(user_id, [conv.id])
+    pinned, archived = flags.get(conv.id, (False, False))
+    archived = archived or bool(getattr(conv, "archived_by_folder_delete", False))
+    return conversation_summary_from_orm(conv, pinned=pinned, archived=archived, **kwargs)
 
 
 async def _first_user_contents_for_untitled(
@@ -174,9 +187,14 @@ async def create_conversation(
         # 404), mirroring the move endpoint so a chat can never be born in someone
         # else's or a deleted folder.
         if body.folder_id is not None:
-            folder = await folder_repo.get_by_id(body.folder_id, user_id=user.user_id)
+            folder = await folder_repo.get_accessible(body.folder_id, user_id=user.user_id)
             if not folder:
                 raise NotFoundError("文件夹不存在")
+            access = await resolve_desk_access(
+                folder_repo._session, folder_id=body.folder_id, user_id=user.user_id
+            )
+            if access is None or not access.can_write:
+                raise AuthorizationError("只读成员不能在此文件夹新建对话")
         # Session permission axes: explicit body wins; else seed from user recipe default.
         if body.permission_axes is not None:
             axes = body.permission_axes.to_axes().to_dict()
@@ -248,6 +266,7 @@ async def duplicate_conversation(
     src = await conv_repo.get_by_id(conversation_id, user_id=user.user_id)
     if not src:
         raise NotFoundError("对话不存在")
+    await _require_conversation_write(conversation_id, user.user_id, conv_repo._session)
     base = (src.title or "").strip()
     title = (f"{base} 副本" if base else "副本")[:500]
     # 克隆：有源钉则拷贝；源为存量 null 则拍当时账号默认。
@@ -298,9 +317,10 @@ async def list_conversations(
     previews = await msg_repo.previews_for_conversations(ids)
     first_users = await _first_user_contents_for_untitled(msg_repo, conversations)
     unfolded = await _unfolded_counts(msg_repo, counts)
+    prefs = await repo.preference_flags_for(user.user_id, ids)
     return ConversationListResponse(
         data=[
-            _summary_with_count(c, counts, unfolded, previews, first_users)
+            _summary_with_count(c, counts, unfolded, previews, first_users, prefs)
             for c in conversations
         ],
         total=total,
@@ -315,24 +335,39 @@ async def list_conversations_grouped(
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     folder_repo: FolderRepository = Depends(get_folder_repo),
     msg_repo: MessageRepository = Depends(get_message_repo),
+    desk: FolderDeskService = Depends(get_folder_desk_service),
 ):
     """Folders + their conversations + the ungrouped remainder (sidebar).
 
     Declared before ``/{conversation_id}`` so "grouped" isn't captured as an id.
     A conversation whose folder is missing/deleted falls back to ungrouped.
+    Includes desks the caller joined (shared-with-me) so member threads group.
     """
-    folders = await folder_repo.list_by_user(user.user_id)
+    folders = list(await folder_repo.list_by_user(user.user_id))
+    desk_role: dict[str, tuple[str, str, str]] = {
+        f.id: ("owner", "accepted", f.user_id) for f in folders
+    }
+    seen = set(desk_role)
+    for view in await desk.list_shared_with_me(user_id=user.user_id):
+        if view.id in seen:
+            continue
+        shared = await folder_repo.get_by_id_unscoped(view.id)
+        if shared is not None:
+            folders.append(shared)
+            seen.add(shared.id)
+            desk_role[shared.id] = (view.my_role, view.my_state, view.owner_user_id)
     conversations = await conv_repo.list_all_by_user(user.user_id)
     ids = [c.id for c in conversations]
     counts = await msg_repo.counts_for_conversations(ids)
     previews = await msg_repo.previews_for_conversations(ids)
     first_users = await _first_user_contents_for_untitled(msg_repo, conversations)
     unfolded = await _unfolded_counts(msg_repo, counts)
+    prefs = await conv_repo.preference_flags_for(user.user_id, ids)
 
     buckets: dict[str, list[ConversationSummary]] = {f.id: [] for f in folders}
     ungrouped: list[ConversationSummary] = []
     for conv in conversations:
-        summary = _summary_with_count(conv, counts, unfolded, previews, first_users)
+        summary = _summary_with_count(conv, counts, unfolded, previews, first_users, prefs)
         if conv.folder_id in buckets:
             buckets[conv.folder_id].append(summary)
         else:
@@ -346,6 +381,9 @@ async def list_conversations_grouped(
                 mode="local" if f.local_root_id else "cloud",
                 local_root_id=f.local_root_id,
                 local_subpath=f.local_subpath,
+                owner_user_id=desk_role[f.id][2],
+                my_role=desk_role[f.id][0],  # type: ignore[arg-type]
+                my_state=desk_role[f.id][1],  # type: ignore[arg-type]
                 conversations=buckets[f.id],
             )
             for f in folders
@@ -457,7 +495,7 @@ async def get_conversation(
     if not (conv.title and str(conv.title).strip()):
         first_users = await msg_repo.first_user_contents_for_conversations([conversation_id])
         first_user = first_users.get(conversation_id)
-    return conversation_summary_from_orm(conv, first_user_message=first_user)
+    return await _orm_summary(repo, user.user_id, conv, first_user_message=first_user)
 
 
 @router.post("/{conversation_id}/auto-title", response_model=AutoTitleResponse)
@@ -509,6 +547,7 @@ async def set_permission_axes(
     conv = await repo.get_by_id(conversation_id, user_id=user.user_id)
     if not conv:
         raise NotFoundError("对话不存在")
+    await _require_conversation_write(conversation_id, user.user_id, repo._session)
     previous = dict(conv.permission_axes or {})
     next_axes = body.permission_axes.to_axes().to_dict()
     if previous != next_axes:
@@ -534,7 +573,7 @@ async def set_permission_axes(
             previous=previous,
             next_axes=next_axes,
         )
-    return conversation_summary_from_orm(conv)
+    return await _orm_summary(repo, user.user_id, conv)
 
 
 @router.patch("/{conversation_id}", response_model=ConversationSummary)
@@ -549,6 +588,9 @@ async def update_conversation(
     conv = await repo.get_by_id(conversation_id, user_id=user.user_id)
     if not conv:
         raise NotFoundError("对话不存在")
+    shared_write = fields & {"title", "deep_research_auto", "model_profile_id"}
+    if shared_write:
+        await _require_conversation_write(conversation_id, user.user_id, repo._session)
     if "title" in fields and body.title is not None:
         conv = await repo.update_title(conversation_id, body.title, user_id=user.user_id)
     # Sidebar housekeeping toggles (对话基础功能补齐): pin floats the row to the top,
@@ -577,7 +619,7 @@ async def update_conversation(
         updated = await repo.set_model_profile(conversation_id, profile_id, user_id=user.user_id)
         if updated:
             conv = updated
-    return conversation_summary_from_orm(conv)
+    return await _orm_summary(repo, user.user_id, conv)
 
 
 @router.delete("/{conversation_id}", response_model=StatusResponse)

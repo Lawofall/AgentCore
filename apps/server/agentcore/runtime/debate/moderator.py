@@ -21,6 +21,7 @@
 - :mod:`moderator_agenda` —— 定议题 / 质询 / 结辩门槛
 - :mod:`moderator_judge` —— 裁判 + 小结 + 记分
 - :mod:`moderator_brief` —— 收场简报
+- :mod:`moderator_timeline` —— 判定 complete → 既有 run delta
 
 → 见设计: docs/03-AI核心/辩论编排设计.md §二、§四、§五
 """
@@ -30,7 +31,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from dataclasses import replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agentcore.core.log_context import log_context
 from agentcore.core.logging import get_logger
@@ -61,6 +62,7 @@ from agentcore.runtime.debate.moderator_phases import (
     run_red_team_round,
     run_roundtable_round,
 )
+from agentcore.runtime.debate.moderator_timeline import emit_moderator_complete
 from agentcore.runtime.debate.types import (
     STOP_ALL_FAILED,
     STOP_CONVERGED,
@@ -88,6 +90,9 @@ from agentcore.runtime.debate.types import (
     WitnessExamRunner,
     WitnessSeatInfo,
 )
+
+if TYPE_CHECKING:
+    from agentcore.runtime.events import EventSink
 
 logger = get_logger(__name__)
 
@@ -135,8 +140,9 @@ class Moderator:
     """主持人辩论循环（辩论编排设计.md §二）。
 
     ``provider`` 注入便于单测（返回脚本化 JSON 的 fake）；``model`` 是裁判 / 小结 / 简报等
-    主持人内部 LLM 调用所用模型（DebateTool 传该回合质量档的 strong 档）。``run`` 接收一个
-    :class:`RoundRunner` 注入「怎么派一轮辩手」，本类只负责编排与判定。
+    主持人内部 LLM 调用所用模型（DebateTool 传该回合质量档的 strong 档）。``sink`` 为可选
+    EventSink：判定 complete 的思考 / 人读产物挂本节点 run_id；缺 sink 或 run_id 静默跳过。
+    ``run`` 接收一个 :class:`RoundRunner` 注入「怎么派一轮辩手」，本类只负责编排与判定。
     """
 
     def __init__(
@@ -147,6 +153,7 @@ class Moderator:
         scenario_prefix: str = "debate",
         run_id: str | None = None,
         parent_run_id: str | None = None,
+        sink: EventSink | None = None,
     ) -> None:
         self._llm = provider
         self._model = model
@@ -155,6 +162,9 @@ class Moderator:
         # inference proxy，成本明细才能挂到主持人 run_id（否则 proxy 侧 mint 随机 UUID）。
         self._run_id = run_id
         self._parent_run_id = parent_run_id
+        # 判定过程挂主持人 run：有 sink + run_id 才发既有 delta；缺一则静默跳过。
+        self._sink = sink
+        self._round_no = 0
         # 主持人自身 LLM 调用（议题 / 裁判 / 小结 / 简报）的累计用量与轮数，供 DebateTool
         # 折算成主持人节点的一条 ledger 行（与辩手 run 一样计入回合总账）。
         self._usage = TokenUsage()
@@ -237,6 +247,7 @@ class Moderator:
             if not config.policy.thorough:
                 subtopics = subtopics[:1]
         for round_no in range(1, config.policy.max_rounds + 1):
+            self._round_no = round_no
             # 焦点优先级：掌舵覆写 > 圆桌子题轴 > 上轮 next_focus > _frame
             if focus_override:
                 focus = focus_override
@@ -608,7 +619,9 @@ class Moderator:
             async with self._usage_lock:
                 self._usage = self._usage + (response.usage or TokenUsage())
                 self._llm_rounds += 1
-            return _parse_json_object(response.content or "")
+            data = _parse_json_object(response.content or "")
+            self._emit_complete_timeline(step, data, response.reasoning_content)
+            return data
 
         if not self._run_id:
             return await _call()
@@ -622,3 +635,18 @@ class Moderator:
             parent_run_id=self._parent_run_id,
         ):
             return await _call()
+
+    def _emit_complete_timeline(
+        self, step: str, data: dict[str, Any], reasoning: str | None
+    ) -> None:
+        """结构化 complete 的思考 + 人读产物挂主持人 run；无 sink / 无 run_id 静默跳过。"""
+        if self._sink is None or not self._run_id:
+            return
+        emit_moderator_complete(
+            self._sink,
+            run_id=self._run_id,
+            step=step,
+            data=data,
+            reasoning=reasoning,
+            round_no=self._round_no,
+        )

@@ -50,6 +50,10 @@ class AuthSettings(BaseModel):
     # account narrow JWT (type=account), reminted per local turn.
     account_token_expire_minutes: int = 720
 
+    # Cloud user-preview URL ticket (type=preview). Short-lived click-to-open,
+    # not a sidecar remint-per-turn token. Bound to conversation + process + port.
+    preview_token_expire_minutes: int = 15
+
     cookie_secure: bool = False
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     cookie_path_prefix: str = ""

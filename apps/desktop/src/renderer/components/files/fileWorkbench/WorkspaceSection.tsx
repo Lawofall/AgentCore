@@ -8,6 +8,7 @@ import {
 import type { FileSortBy } from "@/components/files/fileTreeTypes";
 import { IconButton } from "@/components/files/parts";
 import { DeleteFolderDialog } from "@/components/folders/DeleteFolderDialog";
+import { FolderMembersDialog } from "@/components/folders/FolderMembersDialog";
 import { Button } from "@/components/ui";
 import {
   ContextMenu,
@@ -38,6 +39,12 @@ import { queryClient } from "@/lib/queryClient";
 import { workspaceKeys } from "@/lib/queryKeys";
 import { notifyActionError, notifyError, notifyInfo } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import {
+  canShareFolder,
+  folderMyRole,
+  folderRoleLabel,
+  isFolderOwner,
+} from "@/services/folders";
 import { type WorkspaceInfo, wsExportZip } from "@/services/workspaces";
 import {
   useConversationGenerating,
@@ -63,6 +70,7 @@ import {
   Pencil,
   Trash2,
   Upload,
+  Users,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -160,6 +168,7 @@ export function WorkspaceSection({
   const [exporting, setExporting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(ws.name);
+  const [membersOpen, setMembersOpen] = useState(false);
 
   const deleteMutation = useDeleteConversation();
   const restoreConversationMutation = useRestoreConversation();
@@ -176,27 +185,23 @@ export function WorkspaceSection({
   const canClearScratch =
     !!conversationId && !isLocal && !offlineCloud && !!source?.caps.edit;
   /** Cloud workspace only — clone API requires cloud location. */
-  const canClone =
-    !isLocal &&
-    !offlineCloud &&
-    !!source?.caps.edit &&
-    !ws.wsId.startsWith("shared:");
+  const canClone = !isLocal && !offlineCloud && !!source?.caps.edit;
   /**
-   * 版本 / 软删区 / 导出 ZIP —— 服务端对本机工作区与共享空间一律 409，所以入口按能力
+   * 版本 / 软删区 / 导出 ZIP —— 服务端对本机工作区一律 409，所以入口按能力
    * 位 + ws 种类先行门控，不让用户点进一个必然失败的动作。本机工作区的版本与回收站是
    * 另一条轨（盘上版本区 / 系统回收站），不在这里冒充。
    */
-  const canSnapshot =
-    !isLocal &&
-    !offlineCloud &&
-    !!source?.caps.snapshots &&
-    !ws.wsId.startsWith("shared:");
+  const canSnapshot = !isLocal && !offlineCloud && !!source?.caps.snapshots;
   const scratchGenerating = useConversationGenerating(conversationId ?? "");
 
   const folder = folderId
     ? (getFolders().find((f) => f.id === folderId) ?? null)
     : null;
   const folderIsLocal = folder ? deriveGroupWorkspaceIsLocal(folder) : isLocal;
+  const shareable = folder ? canShareFolder(folder) : false;
+  // Missing cache row is not "I own this" — members would otherwise see 删除文件夹.
+  const folderOwner = Boolean(folder && isFolderOwner(folder));
+  const folderRole = folder ? folderMyRole(folder) : "owner";
 
   const liveFolderConvs = () =>
     folderId ? getConversations().filter((c) => c.folderId === folderId) : [];
@@ -266,7 +271,7 @@ export function WorkspaceSection({
 
   /** Inline rename, for both flavours of root: a `conv:` scratch renames the
    * conversation, a `folder:` row renames the folder itself (§5.4 用户起名). */
-  const canRename = !!conversationId || !!folderId;
+  const canRename = !!conversationId || (!!folderId && folderOwner);
 
   const startEdit = () => {
     if (!canRename) return;
@@ -432,6 +437,11 @@ export function WorkspaceSection({
           <Folder size={14} className="shrink-0 text-muted-foreground" />
         )}
         <span className="min-w-0 flex-1 truncate font-medium">{ws.name}</span>
+        {shareable && !folderOwner && (
+          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
+            {folderRoleLabel(folderRole)}
+          </span>
+        )}
       </Button>
       {source?.caps.edit && (
         <div className="hidden shrink-0 items-center group-hover:flex">
@@ -603,6 +613,12 @@ export function WorkspaceSection({
                 <span className="flex-1 truncate">重命名</span>
               </ContextMenuItem>
             )}
+            {shareable && (
+              <ContextMenuItem onSelect={() => setMembersOpen(true)}>
+                <Users size={14} className="shrink-0" />
+                <span className="flex-1 truncate">成员</span>
+              </ContextMenuItem>
+            )}
             {conversationId && (
               <ContextMenuItem
                 variant="danger"
@@ -612,7 +628,7 @@ export function WorkspaceSection({
                 <span className="flex-1 truncate">删除对话</span>
               </ContextMenuItem>
             )}
-            {folderId && (
+            {folderId && folderOwner && (
               <>
                 <ContextMenuSeparator />
                 <ContextMenuItem
@@ -633,7 +649,7 @@ export function WorkspaceSection({
           {tree}
         </>
       )}
-      {folderId && (
+      {folderId && folderOwner && (
         <DeleteFolderDialog
           open={deleteFolderOpen}
           onOpenChange={setDeleteFolderOpen}
@@ -642,6 +658,15 @@ export function WorkspaceSection({
           isLocal={folderIsLocal}
           onConfirm={() => void confirmDeleteFolder()}
           onPermanentConfirm={confirmPermanentDeleteFolder}
+        />
+      )}
+      {shareable && folder && (
+        <FolderMembersDialog
+          open={membersOpen}
+          onClose={() => setMembersOpen(false)}
+          folderId={folder.id}
+          folderName={folder.name}
+          myRole={folderRole}
         />
       )}
       {canClearScratch && (

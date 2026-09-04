@@ -581,6 +581,7 @@ class DebateTool:
                 model=moderator_model,
                 run_id=moderator_run_id,
                 parent_run_id=graph_parent,
+                sink=self._sink,
             )
             # 掌舵窗口开在主持人开跑处（庭前取证期入的队也能被首轮边界捞到）；无活跃用户
             # 时不开——没挂 on_round_boundary，谁都捞不走，收下就是骗人。

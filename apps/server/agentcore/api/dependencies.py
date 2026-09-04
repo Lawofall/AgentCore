@@ -37,6 +37,7 @@ from agentcore.db.repositories import (
     DocumentRepository,
     EmailChallengeRepository,
     FeedbackRepository,
+    FolderMemberRepository,
     FolderRepository,
     FriendRepository,
     HandoffJobRepository,
@@ -56,7 +57,7 @@ from agentcore.db.repositories import (
     UserRepository,
     UserWorkflowRepository,
 )
-from agentcore.db.repositories.shared_spaces import SharedSpaceRepository
+from agentcore.folders.service import FolderDeskService
 from agentcore.messaging import MessagingService
 from agentcore.messaging.hub import HubChatEventPublisher, default_chat_hub
 from agentcore.security.tokens import (
@@ -67,7 +68,6 @@ from agentcore.security.tokens import (
     decode_account_token,
     decode_folders_token,
 )
-from agentcore.shared_spaces.service import SharedSpaceService
 from agentcore.storage.assets import AssetStorage, build_asset_storage
 
 # Cookie name carrying the access JWT (set by the auth routes).
@@ -296,22 +296,17 @@ def get_messaging_service(
         directory=UserDirectoryRepository(session),
         friends=FriendRepository(session),
         events=HubChatEventPublisher(default_chat_hub()),
-        shared_spaces=SharedSpaceRepository(session),
+        folder_members=FolderMemberRepository(session),
     )
 
 
-def get_shared_space_repo(
+def get_folder_desk_service(
     session: AsyncSession = Depends(get_db),
-) -> SharedSpaceRepository:
-    return SharedSpaceRepository(session)
-
-
-def get_shared_space_service(
-    session: AsyncSession = Depends(get_db),
-) -> SharedSpaceService:
-    """Build SharedSpaceService (多人共享空间) on the request session."""
-    return SharedSpaceService(
-        spaces=SharedSpaceRepository(session),
+) -> FolderDeskService:
+    """Cloud-folder collaboration desk (邀请/成员) on the request session."""
+    return FolderDeskService(
+        folders=FolderRepository(session),
+        members=FolderMemberRepository(session),
         users=UserRepository(session),
         blocks=UserBlockRepository(session),
         directory=UserDirectoryRepository(session),

@@ -20,11 +20,16 @@ export const conversationKeys = {
 };
 
 /** 项目（folder）自有的查询面。The live folder list itself rides on
- * `conversationKeys.grouped`; only the recycle bin has its own trip. */
+ * `conversationKeys.grouped`; recycle bin + collaboration-desk lists are extra
+ * trips. */
 export const folderKeys = {
   all: ["folders"] as const,
   /** 最近删除（`GET /v1/folders/trash`）— 已删项目 + 保留天数. */
   trash: ["folders", "trash"] as const,
+  /** Member desks (`GET /v1/folders/shared-with-me`). */
+  sharedWithMe: ["folders", "shared-with-me"] as const,
+  pendingInvites: ["folders", "pending-invites"] as const,
+  members: (folderId: string) => ["folders", "members", folderId] as const,
 };
 
 export const workspaceKeys = {
@@ -39,18 +44,6 @@ export const externalGrantKeys = {
   all: ["external-grants"] as const,
   list: (conversationId: string) =>
     ["external-grants", "list", conversationId] as const,
-};
-
-/** 多人共享空间（`/v1/shared-spaces`）— 列表 / 邀请 / 成员 / 流水 / 会话挂载. */
-export const sharedSpaceKeys = {
-  all: ["shared-spaces"] as const,
-  list: ["shared-spaces", "list"] as const,
-  pendingInvites: ["shared-spaces", "pending-invites"] as const,
-  detail: (spaceId: string) => ["shared-spaces", "detail", spaceId] as const,
-  members: (spaceId: string) => ["shared-spaces", "members", spaceId] as const,
-  events: (spaceId: string) => ["shared-spaces", "events", spaceId] as const,
-  mounts: (conversationId: string) =>
-    ["shared-spaces", "mounts", conversationId] as const,
 };
 
 /** 设置·模型配置的服务商列表（`GET /v1/users/me/llm-providers`）。 */

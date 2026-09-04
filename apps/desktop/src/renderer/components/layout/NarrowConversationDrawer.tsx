@@ -21,6 +21,7 @@ import {
 import { deriveGroupWorkspaceIsLocal } from "@/lib/conversationWorkspaceMode";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import type { DeletedConversationMeta } from "@/services/conversations";
+import { isSharedWithMeFolder } from "@/services/folders";
 import { useRequiredConversationIds } from "@/stores/aiAttention";
 import { useSidebarStore } from "@/stores/sidebar";
 import {
@@ -47,6 +48,14 @@ export function NarrowConversationDrawer() {
     () => foldersForConversationRail(folders),
     [folders],
   );
+  const ownedFolders = useMemo(
+    () => listedFolders.filter((f) => !isSharedWithMeFolder(f)),
+    [listedFolders],
+  );
+  const sharedFolders = useMemo(
+    () => listedFolders.filter(isSharedWithMeFolder),
+    [listedFolders],
+  );
   const trashQuery = useConversationTrash(
     isNarrow && conversationDrawerOpen && view === "trash",
   );
@@ -56,11 +65,19 @@ export function NarrowConversationDrawer() {
 
   const groups = useMemo(
     () =>
-      buildWorkspaceGroups(conversations, listedFolders, new Set(), {
+      buildWorkspaceGroups(conversations, ownedFolders, new Set(), {
         uncapped: true,
         folderGroupOrder,
       }),
-    [conversations, listedFolders, folderGroupOrder],
+    [conversations, ownedFolders, folderGroupOrder],
+  );
+  const sharedGroups = useMemo(
+    () =>
+      buildWorkspaceGroups(conversations, sharedFolders, new Set(), {
+        uncapped: true,
+        includeEmpty: true,
+      }),
+    [conversations, sharedFolders],
   );
   const folderIds = useMemo(
     () => groups.map(({ folder }) => folder.id),
@@ -142,7 +159,7 @@ export function NarrowConversationDrawer() {
             />
           ) : (
             <>
-              {conversations.length === 0 ? (
+              {conversations.length === 0 && sharedGroups.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
                   <MessageSquare
                     size={24}
@@ -200,6 +217,50 @@ export function NarrowConversationDrawer() {
                       </div>
                     );
                   })}
+                  {sharedGroups.length > 0 && (
+                    <>
+                      <div className="px-2 pb-0.5 pt-2 text-xs font-medium tracking-wide text-sidebar-foreground/40">
+                        与我共享
+                      </div>
+                      {sharedGroups.map(({ folder, convs }) => {
+                        const visible = convs.filter(
+                          (c) => !c.pinned && !c.archived,
+                        );
+                        const hasRequired = visible.some((c) =>
+                          requiredIds.has(c.id),
+                        );
+                        const expanded =
+                          hasRequired || collapsed[folder.id] !== true;
+                        return (
+                          <div key={folder.id}>
+                            <div className="px-2 pt-2">
+                              <WorkspaceGroupHeader
+                                folder={folder}
+                                convs={convs}
+                                expanded={expanded}
+                                surface="narrow"
+                                onToggleExpanded={() =>
+                                  setCollapsed((prev) => ({
+                                    ...prev,
+                                    [folder.id]: expanded,
+                                  }))
+                                }
+                              />
+                            </div>
+                            {expanded &&
+                              visible.map((conv) => (
+                                <div key={conv.id} className="px-2">
+                                  <ConversationItem
+                                    conversation={conv}
+                                    onActivate={close}
+                                  />
+                                </div>
+                              ))}
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
                   {bare.length > 0 && (
                     <div className="space-y-0.5 px-2 py-1">
                       {bare.map((conv) => (

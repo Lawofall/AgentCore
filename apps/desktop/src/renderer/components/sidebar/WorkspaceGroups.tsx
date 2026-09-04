@@ -1,6 +1,9 @@
 import { SurfaceRowButton } from "@/components/ui";
 import { useConversations } from "@/hooks/useConversations";
-import { useWorkspaceGroups } from "@/hooks/useWorkspaceGroups";
+import {
+  useSharedWithMeWorkspaceGroups,
+  useWorkspaceGroups,
+} from "@/hooks/useWorkspaceGroups";
 import { deriveGroupWorkspaceIsLocal } from "@/lib/conversationWorkspaceMode";
 import { isGroupExpanded, pickGroupVisible } from "@/lib/sidebarRailVisibility";
 import { useRequiredConversationIds } from "@/stores/aiAttention";
@@ -41,6 +44,7 @@ import { useFolderGroupReorder } from "./useFolderGroupReorder";
  */
 export function WorkspaceGroups() {
   const groups = useWorkspaceGroups();
+  const sharedGroups = useSharedWithMeWorkspaceGroups();
   const conversations = useConversations();
   const hasPinned = conversations.some((c) => c.pinned);
   const currentId = useConversationStore((s) => s.currentConversationId);
@@ -67,7 +71,7 @@ export function WorkspaceGroups() {
     return active.folderId ?? null;
   }, [conversations, currentId]);
 
-  if (groups.length === 0) return null;
+  if (groups.length === 0 && sharedGroups.length === 0) return null;
 
   return (
     <>
@@ -133,6 +137,61 @@ export function WorkspaceGroups() {
             </div>
           );
         })}
+        {sharedGroups.length > 0 && (
+          <>
+            <div className="px-2 pb-0.5 pt-2 text-xs font-medium tracking-wide text-sidebar-foreground/40">
+              与我共享
+            </div>
+            {sharedGroups.map(({ folder, convs }) => {
+              const stored = expandedSections[folder.id];
+              const visible = convs.filter((c) => !c.pinned);
+              const hasRequired = visible.some((c) => requiredIds.has(c.id));
+              const expanded = isGroupExpanded({
+                stored,
+                isActiveFolder: folder.id === activeFolderId,
+                hasRequired,
+              });
+              const shown = pickGroupVisible(visible, requiredIds);
+              const overflow = visible.length - shown.length;
+              const groupIsLocal = deriveGroupWorkspaceIsLocal(folder);
+              return (
+                <div key={folder.id}>
+                  <WorkspaceGroupHeader
+                    folder={folder}
+                    convs={convs}
+                    expanded={expanded}
+                    onToggleExpanded={() => setSection(folder.id, !expanded)}
+                  />
+                  {expanded && (
+                    <div className="space-y-0.5">
+                      {shown.map((c) => (
+                        <ConversationItem
+                          key={c.id}
+                          conversation={c}
+                          groupIsLocal={groupIsLocal}
+                          className="px-2"
+                        />
+                      ))}
+                      {overflow > 0 && (
+                        <SurfaceRowButton
+                          onClick={() =>
+                            navigate("/conversations", {
+                              state: { focusFolderId: folder.id },
+                            })
+                          }
+                          className="h-8 px-2 text-xs text-sidebar-foreground/50 hover:text-sidebar-foreground"
+                        >
+                          <MoreHorizontal size={13} className="shrink-0" />
+                          更多（{overflow}）
+                        </SurfaceRowButton>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
       {dragPreview && dragFolder ? (
         <FolderGroupDragGhost

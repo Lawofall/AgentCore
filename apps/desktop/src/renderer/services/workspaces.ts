@@ -235,8 +235,8 @@ export async function wsReadFile(
 // because the file hub browses workspaces without a conversation in hand — without
 // them 版本 / 软删区 / 导出 are only reachable by detouring through some chat's side
 // dock. The server refuses these (409) for local workspaces (files live on the
-// user's machine) and for `shared:` spaces (v1 = file CRUD only), so callers gate
-// the entry points instead of letting the user click into a 409.
+// user's machine), so callers gate the entry points instead of letting the user
+// click into a 409. Cloud desks are `folder:` / `conv:` only.
 
 /** Server snapshot payload (`/v1/workspaces/{ws_id}/snapshots`). */
 type BackendSnapshot = Schemas["SnapshotSummary"];
@@ -314,8 +314,8 @@ export async function wsRestoreTrash(
 
 /**
  * 「在浏览器打开」文件中枢云端工作区 HTML：ws 快照 → zip → 主进程解压临时目录 →
- * 系统默认浏览器。Shared spaces refuse snapshots (v1) → caller must not hang this
- * for `shared:` ws ids. Desktop-only (`previewArchive`).
+ * 系统默认浏览器。仅 `folder:` / `conv:` 云桌（快照寻址）。Desktop-only
+ * (`previewArchive`)。
  */
 export async function openCloudWorkspaceInBrowser(
   wsId: string,

@@ -1,9 +1,9 @@
 """Folder CRUD routes (项目 = 工作区).
 
-Folders are user-scoped: every route resolves the authenticated user and a
-non-owner receives 404 (IDOR-safe). Soft-deleting a folder archives its
-conversations in place (keeps ``folder_id``); workspace binding is set at
-create and is immutable thereafter.
+``GET /{id}`` is accepted-member (owner / editor / viewer); outsiders 404
+(IDOR-safe). Tree mutate (rename / move / delete) remains owner-only (members
+403). Soft-deleting a folder archives its conversations in place (keeps
+``folder_id``); workspace binding is set at create and is immutable thereafter.
 
 List / create / get-by-id / soft-delete accept either an access session or a
 folders narrow ticket (sidecar cloud roster) — the sidecar-hosted CEO owns the
@@ -23,6 +23,7 @@ from agentcore.api.dependencies import (
     AuthUser,
     FoldersApiUser,
     get_db,
+    get_folder_desk_service,
     get_folder_repo,
 )
 from agentcore.api.schemas import (
@@ -33,19 +34,30 @@ from agentcore.api.schemas import (
     CreateFolderRequest,
     DeletedFolderListResponse,
     DeletedFolderSummary,
+    FolderMemberListResponse,
+    FolderMemberSummary,
     FolderSummary,
+    InviteFolderMemberRequest,
     StatusResponse,
+    UpdateFolderMemberRequest,
     UpdateFolderRequest,
 )
 from agentcore.config import settings
-from agentcore.core.errors import ConflictError, NotFoundError, ValidationError
+from agentcore.core.errors import (
+    AuthorizationError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from agentcore.core.logging import get_logger
 from agentcore.db.repositories import FolderRepository
 from agentcore.folders.collaboration_timeline import (
     display_act_title,
     list_folder_collaboration_timeline,
 )
+from agentcore.folders.desk import resolve_desk_access
 from agentcore.folders.permanent_delete import permanent_delete_folder
+from agentcore.folders.service import FolderDeskService, FolderDeskView, FolderMemberView
 from agentcore.folders.tree_ops import (
     FolderTreeError,
     move_folder,
@@ -70,6 +82,48 @@ _TRASH_LIST_LIMIT = 200
 def _purge_at(folder) -> datetime:
     """When the retention sweeper may hard-purge this soft-deleted project."""
     return folder.deleted_at + timedelta(days=settings.workspace_retention_days)
+
+
+def _summary_from_desk(view: FolderDeskView) -> FolderSummary:
+    from agentcore.workspace.cloud_tree import parent_rel_path
+
+    rel_path = view.rel_path or None
+    return FolderSummary(
+        id=view.id,
+        name=view.name,
+        mode="local" if view.local_root_id else "cloud",
+        local_root_id=view.local_root_id,
+        local_subpath=view.local_subpath,
+        rel_path=rel_path,
+        parent_rel_path=(parent_rel_path(rel_path) or None) if rel_path else None,
+        owner_user_id=view.owner_user_id,
+        my_role=view.my_role,
+        my_state=view.my_state,
+        created_at=view.created_at,
+        updated_at=view.updated_at,
+    )
+
+
+def _member_summary(view: FolderMemberView) -> FolderMemberSummary:
+    return FolderMemberSummary(
+        user_id=view.user_id,
+        role=view.role,
+        state=view.state,
+        invited_by=view.invited_by,
+        joined_at=view.joined_at,
+        display_name=view.display_name,
+        username=view.username,
+    )
+
+
+async def _require_folder_owner(session: AsyncSession, folder_id: str, user_id: str):
+    """Owner-only mutate: members get 403; outsiders 404 (no existence leak)."""
+    access = await resolve_desk_access(session, folder_id=folder_id, user_id=user_id)
+    if access is None:
+        raise NotFoundError("文件夹不存在")
+    if not access.is_owner:
+        raise AuthorizationError("仅所有者可修改此文件夹")
+    return access
 
 
 class FoldersTokenResponse(BaseModel):
@@ -214,17 +268,113 @@ async def restore_deleted_folder(
     return FolderSummary.from_folder(restored)
 
 
+@router.get("/shared-with-me", response_model=list[FolderSummary])
+async def list_shared_with_me(
+    user: AuthUser,
+    desk: FolderDeskService = Depends(get_folder_desk_service),
+):
+    """Cloud folders the caller joined as editor/viewer (not owned)."""
+    return [_summary_from_desk(v) for v in await desk.list_shared_with_me(user_id=user.user_id)]
+
+
+@router.get("/invites/pending", response_model=list[FolderSummary])
+async def list_pending_folder_invites(
+    user: AuthUser,
+    desk: FolderDeskService = Depends(get_folder_desk_service),
+):
+    return [_summary_from_desk(v) for v in await desk.list_pending_invites(user_id=user.user_id)]
+
+
 @router.get("/{folder_id}", response_model=FolderSummary)
 async def get_folder(
     folder_id: str,
     user: FoldersApiUser,
-    repo: FolderRepository = Depends(get_folder_repo),
+    desk: FolderDeskService = Depends(get_folder_desk_service),
 ):
-    """Owner-scoped folder fetch (desk binding / sidecar get-by-id)."""
-    folder = await repo.get_by_id(folder_id, user_id=user.user_id)
-    if not folder:
-        raise NotFoundError("文件夹不存在")
-    return FolderSummary.from_folder(folder)
+    """Accepted desk member fetch (owner or editor/viewer). Outsiders 404."""
+    view = await desk.get_desk(folder_id=folder_id, user_id=user.user_id)
+    return _summary_from_desk(view)
+
+
+@router.post("/{folder_id}/invites", response_model=FolderMemberSummary, status_code=201)
+async def invite_folder_member(
+    folder_id: str,
+    body: InviteFolderMemberRequest,
+    user: AuthUser,
+    desk: FolderDeskService = Depends(get_folder_desk_service),
+):
+    view = await desk.invite(
+        folder_id=folder_id,
+        actor_id=user.user_id,
+        target_user_id=body.user_id,
+        role=body.role,
+    )
+    return _member_summary(view)
+
+
+@router.post("/{folder_id}/invites/accept", response_model=FolderSummary)
+async def accept_folder_invite(
+    folder_id: str,
+    user: AuthUser,
+    desk: FolderDeskService = Depends(get_folder_desk_service),
+):
+    view = await desk.accept_invite(folder_id=folder_id, user_id=user.user_id)
+    return _summary_from_desk(view)
+
+
+@router.post("/{folder_id}/invites/reject", response_model=StatusResponse)
+async def reject_folder_invite(
+    folder_id: str,
+    user: AuthUser,
+    desk: FolderDeskService = Depends(get_folder_desk_service),
+):
+    await desk.reject_invite(folder_id=folder_id, user_id=user.user_id)
+    return StatusResponse()
+
+
+@router.get("/{folder_id}/members", response_model=FolderMemberListResponse)
+async def list_folder_members(
+    folder_id: str,
+    user: AuthUser,
+    desk: FolderDeskService = Depends(get_folder_desk_service),
+):
+    views = await desk.list_members(folder_id=folder_id, user_id=user.user_id)
+    return FolderMemberListResponse(
+        data=[_member_summary(v) for v in views], total=len(views)
+    )
+
+
+@router.patch("/{folder_id}/members/{member_user_id}", response_model=FolderMemberSummary)
+async def change_folder_member_role(
+    folder_id: str,
+    member_user_id: str,
+    body: UpdateFolderMemberRequest,
+    user: AuthUser,
+    desk: FolderDeskService = Depends(get_folder_desk_service),
+):
+    view = await desk.change_role(
+        folder_id=folder_id,
+        actor_id=user.user_id,
+        target_user_id=member_user_id,
+        role=body.role,
+    )
+    return _member_summary(view)
+
+
+@router.delete("/{folder_id}/members/{member_user_id}", response_model=StatusResponse)
+async def remove_or_leave_folder_member(
+    folder_id: str,
+    member_user_id: str,
+    user: AuthUser,
+    desk: FolderDeskService = Depends(get_folder_desk_service),
+):
+    if member_user_id == user.user_id:
+        await desk.leave(folder_id=folder_id, user_id=user.user_id)
+    else:
+        await desk.remove_member(
+            folder_id=folder_id, actor_id=user.user_id, target_user_id=member_user_id
+        )
+    return StatusResponse()
 
 
 @router.patch("/{folder_id}", response_model=FolderSummary)
@@ -242,6 +392,7 @@ async def update_folder(
     queueing the user's rename behind it (不得静默改名).
     """
     fields = body.model_fields_set
+    await _require_folder_owner(session, folder_id, user.user_id)
     folder = None
     try:
         if "name" in fields and body.name is not None:
@@ -285,6 +436,7 @@ async def delete_folder(
     access-session only.
     """
     try:
+        await _require_folder_owner(session, folder_id, user.user_id)
         repo = FolderRepository(session)
         subtree_ids = await repo.list_live_subtree_ids(
             folder_id, user_id=user.user_id
@@ -306,12 +458,14 @@ async def delete_folder(
 async def delete_folder_permanent(
     folder_id: str,
     user: AuthUser,
+    session: AsyncSession = Depends(get_db),
 ):
     """彻底删除文件夹：清盘成员对话 + 云端共享工作区/快照，再移除文件夹行.
 
     Distinct from ``DELETE /{folder_id}`` (soft-delete + archive members).
     Local-mode OS directories are never touched — only DB + server-side data.
     """
+    await _require_folder_owner(session, folder_id, user.user_id)
     deleted = await permanent_delete_folder(folder_id=folder_id, user_id=user.user_id)
     if not deleted:
         raise NotFoundError("文件夹不存在")
@@ -335,7 +489,7 @@ async def get_collaboration_timeline(
     零写路径。约定文档快照（AgentCore/文档/research/ / debate/ 文件列表）复用工作区
     文件 API，不在此返回。
     """
-    folder = await repo.get_by_id(folder_id, user_id=user.user_id)
+    folder = await repo.get_accessible(folder_id, user_id=user.user_id)
     if not folder:
         raise NotFoundError("文件夹不存在")
     result = await list_folder_collaboration_timeline(

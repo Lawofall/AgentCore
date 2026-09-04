@@ -7,6 +7,9 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { WorkspaceGroupHeader } from "../WorkspaceGroupHeader";
 
+vi.mock("@/components/folders/FolderMembersDialog", () => ({
+  FolderMembersDialog: () => null,
+}));
 vi.mock("@/hooks/useConversations", () => ({
   useArchiveConversation: () => ({ mutateAsync: vi.fn() }),
 }));
@@ -118,6 +121,19 @@ describe("WorkspaceGroupHeader · folder-group reorder", () => {
     for (const el of screen.getAllByLabelText("在此文件夹中新开对话")) {
       expect(el.closest("[data-no-tab-drag]")).toBeTruthy();
     }
+  });
+
+  it("idle trailing actions are hidden, not an opacity gutter", () => {
+    render(<HeaderHarness />);
+    const cluster = screen
+      .getAllByLabelText("文件夹操作")[0]
+      ?.closest("[data-no-tab-drag]");
+    expect(cluster).toBeTruthy();
+    const cls = cluster?.className ?? "";
+    expect(cls).toMatch(/\bhidden\b/);
+    expect(cls).toContain("group-hover:flex");
+    expect(cls).toContain("group-focus-within:flex");
+    expect(cls).not.toMatch(/opacity-0/);
   });
 
   it("click below threshold still toggles expand", () => {

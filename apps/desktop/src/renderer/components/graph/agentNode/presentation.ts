@@ -10,6 +10,7 @@ import {
   stripDurationFaceSuffix,
 } from "@/lib/format";
 import { STANCE_META, toolLabel } from "@/stores/execution";
+import { debateGraphIdentity } from "./debateIdentity";
 import { visibleFaceBadgeKeys } from "./faceBudget";
 import {
   type AgentNodeData,
@@ -150,8 +151,13 @@ export function buildAgentNodePresentation(
               ? { heading: "产出预览", text: d.outputPreview }
               : null;
 
+  const identity = debateGraphIdentity({ role: d.role, stance: d.stance });
+
   const peekTags: string[] = [];
-  if (d.stance) peekTags.push(STANCE_META[d.stance].label);
+  // 默认「正方 / 反方」已由阵营色 + 头像字承担；自定义名才在 peek 补立场词。
+  if (d.stance && identity.showRoleTitle) {
+    peekTags.push(STANCE_META[d.stance].label);
+  }
   if (d.isSubtask) peekTags.push("子任务");
   if (revisionBadge) {
     peekTags.push(
@@ -196,7 +202,7 @@ export function buildAgentNodePresentation(
         : null;
 
   // face 徽标预算（决策 3）：功能徽标同屏 ≤2，优先级 待拍板 > 异常 > 过程性。
-  // 立场（身份层）与状态行（用时层）不计预算、恒显。
+  // 立场改走阵营色 + 头像字，不再占 face 字标；状态行不计预算。
   const visibleFaceBadges = visibleFaceBadgeKeys({
     escalationPending: d.escalationPending ?? 0,
     escalationRaised: d.escalationRaised ?? 0,
@@ -232,6 +238,7 @@ export function buildAgentNodePresentation(
     ariaLabel,
     peekActivity,
     peekTags,
+    identity,
     checkpointFace,
     reviewConcernFace,
     statusFace,

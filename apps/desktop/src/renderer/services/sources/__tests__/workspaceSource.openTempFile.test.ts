@@ -110,12 +110,12 @@ describe("云端源 · 用本机默认应用打开（条件挂载）", () => {
     expect(hub.canOpenWithOsDefaultApp).toBeUndefined();
   });
 
-  it("只读共享空间也能打开（读字节不是写操作）", () => {
+  it("只读 folder: 也能打开（读字节不是写操作）", () => {
     stubOpenTempFile();
-    const shared = createCloudWorkspaceSource("shared:s1", "共享", {
+    const folder = createCloudWorkspaceSource("folder:f1", "项目", {
       readonly: true,
     });
-    expect(typeof shared.openWithOsDefaultApp).toBe("function");
+    expect(typeof folder.openWithOsDefaultApp).toBe("function");
   });
 });
 

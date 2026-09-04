@@ -26,7 +26,7 @@ import { GraphLayoutError } from "./GraphLayoutError";
 import { GraphTeamStopControl } from "./GraphTeamStopControl";
 import { GraphToolbar } from "./GraphToolbar";
 import { WaveLanes } from "./WaveLanes";
-import { edgeTypes, nodeTypes } from "./constants";
+import { RF_PRO_OPTIONS, edgeTypes, nodeTypes } from "./constants";
 import type { GraphActionsValue } from "./graphActions";
 import { GraphActionsContext } from "./graphActions";
 import {
@@ -62,6 +62,8 @@ import { positionsMorphSig, useLayoutMorph } from "./useLayoutMorph";
 
 export type { GraphHoverState } from "./graphHover";
 export { GraphHoverContext };
+
+const EMPTY_FLOW_EDGES: Edge[] = [];
 
 interface GraphViewProps {
   interactive?: boolean;
@@ -213,7 +215,6 @@ export const GraphView = memo(function GraphView({
     layoutReady,
     layoutError,
     nodeSizes,
-    onNodesChange,
     groups,
     scene,
     actCards,
@@ -401,7 +402,6 @@ export const GraphView = memo(function GraphView({
       execution: ex,
       scene: sc,
       positions,
-      nodeHeights: {},
       nodeSizes,
       groups,
       bbox,
@@ -496,7 +496,7 @@ export const GraphView = memo(function GraphView({
     }));
   }, [projected, morphing]);
 
-  const docEdges = projected?.edges ?? [];
+  const docEdges = projected?.edges ?? EMPTY_FLOW_EDGES;
   const flowEdges = useMemo<Edge[]>(() => {
     if (injectGapEdges.length === 0) return docEdges;
     return [...docEdges, ...injectGapEdges];
@@ -551,19 +551,17 @@ export const GraphView = memo(function GraphView({
                               nodeTypes={nodeTypes}
                               edgeTypes={edgeTypes}
                               onInit={onInit}
-                              onNodesChange={onNodesChange}
                               onNodeClick={onNodeClick}
                               onNodeMouseEnter={onNodeMouseEnter}
                               onNodeMouseLeave={onNodeMouseLeave}
                               onNodeContextMenu={onNodeContextMenu}
                               onPaneContextMenu={onPaneContextMenu}
                               onPaneClick={onPaneClick}
-                              fitView={fitMode === "view"}
                               nodesDraggable={false}
                               nodesConnectable={false}
                               nodesFocusable={false}
                               elementsSelectable={false}
-                              proOptions={{ hideAttribution: true }}
+                              proOptions={RF_PRO_OPTIONS}
                               {...interactionProps}
                             >
                               <Background gap={20} size={1} />

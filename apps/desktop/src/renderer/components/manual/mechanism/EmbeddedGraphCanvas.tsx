@@ -1,9 +1,9 @@
 import { WaveLanes } from "@/components/graph/WaveLanes";
+import { RF_PRO_OPTIONS } from "@/components/graph/constants";
 import { type WaveBand, computeWaves } from "@/components/graph/scene";
 import {
   EMBED_MIN_HEIGHT,
   type LayoutResult,
-  NODE_HEIGHT,
   computeLayout,
   fitWidthBox,
 } from "@/lib/elk-layout";
@@ -14,11 +14,10 @@ import {
   Background,
   type Edge,
   type Node,
-  type NodeChange,
   ReactFlow,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PreviewNode, Scenario } from "./scenarioData";
 import { edgeTypes, nodeTypes } from "./shared";
 
@@ -43,24 +42,6 @@ export function EmbeddedGraphCanvas({
   const [colWidth, setColWidth] = useState(0);
   const [layout, setLayout] = useState<LayoutResult | null>(null);
   const [inst, setInst] = useState<ReactFlowInstance | null>(null);
-  // 方案 D（真居中，与 GraphView 同源）：按真实测量高度把节点回中到 ELK 固定槽位，连线
-  // 锚点齐平 → 1→1 边笔直、接真正中；只读高度不重排。
-  const [nodeHeights, setNodeHeights] = useState<Record<string, number>>({});
-  const onNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodeHeights((prev) => {
-      let next = prev;
-      for (const c of changes) {
-        if (c.type === "dimensions" && c.dimensions) {
-          const h = c.dimensions.height;
-          if (h > 0 && prev[c.id] !== h) {
-            if (next === prev) next = { ...prev };
-            next[c.id] = h;
-          }
-        }
-      }
-      return next;
-    });
-  }, []);
 
   // 实测内嵌画布宽度（= 阅读列宽），fit-to-width 据此缩放。
   useEffect(() => {
@@ -116,17 +97,12 @@ export function EmbeddedGraphCanvas({
     if (!layout) return [];
     // 左右流→连线锚点在左右；树形(DOWN)→锚点在上下，否则边会从节点侧面斜拉。
     const handleDirection = layoutKind === "tree" ? "vertical" : "horizontal";
-    // 方案 D：按真实高度把节点居中到槽位（displayY = slot.y + (NODE_HEIGHT − 实测高)/2）。
-    const placed = (id: string, slot: { x: number; y: number }) => {
-      const h = nodeHeights[id];
-      return h ? { x: slot.x, y: slot.y + (NODE_HEIGHT - h) / 2 } : slot;
-    };
     return nodes.map((n, i) => {
       const status = statuses[n.id] ?? (n.data.status as RunStatus);
       return {
         id: n.id,
         type: n.type,
-        position: placed(n.id, layout.positions[n.id] ?? { x: 0, y: 0 }),
+        position: layout.positions[n.id] ?? { x: 0, y: 0 },
         data: {
           ...n.data,
           status,
@@ -136,7 +112,7 @@ export function EmbeddedGraphCanvas({
         },
       } as Node;
     });
-  }, [nodes, layout, layoutKind, nodeHeights, statuses]);
+  }, [nodes, layout, layoutKind, statuses]);
 
   const flowEdges = useMemo<Edge[]>(() => {
     return edges.map(
@@ -205,7 +181,6 @@ export function EmbeddedGraphCanvas({
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           onInit={setInst}
-          onNodesChange={onNodesChange}
           nodesDraggable={false}
           nodesConnectable={false}
           nodesFocusable={false}
@@ -215,7 +190,7 @@ export function EmbeddedGraphCanvas({
           panOnDrag={false}
           preventScrolling={false}
           minZoom={0.05}
-          proOptions={{ hideAttribution: true }}
+          proOptions={RF_PRO_OPTIONS}
         >
           <Background gap={20} size={1} />
           <WaveLanes waves={waves} />

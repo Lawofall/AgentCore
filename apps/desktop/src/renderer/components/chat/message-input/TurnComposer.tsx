@@ -1,6 +1,7 @@
 import { DraftWorkspaceAssignPrompt } from "@/components/chat/DraftWorkspaceAssignPrompt";
 import { MentionMenu } from "@/components/chat/MentionMenu";
 import { Button, IconButton } from "@/components/ui";
+import { useConversations } from "@/hooks/useConversations";
 import { useFolders } from "@/hooks/useFolders";
 import { copyText } from "@/lib/clipboard";
 import {
@@ -74,6 +75,10 @@ import type {
 } from "./composerAttachments";
 import { composerHasSendableDraft } from "./composerAttachments";
 import {
+  COMPOSER_FOLDER_READ_ONLY_HINT,
+  isComposerFolderWriteBlocked,
+} from "./composerFolderWrite";
+import {
   COMPOSER_DEBATE_STEER_PLACEHOLDER,
   useLiveDebateSteer,
 } from "./liveDebateSteer";
@@ -97,15 +102,13 @@ const MAX_COMPOSER_HEIGHT = 200;
 
 /** Align with backend `MessageCreate.content` max_length. */
 const MESSAGE_CHAR_LIMIT = 32_000;
-/** Show the counter only when the draft is near the limit (bar mode). */
-const CHAR_COUNT_NEAR_LIMIT = 28_000;
 
 export type TurnComposerVariant = "card" | "bar";
 
 /**
  * The ONE turn composer (统一 AI 输入框): the full-featured card — auto-growing
  * textarea, @ 引用（含本机附件）, drag-drop attachments, 停止生成,
- * char count, 回填 channel — hosted by the chat view's
+ * 回填 channel — hosted by the chat view's
  * {@link import("../MessageInput").MessageInput}. Canvas is look-only; 下达指令
  * stays in chat. Hosts only pick chrome (placeholder).
  *
@@ -255,7 +258,20 @@ export function TurnComposer({
   const bodyHostRef = useRef<HTMLDivElement>(null);
   const pendingCaretRef = useRef<number | null>(null);
   const folders = useFolders();
+  const conversations = useConversations();
   const draftIntent = useFoldersStore((s) => s.draftWorkspaceIntent);
+  const folderReadOnly = isComposerFolderWriteBlocked({
+    conversationId,
+    conversations,
+    folders,
+    draftIntent,
+  });
+  const sendBlocked = serverUnhealthy || folderReadOnly;
+  const sendBlockedTitle = serverUnhealthy
+    ? "离线时无法发送"
+    : folderReadOnly
+      ? COMPOSER_FOLDER_READ_ONLY_HINT
+      : undefined;
   const pendingFolderId =
     draftIntent.kind === "folder" ? draftIntent.folderId : null;
   const dismissedAssignRef = useRef<Set<string>>(new Set());
@@ -559,7 +575,7 @@ export function TurnComposer({
       e.preventDefault();
       // 辩论进行中一律 continue。经典生成中 = 插队；协调空窗生成中 = 排队。
       // 空闲与 Enter 同路径（默认 steer），勿伪装传 queue。
-      if (serverUnhealthy) return;
+      if (sendBlocked) return;
       if (liveDebate) {
         void handleSend();
       } else if (isGenerating) {
@@ -574,18 +590,14 @@ export function TurnComposer({
 
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      // N4-A：离线硬禁用（与发送按钮一致；handleSend 仍有兜底）。
-      if (serverUnhealthy) return;
+      // 离线 / 只读协作桌硬禁用（与发送按钮一致；handleSend 仍有兜底）。
+      if (sendBlocked) return;
       // 辩论进行中 continue。其余不传 delivery：空闲/协调空窗默认 steer；经典生成中默认 queue。
       void handleSend();
     }
   };
 
-  const charCount = value.length;
   const menuOpen = mention.menuMode !== null;
-  const showCharCount = isBar
-    ? charCount >= CHAR_COUNT_NEAR_LIMIT
-    : charCount > 0;
 
   // 左簇顺序：工作区 · Git? · 模型 · 权限 · @
   // bar：整簇收进 ComposerPlusMenu（权限/@ 带文案）；card：底栏摊开（iconOnly）。
@@ -617,9 +629,8 @@ export function TurnComposer({
 
   // 生成中：停止常显。经典：有草稿时「插队」次级 +「排队」主键。
   // 协调空窗：有草稿时复用空闲「发送」主键（默认立刻给主 Agent）+ 次级「排队」。
-  // 辩论进行中改走掌舵（发送=continue，「出结论」=conclude），隐藏排队/插队。
-  // N4-A：只读离线硬禁用发送。
-  const sendBlocked = serverUnhealthy;
+  // 辩论进行中：发送=continue；隐藏排队/插队；收场靠裁判收敛，不在此露出结论。
+  // 离线 / 只读协作桌硬禁用发送（按钮 disabled + title；键盘走 handleKeyDown）。
   // 辩论进行中主框是「对这场说话」：发送只看正文。@ 入口已藏，mention 芯片不得单独点亮发送。
   const hasDraft = liveDebate
     ? Boolean(plainText(value).trim())
@@ -654,7 +665,7 @@ export function TurnComposer({
       aria-label="发送"
       aria-busy={isSending || undefined}
       data-sending={isSending ? "true" : undefined}
-      title={sendBlocked ? "离线时无法发送" : isSending ? "发送中…" : undefined}
+      title={sendBlocked ? sendBlockedTitle : isSending ? "发送中…" : undefined}
     >
       {isSending ? (
         <Loader2 size={16} className="animate-spin" aria-hidden />
@@ -662,20 +673,6 @@ export function TurnComposer({
         <Send size={16} />
       )}
     </IconButton>
-  );
-  const debateConcludeButton = (
-    <Button
-      variant="neutral"
-      size="sm"
-      className="border-border text-foreground"
-      onClick={() => void handleSend({ debateSteer: "conclude" })}
-      disabled={sendBlocked || isSending}
-      aria-label="出结论"
-      title={sendBlocked ? "离线时无法发送" : "下一轮边界出结论"}
-      data-testid="composer-debate-conclude"
-    >
-      出结论
-    </Button>
   );
   const classicMidFlightSend = (
     <div className="flex items-center gap-1.5">
@@ -687,7 +684,7 @@ export function TurnComposer({
         disabled={queueDisabled}
         aria-label="插队"
         title={
-          sendBlocked ? "离线时无法发送" : "插队：下一步生效（Ctrl/Cmd+Enter）"
+          sendBlocked ? sendBlockedTitle : "插队：下一步生效（Ctrl/Cmd+Enter）"
         }
         data-testid="composer-steer-link"
       >
@@ -700,7 +697,7 @@ export function TurnComposer({
         onClick={() => void handleSend()}
         disabled={queueDisabled}
         aria-label={midFlightLabel}
-        title={sendBlocked ? "离线时无法发送" : midFlightHint}
+        title={sendBlocked ? sendBlockedTitle : midFlightHint}
       >
         排队
       </Button>
@@ -716,7 +713,7 @@ export function TurnComposer({
         onClick={() => void handleSend({ delivery: "queue" })}
         disabled={queueDisabled}
         aria-label="排队"
-        title={sendBlocked ? "离线时无法发送" : "等团队收工后再说"}
+        title={sendBlocked ? sendBlockedTitle : "等团队收工后再说"}
       >
         排队
       </Button>
@@ -724,11 +721,10 @@ export function TurnComposer({
       {stopButton}
     </div>
   );
-  // 辩论进行中：隐藏排队/插队；发送=continue，出结论=conclude。勿扫正文猜「够了收」。
+  // 辩论进行中：隐藏排队/插队；发送=continue。勿扫正文猜「够了收」，勿另放收场键。
   const sendControls = liveDebate ? (
     <div className="flex items-center gap-1.5">
       {hasDraft ? primarySendButton : null}
-      {debateConcludeButton}
       {isGenerating ? stopButton : null}
     </div>
   ) : isGenerating ? (
@@ -925,11 +921,6 @@ export function TurnComposer({
             {voice.isSupported && (
               <VoiceButton state={voice.state} onClick={voice.toggle} />
             )}
-            {showCharCount && (
-              <span className="text-xs text-muted-foreground">
-                {charCount}/{MESSAGE_CHAR_LIMIT}
-              </span>
-            )}
             {sendControls}
           </div>
         </div>
@@ -943,11 +934,6 @@ export function TurnComposer({
             <div className="flex items-center gap-3">
               {voice.isSupported && (
                 <VoiceButton state={voice.state} onClick={voice.toggle} />
-              )}
-              {showCharCount && (
-                <span className="text-xs text-muted-foreground">
-                  {charCount}字
-                </span>
               )}
               {sendControls}
             </div>

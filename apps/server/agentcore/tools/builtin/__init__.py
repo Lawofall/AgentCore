@@ -30,12 +30,19 @@ def code_execution_enabled_for(backend: WorkspaceBackend | None) -> bool:
     behind ONE predicate (not a per-mode special-case) is what makes the
     production-security posture cover ``run`` consistently.
 
-    When cloud execution is config-enabled, the sandbox ``health_check`` verdict
-    (``tools.sandbox.cloud_health``) also gates this predicate: a failed probe withholds
-    the class so registry registration and ``workspace_context`` stay truthful. The
-    verdict is TTL-refreshed in the background on read, so a sandbox that rots after
-    boot is caught rather than trusted for the process life. An unprobed process
-    (tests, lifespan not run, config off) keeps config-only semantics.
+    When cloud execution is config-enabled, two facts gate this predicate:
+
+    1. Host health (``tools.sandbox.cloud_health``): a failed sandboxd /
+       ``health(net)`` probe withholds the class. TTL-refreshed in the
+       background on read.
+    2. **This desk can exec**: a gVisor ``ServerWorkspace`` must already hold a
+       started guest (prepare / resume provisioned it). Host ping without a
+       registered desk is not enough. Backends without ``cloud_desk_ready``
+       (test doubles) and the subprocess escape hatch keep health/config-only
+       semantics.
+
+    An unprobed process (tests, lifespan not run, config off) keeps config-only
+    semantics unless the backend is a gVisor desk with no guest.
 
     Does **not** fold ``command=ask`` withhold — callers that stamp capability lines or
     build registries must use :func:`execution_class_enabled_for` so ask / backend /
@@ -45,20 +52,32 @@ def code_execution_enabled_for(backend: WorkspaceBackend | None) -> bool:
         return True
     if backend.location == "local":
         return True
-    # gVisor lives in the cloud API process only. The desktop sidecar must not
-    # assemble isolation execution for a cloud desk — Windows would fail
-    # ``not_linux`` in 10ms and retire the family as if the local interpreter
-    # were dead; Linux sidecar would isolate against sidecar-local files, not
-    # the cloud volume. SEC-005 also forbids falling back to a plain subprocess
-    # on ``location=server``.
+    # gVisor lives in the independent sandboxd process, not the API or sidecar.
+    # The desktop sidecar must not assemble isolation execution for a cloud desk
+    # — Windows would fail ``not_linux`` in 10ms and retire the family as if the
+    # local interpreter were dead; Linux sidecar would isolate against
+    # sidecar-local files, not the cloud volume. SEC-005 also forbids falling
+    # back to a plain subprocess on ``location=server``.
     if _sidecar_process_hosts_no_cloud_sandbox():
         return False
     if not (settings.gvisor_enabled or settings.code_execute_cloud_enabled):
         return False
     from agentcore.tools.sandbox.cloud_health import cloud_sandbox_health
 
-    # False → known unhealthy; True / None (never probed) → config gate alone.
-    return cloud_sandbox_health() is not False
+    # False → known unhealthy; True / None (never probed) → config + desk gate.
+    if cloud_sandbox_health() is False:
+        return False
+    if settings.gvisor_enabled:
+        return _cloud_desk_ready(backend)
+    return True
+
+
+def _cloud_desk_ready(backend: WorkspaceBackend) -> bool:
+    """True when this backend does not require a started gVisor guest, or has one."""
+    ready = getattr(backend, "cloud_desk_ready", None)
+    if not callable(ready):
+        return True
+    return bool(ready())
 
 
 def _sidecar_process_hosts_no_cloud_sandbox() -> bool:
@@ -105,12 +124,13 @@ def _desktop_bridge_ready() -> bool:
     return ensure_desktop_bridge_health()
 
 
-def _browser_sandbox_host_ready() -> bool:
-    """gVisor + desk ``cloud_sandbox_health`` — same predicate as code_execute's guest.
+def _browser_sandbox_host_ready(backend: WorkspaceBackend | None = None) -> bool:
+    """gVisor + this desk can exec — same predicate as code_execute's guest.
 
     ``code_execute_cloud_enabled`` subprocess path does NOT enable browsers.
     Sidecar / true-local without Bridge never assemble cloud isolation.
-    ``None`` (never probed) keeps config-only semantics, same as the desk gate.
+    ``None`` (never probed) keeps config-only semantics unless the backend is a
+    gVisor desk with no guest.
     """
     if _sidecar_process_hosts_no_cloud_sandbox():
         return False
@@ -118,7 +138,11 @@ def _browser_sandbox_host_ready() -> bool:
         return False
     from agentcore.tools.sandbox.cloud_health import cloud_sandbox_health
 
-    return cloud_sandbox_health() is not False
+    if cloud_sandbox_health() is False:
+        return False
+    if backend is None:
+        return True
+    return _cloud_desk_ready(backend)
 
 
 def browser_host_kind_for(
@@ -140,10 +164,10 @@ def browser_host_kind_for(
     if backend.location == "local":
         if _desktop_bridge_ready():
             return "local"
-        return "sandbox" if _browser_sandbox_host_ready() else None
+        return "sandbox" if _browser_sandbox_host_ready(backend) else None
     if backend.location != "server":
         return None
-    return "sandbox" if _browser_sandbox_host_ready() else None
+    return "sandbox" if _browser_sandbox_host_ready(backend) else None
 
 
 def browser_execution_enabled_for(backend: WorkspaceBackend | None) -> bool:
@@ -156,7 +180,8 @@ def browser_execution_enabled_for(backend: WorkspaceBackend | None) -> bool:
       for the current credential generation → host_kind=local.
     - **local without Bridge + 云桌 guest 健康**: host_kind=sandbox (大众默认云端过桥；
       cloud API cannot reach本机 loopback Bridge).
-    - **server + gVisor**: host_kind=sandbox; folds ``cloud_sandbox_health`` (same as desk).
+    - **server + gVisor**: host_kind=sandbox; same predicate as ``run``
+      (host health ∧ this desk is up).
     - True local engine with neither Bridge nor gVisor → withhold (no fake success).
     """
     return browser_host_kind_for(backend) is not None

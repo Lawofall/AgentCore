@@ -3955,7 +3955,7 @@
         "type": "object"
       },
       "CapabilityGuidelines": {
-        "description": "The system-prompt TEMPLATE the agents follow (静态 蓝图; the per-turn verbatim\nprompt is served separately, see the message prompt endpoint).\n\n``shared_base`` is the base every agent (CEO + workers) shares (identity, output\nstyle, tool-use, safety); ``ceo_addon`` is the CEO coordinator's layers on top of\nthat base (routing core + 按需目录 + citation guidance); ``ceo`` is the full chat\nsystem-prompt template (shared base + ceo_addon), composed by the SAME\n``compose_ceo_chat_prompt`` the live turn uses, so it never drifts.",
+        "description": "The system-prompt TEMPLATE the agents follow (静态 蓝图; the per-turn verbatim\nprompt is served separately, see the message prompt endpoint).\n\n``shared_base`` is the base every agent (CEO + workers) shares (identity, output\nstyle, tool-use, safety); ``worker_leaf`` / ``worker_captain`` are identity+contract\ntemplates (default files form, no dependents) — not the per-turn prompt (that is\nin 收到的上下文); ``ceo_addon`` is the CEO coordinator's layers on top of that base\n(routing core + 按需目录 + citation guidance); ``ceo`` is the full chat\nsystem-prompt template (shared base + ceo_addon), composed by the SAME\n``compose_ceo_chat_prompt`` the live turn uses, so it never drifts.",
         "properties": {
           "ceo": {
             "title": "Ceo",
@@ -3968,10 +3968,20 @@
           "shared_base": {
             "title": "Shared Base",
             "type": "string"
+          },
+          "worker_captain": {
+            "title": "Worker Captain",
+            "type": "string"
+          },
+          "worker_leaf": {
+            "title": "Worker Leaf",
+            "type": "string"
           }
         },
         "required": [
           "shared_base",
+          "worker_leaf",
+          "worker_captain",
           "ceo_addon",
           "ceo"
         ],
@@ -6231,21 +6241,6 @@
         "title": "CreateShareRequest",
         "type": "object"
       },
-      "CreateSharedSpaceRequest": {
-        "properties": {
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "title": "CreateSharedSpaceRequest",
-        "type": "object"
-      },
       "CreateSnapshotRequest": {
         "description": "Take a manual snapshot of a conversation's workspace.\n\nA non-empty ``label`` is a user-pinned kept version when it is not a system\nlabel (turn-baseline / handoff / export·merge). Automatic post-turn backups\nuse ``label=null``.",
         "properties": {
@@ -8165,8 +8160,31 @@
             "title": "Mode",
             "type": "string"
           },
+          "my_role": {
+            "default": "owner",
+            "enum": [
+              "owner",
+              "editor",
+              "viewer"
+            ],
+            "title": "My Role",
+            "type": "string"
+          },
+          "my_state": {
+            "default": "accepted",
+            "enum": [
+              "accepted",
+              "pending"
+            ],
+            "title": "My State",
+            "type": "string"
+          },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "owner_user_id": {
+            "title": "Owner User Id",
             "type": "string"
           }
         },
@@ -8174,9 +8192,108 @@
           "id",
           "name",
           "mode",
+          "owner_user_id",
           "conversations"
         ],
         "title": "FolderGroup",
+        "type": "object"
+      },
+      "FolderMemberListResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/FolderMemberSummary"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total"
+        ],
+        "title": "FolderMemberListResponse",
+        "type": "object"
+      },
+      "FolderMemberSummary": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "invited_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invited By"
+          },
+          "joined_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined At"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "editor",
+              "viewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "accepted",
+              "pending"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "user_id",
+          "role",
+          "state"
+        ],
+        "title": "FolderMemberSummary",
         "type": "object"
       },
       "FolderSummary": {
@@ -8220,8 +8337,31 @@
             "title": "Mode",
             "type": "string"
           },
+          "my_role": {
+            "default": "owner",
+            "enum": [
+              "owner",
+              "editor",
+              "viewer"
+            ],
+            "title": "My Role",
+            "type": "string"
+          },
+          "my_state": {
+            "default": "accepted",
+            "enum": [
+              "accepted",
+              "pending"
+            ],
+            "title": "My State",
+            "type": "string"
+          },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "owner_user_id": {
+            "title": "Owner User Id",
             "type": "string"
           },
           "parent_rel_path": {
@@ -8256,6 +8396,7 @@
           "id",
           "name",
           "mode",
+          "owner_user_id",
           "created_at",
           "updated_at"
         ],
@@ -9001,7 +9142,7 @@
         "title": "InferenceWebSearchResultItem",
         "type": "object"
       },
-      "InviteSharedSpaceMemberRequest": {
+      "InviteFolderMemberRequest": {
         "properties": {
           "role": {
             "default": "editor",
@@ -9021,7 +9162,7 @@
         "required": [
           "user_id"
         ],
-        "title": "InviteSharedSpaceMemberRequest",
+        "title": "InviteFolderMemberRequest",
         "type": "object"
       },
       "KeyInputEvent": {
@@ -11256,33 +11397,6 @@
         "title": "ModelUnavailableReason",
         "type": "object"
       },
-      "MountSharedSpaceRequest": {
-        "description": "Mount a shared space into a cloud conversation as ``shared/<alias>/``.",
-        "properties": {
-          "alias_hint": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Alias Hint"
-          },
-          "space_id": {
-            "minLength": 1,
-            "title": "Space Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "space_id"
-        ],
-        "title": "MountSharedSpaceRequest",
-        "type": "object"
-      },
       "MouseInputEvent": {
         "description": "A pointer event in frame-pixel space (the driver rescales to the viewport).\n\n``button`` accepts DOM integers ``0|1|2`` (desktop/mobile wire) or Playwright\nnames ``left|right|middle``; validation normalizes to the name form.",
         "properties": {
@@ -12005,6 +12119,69 @@
           "primary_slots"
         ],
         "title": "PlaybookTemplateSummary",
+        "type": "object"
+      },
+      "PreviewTokenRequest": {
+        "description": "Mint body: which conversation process, and which listen port when several.",
+        "properties": {
+          "conversation_id": {
+            "minLength": 1,
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port"
+          },
+          "process_id": {
+            "minLength": 1,
+            "title": "Process Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "process_id"
+        ],
+        "title": "PreviewTokenRequest",
+        "type": "object"
+      },
+      "PreviewTokenResponse": {
+        "description": "Enter URL for the preview origin. The ticket is in the query, not a field.",
+        "example": {
+          "expires_in_sec": 900,
+          "port": 5173,
+          "url": "https://preview.example/enter"
+        },
+        "properties": {
+          "expires_in_sec": {
+            "title": "Expires In Sec",
+            "type": "integer"
+          },
+          "port": {
+            "title": "Port",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "expires_in_sec",
+          "port"
+        ],
+        "title": "PreviewTokenResponse",
         "type": "object"
       },
       "QueuedTurnItem": {
@@ -13941,371 +14118,6 @@
         "title": "ShareSummary",
         "type": "object"
       },
-      "SharedMountItem": {
-        "properties": {
-          "alias": {
-            "title": "Alias",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "mode": {
-            "enum": [
-              "readonly",
-              "write"
-            ],
-            "title": "Mode",
-            "type": "string"
-          },
-          "namespace": {
-            "title": "Namespace",
-            "type": "string"
-          },
-          "space_id": {
-            "title": "Space Id",
-            "type": "string"
-          },
-          "ws_id": {
-            "title": "Ws Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "alias",
-          "space_id",
-          "label",
-          "namespace",
-          "mode",
-          "ws_id"
-        ],
-        "title": "SharedMountItem",
-        "type": "object"
-      },
-      "SharedMountListResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/SharedMountItem"
-            },
-            "title": "Data",
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "title": "SharedMountListResponse",
-        "type": "object"
-      },
-      "SharedMountResponse": {
-        "properties": {
-          "mount": {
-            "$ref": "#/components/schemas/SharedMountItem"
-          }
-        },
-        "required": [
-          "mount"
-        ],
-        "title": "SharedMountResponse",
-        "type": "object"
-      },
-      "SharedSpaceEventListResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/SharedSpaceEventSummary"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "total"
-        ],
-        "title": "SharedSpaceEventListResponse",
-        "type": "object"
-      },
-      "SharedSpaceEventSummary": {
-        "properties": {
-          "action": {
-            "title": "Action",
-            "type": "string"
-          },
-          "actor_user_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Actor User Id"
-          },
-          "actor_via": {
-            "enum": [
-              "user",
-              "agent"
-            ],
-            "title": "Actor Via",
-            "type": "string"
-          },
-          "created_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "detail": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Detail"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Path"
-          },
-          "space_id": {
-            "title": "Space Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "space_id",
-          "actor_user_id",
-          "actor_via",
-          "action"
-        ],
-        "title": "SharedSpaceEventSummary",
-        "type": "object"
-      },
-      "SharedSpaceListResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/SharedSpaceSummary"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "total"
-        ],
-        "title": "SharedSpaceListResponse",
-        "type": "object"
-      },
-      "SharedSpaceMemberListResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/SharedSpaceMemberSummary"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "total"
-        ],
-        "title": "SharedSpaceMemberListResponse",
-        "type": "object"
-      },
-      "SharedSpaceMemberSummary": {
-        "properties": {
-          "display_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Name"
-          },
-          "invited_by": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Invited By"
-          },
-          "joined_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Joined At"
-          },
-          "role": {
-            "enum": [
-              "owner",
-              "editor",
-              "viewer"
-            ],
-            "title": "Role",
-            "type": "string"
-          },
-          "state": {
-            "enum": [
-              "accepted",
-              "pending"
-            ],
-            "title": "State",
-            "type": "string"
-          },
-          "user_id": {
-            "title": "User Id",
-            "type": "string"
-          },
-          "username": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Username"
-          }
-        },
-        "required": [
-          "user_id",
-          "role",
-          "state"
-        ],
-        "title": "SharedSpaceMemberSummary",
-        "type": "object"
-      },
-      "SharedSpaceSummary": {
-        "properties": {
-          "created_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "member_count": {
-            "title": "Member Count",
-            "type": "integer"
-          },
-          "my_role": {
-            "enum": [
-              "owner",
-              "editor",
-              "viewer"
-            ],
-            "title": "My Role",
-            "type": "string"
-          },
-          "my_state": {
-            "enum": [
-              "accepted",
-              "pending"
-            ],
-            "title": "My State",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "owner_user_id": {
-            "title": "Owner User Id",
-            "type": "string"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          },
-          "ws_id": {
-            "title": "Ws Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "owner_user_id",
-          "my_role",
-          "my_state",
-          "member_count",
-          "ws_id"
-        ],
-        "title": "SharedSpaceSummary",
-        "type": "object"
-      },
       "SnapshotListResponse": {
         "properties": {
           "data": {
@@ -16063,6 +15875,23 @@
         "title": "UpdateFeedbackStatusRequest",
         "type": "object"
       },
+      "UpdateFolderMemberRequest": {
+        "properties": {
+          "role": {
+            "enum": [
+              "editor",
+              "viewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "UpdateFolderMemberRequest",
+        "type": "object"
+      },
       "UpdateFolderRequest": {
         "description": "Rename and/or re-parent — the local-mode binding stays immutable.\n\n``parent_id`` is a *request* field, not storage: the server turns it into a\n``rel_path`` prefix, which is the single source of truth for nesting\n(双模式工作区 §5.4). Omit it to leave the folder where it is; send ``null`` to\nmove it to the top level.",
         "properties": {
@@ -16523,42 +16352,6 @@
           }
         },
         "title": "UpdateProfileRequest",
-        "type": "object"
-      },
-      "UpdateSharedSpaceMemberRequest": {
-        "properties": {
-          "role": {
-            "enum": [
-              "editor",
-              "viewer"
-            ],
-            "title": "Role",
-            "type": "string"
-          }
-        },
-        "required": [
-          "role"
-        ],
-        "title": "UpdateSharedSpaceMemberRequest",
-        "type": "object"
-      },
-      "UpdateSharedSpaceRequest": {
-        "properties": {
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          }
-        },
-        "title": "UpdateSharedSpaceRequest",
         "type": "object"
       },
       "UpdateStandingTaskRequest": {
@@ -17686,7 +17479,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.12"
+    "version": "0.7.13"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -24305,7 +24098,7 @@
     },
     "/v1/capabilities": {
       "get": {
-        "description": "The complete capability picture: tools, runtime skills, listed packs,\nand the CEO system-prompt template — the data behind 工具箱 → 能力图鉴.",
+        "description": "The complete capability picture: tools, runtime skills, listed packs,\nand the CEO / worker system-prompt templates — the data behind 工具箱 → 能力图鉴.",
         "operationId": "get_capabilities_v1_capabilities_get",
         "parameters": [
           {
@@ -24545,7 +24338,7 @@
     },
     "/v1/conversations/grouped": {
       "get": {
-        "description": "Folders + their conversations + the ungrouped remainder (sidebar).\n\nDeclared before ``/{conversation_id}`` so \"grouped\" isn't captured as an id.\nA conversation whose folder is missing/deleted falls back to ungrouped.",
+        "description": "Folders + their conversations + the ungrouped remainder (sidebar).\n\nDeclared before ``/{conversation_id}`` so \"grouped\" isn't captured as an id.\nA conversation whose folder is missing/deleted falls back to ungrouped.\nIncludes desks the caller joined (shared-with-me) so member threads group.",
         "operationId": "list_conversations_grouped_v1_conversations_grouped_get",
         "parameters": [
           {
@@ -31617,267 +31410,6 @@
         ]
       }
     },
-    "/v1/conversations/{conversation_id}/workspace/shared-mounts": {
-      "delete": {
-        "operationId": "revoke_shared_mounts_v1_conversations__conversation_id__workspace_shared_mounts_delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "alias",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Alias"
-            }
-          },
-          {
-            "in": "query",
-            "name": "space_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Space Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Revoke Shared Mounts",
-        "tags": [
-          "conversations"
-        ]
-      },
-      "get": {
-        "operationId": "list_shared_mounts_v1_conversations__conversation_id__workspace_shared_mounts_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedMountListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Shared Mounts",
-        "tags": [
-          "conversations"
-        ]
-      },
-      "post": {
-        "description": "Mount a shared space into a **cloud** conversation (D2).\n\nLocal-bound conversations (sidecar) cannot mount — no cross-runtime dual root.",
-        "operationId": "mount_shared_space_v1_conversations__conversation_id__workspace_shared_mounts_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MountSharedSpaceRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedMountResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Mount Shared Space",
-        "tags": [
-          "conversations"
-        ]
-      }
-    },
     "/v1/demo-tape": {
       "get": {
         "description": "List available tapes when replay is enabled; 404 when the switch is off.",
@@ -33831,6 +33363,145 @@
         ]
       }
     },
+    "/v1/folders/invites/pending": {
+      "get": {
+        "operationId": "list_pending_folder_invites_v1_folders_invites_pending_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FolderSummary"
+                  },
+                  "title": "Response List Pending Folder Invites V1 Folders Invites Pending Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Pending Folder Invites",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/v1/folders/shared-with-me": {
+      "get": {
+        "description": "Cloud folders the caller joined as editor/viewer (not owned).",
+        "operationId": "list_shared_with_me_v1_folders_shared_with_me_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FolderSummary"
+                  },
+                  "title": "Response List Shared With Me V1 Folders Shared With Me Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Shared With Me",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
     "/v1/folders/token": {
       "post": {
         "description": "Exchange the caller's cookie/Bearer access session for a folders narrow ticket.",
@@ -34113,7 +33784,7 @@
         ]
       },
       "get": {
-        "description": "Owner-scoped folder fetch (desk binding / sidecar get-by-id).",
+        "description": "Accepted desk member fetch (owner or editor/viewer). Outsiders 404.",
         "operationId": "get_folder_v1_folders__folder_id__get",
         "parameters": [
           {
@@ -34362,6 +34033,486 @@
           }
         },
         "summary": "Get Collaboration Timeline",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/v1/folders/{folder_id}/invites": {
+      "post": {
+        "operationId": "invite_folder_member_v1_folders__folder_id__invites_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder_id",
+            "required": true,
+            "schema": {
+              "title": "Folder Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteFolderMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderMemberSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Invite Folder Member",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/v1/folders/{folder_id}/invites/accept": {
+      "post": {
+        "operationId": "accept_folder_invite_v1_folders__folder_id__invites_accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder_id",
+            "required": true,
+            "schema": {
+              "title": "Folder Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Folder Invite",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/v1/folders/{folder_id}/invites/reject": {
+      "post": {
+        "operationId": "reject_folder_invite_v1_folders__folder_id__invites_reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder_id",
+            "required": true,
+            "schema": {
+              "title": "Folder Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Folder Invite",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/v1/folders/{folder_id}/members": {
+      "get": {
+        "operationId": "list_folder_members_v1_folders__folder_id__members_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder_id",
+            "required": true,
+            "schema": {
+              "title": "Folder Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderMemberListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Folder Members",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/v1/folders/{folder_id}/members/{member_user_id}": {
+      "delete": {
+        "operationId": "remove_or_leave_folder_member_v1_folders__folder_id__members__member_user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder_id",
+            "required": true,
+            "schema": {
+              "title": "Folder Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "member_user_id",
+            "required": true,
+            "schema": {
+              "title": "Member User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Or Leave Folder Member",
+        "tags": [
+          "folders"
+        ]
+      },
+      "patch": {
+        "operationId": "change_folder_member_role_v1_folders__folder_id__members__member_user_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder_id",
+            "required": true,
+            "schema": {
+              "title": "Folder Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "member_user_id",
+            "required": true,
+            "schema": {
+              "title": "Member User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFolderMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderMemberSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Folder Member Role",
         "tags": [
           "folders"
         ]
@@ -37312,6 +37463,82 @@
         ]
       }
     },
+    "/v1/preview/token": {
+      "post": {
+        "description": "Exchange the access session for a short cloud-preview enter URL.",
+        "operationId": "mint_preview_token_v1_preview_token_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mint Preview Token",
+        "tags": [
+          "preview"
+        ]
+      }
+    },
     "/v1/realtime": {
       "get": {
         "description": "Open this user's realtime firehose (server→client SSE).\n\nSubscribes the connection to the in-process hub; a new message in any chat the\nuser belongs to arrives as a ``chat_message`` event. The first subscription\n(and last disconnect) also fans a ``presence`` event to co-chat users.\nHeartbeat comments keep the stream warm; the subscription is released when\nthe client disconnects.\n\nOptional ``device_id`` makes reconnects replace their own previous stream\nrather than pile up; optional ``platform`` (query param, falling back to\n``X-Client-Platform``) tells the AI attention signal which surfaces are\nreachable. Neither is required — an undeclared client streams exactly as before.\n\nAuth resolves the user via a request-scoped DB session; that session is\nreturned before the long-lived stream opens so each open desktop client does\nnot pin a primary-pool connection until the app closes.",
@@ -37553,1020 +37780,6 @@
         "summary": "Search",
         "tags": [
           "search"
-        ]
-      }
-    },
-    "/v1/shared-spaces": {
-      "get": {
-        "operationId": "list_shared_spaces_v1_shared_spaces_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedSpaceListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Shared Spaces",
-        "tags": [
-          "shared-spaces"
-        ]
-      },
-      "post": {
-        "operationId": "create_shared_space_v1_shared_spaces_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateSharedSpaceRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedSpaceSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Shared Space",
-        "tags": [
-          "shared-spaces"
-        ]
-      }
-    },
-    "/v1/shared-spaces/invites/pending": {
-      "get": {
-        "operationId": "list_pending_invites_v1_shared_spaces_invites_pending_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedSpaceListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Pending Invites",
-        "tags": [
-          "shared-spaces"
-        ]
-      }
-    },
-    "/v1/shared-spaces/{space_id}": {
-      "delete": {
-        "operationId": "delete_shared_space_v1_shared_spaces__space_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "space_id",
-            "required": true,
-            "schema": {
-              "title": "Space Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Shared Space",
-        "tags": [
-          "shared-spaces"
-        ]
-      },
-      "get": {
-        "operationId": "get_shared_space_v1_shared_spaces__space_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "space_id",
-            "required": true,
-            "schema": {
-              "title": "Space Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedSpaceSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Shared Space",
-        "tags": [
-          "shared-spaces"
-        ]
-      },
-      "patch": {
-        "operationId": "update_shared_space_v1_shared_spaces__space_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "space_id",
-            "required": true,
-            "schema": {
-              "title": "Space Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateSharedSpaceRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedSpaceSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Update Shared Space",
-        "tags": [
-          "shared-spaces"
-        ]
-      }
-    },
-    "/v1/shared-spaces/{space_id}/events": {
-      "get": {
-        "operationId": "list_events_v1_shared_spaces__space_id__events_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "space_id",
-            "required": true,
-            "schema": {
-              "title": "Space Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "before_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Before Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedSpaceEventListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Events",
-        "tags": [
-          "shared-spaces"
-        ]
-      }
-    },
-    "/v1/shared-spaces/{space_id}/invites": {
-      "post": {
-        "operationId": "invite_member_v1_shared_spaces__space_id__invites_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "space_id",
-            "required": true,
-            "schema": {
-              "title": "Space Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InviteSharedSpaceMemberRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedSpaceMemberSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Invite Member",
-        "tags": [
-          "shared-spaces"
-        ]
-      }
-    },
-    "/v1/shared-spaces/{space_id}/invites/accept": {
-      "post": {
-        "operationId": "accept_invite_v1_shared_spaces__space_id__invites_accept_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "space_id",
-            "required": true,
-            "schema": {
-              "title": "Space Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedSpaceSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Accept Invite",
-        "tags": [
-          "shared-spaces"
-        ]
-      }
-    },
-    "/v1/shared-spaces/{space_id}/invites/reject": {
-      "post": {
-        "operationId": "reject_invite_v1_shared_spaces__space_id__invites_reject_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "space_id",
-            "required": true,
-            "schema": {
-              "title": "Space Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Reject Invite",
-        "tags": [
-          "shared-spaces"
-        ]
-      }
-    },
-    "/v1/shared-spaces/{space_id}/members": {
-      "get": {
-        "operationId": "list_members_v1_shared_spaces__space_id__members_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "space_id",
-            "required": true,
-            "schema": {
-              "title": "Space Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedSpaceMemberListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Members",
-        "tags": [
-          "shared-spaces"
-        ]
-      }
-    },
-    "/v1/shared-spaces/{space_id}/members/{member_user_id}": {
-      "delete": {
-        "description": "Owner removes ``member_user_id``, or a member leaves when targeting self.",
-        "operationId": "remove_or_leave_member_v1_shared_spaces__space_id__members__member_user_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "space_id",
-            "required": true,
-            "schema": {
-              "title": "Space Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "member_user_id",
-            "required": true,
-            "schema": {
-              "title": "Member User Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Remove Or Leave Member",
-        "tags": [
-          "shared-spaces"
-        ]
-      },
-      "patch": {
-        "operationId": "change_member_role_v1_shared_spaces__space_id__members__member_user_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "space_id",
-            "required": true,
-            "schema": {
-              "title": "Space Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "member_user_id",
-            "required": true,
-            "schema": {
-              "title": "Member User Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateSharedSpaceMemberRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedSpaceMemberSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Change Member Role",
-        "tags": [
-          "shared-spaces"
         ]
       }
     },
@@ -42678,7 +41891,7 @@
     },
     "/v1/workspaces": {
       "get": {
-        "description": "Enumerate project workspaces + bare-chat scratches + shared spaces.",
+        "description": "Enumerate project workspaces + bare-chat scratches.",
         "operationId": "list_workspaces_v1_workspaces_get",
         "parameters": [
           {
@@ -42896,7 +42109,7 @@
     },
     "/v1/workspaces/{ws_id}/archive/{path}": {
       "get": {
-        "description": "Download a directory subtree as zip (selected dir as archive root).\n\nIndependent of GET ``/{ws_id}/files/{path}`` (preview / single file). Capacity\nis the panel upload ceiling, not snapshot retention. Shared spaces that can\ndownload a file can download a folder zip — this is not the snapshot 409.",
+        "description": "Download a directory subtree as zip (selected dir as archive root).\n\nIndependent of GET ``/{ws_id}/files/{path}`` (preview / single file). Capacity\nis the panel upload ceiling, not snapshot retention.",
         "operationId": "download_workspace_archive_v1_workspaces__ws_id__archive__path__get",
         "parameters": [
           {

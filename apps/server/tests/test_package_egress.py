@@ -93,6 +93,23 @@ def test_install_cache_env_non_empty():
     assert "cdn.npmmirror.com" not in pin["NPM_CONFIG_REGISTRY"]
 
 
+def test_package_egress_session_exposes_sbx_ip():
+    class _Netns:
+        host_ip = "10.202.1.1"
+        sbx_ip = "10.202.1.2"
+        netns_path = "/var/run/netns/acpkg1"
+
+    session = PackageEgressSession(
+        slot=1,
+        netns=_Netns(),  # type: ignore[arg-type]
+        proxy_url="http://10.202.1.1:8898",
+        cache_host_dir=Path("/tmp"),
+        cache_bucket="b",
+    )
+    assert session.sbx_ip == "10.202.1.2"
+    assert session.host_ip == "10.202.1.1"
+
+
 def test_package_cache_host_dir_buckets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "data_dir", str(tmp_path))
     d = package_cache_host_dir("user-1")
@@ -122,11 +139,8 @@ async def test_open_package_egress_ephemeral_buckets_not_shared(
         lambda: True,
     )
 
-    class _Proxy:
-        port = 8898
-
-    async def _ensure_proxy():
-        return _Proxy()
+    async def _must_not_start_proxy():
+        raise AssertionError("API must not start the packaging proxy")
 
     class _Netns:
         def __init__(self, *, slot: int, subnet_base: str):
@@ -141,8 +155,8 @@ async def test_open_package_egress_ephemeral_buckets_not_shared(
             return None
 
     monkeypatch.setattr(
-        "agentcore.tools.sandbox.egress.runtime.ensure_package_egress_proxy",
-        _ensure_proxy,
+        "agentcore.tools.sandbox.egress.proxy.ensure_package_egress_proxy",
+        _must_not_start_proxy,
     )
     monkeypatch.setattr("agentcore.tools.sandbox.egress.runtime.PackageNetns", _Netns)
 
@@ -175,11 +189,8 @@ async def test_open_package_egress_keeps_user_bucket(
         lambda: True,
     )
 
-    class _Proxy:
-        port = 8898
-
-    async def _ensure_proxy():
-        return _Proxy()
+    async def _must_not_start_proxy():
+        raise AssertionError("API must not start the packaging proxy")
 
     class _Netns:
         def __init__(self, *, slot: int, subnet_base: str):
@@ -194,8 +205,8 @@ async def test_open_package_egress_keeps_user_bucket(
             return None
 
     monkeypatch.setattr(
-        "agentcore.tools.sandbox.egress.runtime.ensure_package_egress_proxy",
-        _ensure_proxy,
+        "agentcore.tools.sandbox.egress.proxy.ensure_package_egress_proxy",
+        _must_not_start_proxy,
     )
     monkeypatch.setattr("agentcore.tools.sandbox.egress.runtime.PackageNetns", _Netns)
 
@@ -413,6 +424,7 @@ async def test_install_execute_writes_nm_on_real_workspace(
             runtime_root=sandbox._runtime_root,  # noqa: SLF001
         )
     )
+    await sandbox.ensure_workspace_desk(str(ws))
     result = await sandbox.execute(
         ExecutionRequest(
             code="print('install')",

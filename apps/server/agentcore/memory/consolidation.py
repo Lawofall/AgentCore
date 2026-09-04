@@ -699,6 +699,7 @@ async def consolidate_conversation(
                             window,
                             max_chars=settings.memory_episodic_summary_max_chars,
                             actions=actions,
+                            allow_verified_facts=bool(folder_id),
                         )
                         if summary.strip():
                             return _EpisodicDigest(summary=summary, summarized=True)

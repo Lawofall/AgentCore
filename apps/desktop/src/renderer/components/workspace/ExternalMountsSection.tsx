@@ -10,7 +10,7 @@ import { FolderOpen, Link2Off } from "lucide-react";
 /**
  * C1 trust compensation: list this conversation's ``external/<alias>/`` mounts
  * and revoke (server DELETE + desktop session root). Empty → render nothing.
- * Density mirrors SharedMountsSection; never shows absolute paths.
+ * Density matches conversation file-tree rows; never shows absolute paths.
  */
 export function ExternalMountsSection({
   conversationId,

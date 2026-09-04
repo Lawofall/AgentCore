@@ -29,6 +29,10 @@ from agentcore.workspace.stage_dirs import DRAFTS_DIR
 
 logger = get_logger(__name__)
 
+# Wire heading for the worker ``channel=system`` block (mirrors the LLM system
+# message). Keep in lockstep with CEO's "CEO 系统提示（本回合实际遵循的系统指令）".
+_WORKER_SYSTEM_HEADING = "队员系统提示（本回合实际遵循的系统指令）"
+
 
 def _observe_worker_opening(
     *,
@@ -140,10 +144,12 @@ def _build_messages(
     preamble — the leaf-worker default, or the captain variant for a worker
     authorized to lead one nested sub-team.
 
-    单一源 (上下文传递可视化): the user message is RENDERED from the ordered ContextBlock
-    list :func:`_build_context_blocks` assembles; when ``blocks_sink`` is given, that exact
-    list is handed back so the caller can ship it as the ``run_context`` event — what the
-    user sees == what the LLM eats, one assembly, no second「展示」path to drift."""
+    单一源 (上下文传递可视化): ``system_content`` is assembled once (identity + shared
+    base + contract). The LLM ``system`` message is that string. Material blocks from
+    :func:`_build_context_blocks` RENDER the user message — they are NOT joined with
+    the system block (that would double-inject the prompt into the user turn). When
+    ``blocks_sink`` is given, the sink is ``[system block mirroring system_content]``
+    plus the material list, so ``run_context`` shows the same system the LLM ate."""
     # Stable ``<身份>`` sits in front of the shared base so leaf workers share a
     # cacheable prefix; node contract (form / handoff) stays after the base.
     core, sep, rest = identity.partition("</身份>")
@@ -175,6 +181,13 @@ def _build_messages(
         context_inject=context_inject,
     )
     if blocks_sink is not None:
+        blocks_sink.append(
+            ContextBlock(
+                channel="system",
+                heading=_WORKER_SYSTEM_HEADING,
+                body=system_content,
+            )
+        )
         blocks_sink.extend(blocks)
     user_content = "\n\n".join(f"## {b.heading}\n{b.body}" for b in blocks)
     return [
@@ -193,10 +206,11 @@ def _build_context_blocks(
     *,
     context_inject: Mapping[str, str] | None = None,
 ) -> list[ContextBlock]:
-    """The ordered :class:`ContextBlock` list a worker's opening user message is rendered
-    FROM — the structured single source behind both the prompt and the ``run_context``
-    event (上下文传递可视化, 5 通道之 worker 侧). Each block becomes a「## {heading}\n{body}」
-    section verbatim, so 用户看到的 == LLM 吃到的.
+    """The ordered material :class:`ContextBlock` list a worker's opening **user**
+    message is rendered FROM (上下文传递可视化, worker 侧). Each block becomes a
+    ``## {heading}`` plus body section verbatim. The system prompt is a separate
+    ``role=system`` message; :func:`_build_messages` mirrors it as a ``channel=system``
+    block on the sink without joining it into this list (否则会把系统提示再灌进 user).
 
     团队位置（DAG 拓扑感知）: the worker sees the team-level 原始用户请求 verbatim; on its own
     that reads as a personal mandate, so an UPSTREAM link — blind to the writer downstream —
@@ -286,13 +300,15 @@ def _build_captain_context_blocks(
     手机恒隐藏, 旧 powerMode/usageDetail 门控已退役), the ``history`` it carries, and this
     turn's ``request``.
 
-    Unlike a worker — whose single user message is *rendered FROM* its blocks — the captain
-    is fed a real multi-message chat (system + history + user). So these blocks MIRROR that
-    ``messages`` array (one per channel) rather than being the source it's rendered from;
-    built from the SAME three inputs ``build_captain_executor`` assembles ``messages`` from,
-    they can't drift (用户看到的 == LLM 吃到的). Every fold routes the captain's run_context
-    turn-level (``captainContext`` on the chat bubble), never onto a graph node. 通道⑤ (the
-    CEO reading workers' products back on resume) is a separate ratchet, not this opening."""
+    The captain is fed a real multi-message chat (system + history + user), so these
+    blocks MIRROR that ``messages`` array (one per channel) rather than being the
+    source it's rendered from; built from the SAME three inputs
+    ``build_captain_executor`` assembles ``messages`` from, they can't drift.
+    Workers use the same mirror for ``system`` (see :func:`_build_messages`); their
+    user message is still rendered FROM material blocks only. Every fold routes the
+    captain's run_context turn-level (``captainContext`` on the chat bubble), never
+    onto a graph node. 通道⑤ (the CEO reading workers' products back on resume) is a
+    separate ratchet, not this opening."""
     blocks: list[ContextBlock] = [
         ContextBlock(
             channel="system",
@@ -325,10 +341,10 @@ def _context_block_payloads(blocks: list[ContextBlock]) -> list[dict[str, Any]]:
     :data:`_CONTEXT_BLOCK_BODY_CAP` (head+tail) so the journal stays bounded. ``chars`` is
     the ORIGINAL injected size; ``truncated`` records the budget cap OR this display cap.
 
-    The captain ``system`` block is EXEMPT from the cap: it carries the bounded,
-    internally-built CEO system prompt that the desktop「收到的上下文」dialog shows verbatim
-    (having folded in the old「提示词」button), so it must stay full-fidelity — it is not the
-    unbounded user/dep body 决策④'s cap guards against."""
+    Any ``channel=system`` block is EXEMPT from the cap: it carries the bounded,
+    internally-built system prompt (CEO or worker) that the desktop「收到的上下文」
+    dialog shows verbatim, so it must stay full-fidelity — it is not the unbounded
+    user/dep body 决策④'s cap guards against."""
     payloads: list[dict[str, Any]] = []
     for b in blocks:
         body = b.body

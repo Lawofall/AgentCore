@@ -385,7 +385,7 @@ async def test_navigate_builds_display_contract_and_writes_keyframe(tmp_path):
     payload = json.loads(result.output)
     assert payload["action"] == "navigate" and payload["http_status"] == 200
     assert payload["untrusted_web_content"]["source_url"] == "https://example.com/"
-    assert "note" in payload["untrusted_web_content"]
+    assert "note" not in payload["untrusted_web_content"]
 
 
 @pytest.mark.asyncio
@@ -409,6 +409,7 @@ async def test_snapshot_wraps_tree_untrusted_no_keyframe(tmp_path):
     payload = json.loads(result.output)
     uw = payload["untrusted_web_content"]
     assert uw["elements"] == "[e1] link: More" and uw["accessibility_tree"] == "- document"
+    assert "note" not in uw
     assert payload["snapshot_version"] == 1
 
 

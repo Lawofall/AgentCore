@@ -124,7 +124,7 @@ RUN set -eux; \
       apt-get install -y --no-install-recommends iproute2; \
       rm -rf /var/lib/apt/lists/*; \
     fi
-# iproute2：形状 B 的 netns + veth 由同容器 sandboxd（uid 0）exec `ip`；
+# iproute2：形状 B 的 netns + veth 由独立 sandboxd（uid 0）exec `ip`；
 # base slim 不含 `ip`，随浏览器层一并装（仅 INSTALL_BROWSER=1 时需要）。
 
 # ④ runsc 二进制（INSTALL_RUNSC=0 时该层只拷到一个空目录占位）。
@@ -136,18 +136,18 @@ WORKDIR /app
 
 # 非 root 运行 + 预建 /data 并归属 app：命名卷首次挂载会继承该归属，
 # 避免非 root 进程写挂载点失败的经典坑（DATA_DIR=/data 写工作区/记忆/快照）。
-# 必须建 /home/app：sandbox overlay 以 root 起再 setpriv 降权，HOME 若仍是 /root，
+# 必须建 /home/app：API 以 USER app 跑；HOME 若仍是 /root，
 # asyncpg ssl=prefer 会去读 /root/.postgresql/postgresql.key（0600 root）→
 # PermissionError → /readyz 误判库挂。私钥必须 app 可读且不过宽（0600；0644
-# 会被 OpenSSL/libpq 拒绝）。
+# 会被 OpenSSL/libpq 拒绝）。sandboxd 是独立 uid-0 容器，不跑 postgres 客户端。
 RUN groupadd --system app \
     && useradd --system --gid app --create-home --home-dir /home/app app \
     && mkdir -p /data \
     && chown app:app /data /home/app \
     && chmod 0700 /home/app
 
-# After the home exists: compose user 0:0 still resets HOME=/root at start;
-# entrypoint puts it back. Non-sandbox runs (USER app) keep this ENV.
+# After the home exists: USER app keeps this ENV. sandboxd (uid 0) does not
+# inherit this image USER at runtime (compose sets user 0:0).
 ENV HOME=/home/app \
     USER=app \
     LOGNAME=app

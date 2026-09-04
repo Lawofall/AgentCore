@@ -26,6 +26,7 @@ skip_if:
 
 | Pattern | 场景 | 指针 |
 |---|---|---|
+| TabChip | 内容撑宽横条 tab（右坞 / 浏览器页签 / 文件详情） | L2 `TabChip`：闲置 = 图标+标题；关闭/弹出 overlay 标题尾 |
 | DecisionCard | ask_user / plan_review / approval / escalation | `DecisionCard` + 各 *Card |
 | 推进卡 StageCard | leftover 墓碑，不是开辩入口 | `StageCard.tsx`；**不**并 DecisionCard |
 | StatusStrip | 协作图状态条 | `StatusStrip.tsx` |
@@ -97,6 +98,8 @@ node scripts/check-ui-tokens.mjs --src apps/desktop/src/renderer
 | 动作底栏 | Decision / Dialog 右下锚点；不扫输入框、工具条、协作图干预 |
 | 新面先点名 L3 | 新页 / 新交付物须先说用哪套 Primitive / Pattern，禁止第三套壳。工具箱网格 / 白板工具条 / 辩论室保持登记例外 |
 | 消息操作行 | 窄屏常显；md+ hover / focus-within。助手复制·重新生成、用户复制·编辑、IM 回复与时间共用 `MESSAGE_ACTION_REVEAL_CLASS` |
+| 文档 tab 动作 | 内容撑宽横条（VS Code 编辑器 tab）：关闭/弹出 **overlay** 标题尾，闲置不占槽。活跃 tab 常显 × 并留右槽（避免压住末字）；弹出仅 hover / focus-within。`TabChip`。**否决** Chrome 均分宽 + 流内占位（右坞不是均分条）；**否决** `opacity-0` 仍占 `size-5` |
+| 列表行动作 | 固定列宽（VS Code 资源管理器 / 对话行）：hover / focus-within 才进流，标题 truncate。**否决** 对流内槽 `opacity-0`（闲置仍吃标题宽）。对话行已是；文件夹头 / Git 悬停动作对齐。最近删除右侧由保留期 Badge 定宽，不套 overlay |
 | 品牌字体 | 仅 BrandMark Latin；正文系统栈 |
 | 品牌文案 | 权威 → [产品定位与品牌](/docs/01-产品/产品定位与品牌.md) |
 

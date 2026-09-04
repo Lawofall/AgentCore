@@ -143,6 +143,20 @@ export function buildGlobalEntriesMock(): DocumentNode[] {
       disputedAt: "2026-08-01T09:00:00Z",
       alwaysChars: 900,
     },
+    {
+      id: "g-topic",
+      parentId: null,
+      folderId: null,
+      kind: "document",
+      role: "rule",
+      aiMaintained: true,
+      applyMode: "on_demand",
+      description: "长文写作备忘",
+      name: "主题/写作.md",
+      frontmatterError: null,
+      disputedAt: null,
+      alwaysChars: null,
+    },
   ];
 }
 

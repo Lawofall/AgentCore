@@ -36,7 +36,6 @@ import {
 import { useEffect, useState } from "react";
 import { ExternalMountsSection } from "./ExternalMountsSection";
 import { FilesSection } from "./FilesSection";
-import { SharedMountsSection } from "./SharedMountsSection";
 import { LocalTrashSection, TrashSection } from "./TrashSection";
 import { WorkspaceClientTools } from "./WorkspaceClientTools";
 import { WorkspaceModeBar } from "./WorkspaceModeBar";
@@ -54,6 +53,7 @@ import { WorkspaceModeBar } from "./WorkspaceModeBar";
  *
  * 交接（把活交给云端团队）已下沉为对话时间线里的「后台云端任务」卡（交接「方案 B」/
  * `BackgroundTaskCard`），完成后就地内联评审应用，不再占用工作区侧栏的独立入口。
+ * 协作桌就是当前对话绑定的那棵 `folder:` 树（右坞不再叠第二根）。
  *
  * A draft conversation (no id yet) has no server workspace, so it shows an empty
  * hint until the first turn persists it.
@@ -119,8 +119,6 @@ export function WorkspaceMode() {
     ? "工作区暂无文件。AI 产物会出现在这里；需要时可用工具栏「导出」或工作区菜单「合回到本机」。"
     : "工作区暂无文件。AI 产物会出现在这里；需要时可导出 ZIP。";
 
-  // D2: shared-space mounts are cloud-execution only (local-bound chats have no
-  // cross-runtime dual root).
   const isCloudWorkspace = ws?.location === "cloud";
   const localRootId = ws?.location === "local" ? ws.rootId : null;
   const onCloneGit = isCloudWorkspace
@@ -215,9 +213,6 @@ export function WorkspaceMode() {
       </div>
 
       <ExternalMountsSection conversationId={conversationId} />
-      {isCloudWorkspace ? (
-        <SharedMountsSection conversationId={conversationId} />
-      ) : null}
 
       {trashOpen && (
         <div className="absolute inset-0 z-20 flex">

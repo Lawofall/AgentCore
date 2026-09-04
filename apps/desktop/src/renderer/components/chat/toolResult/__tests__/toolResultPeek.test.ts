@@ -513,6 +513,80 @@ describe("hasToolResultBody", () => {
       ),
     ).toBe(true);
   });
+
+  it("consult with only a name display is not expandable", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "consult",
+          display: { name: "部署流程", origin: "user" },
+          result: "",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("consult with a result body is expandable", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "consult",
+          display: { name: "部署流程" },
+          result: "笔记正文",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("historical consult_skill with only a summary is expandable", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "consult_skill",
+          display: { skill_name: "x", summary: "一行说明" },
+          result: "",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("clean code_diagnostics is not expandable", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "code_diagnostics",
+          display: {
+            kind: "code_diagnostics",
+            status: "ok",
+            diagnostics: [],
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("code_diagnostics with errors is expandable", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "code_diagnostics",
+          display: {
+            kind: "code_diagnostics",
+            status: "ok",
+            diagnostics: [
+              {
+                path: "a.ts",
+                line: 1,
+                column: 1,
+                severity: "error",
+                message: "boom",
+              },
+            ],
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("writeFamilyTitleStat", () => {

@@ -5,10 +5,6 @@ import { workspaceKeys } from "@/lib/queryKeys";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/hooks/useSharedSpaces", () => ({
-  useSharedSpaces: () => ({ data: [], isLoading: false, isError: false }),
-}));
-
 vi.mock("@/hooks/useConversations", () => ({
   useConversations: () => [],
   getConversations: () => [],
@@ -19,8 +15,8 @@ vi.mock("@/hooks/useFolders", () => ({
   getFolders: () => [],
 }));
 
-vi.mock("@/components/files/sharedSpaces/PendingSharedInvites", () => ({
-  PendingSharedInvites: () => null,
+vi.mock("@/components/folders/PendingFolderInvites", () => ({
+  PendingFolderInvites: () => null,
 }));
 
 describe("FileWorkbench mount", () => {
@@ -66,5 +62,10 @@ describe("FileWorkbench mount", () => {
     expect(screen.queryByText("快速对话产生文件后会出现在这里")).toBeNull();
     expect(screen.queryByText("一次快速对话")).toBeNull();
     expect(screen.getByText("还没有文件夹")).toBeTruthy();
+    expect(screen.queryByText("共享空间")).toBeNull();
+    expect(screen.queryByText("挂载共享")).toBeNull();
+    expect(screen.queryByText("还没有共享空间")).toBeNull();
+    expect(screen.queryByLabelText("新建共享空间")).toBeNull();
+    expect(screen.getByText(/与我共享/)).toBeTruthy();
   });
 });

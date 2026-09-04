@@ -300,9 +300,11 @@ class _FakeFolder:
         local_root_id: str | None = None,
         local_subpath: str | None = None,
         rel_path: str | None = None,
+        user_id: str = "u1",
     ) -> None:
         self.id = id
         self.name = name
+        self.user_id = user_id
         self.local_root_id = local_root_id
         self.local_subpath = local_subpath
         self.rel_path = (rel_path or name) if local_root_id is None else None

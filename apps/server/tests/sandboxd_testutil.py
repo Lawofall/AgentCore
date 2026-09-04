@@ -156,3 +156,17 @@ class LoopbackRunscClient(SandboxdClient):
             stderr=asyncio.subprocess.DEVNULL,
         )
         await proc.wait()
+
+    async def preview_register(
+        self,
+        conversation_id: str,
+        process_id: str,
+        *,
+        upstream_ip: str,
+        upstream_port: int,
+        app_port: int,
+    ) -> None:
+        return None
+
+    async def preview_unregister(self, conversation_id: str, process_id: str) -> None:
+        return None

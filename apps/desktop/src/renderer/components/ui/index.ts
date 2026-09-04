@@ -54,6 +54,11 @@ export {
   type SortableTabProps,
   type UseSortableTabIdsOptions,
 } from "./horizontal-tab-strip";
+export {
+  TabChip,
+  type TabChipProps,
+  type TabChipVariant,
+} from "./tab-chip";
 export { Input, Textarea, fieldSurfaceClass } from "./input";
 export { Select } from "./select";
 export {

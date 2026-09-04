@@ -1,4 +1,4 @@
-import { invalidateAllSharedSpaces } from "@/hooks/useSharedSpaces";
+import { invalidateAllFolderSharing } from "@/hooks/useFolderSharing";
 import { clientHeaders } from "@/lib/clientBuildInfo";
 import { queryClient } from "@/lib/queryClient";
 import { bearerAuthHeader, sessionCredentials } from "@/lib/sessionAuth";
@@ -64,15 +64,13 @@ interface ChatMessageUpdatedEvent {
   message: ChatMessageDetail;
 }
 
-/** 多人共享空间：someone invited me (`shared_space_invite`) or a member / their
- * agent changed a space I'm in (`shared_space_changed`). Firehose is a nudge
- * only — the durable paths are `GET /v1/shared-spaces/invites/pending` (loaded
- * with the files rail) and the space event ledger, so handling = invalidate the
- * shared-space queries (+ a heads-up toast for invites). */
-interface SharedSpaceInviteEvent {
-  type: "shared_space_invite";
-  space_id: string;
-  space_name?: string;
+/** 协作桌：someone invited me (`folder_invite`) or membership / files changed
+ * (`folder_changed`). Firehose is a nudge only — durable path is
+ * `GET /v1/folders/invites/pending`. */
+interface FolderInviteEvent {
+  type: "folder_invite";
+  folder_id?: string;
+  folder_name?: string;
 }
 
 /** IM presence: a co-chat user connected/disconnected their firehose. */
@@ -179,18 +177,16 @@ function handleFrame(frame: string): void {
         conv.currentConversationId === e.conversation_id;
       const toastCopy = memoryUpdatedToastCopy(kind, cardShown);
       if (toastCopy) notifyInfo(toastCopy);
-    } else if (event.type === "shared_space_invite") {
-      const e = event as SharedSpaceInviteEvent;
-      invalidateAllSharedSpaces();
+    } else if (event.type === "folder_invite") {
+      const e = event as FolderInviteEvent;
+      invalidateAllFolderSharing();
       notifyInfo(
-        e.space_name
-          ? `你被邀请加入共享空间「${e.space_name}」`
-          : "你有新的共享空间邀请",
+        e.folder_name
+          ? `你被邀请加入「${e.folder_name}」`
+          : "你有新的协作桌邀请",
       );
-    } else if (event.type === "shared_space_changed") {
-      // Refetch space lists / events / mounted trees; the ledger dialog and the
-      // files rail pick the change up via their invalidated queries.
-      invalidateAllSharedSpaces();
+    } else if (event.type === "folder_changed") {
+      invalidateAllFolderSharing();
     } else if (event.type === "presence") {
       const e = event as PresenceEvent;
       if (e.user_id) {

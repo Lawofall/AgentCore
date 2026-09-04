@@ -166,6 +166,20 @@ Preference promotion rule (strict — 偏好.md only):
 - If a summary merely describes what the user asked this session to do, leave
   preferences null (or unchanged) — do not invent durable habits from the genre.
 
+Cross-topic rule (always-files — 偏好.md / 画像.md / folder 画像):
+- A bullet belongs in always-inject ONLY if a later turn about an UNRELATED topic
+  would still need it to choose how to act (who the user is / how to work with them /
+  what THIS desk is). Delete-this-bullet test: if no, do not add it.
+- One-shot lookups (today's log values, this session's investigation, a single
+  "check X" ask) are episode material, not 画像. Leave profile null when summaries
+  only describe this session's task outcome.
+- Machine-local paths (AppData, home directory, OS application logs) are
+  re-fetchable — do not write them into 画像 or 偏好. Folder 导航 is the only place
+  for ops routes, and only when a folder exists.
+- Empty 画像 on a first pass is not a reason to lower that bar. Cold-start may
+  extract explicit identity ("I am a …") or a user-stated general tech stack, but
+  must not fill 画像 from a one-off ask.
+
 Domain split (write-side — 偏好.md):
 - 偏好.md is LIMITED to communication style and work habits only (language, brevity,
   interaction cadence, review style, etc.).
@@ -213,7 +227,10 @@ def _render_semantic_prompt(data: SemanticConsolidateInput) -> str:
             "(merge when over; do not append unboundedly)"
         )
     else:
-        sections.append("# No current folder — leave folder_profile and navigation null.")
+        sections.append(
+            "# No current folder — leave folder_profile and navigation null. "
+            "Do not park this session's investigation or host/shell paths in global 画像."
+        )
     sections.append("Produce the semantic consolidation JSON now.")
     return "\n\n".join(sections)
 

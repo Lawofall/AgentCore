@@ -37,6 +37,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /** 未暂存条目超过此数时，目录分组默认折叠。 */
 const COLLAPSE_DIRS_THRESHOLD = 30;
 
+/** Hover-only chrome: out of flow when idle so the path keeps the row. */
+const hoverOnlyActionsClass =
+  "hidden shrink-0 items-center gap-0.5 group-hover:flex group-focus-within:flex";
+
 function basename(path: string): string {
   const norm = path.replace(/\\/g, "/");
   const i = norm.lastIndexOf("/");
@@ -329,31 +333,35 @@ function ChangeRow({
           ) : null}
         </button>
         {!staged && untracked ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-5 shrink-0 px-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-            disabled={busy}
-            onClick={() => void onDeleteUntracked()}
-            aria-label="删除未跟踪文件"
-            title="移入系统回收站"
-          >
-            <Trash2 size={12} className="text-muted-foreground" />
-          </Button>
+          <span className={hoverOnlyActionsClass}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-5 shrink-0 px-1"
+              disabled={busy}
+              onClick={() => void onDeleteUntracked()}
+              aria-label="删除未跟踪文件"
+              title="移入系统回收站"
+            >
+              <Trash2 size={12} className="text-muted-foreground" />
+            </Button>
+          </span>
         ) : showDiscard ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-5 shrink-0 px-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-            disabled={busy}
-            onClick={() => void onDiscard()}
-            aria-label="丢弃改动"
-            title="丢弃未暂存改动"
-          >
-            <Undo2 size={12} className="text-muted-foreground" />
-          </Button>
+          <span className={hoverOnlyActionsClass}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-5 shrink-0 px-1"
+              disabled={busy}
+              onClick={() => void onDiscard()}
+              aria-label="丢弃改动"
+              title="丢弃未暂存改动"
+            >
+              <Undo2 size={12} className="text-muted-foreground" />
+            </Button>
+          </span>
         ) : null}
         <Button
           type="button"
@@ -442,9 +450,9 @@ function ChangeGroupList({
         const fullDirTitle = g.dir || "仓根";
 
         return (
-          <div key={`${keyPrefix}:${g.dir || "."}`} className="group/dir">
+          <div key={`${keyPrefix}:${g.dir || "."}`}>
             {showHeader ? (
-              <div className="flex h-6 items-center gap-0.5 px-1.5 hover:bg-muted/40">
+              <div className="group flex h-6 items-center gap-0.5 px-1.5 hover:bg-muted/40">
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-center gap-0.5 text-left"
@@ -470,61 +478,63 @@ function ChangeGroupList({
                     {g.entries.length}
                   </span>
                 </button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 shrink-0 px-1 opacity-0 group-hover/dir:opacity-100 focus-visible:opacity-100"
-                  onClick={() =>
-                    void (
-                      staged
-                        ? gitUnstage(rootId, paths)
-                        : gitStage(rootId, paths)
-                    ).then((ok) => ok && onMutated())
-                  }
-                  aria-label={staged ? "取消暂存本组" : "暂存本组"}
-                  title={staged ? "取消暂存本组" : "暂存本组"}
-                >
-                  {staged ? <Minus size={11} /> : <Plus size={11} />}
-                </Button>
-                {!staged && discardable.length > 0 ? (
+                <span className={hoverOnlyActionsClass}>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-5 shrink-0 px-1 opacity-0 group-hover/dir:opacity-100 focus-visible:opacity-100"
+                    className="h-5 shrink-0 px-1"
                     onClick={() =>
-                      void gitDiscard(
-                        rootId,
-                        discardable.map((e) => e.path),
+                      void (
+                        staged
+                          ? gitUnstage(rootId, paths)
+                          : gitStage(rootId, paths)
                       ).then((ok) => ok && onMutated())
                     }
-                    aria-label="丢弃本组改动"
-                    title="丢弃本组未暂存改动"
+                    aria-label={staged ? "取消暂存本组" : "暂存本组"}
+                    title={staged ? "取消暂存本组" : "暂存本组"}
                   >
-                    <Undo2 size={11} className="text-muted-foreground" />
+                    {staged ? <Minus size={11} /> : <Plus size={11} />}
                   </Button>
-                ) : null}
-                {!staged && untracked.length > 0 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 shrink-0 px-1 opacity-0 group-hover/dir:opacity-100 focus-visible:opacity-100"
-                    onClick={() => {
-                      const rels = untracked
-                        .map((e) => repoPathToWorkspaceRel(e.path, subpath))
-                        .filter((p): p is string => p != null && p !== "");
-                      void deleteUntrackedFiles(rootId, rels).then(
-                        (ok) => ok && onMutated(),
-                      );
-                    }}
-                    aria-label="删除本组未跟踪文件"
-                    title="本组未跟踪文件移入回收站"
-                  >
-                    <Trash2 size={11} className="text-muted-foreground" />
-                  </Button>
-                ) : null}
+                  {!staged && discardable.length > 0 ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 shrink-0 px-1"
+                      onClick={() =>
+                        void gitDiscard(
+                          rootId,
+                          discardable.map((e) => e.path),
+                        ).then((ok) => ok && onMutated())
+                      }
+                      aria-label="丢弃本组改动"
+                      title="丢弃本组未暂存改动"
+                    >
+                      <Undo2 size={11} className="text-muted-foreground" />
+                    </Button>
+                  ) : null}
+                  {!staged && untracked.length > 0 ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 shrink-0 px-1"
+                      onClick={() => {
+                        const rels = untracked
+                          .map((e) => repoPathToWorkspaceRel(e.path, subpath))
+                          .filter((p): p is string => p != null && p !== "");
+                        void deleteUntrackedFiles(rootId, rels).then(
+                          (ok) => ok && onMutated(),
+                        );
+                      }}
+                      aria-label="删除本组未跟踪文件"
+                      title="本组未跟踪文件移入回收站"
+                    >
+                      <Trash2 size={11} className="text-muted-foreground" />
+                    </Button>
+                  ) : null}
+                </span>
               </div>
             ) : null}
             {!collapsed

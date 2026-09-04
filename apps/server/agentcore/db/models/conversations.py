@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Index,
     Integer,
@@ -226,6 +227,57 @@ class Folder(Base):
     # soft-deleted before this column existed; deliberately NOT backfilled, so a
     # brand-new recycle bin under-lists rather than surfacing old auto-desk junk.
     delete_origin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+
+class FolderMember(Base):
+    """Collaboration-desk membership (双模式工作区 §八). Independent of IM chat_members.
+
+    Owner is ``Folder.user_id``, not a row here. Invited members are editor/viewer
+    with pending → accepted. Blocking auto-rejects pending; does not kick accepted.
+    """
+
+    __tablename__ = "folder_members"
+    __table_args__ = (
+        CheckConstraint(
+            "role in ('editor', 'viewer')",
+            name="ck_folder_members_role",
+        ),
+        CheckConstraint(
+            "state in ('accepted', 'pending')",
+            name="ck_folder_members_state",
+        ),
+        Index("ix_folder_members_user_id", "user_id"),
+    )
+
+    folder_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
+    user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
+    role: Mapped[str] = mapped_column(String(20))
+    state: Mapped[str] = mapped_column(
+        String(20), default="pending", server_default=text("'pending'")
+    )
+    invited_by: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), nullable=True)
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+
+
+class ConversationPreference(Base):
+    """Per-user pin/archive for a conversation (对标 ChatMember.pinned).
+
+    Conversation.pinned / archived stay as legacy columns; list and PATCH read
+    this table so two members cannot stomp each other.
+    """
+
+    __tablename__ = "conversation_preferences"
+    __table_args__ = (Index("ix_conversation_preferences_user_id", "user_id"),)
+
+    conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
+    user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
+    pinned: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    archived: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()"), onupdate=datetime.now
+    )
 
 
 # --- Messages ---

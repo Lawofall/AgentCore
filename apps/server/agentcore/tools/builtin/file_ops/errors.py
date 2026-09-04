@@ -12,7 +12,6 @@ from agentcore.runtime.facts import (
 )
 from agentcore.tools.protocol import ToolResult
 from agentcore.workspace import external_mounts as _external_mounts
-from agentcore.workspace import shared_mounts as _shared_mounts
 from agentcore.workspace._paths import is_access_denied_oserror
 from agentcore.workspace.limits import (
     FILE_TOO_LARGE_DETAIL,
@@ -210,7 +209,7 @@ def _path_missing_error(error: str, start: float) -> ToolResult:
 
 # Backend ``OutsideWorkspace`` is reused for two different facts:
 # 1) path is not inside any known root (traversal) — message is the path;
-# 2) path *is* inside a mounted root (``external/<alias>/`` / ``shared/…``)
+# 2) path *is* inside a mounted root (``external/<alias>/``)
 #    but the op is not authorized — message is a policy sentence.
 # File tools must not rewrite (2) into 「超出了工作区范围」: that root is legal;
 # the model then copies the in-project example and writes into a forbidden tree.
@@ -227,8 +226,6 @@ _MOUNT_OP_DENIED_MARKERS: tuple[str, ...] = (
     _external_mounts._CROSS_MOUNT_COPY_MSG,
     _external_mounts._CROSS_MOVE_MSG,
     _external_mounts._CROSS_MOUNT_MOVE_MSG,
-    _shared_mounts._READONLY_MSG,
-    _shared_mounts._REVOKED_MSG,
 )
 
 

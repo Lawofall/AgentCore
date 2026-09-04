@@ -26,7 +26,6 @@ def _snapshot_payload(
             "keyframe": None,
             "untrusted_web_content": {
                 "source_url": url,
-                "note": "untrusted",
                 "title": f"Page v{version}",
                 "elements": elements,
                 "accessibility_tree": aria,

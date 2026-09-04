@@ -95,7 +95,7 @@ describe("useGraphLayout · keep graph during relayout", () => {
   });
 });
 
-describe("useGraphLayout · measure does not secondary-ELK", () => {
+describe("useGraphLayout · structure identity does not secondary-ELK", () => {
   beforeEach(() => {
     clearLayoutResultCache();
     computeLayout.mockReset();
@@ -127,10 +127,13 @@ describe("useGraphLayout · measure does not secondary-ELK", () => {
     );
   });
 
-  it("records RF heights but never schedules a second ELK pass", async () => {
+  it("same topology, new execution object: no second ELK; footprint stays NODE_HEIGHT", async () => {
     const emptyExpand = new Set<string>();
-    const { result } = renderHook(() =>
-      useGraphLayout(exec(["be", "fe"]), "leftright", "view", emptyExpand),
+    const first = exec(["be", "fe"]);
+    const { result, rerender } = renderHook(
+      ({ execution }: { execution: Execution }) =>
+        useGraphLayout(execution, "leftright", "view", emptyExpand),
+      { initialProps: { execution: first } },
     );
 
     await waitFor(() => expect(result.current.layoutReady).toBe(true));
@@ -144,24 +147,8 @@ describe("useGraphLayout · measure does not secondary-ELK", () => {
     expect(structuralSizes.be.height).toBe(NODE_HEIGHT);
     expect(structuralSizes.fe.height).toBe(NODE_HEIGHT);
 
-    await act(async () => {
-      result.current.onNodesChange([
-        {
-          type: "dimensions",
-          id: "be",
-          dimensions: { width: 210, height: 180 },
-        },
-        {
-          type: "dimensions",
-          id: "fe",
-          dimensions: { width: 210, height: 200 },
-        },
-      ]);
-    });
+    rerender({ execution: { ...first, runs: [...first.runs] } });
 
-    expect(result.current.nodeHeights.be).toBe(180);
-    expect(result.current.nodeHeights.fe).toBe(200);
-    // Layout footprint stays fixed; no secondary ELK.
     expect(computeLayout.mock.calls.length).toBe(afterStructural);
     expect(result.current.nodeSizes.be.height).toBe(NODE_HEIGHT);
     expect(result.current.nodeSizes.fe.height).toBe(NODE_HEIGHT);

@@ -20,8 +20,10 @@ describe("ManualReference", () => {
     expect(screen.getByText("工作区与文件")).toBeTruthy();
     expect(screen.getAllByText(/打开本机文件夹/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/我的文件/).length).toBeGreaterThan(0);
-    expect(screen.getByText("共享空间")).toBeTruthy();
-    expect(screen.getByText(/不是第三种文件夹/)).toBeTruthy();
+    expect(screen.getByText("协作桌")).toBeTruthy();
+    expect(screen.queryByText(/不是第三种文件夹/)).toBeNull();
+    expect(screen.queryByText("共享空间")).toBeNull();
+    expect(screen.getAllByText(/与我共享/).length).toBeGreaterThan(0);
     expect(screen.getByText(/模式条/)).toBeTruthy();
     expect(screen.getAllByText(/文件夹即工作区/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/项目即工作区/)).toBeNull();

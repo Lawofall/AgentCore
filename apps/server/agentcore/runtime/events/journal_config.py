@@ -38,7 +38,7 @@ _PROCESS_RESULT_CAP = 8000
 # display budget: ``team_preview_resolved`` is median 98B / ~184KB mean / 7.9MB max
 # — 1 MiB sits above legitimate notes and below "one row fills the disk". Marker
 # includes original length so a cap is visible. ``run_context`` is excluded (own
-# 16KB head+tail + captain ``system`` exemption).
+# 16KB head+tail + ``channel=system`` exemption).
 _JOURNAL_PAYLOAD_SAFETY_CAP = 1_048_576
 
 

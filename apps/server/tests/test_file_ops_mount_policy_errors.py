@@ -21,7 +21,6 @@ from agentcore.tools.builtin.web.download_url import DownloadUrlTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace import external_mounts as em
-from agentcore.workspace import shared_mounts as sm
 from agentcore.workspace.external_mounts import ExternalMount, organize_deny_error
 from agentcore.workspace.protocol import OutsideWorkspace
 from agentcore.workspace.server import ServerWorkspace
@@ -206,7 +205,7 @@ async def test_grep_organize_root_surfaces_policy(
 
 def test_mount_op_denied_markers_are_exactly_the_module_msg_constants():
     """Discriminator is the imported ``*_MSG`` set — prefixes / 「（拒绝」 cannot sneak back."""
-    expected = _module_msg_constants(em) | _module_msg_constants(sm)
+    expected = _module_msg_constants(em)
     assert expected, "policy modules exposed no *_MSG constants (parse failure?)"
     assert frozenset(_MOUNT_OP_DENIED_MARKERS) == expected
     assert "（拒绝" not in _MOUNT_OP_DENIED_MARKERS
@@ -215,7 +214,7 @@ def test_mount_op_denied_markers_are_exactly_the_module_msg_constants():
 def test_errors_py_does_not_rescribe_policy_sentences():
     """A wording change in the source modules must not leave a stale literal here."""
     src = Path(file_ops_errors.__file__).read_text(encoding="utf-8")
-    for sentence in _module_msg_constants(em) | _module_msg_constants(sm):
+    for sentence in _module_msg_constants(em):
         assert sentence not in src, f"hand-copied policy sentence in errors.py: {sentence!r}"
     assert '"（拒绝"' not in src and "'（拒绝'" not in src
 
@@ -231,9 +230,6 @@ def test_errors_py_does_not_rescribe_policy_sentences():
         em.cross_root_copy_error("a", "b"),
         em.cross_root_move_error("a", None),
         em.cross_root_move_error("a", "b"),
-        sm.readonly_write_error("shared/s/a.md"),
-        sm.revoked_error("shared/s/a.md"),
-        sm.revoked_error(""),
     ],
 )
 def test_policy_sentence_is_surfaced_as_is(reason: str | None):

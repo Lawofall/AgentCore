@@ -8,11 +8,11 @@ import {
   debateFacePrimaryFromContext,
   pickAgentNodeIdlePrimary,
 } from "@/components/chat/debate/debateFaceCopy";
+import { toDebateModel } from "@/components/chat/debate/model";
 // @vitest-environment jsdom
 /**
- * 辩论 L0 可见性：真实 multi_agent_debate 向量折叠后，推进线 / 结论钩子 / 图门可消费。
+ * 辩论 L0 可见性：真实 multi_agent_debate 向量折叠后，辩论室 / 结论钩子 / 图门可消费。
  */
-import { buildModeratorLedger } from "@/components/chat/detail/debateModerator";
 import { planCapabilities } from "@/components/graph/planCapabilities";
 import { foldToProjectedTurn } from "@/protocol/conformanceFold";
 import type { Execution, RunNode } from "@/stores/execution";
@@ -101,18 +101,17 @@ function toExecution(name: string): Execution {
 }
 
 describe("debate L0 visibility · multi_agent_debate fixture", () => {
-  it("ledger + brief CTA + graph gate ready for chat default surface", () => {
+  it("debate room + brief CTA + graph gate ready for chat default surface", () => {
     const execution = toExecution("multi_agent_debate");
 
     expect(planCapabilities(execution.planType).showsTeamGraph).toBe(true);
     expect(teamHasStartedRuns(execution.runs)).toBe(true);
 
-    const ledger = buildModeratorLedger(execution);
-    expect(ledger).not.toBeNull();
-    if (!ledger) return;
-    expect(ledger.rounds.length).toBeGreaterThan(0);
-    expect(ledger.rounds.some((r) => r.focus || r.summary)).toBe(true);
-    expect(JSON.stringify(ledger)).not.toMatch(/score|比分|记分/i);
+    const model = toDebateModel(execution);
+    expect(model).not.toBeNull();
+    if (!model) return;
+    expect(model.rounds.length).toBeGreaterThan(0);
+    expect(model.rounds.some((r) => r.focus || r.summary)).toBe(true);
 
     expect(debatePreviewSubtitle(execution)).toMatch(/置信/);
     const hook = debateConclusionHook(execution);

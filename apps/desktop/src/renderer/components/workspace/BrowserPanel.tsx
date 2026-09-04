@@ -19,12 +19,11 @@
  * - 无 browserApi（Web）→ sandbox create（若无 sid）+ POST navigate；拒 localhost。
  */
 import {
-  Button,
   HorizontalTabStrip,
   IconButton,
   Input,
-  NO_TAB_DRAG_ATTR,
   SortableTab,
+  TabChip,
   useSortableTabIds,
 } from "@/components/ui";
 import {
@@ -73,7 +72,6 @@ import {
   Plus,
   RotateCw,
   Sparkles,
-  X,
 } from "lucide-react";
 import {
   type FormEvent,
@@ -620,46 +618,26 @@ export function BrowserPanel({
                 Boolean(window.fsApi?.previewArchive));
             return (
               <ContextMenu key={page.id}>
-                <SortableTab
-                  id={page.id}
-                  getItemProps={getItemProps}
-                  className={`group/btab flex max-w-[140px] shrink-0 items-center rounded-lg ${
-                    active
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-accent/50"
-                  }`}
-                >
+                <SortableTab id={page.id} getItemProps={getItemProps}>
                   <ContextMenuTrigger asChild>
-                    <div className="flex min-w-0 flex-1 items-center">
-                      <Button
-                        variant="ghost"
-                        onClick={() => setActivePage(page.id)}
-                        className="h-7 max-w-[110px] truncate rounded-none px-2 py-0 text-xs font-normal"
-                        icon={
-                          isAiPage ? (
-                            <Sparkles
-                              size={12}
-                              className="shrink-0 opacity-60"
-                              aria-hidden
-                            />
-                          ) : (
-                            <Globe size={12} className="shrink-0 opacity-60" />
-                          )
-                        }
-                        title={isAiPage ? "AI 打开的页" : "你打开的页"}
-                      >
-                        {page.title || "新标签页"}
-                      </Button>
-                      <IconButton
-                        size="sm"
-                        onClick={() => onClosePage(page.id)}
-                        aria-label={`关闭 ${page.title || "新标签页"}`}
-                        className="mr-0.5 size-5 opacity-0 group-hover/btab:opacity-100"
-                        {...{ [NO_TAB_DRAG_ATTR]: "" }}
-                      >
-                        <X size={11} />
-                      </IconButton>
-                    </div>
+                    <TabChip
+                      active={active}
+                      icon={
+                        isAiPage ? (
+                          <Sparkles
+                            size={12}
+                            className="shrink-0 opacity-60"
+                            aria-hidden
+                          />
+                        ) : (
+                          <Globe size={12} className="shrink-0 opacity-60" />
+                        )
+                      }
+                      label={page.title || "新标签页"}
+                      title={isAiPage ? "AI 打开的页" : "你打开的页"}
+                      onSelect={() => setActivePage(page.id)}
+                      onClose={() => onClosePage(page.id)}
+                    />
                   </ContextMenuTrigger>
                 </SortableTab>
                 <ContextMenuContent className="min-w-44">

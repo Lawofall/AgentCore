@@ -19,7 +19,7 @@ export const STATUS_TONE: Record<
   skipped: "neutral",
 };
 
-/** Align with desktop assistant clamp (~640px), not the old 480-char console fold. */
+/** 复盘扫读密度：超长终稿先夹一层（约 640px），不跟桌面对话「终稿全文」。 */
 const COLLAPSE_CHARS = 1600;
 const COLLAPSE_LINES = 24;
 

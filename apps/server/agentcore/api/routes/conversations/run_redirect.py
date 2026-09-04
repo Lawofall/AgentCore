@@ -20,7 +20,7 @@ from agentcore.core.logging import get_logger
 from agentcore.db.repositories import AgentAuditEventRepository, ConversationRepository
 from agentcore.runtime.runs.intervene import accept_run_redirect
 
-from ._helpers import _require_owned_conversation
+from ._helpers import _require_conversation_write
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -42,7 +42,7 @@ async def submit_run_redirect(
     The response says whether the engine actually took it (``accepted``): a run the
     live plan can't reach never enters the queue, and never reports success.
     """
-    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, conv_repo._session)
     ack = accept_run_redirect(
         execution_id=body.execution_id,
         run_id=body.run_id,
@@ -94,7 +94,7 @@ async def accept_run_outcome(
     new table, no new SSE event. Owner-scoped (对话归属校验防 IDOR) and idempotent per (turn, run):
     a second accept for the same run is a no-op (``recorded=false``).
     """
-    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, conv_repo._session)
     rows = await audit_repo.list_for_turn(conversation_id=conversation_id, turn_id=message_id)
     # Idempotent per (turn, run): a repeated accept (double-click / retry) must not append twice.
     if any(r.action == "run.outcome_accepted" and r.run_id == body.run_id for r in rows):

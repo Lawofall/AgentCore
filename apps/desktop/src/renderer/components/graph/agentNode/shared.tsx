@@ -18,6 +18,7 @@ import {
 } from "@/stores/execution";
 import type { WorkerRunPhase } from "@/stores/execution";
 import { Check, Loader2, X } from "lucide-react";
+import type { DebateGraphIdentity } from "./debateIdentity";
 import type { FaceBadgeKey } from "./faceBudget";
 
 export interface AgentNodeData {
@@ -517,6 +518,7 @@ export interface AgentNodePresentation {
   ariaLabel: string;
   peekActivity: { heading: string; text: string; italic?: boolean } | null;
   peekTags: string[];
+  identity: DebateGraphIdentity;
   checkpointFace: { label: string; cls: string } | null;
   reviewConcernFace: { label: string; cls: string } | null;
   statusFace: { text: string; cls: string; tickElapsed: boolean };
@@ -527,7 +529,7 @@ export interface AgentNodePresentation {
   handoffFace: string | null;
   /**
    * face 徽标预算（批 R3 决策 3）：本 face 该显示哪几枚功能徽标（同屏 ≤2，
-   * 优先级 待拍板 > 异常 > 过程性）。身份类（立场）不在内、恒显。被挤出的
+   * 优先级 待拍板 > 异常 > 过程性）。立场改走阵营色 + 头像字，不占字标。被挤出的
    * 标记不进此集合，但仍在 {@link ariaLabel} 与 hover peek 里可达（a11y 不回归）。
    */
   visibleFaceBadges: ReadonlySet<FaceBadgeKey>;

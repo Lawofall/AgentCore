@@ -6,7 +6,7 @@
 import { MANUAL_HELP } from "@/components/ManualHelpLink";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DEMO_DEBATE_MODEL } from "@/pages/toolbox/manual/embeds/demoDebate";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DebateModel } from "../../model";
@@ -62,5 +62,17 @@ describe("Scoreboard manual help", () => {
     expect(screen.queryByText("你站")).toBeNull();
     expect(screen.queryByLabelText("动量图例")).toBeNull();
     expect(screen.queryByRole("button", { name: /净分构成/ })).toBeNull();
+  });
+
+  it("这场怎么读：不用你收场", () => {
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <Scoreboard model={DEMO_DEBATE_MODEL} onScrollTo={() => {}} />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "这场怎么读" }));
+    expect(screen.getByText(/不用你收场/)).toBeTruthy();
   });
 });

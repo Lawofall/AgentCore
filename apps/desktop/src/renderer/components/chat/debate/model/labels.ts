@@ -9,7 +9,7 @@ import type { DebateForm, DebateRoundModel, RoundVerdictView } from "./types";
  * 二元对抗是独立视觉语义，不走 `--agent-N` 身份色板，而用 `--debate-side-pro`（蓝）/
  * `--debate-side-con`（红）——一眼红蓝对垒、与并排左支持/右反对一致，且色相/彩度与状态色分离
  * （见 `packages/design-tokens/tokens.css` · color-tokens.mdc）。多方（圆桌 / 红队 / subject…）无
- * 对立轴 → 落回按名字 hash ({@link agentColorVar})。live↔收场同一 key 恒同色，跨群聊 / 简报一致。
+ * 对立轴 → 落回按名字 hash ({@link agentColorVar})。live↔收场同一 key 恒同色，跨群聊 / 简报 / 协作图节点一致。
  */
 const DEBATE_STANCE_COLOR: Record<string, string> = {
   pro: "var(--debate-side-pro)",
@@ -22,8 +22,8 @@ export function debateSideColorVar(sideKey: string, name: string): string {
 }
 
 /**
- * 一轮的「交锋信号」(verdict 派生) —— 驱动时间线轴点 / 收敛信号带的配色与语义，让一轮在
- * 「认知推进线」上一眼读出状态：在飞 > 收敛 > 有交锋 > 各说各话 (色板见 `debateSignalDot`)。
+ * 一轮的「交锋信号」(verdict 派生) —— 驱动辩论室时间线轴点 / 收敛信号带的配色与语义：
+ * 在飞 > 收敛 > 有交锋 > 各说各话 (色板见 `debateSignalDot`)。
  */
 export function roundSignal(round: DebateRoundModel): DebateSignal {
   if (round.inFlight) return "inflight";

@@ -23,15 +23,21 @@ import {
   GLOBAL_PREFERENCES_PATH,
   GLOBAL_PROFILE_PATH,
   MEMORY_UPDATES_PATH,
+  isMemoryTopicPath,
   memoryProjectNavigationPath,
   memoryProjectProfilePath,
   memoryTopicPath,
+  parseProjectMemoryFolderId,
 } from "@/services/sources/memorySource";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ChevronDown,
+  ChevronRight,
   Eraser,
   FileText,
+  Folder,
+  FolderOpen,
   History,
   Loader2,
   Pencil,
@@ -39,8 +45,9 @@ import {
   Trash2,
   Undo2,
 } from "lucide-react";
-import { type ReactNode, forwardRef, useState } from "react";
+import { type ReactNode, forwardRef, useEffect, useState } from "react";
 import { DisputeEntryDialog } from "./DisputeEntryDialog";
+import { loadMemoryTopicsExpanded, saveMemoryTopicsExpanded } from "./storage";
 
 /** Which layer a section renders: GLOBAL entries, or one project's. */
 export type EntryScope =
@@ -69,6 +76,34 @@ const ROW_CHARS_FLOOR = 1000;
 
 /** Fixed AI core leaf names (aligned with server ``memory.store`` / write_guards). */
 const AI_CORE_NAMES = new Set(["偏好.md", "画像.md", "导航.md"]);
+
+const TOPIC_NAME_RE = /^主题\//;
+
+/** Storage name ``主题/<slug>.md`` — logical dir, not a documents-tree folder. */
+export function isTopicEntryName(name: string): boolean {
+  return TOPIC_NAME_RE.test(name);
+}
+
+/** Rail label inside the 主题 folder: strip the ``主题/`` prefix. */
+export function topicEntryDisplayName(name: string): string {
+  return name.replace(TOPIC_NAME_RE, "");
+}
+
+function topicFolderKey(scope: EntryScope): string {
+  return scope.kind === "global" ? "global" : scope.folderId;
+}
+
+/** True when the open tab is a 主题 leaf of *this* scope (not another desk's). */
+function topicPathBelongsToScope(
+  path: string | null,
+  scope: EntryScope,
+): boolean {
+  if (!path || !isMemoryTopicPath(path)) return false;
+  const folderId = parseProjectMemoryFolderId(path);
+  return scope.kind === "global"
+    ? folderId === null
+    : folderId === scope.folderId;
+}
 
 /** AI-maintained 画像 / 偏好 / 导航 — named slots; clear via empty PUT, not DELETE. */
 export function isAiCoreMemoryLeaf(
@@ -137,9 +172,10 @@ function mergeDisplayRows(
   scope: EntryScope,
   docs: DocumentNode[],
 ): DisplayRow[] {
-  const present = new Set(docs.map((d) => d.name));
+  const mainDocs = docs.filter((d) => !isTopicEntryName(d.name));
+  const present = new Set(mainDocs.map((d) => d.name));
   const rows: DisplayRow[] = [
-    ...docs.map((doc): DisplayRow => ({ kind: "doc", doc })),
+    ...mainDocs.map((doc): DisplayRow => ({ kind: "doc", doc })),
     ...corePlaceholders(scope)
       .filter((leaf) => !present.has(leaf.name))
       .map((leaf): DisplayRow => ({ kind: "placeholder", leaf })),
@@ -149,6 +185,17 @@ function mergeDisplayRows(
     const bn = b.kind === "doc" ? b.doc.name : b.leaf.name;
     return an.localeCompare(bn, "zh");
   });
+}
+
+function topicEntryRows(docs: DocumentNode[]): DocumentNode[] {
+  return docs
+    .filter((d) => isTopicEntryName(d.name))
+    .sort((a, b) =>
+      topicEntryDisplayName(a.name).localeCompare(
+        topicEntryDisplayName(b.name),
+        "zh",
+      ),
+    );
 }
 
 /**
@@ -208,8 +255,9 @@ export function formatAlwaysChars(n: number): string {
 /**
  * Flat entry list for one AgentCore scope (目标形态 · 文件页形态).
  * No 记忆/规则/文档 folders — partition is scope only; each row shows 常驻/按需 +
- * description + frontmatter errors. Create lives on the section / `.agentcore`
- * header so it still works while this list is unmounted (collapsed).
+ * description + frontmatter errors. ``主题/*.md`` nest under a default-collapsed
+ * 主题 row. Create lives on the section / `.agentcore` header so it still works
+ * while this list is unmounted (collapsed).
  */
 export function EntriesSection({
   scope,
@@ -237,6 +285,10 @@ export function EntriesSection({
   const [disputeBusy, setDisputeBusy] = useState(false);
   const [clearing, setClearing] = useState<DocumentNode | null>(null);
   const [clearBusy, setClearBusy] = useState(false);
+  const foldKey = topicFolderKey(scope);
+  const [topicsOpen, setTopicsOpen] = useState(() =>
+    loadMemoryTopicsExpanded().has(foldKey),
+  );
 
   const entries = useQuery({
     queryKey: [...ENTRIES_QUERY_KEY, folderId ?? "global"],
@@ -248,7 +300,14 @@ export function EntriesSection({
 
   const rows = entries.data ?? [];
   const displayRows = mergeDisplayRows(scope, rows);
+  const topicRows = topicEntryRows(rows);
+  const topicActive = topicPathBelongsToScope(memoryActivePath, scope);
   const leafPad = indent + 8;
+  const topicLeafPad = leafPad + 12;
+
+  useEffect(() => {
+    if (topicActive) setTopicsOpen(true);
+  }, [topicActive]);
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ENTRIES_QUERY_KEY });
@@ -256,9 +315,15 @@ export function EntriesSection({
 
   const renameEntry = async (doc: DocumentNode) => {
     if (doc.aiMaintained) return;
-    const input = window.prompt("条目名称", doc.name);
+    const input = window.prompt(
+      "条目名称",
+      isTopicEntryName(doc.name) ? topicEntryDisplayName(doc.name) : doc.name,
+    );
     if (input === null) return;
-    const name = ensureMdName(input.trim());
+    const trimmed = input.trim();
+    const name = isTopicEntryName(doc.name)
+      ? `主题/${ensureMdName(trimmed.replace(/^主题\//, ""))}`
+      : ensureMdName(trimmed);
     if (name === ".md" || name === doc.name) return;
     try {
       await renameDocument(doc.id, name);
@@ -346,7 +411,10 @@ export function EntriesSection({
       ? memoryActivePath === target.path
       : documentActivePath === target.path;
 
-  const renderDocRow = (doc: DocumentNode) => {
+  const renderDocRow = (
+    doc: DocumentNode,
+    opts?: { paddingLeft?: number; label?: string },
+  ) => {
     const mode = doc.applyMode;
     const other: DocumentApplyMode = mode === "always" ? "on_demand" : "always";
     const canToggleApply = !doc.aiMaintained && !doc.frontmatterError;
@@ -356,11 +424,11 @@ export function EntriesSection({
       <ContextMenu key={doc.id}>
         <ContextMenuTrigger asChild>
           <EntryLeafRow
-            paddingLeft={leafPad}
+            paddingLeft={opts?.paddingLeft ?? leafPad}
             icon={
               <FileText size={14} className="shrink-0 text-muted-foreground" />
             }
-            label={doc.name}
+            label={opts?.label ?? doc.name}
             description={doc.description}
             frontmatterError={doc.frontmatterError}
             disputed={disputed}
@@ -511,11 +579,68 @@ export function EntriesSection({
           </p>
         </div>
       ) : (
-        displayRows.map((row) =>
-          row.kind === "doc"
-            ? renderDocRow(row.doc)
-            : renderPlaceholderRow(row.leaf),
-        )
+        <>
+          {displayRows.map((row) =>
+            row.kind === "doc"
+              ? renderDocRow(row.doc)
+              : renderPlaceholderRow(row.leaf),
+          )}
+          {topicRows.length > 0 ? (
+            <div>
+              <button
+                type="button"
+                aria-expanded={topicsOpen}
+                aria-label={`主题，${topicRows.length} 条`}
+                onClick={() => {
+                  setTopicsOpen((open) => {
+                    const next = !open;
+                    const stored = loadMemoryTopicsExpanded();
+                    if (next) stored.add(foldKey);
+                    else stored.delete(foldKey);
+                    saveMemoryTopicsExpanded(stored);
+                    return next;
+                  });
+                }}
+                style={{ paddingLeft: leafPad }}
+                className="flex h-7 w-full items-center gap-1.5 rounded-lg pr-1 text-left text-sm text-foreground hover:bg-accent/60"
+              >
+                {topicsOpen ? (
+                  <ChevronDown
+                    size={14}
+                    className="shrink-0 text-muted-foreground"
+                  />
+                ) : (
+                  <ChevronRight
+                    size={14}
+                    className="shrink-0 text-muted-foreground"
+                  />
+                )}
+                {topicsOpen ? (
+                  <FolderOpen
+                    size={14}
+                    className="shrink-0 text-muted-foreground"
+                  />
+                ) : (
+                  <Folder
+                    size={14}
+                    className="shrink-0 text-muted-foreground"
+                  />
+                )}
+                <span className="min-w-0 flex-1 truncate">
+                  主题 · {topicRows.length}
+                </span>
+              </button>
+              {topicsOpen
+                ? topicRows.map((doc) =>
+                    renderDocRow(doc, {
+                      paddingLeft: topicLeafPad,
+                      label: topicEntryDisplayName(doc.name),
+                    }),
+                  )
+                : null}
+            </div>
+          ) : null}
+        </>
       )}
 
       <DisputeEntryDialog

@@ -133,6 +133,7 @@ describe("ToolLine · 过程工具默认折叠", () => {
     fireEvent.click(screen.getByText("Run code"));
     expect(screen.getByText(/hello world/)).toBeTruthy();
     expect(screen.getByText(/退出码 0/)).toBeTruthy();
+    expect(screen.getAllByText("python")).toHaveLength(1);
   });
 
   it("keeps web_search results collapsed on completion", () => {
@@ -173,6 +174,7 @@ describe("ToolLine · 过程工具默认折叠", () => {
     expect(screen.queryByText("深圳天气预报")).toBeNull();
     fireEvent.click(screen.getByText("Search web"));
     expect(screen.getByText("深圳天气预报")).toBeTruthy();
+    expect(screen.queryByText(/搜索：/)).toBeNull();
   });
 
   it("inlines web_search result count into the title row when collapsed", () => {
@@ -460,6 +462,10 @@ describe("ToolLine · 过程工具默认折叠", () => {
     expect(container.querySelector(".lucide-book-open")).toBeTruthy();
     expect(screen.queryByText(/用 pnpm dev 起前端/)).toBeNull();
     expect(screen.getAllByText("部署流程")).toHaveLength(1);
+    fireEvent.click(screen.getByText("Consult"));
+    expect(screen.getByText(/用 pnpm dev 起前端/)).toBeTruthy();
+    expect(screen.getAllByText("部署流程")).toHaveLength(1);
+    expect(screen.queryByText("设定")).toBeNull();
   });
 
   it("read_conversation 折叠态亮对话标题（不摆 conversation_id、不泄正文）", () => {
@@ -504,6 +510,12 @@ describe("ToolLine · 过程工具默认折叠", () => {
     expect(
       screen.queryByText(/对需对抗性多视角思考的问题用 debate 工具/),
     ).toBeNull();
+    fireEvent.click(screen.getByText("Consult skill"));
+    expect(
+      screen.getByText(/对需对抗性多视角思考的问题用 debate 工具/),
+    ).toBeTruthy();
+    expect(screen.getAllByText("debate_and_review")).toHaveLength(1);
+    expect(screen.queryByText("能力指引")).toBeNull();
   });
 
   it("keeps update_synthesis draft out of the title and suppresses the ack peek", () => {
@@ -1915,6 +1927,9 @@ describe("ToolLine · code_execute / test_run / terminal 一行契约", () => {
     expect(screen.getByText(/退出码 1/)).toBeTruthy();
     expect(container.querySelector(".text-destructive")).toBeTruthy();
     expect(collapsedSubline(container)).toBeNull();
+    fireEvent.click(screen.getByText("Run code"));
+    expect(screen.getByText("boom")).toBeTruthy();
+    expect(screen.getAllByText(/退出码 1/)).toHaveLength(1);
   });
 
   it("terminal with command in title suppresses result first line", () => {

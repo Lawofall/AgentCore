@@ -850,25 +850,25 @@ def _run_schema() -> ToolSchema:
     )
 
 
-def test_cloud_short_run_engine_timeout_covers_desk_boot():
+def test_cloud_short_run_engine_timeout_matches_local():
     from agentcore.tools.builtin.run import run_op_timeout_seconds
 
     args = {"command": "python -c 'print(1)'"}
     local = run_op_timeout_seconds(args, location="local")
     cloud = run_op_timeout_seconds(args, location="server")
     assert local == 90.0
-    assert cloud == 90.0 + settings.gvisor_desk_start_timeout_seconds
+    assert cloud == local
     assert resolve_tool_timeout(_run_schema(), args, location="server") == cloud
     assert resolve_tool_timeout(_run_schema(), args, location="local") == local
 
 
-def test_cloud_verify_run_engine_timeout_covers_desk_boot():
+def test_cloud_verify_run_engine_timeout_matches_local():
     from agentcore.tools.builtin.run import run_op_timeout_seconds
 
     args = {"command": "pnpm test"}
     local = run_op_timeout_seconds(args, location="local")
     cloud = run_op_timeout_seconds(args, location="server")
-    assert cloud == local + settings.gvisor_desk_start_timeout_seconds
+    assert cloud == local
 
 
 def test_cloud_process_manage_engine_timeout_skips_desk_boot():

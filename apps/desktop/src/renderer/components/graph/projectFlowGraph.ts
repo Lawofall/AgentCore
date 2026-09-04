@@ -46,7 +46,6 @@ import type { GraphScene } from "./scene";
 export interface FlowGraphProjectionInput {
   execution: Execution;
   positions: Record<string, { x: number; y: number }>;
-  nodeHeights: Record<string, number>;
   nodeSizes: Record<string, { width: number; height: number }>;
   handleDirection: "horizontal" | "vertical";
   litRunId: string | null;

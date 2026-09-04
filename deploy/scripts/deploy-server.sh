@@ -68,8 +68,8 @@ COMPOSE_BASE_FILES=(
   -f "$REPO_DIR/deploy/docker-compose.app.yml"
 )
 COMPOSE_FILES=( "${COMPOSE_BASE_FILES[@]}" )
-# gVisor 默认开：除非 GVISOR_ENABLED=false，否则叠 sandbox
-# （seccomp/apparmor + netns caps + entrypoint 降权 + mem_limit）。
+# gVisor 默认开：除非 GVISOR_ENABLED=false，否则叠独立 sandboxd 服务
+# （seccomp/apparmor + netns caps + 独立入口 + mem_limit）。
 # 不叠层 → 沙箱起不来，启动期健康探测失败不拒启（fail-safe）：打
 # sandbox.cloud_health_failed warning、执行类整类不装配、能力行如实显示未装配。
 _gvisor_off=0
@@ -79,7 +79,7 @@ fi
 if [[ "$_gvisor_off" -eq 0 ]]; then
   _sandbox_yml="$REPO_DIR/deploy/docker-compose.sandbox.yml"
   if [[ -f "$_sandbox_yml" ]]; then
-    _sandbox_entrypoint="$(dirname "$_sandbox_yml")/api-sandbox-entrypoint.sh"
+    _sandbox_entrypoint="$(dirname "$_sandbox_yml")/sandboxd-entrypoint.sh"
     if [[ ! -f "$_sandbox_entrypoint" ]]; then
       err "云执行默认开但缺少 $_sandbox_entrypoint（或设 GVISOR_ENABLED=false）"
       exit 1
@@ -91,7 +91,7 @@ if [[ "$_gvisor_off" -eq 0 ]]; then
   fi
 fi
 dc() { docker compose -p "$COMPOSE_PROJECT" "${COMPOSE_FILES[@]}" --env-file "$ENV_FILE" "$@"; }
-# One-shots must not use the sandbox entrypoint (empty stdout aborts the workspace probe).
+# One-shots must not include the sandbox overlay (long-running sandboxd + socket volume).
 dc_oneshot() { docker compose -p "$COMPOSE_PROJECT" "${COMPOSE_BASE_FILES[@]}" --env-file "$ENV_FILE" "$@"; }
 
 [[ -f "$ENV_FILE" ]] || { err "env file not found: $ENV_FILE（从 production.env.example 复制并填值）"; exit 1; }
@@ -246,7 +246,7 @@ migrate_step() {
 if [[ "$IS_ROLLBACK" -eq 0 ]]; then
   # 须与 compose stop_grace_period=40s 对齐。裸 stop 默认 10s 会砍断
   # 排空 5s + 抢救 20s + 收尾 8s，制造孤儿 lease。
-  dc stop --timeout 40 api 2>/dev/null || true
+  dc stop --timeout 40 api sandboxd 2>/dev/null || true
   stage "api stopped before migrate"
   dc_oneshot run --rm api alembic upgrade head
   stage "alembic upgrade head"

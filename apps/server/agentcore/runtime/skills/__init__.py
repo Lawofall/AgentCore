@@ -31,6 +31,7 @@ from agentcore.runtime.skills.catalog import (
     render_skill_directory,
 )
 from agentcore.runtime.skills.debate_and_review import MULTI_LENS_COURTROOM_TRIGGERS
+from agentcore.runtime.skills.lead_subteam import _LEAD_SUBTEAM
 from agentcore.runtime.skills.registry import SkillRegistry, SystemSkill
 from agentcore.runtime.skills.team_cross_folder import _TEAM_CROSS_FOLDER
 from agentcore.runtime.skills.team_delivery_env import _TEAM_DELIVERY_ENV
@@ -42,6 +43,7 @@ __all__ = [
     "MULTI_LENS_COURTROOM_TRIGGERS",
     "SkillRegistry",
     "SystemSkill",
+    "_LEAD_SUBTEAM",
     "_TEAM_CROSS_FOLDER",
     "_TEAM_DELIVERY_ENV",
     "_TEAM_ORCHESTRATION_ADVANCED",

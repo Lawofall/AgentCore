@@ -41,6 +41,7 @@ describe("FileBrowser · 工具条顺序", () => {
       ).toBeTruthy();
     }
     expect(screen.queryByRole("button", { name: "刷新" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "挂载共享空间" })).toBeNull();
   });
 });
 
@@ -63,5 +64,17 @@ describe("FileBrowser · 从 Git 克隆", () => {
       </TooltipProvider>,
     );
     expect(screen.queryByRole("button", { name: "从 Git 克隆" })).toBeNull();
+  });
+});
+
+describe("FileBrowser · 无挂载共享空间", () => {
+  it("工具条不渲染挂载入口或第二根", () => {
+    render(
+      <TooltipProvider>
+        <FileBrowser source={source} />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "挂载共享空间" })).toBeNull();
+    expect(screen.queryByTestId("shared-roots")).toBeNull();
   });
 });

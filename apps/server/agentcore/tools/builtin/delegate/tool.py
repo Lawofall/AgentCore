@@ -36,6 +36,7 @@ from agentcore.runtime.events import EventSink, plan_revised
 from agentcore.tools.builtin.delegate.schema import (
     DELEGATE_DESCRIPTION,
     DELEGATE_PARAMETERS,
+    NESTED_DELEGATE_DESCRIPTION,
 )
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -280,9 +281,12 @@ class DelegateTool:
 
     @property
     def schema(self) -> ToolSchema:
+        depth = getattr(self, "_depth", 0)
         return ToolSchema(
             name="delegate",
-            description=DELEGATE_DESCRIPTION,
+            description=(
+                NESTED_DELEGATE_DESCRIPTION if depth >= 1 else DELEGATE_DESCRIPTION
+            ),
             parameters=DELEGATE_PARAMETERS,
             category=ToolCategory.ORCHESTRATION,
             approval=ToolApproval.NEVER,

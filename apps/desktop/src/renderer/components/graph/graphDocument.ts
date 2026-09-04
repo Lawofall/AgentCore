@@ -60,7 +60,7 @@ export function graphDocumentFingerprint(opts: {
 /**
  * Shell snapshot key for positions / compound groups / act-card placements.
  * Changing this updates node positions without implying a topology change.
- * Does NOT include nodeHeights (measure ≠ Document).
+ * Measure is not Document — RF node heights must not appear here.
  */
 export function graphShellSnapshotKey(opts: {
   positions: Record<string, { x: number; y: number }>;

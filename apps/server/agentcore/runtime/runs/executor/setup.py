@@ -261,6 +261,15 @@ async def _prepare_agent_node(
             child_delegate._default_target_folder_id = parent_desk  # type: ignore[attr-defined]
         opening = tuple(t for t in lead_subteam.tools if t.schema.name != "replan")
         worker_tools = _registry_with(worker_tools, *opening)
+        from agentcore.runtime.runs.executor.captain_consult import (
+            offer_nested_lead_consult,
+        )
+
+        worker_tools, system_prompt = await offer_nested_lead_consult(
+            worker_tools,
+            system_prompt,
+            user_id=str(getattr(tool_ctx, "user_id", "") or ""),
+        )
         # allowed_tools stays None — "offer all" already includes the opening
         # lead_subteam tools now living in worker_tools.
     # Topology-split handoff wording + deliverable.form: DAG is known at identity

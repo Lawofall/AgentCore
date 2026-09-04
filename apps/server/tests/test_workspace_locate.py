@@ -291,7 +291,7 @@ def test_parse_workspace_id_accepts_uuid_idents():
 
 
 def test_parse_workspace_id_rejects_malformed():
-    for bad in ("", "folder", "folder:", ":f1", "team:f1", "folder:a/b", "conv/c1"):
+    for bad in ("", "folder", "folder:", ":f1", "team:f1", "shared:abc", "folder:a/b", "conv/c1"):
         with pytest.raises(ValueError, match="非法工作区"):
             parse_workspace_id(bad)
 
@@ -419,7 +419,6 @@ async def test_build_turn_backend_does_not_kick_code_index(monkeypatch, tmp_path
     monkeypatch.setattr(
         tb.grant_store, "grants_as_dict", AsyncMock(return_value={})
     )
-    monkeypatch.setattr(tb.shared_mount_store, "mounts_as_dict", lambda _cid: {})
     monkeypatch.setattr(tb, "attach_grants_to_backend", AsyncMock())
 
     result = await tb.build_turn_backend(

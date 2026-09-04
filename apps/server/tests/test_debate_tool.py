@@ -274,6 +274,33 @@ async def test_emits_debate_result_event_for_frontend_view():
     assert p["brief"]["strongest_points"]
 
 
+async def test_moderator_run_emits_process_deltas():
+    """DebateTool 把主持人判定挂到主持人 run 的既有 output delta（侧面板时间线）。"""
+    sink = EventSink()
+    llm = _DebateLLM(converge_at=1)
+    tool = _tool(llm, sink=sink)
+    await tool.execute(
+        {"motion": "该不该做 X", "form": "debate", "sides": _sides(), "thorough": False},
+        _ctx(),
+    )
+    sink.close()
+    events = [e async for e in sink]
+    mod_id = next(
+        e.payload["moderator_run_id"]
+        for e in events
+        if e.type is EventType.DEBATE_RESULT
+    )
+    joined = "".join(
+        e.payload["delta"]
+        for e in events
+        if e.type is EventType.RUN_OUTPUT_DELTA and e.payload.get("run_id") == mod_id
+    )
+    assert "## 第 1 轮焦点" in joined
+    assert "本轮焦点" in joined
+    assert "## 小结" in joined
+    assert "## 终审" in joined
+
+
 async def test_emits_batch_metrics_for_diagnostics():
     """首轮辩手经 WaveScheduler 并行扇出 → 调度埋点快照也 emit（journal 重放；
     与 delegate drive 同形）。此前只 logger.info。"""

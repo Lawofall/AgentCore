@@ -272,11 +272,12 @@ async def create_cloud_folder(
 
 
 async def load_folder_summary(*, user_id: str, folder_id: str) -> dict[str, Any] | None:
-    """Owner-scoped single-folder fetch (``FolderSummary`` shape).
+    """Accepted-member single-folder fetch (``FolderSummary`` shape).
 
-    ``None`` ⇒ 不存在 **或** 不属于该账号 — the two are deliberately indistinguishable
-    (IDOR-safe, same posture as ``GET /folders/{id}``). Sidecar turns go through the
-    folders narrow ticket; cloud API processes use the in-process repository.
+    ``None`` ⇒ 不存在 **或** 调用者不是已接受成员 — the two are deliberately
+    indistinguishable (IDOR-safe, same posture as ``GET /folders/{id}``). Sidecar
+    turns go through the folders narrow ticket; cloud API processes use the
+    in-process repository.
     """
     from agentcore.folders.credentials import (
         FoldersCloudError,
@@ -294,8 +295,16 @@ async def load_folder_summary(*, user_id: str, folder_id: str) -> dict[str, Any]
             raise FoldersCloudError(str(e)) from e
 
     async with async_session_factory() as session:
-        folder = await FolderRepository(session).get_by_id(folder_id, user_id=user_id)
-    return folder_summary_dict(folder) if folder is not None else None
+        from agentcore.folders.desk import resolve_desk_access
+
+        access = await resolve_desk_access(session, folder_id=folder_id, user_id=user_id)
+        if access is None:
+            return None
+        return FolderSummary.from_folder(
+            access.folder,
+            my_role=access.role,
+            my_state=access.state,
+        ).model_dump(mode="json")
 
 
 async def soft_delete_folder(*, user_id: str, folder_id: str) -> bool:

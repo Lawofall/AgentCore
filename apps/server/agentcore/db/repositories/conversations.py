@@ -13,6 +13,7 @@ from agentcore.core.types import is_uuid_id, new_id
 from agentcore.db.models import (
     Conversation,
     ConversationExternalGrant,
+    ConversationPreference,
     CostEvent,
     Folder,
     MemoryUpdateRow,
@@ -21,6 +22,10 @@ from agentcore.db.models import (
     TurnLeaseRow,
     TurnMetricsRow,
     User,
+)
+from agentcore.db.repositories._desk_visibility import (
+    conversation_deleted_visible_clause,
+    conversation_visible_clause,
 )
 
 from ._audit_cascade import delete_audit_for_conversation
@@ -286,8 +291,10 @@ class ConversationRepository:
         return int(conv.deep_research_auto_debate_count)
 
     async def get_by_id(self, conversation_id: str, *, user_id: str) -> Conversation | None:
-        """Owner-scoped fetch: a non-owner (or unknown id) gets None, which the route
-        turns into a 404 — no cross-user access nor existence leak.
+        """Accepted-member fetch: a non-member (or unknown id) gets None → 404.
+
+        Bare chats stay owner-only. Folder chats are visible to the desk owner and
+        every accepted folder_members row (including threads others opened).
 
         ``user_id`` is mandatory so owner-scoping is the structural default rather than
         a caller convention (SEC-002). Trusted internal / admin callers that legitimately
@@ -301,7 +308,7 @@ class ConversationRepository:
             select(Conversation).where(
                 Conversation.id == conversation_id,
                 Conversation.deleted_at.is_(None),
-                Conversation.user_id == user_id,
+                conversation_visible_clause(user_id),
             )
         )
         return result.scalar_one_or_none()
@@ -360,11 +367,33 @@ class ConversationRepository:
         # handoff (双模式 P2e/e2) hosts local→云 job runs; standing hosts 站立任务钉对话.
         # ``archived`` selects one side of the archive split: the default (False) is
         # the live list (sidebar / 全部对话), True backs the「已归档」view.
-        base_query = select(Conversation).where(
-            Conversation.user_id == user_id,
-            Conversation.deleted_at.is_(None),
-            Conversation.mode.notin_(("handoff", "standing")),
-            Conversation.archived == archived,
+        pref_pinned = func.coalesce(ConversationPreference.pinned, False)
+        pref_archived = func.coalesce(ConversationPreference.archived, False)
+        if archived:
+            archive_where = or_(
+                pref_archived.is_(True),
+                Conversation.archived_by_folder_delete.is_(True),
+            )
+        else:
+            archive_where = and_(
+                pref_archived.is_(False),
+                Conversation.archived_by_folder_delete.is_(False),
+            )
+        base_query = (
+            select(Conversation)
+            .outerjoin(
+                ConversationPreference,
+                and_(
+                    ConversationPreference.conversation_id == Conversation.id,
+                    ConversationPreference.user_id == user_id,
+                ),
+            )
+            .where(
+                Conversation.deleted_at.is_(None),
+                Conversation.mode.notin_(("handoff", "standing")),
+                conversation_visible_clause(user_id),
+                archive_where,
+            )
         )
 
         count_result = await self._session.execute(
@@ -372,9 +401,8 @@ class ConversationRepository:
         )
         total = count_result.scalar_one()
 
-        # Pinned float to the top (置顶对话), then most-recent activity.
         result = await self._session.execute(
-            base_query.order_by(Conversation.pinned.desc(), Conversation.updated_at.desc())
+            base_query.order_by(pref_pinned.desc(), Conversation.updated_at.desc())
             .limit(limit)
             .offset(offset)
         )
@@ -538,7 +566,7 @@ class ConversationRepository:
         ``updated_at`` without a title or body filter.
         """
         stmt = select(Conversation).where(
-            Conversation.user_id == user_id,
+            conversation_visible_clause(user_id),
             Conversation.deleted_at.is_(None),
             Conversation.mode.notin_(("handoff", "standing")),
         )
@@ -557,7 +585,14 @@ class ConversationRepository:
             else:
                 stmt = stmt.where(title_hit)
         if not include_archived:
-            stmt = stmt.where(Conversation.archived.is_(False))
+            personally_archived = select(ConversationPreference.conversation_id).where(
+                ConversationPreference.user_id == user_id,
+                ConversationPreference.archived.is_(True),
+            )
+            stmt = stmt.where(
+                Conversation.archived_by_folder_delete.is_(False),
+                Conversation.id.not_in(personally_archived),
+            )
         if global_chats_only:
             stmt = stmt.where(Conversation.folder_id.is_(None))
         if updated_after is not None:
@@ -609,10 +644,7 @@ class ConversationRepository:
         folder_names: dict[str, str] = {}
         if folder_ids:
             fres = await self._session.execute(
-                select(Folder.id, Folder.name).where(
-                    Folder.id.in_(folder_ids),
-                    Folder.user_id == user_id,
-                )
+                select(Folder.id, Folder.name).where(Folder.id.in_(folder_ids))
             )
             folder_names = {row[0]: row[1] for row in fres.all()}
         from agentcore.db.repositories.messages import MessageRepository
@@ -620,8 +652,10 @@ class ConversationRepository:
         counts = await MessageRepository(self._session).counts_for_conversations(
             [c.id for c in convs]
         )
+        flags = await self.preference_flags_for(user_id, [c.id for c in convs])
         out: list[dict] = []
         for c in convs:
+            pinned, archived = flags.get(c.id, (False, False))
             out.append(
                 {
                     "conversation_id": c.id,
@@ -630,7 +664,8 @@ class ConversationRepository:
                     "folder_name": folder_names.get(c.folder_id) if c.folder_id else None,
                     "updated_at": c.updated_at.isoformat() if c.updated_at else None,
                     "message_count": int(counts.get(c.id, 0)),
-                    "archived": bool(c.archived),
+                    "archived": archived or bool(c.archived_by_folder_delete),
+                    "pinned": pinned,
                 }
             )
         return out
@@ -674,31 +709,78 @@ class ConversationRepository:
             await self._session.refresh(conv)
         return conv
 
+    async def preference_flags_for(
+        self, user_id: str, conversation_ids: Sequence[str]
+    ) -> dict[str, tuple[bool, bool]]:
+        """``{conversation_id: (pinned, archived)}`` for the caller. Missing → (False, False)."""
+        if not conversation_ids:
+            return {}
+        result = await self._session.execute(
+            select(ConversationPreference).where(
+                ConversationPreference.user_id == user_id,
+                ConversationPreference.conversation_id.in_(list(conversation_ids)),
+            )
+        )
+        return {
+            row.conversation_id: (bool(row.pinned), bool(row.archived))
+            for row in result.scalars().all()
+        }
+
+    async def _upsert_preference(
+        self,
+        conversation_id: str,
+        user_id: str,
+        *,
+        pinned: bool | None = None,
+        archived: bool | None = None,
+    ) -> ConversationPreference:
+        result = await self._session.execute(
+            select(ConversationPreference).where(
+                ConversationPreference.conversation_id == conversation_id,
+                ConversationPreference.user_id == user_id,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            row = ConversationPreference(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                pinned=bool(pinned) if pinned is not None else False,
+                archived=bool(archived) if archived is not None else False,
+            )
+            self._session.add(row)
+        else:
+            if pinned is not None:
+                row.pinned = pinned
+            if archived is not None:
+                row.archived = archived
+        await self._session.commit()
+        await self._session.refresh(row)
+        return row
+
+    async def delete_preferences_for_user(self, user_id: str) -> int:
+        result = await self._session.execute(
+            delete(ConversationPreference).where(ConversationPreference.user_id == user_id)
+        )
+        await self._session.commit()
+        return int(result.rowcount or 0)
+
     async def set_pinned(
         self, conversation_id: str, pinned: bool, *, user_id: str
     ) -> Conversation | None:
-        """Pin / unpin a conversation (置顶对话). Pinned chats sort to the top of
-        the sidebar / list; this only writes the flag."""
+        """Pin / unpin for this caller only (per-user preference)."""
         conv = await self.get_by_id(conversation_id, user_id=user_id)
         if conv:
-            conv.pinned = pinned
-            await self._session.commit()
-            await self._session.refresh(conv)
+            await self._upsert_preference(conversation_id, user_id, pinned=pinned)
         return conv
 
     async def set_archived(
         self, conversation_id: str, archived: bool, *, user_id: str
     ) -> Conversation | None:
-        """Archive / unarchive a conversation (归档对话, reversible).
-
-        Archiving hides it from the live sidebar / grouped list (it moves to the
-        「已归档」view) without deleting it; unarchiving returns it to the list.
-        """
+        """Archive / unarchive for this caller only (per-user preference)."""
         conv = await self.get_by_id(conversation_id, user_id=user_id)
         if conv:
-            conv.archived = archived
-            await self._session.commit()
-            await self._session.refresh(conv)
+            await self._upsert_preference(conversation_id, user_id, archived=archived)
         return conv
 
     async def soft_delete(self, conversation_id: str, *, user_id: str) -> bool:
@@ -721,13 +803,23 @@ class ConversationRepository:
         conv = await self.get_by_id(conversation_id, user_id=user_id)
         if not conv:
             return False
+        if conv.user_id != user_id:
+            from agentcore.db.repositories.folders import FolderRepository
+
+            folder = (
+                await FolderRepository(self._session).get_by_id_unscoped(conv.folder_id)
+                if conv.folder_id
+                else None
+            )
+            if folder is None or folder.user_id != user_id:
+                return False
         # 现场跟随对话：软删也清 run_sessions，避免唤回已删对话的现场。
         from agentcore.db.repositories.runs import RunSessionRepository
 
         await RunSessionRepository(self._session).delete_for_conversation(conversation_id)
         await self._session.execute(
             update(Conversation)
-            .where(Conversation.id == conversation_id, Conversation.user_id == user_id)
+            .where(Conversation.id == conversation_id)
             .values(deleted_at=datetime.now(UTC), updated_at=Conversation.updated_at)
             .execution_options(synchronize_session=False)
         )
@@ -785,7 +877,7 @@ class ConversationRepository:
         result = await self._session.execute(
             select(Conversation)
             .where(
-                Conversation.user_id == user_id,
+                conversation_deleted_visible_clause(user_id),
                 Conversation.deleted_at.is_not(None),
                 Conversation.deleted_at > not_before,
                 Conversation.mode.notin_(HIDDEN_CONVERSATION_MODES),
@@ -806,7 +898,7 @@ class ConversationRepository:
         result = await self._session.execute(
             select(Conversation).where(
                 Conversation.id == conversation_id,
-                Conversation.user_id == user_id,
+                conversation_deleted_visible_clause(user_id),
                 Conversation.deleted_at.is_not(None),
                 Conversation.mode.notin_(HIDDEN_CONVERSATION_MODES),
             )
@@ -831,11 +923,13 @@ class ConversationRepository:
         cleared with it. A chat whose project was soft-deleted meanwhile keeps pointing
         at it and reads as 未分组 until that project is restored too.
         """
+        visible = await self.get_deleted_by_id(conversation_id, user_id=user_id)
+        if visible is None:
+            return None
         result = await self._session.execute(
             update(Conversation)
             .where(
                 Conversation.id == conversation_id,
-                Conversation.user_id == user_id,
                 Conversation.deleted_at.is_not(None),
                 Conversation.deleted_at > not_before,
                 Conversation.mode.notin_(HIDDEN_CONVERSATION_MODES),
@@ -854,7 +948,7 @@ class ConversationRepository:
         # still carrying ``deleted_at``.
         refreshed = await self._session.execute(
             select(Conversation)
-            .where(Conversation.id == conversation_id, Conversation.user_id == user_id)
+            .where(Conversation.id == conversation_id)
             .execution_options(populate_existing=True)
         )
         return refreshed.scalar_one_or_none()
@@ -879,12 +973,16 @@ class ConversationRepository:
     async def list_ids_by_folder(self, folder_id: str, *, user_id: str) -> list[str]:
         """Every conversation filed in ``folder_id`` (live, archived, or soft-deleted).
 
-        Used by permanent project wipe to cascade hard-delete all member chats.
+        Used by permanent project wipe to cascade hard-delete all member chats,
+        including threads opened by folder members (``Conversation.user_id`` may
+        differ from the wiping owner). ``user_id`` is accepted at the call site
+        and is not a SQL filter.
+
         Handoff-host conversations are excluded (hidden infra rows).
         """
+        del user_id
         result = await self._session.execute(
             select(Conversation.id).where(
-                Conversation.user_id == user_id,
                 Conversation.folder_id == folder_id,
                 Conversation.mode.notin_(("handoff", "standing")),
             )
@@ -899,10 +997,16 @@ class ConversationRepository:
         after the grace period — distinct from ``soft_delete`` (the user-facing
         recoverable delete). The ``turn_journal`` replay stream (唯一事实源, §8.3)
         is dropped here too — it would otherwise orphan (it has no own TTL sweep).
-        In-flight ``turn_stream_state`` snapshots go first (keyed by message id,
+        Per-user ``conversation_preferences`` have no DB FK and go first.
+        In-flight ``turn_stream_state`` snapshots go next (keyed by message id,
         no ``conversation_id`` — must run before the message delete).
         ``run_sessions`` are also cleared (现场跟随对话).
         """
+        await self._session.execute(
+            delete(ConversationPreference).where(
+                ConversationPreference.conversation_id == conversation_id
+            )
+        )
         await delete_stream_state_for_conversation(self._session, conversation_id)
         await self._session.execute(
             delete(Message).where(Message.conversation_id == conversation_id)
@@ -1058,17 +1162,25 @@ class ConversationRepository:
         conversations are excluded here (they live in the separate「已归档」view);
         pinned ones sort to the top (置顶对话).
         """
+        pref_pinned = func.coalesce(ConversationPreference.pinned, False)
+        pref_archived = func.coalesce(ConversationPreference.archived, False)
         result = await self._session.execute(
             select(Conversation)
-            .where(
-                Conversation.user_id == user_id,
-                Conversation.deleted_at.is_(None),
-                # Hidden handoff-job conversations (P2e / e2) are not sidebar chats.
-                Conversation.mode.notin_(("handoff", "standing")),
-                # Archived chats are hidden from the live list (归档对话, reversible).
-                Conversation.archived.is_(False),
+            .outerjoin(
+                ConversationPreference,
+                and_(
+                    ConversationPreference.conversation_id == Conversation.id,
+                    ConversationPreference.user_id == user_id,
+                ),
             )
-            .order_by(Conversation.pinned.desc(), Conversation.updated_at.desc())
+            .where(
+                Conversation.deleted_at.is_(None),
+                Conversation.mode.notin_(("handoff", "standing")),
+                conversation_visible_clause(user_id),
+                pref_archived.is_(False),
+                Conversation.archived_by_folder_delete.is_(False),
+            )
+            .order_by(pref_pinned.desc(), Conversation.updated_at.desc())
         )
         return result.scalars().all()
 

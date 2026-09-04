@@ -60,10 +60,6 @@ vi.mock("@/components/workspace/ExternalMountsSection", () => ({
   ExternalMountsSection: () => null,
 }));
 
-vi.mock("@/components/workspace/SharedMountsSection", () => ({
-  SharedMountsSection: () => null,
-}));
-
 vi.mock("@/components/files/fileWorkbench/EntriesSection", () => ({
   EntriesSection: ({
     onOpen,

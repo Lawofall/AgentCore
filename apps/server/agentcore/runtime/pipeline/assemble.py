@@ -198,8 +198,10 @@ async def assemble_ceo_turn(
         folder_id=folder_id,
         permission_axes=permission_axes,
         # Same live-user gate as ask_user itself, plus desktop-only: web/mobile omit.
-        advertise_bind_local_folder=checkpoint_enabled and channel.can_bind_folder,
-        desktop_online=channel.desktop_online,
+        advertise_bind_local_folder=checkpoint_enabled
+        and channel.can_bind_folder
+        and not prepared.member_turn,
+        desktop_online=channel.desktop_online and not prepared.member_turn,
     )
     from agentcore.runtime.resolve.prepare import _wire_conversation_log_tools
     from agentcore.tools.ceo_toolset import wire_ceo_consult
@@ -328,7 +330,12 @@ async def assemble_ceo_turn(
     # Workers never receive this listing. Generated fresh each turn; "" omits the 文件节.
     workspace_overview = await _timed_phase(
         "workspace_overview",
-        build_workspace_overview(backend, shared_workspace=folder_id is not None),
+        build_workspace_overview(
+            backend,
+            shared_workspace=folder_id is not None,
+            conversation_id=conversation_id,
+            exclude_turn_id=message_id,
+        ),
     )
     chat_system_prompt = compose_ceo_chat_prompt(
         prepared.system_prompt,

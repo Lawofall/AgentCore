@@ -121,6 +121,14 @@ async def test_write_creates_parents_and_returns_count(tmp_path: Path):
     assert (tmp_path / "nested" / "dir" / "out.txt").read_text(encoding="utf-8") == "abcd"
 
 
+async def test_shared_prefix_is_ordinary_relative_path(tmp_path: Path):
+    """``shared/foo`` is a user folder, not a second-root mount namespace."""
+    written = await _ws(tmp_path).write("shared/foo.txt", "desk")
+    assert written == 4
+    assert (tmp_path / "shared" / "foo.txt").read_text(encoding="utf-8") == "desk"
+    assert await _ws(tmp_path).read("shared/foo.txt") == "desk"
+
+
 async def test_write_escape_raises_outside_workspace(tmp_path: Path):
     ws = tmp_path / "ws"
     ws.mkdir()

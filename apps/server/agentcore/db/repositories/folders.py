@@ -10,7 +10,8 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.core.types import new_id
-from agentcore.db.models import Conversation, Folder
+from agentcore.db.models import Conversation, ConversationPreference, Folder, FolderMember
+from agentcore.db.repositories._desk_visibility import folder_accessible_clause
 from agentcore.folders.unbind import clear_folder_session_pointers
 from agentcore.workspace.cloud_tree import (
     ancestor_chain,
@@ -182,6 +183,26 @@ class FolderRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_accessible(self, folder_id: str, *, user_id: str) -> Folder | None:
+        """Live folder if caller is owner or an accepted member (else None → 404)."""
+        result = await self._session.execute(
+            select(Folder).where(
+                Folder.id == folder_id,
+                Folder.deleted_at.is_(None),
+                folder_accessible_clause(user_id),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_owned_ids(
+        self, user_id: str, *, include_deleted: bool = True
+    ) -> list[str]:
+        stmt = select(Folder.id).where(Folder.user_id == user_id)
+        if not include_deleted:
+            stmt = stmt.where(Folder.deleted_at.is_(None))
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_by_id_unscoped(self, folder_id: str) -> Folder | None:
         """Cross-owner fetch for trusted internal callers resolving a conversation's own
         folder (already authorized via that conversation). The explicit name keeps the
@@ -210,9 +231,9 @@ class FolderRepository:
     ) -> Sequence[Folder]:
         """Owner-scoped folder-name substring search (全局搜索 Tier 1)."""
         stmt = select(Folder).where(
-            Folder.user_id == user_id,
             Folder.deleted_at.is_(None),
             Folder.name.ilike(_ilike_pattern(query)),
+            folder_accessible_clause(user_id),
         )
         if updated_after is not None:
             stmt = stmt.where(Folder.updated_at >= updated_after)
@@ -378,7 +399,9 @@ class FolderRepository:
           rows are excluded, matching every user-facing read path.
         * Only rows that are still un-archived get ``archived_by_folder_delete``, so
           restore can put back exactly what this delete took away and leave chats the
-          user archived themselves alone.
+          user archived themselves alone. Un-archived means both the legacy
+          ``Conversation.archived`` flag and the folder owner's
+          ``conversation_preferences.archived`` row.
         """
         folder = await self.get_by_id(folder_id, user_id=user_id)
         if not folder:
@@ -403,14 +426,18 @@ class FolderRepository:
                 .values(deleted_at=now, delete_origin=FOLDER_DELETE_ORIGIN_CASCADE)
                 .execution_options(synchronize_session=False)
             )
+        owner_archived = select(ConversationPreference.conversation_id).where(
+            ConversationPreference.user_id == user_id,
+            ConversationPreference.archived.is_(True),
+        )
         await self._session.execute(
             update(Conversation)
             .where(
-                Conversation.user_id == user_id,
                 Conversation.folder_id.in_(subtree_ids),
                 Conversation.deleted_at.is_(None),
                 Conversation.mode.notin_(HIDDEN_CONVERSATION_MODES),
                 Conversation.archived.is_(False),
+                Conversation.id.not_in(owner_archived),
             )
             .values(
                 archived=True,
@@ -556,7 +583,6 @@ class FolderRepository:
         await self._session.execute(
             update(Conversation)
             .where(
-                Conversation.user_id == user_id,
                 Conversation.folder_id.in_(restored_ids),
                 Conversation.archived_by_folder_delete.is_(True),
             )
@@ -641,18 +667,24 @@ class FolderRepository:
         return result.scalars().all()
 
     async def hard_delete(self, folder_id: str) -> None:
-        """Physically remove a folder record."""
-        await self._session.execute(delete(Folder).where(Folder.id == folder_id))
-        await self._session.commit()
+        """Physically remove a folder record and its membership roster."""
+        await self.hard_delete_many([folder_id])
 
     async def hard_delete_many(self, folder_ids: Sequence[str]) -> None:
-        """Physically remove a whole subtree's rows — one statement, one transaction.
+        """Physically remove a whole subtree's rows — one transaction.
 
         A per-row loop could commit the parent and then fail on a child, which is the
         one outcome 彻底删除 must not produce: the child would survive as a live folder
         whose directory was already purged with the parent's.
+
+        ``folder_members`` has no DB FK, so the roster is deleted first in this
+        same transaction — otherwise hard-deleting the folder orphans memberships.
         """
         if not folder_ids:
             return
-        await self._session.execute(delete(Folder).where(Folder.id.in_(folder_ids)))
+        ids = list(folder_ids)
+        await self._session.execute(
+            delete(FolderMember).where(FolderMember.folder_id.in_(ids))
+        )
+        await self._session.execute(delete(Folder).where(Folder.id.in_(ids)))
         await self._session.commit()

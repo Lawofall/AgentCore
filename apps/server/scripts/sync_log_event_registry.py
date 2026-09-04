@@ -1,4 +1,4 @@
-﻿"""Scan logger.* call sites and regenerate agentcore/observability/catalog.py.
+"""Scan logger.* call sites and regenerate agentcore/observability/catalog.py.
 
 Also pair with ``gen_log_event_docs.py`` to refresh the markdown event table::
 
@@ -759,6 +759,9 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "count": "int",
         "desks": "int",
     },
+    "sandbox.desk_provision_failed": {
+        "error": "str",
+    },
     "sandbox.desk_reaped": {
         "workspace": "str",
         "container_id": "str",
@@ -773,6 +776,25 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "container_id": "str",
         "timeout_seconds": "float",
         "elapsed_seconds": "float",
+    },
+    "sandboxd.package_proxy_failed": {
+        "error": "str",
+    },
+    "sandboxd.preview_proxy_failed": {
+        "error": "str",
+    },
+    "sandboxd.preview_proxy_started": {
+        "host": "str",
+        "port": "int",
+    },
+    "sandboxd.preview_registered": {
+        "conversation_id": "str",
+        "process_id": "str",
+        "app_port": "int",
+    },
+    "sandboxd.preview_unregistered": {
+        "conversation_id": "str",
+        "process_id": "str",
     },
     "sandboxd.exec": {
         "container_id": "str",
@@ -1191,7 +1213,8 @@ KEY_DESC: dict[str, str] = {
     "sandbox.desk_process_started": "云桌 guest 内已短 exec 拉起按对话记账的长驻进程",
     "sandbox.desk_process_stopped": "云桌 guest 内已短 exec 结束一条长驻进程",
     "sandbox.desk_processes_dropped": "关停 desk 时丢掉该桌的进程登记（guest kill 收掉 pid）",
-    "sandbox.desk_reaped": "空闲云桌 guest 已 kill+delete（盘保留；下次懒创建）",
+    "sandbox.desk_provision_failed": "回合外开通云桌失败（不中断回合；execute 要求已注册桌）",
+    "sandbox.desk_reaped": "空闲云桌 guest 已 kill+delete（盘保留；下次 prepare/attach 再创建）",
     "sandbox.desk_reaper_error": "桌级 idle reap 扫一轮失败（不打死 browser_reaper 循环）",
     "sandbox.desk_reaper_swept": "桌级 idle reap 扫到并关掉了若干空闲 guest",
     "sandboxd.start_detach": "sandboxd 已 ``runsc run -d`` 拉起长寿命 guest",
@@ -1200,6 +1223,12 @@ KEY_DESC: dict[str, str] = {
     ),
     "sandboxd.exec": "sandboxd 已 ``runsc exec`` 进允许表解释器",
     "sandboxd.exec_stdio": "sandboxd 已 ``runsc exec`` stdio 进桌内驱动（不另起 guest）",
+    "sandboxd.package_proxy_failed": "sandboxd 启动装包 allowlist 代理失败（仍监听 socket）",
+    "sandboxd.preview_proxy_failed": "sandboxd 启动用户预览 HTTP/WS 反代失败（仍监听 socket）",
+    "sandboxd.preview_proxy_started": "sandboxd 用户预览 HTTP/WS 反代已监听",
+    "sandboxd.preview_proxy_stopped": "sandboxd 用户预览 HTTP/WS 反代已停止",
+    "sandboxd.preview_registered": "sandboxd 已登记一条用户预览上游（guest bridge）",
+    "sandboxd.preview_unregistered": "sandboxd 已去掉一条用户预览上游",
     "compaction.shutdown_timeout": "停机 flush 在飞 fold 超时（best-effort，取消剩余 task）",
     "memory.consolidation_window_dropped": (
         "不可重试 consolidation 失败：推进水位并丢弃本窗口（防 sweeper 无限重选）"

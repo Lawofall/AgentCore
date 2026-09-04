@@ -3,8 +3,10 @@
 Each settled conversation writes one ≤N-char dialogue digest (plus optional verified
 folder-fact bullets) into ``memory_episodes``. Digests are append-only, never deduped,
 never injected into prompts — they only feed the later semantic consolidation pass.
-When turn_journal shows real tool activity, the digest input includes a secret-redacted
-action inventory so verified paths/commands can land.
+Verified-facts bullets are **folder-bound only**: naked chat / host exploration of the
+user's machine is not project ops knowledge. When a folder is bound and turn_journal
+shows real tool activity, the digest input includes a secret-redacted action inventory
+so verified paths/commands can land.
 
 Per-scope sidecar (last_semantic_at / explore fingerprint) lives in ``memory_scope_states``,
 not the documents tree.
@@ -51,6 +53,7 @@ __all__ = [
     "append_episode",
     "clamp_summary",
     "compose_episode_summary",
+    "episodic_system_prompt",
     "episode_actions",
     "fallback_episode_summary",
     "list_undigested_episodes",
@@ -257,10 +260,13 @@ async def append_episode(
     """Append one session summary. Never dedups. Returns the stored record.
 
     ``summary`` may already include a ``## 本场证实的项目事实`` section; only the
-    dialogue paragraph is hard-capped to ``max_chars``.
+    dialogue paragraph is hard-capped to ``max_chars``. Naked-chat episodes
+    (``scope is None``) drop that section even if the summarizer wrote one.
     """
     ep_store = store or default_episode_store()
     dialogue, facts = split_summary_and_facts(summary)
+    if scope is None:
+        facts = ""
     stored = compose_episode_summary(dialogue, facts, max_chars=max_chars)
     actions_json = ""
     if actions is not None and not actions.is_empty():
@@ -322,14 +328,18 @@ async def purge_digested_episodes(
     return await ep.purge_digested(older_than_days=older_than_days, user_id=user_id)
 
 
-_EPISODIC_SYSTEM = """\
+_EPISODIC_SYSTEM_HEAD = """\
 Summarize this conversation for a later long-term-memory consolidation pass.
 
 Output format (plain text, no JSON, no title):
 1) ONE short paragraph in the user's language covering: what the user wanted,
    durable facts/preferences that surfaced, and any correction the user made.
    Keep the paragraph under the character budget given below.
-2) OPTIONAL second block — only when the Turn action inventory lists real
+"""
+
+_EPISODIC_FACTS_BLOCK = """\
+2) OPTIONAL second block — only when this conversation is bound to a folder
+   (# Folder-bound: yes) AND the Turn action inventory lists real workspace
    tool activity that verified project ops knowledge. Start it exactly with:
 
 ## 本场证实的项目事实
@@ -341,9 +351,22 @@ A fact is worth writing ⟺ the next session can skip one action because of it
 (less re-reading / re-asking / re-failing). If the inventory is empty or nothing
 meets that bar, OMIT the facts section entirely.
 
+Host/shell exploration of the user's machine (AppData, home dir, OS app logs)
+is NOT project ops knowledge — omit the facts section for that activity.
+
 Omit one-off chat trivia from the paragraph. Tool noise belongs ONLY in the
 verified-facts section (and only when verified).
+"""
 
+_EPISODIC_NAKED_BLOCK = """\
+2) Do NOT write a 「本场证实的项目事实」 section. This conversation has no bound
+   folder (# Folder-bound: no). Host/shell activity on the user's machine is not
+   project ops knowledge. Summarize the request only.
+
+Omit one-off chat trivia from the paragraph.
+"""
+
+_EPISODIC_PREF_RULE = """\
 Preference / habit rule (strict):
 - User preferences and work habits may ONLY come from the user's explicit statements
   or corrections (e.g. "请用中文", "以后别用表格", "我说的是 pnpm 不是 npm").
@@ -352,6 +375,16 @@ Preference / habit rule (strict):
 - If no explicit preference/correction appeared, omit preference wording entirely —
   summarize the request only.
 """
+
+
+def episodic_system_prompt(*, allow_verified_facts: bool) -> str:
+    """System prompt for the session summarizer; facts block only when folder-bound."""
+    body = _EPISODIC_FACTS_BLOCK if allow_verified_facts else _EPISODIC_NAKED_BLOCK
+    return f"{_EPISODIC_SYSTEM_HEAD}\n{body}\n{_EPISODIC_PREF_RULE}"
+
+
+# Pin tests and callers that want the folder-bound (facts-allowed) wording.
+_EPISODIC_SYSTEM = episodic_system_prompt(allow_verified_facts=True)
 
 # The background tier (free Flash) measured 35–37s on real memory windows, so the old
 # 20s ceiling timed out every single pass. Nothing waits on this call — it runs after
@@ -367,6 +400,7 @@ class EpisodicSummarizer(Protocol):
         *,
         max_chars: int,
         actions: TurnActionInventory | None = None,
+        allow_verified_facts: bool = False,
     ) -> str: ...
 
 
@@ -387,12 +421,15 @@ class LLMEpisodicSummarizer:
         *,
         max_chars: int,
         actions: TurnActionInventory | None = None,
+        allow_verified_facts: bool = False,
     ) -> str:
         convo = "\n".join(f"{m['role']}: {m['content']}" for m in messages)
         inv = actions or TurnActionInventory()
         actions_block = render_action_inventory_for_prompt(inv)
+        bound = "yes" if allow_verified_facts else "no"
         user_prompt = (
             f"# Character budget (dialogue paragraph only)\n{max_chars}\n\n"
+            f"# Folder-bound: {bound}\n\n"
             f"# Turn action inventory (verified tool activity; already secret-redacted)\n"
             f"{actions_block}\n\n"
             f"# Conversation\n{convo}\n\n"
@@ -401,7 +438,12 @@ class LLMEpisodicSummarizer:
         request = build_selected_request(
             self._selected,
             [
-                LLMMessage(role="system", content=_EPISODIC_SYSTEM),
+                LLMMessage(
+                    role="system",
+                    content=episodic_system_prompt(
+                        allow_verified_facts=allow_verified_facts
+                    ),
+                ),
                 LLMMessage(role="user", content=user_prompt),
             ],
             stream=False,
@@ -414,8 +456,8 @@ class LLMEpisodicSummarizer:
             logger.warning("memory.episodic_summary_timeout")
             return ""
         dialogue, facts = split_summary_and_facts(response.content or "")
-        # Drop "verified" facts when there was no real tool activity (anti-hallucination).
-        if inv.is_empty():
+        # Drop "verified" facts when naked chat, or when there was no real tool activity.
+        if not allow_verified_facts or inv.is_empty():
             facts = ""
         return compose_episode_summary(dialogue, facts, max_chars=max_chars)
 

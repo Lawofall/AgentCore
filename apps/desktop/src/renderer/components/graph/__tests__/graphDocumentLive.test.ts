@@ -118,7 +118,6 @@ function projectShell(execution: Execution) {
     execution,
     scene,
     positions,
-    nodeHeights: {},
     nodeSizes: {},
     groups: [],
     bbox: { width: 400, height: 400 },

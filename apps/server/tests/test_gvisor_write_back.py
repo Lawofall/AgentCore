@@ -193,6 +193,7 @@ async def test_gvisor_write_back_lands_artifact_in_real_workspace(tmp_path: Path
         runtime_root=str(tmp_path / "rt"),
     )
     _bind_loopback(sandbox)
+    await sandbox.ensure_workspace_desk(str(ws))
 
     result = await sandbox.execute(
         ExecutionRequest(
@@ -222,6 +223,7 @@ async def test_gvisor_readonly_script_does_not_claim_written_files(tmp_path: Pat
         runtime_root=str(tmp_path / "rt"),
     )
     _bind_loopback(sandbox)
+    await sandbox.ensure_workspace_desk(str(ws))
     result = await sandbox.execute(
         ExecutionRequest(
             code="print('ignored-by-fake')",
@@ -254,6 +256,7 @@ async def test_gvisor_bind_reports_only_actual_content_change(tmp_path: Path):
         runtime_root=str(tmp_path / "rt"),
     )
     _bind_loopback(sandbox)
+    await sandbox.ensure_workspace_desk(str(ws))
     result = await sandbox.execute(
         ExecutionRequest(
             code="print('ignored-by-fake')",
@@ -296,6 +299,7 @@ async def test_gvisor_timeout_does_not_claim_copy_out(tmp_path: Path):
         )
     )
 
+    await sandbox.ensure_workspace_desk(str(ws))
     start = time.monotonic()
     result = await sandbox._execute_in_slot(  # noqa: SLF001
         ExecutionRequest(code="x", language="python", cwd=str(ws), timeout_seconds=1),
@@ -489,17 +493,19 @@ def test_start_detach_rpc_budget_is_minutes_not_exec_cap():
     assert _START_DETACH_RPC_TIMEOUT < 1200.0
 
 
-async def test_start_detach_timeout_is_not_exec_forced_stop(tmp_path: Path):
+async def test_execute_without_desk_does_not_start_detach(tmp_path: Path):
     ws = tmp_path / "workspace"
     ws.mkdir()
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
+    starts: list[int] = []
 
-    class _BootTimeout(LoopbackRunscClient):
+    class _MustNotBoot(LoopbackRunscClient):
         async def start_detach(self, **kwargs):  # noqa: ANN003, ARG002
-            raise TimeoutError()
+            starts.append(1)
+            raise AssertionError("execute must not start_detach")
 
         async def exec_wait(self, **kwargs):  # noqa: ANN003, ARG002
-            raise AssertionError("exec_wait must not run before desk is ready")
+            raise AssertionError("exec_wait must not run without a desk")
 
         async def kill(self, container_id: str, signal: str = "SIGKILL") -> None:
             return None
@@ -508,7 +514,7 @@ async def test_start_detach_timeout_is_not_exec_forced_stop(tmp_path: Path):
             return None
 
     set_sandboxd_client_for_tests(
-        _BootTimeout(
+        _MustNotBoot(
             runsc_path=sandbox._runsc,  # noqa: SLF001
             runtime_root=sandbox._runtime_root,  # noqa: SLF001
         )
@@ -521,11 +527,8 @@ async def test_start_detach_timeout_is_not_exec_forced_stop(tmp_path: Path):
             ),
             time.monotonic(),
         )
-    msg = str(failed.value)
-    assert "forced stop after" not in msg
-    assert "Timeout: forced stop after 15s" not in msg
-    assert "forced stop after 30s" not in msg
-    assert "forced stop after 60s" not in msg
+    assert starts == []
+    assert "forced stop after" not in str(failed.value)
     assert failed.value.details.get("code") == "exec_env_sandbox_unavailable"
 
 
@@ -586,6 +589,7 @@ async def test_exec_sandboxd_error_is_not_desk_start_failure(tmp_path: Path):
         runtime_root=str(tmp_path / "rt"),
     )
     inner = _bind_loopback(sandbox)
+    await sandbox.ensure_workspace_desk(str(ws))
 
     async def _boom(**kwargs):  # noqa: ANN003
         raise SandboxdError("exec blew up")
@@ -601,7 +605,7 @@ async def test_exec_sandboxd_error_is_not_desk_start_failure(tmp_path: Path):
     assert failed.value.details.get("code") != "exec_env_sandbox_unavailable"
 
 
-async def test_dead_guest_is_dropped_and_exec_retries(tmp_path: Path):
+async def test_dead_guest_is_dropped_and_exec_does_not_recreate(tmp_path: Path):
     ws = tmp_path / "workspace"
     ws.mkdir()
     sandbox = GVisorSandbox(
@@ -609,23 +613,22 @@ async def test_dead_guest_is_dropped_and_exec_retries(tmp_path: Path):
         runtime_root=str(tmp_path / "rt"),
     )
     inner = _bind_loopback(sandbox)
+    await sandbox.ensure_workspace_desk(str(ws))
     calls = {"n": 0}
-    orig = inner.exec_wait
 
-    async def _dead_then_ok(**kwargs):  # noqa: ANN003
+    async def _dead(**kwargs):  # noqa: ANN003
         calls["n"] += 1
-        if calls["n"] == 1:
-            raise SandboxdError("container not found")
-        return await orig(**kwargs)
+        raise SandboxdError("container not found")
 
-    inner.exec_wait = _dead_then_ok  # type: ignore[method-assign]
-    result = await sandbox.execute(
-        ExecutionRequest(
-            code="print(1)", language="python", cwd=str(ws), timeout_seconds=10
+    inner.exec_wait = _dead  # type: ignore[method-assign]
+    with pytest.raises(SandboxError, match="云端隔离执行环境当前不可用"):
+        await sandbox.execute(
+            ExecutionRequest(
+                code="print(1)", language="python", cwd=str(ws), timeout_seconds=10
+            )
         )
-    )
-    assert calls["n"] == 2
-    assert result.success is True
+    assert calls["n"] == 1
+    assert sandbox.host_scratch_dir(str(ws)) is None
 
 
 @pytest.mark.asyncio

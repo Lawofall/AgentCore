@@ -4,6 +4,7 @@ import { hasLocalFiles } from "@/lib/capabilities";
 import {
   type FolderMeta,
   dedupeFoldersByLocalBinding,
+  isSharedWithMeFolder,
   localFolderBindingKey,
 } from "@/services/folders";
 import { useRequiredConversationIds } from "@/stores/aiAttention";
@@ -142,7 +143,12 @@ export function buildWorkspaceGroups(
   conversations: Conversation[],
   folders: FolderMeta[],
   requiredIds: ReadonlySet<string> = new Set(),
-  opts?: { uncapped?: boolean; folderGroupOrder?: readonly string[] },
+  opts?: {
+    uncapped?: boolean;
+    folderGroupOrder?: readonly string[];
+    /** Shared-with-me desks stay visible so the user can start a chat. */
+    includeEmpty?: boolean;
+  },
 ): WorkspaceGroup[] {
   const displayFolders = dedupeFoldersByLocalBinding(folders);
   const canonical = canonicalFolderIds(folders);
@@ -166,6 +172,13 @@ export function buildWorkspaceGroups(
     );
     result.push({ folder, convs, latest });
   }
+  if (opts?.includeEmpty) {
+    const seen = new Set(result.map((g) => g.folder.id));
+    for (const folder of displayFolders) {
+      if (seen.has(folder.id)) continue;
+      result.push({ folder, convs: [], latest: 0 });
+    }
+  }
   const ordered = orderWorkspaceGroups(result, opts?.folderGroupOrder);
   if (opts?.uncapped) return ordered;
   return pickVisibleWorkspaceGroups(ordered, requiredIds);
@@ -175,17 +188,42 @@ export function buildWorkspaceGroups(
  * The sidebar's folder groups over the live grouped cache. Shared by
  * `WorkspaceGroups` (renders them) and `RecentConversations` (bare-chat zone)
  * so the partition lives in one place.
+ *
+ * Owned desks only — member desks are {@link useSharedWithMeWorkspaceGroups}.
  */
 export function useWorkspaceGroups(): WorkspaceGroup[] {
   const conversations = useConversations();
   const allFolders = useFolders();
-  const folders = foldersForConversationRail(allFolders);
+  const folders = foldersForConversationRail(allFolders).filter(
+    (f) => !isSharedWithMeFolder(f),
+  );
   const requiredIds = useRequiredConversationIds();
   const folderGroupOrder = useSidebarStore((s) => s.folderGroupOrder);
   return useMemo(
     () =>
       buildWorkspaceGroups(conversations, folders, requiredIds, {
         folderGroupOrder,
+      }),
+    [conversations, folders, requiredIds, folderGroupOrder],
+  );
+}
+
+/**
+ * 与我共享 — cloud desks this user joined. Empty desks stay so「+」can open
+ * a chat. Not capped with the owned rail (invited desks should stay visible).
+ */
+export function useSharedWithMeWorkspaceGroups(): WorkspaceGroup[] {
+  const conversations = useConversations();
+  const allFolders = useFolders();
+  const folders = allFolders.filter(isSharedWithMeFolder);
+  const requiredIds = useRequiredConversationIds();
+  const folderGroupOrder = useSidebarStore((s) => s.folderGroupOrder);
+  return useMemo(
+    () =>
+      buildWorkspaceGroups(conversations, folders, requiredIds, {
+        folderGroupOrder,
+        includeEmpty: true,
+        uncapped: true,
       }),
     [conversations, folders, requiredIds, folderGroupOrder],
   );

@@ -3,7 +3,7 @@ import { WorkspaceSection } from "@/components/files/fileWorkbench/WorkspaceSect
 import type { Tab } from "@/components/files/fileWorkbench/storage";
 import type { FileSource } from "@/lib/fileSource";
 import { type FolderTreeNode, childFolderNames } from "@/lib/folderTree";
-import type { FolderMeta } from "@/services/folders";
+import { type FolderMeta, isFolderOwner } from "@/services/folders";
 import type { WorkspaceInfo } from "@/services/workspaces";
 import type { ReactNode } from "react";
 
@@ -61,7 +61,7 @@ export function FolderRailRow({
       showLocationBadge={false}
       hideRootDirs={node ? childFolderNames(node) : undefined}
       onCreateSubfolder={
-        folder.mode === "cloud"
+        folder.mode === "cloud" && isFolderOwner(folder)
           ? (anchorEl) => host.onCreateSubfolder(folder, anchorEl)
           : undefined
       }

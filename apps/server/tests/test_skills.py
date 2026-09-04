@@ -36,6 +36,7 @@ from agentcore.workspace.server import ServerWorkspace
 # data_file_landing ride consult audience (worker loop vs CEO 派工);
 # long_form_landing is worker-only landing HOW.
 # team_orchestration_advanced 是主管手册（audience=ceo）。
+# lead_subteam 是嵌套 lead 手册（audience=worker + requires_tools=delegate）。
 _FULL_TOOLS = {"delegate", "ask_user", "debate", "run"}
 _NO_LIVE_USER = {"delegate", "debate"}  # autonomous path: no ask_user
 
@@ -71,6 +72,7 @@ def test_registry_registers_the_system_skills():
     names = {s.name for s in reg.list_all()}
     assert names == {
         "team_orchestration_advanced",
+        "lead_subteam",
         "team_cross_folder",
         "team_delivery_env",
         "product_help",
@@ -149,12 +151,13 @@ def test_available_audience_hides_ceo_only_from_workers():
     assert "verify_and_fix" not in worker
     assert "data_file_landing" in worker
     assert "run" not in worker
-    # 持 delegate 的嵌套 lead 目录也必须与叶子同名，避免队员之间打散前缀。
+    assert "lead_subteam" not in worker
     lead = {s.name for s in reg.available({"delegate"}, audience="worker")}
-    assert lead == worker
+    assert lead == worker | {"lead_subteam"}
     ceo = {s.name for s in reg.available(_FULL_TOOLS, audience="ceo")}
     assert "product_help" in ceo
     assert "team_orchestration_advanced" in ceo
+    assert "lead_subteam" not in ceo
     assert "team_cross_folder" in ceo
     assert "team_delivery_env" in ceo
     assert "verify_and_fix" not in ceo
@@ -179,12 +182,85 @@ async def test_worker_consult_source_hides_ceo_only_listing_and_fetch():
     assert "verify_and_fix" not in names
     assert "data_file_landing" in names
     assert "run" not in names
+    assert "lead_subteam" not in names
     assert await source.fetch_by_name("u", "product_help") is None
     assert await source.fetch_by_name("u", "team_orchestration_advanced") is None
+    assert await source.fetch_by_name("u", "lead_subteam") is None
     assert await source.fetch_by_name("u", "team_cross_folder") is None
     assert await source.fetch_by_name("u", "team_delivery_env") is None
     assert await source.fetch_by_name("u", "long_form_landing") is not None
     assert await source.fetch_by_name("u", "data_file_landing") is not None
+
+
+async def test_nested_lead_consult_source_fetches_lead_subteam():
+    """持 delegate 的队员：目录与 fetch 都能拿到子队拆法；仍拿不到 CEO 编制本。"""
+    source = SkillConsultSource(
+        registry=build_system_skill_registry(),
+        tool_names={"delegate"},
+        audience="worker",
+    )
+    names = {e.name for e in await source.list_directory("u")}
+    assert "lead_subteam" in names
+    assert "team_orchestration_advanced" not in names
+    body = await source.fetch_by_name("u", "lead_subteam")
+    assert body is not None
+    assert "阻塞" in body
+    assert "立即返回" not in body
+
+
+def test_lead_subteam_is_not_ceo_coordination():
+    from agentcore.runtime.skills import _LEAD_SUBTEAM
+
+    body = _LEAD_SUBTEAM
+    assert "凡大活必嵌套" in body
+    assert "阻塞" in body
+    assert "优先先" in body and "delegate" in body
+    assert "立即返回" not in body
+    assert "可静默" not in body
+    assert "ask_user" not in body
+    assert "team_orchestration_advanced" not in body
+    assert "探路" not in body
+
+
+async def test_expand_skill_tool_names_unlocks_lead_subteam():
+    from agentcore.runtime.context.consult_sources import (
+        MergedConsultSource,
+        SkillConsultSource,
+        expand_skill_tool_names,
+    )
+
+    leaf = MergedConsultSource(
+        skill=SkillConsultSource(
+            registry=build_system_skill_registry(),
+            tool_names=set(),
+            audience="worker",
+        )
+    )
+    assert await leaf.fetch_by_name("u", "lead_subteam") is None
+    lead = expand_skill_tool_names(leaf, {"delegate"})
+    assert lead is not leaf
+    assert await lead.fetch_by_name("u", "lead_subteam") is not None
+    assert await leaf.fetch_by_name("u", "lead_subteam") is None
+
+
+def test_splice_on_demand_directory_replaces_block():
+    from agentcore.runtime.resolve.prompt.compose import splice_on_demand_directory
+
+    prompt = "BASE\n\n<按需目录>\nold\n</按需目录>\n\n<工作区>facts"
+    out = splice_on_demand_directory(prompt, "<按需目录>\nnew\n</按需目录>")
+    assert "old" not in out
+    assert "new" in out
+    assert "<工作区>facts" in out
+
+
+async def test_offer_nested_lead_consult_noop_without_consult():
+    from agentcore.runtime.runs.executor.captain_consult import offer_nested_lead_consult
+    from agentcore.tools.registry import ToolRegistry
+
+    reg = ToolRegistry()
+    out_reg, prompt = await offer_nested_lead_consult(reg, "SYS", user_id="u")
+    assert prompt == "SYS"
+    assert out_reg is reg
 
 
 async def test_ceo_consult_source_keeps_product_help():
@@ -196,11 +272,13 @@ async def test_ceo_consult_source_keeps_product_help():
     names = {e.name for e in await source.list_directory("u")}
     assert "product_help" in names
     assert "team_orchestration_advanced" in names
+    assert "lead_subteam" not in names
     assert "data_file_landing" in names
     assert "run" in names
     assert "long_form_landing" not in names
     assert await source.fetch_by_name("u", "product_help") is not None
     assert await source.fetch_by_name("u", "team_orchestration_advanced") is not None
+    assert await source.fetch_by_name("u", "lead_subteam") is None
     assert await source.fetch_by_name("u", "data_file_landing") is not None
     assert await source.fetch_by_name("u", "long_form_landing") is None
 

@@ -15,6 +15,10 @@ vi.mock("@/hooks/useConversations", () => ({
 vi.mock("@/hooks/useFolders", () => ({
   useFolders: () => [],
 }));
+vi.mock("@/hooks/useFolderSharing", () => ({
+  useSharedWithMeFolders: () => ({ data: [] }),
+  usePendingFolderInvites: () => ({ data: [] }),
+}));
 vi.mock("@/lib/theme", () => ({
   useApplyTheme: () => undefined,
 }));

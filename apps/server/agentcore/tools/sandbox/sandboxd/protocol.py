@@ -7,6 +7,8 @@ Newline JSON RPC on a Unix socket. The API process never execs ``runsc`` or ``ip
 - ``exec``: ``runsc exec`` into a running guest — ``wait`` (JSONL) or ``stdio``
   (browser driver). Does not delete the guest.
 - ``netns_setup`` / ``netns_teardown``: packaging allowlist family only.
+- ``preview_register`` / ``preview_unregister``: in-process HTTP/WS preview
+  reverse-proxy registry (``conversation_id`` + ``process_id``).
 """
 
 from __future__ import annotations
@@ -32,6 +34,8 @@ METHOD_RUN = "run"
 METHOD_EXEC = "exec"
 METHOD_DELETE = "delete"
 METHOD_KILL = "kill"
+METHOD_PREVIEW_REGISTER = "preview_register"
+METHOD_PREVIEW_UNREGISTER = "preview_unregister"
 
 
 @dataclass(frozen=True, slots=True)

@@ -38,7 +38,6 @@ import {
 } from "@/stores/execution";
 import { dismissFocusedFloat, useSidePanelStore } from "@/stores/sidePanel";
 import type { TurnDetailView } from "@/stores/ui";
-import { ReactFlowProvider } from "@xyflow/react";
 import {
   ArrowLeft,
   GitCompare,
@@ -484,9 +483,7 @@ export function TurnDetailPage() {
               {!debateViewPending && view === "graph" && (
                 <div className="min-h-0 flex-1">
                   {showTeamGraph ? (
-                    <ReactFlowProvider>
-                      <GraphView interactive fitMode="view" />
-                    </ReactFlowProvider>
+                    <GraphView interactive fitMode="view" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center">
                       <div className="text-center">

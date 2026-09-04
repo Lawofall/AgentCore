@@ -36,6 +36,7 @@ from agentcore.runtime.resolve.prompt.compose import (
     compose_worker_base_prompt,
     derive_ceo_addon,
     render_on_demand_directory,
+    splice_on_demand_directory,
 )
 from agentcore.runtime.resolve.prompt.memory_rules import (
     _MEMORY_ROUTING_FENCE,
@@ -69,4 +70,5 @@ __all__ = [
     "compose_worker_base_prompt",
     "derive_ceo_addon",
     "render_on_demand_directory",
+    "splice_on_demand_directory",
 ]

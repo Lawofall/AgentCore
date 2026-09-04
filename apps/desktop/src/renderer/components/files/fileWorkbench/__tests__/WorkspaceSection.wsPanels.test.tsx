@@ -3,7 +3,7 @@
  * 「我的文件」里云端文件夹的三件能力入口——版本 / 软删区 / 导出 ZIP。
  *
  * 这三件此前只有对话右坞才有，从文件页进来的用户得绕回某个对话才够得着。这里钉的是
- * 入口的**门控**（后端对本机工作区与共享空间一律 409，不能让用户点进一个必然失败的
+ * 入口的**门控**（后端对本机工作区一律 409，不能让用户点进一个必然失败的
  * 动作）与**出口**（版本 / 软删区走开标签页那条缝，导出直接触发打包下载）。
  */
 
@@ -154,8 +154,11 @@ describe("云端文件夹的版本 / 软删区 / 导出入口", () => {
     expect(screen.queryByText("导出 ZIP")).toBeNull();
   });
 
-  it("共享空间也不挂：服务端对 shared: 一律拒绝快照", async () => {
-    renderSection({ ws: ws({ wsId: "shared:s1" }) });
+  it("只读协作桌不挂：viewer 源无 snapshots", async () => {
+    renderSection({
+      ws: ws({ wsId: "folder:f-view" }),
+      source: source({ snapshots: false }),
+    });
 
     fireEvent.contextMenu(screen.getByText("季度报告"));
     await screen.findByText("新建文件");
