@@ -1,4 +1,4 @@
-"""Mutating file tools: write / append / str_replace."""
+"""Mutating file tools: write / str_replace."""
 
 from __future__ import annotations
 
@@ -44,19 +44,16 @@ from .integrity import (
     _reject_write_scope,
     classify_write_kind,
     format_artifact_manifest,
-    has_skeleton_markers,
-    is_skeleton_content,
-    prose_append_rejection,
     stale_overwrite_rejection,
 )
 from .read import _format_numbered_lines
 
 logger = get_logger(__name__)
 
-# 写类工具「回显结果」：worker 写 / 追加 / 替换后，常会为「确认写对没」再花一整轮 read 回读自检
-# （trace 4d715ea0 实测：8 个 append worker 全是 读→追加→回读→handoff，那一轮回读零信息增量）。
-# Artifact-first：写/append 成功回执 = artifact manifest（path/chars/lines/hash/标题树/末段预览），
-# 并硬拒对本 run 已落盘 path 的 body file_read；成篇 prose 后同 path append 亦硬拒。
+# 写类工具「回显结果」：worker 写 / 替换后，常会为「确认写对没」再花一整轮 read 回读自检
+# （trace 4d715ea0 实测：多 worker 读→改→回读→handoff，那一轮回读零信息增量）。
+# Artifact-first：写成功回执 = artifact manifest（path/chars/lines/hash/标题树/末段预览），
+# 并硬拒对本 run 已落盘 path 的 body file_read。
 # 回显有界（行数 + 字符双上限），大文件不炸 token。
 _EDIT_ECHO_CONTEXT = 3
 _EDIT_ECHO_MAX_LINES = 24
@@ -92,14 +89,23 @@ def _old_string_preview(old_string: str) -> str:
     return redact_secrets(text)
 
 
+def _old_string_nonempty_lines(old_string: str) -> list[str]:
+    return [ln for ln in old_string.replace("\r\n", "\n").splitlines() if ln.strip()]
+
+
+def _is_short_str_replace_anchor(old_string: str) -> bool:
+    """Fuzzy near-miss receipts only for a single nonempty line (punctuation drift)."""
+    return len(_old_string_nonempty_lines(old_string)) <= 1
+
+
 def _fuzzy_line_candidates(
     content: str, old_string: str
 ) -> list[tuple[float, int, list[str]]]:
-    """Bounded fuzzy regions near ``old_string`` anchors (score, start_1based, lines)."""
+    """Bounded fuzzy regions near a short ``old_string`` (score, start_1based, lines)."""
     lines = content.splitlines()
     if not lines:
         return []
-    old_lines = [ln for ln in old_string.replace("\r\n", "\n").splitlines() if ln.strip()]
+    old_lines = _old_string_nonempty_lines(old_string)
     if not old_lines:
         start, region = _region_slice(
             lines, 0, context=0, max_lines=_EDIT_FAIL_MAX_LINES
@@ -228,12 +234,8 @@ def _format_fail_snippet_block(
     label: str,
     start_line: int,
     region: list[str],
-    score: float | None = None,
 ) -> str:
-    score_note = ""
-    if score is not None:
-        score_note = f"（模糊相似度 {score:.0%}，非精确）"
-    header = f"—— {label}{score_note} · 约第 {start_line} 行起 ——"
+    header = f"—— {label} · 约第 {start_line} 行起 ——"
     body = _format_numbered_lines(region, start_line)
     return f"{header}\n{body}" if body else header
 
@@ -251,20 +253,28 @@ async def _assemble_str_replace_fail_receipt(
     Backend still raises ``NoMatch`` / ``AmbiguousMatch``; this only enriches the tool
     error so the model can re-anchor from disk instead of inventing a skeleton rewrite.
     """
+    preview = (
+        f"\n你提供的 old_string 预览：\n```\n{_old_string_preview(old_string)}\n```"
+    )
+    short_anchor = _is_short_str_replace_anchor(old_string)
     if kind == "no_match":
         head = (
             f"在 {rel_path} 中找不到 old_string；它必须与磁盘文件完全一致，"
             "包括空白与缩进。"
-        )
+        ) + preview
+        if short_anchor:
+            head += "\n以下为磁盘邻近原文（真源；非精确命中，勿当已匹配）："
+        else:
+            head += (
+                "\n整段 old_string 均不在文件中（不是某一行像不像）。"
+                "请对照写回执 end_preview 重写精确锚，或先 file_read 再 str_replace。"
+            )
     else:
         head = (
             f"old_string 在 {rel_path} 中不唯一（匹配 {match_count} 处）。请补充"
             "更多上下文以锁定单一片段，或设置 replace_all=true。"
+            f"{preview}\n以下为磁盘精确命中（真源）："
         )
-    head += (
-        f"\n你提供的 old_string 预览：\n```\n{_old_string_preview(old_string)}\n```"
-        "\n以下为磁盘原文片段（真源；标明非精确的仅供锚定，勿当已匹配）："
-    )
 
     try:
         content = await context.backend.read(rel_path)
@@ -298,25 +308,36 @@ async def _assemble_str_replace_fail_receipt(
             blocks.append(block)
         if match_count is not None and match_count > len(blocks):
             blocks.append(f"（另有 {match_count - len(blocks)} 处未列出）")
-    else:
+    elif short_anchor:
         for i, (score, start, region) in enumerate(
             _fuzzy_line_candidates(content, old_string), start=1
         ):
-            label = "文件开头" if score == 0.0 and i == 1 else f"候选 #{i}"
+            if score == 0.0 and i == 1:
+                label = "文件开头"
+            elif i == 1:
+                label = "邻近原文（非精确命中）"
+            else:
+                label = f"邻近原文 #{i}（非精确命中）"
             blocks.append(
                 _format_fail_snippet_block(
                     label=label,
                     start_line=start,
                     region=region,
-                    score=None if score == 0.0 else score,
                 )
             )
 
-    guidance = (
-        "\n请对照上方盘片段重写精确 old_string 后再 str_replace；"
-        "确需整文件覆盖可用 file_write（须完整正文，勿残缺骨架交差）；仍对不上则 escalate。"
-    )
-    return head + "\n\n" + "\n\n".join(blocks) + guidance
+    if kind == "no_match" and not short_anchor:
+        guidance = (
+            "\n确需整文件覆盖可用 file_write（须完整正文，勿残缺骨架交差）；"
+            "仍对不上则 escalate。"
+        )
+    else:
+        guidance = (
+            "\n请对照上方盘片段重写精确 old_string 后再 str_replace；"
+            "确需整文件覆盖可用 file_write（须完整正文，勿残缺骨架交差）；仍对不上则 escalate。"
+        )
+    joined = "\n\n".join(blocks)
+    return head + ("\n\n" + joined if joined else "") + guidance
 
 def _promote_research_landed_refs(rel_path: str, content: str) -> None:
     """方向笔记落盘后：正文已引用的台账 id 升 selected，供 CEO 汇总继承。"""
@@ -565,154 +586,6 @@ class FileWriteTool:
         )
         return await attach_write_diagnostics(result, context=context, path=rel_path)
 
-
-class FileAppendTool:
-    """Append content to the end of a file within the workspace."""
-
-    registration = ToolRegistration(
-        surface=ToolSurface.BUILTIN,
-        audience=AUDIENCE_BOTH,
-        file_products=FileProductsContract.SELF_REPORT,
-    )
-
-    @property
-    def schema(self) -> ToolSchema:
-        # Schema layer: 这是什么 + HOW。落盘姿势在 consult(long_form_landing)。
-        return ToolSchema(
-            name="file_append",
-            description=(
-                "在文件末尾追加：不存在则创建（含上级目录）；已存在则拼接、不重写全文。"
-                "HOW→consult(long_form_landing)。"
-            ),
-            parameters={
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "工作区内的相对文件路径。",
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": (
-                            "要追加到文件末尾的内容（一节/一段为宜，不硬拒字数；"
-                            "自行带好段落分隔，如 leading \\n\\n）。"
-                            "禁止把已落盘短状态/清理占位原样当 content。"
-                        ),
-                    },
-                },
-                "required": ["path", "content"],
-            },
-            category=ToolCategory.FILESYSTEM,
-            approval=ToolApproval.GRANTABLE,
-        )
-
-    async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
-        start = time.monotonic()
-        stub_err = cleared_write_stub_rejection(arguments)
-        if stub_err is not None:
-            return _error(stub_err, start, contract_failure=True)
-
-        requested_path = arguments.get("path", "")
-        content = arguments.get("content", "")
-
-        if not requested_path:
-            return _error("path 不能为空：请提供工作区内的相对文件路径（如 report.md）", start)
-
-        rel_path, rename_note = await _prepare_write_relpath(requested_path, context)
-
-        scope_denied = _reject_write_scope(
-            context, rel_path, start, event="file_append.scope_rejected"
-        )
-        if scope_denied is not None:
-            return scope_denied
-
-        path_key = _norm_rel_path(rel_path)
-        if context.landed_artifact_kinds.get(path_key) == "prose":
-            return _error(
-                prose_append_rejection(rel_path),
-                start,
-                contract_failure=True,
-            )
-
-        denied, release_on_fail = _claim_write_path(
-            context, rel_path, event="file_append.collision", start=start
-        )
-        if denied is not None:
-            return denied
-        coordinator = context.write_coordinator
-
-        # Pre-read: missing → create-via-append (allowed); existing skeleton → fill-in.
-        old_content: str | None = None
-        try:
-            old_content = await context.backend.read(rel_path)
-        except PathNotFound:
-            old_content = None
-        except WorkspaceError as e:
-            dead = _maybe_channel_dead_error(e, start)
-            if dead is not None:
-                if coordinator is not None and release_on_fail:
-                    coordinator.release(rel_path, context.run_id)
-                return dead
-            old_content = None
-
-        # Disk already looks like finished prose and this run wrote it as prose
-        # is handled above. If disk is prose but not locked this run (扩写 / 他 run
-        # 骨架)，仍放行。若本 run 未登记且盘上已是成篇、又无骨架标记——仍放行扩写。
-
-        try:
-            appended = await context.backend.append(rel_path, content)
-        except OutsideWorkspace as e:
-            if coordinator is not None and release_on_fail:
-                coordinator.release(rel_path, context.run_id)
-            return _outside_workspace_error(
-                rel_path, start, location=context.backend.location, reason=str(e)
-            )
-        except NotAFile:
-            if coordinator is not None and release_on_fail:
-                coordinator.release(rel_path, context.run_id)
-            return _error(f"不是文件：{rel_path}", start)
-        except WorkspaceError as e:
-            if coordinator is not None and release_on_fail:
-                coordinator.release(rel_path, context.run_id)
-            dead = _maybe_channel_dead_error(e, start)
-            if dead is not None:
-                return dead
-            return _write_io_error(e, start, action="追加")
-
-        try:
-            merged = await context.backend.read(rel_path)
-        except WorkspaceError:
-            merged = (old_content or "") + (content or "")
-
-        if old_content is None:
-            # Created via append: classify the new body (skeleton fill-in vs prose dump).
-            kind = classify_write_kind(merged)
-        elif is_skeleton_content(old_content) or has_skeleton_markers(old_content):
-            kind = "skeleton"
-        elif path_key not in context.landed_artifact_kinds:
-            # Pre-existing non-skeleton (扩写): land for read-reject, keep append-ok.
-            kind = "skeleton"
-        else:
-            kind = context.landed_artifact_kinds.get(path_key) or "skeleton"
-
-        output = format_artifact_manifest(
-            path=rel_path,
-            content=merged,
-            chars_written=appended,
-            kind=kind,
-            action="append",
-        )
-        if rename_note:
-            output = f"{output}\n{rename_note}"
-        _mark_landed_files(context, path_key, kind=kind)
-        result = ToolResult(
-            tool_call_id="",
-            success=True,
-            output=output,
-            duration_ms=int((time.monotonic() - start) * 1000),
-            file_products=[file_product(rel_path)],
-        )
-        return await attach_write_diagnostics(result, context=context, path=rel_path)
 
 class StrReplaceTool:
     """Replace an exact text span in an existing workspace file (precise edit)."""

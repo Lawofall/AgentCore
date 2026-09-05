@@ -6,8 +6,13 @@ import {
   initFold,
   projectExecution,
 } from "./project";
-import { type ExecutionRuntime, execRuntime, useExecutionStore } from "./store";
-import type { Execution, ExecutionPlan } from "./types";
+import {
+  type ExecutionRuntime,
+  execRuntime,
+  reloadProcessOverlay,
+  useExecutionStore,
+} from "./store";
+import type { AgentState, Execution, ExecutionPlan, RunNode } from "./types";
 
 /**
  * The assistant message id whose team graph the current subtree renders.
@@ -92,10 +97,11 @@ function overlayWorkerToolPhases(
   return { ...exec, agents, runs };
 }
 
-/** Overlay journaled per-run process[] so reload interleaving matches live. */
+/** Overlay journaled per-run process[] so reload interleaving matches live.
+ * Live runtimes keep `runProcesses` null; empty lanes are absent, not a wipe. */
 function overlayRunProcesses(exec: Execution, rt: ExecutionRuntime): Execution {
-  const map = rt.runProcesses;
-  if (!map || Object.keys(map).length === 0) return exec;
+  const map = reloadProcessOverlay(rt.runProcesses);
+  if (!map) return exec;
   let changed = false;
   const runs = exec.runs.map((r) => {
     const process = map[r.id];
@@ -180,6 +186,112 @@ export function useMessageExecution(
     messageId ? s.byId[messageId] : undefined,
   );
   return useMemo(() => (rt ? projectRuntime(rt) : null), [rt]);
+}
+
+/** Cheap fingerprint of one run's inspector inputs — stable under other runs' streams. */
+export function runInspectorSig(
+  execution: Execution | null,
+  runId: string,
+): string {
+  if (!execution) return "";
+  const run = execution.runs.find((r) => r.id === runId);
+  if (!run) return `missing:${runId}`;
+  const agent = execution.agents.find((a) => a.id === run.agentId);
+  return `${execution.status}|${runProcessSig(run.process)}|${runMetaSig(run)}|${agentInspectorSig(agent)}`;
+}
+
+function chunkMeta(chunks: readonly string[]): string {
+  const n = chunks.length;
+  if (n === 0) return "0:0";
+  return `${n}:${chunks[n - 1]?.length ?? 0}`;
+}
+
+function runProcessSig(process: RunNode["process"]): string {
+  let tools = 0;
+  let running = 0;
+  let success = 0;
+  let error = 0;
+  let textChars = 0;
+  for (const step of process) {
+    if (step.kind === "tool") {
+      tools++;
+      if (step.status === "running") running++;
+      else if (step.status === "success") success++;
+      else error++;
+    } else if (step.kind === "reasoning" || step.kind === "content") {
+      textChars += step.text.length;
+    }
+  }
+  const last = process.at(-1);
+  const tail =
+    last == null
+      ? ""
+      : last.kind === "tool"
+        ? `${last.id}:${last.status}:${last.phase ?? ""}`
+        : last.kind === "reasoning" || last.kind === "content"
+          ? `${last.kind}:${last.text.length}`
+          : last.kind;
+  return `${process.length}:${tools}:${running}:${success}:${error}:${textChars}:${tail}`;
+}
+
+function runMetaSig(run: RunNode): string {
+  return [
+    run.status,
+    run.phase ?? "",
+    run.phaseTool ?? "",
+    run.error ? "1" : "0",
+    run.debrief ? "1" : "0",
+    run.escalations.length,
+    run.receivedContext.length,
+    run.checkpoint?.status ?? "",
+  ].join("|");
+}
+
+function agentInspectorSig(agent: AgentState | undefined): string {
+  if (!agent) return "";
+  const tp = agent.toolProgress;
+  const te = agent.toolExecutionLive;
+  return [
+    agent.status,
+    chunkMeta(agent.outputChunks),
+    chunkMeta(agent.reasoningChunks),
+    tp ? `${tp.toolName}:${tp.chars}` : "",
+    te ? `${te.toolName}:${te.phase}` : "",
+    agent.toolCalls.length,
+  ].join("|");
+}
+
+export type MessageRunView = {
+  execution: Execution;
+  run: RunNode;
+  agent: AgentState;
+};
+
+/**
+ * Run-detail subscription: re-render only when THIS run's inspector inputs
+ * change. Sibling workers' token/tool floods must not rebuild the tree.
+ */
+export function useMessageRun(
+  messageId: string | null,
+  runId: string,
+): MessageRunView | null {
+  const sig = useExecutionStore((s) => {
+    if (!messageId) return "";
+    const rt = s.byId[messageId];
+    return runInspectorSig(rt ? projectRuntime(rt) : null, runId);
+  });
+  return useMemo(() => {
+    if (!messageId || !sig) return null;
+    const rt = useExecutionStore.getState().byId[messageId];
+    const execution = rt ? projectRuntime(rt) : null;
+    if (!execution) return null;
+    const run = execution.runs.find((r) => r.id === runId);
+    const agent = run
+      ? (execution.agents.find((a) => a.id === run.agentId) ?? null)
+      : null;
+    if (!run || !agent) return null;
+    return { execution, run, agent };
+  }, [sig, messageId, runId]);
 }
 
 /**

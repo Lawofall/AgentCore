@@ -64,7 +64,7 @@ class EngineSettings(BaseModel):
     # 以免改空转治理）。指针禁止教重跑。1 = 只留最近一轮全文（并行多 exec
     # 都留）。code_execute / test_run 不在此列（改码对照 / 验证诚实性）。
     engine_tool_clear_exec_keep_recent: int = 1
-    # 写参投影窗：已完成且正文 ≥ min_chars 的 file_write / file_append / str_replace，
+    # 写参投影窗：已完成且正文 ≥ min_chars 的 file_write / str_replace，
     # 只留最近 N 条 assistant 消息里的全文（下一刀可当 old_string）。跑命令 / 说话
     # / 交接也计数——旧口径只数「含写的轮」会让稿子在写完后一直躺到下一次写。
     # 更早的压成 path + 结果侧摘要。1 = 刚说过的那一句；0 = 全部压扁（旧行为）。

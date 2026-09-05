@@ -1,7 +1,6 @@
 import { statusPillSoft } from "@/components/ui/tone-presets";
 import { formatDuration, formatDurationSec } from "@/lib/format";
 import { NODE_HEIGHT } from "@/lib/graphMetrics";
-import type { ReviewConcernLevel } from "@/lib/reviewConcern";
 import type {
   DebateBeat,
   PlanRevisionKind,
@@ -97,8 +96,6 @@ export interface AgentNodeData {
   escalationRaised?: number;
   /** 节点上最严重的升级展示类（真 scope > 需求矛盾 > dep > normal）。 */
   escalationKind?: EscalationDisplayKind | null;
-  /** Review/QC output flagged by {@link detectReviewConcern} (中间可见性 phase-1). */
-  reviewConcern?: ReviewConcernLevel | null;
   /** Failure reason from `run_failed` — drives face「模型中断/调用失败」+ peek. */
   error?: string | null;
   /** `run_failed.failure_kind` — preferred face class over error-text heuristics. */
@@ -520,7 +517,6 @@ export interface AgentNodePresentation {
   peekTags: string[];
   identity: DebateGraphIdentity;
   checkpointFace: { label: string; cls: string } | null;
-  reviewConcernFace: { label: string; cls: string } | null;
   statusFace: { text: string; cls: string; tickElapsed: boolean };
   /** 热修 vN / 辩论「第 N 轮」角标；null = 不挂。 */
   revisionBadge: RevisionBadgePresentation | null;

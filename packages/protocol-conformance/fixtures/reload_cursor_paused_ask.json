@@ -24,7 +24,6 @@
         "checkpoint_id": "cp1",
         "conversation_id": "conv_demo",
         "question": "继续按 A 方案，还是换 B？\n两者成本相近，B 多花一天但更稳。",
-        "assumptions": [],
         "questions": [],
         "intent": "decision"
       },

@@ -289,20 +289,14 @@ class _FakeRegistry:
         session=None,
         keyframes=None,
         busy=False,
-        taken_over=False,
         acquire_error: Exception | None = None,
     ):
         self._session = session
         self._keyframes = keyframes or KeyframeTracker()
         self._busy = busy
-        self._taken_over = taken_over
         self._acquire_error = acquire_error
         self.closed: list[str] = []
         self.last_request = None
-
-    def is_taken_over(self, cid, *, session_id=None, run_id=None):
-        # M2 接管互斥: the tool consults this before acquiring; default False (no takeover).
-        return self._taken_over
 
     def peek_entry(self, cid, *, session_id=None, run_id=None):
         if self._session is None:

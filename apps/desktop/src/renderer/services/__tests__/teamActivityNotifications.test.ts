@@ -44,7 +44,6 @@ function resume(
     steps: [],
     pending: [],
     question: "",
-    assumptions: [],
     questions: [],
     intent: "decision",
     origin: "server",

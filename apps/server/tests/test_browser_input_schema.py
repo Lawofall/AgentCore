@@ -1,4 +1,4 @@
-"""Browser takeover input schema: DOM button 0|1|2 and Playwright names both validate."""
+"""Browser input schema: DOM button 0|1|2 and Playwright names both validate."""
 
 from __future__ import annotations
 

@@ -24,7 +24,6 @@ import {
   pickCostMoney,
   sumChunkChars,
 } from "@/lib/format";
-import { detectReviewConcern, isReviewLikeWorker } from "@/lib/reviewConcern";
 import { isGraphPerfEnabled, markGraphPerf } from "@/services/graphPerf";
 import { useActiveMessageContent } from "@/stores/conversation";
 import {
@@ -64,8 +63,6 @@ import { stripNamespace } from "./ids";
 import { type GraphScene, buildGraphScene } from "./scene";
 
 const EMPTY_FOLDED: readonly string[] = [];
-/** Stream: scan review concern every N output chars; terminal statuses always scan. */
-const REVIEW_CONCERN_MILESTONE = 256;
 /** When true, node/edge faces self-read Live; Document shells omit live fields. */
 export const GraphDocumentModeContext = createContext(false);
 
@@ -256,32 +253,6 @@ export function stepEdgeAnimatedSig(
     : "0";
 }
 
-function reviewConcernForFace(
-  agent: AgentState | undefined,
-  faceRun: RunNode,
-  status: RunStatus,
-): ReturnType<typeof detectReviewConcern> {
-  const role = agent?.role ?? faceRun.role ?? "";
-  if (!isReviewLikeWorker(role, faceRun.id)) return null;
-  const chunks = agent?.outputChunks ?? [];
-  const charLen = sumChunkChars(chunks);
-  if (charLen < 12) return null;
-  if (status === "running") {
-    const last = chunks.length > 0 ? chunks[chunks.length - 1] : undefined;
-    const prevLen = charLen - (last?.length ?? 0);
-    const crossed =
-      Math.floor(prevLen / REVIEW_CONCERN_MILESTONE) !==
-      Math.floor(charLen / REVIEW_CONCERN_MILESTONE);
-    const firstHit = prevLen < 12;
-    if (!crossed && !firstHit) return null;
-  }
-  // Terminal (or milestone): one join — not per-delta on the hot path.
-  return detectReviewConcern(chunks.join(""), {
-    role,
-    runId: faceRun.id,
-  });
-}
-
 function useLiveExecutionGetter(): () => Execution | null {
   const messageId = useExecutionScope();
   return useCallback(() => {
@@ -343,7 +314,6 @@ export function deriveAgentNodeLive(
   const outputChunks = agent?.outputChunks ?? [];
   const reasoningChunks = agent?.reasoningChunks ?? [];
   const outputChars = sumChunkChars(outputChunks);
-  const reviewConcern = reviewConcernForFace(agent, faceRun, aggregatedStatus);
   const focused =
     opts.litRunId === run.id || foldedCx.some((r) => r.id === opts.litRunId);
   const isContinuation = run.continuesRunId != null;
@@ -472,7 +442,6 @@ export function deriveAgentNodeLive(
       0,
     ),
     escalationKind: pickEscalationKind(roundRuns.flatMap((r) => r.escalations)),
-    reviewConcern,
     foldedChildCount:
       foldedChildCount > 0 && !foldInfo?.debateUnits.has(run.id)
         ? foldedChildCount

@@ -36,7 +36,6 @@ vi.mock("@/components/ManualHelpLink", () => ({
 
 const twoQuestions: AskUserContent = {
   question: "总标题不要画",
-  assumptions: [{ id: "a0", label: "交付物", value: "单页落地" }],
   questions: [
     {
       id: "q0",
@@ -175,7 +174,6 @@ describe("AskDecisionBody question pager", () => {
       <Harness
         content={{
           question: "只一题",
-          assumptions: [],
           questions: [
             {
               id: "q0",
@@ -202,7 +200,6 @@ describe("AskDecisionBody question pager", () => {
         onContinue={onContinue}
         content={{
           question: "只一题",
-          assumptions: [],
           questions: [
             {
               id: "q0",
@@ -240,7 +237,6 @@ describe("AskDecisionBody question pager", () => {
         onContinue={onContinue}
         content={{
           question: "只一题",
-          assumptions: [],
           questions: [
             {
               id: "q0",
@@ -267,7 +263,7 @@ describe("AskDecisionBody question pager", () => {
     render(
       <Harness
         onContinue={onContinue}
-        content={{ question: "选 A 还是 B？", assumptions: [], questions: [] }}
+        content={{ question: "选 A 还是 B？", questions: [] }}
       />,
     );
     expect(primaryButton(/^提交$/).disabled).toBe(false);
@@ -281,7 +277,6 @@ describe("AskDecisionBody question pager", () => {
       <Harness
         content={{
           question: "只一题",
-          assumptions: [],
           questions: [
             {
               id: "q0",
@@ -352,7 +347,6 @@ describe("AskDecisionBody question pager", () => {
     const onContinue = vi.fn();
     const three: AskUserContent = {
       question: "总标题不要画",
-      assumptions: [],
       questions: [
         {
           id: "q0",
@@ -474,16 +468,12 @@ describe("AskDecisionBody question pager", () => {
     expect(onContinue).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps per-question notes and assumptions while switching", () => {
+  it("keeps per-question notes while switching", () => {
     render(<Harness />);
     expect(screen.getByPlaceholderText(ASK_NOTE_PLACEHOLDER)).toBeTruthy();
-    expect(screen.getByText("起步计划")).toBeTruthy();
-    expect(screen.getByText("单页落地")).toBeTruthy();
     fireEvent.click(screen.getByText("方案 A（推荐）"));
     fireEvent.click(primaryButton(/^下一题$/));
     expect(screen.getByPlaceholderText(ASK_NOTE_PLACEHOLDER)).toBeTruthy();
-    expect(screen.getByText("起步计划")).toBeTruthy();
-    expect(screen.getByText("单页落地")).toBeTruthy();
   });
 
   it("preserves picks after switching away and back", () => {
@@ -584,7 +574,6 @@ describe("AskDecisionBody question pager", () => {
       <Harness
         content={{
           question: "总标题不要画",
-          assumptions: [],
           questions: [
             {
               id: "q0",
@@ -630,7 +619,6 @@ describe("AskDecisionBody question pager", () => {
     vi.useFakeTimers();
     const three: AskUserContent = {
       question: "总标题不要画",
-      assumptions: [],
       questions: [
         {
           id: "q0",

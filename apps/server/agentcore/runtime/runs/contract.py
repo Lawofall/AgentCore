@@ -863,7 +863,7 @@ def format_light_repair_feedback(
     return (
         "你上一次的产出只差格式补全（缺章节），"
         f"不必重新调查：\n{items}{coverage}{prior_block}\n\n"
-        "请对已落盘文件用 str_replace（或局部 file_append 填骨架空位）就地补齐后 "
+        "请对已落盘文件用 str_replace 就地补齐后 "
         "handoff；优先以写回执 artifact manifest 验真，勿为空转反复 file_read "
         "自产物正文。"
         "不要重新检索、不要道歉、不要附带说明。"
@@ -892,7 +892,7 @@ def format_write_pass_feedback(verdict: ContractVerdict) -> str:
     return (
         "你尚未把产物写入工作区。本轮是【短写盘 pass】——工具面已收窄为写盘/handoff："
         f"\n{items}\n\n"
-        "请立即用 file_write / str_replace / file_append（或等价落盘）把产物写进工作区，"
+        "请立即用 file_write / str_replace（或等价落盘）把产物写进工作区，"
         "然后调用 handoff。"
         "禁止重新调查、禁止全仓巡读、禁止只把内容贴在回复正文里。"
     )

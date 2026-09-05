@@ -251,7 +251,7 @@ def test_zero_landing_worker_keeps_role_blocking_gap():
                 {
                     "description": (
                         "本队员本波未交卷：未把产物写入工作区：交付物须用 file_write / "
-                        "str_replace / file_append 或 code_execute / file_copy 落盘，"
+                        "str_replace 或 code_execute / file_copy 落盘，"
                         "而非粘在回复正文里"
                     ),
                     "severity": "warning",

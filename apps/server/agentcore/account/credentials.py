@@ -88,6 +88,36 @@ def _auth_headers(creds: AccountCredentials) -> dict[str, str]:
     }
 
 
+def _fastapi_validation_bits(resp: httpx.Response) -> str:
+    """Join FastAPI 422 ``detail[]`` loc/msg into a model-readable fragment."""
+    try:
+        payload = resp.json()
+    except ValueError:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    detail = payload.get("detail")
+    if not isinstance(detail, list):
+        return ""
+    parts: list[str] = []
+    for item in detail:
+        if not isinstance(item, dict):
+            continue
+        loc = item.get("loc")
+        msg = item.get("msg")
+        field = ""
+        if isinstance(loc, list):
+            field = ".".join(str(x) for x in loc if x != "body")
+        msg_s = str(msg).strip() if msg is not None else ""
+        if field and msg_s:
+            parts.append(f"{field}: {msg_s}")
+        elif msg_s:
+            parts.append(msg_s)
+        elif field:
+            parts.append(field)
+    return "; ".join(parts)
+
+
 def _raise_for_status(resp: httpx.Response, *, op: str) -> None:
     if resp.status_code in (401, 403):
         raise AccountCloudError(
@@ -114,6 +144,12 @@ def _raise_for_status(resp: httpx.Response, *, op: str) -> None:
             f"account {op} failed (409)",
             code="account_cloud_failed",
         )
+    if resp.status_code == 422:
+        bits = _fastapi_validation_bits(resp)
+        message = f"account {op} validation (422)"
+        if bits:
+            message = f"{message}: {bits}"
+        raise AccountCloudError(message, code="account_cloud_validation")
     if resp.status_code >= 400:
         raise AccountCloudError(
             f"account {op} failed ({resp.status_code})",

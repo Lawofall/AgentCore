@@ -487,9 +487,8 @@ class PausedTurnSummary(BaseModel):
     resume of a leftover frame is 410 Gone.
     plan_review carries ``steps`` (the reviewed checkpoint nodes) + ``pending`` (the
     gated downstream); ask_user carries the unified card payload
-    ``question`` (the framing / opening line) + the optional opening
-    content ``assumptions`` / ``questions`` (empty for a compact mid-task fork). The
-    unused set is empty for the other kinds.
+    ``question`` (the framing / opening line) + ``questions`` (empty for a compact
+    mid-task fork). The unused set is empty for the other kinds.
     """
 
     message_id: str
@@ -503,7 +502,6 @@ class PausedTurnSummary(BaseModel):
     pending: list[dict[str, Any]] = Field(default_factory=list)
     # ask_user
     question: str = ""
-    assumptions: list[dict[str, Any]] = Field(default_factory=list)
     questions: list[dict[str, Any]] = Field(default_factory=list)
     intent: AskCheckpointIntent | None = None
     browser_login: bool = False
@@ -837,10 +835,10 @@ class MessageDetail(BaseModel):
 
 # Closed sets for persisted ``memory_updates`` JSONB (kind + items[].action).
 # Removing / renaming a member is a backfill — do not drop a historical value to
-# tidy the type. Write-site inventory: consolidation.py (semantic +
-# add/update/remove via MemoryAction), always_quota.py + billing_quota_card.py
-# (kind=quota; action quota / quota_denied / quota_holder). Session digests live
-# in ``memory_episodes`` and never get a ``memory_updates`` row.
+# tidy the type. Write-site inventory: always_quota.py + billing_quota_card.py
+# (kind=quota; action quota / quota_denied / quota_holder). consolidation.py no
+# longer writes kind=semantic; historical semantic rows remain readable.
+# Session digests live in ``memory_episodes`` and never get a ``memory_updates`` row.
 # Production value-domain check (pre-deploy, human): Agent记忆与知识系统.md
 # 「memory_updates 闭集 · 上线前生产库查询」.
 MemoryUpdateKind = Literal["semantic", "quota"]

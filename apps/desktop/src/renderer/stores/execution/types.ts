@@ -216,7 +216,8 @@ export interface AgentState {
    * name + the chars of arguments streamed so far. Non-null only during active
    * argument assembly — set on each progress tick, cleared once the call starts
    * executing (tool_use_start) or the run ends. Drives the node/detail's live
-   * write-family「{tool} · N 字」heartbeat so a long file write never looks frozen. */
+   * write-family / delegate / debate「{tool} · N 字」heartbeat so a long assemble
+   * never looks frozen. */
   toolProgress: { toolName: string; chars: number } | null;
   /** Coarse EXECUTION phase for this worker's currently-running tool (`tool_use_progress`
    * with `run_id`). Transport-only — never folded from frames/journal; overlaid live from
@@ -403,8 +404,8 @@ export interface RunNode {
    * Appended on each `run_escalation` frame. */
   escalations: RunEscalation[];
   /** Per-run 思考·正文·工具 timeline (对称 CEO ``message.process``). Live-folded from
-   * ``run_reasoning_delta`` / ``run_output_delta`` / worker ``tool_use_*``; reload overlays
-   * ``runs.run_processes[runId]`` so interleaving matches live (not ``message_final`` splice). */
+   * ``run_reasoning_delta`` / ``run_output_delta`` / worker ``tool_use_*``. Reload may
+   * seed from ``runs.run_processes[runId]`` once workers have settled (not while live). */
   process: ProcessStep[];
   /**
    * Worker mid-flight activity phase (`run_phase` SSE). Orthogonal to {@link status}.
@@ -597,7 +598,7 @@ export interface ExecutionPlan {
 export interface ExecutionJournal {
   events: SSEEvent[];
   finishReason: string;
-  /** Per-run ProcessStep[] from journal (reload overlay). Absent on older journals. */
+  /** Per-run ProcessStep[] from journal (settled-reload seed). Absent on older journals. */
   runProcesses?: Record<string, ProcessStep[]> | null;
   /**
    * False when REST list dropped bulky journal events; graph / turn-detail

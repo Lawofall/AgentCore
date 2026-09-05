@@ -27,14 +27,8 @@ import {
   formatRegisterLocalFolderAnswer,
   pickAndRegisterLocalFolder,
 } from "@/lib/registerLocalFolder";
-import { usePersistentDisclosure } from "@/stores/disclosure";
-import type {
-  AskAssumption,
-  AskOption,
-  AskQuestion,
-  CheckpointIntent,
-} from "@/types/events";
-import { ChevronRight, FolderOpen, FolderTree, Loader2 } from "lucide-react";
+import type { AskOption, AskQuestion, CheckpointIntent } from "@/types/events";
+import { FolderOpen, FolderTree, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
@@ -55,7 +49,6 @@ export const ASK_NOTE_PLACEHOLDER = "没有合适的，写在这里";
  * (live/replay), a paused-turn frame, and a worker escalation all satisfy it. */
 export interface AskUserContent {
   question: string;
-  assumptions: AskAssumption[];
   questions: AskQuestion[];
 }
 
@@ -148,7 +141,7 @@ export function useAskAnswer(
 }
 
 /**
- * The structured pickers — optional 起步计划 (read-only) + askable questions —
+ * The structured pickers — askable questions —
  * driven by a {@link useAskAnswer} instance. Renders nothing it has no content for, so a
  * bare one-question escalate shows just that question and the CEO opening shows the full
  * set. Choice questions carry 本题人话; the headline and footer live in the consuming card.
@@ -158,7 +151,6 @@ export function AskQuestionFields({
   answer,
   tone,
   disabled,
-  disclosureKey,
   conversationId,
   onBindResolve,
 }: {
@@ -166,7 +158,7 @@ export function AskQuestionFields({
   answer: ReturnType<typeof useAskAnswer>;
   tone: AskTone;
   disabled: boolean;
-  /** 检查点/升级 id：给了才把「起步计划」开合持久化。 */
+  /** 检查点/升级 id：给了才把开合持久化（授权项等）。 */
   disclosureKey?: string | null;
   /** Desktop conversation id — enables bind_local_folder action options. */
   conversationId?: string | null;
@@ -308,14 +300,6 @@ export function AskQuestionFields({
 
   return (
     <div className="space-y-2.5">
-      {/* 起步计划：可折叠的只读信息块（默认收起；summary 预览各项名）。 */}
-      {content.assumptions.length > 0 && (
-        <AssumptionsDisclosure
-          assumptions={content.assumptions}
-          disclosureKey={disclosureKey}
-        />
-      )}
-
       {content.questions.map((q, i) => (
         <QuestionField
           key={q.id}
@@ -348,59 +332,6 @@ export function AskQuestionFields({
       )}
       {bindError && (
         <p className="text-xs text-muted-foreground">{bindError}</p>
-      )}
-    </div>
-  );
-}
-
-/** Controlled 起步计划 fold — replaces native `<details>` so open state can persist. */
-function AssumptionsDisclosure({
-  assumptions,
-  disclosureKey,
-  defaultOpen = false,
-}: {
-  assumptions: AskAssumption[];
-  disclosureKey?: string | null;
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = usePersistentDisclosure(
-    disclosureKey ? `${disclosureKey}:assumptions` : null,
-    defaultOpen,
-  );
-  return (
-    <div className="rounded-lg bg-muted/20">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full cursor-pointer list-none items-center gap-1.5 px-2.5 py-1.5 text-left"
-      >
-        <ChevronRight
-          size={13}
-          className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
-        />
-        <span className="shrink-0 text-xs font-medium text-muted-foreground">
-          起步计划
-        </span>
-        {!open && (
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground/70">
-            {assumptions.map((a) => a.label).join(" · ")}
-          </span>
-        )}
-      </button>
-      {open && (
-        <div className="space-y-0.5 px-2.5 pb-2 pl-6">
-          {assumptions.map((a) => (
-            <div key={a.id} className="flex gap-1.5 text-xs">
-              <span className="w-14 shrink-0 text-muted-foreground">
-                {a.label}
-              </span>
-              <span className="min-w-0 flex-1 whitespace-pre-wrap text-foreground">
-                {a.value}
-              </span>
-            </div>
-          ))}
-        </div>
       )}
     </div>
   );

@@ -192,13 +192,19 @@ export function dropTrailingContentSteps(
  *   inline timeline (统一团队时间线 = the CEO's OWN steps);
  * - an ORCHESTRATION call (delegate/debate): the `team` marker (dropped at `run_plan`)
  *   stands in its place as the collaboration graph's slot, so it makes no tool step.
- *   Mirrors the backend `EventSink._accumulate_process`. */
+ *   Mirrors the backend `EventSink._accumulate_process`;
+ * - a `tool_call_id` already on the lane: `tool_use_start` is one step, same as
+ *   `team` / other markers. GET process and an incremental attach segment may each
+ *   carry the same start; a second fold is not a new call. */
 export function appendToolStep(
   process: ProcessStep[] | undefined,
   payload: ToolUseStartPayload,
 ): ProcessStep[] {
   if (payload.run_id || isMarkerStandinTool(payload.tool_name))
     return process ?? [];
+  const id = payload.tool_call_id;
+  if (id && process?.some((s) => s.kind === "tool" && s.id === id))
+    return process;
   const steps = process ? [...process] : [];
   steps.push({
     kind: "tool",

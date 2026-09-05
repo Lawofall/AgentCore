@@ -1535,7 +1535,7 @@ def test_orchestration_skill_teaches_recall_and_delegate_fallback():
     assert "白名单" not in body
     assert "相关工具" not in body
     assert "str_replace" in landing
-    assert "file_append" in landing
+    assert "file_append" not in landing
     assert "全文重写" not in body
     assert "**禁止**对已有成篇成品再 `file_write`" not in body
     assert "禁止骨架/最小实现" not in body
@@ -1554,8 +1554,9 @@ def test_ask_user_kickoff_skill_teaches_short_clarify():
     skill = build_system_skill_registry().get("asking_the_user")
     assert skill.requires_tools == ("ask_user",)
     body = skill.body
-    assert "assumptions" in body
-    assert "2–6 字项名" in body
+    assert "assumptions" not in body
+    assert "起步计划" not in body
+    assert "2–6 字项名" not in body
     assert "questions" in body
     assert "要什么" in body and "给谁" in body
     assert "短问" in body or "短澄清" in body
@@ -1638,6 +1639,8 @@ def test_ask_user_kickoff_skill_omits_retired_format_fields():
     body = _body("asking_the_user")
     assert "style_options" not in body
     assert "format_options" not in body
+    assert "assumptions" not in body
+    assert "起步计划" not in body
     assert "提案墙" not in body
     assert "短问" in body or "短澄清" in body
 
@@ -1862,8 +1865,10 @@ def test_long_form_dispatch_and_landing_how():
     assert landing.audience == ("worker",)
     body = landing.body
     assert "file_write" in body
-    assert "file_append" in body
-    assert "骨架填空" in body
+    assert "file_append" not in body
+    assert "骨架填空" not in body
+    assert "截断" in body
+    assert "end_preview" in body
     assert "file_read 抽查" not in body
     assert "manifest" in body
     assert "run" in body

@@ -62,7 +62,7 @@ def chromium_launch_args(proxy: str) -> list[str]:
 CHROME_ARGS = chromium_launch_args(PROXY)
 
 # The commands the host may invoke (allowlist keeps ``cmd:"start"`` / dunder probing from
-# reaching internal methods). ``input`` (M2 · D17) injects user takeover events via CDP Input.
+# reaching internal methods). ``input`` injects user events via CDP Input.
 _COMMANDS = frozenset(
     {
         "navigate",
@@ -117,7 +117,7 @@ def _scrub_console_text(raw, max_len: int = _CONSOLE_MAX_TEXT) -> str:
     return t[: max(0, max_len - 1)] + "…"
 
 
-# CDP Input event-type maps (M2 接管注入): our compact wire verbs → CDP domain verbs.
+# CDP Input event-type maps (user input injection): our compact wire verbs → CDP domain verbs.
 _MOUSE_TYPES = {
     "down": "mousePressed",
     "up": "mouseReleased",
@@ -376,8 +376,8 @@ class Driver:
         self._snapshot_version = 0
         self._cdp = None
         self._screencast_on = False
-        # Last screencast frame's device dims — the coordinate space the host's takeover
-        # events live in (帧像素空间). Used to rescale input to the viewport (M2).
+        # Last screencast frame's device dims — the coordinate space the host's input
+        # events live in (帧像素空间). Used to rescale input to the viewport.
         self._last_frame_w = WIDTH
         self._last_frame_h = HEIGHT
         # Read-only runtime evidence for browser_console (page console + pageerror).
@@ -536,7 +536,7 @@ class Driver:
             raise ValueError(
                 "password_blocked: AI 不得填写密码框；"
                 "worker 请 escalate(blocking=true, browser_login=true)；"
-                "CEO 请 ask_user(browser_login=true) 让用户接管登录"
+                "CEO 请 ask_user(browser_login=true) 让用户在右坞完成登录并点「已登录，继续」"
             )
         text = str(req.get("text", "") or "")
         # Focus + select-all, then CDP insertText (fill 对受控/contenteditable 不可靠).
@@ -666,7 +666,7 @@ class Driver:
         md = params.get("metadata") or {}
         w = int(md.get("deviceWidth") or WIDTH)
         h = int(md.get("deviceHeight") or HEIGHT)
-        # Remember the frame's dims: takeover input coordinates are in this space (M2).
+        # Remember the frame's dims: input coordinates are in this space.
         self._last_frame_w = w or WIDTH
         self._last_frame_h = h or HEIGHT
         _emit(
@@ -688,9 +688,9 @@ class Driver:
         except Exception as exc:  # noqa: BLE001 - late acks after stop/close are harmless
             _log(f"screencast ack failed: {type(exc).__name__}: {exc}")
 
-    # -- user takeover input injection (M2 · D17) -----------------------------
+    # -- user input injection -------------------------------------------------
     async def input(self, req: dict) -> dict:
-        """Inject a batch of takeover events via the CDP Input domain.
+        """Inject a batch of input events via the CDP Input domain.
 
         Coordinates arrive in frame-pixel space (``browser_live_frame`` dims) and are
         rescaled to the viewport here. Events dispatch in order; a bad single event is

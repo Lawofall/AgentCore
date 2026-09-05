@@ -46,10 +46,6 @@ from agentcore.runtime.runs.types import (
 _VALID_STANCES = frozenset({"pro", "con"})
 _VALID_OUTPUT_FORMATS = frozenset({"text", "json"})
 # DAG 节点可显式声明 timeout_ms；缺省不填 → ``policy.timeout_s`` 保持 None（无默认墙钟）。
-# Per-sibling excerpt caps in a fan-out awareness summary: a scope line (任务),
-# kept tight so a wide fan-out's awareness block stays scannable and can't blow
-# up a worker's context.
-_SIBLING_TASK_CHARS = 150
 # Consumer-oriented phrasing only — bare 「上游」「前置」 false-fire on seed tasks
 # that *are* the upstream ("作为上游产出…"). Keep advisory; never a hard reject.
 _UPSTREAM_HINTS = re.compile(
@@ -946,28 +942,34 @@ def _apply_sibling_summaries(plan: RunPlan) -> None:
 
 
 def _sibling_summary(group: list[RunSpec], me: RunSpec) -> str:
-    """Fan-out awareness body for ``me``: one bullet per *other* node in its
-    fan-out group, carrying enough for a peer to draw its own boundary —
+    """Fan-out roster body for ``me``: one entry per *other* node —
 
-      ``- {role}：{task}``
+      ``- {role}`` / optional ``落盘`` (pinned artifacts) / ``切面`` (task 全文)
 
-    Scope is the sibling's ``task`` instruction (always present) so a peer is never
-    blank. Excerpts are capped (:func:`_excerpt`). Assumes ``len(group) >= 2``
-    (caller skips a lone node)."""
-    lines: list[str] = []
-    for other in group:
-        if other.run_id == me.run_id:
-            continue
-        scope = _excerpt(other.task, _SIBLING_TASK_CHARS)
-        lines.append(f"- {other.role}：{scope}")
+    No per-line excerpt. Typical teams are small; pathological volume is the
+    ``run_context`` block cap, not this builder. Assumes ``len(group) >= 2``.
+    """
+    return "\n".join(
+        _sibling_line(other) for other in group if other.run_id != me.run_id
+    )
+
+
+def _sibling_line(other: RunSpec) -> str:
+    """One sibling roster entry: role, pinned paths, full task (multiline indented)."""
+    lines = [f"- {other.role}"]
+    pinned = [
+        p.strip().replace("\\", "/")
+        for p in (other.deliverable.artifacts if other.deliverable else [])
+        if isinstance(p, str) and p.strip()
+    ]
+    if pinned:
+        lines.append("  落盘：" + "、".join(f"`{p}`" for p in pinned))
+    task = (other.task or "").strip()
+    if task:
+        first, *rest = task.splitlines()
+        lines.append(f"  切面：{first}")
+        lines.extend(f"  {line}" for line in rest)
     return "\n".join(lines)
-
-
-def _excerpt(text: str, limit: int) -> str:
-    """Head excerpt of ``text`` capped at ``limit`` chars (ellipsis when over) — a
-    sibling overview only needs the gist, not the tail."""
-    text = text.strip()
-    return text if len(text) <= limit else text[:limit] + "…"
 
 
 def _explicit_timeout_s(item: dict[str, Any]) -> int | None:

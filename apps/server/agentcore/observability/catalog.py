@@ -284,11 +284,6 @@ EVENTS: list[EventSpec] = [
         },
     ),
     EventSpec(name='browser.session_opened'),
-    EventSpec(name='browser.takeover_ended'),
-    EventSpec(name='browser.takeover_finalize_failed'),
-    EventSpec(name='browser.takeover_finalized'),
-    EventSpec(name='browser.takeover_marked'),
-    EventSpec(name='browser.takeover_started'),
     EventSpec(name='browser.unbind_run_failed'),
     EventSpec(name='builder.suspect_missing_dep'),
     EventSpec(name='byok.decrypt_failed'),
@@ -338,7 +333,22 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='chat.local_turn_harvest_claim_continue'),
     EventSpec(name='chat.local_turn_harvest_idempotent'),
     EventSpec(name='chat.local_turn_idempotent_race'),
-    EventSpec(name='chat.local_turn_recorded'),
+    EventSpec(
+        name='chat.local_turn_recorded',
+        description=(
+            '本机 sidecar 回写落库。失败时带 error_code / error_type（异常类名，不进用户面）；成功'
+            '路径通常无这两键'
+        ),
+        fields={
+            'chars': FieldType('int'),
+            'conversation_id': FieldType('str'),
+            'error_code': FieldType('str'),
+            'error_type': FieldType('str'),
+            'finish_reason': FieldType('str'),
+            'message_id': FieldType('str'),
+            'rounds': FieldType('int'),
+        },
+    ),
     EventSpec(name='chat.local_turn_reuse_paired_user'),
     EventSpec(name='chat.local_turn_skip_synthetic_user'),
     EventSpec(name='chat.local_turn_tool_failures'),
@@ -1433,7 +1443,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='event_tap.failed'),
     EventSpec(name='evidence.promote_landed_note_refs'),
     EventSpec(name='favicon.fetch_failed'),
-    EventSpec(name='file_append.collision'),
     EventSpec(name='file_delete.collision'),
     EventSpec(name='file_move.collision'),
     EventSpec(name='file_ownership.completion_handoff'),
@@ -1886,7 +1895,6 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(name='memory.consolidation_run_failed'),
     EventSpec(name='memory.consolidation_skipped_abnormal_turn'),
-    EventSpec(name='memory.consolidation_skipped_no_credentials'),
     EventSpec(name='memory.consolidation_swept'),
     EventSpec(
         name='memory.consolidation_window_dropped',

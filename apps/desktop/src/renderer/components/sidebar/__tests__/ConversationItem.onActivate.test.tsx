@@ -49,6 +49,7 @@ vi.mock("@/stores/aiAttention", () => ({
 vi.mock("@/stores/aiTurnActivity", () => ({
   conversationSidebarActivityStatus: () => null,
   useConversationCloudRunning: () => false,
+  useConversationGraphLive: () => false,
 }));
 
 vi.mock("@/stores/interactions", () => ({

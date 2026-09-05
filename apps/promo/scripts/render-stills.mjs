@@ -4,7 +4,7 @@
  *    Canvas view running inside), registered standalone in Root.tsx (4:3, 1920×1440).
  *  - `payoff` — the 收束高潮 shot (demo butterfly delivered, CEO 汇聚点 lit), sized to
  *    the demo bbox framed 4:3.
- *  - `nodecard` — a 功能特写 of one real AgentNode (模型档 / 深度 / 流式预览 + ▋ /
+ *  - `nodecard` — a 功能特写 of one real AgentNode (模型档 / 深度 / 流式预览 /
  *    用时·工具), also standalone in Root.tsx (sized to the card + margin).
  *  - `mobile` — 9:20 手机聊天页（fan-out SSE 向量 + 真机 fold/AssistantContent），供宣传图 #8
   - the 4 STILL_DEFS diagrams (fanout / debate / nested2 / bigteam), each already

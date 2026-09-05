@@ -110,7 +110,7 @@ async def test_download_url_marks_governance_and_self_reports_product(
     ]
     assert context.has_landed_files is True
     assert context.landed_artifact_authors["uploads/data.csv"] == "a"
-    # 下载来的字节不是成篇正文：按 skeleton 记，同 path 后续 file_append 不该被锁。
+    # 下载来的字节不是成篇正文：按 skeleton 记（classify_write_kind / 调研质检）。
     assert context.landed_artifact_kinds["uploads/data.csv"] == "skeleton"
 
 

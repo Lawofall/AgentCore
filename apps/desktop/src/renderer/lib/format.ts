@@ -274,6 +274,62 @@ export function formatDisplayCost(
 }
 
 /**
+ * 把 nano 映到与 {@link formatCost} 相同的「分」整数（`toFixed(2)` 口径）。
+ * 0 / 不足 1 分返回 null——那些走「—」/「<¥0.01」，不能拿来做加减找齐。
+ */
+function displayFen(nano: number): number | null {
+  if (nano <= 0) return null;
+  const amount = nano / NANO_PER_UNIT;
+  if (amount < 0.01) return null;
+  return Math.round(Number(amount.toFixed(2)) * 100);
+}
+
+function formatFen(fen: number, currency?: string | null): string {
+  return `${currencySymbol(currency)}${(fen / 100).toFixed(2)}`;
+}
+
+/**
+ * 成本构成（`total == input + output`）的展示找齐：分项各自 `toFixed(2)` 会
+ * 和总额差 1 分。输入先按展示口径取整，输出吃差额，使看见的输入+输出 = 总额。
+ * 任一分项不足 1 分时不强找齐，退回 {@link formatCost}。
+ */
+export function formatAlignedCostParts(
+  inputNano: number,
+  outputNano: number,
+  totalNano: number,
+  currency?: string | null,
+): { input: string; output: string } {
+  const totalFen = displayFen(totalNano);
+  const inputFenRaw = displayFen(inputNano);
+  if (
+    totalFen == null ||
+    (inputNano > 0 && inputFenRaw == null) ||
+    (outputNano > 0 && displayFen(outputNano) == null)
+  ) {
+    return {
+      input: formatCost(inputNano, currency),
+      output: formatCost(outputNano, currency),
+    };
+  }
+  if (inputNano <= 0) {
+    return { input: "—", output: formatFen(totalFen, currency) };
+  }
+  if (outputNano <= 0) {
+    return { input: formatFen(totalFen, currency), output: "—" };
+  }
+  let inputFen = inputFenRaw ?? 0;
+  let outputFen = totalFen - inputFen;
+  if (outputFen < 0) {
+    outputFen = displayFen(outputNano) ?? 0;
+    inputFen = totalFen - outputFen;
+  }
+  return {
+    input: formatFen(inputFen, currency),
+    output: formatFen(outputFen, currency),
+  };
+}
+
+/**
  * SSE / fold `CostBreakdown` 叶子上挑「记账 total vs 估算 estimated_total」，
  * **连同该笔金额自己的币种**一起返回。
  *

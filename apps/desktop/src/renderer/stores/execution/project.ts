@@ -357,8 +357,8 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
       break;
     }
     case "run_tool_progress": {
-      // The worker is composing a tool call's arguments (the file body for
-      // file_write, …): light up the live composing heartbeat. Cleared when the
+      // The worker is composing a tool call's arguments (file body / delegate
+      // task JSON / …): light up the live composing heartbeat. Cleared when the
       // call starts executing (tool_use_start) or the run ends.
       const agent = s.agentIndex.get(f.agentId);
       if (agent) agent.toolProgress = { toolName: f.toolName, chars: f.chars };

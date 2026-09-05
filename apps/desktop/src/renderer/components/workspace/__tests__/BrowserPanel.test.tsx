@@ -238,7 +238,9 @@ describe("BrowserPanel", () => {
     });
     renderPanel(<BrowserPanel conversationId="conv-1" liveAvailable={true} />);
     expect(screen.queryByTestId("browser-live")).toBeNull();
-    expect(screen.getByText("接管")).toBeTruthy();
+    expect(screen.queryByText("接管")).toBeNull();
+    expect(screen.queryByText("归还控制")).toBeNull();
+    expect(screen.getByText("页面加载中…")).toBeTruthy();
   });
 
   it("mounts BrowserLivePanel for local hostKind when browserApi is absent (remote viewer)", () => {
@@ -808,7 +810,7 @@ describe("BrowserPanel", () => {
     );
   });
 
-  it("hides Local takeover when the page has no serverSessionId", () => {
+  it("hides 接管 chrome on local preview without serverSessionId", () => {
     const api = mockBrowserApi();
     window.browserApi = api;
     renderPanel(<BrowserPanel conversationId="conv-1" liveAvailable={false} />);
@@ -816,7 +818,7 @@ describe("BrowserPanel", () => {
     expect(screen.queryByText("归还控制")).toBeNull();
   });
 
-  it("shows Local takeover when active page has serverSessionId (non-live)", () => {
+  it("uses Local WebContents when active page has serverSessionId (non-live)", () => {
     const api = mockBrowserApi();
     window.browserApi = api;
     useBrowserSessionsStore.setState({
@@ -834,8 +836,10 @@ describe("BrowserPanel", () => {
       activePageId: "browser-server:sess-local",
     });
     renderPanel(<BrowserPanel conversationId="conv-1" liveAvailable={false} />);
-    expect(screen.getByText("接管")).toBeTruthy();
+    expect(screen.queryByText("接管")).toBeNull();
+    expect(screen.queryByText("归还控制")).toBeNull();
     expect(screen.queryByTestId("browser-live")).toBeNull();
+    expect(screen.getByText("页面加载中…")).toBeTruthy();
   });
 
   it("wires tab reorder to reorderPages via HorizontalTabStrip", () => {

@@ -153,6 +153,29 @@ async def test_salvage_pipeline_exception_carries_journal_entries():
 
 
 @pytest.mark.asyncio
+async def test_salvage_pipeline_exception_stamps_error_type_on_journal():
+    """Exception class is durable on journal / result; user face stays product copy."""
+    from agentcore.core.errors import UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+
+    sink = EventSink()
+    audit = SimpleNamespace(drops=0, flush=AsyncMock())
+
+    result = await salvage_pipeline_exception(
+        e=AttributeError("'PreparedTurn' object has no attribute 'member_turn'"),
+        message_id="m-ae",
+        sink=sink,
+        fact_log=None,
+        audit_recorder=audit,
+        roster_writer=None,
+    )
+    assert result["error_type"] == "AttributeError"
+    assert result["error"] == UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+    turn_end = next(e for e in result["journal_entries"] if e["kind"] == "turn_end")
+    assert turn_end["payload"]["error"]["error_type"] == "AttributeError"
+    assert "PreparedTurn" not in (turn_end["payload"]["error"].get("message") or "")
+
+
+@pytest.mark.asyncio
 async def test_salvage_failed_captain_hides_uncoded_exception_from_user_face():
     from agentcore.core.errors import UNCLASSIFIED_EXCEPTION_USER_MESSAGE
     from agentcore.runtime.pipeline.settle import salvage_failed_captain

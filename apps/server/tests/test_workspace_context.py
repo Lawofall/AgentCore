@@ -514,6 +514,41 @@ def test_local_remote_channel_facts():
     assert "action=bind_local_folder" not in out
 
 
+def test_local_desk_line_is_folder_name_not_os_path():
+    """Sidecar Local ``backend.root`` is a disk path; 桌行 must not leak it."""
+    backend = _FakeBackend("local", root_label="LegalMystery")
+    backend.root = Path(r"C:\Project\LegalMystery")
+    labeled = build_workspace_context(
+        backend,
+        desktop_online=True,
+        run_enabled=True,
+        desk_folder_label="法庭迷局",
+    )
+    assert "桌：法庭迷局" in labeled
+    assert "C:" not in labeled
+    assert r"\Project" not in labeled
+    assert "LegalMystery" not in labeled
+
+    fallback = build_workspace_context(
+        backend,
+        desktop_online=True,
+        run_enabled=True,
+    )
+    assert "桌：LegalMystery" in fallback
+    assert "C:" not in fallback
+    assert r"\Project" not in fallback
+
+    backend.root = Path("/Users/me/LegalMystery")
+    posix = build_workspace_context(
+        backend,
+        desktop_online=True,
+        run_enabled=True,
+        desk_folder_label="LegalMystery",
+    )
+    assert "桌：LegalMystery" in posix
+    assert "/Users/" not in posix
+
+
 def test_browser_capability_override():
     out = build_workspace_context(
         _FakeBackend("server"),

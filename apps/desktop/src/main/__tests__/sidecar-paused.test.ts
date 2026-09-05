@@ -45,7 +45,6 @@ function summary(messageId: string) {
     steps: [],
     pending: [],
     question: "要继续吗？",
-    assumptions: [],
     questions: [],
   };
 }

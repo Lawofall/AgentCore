@@ -2,22 +2,12 @@ import type { AskUserContent } from "@/components/chat/ask/AskUserFields";
 
 /**
  * Shared mock for retired ask-commence layout preview variants.
- * Rich ask_user payload (assumptions + questions + style) — production mounts
+ * Rich ask_user payload (questions) — production mounts
  * {@link AskDecisionBody} (scene v5), not a kickoff ceremony shell.
  */
 export const ASK_COMMENCE_MOCK: AskUserContent = {
   question:
     "按这版起步计划开做可以吗？有两处想先跟你对齐。\n需求能做，但方向还差两处对齐。\n先按可执行起步计划开做\n确认后立刻动手，途中可再改",
-  assumptions: [
-    { id: "a0", label: "交付物", value: "响应式落地页（单页）+ 基础 SEO" },
-    { id: "a1", label: "部署", value: "纯静态，托管到现有 CDN" },
-    {
-      id: "a2",
-      label: "首版范围",
-      value: "Hero / 卖点 / 案例 / CTA，不含后台",
-    },
-    { id: "a3", label: "工期假设", value: "先出可上线稿，再迭代动效与文案" },
-  ],
   questions: [
     {
       id: "q0",

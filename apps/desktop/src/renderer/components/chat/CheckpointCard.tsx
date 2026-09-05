@@ -85,7 +85,7 @@ export function AskUserCard({
     note: string,
     selected?: string[],
   ) => void | Promise<void>;
-  /** 检查点 id：给了才把起步计划开合持久化（旧 decision 折叠路径已退役；保留形参兼容调用方）。 */
+  /** 检查点 id（旧 decision 折叠路径已退役；保留形参兼容调用方）。 */
   disclosureKey?: string | null;
   /** Enables bind_local_folder action options on desktop. */
   conversationId?: string | null;

@@ -18,7 +18,7 @@ from .errors import _error
 
 logger = get_logger(__name__)
 
-# Artifact-first: skeleton vs prose (append lock), write_scope.
+# Artifact-first: skeleton vs prose (research QC / read-back / diagnostics), write_scope.
 # Completeness heuristics are not write-path gates (evals / remember
 # may still reuse ``has_omission_marker`` / ``is_severe_shrink``).
 _OMISSION_LITERALS = (
@@ -32,7 +32,7 @@ _OMISSION_RE = re.compile(
     re.IGNORECASE,
 )
 
-# "成篇" threshold: classify_write_kind / prose-append lock.
+# "成篇" threshold: classify_write_kind (research QC / read-back / diagnostics).
 # file_write overwrite and file_delete of a substantial draft are allowed
 # (prefer str_replace for revisions; delete is reversible by default).
 # Length is advisory only (skill / schema 可选骨架分段) — no hard reject on oversized bodies.
@@ -61,7 +61,7 @@ def is_severe_shrink(old_chars: int, new_chars: int) -> bool:
 # Skeleton vs prose (Artifact-first Writing) ---------------------------------
 # Explicit outline / website markers always count as skeleton. Otherwise:
 # short stubs are skeleton; short + many headings with thin body = skeleton;
-# substantial body without those cues = prose (locks same-path append this run).
+# substantial body without those cues = prose.
 _SKELETON_SOFT_CHARS = 800
 _MD_HEADING_RE = re.compile(r"(?m)^(#{1,6})\s+(\S.*)$")
 _HTML_HEADING_RE = re.compile(r"(?is)<h([1-6])\b[^>]*>(.*?)</h\1>")
@@ -112,7 +112,7 @@ def _prose_body_chars(content: str) -> int:
 
 
 def classify_write_kind(content: str) -> Literal["skeleton", "prose"]:
-    """Classify a ``file_write`` body as skeleton (append-ok) or prose (append-locked)."""
+    """Classify a ``file_write`` body as skeleton or prose (research QC / read-back)."""
     text = content or ""
     stripped = text.strip()
     if not stripped:
@@ -197,13 +197,6 @@ def format_artifact_manifest(
         "勿为空转反复 file_read。"
     )
 
-
-def prose_append_rejection(path: str) -> str:
-    """Hard reject when appending after a same-run prose ``file_write``."""
-    return (
-        f"拒绝追加：`{path}` 本 run 已落成篇正文（非骨架）。"
-        "成篇后请用 str_replace 局部修订；骨架填空路径才用 file_append。"
-    )
 
 def _norm_rel_path(path: str) -> str:
     return (path or "").strip().replace("\\", "/")
@@ -315,8 +308,8 @@ def _mark_landed_files(
 ) -> None:
     """Stamp landed-files gate + Artifact-first path kind (shared mutable dict).
 
-    ``kind="prose"`` locks same-path append. ``kind="skeleton"`` or omitted keeps
-    append allowed. Existing ``prose`` is never downgraded.
+    ``kind="prose"`` / ``"skeleton"`` stamps ``landed_artifact_kinds``.
+    Existing ``prose`` is never downgraded.
     First writer of ``path`` is recorded in ``landed_artifact_authors`` (setdefault).
     Failure paths never call this.
     """
@@ -331,7 +324,7 @@ def _mark_landed_files(
             path_key, desk_id=getattr(context, "ownership_desk_id", None)
         )
     # Successful disk land → sibling verify cache is stale (typecheck/build).
-    # Must run before kind early-returns (prose lock) — the file already changed.
+    # Must run before kind early-returns — the file already changed.
     eid = (getattr(context, "execution_id", None) or "").strip()
     if eid:
         try:
@@ -366,8 +359,6 @@ def _log_write_collision(
     # Literals required so sync_log_event_registry picks them up.
     if event == "file_write.collision":
         logger.info("file_write.collision", path=path, run_id=run_id, owner=owner)
-    elif event == "file_append.collision":
-        logger.info("file_append.collision", path=path, run_id=run_id, owner=owner)
     elif event == "str_replace.collision":
         logger.info("str_replace.collision", path=path, run_id=run_id, owner=owner)
     elif event == "file_delete.collision":

@@ -202,7 +202,6 @@ def with_file_products_marker(content: str, products: Iterable[FileProduct]) -> 
 # ``serialize.file_landing_tool_names``）。顺序即散文清单顺序。
 LANDING_TOOL_NAMES: tuple[str, ...] = (
     "file_write",
-    "file_append",
     "str_replace",
     "file_move",
     "file_copy",

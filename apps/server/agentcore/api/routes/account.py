@@ -171,7 +171,7 @@ class ConversationReadRequest(BaseModel):
     cursor: str | None = None
     max_chars: int | None = Field(default=None, ge=1, le=MAX_CHUNK_CHARS)
     focus: str = DEFAULT_FOCUS
-    query: str = ""
+    query: str | None = None
 
 
 class ConversationReadResponse(BaseModel):

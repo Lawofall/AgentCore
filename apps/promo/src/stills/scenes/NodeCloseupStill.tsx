@@ -5,7 +5,7 @@ import { GraphStage } from "../../core/graph/GraphStage";
 /*
  * 功能特写 still: ONE real AgentNode at native size, showing the full chip
  * vocabulary the product packs into a teammate card — 角色身份头像 + 运行态
- * presence dot + 模型档(强) + 深度 badge + 流式输出预览(带 ▋ 光标) + 用时·工具
+ * presence dot + 模型档(强) + 深度 badge + 流式输出预览 + 用时·工具
  * 脚注. A feature-callout "anatomy" shot, so it deliberately puts the running
  * live-preview AND the completed-only 用时 chip on one card (a composite the
  * runtime never shows at a single instant) to label every signal in one image;
@@ -14,7 +14,7 @@ import { GraphStage } from "../../core/graph/GraphStage";
  * Rendered through GraphStage (one node, no edges) so it reuses the exact
  * ReactFlow context + real AgentNode the graph stills use — pixel-identical to
  * in-app. A <Still> renders frame 0, and styles.css neutralizes the card's CSS
- * animations (pulse / caret) to their resting state, so no per-frame freeze is
+ * animations (pulse) to their resting state, so no per-frame freeze is
  * needed; `_enterFrame:-100` / `_terminalFrame:null` keep the motion wrappers
  * settled all the same.
  */

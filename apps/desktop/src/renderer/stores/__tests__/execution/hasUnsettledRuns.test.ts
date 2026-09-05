@@ -4,6 +4,7 @@ import {
   type RunFrame,
   execRuntime,
   hasUnsettledRuns,
+  isConversationExecutionLive,
   useExecutionStore,
 } from "../../execution";
 
@@ -187,5 +188,52 @@ describe("runsAllSettled reconcile (via recordFrame → setStatus completed)", (
     expect(hasUnsettledRuns(rt())).toBe(true);
     store().recordFrame(completed(), MID);
     expect(rt().status).toBe("completed");
+  });
+});
+
+describe("isConversationExecutionLive", () => {
+  it("running 图为活体", () => {
+    store().startExecution(onePlan, MID);
+    store().recordFrame(started(), MID);
+    expect(rt().status).toBe("running");
+    expect(isConversationExecutionLive(rt())).toBe(true);
+  });
+
+  it("完成后不是活体", () => {
+    store().startExecution(onePlan, MID);
+    store().recordFrame(started(), MID);
+    store().recordFrame(completed(), MID);
+    expect(isConversationExecutionLive(rt())).toBe(false);
+  });
+
+  it("无 plan 不是活体", () => {
+    expect(isConversationExecutionLive(rt())).toBe(false);
+  });
+
+  it("paused 且队员仍在跑 → 活体", () => {
+    store().startExecution(onePlan, MID);
+    store().recordFrame(started(), MID);
+    store().setStatus("paused", MID);
+    expect(rt().status).toBe("paused");
+    expect(isConversationExecutionLive(rt())).toBe(true);
+  });
+
+  it("failed 且 detached 队员仍在跑 → 活体", () => {
+    store().startExecution(onePlan, MID);
+    store().recordFrame(started(), MID);
+    store().setExecutionDetached(
+      {
+        execution_id: "e1",
+        conversation_id: "c",
+        completed: 0,
+        total: 1,
+        host_turn_id: MID,
+      },
+      MID,
+    );
+    store().setStatus("failed", MID);
+    expect(rt().status).toBe("failed");
+    expect(rt().executionDetached).not.toBeNull();
+    expect(isConversationExecutionLive(rt())).toBe(true);
   });
 });

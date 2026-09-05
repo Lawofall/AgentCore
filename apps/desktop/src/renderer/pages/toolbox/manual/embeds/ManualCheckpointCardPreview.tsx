@@ -16,7 +16,6 @@ import { ManualDemoRetryBar } from "./ManualDemoRetryBar";
 const DEMO_ASK: AskUserContent = {
   question:
     "试点范围定多大？\nCEO 建议先小范围验证；两名队员已分别给出成本与回滚方案，需要你拍板后再放行下游任务。",
-  assumptions: [],
   questions: [
     {
       id: "scope",

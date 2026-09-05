@@ -276,7 +276,6 @@ async def test_approve_always_files_grants_whole_class():
     file_ops = frozenset(
         {
             "file_write",
-            "file_append",
             "str_replace",
             "file_delete",
             "file_move",

@@ -35,7 +35,15 @@ vi.mock("@/stores/execution", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/stores/execution")>();
   return {
     ...actual,
-    useMessageExecution: () => mockExecution,
+    useMessageRun: (_messageId: string, runId: string) => {
+      if (!mockExecution) return null;
+      const run = mockExecution.runs.find((r) => r.id === runId);
+      const agent = run
+        ? mockExecution.agents.find((a) => a.id === run.agentId)
+        : null;
+      if (!run || !agent) return null;
+      return { execution: mockExecution, run, agent };
+    },
   };
 });
 
@@ -213,10 +221,40 @@ describe("RunDetailBody member stop", () => {
     wrap(<RunDetailBody messageId="m1" runId="r1" />);
 
     expect(screen.getByRole("button", { name: "停止这位队员" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "立即改此人" })).toBeTruthy();
+    // 纯图标：可见正文里不再写动作名（名字只在 aria-label / tooltip）。
+    expect(screen.queryByText("停止这位队员")).toBeNull();
+    expect(screen.queryByText("立即改此人")).toBeNull();
     expect(screen.queryByText(/正在实时输出/)).toBeNull();
     expect(screen.queryByText("接手")).toBeNull();
     expect(screen.queryByRole("button", { name: /记下改法/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "停止整轮" })).toBeNull();
+  });
+
+  it("hides run-status chips and header duration (live and terminal)", () => {
+    seed({ agentStatus: "working", runStatus: "running" });
+    mockExecution = {
+      ...mockExecution,
+      runs: [{ ...mockExecution.runs[0], phase: "thinking" }],
+    };
+    wrap(<RunDetailBody messageId="m1" runId="r1" />);
+    expect(screen.queryByText("思考中")).toBeNull();
+    expect(screen.queryByText("执行中")).toBeNull();
+    cleanup();
+
+    seed({ agentStatus: "idle", runStatus: "pending" });
+    wrap(<RunDetailBody messageId="m1" runId="r1" />);
+    expect(screen.queryByText("排队中")).toBeNull();
+    cleanup();
+
+    seed({ agentStatus: "completed", runStatus: "completed" });
+    mockExecution = {
+      ...mockExecution,
+      runs: [{ ...mockExecution.runs[0], durationMs: 2000 }],
+    };
+    wrap(<RunDetailBody messageId="m1" runId="r1" />);
+    expect(screen.queryByText("已完成")).toBeNull();
+    expect(screen.queryByText("2.0s")).toBeNull();
   });
 
   it("shows 接手 chip when this run replaces another, without live-output copy", () => {
@@ -329,6 +367,8 @@ describe("RunDetailBody member stop", () => {
     expect(screen.queryByRole("button", { name: /停止这位队员/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /立即改此人/ })).toBeNull();
     expect(screen.getByRole("button", { name: "停止整轮" })).toBeTruthy();
+    expect(screen.queryByText("停止整轮")).toBeNull();
+    expect(screen.queryByText("执行中")).toBeNull();
     expect(screen.queryByRole("button", { name: /记下改法/ })).toBeNull();
   });
 

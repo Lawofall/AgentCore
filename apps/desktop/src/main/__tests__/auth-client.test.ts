@@ -30,12 +30,13 @@ const h = vi.hoisted(() => {
     cookieFlush: vi.fn(async () => {}),
     appOn: vi.fn(),
     appQuit: vi.fn(),
+    appGetVersion: vi.fn(() => "0.9.21-test"),
   };
 });
 
 vi.mock("electron", () => ({
   net: { fetch: h.fetchMock },
-  app: { on: h.appOn, quit: h.appQuit },
+  app: { on: h.appOn, quit: h.appQuit, getVersion: h.appGetVersion },
   session: {
     defaultSession: {
       cookies: {
@@ -346,6 +347,8 @@ describe("bearerPostJson", () => {
     expect(firstPost[1].credentials).toBe("omit");
     expect(firstPost[1].headers.Authorization).toBe("Bearer expired");
     expect(firstPost[1].headers.Cookie).toBeUndefined();
+    expect(firstPost[1].headers["X-Client-Platform"]).toBe("desktop");
+    expect(firstPost[1].headers["X-Client-Version"]).toBe("0.9.21-test");
     const retryPost = h.fetchMock.mock.calls[2] as [
       string,
       { headers: Record<string, string> },

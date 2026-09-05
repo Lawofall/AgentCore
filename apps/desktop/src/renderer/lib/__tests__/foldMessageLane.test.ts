@@ -204,6 +204,16 @@ describe("foldMessageLane", () => {
     expect(next.reasoning).toBe(laneText(next.process, "reasoning"));
   });
 
+  it("foldToolUseStart is idempotent on the same tool_call_id", () => {
+    const started = foldToolUseStart(
+      messageLaneFromMessage({ content: "" }),
+      startPayload(),
+    );
+    const again = foldToolUseStart(started, startPayload());
+    expect(again).toBe(started);
+    expect(again.process.filter((s) => s.kind === "tool")).toHaveLength(1);
+  });
+
   // 工具执行阶段进度 (联网搜索前端展示优化)
   it("foldToolUsePhase stamps a running tool step's phase", () => {
     const started = foldToolUseStart(
@@ -521,5 +531,116 @@ describe("foldTeamMarker", () => {
       { kind: "content", text: "这是个很有意思的方向" },
       { kind: "team", execution_id: "exec1" },
     ]);
+  });
+});
+
+/** 截图同款：派队前三连工具 + team。第二次折同一批 start 时，工具会出现在图后。 */
+function foldCeoLeadInThenTeam() {
+  let lane = messageLaneFromMessage({ content: "" });
+  const tools: Array<{
+    id: string;
+    name: string;
+    args: Record<string, string>;
+  }> = [
+    {
+      id: "c1",
+      name: "consult",
+      args: { name: "team_orchestration_advanced" },
+    },
+    { id: "c2", name: "list_folders", args: {} },
+    {
+      id: "c3",
+      name: "file_write",
+      args: { path: "docs/00-创作基准.md" },
+    },
+  ];
+  for (const [i, t] of tools.entries()) {
+    lane = foldReasoningDelta(lane, `想 ${i + 1}`);
+    lane = foldToolUseStart(
+      lane,
+      startPayload({
+        tool_call_id: t.id,
+        tool_name: t.name,
+        arguments: t.args,
+      }),
+    );
+    lane = foldToolUseEnd(lane, {
+      tool_call_id: t.id,
+      tool_name: t.name,
+      result: "ok",
+      status: "success",
+    } as ToolUseEndPayload);
+  }
+  lane = foldReasoningDelta(lane, "开始派队");
+  return foldTeamMarker(lane, "exec-court");
+}
+
+describe("协作图下重复工具 · 同一批 tool_use_start 再折", () => {
+  it("live 只折一次：工具都在 team 前，且被思考隔开", () => {
+    const kinds = foldCeoLeadInThenTeam().process.map((s) =>
+      s.kind === "tool" ? s.tool_name : s.kind,
+    );
+    expect(kinds).toEqual([
+      "reasoning",
+      "consult",
+      "reasoning",
+      "list_folders",
+      "reasoning",
+      "file_write",
+      "reasoning",
+      "team",
+    ]);
+  });
+
+  it("team 已在时再折同一批 start：同 id 不追加到图后", () => {
+    let lane = foldCeoLeadInThenTeam();
+    lane = foldReasoningDelta(lane, "想 1");
+    lane = foldToolUseStart(
+      lane,
+      startPayload({
+        tool_call_id: "c1",
+        tool_name: "consult",
+        arguments: { name: "team_orchestration_advanced" },
+      }),
+    );
+    lane = foldToolUseStart(
+      lane,
+      startPayload({
+        tool_call_id: "c2",
+        tool_name: "list_folders",
+        arguments: {},
+      }),
+    );
+    lane = foldToolUseStart(
+      lane,
+      startPayload({
+        tool_call_id: "c3",
+        tool_name: "file_write",
+        arguments: { path: "docs/00-创作基准.md" },
+      }),
+    );
+    lane = foldTeamMarker(lane, "exec-court");
+    const afterTeam = lane.process.slice(
+      lane.process.findIndex((s) => s.kind === "team") + 1,
+    );
+    expect(afterTeam).toEqual([]);
+  });
+
+  it("图后新 id 的工具仍追加", () => {
+    let lane = foldCeoLeadInThenTeam();
+    lane = foldToolUseStart(
+      lane,
+      startPayload({
+        tool_call_id: "c-after",
+        tool_name: "web_search",
+        arguments: { query: "规则" },
+      }),
+    );
+    const afterTeam = lane.process.slice(
+      lane.process.findIndex((s) => s.kind === "team") + 1,
+    );
+    expect(
+      afterTeam.map((s) => (s.kind === "tool" ? s.tool_name : s.kind)),
+    ).toEqual(["web_search"]);
   });
 });

@@ -107,7 +107,7 @@ async def execute_tools(
 
     # Same-batch handoff after writes: ``landed_artifact_kinds`` is a shared dict, but
     # parallel gather can still let handoff observe an empty stamp if it races ahead of
-    # file_write/file_append. Run non-handoff tools first (still parallel among
+    # file_write. Run non-handoff tools first (still parallel among
     # themselves), then handoff — message order stays call-list order below.
     def _is_handoff_call(tc: ToolCall) -> bool:
         return sanitize_tool_name(tc.function.name or "") == "handoff"

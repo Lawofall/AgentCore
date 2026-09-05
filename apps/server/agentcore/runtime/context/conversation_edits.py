@@ -24,7 +24,6 @@ MAX_CONVERSATION_EDIT_PATHS = 8
 MAX_CONVERSATION_EDIT_HITS = 64
 
 _WRITE = "file_write"
-_APPEND = "file_append"
 _REPLACE = "str_replace"
 _DELETE = "file_delete"
 _MOVE = "file_move"
@@ -34,7 +33,7 @@ _DOCX = "md_to_docx"
 _PDF = "md_to_pdf"
 
 MUTATION_TOOLS = frozenset(
-    {_WRITE, _APPEND, _REPLACE, _DELETE, _MOVE, _COPY, _BATCH, _DOCX, _PDF}
+    {_WRITE, _REPLACE, _DELETE, _MOVE, _COPY, _BATCH, _DOCX, _PDF}
 )
 
 _LABEL_WRITE = "写过"
@@ -107,7 +106,7 @@ def _label_for_kind(kind: str, *, tool: str) -> str:
         return _LABEL_COPY
     if tool == _MOVE:
         return _LABEL_MOVE
-    if tool in {_APPEND, _REPLACE}:
+    if tool in {_REPLACE}:
         return _LABEL_UPDATE
     return _LABEL_WRITE
 

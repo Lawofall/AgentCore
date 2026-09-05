@@ -105,7 +105,7 @@ class EscalateTool:
                     "browser_login": {
                         "type": "boolean",
                         "description": (
-                            "可选，默认 false。true=用户接管浏览器登录"
+                            "true=请用户在右坞登录并点「已登录，继续」"
                             "（AI 不经手密码）；强制 blocking=true，须 assumption。"
                         ),
                     },
@@ -190,7 +190,7 @@ class EscalateTool:
         assumption = str(arguments.get("assumption") or "").strip()
         blocking = bool(arguments.get("blocking"))
         # browser_login forces blocking semantics (narrow D16 exception for user login
-        # takeover while the escalate is pending). Promote rather than reject so a model
+        # in the dock while the escalate is pending). Promote rather than reject so a model
         # that sets browser_login without blocking still lands on the suspend path.
         browser_login = bool(arguments.get("browser_login"))
         if browser_login:

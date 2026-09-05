@@ -95,8 +95,13 @@ export interface ExecutionRuntime {
   /** Worker-scoped `tool_use_progress` (run_id present), keyed by run id. Transport-only —
    * merged onto agents at projection time; never journaled or replayed. */
   workerToolPhases: Record<string, { phase: string; toolName: string }>;
-  /** Per-run ProcessStep[] from journal reload (`runs.run_processes`). Overlay replaces
-   * splice-derived process so reopen matches live interleaving. null while live. */
+  /**
+   * Settled-reload seed only (`runs.run_processes`). `projectRuntime` stamps it
+   * over splice-derived `process` so reopen matches live interleaving.
+   * Must stay null while any worker is still pending/running — live fold of
+   * `run_reasoning_delta` / `run_output_delta` is then the process authority
+   * (open thinking is not journaled; a stale seed would erase it every frame).
+   */
   runProcesses: Record<string, ProcessStep[]> | null;
   /** CEO 协调模式 Phase 1：`team_synthesis_preview` 最新快照（同 key 保最新）。P2 起
    * DURABLE：重载由 hydrateFromJournal 取 journal 中最后一条重建。状态条已收成工具栏，
@@ -342,6 +347,23 @@ function statusFromFinish(finishReason: string): ExecutionStatus {
 }
 
 /**
+ * Journal `run_processes` as a reload seed: drop empty lanes so they cannot
+ * replace a fold that already has steps (empty array is truthy).
+ */
+export function reloadProcessOverlay(
+  map: Record<string, ProcessStep[]> | null | undefined,
+): Record<string, ProcessStep[]> | null {
+  if (!map) return null;
+  let seeded: Record<string, ProcessStep[]> | null = null;
+  for (const [id, steps] of Object.entries(map)) {
+    if (steps.length === 0) continue;
+    seeded ??= {};
+    seeded[id] = steps;
+  }
+  return seeded;
+}
+
+/**
  * The execution runtime of an assistant message, never undefined (empty
  * default). Use this for imperative reads (`getState`, tests); components
  * subscribe via {@link useProjectedExecution} / {@link useActiveExecField}
@@ -387,6 +409,20 @@ export function hasUnsettledRuns(runtime: ExecutionRuntime): boolean {
       r.kind !== "captain" &&
       (r.status === "pending" || r.status === "running"),
   );
+}
+
+/**
+ * 侧栏「执行中」与协作图是否还在转对齐：`status=running`，或挂起后队员仍在跑，
+ * 或已 stamp `execution_detached`（后台条还在，含失败与后台并陈）。
+ */
+export function isConversationExecutionLive(
+  runtime: ExecutionRuntime,
+): boolean {
+  if (!runtime.plan) return false;
+  if (runtime.status === "running") return true;
+  if (runtime.executionDetached != null) return true;
+  if (runtime.status === "paused") return hasUnsettledRuns(runtime);
+  return false;
 }
 
 function maybeCompleteIfWorkersSettled(
@@ -461,6 +497,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
       patchExec(messageId, () => ({
         plan: mergePlanInto(cur, plan),
         status: "running",
+        runProcesses: null,
       }));
     },
 
@@ -658,7 +695,9 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
             coordinationWait: null,
           };
         }
-        return cur.status === status ? null : { status };
+        return cur.status === status
+          ? null
+          : { status, ...(status === "running" ? { runProcesses: null } : {}) };
       }),
 
     setAttestedOutcome: (outcome, messageId) =>
@@ -849,6 +888,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
           fromExecutionCompleted == null &&
           cur.executionDetached != null &&
           hasUnsettledRuns(provisional);
+        const graphStatus = stillUnsettled ? "running" : finishStatus;
         return {
           byId: {
             ...state.byId,
@@ -856,7 +896,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
               plan,
               frames,
               playhead: null,
-              status: stillUnsettled ? "running" : finishStatus,
+              status: graphStatus,
               debate,
               debateRounds,
               crossExamEnabled,
@@ -864,7 +904,12 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
               debatePretrial,
               evidenceLedger,
               workerToolPhases: {},
-              runProcesses: journal.runProcesses ?? null,
+              runProcesses: hasUnsettledRuns({
+                ...provisional,
+                status: graphStatus,
+              })
+                ? null
+                : reloadProcessOverlay(journal.runProcesses),
               teamSynthesisPreview,
               coordinationWait: null,
               executionDetached: stillUnsettled

@@ -59,4 +59,39 @@ describe("AgentNodeCardFace · debate identity", () => {
     expect(screen.getByText("原告")).toBeTruthy();
     expect(screen.queryByText("正方")).toBeNull();
   });
+
+  it("live preview has no block caret", () => {
+    const d = debateNode({
+      outputPreview: "正在比对历史区间，已定位 2 处异常点",
+    });
+    const p = buildAgentNodePresentation(d);
+    render(
+      <AgentNodeCardFace
+        d={d}
+        p={p}
+        flashColor="var(--success)"
+        flashing={false}
+      />,
+    );
+    expect(screen.getByText(/正在比对历史区间/)).toBeTruthy();
+    expect(screen.queryByText("▋")).toBeNull();
+  });
+
+  it("live tool composing has no block caret", () => {
+    const d = debateNode({
+      toolProgress: { toolName: "file_write", chars: 2100 },
+    });
+    const p = buildAgentNodePresentation(d);
+    render(
+      <AgentNodeCardFace
+        d={d}
+        p={p}
+        flashColor="var(--success)"
+        flashing={false}
+      />,
+    );
+    expect(screen.getByText(/Write file/)).toBeTruthy();
+    expect(screen.getByText(/2\.1k 字/)).toBeTruthy();
+    expect(screen.queryByText("▋")).toBeNull();
+  });
 });

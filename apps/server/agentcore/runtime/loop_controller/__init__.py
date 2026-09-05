@@ -24,7 +24,6 @@ Thin facade — implementation split by axis (under ``runtime/loop_controller/``
 * ``.types`` — shared types / constants / fingerprint
 * ``.stuck`` — stuck / intervention detector
 * ``.circuit`` — tool-failure circuit breaker
-* ``.write_reject`` — same-path write-reject streak 策略机
 
 Public import paths stay stable via re-exports below
 (``agentcore.runtime.loop_controller`` / ``.<leaf>``; no flat root shims).
@@ -45,7 +44,6 @@ from .types import (
     CIRCUIT_TALLY_KEEP_AVAILABLE,
     DEFAULT_EMPTY_THRESHOLD,
     DEFAULT_EXEC_ENV_TIMEOUT_RETIRE,
-    DEFAULT_PATH_WRITE_REJECT_STREAK,
     DEFAULT_THRESHOLD,
     DEFAULT_TOOL_FAILURE_DISABLE,
     DEFAULT_TOOL_FAILURE_WARN,
@@ -59,31 +57,26 @@ from .types import (
     EXEC_ENV_TIMEOUT_FAMILY,
     EXEC_ENV_TIMEOUT_RETIRE_STEER,
     EXEC_RUN_TOOL_NAMES,
-    FORCE_SEGMENTED_NARROW_TOOLS,
     LANDING_TOOLS,
     MEMORY_TOOLS,
     ORCHESTRATION_TOOLS,
-    PATH_SEGMENT_FORCE_TOOLS,
     PROGRESS_TOOLS,
     CircuitBreak,
     Intervention,
     StuckReason,
     StuckSignal,
     ToolAttempt,
-    classify_segmented_write_reject,
     delivery_idle_narrow_prompt,
     delivery_idle_nudge_prompt,
     fingerprint_tool_call,
     is_exec_env_timeout,
     resolve_error_class,
 )
-from .write_reject import WriteRejectStreakMixin
 
 __all__ = [
     "CIRCUIT_TALLY_KEEP_AVAILABLE",
     "DEFAULT_EMPTY_THRESHOLD",
     "DEFAULT_EXEC_ENV_TIMEOUT_RETIRE",
-    "DEFAULT_PATH_WRITE_REJECT_STREAK",
     "DEFAULT_THRESHOLD",
     "DEFAULT_TOOL_FAILURE_DISABLE",
     "DEFAULT_TOOL_FAILURE_WARN",
@@ -97,11 +90,9 @@ __all__ = [
     "EXEC_ENV_TIMEOUT_FAMILY",
     "EXEC_ENV_TIMEOUT_RETIRE_STEER",
     "EXEC_RUN_TOOL_NAMES",
-    "FORCE_SEGMENTED_NARROW_TOOLS",
     "LANDING_TOOLS",
     "MEMORY_TOOLS",
     "ORCHESTRATION_TOOLS",
-    "PATH_SEGMENT_FORCE_TOOLS",
     "PROGRESS_TOOLS",
     "CircuitBreak",
     "Intervention",
@@ -109,7 +100,6 @@ __all__ = [
     "StuckReason",
     "StuckSignal",
     "ToolAttempt",
-    "classify_segmented_write_reject",
     "delivery_idle_narrow_prompt",
     "delivery_idle_nudge_prompt",
     "fingerprint_tool_call",
@@ -121,7 +111,6 @@ __all__ = [
 class LoopController(
     StuckInterventionMixin,
     ToolCircuitBreakerMixin,
-    WriteRejectStreakMixin,
 ):
     """Sliding-window stuck detector with a two-strike intervention policy.
 
@@ -137,7 +126,6 @@ class LoopController(
         empty_threshold: int = DEFAULT_EMPTY_THRESHOLD,
         tool_failure_warn: int = DEFAULT_TOOL_FAILURE_WARN,
         tool_failure_disable: int = DEFAULT_TOOL_FAILURE_DISABLE,
-        path_write_reject_streak: int = DEFAULT_PATH_WRITE_REJECT_STREAK,
         validation_path_streak: int = DEFAULT_VALIDATION_PATH_STREAK,
         unproductive_threshold: int = DEFAULT_UNPRODUCTIVE_THRESHOLD,
         convergence_finalize_rounds: int = 0,
@@ -160,7 +148,6 @@ class LoopController(
         self._empty_threshold = max(1, empty_threshold)
         self._tool_failure_warn = max(1, tool_failure_warn)
         self._tool_failure_disable = max(self._tool_failure_warn, tool_failure_disable)
-        self._path_write_reject_streak = max(1, path_write_reject_streak)
         self._validation_path_streak = max(1, validation_path_streak)
         self._unproductive_threshold = max(1, unproductive_threshold)
         self._recent: deque[ToolAttempt] = deque(maxlen=window)
@@ -219,13 +206,8 @@ class LoopController(
         self._tool_disabled: set[str] = set()
         # Explicit retire (``retire_tools`` on non-run tools): may disable KEEP_AVAILABLE.
         self._tool_force_retire: set[str] = set()
-        # Write/landing tools that hit disable threshold but stay enabled (强制分段).
+        # Write/landing tools that hit disable threshold but stay enabled.
         self._tool_segmented_forced: set[str] = set()
-        # Same-path consecutive classified write rejects: path → (class, streak).
-        # Trips the same ``force_segmented`` latch (not a parallel breaker).
-        self._path_write_rejects: dict[str, tuple[str, int]] = {}
-        # One-shot: record() saw streak ≥ threshold; consumed by tool_circuit_breaker.
-        self._pending_path_force_segmented: bool = False
         # Orchestration / memory tools kept alive despite parse-only disable-threshold hits.
         self._tool_parse_kept: set[str] = set()
         # One-shot hard-stop steer from a tool that retires a family (e.g. browser
@@ -607,10 +589,6 @@ class LoopController(
                     or attempt.fingerprint != self._validation_fp_streak[0]
                 ):
                     self._validation_fp_streak = None
-            # Same-path classified write rejects → early force_segmented (合流熔断出口).
-            # contract_failure skips the cumulative tally above; this streak is the
-            # dedicated early path for prose-append / code-integrity hard rejects.
-            self._note_path_write_reject(attempt)
             # Over-investigation bookkeeping (收敛治理): tally read-only investigation
             # breadth. Calls count every attempt (incl. failures) for diagnostics;
             # rounds only advance when ≥1 investigation call succeeded — an all-fail

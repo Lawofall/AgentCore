@@ -1,9 +1,12 @@
-"""LLM consolidation of preference / profile / navigation memory — NOT vector search.
+"""LLM rewrite helpers for preference / profile / navigation — NOT the live idle path.
 
-Rewrites always-files (偏好 / 画像 / folder 导航) as whole documents from undigested
-episodic digests + current semantic markdown. Does **not** write ``主题/*.md`` (explore /
-file page / daily review do). Uses a chat LLM ``complete()`` pass only; no embeddings,
-no vector index, no similarity retrieval. Never runs on a single conversation window.
+Live idle chats store a session digest and mark it digested; they do **not** call
+this module. Always-files are written by ``remember``, explore, daily-review
+checkbox, and the file page. ``apply_explicit_memory_ops`` still serves daily
+review. The consolidator below remains for unit tests of whole-file rewrite /
+nav merge — not a production writer.
+
+Uses a chat LLM ``complete()`` pass only; no embeddings, no vector index.
 """
 
 from __future__ import annotations
@@ -104,10 +107,10 @@ class SemanticConsolidator(Protocol):
 
 _SEMANTIC_SYSTEM_PROMPT = """\
 You maintain a user's long-term SEMANTIC memory from recent SESSION SUMMARIES (episodic
-digests). You are given the current preference/profile markdown files and a list of
-undigested session summaries. Merge durable knowledge about the USER and their FOLDERS,
-deduplicate across sessions, and drop one-off chat trivia. Product capabilities
-(playbooks, tools, skills, handbook answers) live in the product ≠ this memory.
+digests). This pass is NOT the live idle path — idle chats do not rewrite always-files.
+When invoked (tests / explicit rewrite), merge durable knowledge about the USER and
+their FOLDERS, deduplicate across sessions, and drop one-off chat trivia. Product
+capabilities (playbooks, tools, skills, handbook answers) live in the product ≠ this memory.
 This pass rewrites 偏好.md / 画像.md / 导航.md only. 主题/*.md is written by explore,
 the file page, or daily review — not this pass.
 
@@ -166,10 +169,11 @@ Preference promotion rule (strict — 偏好.md only):
 - If a summary merely describes what the user asked this session to do, leave
   preferences null (or unchanged) — do not invent durable habits from the genre.
 
-Cross-topic rule (always-files — 偏好.md / 画像.md / folder 画像):
-- A bullet belongs in always-inject ONLY if a later turn about an UNRELATED topic
-  would still need it to choose how to act (who the user is / how to work with them /
-  what THIS desk is). Delete-this-bullet test: if no, do not add it.
+Every-task rule (always-files — 偏好.md / 画像.md / folder 画像):
+- A bullet belongs in always-inject ONLY if almost every later task would still
+  need it to choose how to act (who the user is / how to work with them /
+  what THIS desk is). Delete-this-bullet test: if a later unrelated task would
+  not use it, do not add it.
 - One-shot lookups (today's log values, this session's investigation, a single
   "check X" ask) are episode material, not 画像. Leave profile null when summaries
   only describe this session's task outcome.

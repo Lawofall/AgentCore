@@ -69,7 +69,6 @@ describe("formatRegisterLocalFolderAnswer", () => {
 describe("composeAnswer with bind_local_folder pick", () => {
   const content: AskUserContent = {
     question: "需要本地目录吗？",
-    assumptions: [],
     questions: [
       {
         id: "q0",
@@ -167,7 +166,6 @@ describe("displayAskReply", () => {
 describe("hasExplicitAskReply", () => {
   const q: AskUserContent = {
     question: "x",
-    assumptions: [],
     questions: [
       {
         id: "q0",
@@ -189,7 +187,6 @@ describe("hasExplicitAskReply", () => {
   it("does not let one question's note satisfy another", () => {
     const two: AskUserContent = {
       question: "x",
-      assumptions: [],
       questions: [
         q.questions[0],
         {
@@ -214,7 +211,6 @@ describe("hasExplicitAskReply", () => {
   it("does not count a note on a text question", () => {
     const textQ: AskUserContent = {
       question: "x",
-      assumptions: [],
       questions: [
         {
           id: "q0",

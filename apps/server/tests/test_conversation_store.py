@@ -583,6 +583,94 @@ def test_ensure_structured_run_error_preserves_context():
     }
 
 
+def test_ensure_structured_run_error_preserves_error_type():
+    from agentcore.core.error_codes import ErrorCode
+
+    out = cloud_mod._ensure_structured_run_error(
+        existing={
+            "code": ErrorCode.PIPELINE_ERROR,
+            "message": "管线执行失败，请稍后重试。",
+            "error_type": "AttributeError",
+        }
+    )
+    assert out["error_type"] == "AttributeError"
+    assert out["code"] == ErrorCode.PIPELINE_ERROR
+
+
+def test_merge_run_error_keeps_journal_error_type():
+    from agentcore.core.error_codes import ErrorCode
+
+    merged = cloud_mod._merge_run_error_into_journal_entries(
+        [
+            {
+                "kind": "turn_end",
+                "payload": {
+                    "finish_reason": "error",
+                    "error": {
+                        "code": ErrorCode.PIPELINE_ERROR,
+                        "message": "管线执行失败，请稍后重试。",
+                        "error_type": "AttributeError",
+                    },
+                },
+                "ts": None,
+            }
+        ],
+        {
+            "code": ErrorCode.PIPELINE_ERROR,
+            "message": "管线执行失败，请稍后重试。",
+        },
+        finish_reason="error",
+    )
+    turn_end = next(e for e in merged if e.get("kind") == "turn_end")
+    assert turn_end["payload"]["error"]["error_type"] == "AttributeError"
+
+
+def test_merge_run_error_copies_error_type_when_journal_lacks_it():
+    from agentcore.core.error_codes import ErrorCode
+
+    merged = cloud_mod._merge_run_error_into_journal_entries(
+        [
+            {
+                "kind": "turn_end",
+                "payload": {
+                    "finish_reason": "error",
+                    "error": {
+                        "code": ErrorCode.PIPELINE_ERROR,
+                        "message": "管线执行失败，请稍后重试。",
+                    },
+                },
+                "ts": None,
+            }
+        ],
+        {
+            "code": ErrorCode.PIPELINE_ERROR,
+            "message": "管线执行失败，请稍后重试。",
+            "error_type": "AttributeError",
+        },
+        finish_reason="error",
+    )
+    turn_end = next(e for e in merged if e.get("kind") == "turn_end")
+    assert turn_end["payload"]["error"]["error_type"] == "AttributeError"
+
+
+def test_turn_end_error_fields_reads_journal():
+    code, et = cloud_mod._turn_end_error_fields(
+        [
+            {
+                "kind": "turn_end",
+                "payload": {
+                    "error": {
+                        "code": "PIPELINE_ERROR",
+                        "error_type": "AttributeError",
+                    }
+                },
+            }
+        ]
+    )
+    assert code == "PIPELINE_ERROR"
+    assert et == "AttributeError"
+
+
 def test_merge_run_error_into_journal_completes_sparse_turn_end():
     """Missing / partial turn_end.error is filled; other error fields stay."""
     from agentcore.core.error_codes import ErrorCode

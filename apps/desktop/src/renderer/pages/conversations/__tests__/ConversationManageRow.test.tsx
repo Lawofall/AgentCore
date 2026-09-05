@@ -48,12 +48,14 @@ vi.mock("@/stores/conversation", () => ({
   useConversationStore: (
     sel: (s: {
       currentConversationId: string | null;
+      byId: Record<string, never>;
       switchConversation: () => void;
       dropConversationRuntime: () => void;
     }) => unknown,
   ) =>
     sel({
       currentConversationId: null,
+      byId: {},
       switchConversation: vi.fn(),
       dropConversationRuntime: vi.fn(),
     }),
@@ -62,6 +64,12 @@ vi.mock("@/stores/conversation", () => ({
 
 vi.mock("@/stores/aiAttention", () => ({
   useConversationAwaitingAttention: () => false,
+}));
+
+vi.mock("@/stores/aiTurnActivity", () => ({
+  conversationSidebarActivityStatus: () => null,
+  useConversationCloudRunning: () => false,
+  useConversationGraphLive: () => false,
 }));
 
 vi.mock("@/stores/interactions", () => ({

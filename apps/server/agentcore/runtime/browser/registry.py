@@ -25,7 +25,6 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Literal, Protocol
 
 from agentcore.config import settings
@@ -42,27 +41,6 @@ logger = get_logger(__name__)
 
 SessionFactory = Callable[[BrowserSessionRequest], Awaitable[BrowserSession]]
 HostKind = Literal["sandbox", "local"]
-
-
-@dataclass(frozen=True)
-class TakeoverMark:
-    """The active user-takeover pinned onto a session entry (M2 · D16/D17).
-
-    The registry entry is the single in-memory source of truth for「is this session under
-    user takeover」— the tools consult it (``user_in_control``) and every teardown path
-    uses it to finalize the durable record. ``record_id`` links to the ``browser_takeovers``
-    row so a drop can close it; ``started_at`` lets the endpoint reconstruct state.
-    """
-
-    record_id: str
-    user_id: str
-    started_at: datetime
-
-
-# Called on every session teardown that still carries an un-ended takeover (reap / crash /
-# shutdown / delete) so the durable record is completed on ALL paths (D17). Injected so the
-# registry stays DB-agnostic and unit-testable; awaited inside ``_drop``.
-TakeoverFinalizer = Callable[[TakeoverMark, str], Awaitable[None]]
 
 
 class BrowserSessionObserver(Protocol):
@@ -110,8 +88,6 @@ class _Entry:
     keyframes: KeyframeTracker = field(default_factory=KeyframeTracker)
     host_kind: HostKind = "sandbox"
     run_id: str | None = None
-    # Set while a user is actively driving this session by hand (M2 接管); None otherwise.
-    takeover: TakeoverMark | None = None
     url: str | None = None
     title: str | None = None
 
@@ -123,7 +99,7 @@ class _Entry:
             run_id=self.run_id,
             created_at=self.session.created_at,
             last_used=self.session.last_used,
-            control="user" if self.takeover is not None else "agent",
+            control="agent",
             url=self.url,
             title=self.title,
         )
@@ -183,17 +159,10 @@ class BrowserSessionRegistry:
         self._locks: dict[str, asyncio.Lock] = {}
         # M1 live hub (D13): notified on create/drop, consulted for watch-based TTL sparing.
         self._observer: BrowserSessionObserver | None = None
-        # M2 takeover (D17): completes the durable record on every session teardown that
-        # still carries an un-ended takeover. Wired by the takeover service.
-        self._takeover_finalizer: TakeoverFinalizer | None = None
 
     def set_observer(self, observer: BrowserSessionObserver | None) -> None:
         """Wire the live hub so this registry can announce sessions + spare watched ones."""
         self._observer = observer
-
-    def set_takeover_finalizer(self, finalizer: TakeoverFinalizer | None) -> None:
-        """Wire the takeover service so a dropped session's open record gets completed."""
-        self._takeover_finalizer = finalizer
 
     # -- config (read live so a test / ops change is honored) -------------------
     @property
@@ -340,74 +309,6 @@ class BrowserSessionRegistry:
             if sid in self._entries
         ]
 
-    # -- M2 takeover state (D16/D17): the entry is the in-memory source of truth ----------
-    def is_taken_over(
-        self,
-        conversation_id: str,
-        *,
-        session_id: str | None = None,
-        run_id: str | None = None,
-    ) -> bool:
-        """True while the resolved live session is under user takeover."""
-        return self.takeover_mark(conversation_id, session_id=session_id, run_id=run_id) is not None
-
-    def takeover_mark(
-        self,
-        conversation_id: str,
-        *,
-        session_id: str | None = None,
-        run_id: str | None = None,
-    ) -> TakeoverMark | None:
-        """The active takeover mark for the resolved session, or None."""
-        sid = self.resolve_session_id(conversation_id, session_id=session_id, run_id=run_id)
-        if sid is None:
-            return None
-        entry = self._entry_live(sid)
-        return entry.takeover if entry is not None else None
-
-    def begin_takeover(
-        self,
-        conversation_id: str,
-        mark: TakeoverMark,
-        *,
-        session_id: str | None = None,
-    ) -> bool:
-        """Pin ``mark`` onto the resolved live session; False if none is live."""
-        sid = self.resolve_session_id(conversation_id, session_id=session_id)
-        if sid is None:
-            return False
-        entry = self._entry_live(sid)
-        if entry is None:
-            return False
-        entry.takeover = mark
-        logger.info(
-            "browser.takeover_marked",
-            conversation_id=conversation_id,
-            session_id=sid,
-        )
-        return True
-
-    def end_takeover(
-        self,
-        conversation_id: str,
-        *,
-        session_id: str | None = None,
-    ) -> TakeoverMark | None:
-        """Clear + return the active takeover mark (explicit end), or None if not marked.
-
-        Clearing here BEFORE any drop ensures an explicit end never double-finalizes: a
-        later teardown finds no mark and skips the finalizer.
-        """
-        sid = self.resolve_session_id(conversation_id, session_id=session_id)
-        if sid is None:
-            return None
-        entry = self._entries.get(sid)
-        if entry is None or entry.takeover is None:
-            return None
-        mark = entry.takeover
-        entry.takeover = None
-        return mark
-
     def peek(
         self,
         conversation_id: str,
@@ -429,7 +330,7 @@ class BrowserSessionRegistry:
         session_id: str | None = None,
         run_id: str | None = None,
     ) -> _Entry | None:
-        """Like :meth:`peek` but returns the full entry (keyframes / takeover / ids)."""
+        """Like :meth:`peek` but returns the full entry (keyframes / ids)."""
         sid = self.resolve_session_id(conversation_id, session_id=session_id, run_id=run_id)
         if sid is None:
             return None
@@ -760,9 +661,6 @@ class BrowserSessionRegistry:
 
     async def _teardown_entry(self, session_id: str, entry: _Entry, *, reason: str) -> None:
         cid = entry.conversation_id
-        if entry.takeover is not None:
-            await self._finalize_takeover(entry.takeover, reason)
-            entry.takeover = None
         try:
             await entry.session.close()
         except Exception:  # noqa: BLE001 - teardown is best-effort
@@ -802,15 +700,6 @@ class BrowserSessionRegistry:
         new_active = self._active.get(cid)
         if new_active and self._entry_live(new_active) is not None:
             self._notify_ready(cid, new_active)
-
-    async def _finalize_takeover(self, mark: TakeoverMark, reason: str) -> None:
-        finalizer = self._takeover_finalizer
-        if finalizer is None:
-            return
-        try:
-            await finalizer(mark, reason)
-        except Exception:  # noqa: BLE001 - a留档 write failure must not break teardown
-            logger.warning("browser.takeover_finalize_failed", record_id=mark.record_id)
 
     def __len__(self) -> int:
         return len(self._entries)

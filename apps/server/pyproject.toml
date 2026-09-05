@@ -1,6 +1,6 @@
 [project]
 name = "agentcore"
-version = "0.7.15"
+version = "0.7.16"
 description = "AgentCore - Multi-Agent AI Workspace Backend"
 requires-python = ">=3.12"
 dependencies = [
@@ -232,7 +232,6 @@ module = [
     "agentcore.api.routes.admin.observability",
     "agentcore.api.routes.conversations.audit",
     "agentcore.api.routes.conversations.binding",
-    "agentcore.api.routes.conversations.browser_takeover",
     "agentcore.api.routes.conversations.crud",
     "agentcore.api.routes.folders",
     "agentcore.api.routes.messages",
@@ -258,7 +257,6 @@ module = [
     "agentcore.db.repositories.agent_audit",
     "agentcore.db.repositories.billing",
     "agentcore.db.repositories.bookmarks",
-    "agentcore.db.repositories.browser",
     "agentcore.db.repositories.conversation_shares",
     "agentcore.db.repositories.conversations",
     "agentcore.db.repositories.devices",

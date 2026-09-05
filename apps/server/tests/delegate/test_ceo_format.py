@@ -490,6 +490,7 @@ def test_worker_products_empty_body_with_files_and_debrief_is_pointer():
     by_id = {p["run_id"]: p for p in products}
     ok = by_id["w_ok"]
     assert ok["fidelity"] == "pointer"
+    assert ok["truncated"] is False
     assert ok["status"] == "completed"
     assert "交接结论：报告已落盘" in ok["body"]
     assert "结论甲" in ok["body"]

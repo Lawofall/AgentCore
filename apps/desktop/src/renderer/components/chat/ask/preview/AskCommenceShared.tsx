@@ -4,28 +4,19 @@
  * this file keeps preview-only shell + footer + answer alias.
  */
 import { Button } from "@/components/ui";
-import { usePersistentDisclosure } from "@/stores/disclosure";
-import type { AskAssumption } from "@/types/events";
-import { ChevronRight, Loader2, Rocket } from "lucide-react";
+import { Loader2, Rocket } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   COMMENCE_TONE,
   ChoiceQuestion,
   CommenceNote,
   OptionButton,
-  PlanChips,
   splitBriefContext,
 } from "../AskCommenceParts";
 import type { AskUserContent } from "../AskUserFields";
 import { useAskAnswer } from "../AskUserFields";
 
-export {
-  ChoiceQuestion,
-  CommenceNote,
-  OptionButton,
-  PlanChips,
-  splitBriefContext,
-};
+export { ChoiceQuestion, CommenceNote, OptionButton, splitBriefContext };
 export { COMMENCE_TONE as PREVIEW_TONE };
 
 export type PreviewAnswer = ReturnType<typeof useAskAnswer>;
@@ -80,61 +71,6 @@ export function CommenceFooter({
           ? `已预填 ${answer.presetCount} 项，直接开做或按需调整`
           : "也可直接在下方对话框回复"}
       </span>
-    </div>
-  );
-}
-
-/** Collapsible 起步计划 — same semantics as production, slightly denser. */
-export function PlanDetails({
-  assumptions,
-  defaultOpen = false,
-  disclosureKey,
-}: {
-  assumptions: AskAssumption[];
-  defaultOpen?: boolean;
-  /** Preview/stable key；缺省退化为会话内存态。 */
-  disclosureKey?: string | null;
-}) {
-  const [open, setOpen] = usePersistentDisclosure(
-    disclosureKey ? `${disclosureKey}:assumptions` : null,
-    defaultOpen,
-  );
-  if (assumptions.length === 0) return null;
-  return (
-    <div className="rounded-lg bg-muted/20">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full cursor-pointer list-none items-center gap-1.5 px-2.5 py-1.5 text-left"
-      >
-        <ChevronRight
-          size={13}
-          className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
-        />
-        <span className="shrink-0 text-xs font-medium text-muted-foreground">
-          起步计划
-        </span>
-        {!open && (
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground/70">
-            {assumptions.map((a) => a.label).join(" · ")}
-          </span>
-        )}
-      </button>
-      {open && (
-        <div className="space-y-0.5 px-2.5 pb-2 pl-6">
-          {assumptions.map((a) => (
-            <div key={a.id} className="flex gap-1.5 text-xs">
-              <span className="w-14 shrink-0 text-muted-foreground">
-                {a.label}
-              </span>
-              <span className="min-w-0 flex-1 whitespace-pre-wrap text-foreground">
-                {a.value}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

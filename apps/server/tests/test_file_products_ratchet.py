@@ -58,7 +58,6 @@ from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.tools.builtin.archive_create import ArchiveCreateTool
 from agentcore.tools.builtin.archive_extract import ArchiveExtractTool
 from agentcore.tools.builtin.file_ops import (
-    FileAppendTool,
     FileBatchTool,
     FileCopyTool,
     FileMoveTool,
@@ -159,14 +158,6 @@ def _snapshot(root: Path) -> frozenset[str]:
 
 async def _run_file_write(root: Path, _mp: pytest.MonkeyPatch) -> ToolResult:
     return await FileWriteTool().execute({"path": "报告.md", "content": "# 标题"}, _ctx(root))
-
-
-def _seed_report(root: Path) -> None:
-    (root / "报告.md").write_text("# 标题\n", encoding="utf-8")
-
-
-async def _run_file_append(root: Path, _mp: pytest.MonkeyPatch) -> ToolResult:
-    return await FileAppendTool().execute({"path": "报告.md", "content": "\n更多"}, _ctx(root))
 
 
 def _seed_src_txt(root: Path) -> None:
@@ -310,7 +301,6 @@ class _Case:
 
 _CASES: tuple[_Case, ...] = (
     _Case("file_write", _run_file_write, (("报告.md", "md", None),)),
-    _Case("file_append", _run_file_append, (("报告.md", "md", None),), _seed_report),
     _Case("str_replace", _run_str_replace, (("src.txt", "txt", None),), _seed_src_txt),
     _Case("file_copy", _run_file_copy, (("out/copy.py", "code", None),), _seed_src_txt),
     _Case(

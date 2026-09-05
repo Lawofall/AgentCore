@@ -80,7 +80,9 @@ async function fetchWithConnectTimeout(
   }
 }
 
-/** Latest journal seq **folded/dispatched** on this conversation (for Last-Event-ID). */
+/** Latest journal seq **folded/dispatched** on this conversation (for Last-Event-ID).
+ * REST hydrate without a live pump (``loadLatestWindow`` / ``ensureFullMessageRuns``)
+ * clears it so the next attach is full_replay rather than incremental-on-GET. */
 const lastEventIds = new Map<string, string>();
 /** Parsed ``id:`` stamped onto the event object; committed only after fold/dispatch. */
 const pendingEventIds = new WeakMap<SSEEvent, string>();
@@ -131,6 +133,14 @@ export function peekLastEventId(conversationId: string): string | undefined {
 
 export function clearLastEventId(conversationId: string): void {
   lastEventIds.delete(conversationId);
+}
+
+/** Test seam: pretend this conversation already folded ``id``. */
+export function seedLastEventIdForTests(
+  conversationId: string,
+  id: string,
+): void {
+  lastEventIds.set(conversationId, id);
 }
 
 /**

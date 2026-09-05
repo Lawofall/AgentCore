@@ -3,9 +3,10 @@
  *
  * Decoupled from message-window adopt: ConversationPage reveals immediately when
  * the slice already has content (or list metadata confirms messageCount===0); on an
- * empty cold slice it awaits {@link awaitHydrateAttachSettle} before reveal so
- * unsynced projection does not flash a white screen. Warm reopen with content still
- * schedules settle in the background via {@link scheduleHydrateAttachSettle}.
+ * empty cold slice it awaits {@link awaitHydrateAttachSettle} (live tail on
+ * screen, not the whole turn) before reveal so a still-running last round does
+ * not flash missing. Warm reopen with content still schedules settle in the
+ * background via {@link scheduleHydrateAttachSettle}.
  * Warm reopen keeps the in-memory slice (adopt skips overwrite) but still runs
  * recovery-driven attach/settle so a detached live / ghost running assistant is
  * not left stuck in a fake generating state.
@@ -14,6 +15,7 @@
  * 显式卸观察仅由 `attachSidecarTurn({ signal })` 调用方传入。
  */
 import { logEvent } from "@/lib/log";
+import { persistResidentOpenedCache } from "@/services/offlineCache";
 import {
   type ConversationRecovery,
   shouldHydrateLocalRecovery,
@@ -33,10 +35,13 @@ import {
   hasLocalConversationStream,
 } from "./streamOwnership";
 
+/** Hydrate waits this long for the live tail to land, then reveals anyway. */
+const REPLAY_READY_TIMEOUT_MS = 8_000;
+
 /**
  * Await recovery then project unsynced / kick attach.
  * Does **not** wait for a live sidecar turn to finish — overlay may reveal
- * once history is projected; attach continues in the background.
+ * once the live tail is on screen (or the wait times out); attach continues.
  * Safe when `loadRecovery` never rejects.
  */
 export async function awaitHydrateAttachSettle(
@@ -111,6 +116,7 @@ export async function runHydrateAttachSettle(
     let yieldHeldAcrossReturn = false;
     try {
       projectUnsyncedTurns(conversationId, recovery.unsynced);
+      persistResidentOpenedCache(conversationId);
       // Paused local turns skip attach (no live buffer). Cloud pause writeback
       // omits turn_journal, so reinject display runs from the pause frame.
       if (recovery.pausedCount > 0) {
@@ -120,7 +126,13 @@ export async function runHydrateAttachSettle(
       settleOrphanEmptyAssistants(conversationId);
       if (occupyUntilAttach) {
         // 切会话不卸观察泵 — 无页级 signal。
-        const attached = attachSidecarTurn(conversationId);
+        let notifyReplayReady = (): void => {};
+        const replayReady = new Promise<void>((resolve) => {
+          notifyReplayReady = resolve;
+        });
+        const attached = attachSidecarTurn(conversationId, {
+          onReplayReady: () => notifyReplayReady(),
+        });
         if (waitForAttach) {
           await attached;
         } else {
@@ -128,6 +140,12 @@ export async function runHydrateAttachSettle(
           void attached.finally(() => {
             releaseSidecarYield?.();
           });
+          await Promise.race([
+            replayReady,
+            new Promise<void>((resolve) => {
+              setTimeout(resolve, REPLAY_READY_TIMEOUT_MS);
+            }),
+          ]);
         }
       }
       return "local";
@@ -136,14 +154,21 @@ export async function runHydrateAttachSettle(
     }
   }
   const last = getRuntime(conversationId).messages.at(-1);
-  if (last) {
-    const canAttach = recovery.cloudLive && recovery.pausedCount === 0;
-    if (last.role === "user" && canAttach) {
-      void attachOnOpen(conversationId);
-    } else if (last.role === "assistant" && last.status === "running") {
+  const canAttach = recovery.cloudLive && recovery.pausedCount === 0;
+  if (canAttach) {
+    if (last?.role === "assistant" && last.status === "running") {
       await settleCloudRunningAssistant(conversationId, recovery);
     } else {
-      // Warm reopen may leave a mid-slice empty incomplete from a prior preempt.
+      // REST window may still miss the live tail (in-flight not flushed).
+      // Attach anyway — waiting for last===user left the newest round blank.
+      void attachOnOpen(conversationId);
+    }
+    return "cloud";
+  }
+  if (last) {
+    if (last.role === "assistant" && last.status === "running") {
+      await settleCloudRunningAssistant(conversationId, recovery);
+    } else {
       settleOrphanEmptyAssistants(conversationId);
     }
   }

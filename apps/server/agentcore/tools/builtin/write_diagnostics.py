@@ -1,7 +1,7 @@
 """Best-effort language-service diagnostics after TS/JS writes (inner verify loop).
 
 On in-process desks, runtime attaches a short diagnostics block to successful
-``file_write`` / ``str_replace`` / ``file_append`` receipts. Over a desktop
+``file_write`` / ``str_replace`` receipts. Over a desktop
 fulfill hop the write returns without waiting — ``code_diagnostics`` stays the
 explicit inner-loop tool. Failures and ``unavailable`` never flip a write success
 into failure.

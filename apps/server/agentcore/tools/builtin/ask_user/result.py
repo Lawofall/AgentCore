@@ -22,9 +22,8 @@ def _option_label(opt: Any) -> str:
 
 def confirmed_defaults_summary(
     questions: list[dict[str, Any]] | None = None,
-    assumptions: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Join card ``default`` / assumption labels for empty-continue inject (案 B).
+    """Join card ``default`` labels for empty-continue inject (案 B).
 
     Path-bearing options（新建仓库/本地目录）：when ``default`` matches an option that
     carries ``path``, surface the path alongside the default label（53f08 同族加强）.
@@ -50,14 +49,6 @@ def confirmed_defaults_summary(
         elif path and prompt:
             head = f"{prompt}={path}"
         parts.append(head)
-    for a in assumptions or []:
-        if not isinstance(a, dict):
-            continue
-        label = str(a.get("label") or "").strip()
-        if not label:
-            continue
-        value = str(a.get("value") or "").strip()
-        parts.append(f"{label}={value}" if value else label)
     return "；".join(parts)
 
 
@@ -88,7 +79,6 @@ def ask_user_tool_result(
     response: CheckpointResponse,
     *,
     questions: list[dict[str, Any]] | None = None,
-    assumptions: list[dict[str, Any]] | None = None,
 ) -> ToolResult:
     """Map the user's ask_user answer to the tool result the CEO loop consumes.
 
@@ -124,7 +114,7 @@ def ask_user_tool_result(
         elif picks:
             output = f"用户选择：{picks}。请按此继续。"
         else:
-            defaults = confirmed_defaults_summary(questions, assumptions)
+            defaults = confirmed_defaults_summary(questions)
             if defaults:
                 output = (
                     f"用户确认默认：{defaults}。"

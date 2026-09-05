@@ -527,6 +527,12 @@ export async function ensureFullMessageRuns(
           },
           conversationId,
         );
+        // GET 过程车道与 SSE 游标必须同真。整窗 loadLatestWindow 本来就会清游标；
+        // 单条补全若留下过期 Last-Event-ID，下一发增量 attach 会把同一批
+        // tool_use_start 叠到已有 team 后面。直播泵占用时游标仍由折/dispatch 推进。
+        if (!hasLocalConversationStream(conversationId)) {
+          clearLastEventId(conversationId);
+        }
       }
       if (full.runs && full.runs.eventsComplete !== false) {
         useExecutionStore.getState().hydrateFromJournal(messageId, full.runs);

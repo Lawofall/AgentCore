@@ -6,10 +6,20 @@
  * 开、每台在线桌面一条，连接时播种整份 running 集合（客户端 replace），之后按对话增量
  * 进出。帧带的是事实，不回头 GET；断线靠下一帧 snapshot 整表替换，禁止「打开即清」。
  *
- * 本机 sidecar / 本地容器对话不吃这路云信号——它们的生成态仍以本端 `isGenerating` 为准，
- * 否则同一条对话会被云 running 与本机流各点一次灯。
+ * 本机 sidecar / 本地容器对话不吃这路云信号——它们的生成态仍以本端 `isGenerating`
+ * 与本机协作图活体为准，否则同一条对话会被云 running 与本机流各点一次灯。
  */
-import type { ConversationRuntime } from "@/stores/conversation";
+import {
+  type ConversationRuntime,
+  assistantProjectionId,
+  runtimeOf,
+  useConversationStore,
+} from "@/stores/conversation";
+import {
+  execRuntime,
+  isConversationExecutionLive,
+  useExecutionStore,
+} from "@/stores/execution";
 import { create } from "zustand";
 
 export const AI_TURN_ACTIVITY_SNAPSHOT_TYPE = "ai_turn_activity_snapshot";
@@ -157,20 +167,43 @@ export function ignoresCloudTurnActivity(
   return executionVia === "sidecar" || localContainerRootId != null;
 }
 
-/** 侧栏状态点：等你灯 > 云 running > 本端 isGenerating。 */
+/**
+ * 本对话已加载切片上，是否还有一张协作图在转（含主管收口后队员托管）。
+ * 从未打开过的对话没有切片，这里为 false——跨会话只靠云 running / isGenerating。
+ */
+export function useConversationGraphLive(conversationId: string): boolean {
+  const projectionKey = useConversationStore((s) => {
+    let key = "";
+    for (const m of runtimeOf(s, conversationId).messages) {
+      if (m.role === "assistant") key += `${assistantProjectionId(m)}\0`;
+    }
+    return key;
+  });
+  return useExecutionStore((s) => {
+    if (!projectionKey) return false;
+    for (const mid of projectionKey.split("\0")) {
+      if (mid && isConversationExecutionLive(execRuntime(s, mid))) return true;
+    }
+    return false;
+  });
+}
+
+/** 侧栏状态点：等你灯 > 协作图活体 / 本端 isGenerating / 云 running。 */
 export function conversationSidebarActivityStatus(input: {
   awaiting: boolean;
   cloudRunning: boolean;
   isGenerating: boolean;
   executionVia: ConversationRuntime["executionVia"];
   localContainerRootId?: string | null;
+  /** 本机已加载切片上的协作图仍在转。 */
+  graphLive?: boolean;
 }): "running" | "awaiting" | null {
   if (input.awaiting) return "awaiting";
+  if (input.graphLive || input.isGenerating) return "running";
   const ignoreCloud = ignoresCloudTurnActivity(
     input.executionVia,
     input.localContainerRootId,
   );
   if (!ignoreCloud && input.cloudRunning) return "running";
-  if (input.isGenerating) return "running";
   return null;
 }

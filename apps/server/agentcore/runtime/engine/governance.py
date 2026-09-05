@@ -559,8 +559,6 @@ def apply_circuit_breaker(
     disabled_tools: set[str],
 ) -> CircuitBreakerOutcome:
     """Retire wedged tools and inject a steer when the breaker trips."""
-    from agentcore.runtime.loop_controller import FORCE_SEGMENTED_NARROW_TOOLS
-
     breaker = controller.tool_circuit_breaker()
     refresh = bool(breaker.disabled)
     if breaker.disabled:
@@ -587,13 +585,6 @@ def apply_circuit_breaker(
                 if "web_search" not in disabled_tools:
                     disabled_tools.add("web_search")
                     refresh = True
-    # force_segmented keeps the pen but narrows dangerous append thrashing
-    # (file_append out; file_write / str_replace stay — not a full write lockout).
-    if breaker.force_segmented:
-        before = len(disabled_tools)
-        disabled_tools.update(FORCE_SEGMENTED_NARROW_TOOLS)
-        if len(disabled_tools) > before:
-            refresh = True
     breaker_message = breaker.message()
     if breaker_message is not None:
         logger.info(

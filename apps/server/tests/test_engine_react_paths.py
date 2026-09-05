@@ -260,6 +260,31 @@ async def test_execute_tools_unknown_tool_suggests_alias():
     assert write_tool.calls == 0
 
 
+async def test_execute_tools_unknown_file_append_suggests_str_replace_no_exec():
+    """废名 file_append 只 did-you-mean，永不自动改写执行。"""
+    from agentcore.llm.provider.protocol import ToolCall, ToolCallFunction
+
+    replace_tool = _StubTool("str_replace")
+    reg = ToolRegistry()
+    reg.register(replace_tool)
+    sink = EventSink()
+    messages, terminal, attempts = await execute_tools(
+        [ToolCall(id="c1", function=ToolCallFunction(name="file_append", arguments="{}"))],
+        reg,
+        _context(),
+        sink,
+        approval_gate=None,
+        run_id="r1",
+    )
+
+    assert terminal is None
+    assert attempts[0].success is False
+    content = messages[0].content or ""
+    assert "not found" in content
+    assert "你是否想用：str_replace" in content
+    assert replace_tool.calls == 0
+
+
 async def test_execute_tools_wait_not_found_no_fuzzy_to_unrelated():
     """协调闸 wait 未装配：诚实文案，勿 fuzzy 成 git 等无关工具。"""
     from agentcore.llm.provider.protocol import ToolCall, ToolCallFunction
@@ -296,6 +321,7 @@ def test_registry_suggest_names_alias_and_close_match():
     reg.register(_StubTool("web_fetch"))
     reg.register(_StubTool("download_url"))
     reg.register(_StubTool("file_write"))
+    reg.register(_StubTool("str_replace"))
     reg.register(_StubTool("file_list"))
     reg.register(_StubTool("glob"))
 
@@ -303,6 +329,7 @@ def test_registry_suggest_names_alias_and_close_match():
     assert reg.suggest_names("wget") == ["download_url"]
     assert reg.suggest_names("curl") == ["download_url"]
     assert reg.suggest_names("write") == ["file_write"]
+    assert reg.suggest_names("file_append") == ["str_replace"]
     assert reg.suggest_names("ls") == ["file_list"]
     assert reg.suggest_names("list_dir") == ["file_list"]
     assert reg.suggest_names("find") == ["glob"]

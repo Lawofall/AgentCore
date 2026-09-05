@@ -12,7 +12,7 @@ from agentcore.llm.provider.protocol import ToolCall, ToolCallFunction
 from agentcore.runtime.engine.tool_exec import execute_tools
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.loop_controller import DEFAULT_TOOL_FAILURE_DISABLE, LoopController
-from agentcore.tools.builtin.file_ops import FileAppendTool, FileWriteTool
+from agentcore.tools.builtin.file_ops import FileWriteTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -165,12 +165,6 @@ async def test_stale_file_write_is_contract_failure(tmp_path: Path):
     assert "不是你刚读到的版本" in (w.error or "")
     assert stale_overwrite_rejection("report.md") in (w.error or "")
     assert (tmp_path / "report.md").read_text(encoding="utf-8") == "from-A"
-
-    ap = await FileAppendTool().execute(
-        {"path": "report.md", "content": "more"},
-        _ctx(tmp_path, run_id="c", coordinator=WriteCoordinator()),
-    )
-    assert ap.success is True
 
 
 async def test_stale_write_does_not_trip_run_circuit_breaker(tmp_path: Path):

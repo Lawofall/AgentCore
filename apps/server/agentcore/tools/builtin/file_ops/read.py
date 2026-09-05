@@ -374,6 +374,14 @@ async def _file_not_found_error(
     )
 
 
+def _not_a_file_error(rel_path: str, start: float) -> ToolResult:
+    """``NotAFile``: path is a directory (or other non-file). Next tool: file_list."""
+    return _error(
+        f"不是文件（这是目录）：{rel_path}。列举请用 file_list。",
+        start,
+    )
+
+
 def _append_pdf_page_footer(
     output: str,
     *,
@@ -440,7 +448,7 @@ class FileReadTool:
             name="file_read",
             description=(
                 "读取工作区文件。http(s) 用 web_fetch；定位用 grep / code_search / glob。"
-                "`.` 不是文件。正文用本工具，勿 dump。"
+                "目录用 file_list。勿 dump。"
             ),
             parameters={
                 "type": "object",
@@ -547,7 +555,7 @@ class FileReadTool:
         except PathNotFound:
             return await _file_not_found_error(rel_path, start=start, context=context)
         except NotAFile:
-            return _error(f"不是文件：{rel_path}", start)
+            return _not_a_file_error(rel_path, start)
         except WorkspaceError as e:
             dead = _maybe_channel_dead_error(e, start)
             if dead is not None:
@@ -656,7 +664,7 @@ class FileReadTool:
                     rel_path, start=start, context=context
                 )
             except NotAFile:
-                return _error(f"不是文件：{rel_path}", start)
+                return _not_a_file_error(rel_path, start)
             except WorkspaceError as e:
                 if is_file_too_large_detail(str(e)):
                     return _observe_ok(
@@ -750,7 +758,7 @@ class FileReadTool:
         except PathNotFound:
             return await _file_not_found_error(rel_path, start=start, context=context)
         except NotAFile:
-            return _error(f"不是文件：{rel_path}", start)
+            return _not_a_file_error(rel_path, start)
         except WorkspaceError as e:
             dead = _maybe_channel_dead_error(e, start)
             if dead is not None:
@@ -791,7 +799,7 @@ class FileReadTool:
         except PathNotFound:
             return await _file_not_found_error(rel_path, start=start, context=context)
         except NotAFile:
-            return _error(f"不是文件：{rel_path}", start)
+            return _not_a_file_error(rel_path, start)
         except WorkspaceError as e:
             return _map_workspace_read_error(e, path=display, start=start)
 
@@ -849,7 +857,7 @@ class FileReadTool:
         except PathNotFound:
             return await _file_not_found_error(rel_path, start=start, context=context)
         except NotAFile:
-            return _error(f"不是文件：{rel_path}", start)
+            return _not_a_file_error(rel_path, start)
         except WorkspaceError as e:
             return _map_workspace_read_error(e, path=display, start=start)
 

@@ -59,7 +59,6 @@ const staleReadonlyOption = {
 
 const grantDefaultContent: AskUserContent = {
   question: "需要本机目录吗？",
-  assumptions: [],
   questions: [
     {
       id: "q0",
@@ -178,7 +177,6 @@ describe("AskDecisionBody organize confirm card", () => {
 
   const organizeContent: AskUserContent = {
     question: "要把桌面「咨询」整理成 pdf 吗？",
-    assumptions: [],
     questions: [
       {
         id: "q0",
@@ -216,7 +214,6 @@ describe("AskDecisionBody organize confirm card", () => {
   it("mixed scope+attach card stays 需要你拍板 (does not hijack to 加入本对话)", () => {
     const mixed: AskUserContent = {
       question: "现在还看不到效果，下一步怎么做？",
-      assumptions: [],
       questions: [
         {
           id: "q0",
@@ -243,7 +240,6 @@ describe("AskDecisionBody organize confirm card", () => {
   it("grant-only attach card uses 加入本对话 chrome and 允许改 target", () => {
     const attachOnly: AskUserContent = {
       question: "允许改这个目录？",
-      assumptions: [],
       questions: [
         {
           id: "q0",
@@ -354,7 +350,6 @@ describe("AskDecisionBody organize confirm card", () => {
   it("note 可以 on mixed organize+attach card fulfills organize, not attach", async () => {
     const mixed: AskUserContent = {
       question: "授权哪个？",
-      assumptions: [],
       questions: [
         {
           id: "q0",
@@ -471,7 +466,6 @@ describe("AskDecisionBody generic option one-line", () => {
   it("does not paint model option second sentences; message omitted when questions exist", () => {
     const content: AskUserContent = {
       question: "用哪种格式？\n背景说明应保留",
-      assumptions: [],
       questions: [
         {
           id: "q0",
@@ -503,7 +497,6 @@ describe("AskDecisionBody question stems", () => {
   it("does not paint message as a banner title when questions exist", () => {
     const content: AskUserContent = {
       question: "总标题不要画",
-      assumptions: [],
       questions: [
         {
           id: "q0",
@@ -526,7 +519,6 @@ describe("AskDecisionBody question stems", () => {
       <Harness
         content={{
           question: "选 A 还是 B？",
-          assumptions: [],
           questions: [],
         }}
       />,
@@ -539,7 +531,6 @@ describe("AskDecisionBody question stems", () => {
   it("paints each question prompt and not the message title", () => {
     const content: AskUserContent = {
       question: "总标题不要画",
-      assumptions: [],
       questions: [
         {
           id: "q0",
@@ -579,7 +570,6 @@ describe("AskDecisionBody question stems", () => {
   it("falls back to message when the only question has an empty prompt", () => {
     const content: AskUserContent = {
       question: "用这句话当题干",
-      assumptions: [],
       questions: [
         {
           id: "q0",
@@ -600,7 +590,6 @@ describe("AskDecisionBody question stems", () => {
   it("paints a fill-in when a choice question has no options", () => {
     const content: AskUserContent = {
       question: "总标题不要画",
-      assumptions: [],
       questions: [
         {
           id: "q0",

@@ -81,14 +81,19 @@ from agentcore.tools.protocol import ToolSchema
 # 2026-09-02 form=files 不再钉工作稿；裸文件名仍 join。实测 delegate 2294。
 # 2026-09-02 run：when-to-use 补进 description（验证直接跑 / dev 后台 / action 管已有进程）。
 # 省略 wait_for 则起来就返回（不再注入默认就绪信号）。cap 1030。
+# 2026-09-06 ask_user：撤起步计划 assumptions 槽。桌面 1949、web 1400。
+# 2026-09-06 delegate.task：自包含 ≠ 逐步改法/改哪些文件/章节骨架（根可见面补对比边界）。
+# 实测 2305。cap 2300→2310（抬顶=新语义，非回潮）。
+# 2026-09-06 delegate.task：点名路径用工作区相对 POSIX（与工具 path 同形）。
+# 实测 2335。cap 2310→2340（抬顶=新语义，非回潮）。
 _CAPS: dict[str, int] = {
     "browser": 1330,
     "git": 2430,
     "host": 2570,
     "run": 1030,
-    "delegate": 2300,
+    "delegate": 2340,
     "debate": 1380,
-    "ask_user": 2240,
+    "ask_user": 1950,
     "list_folders": 240,
     "resolve_folder": 370,
     "create_folder": 510,
@@ -96,7 +101,7 @@ _CAPS: dict[str, int] = {
 _TOTAL_CAP = sum(_CAPS.values())
 
 # 非桌面（web）态 ask_user：桌面独有的 action / well_known 等选项不装配。
-_ASK_USER_WEB_CAP = 1690
+_ASK_USER_WEB_CAP = 1400
 
 # Worker-only：escalate / handoff / 写盘三件套曾把身份段或 consult HOW 再抄一遍到按钮上。
 # 2026-08-29 escalate blocking：已拒凭据→false 短触发（身份段不进按钮）。当次实测 1698。cap 1690→1700。
@@ -129,7 +134,6 @@ _WORKER_CAPS: dict[str, int] = {
     "escalate": 1510,
     "handoff": 250,
     "file_write": 500,
-    "file_append": 420,
     "str_replace": 640,
 }
 _FILE_CAPS: dict[str, int] = {
@@ -203,7 +207,6 @@ def _measured() -> dict[str, int]:
 def _measured_worker() -> dict[str, int]:
     from agentcore.tools.builtin.escalate import EscalateTool
     from agentcore.tools.builtin.file_ops.mutate import (
-        FileAppendTool,
         FileWriteTool,
         StrReplaceTool,
     )
@@ -213,7 +216,6 @@ def _measured_worker() -> dict[str, int]:
         "escalate": measure_openai_tool_chars(EscalateTool().schema),
         "handoff": measure_openai_tool_chars(HandoffTool().schema),
         "file_write": measure_openai_tool_chars(FileWriteTool().schema),
-        "file_append": measure_openai_tool_chars(FileAppendTool().schema),
         "str_replace": measure_openai_tool_chars(StrReplaceTool().schema),
     }
 

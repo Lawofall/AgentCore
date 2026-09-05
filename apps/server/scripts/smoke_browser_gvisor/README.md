@@ -20,7 +20,7 @@ tools/builtin/browser.py（六工具）
         + oci.py（会话 OCI，netns-path 挂载）+ runsc --platform=systrap --network=sandbox
           + driver.py（沙箱内长驻 async Playwright Chromium）
 runtime/browser/live.py  BrowserLiveHub（M1 直播帧扇出）
-driver 的 CDP Input 注入（M2 接管，与 …/browser/input 端点同一 session.send 路径）
+driver 的 CDP Input 注入（与 …/browser/input 端点同一 session.send 路径）
 ```
 
 版本：Playwright **1.61.0** / Chromium **149.0.7827.55** / runsc（gVisor latest, systrap）。
@@ -58,7 +58,7 @@ docker run --rm --privileged --user root `
 | 2 | `BrowserSessionRegistry.acquire` → 真 netns+veth+代理+runsc（冷启耗时） | ✅ | 冷启 **2.1–2.6s**；netns `acbrw0`、veth `acbrwh0@if3 link-netns acbrw0`、host_ip `10.201.0.1`、代理 `0.0.0.0:8899`、runsc 容器 `agentcore-browser-*` running |
 | 3 | 六工具真跑：navigate 公网 → snapshot(a11y 非空) → click/type/scroll → screenshot；关键帧落盘非空 | ✅ | example.com **HTTP 200**；snapshot elements 18 字 / aria **232 字**（非空）；type→`smoke-typed-123` 快照可见；click→`BTN_CLICKED` 快照可见；scroll ok；**6 张关键帧** `step-0001..0006.jpg` 全 JPEG(0xFFD8) 非空（7.0–16.3 KB） |
 | 4 | M1 直播：live hub 收到连续帧（帧率/单帧体积）；stop 后停帧 | ✅ | status `started`；4s 窗口 **117–118 帧 ≈ 29 fps**（everyNthFrame=2）；单帧 **~7.2 KB** jpeg；detach+grace 后 `screencast_on=false`、零新帧 |
-| 5 | M2 接管：input 注入鼠标点击 + 键盘输入并生效 | ✅ | 鼠标注入 3 事件→按钮 onclick 触发（快照见 `CLICKED_OK`）；键盘：点击聚焦+insertText 3 事件→输入框值（快照见 `hi-takeover-9`） |
+| 5 | input 注入鼠标点击 + 键盘输入并生效 | ✅ | 鼠标注入 3 事件→按钮 onclick 触发（快照见 `CLICKED_OK`）；键盘：点击聚焦+insertText 3 事件→输入框值（快照见 `hi-input-9`） |
 | 6 | SSRF 负面：沙箱内经代理访问元数据 + 私网被拒 | ✅ | `metadata.google.internal`→代理 **403 BLOCKED_HOST**；`10.199.0.9`→代理 **403 PRIVATE_IP**（均经沙箱→代理真路径，`on_decision` 记录 allowed=false）；`169.254.169.254` 经产品 `resolve_dial_target` → 拒（None/PRIVATE_IP） |
 | 7 | 干净拆除：`registry.close` 后 runsc/netns/veth 全消失 | ✅ | close 前 netns/veth/runsc 各 1；close 后**全空**（netns `[]`、veth `[]`、runsc `[]`）。拆除耗时经 A/B 修复后 **0.3s**（`runsc delete --force` 0.0s；原 ~120s），见风险①（已解决） |
 

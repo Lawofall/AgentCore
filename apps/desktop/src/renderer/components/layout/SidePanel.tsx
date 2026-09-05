@@ -551,21 +551,20 @@ export function SidePanel() {
             </div>
           );
         })}
-        {/* Multi-run keep-alive: every docked run stays mounted (hidden when inactive). */}
-        {runTabs.map((tab) => (
-          <div
-            key={tab.id}
-            className={`absolute inset-0 ${
-              activeTabId === tab.id ? "" : "hidden"
-            }`}
-          >
-            <RunDetailScroll
-              key={`${tab.id}:${tab.runId}`}
-              messageId={tab.messageId}
-              runId={tab.runId}
-            />
-          </div>
-        ))}
+        {/* 坞内未激活的 run 卸树：切走不再跟直播刷完整过程。浮窗各挂一份，仍保活。
+            切回再挂：进行中贴底、收场置顶（RunDetailScroll reset）。 */}
+        {runTabs.map((tab) => {
+          if (activeTabId !== tab.id) return null;
+          return (
+            <div key={tab.id} className="absolute inset-0">
+              <RunDetailScroll
+                key={`${tab.id}:${tab.runId}`}
+                messageId={tab.messageId}
+                runId={tab.runId}
+              />
+            </div>
+          );
+        })}
         {activeTab?.kind === "content" && (
           <div className="absolute inset-0 overflow-y-auto p-4">
             <Markdown content={contentTabText} />

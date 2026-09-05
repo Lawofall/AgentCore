@@ -31,7 +31,6 @@ _BUILTIN_ORDER = [
     "web_fetch",
     "file_read",
     "file_write",
-    "file_append",
     "str_replace",
     "file_list",
     "glob",
@@ -114,7 +113,6 @@ _CATALOG_AVAILABLE_TO: dict[str, tuple[str, ...]] = {
     "git": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     # Write / execute: CEO + worker (same GRANTABLE ApprovalGate)
     "file_write": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    "file_append": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "str_replace": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "file_delete": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "file_move": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
@@ -223,7 +221,6 @@ def test_tool_registry_grant_sets_snapshot():
     assert file_mutation_tool_names() == frozenset(
         {
             "file_write",
-            "file_append",
             "str_replace",
             "file_delete",
             "file_move",

@@ -1,8 +1,7 @@
 /**
  * 右坞唯一浏览器壳——页签条 + 可编辑地址栏 + 新页；内容区：
  * - 有 serverSessionId 且非 preferLocalHost → {@link BrowserLivePanel}（SSE jpeg）；
- * - Local + 有 browserApi → 本机 WebContents 真画面（screencast 只服务远程观众）；
- * - Local 有 serverSessionId 时挂 {@link BrowserLocalTakeoverBar}（无 sid 隐藏接管）。
+ * - Local + 有 browserApi → 本机 WebContents 真画面（screencast 只服务远程观众；本就可点）。
  *
  * 有 conversationId 时 mount / 聚焦 hydrate（list sessions + P1 冷恢复）；空白页不 POST create。
  * 关闭带 serverSessionId 的页 → DELETE + browserApi.close(裸 sid) 再本地移除；
@@ -34,7 +33,6 @@ import {
 } from "@/components/ui/context-menu";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { BrowserLivePanel } from "@/components/workspace/BrowserLivePanel";
-import { BrowserLocalTakeoverBar } from "@/components/workspace/BrowserLocalTakeoverBar";
 import { isBrowserTool } from "@/lib/browserActivity";
 import { notifyError } from "@/lib/toast";
 import {
@@ -749,13 +747,6 @@ export function BrowserPanel({
           />
         ) : useLocalHost ? (
           <div className="flex h-full min-h-0 flex-col">
-            {/* 有 serverSessionId 才挂接管条（D8 随时）；无 sid = 纯本地预览 → 隐藏接管。 */}
-            {activePage?.serverSessionId && conversationId ? (
-              <BrowserLocalTakeoverBar
-                conversationId={conversationId}
-                sessionId={activePage.serverSessionId}
-              />
-            ) : null}
             <div ref={hostRef} className="relative min-h-0 flex-1 bg-muted/20">
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground/50">
                 <Globe size={22} />

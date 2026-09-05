@@ -81,12 +81,10 @@ def test_result_continue_empty_injects_confirmed_defaults():
             "default": "上班族 + 半天块通用模板",
         }
     ]
-    assumptions = [{"id": "a0", "label": "本周=周一至周日", "value": ""}]
-    assert "上班族" in confirmed_defaults_summary(questions, assumptions)
+    assert "上班族" in confirmed_defaults_summary(questions)
     res = ask_user_tool_result(
         CheckpointResponse(decision=CheckpointDecision.CONTINUE, note="", selected=[]),
         questions=questions,
-        assumptions=assumptions,
     )
     assert res.effect is ToolEffect.CONTINUE
     assert res.output.startswith("用户确认默认：")

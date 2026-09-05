@@ -418,9 +418,7 @@ export function BrowserActivityCard({
             <ChevronRight size={14} className="shrink-0" />
           )}
         </button>
-        {/* 揭示右坞「浏览器」tab。**不按 running 收起**：接管默认只能在 turn 之间做，若入口只在
-            运行中出现，用户就必须提前抢点开才有路子接管（沙箱在 turn 后仍存活 idle TTL，页面状态
-            还在，正是最该上手的时刻）。跑着时是直播、停下后是最后一帧/接管入口，故文案随态切。 */}
+        {/* 揭示右坞「浏览器」tab。不按 running 收起：跑着时是直播、停下后仍可看最后一帧。文案随态切。 */}
         {conversationId && (
           <button
             type="button"

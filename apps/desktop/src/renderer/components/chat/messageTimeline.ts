@@ -1,5 +1,4 @@
 import type { HandoffJob } from "@/services/handoff";
-import type { BrowserTakeover } from "@/stores/browserTakeover";
 import type { MemoryUpdate, Message } from "@/stores/conversation";
 import type { PermissionChange } from "@/stores/permissionChanges";
 
@@ -7,7 +6,6 @@ export type TimelineItem =
   | { kind: "message"; at: number; key: string; msg: Message }
   | { kind: "task"; at: number; key: string; job: HandoffJob }
   | { kind: "memory"; at: number; key: string; update: MemoryUpdate }
-  | { kind: "takeover"; at: number; key: string; takeover: BrowserTakeover }
   | {
       kind: "preset-change";
       at: number;
@@ -17,16 +15,15 @@ export type TimelineItem =
   | { kind: "compaction"; at: number; key: string };
 
 // Same-timestamp ordering. message/task form the base timeline (a turn's message first,
-// then any background task it spawned). memory + takeover + preset-change are NOT ordered
+// then any background task it spawned). memory + preset-change are NOT ordered
 // here — they snap to exchange boundaries below, not to a raw timestamp slot; the order
 // value only breaks ties among two anchored cards landing on the same boundary.
 const KIND_ORDER: Record<TimelineItem["kind"], number> = {
   message: 0,
   task: 1,
   memory: 2,
-  takeover: 3,
-  "preset-change": 4,
-  compaction: 5,
+  "preset-change": 3,
+  compaction: 4,
 };
 
 /**
@@ -56,12 +53,10 @@ export function mergeTimeline(
   messages: Message[],
   tasks: HandoffJob[],
   memoryUpdates: MemoryUpdate[] = [],
-  takeovers: BrowserTakeover[] = [],
   presetChanges: PermissionChange[] = [],
   compactedThrough?: string | null,
 ): TimelineItem[] {
-  const anchoredCount =
-    memoryUpdates.length + takeovers.length + presetChanges.length;
+  const anchoredCount = memoryUpdates.length + presetChanges.length;
   if (tasks.length === 0 && anchoredCount === 0) {
     return insertCompactionDivider(
       messages.map((msg) => ({
@@ -98,12 +93,11 @@ export function mergeTimeline(
     return insertCompactionDivider(base, compactedThrough);
   }
 
-  // Anchored cards (memory 记忆卡 + takeover 接管标记卡 + preset-change 权限模式切换系统行),
+  // Anchored cards (memory 记忆卡 + preset-change 权限模式切换系统行),
   // oldest-first, each dropped just before the NEXT user message that starts after it (= the
   // end of the exchange active at its timestamp), or at the very tail when no later turn
   // exists. A user message is the only exchange boundary; assistant replies / tasks belong to
-  // that exchange, so a card always lands after them. Takeovers anchor on their START time —
-  // D16 only allows takeover between turns / after an ask_user pause. A preset switch「下一回合
+  // that exchange, so a card always lands after them. A preset switch「下一回合
   // 生效」so anchoring before the next user message puts the「权限模式 A → B」line right ahead of
   // the turn it governs.
   const anchored: TimelineItem[] = [
@@ -113,14 +107,6 @@ export function mergeTimeline(
         at: Date.parse(memoryAnchorTime(update)) || 0,
         key: `mem:${update.id}`,
         update,
-      }),
-    ),
-    ...takeovers.map(
-      (takeover): TimelineItem => ({
-        kind: "takeover",
-        at: Date.parse(takeover.startedAt) || 0,
-        key: `tko:${takeover.id}`,
-        takeover,
       }),
     ),
     ...presetChanges.map(

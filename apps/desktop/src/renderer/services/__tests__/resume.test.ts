@@ -68,7 +68,6 @@ const cpPayload = (
   checkpoint_id: "cp1",
   conversation_id: CID,
   question: "先做 A 还是 B?",
-  assumptions: [],
   questions: [],
   ...over,
 });
@@ -576,7 +575,6 @@ describe("resolveResumeMessageId", () => {
       steps: [],
       pending: [],
       question: "先做 A 还是 B?",
-      assumptions: [],
       questions: [],
       intent: "decision",
     });

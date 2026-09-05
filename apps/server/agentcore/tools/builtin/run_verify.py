@@ -1428,6 +1428,8 @@ async def execute_verify(arguments: dict[str, Any], context: ToolContext) -> Too
         else:
             error = None if ok else f"验证未通过（退出码 {exec_result.exit_code}）"
 
+        # ``verify_result`` = command finished red. Machine code only — no user
+        # failure face (the card body already has exit code + compiler text).
         meta_code = (
             EXEC_TIMEOUT_CODE
             if kind == "idle"

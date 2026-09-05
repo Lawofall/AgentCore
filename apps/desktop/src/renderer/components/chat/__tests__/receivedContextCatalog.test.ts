@@ -60,8 +60,8 @@ describe("buildReceivedContextCatalog", () => {
       { includeSystem: true },
     );
     expect(groups[0].items.map((i) => i.label)).toEqual([
-      "前置结果 · 调研员",
-      "前置结果 · 撰写员",
+      "前置 · 调研员",
+      "前置 · 撰写员",
     ]);
   });
 

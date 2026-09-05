@@ -112,7 +112,6 @@ TS_EXPORTS: tuple[TsExport, ...] = (
         interaction.CheckpointDecision,
         doc="The user's settlement of a checkpoint the CEO raised (ask_user).",
     ),
-    TsInterface(interaction.AskAssumption),
     TsInterface(interaction.AskOption),
     TsInterface(interaction.AskQuestion),
     TsAlias("CheckpointIntent", interaction.AskCheckpointIntent),

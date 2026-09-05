@@ -39,7 +39,7 @@ class _ServerBackend:
 
 
 _FILE_OP_CLASS = frozenset(
-    {"file_write", "file_append", "str_replace", "git"}
+    {"file_write", "str_replace", "git"}
 )
 
 

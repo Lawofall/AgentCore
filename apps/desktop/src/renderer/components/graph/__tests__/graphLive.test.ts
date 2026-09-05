@@ -2,9 +2,8 @@ import {
   agentNodeLiveSig,
   deriveAgentNodeLive,
 } from "@/components/graph/graphLive";
-import * as reviewConcern from "@/lib/reviewConcern";
 import type { AgentState, Execution, RunNode } from "@/stores/execution";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 function run(
   partial: Partial<RunNode> & Pick<RunNode, "id" | "status" | "agentId">,
@@ -193,14 +192,13 @@ describe("deriveAgentNodeLive", () => {
     expect(face.tokenCount).toBeGreaterThan(0);
   });
 
-  it("does not scan review concern for non-review roles", () => {
-    const spy = vi.spyOn(reviewConcern, "detectReviewConcern");
+  it("does not flag review-concern from free-text output", () => {
     const text = "综合评分 4/10，整体方向偏了，建议重写。";
     const execution = exec({
       agents: [
         agent({
           id: "a1",
-          role: "研究员",
+          role: "学术审校员",
           status: "completed",
           outputChunks: [text],
         }),
@@ -211,27 +209,7 @@ describe("deriveAgentNodeLive", () => {
     expect(faceRun).toBeDefined();
     if (!faceRun) throw new Error("expected run");
     const face = deriveAgentNodeLive(execution, faceRun, deriveOpts);
-    expect(face.reviewConcern).toBeNull();
-    expect(spy).not.toHaveBeenCalled();
-    spy.mockRestore();
-  });
-
-  it("scans review concern for review-like roles when completed", () => {
-    const execution = exec({
-      agents: [
-        agent({
-          id: "a1",
-          role: "学术审校员",
-          status: "completed",
-          outputChunks: ["综合评分 4/10，问题较多需要修改。"],
-        }),
-      ],
-      runs: [run({ id: "r1", agentId: "a1", status: "completed" })],
-    });
-    const faceRun = execution.runs[0];
-    expect(faceRun).toBeDefined();
-    if (!faceRun) throw new Error("expected run");
-    const face = deriveAgentNodeLive(execution, faceRun, deriveOpts);
-    expect(face.reviewConcern).toBe("critical");
+    expect(face).not.toHaveProperty("reviewConcern");
+    expect(face.outputPreview).toContain("建议重写");
   });
 });

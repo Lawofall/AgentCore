@@ -44,7 +44,6 @@ def checkpoint_required(
     checkpoint_id: str,
     conversation_id: str,
     question: str,
-    assumptions: list[dict[str, Any]] | None = None,
     questions: list[dict[str, Any]] | None = None,
     intent: AskCheckpointIntent | None = None,
     browser_login: bool | None = None,
@@ -53,7 +52,6 @@ def checkpoint_required(
         "checkpoint_id": checkpoint_id,
         "conversation_id": conversation_id,
         "question": question,
-        "assumptions": assumptions or [],
         "questions": questions or [],
     }
     if intent is not None:
@@ -192,8 +190,8 @@ def escalation_required(
     prompt replays inline on reload. ``kind`` is the escalate taxonomy
     (normal / scope / dep), orthogonal to blocking. ``awaiting`` is ``user`` (经典可答卡)
     or ``ceo`` (协调模式等主管仲裁，初始不作为用户可答卡).
-    ``browser_login`` (narrow D16 exception): when true, the pending escalate allows
-    user browser takeover while the turn is still running. Absent/false on old streams.
+    ``browser_login`` (narrow D16 exception): when true, the pending escalate asks
+    the user to finish login in the dock and tap「已登录，继续」. Absent/false on old streams.
     ``ownership_paths`` / ``lock_owner_run_id``: write-lock conflict 结构化裁决（移交写权）。
     ``timeout_seconds``: the wall-clock ceiling this suspend actually got. ABSENT is the
     default deployment (D2 ``checkpoint_timeout_seconds=None``) = waits indefinitely, so a

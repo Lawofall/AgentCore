@@ -99,8 +99,6 @@ export const REST_PATH_TEMPLATES = [
   "/v1/conversations/{conversation_id}/browser/sessions",
   "/v1/conversations/{conversation_id}/browser/sessions/{session_id}",
   "/v1/conversations/{conversation_id}/browser/sessions/{session_id}/navigate",
-  "/v1/conversations/{conversation_id}/browser/takeover",
-  "/v1/conversations/{conversation_id}/browser/takeovers",
   "/v1/conversations/{conversation_id}/cost",
   "/v1/conversations/{conversation_id}/debate-steer",
   "/v1/conversations/{conversation_id}/duplicate",

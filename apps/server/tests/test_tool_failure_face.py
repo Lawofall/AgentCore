@@ -10,6 +10,7 @@ from agentcore.core.errors import ToolError, ValidationError
 from agentcore.runtime.engine.tool_failure_face import (
     _CURATED_BY_CODE,
     DEFAULT_TOOL_FAILURE_MESSAGE,
+    NO_USER_FACE_CODES,
     tool_failure_fields,
     tool_failure_from_result,
 )
@@ -93,6 +94,20 @@ def test_tool_failure_from_result_uses_metadata_code_curated():
         "message": "这条命令一直没有输出，已经中止。请检查本机环境或网络后再试。",
         "code": "exec_timeout",
     }
+
+
+def test_verify_result_has_no_user_face():
+    """Red check is an ordinary result: card body only, no curated aside."""
+    result = ToolResult(
+        tool_call_id="t1",
+        success=False,
+        output="验证未通过（退出码 2）\nerror TS2322: …",
+        error="验证未通过（退出码 2）",
+        metadata={"code": "verify_result"},
+    )
+    assert tool_failure_from_result(result) is None
+    assert "verify_result" in NO_USER_FACE_CODES
+    assert "verify_result" not in _CURATED_BY_CODE
 
 
 def test_exec_timeout_and_forced_stop_faces_are_distinct():
@@ -311,7 +326,6 @@ _DETERMINISTIC_CODES = (
     "verify_contract",
     "run_contract",
     "verify_policy_inner",
-    "verify_result",
 )
 
 # Engine vocabulary + model-channel imperatives that must never reach the user sentence.
@@ -774,9 +788,15 @@ def test_every_produced_failure_code_has_curated_copy():
     # them would make this gate cry wolf, and someone would delete it.
     for soft_success in ("dirty_skip", "already_repo", "no_repo"):
         assert soft_success not in produced, f"{soft_success} 挂在成功结果上，不该要求文案"
+    # Failed-but-ordinary results (red check that already has a card body).
+    for code in NO_USER_FACE_CODES:
+        assert code in produced, f"{code} 仍应由工具产出，只是不配用户面旁白"
+        assert code not in _CURATED_BY_CODE, f"{code} 不该再有用户面文案"
 
     missing = {
-        code: sorted(sites) for code, sites in produced.items() if code not in _CURATED_BY_CODE
+        code: sorted(sites)
+        for code, sites in produced.items()
+        if code not in _CURATED_BY_CODE and code not in NO_USER_FACE_CODES
     }
     assert not missing, (
         "以下 code 已被工具/引擎产出，但 _CURATED_BY_CODE 里没有文案，"

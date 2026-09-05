@@ -211,7 +211,7 @@ class WorkspaceSettings(BaseModel):
     # viewer from growing memory and keeps latency low (show the newest frame, not a backlog).
     browser_live_max_queued_frames: int = 8
 
-    # ── L3 团队浏览器 M2 接管（内置浏览器与Agent浏览器提案.md · D16–D18）──────────
+    # ── 浏览器输入注入（POST …/browser/input）──────────────────────────────────
     # Max input events one POST …/browser/input batch may carry (打字合批 上限). Bounds a
     # single injection round so a malformed / oversized batch is rejected (422) rather than
     # wedging the driver; the client coalesces typing into batches under this cap.

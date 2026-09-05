@@ -89,7 +89,7 @@ AI 运行时入口 → [`docs/03-AI核心/运行时总览.md`](docs/03-AI核心/
 
 ## 快速开始
 
-完整步骤（环境变量、账号、Windows 清树重启）见 **[`docs/02-架构/本地开发.md`](docs/02-架构/本地开发.md)**。
+完整步骤（环境变量、账号、Windows 清树重启）见 **[`docs/02-架构/本地开发.md`](docs/02-架构/本地开发.md)**。谁付钱（自己带 Key / 和线上同构）见该文「两条起步路」。
 
 前置环境（与根 `package.json` `engines` / `packageManager` 对齐）：
 

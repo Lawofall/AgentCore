@@ -3,7 +3,6 @@ import type { ErrorAction } from "@/lib/errors";
 import type { ExecutionJournal } from "@/stores/execution";
 import type { components } from "@/types/api.generated";
 import type {
-  AskAssumption,
   AskQuestion,
   CeoReviewSummary,
   CheckpointDecision,
@@ -20,7 +19,6 @@ import type { TurnPhase } from "./turnPhase";
 export interface CheckpointDisplay {
   id: string;
   question: string;
-  assumptions: AskAssumption[];
   questions: AskQuestion[];
   intent: AskUiIntent;
   status: "pending" | "resolved";

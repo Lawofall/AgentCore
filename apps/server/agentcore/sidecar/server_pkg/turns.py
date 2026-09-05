@@ -16,7 +16,11 @@ from agentcore.core.types import new_id
 from agentcore.llm.resolve import resolve_turn_model
 from agentcore.runtime.checkpoints import CheckpointDecision
 from agentcore.runtime.events import EventSink, FinishReason, error_event, message_end
-from agentcore.runtime.journal import KIND_TURN_END, runs_from_entries
+from agentcore.runtime.journal import (
+    KIND_TURN_END,
+    attach_journal_error_type,
+    runs_from_entries,
+)
 from agentcore.runtime.suspension import TurnSuspension
 from agentcore.sidecar import protocol
 from agentcore.sidecar.server_pkg.result import trim_result
@@ -692,6 +696,12 @@ class TurnExecutionMixin:
         ):
             return
         journal_entries = result.get("journal_entries")
+        error_type = result.get("error_type")
+        if isinstance(error_type, str) and error_type.strip():
+            journal_entries = attach_journal_error_type(
+                journal_entries if isinstance(journal_entries, list) else None,
+                error_type,
+            )
         runs = runs_from_entries(journal_entries) if journal_entries else None
         finish = _finish_str(result)
         content = result.get("content") or ""

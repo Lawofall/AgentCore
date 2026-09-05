@@ -22,6 +22,7 @@ Subpackages:
 
 from .entries import (
     KIND_TURN_END,
+    attach_journal_error_type,
     ensure_cancelled_turn_end,
     entries_from_runs,
     journal_entries_from_display_runs,
@@ -40,6 +41,7 @@ from .team_batch import team_batch_from_entries
 
 __all__ = [
     "KIND_TURN_END",
+    "attach_journal_error_type",
     "clear_runs_cache",
     "completed_from_journal",
     "ensure_cancelled_turn_end",

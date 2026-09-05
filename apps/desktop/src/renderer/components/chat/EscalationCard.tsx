@@ -144,7 +144,7 @@ function useEscalationSubmit(
   return { submitting, busy, send };
 }
 
-/** 浏览器登录等待 escalate：不 auto-resume；用户接管登录后点「已登录，继续」resolve。 */
+/** 浏览器登录等待 escalate：不 auto-resume；用户完成登录后点「已登录，继续」resolve。 */
 function PendingBrowserLoginEscalation({
   escalation,
   role,
@@ -305,11 +305,10 @@ function PendingEscalation({
   conversationId: string | null;
 }) {
   // 结构化升级: reuse the ask_user 问答内核 (choice/text + 答复模型 α composition). A worker
-  // fork is always a 待你拍板 (no 起步计划 / 风格), so the content carries only the structured
+  // fork is always a 待你拍板, so the content carries only the structured
   // `questions`; the free note doubles as the answer box for a plain free-text escalate.
   const content: AskUserContent = {
     question: escalation.question,
-    assumptions: [],
     questions: escalation.questions,
   };
   const ans = useAskAnswer(content);

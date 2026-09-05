@@ -16,13 +16,7 @@ import {
   useExecutionStore,
 } from "@/stores/execution";
 import { useRunStopPendingStore } from "@/stores/runStopPending";
-import {
-  AlertTriangle,
-  ArrowUp,
-  FileText,
-  Pause,
-  PencilLine,
-} from "lucide-react";
+import { ArrowUp, FileText, Pause, PencilLine } from "lucide-react";
 import { useEffect, useState } from "react";
 import { isStoppableRunStatus } from "../runStopActions";
 import {
@@ -244,7 +238,6 @@ function AgentNodeMeta({
     p.visibleFaceBadges.has("escalation");
   const hasChips =
     showCrossExam ||
-    Boolean(p.reviewConcernFace && p.visibleFaceBadges.has("reviewConcern")) ||
     Boolean(p.checkpointFace && p.visibleFaceBadges.has("checkpoint")) ||
     showEscalationPending ||
     showRaised;
@@ -256,14 +249,6 @@ function AgentNodeMeta({
           mark={d.debateCrossExamMark}
           onActivate={d.onActivateCrossExam}
         />
-      )}
-      {p.reviewConcernFace && p.visibleFaceBadges.has("reviewConcern") && (
-        <span
-          className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-1.5 py-0.5 font-medium ${p.reviewConcernFace.cls}`}
-        >
-          <AlertTriangle size={10} />
-          {p.reviewConcernFace.label}
-        </span>
       )}
       {p.checkpointFace && p.visibleFaceBadges.has("checkpoint") && (
         <span
@@ -423,9 +408,6 @@ function AgentNodeActivity({
             {charLabel}
           </span>
         )}
-        <span className="ml-0.5 inline-block animate-pulse text-primary">
-          ▋
-        </span>
       </p>
     );
   }
@@ -434,9 +416,6 @@ function AgentNodeActivity({
     return (
       <p className="mt-2 line-clamp-2 text-xs leading-snug text-primary/90">
         {phaseLabel} · {toolLabel(p.liveToolExec.toolName)}
-        <span className="ml-0.5 inline-block animate-pulse text-primary">
-          ▋
-        </span>
       </p>
     );
   }
@@ -444,9 +423,6 @@ function AgentNodeActivity({
     return (
       <p className="mt-2 line-clamp-2 text-xs leading-snug text-muted-foreground/80">
         {p.livePreview}
-        <span className="ml-0.5 inline-block animate-pulse text-primary">
-          ▋
-        </span>
       </p>
     );
   }
@@ -454,9 +430,6 @@ function AgentNodeActivity({
     return (
       <p className="mt-2 line-clamp-2 text-xs italic leading-snug text-muted-foreground/60">
         {p.liveThinking}
-        <span className="ml-0.5 inline-block animate-pulse text-primary">
-          ▋
-        </span>
       </p>
     );
   }

@@ -142,11 +142,14 @@ async def _read_via_cloud(
     assert creds is not None
     payload: dict[str, Any] = {
         "conversation_id": conversation_id,
-        "cursor": cursor,
-        "max_chars": max_chars,
         "focus": focus,
-        "query": query,
     }
+    if query is not None:
+        payload["query"] = query
+    if cursor is not None:
+        payload["cursor"] = cursor
+    if max_chars is not None:
+        payload["max_chars"] = max_chars
     try:
         data = await cloud_read_conversation(creds, payload=payload)
     except AccountCloudError:

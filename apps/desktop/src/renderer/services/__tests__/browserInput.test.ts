@@ -1,13 +1,10 @@
 /**
- * L3「团队浏览器」M2 接管客户端 (services/browserTakeover.ts) 单测：
- * - REST：start/end/input/list 端点 + body 形；空批不发；wire→narrow 映射。
- * - start 成败靠 body.reason（200）：started|already_active 成功；其余 throw TakeoverStartError。
- * - list 读 `data`（非旧 `takeovers`）。
- * - start 失败语义：no_session / already_active → zh 文案（+ 回落；兼容 ApiError.code）。
+ * 沙箱浏览器输入客户端 (services/browserInput.ts) 单测：
+ * - REST：input 端点 + body 形；空批不发；路径编码 conversation id。
  * - 坐标换算 toFrameSpace：object-contain 缩放 + 信箱留白 + 钳制 + 非法尺寸兜底。
  * - 输入批处理 createInputBatcher：定时 flush、move 合并、commit 立即 flush、stop 收口、发失败吞掉。
- * - 修饰键 modifiersOf / 时长成文 formatTakeoverDuration。
- * mock `@/services/api` 的 api 方法（保留真 ApiError 以驱动 instanceof 分支）。
+ * - 修饰键 modifiersOf。
+ * mock `@/services/api` 的 api 方法。
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,96 +23,26 @@ vi.mock("@/services/api", async (importOriginal) => {
   };
 });
 
-import { ApiError, api } from "@/services/api";
+import { api } from "@/services/api";
 import {
   type BrowserInputEvent,
-  TakeoverStartError,
   createInputBatcher,
-  endBrowserTakeover,
-  formatTakeoverDuration,
-  listBrowserTakeovers,
   modifiersOf,
   sendBrowserInput,
-  startBrowserTakeover,
-  takeoverStartErrorMessage,
   toFrameSpace,
-} from "../browserTakeover";
+} from "../browserInput";
 
 const mockPost = vi.mocked(api.post);
-const mockGet = vi.mocked(api.get);
 
 beforeEach(() => {
-  mockPost.mockReset().mockResolvedValue({
-    active: true,
-    reason: "started",
-  });
-  mockGet.mockReset();
+  mockPost.mockReset().mockResolvedValue({ ok: true });
 });
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("browserTakeover · REST", () => {
-  it("starts a takeover and treats reason=started as success", async () => {
-    const state = await startBrowserTakeover("conv-42");
-    expect(mockPost).toHaveBeenCalledWith(
-      "/v1/conversations/conv-42/browser/takeover",
-      { action: "start" },
-    );
-    expect(state).toEqual({ active: true, reason: "started" });
-  });
-
-  it("starts / ends with session_id when provided", async () => {
-    await startBrowserTakeover("conv-42", { sessionId: "sess-local" });
-    expect(mockPost).toHaveBeenCalledWith(
-      "/v1/conversations/conv-42/browser/takeover",
-      { action: "start", session_id: "sess-local" },
-    );
-    mockPost.mockClear();
-    await endBrowserTakeover("conv-42", { sessionId: "sess-local" });
-    expect(mockPost).toHaveBeenCalledWith(
-      "/v1/conversations/conv-42/browser/takeover",
-      { action: "end", session_id: "sess-local" },
-    );
-  });
-
-  it("treats reason=already_active as success (idempotent start)", async () => {
-    mockPost.mockResolvedValue({
-      active: true,
-      reason: "already_active",
-      started_at: "2026-07-25T00:00:00Z",
-    });
-    const state = await startBrowserTakeover("conv-42");
-    expect(state.reason).toBe("already_active");
-    expect(state.active).toBe(true);
-  });
-
-  it("throws TakeoverStartError when reason is a start failure", async () => {
-    mockPost.mockResolvedValue({ active: false, reason: "no_session" });
-    await expect(startBrowserTakeover("c1")).rejects.toEqual(
-      expect.objectContaining({
-        name: "TakeoverStartError",
-        reason: "no_session",
-      }),
-    );
-  });
-
-  it("throws on not_active reason", async () => {
-    mockPost.mockResolvedValue({ active: false, reason: "not_active" });
-    await expect(startBrowserTakeover("c1")).rejects.toMatchObject({
-      reason: "not_active",
-    });
-  });
-
-  it("ends a takeover with {action:'end'} (idempotent)", async () => {
-    await endBrowserTakeover("conv-42");
-    expect(mockPost).toHaveBeenCalledWith(
-      "/v1/conversations/conv-42/browser/takeover",
-      { action: "end" },
-    );
-  });
-
+describe("browserInput · REST", () => {
   it("posts input events in a batch", async () => {
     const events: BrowserInputEvent[] = [
       { kind: "mouse", type: "down", x: 10, y: 20, button: 0, click_count: 1 },
@@ -133,70 +60,21 @@ describe("browserTakeover · REST", () => {
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  it("lists takeovers from `data`, mapping snake_case wire → narrow records", async () => {
-    mockGet.mockResolvedValue({
-      data: [
-        {
-          id: "t1",
-          started_at: "2026-07-20T10:00:00Z",
-          ended_at: "2026-07-20T10:02:00Z",
-        },
-        { id: "t2", started_at: "2026-07-20T11:00:00Z" },
-      ],
-    });
-    const out = await listBrowserTakeovers("c1");
-    expect(mockGet).toHaveBeenCalledWith(
-      "/v1/conversations/c1/browser/takeovers",
-    );
-    expect(out).toEqual([
-      {
-        id: "t1",
-        startedAt: "2026-07-20T10:00:00Z",
-        endedAt: "2026-07-20T10:02:00Z",
-      },
-      { id: "t2", startedAt: "2026-07-20T11:00:00Z", endedAt: null },
-    ]);
-  });
-
   it("encodes the conversation id in the path", async () => {
-    await startBrowserTakeover("a/b?c");
+    await sendBrowserInput("a/b?c", [{ kind: "text", text: "x" }]);
     expect(mockPost).toHaveBeenCalledWith(
-      "/v1/conversations/a%2Fb%3Fc/browser/takeover",
-      { action: "start" },
-    );
-  });
-});
-
-describe("takeoverStartErrorMessage", () => {
-  const withCode = (code: string) =>
-    new ApiError(409, JSON.stringify({ error: { code } }));
-
-  it("maps TakeoverStartError reason strings", () => {
-    expect(
-      takeoverStartErrorMessage(new TakeoverStartError("no_session")),
-    ).toContain("没有进行中");
-    expect(takeoverStartErrorMessage("not_active")).toContain(
-      "没有进行中的接管",
+      "/v1/conversations/a%2Fb%3Fc/browser/input",
+      { events: [{ kind: "text", text: "x" }] },
     );
   });
 
-  it("maps the pinned start-failure codes (legacy ApiError.path)", () => {
-    expect(takeoverStartErrorMessage(withCode("no_session"))).toContain(
-      "没有进行中",
-    );
-    expect(takeoverStartErrorMessage(withCode("already_active"))).toContain(
-      "已被接管",
-    );
-  });
-
-  it("falls back to the server message then a generic default", () => {
-    const withMsg = new ApiError(
-      400,
-      JSON.stringify({ error: { code: "weird", message: "服务端说明" } }),
-    );
-    expect(takeoverStartErrorMessage(withMsg)).toBe("服务端说明");
-    expect(takeoverStartErrorMessage(new Error("x"))).toBe(
-      "无法接管浏览器，请重试",
+  it("includes session_id when the live tab is pinned", async () => {
+    await sendBrowserInput("c1", [{ kind: "text", text: "x" }], {
+      sessionId: "sess-1",
+    });
+    expect(mockPost).toHaveBeenCalledWith(
+      "/v1/conversations/c1/browser/input",
+      { events: [{ kind: "text", text: "x" }], session_id: "sess-1" },
     );
   });
 });
@@ -262,15 +140,6 @@ describe("modifiersOf", () => {
         shiftKey: false,
       }),
     ).toBeUndefined();
-  });
-});
-
-describe("formatTakeoverDuration", () => {
-  it("formats minutes+seconds, and bare seconds under a minute", () => {
-    expect(formatTakeoverDuration(65_000)).toBe("1分5秒");
-    expect(formatTakeoverDuration(30_000)).toBe("30秒");
-    expect(formatTakeoverDuration(0)).toBe("0秒");
-    expect(formatTakeoverDuration(-100)).toBe("0秒");
   });
 });
 

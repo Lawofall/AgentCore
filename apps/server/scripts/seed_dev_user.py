@@ -14,7 +14,9 @@ This is a dev-only convenience: it creates a REAL user that logs in through the
 normal ``/auth/login`` flow, so it never touches the auth code path and carries
 no production bypass risk. It does **not** need ``LEGACY_REGISTER_ENABLED``
 (that flag only reopens HTTP ``POST /v1/auth/register``). Safe to re-run —
-existing users are left untouched.
+existing users are left untouched. Platform-aligned local billing (unlimited
+dev quota) is a separate step: ``uv run python scripts/set_quota.py dev --unlimited``
+— see docs/02-架构/本地开发.md#两条起步路.
 """
 
 from __future__ import annotations

@@ -23,7 +23,6 @@
         "checkpoint_id": "cp_org",
         "conversation_id": "conv_demo",
         "question": "按下列方案整理桌面？\n确认后按方案批量执行，不再二次弹审批。",
-        "assumptions": [],
         "questions": [
           {
             "id": "q0",

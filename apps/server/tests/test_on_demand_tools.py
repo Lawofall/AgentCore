@@ -396,7 +396,6 @@ _STUFFED_WORKER_RESIDENT = frozenset(
         "web_fetch",
         "file_read",
         "file_write",
-        "file_append",
         "str_replace",
         "file_list",
         "glob",
@@ -435,9 +434,9 @@ def _stuffed_worker() -> ToolRegistry:
 
 
 def test_stuffed_worker_opening_table_omits_on_demand_tools():
-    """Locks the opening FC win: 29 registered; consult 另 wire，不在此表."""
+    """Locks the opening FC win: 28 registered; consult 另 wire，不在此表."""
     registry = _stuffed_worker()
-    assert registry.count == 29
+    assert registry.count == 28
     offered = _def_names(registry)
     assert offered == _STUFFED_WORKER_RESIDENT
     chars = sum(
@@ -478,12 +477,12 @@ async def test_stuffed_worker_opening_table_omits_mcp_tools():
     registry = _stuffed_worker()
     opening_before = _def_names(registry)
     count_before = registry.count
-    assert count_before == 29
+    assert count_before == 28
     assert opening_before == _STUFFED_WORKER_RESIDENT
 
     registered = register_mcp_tools(registry, _playwright_mcp_result(tool_count=24))
     assert registered == 24
-    assert registry.count == 53
+    assert registry.count == 52
     offered = _def_names(registry)
     assert offered == opening_before
     mcp_names = {n for n in registry.names if n.startswith("mcp_")}

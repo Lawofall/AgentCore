@@ -12,7 +12,7 @@ Split axes (implementation modules):
 - ``errors`` — error / result mapping
 - ``read`` — file_read / file_list (one-layer LS; FileListTool still in read.py)
 - ``listing`` / ``glob`` — listing helpers + globstar search
-- ``mutate`` — write / append / str_replace
+- ``mutate`` — write / str_replace
 - ``meta`` — delete / move / copy / mkdir
 - ``batch`` — file_batch
 
@@ -33,7 +33,6 @@ from agentcore.tools.builtin.file_ops.integrity import (
     has_skeleton_markers,
     is_severe_shrink,
     is_skeleton_content,
-    prose_append_rejection,
     write_scope_rejection,
 )
 from agentcore.tools.builtin.file_ops.listing import expand_brace_globs
@@ -44,7 +43,6 @@ from agentcore.tools.builtin.file_ops.meta import (
     MkdirTool,
 )
 from agentcore.tools.builtin.file_ops.mutate import (
-    FileAppendTool,
     FileWriteTool,
     StrReplaceTool,
 )
@@ -57,7 +55,6 @@ from agentcore.tools.builtin.file_ops.read import (
 )
 
 __all__ = [
-    "FileAppendTool",
     "FileBatchTool",
     "FileCopyTool",
     "FileDeleteTool",
@@ -83,6 +80,5 @@ __all__ = [
     "has_skeleton_markers",
     "is_severe_shrink",
     "is_skeleton_content",
-    "prose_append_rejection",
     "write_scope_rejection",
 ]

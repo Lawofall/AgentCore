@@ -94,7 +94,6 @@ describe("ProcessTimeline · 非末段正文进过程折", () => {
     const resolvedAsk: CheckpointDisplay = {
       id: "cp-1",
       question: "你心里的「Agent 生态」更接近哪种？",
-      assumptions: [],
       questions: [],
       intent: "decision",
       status: "resolved",
@@ -129,7 +128,6 @@ describe("ProcessTimeline · 非末段正文进过程折", () => {
     const pendingAsk: CheckpointDisplay = {
       id: "cp-pending",
       question: "选哪条？",
-      assumptions: [],
       questions: [],
       intent: "decision",
       status: "pending",

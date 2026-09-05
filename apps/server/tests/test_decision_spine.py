@@ -429,6 +429,30 @@ def test_local_turn_spine_head_and_tool_failure_codes() -> None:
     assert "searxng_unreachable" in text
 
 
+def test_local_turn_recorded_error_type_on_tail() -> None:
+    tid = "e" * 32
+    events = [
+        {
+            "type": "log",
+            "event": "chat.local_turn_recorded",
+            "timestamp": "2026-08-11T12:00:01Z",
+            "trace_id": tid,
+            "conversation_id": "conv-local",
+            "message_id": "m-local",
+            "chars": 0,
+            "rounds": 0,
+            "finish_reason": "error",
+            "error_code": "PIPELINE_ERROR",
+            "error_type": "AttributeError",
+        },
+    ]
+    spine = build_decision_spine(events, trace_id=tid)
+    assert spine["tail"]["error_type"] == "AttributeError"
+    assert spine["tail"]["error_code"] == "PIPELINE_ERROR"
+    text = format_decision_spine(spine)
+    assert "AttributeError" in text
+
+
 def test_local_turn_recorded_does_not_mask_cloud_turn_close() -> None:
     """If both local_turn_recorded and turn_complete exist, prefer primary close/start."""
     tid = "f" * 32

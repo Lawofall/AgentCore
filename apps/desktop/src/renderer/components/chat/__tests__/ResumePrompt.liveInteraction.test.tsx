@@ -253,7 +253,6 @@ describe("ResumePrompt · live InteractionStore authority", () => {
         checkpoint_id: "cp-unbound",
         conversation_id: CID,
         question: "第二轮拍板？",
-        assumptions: [],
         questions: [],
       },
     });
@@ -320,7 +319,6 @@ describe("ResumePrompt · live InteractionStore authority", () => {
         checkpoint_id: "cp-r1",
         conversation_id: CID,
         question: "第一轮？",
-        assumptions: [],
         questions: [],
       },
     });
@@ -359,7 +357,6 @@ describe("ResumePrompt · live InteractionStore authority", () => {
         checkpoint_id: "cp-r2",
         conversation_id: CID,
         question: "第二轮拍板？",
-        assumptions: [],
         questions: [],
       },
     });
@@ -390,7 +387,6 @@ describe("ResumePrompt · live InteractionStore authority", () => {
         checkpoint_id: "cp-ask-keep",
         conversation_id: CID,
         question: "这次讨论怎么推进？",
-        assumptions: [],
         questions: [],
       },
     });
@@ -417,7 +413,6 @@ describe("ResumePrompt · live InteractionStore authority", () => {
       steps: [],
       pending: [],
       question: "",
-      assumptions: [],
       questions: [],
       intent: "decision",
       origin: "server",
@@ -488,7 +483,6 @@ describe("ResumePrompt · ask continue → leftover team_preview SSE skip", () =
         checkpoint_id: "cp-ask",
         conversation_id: CID,
         question: "这次讨论怎么推进？",
-        assumptions: [],
         questions: [],
       },
     });
@@ -655,7 +649,6 @@ describe("ResumePrompt · ask continue → leftover team_preview SSE skip", () =
       steps: [],
       pending: [],
       question: "怎么推进？",
-      assumptions: [],
       questions: [],
       intent: "decision",
       origin: "server",

@@ -1,11 +1,10 @@
-"""Browser Session API schemas — multi ``session_id`` + takeover (M0 / M2).
+"""Browser Session API schemas — multi ``session_id`` + input injection.
 
-Co-owned with the desktop BrowserPanel: list/create/close sessions; takeover state is
-carried by the POST response; input is a batch of frame-pixel-space events. NO frame /
-key / text content is ever persisted or echoed back (D17).
+Co-owned with the desktop BrowserPanel: list/create/close sessions; input is a batch of
+frame-pixel-space events. NO frame / key / text content is ever persisted or echoed
+back (D17).
 """
 
-from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, Field, WithJsonSchema
@@ -105,32 +104,6 @@ class BrowserSessionCreateRequest(BaseModel):
     activate: bool = True
 
 
-class BrowserTakeoverActionRequest(BaseModel):
-    """Start or end user takeover of a browser session (owner-only).
-
-    ``session_id`` optional — omit to resolve the conversation's unique/active session.
-    """
-
-    action: Literal["start", "end"]
-    session_id: str | None = None
-
-
-class BrowserTakeoverState(BaseModel):
-    """The takeover state a POST …/browser/takeover returns.
-
-    ``reason`` distinguishes every outcome without an HTTP error: ``started`` / ``ended`` on
-    success; ``already_active`` (start when one is running — still active); ``no_session``
-    (no live session to take over); ``not_active`` (end when none is running).
-    ``active`` reflects the resulting state; ``started_at`` is set while active.
-    """
-
-    active: bool
-    reason: Literal["started", "ended", "already_active", "no_session", "not_active"]
-    record_id: str | None = None
-    started_at: datetime | None = None
-    session_id: str | None = None
-
-
 class MouseInputEvent(BaseModel):
     """A pointer event in frame-pixel space (the driver rescales to the viewport).
 
@@ -174,7 +147,7 @@ BrowserInputEvent = Annotated[
 
 
 class BrowserInputRequest(BaseModel):
-    """A batch of takeover input events (only valid while takeover is active; else 409)."""
+    """A batch of input events (owner + live session; else 409)."""
 
     events: list[BrowserInputEvent]
     session_id: str | None = None
@@ -184,19 +157,3 @@ class BrowserInputResponse(BaseModel):
     """Result of an input batch: how many events were dispatched (no content echoed)."""
 
     injected: int
-
-
-class BrowserTakeoverRecord(BaseModel):
-    """One audit episode for the timeline card (who/when/why — never content, D17)."""
-
-    id: str
-    started_at: datetime
-    ended_at: datetime | None
-    end_reason: str | None
-    session_id: str | None = None
-
-    model_config = {"from_attributes": True}
-
-
-class BrowserTakeoverListResponse(BaseModel):
-    data: list[BrowserTakeoverRecord]

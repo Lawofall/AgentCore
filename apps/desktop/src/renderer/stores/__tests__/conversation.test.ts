@@ -830,13 +830,12 @@ describe("plan_review cards (结构化挂起 2a)", () => {
 // assistant message it paused — set live via InteractionStore, flipped on resolve;
 // journal reload hydrates through hydrateInteractionsFromJournal
 // (see interactions.test.ts). The opening flavor carries the rich content the
-// former kickoff did (assumptions / questions / style_options).
+// former kickoff did (questions).
 describe("ask_user cards (统一开场引导 + 途中拍板)", () => {
   const reqPayload = (id: string): CheckpointRequiredPayload => ({
     checkpoint_id: id,
     conversation_id: "a",
     question: "我先按这个方案做这个落地页，对吗？",
-    assumptions: [{ id: "a0", label: "部署", value: "纯静态" }],
     questions: [
       {
         id: "q0",

@@ -527,14 +527,14 @@ Rules:
   existing time-bound bullet whose date has passed, either "update" it to past tense
   (e.g. "计划2026年7月去X" → "2026年7月去过X") if still worth remembering, or
   "remove" it if it was transient and no longer useful.
-- 记忆价值分层（冷启动 vs 已有记忆）：
-  - 冷启动：当偏好.md 与 画像.md 均为空时，应主动从对话提取「合理的用户信号」
-    （语言偏好、用户陈述的技术栈、工作习惯等）。此时写入门槛降低——只要对话透露出
-    稳定倾向或事实信号，就应写入，不必等到「高价值」才记。一次性查询、本场任务
-    结果、本机 AppData/日志路径不是用户特征，空 ops 合法。
-  - 已有记忆：只记持久、高价值知识，忽略一次性任务细节和短暂上下文。不要为随口
-    一提就新建主题笔记——优先补充已有笔记，仅当话题会反复出现时才新建。
-  - 任务细节本身不写，但其中暴露的工具链/语言/工作习惯要提取写入。
+- 记忆价值分层:
+  - Default is empty ops. A fact belongs in 偏好.md / 画像.md ONLY if almost every
+    later task (or every task on THIS desk, for folder 画像) would still need it.
+    Idle chats must not fill always-files from one-off work.
+  - 一次性查询、本场任务结果、本机 AppData/日志路径不是用户特征，空 ops 合法.
+  - 偏好只能来自用户明示或当场纠正，禁止从任务题材推断.
+  - 已有记忆：忽略一次性任务细节和短暂上下文。不要为随口一提就新建主题笔记.
+  - Empty 画像 is not a reason to lower that bar. 冷启动不得把一次性询问写成身份.
 - 主题笔记只记仍会改变以后行动的事实，以及一行否决（方案+为何否）。禁止过程日记、
   已完成步骤；不要把经验教训/操作流程写成施工顺序。
 - PRIVACY: do not record sensitive personal data — government IDs, passwords/keys,
@@ -546,13 +546,12 @@ Rules:
 - Write "content" as a short declarative bullet in the user's language, using soft
   wording (倾向 / 偏好) for preferences — observations, not hard rules. Write a folder-scoped
   fact with folder-relative wording (e.g. "本文件夹…") so its scope is clear in the prompt.
-- 空 ops 仅当对话完全无用户特征信号时才合法；只要对话中有语言/工具/习惯/技术栈等
-  信号，就必须产出 add/update ops，不可默认输出空列表。
-- 冷启动示例（偏好与画像均为空，对话含用户信号 → 必须写入）：
+- 空 ops 合法（默认）。只在对话含「几乎每个以后任务都会用到」的用户特征时才 add/update.
+- 冷启动示例（偏好与画像均为空；仅明示、且每任务都有用才写）：
   对话：user: 我用 pnpm，请用中文回复
-  输出：{"ops": [{"action": "add", "section": "技术栈与工具", "content": "倾向使用 pnpm"},
-    {"action": "add", "section": "沟通偏好", "content": "倾向用中文交流"}]}
-- 冷启动示例（对话仅为一次性任务、无用户特征 → 空 ops 合法）：
+  输出：{"ops": [{"action": "add", "section": "沟通偏好", "content": "倾向用中文交流"},
+    {"action": "add", "section": "技术栈与工具", "content": "倾向使用 pnpm"}]}
+- 冷启动示例（对话仅为一次性任务 → 空 ops 合法）：
   对话：user: 帮我把这段 JSON 格式化一下
   输出：{"ops": []}
 - 纠正记录示例（用户否定 AI 理解 → 写入 global 纠正记录）：
@@ -609,14 +608,6 @@ def _render_extract_prompt(data: MemoryExtractInput) -> str:
     else:
         sections.append(
             "# No current folder — this is a bare chat; route everything to scope \"global\""
-        )
-    if _is_cold_start(data):
-        sections.append(
-            "# COLD START\n"
-            "偏好.md 与 画像.md 均为空——这是冷启动。请主动从下方对话中提取合理的用户信号"
-            "（语言偏好、技术栈、工具链、工作习惯等），降低写入门槛；只要对话中有此类"
-            "信号就必须产出 ops，不可默认输出空列表。任务细节本身不写，但其中暴露的"
-            "工具链/语言/习惯要提取。"
         )
     sections.append(f"# Recent conversation\n{convo}")
     return "\n\n".join(sections) + "\n\nProduce the consolidation ops JSON now."

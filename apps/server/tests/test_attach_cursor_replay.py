@@ -30,6 +30,7 @@ from agentcore.runtime.events.stream_checkpointer import (
     run_output_channel,
 )
 from agentcore.runtime.events.types import EventType
+from agentcore.runtime.journal.fold import runs_from_entries
 from agentcore.runtime.journal.writer import TurnJournalWriter, current_journal_writer
 
 
@@ -997,3 +998,207 @@ async def test_bare_seq_cursor_replays_the_whole_journal(monkeypatch):
     assert "FROM_HISTORY" not in joined
     assert "CEO 旁白" in joined
     assert "tool_use_start" in joined
+
+
+def _ceo_tool(
+    seq_start: int,
+    *,
+    call_id: str,
+    name: str,
+    arguments: dict,
+) -> list[dict]:
+    """Live 时序：start → end → process_tool（end 时落盘，从不在 running 时 pin）。"""
+    return [
+        {
+            "seq": seq_start,
+            "kind": "tool_use_start",
+            "payload": {
+                "tool_call_id": call_id,
+                "tool_name": name,
+                "arguments": arguments,
+            },
+            "ts": "t0",
+        },
+        {
+            "seq": seq_start + 1,
+            "kind": "tool_use_end",
+            "payload": {
+                "tool_call_id": call_id,
+                "tool_name": name,
+                "status": "success",
+                "result": "ok",
+            },
+            "ts": "t0",
+        },
+        {
+            "seq": seq_start + 2,
+            "kind": "process_tool",
+            "payload": {
+                "kind": "tool",
+                "id": call_id,
+                "tool_name": name,
+                "arguments": arguments,
+                "status": "success",
+                "result": "ok",
+            },
+            "ts": "t0",
+        },
+    ]
+
+
+# 截图同款模拟 journal：思考隔开的三连 CEO 工具 + run_plan。process_tool 跟在每件
+# end 之后（与 EventSink 渐进落盘一致），GET 投影应把三件都放在 team 前。
+_CEO_LEAD_IN_JOURNAL = [
+    {
+        "seq": 1,
+        "kind": "process_reasoning",
+        "payload": {"kind": "reasoning", "text": "想 1"},
+        "ts": "t0",
+    },
+    *_ceo_tool(
+        2,
+        call_id="c1",
+        name="consult",
+        arguments={"name": "team_orchestration_advanced"},
+    ),
+    {
+        "seq": 5,
+        "kind": "process_reasoning",
+        "payload": {"kind": "reasoning", "text": "想 2"},
+        "ts": "t0",
+    },
+    *_ceo_tool(6, call_id="c2", name="list_folders", arguments={}),
+    {
+        "seq": 9,
+        "kind": "process_reasoning",
+        "payload": {"kind": "reasoning", "text": "想 3"},
+        "ts": "t0",
+    },
+    *_ceo_tool(
+        10,
+        call_id="c3",
+        name="file_write",
+        arguments={"path": "docs/00-创作基准.md"},
+    ),
+    {
+        "seq": 13,
+        "kind": "process_reasoning",
+        "payload": {"kind": "reasoning", "text": "开始派队"},
+        "ts": "t0",
+    },
+    {
+        "seq": 14,
+        "kind": "run_plan",
+        "payload": {"execution_id": "exec-court", "plan_type": "multi_agent"},
+        "ts": "t0",
+    },
+    {
+        "seq": 15,
+        "kind": "process_team",
+        "payload": {"kind": "team", "execution_id": "exec-court"},
+        "ts": "t0",
+    },
+]
+
+
+_CEO_PLAN_SEQ = 14
+_CEO_LAST_TOOL_END_SEQ = 11
+
+
+def test_ceo_lead_in_journal_skips_process_tool_mirrors():
+    """attach 重建工具只走 DURABLE start/end，不把 process_tool 再折一遍。"""
+    events = journal_rows_to_sse(_CEO_LEAD_IN_JOURNAL)
+    kinds = [e.type for e in events]
+    assert EventType.TOOL_USE_START in kinds
+    assert kinds.count(EventType.TOOL_USE_START) == 3
+    names = [e.payload.get("tool_name") for e in events if e.type == EventType.TOOL_USE_START]
+    assert names == ["consult", "list_folders", "file_write"]
+    start_seqs = [e.seq for e in events if e.type == EventType.TOOL_USE_START]
+    plan = next(e for e in events if e.type == EventType.RUN_PLAN)
+    assert plan.seq == _CEO_PLAN_SEQ
+    assert max(start_seqs) < plan.seq
+
+
+def test_incremental_after_run_plan_does_not_reship_ceo_tools():
+    """游标停在 run_plan（直播正常盖章）时，增量段不含图前那三件。"""
+    events = journal_rows_to_sse(_CEO_LEAD_IN_JOURNAL)
+    kept = _slice_after_cursor(events, after_seq=_CEO_PLAN_SEQ)
+    assert not any(e.type == EventType.TOOL_USE_START for e in kept)
+    kept_from_last_tool_end = _slice_after_cursor(
+        events, after_seq=_CEO_LAST_TOOL_END_SEQ
+    )
+    assert not any(e.type == EventType.TOOL_USE_START for e in kept_from_last_tool_end)
+    assert any(e.type == EventType.RUN_PLAN for e in kept_from_last_tool_end)
+
+
+def test_incremental_from_before_tools_reships_all_three_starts():
+    """游标停在第一件工具之前（GET 已水合出图、Last-Event-ID 还早）→ 增量会重发三件 start。"""
+    events = journal_rows_to_sse(_CEO_LEAD_IN_JOURNAL)
+    kept = _slice_after_cursor(events, after_seq=1)
+    names = [e.payload.get("tool_name") for e in kept if e.type == EventType.TOOL_USE_START]
+    assert names == ["consult", "list_folders", "file_write"]
+    assert any(e.type == EventType.RUN_PLAN for e in kept)
+
+
+def test_reasoning_cursor_is_a_legal_incremental_anchor():
+    """回放段会给 process_reasoning 打 id:，下次重连的游标可以停在「第一件工具之前」。"""
+    assert (
+        _incremental_verdict(
+            _CEO_LEAD_IN_JOURNAL, after_seq=1, turn_id="m1", cursor_turn_id="m1"
+        )
+        is None
+    )
+    assert (
+        _incremental_verdict(
+            _CEO_LEAD_IN_JOURNAL,
+            after_seq=_CEO_PLAN_SEQ,
+            turn_id="m1",
+            cursor_turn_id="m1",
+        )
+        is None
+    )
+
+
+def test_get_projection_keeps_ceo_tools_before_team():
+    """GET ``runs.process`` 按 journal 序投影：三件工具在 team 前，图后没有副本。"""
+    runs = runs_from_entries(_CEO_LEAD_IN_JOURNAL)
+    assert runs is not None
+    process = runs["process"]
+    team_at = next(i for i, s in enumerate(process) if s.get("kind") == "team")
+    before = [s.get("tool_name") for s in process[:team_at] if s.get("kind") == "tool"]
+    after = [s.get("tool_name") for s in process[team_at + 1 :] if s.get("kind") == "tool"]
+    assert before == ["consult", "list_folders", "file_write"]
+    assert after == []
+
+
+async def test_build_cursor_replay_from_reasoning_cursor_reships_starts(monkeypatch):
+    """Last-Event-ID 停在 process_reasoning → 增量段（无 full_replay）带上三件 start。"""
+    _patch_journal_repo(monkeypatch, _CEO_LEAD_IN_JOURNAL)
+    events = await build_cursor_replay(
+        turn_id="m1",
+        conversation_id="c1",
+        after_seq=1,
+        cursor_turn_id="m1",
+        memory_channels={},
+        memory_agent_ids={},
+    )
+    assert events[0].type == EventType.MESSAGE_START
+    assert "full_replay" not in events[0].payload
+    names = [e.payload.get("tool_name") for e in events if e.type == EventType.TOOL_USE_START]
+    assert names == ["consult", "list_folders", "file_write"]
+
+
+async def test_build_cursor_replay_from_run_plan_does_not_reship_starts(monkeypatch):
+    """直播正常把游标盖到 run_plan 之后，增量段不再带图前工具。"""
+    _patch_journal_repo(monkeypatch, _CEO_LEAD_IN_JOURNAL)
+    events = await build_cursor_replay(
+        turn_id="m1",
+        conversation_id="c1",
+        after_seq=_CEO_PLAN_SEQ,
+        cursor_turn_id="m1",
+        memory_channels={},
+        memory_agent_ids={},
+    )
+    assert events[0].type == EventType.MESSAGE_START
+    assert "full_replay" not in events[0].payload
+    assert not any(e.type == EventType.TOOL_USE_START for e in events)

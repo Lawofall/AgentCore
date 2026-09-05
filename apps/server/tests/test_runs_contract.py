@@ -486,7 +486,7 @@ def test_form_files_passes_when_file_copy_landed():
 
 
 def test_requires_files_passes_when_str_replace_landed():
-    """str_replace / file_append 成功落盘须计入 files_written（分区 worker 增量补丁）。"""
+    """str_replace 成功落盘须计入 files_written（分区 worker 增量补丁）。"""
     from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
     from agentcore.runtime.runs.serialize import files_touched_from_transcript
     from agentcore.tools.file_products import file_product, with_file_products_marker

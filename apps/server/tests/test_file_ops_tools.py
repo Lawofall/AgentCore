@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from agentcore.tools.builtin.file_ops import (
-    FileAppendTool,
     FileBatchTool,
     FileCopyTool,
     FileDeleteTool,
@@ -831,6 +830,7 @@ def test_file_read_schema_teaches_default_full_read():
     assert "glob" in desc
     assert "dump" in desc
     assert "web_fetch" in desc
+    assert "file_list" in desc
     assert "web_fetch" in schema.parameters["properties"]["path"]["description"]
     assert "默认不抽文本" in schema.parameters["properties"]["path"]["description"]
     offset = schema.parameters["properties"]["offset"]
@@ -839,6 +839,18 @@ def test_file_read_schema_teaches_default_full_read():
     assert "请用 code_execute。" not in desc
     assert "artifact manifest" not in desc
     assert "start_page" not in desc
+
+
+@pytest.mark.parametrize("path", [".", "pkg"])
+async def test_file_read_directory_fails_and_names_file_list(
+    tmp_path: Path, path: str
+):
+    (tmp_path / "pkg").mkdir()
+    result = await FileReadTool().execute({"path": path}, _ctx(tmp_path))
+    assert result.success is False
+    text = f"{result.error or ''}{result.output or ''}"
+    assert "目录" in text
+    assert "file_list" in text
 
 
 @pytest.mark.parametrize(
@@ -936,52 +948,7 @@ async def test_file_read_missing_does_not_trip_circuit_breaker(tmp_path: Path):
     assert c.tool_failure_count("file_read") == 0
 
 
-# --- file_append ---
-
-
-async def test_append_creates_file_when_missing(tmp_path: Path):
-    result = await FileAppendTool().execute(
-        {"path": "draft.md", "content": "# Intro"}, _ctx(tmp_path)
-    )
-    assert result.success is True
-    assert (tmp_path / "draft.md").read_text(encoding="utf-8") == "# Intro"
-
-
-async def test_append_adds_to_existing_file(tmp_path: Path):
-    (tmp_path / "draft.md").write_text("# Intro", encoding="utf-8")
-    result = await FileAppendTool().execute(
-        {"path": "draft.md", "content": "\n\n## Section 2"}, _ctx(tmp_path)
-    )
-    assert result.success is True
-    assert (tmp_path / "draft.md").read_text(encoding="utf-8") == "# Intro\n\n## Section 2"
-
-
-async def test_append_rejects_empty_path(tmp_path: Path):
-    result = await FileAppendTool().execute({"path": "", "content": "x"}, _ctx(tmp_path))
-    assert result.success is False
-    assert "path 不能为空" in result.error
-
-
-async def test_append_rejects_directory_target(tmp_path: Path):
-    (tmp_path / "pkg").mkdir()
-    result = await FileAppendTool().execute({"path": "pkg", "content": "x"}, _ctx(tmp_path))
-    assert result.success is False
-    assert "不是文件" in result.error
-
-
-async def test_append_receipt_echoes_merged_tail(tmp_path: Path):
-    # append 回执改为 artifact manifest（含 end_preview），免掉纯回读自检。
-    (tmp_path / "draft.md").write_text("# Intro", encoding="utf-8")
-    result = await FileAppendTool().execute(
-        {"path": "draft.md", "content": "\n\n## Section 2"}, _ctx(tmp_path)
-    )
-    assert result.success is True
-    assert "## Section 2" in result.output  # end_preview / title_tree
-    assert "artifact manifest" in result.output
-    assert "优先用 manifest 验真" in result.output
-
-
-async def test_write_receipt_notes_persisted(tmp_path: Path):
+# --- file_write receipts ---
     # file_write 回执 = artifact manifest；优先 manifest 验真（非身份硬闸）。
     result = await FileWriteTool().execute(
         {"path": "report.md", "content": "# Hi\n\n## A\n"}, _ctx(tmp_path)
@@ -1005,40 +972,6 @@ async def test_write_receipt_reports_chars_not_bytes(tmp_path: Path):
     assert f"已写入 {len(body)} 字符到 诉状.md" in result.output
     assert f"chars: {len(body)}" in result.output
     assert "字节" not in result.output
-
-
-async def test_write_prose_then_append_rejected(tmp_path: Path):
-    """成篇 file_write 后同 path file_append 硬拒（Artifact-first）。"""
-    prose = "# 报告\n\n" + ("这是实质正文段落。" * 50)  # well over substantial
-    assert len(prose) >= 400
-    ctx = _ctx(tmp_path)
-    w = await FileWriteTool().execute({"path": "essay.md", "content": prose}, ctx)
-    assert w.success is True
-    assert "kind: prose" in w.output
-    assert ctx.landed_artifact_kinds.get("essay.md") == "prose"
-    blocked = await FileAppendTool().execute(
-        {"path": "essay.md", "content": "\n\n## 续章\n更多。"}, ctx
-    )
-    assert blocked.success is False
-    assert blocked.contract_failure is True
-    assert "拒绝追加" in (blocked.error or "")
-    assert "str_replace" in (blocked.error or "")
-    assert "骨架填空" in (blocked.error or "") or "骨架" in (blocked.error or "")
-    assert "应先短骨架" not in (blocked.error or "")
-    assert "长交付物应先" not in (blocked.error or "")
-
-
-async def test_write_skeleton_then_append_allowed(tmp_path: Path):
-    skeleton = "# 报告\n\n## 一\n\n## 二\n\n<!-- OUTLINE -->\n"
-    ctx = _ctx(tmp_path)
-    w = await FileWriteTool().execute({"path": "report.md", "content": skeleton}, ctx)
-    assert w.success is True
-    assert ctx.landed_artifact_kinds.get("report.md") == "skeleton"
-    a = await FileAppendTool().execute(
-        {"path": "report.md", "content": "\n\n## 一\n\n正文填空。\n"}, ctx
-    )
-    assert a.success is True
-    assert "artifact manifest" in a.output
 
 
 async def test_file_read_allows_author_self_product(tmp_path: Path):
@@ -1159,20 +1092,6 @@ async def test_write_allows_oversized_prose(tmp_path: Path):
     assert "已拦截" not in (result.error or "")
 
 
-async def test_append_allows_oversized_chunk(tmp_path: Path):
-    from agentcore.tools.builtin.file_ops import FileAppendTool
-
-    (tmp_path / "a.md").write_text("# skeleton\n", encoding="utf-8")
-    body = "y" * 8000
-    result = await FileAppendTool().execute(
-        {"path": "a.md", "content": body}, _ctx(tmp_path)
-    )
-    assert result.success is True
-    assert result.contract_failure is not True
-    assert "拒绝单次过大写入" not in (result.error or "")
-    assert (tmp_path / "a.md").read_text(encoding="utf-8") == "# skeleton\n" + body
-
-
 async def test_str_replace_allows_oversized_new_string(tmp_path: Path):
     from agentcore.tools.builtin.file_ops import StrReplaceTool
 
@@ -1214,36 +1133,6 @@ async def test_write_allows_short_skeleton_with_section_markers(tmp_path: Path):
     assert "kind: skeleton" in result.output
 
 
-async def test_write_then_append_segmented_path(tmp_path: Path):
-    """建站 HTML 短骨架 + SECTION 填空：append 仍放行（勿误伤）。"""
-    skeleton = (
-        "<!doctype html>\n<html>\n<head></head>\n<body>\n"
-        "<!-- SECTION:s0 START -->\n<!-- SECTION:s0 END -->\n"
-    )
-    section = "  <section>hello</section>\n"
-    closing = "</body>\n</html>\n"
-
-    ctx = _ctx(tmp_path)
-    w = await FileWriteTool().execute(
-        {"path": "site/index.html", "content": skeleton}, ctx
-    )
-    assert w.success is True
-    assert ctx.landed_artifact_kinds.get("site/index.html") == "skeleton"
-
-    a1 = await FileAppendTool().execute(
-        {"path": "site/index.html", "content": section}, ctx
-    )
-    assert a1.success is True
-    assert "已追加" in a1.output
-
-    a2 = await FileAppendTool().execute(
-        {"path": "site/index.html", "content": closing}, ctx
-    )
-    assert a2.success is True
-    merged = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
-    assert merged == skeleton + section + closing
-
-
 def test_write_schema_does_not_teach_completeness_gates():
     """按钮只留这是什么 + HOW；完整性硬拒不进 schema / landing。"""
     from agentcore.runtime.skills import build_system_skill_registry
@@ -1263,23 +1152,15 @@ def test_write_schema_does_not_teach_completeness_gates():
     assert "省略标记" not in landing.body
     assert "allow_shrink" not in landing.body
     assert "硬拒" not in landing.body
-    assert "HOW→consult(long_form_landing)" in FileAppendTool().schema.description
+    assert "file_append" not in landing.body
     assert "HOW→consult(long_form_landing)" in StrReplaceTool().schema.description
     content_desc = FileWriteTool().schema.parameters["properties"]["content"]["description"]
     assert "完整正文" in content_desc
     assert "硬拒" not in content_desc
     write_path = FileWriteTool().schema.parameters["properties"]["path"]["description"]
-    append_path = FileAppendTool().schema.parameters["properties"]["path"]["description"]
     replace_path = StrReplaceTool().schema.parameters["properties"]["path"]["description"]
     assert "扁平" in write_path
-    assert "扁平" not in append_path
     assert "扁平" not in replace_path
-
-    append_desc = FileAppendTool().schema.description
-    assert "追加" in append_desc
-    assert "骨架" not in append_desc
-    assert "次数上限" not in append_desc
-    assert "Artifact-first" not in append_desc
 
     replace_desc = StrReplaceTool().schema.description
     assert "完全匹配" in replace_desc or "精确替换" in replace_desc
@@ -1290,6 +1171,12 @@ def test_write_schema_does_not_teach_completeness_gates():
     assert "不硬拒" in new_desc
     assert "_landed_summary" not in new_desc
     assert "已落盘短状态" in new_desc or "清理占位" in new_desc
+
+
+def test_file_append_tool_is_absent():
+    import agentcore.tools.builtin.file_ops as file_ops
+
+    assert not hasattr(file_ops, "FileAppendTool")
 
 
 def test_classify_write_kind_helpers():
@@ -2195,7 +2082,7 @@ async def test_write_scope_explore_memory_has_no_inner_path_ban(tmp_path: Path):
 async def test_write_scope_none_rejects_all(tmp_path: Path):
     ctx = _ctx(tmp_path)
     ctx.write_scope = "none"
-    result = await FileAppendTool().execute(
+    result = await FileWriteTool().execute(
         {"path": "AgentCore/文档/research/x.md", "content": "x"},
         ctx,
     )

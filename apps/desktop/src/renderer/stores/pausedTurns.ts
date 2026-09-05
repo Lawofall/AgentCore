@@ -5,7 +5,6 @@ import {
 } from "@/lib/checkpointIntent";
 import type { components } from "@/types/api.generated";
 import type {
-  AskAssumption,
   AskOption,
   AskQuestion,
   CeoReviewSummary,
@@ -64,7 +63,7 @@ export function beginPausedSnapshot(): number {
  *
  * `kind` selects the card the {@link ResumePrompt} renders: plan_review reviews the
  * finished `steps` + gated `pending`; ask_user re-asks the unified card content
- * (`question` + `assumptions` / `questions`).
+ * (`question` / `questions`).
  * The unused set is empty for the other kind.
  */
 export interface PendingResume {
@@ -87,8 +86,6 @@ export interface PendingResume {
   ceoReview?: CeoReviewSummary;
   /** ask_user: the framing / opening line (always shown). */
   question: string;
-  /** ask_user: 起步计划 read-only chips (低影响决策，开场常见). */
-  assumptions: AskAssumption[];
   /** ask_user: the askable items (途中岔路通常一个；开场可多个). */
   questions: AskQuestion[];
   /** ask_user chrome intent after {@link parseCheckpointIntent}. */
@@ -120,16 +117,6 @@ const toPending = (raw: PausedTurnSummary["pending"]): PlanReviewPending[] =>
 /** ask_user rich fields arrive as loose JSON dicts (backend ``list[dict]``); map
  * them to the typed display shapes the unified card reads, tolerating missing keys.
  * The backend already normalized + capped + id'd them (ask_user._normalize_*). */
-const toAssumptions = (
-  raw: PausedTurnSummary["assumptions"],
-): AskAssumption[] =>
-  (raw ?? []).map((a, i) => ({
-    id: String(a.id ?? `a${i}`),
-    label: String(a.label ?? ""),
-    value: String(a.value ?? ""),
-  }));
-
-/** Options rehydrate as `{label, detail?, action?, well_known?, target_name?}` from the backend. */
 const toOptions = (raw: unknown): AskOption[] =>
   Array.isArray(raw)
     ? raw.map((o) => {
@@ -252,7 +239,6 @@ function entryFromSummary(
     // REST 快照尚未列该字段进 schema；宽松读，后端带了就透传（absent → undefined）。
     ceoReview: toCeoReview((s as { ceo_review?: unknown }).ceo_review),
     question: s.question ?? "",
-    assumptions: toAssumptions(s.assumptions),
     questions: toQuestions(s.questions),
     intent: toIntent((s as { intent?: unknown }).intent),
     ...((s as { browser_login?: unknown }).browser_login === true

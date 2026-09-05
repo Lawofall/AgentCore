@@ -51,6 +51,7 @@ import { useConversationAwaitingAttention } from "@/stores/aiAttention";
 import {
   conversationSidebarActivityStatus,
   useConversationCloudRunning,
+  useConversationGraphLive,
 } from "@/stores/aiTurnActivity";
 import {
   type Conversation,
@@ -142,6 +143,7 @@ export function ConversationItem({
     (s) => s.byId[conversation.id]?.executionVia ?? null,
   );
   const cloudRunning = useConversationCloudRunning(conversation.id);
+  const graphLive = useConversationGraphLive(conversation.id);
   // 「等你」灯（前端UX设计.md §对话列表状态点）：热阻塞交互（审批 / 授权 / 升级拍板，
   // CEO 仲裁除外）+ 可操作暂停帧（途中提问 / 计划复核）都算等用户。
   const awaitingInteraction = useInteractionStore((s) =>
@@ -165,14 +167,15 @@ export function ConversationItem({
   const showHotkeyIndex =
     useRailHotkeyHintVisible() && !showRowActions && hotkeyIndex != null;
 
-  // 等你灯 > 云 running > 本端 isGenerating。sidecar / 本地容器忽略云 running，
-  // 免得本机引擎对话被账号级集合再点一次灯。
+  // 等你灯 > 协作图活体 / 本端 isGenerating / 云 running。sidecar / 本地容器忽略云
+  // running，免得本机引擎对话被账号级集合再点一次灯。
   const status = conversationSidebarActivityStatus({
     awaiting: awaitingInteraction || awaitingResume || awaitingAttention,
     cloudRunning,
     isGenerating,
     executionVia,
     localContainerRootId: conversation.localContainerRootId,
+    graphLive,
   });
 
   const suppressPreview = moreOpen || contextMenuOpen;
@@ -403,7 +406,7 @@ export function ConversationItem({
                         }
                         className={`size-1.5 rounded-full ${
                           status === "running"
-                            ? "animate-pulse bg-primary"
+                            ? "animate-pulse bg-primary ring-2 ring-primary/40"
                             : "bg-primary ring-2 ring-primary/25"
                         }`}
                       />

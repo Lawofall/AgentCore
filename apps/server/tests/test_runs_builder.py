@@ -224,18 +224,15 @@ def test_dag_linear_chain_has_no_siblings():
     assert all(n.sibling_summary == "" for n in plan.nodes)
 
 
-def test_sibling_summary_task_excerpt_capped():
-    # A long sibling task is truncated to the per-sibling cap with an ellipsis, so a
-    # wide fan-out's awareness block can't blow up a worker's context.
+def test_sibling_summary_keeps_full_task():
     long_task = "x" * 500
     plan, errs = build_run_plan(
         [{"role": "A", "task": long_task}, {"role": "B", "task": "短"}], id_prefix="t"
     )
     assert errs == []
     b = plan.nodes[1]
-    assert "x" * 150 in b.sibling_summary
-    assert "x" * 200 not in b.sibling_summary
-    assert b.sibling_summary.endswith("…")
+    assert b.sibling_summary == f"- A\n  切面：{long_task}"
+    assert "…" not in b.sibling_summary
 
 
 def test_sibling_summary_uses_task_only():
@@ -265,30 +262,51 @@ def test_sibling_summary_uses_task_only():
     assert "做下单页" in backend.sibling_summary
 
 
-def test_sibling_summary_falls_back_to_task_without_objective():
-    # task instruction is the scope so a peer is never blank.
+def test_sibling_summary_roster_line_is_role_and_full_task():
     plan, errs = build_run_plan(
         [{"role": "A", "task": "做A"}, {"role": "B", "task": "做B"}], id_prefix="t"
     )
     assert errs == []
     a = plan.nodes[0]
-    assert a.sibling_summary == "- B：做B"
+    assert a.sibling_summary == "- B\n  切面：做B"
 
 
-def test_sibling_summary_ignores_deleted_deliverable_name():
-    # Deleted name key is not consumed; sibling summary is role + task only.
+def test_sibling_summary_lists_pinned_artifacts_ignores_deleted_name():
     plan, errs = build_run_plan(
         [
-            {"role": "A", "task": "a", "deliverable": {"name": "y" * 300}},
+            {
+                "role": "A",
+                "task": "写引擎",
+                "deliverable": {
+                    "name": "y" * 300,
+                    "form": "files",
+                    "artifacts": ["src/engine/rules.ts", "src/data/tables.ts"],
+                },
+            },
             {"role": "B", "task": "b"},
         ],
         id_prefix="t",
     )
     assert errs == []
     b = plan.nodes[1]
-    assert b.sibling_summary == "- A：a"
+    assert b.sibling_summary == (
+        "- A\n  落盘：`src/engine/rules.ts`、`src/data/tables.ts`\n  切面：写引擎"
+    )
+    assert "y" * 300 not in b.sibling_summary
     assert plan.nodes[0].deliverable is not None
     assert plan.nodes[0].deliverable.form == "files"
+
+
+def test_sibling_summary_indents_multiline_task():
+    plan, errs = build_run_plan(
+        [
+            {"role": "A", "task": "第一行\n第二行"},
+            {"role": "B", "task": "短"},
+        ],
+        id_prefix="t",
+    )
+    assert errs == []
+    assert plan.nodes[1].sibling_summary == "- A\n  切面：第一行\n  第二行"
 
 
 def test_dag_namespaces_ids_and_rewrites_edges():

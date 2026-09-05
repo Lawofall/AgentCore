@@ -102,7 +102,7 @@ async def test_list_browser_sessions_with_entries(monkeypatch):
             run_id="r1",
             created_at=3.0,
             last_used=4.0,
-            control="user",
+            control="agent",
             url=None,
             title=None,
         ),
@@ -127,7 +127,7 @@ async def test_list_browser_sessions_with_entries(monkeypatch):
         "title": "Example",
     }
     assert result["data"][1]["session_id"] == "s2"
-    assert result["data"][1]["control"] == "user"
+    assert result["data"][1]["control"] == "agent"
 
 
 @pytest.mark.asyncio

@@ -1,20 +1,19 @@
 import { Markdown } from "@/components/chat/Markdown";
 import {
   type CatalogItem,
-  FIDELITY_META,
   buildReceivedContextCatalog,
   defaultCatalogItemId,
   flattenCatalog,
 } from "@/components/chat/receivedContextCatalog";
 import { PromptDocument } from "@/components/prompt/PromptDocument";
-import { Badge, Button, SectionLabel } from "@/components/ui";
+import { Badge, SectionLabel } from "@/components/ui";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { formatCompact } from "@/lib/format";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { cn } from "@/lib/utils";
@@ -29,13 +28,11 @@ import { useMemo, useState } from "react";
 function ReceivedContextReader({
   blocks,
   layout,
-  onNavigate,
   preferMaterial = false,
   initialSelectedId,
 }: {
   blocks: ContextBlockWire[];
   layout: "split" | "stack";
-  onNavigate?: (runId: string) => void;
   preferMaterial?: boolean;
   initialSelectedId?: string | null;
 }) {
@@ -109,48 +106,19 @@ function ReceivedContextReader({
       </nav>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-2">
-        <ReaderBody item={selected} onNavigate={onNavigate} />
+        <ReaderBody item={selected} />
       </div>
     </div>
   );
 }
 
-function ReaderBody({
-  item,
-  onNavigate,
-}: {
-  item: CatalogItem;
-  onNavigate?: (runId: string) => void;
-}) {
-  const canJump = Boolean(onNavigate && item.source_run_id);
-  const fidelityLabel = item.fidelity
-    ? (FIDELITY_META[item.fidelity] ?? item.fidelity)
-    : "";
-  const showProvenance =
-    Boolean(item.source_role) || Boolean(item.fidelity) || item.truncated;
+function ReaderBody({ item }: { item: CatalogItem }) {
+  // pointer 是落盘策略不是预算截断；旧 journal 仍可能 stamp truncated。
+  const showTruncated = item.truncated && item.fidelity !== "pointer";
 
   return (
     <div className="space-y-2">
-      {showProvenance && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {item.source_role && canJump ? (
-            <Button
-              variant="ghost"
-              onClick={() => onNavigate?.(item.source_run_id)}
-              title="跳到来源节点"
-              className="h-auto gap-1 px-1.5 py-0.5 text-muted-foreground"
-            >
-              <span>来自 {item.source_role}</span>
-              <CornerDownRight size={14} className="shrink-0" />
-            </Button>
-          ) : null}
-          {item.source_role && !canJump ? (
-            <Badge tone="muted">来自 {item.source_role}</Badge>
-          ) : null}
-          {fidelityLabel ? <Badge tone="muted">{fidelityLabel}</Badge> : null}
-          {item.truncated ? <Badge tone="muted">已截断</Badge> : null}
-        </div>
-      )}
+      {showTruncated ? <Badge tone="muted">已截断</Badge> : null}
       <div data-testid="received-context-body">
         {item.channel === "system" ? (
           <PromptDocument
@@ -181,14 +149,12 @@ function ReaderBody({
 }
 
 /**
- * 队员右坞：一条入口，点开与 CEO 同一弹窗。
+ * 队员右坞：标题行一条入口，点开与 CEO 同一弹窗。无内容则不出现。
  */
 export function ReceivedContextSection({
   blocks,
-  onNavigate,
 }: {
   blocks: ContextBlockWire[];
-  onNavigate?: (runId: string) => void;
 }) {
   const { isNarrow } = useNarrowLayoutState();
   const itemCount = useMemo(
@@ -201,29 +167,25 @@ export function ReceivedContextSection({
   const [open, setOpen] = useState(false);
   if (itemCount === 0) return null;
   return (
-    <section className="mb-4 last:mb-0">
-      <Button
-        variant="ghost"
-        onClick={() => setOpen(true)}
-        className="h-auto w-full justify-start gap-1.5 px-0 py-0 hover:bg-transparent"
-      >
-        <span className="flex w-full items-center gap-1.5">
-          <span className="flex-1 text-left text-xs font-medium text-muted-foreground">
-            收到的上下文
-          </span>
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {itemCount} 段
-          </span>
-        </span>
-      </Button>
+    <>
+      <SimpleTooltip label="看这位队员实际拿到的内容">
+        <Badge
+          as="button"
+          tone="muted"
+          pill
+          className="font-medium"
+          onClick={() => setOpen(true)}
+        >
+          上下文
+        </Badge>
+      </SimpleTooltip>
       <ReceivedContextDialog
         blocks={blocks}
         open={open}
         onOpenChange={setOpen}
         preferMaterial
-        onNavigate={onNavigate}
       />
-    </section>
+    </>
   );
 }
 
@@ -237,25 +199,23 @@ export function ReceivedContextDialog({
   onOpenChange,
   initialSelectedId,
   preferMaterial = false,
-  onNavigate,
 }: {
   blocks: ContextBlockWire[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialSelectedId?: string | null;
   preferMaterial?: boolean;
-  onNavigate?: (runId: string) => void;
 }) {
   const { isNarrow } = useNarrowLayoutState();
   if (blocks.length === 0) return null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(32rem,70vh)] max-w-2xl flex-col">
+      <DialogContent
+        className="flex h-[min(32rem,70vh)] max-w-2xl flex-col"
+        aria-describedby={undefined}
+      >
         <DialogHeader className="shrink-0">
           <DialogTitle>收到的上下文</DialogTitle>
-          <DialogDescription>
-            本回合 AI 实际读到的上下文，与喂给模型的逐字一致。
-          </DialogDescription>
         </DialogHeader>
         <ReceivedContextReader
           key={initialSelectedId ?? "default"}
@@ -263,7 +223,6 @@ export function ReceivedContextDialog({
           layout={isNarrow ? "stack" : "split"}
           initialSelectedId={initialSelectedId}
           preferMaterial={preferMaterial}
-          onNavigate={onNavigate}
         />
       </DialogContent>
     </Dialog>

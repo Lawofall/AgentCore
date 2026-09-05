@@ -23,7 +23,6 @@
         "checkpoint_id": "cp_pick",
         "conversation_id": "conv_demo",
         "question": "选哪条方案推进？",
-        "assumptions": [],
         "questions": [
           {
             "id": "q0",

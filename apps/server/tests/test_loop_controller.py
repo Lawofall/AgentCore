@@ -80,9 +80,6 @@ def test_fingerprint_empty_write_path_collapses():
     assert fingerprint_tool_call(
         "file_write", '{"path": "", "content": "x"}'
     ) == fingerprint_tool_call("file_write", '{"path": "  ", "content": "other"}')
-    assert fingerprint_tool_call(
-        "file_append", '{"path": "", "content": "x"}'
-    ) == fingerprint_tool_call("file_append", '{"path": "  ", "content": "y"}')
 
 
 # --- detect: nothing below threshold ---
@@ -364,7 +361,8 @@ def test_circuit_breaker_still_counts_real_execution_failures():
     msg = cb.message() or ""
     assert "连续写盘失败" in msg
     assert "file_write" in msg and "str_replace" in msg
-    assert "file_append" in msg and "已收窄" in msg
+    assert "file_append" not in msg
+    assert "已收窄" not in msg
     assert "停用" not in msg
     assert "短骨架" not in msg
     assert "JSON 转义" not in msg
@@ -388,7 +386,8 @@ def test_circuit_breaker_parse_only_write_tools_force_segmented_not_disable():
     assert "file_write" in disable.force_segmented
     disable_msg = disable.message() or ""
     assert "连续写盘失败" in disable_msg
-    assert "file_append" in disable_msg and "已收窄" in disable_msg
+    assert "file_append" not in disable_msg
+    assert "已收窄" not in disable_msg
     assert "停用" not in disable_msg
     assert "短骨架" not in disable_msg
     assert "原样重发" not in disable_msg
@@ -1237,168 +1236,25 @@ def test_circuit_breaker_other_parse_warn_is_class_aware():
     assert cb.message() is None
 
 
-def _prose_append_reject(fp: str, path: str) -> ToolAttempt:
-    return ToolAttempt(
-        fp,
-        "file_append",
-        success=False,
-        contract_failure=True,
-        error_summary=f"拒绝追加：`{path}` 本 run 已落成篇正文（非骨架）。",
-        meta={"path": path, "segmented_write_reject": "prose_append"},
-    )
-
-
-def test_path_write_reject_streak_trips_force_segmented_at_two():
-    """Same path + same class ×2 → force_segmented (early strategy, not disable)."""
-    c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    c.record([_prose_append_reject("a", "report.md")])
-    assert not c.tool_circuit_breaker()
-    assert c.tool_failure_count("file_append") == 0  # still contract_failure-skipped
-    c.record([_prose_append_reject("b", "report.md")])
-    cb = c.tool_circuit_breaker()
-    assert cb.disabled == ()
-    assert "file_append" in cb.force_segmented
-    assert "file_write" in cb.force_segmented
-    msg = cb.message() or ""
-    assert "连续写盘失败" in msg
-    assert "file_append" in msg and "已收窄" in msg
-    assert "停用" not in msg
-    assert "短骨架" not in msg
-    # Idempotent: further same-path rejects do not re-fire.
-    c.record([_prose_append_reject("c", "report.md")])
-    assert not c.tool_circuit_breaker()
-
-
-def test_path_write_reject_below_threshold_does_not_trip():
-    c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    c.record([_prose_append_reject("a", "report.md")])
-    assert not c.tool_circuit_breaker()
-
-
-def test_path_write_reject_different_paths_do_not_combine():
-    c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    c.record([_prose_append_reject("a", "a.md")])
-    c.record([_prose_append_reject("b", "b.md")])
-    assert not c.tool_circuit_breaker()
-
-
-def test_path_write_reject_unclassified_resets_streak():
-    c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    c.record([_prose_append_reject("a", "x.md")])
-    c.record(
-        [
-            ToolAttempt(
-                "b",
-                "file_write",
-                success=False,
-                contract_failure=True,
-                error_summary="path 不能为空",
-                meta={"path": "x.md"},
-            )
-        ]
-    )
-    assert not c.tool_circuit_breaker()
-    c.record([_prose_append_reject("c", "x.md")])
-    assert not c.tool_circuit_breaker()
-
-
-def test_path_write_reject_success_resets_streak():
-    c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    c.record([_prose_append_reject("a", "report.md")])
-    c.record(
-        [
-            ToolAttempt(
-                "ok",
-                "file_append",
-                success=True,
-                meta={"path": "report.md"},
-            )
-        ]
-    )
-    c.record([_prose_append_reject("b", "report.md")])
-    assert not c.tool_circuit_breaker()
-
-
-def test_path_write_reject_two_in_one_round_trips():
-    c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    c.record(
-        [
-            _prose_append_reject("a", "report.md"),
-            _prose_append_reject("b", "report.md"),
-        ]
-    )
-    cb = c.tool_circuit_breaker()
-    assert "file_write" in cb.force_segmented
-    assert "file_append" in cb.force_segmented
-
-
-def test_classify_segmented_write_reject_covers_prose_not_length():
-    from agentcore.runtime.loop_controller import classify_segmented_write_reject
-
-    assert (
-        classify_segmented_write_reject(
-            "file_append",
-            error="拒绝追加：`a.md` 本 run 已落成篇正文（非骨架）。",
-            contract_failure=True,
-        )
-        == "prose_append"
-    )
-    assert (
-        classify_segmented_write_reject(
-            "file_write",
-            error="拒绝写入代码文件 `a.ts`：括号结构不完整（缺 `}`）。",
-            contract_failure=True,
-        )
-        is None
-    )
-    assert (
-        classify_segmented_write_reject(
-            "file_write",
-            error="内容过长 length_rejected 请缩短",
-            contract_failure=True,
-        )
-        is None
-    )
-    assert (
-        classify_segmented_write_reject(
-            "file_write",
-            error="拒绝整篇截断覆盖：`报告.md` 旧稿约 2000 字 → 新稿 300 字（低于旧稿 50%）。",
-            contract_failure=True,
-        )
-        is None
-    )
-    assert (
-        classify_segmented_write_reject(
-            "file_append",
-            error="拒绝追加：`a.md` 本 run 已落成篇正文（非骨架）。",
-            contract_failure=False,
-        )
-        is None
-    )
-
-
-def test_apply_circuit_breaker_narrows_file_append_on_force_segmented():
-    """force_segmented keeps file_write; narrows file_append out of the toolset."""
+def test_apply_circuit_breaker_force_segmented_keeps_write_pens():
+    """force_segmented keeps file_write / str_replace on the table; does not name retired pens."""
     from agentcore.llm.provider.protocol import LLMMessage
     from agentcore.runtime.engine.governance import apply_circuit_breaker
 
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    c.record(
-        [
-            _prose_append_reject("a", "report.md"),
-            _prose_append_reject("b", "report.md"),
-        ]
-    )
+    real = ToolAttempt("a", "file_write", success=False, policy_failure=False)
+    c.record([real, real, real])
     disabled: set[str] = set()
     messages: list[LLMMessage] = []
     out = apply_circuit_breaker(
         c, messages=messages, run_id="r1", round_idx=0, disabled_tools=disabled
     )
     assert out.message is not None
-    assert "file_append" in disabled
+    assert "file_append" not in (out.message or "")
+    assert "已收窄" not in (out.message or "")
     assert "file_write" not in disabled
     assert "str_replace" not in disabled
-    assert out.refresh_tool_defs is True
+    assert out.refresh_tool_defs is False
 
 
 # --- B2: no-output early stop (unproductive rounds) ---
@@ -1475,7 +1331,6 @@ def test_progress_tools_reset_investigation_spin():
 
     assert {
         "file_write",
-        "file_append",
         "str_replace",
         "handoff",
         "delegate",

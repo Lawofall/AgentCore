@@ -5,12 +5,12 @@ The memory system splits how durable knowledge is written (Agent记忆与知识�
 
 - **explicit user directive → user rule** (this tool): when the user clearly says「记住…」「以后
   都要…」「别再…」「改为…」「忘掉…」, the CEO records / mutates a ``role='rule',
-  ai_maintained=false`` document — the user OWNS it, so the offline consolidation never rewrites
+  ai_maintained=false`` document — the user OWNS it, so idle digest never rewrites
   it. Same ``<设定>`` block as AI memory, ordered by folder not author. Effect is immediate:
   next turn's ``<设定>``.
-- **inferred preference → offline consolidation** (NOT this tool): preferences merely observed in
-  conversation stay with the two-layer consolidation pass, which writes ``ai_maintained=true``
-  memory. The tool description steers the model to that split.
+- **inferred preference → not this tool**: preferences merely observed in conversation are
+  not written by idle digest. The user must say so, or use explore / daily review / the
+  file page. The tool description steers the model to that split.
 
 Same master-switch neutrality as user rules generally: a user rule is the user's own instruction,
 not AI memory, so it is recorded whenever the user asks — turning off「AI 记忆」silences AI-grown
@@ -78,8 +78,8 @@ class RememberTool:
             description=(
                 "把用户明确下达的指令记为「用户规则」——长期生效、注入后续每一轮对话。"
                 "仅当用户清楚地说「记住…」「以后都要…」「以后别…」"
-                "「改为…」「忘掉…」「现在有哪些规则」等明确指令时使用；普通对话里推测出来的偏好"
-                "不要用本工具，交给会话结束后的离线巩固。"
+                "「改为…」「忘掉…」「现在有哪些规则」等明确指令时使用。"
+                "普通对话里推测出来的偏好不要用本工具：用户没下指令就不记。"
                 "写入/删除后立即生效，下一轮对话即注入。"
                 "禁止把文件夹调研简报 / 技术栈盘点 / 探索幕产出写成规则——"
                 "那是文件夹画像，须用 update_folder_profile。"

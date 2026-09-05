@@ -239,6 +239,9 @@ def test_extract_prompt_cold_start_does_not_treat_one_shot_lookup_as_identity():
     assert "一次性查询" in _EXTRACT_SYSTEM_PROMPT
     assert "AppData" in _EXTRACT_SYSTEM_PROMPT
     assert "空 ops 合法" in _EXTRACT_SYSTEM_PROMPT
+    assert "almost every" in _EXTRACT_SYSTEM_PROMPT
+    assert "就必须产出" not in _EXTRACT_SYSTEM_PROMPT
+    assert "降低写入门槛" not in _EXTRACT_SYSTEM_PROMPT
 
 
 def test_extract_prompt_documents_files_and_scope_routing():

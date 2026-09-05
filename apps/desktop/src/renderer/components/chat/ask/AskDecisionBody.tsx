@@ -45,7 +45,7 @@ import type { AskOption, AskQuestion } from "@/types/events";
 import { ArrowRight, FolderOpen, FolderTree, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AskCardFooter, AskCardShell, AskSectionLabel } from "./AskCardShell";
+import { AskCardFooter, AskCardShell } from "./AskCardShell";
 import { CommenceNote } from "./AskCommenceParts";
 import { type AskRow, AskRowGroup } from "./AskOptionRow";
 import {
@@ -562,24 +562,6 @@ export function AskDecisionBody({
         className="space-y-3"
         data-ask-question-step={paged ? safeStep : undefined}
       >
-        {content.assumptions.length > 0 && (
-          <div className="space-y-1">
-            <AskSectionLabel>起步计划</AskSectionLabel>
-            <dl className="divide-y divide-border/60 px-2">
-              {content.assumptions.map((a) => (
-                <div key={a.id} className="space-y-0.5 py-1.5">
-                  <dt className="text-xs leading-snug text-muted-foreground">
-                    {a.label}
-                  </dt>
-                  <dd className="min-w-0 whitespace-pre-wrap text-xs leading-snug text-foreground/90">
-                    {a.value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        )}
-
         {visibleQuestions.map((q) => {
           const stem =
             content.questions.length === 1 && !q.prompt.trim()

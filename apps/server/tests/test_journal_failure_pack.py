@@ -291,3 +291,17 @@ async def test_persist_pack_write_error_does_not_raise(monkeypatch) -> None:
         trace_id="g" * 32,
         entries=_ERROR_ENTRIES,
     )
+
+
+def test_default_packs_root_follows_log_file(tmp_path, monkeypatch) -> None:
+    from agentcore.config import PROJECT_ROOT, settings
+    from agentcore.runtime.journal.failure_pack import _default_packs_root
+
+    monkeypatch.setattr(settings, "log_file", str(tmp_path / "prod.jsonl"))
+    assert _default_packs_root() == tmp_path / "packs"
+
+    monkeypatch.setattr(settings, "log_file", "logs/dev.jsonl")
+    assert _default_packs_root() == PROJECT_ROOT / "logs" / "packs"
+
+    monkeypatch.setattr(settings, "log_file", "")
+    assert _default_packs_root() == PROJECT_ROOT / "logs" / "packs"

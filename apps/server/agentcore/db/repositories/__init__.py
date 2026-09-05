@@ -36,7 +36,6 @@ from .auth import (
 from .billing import CostEventRepository
 from .boards import BoardRepository
 from .bookmarks import BookmarkRepository
-from .browser import BrowserTakeoverRepository
 from .chat import ChatRepository
 from .conversation_shares import ConversationShareRepository
 from .conversations import ConversationRepository
@@ -80,7 +79,6 @@ __all__ = [
     "AdminMfaRepository",
     "BookmarkRepository",
     "BoardRepository",
-    "BrowserTakeoverRepository",
     "ChatRepository",
     "ConversationRepository",
     "ConversationShareRepository",

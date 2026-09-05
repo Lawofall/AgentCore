@@ -380,6 +380,49 @@ describe("attachSidecarTurn (D4)", () => {
     );
   });
 
+  it("fires onReplayReady after the live tail is on screen, before turn end", async () => {
+    useConversationStore.getState().switchConversation(CID);
+    let resolveAttach!: (v: ReturnType<typeof attachLiveResponse>) => void;
+    const attachGate = new Promise<ReturnType<typeof attachLiveResponse>>(
+      (resolve) => {
+        resolveAttach = resolve;
+      },
+    );
+    stubSidecarApi({ attach: vi.fn(() => attachGate) });
+
+    let replayReady = false;
+    const ac = new AbortController();
+    const p = attachSidecarTurn(CID, {
+      signal: ac.signal,
+      onReplayReady: () => {
+        replayReady = true;
+      },
+    });
+    await vi.waitFor(() => expect(replayReady).toBe(false));
+
+    resolveAttach(
+      attachLiveResponse({
+        events: [
+          {
+            type: "message_start",
+            timestamp: "t0",
+            payload: { message_id: "a-live" },
+          },
+        ],
+      }),
+    );
+    await vi.waitFor(() => expect(replayReady).toBe(true));
+    const msgs = useConversationStore.getState().byId[CID].messages;
+    expect(msgs.some((m) => m.id === "u-live")).toBe(true);
+    expect(getActiveSidecarTarget(CID)?.turnId).toBe("turn-live");
+    // Turn still live — attach promise has not settled.
+    expect(
+      await Promise.race([p.then(() => "done"), Promise.resolve("pending")]),
+    ).toBe("pending");
+    ac.abort();
+    await p;
+  });
+
   it("overlay isGenerating still attaches (cold hydrate chrome is not a pump)", async () => {
     const store = useConversationStore.getState();
     store.switchConversation(CID);

@@ -740,8 +740,10 @@ describe("hydrateInteractionsFromJournal (history replay)", () => {
         id: "c1",
         status: "pending",
         decision: null,
-        assumptions: [{ id: "a0", label: "部署", value: "纯静态" }],
       });
+      expect(entryToCheckpoint(checkpointEntry)).not.toHaveProperty(
+        "assumptions",
+      );
       expect(cards[0].questions[0].default).toBe("潜在客户（推荐）");
     });
 

@@ -108,7 +108,6 @@ async def test_every_landing_tool_self_reports_its_product(tmp_path):
     ``ToolResult.file_products`` 就是磁盘上那个路径；不自报即红。
     """
     from agentcore.tools.builtin.file_ops import (
-        FileAppendTool,
         FileCopyTool,
         FileMoveTool,
         FileWriteTool,
@@ -131,13 +130,6 @@ async def test_every_landing_tool_self_reports_its_product(tmp_path):
     (tmp_path / "src.txt").write_text("alpha\n", encoding="utf-8")
     cases: list[tuple[str, object, dict, str, str]] = [
         ("file_write", FileWriteTool(), {"path": "报告.md", "content": "# 标题"}, "报告.md", "md"),
-        (
-            "file_append",
-            FileAppendTool(),
-            {"path": "报告.md", "content": "\n更多"},
-            "报告.md",
-            "md",
-        ),
         (
             "str_replace",
             StrReplaceTool(),

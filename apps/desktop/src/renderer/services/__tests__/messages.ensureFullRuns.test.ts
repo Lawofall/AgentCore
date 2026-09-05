@@ -8,6 +8,14 @@ vi.mock("@/services/api", () => ({
 }));
 
 import {
+  peekLastEventId,
+  seedLastEventIdForTests,
+} from "@/services/streamConversation";
+import {
+  beginLocalConversationStream,
+  resetStreamOwnershipForTests,
+} from "@/services/turns/streamOwnership";
+import {
   ensureFullMessageRuns,
   resetEnsureFullMessageRunsForTests,
 } from "../messages";
@@ -65,6 +73,7 @@ function fullRow() {
 
 beforeEach(() => {
   resetEnsureFullMessageRunsForTests();
+  resetStreamOwnershipForTests();
   apiGet.mockReset();
   useExecutionStore.setState({ byId: {} });
   useConversationStore.setState({
@@ -138,5 +147,54 @@ describe("ensureFullMessageRuns", () => {
     resolveGet(fullRow());
     await Promise.all([p1, p2]);
     expect(apiGet).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes process without a live pump: drops Last-Event-ID so next attach is full_replay", async () => {
+    const store = useConversationStore.getState();
+    store.switchConversation(CID);
+    store.addMessage({
+      id: MID,
+      role: "assistant",
+      content: "结论",
+      createdAt: "2026-01-01T00:00:00Z",
+      executionId: "exec-full",
+      isStreaming: false,
+      runs: {
+        events: slimRow().runs.events as never,
+        finishReason: "stop",
+        eventsComplete: false,
+      },
+    });
+    seedLastEventIdForTests(CID, "m1:1");
+    apiGet.mockResolvedValue(fullRow());
+    await ensureFullMessageRuns(CID, MID);
+    expect(peekLastEventId(CID)).toBeUndefined();
+  });
+
+  it("live pump owns the cursor: GET-one-message does not drop Last-Event-ID", async () => {
+    const store = useConversationStore.getState();
+    store.switchConversation(CID);
+    store.addMessage({
+      id: MID,
+      role: "assistant",
+      content: "结论",
+      createdAt: "2026-01-01T00:00:00Z",
+      executionId: "exec-full",
+      isStreaming: true,
+      runs: {
+        events: slimRow().runs.events as never,
+        finishReason: "stop",
+        eventsComplete: false,
+      },
+    });
+    const release = beginLocalConversationStream(CID);
+    try {
+      seedLastEventIdForTests(CID, "m1:14");
+      apiGet.mockResolvedValue(fullRow());
+      await ensureFullMessageRuns(CID, MID);
+      expect(peekLastEventId(CID)).toBe("m1:14");
+    } finally {
+      release();
+    }
   });
 });

@@ -14,7 +14,6 @@ const EMPTY: FaceBadgeSignals = {
   checkpointPending: false,
   checkpointStopped: false,
   checkpointReleased: false,
-  reviewConcern: false,
   revision: false,
   handoff: false,
   crossExamSuffix: false,
@@ -88,22 +87,22 @@ describe("buildFaceBadgeDescriptors", () => {
 describe("pickFaceBadges", () => {
   it("keeps every badge when at or under budget", () => {
     const picked = visibleFaceBadgeKeys(
-      signals({ reviewConcern: true, crossExamSuffix: true }),
+      signals({ checkpointStopped: true, crossExamSuffix: true }),
     );
-    expect(picked).toEqual(new Set(["reviewConcern", "crossExam"]));
+    expect(picked).toEqual(new Set(["checkpoint", "crossExam"]));
   });
 
   it("caps at 2 and prefers 待拍板 > 异常 > 过程性", () => {
-    // decision (escalation) + anomaly (reviewConcern) + process (revision, crossExam)
+    // decision (escalation) + anomaly (checkpointStopped) + process (revision, crossExam)
     const picked = visibleFaceBadgeKeys(
       signals({
         escalationPending: 1,
-        reviewConcern: true,
+        checkpointStopped: true,
         revision: true,
         crossExamSuffix: true,
       }),
     );
-    expect(picked).toEqual(new Set(["escalation", "reviewConcern"]));
+    expect(picked).toEqual(new Set(["escalation", "checkpoint"]));
     expect(picked.size).toBe(FACE_BADGE_BUDGET);
     expect(picked.has("revision")).toBe(false);
     expect(picked.has("crossExam")).toBe(false);
@@ -114,7 +113,7 @@ describe("pickFaceBadges", () => {
       signals({
         escalationPending: 1,
         checkpointPending: true,
-        reviewConcern: true,
+        revision: true,
       }),
     );
     expect(picked).toEqual(new Set(["escalation", "checkpoint"]));
@@ -132,7 +131,7 @@ describe("pickFaceBadges", () => {
     expect(picked).toEqual(new Set(["checkpoint", "revision"]));
   });
 
-  it("keeps released checkpoint as process and yields to decision/anomaly", () => {
+  it("keeps released checkpoint as process and yields extra process to decision/anomaly", () => {
     expect(
       visibleFaceBadgeKeys(
         signals({ checkpointReleased: true, revision: true }),
@@ -142,16 +141,16 @@ describe("pickFaceBadges", () => {
       visibleFaceBadgeKeys(
         signals({
           escalationPending: 1,
-          reviewConcern: true,
-          checkpointReleased: true,
+          checkpointStopped: true,
+          revision: true,
         }),
       ),
-    ).toEqual(new Set(["escalation", "reviewConcern"]));
+    ).toEqual(new Set(["escalation", "checkpoint"]));
   });
 
   it("respects an explicit budget override", () => {
     const descriptors = buildFaceBadgeDescriptors(
-      signals({ escalationPending: 1, reviewConcern: true }),
+      signals({ escalationPending: 1, checkpointStopped: true }),
     );
     expect(pickFaceBadges(descriptors, 1)).toEqual(new Set(["escalation"]));
     expect(pickFaceBadges(descriptors, 0)).toEqual(new Set());

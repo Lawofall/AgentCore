@@ -334,17 +334,11 @@ class RunSpec:
     # default (80). CEO may still stamp this.
     max_rounds: int | None = None
     policy: RunPolicy = field(default_factory=RunPolicy)
-    # Fan-out awareness: a concise list of the *other* nodes that fanned out from
-    # the same point — those sharing this node's exact ``depends_on`` set, i.e. the
-    # peers it runs in parallel with toward the same juncture (never its own
-    # upstream/downstream, which arrive separately via ``depends_on``). Injected into
-    # the worker's child context so parallel siblings coordinate instead of
-    # overlapping. Populated by ``build_run_plan`` for BOTH a flat parallel batch
-    # (all share the empty dep set → all siblings) and a DAG (a「research → writer」
-    # fan-out's parallel researchers share their deps → see each other). Narrower
-    # than「same wave」on purpose: independent chains that coincidentally share a
-    # topological layer are NOT siblings. A node with no same-fan-out peer (a
-    # pipeline link, a lone writer) leaves it blank.
+    # Fan-out roster (other nodes sharing this ``depends_on`` set): role + 切面
+    # (task 全文) + 落盘 when artifacts are pinned. Injected into 团队位置 so
+    # parallel siblings can draw boundaries. Not an excerpt. Narrower than
+    # 「same wave」: independent chains that share a topological layer by chance
+    # are NOT siblings. A node with no same-fan-out peer leaves it blank.
     sibling_summary: str = ""
     # plan_review CONTINUE：主 Agent llm 把关压缩要点（REPLACE，非 append）。
     # 与 ``steer`` 分通道；渲染在 steer 之前。空 = 无 / deterministic 不下发。

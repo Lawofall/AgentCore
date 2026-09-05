@@ -446,7 +446,6 @@ export function surfaceResumeFromAssistant(
       steps: [],
       pending: [],
       question: cp.question,
-      assumptions: cp.assumptions,
       questions: cp.questions,
       intent: cp.intent,
       ...(cp.browserLogin ? { browserLogin: true as const } : {}),
@@ -464,7 +463,6 @@ export function surfaceResumeFromAssistant(
         pending: pr.pending,
         ceoReview: pr.ceoReview,
         question: "",
-        assumptions: [],
         questions: [],
         intent: "decision",
       });

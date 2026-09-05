@@ -215,7 +215,9 @@ def worker_products(tool: DelegateTool, plan: RunPlan, results: dict) -> list[di
                 prose_limit=CEO_SYNTHESIS_POINTER_CHARS,
                 prefer_brief=node_has_dependents(plan, node.run_id),
             )
-            fidelity, truncated = "pointer", True
+            fidelity = "pointer"
+            # Digest is the intended payload (产物在盘上); not a budget trim.
+            truncated = False
         elif mode == "pass_through":
             allowance = next(allowances)
             # Leaves (no files, no downstream): conclusion lives in the body —

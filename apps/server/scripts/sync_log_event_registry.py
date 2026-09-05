@@ -210,6 +210,15 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "reason": "str",
         "detail": "str",
     },
+    "chat.local_turn_recorded": {
+        "conversation_id": "str",
+        "message_id": "str",
+        "finish_reason": "str",
+        "chars": "int",
+        "rounds": "int",
+        "error_code": "str",
+        "error_type": "str",
+    },
     "conversation.created": {
         "user_id": "str",
         "conversation_id": "str",
@@ -1072,6 +1081,10 @@ KEY_DESC: dict[str, str] = {
         "regenerate 早退拒绝（会话不存在 / 目标非用户消息或已删除）；排前端传错 id"
     ),
     "chat.prepare_phase": "prepare/assemble 分段耗时（phase + ms；每 phase 一行）",
+    "chat.local_turn_recorded": (
+        "本机 sidecar 回写落库。失败时带 error_code / error_type（异常类名，"
+        "不进用户面）；成功路径通常无这两键"
+    ),
     "conversation.created": (
         "POST /v1/conversations 受理一次新建；client_request_id 为空表示该客户端没传幂等键，"
         "idempotent_hit=true 表示这次重复请求原样返回了首次那条（没新建、没跑回合）"

@@ -27,7 +27,6 @@ describe("AskUserCard manual help", () => {
           <AskUserCard
             content={{
               question: "选 A 还是 B？",
-              assumptions: [],
               questions: [],
             }}
             intent={intent}

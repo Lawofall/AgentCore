@@ -6,7 +6,6 @@ import type {
 } from "@/stores/conversation/types";
 import type { PendingResume, ResumeOrigin } from "@/stores/pausedTurns";
 import type {
-  AskAssumption,
   AskQuestion,
   PlanReviewPending,
   PlanReviewStep,
@@ -44,7 +43,6 @@ export function entryToCheckpoint(e: InteractionEntry): CheckpointDisplay {
   return {
     id: e.id,
     question: str(p.question),
-    assumptions: arr<AskAssumption>(p.assumptions),
     questions: arr<AskQuestion>(p.questions),
     intent: parseCheckpointIntent(p.intent),
     ...settlement,
@@ -165,7 +163,6 @@ export function entryToColdResume(
       steps: [],
       pending: [],
       question: cp.question,
-      assumptions: cp.assumptions,
       questions: cp.questions,
       intent: cp.intent,
       ...(cp.browserLogin ? { browserLogin: true as const } : {}),
@@ -181,7 +178,6 @@ export function entryToColdResume(
       pending: pr.pending,
       ceoReview: pr.ceoReview,
       question: "",
-      assumptions: [],
       questions: [],
       intent: "decision",
     };

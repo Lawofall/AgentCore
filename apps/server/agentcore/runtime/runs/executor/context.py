@@ -418,8 +418,10 @@ def _team_position_block(plan: RunPlan, spec: RunSpec) -> str:
       - has dependents    → upstream link: hands off, "别自己产最终交付物" +
         中间产物落盘起名许可（A1）
       - else has upstream  → terminal node:  "你是终端环，据上游产出最终交付物"
-    Parallel-peer awareness (``sibling_summary``, computed by the builder) is prepended
-    in every team shape; a node with none (a lone pipeline link) skips that line."""
+    Parallel-peer awareness (``sibling_summary`` roster, computed by the builder)
+    is included in every team shape that has same-fan-out peers; a node with none
+    (a lone pipeline link) skips that section. Every team shape starts with a
+    self line so the 看-side roster names who this block is for."""
     roles = {n.run_id: (n.role or n.run_id) for n in plan.nodes}
     dependents = [roles[n.run_id] for n in plan.nodes if spec.run_id in n.depends_on]
     upstream = [roles[d] for d in spec.depends_on if d in roles]
@@ -450,7 +452,8 @@ def _team_position_block(plan: RunPlan, spec: RunSpec) -> str:
         )
     if not parts:
         return ""
-    return "## 你在团队中的位置\n" + "\n\n".join(parts)
+    me = spec.role or spec.run_id
+    return f"你：{me}（本职见「你的任务」）\n\n" + "\n\n".join(parts)
 
 
 def _context_inject_blocks(

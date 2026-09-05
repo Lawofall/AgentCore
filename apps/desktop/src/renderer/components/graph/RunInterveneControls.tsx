@@ -7,11 +7,13 @@
  * 藏成「按钮不见了」。整轮 `turnPhase === "stopping"` 除外：按人停已被输入框
  * 硬停覆盖，再挂会打空 run-stop。判定与文案由 `protocol-fold-kit/runIntervene`
  * 给出，不在本文件另写 status 表。
+ *
+ * 动作是标题行右侧的纯图标；可见名字只在 aria-label / tooltip。点不动的原因仍
+ * 写在标题下面（右坞有空间，不必等 hover）。
  */
 
-import { Button, Textarea } from "@/components/ui";
+import { Button, IconButton, Textarea } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { detectReviewConcern } from "@/lib/reviewConcern";
 import { cn } from "@/lib/utils";
 import { submitRunRedirect } from "@/services/runRedirect";
 import { runtimeOf, useConversationStore } from "@/stores/conversation";
@@ -23,7 +25,7 @@ import {
   runRedirectGate,
   runStopGate,
 } from "@agentcore/protocol-fold-kit";
-import { RotateCcw, Square } from "lucide-react";
+import { Loader2, RotateCcw, Square } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -38,8 +40,8 @@ export interface RunInterveneControlsProps {
   role: string;
   /** 本幕是否开放改方向（辩论幕恒 false → 该按钮整体不渲染）。 */
   redirectCapable: boolean;
-  /** 该队员已产出的正文——用于给改方向草稿挑开头，缺省即用角色名模板。 */
-  output?: string;
+  /** 标题行左侧（角色 / 接手 / 权限快照 / 终态徽章）。 */
+  headerStart: ReactNode;
   className?: string;
 }
 
@@ -48,11 +50,9 @@ const STOP_LABEL = "停止这位队员";
 const STOP_BUSY_LABEL = "停止请求中…";
 const REDIRECT_PLACEHOLDER = "具体、可执行的修改方向…";
 
-/** 改方向草稿开头：这一步已被复核点名时不再重复角色名，直接接改法。 */
-function seedRedirectDraft(role: string, output: string): string {
-  return detectReviewConcern(output) != null
-    ? "请按以下方向调整："
-    : `请按以下方向调整「${role}」的产出：`;
+/** 改方向草稿开头：恒用角色名模板，不扫产出正文。 */
+function seedRedirectDraft(role: string): string {
+  return `请按以下方向调整「${role}」的产出：`;
 }
 
 export function RunInterveneControls({
@@ -62,7 +62,7 @@ export function RunInterveneControls({
   runStatus,
   role,
   redirectCapable,
-  output = "",
+  headerStart,
   className,
 }: RunInterveneControlsProps) {
   const stopCovered = useRunStopPendingStore((s) =>
@@ -87,7 +87,7 @@ export function RunInterveneControls({
   const stopBusy = stopGate.enabled && (stopCovered || stopSubmitting);
 
   const openComposer = () => {
-    setDraft(seedRedirectDraft(role, output));
+    setDraft(seedRedirectDraft(role));
     setComposerOpen(true);
   };
 
@@ -113,45 +113,56 @@ export function RunInterveneControls({
       : stopGate.reason;
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
-      <div className="flex flex-wrap items-center gap-2">
-        {redirectCapable && (
-          <GatedButton
-            gate={redirectGate}
-            label={REDIRECT_LABEL}
-            tip={redirectTip}
-            icon={<RotateCcw size={13} />}
-            tone="primary"
-            onClick={openComposer}
-          />
-        )}
-        {!wholeTurnStopping && (
-          <GatedButton
-            gate={stopGate}
-            label={stopLabel}
-            tip={stopTip}
-            icon={<Square size={13} />}
-            tone="destructive"
-            busy={stopBusy}
-            onClick={async () => {
-              setStopSubmitting(true);
-              try {
-                await requestRunStop({
-                  conversationId,
-                  executionId,
-                  runId,
-                  scope: "node",
-                });
-              } finally {
-                setStopSubmitting(false);
-              }
-            }}
-          />
+    <div className={cn("mb-4 space-y-2", className)}>
+      <div className="flex items-center gap-2">
+        {headerStart}
+        {(redirectCapable || !wholeTurnStopping) && (
+          <span className="flex shrink-0 items-center gap-0.5">
+            {redirectCapable && (
+              <GatedIconButton
+                gate={redirectGate}
+                label={REDIRECT_LABEL}
+                tip={redirectTip}
+                icon={<RotateCcw size={13} />}
+                tone="primary"
+                onClick={openComposer}
+              />
+            )}
+            {!wholeTurnStopping && (
+              <GatedIconButton
+                gate={stopGate}
+                label={stopLabel}
+                tip={stopTip}
+                icon={
+                  stopBusy ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Square size={13} />
+                  )
+                }
+                tone="destructive"
+                busy={stopBusy}
+                onClick={async () => {
+                  setStopSubmitting(true);
+                  try {
+                    await requestRunStop({
+                      conversationId,
+                      executionId,
+                      runId,
+                      scope: "node",
+                    });
+                  } finally {
+                    setStopSubmitting(false);
+                  }
+                }}
+              />
+            )}
+          </span>
         )}
       </div>
 
       {composerOpen && (
-        <div className="space-y-2 border-t border-primary/15 pt-2">
+        <div className="space-y-2 border-t border-border pt-2">
           <RunRedirectComposer
             conversationId={conversationId}
             executionId={executionId}
@@ -178,7 +189,7 @@ export function RunInterveneControls({
  * tooltip 就永远说不出「为什么不能」——那正是要修的毛病。`disabled` 只留给
  * 「停止请求中…」这类真·在飞态。
  */
-function GatedButton({
+function GatedIconButton({
   gate,
   label,
   tip,
@@ -198,21 +209,19 @@ function GatedButton({
   const unavailable = !gate.enabled;
   const toneClass =
     tone === "primary"
-      ? "text-primary hover:bg-primary/10"
+      ? "text-primary hover:bg-primary/10 hover:text-primary"
       : "text-muted-foreground hover:bg-destructive/10 hover:text-destructive";
   return (
     <SimpleTooltip label={tip}>
-      <Button
+      <IconButton
         type="button"
-        variant="ghost"
-        className={cn(
-          "h-7",
+        className={
           unavailable
             ? "cursor-not-allowed text-muted-foreground/60 hover:bg-transparent hover:text-muted-foreground/60"
-            : toneClass,
-        )}
-        icon={icon}
+            : toneClass
+        }
         disabled={busy}
+        aria-busy={busy || undefined}
         aria-disabled={unavailable || undefined}
         aria-label={unavailable ? `${label}（${gate.reason}）` : label}
         title={unavailable ? (gate.reason ?? undefined) : undefined}
@@ -223,8 +232,8 @@ function GatedButton({
         }}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        {label}
-      </Button>
+        {icon}
+      </IconButton>
     </SimpleTooltip>
   );
 }

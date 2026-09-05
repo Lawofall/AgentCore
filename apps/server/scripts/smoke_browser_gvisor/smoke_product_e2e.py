@@ -9,7 +9,7 @@
             + oci.py（会话 OCI）+ runsc（--platform=systrap --network=sandbox）
               + driver.py（沙箱内长驻 async Playwright Chromium）
     runtime/browser/live.py（BrowserLiveHub，M1 直播帧扇出）
-    driver 的 CDP Input 注入（M2 接管，经 browser/input 端点同一 send 路径）
+    driver 的 CDP Input 注入（经 browser/input 端点同一 send 路径）
 
 必须在 ``--privileged`` 容器内、产品镜像（``INSTALL_BROWSER=1`` 构建）上跑。宿主 Windows +
 Docker Desktop 的运行方式见本目录 README。
@@ -55,7 +55,7 @@ CID = "smoke-conv-e2e-1"
 
 # A public page (proves the sandbox → netns → filter proxy → internet path, incl. the dev
 # Clash fake-IP allowance) and two offline data: pages (deterministic click/type/scroll +
-# takeover injection, no network flake).
+# input injection, no network flake).
 PUBLIC_URL = os.environ.get("SMOKE_PUBLIC_URL", "https://example.com")
 
 # Form page (six-tool click/type/scroll): input has NO placeholder/aria so its snapshot name
@@ -71,17 +71,17 @@ FORM_HTML = (
 )
 FORM_URL = "data:text/html;base64," + base64.b64encode(FORM_HTML.encode()).decode()
 
-# Takeover page (M2 injection): fixed-coordinate input + a button whose onclick mutates its
+# Input page: fixed-coordinate input + a button whose onclick mutates its
 # own text, so both mouse and keyboard injection produce a snapshot-observable change.
-TAKEOVER_HTML = (
-    "<!doctype html><html><head><meta charset=utf-8><title>Takeover</title></head>"
+INPUT_HTML = (
+    "<!doctype html><html><head><meta charset=utf-8><title>Input</title></head>"
     "<body style='margin:0;font-family:sans-serif'>"
     "<input id=inp style='position:absolute;left:20px;top:20px;width:300px;height:44px;font-size:22px'>"
     "<button id=btn onclick=\"this.textContent='CLICKED_OK'\" "
     "style='position:absolute;left:20px;top:100px;width:260px;height:50px'>clickme</button>"
     "</body></html>"
 )
-TAKEOVER_URL = "data:text/html;base64," + base64.b64encode(TAKEOVER_HTML.encode()).decode()
+INPUT_URL = "data:text/html;base64," + base64.b64encode(INPUT_HTML.encode()).decode()
 
 # Animated page (M1 live): continuous repaint so the CDP screencast keeps pushing frames
 # (a fully static page would emit ~1 frame then go quiet). Same shape as the PoC gate page.
@@ -367,8 +367,8 @@ async def main() -> int:
 
         _mark("live done")
 
-        # === 断言 5：M2 接管 input 注入鼠标点击 + 键盘输入并生效 ===
-        await session.send(BrowserCommand(action="navigate", args={"url": TAKEOVER_URL, "capture": False}))
+        # === 断言 5：input 注入鼠标点击 + 键盘输入并生效（无需先 start takeover）===
+        await session.send(BrowserCommand(action="navigate", args={"url": INPUT_URL, "capture": False}))
         # mouse click on the button (its onclick sets text → snapshot-observable)
         mouse_events = [
             {"kind": "mouse", "type": "move", "x": 150, "y": 125},
@@ -387,7 +387,7 @@ async def main() -> int:
         key_events = [
             {"kind": "mouse", "type": "down", "x": 170, "y": 42, "button": "left", "click_count": 1},
             {"kind": "mouse", "type": "up", "x": 170, "y": 42, "button": "left", "click_count": 1},
-            {"kind": "text", "text": "hi-takeover-9"},
+            {"kind": "text", "text": "hi-input-9"},
         ]
         r_key = await session.send(
             BrowserCommand(
@@ -396,8 +396,8 @@ async def main() -> int:
             )
         )
         r_snap2 = await session.send(BrowserCommand(action="snapshot"))
-        key_effect = "hi-takeover-9" in (r_snap2.data.get("elements") or "")
-        metrics["takeover_input"] = {
+        key_effect = "hi-input-9" in (r_snap2.data.get("elements") or "")
+        metrics["input_inject"] = {
             "mouse_injected": r_mouse.data.get("injected"),
             "mouse_effect_clicked": btn_effect,
             "key_injected": r_key.data.get("injected"),
@@ -407,7 +407,7 @@ async def main() -> int:
         checks["a5_mouse_effect"] = btn_effect
         checks["a5_key_inject"] = bool(r_key.ok) and int(r_key.data.get("injected") or 0) >= 3
         checks["a5_key_effect"] = key_effect
-        _mark("takeover done")
+        _mark("input done")
 
         # === 断言 6：SSRF 负面（沙箱内经代理访问元数据 + 私网被拒）===
         # metadata.google.internal + a private literal IP are NORMAL http targets Chromium

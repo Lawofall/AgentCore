@@ -8,6 +8,7 @@ import {
 } from "@/components/chat/ToolLine";
 import { teamGraphVisible } from "@/components/chat/debatePreviewPlacement";
 import { absorbHandoffBriefContent } from "@/components/chat/handoffBrief";
+import { ProcessTimelineScrollContext } from "@/components/chat/message-bubble/processTimelineScroll";
 import { executionGraphCapabilities } from "@/components/graph/planCapabilities";
 import {
   type TimelineNode,
@@ -28,12 +29,28 @@ import type {
   RunDebrief,
   TurnEvidenceLedgerEntry,
 } from "@/types/events";
+import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { Fragment, memo } from "react";
+import { Fragment, memo, useContext } from "react";
 import { ThinkingDots, ThinkingHeader } from "./Thinking";
 
 /** Thought 折叠覆盖面：推理/工具/非末段正文 + 弱式决策痕迹（批准/委派授权/推进卡）
  * + 已答复 ask / 已结算开工复核。末段正文、待拍板、协作图、插话仍外置可见。 */
+
+function estimateTimelineNodeSize(node: TimelineNode | undefined): number {
+  if (!node) return 36;
+  switch (node.kind) {
+    case "content":
+      return 72;
+    case "reasoning":
+      return 36;
+    case "tool":
+    case "tool-group":
+      return 32;
+    default:
+      return 40;
+  }
+}
 
 function countProcessStats(nodes: TimelineNode[]) {
   let reasoningCount = 0;
@@ -294,6 +311,38 @@ export function ProcessTimeline({
   const showFallbackAfter =
     !hasContentStep && Boolean(fallbackContent) && fallbackBeforeTeamIdx < 0;
 
+  const scrollParent = useContext(ProcessTimelineScrollContext);
+  const windowed =
+    scrollParent != null && !shouldCollapseProcess && nodes.length > 0;
+  const virtualizer = useVirtualizer({
+    count: windowed ? nodes.length : 0,
+    getScrollElement: () => scrollParent,
+    estimateSize: (index) => estimateTimelineNodeSize(nodes[index]),
+    overscan: 6,
+    enabled: windowed,
+    getItemKey: (index) => nodeKeys[index] ?? String(index),
+    observeElementRect: (_instance, cb) => {
+      if (!scrollParent) return;
+      const notify = () => {
+        cb({
+          width: Math.max(scrollParent.clientWidth, 1),
+          height: Math.max(scrollParent.clientHeight, 1),
+        });
+      };
+      notify();
+      if (typeof ResizeObserver === "undefined") return;
+      const ro = new ResizeObserver(notify);
+      ro.observe(scrollParent);
+      return () => ro.disconnect();
+    },
+    rangeExtractor: (range) => {
+      const base = defaultRangeExtractor(range);
+      if (!isStreaming || nodes.length === 0) return base;
+      const last = nodes.length - 1;
+      return base.includes(last) ? base : [...base, last];
+    },
+  });
+
   const renderFallback = (key: string) => (
     <div
       key={key}
@@ -393,19 +442,57 @@ export function ProcessTimeline({
 
   return (
     <div className="min-w-0 max-w-full space-y-2">
-      {nodes.map((node, i) => {
-        const prefix =
-          i === fallbackBeforeTeamIdx
-            ? renderFallback("fallback-before-team")
-            : null;
-        if (shouldCollapseProcess) {
-          const isFirstProcess = i === firstFoldIndex;
+      {windowed ? (
+        <div
+          className="relative w-full"
+          style={{ height: virtualizer.getTotalSize() }}
+        >
+          {virtualizer.getVirtualItems().map((vi) => {
+            const node = nodes[vi.index];
+            if (!node) return null;
+            return (
+              <div
+                key={vi.key}
+                data-index={vi.index}
+                data-timeline-node=""
+                ref={virtualizer.measureElement}
+                className="absolute top-0 left-0 w-full pb-2"
+                style={{ transform: `translateY(${vi.start}px)` }}
+              >
+                {renderNode(node, vi.index)}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        nodes.map((node, i) => {
+          const prefix =
+            i === fallbackBeforeTeamIdx
+              ? renderFallback("fallback-before-team")
+              : null;
+          if (shouldCollapseProcess) {
+            const isFirstProcess = i === firstFoldIndex;
 
-          if (!processExpanded) {
-            if (foldMask[i]) {
-              if (!isFirstProcess) return null;
+            if (!processExpanded) {
+              if (foldMask[i]) {
+                if (!isFirstProcess) return null;
+                return (
+                  <Fragment key={`sum-${nodeKeys[i]}`}>
+                    {prefix}
+                    <button
+                      type="button"
+                      onClick={toggleProcess}
+                      className="inline-flex items-center gap-1 text-sm text-muted-foreground"
+                    >
+                      {processSummary}
+                      <ChevronRight className="size-4 shrink-0" aria-hidden />
+                    </button>
+                  </Fragment>
+                );
+              }
+            } else if (isFirstProcess) {
               return (
-                <Fragment key={`sum-${nodeKeys[i]}`}>
+                <Fragment key="process-expanded">
                   {prefix}
                   <button
                     type="button"
@@ -413,38 +500,24 @@ export function ProcessTimeline({
                     className="inline-flex items-center gap-1 text-sm text-muted-foreground"
                   >
                     {processSummary}
-                    <ChevronRight className="size-4 shrink-0" aria-hidden />
+                    <ChevronDown className="size-4 shrink-0" aria-hidden />
                   </button>
+                  {renderNode(node, i)}
                 </Fragment>
               );
             }
-          } else if (isFirstProcess) {
+          }
+          if (prefix) {
             return (
-              <Fragment key="process-expanded">
+              <Fragment key={`wrap-${nodeKeys[i]}`}>
                 {prefix}
-                <button
-                  type="button"
-                  onClick={toggleProcess}
-                  className="inline-flex items-center gap-1 text-sm text-muted-foreground"
-                >
-                  {processSummary}
-                  <ChevronDown className="size-4 shrink-0" aria-hidden />
-                </button>
                 {renderNode(node, i)}
               </Fragment>
             );
           }
-        }
-        if (prefix) {
-          return (
-            <Fragment key={`wrap-${nodeKeys[i]}`}>
-              {prefix}
-              {renderNode(node, i)}
-            </Fragment>
-          );
-        }
-        return renderNode(node, i);
-      })}
+          return renderNode(node, i);
+        })
+      )}
       {/* 无 team 标记的图兜底已移除（时间线一期）：多 Agent 回合必有 `team` 标记
           （live 盖章 + reload journal 补齐），图只在标记槽渲染。 */}
       {showFallbackAfter && renderFallback("fallback-after")}

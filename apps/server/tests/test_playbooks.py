@@ -190,14 +190,15 @@ def test_cite_write_review_fans_out_one_researcher_per_angle_then_outline_then_w
     assert outline_d["form"] == "files"
     assert outline_d["artifacts"] == ["AgentCore/文档/research/提纲.md"]
     assert "AgentCore/文档/research/提纲.md" in by_id["outline"]["task"]
-    # Artifact-first writer brief：主路径一次完整 write；可选骨架；禁半章散文再 append。
-    # 定案对齐：分波范围 + continue_from 待续；填空正向 file_append / str_replace（废工具不点名）。
+    # Artifact-first writer brief：主路径一次完整 write；截断则更短完整 write 或 str_replace。
+    # 定案对齐：分波范围 + continue_from 待续；修订正向 str_replace（废工具不点名）。
     # （write_task 已在上方绑定；含 MD→PDF 纪律）
     assert "主路径" in write_task or "一次 file_write 完整" in write_task
-    assert "短骨架" in write_task or "骨架" in write_task
-    assert "禁止首写半章散文" in write_task
-    assert "首写必须是短骨架" not in write_task
-    assert "file_append" in write_task and "str_replace" in write_task
+    assert "file_append" not in write_task
+    assert "骨架填空" not in write_task
+    assert "禁止首写半章散文" not in write_task
+    assert "str_replace" in write_task
+    assert "end_preview" in write_task or "唯一锚" in write_task
     assert "write_section" not in write_task
     assert "continue_from_run_id" in write_task
     assert "章节范围" in write_task or "前几章" in write_task

@@ -20,7 +20,6 @@ function resume(conversationId: string, checkpointId: string): PendingResume {
     steps: [],
     pending: [],
     question: "?",
-    assumptions: [],
     questions: [],
     intent: "decision",
     origin: "server",

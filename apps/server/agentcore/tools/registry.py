@@ -20,6 +20,7 @@ _KNOWN_TOOL_ALIASES: dict[str, str] = {
     "wget": "download_url",
     "curl": "download_url",
     "write": "file_write",
+    "file_append": "str_replace",
     "read": "file_read",
     "search": "web_search",
     "websearch": "web_search",

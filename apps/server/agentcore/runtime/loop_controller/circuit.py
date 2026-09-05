@@ -14,7 +14,6 @@ from .types import (
     LANDING_TOOLS,
     MEMORY_TOOLS,
     ORCHESTRATION_TOOLS,
-    PATH_SEGMENT_FORCE_TOOLS,
     CircuitBreak,
 )
 
@@ -41,7 +40,6 @@ class ToolCircuitBreakerMixin:
     _tool_parse_kept: set[str]
     _tool_failure_warn: int
     _tool_failure_disable: int
-    _pending_path_force_segmented: bool
     _pending_retire_message: str | None
     _pending_validation_stop: str | None
     _pending_validation_hard_stop: bool
@@ -60,16 +58,12 @@ class ToolCircuitBreakerMixin:
         when the local desk fulfiller is gone (``_workspace_channel_dead``):
         then pens are disabled with the rest of the workspace IO family. Otherwise
         hitting the disable threshold yields ``force_segmented`` instead (keep the
-        pen, force skeleton + section writes). Orchestration tools (``ORCHESTRATION_TOOLS``)
+        pen). Orchestration tools (``ORCHESTRATION_TOOLS``)
         and memory tools (``MEMORY_TOOLS``) are never disabled on **parse-only**
         failures either (keep the dispatcher / remember; typed JSON-format steer).
         ``CIRCUIT_TALLY_KEEP_AVAILABLE`` (``run`` / 打开网页族) 不因累计失败
         警告或卸工具。``run`` 族亦不因探测失败 / 干等 / 环境死卸工具；网页等
         显式 ``_tool_force_retire``（``retire_tools``）仍卸。
-
-        Same-path consecutive classified write rejects (prose-append lock only)
-        also enter ``force_segmented`` via the same latch — early strategy
-        upgrade, not a second breaker.
         """
         newly_warned: list[str] = []
         newly_disabled: list[str] = []
@@ -122,14 +116,6 @@ class ToolCircuitBreakerMixin:
             elif count >= self._tool_failure_warn and name not in self._tool_warned:
                 self._tool_warned.add(name)
                 newly_warned.append(name)
-        if self._pending_path_force_segmented:
-            self._pending_path_force_segmented = False
-            for name in sorted(PATH_SEGMENT_FORCE_TOOLS):
-                if name in self._tool_disabled or name in self._tool_segmented_forced:
-                    continue
-                self._tool_segmented_forced.add(name)
-                self._tool_warned.discard(name)
-                newly_force_segmented.append(name)
         tripped = (*newly_warned, *newly_disabled, *newly_force_segmented)
         parse_only = frozenset(
             name

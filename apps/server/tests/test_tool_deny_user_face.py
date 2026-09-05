@@ -407,7 +407,10 @@ async def test_write_args_parse_failure_is_the_one_legitimate_authored_face():
     assert user == _USER_WRITE_PARSE_MSG
     assert_user_face_clean(user)
     # Recipe stays model-side, verbatim.
-    assert "改为短骨架 + 按节 file_append / str_replace 分段落盘" in model
+    assert "更短但完整" in model
+    assert "str_replace" in model
+    assert "end_preview" in model
+    assert "file_append" not in model
 
 
 async def test_liveness_timeout_keeps_retry_ban_off_the_user_face():

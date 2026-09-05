@@ -5,13 +5,14 @@ import { processHasSuccessfulHandoff } from "@/components/chat/handoffBrief";
 import { ProcessTimeline } from "@/components/chat/message-bubble/ProcessTimeline";
 import { RunInterveneControls } from "@/components/graph/RunInterveneControls";
 import { runActCapabilities } from "@/components/graph/planCapabilities";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button, IconButton } from "@/components/ui";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useTurnAudit } from "@/hooks/useTurnAudit";
 import { openWorkspaceDeliverable } from "@/lib/openWorkspaceDeliverable";
 import type { AgentAuditEvent } from "@/services/audit";
 import { permissionAxesShortLabel } from "@/services/permissionAxes";
 import { activeRuntime, useConversationStore } from "@/stores/conversation";
-import { revisionChains, useMessageExecution } from "@/stores/execution";
+import { revisionChains, useMessageRun } from "@/stores/execution";
 import { useSidePanelStore } from "@/stores/sidePanel";
 import { turnDetailPath } from "@/stores/ui";
 import { isLiveRunStatus } from "@agentcore/protocol-fold-kit";
@@ -30,7 +31,7 @@ import {
   RevisionChainSection,
   revisionComparePair,
 } from "./sections/RunRevisionChain";
-import { Section, StatusBadge } from "./sections/shared";
+import { Section } from "./sections/shared";
 
 /**
  * 本回合生效的权限配方短名（原安全台账「本回合模式 · X」快照）。回合审计里
@@ -60,7 +61,7 @@ function turnPresetSnapshot(
 
 /**
  * Single-run detail content — hybrid layout aligned with the CEO bubble timeline:
- * header anchors (role / 接手 chip / status / 打开辩论室 / task / revision /
+ * header anchors (role / 接手 chip / 上下文 / 打开辩论室 / task / revision /
  * escalation / context) → interleaved ProcessTimeline body → footer (debrief /
  * resources). Topology (depends / parent / children) lives on the
  * collab graph, not this inspector.
@@ -78,7 +79,7 @@ export function RunDetailBody({
   messageId: string;
   runId: string;
 }) {
-  const execution = useMessageExecution(messageId);
+  const viewed = useMessageRun(messageId, runId);
   const showRunDetail = useSidePanelStore((s) => s.showRunDetail);
   const navigate = useNavigate();
   const conversationId = useConversationStore((s) => s.currentConversationId);
@@ -88,10 +89,9 @@ export function RunDetailBody({
       false,
   );
 
-  const run = execution?.runs.find((s) => s.id === runId);
-  const agent = run
-    ? execution?.agents.find((a) => a.id === run.agentId)
-    : null;
+  const execution = viewed?.execution;
+  const run = viewed?.run;
+  const agent = viewed?.agent;
   const runCaps = runActCapabilities(execution, runId);
   const turnAudit = useTurnAudit(
     conversationId != null ? conversationId : null,
@@ -100,42 +100,30 @@ export function RunDetailBody({
 
   if (!execution || !run || !agent) return null;
 
-  const output = agent.outputChunks.join("");
   // 整轮停只给 captain：队员栏再夹一枚方块停止，会和「停止这位队员」看起来像同一件事。
   // 整轮硬停的主入口是输入框。「跑完再说」走输入框排队，不在右坞再放填草稿入口。
   const isCaptainRun = run.kind === "captain";
   const working = agent.status === "working";
   const stopTurnAction =
     working && isCaptainRun ? (
-      <Button
-        variant="ghost"
-        className="h-7 text-destructive hover:bg-destructive/10"
-        icon={<Square size={13} />}
-        onClick={() => useConversationStore.getState().stopGeneration()}
-      >
-        停止整轮
-      </Button>
+      <SimpleTooltip label="结束整轮（所有队员一起停）">
+        <IconButton
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          aria-label="停止整轮"
+          onClick={() => useConversationStore.getState().stopGeneration()}
+        >
+          <Square size={13} />
+        </IconButton>
+      </SimpleTooltip>
     ) : null;
   // 按人干预（只改这个人 / 只停这个人）：只在 `isLiveRunStatus` 时挂载（running /
   // pending）。终局整条不渲染、也不写灰字原因——死按钮没有教学价值。排队仍画：可停；
-  // 改方向继续变灰 +「还没开工」。
+  // 改方向继续变灰 +「还没开工」。动作收进标题行纯图标。
   //
   // captain 除外（手机早有这道护栏）：主管这一路就是这条对话本身，「只停这位队员」对它
   // 无意义，引擎的计划里也没有它——出了按钮就是许一个必然落空的愿。要停就停整轮。
-  const intervene =
-    conversationId != null && !isCaptainRun && isLiveRunStatus(run.status) ? (
-      <RunInterveneControls
-        conversationId={conversationId}
-        executionId={execution.id}
-        runId={run.id}
-        runStatus={run.status}
-        role={agent.role}
-        redirectCapable={runCaps.runRedirect}
-        output={output}
-      />
-    ) : (
-      stopTurnAction
-    );
+  const memberIntervene =
+    conversationId != null && !isCaptainRun && isLiveRunStatus(run.status);
   const thinkingLive = isThinkingLivePlaceholder(agent);
 
   const isModerator = isDebateModeratorRun(execution, run.id);
@@ -160,68 +148,64 @@ export function RunDetailBody({
     (agent.toolProgress != null && agent.status === "working") ||
     (agent.status === "working" && !isModerator);
 
+  const headerStart = (
+    <>
+      <span className="flex-1 truncate text-sm font-medium text-foreground">
+        {agent.role}
+      </span>
+      {run.replacesRunId != null && (
+        <Badge
+          tone="muted"
+          pill
+          title="同角色新人按新方向重做"
+          className="font-medium"
+        >
+          接手
+        </Badge>
+      )}
+      {turnPresetLabel && (
+        <Badge
+          tone="muted"
+          pill
+          title="本回合生效的权限模式"
+          className="gap-1 font-medium"
+        >
+          <Shield size={11} className="shrink-0" />
+          {turnPresetLabel}
+        </Badge>
+      )}
+      {isModerator && conversationId != null && (
+        <Button
+          variant="ghost"
+          className="h-auto shrink-0 px-0 py-0 text-xs text-primary hover:bg-transparent"
+          icon={<MessagesSquare size={12} />}
+          onClick={() => {
+            navigate(turnDetailPath(conversationId, messageId, "debate"));
+          }}
+        >
+          打开辩论室
+        </Button>
+      )}
+      <ReceivedContextSection key={runId} blocks={contextBlocks} />
+    </>
+  );
+
   return (
     <div className="p-4">
-      <div className="mb-4 flex items-center gap-2">
-        <span className="flex-1 truncate text-sm font-medium text-foreground">
-          {agent.role}
-        </span>
-        {run.replacesRunId != null && (
-          <Badge
-            tone="muted"
-            pill
-            title="同角色新人按新方向重做"
-            className="font-medium"
-          >
-            接手
-          </Badge>
-        )}
-        {turnPresetLabel && (
-          <Badge
-            tone="muted"
-            pill
-            title="本回合生效的权限模式"
-            className="gap-1 font-medium"
-          >
-            <Shield size={11} className="shrink-0" />
-            {turnPresetLabel}
-          </Badge>
-        )}
-        <StatusBadge
-          status={run.status}
-          phase={run.phase}
-          phaseTool={run.phaseTool}
+      {memberIntervene ? (
+        <RunInterveneControls
+          conversationId={conversationId}
+          executionId={execution.id}
+          runId={run.id}
+          runStatus={run.status}
+          role={agent.role}
+          redirectCapable={runCaps.runRedirect}
+          headerStart={headerStart}
         />
-        {run.durationMs != null && (
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {(run.durationMs / 1000).toFixed(1)}s
-          </span>
-        )}
-        {isModerator && conversationId != null && (
-          <Button
-            variant="ghost"
-            className="h-auto shrink-0 px-0 py-0 text-xs text-primary hover:bg-transparent"
-            icon={<MessagesSquare size={12} />}
-            onClick={() => {
-              navigate(turnDetailPath(conversationId, messageId, "debate"));
-            }}
-          >
-            打开辩论室
-          </Button>
-        )}
-      </div>
-
-      {/* 进行中用 live 底托住干预按钮；排队中无底托。终局 `intervene` 为 null，
-          整块不挂，避免空 wrapper。 */}
-      {intervene && (
-        <div
-          className={
-            agent.status === "working"
-              ? "mb-4 space-y-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs"
-              : "mb-4"
-          }
-        >
-          {intervene}
+      ) : (
+        <div className="mb-4 flex items-center gap-2">
+          {headerStart}
+          {stopTurnAction}
         </div>
       )}
 
@@ -265,21 +249,6 @@ export function RunDetailBody({
           role={agent.role}
           conversationId={conversationId}
           interactive={turnInteractive}
-        />
-      )}
-
-      {contextBlocks.length > 0 && (
-        <ReceivedContextSection
-          key={runId}
-          blocks={contextBlocks}
-          onNavigate={(rid) => {
-            const target = execution.runs.find((r) => r.id === rid);
-            if (!target) return;
-            const role = execution.agents.find(
-              (a) => a.id === target.agentId,
-            )?.role;
-            showRunDetail(messageId, rid, role);
-          }}
         />
       )}
 
@@ -341,12 +310,7 @@ export function RunDetailBody({
       ) : null}
 
       {(run.usage || run.cost) && (
-        <ResourceSection
-          run={run}
-          agent={agent}
-          defaultExpanded
-          keyBase={`run:${runId}`}
-        />
+        <ResourceSection run={run} agent={agent} keyBase={`run:${runId}`} />
       )}
     </div>
   );

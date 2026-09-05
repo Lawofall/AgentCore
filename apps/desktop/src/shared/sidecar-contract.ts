@@ -283,7 +283,6 @@ export interface SidecarPausedTurn {
   pending: Record<string, unknown>[];
   /** ask_user：统一卡片载荷（plan_review 帧为空）。 */
   question: string;
-  assumptions: Record<string, unknown>[];
   questions: Record<string, unknown>[];
 }
 

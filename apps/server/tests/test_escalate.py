@@ -90,7 +90,7 @@ async def test_browser_login_promotes_to_blocking_and_requires_assumption(monkey
     monkeypatch.setattr(escalate_mod, "logger", spy)
 
     result = await EscalateTool().execute(
-        {"question": "请接管登录", "browser_login": True},
+        {"question": "请在右坞完成登录", "browser_login": True},
         _ctx(),
     )
     assert result.success is False
@@ -104,7 +104,7 @@ async def test_browser_login_with_assumption_logs_promoted_blocking(monkeypatch)
 
     result = await EscalateTool().execute(
         {
-            "question": "请接管登录",
+            "question": "请在右坞完成登录",
             "assumption": "用户登录后继续",
             "browser_login": True,
             # blocking omitted — should promote
@@ -285,7 +285,7 @@ async def test_blocking_channel_forwards_browser_login():
     )
     result = await EscalateTool().execute(
         {
-            "question": "请接管登录",
+            "question": "请在右坞完成登录",
             "assumption": "用户登录后继续",
             "blocking": True,
             "browser_login": True,
@@ -336,7 +336,7 @@ async def test_browser_login_skips_ceo_arbitration_when_coordination_active(monk
     )
     result = await EscalateTool().execute(
         {
-            "question": "请接管登录",
+            "question": "请在右坞完成登录",
             "assumption": "用户登录后继续",
             "browser_login": True,
         },

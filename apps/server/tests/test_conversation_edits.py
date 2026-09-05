@@ -33,9 +33,6 @@ def test_write_append_replace_delete_labels():
         name="str_replace", arguments='{"path":"稿.md"}'
     ) == [ConversationEdit(path="稿.md", label="更新")]
     assert edits_from_tool_call(
-        name="file_append", arguments='{"path":"稿.md"}'
-    ) == [ConversationEdit(path="稿.md", label="更新")]
-    assert edits_from_tool_call(
         name="file_delete", arguments='{"path":"稿.md"}'
     ) == [ConversationEdit(path="稿.md", label="已删除")]
 

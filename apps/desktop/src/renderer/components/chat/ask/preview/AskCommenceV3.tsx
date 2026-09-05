@@ -10,7 +10,6 @@ import {
   ChoiceQuestion,
   CommenceFooter,
   CommenceNote,
-  PlanChips,
   PreviewShell,
   useCommencePreviewAnswer,
 } from "./AskCommenceShared";
@@ -122,10 +121,8 @@ export function AskCommenceV3({ content }: { content: AskUserContent }) {
             </div>
           )}
 
-          {/* Secondary: plan + style/note only after decisions */}
+          {/* Secondary: note only after decisions */}
           <div className="space-y-2 border-t border-border/50 pt-3">
-            <p className="text-xs text-muted-foreground">起步计划</p>
-            <PlanChips assumptions={content.assumptions} quiet />
             {total === 0 && (
               <CommenceNote answer={answer} disabled={busy} compact />
             )}

@@ -50,7 +50,6 @@ function pausedShell(): PendingResume {
     steps: [],
     pending: [],
     question: "",
-    assumptions: [],
     questions: [],
     intent: "decision",
     origin: "server",

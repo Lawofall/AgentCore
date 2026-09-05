@@ -211,7 +211,6 @@ def test_ask_user_suspension_round_trips():
         folder_id="F2",
         transcript=transcript,
         question="按这个计划开做？\n两者代价不同",
-        assumptions=[{"id": "a0", "label": "部署", "value": "纯静态"}],
         questions=[
             {
                 "id": "q0",
@@ -236,8 +235,16 @@ def test_ask_user_suspension_round_trips():
     assert restored.folder_id == "F2"
     assert restored.question == "按这个计划开做？\n两者代价不同"
     assert "context" not in frame.to_json()
-    assert restored.assumptions == [{"id": "a0", "label": "部署", "value": "纯静态"}]
-    assert restored.questions[0]["prompt"] == "A 还是 B?"
+    assert "assumptions" not in frame.to_json()
+    leftover = suspension_from_json(
+        {
+            **frame.to_json(),
+            "assumptions": [{"id": "a0", "label": "部署", "value": "纯静态"}],
+        }
+    )
+    assert isinstance(leftover, AskUserSuspension)
+    assert not hasattr(leftover, "assumptions")
+    assert leftover.questions[0]["prompt"] == "A 还是 B?"
     assert restored.questions[0]["options"] == [{"label": "A"}, {"label": "B"}]
     assert restored.questions[0]["multiple"] is True
     assert restored.intent == "decision"

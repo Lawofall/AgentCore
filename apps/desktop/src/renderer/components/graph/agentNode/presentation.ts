@@ -3,7 +3,6 @@ import {
   toolPhaseText,
 } from "@/components/chat/message-bubble/constants";
 import { isWitnessSeatRun } from "@/components/graph/helpers";
-import { statusPillSoft } from "@/components/ui/tone-presets";
 import {
   formatCompact,
   formatDuration,
@@ -116,13 +115,9 @@ export function buildAgentNodePresentation(
         ? `，上报 ${d.escalationRaised} 条${d.escalationKind && d.escalationKind !== "normal" ? `（${escalationKindLabel(d.escalationKind)}）` : ""}`
         : ""
   }${
-    // a11y 不回归：即便视觉预算挤掉了「方向风险 / 待关注 / 含质询」，仍进 aria 播报。
-    d.reviewConcern === "critical"
-      ? "，方向风险"
-      : d.reviewConcern === "warning"
-        ? "，待关注"
-        : ""
-  }${d.debateCrossExamMark ? `，${d.debateCrossExamMark.label}` : ""}`;
+    // a11y 不回归：即便视觉预算挤掉了「含质询」，仍进 aria 播报。
+    d.debateCrossExamMark ? `，${d.debateCrossExamMark.label}` : ""
+  }`;
 
   const writeChars = liveTool
     ? composingWriteChars(liveTool.toolName, liveTool.chars)
@@ -169,8 +164,6 @@ export function buildAgentNodePresentation(
   if (d.revised) peekTags.push(revisedBadge(d.revised).label);
   if (d.replacesRunId) peekTags.push("接手");
   if (d.checkpoint) peekTags.push(checkpointBadge(d.checkpoint).label);
-  if (d.reviewConcern === "critical") peekTags.push("方向风险");
-  else if (d.reviewConcern === "warning") peekTags.push("待关注");
   // 含质询 / 质询作答失败标记：被 face 预算挤出时仍在 hover peek 可达。
   if (d.debateCrossExamMark) peekTags.push(d.debateCrossExamMark.label);
   if ((d.escalationPending ?? 0) > 0) {
@@ -194,13 +187,6 @@ export function buildAgentNodePresentation(
   // pending / stop / resolved(放行|调整) 均走 face；文案由 checkpointBadge 归一。
   const checkpointFace = d.checkpoint ? checkpointBadge(d.checkpoint) : null;
 
-  const reviewConcernFace =
-    d.reviewConcern === "critical"
-      ? { label: "方向风险", cls: statusPillSoft.destructive }
-      : d.reviewConcern === "warning"
-        ? { label: "待关注", cls: "bg-warning/10 text-warning" }
-        : null;
-
   // face 徽标预算（决策 3）：功能徽标同屏 ≤2，优先级 待拍板 > 异常 > 过程性。
   // 立场改走阵营色 + 头像字，不再占 face 字标；状态行不计预算。
   const visibleFaceBadges = visibleFaceBadgeKeys({
@@ -215,7 +201,6 @@ export function buildAgentNodePresentation(
       checkpointFace != null &&
       d.checkpoint?.status === "resolved" &&
       d.checkpoint?.decision !== "stop",
-    reviewConcern: reviewConcernFace != null,
     revision: revisionBadge != null && revisionBadge.kind !== "debate",
     handoff: d.replacesRunId != null,
     crossExamSuffix: d.debateCrossExamMark?.mode === "suffix",
@@ -240,7 +225,6 @@ export function buildAgentNodePresentation(
     peekTags,
     identity,
     checkpointFace,
-    reviewConcernFace,
     statusFace,
     revisionBadge,
     revisionFaceHint: faceHint,

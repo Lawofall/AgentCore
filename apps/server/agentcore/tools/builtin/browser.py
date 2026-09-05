@@ -390,16 +390,6 @@ class _BrowserToolBase:
 
         registry = self._registry_or_default()
         want_sid = str(arguments.get("session_id") or "").strip() or None
-        # M2 接管互斥 (D8): while the user is driving the resolved session by hand, AI
-        # browser tools fail fast with a stable ``user_in_control`` code — no queue/wait.
-        if registry.is_taken_over(
-            context.conversation_id, session_id=want_sid, run_id=context.run_id or None
-        ):
-            return _error(
-                "用户正在接管浏览器，AI 浏览器工具暂不可用；请等待用户结束接管后再继续。",
-                start,
-                code="user_in_control",
-            )
         # C1/C2/C4: host_kind must match assembly gate (Bridge→local; else gVisor→sandbox).
         from agentcore.tools.builtin import browser_host_kind_for
 
@@ -482,13 +472,13 @@ class _BrowserToolBase:
                 # Worker has escalate channel; CEO does not — guide by role.
                 if context.escalation is not None:
                     guide = (
-                        "请 escalate(blocking=true, browser_login=true) 让用户接管登录"
-                        "（登录完成后用户会结束接管，你再继续）。"
+                        "请 escalate(blocking=true, browser_login=true) "
+                        "让用户在右坞完成登录并点「已登录，继续」。"
                     )
                 else:
                     guide = (
-                        "请 ask_user(browser_login=true) 让用户接管登录"
-                        "（登录完成后用户点「已登录，继续」，你再继续）。"
+                        "请 ask_user(browser_login=true) "
+                        "让用户在右坞完成登录并点「已登录，继续」。"
                     )
                 msg = f"目标为密码输入框，AI 不得填写。{guide}"
                 return ToolResult(
@@ -809,16 +799,6 @@ class BrowserTool(_BrowserToolBase):
             return _error("缺少必填参数：url", start)
         if not context.conversation_id:
             return _error("浏览器工具需要会话上下文（当前调用未绑定对话）。", start)
-        registry = self._registry_or_default()
-        want_sid = str(arguments.get("session_id") or "").strip() or None
-        if registry.is_taken_over(
-            context.conversation_id, session_id=want_sid, run_id=context.run_id or None
-        ):
-            return _error(
-                "用户正在接管浏览器，AI 浏览器工具暂不可用；请等待用户结束接管后再继续。",
-                start,
-                code="user_in_control",
-            )
         kind = classify_navigate_target(url)
         from agentcore.tools.builtin import browser_host_kind_for
 

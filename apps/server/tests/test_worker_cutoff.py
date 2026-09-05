@@ -448,14 +448,16 @@ def test_token_wind_down_threshold_and_tool_narrowing():
     assert should_enter_token_wind_down(1, 30_000, 30_000) is False  # reserve >= ceiling
     assert should_enter_token_wind_down(1, 20_000, 30_000) is False  # reserve > ceiling
 
-    # 收尾窗口本意「落盘 + 内环诊断 + handoff」；分段长文靠 file_append，白名单不可漏。
-    assert "file_append" in WIND_DOWN_ALLOWED_TOOLS
+    # 收尾窗口本意「落盘 + 内环诊断 + handoff」；写盘白名单不可漏 file_write / str_replace。
+    assert "file_write" in WIND_DOWN_ALLOWED_TOOLS
+    assert "str_replace" in WIND_DOWN_ALLOWED_TOOLS
+    assert "file_append" not in WIND_DOWN_ALLOWED_TOOLS
     assert "code_diagnostics" in WIND_DOWN_ALLOWED_TOOLS
     available = {
         "web_search",
         "handoff",
         "file_write",
-        "file_append",
+        "str_replace",
         "file_list",
         "code_diagnostics",
         "code_execute",
@@ -466,14 +468,15 @@ def test_token_wind_down_threshold_and_tool_narrowing():
             "web_search",
             "handoff",
             "file_write",
-            "file_append",
+            "str_replace",
             "file_list",
             "code_diagnostics",
         ],
     )
     assert "handoff" in narrowed
     assert "file_write" in narrowed
-    assert "file_append" in narrowed  # 追加写在收尾窗口可用（钉死）
+    assert "str_replace" in narrowed
+    assert "file_append" not in narrowed
     assert "code_diagnostics" in narrowed  # 收窄后仍可内环自检
     assert "web_search" not in narrowed
     assert "code_execute" not in narrowed
@@ -530,7 +533,7 @@ def test_wind_down_keeps_file_read_for_files_deliverable():
         "grep",
         "file_read",
         "file_write",
-        "file_append",
+        "str_replace",
         "handoff",
         "code_execute",
     }
@@ -540,7 +543,7 @@ def test_wind_down_keeps_file_read_for_files_deliverable():
         "grep",
         "file_read",
         "file_write",
-        "file_append",
+        "str_replace",
         "handoff",
     ]
     assert worker_keeps_file_read_in_wind_down(available=available, allowed=allowed)
@@ -584,11 +587,11 @@ def test_wind_down_does_not_keep_note_tools():
         "web_search",
         "grep",
         "file_write",
-        "file_append",
+        "str_replace",
         "handoff",
         "code_execute",
     }
-    allowed = ["web_search", "grep", "file_write", "file_append", "handoff"]
+    allowed = ["web_search", "grep", "file_write", "str_replace", "handoff"]
     narrowed = narrow_tools_for_wind_down(available, allowed=allowed)
     assert "file_write" in narrowed
     assert "handoff" in narrowed
@@ -641,12 +644,13 @@ def test_wind_down_breach_detection_and_local_force():
 
     # Pending landing: breach keeps write tools (not handoff-only).
     landing_surface = narrow_tools_for_wind_down_breach(
-        {"handoff", "file_write", "file_append", "web_search"},
+        {"handoff", "file_write", "str_replace", "web_search"},
         keep_landing=True,
         keep_file_read=False,
     )
     assert "file_write" in landing_surface
-    assert "file_append" in landing_surface
+    assert "str_replace" in landing_surface
+    assert "file_append" not in landing_surface
     assert "handoff" in landing_surface
     assert "web_search" not in landing_surface
 

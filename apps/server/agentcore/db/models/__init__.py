@@ -20,7 +20,6 @@ from .agent_audit import AgentAuditEvent
 from .auth import Credentials, RefreshToken, UserGitCredential, UserLlmProvider
 from .billing import CostCall, CostEvent, CostLedgerOutbox
 from .boards import Board
-from .browser import BrowserTakeoverRow
 from .chat import Chat, ChatMember, ChatMessage
 from .conversations import (
     Conversation,
@@ -77,7 +76,6 @@ __all__ = [
     "AgentAuditEvent",
     "AdminMfa",
     "Board",
-    "BrowserTakeoverRow",
     "Chat",
     "ChatMember",
     "ChatMessage",

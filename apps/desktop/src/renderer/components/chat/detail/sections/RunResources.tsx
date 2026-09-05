@@ -5,6 +5,7 @@ import {
   COST_ESTIMATE_LABEL,
   COST_UNPRICED_HINT,
   COST_UNPRICED_LABEL,
+  formatAlignedCostParts,
   formatCompact,
   formatCostCaption,
   formatDisplayCost,
@@ -24,19 +25,21 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { MetricRow } from "./shared";
 
 /**
- * Per-run resource ledger (§7.3B power detail) — the single place a run's full
- * raw token + cost breakdown lives. Defaults expanded. All-zero cost renders as
- * 「—」(§7.5), not「¥0.00」. BYOK with estimate shows ≈¥ + 估算标注.
+ * Per-run resource ledger — the single place a run's full token + cost
+ * breakdown lives. Defaults collapsed; header keeps the run ¥. All-zero cost
+ * renders as「—」(§7.5), not「¥0.00」. BYOK with estimate shows ≈ + 估算标注.
+ * `cost.cached` is the billed cache-hit portion (already inside input), not
+ * savings vs miss price.
  */
 export function ResourceSection({
   run,
   agent,
-  defaultExpanded,
+  defaultExpanded = false,
   keyBase,
 }: {
   run: RunNode;
   agent: AgentState;
-  defaultExpanded: boolean;
+  defaultExpanded?: boolean;
   keyBase: string;
 }) {
   const [expanded, setExpanded] = usePersistentDisclosure(
@@ -62,6 +65,26 @@ export function ResourceSection({
         ? `${formatCompact(tokenTotal)} tok · ${byokLabel}`
         : null;
   const cache = usage ? cacheUsageDisplay(usage) : null;
+  const think = reasoningMeta(agent.thinking);
+  const cacheLine =
+    cache == null
+      ? null
+      : cache.billedAsMiss
+        ? `${CACHE_BILLED_AS_MISS_LABEL} ${formatCompact(cache.cacheMiss)}`
+        : cache.cacheHit > 0
+          ? `缓存命中 ${formatCompact(cache.cacheHit)}${
+              cache.hitRatePercent != null ? `（${cache.hitRatePercent}%）` : ""
+            }`
+          : null;
+  const parts =
+    cost != null && money != null && money.nano > 0 && !money.estimated
+      ? formatAlignedCostParts(
+          cost.input,
+          cost.output,
+          money.nano,
+          cost.currency,
+        )
+      : null;
 
   return (
     <section className="mb-4 last:mb-0">
@@ -95,42 +118,43 @@ export function ResourceSection({
 
       {expanded && (
         <div className="mt-2 space-y-2 rounded-lg bg-muted p-3">
-          <MetricRow label="思考" value={reasoningMeta(agent.thinking).label} />
-          {model && <MetricRow label="模型" value={model} mono />}
+          <div className="flex items-baseline justify-between gap-3">
+            {model ? (
+              <span
+                className="min-w-0 truncate font-mono text-xs text-foreground"
+                title={model}
+              >
+                {model}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">模型</span>
+            )}
+            <SimpleTooltip label={think.description}>
+              <span className="shrink-0 cursor-default text-xs text-muted-foreground">
+                {think.label}
+              </span>
+            </SimpleTooltip>
+          </div>
 
-          {money != null && money.nano > 0 && (
+          {parts && (
             <div>
-              <MetricRow
-                label={
-                  money.estimated ? `成本（${COST_ESTIMATE_LABEL}）` : "成本"
-                }
-                value={formatDisplayCost(
-                  money.nano,
-                  money.estimated,
-                  money.currency,
-                )}
-              />
-              {money.estimated ? (
-                <SimpleTooltip label={COST_ESTIMATE_HINT}>
-                  <p className="mt-0.5 cursor-default text-xs text-muted-foreground">
-                    {COST_ESTIMATE_HINT}
-                  </p>
-                </SimpleTooltip>
-              ) : cost ? (
-                // 分项与 total 同属这条 run 的一张价卡 → 同 cost.currency。
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  输入 {formatDisplayCost(cost.input, false, cost.currency)} ·
-                  输出 {formatDisplayCost(cost.output, false, cost.currency)}
-                  {cost.cached > 0 && (
-                    <>
-                      {" "}
-                      · 缓存省{" "}
-                      {formatDisplayCost(cost.cached, false, cost.currency)}
-                    </>
-                  )}
+              <p className="text-xs tabular-nums text-muted-foreground">
+                输入 {parts.input} · 输出 {parts.output}
+              </p>
+              {cost && cost.cached > 0 && (
+                <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                  其中缓存{" "}
+                  {formatDisplayCost(cost.cached, false, cost.currency)}
                 </p>
-              ) : null}
+              )}
             </div>
+          )}
+          {money != null && money.nano > 0 && money.estimated && (
+            <SimpleTooltip label={COST_ESTIMATE_HINT}>
+              <p className="cursor-default text-xs text-muted-foreground">
+                {COST_ESTIMATE_HINT}
+              </p>
+            </SimpleTooltip>
           )}
           {money != null &&
             money.nano <= 0 &&
@@ -150,20 +174,22 @@ export function ResourceSection({
                   label="输入 token"
                   value={formatCompact(usage.input)}
                 />
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {cache?.billedAsMiss
-                    ? `${CACHE_BILLED_AS_MISS_LABEL} ${formatCompact(cache.cacheMiss)}`
-                    : `命中 ${formatCompact(usage.cache_hit)} · 未命中 ${formatCompact(usage.cache_miss)} · 缓存率 ${cache?.hitRatePercent ?? 0}%`}
-                </p>
+                {cacheLine && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {cacheLine}
+                  </p>
+                )}
               </div>
               <div>
                 <MetricRow
                   label="输出 token"
                   value={formatCompact(usage.output)}
                 />
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  推理 {formatCompact(usage.reasoning)}
-                </p>
+                {usage.reasoning > 0 && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    推理 {formatCompact(usage.reasoning)}
+                  </p>
+                )}
               </div>
             </>
           )}

@@ -20,7 +20,6 @@ afterEach(cleanup);
 
 const organizeContent: AskUserContent = {
   question: "确认要执行的整理项？",
-  assumptions: [],
   questions: [
     {
       id: "q0",
@@ -44,7 +43,6 @@ const organizeContent: AskUserContent = {
 
 const dailyReviewContent: AskUserContent = {
   question: "确认要落盘的项？\n来自今日对话摘要。",
-  assumptions: [],
   questions: [
     {
       id: "q0",

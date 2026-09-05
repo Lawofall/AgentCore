@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   GENERIC_TOOL_FAILURE_MESSAGE,
+  RETIRED_VERIFY_RESULT_MESSAGE,
   specificToolFailureMessage,
 } from "../productFailureFace";
 
@@ -27,6 +28,15 @@ describe("specificToolFailureMessage", () => {
       specificToolFailureMessage({
         status: "error",
         failure: { message: "未找到所需资源，请换一种方式继续。" },
+      }),
+    ).toBeNull();
+  });
+
+  it("hides the retired verify-result aside", () => {
+    expect(
+      specificToolFailureMessage({
+        status: "error",
+        failure: { message: RETIRED_VERIFY_RESULT_MESSAGE },
       }),
     ).toBeNull();
   });

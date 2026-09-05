@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 Action = Literal["read", "write"]
 
 READ_TOOLS = frozenset({"file_read"})
-WRITE_TOOLS = frozenset({"file_write", "file_append", "str_replace"})
+WRITE_TOOLS = frozenset({"file_write", "str_replace"})
 FILE_TOOLS = READ_TOOLS | WRITE_TOOLS
 
 # Newest unique paths kept in the compaction ledger.

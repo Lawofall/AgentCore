@@ -14,26 +14,10 @@ import { MessageCircleQuestion } from "lucide-react";
 import { useState } from "react";
 import { ResumeDeferredNotice } from "./ResumeDeferredNotice";
 
-function formatBrowserLoginAssumption(
-  assumptions: PendingResume["assumptions"],
-): string | undefined {
-  if (assumptions.length === 0) return undefined;
-  const text = assumptions
-    .map((a) => {
-      const label = a.label?.trim() ?? "";
-      const value = a.value?.trim() ?? "";
-      if (label && value) return `${label}：${value}`;
-      return value || label;
-    })
-    .filter(Boolean)
-    .join("；");
-  return text || undefined;
-}
-
 function AskUserBrowserLoginResumeCard({ turn }: { turn: PendingResume }) {
-  const [submitting, setSubmitting] = useState<
-    "logged_in" | "use_assumption" | "stop" | null
-  >(null);
+  const [submitting, setSubmitting] = useState<"logged_in" | "stop" | null>(
+    null,
+  );
   const entryStatus = useInteractionStore(
     (s) => s.byId.get(turn.checkpointId)?.status,
   );
@@ -44,7 +28,6 @@ function AskUserBrowserLoginResumeCard({ turn }: { turn: PendingResume }) {
     submitting !== null ||
     entryStatus === "submitting" ||
     deferredBusyReason !== null;
-  const assumption = formatBrowserLoginAssumption(turn.assumptions);
 
   if (deferredBusyReason) {
     return (
@@ -62,19 +45,9 @@ function AskUserBrowserLoginResumeCard({ turn }: { turn: PendingResume }) {
     );
   }
 
-  const send = async (
-    decision: "continue" | "stop",
-    opts?: { useAssumption?: boolean },
-  ) => {
+  const send = async (decision: "continue" | "stop") => {
     if (busy) return;
-    const useAssumption = opts?.useAssumption === true && !!assumption;
-    setSubmitting(
-      useAssumption
-        ? "use_assumption"
-        : decision === "continue"
-          ? "logged_in"
-          : "stop",
-    );
+    setSubmitting(decision === "continue" ? "logged_in" : "stop");
     try {
       const result = await submitInteraction({
         id: turn.checkpointId,
@@ -83,11 +56,7 @@ function AskUserBrowserLoginResumeCard({ turn }: { turn: PendingResume }) {
         cold: {
           messageId: turn.messageId,
           decision,
-          note: useAssumption
-            ? assumption
-            : decision === "continue"
-              ? "已登录，继续"
-              : "",
+          note: decision === "continue" ? "已登录，继续" : "",
           selected: [],
         },
       });
@@ -105,17 +74,11 @@ function AskUserBrowserLoginResumeCard({ turn }: { turn: PendingResume }) {
     <BrowserLoginDecisionCard
       roleLabel="主 Agent"
       question={turn.question || "请在右坞浏览器完成登录"}
-      assumption={assumption}
       conversationId={turn.conversationId}
       revealKey={turn.checkpointId}
       busy={busy}
       submitting={submitting}
       onLoggedIn={() => void send("continue")}
-      onUseAssumption={
-        assumption
-          ? () => void send("continue", { useAssumption: true })
-          : undefined
-      }
       onStop={() => void send("stop")}
     />
   );

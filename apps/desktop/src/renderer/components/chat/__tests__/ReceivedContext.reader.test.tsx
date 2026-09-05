@@ -65,8 +65,9 @@ describe("ReceivedContextSection reader", () => {
       />,
     );
 
-    const entry = screen.getByRole("button", { name: /收到的上下文/ });
-    expect(entry.textContent).toContain("3 段");
+    const entry = screen.getByRole("button", { name: "上下文" });
+    expect(entry.textContent).toBe("上下文");
+    expect(entry.textContent).not.toMatch(/段/);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("button", { name: /原始请求/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /对话历史/ })).toBeNull();
@@ -109,7 +110,7 @@ describe("ReceivedContextSection reader", () => {
     );
 
     expect(screen.queryByRole("button", { name: /常驻指令/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /收到的上下文/ }));
+    fireEvent.click(screen.getByRole("button", { name: "上下文" }));
     expect(screen.getByRole("button", { name: /常驻指令/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /输出风格/ })).toBeNull();
 
@@ -133,17 +134,16 @@ describe("ReceivedContextSection reader", () => {
         ]}
       />,
     );
-    expect(
-      screen.getByRole("button", { name: /收到的上下文/ }).textContent,
-    ).toContain("1 段");
-    fireEvent.click(screen.getByRole("button", { name: /收到的上下文/ }));
+    expect(screen.getByRole("button", { name: "上下文" }).textContent).toBe(
+      "上下文",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "上下文" }));
     expect(screen.queryByText("常驻指令")).toBeNull();
     expect(screen.queryByRole("button", { name: /输出风格/ })).toBeNull();
     expect(screen.getByRole("button", { name: /原始请求/ })).toBeTruthy();
   });
 
-  it("defaults to the first 材料 row and opens with provenance", () => {
-    const onNavigate = vi.fn();
+  it("defaults to the first 材料 row; source lives in the catalog, not body chips", () => {
     render(
       <ReceivedContextSection
         blocks={[
@@ -158,25 +158,21 @@ describe("ReceivedContextSection reader", () => {
             chars: 18,
           }),
         ]}
-        onNavigate={onNavigate}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /收到的上下文/ }));
+    fireEvent.click(screen.getByRole("button", { name: "上下文" }));
     const materialBtn = screen.getByRole("button", {
-      name: /前置结果 · 调研员/,
+      name: /前置 · 调研员/,
     });
     expect(materialBtn.getAttribute("aria-current")).toBe("true");
     expect(materialBtn.textContent).toContain("18 字");
     expect(screen.getByTestId("received-context-body").textContent).toBe(
       "竞品 A/B/C 的定价区间……",
     );
-    expect(screen.getByText("来自 调研员")).toBeTruthy();
-    expect(screen.getByText("摘要")).toBeTruthy();
+    expect(screen.queryByText("来自 调研员")).toBeNull();
+    expect(screen.queryByText("摘要")).toBeNull();
     expect(screen.getByText("已截断")).toBeTruthy();
-
-    fireEvent.click(screen.getByText("来自 调研员"));
-    expect(onNavigate).toHaveBeenCalledWith("run-up");
   });
 
   it("shows 环境 group label only inside the dialog", () => {
@@ -190,32 +186,35 @@ describe("ReceivedContextSection reader", () => {
     );
     expect(screen.queryByText("环境")).toBeNull();
     expect(screen.queryByRole("button", { name: /团队位置/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /收到的上下文/ }));
+    fireEvent.click(screen.getByRole("button", { name: "上下文" }));
     expect(screen.getByText("环境")).toBeTruthy();
     expect(screen.getByRole("button", { name: /团队位置/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /团队共识/ })).toBeTruthy();
   });
 
-  it("source without run id degrades to a plain badge", () => {
-    const onNavigate = vi.fn();
+  it("does not badge pointer as 已截断 even when the wire stamp is true", () => {
     render(
       <ReceivedContextSection
         blocks={[
           block({
-            channel: "history",
-            source_role: "用户",
-            source_run_id: "",
-            body: "用户：你好\nCEO：您好",
+            channel: "team_result",
+            body: "交接结论：已落盘。",
+            source_role: "案卷作者",
+            source_run_id: "run-up",
+            fidelity: "pointer",
+            truncated: true,
           }),
         ]}
-        onNavigate={onNavigate}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /收到的上下文/ }));
-    expect(screen.getByText("来自 用户")).toBeTruthy();
-    fireEvent.click(screen.getByText("来自 用户"));
-    expect(onNavigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "上下文" }));
+    expect(
+      screen.getByRole("button", { name: /回传 · 案卷作者/ }),
+    ).toBeTruthy();
+    expect(screen.queryByText("来自 案卷作者")).toBeNull();
+    expect(screen.queryByText("递指针")).toBeNull();
+    expect(screen.queryByText("已截断")).toBeNull();
   });
 });
 

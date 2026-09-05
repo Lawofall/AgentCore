@@ -30,7 +30,6 @@
         "checkpoint_id": "cp_absorb",
         "conversation_id": "conv_demo",
         "question": "帮你分析一下选项：\n请确认后继续。",
-        "assumptions": [],
         "questions": [],
         "intent": "decision"
       },

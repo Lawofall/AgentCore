@@ -84,7 +84,7 @@ async def test_empty_assumptions_and_questions_still_ok():
     token = captain_transcript.set([LLMMessage(role="user", content="写调研报告")])
     try:
         res = await tool.execute(
-            {"message": "复述目标确认一下？", "assumptions": [], "questions": []},
+            {"message": "复述目标确认一下？", "questions": []},
             _ctx(),
         )
     finally:
@@ -95,13 +95,14 @@ async def test_empty_assumptions_and_questions_still_ok():
 
 
 @pytest.mark.asyncio
-async def test_ask_with_assumptions_still_suspends():
+async def test_leftover_assumptions_arg_dropped_from_wire():
+    """模型仍塞起步计划槽 → 丢掉、不入 checkpoint_required。"""
     tool = _tool()
     token = captain_transcript.set([LLMMessage(role="user", content="写一份竞品调研报告")])
     try:
         res = await tool.execute(
             {
-                "message": "按这份起步计划开做",
+                "message": "本轮范围怎么定？",
                 "assumptions": [{"label": "范围", "value": "国内三家"}],
             },
             _ctx(),
@@ -111,6 +112,8 @@ async def test_ask_with_assumptions_still_suspends():
 
     assert res.success is True
     assert res.effect is ToolEffect.SUSPEND
+    cp = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
+    assert "assumptions" not in cp.payload
 
 
 @pytest.mark.asyncio

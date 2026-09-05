@@ -102,10 +102,10 @@ def test_semantic_prompt_domain_split_keeps_genre_out_of_preferences():
     assert '"ops"' not in text
 
 
-def test_semantic_prompt_cross_topic_bar_keeps_one_shot_out_of_profile():
+def test_semantic_prompt_every_task_bar_keeps_one_shot_out_of_profile():
     text = _SEMANTIC_SYSTEM_PROMPT
-    assert "Cross-topic rule" in text
-    assert "UNRELATED topic" in text
+    assert "Every-task rule" in text
+    assert "almost every later task" in text
     assert "One-shot lookups" in text
     assert "AppData" in text
     assert "must not fill 画像 from a one-off ask" in text

@@ -15,7 +15,7 @@ import {
  * 空白页签仍是本地壳态、不自动 POST；Web 地址栏回车才显式
  * {@link createBrowserSession}（sandbox）+ {@link navigateBrowserSession}。
  * 桌面有 `browserApi` 时走 Local WebContents，不经本 create。
- * 走 `services/api` 以复用 401 刷新 / CSRF（与 {@link browserTakeover} 同路）。
+ * 走 `services/api` 以复用 401 刷新 / CSRF（与 browserInput 同路）。
  */
 
 export type BrowserHostKind = "sandbox" | "local";

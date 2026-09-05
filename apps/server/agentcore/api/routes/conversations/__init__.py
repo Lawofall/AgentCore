@@ -15,9 +15,9 @@ from fastapi import APIRouter
 from . import (
     audit,
     binding,
+    browser_input,
     browser_live,
     browser_sessions,
-    browser_takeover,
     crud,
     debate_steer,
     external_grants,
@@ -58,7 +58,7 @@ router.include_router(files.router)
 router.include_router(turn_files_diff.router)
 # L3 团队浏览器 M1 直播旁路端点（新增路径追加在末尾，不改既有 OpenAPI 顺序）。
 router.include_router(browser_live.router)
-# L3 团队浏览器 M2 用户接管端点（同样追加在末尾）。
-router.include_router(browser_takeover.router)
+# 浏览器输入注入（同样追加在末尾）。
+router.include_router(browser_input.router)
 # M0 多 session_id：list / create / close（追加在末尾）。
 router.include_router(browser_sessions.router)

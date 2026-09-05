@@ -68,16 +68,6 @@ def test_files_touched_from_transcript_collects_produced_paths_in_order():
     assert files_touched_from_transcript(transcript) == ["index.html", "docs/b.txt"]
 
 
-def test_files_touched_from_transcript_collects_file_append():
-    transcript = [
-        _assistant_call("c1", "file_write", '{"path": "doc.md", "content": "# Title"}'),
-        _landed("c1", "已写入", "doc.md"),
-        _assistant_call("c2", "file_append", '{"path": "doc.md", "content": "\\n## Section"}'),
-        _landed("c2", "已追加", "doc.md"),
-    ]
-    assert files_touched_from_transcript(transcript) == ["doc.md"]
-
-
 def test_files_touched_from_transcript_collects_file_copy():
     """Successful file_copy destination counts toward files_written / 落盘闸."""
     transcript = [

@@ -163,7 +163,6 @@ describe("settleCloudRunningAssistant (stale recovery race)", () => {
       steps: [],
       pending: [],
       question: "where?",
-      assumptions: [],
       questions: [],
       intent: "decision",
       origin: "server",

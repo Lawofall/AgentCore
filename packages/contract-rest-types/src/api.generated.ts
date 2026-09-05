@@ -2017,7 +2017,7 @@ export interface paths {
         put?: never;
         /**
          * Submit Browser Input
-         * @description Inject a batch of takeover input events (owner-only; 409 unless takeover active).
+         * @description Inject a batch of input events (owner-only; 409 if no live session / inject fails).
          */
         post: operations["submit_browser_input_v1_conversations__conversation_id__browser_input_post"];
         delete?: never;
@@ -2113,46 +2113,6 @@ export interface paths {
          *     Works for sandbox (Web) and local host_kind sessions alike.
          */
         post: operations["navigate_browser_session_v1_conversations__conversation_id__browser_sessions__session_id__navigate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/conversations/{conversation_id}/browser/takeover": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Set Browser Takeover
-         * @description Start or end user takeover of a browser session (owner-only).
-         */
-        post: operations["set_browser_takeover_v1_conversations__conversation_id__browser_takeover_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/conversations/{conversation_id}/browser/takeovers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Browser Takeovers
-         * @description The conversation's user-takeover audit episodes, newest-first (timeline card).
-         */
-        get: operations["list_browser_takeovers_v1_conversations__conversation_id__browser_takeovers_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -8165,7 +8125,7 @@ export interface components {
         };
         /**
          * BrowserInputRequest
-         * @description A batch of takeover input events (only valid while takeover is active; else 409).
+         * @description A batch of input events (owner + live session; else 409).
          */
         BrowserInputRequest: {
             /** Events */
@@ -8254,69 +8214,6 @@ export interface components {
             title?: string | null;
             /** Url */
             url?: string | null;
-        };
-        /**
-         * BrowserTakeoverActionRequest
-         * @description Start or end user takeover of a browser session (owner-only).
-         *
-         *     ``session_id`` optional — omit to resolve the conversation's unique/active session.
-         */
-        BrowserTakeoverActionRequest: {
-            /**
-             * Action
-             * @enum {string}
-             */
-            action: "start" | "end";
-            /** Session Id */
-            session_id?: string | null;
-        };
-        /** BrowserTakeoverListResponse */
-        BrowserTakeoverListResponse: {
-            /** Data */
-            data: components["schemas"]["BrowserTakeoverRecord"][];
-        };
-        /**
-         * BrowserTakeoverRecord
-         * @description One audit episode for the timeline card (who/when/why — never content, D17).
-         */
-        BrowserTakeoverRecord: {
-            /** End Reason */
-            end_reason: string | null;
-            /** Ended At */
-            ended_at: string | null;
-            /** Id */
-            id: string;
-            /** Session Id */
-            session_id?: string | null;
-            /**
-             * Started At
-             * Format: date-time
-             */
-            started_at: string;
-        };
-        /**
-         * BrowserTakeoverState
-         * @description The takeover state a POST …/browser/takeover returns.
-         *
-         *     ``reason`` distinguishes every outcome without an HTTP error: ``started`` / ``ended`` on
-         *     success; ``already_active`` (start when one is running — still active); ``no_session``
-         *     (no live session to take over); ``not_active`` (end when none is running).
-         *     ``active`` reflects the resulting state; ``started_at`` is set while active.
-         */
-        BrowserTakeoverState: {
-            /** Active */
-            active: boolean;
-            /**
-             * Reason
-             * @enum {string}
-             */
-            reason: "started" | "ended" | "already_active" | "no_session" | "not_active";
-            /** Record Id */
-            record_id?: string | null;
-            /** Session Id */
-            session_id?: string | null;
-            /** Started At */
-            started_at?: string | null;
         };
         /**
          * CapabilitiesResponse
@@ -8826,11 +8723,8 @@ export interface components {
             focus: string;
             /** Max Chars */
             max_chars?: number | null;
-            /**
-             * Query
-             * @default
-             */
-            query: string;
+            /** Query */
+            query?: string | null;
         };
         /** ConversationReadResponse */
         ConversationReadResponse: {
@@ -11755,15 +11649,10 @@ export interface components {
          *     resume of a leftover frame is 410 Gone.
          *     plan_review carries ``steps`` (the reviewed checkpoint nodes) + ``pending`` (the
          *     gated downstream); ask_user carries the unified card payload
-         *     ``question`` (the framing / opening line) + the optional opening
-         *     content ``assumptions`` / ``questions`` (empty for a compact mid-task fork). The
-         *     unused set is empty for the other kinds.
+         *     ``question`` (the framing / opening line) + ``questions`` (empty for a compact
+         *     mid-task fork). The unused set is empty for the other kinds.
          */
         PausedTurnSummary: {
-            /** Assumptions */
-            assumptions?: {
-                [key: string]: unknown;
-            }[];
             /**
              * Browser Login
              * @default false
@@ -18437,80 +18326,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BrowserSessionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_browser_takeover_v1_conversations__conversation_id__browser_takeover_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                conversation_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BrowserTakeoverActionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BrowserTakeoverState"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_browser_takeovers_v1_conversations__conversation_id__browser_takeovers_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                conversation_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BrowserTakeoverListResponse"];
                 };
             };
             /** @description Validation Error */

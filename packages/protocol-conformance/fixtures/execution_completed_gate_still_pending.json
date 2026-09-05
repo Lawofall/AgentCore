@@ -96,7 +96,6 @@
         "checkpoint_id": "cp-after-exec",
         "conversation_id": "conv_demo",
         "question": "按此方案推进吗？\n团队已交付方案。",
-        "assumptions": [],
         "questions": [],
         "intent": "decision"
       },

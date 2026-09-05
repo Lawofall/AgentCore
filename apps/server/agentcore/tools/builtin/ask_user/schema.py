@@ -40,9 +40,7 @@ def advertised_option_actions(
     if (workspace_location or "").strip().lower() == "local":
         return (_GRANT_ORGANIZE, _GRANT_ATTACH)
     return (*_LOCAL_PROJECT_ACTIONS, _GRANT_ORGANIZE)
-_MAX_ASSUMPTIONS = 10
-_MAX_ASSUMPTION_LABEL = 8  # 短项名原样保留；更长并入 value，项名改「假设」
-_FALLBACK_ASSUMPTION_LABEL = "假设"
+
 
 # Claude Code-style tendency: the advised option is first, name ends with
 # 「（推荐）」or (recommended). Bare「推荐」in a product name stays unmarked.
@@ -231,29 +229,6 @@ def normalize_options(
         out.append(opt)
         if len(out) >= cap:
             break
-    return out
-
-
-def normalize_assumptions(raw: Any) -> list[dict[str, Any]]:
-    """Cap + id the 起步计划 chips, dropping malformed / empty-label entries.
-
-    Short labels (≤8 字) stay as-is. Longer ones fold into ``value``
-    (``label：value`` when value is non-empty) and the chip name becomes「假设」—
-    a runaway item name never rejects the ask.
-    """
-    items = coerce_list_arg(raw, field="assumptions")
-    out: list[dict[str, Any]] = []
-    for i, it in enumerate(items[:_MAX_ASSUMPTIONS]):
-        if not isinstance(it, dict):
-            continue
-        label = str(it.get("label") or "").strip()
-        if not label:
-            continue
-        value = str(it.get("value") or "").strip()
-        if len(label) > _MAX_ASSUMPTION_LABEL:
-            value = f"{label}：{value}" if value else label
-            label = _FALLBACK_ASSUMPTION_LABEL
-        out.append({"id": f"a{i}", "label": label, "value": value})
     return out
 
 

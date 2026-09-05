@@ -21,14 +21,13 @@ import {
   pickAndRegisterLocalFolder,
 } from "@/lib/registerLocalFolder";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
-import type { AskAssumption, AskOption, AskQuestion } from "@/types/events";
+import type { AskOption, AskQuestion } from "@/types/events";
 import { ChevronRight, Loader2, Rocket } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ChoiceQuestion,
   CommenceNote,
-  PlanChips,
   splitBriefContext,
 } from "./AskCommenceParts";
 import type { AskUserContent, useAskAnswer } from "./AskUserFields";
@@ -57,7 +56,6 @@ export function AskCommenceKickoffBody({
   const [bindBusyLabel, setBindBusyLabel] = useState<string | null>(null);
   const [bindError, setBindError] = useState<string | null>(null);
   const [briefOpen, setBriefOpen] = useState(false);
-  const [planOpen, setPlanOpen] = useState(false);
 
   const handleBindOption = async (q: AskQuestion, opt: AskOption) => {
     if (busy || bindBusyLabel) return;
@@ -191,14 +189,6 @@ export function AskCommenceKickoffBody({
             }`}
           />
         </button>
-
-        {content.assumptions.length > 0 && (
-          <PlanChipsEntry
-            assumptions={content.assumptions}
-            open={planOpen}
-            onToggle={() => setPlanOpen((v) => !v)}
-          />
-        )}
       </div>
 
       {/* Choose — 题干 + 紧凑单行选项常驻 */}
@@ -268,51 +258,6 @@ export function AskCommenceKickoffBody({
           </Button>
         </div>
       </div>
-    </div>
-  );
-}
-
-/** 起步计划：前 2 项 +「+N」一行入口，点开全显。 */
-function PlanChipsEntry({
-  assumptions,
-  open,
-  onToggle,
-}: {
-  assumptions: AskAssumption[];
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const preview = assumptions.slice(0, 2);
-  const rest = assumptions.length - preview.length;
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex w-full items-center gap-1.5 text-left"
-      >
-        <ChevronRight
-          size={13}
-          className={`shrink-0 text-muted-foreground transition-transform ${
-            open ? "rotate-90" : ""
-          }`}
-        />
-        <span className="shrink-0 text-xs text-muted-foreground">起步计划</span>
-        {!open && (
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground/80">
-            {preview.map((a) => `${a.label} ${a.value}`).join(" · ")}
-          </span>
-        )}
-        {!open && rest > 0 && (
-          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-            +{rest}
-          </span>
-        )}
-      </button>
-      {open && (
-        <PlanChips assumptions={assumptions} quiet className="mt-1.5 pl-5" />
-      )}
     </div>
   );
 }

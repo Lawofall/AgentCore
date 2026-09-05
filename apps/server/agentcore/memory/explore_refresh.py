@@ -73,6 +73,8 @@ Output ONLY a JSON object:
 
 Rules:
 - profile sections (when present): 技术栈与工具, 关于用户的事实, 项目约束
+- Only write 画像 bullets that almost every later task on THIS desk still needs
+  (what this desk is / stack / hard constraints). One-shot investigation is not 画像.
 - navigation is a SHORT pointer only — never paste long bodies; point to 主题/
 - Prefer null over rewriting when the snapshot does not change durable facts
 - Never wipe still-valid bullets; merge updates only

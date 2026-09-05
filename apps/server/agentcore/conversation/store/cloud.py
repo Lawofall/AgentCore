@@ -154,6 +154,9 @@ def _ensure_structured_run_error(
         ctx = existing.get("context")
         if isinstance(ctx, dict):
             out["context"] = ctx
+        et = existing.get("error_type")
+        if isinstance(et, str) and et.strip():
+            out["error_type"] = et.strip()
     return out
 
 
@@ -201,12 +204,62 @@ def _merge_run_error_into_journal_entries(
                 merged[key] = run_error[key]
         if "context" not in merged and isinstance(run_error.get("context"), dict):
             merged["context"] = run_error["context"]
+        if not (isinstance(merged.get("error_type"), str) and merged["error_type"].strip()):
+            incoming_et = run_error.get("error_type")
+            if isinstance(incoming_et, str) and incoming_et.strip():
+                merged["error_type"] = incoming_et.strip()
         payload["error"] = merged
     if finish_reason is not None and not payload.get("finish_reason"):
         payload["finish_reason"] = finish_reason
     entry["payload"] = payload
     base[turn_end_idx] = entry
     return base
+
+
+def _turn_end_error_fields(
+    entries: list[dict[str, Any]] | None,
+) -> tuple[str | None, str | None]:
+    """``(error_code, error_type)`` from the last ``turn_end.error``; logs only."""
+    if not entries:
+        return None, None
+    for i in range(len(entries) - 1, -1, -1):
+        if (entries[i].get("kind") or "") != KIND_TURN_END:
+            continue
+        payload = entries[i].get("payload") or {}
+        err = payload.get("error") if isinstance(payload, dict) else None
+        if not isinstance(err, dict):
+            return None, None
+        code = err.get("code")
+        et = err.get("error_type")
+        code_s = str(code).strip() if code is not None else ""
+        et_s = et.strip() if isinstance(et, str) else ""
+        return (code_s or None, et_s or None)
+    return None, None
+
+
+def _log_local_turn_recorded(
+    *,
+    conversation_id: str,
+    message_id: str | None,
+    chars: int,
+    rounds: int,
+    finish_reason: Any = None,
+    durable: list[dict[str, Any]] | None = None,
+) -> None:
+    fields: dict[str, Any] = {
+        "conversation_id": conversation_id,
+        "message_id": message_id,
+        "chars": chars,
+        "rounds": rounds,
+    }
+    if finish_reason is not None:
+        fields["finish_reason"] = finish_reason
+    code, error_type = _turn_end_error_fields(durable)
+    if code:
+        fields["error_code"] = code
+    if error_type:
+        fields["error_type"] = error_type
+    logger.info("chat.local_turn_recorded", **fields)
 
 
 def _usage_metadata(
@@ -1319,6 +1372,7 @@ class CloudStore:
         )
         # Intentional skip — client may delete outbox; never a silent "200 + null id".
         noop = bool(message_id) and not should_settle
+        durable: list[dict[str, Any]] | None = None
         if should_settle:
             async with async_session_factory() as session:
                 # D7: idempotent merge upsert (no early-return when rows already exist).
@@ -1420,13 +1474,13 @@ class CloudStore:
             # Mirror cloud: ERROR/CANCELLED still arm compaction; PAUSED does not.
             if not is_paused:
                 await schedule_compaction_if_due(conversation_id, input_tokens)
-            logger.info(
-                "chat.local_turn_recorded",
+            _log_local_turn_recorded(
                 conversation_id=conversation_id,
                 message_id=message_id,
                 finish_reason=finish_value,
                 chars=len(content_to_write or ""),
                 rounds=rounds,
+                durable=durable,
             )
             return {
                 "user_message_id": user_msg_id,
@@ -1520,12 +1574,13 @@ class CloudStore:
         schedule_consolidation(conversation_id)
         await schedule_compaction_if_due(conversation_id, input_tokens)
 
-        logger.info(
-            "chat.local_turn_recorded",
+        _log_local_turn_recorded(
             conversation_id=conversation_id,
             message_id=message_id,
+            finish_reason=finish_value,
             chars=len(assistant_content or ""),
             rounds=rounds,
+            durable=durable,
         )
         return {
             "user_message_id": user_msg_id,

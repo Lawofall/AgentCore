@@ -35,7 +35,15 @@ vi.mock("@/stores/execution", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/stores/execution")>();
   return {
     ...actual,
-    useMessageExecution: () => mockExecution,
+    useMessageRun: (_messageId: string, runId: string) => {
+      if (!mockExecution) return null;
+      const run = mockExecution.runs.find((r) => r.id === runId);
+      const agent = run
+        ? mockExecution.agents.find((a) => a.id === run.agentId)
+        : null;
+      if (!run || !agent) return null;
+      return { execution: mockExecution, run, agent };
+    },
   };
 });
 

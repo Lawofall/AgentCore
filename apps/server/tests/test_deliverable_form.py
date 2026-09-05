@@ -398,7 +398,7 @@ async def test_prose_worker_still_offered_write_tools():
     tasks = [{"role": "A", "task": "打招呼", "deliverable": {"form": "prose"}}]
     plan, _ = build_run_plan(tasks, id_prefix="t")
     reg = ToolRegistry()
-    for name in ("file_write", "file_append", "str_replace", "file_read", "code_execute"):
+    for name in ("file_write", "str_replace", "file_read", "code_execute"):
         reg.register(_GrantableTool(name))
     provider = _OfferRecorder()
     executor = build_agent_executor(
@@ -416,7 +416,7 @@ async def test_prose_worker_still_offered_write_tools():
     assert res["t_1"].phase is RunPhase.COMPLETED
     offered = set(provider.offered[0])
     assert "file_write" in offered
-    assert "file_append" in offered
+    assert "file_append" not in offered
     assert "str_replace" in offered
     assert "file_read" in offered
     assert "code_execute" in offered

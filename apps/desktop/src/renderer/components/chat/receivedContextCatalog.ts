@@ -9,7 +9,7 @@ export const CONTEXT_CHANNEL_META: Record<
   history: { label: "对话历史", hint: "本回合之前的往来" },
   request: { label: "原始请求", hint: "老板交给整个团队的目标" },
   team_position: { label: "团队位置", hint: "队友与产出去向" },
-  dependency: { label: "前置结果", hint: "上游队友交付的产物" },
+  dependency: { label: "前置", hint: "上游队友交付的产物" },
   workspace: { label: "工作区", hint: "共享工作区可读文件" },
   task: { label: "你的任务", hint: "分派给本 Agent 的具体活" },
   deliverable: { label: "交付物规格", hint: "本节点落点与结构约束" },
@@ -19,7 +19,7 @@ export const CONTEXT_CHANNEL_META: Record<
     hint: "用户已放行的主 Agent 注意事项（非否决）",
   },
   steer: { label: "中途指示", hint: "执行中追加的操舵" },
-  team_result: { label: "队员回传", hint: "委派的队员交回 CEO 的产物" },
+  team_result: { label: "回传", hint: "委派的队员交回 CEO 的产物" },
   round_focus: { label: "本轮焦点", hint: "这一轮辩论聚焦的争议点" },
   opponent: { label: "对方论点", hint: "对方上一轮的发言（供针对性回应）" },
   challenge: { label: "被驳命门", hint: "上一轮裁判记录你被反驳的点" },
@@ -36,12 +36,6 @@ export const CONTEXT_CHANNEL_META: Record<
   rebuttal: { label: "反驳", hint: "本轮反驳" },
   thread: { label: "线索", hint: "本轮圆桌线索" },
   crux: { label: "争点", hint: "本轮争点" },
-};
-
-export const FIDELITY_META: Record<string, string> = {
-  pointer: "递指针",
-  summarize: "摘要",
-  pass_through: "全文",
 };
 
 export type CatalogGroupId =

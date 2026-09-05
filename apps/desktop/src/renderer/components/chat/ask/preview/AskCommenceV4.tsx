@@ -9,7 +9,6 @@ import {
   ChoiceQuestion,
   CommenceFooter,
   CommenceNote,
-  PlanChips,
   PreviewShell,
   useCommencePreviewAnswer,
 } from "./AskCommenceShared";
@@ -49,7 +48,6 @@ export function AskCommenceV4({ content }: { content: AskUserContent }) {
             </p>
           </div>
         </div>
-        <PlanChips assumptions={content.assumptions} />
       </div>
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2.5">

@@ -971,7 +971,7 @@ async def test_execute_tools_does_not_unwrap_when_top_level_tasks_present():
 
 
 async def test_write_tool_parse_failure_splits_user_and_model_copy():
-    """Write-tool JSON parse: ``failure.message`` 人话；模型面 ``result`` 强制分段。"""
+    """Write-tool JSON parse: ``failure.message`` 人话；模型面 ``result`` 完整写入或按锚续写。"""
     tracked = _OkTool("file_write", output="written")
     reg = ToolRegistry()
     reg.register(tracked)
@@ -990,16 +990,16 @@ async def test_write_tool_parse_failure_splits_user_and_model_copy():
     assert attempts[0].parse_failure is True
     model = messages[0].content or ""
     assert "不是合法 JSON" in model
-    assert "分段" in model or "短骨架" in model
+    assert "按锚" in model or "完整" in model
     assert "原样重发全部参数" not in model
     ends = [e for e in sink._history if e.type == EventType.TOOL_USE_END]  # noqa: SLF001
     assert len(ends) == 1
     # Model-facing result keeps technical tip (same as transcript, sans marker).
     wire_result = ends[0].payload.get("result") or ""
     assert "不是合法 JSON" in wire_result
-    assert "分段" in wire_result or "短骨架" in wire_result
+    assert "按锚" in wire_result or "完整" in wire_result
     failure = ends[0].payload.get("failure") or {}
-    assert failure.get("message") == "长文保存失败，改成分段写入继续。"
+    assert failure.get("message") == "长文保存失败，请改用更短但完整的写入或按锚续写。"
     assert failure.get("code") == "args_parse_failed"
     assert "失败位置" not in (failure.get("message") or "")
 

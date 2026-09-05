@@ -87,7 +87,6 @@ WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS: tuple[str, ...] = (
     "file_list",
     "glob",
     "file_write",
-    "file_append",
     "str_replace",
     "file_delete",
     "file_move",

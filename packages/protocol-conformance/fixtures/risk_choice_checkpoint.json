@@ -23,7 +23,6 @@
         "checkpoint_id": "cp_risk",
         "conversation_id": "conv_demo",
         "question": "哪些风险要在本轮处理？",
-        "assumptions": [],
         "questions": [
           {
             "id": "q0",

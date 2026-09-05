@@ -60,7 +60,7 @@ def test_field_consumer_gate_clean_tree():
     assert result.ok
     assert result.coverage is not None
     assert result.coverage.events == 78
-    assert result.coverage.top_level_slots == 417
+    assert result.coverage.top_level_slots == 416
     assert result.coverage.scan_files > 0
     assert (result.coverage.repo_root.replace("\\", "/")).endswith("AgentCore") or (
         "AgentCore" in result.coverage.repo_root

@@ -1,14 +1,12 @@
 // @vitest-environment jsdom
 /**
- * L3「团队浏览器」M1 直播 + M2 接管 tab body (BrowserLivePanel) 渲染单测：
+ * 浏览器直播 tab body (BrowserLivePanel) 渲染单测：
  * - 连接中 / 无直播(no_session) / 会话已结束(session_closed) / 断线重连各态文案。
  * - 逐帧换图：帧到达即 createObjectURL 换 <img src>、并 revoke 上一帧 URL（防泄漏）。
  * - 卸载回收：unmount 时 revoke 末帧 URL + stop() 收口 SSE。
- * - M2 接管流转：有活直播才显「接管」；turn 运行中仍显（D8）；pending browserLogin
- *   仅影响归还提示；start 成功→接管中条+归还；start 失败(no_session)显因回落；归还/会话结束/卸载
- *   都收口 end 并把留档乐观并入 store；键盘输入捕获 → 批量 POST。
- * mock services/browserLive 直接驱动回调；services/browserTakeover 仅 mock 网络（保留真坐标/批处理/
- * 文案纯函数）；桩 URL.createObjectURL/revoke（jsdom 缺失）。块注释隔开 @vitest-environment 指令。
+ * - 非登录只看：无「接管 / 归还控制」；pending browserLogin 才可点并攒批 POST input。
+ * mock services/browserLive 直接驱动回调；services/browserInput 仅 mock 网络（保留真坐标/批处理）；
+ * 桩 URL.createObjectURL/revoke（jsdom 缺失）。块注释隔开 @vitest-environment 指令。
  */
 
 import {
@@ -24,29 +22,21 @@ vi.mock("@/services/browserLive", () => ({
   startBrowserLive: vi.fn(),
 }));
 
-vi.mock("@/services/browserTakeover", async (importOriginal) => {
+vi.mock("@/services/browserInput", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/services/browserTakeover")>();
+    await importOriginal<typeof import("@/services/browserInput")>();
   return {
     ...actual,
-    startBrowserTakeover: vi.fn(),
-    endBrowserTakeover: vi.fn(),
     sendBrowserInput: vi.fn(),
-    listBrowserTakeovers: vi.fn(),
   };
 });
 
+import { sendBrowserInput } from "@/services/browserInput";
 import type {
   BrowserLiveClient,
   BrowserLiveHandlers,
 } from "@/services/browserLive";
 import { startBrowserLive } from "@/services/browserLive";
-import {
-  endBrowserTakeover,
-  sendBrowserInput,
-  startBrowserTakeover,
-} from "@/services/browserTakeover";
-import { useBrowserTakeoverStore } from "@/stores/browserTakeover";
 import { useConversationStore } from "@/stores/conversation";
 import { EMPTY_RUNTIME } from "@/stores/conversation/runtime";
 import type { Message } from "@/stores/conversation/types";
@@ -58,8 +48,6 @@ import {
 import { BrowserLivePanel } from "../BrowserLivePanel";
 
 const mockStart = vi.mocked(startBrowserLive);
-const mockStartTakeover = vi.mocked(startBrowserTakeover);
-const mockEndTakeover = vi.mocked(endBrowserTakeover);
 const mockSendInput = vi.mocked(sendBrowserInput);
 
 let captured: BrowserLiveHandlers | null;
@@ -79,13 +67,7 @@ beforeEach(() => {
     captured = handlers;
     return { stop: stopSpy } satisfies BrowserLiveClient;
   });
-  mockStartTakeover.mockReset().mockResolvedValue({
-    active: true,
-    reason: "started",
-  });
-  mockEndTakeover.mockReset().mockResolvedValue(undefined);
   mockSendInput.mockReset().mockResolvedValue(undefined);
-  useBrowserTakeoverStore.setState({ byConversation: {} });
   useExecutionStore.setState({ byId: {} });
   useConversationStore.setState({
     currentConversationId: null,
@@ -300,144 +282,42 @@ function goLive(): void {
   emit((h) => h.onFrame(FRAME("AAAA")));
 }
 
-/** Click a button by its visible text, flushing the async takeover transition. */
-async function clickAsync(text: string): Promise<void> {
-  await act(async () => {
-    fireEvent.click(screen.getByText(text));
-  });
-}
+const LOGIN_HINT = "请在此完成登录，然后回到对话点「已登录，继续」";
 
-describe("BrowserLivePanel · M2 接管流转", () => {
-  it("offers 接管 only once a live frame is streaming", () => {
+describe("BrowserLivePanel · 登录可点 / 非登录只看", () => {
+  it("never offers 接管 or 归还控制, even with a live frame", () => {
     render(<BrowserLivePanel conversationId="c1" />);
-    expect(screen.queryByText("接管")).toBeNull();
     goLive();
-    expect(screen.getByText("接管")).toBeTruthy();
+    expect(screen.queryByText("接管")).toBeNull();
+    expect(screen.queryByText("归还控制")).toBeNull();
   });
 
-  it("offers 接管 while a turn is running (D8 anytime)", () => {
+  it("stays view-only while a turn is running without pending login", () => {
     seedRunningTurn("c1", "a1");
     render(<BrowserLivePanel conversationId="c1" />);
     goLive();
-    expect(screen.getByText("接管")).toBeTruthy();
+    expect(screen.queryByLabelText(/登录中的浏览器画面/)).toBeNull();
+    expect(screen.queryByText(LOGIN_HINT)).toBeNull();
+    expect(screen.queryByText("接管")).toBeNull();
+    expect(screen.queryByText("归还控制")).toBeNull();
   });
 
-  it("keeps 接管 while running if pending browserLogin", () => {
+  it("shows the login hint and an interactive surface when pending browserLogin", () => {
     seedPendingBrowserLogin("c1", "a1");
     render(<BrowserLivePanel conversationId="c1" />);
     goLive();
-    expect(screen.getByText("接管")).toBeTruthy();
-  });
-
-  it("enters takeover: calls start, shows the 接管中 bar + 归还控制, hides 接管", async () => {
-    render(<BrowserLivePanel conversationId="c1" />);
-    goLive();
-    await clickAsync("接管");
-
-    expect(mockStartTakeover).toHaveBeenCalledWith("c1", undefined);
-    expect(screen.getByText(/接管中/)).toBeTruthy();
-    expect(screen.getByText("归还控制")).toBeTruthy();
+    expect(screen.getByText(LOGIN_HINT)).toBeTruthy();
+    expect(screen.getByLabelText(/登录中的浏览器画面/)).toBeTruthy();
     expect(screen.queryByText("接管")).toBeNull();
+    expect(screen.queryByText("归还控制")).toBeNull();
   });
 
-  it("passes sessionId to takeover start/end", async () => {
+  it("captures keyboard input on the login surface and batches it", async () => {
+    seedPendingBrowserLogin("c1", "a1");
     render(<BrowserLivePanel conversationId="c1" sessionId="sess-live" />);
     goLive();
-    await clickAsync("接管");
-    expect(mockStartTakeover).toHaveBeenCalledWith("c1", {
-      sessionId: "sess-live",
-    });
-    await clickAsync("归还控制");
-    expect(mockEndTakeover).toHaveBeenCalledWith("c1", {
-      sessionId: "sess-live",
-    });
-  });
 
-  it("surfaces a start failure (no_session reason) and stays idle", async () => {
-    const { TakeoverStartError } = await import("@/services/browserTakeover");
-    mockStartTakeover.mockRejectedValue(new TakeoverStartError("no_session"));
-    render(<BrowserLivePanel conversationId="c1" />);
-    goLive();
-    await clickAsync("接管");
-
-    const failBar = screen
-      .getByText("当前没有进行中的浏览器会话")
-      .closest("div");
-    expect(failBar?.className).toContain("bg-muted/40");
-    expect(failBar?.className).not.toContain("destructive");
-    // Back to idle → the 接管 affordance returns, no 接管中 bar.
-    expect(screen.getByText("接管")).toBeTruthy();
-    expect(screen.queryByText("归还控制")).toBeNull();
-  });
-
-  it("returns control: ends the takeover, records it, and shows 控制已归还 (no pending login)", async () => {
-    render(<BrowserLivePanel conversationId="c1" />);
-    goLive();
-    await clickAsync("接管");
-    await clickAsync("归还控制");
-
-    expect(mockEndTakeover).toHaveBeenCalledWith("c1", undefined);
-    const records = useBrowserTakeoverStore.getState().byConversation.c1 ?? [];
-    expect(records).toHaveLength(1);
-    expect(records[0].endedAt).not.toBeNull();
-    // Chrome returns to the normal live header.
-    expect(screen.queryByText("归还控制")).toBeNull();
-    // 普通接管归还：不暗示登录 / 发继续。
-    expect(screen.getByText("控制已归还")).toBeTruthy();
-    expect(
-      screen.queryByText("登录完成后，回到对话点「已登录，继续」"),
-    ).toBeNull();
-  });
-
-  it("returns control during pending browserLogin: hint aligns with EscalationCard", async () => {
-    seedPendingBrowserLogin("c1", "a1");
-    render(<BrowserLivePanel conversationId="c1" />);
-    goLive();
-    await clickAsync("接管");
-    await clickAsync("归还控制");
-
-    expect(mockEndTakeover).toHaveBeenCalledWith("c1", undefined);
-    expect(
-      screen.getByText("登录完成后，回到对话点「已登录，继续」"),
-    ).toBeTruthy();
-    expect(screen.queryByText("控制已归还")).toBeNull();
-  });
-
-  it("auto-returns control when the session closes mid-takeover (no return hint)", async () => {
-    render(<BrowserLivePanel conversationId="c1" />);
-    goLive();
-    await clickAsync("接管");
-
-    await act(async () => {
-      emit((h) => h.onStatus("session_closed"));
-    });
-
-    expect(mockEndTakeover).toHaveBeenCalledWith("c1", undefined);
-    expect(screen.queryByText("归还控制")).toBeNull();
-    expect(useBrowserTakeoverStore.getState().byConversation.c1).toHaveLength(
-      1,
-    );
-    expect(screen.queryByText("控制已归还")).toBeNull();
-    expect(
-      screen.queryByText("登录完成后，回到对话点「已登录，继续」"),
-    ).toBeNull();
-  });
-
-  it("best-effort ends the takeover on unmount", async () => {
-    const { unmount } = render(<BrowserLivePanel conversationId="c1" />);
-    goLive();
-    await clickAsync("接管");
-
-    unmount();
-    expect(mockEndTakeover).toHaveBeenCalledWith("c1", undefined);
-  });
-
-  it("captures keyboard input on the takeover surface and batches it", async () => {
-    render(<BrowserLivePanel conversationId="c1" />);
-    goLive();
-    await clickAsync("接管");
-
-    const surface = screen.getByLabelText(/接管中的浏览器画面/);
+    const surface = screen.getByLabelText(/登录中的浏览器画面/);
     await act(async () => {
       fireEvent.keyDown(surface, { key: "a", code: "KeyA" });
       fireEvent.keyUp(surface, { key: "a", code: "KeyA" });
@@ -450,6 +330,18 @@ describe("BrowserLivePanel · M2 接管流转", () => {
         expect.objectContaining({ kind: "key", type: "down", key: "a" }),
         expect.objectContaining({ kind: "key", type: "up", key: "a" }),
       ]),
+      { sessionId: "sess-live" },
     );
+  });
+
+  it("does not capture input when not pending browserLogin", async () => {
+    render(<BrowserLivePanel conversationId="c1" />);
+    goLive();
+    const img = screen.getByAltText("浏览器直播画面");
+    await act(async () => {
+      fireEvent.keyDown(img, { key: "a", code: "KeyA" });
+      fireEvent.keyUp(img, { key: "a", code: "KeyA" });
+    });
+    expect(mockSendInput).not.toHaveBeenCalled();
   });
 });

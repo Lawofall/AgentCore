@@ -33,7 +33,6 @@ const emptyBags: TimelineCardBags = {
 const pendingCheckpoint: CheckpointDisplay = {
   id: "cp-1",
   question: "先对齐方向？",
-  assumptions: [],
   questions: [],
   intent: "decision",
   status: "pending",

@@ -17,7 +17,6 @@ from agentcore.runtime.loop_controller import (
     ERROR_CLASS_VALIDATION,
     EXEC_RUN_TOOL_NAMES,
     ToolAttempt,
-    classify_segmented_write_reject,
 )
 from agentcore.tools.file_products import LANDING_TOOLS
 from agentcore.tools.registry import ToolRegistry
@@ -37,7 +36,7 @@ ArgsParseClass = Literal["truncated", "escape", "other"]
 _ORCH_PARSE_TOOLS = frozenset({"delegate", "ask_user"})
 
 # User-visible process-line copy for write-tool args parse failures (人话).
-_USER_WRITE_PARSE_MSG = "长文保存失败，改成分段写入继续。"
+_USER_WRITE_PARSE_MSG = "长文保存失败，请改用更短但完整的写入或按锚续写。"
 
 # 工具失败机器尾注 (落盘失败归因 · 消费方见 runtime/runs/serialize.py):
 # LLMMessage 无独立 success 字段；失败/拒绝路径在 tool content 末追加此 marker，让
@@ -61,22 +60,14 @@ def _attempt_meta_with_landing_path(
     name: str,
     args: Any,
     base: dict[str, Any] | None = None,
-    *,
-    error: str = "",
-    contract_failure: bool = False,
 ) -> dict[str, Any]:
-    """Forward landing-tool path (+ write-reject class) into ``ToolAttempt.meta``."""
+    """Forward landing-tool path into ``ToolAttempt.meta``."""
     from agentcore.runtime.runs.landing_product import landing_tool_path_from_args
 
     meta: dict[str, Any] = dict(base or {})
     path = landing_tool_path_from_args(name, args if isinstance(args, dict) else None)
     if path:
         meta["path"] = path
-    reject_class = classify_segmented_write_reject(
-        name, error=error, contract_failure=contract_failure
-    )
-    if reject_class:
-        meta["segmented_write_reject"] = reject_class
     # Permanent liveness: first-fail retire of this tool (loop_controller).
     # ``run`` 族只记失败，不卸工具。
     if (
@@ -323,8 +314,8 @@ def _strategy_for_args_parse(tool_name: str, parse_class: ArgsParseClass) -> str
             else "【策略】这通常是整篇正文塞进一次工具调用导致的转义失败——"
         )
         return (
-            trunc_hint + "不要原样重发整段导致再次截断；可一次完整 file_write（须完整正文）"
-            "或改为短骨架 + 按节 file_append / str_replace 分段落盘"
+            trunc_hint + "不要原样重发整段导致再次截断；可一次更短但完整的 file_write"
+            "或用 str_replace 在唯一锚（含写回执 end_preview）后续写"
             "（每节远小于一次输出上限）；成篇后修订用 str_replace。"
             "勿向用户讲解 JSON 引号转义。"
         )

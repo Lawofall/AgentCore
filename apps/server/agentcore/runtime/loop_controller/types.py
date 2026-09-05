@@ -55,11 +55,6 @@ EXEC_ENV_TIMEOUT_RETIRE_STEER = (
     "请改静态核验/读文件取证，向协调者如实报告「执行环境不可用、验证未实跑」；"
     "禁止再原样重试跑命令。"
 )
-# Same-path consecutive classified write rejects → force_segmented early (策略机),
-# before the cumulative per-tool disable threshold. Covers prose-append / code
-# integrity / severe-shrink hard rejects (contract_failure) that skip the normal
-# failure tally.
-DEFAULT_PATH_WRITE_REJECT_STREAK = 2
 # Validation / contract self-correct: same fingerprint consecutive failures →
 # stop that path (steer), tool stays available (not a parallel disable tally).
 DEFAULT_VALIDATION_PATH_STREAK = 2
@@ -97,7 +92,6 @@ PROGRESS_TOOLS = frozenset(
     {
         "delegate",
         "file_write",
-        "file_append",
         "str_replace",
         "handoff",
         "ask_user",
@@ -106,38 +100,12 @@ PROGRESS_TOOLS = frozenset(
 # ``LANDING_TOOLS`` (imported above) = workspace landing tools: success clears
 # delivery-idle thrashing; any attempt is "落盘意图" and exempts that round from the
 # delivery-idle clock.
-# Write tools that enter force_segmented when same-path reject streak trips
-# (keep str_replace as the preferred segmented pen).
-PATH_SEGMENT_FORCE_TOOLS = frozenset({"file_write", "file_append"})
-# Dangerous landing action narrowed (disabled) once force_segmented latches —
-# keep file_write / str_replace; stop append thrashing on already-landed prose.
-FORCE_SEGMENTED_NARROW_TOOLS = frozenset({"file_append"})
 # CEO orchestration primitives: parse-only thrashing must not retire them
 # (same posture as LANDING_TOOLS keeping the pen — keep the dispatcher).
 ORCHESTRATION_TOOLS = frozenset({"delegate", "ask_user"})
 # Memory tools: parse-only thrashing must not retire them (same keep posture as
 # ORCHESTRATION_TOOLS — independent set; do NOT fold into ORCHESTRATION_TOOLS).
 MEMORY_TOOLS = frozenset({"remember"})
-
-
-def classify_segmented_write_reject(
-    tool_name: str,
-    *,
-    error: str = "",
-    contract_failure: bool = False,
-) -> str | None:
-    """Classify a hard write reject that feeds the same-path force_segmented streak.
-
-    Returns a stable class id (``prose_append``) or ``None``.
-    Does **not** cover length/oversized / brace / omission / shrink rejects
-    (those write-path heuristics were removed).
-    """
-    if not contract_failure or tool_name not in {"file_write", "file_append"}:
-        return None
-    text = error or ""
-    if tool_name == "file_append" and "已落成篇正文" in text:
-        return "prose_append"
-    return None
 
 
 def _collapse_malformed_required_args(name: str, parsed: dict[str, object]) -> dict[str, object]:
@@ -153,7 +121,7 @@ def _collapse_malformed_required_args(name: str, parsed: dict[str, object]) -> d
     ``is_cleared_write_stub_args``) collapses per path for write pens so different
     summary texts still trip validation path-stop.
     """
-    if name in {"file_write", "file_append", "str_replace"}:
+    if name in {"file_write", "str_replace"}:
         from agentcore.runtime.engine.write_args_clear import is_cleared_write_stub_args
 
         if is_cleared_write_stub_args(parsed):
@@ -175,17 +143,11 @@ def _collapse_malformed_required_args(name: str, parsed: dict[str, object]) -> d
         ):
             path_key = path.strip().replace("\\", "/") if isinstance(path, str) else ""
             return {"__malformed__": "identical_edit", "path": path_key}
-    if name in {"file_write", "file_append"}:
+    if name == "file_write":
         path = parsed.get("path")
         if path is None or (isinstance(path, str) and not path.strip()):
             return {"__malformed__": "path"}
     return parsed
-
-
-def _norm_write_reject_path(path: object) -> str:
-    if not isinstance(path, str):
-        return ""
-    return path.strip().replace("\\", "/")
 
 
 def delivery_idle_nudge_prompt(
@@ -368,11 +330,9 @@ class CircuitBreak:
     failures — their steer text must guide format/strategy, never「换不同的输入」.
 
     ``force_segmented`` names write/landing tools that hit the disable threshold
-    *or* the same-path classified write-reject streak, but stay enabled — steer
-    forces skeleton + section writes instead of retiring the pen（长文落盘定案：
-    失败换分段，不关写文件）. ``apply_circuit_breaker`` may still narrow
-    ``file_append`` out of the live toolset while keeping ``file_write`` /
-    ``str_replace``.
+    but stay enabled — steer keeps the pen（长文落盘定案：失败不关写文件）
+    and points at a shorter complete ``file_write`` or ``str_replace`` after a
+    unique anchor. The live toolset is not narrowed.
 
     ``retire_message`` is an optional hard-stop steer (e.g. browser egress
     unavailable) that replaces the generic「已多次失败」disable copy when set.
@@ -434,8 +394,9 @@ class CircuitBreak:
         if self.force_segmented:
             names = "、".join(f"`{n}`" for n in self.force_segmented)
             parts.append(
-                f"工具 {names} 连续写盘失败：写文件能力保持可用（`file_write` / `str_replace`）；"
-                "`file_append` 已收窄。"
+                f"工具 {names} 连续写盘失败：写文件能力保持可用（`file_write` / `str_replace`）。"
+                "请改用更短但完整的 `file_write`，或用 `str_replace` 在唯一锚"
+                "（含写回执 `end_preview`）后续写。"
             )
         if self.validation_stop:
             parts.append(self.validation_stop.strip())

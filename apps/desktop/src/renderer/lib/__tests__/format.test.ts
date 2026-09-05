@@ -2,6 +2,7 @@ import {
   COST_ESTIMATE_LABEL,
   chunksTailText,
   estimateTokensFromCharCount,
+  formatAlignedCostParts,
   formatBytes,
   formatBytesPerSecond,
   formatCompact,
@@ -127,6 +128,26 @@ describe("formatDisplayCost / pickCostMoney (BYOK ≈)", () => {
   it("appends 自带密钥·估算 caption for estimates", () => {
     expect(formatCostCaption(YUAN, true)).toBe(`≈¥1.00 ${COST_ESTIMATE_LABEL}`);
     expect(formatCostCaption(YUAN, false)).toBe("¥1.00");
+  });
+});
+
+describe("formatAlignedCostParts", () => {
+  it("puts rounding remainder on output so parts sum to the displayed total", () => {
+    // 0.137 + 0.026 = 0.163 → $0.14 + $0.03 vs $0.16 if rounded independently.
+    const parts = formatAlignedCostParts(
+      137_000_000,
+      26_000_000,
+      163_000_000,
+      "USD",
+    );
+    expect(parts.input).toBe("$0.14");
+    expect(parts.output).toBe("$0.02");
+  });
+
+  it("leaves parts unchanged when independent rounding already matches", () => {
+    expect(
+      formatAlignedCostParts(140_000_000, 20_000_000, 160_000_000),
+    ).toEqual({ input: "¥0.14", output: "¥0.02" });
   });
 });
 

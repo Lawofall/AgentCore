@@ -3,7 +3,6 @@
  * ResumePrompt · ask_user browser_login：
  * - pending + browserLogin → 「需要你登录」；不自动 showBrowser，点「打开浏览器」才揭示
  * - 「已登录，继续」走 cold ask_user continue
- * - 有 assumptions →「按假设继续」（冷路 continue + note=假设文案）
  */
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { PendingResume } from "@/stores/pausedTurns";
@@ -66,7 +65,6 @@ const loginTurn: PendingResume = {
   steps: [],
   pending: [],
   question: "请在右坞完成登录",
-  assumptions: [],
   questions: [],
   intent: "decision",
   browserLogin: true,
@@ -117,49 +115,7 @@ describe("ResumePrompt · ask_user browser_login", () => {
     );
   });
 
-  it("shows 按假设继续 when assumptions present and submits assumption note", async () => {
-    usePausedTurnStore.setState({
-      pending: [
-        {
-          ...loginTurn,
-          assumptions: [{ id: "a0", label: "登录", value: "用户已登录" }],
-        },
-      ],
-    });
-
-    render(
-      <MemoryRouter>
-        <TooltipProvider>
-          <ResumePrompt />
-        </TooltipProvider>
-      </MemoryRouter>,
-    );
-
-    // 冷路挂起没有墙钟——卡面只能说「一直等你」，不得承诺自动按假设继续。
-    expect(
-      screen.getByText(
-        /不会自动继续——这条一直等你；点「按假设继续」才按此走：登录：用户已登录/,
-      ),
-    ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "按假设继续" })).toBeTruthy();
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "按假设继续" }));
-    });
-
-    expect(submitInteraction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "cp-login",
-        kind: "ask_user",
-        cold: expect.objectContaining({
-          decision: "continue",
-          note: "登录：用户已登录",
-        }),
-      }),
-    );
-  });
-
-  it("hides 按假设继续 when assumptions are empty", () => {
+  it("does not offer 按假设继续 on the login card", () => {
     render(
       <MemoryRouter>
         <TooltipProvider>

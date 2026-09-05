@@ -76,7 +76,6 @@ function makePlanReview(over: Record<string, unknown> = {}) {
     steps: [{ run_id: "r1", role: "调研", summary: "方案就绪" }],
     pending: [{ run_id: "r2", role: "执行" }],
     question: "",
-    assumptions: [],
     questions: [],
     intent: "decision",
     origin: "server",

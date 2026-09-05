@@ -49,7 +49,6 @@ function liveResume(messageId: string, checkpointId: string): PendingResume {
     steps: [],
     pending: [],
     question: "继续？",
-    assumptions: [],
     questions: [],
     intent: "decision",
     origin: "server",

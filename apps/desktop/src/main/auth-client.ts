@@ -361,6 +361,13 @@ async function peekAuthErrorMessage(
   }
 }
 
+function clientAttributionHeaders(): Record<string, string> {
+  return {
+    "X-Client-Platform": "desktop",
+    "X-Client-Version": app.getVersion(),
+  };
+}
+
 export interface BearerJsonResult {
   ok: boolean;
   status: number;
@@ -387,6 +394,7 @@ export async function bearerPostJson(
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${access}`,
+        ...clientAttributionHeaders(),
       },
       body: JSON.stringify(body),
     });
@@ -443,7 +451,11 @@ export async function bearerFetch(
     net.fetch(apiUrl(path), {
       ...init,
       credentials: "omit",
-      headers: { ...init.headers, Authorization: `Bearer ${access}` },
+      headers: {
+        ...clientAttributionHeaders(),
+        ...init.headers,
+        Authorization: `Bearer ${access}`,
+      },
     });
 
   const cookies = await readAuthCookies();

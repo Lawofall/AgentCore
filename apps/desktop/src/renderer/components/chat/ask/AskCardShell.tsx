@@ -7,7 +7,7 @@
  *
  * 排版契约：头/底 `px-4`，体 `px-2`——{@link AskRowGroup} 的行自带 `px-2`，两者相加后行内文字
  * 与标题左对齐，而行的 hover 灰底比文字宽出 8px（参考卡的观感）。体里**非行式**的块（小节标题、
- * 起步计划、输入框）需自带 `px-2` 才能对齐。
+ * 输入框）需自带 `px-2` 才能对齐。
  */
 import { Button } from "@/components/ui";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
@@ -72,13 +72,6 @@ export function AskCardShell({
         </div>
       )}
     </div>
-  );
-}
-
-/** 小节标题（起步计划 / 风格基调 / 题干上方）。自带 `px-2` 对齐行式选项。 */
-export function AskSectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <p className="px-2 text-xs font-medium text-muted-foreground">{children}</p>
   );
 }
 

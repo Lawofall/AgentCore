@@ -1,4 +1,4 @@
-"""In-sandbox driver CDP Input injection (M2 · D17): mouse/key/text mapping + coord rescale.
+"""In-sandbox driver CDP Input injection: mouse/key/text mapping + coord rescale.
 
 Drives ``Driver.input`` with a fake CDP session (no Playwright / no Chromium), asserting the
 compact wire verbs map to the right CDP Input calls, frame-pixel coordinates rescale to the

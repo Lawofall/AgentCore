@@ -1,9 +1,9 @@
 """Cold-start explore act — folder ``画像.md`` / ``导航.md`` + fingerprint meta.
 
 Product exception to §1.5 (normally no mid-turn AI write of ``ai_maintained`` profile):
-explore-act close-out may write the **folder** layer only. Orthogonal to consolidation
-``_is_cold_start`` (global preferences+profile empty). See 编排器 · 冷启动探索幕 /
-记忆 §1.5. Optional folder ``主题/<slug>.md`` whole-file replace (soft top 5 / call).
+explore-act close-out may write the **folder** layer only. Orthogonal to idle
+session digests (which do not rewrite always-files). See 编排器 · 冷启动探索幕 /
+记忆 §三. Optional folder ``主题/<slug>.md`` whole-file replace (soft top 5 / call).
 """
 
 from __future__ import annotations

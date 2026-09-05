@@ -1,6 +1,6 @@
 """Collapse old write-tool arguments in the model-facing window (handoff 缓存崩塌).
 
-After a worker ``file_write`` / ``file_append`` / ``str_replace`` lands, the assistant
+After a worker ``file_write`` / ``str_replace`` lands, the assistant
 message still carries the FULL body inside ``tool_calls[].function.arguments``. Older
 rounds re-pay that body as cache_miss (case: handoff round ~28k in / ~27k miss).
 
@@ -36,7 +36,7 @@ from typing import Any
 
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
 
-WRITE_ARG_TOOLS = frozenset({"file_write", "file_append", "str_replace"})
+WRITE_ARG_TOOLS = frozenset({"file_write", "str_replace"})
 
 # Legacy synthetic name formerly used as projected ``function.name``. Kept only so
 # residual imitation can be early-rejected; new projection never emits this name.

@@ -21,7 +21,6 @@ _EXPECTED_NAMES = {
     "download_url",
     "file_read",
     "file_write",
-    "file_append",
     "str_replace",
     "file_list",
     "glob",
@@ -48,7 +47,6 @@ _CEO_DEFAULT_NAMES = {
     "web_fetch",
     "file_read",
     "file_write",
-    "file_append",
     "str_replace",
     "file_list",
     "glob",
@@ -70,7 +68,6 @@ _CEO_DEFAULT_NAMES = {
 }
 _MUTATION_NAMES = {
     "file_write",
-    "file_append",
     "str_replace",
     "file_delete",
     "file_move",
@@ -121,7 +118,6 @@ def test_worker_registry_adds_worker_surface_tools_without_leaking_them():
 def test_write_and_exec_tools_are_grantable():
     approvals = {s.name: s.approval for s in build_builtin_registry().list_all()}
     assert approvals["file_write"] is ToolApproval.GRANTABLE
-    assert approvals["file_append"] is ToolApproval.GRANTABLE
     assert approvals["str_replace"] is ToolApproval.GRANTABLE
     assert approvals["run"] is ToolApproval.GRANTABLE
     # Destructive / mutating file ops require the same consent as writes.
@@ -148,7 +144,6 @@ def test_file_mutation_class_is_grantable_filesystem_without_code_execute():
     names = file_mutation_tool_names()
     assert names == {
         "file_write",
-        "file_append",
         "str_replace",
         "file_delete",
         "file_move",

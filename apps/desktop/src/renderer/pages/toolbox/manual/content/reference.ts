@@ -116,7 +116,7 @@ export const referenceChapter: ManualChapterContent = {
             },
             {
               title: "右坞浏览器",
-              desc: "统一浏览器：桌面可 Local，云端 Sandbox。需要时用「+」或聊天里的入口打开；AI 浏览过程在对话里可见，点开可看直播、接管登录。",
+              desc: "统一浏览器：桌面可 Local，云端 Sandbox。需要时用「+」或聊天里的入口打开；AI 浏览过程在对话里可见，点开可看直播；需要登录时在右坞完成登录。",
             },
             {
               title: "文件工作台",

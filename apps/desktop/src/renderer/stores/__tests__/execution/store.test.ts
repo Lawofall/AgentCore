@@ -8,6 +8,7 @@ import {
   projectExecution,
   projectRuntime,
   reasoningMeta,
+  reloadProcessOverlay,
 } from "../../execution";
 import { MID, plan, resetExecutionStore, rt, started, store } from "./fixtures";
 
@@ -469,6 +470,171 @@ describe("hydrateFromJournal (reload replay, §9.3)", () => {
     expect(rt().executionDetached?.execution_id).toBe("exec-1");
   });
 
+  it("does not seed runProcesses while workers are still in flight", () => {
+    store().startExecution(plan, MID);
+    store().recordFrame(started("agent-1", "run-1"), MID);
+    store().recordFrame(started("agent-2", "run-2"), MID);
+    store().setExecutionDetached(
+      {
+        execution_id: "exec-1",
+        conversation_id: "cid",
+        completed: 0,
+        total: 3,
+        host_turn_id: MID,
+      },
+      MID,
+    );
+
+    const partial: ExecutionJournal = {
+      finishReason: "stop",
+      runProcesses: {
+        "run-1": [{ kind: "reasoning", text: "journal 已闭合的思考" }],
+        "run-2": [],
+      },
+      events: [
+        {
+          type: "run_plan",
+          timestamp: "2026-01-01T00:00:00.000Z",
+          payload: {
+            execution_id: "exec-1",
+            plan_type: "multi_agent",
+            task_summary: plan.taskSummary,
+            agents: plan.agents.map((a) => ({ id: a.id, role: a.role })),
+            runs: plan.runs.map((r) => ({
+              id: r.id,
+              agent_id: r.agentId,
+              task: r.task,
+              depends_on: r.dependsOn,
+            })),
+          },
+        },
+        {
+          type: "run_started",
+          timestamp: "2026-01-01T00:00:01.000Z",
+          payload: {
+            agent_id: "agent-1",
+            run_id: "run-1",
+            parent_run_id: null,
+            kind: "agent",
+          },
+        },
+        {
+          type: "run_completed",
+          timestamp: "2026-01-01T00:00:02.000Z",
+          payload: {
+            run_id: "run-1",
+            agent_id: "agent-1",
+            output_summary: "fixer done",
+            duration_ms: 500,
+          },
+        },
+        {
+          type: "run_started",
+          timestamp: "2026-01-01T00:00:03.000Z",
+          payload: {
+            agent_id: "agent-2",
+            run_id: "run-2",
+            parent_run_id: null,
+            kind: "agent",
+          },
+        },
+      ],
+    };
+    store().hydrateFromJournal(MID, partial);
+    expect(rt().status).toBe("running");
+    expect(rt().runProcesses).toBeNull();
+
+    store().recordFrame(
+      {
+        t: 4000,
+        kind: "run_reasoning_delta",
+        runId: "run-2",
+        agentId: "agent-2",
+        delta: "还在想的直播思考",
+      },
+      MID,
+    );
+    const process = projectRuntime(rt())?.runs.find(
+      (r) => r.id === "run-2",
+    )?.process;
+    expect(process).toEqual([{ kind: "reasoning", text: "还在想的直播思考" }]);
+  });
+
+  it("seeds runProcesses on a settled reload so reopen interleaving wins", () => {
+    const seeded: ExecutionJournal = {
+      ...journal,
+      runProcesses: {
+        "run-1": [
+          { kind: "reasoning", text: "journal思考" },
+          { kind: "content", text: "journal正文" },
+        ],
+      },
+    };
+    store().hydrateFromJournal(MID, seeded);
+    expect(rt().status).toBe("completed");
+    expect(rt().runProcesses?.["run-1"]).toHaveLength(2);
+    expect(
+      projectRuntime(rt())?.runs.find((r) => r.id === "run-1")?.process,
+    ).toEqual(seeded.runProcesses?.["run-1"]);
+  });
+
+  it("empty runProcesses lanes do not wipe splice-derived process", () => {
+    const synthesized: ExecutionJournal = {
+      finishReason: "stop",
+      runProcesses: { "run-1": [] },
+      events: [
+        {
+          type: "run_plan",
+          timestamp: "2026-01-01T00:00:00.000Z",
+          payload: {
+            execution_id: "exec-1",
+            plan_type: "multi_agent",
+            task_summary: "T",
+            agents: [{ id: "agent-1", role: "研究员" }],
+            runs: [
+              {
+                id: "run-1",
+                agent_id: "agent-1",
+                task: "研究",
+                depends_on: [],
+              },
+            ],
+          },
+        },
+        {
+          type: "run_started",
+          timestamp: "2026-01-01T00:00:01.000Z",
+          payload: {
+            agent_id: "agent-1",
+            run_id: "run-1",
+            parent_run_id: null,
+            kind: "agent",
+          },
+        },
+        {
+          type: "run_reasoning_delta",
+          timestamp: "2026-01-01T00:00:02.000Z",
+          payload: { run_id: "run-1", agent_id: "agent-1", delta: "完整思考" },
+        },
+        {
+          type: "run_completed",
+          timestamp: "2026-01-01T00:00:02.000Z",
+          payload: {
+            run_id: "run-1",
+            agent_id: "agent-1",
+            output_summary: "摘要",
+            duration_ms: 1000,
+          },
+        },
+      ],
+    };
+    store().hydrateFromJournal(MID, synthesized);
+    expect(rt().runProcesses).toBeNull();
+    expect(
+      projectRuntime(rt())?.runs.find((r) => r.id === "run-1")?.process,
+    ).toEqual([{ kind: "reasoning", text: "完整思考" }]);
+  });
+
   it("is idempotent when re-hydrating an equal journal", () => {
     store().hydrateFromJournal(MID, journal);
     expect(rt().plan?.runs).toHaveLength(1);
@@ -687,7 +853,75 @@ describe("ingestPlan (multi-batch delegate merge)", () => {
     expect(rt().plan?.id).toBe("exec-2");
     expect(rt().frames).toEqual([]);
   });
+
+  it("drops a reload process seed when a later batch goes live again", () => {
+    store().hydrateFromJournal(MID, {
+      finishReason: "stop",
+      runProcesses: {
+        "run-1": [{ kind: "reasoning", text: "旧种子" }],
+      },
+      events: [
+        {
+          type: "run_plan",
+          timestamp: "2026-01-01T00:00:00.000Z",
+          payload: {
+            execution_id: "exec-1",
+            plan_type: "multi_agent",
+            task_summary: "分析对比 React 和 Vue",
+            agents: [{ id: "agent-1", role: "React 研究员" }],
+            runs: [
+              {
+                id: "run-1",
+                agent_id: "agent-1",
+                task: "研究 React",
+                depends_on: [],
+              },
+            ],
+          },
+        },
+        {
+          type: "run_started",
+          timestamp: "2026-01-01T00:00:01.000Z",
+          payload: {
+            agent_id: "agent-1",
+            run_id: "run-1",
+            parent_run_id: null,
+            kind: "agent",
+          },
+        },
+        {
+          type: "run_completed",
+          timestamp: "2026-01-01T00:00:02.000Z",
+          payload: {
+            run_id: "run-1",
+            agent_id: "agent-1",
+            output_summary: "done",
+            duration_ms: 1000,
+          },
+        },
+      ],
+    });
+    expect(rt().runProcesses).not.toBeNull();
+    store().ingestPlan(plan, MID);
+    expect(rt().status).toBe("running");
+    expect(rt().runProcesses).toBeNull();
+  });
 });
+
+describe("reloadProcessOverlay", () => {
+  it("drops empty lanes so they cannot wipe a fold", () => {
+    expect(reloadProcessOverlay(null)).toBeNull();
+    expect(reloadProcessOverlay({})).toBeNull();
+    expect(reloadProcessOverlay({ "run-1": [] })).toBeNull();
+    expect(
+      reloadProcessOverlay({
+        "run-1": [],
+        "run-2": [{ kind: "reasoning", text: "留" }],
+      }),
+    ).toEqual({ "run-2": [{ kind: "reasoning", text: "留" }] });
+  });
+});
+
 describe("agent thinking display", () => {
   it("reasoningMeta collapses to thinking on/off", () => {
     expect(reasoningMeta(false).short).toBe("非思考");

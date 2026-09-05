@@ -499,6 +499,8 @@ def _tail_from_close(close: dict[str, Any] | None) -> dict[str, Any]:
         "input_tokens": close.get("input_tokens"),
         "output_tokens": close.get("output_tokens"),
         "reply_preview": close.get("reply_preview"),
+        "error_code": close.get("error_code"),
+        "error_type": close.get("error_type"),
         # jsonl close：turn_complete 常带 tokens；resume_complete 通常不带 → 勿当全 trace。
         "token_scope": (
             "settlement_segment"
@@ -714,6 +716,10 @@ def build_decision_spine(
                 tail["phase0"] = phase0
             if close.get("reply_preview") and "reply_preview" not in tail:
                 tail["reply_preview"] = close.get("reply_preview")
+            for k in ("error_type", "error_code"):
+                val = close.get(k)
+                if val and k not in tail:
+                    tail[k] = val
     else:
         tail = _tail_from_close(close)
 
@@ -1015,7 +1021,15 @@ def format_decision_spine(spine: dict[str, Any]) -> str:
     if collab:
         lines.append("         collab: " + " · ".join(collab))
     if tail.get("error"):
-        lines.append(f"         error: {tail['error']}")
+        extra = f"  error_type={tail['error_type']}" if tail.get("error_type") else ""
+        lines.append(f"         error: {tail['error']}{extra}")
+    elif tail.get("error_type") or tail.get("error_code"):
+        bits = []
+        if tail.get("error_code"):
+            bits.append(f"error_code={tail['error_code']}")
+        if tail.get("error_type"):
+            bits.append(f"error_type={tail['error_type']}")
+        lines.append("         error: " + " ".join(bits))
 
     # 两口径提示：llm 全 trace vs tail 收口折账（resume 常见差）。
     llm_in = int(llm.get("input_tokens") or 0)

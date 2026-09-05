@@ -75,7 +75,7 @@ skip_if:
 
 ## 十、详情面板（右坞）
 
-单一 `SidePanel`（对话/画布**主坞**）。高亮跟**焦点面板**的 run（主坞活跃 tab 或某浮窗；`focusSurface` / `sidePanelFocusTabId`）。**否决**覆盖式单 tab、独立 reasoning Tab、并排双右坞、把白板塞进右坞、顶栏全局命令板（首期）。委派：单一 GraphView + 单一 `AgentRun` 模型。run 详情时间线：进行中贴底跟随（同主对话 stick 语义，上滑脱钩 +「回到底部」）；回看已结束 run 打开置顶。→ `stores/sidePanel.ts`、`RunDetailScroll.tsx` / `RunDetailBody.tsx`。
+单一 `SidePanel`（对话/画布**主坞**）。高亮跟**焦点面板**的 run（主坞活跃 tab 或某浮窗；`focusSurface` / `sidePanelFocusTabId`）。**否决**覆盖式单 tab、独立 reasoning Tab、并排双右坞、把白板塞进右坞、顶栏全局命令板（首期）。委派：单一 GraphView + 单一 `AgentRun` 模型。run 详情时间线：进行中贴底跟随（同主对话 stick 语义，上滑脱钩 +「回到底部」）；回看已结束 run 打开置顶。坞内未激活的 run 详情卸树（切回再挂）；浮窗里正在看的仍保活。过程列表只画视野里的行。→ `stores/sidePanel.ts`、`RunDetailScroll.tsx` / `RunDetailBody.tsx`。
 
 **否决**诊断模式 / 开发者模式、侧面板 run 详情「诊断信息」、协作图工具栏调度摘要（峰值 / 串行）：查 bug 走排查包喂 AI，不给人眼检视铬条。
 
@@ -156,4 +156,4 @@ Cmd+K：搜索；页内：筛选；Cmd+F：查找。Tier 3 语义搜索 ⏳（�
 
 ## 十五、待定与收藏
 
-窄屏协作图走桌面 `InlineTeamGraph`（点节点开 sheet）；竖排 `TeamView` 与旧手机辩论精简面**已随 fold 退役**。跨会话多任务总览、无障碍、虚拟滚动 ⏳。**否决**流式字级打字机（token 已到再往外挤；与 rAF 合批、停止/插队诚实性冲突）。流式答案末尾光标 ✅（思考空态仍 `ThinkingDots`）。**断线只读 / 完全离线** → [双模式工作区](/docs/02-架构/双模式工作区.md)（本文不复述）。消息收藏 ✅：命令面板「已收藏」facet；**否决**侧栏独立列表。**否决逐条消息删除**：单行硬删只删半个回合（配对消息成孤儿）、连带销毁 journal 重放与审计而用量账单仍留、手机端本就没有；「这答案我不要」走**重新生成**，其余走**对话级删除**。对齐行业（ChatGPT / Claude / Gemini 助手底栏均无逐条删除）。后端 `DELETE .../messages/{id}` 保留但前端不再调用。
+窄屏协作图走桌面 `InlineTeamGraph`（点节点开 sheet）；竖排 `TeamView` 与旧手机辩论精简面**已随 fold 退役**。跨会话多任务总览、无障碍、聊天列表虚拟滚动 ⏳（队员详情过程窗口化 ✅）。**否决**流式字级打字机（token 已到再往外挤；与 rAF 合批、停止/插队诚实性冲突）。流式答案末尾光标 ✅（思考空态仍 `ThinkingDots`）。**断线只读 / 完全离线** → [双模式工作区](/docs/02-架构/双模式工作区.md)（本文不复述）。消息收藏 ✅：命令面板「已收藏」facet；**否决**侧栏独立列表。**否决逐条消息删除**：单行硬删只删半个回合（配对消息成孤儿）、连带销毁 journal 重放与审计而用量账单仍留、手机端本就没有；「这答案我不要」走**重新生成**，其余走**对话级删除**。对齐行业（ChatGPT / Claude / Gemini 助手底栏均无逐条删除）。后端 `DELETE .../messages/{id}` 保留但前端不再调用。

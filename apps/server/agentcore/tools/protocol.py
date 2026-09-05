@@ -478,14 +478,13 @@ class ToolContext:
     # ``deliverable.form``（``prose`` / ``files`` / None）。有下游 + prose 时禁止
     # 用 summary 升格冒充交接地板正文；其它 form 仍可升格。
     handoff_deliverable_form: str | None = None
-    # True when this run already landed at least one file (file_write / append /
+    # True when this run already landed at least one file (file_write /
     # str_replace) on the *current* ToolContext object. Best-effort same-ctx
     # signal only — ``dataclasses.replace`` drops this bool. Handoff / executor
     # body-floor exemption must read ``landed_artifact_kinds`` (prose) instead.
     has_landed_files: bool = False
     # Artifact-first Writing：本 execution 已落盘 path → ``skeleton`` | ``prose``（共享可变
-    # dict；``dataclasses.replace`` 浅拷贝）。``prose`` = 成篇
-    # 正文，同 path 后续 ``file_append`` 硬拒。配 ``landed_artifact_authors``：首次落盘
+    # dict；``dataclasses.replace`` 浅拷贝）。配 ``landed_artifact_authors``：首次落盘
     # 该 path 的 ``agent_id``（归属/可观测）。
     landed_artifact_kinds: dict[str, Literal["skeleton", "prose"]] = field(
         default_factory=dict

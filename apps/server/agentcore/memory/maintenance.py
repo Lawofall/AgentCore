@@ -2,8 +2,10 @@
 
 The live path no longer calls ``maintain_user_memory`` per conversation (that was
 the old one-shot 「消息窗口→ops→直写画像」path). Session digests go through
-``episodic.py``; batch semantic merges go through ``semantic.py``. This module
-still owns the shared ``MemoryUpdateItem`` card shape, topic-cap enforcement, and
+``episodic.py`` and are marked digested without rewriting always-files.
+``semantic.py`` consolidator is tests-only; daily-review uses
+``apply_explicit_memory_ops``. This module still owns the shared
+``MemoryUpdateItem`` card shape, topic-cap enforcement, and
 ``maintain_user_memory`` (ops apply) for tests / callers that already hold ops.
 """
 

@@ -209,3 +209,68 @@ describe("persistOpenedCache preview", () => {
     expect(payload.conversation.lastMessagePreview).not.toBe(STALE_SUCCESS);
   });
 });
+
+describe("persistOpenedCache richer-only", () => {
+  const putOpenedConversation = vi.fn().mockResolvedValue(undefined);
+  const getConversation = vi.fn();
+
+  beforeEach(() => {
+    getConversations.mockReset();
+    getConversations.mockReturnValue([]);
+    putOpenedConversation.mockClear();
+    getConversation.mockReset();
+    Object.defineProperty(window, "localStoreApi", {
+      configurable: true,
+      value: { putOpenedConversation, getConversation },
+    });
+  });
+
+  it("does not replace a thicker opened snapshot with a thinner window", async () => {
+    const thick = [
+      msg("u1", "user", "first"),
+      msg("a1", "assistant", "reply1"),
+      msg("u2", "user", "second"),
+      msg("a2", "assistant", "live tail"),
+    ];
+    getConversation.mockResolvedValue({
+      conversation: listed("c1", "live tail"),
+      messages: thick,
+      memoryUpdates: [],
+      hasMoreBefore: false,
+      hasMoreAfter: false,
+    });
+
+    await persistOpenedCache(
+      "c1",
+      [msg("u1", "user", "first"), msg("a1", "assistant", "reply1")],
+      [],
+      { hasMoreBefore: false, hasMoreAfter: false },
+    );
+
+    expect(putOpenedConversation).not.toHaveBeenCalled();
+  });
+
+  it("writes when the incoming window is strictly richer", async () => {
+    getConversation.mockResolvedValue({
+      conversation: listed("c1", "reply1"),
+      messages: [msg("u1", "user", "first"), msg("a1", "assistant", "reply1")],
+      memoryUpdates: [],
+      hasMoreBefore: false,
+      hasMoreAfter: false,
+    });
+
+    await persistOpenedCache(
+      "c1",
+      [
+        msg("u1", "user", "first"),
+        msg("a1", "assistant", "reply1"),
+        msg("u2", "user", "second"),
+        msg("a2", "assistant", "live tail"),
+      ],
+      [],
+      { hasMoreBefore: false, hasMoreAfter: false },
+    );
+
+    expect(putOpenedConversation).toHaveBeenCalledTimes(1);
+  });
+});

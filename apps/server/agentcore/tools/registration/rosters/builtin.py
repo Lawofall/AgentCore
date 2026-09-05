@@ -15,7 +15,6 @@ def load_roster() -> tuple[type, ...]:
     from agentcore.tools.builtin.code_search import CodeSearchTool
     from agentcore.tools.builtin.external_mount_readonly import ExternalMountReadonlyTool
     from agentcore.tools.builtin.file_ops import (
-        FileAppendTool,
         FileBatchTool,
         FileCopyTool,
         FileDeleteTool,
@@ -43,7 +42,6 @@ def load_roster() -> tuple[type, ...]:
         WebFetchTool,
         FileReadTool,
         FileWriteTool,
-        FileAppendTool,
         StrReplaceTool,
         FileListTool,
         GlobTool,

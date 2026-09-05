@@ -38,12 +38,14 @@ class PersistenceSettings(BaseModel):
     memory_consolidation_shared_failure_cooldown_max_seconds: int = 1800
     # Episodic session summary hard cap (chars); LLM output is truncated to this.
     memory_episodic_summary_max_chars: int = 200
-    # Digested episodes have no reader left (semantic already merged them); the sweeper
-    # hard-deletes them past this window. 0 disables the purge (keeps them forever).
+    # Digested episodes have no reader left (idle path marks them digested without
+    # merging into always-files); the sweeper hard-deletes them past this window.
+    # 0 disables the purge (keeps them forever).
     memory_episode_retention_days: int = 30
-    # Semantic consolidation: live path after each episode write is eager (bypasses
-    # these). The numbers below are the non-eager leak-scan backstop (undigested
-    # count, or hours since the last successful semantic pass for that (user, scope)).
+    # Unused by the live idle path (episodes are digested without rewriting
+    # always-files). Kept so tests of :func:`should_run_semantic` stay stable.
+    # historical: non-eager leak-scan backstop (undigested count, or hours since
+    # the last successful semantic pass for that (user, scope)).
     memory_semantic_min_episodes: int = 3
     memory_semantic_max_age_hours: float = 24.0
     memory_section_bullet_cap: int = 20

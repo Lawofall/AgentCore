@@ -11,7 +11,7 @@ import {
   isGrantFolderAction,
 } from "@/lib/desktopDownload";
 import { organizeConfirmDetail } from "@/lib/grantFolderHints";
-import type { AskAssumption, AskOption, AskQuestion } from "@/types/events";
+import type { AskOption, AskQuestion } from "@/types/events";
 import { Check, FolderOpen, FolderTree, Loader2 } from "lucide-react";
 import { ASK_NOTE_PLACEHOLDER, type AskTone } from "./AskUserFields";
 
@@ -45,41 +45,6 @@ export function splitBriefContext(context: string): {
   const [lead, ...rest] = lines;
   const points = rest.map((l) => l.replace(/^[-•*]\s*/, ""));
   return { lead: lead ?? "", points };
-}
-
-/** Compact plan as secondary chips (label · value). */
-export function PlanChips({
-  assumptions,
-  className = "",
-  quiet = false,
-}: {
-  assumptions: AskAssumption[];
-  className?: string;
-  /** Quieter surface for secondary placement (brief footer). */
-  quiet?: boolean;
-}) {
-  if (assumptions.length === 0) return null;
-  return (
-    <div className={`flex flex-wrap gap-1.5 ${className}`}>
-      {assumptions.map((a) => (
-        <span
-          key={a.id}
-          className={
-            quiet
-              ? "inline-flex max-w-full items-baseline gap-1 rounded-lg bg-muted/30 px-2 py-0.5 text-xs text-muted-foreground"
-              : "inline-flex max-w-full items-baseline gap-1 rounded-lg border border-border/60 bg-muted/25 px-2 py-0.5 text-xs"
-          }
-        >
-          <span className="shrink-0 text-muted-foreground/80">{a.label}</span>
-          <span
-            className={`min-w-0 truncate ${quiet ? "text-muted-foreground" : "text-foreground/80"}`}
-          >
-            {a.value}
-          </span>
-        </span>
-      ))}
-    </div>
-  );
 }
 
 export function CommenceNote({

@@ -25,6 +25,7 @@ from agentcore.runtime.events import (
     message_end,
 )
 from agentcore.runtime.facts import TurnFactLog, TurnPausedFact, record_turn_fact
+from agentcore.runtime.journal.entries import attach_journal_error_type
 from agentcore.runtime.ledger_channel import emit_turn_evidence_ledger
 from agentcore.runtime.pipeline.finalize import _journal_entries_for_turn
 from agentcore.runtime.runs import RunPhase
@@ -424,6 +425,8 @@ async def salvage_pipeline_exception(
         )
     except Exception:  # noqa: BLE001 — salvage is best-effort; keep the real error
         crash_journal = None
+    error_type = type(e).__name__
+    crash_journal = attach_journal_error_type(crash_journal, error_type)
     await audit_recorder.flush()
     if roster_writer is not None:
         await roster_writer.flush()
@@ -433,6 +436,7 @@ async def salvage_pipeline_exception(
         "reasoning_content": salvaged_reasoning or None,
         "error": message,
         "error_code": code,
+        "error_type": error_type,
         "finish_reason": FinishReason.ERROR,
         "journal_entries": crash_journal,
         "audit_drops": audit_recorder.drops,

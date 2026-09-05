@@ -183,19 +183,26 @@ const toolSummaryLabel = (
   args?: Record<string, unknown>,
 ): string => toolMeta(name, args).label;
 
-/** 写盘家族：折叠标题已点名路径；组装心跳只在这类工具上报字数（长写入不能看起来冻住）。 */
+/** 写盘家族：折叠标题已点名路径；类型诊断 peek 也只认这三类。 */
 export const WRITE_FAMILY_TOOLS = new Set([
   "file_write",
   "file_append",
   "str_replace",
 ]);
 
-/** 组装心跳字数；非写盘或尚未出字返回 null。 */
+/** 组装心跳报字数：写盘（长正文）+ 编排原语（长 task / 辩题 JSON）。其余工具只出标签。 */
+const COMPOSING_CHAR_TOOLS = new Set([
+  ...WRITE_FAMILY_TOOLS,
+  "delegate",
+  "debate",
+]);
+
+/** 组装心跳字数；不在报数字段或尚未出字返回 null。 */
 export function composingWriteChars(
   toolName: string,
   chars: number,
 ): string | null {
-  if (chars <= 0 || !WRITE_FAMILY_TOOLS.has(toolName)) return null;
+  if (chars <= 0 || !COMPOSING_CHAR_TOOLS.has(toolName)) return null;
   return `${formatCompact(chars)} 字`;
 }
 

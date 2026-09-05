@@ -75,7 +75,6 @@ def _frame(*, checkpoint_id: str = "cp-a", tool_call_id: str = "ask_a") -> AskUs
                 "payload": {
                     "checkpoint_id": "cp-a",
                     "question": "先确认范围？",
-                    "assumptions": [],
                     "questions": [],
                 },
             },
@@ -84,7 +83,6 @@ def _frame(*, checkpoint_id: str = "cp-a", tool_call_id: str = "ask_a") -> AskUs
                 "payload": {
                     "checkpoint_id": "cp-b",
                     "question": "区外目录写入授权",
-                    "assumptions": [],
                     "questions": [],
                 },
             },
@@ -182,7 +180,6 @@ def _pause_journal() -> list[dict]:
             "payload": {
                 "checkpoint_id": "cp-a",
                 "question": "先确认范围？",
-                "assumptions": [],
                 "questions": [],
             },
         },
@@ -191,7 +188,6 @@ def _pause_journal() -> list[dict]:
             "payload": {
                 "checkpoint_id": "cp-b",
                 "question": "区外目录写入授权",
-                "assumptions": [],
                 "questions": [],
             },
         },

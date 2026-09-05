@@ -523,7 +523,7 @@ def test_research_report_write_task_has_chapter_discipline():
     tasks, errors = expand_playbook("cite_write_review", {"topic": "X", "angles": ["甲", "乙"]})
     assert not errors
     write = next(t for t in tasks if t["id"] == "write")
-    assert "按章" in write["task"]
+    assert "一次 file_write 完整正文" in write["task"]
     assert "file_delete" not in write["task"]
     assert "章边界" in write["task"]
     # 中间环约定文档契约：调研 + 提纲 form=files，路径在 RESEARCH_DIR，角度名入文件名。

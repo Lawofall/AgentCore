@@ -32,12 +32,6 @@ class ApprovalResolvedPayload(WirePayload):
     decision: ApprovalDecision
 
 
-class AskAssumption(WirePayload):
-    id: str
-    label: str
-    value: str
-
-
 class AskOption(WirePayload):
     """One selectable answer to a choice AskQuestion. `label` is both the displayed text
     and the value composed back into the answer. Tendency lives in the name
@@ -106,7 +100,6 @@ class CheckpointRequiredPayload(WirePayload):
     checkpoint_id: str
     conversation_id: str
     question: str
-    assumptions: list[AskAssumption]
     questions: list[AskQuestion]
     intent: AskCheckpointIntent | None = absent(ts_type="CheckpointIntent")
     browser_login: bool | None = absent(
@@ -219,7 +212,7 @@ class EscalationRequiredPayload(WirePayload):
         "谁在仲裁：user=经典可答卡；ceo=协调模式等主管。旧流缺字段按 user。"
     )
     browser_login: bool | None = absent(
-        "true=用户可在回合仍 running 时接管浏览器完成登录（D16 窄例外）。"
+        "true=请用户在右坞完成登录并点「已登录，继续」（回合仍 running）。"
         "旧流缺字段按 false。"
     )
     ownership_paths: list[str] | None = absent(

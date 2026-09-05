@@ -495,6 +495,10 @@ def test_core_teaches_split_criterion_over_count():
     lf_fail = build_system_skill_registry().get("long_form_landing").body
     assert "参数不是合法 JSON" in lf_fail
     assert "参数不是合法 JSON" not in hint
+    assert "file_append" not in lf_fail
+    assert "file_append" not in _DEFAULT_SYSTEM_PROMPT
+    assert "file_append" not in hint
+    assert "file_append" not in _TEAM_ORCHESTRATION_ADVANCED
     assert "asking_the_user" not in hint
     assert "ask_user_kickoff" not in hint
     assert "糊建站" in kickoff or "做个网站" in kickoff
@@ -858,6 +862,19 @@ def test_core_reminds_pass_hidden_context_to_worker():
     assert "看不到" not in _CEO_CORE_HINT or "对话历史" not in _CEO_CORE_HINT
 
 
+def test_delegate_task_names_workspace_relative_paths():
+    """派工点名路径与工具 path 同形；核不复述、不写禁盘符补集。"""
+    from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
+
+    task_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["task"][
+        "description"
+    ]
+    assert "相对 POSIX" in task_desc
+    assert "相对 POSIX" not in _CEO_CORE_HINT
+    assert "C:\\" not in task_desc
+    assert "盘符" not in task_desc
+
+
 def test_core_teaches_confirmed_constraints_block_on_delegate():
     """已确认约束填法在 delegate task 参数；编排 skill 只留诚实边界；核不复述。"""
     hint = _CEO_CORE_HINT
@@ -945,6 +962,23 @@ def test_skill_teaches_constraint_vs_solution_boundary():
         "description"
     ]
     assert "已确认约束" in task_desc
+
+
+def test_task_schema_contrasts_brief_vs_howto():
+    """自包含 ≠ HOW：对比边界只在 task 参数；核不抄；skill 只留认知分工。"""
+    from agentcore.runtime.skills import _LEAD_SUBTEAM
+    from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
+
+    task_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["task"][
+        "description"
+    ]
+    assert "逐步改法" in task_desc
+    assert "章节骨架" in task_desc
+    assert "逐步改法" not in _CEO_CORE_HINT
+    assert "章节骨架" not in _CEO_CORE_HINT
+    assert "逐步改法" not in _TEAM_ORCHESTRATION_ADVANCED
+    assert "逐步改法" not in _LEAD_SUBTEAM
+    assert "专业方案归专家" in _TEAM_ORCHESTRATION_ADVANCED
 
 
 def test_core_teaches_delegate_point_dont_answer():

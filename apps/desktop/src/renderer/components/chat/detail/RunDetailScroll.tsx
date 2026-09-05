@@ -1,10 +1,11 @@
 import { RunDetailBody } from "@/components/chat/detail/RunDetailBody";
+import { ProcessTimelineScrollContext } from "@/components/chat/message-bubble/processTimelineScroll";
 import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useStickToBottom } from "@/lib/useStickToBottom";
-import { useMessageExecution } from "@/stores/execution";
+import { useMessageRun } from "@/stores/execution";
 import { ArrowDown } from "lucide-react";
-import type { KeyboardEvent } from "react";
+import { type KeyboardEvent, useLayoutEffect, useState } from "react";
 
 /**
  * Scroll shell for a SidePanel run tab: stick-to-bottom while the worker is
@@ -12,9 +13,8 @@ import type { KeyboardEvent } from "react";
  * top. Lives outside {@link RunDetailBody} so the panel chrome does not subscribe
  * to every streaming token — only this shell + the body do.
  *
- * Layout growth (async diagrams, expand/collapse, REST sections) is followed via
- * ResizeObserver on the content wrapper — keep-alive `hidden` tabs also re-stick
- * naturally when unhidden (0→real size) while still stuck.
+ * Docked inactive tabs unmount this shell. Remount follows {@link useStickToBottom}
+ * reset: live → bottom, settled → top. Visible float hosts keep their own copy.
  */
 export function RunDetailScroll({
   messageId,
@@ -23,15 +23,11 @@ export function RunDetailScroll({
   messageId: string;
   runId: string;
 }) {
-  const execution = useMessageExecution(messageId);
-  const run = execution?.runs.find((r) => r.id === runId) ?? null;
-  const agent = run
-    ? (execution?.agents.find((a) => a.id === run.agentId) ?? null)
-    : null;
-
-  const ready = run != null && agent != null;
+  const viewed = useMessageRun(messageId, runId);
+  const ready = viewed != null;
   const live =
-    ready && (agent.status === "working" || run.status === "running");
+    ready &&
+    (viewed.agent.status === "working" || viewed.run.status === "running");
 
   // Only fire reset once the run is projectable — avoids a false "done → top"
   // flash before execution lands, then a second reset when data arrives.
@@ -41,6 +37,10 @@ export function RunDetailScroll({
     resetKey,
     { followOnReset: live },
   );
+  const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    setScrollEl(scrollRef.current);
+  }, [scrollRef]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "End") return;
@@ -61,11 +61,15 @@ export function RunDetailScroll({
         onKeyDown={onKeyDown}
       >
         <div ref={contentRef}>
-          <RunDetailBody
-            key={`${messageId}:${runId}`}
-            messageId={messageId}
-            runId={runId}
-          />
+          {scrollEl ? (
+            <ProcessTimelineScrollContext.Provider value={scrollEl}>
+              <RunDetailBody
+                key={`${messageId}:${runId}`}
+                messageId={messageId}
+                runId={runId}
+              />
+            </ProcessTimelineScrollContext.Provider>
+          ) : null}
         </div>
       </div>
       {!atBottom && (

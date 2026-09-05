@@ -108,7 +108,12 @@ beforeEach(() => {
   settleCloudRunningAssistant.mockClear();
   settleOrphanEmptyAssistants.mockClear();
   attachSidecarTurn.mockClear();
-  attachSidecarTurn.mockImplementation(async () => true);
+  attachSidecarTurn.mockImplementation(
+    async (_cid?: string, opts?: { onReplayReady?: () => void }) => {
+      opts?.onReplayReady?.();
+      return true;
+    },
+  );
   projectUnsyncedTurns.mockClear();
   projectPausedRuns.mockClear();
   syncConversationFollow.mockClear();
@@ -160,6 +165,23 @@ describe("runHydrateAttachSettle (warm reopen / cold adopt)", () => {
     expect(settleCloudRunningAssistant).not.toHaveBeenCalled();
   });
 
+  it("cloudLive with last complete assistant still attaches (REST missing live tail)", async () => {
+    seedMessages({ role: "assistant", status: "complete" });
+
+    const branch = await runHydrateAttachSettle(CID, {
+      sidecarLive: false,
+      cloudLive: true,
+      cloudKnown: true,
+      pausedCount: 0,
+      unsynced: [],
+    });
+
+    expect(branch).toBe("cloud");
+    expect(attachOnOpen).toHaveBeenCalledTimes(1);
+    expect(attachOnOpen).toHaveBeenCalledWith(CID);
+    expect(settleOrphanEmptyAssistants).not.toHaveBeenCalled();
+  });
+
   it("cold-style local sidecarLive still attaches (adopt-success path parity)", async () => {
     // Empty slice mirrors post-adopt readiness; branch must still attach.
     useConversationStore.getState().switchConversation(CID);
@@ -178,7 +200,10 @@ describe("runHydrateAttachSettle (warm reopen / cold adopt)", () => {
     expect(settleOrphanEmptyAssistants).toHaveBeenCalledWith(CID);
     expect(attachSidecarTurn).toHaveBeenCalledTimes(1);
     // Hydrate 不传页级 signal（切会话 ≠ 卸观察泵）。
-    expect(attachSidecarTurn).toHaveBeenCalledWith(CID);
+    expect(attachSidecarTurn).toHaveBeenCalledWith(
+      CID,
+      expect.objectContaining({ onReplayReady: expect.any(Function) }),
+    );
     expect(projectPausedRuns).not.toHaveBeenCalled();
     expect(attachOnOpen).not.toHaveBeenCalled();
     expect(settleCloudRunningAssistant).not.toHaveBeenCalled();
@@ -216,12 +241,12 @@ describe("runHydrateAttachSettle (warm reopen / cold adopt)", () => {
     expect(projectPausedRuns).toHaveBeenCalledWith(CID, pausedRuns);
   });
 
-  it("cloud complete assistant settles orphans but does not attach/ghost", async () => {
+  it("idle complete assistant settles orphans but does not attach/ghost", async () => {
     seedMessages({ role: "assistant", status: "complete" });
 
     await runHydrateAttachSettle(CID, {
       sidecarLive: false,
-      cloudLive: true,
+      cloudLive: false,
       cloudKnown: true,
       pausedCount: 0,
       unsynced: [],
@@ -390,7 +415,10 @@ describe("runHydrateAttachSettle (warm reopen / cold adopt)", () => {
 
     expect(branch).toBe("local");
     expect(attachSidecarTurn).toHaveBeenCalledTimes(1);
-    expect(attachSidecarTurn).toHaveBeenCalledWith(CID);
+    expect(attachSidecarTurn).toHaveBeenCalledWith(
+      CID,
+      expect.objectContaining({ onReplayReady: expect.any(Function) }),
+    );
   });
 
   it("打开对话不清 ai_attention 灯", async () => {
@@ -423,10 +451,12 @@ describe("runHydrateAttachSettle (warm reopen / cold adopt)", () => {
     seedMessages({ role: "assistant", status: "running" });
     let finishAttach!: (ok: boolean) => void;
     attachSidecarTurn.mockImplementation(
-      () =>
-        new Promise<boolean>((resolve) => {
+      (_cid?: string, opts?: { onReplayReady?: () => void }) => {
+        opts?.onReplayReady?.();
+        return new Promise<boolean>((resolve) => {
           finishAttach = resolve;
-        }),
+        });
+      },
     );
 
     const settled = awaitHydrateAttachSettle(
@@ -448,6 +478,38 @@ describe("runHydrateAttachSettle (warm reopen / cold adopt)", () => {
     await vi.waitFor(() => {
       expect(hasLocalConversationStream(CID)).toBe(false);
     });
+  });
+
+  it("awaitHydrateAttachSettle waits for live-tail snapshot, not turn end", async () => {
+    seedMessages({ role: "assistant", status: "running" });
+    let notifyReady: (() => void) | undefined;
+    attachSidecarTurn.mockImplementation(
+      (_cid?: string, opts?: { onReplayReady?: () => void }) => {
+        notifyReady = () => opts?.onReplayReady?.();
+        return new Promise<boolean>(() => {});
+      },
+    );
+
+    let resolved = false;
+    const pending = awaitHydrateAttachSettle(
+      CID,
+      Promise.resolve({
+        sidecarLive: true,
+        cloudLive: false,
+        cloudKnown: true,
+        pausedCount: 0,
+        unsynced: [],
+      }),
+    ).then((branch) => {
+      resolved = true;
+      return branch;
+    });
+
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    notifyReady?.();
+    await expect(pending).resolves.toBe("local");
+    expect(resolved).toBe(true);
   });
 
   it("awaitHydrateAttachSettle runs settle after recovery resolves", async () => {

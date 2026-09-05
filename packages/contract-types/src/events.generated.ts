@@ -177,12 +177,6 @@ export type CheckpointDecision =
   | "timeout"
   | "orphaned";
 
-export interface AskAssumption {
-  id: string;
-  label: string;
-  value: string;
-}
-
 /** One selectable answer to a choice AskQuestion. `label` is both the displayed text
  * and the value composed back into the answer. Tendency lives in the name
  * (``（推荐）`` / ``(recommended)``), not a separate flag; the card does not pre-select.
@@ -238,7 +232,6 @@ export interface CheckpointRequiredPayload {
   checkpoint_id: string;
   conversation_id: string;
   question: string;
-  assumptions: AskAssumption[];
   questions: AskQuestion[];
   intent?: CheckpointIntent;
   /** true=CEO 请求用户在右坞浏览器完成登录（同 escalate browser_login 体验）。旧流缺字段按 false。 */
@@ -523,7 +516,7 @@ export interface EscalationRequiredPayload {
   kind?: EscalationKind;
   /** 谁在仲裁：user=经典可答卡；ceo=协调模式等主管。旧流缺字段按 user。 */
   awaiting?: "user" | "ceo";
-  /** true=用户可在回合仍 running 时接管浏览器完成登录（D16 窄例外）。旧流缺字段按 false。 */
+  /** true=请用户在右坞完成登录并点「已登录，继续」（回合仍 running）。旧流缺字段按 false。 */
   browser_login?: boolean;
   /** 写权冲突路径列表；有值时前端呈现「移交写权 / 保持原主」。旧流缺字段按无。 */
   ownership_paths?: string[];

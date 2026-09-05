@@ -74,9 +74,11 @@ DELEGATE_PARAMETERS = {
                         "type": "string",
                         "description": (
                             "自包含=目标+边界+验收（worker 看不到完整历史）。"
+                            "≠逐步改法、改哪些文件、章节骨架。"
                             "凭据写入 task 供队员填 env。"
                             "已拍板写同一行「已确认约束：①…；②…」；无则「（无）」；自拟默认标假设不进本行。"
                             "未装配能力 ≠ 写进 task。"
+                            "点名路径用工作区相对 POSIX（与工具 path 同形）。"
                         ),
                     },
                     "deliverable": TASK_DELIVERABLE_SCHEMA,

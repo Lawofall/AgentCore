@@ -655,6 +655,7 @@ def test_task_description_matches_what_worker_actually_receives():
     assert "自包含" in task_desc
     assert "看不到完整历史" in task_desc
     assert "目标" in task_desc and "边界" in task_desc and "验收" in task_desc
+    assert "逐步改法" in task_desc
     assert "must_contain" not in task_desc
     assert "细则进 deliverable.must_contain" not in task_desc
 

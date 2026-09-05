@@ -1672,6 +1672,21 @@ describe("ComposingToolLine · 参数组装心跳", () => {
     expect(screen.queryByText(/正在组装/)).toBeNull();
   });
 
+  it("delegate / debate composing also shows char count, no verb prefix", () => {
+    const { unmount } = renderWithTooltip(
+      <ComposingToolLine tool={{ toolName: "delegate", chars: 2100 }} />,
+    );
+    expect(screen.getByText(/Delegate/)).toBeTruthy();
+    expect(screen.getByText(/2\.1k 字/)).toBeTruthy();
+    expect(screen.queryByText(/正在组装/)).toBeNull();
+    unmount();
+    renderWithTooltip(
+      <ComposingToolLine tool={{ toolName: "debate", chars: 4200 }} />,
+    );
+    expect(screen.getByText(/Debate/)).toBeTruthy();
+    expect(screen.getByText(/4\.2k 字/)).toBeTruthy();
+  });
+
   it("omits char count when zero", () => {
     renderWithTooltip(
       <ComposingToolLine tool={{ toolName: "debate", chars: 0 }} />,
@@ -1679,6 +1694,18 @@ describe("ComposingToolLine · 参数组装心跳", () => {
     expect(screen.getByText("Debate")).toBeTruthy();
     expect(screen.queryByText(/正在组装/)).toBeNull();
     expect(screen.queryByText(/字/)).toBeNull();
+  });
+
+  it("does not paint a block composing caret", () => {
+    const { unmount } = renderWithTooltip(
+      <ComposingToolLine tool={{ toolName: "file_write", chars: 2100 }} />,
+    );
+    expect(screen.queryByText("▋")).toBeNull();
+    unmount();
+    renderWithTooltip(
+      <ComposingToolLine tool={{ toolName: "web_search", chars: 1280 }} />,
+    );
+    expect(screen.queryByText("▋")).toBeNull();
   });
 });
 

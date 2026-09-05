@@ -15,6 +15,7 @@
  * 切会话 ≠ 卸观察泵；hydrate 路径不传 signal。
  */
 import { logEvent } from "@/lib/log";
+import { persistResidentOpenedCache } from "@/services/offlineCache";
 import {
   type SidecarTurnClaim,
   claimSidecarTurnSink,
@@ -40,6 +41,36 @@ import { beginLocalConversationStream } from "./streamOwnership";
 
 /** In-flight attach per conversation — hydrate 两次 coalesce 到同一 Promise。 */
 const attachInFlight = new Map<string, Promise<boolean>>();
+/** Replay-ready waiters (hydrate reveal). Survives coalesce; cleared on teardown. */
+const replayReadyWaiters = new Map<string, Set<() => void>>();
+const replayReadyFired = new Set<string>();
+
+function registerReplayReady(conversationId: string, cb?: () => void): void {
+  if (!cb) return;
+  if (replayReadyFired.has(conversationId)) {
+    cb();
+    return;
+  }
+  let waiters = replayReadyWaiters.get(conversationId);
+  if (!waiters) {
+    waiters = new Set();
+    replayReadyWaiters.set(conversationId, waiters);
+  }
+  waiters.add(cb);
+}
+
+function fireReplayReady(conversationId: string): void {
+  replayReadyFired.add(conversationId);
+  const waiters = replayReadyWaiters.get(conversationId);
+  replayReadyWaiters.delete(conversationId);
+  if (!waiters) return;
+  for (const cb of waiters) cb();
+}
+
+function clearReplayReady(conversationId: string): void {
+  replayReadyFired.delete(conversationId);
+  replayReadyWaiters.delete(conversationId);
+}
 
 function isTerminalEvent(type: string): boolean {
   return type === "message_end" || type === "error";
@@ -96,6 +127,11 @@ export interface AttachSidecarTurnOptions {
    * 切会话 / hydrate 不传此 signal。
    */
   signal?: AbortSignal;
+  /**
+   * Live tail is on screen (user row + attach snapshot folded). Hydrate waits
+   * for this — not for the turn to finish.
+   */
+  onReplayReady?: () => void;
 }
 
 /**
@@ -107,6 +143,7 @@ export async function attachSidecarTurn(
   conversationId: string,
   opts?: AttachSidecarTurnOptions,
 ): Promise<boolean> {
+  registerReplayReady(conversationId, opts?.onReplayReady);
   const existing = attachInFlight.get(conversationId);
   if (existing) return existing;
 
@@ -128,6 +165,8 @@ export async function attachSidecarTurn(
 /** 测试隔离：清空 in-flight latch。 */
 export function resetSidecarAttachInFlightForTests(): void {
   attachInFlight.clear();
+  replayReadyWaiters.clear();
+  replayReadyFired.clear();
 }
 
 async function attachSidecarTurnExclusive(
@@ -202,6 +241,7 @@ async function attachSidecarTurnExclusive(
 
   try {
     if (ac.signal.aborted) {
+      fireReplayReady(conversationId);
       teardownAttachedTurn(
         conversationId,
         activeTurnId,
@@ -219,6 +259,7 @@ async function attachSidecarTurnExclusive(
       conversationId,
     });
     if (!claim.isOwner()) {
+      fireReplayReady(conversationId);
       teardownAttachedTurn(
         conversationId,
         activeTurnId,
@@ -233,6 +274,7 @@ async function attachSidecarTurnExclusive(
     }
     if (!res.attached || !res.turnId || !res.rootId) {
       // Race: turn settled between recovery and attach — re-query, never hang.
+      fireReplayReady(conversationId);
       teardownAttachedTurn(
         conversationId,
         activeTurnId,
@@ -341,6 +383,9 @@ async function attachSidecarTurnExclusive(
       if (next) foldEvent(next);
     }
 
+    fireReplayReady(conversationId);
+    persistResidentOpenedCache(conversationId);
+
     if (!finished && !ac.signal.aborted && claim.isOwner()) {
       await done;
     }
@@ -357,6 +402,7 @@ async function attachSidecarTurnExclusive(
     );
     return true;
   } catch (err) {
+    fireReplayReady(conversationId);
     teardownAttachedTurn(
       conversationId,
       activeTurnId,
@@ -383,6 +429,7 @@ function teardownAttachedTurn(
 ): void {
   clearActiveSidecarTurn(conversationId, turnId);
   claim?.release();
+  clearReplayReady(conversationId);
   ac.signal.removeEventListener("abort", onAbort);
   externalSignal?.removeEventListener("abort", onExternalAbort);
   const store = useConversationStore.getState();

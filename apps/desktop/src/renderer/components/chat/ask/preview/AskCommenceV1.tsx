@@ -9,7 +9,6 @@ import {
   ChoiceQuestion,
   CommenceFooter,
   CommenceNote,
-  PlanDetails,
   PreviewShell,
   useCommencePreviewAnswer,
 } from "./AskCommenceShared";
@@ -34,11 +33,6 @@ export function AskCommenceV1({ content }: { content: AskUserContent }) {
         <p className="line-clamp-2 text-sm font-medium text-foreground">
           {content.question}
         </p>
-
-        <PlanDetails
-          assumptions={content.assumptions}
-          disclosureKey="preview:ask-commence-v1"
-        />
 
         <div className="space-y-3 border-t border-border pt-2.5">
           {content.questions.map((q, i) => (

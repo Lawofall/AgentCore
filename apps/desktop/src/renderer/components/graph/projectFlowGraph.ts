@@ -12,7 +12,6 @@ import {
   pickCostMoney,
   tailText,
 } from "@/lib/format";
-import { detectReviewConcern } from "@/lib/reviewConcern";
 import {
   isGraphTraceEnabled,
   traceGraphProjection,
@@ -334,13 +333,6 @@ export function projectFlowNodes({
     const hostAgent = execution.agents.find((a) => a.id === run.agentId);
     const output = agent ? agent.outputChunks.join("") : "";
     const reasoning = agent ? agent.reasoningChunks.join("") : "";
-    const reviewConcern =
-      output.length >= 12
-        ? detectReviewConcern(output, {
-            role: agent?.role ?? faceRun.role,
-            runId: faceRun.id,
-          })
-        : null;
     const focused =
       litRunId === run.id || foldedCx.some((r) => r.id === litRunId);
     const isContinuation = run.continuesRunId != null;
@@ -473,7 +465,6 @@ export function projectFlowNodes({
       escalationKind: pickEscalationKind(
         roundRuns.flatMap((r) => r.escalations),
       ),
-      reviewConcern,
       foldedChildCount:
         foldedChildCount > 0 && !foldInfo.debateUnits.has(run.id)
           ? foldedChildCount

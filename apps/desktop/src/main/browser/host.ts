@@ -1130,7 +1130,7 @@ export async function bridgeDispatchLocalBrowser(
           return {
             ok: false,
             error:
-              "password_blocked: AI 不得填写密码框；worker 请 escalate(blocking=true, browser_login=true)；CEO 请 ask_user(browser_login=true) 让用户接管登录",
+              "password_blocked: AI 不得填写密码框；worker 请 escalate(blocking=true, browser_login=true)；CEO 请 ask_user(browser_login=true) 让用户完成登录",
           };
         }
         const text = String(args.text ?? "");

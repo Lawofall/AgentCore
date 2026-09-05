@@ -38,8 +38,11 @@ def _ctx() -> ToolContext:
 def test_remember_schema_is_static():
     tool = RememberTool(folder_id=None)
     assert tool.schema.name == "remember"
-    # Steers the model to the split: explicit directive here, inferred preferences to巩固.
+    # Explicit directive here; inferred prefs are not auto-saved (idle digest
+    # does not write always-files).
     assert "明确" in tool.schema.description
+    assert "离线巩固" not in tool.schema.description
+    assert "没下指令就不记" in tool.schema.description
     assert tool.schema.parameters["required"] == []
     assert tool.schema.parameters["properties"]["scope"]["enum"] == ["global", "folder"]
     assert tool.schema.parameters["properties"]["action"]["enum"] == [

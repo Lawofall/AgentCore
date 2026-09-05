@@ -27,6 +27,12 @@ from agentcore.core.errors import AgentCoreError
 # code-specific sentence below, where the cause is actually known.
 DEFAULT_TOOL_FAILURE_MESSAGE = "这一步没能完成，我会换个方式继续。"
 
+# Machine outcome codes that must not grow a second user sentence. The tool card body
+# already states the fact (exit code, compiler text). A curated aside would duplicate it.
+# Still produced on failed ToolResult (so the registration sentinel sees them); they are
+# outcomes, not breakage — same idea as successful-result codes the sentinel ignores.
+NO_USER_FACE_CODES: frozenset[str] = frozenset({"verify_result"})
+
 # The model named something that is not a callable tool — a typo/hallucination, a
 # protocol-tag residue, or the legacy landed-status bait. All the same fact for the
 # user: the step did not run and the agent routes around it. The name itself is model
@@ -175,8 +181,8 @@ _CURATED_BY_CODE: dict[str, str] = {
     "verify_policy_inner": (
         "这类整体检查不归这位队员跑——他只做小范围自检，已跳过。整体验证会交给负责验收的成员。"
     ),
-    # The check ran to completion and came back red — an ordinary result, not a breakage.
-    "verify_result": "这次检查跑完了，结果没有通过。我会看报错继续修。",
+    # verify_result: ordinary red check (command finished). No user face — see
+    # ``NO_USER_FACE_CODES``. Do not resurrect an aside on top of the compiler output.
     # --- 浏览器：密码框硬拒 / 没截到画面 / 动作没生效 / 连接授权失效 ---
     # The refusal is the product's own safety line, never an order back to the user.
     "password_blocked": (
@@ -356,18 +362,22 @@ def tool_failure_fields(
     return {"message": curated, "code": resolved_code}
 
 
-def tool_failure_from_result(result: Any) -> dict[str, str]:
+def tool_failure_from_result(result: Any) -> dict[str, str] | None:
     """Map a failed :class:`~agentcore.tools.protocol.ToolResult` to ``failure``.
 
     Uses optional ``failure_message`` / ``failure_code`` when a tool authored them;
     otherwise curated copy for ``metadata["code"]`` or ``TOOL_ERROR``. Never lifts
-    ``error`` / ``output`` onto the user channel.
+    ``error`` / ``output`` onto the user channel. Returns ``None`` for
+    :data:`NO_USER_FACE_CODES` (ordinary red results — no second user sentence).
     """
     meta = getattr(result, "metadata", None) or {}
     meta_code = meta.get("code") if isinstance(meta, dict) else None
     if not isinstance(meta_code, str) or not meta_code.strip():
         meta_code = None
+    code = getattr(result, "failure_code", None) or meta_code
+    if isinstance(code, str) and code.strip() in NO_USER_FACE_CODES:
+        return None
     return tool_failure_fields(
-        code=getattr(result, "failure_code", None) or meta_code,
+        code=code,
         product_message=getattr(result, "failure_message", None),
     )

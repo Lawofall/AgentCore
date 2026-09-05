@@ -10,7 +10,9 @@
  * 应用内浮窗（§十 · 方案 B）：Move 不 Copy；可 float = run / workspace / file / changes；
  * 不可 = terminal / browser；content / simple-turn 永不 float。统一上限 8。
  *
- * Content tabs store references only; bodies keep-alive while the tab exists.
+ * Content tabs store references only. File / terminal bodies keep-alive while
+ * the tab exists; docked run bodies mount only while active (float run bodies
+ * stay live); browser unmounts when inactive.
  * `open` / `width` are persisted; content tabs + floats are session-level.
  */
 

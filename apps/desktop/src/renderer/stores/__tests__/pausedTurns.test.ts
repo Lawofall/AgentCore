@@ -34,7 +34,6 @@ function liveResume(
     steps: [],
     pending: [],
     question: "继续？",
-    assumptions: [],
     questions: [],
     intent: "decision",
     origin: "server",

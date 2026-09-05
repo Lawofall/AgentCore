@@ -385,7 +385,6 @@ describe("toMessage (reload hydrate)", () => {
                 checkpoint_id: "ask-h",
                 conversation_id: "c1",
                 question: "选哪个？",
-                assumptions: [],
                 questions: [],
               },
             },

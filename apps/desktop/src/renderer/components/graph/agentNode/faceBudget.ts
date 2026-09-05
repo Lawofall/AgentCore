@@ -20,7 +20,6 @@ export type FaceBadgeBucket = "decision" | "anomaly" | "process";
 export type FaceBadgeKey =
   | "escalation"
   | "checkpoint"
-  | "reviewConcern"
   | "revision"
   | "handoff"
   | "crossExam";
@@ -61,8 +60,6 @@ export interface FaceBadgeSignals {
   checkpointStopped: boolean;
   /** 检查点已放行/已调整（过程性桶；与 pending/stop 互斥）。 */
   checkpointReleased: boolean;
-  /** 方向风险 / 待关注（异常桶）。 */
-  reviewConcern: boolean;
   /** 同人接续「续 ×N」角标（过程性；辩论轮次角标不走此路，属身份层）。 */
   revision: boolean;
   /** 回落换人「接手」角标（过程性；仅在无 revision 角标时占右上角）。 */
@@ -98,7 +95,6 @@ export function buildFaceBadgeDescriptors(
   } else if (s.checkpointReleased) {
     out.push({ key: "checkpoint", bucket: "process" });
   }
-  if (s.reviewConcern) out.push({ key: "reviewConcern", bucket: "anomaly" });
   // 右上角只占一枚：revision（续 ×N）优先于 handoff（接手），与既有互斥渲染一致。
   if (s.revision) out.push({ key: "revision", bucket: "process" });
   else if (s.handoff) out.push({ key: "handoff", bucket: "process" });

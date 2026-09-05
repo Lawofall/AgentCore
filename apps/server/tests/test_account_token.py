@@ -209,6 +209,38 @@ async def test_cloud_search_unauthorized(monkeypatch: pytest.MonkeyPatch, accoun
     assert ei.value.code == "account_cloud_unauthorized"
 
 
+async def test_cloud_read_422_includes_fastapi_loc_msg(
+    monkeypatch: pytest.MonkeyPatch, account_creds
+):
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            422,
+            json={
+                "detail": [
+                    {
+                        "type": "string_type",
+                        "loc": ["body", "query"],
+                        "msg": "Input should be a valid string",
+                        "input": None,
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(
+        "agentcore.account.credentials.outbound_async_client",
+        lambda **kwargs: httpx.AsyncClient(transport=_FakeTransport(_handler), **kwargs),
+    )
+    with pytest.raises(AccountCloudError) as ei:
+        await cloud_read_conversation(
+            account_creds, payload={"conversation_id": "c1"}
+        )
+    assert ei.value.code == "account_cloud_validation"
+    assert "query" in ei.value.message
+    assert "Input should be a valid string" in ei.value.message
+
+
 async def test_cloud_search_unreachable(monkeypatch: pytest.MonkeyPatch, account_creds):
     async def _handler(request: httpx.Request) -> httpx.Response:
         del request
@@ -307,6 +339,8 @@ async def test_read_uses_cloud_when_creds_bound(
 
     async def _fake_read(creds: AccountCredentials, *, payload: dict[str, Any]):
         assert payload["conversation_id"] == _PAST_UUID
+        assert payload["focus"] == "dialogue"
+        assert "query" not in payload or payload["query"] == ""
         return {
             "status": "ok",
             "title": "Past",
@@ -333,6 +367,20 @@ async def test_read_uses_cloud_when_creds_bound(
     assert result.success
     assert "body text" in result.output
     assert result.display["conversation_id"] == _PAST_UUID
+
+
+def test_conversation_read_request_accepts_null_query():
+    from agentcore.api.routes.account import ConversationReadRequest
+
+    req = ConversationReadRequest.model_validate(
+        {
+            "conversation_id": _PAST_UUID,
+            "query": None,
+            "max_chars": 60000,
+        }
+    )
+    assert req.query is None
+    assert req.max_chars == 60000
 
 
 async def test_read_cloud_soft_miss(monkeypatch: pytest.MonkeyPatch, account_creds):

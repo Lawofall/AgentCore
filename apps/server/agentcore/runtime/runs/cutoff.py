@@ -63,7 +63,6 @@ WIND_DOWN_ALLOWED_TOOLS = frozenset(
     {
         "handoff",
         "file_write",
-        "file_append",
         "str_replace",
         "file_move",
         "file_copy",
@@ -200,7 +199,7 @@ def narrow_tools_for_wind_down_breach(
 
     Default = handoff-only (strip retrieval thrash). When the run still owes
     workspace landing (``keep_landing``), keep the wind_down write whitelist so
-    ``file_write`` / append / replace are not allowlist-denied mid-obligation.
+    ``file_write`` / ``str_replace`` are not allowlist-denied mid-obligation.
     """
     if keep_landing:
         return narrow_tools_for_wind_down(

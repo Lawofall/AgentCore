@@ -14,7 +14,6 @@ afterEach(cleanup);
 const resolvedDecision: CheckpointDisplay = {
   id: "cp-1",
   question: "关于论文有几个方向想先跟你对齐",
-  assumptions: [],
   questions: [],
   intent: "decision",
   status: "resolved",

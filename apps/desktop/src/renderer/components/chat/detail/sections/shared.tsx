@@ -1,10 +1,4 @@
-import {
-  type RunNode,
-  type RunStatus,
-  runPhaseLabel,
-  runStatusLabel,
-  toolLabel,
-} from "@/stores/execution";
+import type { RunNode } from "@/stores/execution";
 
 export function Section({
   title,
@@ -26,37 +20,6 @@ export function Section({
       </div>
       {children}
     </section>
-  );
-}
-
-export function StatusBadge({
-  status,
-  phase,
-  phaseTool,
-}: {
-  status: string;
-  phase?: RunNode["phase"];
-  phaseTool?: RunNode["phaseTool"];
-}) {
-  const styles: Record<string, string> = {
-    pending: "bg-muted text-muted-foreground",
-    running: "bg-primary/10 text-primary",
-    completed: "bg-success/10 text-success",
-    failed: "bg-destructive/10 text-destructive",
-    cancelled: "bg-muted text-muted-foreground",
-    skipped: "bg-muted text-muted-foreground",
-  };
-  const phaseText =
-    status === "running" ? runPhaseLabel(phase, phaseTool, toolLabel) : null;
-  const label =
-    phaseText ??
-    (status in styles ? runStatusLabel(status as RunStatus) : status);
-  return (
-    <span
-      className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${styles[status] ?? ""}`}
-    >
-      {label}
-    </span>
   );
 }
 

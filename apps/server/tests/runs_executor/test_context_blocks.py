@@ -14,11 +14,19 @@ from tests.runs_executor.conftest import _plan
 
 
 def test_sibling_block_warns_about_file_path_collisions():
-    spec = RunSpec(run_id="x", agent_id="x", role="A", task="t", sibling_summary="- B：做B")
+    spec = RunSpec(
+        run_id="x",
+        agent_id="x",
+        role="A",
+        task="t",
+        sibling_summary="- B\n  切面：做B",
+    )
     msgs = _build_messages(_plan(spec), spec, {}, "SYS", "原始请求")
     user = msgs[1].content or ""
     assert "避免互相覆盖" in user  # the soft path-ownership nudge
     assert "做B" in user  # still carries the sibling intent summary
+    assert "你：A（本职见「你的任务」）" in user
+    assert "切面：做B" in user
 
 
 def test_team_position_block_four_dag_shapes():
@@ -49,6 +57,8 @@ def test_team_position_block_four_dag_shapes():
     up = _build_messages(plan, r1, {}, "SYS", "原始请求")[1].content or ""
     assert "检索纪律" not in up
     assert "你在团队中的位置" in up
+    assert "你：调研员A（本职见「你的任务」）" in up
+    assert "切面：查B" in up
     assert "上游一环" in up and "写手" in up
     assert "不要自己产出整个最终交付物" in up
     assert "调研员B" in up  # parallel-peer awareness still present
@@ -63,6 +73,7 @@ def test_team_position_block_four_dag_shapes():
     # (2) TERMINAL synthesizer (has upstream, no dependents): told it IS the final author
     #     — reinforces structure ownership (the worker-side L3 lever).
     term = _build_messages(plan, w, {}, "SYS", "原始请求")[1].content or ""
+    assert "你：写手（本职见「你的任务」）" in term
     assert "终端环" in term and "最终交付物" in term
     assert "先 file_read" in term and "全仓" in term
     assert "不要自己产出整个最终交付物" not in term  # not an upstream link
@@ -75,6 +86,8 @@ def test_team_position_block_four_dag_shapes():
     )
     par = _build_messages(par_plan, par_plan.by_id("p_1"), {}, "SYS", "原始请求")[1].content or ""
     assert "并行队友" in par
+    assert "你：A（本职见「你的任务」）" in par
+    assert "切面：做B" in par
     assert "上游一环" not in par and "终端环" not in par
     assert "自起描述性文件名" not in par  # no hand-off → no A1 intermediate-persist hint
 
@@ -84,6 +97,7 @@ def test_team_position_block_four_dag_shapes():
         _build_messages(solo_plan, solo_plan.by_id("s_1"), {}, "SYS", "原始请求")[1].content or ""
     )
     assert "你在团队中的位置" not in solo
+    assert "本职见「你的任务」" not in solo
     assert "不一定全是你的活" not in solo  # a solo worker IS the whole job
 
 
@@ -112,6 +126,29 @@ def test_team_position_a1_respects_pinned_artifacts():
     assert f"{RESEARCH_DIR}/选型调研报告.md" in up
     assert "自起描述性文件名" not in up
     assert "findings-" not in up
+
+
+def test_team_position_roster_keeps_full_sibling_task_and_artifacts():
+    long_task = "初始化项目。" + ("目录约定与引擎边界。" * 20)
+    assert len(long_task) > 150
+    plan, errs = build_run_plan(
+        [
+            {
+                "role": "架构工程师",
+                "task": long_task,
+                "deliverable": {"form": "files", "artifacts": ["src/engine/", "src/data/"]},
+            },
+            {"role": "前端", "task": "做调查页"},
+        ],
+        id_prefix="t",
+    )
+    assert errs == []
+    user = _build_messages(plan, plan.nodes[1], {}, "SYS", "原始请求")[1].content or ""
+    assert "你：前端（本职见「你的任务」）" in user
+    assert long_task in user
+    assert "落盘：`src/engine/`、`src/data/`" in user
+    assert "切面：" in user
+    assert "…" not in user
 
 
 async def test_context_blocks_channel_sequence_and_single_source():

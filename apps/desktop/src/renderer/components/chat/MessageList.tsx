@@ -5,10 +5,6 @@ import {
   useWorkspaceRootId,
 } from "@/stores/backgroundTasks";
 import {
-  useBrowserTakeovers,
-  useBrowserTakeoversSync,
-} from "@/stores/browserTakeover";
-import {
   useActiveMemoryUpdates,
   useActiveMessages,
   useConversationStore,
@@ -19,7 +15,6 @@ import {
 } from "@/stores/permissionChanges";
 import { useMemo } from "react";
 import { BackgroundTaskCard } from "./BackgroundTaskCard";
-import { BrowserTakeoverCard } from "./BrowserTakeoverCard";
 import { CompactionDivider } from "./CompactionDivider";
 import { MemoryUpdateCard } from "./MemoryUpdateCard";
 import { MessageBubble } from "./MessageBubble";
@@ -50,11 +45,6 @@ export function MessageList() {
   // cards float below every new turn).
   const memoryUpdates = useActiveMemoryUpdates();
 
-  // L3 团队浏览器 M2 接管标记卡 (提案 D17): 同样按时间戳锚到回合末尾并入时间线；数据来自
-  // GET takeovers（打开会话拉一次，刷新/回放可重建）+ 归还控制时 store 乐观合并。
-  useBrowserTakeoversSync(conversationId);
-  const takeovers = useBrowserTakeovers(conversationId);
-
   // 权限模式切换系统行 (原侧栏安全台账「权限模式 A → B」条目): 数据源是会话级审计 REST，打开
   // 会话拉一次，切换成功后由 PermissionAxesBadge 命令式重拉；按时间戳并入时间线、锚到它生效
   // 的那一回合之前。
@@ -67,18 +57,10 @@ export function MessageList() {
         messages,
         tasks,
         memoryUpdates,
-        takeovers,
         presetChanges,
         compactedThrough,
       ),
-    [
-      messages,
-      tasks,
-      memoryUpdates,
-      takeovers,
-      presetChanges,
-      compactedThrough,
-    ],
+    [messages, tasks, memoryUpdates, presetChanges, compactedThrough],
   );
 
   return (
@@ -90,8 +72,6 @@ export function MessageList() {
           <BackgroundTaskCard key={it.key} job={it.job} rootId={rootId} />
         ) : it.kind === "memory" ? (
           <MemoryUpdateCard key={it.key} update={it.update} />
-        ) : it.kind === "takeover" ? (
-          <BrowserTakeoverCard key={it.key} takeover={it.takeover} />
         ) : it.kind === "compaction" ? (
           <CompactionDivider key={it.key} />
         ) : (

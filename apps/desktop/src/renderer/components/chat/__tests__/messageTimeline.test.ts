@@ -1,4 +1,3 @@
-import type { BrowserTakeover } from "@/stores/browserTakeover";
 import type { MemoryUpdate, Message } from "@/stores/conversation";
 import type { PermissionChange } from "@/stores/permissionChanges";
 import { describe, expect, it } from "vitest";
@@ -41,13 +40,6 @@ const mem = (
   anchorAt,
   kind: "semantic",
   items: [],
-});
-
-// A takeover marker anchors on its START time (endedAt is irrelevant to placement).
-const tko = (id: string, startedAt: string): BrowserTakeover => ({
-  id,
-  startedAt,
-  endedAt: startedAt,
 });
 
 // A preset switch anchors on when it happened (下一回合生效 → lands before the next turn).
@@ -177,44 +169,6 @@ describe("mergeTimeline", () => {
     ]);
   });
 
-  it("anchors a takeover marker to its exchange end (like a memory card)", () => {
-    // A takeover happened at 01:00, between u1 and the long turn's 02:00 completion;
-    // it must land AFTER the answer (exchange tail), never between question and answer.
-    const messages = [
-      um("u1", "2026-01-01T00:00:00Z"),
-      am("a1", "2026-01-01T02:00:00Z"),
-    ];
-    const items = mergeTimeline(
-      messages,
-      [],
-      [],
-      [tko("t1", "2026-01-01T01:00:00Z")],
-    );
-    expect(items.map((i) => i.key)).toEqual(["m:u1", "m:a1", "tko:t1"]);
-  });
-
-  it("distributes takeover markers across their own exchanges, not stacked at the tail", () => {
-    const messages = [
-      um("u1", "2026-01-01T00:00:00Z"),
-      am("a1", "2026-01-01T01:00:00Z"),
-      um("u2", "2026-01-01T02:00:00Z"),
-      am("a2", "2026-01-01T05:00:00Z"),
-    ];
-    const takeovers = [
-      tko("t2", "2026-01-01T06:00:00Z"), // turn 2 tail
-      tko("t1", "2026-01-01T01:30:00Z"), // turn 1 (before u2)
-    ];
-    const items = mergeTimeline(messages, [], [], takeovers);
-    expect(items.map((i) => i.key)).toEqual([
-      "m:u1",
-      "m:a1",
-      "tko:t1",
-      "m:u2",
-      "m:a2",
-      "tko:t2",
-    ]);
-  });
-
   it("anchors a permission-change line before the next turn it governs", () => {
     // Switch happened at 01:30 (after turn 1's answer, before u2); the「权限模式 A → B」line
     // must land at turn 1's tail — right ahead of the turn 2 it takes effect on.
@@ -228,7 +182,6 @@ describe("mergeTimeline", () => {
       messages,
       [],
       [],
-      [],
       [pc("pc1", "2026-01-01T01:30:00Z")],
     );
     expect(items.map((i) => i.key)).toEqual([
@@ -240,28 +193,6 @@ describe("mergeTimeline", () => {
     ]);
   });
 
-  it("interleaves memory + takeover cards, ordered by time within an exchange", () => {
-    const messages = [
-      um("u1", "2026-01-01T00:00:00Z"),
-      am("a1", "2026-01-01T01:00:00Z"),
-      um("u2", "2026-01-01T10:00:00Z"),
-    ];
-    // Both belong to turn 1 (before u2). Takeover (02:00) precedes memory (03:00).
-    const items = mergeTimeline(
-      messages,
-      [],
-      [mem("m1", "2026-01-01T03:00:00Z")],
-      [tko("t1", "2026-01-01T02:00:00Z")],
-    );
-    expect(items.map((i) => i.key)).toEqual([
-      "m:u1",
-      "m:a1",
-      "tko:t1",
-      "mem:m1",
-      "m:u2",
-    ]);
-  });
-
   it("inserts a compaction divider after the last folded message", () => {
     const messages = [
       um("u1", "2026-01-01T00:00:00Z"),
@@ -269,14 +200,7 @@ describe("mergeTimeline", () => {
       um("u2", "2026-01-01T02:00:00Z"),
       am("a2", "2026-01-01T03:00:00Z"),
     ];
-    const items = mergeTimeline(
-      messages,
-      [],
-      [],
-      [],
-      [],
-      "2026-01-01T01:00:00Z",
-    );
+    const items = mergeTimeline(messages, [], [], [], "2026-01-01T01:00:00Z");
     expect(items.map((i) => i.key)).toEqual([
       "m:u1",
       "m:a1",
@@ -291,14 +215,7 @@ describe("mergeTimeline", () => {
       um("u2", "2026-01-01T02:00:00Z"),
       am("a2", "2026-01-01T03:00:00Z"),
     ];
-    const items = mergeTimeline(
-      messages,
-      [],
-      [],
-      [],
-      [],
-      "2026-01-01T01:00:00Z",
-    );
+    const items = mergeTimeline(messages, [], [], [], "2026-01-01T01:00:00Z");
     expect(items.map((i) => i.key)).toEqual(["m:u2", "m:a2"]);
   });
 

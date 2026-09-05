@@ -17,7 +17,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   conversationHasBrowserActivity,
   conversationHasPendingBrowserLogin,
-  conversationHasRunningTurn,
   isBrowserTool,
 } from "../browserActivity";
 
@@ -325,48 +324,6 @@ describe("conversationHasPendingBrowserLogin", () => {
     );
     expect(
       conversationHasPendingBrowserLogin(
-        [assistantMessage(MID)],
-        useExecutionStore.getState().byId,
-      ),
-    ).toBe(false);
-  });
-});
-
-describe("conversationHasRunningTurn", () => {
-  it("is false with no messages / no execution", () => {
-    expect(conversationHasRunningTurn([], {})).toBe(false);
-    expect(
-      conversationHasRunningTurn(
-        [assistantMessage(MID)],
-        useExecutionStore.getState().byId,
-      ),
-    ).toBe(false);
-  });
-
-  it("is true while an execution projection is running", () => {
-    seedWorkerToolCall(MID, "browser_navigate");
-    expect(
-      conversationHasRunningTurn(
-        [assistantMessage(MID)],
-        useExecutionStore.getState().byId,
-      ),
-    ).toBe(true);
-  });
-
-  it("is false after the turn finished", () => {
-    seedWorkerToolCall(MID, "browser_navigate", { end: true });
-    expect(
-      conversationHasRunningTurn(
-        [assistantMessage(MID)],
-        useExecutionStore.getState().byId,
-      ),
-    ).toBe(false);
-  });
-
-  it("only counts this conversation's messages", () => {
-    seedWorkerToolCall("other-turn", "browser_navigate");
-    expect(
-      conversationHasRunningTurn(
         [assistantMessage(MID)],
         useExecutionStore.getState().byId,
       ),

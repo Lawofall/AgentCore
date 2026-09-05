@@ -34,7 +34,6 @@ _WORKER_ONLY_COLLAB = {
 }
 _CEO_AND_WORKER_MUTATION = {
     "file_write",
-    "file_append",
     "str_replace",
     "file_delete",
     "file_move",

@@ -18,8 +18,8 @@ import { useEffect } from "react";
  * Account usage dashboard (§7.3D) — the manager's view of the team's spend.
  *
  * 大众面 leads with two semantic quota meters (本月额度 / 今日 tokens) so the user
- * reads「还剩多少」at a glance without big raw numbers. Token / cost breakdown and
- * run-detail「资源消耗」default-expand are always on. All numbers come from
+ * reads「还剩多少」at a glance without big raw numbers. Token / cost breakdown
+ * on this page is always on; run-detail「资源消耗」defaults collapsed. All numbers come from
  * `GET /usage/summary` via the usage store; money is integer nano（无汇率），符号取
  * 自各金额自带的 `currency`——平台记账 / 额度恒 ¥，BYOK 估算走社区美元价目显 $.
  * BYOK-with-key shows token meters + ≈ estimates when `estimated_cost` /

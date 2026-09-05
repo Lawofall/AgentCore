@@ -560,8 +560,6 @@ async def run_one_tool(
                         name,
                         args,
                         {"error_class": ERROR_CLASS_VALIDATION},
-                        error=error_msg,
-                        contract_failure=True,
                     ),
                 ),
                 [],
@@ -663,7 +661,9 @@ async def run_one_tool(
             "run_id": event_run_id,
         }
         if not result.success:
-            end_kwargs["failure"] = tool_failure_from_result(result)
+            face = tool_failure_from_result(result)
+            if face:
+                end_kwargs["failure"] = face
         if result.metadata.get("partial_failure"):
             end_kwargs["partial_failure"] = True
         if getattr(result, "audience", None) == TOOL_AUDIENCE_CEO:
@@ -767,8 +767,6 @@ async def run_one_tool(
                 name,
                 args,
                 result_meta or None,
-                error=error_summary,
-                contract_failure=contract_failure,
             ),
         ),
         citations,

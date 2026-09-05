@@ -3,9 +3,6 @@
  *
  * 右坞「浏览器」tab 走**条件常驻**（同「终端」tab 先例，见 `shouldShowTerminalTab`）：本会话
  * 出现过 `browser` / 历史 `browser_*` 工具调用 → tab 常驻整个会话，而不是「有直播目标才出现、用完即消失」。
- * 动因是两个窗口原本相反——接管默认**仅无 turn 运行时**可做，而旧入口（活动卡「查看直播」）
- * 只在 turn `running` 时渲染：用户必须在跑的时候先点开 tab 才能在停下后接管，没提前点开就
- * 再无入口，而此时沙箱还活着（idle TTL）、页面状态还在，正是最该上手的时刻。
  *
  * 判定扫两处：① execution 投影的 `agent.toolCalls`（worker）；② assistant
  * `message.process` 里 `kind==="tool"` 且 `isBrowserTool(tool_name)`（CEO 可直调
@@ -55,7 +52,7 @@ export function conversationHasBrowserActivity(
 }
 
 /**
- * 本会话是否存在 pending 的 `browserLogin` escalate（→ 归还控制提示走登录口径）。
+ * 本会话是否存在 pending 的 `browserLogin` escalate（→ 沙箱直播画面可点、注入 input）。
  * 与 EscalationCard「需要你登录」同源：扫 execution 投影 `run.escalations`。
  * CEO ``ask_user(browser_login)`` 走 cold pause，由调用方另扫 pausedTurns。
  */
@@ -78,26 +75,6 @@ export function conversationHasPendingBrowserLogin(
         return true;
       }
     }
-  }
-  return false;
-}
-
-/**
- * 本会话是否有 turn / execution 在跑（→ 接管闸「turn_running」前端对齐）。
- * 扫本会话 assistant 消息的 execution 投影 `status === "running"`，与后端
- * `_running(conversation_id)`（turn_runs 未完成）同语义坐标系——勿另发明
- * `isStreaming` / `hasUnsettledRuns` 等旁路。
- */
-export function conversationHasRunningTurn(
-  messages: Message[],
-  executionById: Record<string, ExecutionRuntime>,
-): boolean {
-  for (const msg of messages) {
-    if (msg.role !== "assistant") continue;
-    const rt = executionById[assistantProjectionId(msg)];
-    if (!rt) continue;
-    const exec = projectRuntime(rt);
-    if (exec?.status === "running") return true;
   }
   return false;
 }

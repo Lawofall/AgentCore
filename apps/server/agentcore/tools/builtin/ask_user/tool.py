@@ -23,7 +23,6 @@ from agentcore.tools.builtin.ask_user.intent import resolve_ask_checkpoint_inten
 from agentcore.tools.builtin.ask_user.schema import (
     ListArgError,
     advertised_option_actions,
-    normalize_assumptions,
     normalize_questions,
 )
 from agentcore.tools.builtin.ask_user.suspend import persist_suspension
@@ -161,27 +160,6 @@ class AskUserTool:
                             "必填。普通卡不当标题（无题时当唯一题干；批次原因未必看见）。"
                         ),
                     },
-                    "assumptions": {
-                        "type": "array",
-                        "description": (
-                            "可选：低影响默认可逆决策（只读陈列）。"
-                            "label 2–6 字项名。高杠杆放 questions。"
-                        ),
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "label": {
-                                    "type": "string",
-                                    "description": "2–6 字项名。",
-                                },
-                                "value": {
-                                    "type": "string",
-                                    "description": "默认值。",
-                                },
-                            },
-                            "required": ["label", "value"],
-                        },
-                    },
                     "questions": {
                         "type": "array",
                         "description": questions_desc,
@@ -271,7 +249,6 @@ class AskUserTool:
             )
 
         try:
-            assumptions = normalize_assumptions(arguments.get("assumptions"))
             questions = normalize_questions(
                 arguments.get("questions"),
                 max_options=card_max_options(card),
@@ -350,7 +327,6 @@ class AskUserTool:
             checkpoint_id=checkpoint_id,
             conversation_id=self.conversation_id,
             question=message,
-            assumptions=assumptions,
             questions=questions,
             intent=intent,
             browser_login=True if browser_login else None,
@@ -383,7 +359,6 @@ class AskUserTool:
                 checkpoint_id=checkpoint_id,
                 context=context,
                 message=message,
-                assumptions=assumptions,
                 questions=questions,
                 required_event=required,
                 intent=intent,

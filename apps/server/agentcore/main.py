@@ -422,11 +422,6 @@ async def lifespan(app: FastAPI):
         from agentcore.runtime.browser.live import default_browser_live_hub
 
         default_browser_live_hub()
-        # L3 团队浏览器 M2 接管 (D17): wire the takeover finalizer now so an active takeover's
-        # record is completed even when its session is reaped/recycled with no prior endpoint hit.
-        from agentcore.runtime.browser.takeover import default_browser_takeover_service
-
-        default_browser_takeover_service()
 
     # Single-process event-loop lag: 1 Hz sleep overrun. Answers「当时卡没卡」
     # without a metrics backend; cancelled on shutdown with the other loops.

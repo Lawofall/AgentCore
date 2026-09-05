@@ -25,7 +25,6 @@ describe("ASK_COMMENCE_SCENES", () => {
 
   it("shared mock carries ask clarification fields", () => {
     expect(ASK_COMMENCE_MOCK.question.length).toBeGreaterThan(0);
-    expect(ASK_COMMENCE_MOCK.assumptions.length).toBeGreaterThan(0);
     expect(ASK_COMMENCE_MOCK.questions.length).toBeGreaterThan(0);
     expect(ASK_COMMENCE_MOCK.questions.every((q) => q.kind === "choice")).toBe(
       true,

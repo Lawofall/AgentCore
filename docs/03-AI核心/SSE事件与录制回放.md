@@ -51,6 +51,7 @@ skip_if:
 - **扇出**（✅）：每订阅者一条独立有界队列，同帧逐个投递——不瓜分、一端断开不连坐、`seq` 在 emit 侧一次性回填故各端编号一致。→ 见代码 `runtime/events/sink.py`
 - **接入姿势**（✅）：重放段 → `: attach-caught-up` 边界 → 实时段。客户端据此把首段整段缓冲后一次折，否则已完成的 worker 会再演一遍 running→completed。一次折约束的是**协作图**；打开/刷新时消息窗正文先揭开，不等这条回放。**边界注释是唯一折段闸**：注释前断流 = 传输失败（跟播丢缓冲后重连，回合级 attach 抛 network 由调用方重试）；游标只在折/dispatch 后推进，半段不入屏。**否决**流结束仍无注释就把缓冲当完整段折（旧后端兼容）。**执行端同会话**：本端 POST / sidecar 泵占用时对话级 follow **静音不断连**（帧不折、游标不推进），放闸后同一条 SSE 接着收；禁止 abort 再全量 `full_replay` 把本机刚折完的回合闪一次。
 - **增量重放**（✅）：`Last-Event-ID` 决定**发什么、不决定读什么**——服务端照旧读整回合 journal，因为四处判定（是否结构化回合 / 已覆盖的 run 集 / `agent_id` 回填 / worker 全文拼接）必须扫过全表才成立，改成 `seq > 游标` 查会让它们翻面成「worker 正文整段重发或静默丢失」。贵的是网络与客户端折，不是那一次主键索引扫描，故**过滤发生在产出事件之后**。attach 下发的 `tool_use_end.result` 与过程车道同为 8k 预览（live 主连接仍全文；完整 stdout 在 `tool_call`）。→ 见代码 `runtime/events/attach_replay.py`
+- **过程车道与游标同真**（✅）：`tool_use_start` 按 `tool_call_id` 折一次（已在 `process[]` 则不再追加，与 `team` 标记同款）。GET 单条消息写入完整 `runs.process` 且本端无直播泵时丢掉 SSE 游标，下一发 attach 走全量——不拿过期 `Last-Event-ID` 把同一批 start 增量叠到协作图后面。直播泵占用时不丢游标。**否决**只在渲染层丢图后重复行。→ 见代码 `processTimeline.appendToolStep` · `messages.ensureFullMessageRuns`
 
 **两条指令都由服务端下达，客户端不拿屏上状态猜**——没有它们的年代，桌面 follow 重连分支猜错把正文折了两遍：
 

@@ -298,7 +298,6 @@ def _build_required_event(
             checkpoint_id=checkpoint_id,
             conversation_id=conversation_id,
             question=str(payload.get("question") or ""),
-            assumptions=list(payload.get("assumptions") or []),
             questions=list(payload.get("questions") or []),
             intent=coerce_ask_checkpoint_intent(intent) if intent else None,
         )
@@ -555,7 +554,6 @@ def _build_tape_frame(
             **common,
             tool_call_id=f"tape_ask_user_{checkpoint_id[:8]}",
             question=str(payload.get("question") or ""),
-            assumptions=list(payload.get("assumptions") or []),
             questions=list(payload.get("questions") or []),
             intent=coerce_ask_checkpoint_intent(payload.get("intent")),
         )

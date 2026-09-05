@@ -16,6 +16,32 @@ _RUN_PROCESS_PREFIX = "run_process_"
 _CANCELLED_FINISH = "cancelled"
 
 
+def attach_journal_error_type(
+    entries: list[dict[str, Any]] | None, error_type: str
+) -> list[dict[str, Any]] | None:
+    """Stamp the exception class on ``turn_end.error`` (logs / packs; not user face)."""
+    name = (error_type or "").strip()
+    if not entries or not name:
+        return entries
+    out = [dict(e) for e in entries]
+    for i in range(len(out) - 1, -1, -1):
+        if (out[i].get("kind") or "") != KIND_TURN_END:
+            continue
+        entry = dict(out[i])
+        payload = dict(entry.get("payload") or {})
+        err = payload.get("error")
+        if isinstance(err, dict):
+            merged = dict(err)
+            merged.setdefault("error_type", name)
+            payload["error"] = merged
+        else:
+            payload["error"] = {"error_type": name}
+        entry["payload"] = payload
+        out[i] = entry
+        return out
+    return out
+
+
 def last_turn_end_finish(entries: list[dict[str, Any]] | None) -> str | None:
     """Last ``turn_end.finish_reason`` in emission order, or ``None``."""
     if not entries:

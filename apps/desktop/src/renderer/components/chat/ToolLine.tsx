@@ -165,7 +165,7 @@ function writeFamilyDiagnosticPeek(data: ToolResultData): string | null {
   return null;
 }
 
-/** 模型流式组装工具调用 JSON 时的心跳行（不持久化）。写盘家族才报字数。 */
+/** 模型流式组装工具调用 JSON 时的心跳行（不持久化）。写盘与 delegate/debate 报字数。 */
 export function ComposingToolLine({
   tool,
 }: {
@@ -185,7 +185,6 @@ export function ComposingToolLine({
           </span>
         )}
       </span>
-      <span className="inline-block animate-pulse text-primary">▋</span>
     </span>
   );
 }

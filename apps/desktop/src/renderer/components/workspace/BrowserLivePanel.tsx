@@ -1,31 +1,25 @@
-import { noticeChipNeutral } from "@/components/ui/tone-presets";
 import {
   conversationHasBrowserActivity,
   conversationHasPendingBrowserLogin,
 } from "@/lib/browserActivity";
 import {
+  type InputBatcher,
+  createInputBatcher,
+  modifiersOf,
+  sendBrowserInput,
+  toFrameSpace,
+} from "@/services/browserInput";
+import {
   type BrowserLiveConnection,
   type BrowserLiveState,
   startBrowserLive,
 } from "@/services/browserLive";
-import {
-  type InputBatcher,
-  createInputBatcher,
-  endBrowserTakeover,
-  modifiersOf,
-  sendBrowserInput,
-  startBrowserTakeover,
-  takeoverStartErrorMessage,
-  toFrameSpace,
-} from "@/services/browserTakeover";
 import { useBrowserSessionsStore } from "@/stores/browserSessions";
-import { useBrowserTakeoverStore } from "@/stores/browserTakeover";
 import { useConversationStore } from "@/stores/conversation";
 import { runtimeOf } from "@/stores/conversation/runtime";
 import { useExecutionStore } from "@/stores/execution";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import {
-  Hand,
   Loader2,
   type LucideIcon,
   MonitorOff,
@@ -36,14 +30,13 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
-  useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
 
 /**
- * 浏览器 M1 直播 + M2 用户接管 tab body (提案 D15/D16)——桌面首个「按帧刷新」组件。
+ * 浏览器直播 tab body——桌面首个「按帧刷新」组件。
  *
  * 附着一条 `…/browser/live` SSE 直播流（{@link startBrowserLive}），把 base64 jpeg 帧转成
  * objectURL **逐帧换图**：每来一帧换 `<img src>`、并回收上一帧的 objectURL（防内存泄漏）。覆盖
@@ -52,14 +45,10 @@ import {
  * tab 自身条件常驻（{@link useBrowserRegion}），故本组件在「本会话用过浏览器、但此刻无直播」时
  * 也会被挂载 —— `no_session` 占位态正是这条常态路径的正文，不是异常。
  *
- * M2 接管（D16 / D8）：有活直播（started 且有帧）即可显「接管」——随时可接，已废止
- * turn_running 闸；pending `browserLogin` 仅影响归还提示口径。接管中画面变可交互面——
- * 捕获点击/键盘/滚轮，把展示坐标 {@link toFrameSpace} 换算到帧像素空间，经
- * {@link createInputBatcher} 攒批 POST（避免事件洪泛）；显著「接管中」状态条 + 「归还控制」。
- * start 失败（no_session 等）、会话结束(session_closed)、面板卸载都收口（卸载时尽力 end）。
- * 接管起止乐观并入接管 store 供时间线标记卡即时可见。归还提示两态：pending `browserLogin` →
- * 对齐升级卡「已登录，继续」；否则「控制已归还」。密码等键入不回显不留存（缓冲仅在飞、不落
- * 任何持久缓存，守 D7）。
+ * 非登录只看。仅 pending `browser_login`（escalate 或 CEO ask_user）且有活直播时，画面变可交互
+ * 面——捕获点击/键盘/滚轮，把展示坐标 {@link toFrameSpace} 换算到帧像素空间，经
+ * {@link createInputBatcher} 攒批 POST（避免事件洪泛）。登录中短提示引导回对话点「已登录，继续」。
+ * 密码等键入不回显不留存（缓冲仅在飞、不落任何持久缓存）。
  */
 
 /** base64（不含 data: 前缀）→ Blob，供 `URL.createObjectURL` 逐帧换图。 */
@@ -130,28 +119,18 @@ function LivePlaceholder({
   );
 }
 
-/** 接管生命周期（本地态，区别于服务端 live 三态；接管态**不走 live 通道**）。 */
-type TakeoverPhase = "idle" | "starting" | "active" | "ending";
-
 export function BrowserLivePanel({
   conversationId,
   sessionId,
 }: {
   conversationId: string;
-  /** Registry tab pin — 对齐 LocalTakeoverBar；live SSE + takeover start/end 都带上。 */
+  /** Registry tab pin — live SSE 带上。 */
   sessionId?: string | null;
 }) {
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<BrowserLiveState | null>(null);
   const [connection, setConnection] =
     useState<BrowserLiveConnection>("connecting");
-  const [takeover, setTakeover] = useState<TakeoverPhase>("idle");
-  const [takeoverError, setTakeoverError] = useState<string | null>(null);
-  /**
-   * 用户点「归还控制」后的短提示（不 auto-resume）。文案两态：有 pending
-   * `browserLogin`（escalate 或 CEO ask_user）→ 对齐登录卡「已登录，继续」；否则仅「控制已归还」。
-   */
-  const [returnHint, setReturnHint] = useState(false);
   const pendingEscalationLogin = useExecutionStore((s) =>
     conversationHasPendingBrowserLogin(
       runtimeOf(useConversationStore.getState(), conversationId).messages,
@@ -173,13 +152,10 @@ export function BrowserLivePanel({
   // Latest frame's pixel dimensions — the coordinate space input events must map into.
   const frameDimRef = useRef<{ width: number; height: number } | null>(null);
 
-  // Takeover-only refs (read at DOM-event time, so kept out of React state).
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const batcherRef = useRef<InputBatcher | null>(null);
   const draggingRef = useRef(false);
   const composingRef = useRef(false);
-  const takeoverActiveRef = useRef(false);
-  const takeoverStartRef = useRef<string | null>(null);
 
   useEffect(() => {
     const client = startBrowserLive(
@@ -210,82 +186,38 @@ export function BrowserLivePanel({
     };
   }, [conversationId, sessionId]);
 
-  // Core收口：停批处理 + 尽力 end（幂等）+ 把本场接管乐观并入 store（时间线标记卡即时可见）。
-  // 不碰 React state，故可安全用于卸载/会话结束/按钮各路径。仅在确实持有控制时执行一次。
-  const endTakeoverCore = useCallback(() => {
-    if (!takeoverActiveRef.current) return;
-    const startedAt = takeoverStartRef.current;
-    takeoverActiveRef.current = false;
-    takeoverStartRef.current = null;
-    draggingRef.current = false;
-    batcherRef.current?.stop();
-    batcherRef.current = null;
-    void endBrowserTakeover(
-      conversationId,
-      sessionId ? { sessionId } : undefined,
-    ).catch(() => {});
-    if (startedAt) {
-      useBrowserTakeoverStore
-        .getState()
-        .addLocal(conversationId, startedAt, new Date().toISOString());
-    }
-  }, [conversationId, sessionId]);
+  // 有帧且非「无直播」→ 放画面（会话结束时保留最后一帧、叠加结束提示；重连时保留最后一帧、叠加重连提示）。
+  const showFrame = frameUrl !== null && status !== "no_session";
+  const isLive =
+    showFrame && status !== "session_closed" && connection === "open";
+  // 仅 pending 登录 + 活直播 → 画面可点；否则只看。
+  const inputEnabled =
+    pendingBrowserLogin &&
+    showFrame &&
+    status === "started" &&
+    connection === "open";
 
-  // 归还控制：收口 + 复位可见态。`showReturnHint` 仅用户点「归还控制」时开（会话结束
-  // / 卸载不提示）；**不** auto-resume / auto-resolve。
-  const returnControl = useCallback(
-    (opts?: { showReturnHint?: boolean }) => {
-      if (!takeoverActiveRef.current) return;
-      setTakeover("ending");
-      endTakeoverCore();
-      setTakeover("idle");
-      setTakeoverError(null);
-      if (opts?.showReturnHint) setReturnHint(true);
-    },
-    [endTakeoverCore],
-  );
-
-  const beginTakeover = useCallback(async () => {
-    setTakeoverError(null);
-    setReturnHint(false);
-    setTakeover("starting");
-    try {
-      // 200 + reason：started|already_active 成功；其余 reason 抛 TakeoverStartError。
-      await startBrowserTakeover(
+  useEffect(() => {
+    if (!inputEnabled) return;
+    const batcher = createInputBatcher((events) =>
+      sendBrowserInput(
         conversationId,
+        events,
         sessionId ? { sessionId } : undefined,
-      );
-      takeoverStartRef.current = new Date().toISOString();
-      takeoverActiveRef.current = true;
-      batcherRef.current = createInputBatcher((events) =>
-        sendBrowserInput(conversationId, events),
-      );
-      setTakeover("active");
-    } catch (err) {
-      // start 失败（no_session / …）→ 复位 + 显因。
-      setTakeover("idle");
-      setTakeoverError(takeoverStartErrorMessage(err));
-    }
-  }, [conversationId, sessionId]);
+      ),
+    );
+    batcherRef.current = batcher;
+    return () => {
+      batcher.stop();
+      if (batcherRef.current === batcher) batcherRef.current = null;
+    };
+  }, [inputEnabled, conversationId, sessionId]);
 
-  // 会话结束时若仍在接管 → 自动归还（服务端会话已亡，end 幂等无副作用；不弹「继续」提示）。
   useEffect(() => {
-    if (status === "session_closed" && takeoverActiveRef.current) {
-      returnControl();
-    }
-  }, [status, returnControl]);
+    if (inputEnabled) surfaceRef.current?.focus();
+  }, [inputEnabled]);
 
-  // 接管激活即把焦点落到交互面，键盘事件才有归属。
-  useEffect(() => {
-    if (takeover === "active") surfaceRef.current?.focus();
-  }, [takeover]);
-
-  // 卸载时尽力 end（D16）——面板被切走 / 换会话（key 重建）都会触发。
-  useEffect(() => {
-    return () => endTakeoverCore();
-  }, [endTakeoverCore]);
-
-  // ---- 输入捕获（仅接管激活时挂到交互面）→ 换算帧空间 → 攒批 ----------------
+  // ---- 输入捕获（仅 pending 登录时挂到交互面）→ 换算帧空间 → 攒批 ----------------
   const pushMouse = (
     type: "down" | "up" | "move" | "wheel",
     e: { clientX: number; clientY: number },
@@ -324,7 +256,7 @@ export function BrowserLivePanel({
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>): void => {
-    // 仅拖拽时发送 move（避免悬停洪泛，D16）；批处理器再就地合并连续 move。
+    // 仅拖拽时发送 move（避免悬停洪泛）；批处理器再就地合并连续 move。
     if (!draggingRef.current) return;
     pushMouse("move", e);
   };
@@ -379,92 +311,36 @@ export function BrowserLivePanel({
     e: React.CompositionEvent<HTMLDivElement>,
   ): void => {
     composingRef.current = false;
-    // IME/组合输入兜底：只灌最终合成文本，不逐键上报（不缓存键入内容，守 D7）。
+    // IME/组合输入兜底：只灌最终合成文本，不逐键上报（不缓存键入内容）。
     if (e.data) batcherRef.current?.push({ kind: "text", text: e.data });
   };
 
-  // 有帧且非「无直播」→ 放画面（会话结束时保留最后一帧、叠加结束提示；重连时保留最后一帧、叠加重连提示）。
-  const showFrame = frameUrl !== null && status !== "no_session";
-  const isLive =
-    showFrame && status !== "session_closed" && connection === "open";
-  // 可接管：活直播即可（D8 随时；废止 turn_running 闸）。pending browserLogin 仅影响归还提示。
-  const canTakeover =
-    showFrame && status === "started" && connection === "open";
-  const isTakingOver = takeover === "active" || takeover === "ending";
-
   return (
     <div className="flex h-full flex-col bg-muted/20">
-      {isTakingOver ? (
-        // 显著「接管中」状态条（D16）：品牌蓝，含「归还控制」。
-        <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-primary/30 bg-primary/10 px-3 text-xs">
-          <Hand size={13} className="shrink-0 text-primary" />
-          <span className="font-medium text-primary">
-            接管中 · 你正在操作浏览器
-          </span>
-          <button
-            type="button"
-            onClick={() => returnControl({ showReturnHint: true })}
-            className="ml-auto shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            归还控制
-          </button>
-        </div>
-      ) : (
-        <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border px-3 text-xs">
-          <Radio
-            size={13}
-            className={`shrink-0 ${isLive ? "text-primary" : "text-muted-foreground/50"}`}
-          />
-          <span
-            className={isLive ? "text-foreground" : "text-muted-foreground"}
-          >
-            {isLive ? "直播中" : "浏览器直播"}
-          </span>
-          {takeover === "starting" ? (
-            <span className="ml-auto flex shrink-0 items-center gap-1 text-muted-foreground">
-              <Loader2 size={12} className="animate-spin" /> 正在接管…
-            </span>
-          ) : (
-            canTakeover && (
-              <button
-                type="button"
-                onClick={() => void beginTakeover()}
-                className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/15"
-              >
-                <Hand size={12} className="shrink-0" />
-                接管
-              </button>
-            )
-          )}
-        </div>
-      )}
+      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border px-3 text-xs">
+        <Radio
+          size={13}
+          className={`shrink-0 ${isLive ? "text-primary" : "text-muted-foreground/50"}`}
+        />
+        <span className={isLive ? "text-foreground" : "text-muted-foreground"}>
+          {isLive ? "直播中" : "浏览器直播"}
+        </span>
+      </div>
 
-      {takeoverError && (
-        <div
-          className={`flex shrink-0 items-center gap-1.5 border-b px-3 py-1.5 text-xs ${noticeChipNeutral}`}
-        >
-          <MonitorOff size={13} className="shrink-0 text-muted-foreground" />
-          {takeoverError}
-        </div>
-      )}
-
-      {returnHint && !takeoverError && (
+      {pendingBrowserLogin && (
         <div className="flex shrink-0 items-center gap-1.5 border-b border-primary/20 bg-primary/5 px-3 py-1.5 text-xs text-foreground">
-          <Hand size={13} className="shrink-0 text-primary" />
-          {pendingBrowserLogin
-            ? "登录完成后，回到对话点「已登录，继续」"
-            : "控制已归还"}
+          请在此完成登录，然后回到对话点「已登录，继续」
         </div>
       )}
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2">
         {showFrame && frameUrl ? (
-          isTakingOver ? (
+          inputEnabled ? (
             <div
               ref={surfaceRef}
-              // biome-ignore lint/a11y/noNoninteractiveTabindex: a remote-control surface must be focusable to capture keyboard input injected into the sandbox browser; there is no semantic element for "proxy the user's device input to another screen".
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: a login surface must be focusable to capture keyboard input injected into the sandbox browser; there is no semantic element for "proxy the user's device input to another screen".
               tabIndex={0}
-              aria-label="接管中的浏览器画面（点击 / 键入 / 滚动即操作远端）"
+              aria-label="登录中的浏览器画面（点击 / 键入 / 滚动即操作远端）"
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
@@ -514,7 +390,7 @@ export function BrowserLivePanel({
 
 /**
  * 右坞「浏览器」tab 的显隐 + 目标会话（同 `useTerminalRegion` 先例）：
- * - 本会话**曾有** `browser_*` 活动 → 显示（常驻，便于 turn 后接管）；
+ * - 本会话**曾有** `browser_*` 活动 → 显示（常驻，便于回头看直播）；
  * - 或本会话仍有带 URL / serverSession 的页签（用户页 / 冷恢复）→ 自动带上内容 tab。
  *
  * **不做 auto-surface 面板**：AI 用浏览器是高频常态，自动弹面板是打扰；唯一需要抢注意力的是 pending

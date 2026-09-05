@@ -1,15 +1,18 @@
 ---
-description: 本地产品 AI / eval / probe 真跑 LLM——用 dev 账号 OpenCode Zen BYOK，禁止默认踩 PLATFORM_API_KEY。
+description: 本地产品 AI / eval / probe 真跑 LLM——默认用 dev 账号自己的 Key；同构档才走本机平台 Key。禁止填生产池 Key。
 alwaysApply: false
 ---
 
 # 本地 LLM dogfood 凭据
 
+两条起步路权威 → [本地开发 · 两条起步路](/docs/02-架构/本地开发.md#两条起步路)。本规则只写 How。
+
 ## 症状 → 原因 → 对策
 
-- **症状**：eval / 探针报缺 key、或踩过期 `PLATFORM_API_KEY`。
-- **原因**：本地默认应走测试账号 BYOK，不是平台 key。
-- **对策**：`dev` / `devpassword`（`DEV_USERNAME` / `DEV_PASSWORD` 可覆盖）+ 账号已配 **OpenCode Zen**（如 `deepseek-v4-flash-free`）；先 `uv run python scripts/seed_dev_user.py`，再设置页或 `scripts/set_dev_llm_key.py`。
+- **症状**：eval / 探针报缺 key、或踩过期 / 线上池的 `PLATFORM_API_KEY`。
+- **原因**：clone 默认应走测试账号自己的 Key，不是平台 key；同构档也必须用**本机独立**平台 Key。
+- **对策（默认档）**：`dev` / `devpassword`（`DEV_USERNAME` / `DEV_PASSWORD` 可覆盖）+ 账号已配 **OpenCode Zen**（如 `deepseek-v4-flash-free`）；先 `uv run python scripts/seed_dev_user.py`，再设置页或 `scripts/set_dev_llm_key.py`。
+- **对策（同构档）**：本机 `.env` `BILLING_MODE=platform` + 独立 `PLATFORM_*`（Go + `deepseek-v4-flash`）+ 重启 api；`uv run python scripts/set_quota.py dev --unlimited`。禁止复制生产池 Key。
 
 ## 改 prompt / runtime 后仍像旧核
 
@@ -21,13 +24,13 @@ alwaysApply: false
 
 - 产品回合：`scripts/archive/probe_turn.py`（HTTP，与桌面同路）。
 - **多端同权 / 对话级订阅**：`scripts/archive/probe_multiend.py`——挂两条真 SSE（一条扮桌面、一条扮手机 `?follow=true`）断言帧**到没到对端**。多端类缺陷单测普遍抓不到（测里的回合是瞬时的），这条真跑就抓出过「对端晚 12.6s 才看到回合」。连跑 4 场景约十几个回合，容易打满限流窗（见下）。
-- Eval / 多数探针：`EvalHarness` → `await eval_credentials()`（已回落本地 BYOK；**异步路径必须 await**，勿在 running loop 里同步调 `_eval_credentials` 以免 DB BYOK 静默失败回落到过期 PLATFORM）。
+- Eval / 多数探针：`EvalHarness` → `await eval_credentials()`（已回落本地账号 Key；**异步路径必须 await**，勿在 running loop 里同步调 `_eval_credentials` 以免 DB Key 静默失败回落到过期 PLATFORM）。
 
 ## 优先级（勿颠倒）
 
 1. `EVAL_DEEPSEEK_*`（显式覆盖）
-2. 本地库测试账号 BYOK（默认；模型跟账号默认，常为 `deepseek-v4-flash-free`）
-3. `PLATFORM_*`（最后；本地 dogfood **禁止**默认依赖）
+2. 本地库测试账号自己的 Key（默认档；模型跟账号默认，常为 `deepseek-v4-flash-free`）
+3. `PLATFORM_*`（最后；默认档 **禁止**依赖。同构档的**产品对话**走这里，eval / 探针仍先走 1–2，除非你故意在测平台代付）
 
 **限流窗**：连跑多个真回合会触发 `llm.rate_limit_no_retry`，回合以 `error` 帧收口、无正文——别把它误判成产品缺陷（症状：`content_delta×0` 但 `message_end` 正常）。小时级窗宜等不宜硬重试。
 
@@ -35,7 +38,7 @@ alwaysApply: false
 
 - **症状**：产品 AI「不听话」——无视工具回执与 skill 明令（如已告知无执行环境仍手抄数据、仍宣称已校验），或某一跳墙钟离谱。
 - **原因**：免费档（`*-free`）不只是慢和限流，**行为也不同**：会把数据搬进推理再交差。同一 prompt 换付费档可能直接消失。
-- **对策**：下「提示词压不住 / 该加闸 / 编排太贵」这类结论**之前**，先换官方 BYOK `deepseek-v4-flash` 跑同一场景，对照 dev 的 `*-free` 档。免费档不只是慢，行为也不同（会把数据搬进推理再交差）；贵的经常是模型不是工具表。
+- **对策**：下「提示词压不住 / 该加闸 / 编排太贵」这类结论**之前**，先换官方 `deepseek-v4-flash` 跑同一场景，对照 dev 的 `*-free` 档。免费档不只是慢，行为也不同（会把数据搬进推理再交差）；贵的经常是模型不是工具表。同构档已经是付费 Flash，对照时不要再当成免费档。
 - **反向同样成立**：别拿「换付费档就没了」把问题判给模型档位然后收手。无执行分支上有没有「够得着的完整交付」（结构报告 + 待跑脚本 + 一句下一步）同样决定会不会手抄、会不会宣称已校验。
 - **验证时别同时换两个变量**：改完 prompt / skill，要用**失败基线那个模型**复跑。拿付费档去验刚改的 skill，好转可被换模型单独解释，等于没验。
 

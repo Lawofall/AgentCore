@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from agentcore.config import PROJECT_ROOT
+from agentcore.config import PROJECT_ROOT, settings
 from agentcore.core.logging import get_logger
 from agentcore.observability.query.journal_redact import (
     JOURNAL_REDACT_SCHEMA,
@@ -32,6 +32,13 @@ _PACKS_REL = Path("logs") / "packs"
 
 
 def _default_packs_root() -> Path:
+    """Sibling of the jsonl log file so prod volume writes succeed (not ``/app/logs``)."""
+    raw = (settings.log_file or "").strip()
+    if raw:
+        log_path = Path(raw)
+        if not log_path.is_absolute():
+            log_path = PROJECT_ROOT / log_path
+        return log_path.parent / "packs"
     return PROJECT_ROOT / _PACKS_REL
 
 

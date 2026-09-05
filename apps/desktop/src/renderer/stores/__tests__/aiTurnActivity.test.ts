@@ -137,4 +137,30 @@ describe("conversationSidebarActivityStatus", () => {
     expect(ignoresCloudTurnActivity(null, "root-1")).toBe(true);
     expect(ignoresCloudTurnActivity("cloud_bridge", null)).toBe(false);
   });
+
+  it("sidecar 上协作图仍在转时亮执行中（不靠 isGenerating / 云 running）", () => {
+    expect(
+      conversationSidebarActivityStatus({
+        awaiting: false,
+        cloudRunning: false,
+        isGenerating: false,
+        executionVia: "sidecar",
+        localContainerRootId: null,
+        graphLive: true,
+      }),
+    ).toBe("running");
+  });
+
+  it("等你灯压过协作图活体", () => {
+    expect(
+      conversationSidebarActivityStatus({
+        awaiting: true,
+        cloudRunning: false,
+        isGenerating: false,
+        executionVia: "sidecar",
+        localContainerRootId: null,
+        graphLive: true,
+      }),
+    ).toBe("awaiting");
+  });
 });

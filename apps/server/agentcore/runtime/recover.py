@@ -302,7 +302,6 @@ async def _settle_resume(
             result = ask_user_tool_result(
                 response,
                 questions=list(suspension.questions or []),
-                assumptions=list(suspension.assumptions or []),
             )
             # 场面账（presentation_format / automation_delivery）已拆除风格账：
             # resume 不再 record_*。

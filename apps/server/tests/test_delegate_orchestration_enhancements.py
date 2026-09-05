@@ -133,7 +133,7 @@ def test_projected_write_args_carry_nothing_worth_echoing():
         assert bait not in projected
     # Constant kept for residual-imitation rejection only — never a projected name.
     assert LANDED_STATUS_TOOL == "_write_landed"
-    assert LANDED_STATUS_TOOL not in {"file_write", "file_append", "str_replace"}
+    assert LANDED_STATUS_TOOL not in {"file_write", "str_replace"}
 
 
 def test_projected_str_replace_drops_body_keys():
@@ -286,7 +286,7 @@ def test_project_cleared_write_args_migrates_legacy_write_landed_name():
     status = json.dumps(
         {
             "status": "landed",
-            "via": "file_append",
+            "via": "file_write",
             "chars": 900,
             "path": "docs/a.md",
             "note": "已写入",
@@ -307,9 +307,9 @@ def test_project_cleared_write_args_migrates_legacy_write_landed_name():
     ]
     out = project_cleared_write_args(msgs, min_chars=100)
     assert out is not msgs
-    assert out[0].tool_calls[0].function.name == "file_append"
+    assert out[0].tool_calls[0].function.name == "file_write"
     assert out[0].tool_calls[0].function.name != LANDED_STATUS_TOOL
-    assert json.loads(out[0].tool_calls[0].function.arguments)["via"] == "file_append"
+    assert json.loads(out[0].tool_calls[0].function.arguments)["via"] == "file_write"
 
 
 def test_project_cleared_write_args_skips_pending_write():

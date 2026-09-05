@@ -2,7 +2,8 @@
 
 只写开场工具表看不出来的现场：执行、桌、系统、Git、客户端、未装配缺口、
 已挂区外、非空约定文档出口。已装配不报（开场表就是通道）；产物格式 / 出站 HOW /
-表格解析 / 通道履约剧本不在这里。
+表格解析 / 通道履约剧本不在这里。本机「桌」写文件夹名 / ``root_label``，不写 OS 绝对路径
+（工具 path 只认相对 POSIX；盘符进任务会让队员按错坐标系）。
 
 空状态不写。空桌只标「顶层空」。CEO 文件索引仍拼在本块末节（工人不加）。
 HOW → ``product_help`` / ``team_delivery_env`` / ``team_local_desk`` / 工具 description / consult。
@@ -253,13 +254,14 @@ def _desk_line(
     root_label: str,
     desk_visibly_empty: bool | None,
 ) -> str:
-    """Which desk this agent sits on. No folder_id, no 出生桌."""
+    """Which desk this agent sits on. No folder_id, no 出生桌.
+
+    Local sidecar ``backend.root`` is an OS path (``C:\\…``). Never put it here:
+    file tools reject drive letters, and captains copy the desk line into tasks.
+    """
     empty = "；顶层空" if desk_visibly_empty else ""
     if is_local:
-        root = getattr(backend, "root", None)
-        shown = str(root) if root is not None else (
-            (desk_folder_label or "").strip() or root_label
-        )
+        shown = (desk_folder_label or "").strip() or root_label
         if empty:
             return f"桌：{shown}（顶层空）"
         return f"桌：{shown}"

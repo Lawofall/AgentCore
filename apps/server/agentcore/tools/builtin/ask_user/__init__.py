@@ -20,8 +20,7 @@ The card's content is one adaptive shape (rich when opening, compact mid-task).
 On ordinary cards it is **not** shown as a title — the user-visible question goes in
 ``questions[].prompt``; ``message`` may hold a batch reason the user may not see.
 With no ``questions``, ``message`` remains the only stem. Dedicated cards still use
-``message`` as the card title. Optional ``assumptions`` (起步计划 — low-impact
-decisions the CEO made for the user, read-only chips), optional ``questions``
+``message`` as the card title. Optional ``questions``
 (each pre-fillable with a ``default`` so a 想省事 user one-clicks through).
 A mid-task A/B is one ``questions`` item plus required ``message``.
 

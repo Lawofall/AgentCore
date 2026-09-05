@@ -16,8 +16,6 @@ from dataclasses import dataclass
 from agentcore.memory.user_memory import (
     MemoryAction,
     MemoryExtractInput,
-    _is_cold_start,
-    _render_extract_prompt,
     parse_memory_ops,
 )
 
@@ -34,7 +32,6 @@ class MemoryConsolidationVector:
     expect_min_ops: int = 0
     expect_max_ops: int | None = None
     expect_min_add_ops: int = 0
-    require_cold_start_banner: bool = False
 
     def parsed_ops(self) -> list:
         return parse_memory_ops(self.golden_raw, folder_id=self.input.folder_id)
@@ -50,16 +47,10 @@ class MemoryConsolidationVector:
         add_count = sum(1 for op in ops if op.action == MemoryAction.ADD)
         if add_count < self.expect_min_add_ops:
             raise AssertionError(f"expected >= {self.expect_min_add_ops} add ops, got {add_count}")
-        if self.require_cold_start_banner:
-            prompt = _render_extract_prompt(self.input)
-            if "# COLD START" not in prompt:
-                raise AssertionError("cold-start vector must render the COLD START banner")
-            if not _is_cold_start(self.input):
-                raise AssertionError("cold-start vector input must be a cold start")
 
 
 def _memory_cold_start_extraction() -> MemoryConsolidationVector:
-    """冷启动提取：偏好与画像均为空，对话含明确用户特征信号 → 必须写入。"""
+    """空偏好/画像时，明示且每任务有用的特征仍可写入（不降门槛、无 COLD START 横幅）。"""
     golden = (
         '{"ops": ['
         '{"action": "add", "section": "技术栈与工具", "content": "倾向使用 pnpm 管理前端项目"},'
@@ -82,7 +73,6 @@ def _memory_cold_start_extraction() -> MemoryConsolidationVector:
         golden_raw=golden,
         expect_min_ops=1,
         expect_min_add_ops=1,
-        require_cold_start_banner=True,
     )
 
 
@@ -116,7 +106,7 @@ def _memory_ephemeral_task_no_write() -> MemoryConsolidationVector:
 
 MEMORY_VECTORS: dict[str, tuple[str, Callable[[], MemoryConsolidationVector]]] = {
     "memory_cold_start_extraction": (
-        "记忆整合：冷启动提取（空记忆 + 用户特征信号 → 非空 add ops）",
+        "记忆整合：空核 + 明示每任务特征 → 非空 add ops（不降门槛）",
         _memory_cold_start_extraction,
     ),
     "memory_ephemeral_task_no_write": (

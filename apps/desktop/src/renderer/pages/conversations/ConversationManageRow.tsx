@@ -37,6 +37,11 @@ import {
 } from "@/services/conversations";
 import { useConversationAwaitingAttention } from "@/stores/aiAttention";
 import {
+  conversationSidebarActivityStatus,
+  useConversationCloudRunning,
+  useConversationGraphLive,
+} from "@/stores/aiTurnActivity";
+import {
   type Conversation,
   useConversationGenerating,
   useConversationStore,
@@ -102,6 +107,11 @@ export function ConversationManageRow({
   const folders = useFolders();
 
   const isGenerating = useConversationGenerating(conversation.id);
+  const executionVia = useConversationStore(
+    (s) => s.byId[conversation.id]?.executionVia ?? null,
+  );
+  const cloudRunning = useConversationCloudRunning(conversation.id);
+  const graphLive = useConversationGraphLive(conversation.id);
   const awaitingInteraction = useInteractionStore((s) =>
     [...s.byId.values()].some(
       (e) => e.conversationId === conversation.id && isAwaitingUserEntry(e),
@@ -115,12 +125,14 @@ export function ConversationManageRow({
   // firehose `ai_attention`：另一端起的回合也亮灯（本端从未流过该对话时唯一的来源）。
   const awaitingAttention = useConversationAwaitingAttention(conversation.id);
 
-  const status: "running" | "awaiting" | null =
-    awaitingInteraction || awaitingResume || awaitingAttention
-      ? "awaiting"
-      : isGenerating
-        ? "running"
-        : null;
+  const status = conversationSidebarActivityStatus({
+    awaiting: awaitingInteraction || awaitingResume || awaitingAttention,
+    cloudRunning,
+    isGenerating,
+    executionVia,
+    localContainerRootId: conversation.localContainerRootId,
+    graphLive,
+  });
 
   const folder =
     conversation.folderId != null
@@ -288,7 +300,7 @@ export function ConversationManageRow({
                     aria-label={status === "running" ? "执行中" : "等你决策"}
                     className={`size-2 rounded-full ${
                       status === "running"
-                        ? "animate-pulse bg-primary"
+                        ? "animate-pulse bg-primary ring-2 ring-primary/40"
                         : "bg-primary ring-2 ring-primary/25"
                     }`}
                   />

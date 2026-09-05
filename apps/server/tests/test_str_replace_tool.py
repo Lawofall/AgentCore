@@ -194,15 +194,16 @@ async def test_old_string_not_found(tmp_path: Path):
     )
     assert result.success is False
     assert "找不到" in result.error
-    # 阶段3：失败回执必须带回磁盘片段（真源），不能只报「找不到」。
-    assert "磁盘原文" in (result.error or "")
+    # 失败回执必须带回磁盘片段（真源），不能只报「找不到」。
+    assert "磁盘邻近原文" in (result.error or "")
     assert "hello world" in (result.error or "")
     assert "勿残缺骨架交差" in (result.error or "")
+    assert "模糊相似度" not in (result.error or "")
     assert (tmp_path / "f.txt").read_text(encoding="utf-8") == "hello world\nsecond line\n"
 
 
 async def test_no_match_includes_fuzzy_near_miss(tmp_path: Path):
-    """Near-miss old_string still gets disk candidates marked non-exact."""
+    """单行 near-miss 附邻近原文；不标相似度百分比。"""
     (tmp_path / "app.py").write_text(
         "def add(a, b):\n    return a - b\n", encoding="utf-8"
     )
@@ -214,10 +215,44 @@ async def test_no_match_includes_fuzzy_near_miss(tmp_path: Path):
         },
         _ctx(tmp_path),
     )
+    err = result.error or ""
     assert result.success is False
-    assert "找不到" in (result.error or "")
-    assert "非精确" in (result.error or "")
-    assert "return a - b" in (result.error or "")
+    assert "找不到" in err
+    assert "邻近原文" in err
+    assert "非精确" in err
+    assert "return a - b" in err
+    assert "模糊相似度" not in err
+    assert "100%" not in err
+
+
+async def test_multiline_no_match_does_not_fuzzy_partial_line(tmp_path: Path):
+    """多行锚找不到：不把其中一行满分抬成整段已匹配。"""
+    (tmp_path / "rules.md").write_text(
+        "| 完胜 | 无罪/轻档 + 真凶当庭立住 | 最高信息回报 |\n"
+        "| 程序性胜诉 | 无罪但真相未明 | 中量情报 |\n"
+        "\n### 10.2 暗线情报不白玩原则【锁定】\n",
+        encoding="utf-8",
+    )
+    result = await StrReplaceTool().execute(
+        {
+            "path": "rules.md",
+            "old_string": (
+                "| 完败 | 罪成且方向全错 | 只吐一条最轻情报 |\n"
+                "### 10.2 暗线情报不白玩原则【锁定】"
+            ),
+            "new_string": "| 完胜 | 无罪 | 改 |\n### 10.2 暗线情报不白玩原则【锁定】",
+        },
+        _ctx(tmp_path),
+    )
+    err = result.error or ""
+    assert result.success is False
+    assert "找不到" in err
+    assert "整段 old_string 均不在文件中" in err
+    assert "模糊相似度" not in err
+    assert "邻近原文" not in err
+    assert "100%" not in err
+    # 标题仍可出现在 old_string 预览里，但不作为「已匹配」候选贴出完胜表。
+    assert "约第" not in err
 
 
 async def test_non_unique_without_replace_all_fails(tmp_path: Path):

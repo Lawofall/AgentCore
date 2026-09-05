@@ -28,7 +28,6 @@ const staleReadonlyOption = {
 
 const grantContent: AskUserContent = {
   question: "需要本机目录吗？",
-  assumptions: [],
   questions: [
     {
       id: "q0",

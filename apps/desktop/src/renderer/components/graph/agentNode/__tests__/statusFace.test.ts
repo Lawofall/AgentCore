@@ -536,6 +536,20 @@ describe("buildAgentNodePresentation revision face", () => {
     });
   });
 
+  it("composing peek: delegate / debate also report 字", () => {
+    const p = buildAgentNodePresentation(
+      baseNode({
+        status: "running",
+        isAnimating: true,
+        toolProgress: { toolName: "delegate", chars: 2100 },
+      }),
+    );
+    expect(p.peekActivity).toEqual({
+      heading: "Delegate",
+      text: "2.1k 字",
+    });
+  });
+
   it("composing peek: non-write has no 字 and no verb heading", () => {
     const p = buildAgentNodePresentation(
       baseNode({
@@ -582,18 +596,19 @@ describe("buildAgentNodePresentation checkpoint face", () => {
     expect(p.visibleFaceBadges.has("checkpoint")).toBe(true);
   });
 
-  it("yields released checkpoint to higher-priority decision/anomaly badges", () => {
+  it("yields process badges to higher-priority decision and anomaly", () => {
     const p = buildAgentNodePresentation(
       baseNode({
-        checkpoint: { status: "resolved", decision: "continue" },
+        checkpoint: { status: "resolved", decision: "stop" },
         escalationPending: 1,
-        reviewConcern: "critical",
+        isRevision: true,
+        continuationIndex: 2,
       }),
     );
-    expect(p.checkpointFace?.label).toBe("已放行");
-    expect(p.visibleFaceBadges.has("checkpoint")).toBe(false);
+    expect(p.checkpointFace?.label).toBe("已停止");
+    expect(p.visibleFaceBadges.has("checkpoint")).toBe(true);
     expect(p.visibleFaceBadges.has("escalation")).toBe(true);
-    expect(p.visibleFaceBadges.has("reviewConcern")).toBe(true);
+    expect(p.visibleFaceBadges.has("revision")).toBe(false);
   });
 });
 
