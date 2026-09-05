@@ -55,11 +55,11 @@ async def test_hostname_resolving_to_private_is_refused(monkeypatch: pytest.Monk
 async def test_fake_ip_proxy_range_gated_by_setting(monkeypatch: pytest.MonkeyPatch):
     # 198.18/15 is the Clash/Mihomo fake-IP placeholder — allowed only when the
     # core.net setting is on (dev machines behind such a proxy), refused otherwise.
-    monkeypatch.setattr(settings, "read_url_allow_fake_ip_proxy", True)
+    monkeypatch.setattr(settings, "web_fetch_allow_fake_ip_proxy", True)
     ip, reason = await resolve_dial_target("198.18.0.7", 443)
     assert ip == "198.18.0.7"
 
-    monkeypatch.setattr(settings, "read_url_allow_fake_ip_proxy", False)
+    monkeypatch.setattr(settings, "web_fetch_allow_fake_ip_proxy", False)
     ip2, reason2 = await resolve_dial_target("198.18.0.7", 443)
     # core.net flags the Clash fake-IP range with a dedicated refusal reason.
     assert ip2 is None and reason2 in ("PRIVATE_IP", "PRIVATE_IP_FAKE_PROXY")

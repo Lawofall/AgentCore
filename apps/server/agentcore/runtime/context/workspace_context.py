@@ -5,7 +5,7 @@
 表格解析 / 通道履约剧本不在这里。
 
 空状态不写。空桌只标「顶层空」。CEO 文件索引仍拼在本块末节（工人不加）。
-HOW → ``product_help`` / ``team_delivery_env`` / 工具 description / consult。
+HOW → ``product_help`` / ``team_delivery_env`` / ``team_local_desk`` / 工具 description / consult。
 分层 → docs/03-AI核心/上下文工程.md「提示词设计原则」。
 """
 

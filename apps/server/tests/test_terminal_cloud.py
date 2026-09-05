@@ -316,7 +316,7 @@ async def test_close_all_desk_sessions_drops_ledger(tmp_path: Path):
     assert "无后台进程" in listed.output
 
 
-async def test_cloud_long_running_defaults_wait_for(tmp_path: Path):
+async def test_cloud_long_running_starts_without_default_wait(tmp_path: Path):
     sandbox = _FakeDesk(tmp_path / "scratch", auto_log="Local: http://localhost:5173/\n")
     backend = _backend(tmp_path, sandbox)
     result = await process_manage(
@@ -325,10 +325,11 @@ async def test_cloud_long_running_defaults_wait_for(tmp_path: Path):
     )
     assert result.success is True
     assert sandbox.execs != []
-    assert "wait_for 已命中" in result.output
-    assert "打开预览" in result.output
+    assert "wait_for 已命中" not in result.output
+    assert "请 read" not in result.output
     assert result.display.get("http_ports") == [5173]
     assert result.display.get("preview_available") is True
+    assert "打开预览" in result.output
     assert "http://" not in result.output.split("【就绪判定】")[-1]
 
 

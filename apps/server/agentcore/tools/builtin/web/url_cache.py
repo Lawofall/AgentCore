@@ -1,10 +1,10 @@
-"""Conversation-scoped read_url fetch cache (P2: 会话级抓取缓存).
+"""Conversation-scoped web_fetch fetch cache (P2: 会话级抓取缓存).
 
-``read_url`` reaches the open internet on every call. Within ONE conversation the
+``web_fetch`` reaches the open internet on every call. Within ONE conversation the
 same page is often re-read across turns (the user follows up on a source) or read
 right after ``web_search`` surfaced it — each time paying the full fetch round-trip
 and re-exposing the call to a now-flaky / rate-limited / 403 page. This module
-memoises a fetched page's extracted text per conversation, so a repeat ``read_url``
+memoises a fetched page's extracted text per conversation, so a repeat ``web_fetch``
 of the same URL returns instantly from memory (within a freshness TTL) instead of
 re-fetching.
 
@@ -206,11 +206,11 @@ class UrlCacheRegistry:
         return conversation_id in self._caches
 
 
-# Process-wide registry, shared by every read_url call so a conversation's fetch
+# Process-wide registry, shared by every web_fetch call so a conversation's fetch
 # cache survives across turns (single-worker posture; front with Redis to scale out).
 _registry: UrlCacheRegistry = UrlCacheRegistry()
 
 
 def default_url_cache_registry() -> UrlCacheRegistry:
-    """The process-wide read_url fetch-cache registry (shared by every turn)."""
+    """The process-wide web_fetch fetch-cache registry (shared by every turn)."""
     return _registry

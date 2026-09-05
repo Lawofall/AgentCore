@@ -668,14 +668,20 @@ export function composeAnswer(
     const picked = (answers[q.id] ?? []).map((s) => s.trim()).filter(Boolean);
     const qNote = (notes[q.id] ?? "").trim();
     if (picked.length) {
-      const head = `· ${q.prompt}：${picked.join("、")}`;
+      const head = `${q.prompt}：${picked.join("、")}`;
       lines.push(qNote ? `${head} · 补充：${qNote}` : head);
     } else if (qNote) {
-      lines.push(`· ${q.prompt}：${qNote}`);
+      lines.push(`${q.prompt}：${qNote}`);
     } else if (q.default) {
-      lines.push(`· ${q.prompt}：（按你的默认）`);
+      lines.push(`${q.prompt}：（按你的默认）`);
     }
   }
   if (lines.length === 0) return cardTrimmed;
-  return ["我的答复：", ...lines].join("\n");
+  return lines.join("\n");
+}
+
+/** Drop retired compose chrome (heading + line bullets) so settled UI shows the picks.
+ * New compose no longer emits them; old stored notes still might. */
+export function displayAskReply(text: string): string {
+  return text.replace(/^我的答复：\s*/, "").replace(/^· /gm, "");
 }

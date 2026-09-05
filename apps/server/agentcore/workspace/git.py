@@ -11,7 +11,7 @@ Safety:
   server can't be coerced into reading local repos or arbitrary hosts via a
   different transport.
 - The URL is run through the shared SSRF guard (``core.net.classify_url``, the same
-  policy as ``read_url`` / favicon), so a clone target that resolves to a
+  policy as ``web_fetch`` / favicon), so a clone target that resolves to a
   local/internal/reserved address (e.g. ``169.254.169.254``) is refused (SEC-006).
 - Optional account-level PAT (G3) is embedded into the clone URL in-process only;
   never logged; tools never accept password parameters.
@@ -56,7 +56,7 @@ async def _reject_ssrf(repo_url: str) -> None:
 
     ``git clone`` makes the server an HTTP client to ``repo_url``; without this it
     would be an SSRF hole (clone ``http://169.254.169.254/…`` or an intranet host)
-    that bypasses the same private-IP guard ``read_url`` / the favicon proxy already
+    that bypasses the same private-IP guard ``web_fetch`` / the favicon proxy already
     apply (SEC-006). Reuses the single shared definition (``core.net``) so there is
     one SSRF policy.
 

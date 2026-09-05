@@ -154,7 +154,7 @@ class RunTool:
                     "wait_for": {
                         "type": "string",
                         "description": (
-                            "可选。匹配此正则再返回；长驻省略则用默认就绪信号。"
+                            "可选。匹配此正则再返回；省略则起来就返回。"
                         ),
                     },
                     "wait_timeout_seconds": {

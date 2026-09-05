@@ -97,12 +97,12 @@ def looks_like_http_url(path: str) -> bool:
 
 
 def _url_not_workspace_path_error(path: str, start: float) -> ToolResult:
-    """file_read was given a public URL — reroute to read_url; do not treat as a path."""
+    """file_read was given a public URL — reroute to web_fetch; do not treat as a path."""
     clipped = path if len(path) <= 200 else path[:199] + "…"
     return _error(
         (
             f"`{clipped}` 是 http(s) 网页地址，不是工作区相对路径。"
-            "请改用 read_url(url=该地址) 深读正文；工作区文件才用 file_read。"
+            "请改用 web_fetch(url=该地址) 深读正文；工作区文件才用 file_read。"
             "不要把 URL 改写成路径再重试本工具。"
         ),
         start,
@@ -271,11 +271,11 @@ def _outside_workspace_msg(
     if location == "server":
         return (
             f"路径 '{path}' 超出了工作区范围。"
-            "若要把该本机目录进产品工作区：**推荐**引导 Composer「导入到云」；"
+            "若要把该本机目录进当前云桌：引导 Composer「导入到云」；"
             "仅当用户明确要求新建云文件夹时才用 create_folder"
-            "（禁止为过写盘闸而建；裸聊写盘缺桌由运行时自动建云桌）；"
-            "本机传统 open_local_project / register_local_project / "
-            "bind_local_folder 合法非默认（≠离线）。"
+            "（禁止为过写盘闸而建；云会话裸聊写盘缺桌由运行时自动建云桌）；"
+            "打开本机目录用 open_local_project / register_local_project / "
+            "bind_local_folder（≠离线）。"
             f"若本意是工作区内文件：{relative_fix}"
         )
     return (

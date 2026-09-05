@@ -391,30 +391,6 @@ class LoopController(
             seed.get("validation_thrash_latched", False)
         )
 
-    def post_delegate_check(self, tool_names: set[str]) -> str | None:
-        """Check if CEO is doing investigation work after delegating.
-
-        Returns a reminder message if needed, None otherwise.
-        """
-        if not self._post_delegate:
-            return None
-        investigation_used = tool_names & self._investigation_tools
-        if not investigation_used:
-            return None
-        self._post_delegate_investigation_count += 1
-        if self._post_delegate_investigation_count == 1:
-            return (
-                "[系统提示] 你已将此工作委派给团队。请直接基于团队的产出写综述，"
-                "不要重复调查。如需验证某个具体细节可读 worker 产出的文件，"
-                "但不要展开新的调研。"
-            )
-        if self._post_delegate_investigation_count == 2:
-            return (
-                "[系统提示] 你仍在做已委派给团队的调查工作。请立即停止调研，"
-                "基于团队已有产出写综述收尾。"
-            )
-        return None  # 第三次由 convergence_action 处理
-
     def _is_product_landing_success(self, attempt: ToolAttempt) -> bool:
         """Successful landing that counts as product under the files zero-write gate."""
         if not attempt.success or attempt.tool_name not in LANDING_TOOLS:

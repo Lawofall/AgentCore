@@ -1,7 +1,6 @@
-"""Soft audit-gate nudge for the CEO captain ReAct loop (协作优先返工环).
+"""Audit-gate tests: engine soft/hard wrap-up block is withdrawn.
 
-Covers trigger conditions, one-shot latch, second-delegate suppression, light-batch
-skip, worker isolation, and nudge copy keywords. Scripted fake provider — zero LLM.
+Playbook stamps remain. Scripted fake provider — zero LLM.
 """
 
 from __future__ import annotations
@@ -17,8 +16,6 @@ from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
 from agentcore.runtime.captain_profile import apply_captain_max_rounds
 from agentcore.runtime.engine import react_loop
 from agentcore.runtime.engine.governance import (
-    audit_gate_hard_prompt,
-    audit_gate_nudge_prompt,
     coordination_injection_has_all_completed,
 )
 from agentcore.runtime.events import EventSink
@@ -154,23 +151,19 @@ async def _run_captain(
 
 
 def test_nudge_copy_cites_audit_keywords():
-    text = audit_gate_nudge_prompt()
-    assert "独立审计" in text
-    assert "审计者≠作者" in text
-    assert "向用户收口" in text
-    assert "不是默认路径" in text
-    assert "≤2 轮" in text  # banned default-rework framing (negated in copy)
-    assert "禁止把「审完默认修订≤2 轮」" in text
-    assert "绝不代派" in text
-    assert "成文专线" in text or "结构长文" in text
+    """Engine audit [系统提示] copy is withdrawn; playbook still expands review nodes."""
+    from agentcore.runtime.engine import governance as gov
+
+    assert not hasattr(gov, "audit_gate_nudge_prompt")
+    assert not hasattr(gov, "audit_gate_hard_prompt")
+    assert not hasattr(gov, "should_audit_gate")
+    assert not hasattr(gov, "maybe_inject_audit_gate")
 
 
 def test_hard_prompt_cites_new_playbook_ids():
-    text = audit_gate_hard_prompt()
-    assert "playbook=cite_write_review" in text
-    assert "playbook=map_fanout" in text
-    assert "research_report" not in text
-    assert "parallel_brief" not in text
+    from agentcore.runtime.engine import governance as gov
+
+    assert not hasattr(gov, "audit_gate_hard_prompt")
 
 
 def test_coordination_injection_has_all_completed():
@@ -198,17 +191,14 @@ def test_apply_captain_max_rounds_raises_when_configured(monkeypatch):
 
 
 def test_should_audit_gate_requires_hard_flag():
-    """Soft gate aligns with hard gate: substantial alone is not enough."""
-    from agentcore.runtime.engine.governance import should_audit_gate
+    """Engine no longer gates wrap-up on audit_hard; stamps may still exist on the controller."""
+    from agentcore.runtime.engine import governance as gov
     from agentcore.runtime.loop_controller import LoopController
 
-    c = LoopController()
-    c.mark_post_delegate(node_count=5, has_deps=True)  # substantial, no audit_hard
-    assert should_audit_gate(c, role="captain") is False
-
+    assert not hasattr(gov, "should_audit_gate")
     c2 = LoopController()
     c2.mark_post_delegate(node_count=5, has_deps=True, audit_hard=True)
-    assert should_audit_gate(c2, role="captain") is True
+    assert c2.audit_hard_required is True
 
 
 class _AuditHardStubTool(_StubTool):
@@ -241,17 +231,12 @@ async def test_substantial_batch_fires_once_on_wrap_up():
         [
             [_tool_chunk("delegate", _substantial_tasks_args(), call_id="d1")],
             [_content_chunk("综述草稿")],
-            [_content_chunk("最终交付")],
         ]
     )
     content, messages = await _run_captain(provider, _registry(delegate))
 
-    assert content == "最终交付"
-    gates = _audit_gate_msgs(messages)
-    assert len(gates) == 1
-    assert "独立审计" in (gates[0].content or "")
-    assert "审计者≠作者" in (gates[0].content or "")
-    assert "向用户收口" in (gates[0].content or "")
+    assert content == "综述草稿"
+    assert _audit_gate_msgs(messages) == []
 
 
 @pytest.mark.asyncio
@@ -295,15 +280,12 @@ async def test_hard_required_without_review_blocks_then_second_delegate_delivers
     provider = _ScriptedProvider(
         [
             [_tool_chunk("delegate", _substantial_tasks_args(), call_id="d1")],
-            [_content_chunk("半残稿")],  # soft nudge
-            [_content_chunk("仍想收尾")],  # hard block discards
-            [_tool_chunk("delegate", _light_tasks_args(), call_id="d2")],
-            [_content_chunk("审后收口")],
+            [_content_chunk("半残稿")],
         ]
     )
     content, messages = await _run_captain(provider, _registry(delegate))
-    assert content == "审后收口"
-    assert any("成篇审计硬门" in (m.content or "") for m in messages if m.role == "user")
+    assert content == "半残稿"
+    assert not any("成篇审计硬门" in (m.content or "") for m in messages if m.role == "user")
 
 
 @pytest.mark.asyncio
@@ -329,13 +311,12 @@ async def test_fires_at_most_once():
         [
             [_tool_chunk("delegate", _substantial_tasks_args(), call_id="d1")],
             [_content_chunk("第一次收尾")],
-            [_content_chunk("第二次收尾")],
         ]
     )
     content, messages = await _run_captain(provider, _registry(delegate))
 
-    assert content == "第二次收尾"
-    assert len(_audit_gate_msgs(messages)) == 1
+    assert content == "第一次收尾"
+    assert _audit_gate_msgs(messages) == []
 
 
 @pytest.mark.asyncio
@@ -393,13 +374,12 @@ async def test_light_batch_with_deps_is_substantial():
         [
             [_tool_chunk("delegate", args, call_id="d1")],
             [_content_chunk("草稿")],
-            [_content_chunk("交付")],
         ]
     )
     content, messages = await _run_captain(provider, _registry(delegate))
 
-    assert content == "交付"
-    assert len(_audit_gate_msgs(messages)) == 1
+    assert content == "草稿"
+    assert _audit_gate_msgs(messages) == []
 
 
 @pytest.mark.asyncio

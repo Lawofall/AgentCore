@@ -73,8 +73,6 @@ class LoopWindDown:
         self.wind_down_effective_allowed: list[str] | None = None
         self.wind_down_whitelist: frozenset[str] | None = None
         self.wind_down_breach_count = 0
-        self.wind_down_breach_pending_nudge = False
-        self.wind_down_breach_nudge_text = ""
         # delivery_idle 工具收窄（factory 对交文件已关；显式构造仍可能走此路径）。
         # 与 token/timeout wind_down 解耦。
         self.delivery_idle_narrow_active = False
@@ -90,6 +88,7 @@ class LoopWindDown:
         from agentcore.runtime.runs.cutoff import (
             narrow_tools_for_wind_down,
             wind_down_allowed_tools,
+            wind_down_instruction_retrieval,
             wind_down_instruction_timeout,
             wind_down_instruction_token,
             worker_keeps_file_read_in_wind_down,
@@ -115,11 +114,7 @@ class LoopWindDown:
             elif reason == "worker_timeout":
                 instruction = wind_down_instruction_timeout()
             else:
-                # retrieval_budget / other: keep caller-supplied or build a short default.
-                instruction = (
-                    "[系统提示] 检索预算已用尽。本轮起进入收尾窗口：仅允许落盘"
-                    "与 handoff，请基于已有证据交卷；禁止继续 web_search / read_url。"
-                )
+                instruction = wind_down_instruction_retrieval()
         self.messages.append(LLMMessage(role="user", content=instruction))
         from agentcore.runtime.tool_failures import sync_tool_failure_constraint_in_system
 
@@ -269,10 +264,8 @@ class LoopWindDown:
         return None
 
     def apply_tool_breach(self, outcome: RoundOutcome, *, tokens: int) -> WindDownBreachResult:
-        """Wind-down breach: non-whitelist tool → nudge+handoff-only, or local synth."""
+        """Wind-down breach: non-whitelist tool → narrow surface, or local synth."""
         skip_tool_exec = False
-        self.wind_down_breach_pending_nudge = False
-        self.wind_down_breach_nudge_text = ""
         directive: LoopDirective | None = None
         if self.wind_down_active and self.role == "worker":
             from agentcore.runtime.engine.directive import Continue, Return
@@ -280,8 +273,8 @@ class LoopWindDown:
                 WIND_DOWN_ALLOWED_TOOLS,
                 narrow_tools_for_wind_down_breach,
                 should_force_local_after_wind_down_breach,
-                wind_down_breach_nudge,
                 wind_down_breach_tool_names,
+                wind_down_deny_output,
                 worker_keeps_file_read_in_wind_down,
             )
 
@@ -319,12 +312,7 @@ class LoopWindDown:
                 )
                 self.wind_down_breach_count += 1
 
-                def _journal_wind_down_deny(
-                    tc: Any,
-                    name: str,
-                    *,
-                    _keep_landing: bool = keep_landing,
-                ) -> None:
+                def _journal_wind_down_deny(tc: Any, name: str) -> None:
                     """Emit durable tool_use_start/end so wind_down 拒执行
                     is journal-queryable."""
                     import json as _json
@@ -340,15 +328,9 @@ class LoopWindDown:
                             args = {}
                     except Exception:  # noqa: BLE001
                         args = {}
-                    deny = f"工具 '{name}' 不在收尾窗口白名单，未执行。" + (
-                        "请落盘后调用 handoff 交卷。"
-                        if _keep_landing
-                        else "请立即调用 handoff 交卷。"
-                    )
+                    deny = wind_down_deny_output(name)
                     self.sink.emit(tool_use_start(tc.id, name, args, run_id=self.run_id or ""))
-                    # 收尾窗口 / 白名单 / 落盘 / handoff are all engine words
-                    # aimed at the model — ``deny`` stays on ``result`` and
-                    # the user face is curated by code only.
+                    # Deny stays on ``result``; the user face is curated by code only.
                     self.sink.emit(
                         tool_use_end(
                             tc.id,
@@ -392,7 +374,6 @@ class LoopWindDown:
                         keep_file_read=keep_file_read,
                         allowed=list(effective_whitelist),
                     )
-                    breach_nudge = wind_down_breach_nudge(keep_landing=keep_landing)
                     self.refresh_tool_defs()
                     if not kept:
                         self.messages.append(
@@ -405,11 +386,7 @@ class LoopWindDown:
                         )
                         for tc in outcome.tool_calls or []:
                             name = tc.function.name or ""
-                            deny = f"工具 '{name}' 不在收尾窗口白名单，未执行。" + (
-                                "请落盘后调用 handoff 交卷。"
-                                if keep_landing
-                                else "请立即调用 handoff 交卷。"
-                            )
+                            deny = wind_down_deny_output(name)
                             self.messages.append(
                                 LLMMessage(
                                     role="tool",
@@ -417,7 +394,6 @@ class LoopWindDown:
                                     tool_call_id=tc.id,
                                 )
                             )
-                        self.messages.append(LLMMessage(role="user", content=breach_nudge))
                         outcome = RoundOutcome(
                             content=outcome.content,
                             reasoning=outcome.reasoning,
@@ -432,30 +408,9 @@ class LoopWindDown:
                             usage=outcome.usage,
                             tool_calls=kept,
                         )
-                        # Nudge after tools if the round continues (below).
                         skip_tool_exec = False
-                        # Mark so post-tool path can inject nudge once.
-                        self.wind_down_breach_pending_nudge = True
-                        # Stash nudge text for the post-tool inject path.
-                        self.wind_down_breach_nudge_text = breach_nudge
         return WindDownBreachResult(
             skip_tool_exec=skip_tool_exec,
             outcome=outcome,
             directive=directive,
         )
-
-    def inject_pending_breach_nudge(self, directive: LoopDirective) -> None:
-        if not self.wind_down_breach_pending_nudge:
-            return
-        from agentcore.runtime.engine.directive import Continue
-        from agentcore.runtime.runs.cutoff import WIND_DOWN_BREACH_NUDGE
-
-        if isinstance(directive, Continue):
-            self.messages.append(
-                LLMMessage(
-                    role="user",
-                    content=(self.wind_down_breach_nudge_text or WIND_DOWN_BREACH_NUDGE),
-                )
-            )
-        self.wind_down_breach_pending_nudge = False
-        self.wind_down_breach_nudge_text = ""

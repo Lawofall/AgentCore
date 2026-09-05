@@ -1,11 +1,8 @@
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Literal
 
 from agentcore.runtime.runs.constants import MAX_DELEGATION_DEPTH
 from agentcore.tools.protocol import Tool
-
-DeliverableForm = Literal["prose", "files", "workspace"]
 
 
 @dataclass(frozen=True)
@@ -49,107 +46,16 @@ DelegateFactory = Callable[[str, int], LeadSubteam]
 # wave's width being parked on the user. Tunable; start conservative.
 ESCALATION_CONCURRENCY_CAP = 3
 
-# Shared one-liners for every form block (HOW encyclopedia lives in tools / consult).
-_WORKER_STRUCTURE_OWNERSHIP = (
-    "专业结构由你定：task 里的骨架 / 关注点只是起点线索，不是填字模板或答题边界。"
-)
-_WORKER_NO_PREAMBLE = "直接以产出本身开头。"
-# Landing contract. HOW for long-form / tables lives in consult; brief writing shape on handoff description.
-_WORKER_LANDING_DISCIPLINE = (
-    "写文件工具（file_write / file_append / str_replace）返回成功即已落盘（回执为 artifact manifest）。"
-)
 
-# form=workspace: in-place project edits — must land, never into AgentCore/docs.
-_WORKER_DELIVERABLE_FORM_WORKSPACE = f"""\
-你的交付形态是【改工程】（form=workspace）：就地改用户工作区里的源码 / 项目文件\
-（改存量用 str_replace），不要落进 `AgentCore/文档/`——那是 AI 的过程材料抽屉，不装业务代码。\
-你【必须】调用写文件工具把改动真正落到工作区。正文只简短交代改了哪些路径、\
-怎么运行、关键取舍。
-
-{_WORKER_LANDING_DISCIPLINE}
-
-{_WORKER_NO_PREAMBLE}
-
-{_WORKER_STRUCTURE_OWNERSHIP}"""
-
-_WORKER_DELIVERABLE_FORM_PROSE = f"""\
-你的交付形态是【纯文字】（form=prose）：把完整内容直接作为正文交付，自包含、准确、可独立阅读\
-（结论、根因、关键取舍、怎么用）。不要落盘、不要调用写文件工具；成品就是你的文字产出本身。\
-{_WORKER_NO_PREAMBLE}
-
-{_WORKER_STRUCTURE_OWNERSHIP}"""
-
-# form=files: 必须落盘。聊天大段粘贴由引擎闸拦。
-_WORKER_DELIVERABLE_FORM_FILES = f"""\
-你的交付形态是【落盘文件】（form=files）：你【必须】调用 file_write 把产物真正写进工作区。\
-落盘产物须自包含可读（结论、根因、关键取舍、怎么用）。正文只简短交代：改了哪些文件\
-（给路径）、怎么运行、关键取舍。
-
-{_WORKER_LANDING_DISCIPLINE}
-
-{_WORKER_NO_PREAMBLE}
-
-{_WORKER_STRUCTURE_OWNERSHIP}"""
-
-# 队员合同：防 CEO 综收把队员话回灌成用户症状已消。对照本节点结构真相；不加闸。
-_WORKER_DELIVERY_HONESTY = """\
-【交接勿回灌】正文与 handoff 对照本节点结构真相：可见症状下写改了什么并请对照（改文件 ≠ 症状消失）；\
-没改用户打开的文件就写界面没改；勿把说明书说成系统已就绪。"""
+def _worker_identity_core(*, captain: bool, depth: int) -> str:
+    intro = _worker_captain_intro(depth=depth) if captain else _WORKER_LEAF_INTRO
+    return f"<身份>\n{intro}\n</身份>"
 
 
-def _handoff_policy_with_dependents(form: DeliverableForm | None) -> str:
-    """Topology only. Writing shape lives on the handoff tool description."""
-    body = "有下游：完成后必须调用 handoff。"
-    if form == "prose":
-        body += "结论与根因写在正文。正文非空即可，不设字数门槛。"
-    return body
+def build_worker_identity_catalog(*, captain: bool, depth: int = 1) -> str:
+    """Toolbox template: ``<身份>`` only. Form HOW is per-turn 交付物规格."""
+    return _worker_identity_core(captain=captain, depth=depth)
 
-
-def _handoff_policy_leaf() -> str:
-    """Topology only. Writing shape lives on the handoff tool description."""
-    return (
-        "无下游：默认不调用 handoff。"
-        "仅当有正文或文件里没有的增量才补交。"
-    )
-
-
-def _form_block(form: DeliverableForm | None) -> str:
-    if form == "prose":
-        return _WORKER_DELIVERABLE_FORM_PROSE
-    if form == "workspace":
-        return _WORKER_DELIVERABLE_FORM_WORKSPACE
-    return _WORKER_DELIVERABLE_FORM_FILES
-
-
-def resolve_identity_form(
-    form: DeliverableForm | None,
-    *,
-    artifacts: Sequence[str] | None = None,
-) -> DeliverableForm:
-    """Coerce identity form: omit / invalid → files. Non-empty artifacts ⇒ files.
-
-    Explicit ``prose`` / ``workspace`` win. Omitted form is files (no two-way
-    self-judgment). Artifacts with omitted form still select the files block.
-    """
-    if form == "prose":
-        return "prose"
-    if form == "workspace":
-        return "workspace"
-    if form == "files" or bool(artifacts):
-        return "files"
-    return "files"
-
-
-def _deliverable_policy(
-    *, has_dependents: bool, form: DeliverableForm | None = None
-) -> str:
-    """Compose form policy + topology-split handoff wording."""
-    handoff = (
-        _handoff_policy_with_dependents(form)
-        if has_dependents
-        else _handoff_policy_leaf()
-    )
-    return f"{_form_block(form)}\n\n{handoff}\n\n{_WORKER_DELIVERY_HONESTY}"
 
 # 环境能力自述（能写 ≠ 能跑）: appended ONLY when the turn's worker registry carries no
 # execution class (cloud location=server without sandbox — see
@@ -162,24 +68,12 @@ _WORKER_NO_EXECUTION_POLICY = (
     "【本回合执行环境未装配】没有 run：【能】写文件，【不能】运行。注明未运行。"
 )
 
-# Shared by every delegated worker (leaf + captain): the environment-mutation caution
-# (按角色 right-size). CEO now also holds write / execute tools; its caution stays
-# in those tools' descriptions (一层一所有者), not copied into the CEO core.
-# Workers keep this block verbatim. Charting HOW is not resident; mermaid is
-# named in the shared GFM sentence only.
-_WORKER_TOOL_SAFETY_POLICY = """\
-<写工具谨慎>
-写文件、删除、移动、执行代码等会改动环境的工具，可能需要用户确认后才执行；你放手\
-调用即可，由确认机制处理同意，不必在正文里反复征求许可。对不可逆或破坏性的操作\
-（删除、整体覆盖、危险命令）要格外谨慎——尤其在本地模式下，它们作用于用户自己的机器。\
-云端无任意 HTTPS 出口时【禁止】用 run 代调外网生图 API 交差。
-</写工具谨慎>"""
-
 # Leaf-worker intro (no nested delegate). Isolated context, no follow-ups, no delegate.
-# Product membership lives here (shared base does not write 一员 / <身份>).
+# Product membership lives here (shared base does not write 队员 / <身份>).
+# 品类介绍 / 标假设 → escalate description；不进身份。
 _WORKER_LEAF_INTRO = """\
-你是 AgentCore（一个多 Agent AI 工作台）的一员，团队中的一名专家 worker。你只负责一个划定好的任务，外加完成它所需的上下文；\
-你不能再向下委派。够不到用户；信息不足就标假设继续。"""
+你是 AgentCore 的队员，只负责划定好的这一件任务（所需上下文已给你）。\
+不能再向下委派。够不到用户。"""
 
 # Captain intro: identity + nest honesty. Depth honesty branches on MAX_DELEGATION_DEPTH.
 # Staffing HOW → consult(lead_subteam) (requires_tools=delegate, worker-only).
@@ -190,19 +84,17 @@ def _worker_captain_intro(*, depth: int) -> str:
     # Children land at depth+1; they may nest iff depth+1 < MAX (i.e. depth < MAX-1).
     if depth < MAX_DELEGATION_DEPTH - 1:
         nest_honesty = (
-            "你可以把它拆给一支由你指挥的子团队（你的子成员仍可再向下委派一层），看到他们的"
-            "产出后由你整合。"
+            "你可以再向下委派一层子团队（你的子成员仍可再向下委派一层），看到产出后由你整合。"
         )
     else:
         nest_honesty = (
-            "你可以把它拆给一支由你指挥的子团队（只能再嵌套这一层，你的子成员不能再向下委派），"
-            "看到他们的产出后由你整合。"
+            "你可以再向下委派一层子团队（只能再嵌套这一层，你的子成员不能再向下委派），"
+            "看到产出后由你整合。"
         )
-    return f"""\
-你是 AgentCore（一个多 Agent AI 工作台）的一员，团队中的一名专家 worker，除了自己干活，\
-你还可以再向下委派一层子团队来分担。你负责一个划定\
-好的任务，外加完成它所需的上下文；你够不到用户、不会有人实时答疑。
-{nest_honesty}"""
+    return (
+        "你是 AgentCore 的队员，只负责划定好的这一件任务（所需上下文已给你）。够不到用户。"
+        f"{nest_honesty}"
+    )
 
 
 def build_worker_identity(
@@ -210,37 +102,27 @@ def build_worker_identity(
     has_dependents: bool,
     captain: bool = False,
     depth: int = 1,
-    form: DeliverableForm | None = None,
-    artifacts: Sequence[str] | None = None,
     can_execute: bool = True,
 ) -> str:
-    """Assemble a worker's identity preamble (topology-split handoff + leaf/captain).
+    """Assemble a worker's ``<身份>`` preamble (leaf / captain).
 
-    ``has_dependents`` comes from the DAG at identity-build time (``node_has_dependents``):
-    upstream nodes must call handoff; writing shape lives on the tool description.
-    Leaves skip unless they have incremental briefing beyond the body or files.
+    ``has_dependents`` is accepted for call-site stability; handoff must-vs-may
+    lives on the handoff tool description, not this identity.
+    Form HOW lives on the per-turn 交付物规格 channel, not here.
     ``captain`` selects the nested-delegation intro;
     ``depth`` (when captain) picks honest child-nesting copy vs ``MAX_DELEGATION_DEPTH``.
-    ``form`` selects the deliverable-form block (omit = files).
-    Non-empty ``artifacts`` still select the files-form prompt.
     ``can_execute`` is computed after exec-env sticky retire (and after the
     execution class is absent from the registry, e.g. cloud without sandbox):
     False layers the 能写≠能跑 self-description so the prompt never over-claims
     a callable ``code_execute`` the turn withheld (能力闸门与交付诚实性).
     """
-    effective_form = resolve_identity_form(form, artifacts=artifacts)
-    intro = _worker_captain_intro(depth=depth) if captain else _WORKER_LEAF_INTRO
+    _ = has_dependents
     no_exec = "" if can_execute else f"\n\n{_WORKER_NO_EXECUTION_POLICY}"
-    core = f"<身份>\n{intro}\n</身份>"
-    contract = (
-        f"{_deliverable_policy(has_dependents=has_dependents, form=effective_form)}"
-        f"{no_exec}\n\n"
-        f"{_WORKER_TOOL_SAFETY_POLICY}"
-    )
-    return f"{core}\n\n{contract}"
+    core = _worker_identity_core(captain=captain, depth=depth)
+    return f"{core}{no_exec}"
 
 
 # Defaults for callers that don't yet know topology (solo / leaf assumption).
-# Prefer :func:`build_worker_identity` at the executor so handoff wording matches the DAG.
+# Prefer :func:`build_worker_identity` at the executor so captain/leaf matches.
 _WORKER_IDENTITY = build_worker_identity(has_dependents=False, captain=False)
 _WORKER_CAPTAIN_IDENTITY = build_worker_identity(has_dependents=False, captain=True)

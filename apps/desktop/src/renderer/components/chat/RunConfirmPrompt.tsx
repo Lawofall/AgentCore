@@ -2,7 +2,7 @@ import { Button, DecisionCard, DecisionCardIcon } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { notifyError } from "@/lib/toast";
 import { useRunConfirmStore } from "@/stores/runConfirm";
-import { Check, CheckCheck, Terminal, X } from "lucide-react";
+import { CheckCheck, Terminal } from "lucide-react";
 import { useState } from "react";
 
 const PREVIEW_CAP = 2000;
@@ -74,20 +74,10 @@ export function RunConfirmPrompt() {
         </div>
 
         <div className="mt-2.5 flex flex-wrap items-center justify-end gap-1.5 pl-6">
-          <Button
-            variant="danger"
-            icon={<X size={13} />}
-            disabled={busy}
-            onClick={onCancel}
-          >
+          <Button variant="outline" disabled={busy} onClick={onCancel}>
             取消
           </Button>
-          <Button
-            variant="primary"
-            icon={<Check size={13} />}
-            disabled={busy}
-            onClick={onRun}
-          >
+          <Button variant="primary" disabled={busy} onClick={onRun}>
             运行
           </Button>
           <Button

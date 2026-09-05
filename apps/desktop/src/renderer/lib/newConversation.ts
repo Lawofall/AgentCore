@@ -14,8 +14,7 @@ function prepareNewConversationDraft(
 ): void {
   const foldersStore = useFoldersStore.getState();
   if (opts?.local) {
-    // §7.2：禁新建本机草稿；改导云路径（存量会话续跑不经本入口）。
-    foldersStore.setDraftWorkspaceIntent({ kind: "quick_cloud" });
+    foldersStore.setDraftWorkspaceIntent({ kind: "quick_local" });
   } else if (opts?.cloud) {
     foldersStore.setDraftWorkspaceIntent({ kind: "quick_cloud" });
   } else if (folderId) {
@@ -34,10 +33,10 @@ function prepareNewConversationDraft(
  * 开启一个全新的草稿对话并跳到 `/`。草稿只活在 store 里（不落库），首条消息发送时
  * 才由 MessageInput 真正在后端 create会话。
  *
- * - 不传 folderId：默认云端裸聊草稿（桌面裸聊默认切云 §八.7）
+ * - 不传 folderId：桌面本地对话草稿；网页/手机云端对话
  * - 传 folderId：项目草稿（出生定终身继承项目工作区；含侧栏点已有未迁 local）
- * - `opts.cloud`：显式云端草稿（与默认同）
- * - `opts.local`：§7.2 已废——改导云草稿，不再造 `quick_local`
+ * - `opts.cloud`：显式云端对话草稿
+ * - `opts.local`：显式本地对话草稿
  *
  * N4-A：离线仍可进入空白草稿页（导航与创建解耦）；发送由 composer 硬禁
  * （`ComposerConnectionNotice` + `useComposerSend`）。

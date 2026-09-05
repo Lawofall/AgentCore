@@ -554,6 +554,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='consult.name_shadowed'),
     EventSpec(name='consult.reuse'),
     EventSpec(name='consult.rule_fetch_failed'),
+    EventSpec(name='consult.skill_replacements_load_failed'),
+    EventSpec(name='consult.skill_replacements_snapshot_failed'),
     EventSpec(name='contract.cite_phase_a_terminal_reject'),
     EventSpec(name='contract.cite_upgrade'),
     EventSpec(name='contract.cite_upgrade_exhausted'),
@@ -1206,9 +1208,18 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='email.sent'),
     EventSpec(name='email.smtp_unconfigured_registration'),
     EventSpec(name='email.unconfigured'),
-    EventSpec(name='engine.audit_gate_hard_block'),
-    EventSpec(name='engine.audit_gate_nudge'),
-    EventSpec(name='engine.availability_status_nudge'),
+    EventSpec(
+        name='engine.audit_gate_hard_block',
+        description='历史兼容：曾因审计启发式硬拦收口；拦截已撤，不再发此事件',
+    ),
+    EventSpec(
+        name='engine.audit_gate_nudge',
+        description='历史兼容：曾因审计启发式软提醒；拦截已撤，不再发此事件',
+    ),
+    EventSpec(
+        name='engine.availability_status_nudge',
+        description='历史兼容：曾因可用性状态软提醒；拦截已撤，不再发此事件',
+    ),
     EventSpec(name='engine.browser_snapshot_clear'),
     EventSpec(
         name='engine.ceiling_finalize',
@@ -1224,7 +1235,10 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='engine.convergence_finalize'),
     EventSpec(name='engine.coord_inject'),
     EventSpec(name='engine.coordination_listen'),
-    EventSpec(name='engine.debate_gate_nudge'),
+    EventSpec(
+        name='engine.debate_gate_nudge',
+        description='历史兼容：曾因辩论收口软提醒；拦截已撤，不再发此事件',
+    ),
     EventSpec(name='engine.degraded'),
     EventSpec(name='engine.delivery_idle_narrow'),
     EventSpec(name='engine.delivery_idle_narrow_apply'),
@@ -1302,7 +1316,10 @@ EVENTS: list[EventSpec] = [
             'used': FieldType('int'),
         },
     ),
-    EventSpec(name='engine.retrieval_budget_critical'),
+    EventSpec(
+        name='engine.retrieval_budget_critical',
+        description='历史兼容：曾在检索预算临界注入提示；提示已撤，不再发此事件',
+    ),
     EventSpec(name='engine.retrieval_budget_wind_down'),
     EventSpec(name='engine.steer_hold_return'),
     EventSpec(name='engine.structured_reply_salvaged'),
@@ -2007,8 +2024,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='platform_pool.blocked',
         description=(
-            '平台池成员 401（封号或坏 key）或 403 RegionError 已摘除，需人工重新启用。401 不换号重'
-            '试；403 允许 commit 前换号'
+            '平台池成员 401 AuthError（封号或坏 key）或 403 RegionError 已摘除，需人工重新启用。Aut'
+            'hError 不换号重试；403 允许 commit 前换号。CreditsError 走 cooling/exhausted'
         ),
         fields={
             'credential_id': FieldType('str'),
@@ -2018,8 +2035,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='platform_pool.cooling',
         description=(
-            '平台池成员因上游 429 进入 cooling/exhausted；recovery_at 为 unix 秒（上游 Retry-After'
-            '）'
+            '平台池成员因上游 429 或 CreditsError / 工作区月限进入 cooling/exhausted；recovery_at '
+            '为 unix 秒（Retry-After，缺头则窗口 5h / 月耗尽用订阅月末）'
         ),
         fields={
             'credential_id': FieldType('str'),
@@ -2051,7 +2068,16 @@ EVENTS: list[EventSpec] = [
         },
     ),
     EventSpec(name='platform_pool.reload_failed'),
-    EventSpec(name='platform_pool.reloaded'),
+    EventSpec(
+        name='platform_pool.reloaded',
+        description=(
+            '平台池快照热更完成；成员签名（id/enabled/url/day/key hash）未变打 debug，变化才 info'
+        ),
+        fields={
+            'members': FieldType('int'),
+            'rows': FieldType('int'),
+        },
+    ),
     EventSpec(name='platform_pool.tool_surface_limits_invalid'),
     EventSpec(name='presence.audience_failed'),
     EventSpec(name='presence.broadcast'),
@@ -2696,7 +2722,7 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(
         name='tool.execute_start',
-        description='工具开始执行（read_url/download_url 带 url/host）',
+        description='工具开始执行（web_fetch/download_url 带 url/host）',
         fields={
             'host': FieldType('str'),
             'tool': FieldType('str'),
@@ -2705,18 +2731,18 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(name='tool.multi_terminal'),
     EventSpec(name='tool.name_protocol_sanitized'),
-    EventSpec(name='tool.read_url_cache_hit'),
+    EventSpec(name='tool.web_fetch_cache_hit'),
     EventSpec(
-        name='tool.read_url_error',
-        description='read_url 抓取失败（url/host/error）',
+        name='tool.web_fetch_error',
+        description='web_fetch 抓取失败（url/host/error）',
         fields={
             'error': FieldType('str'),
             'host': FieldType('str'),
             'url': FieldType('str'),
         },
     ),
-    EventSpec(name='tool.read_url_github_api_fallback'),
-    EventSpec(name='tool.read_url_novel_domain'),
+    EventSpec(name='tool.web_fetch_github_api_fallback'),
+    EventSpec(name='tool.web_fetch_novel_domain'),
     EventSpec(
         name='tool.web_search',
         fields={

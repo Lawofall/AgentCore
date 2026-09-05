@@ -131,7 +131,7 @@ describe("browser 聚合判定", () => {
     expect(isBrowserTool("browser_navigate")).toBe(true);
     expect(isBrowserTool("browser_screenshot")).toBe(true);
     expect(isBrowserTool("file_write")).toBe(false);
-    expect(isBrowserTool("read_url")).toBe(false);
+    expect(isBrowserTool("web_fetch")).toBe(false);
   });
 
   it("groups ≥2 consecutive all-browser steps, not mixed or single", () => {
@@ -165,7 +165,7 @@ describe("browser 聚合判定", () => {
     expect(
       isBrowserDisplay({ kind: "browser", action: "click", url: "https://x" }),
     ).toBe(true);
-    // read_url 形状（无 kind:"browser"）不误判。
+    // web_fetch 形状（无 kind:"browser"）不误判。
     expect(isBrowserDisplay({ url: "https://x", content: "body" })).toBe(false);
     expect(isBrowserDisplay(null)).toBe(false);
     expect(isBrowserDisplay({ kind: "browser", action: "click" })).toBe(false);

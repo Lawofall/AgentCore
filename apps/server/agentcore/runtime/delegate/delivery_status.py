@@ -1232,7 +1232,7 @@ builder does not I/O. ``delivered_files`` = accepted only;
     warnings = [g for g in gaps if not _is_blocking(g)]
 
     # 待用户操作：① 无执行环境 → 按会话 location 诚实分流（已在云≠再导入到云；
-    #    wire kind 仍可 bind_local_folder；本机传统合法非默认）；
+    #    wire kind 仍可 bind_local_folder；桌面默认同通道，云是选项）；
     # ② 额度 SKIPPED 未跑节点 → 续跑入口。
     # 整页 QA 预算 defer 不再挂一键续派（旧磁带 kind=website_verify 仅兼容）。
     # 成篇未写完不再挂 continue_writing——改由对话框接着说。
@@ -1462,16 +1462,6 @@ def is_availability_status_question(text: str) -> bool:
     if not compact or len(compact) > 20:
         return False
     return _AVAILABILITY_STATUS_RE.match(compact) is not None
-
-
-def availability_status_nudge_prompt() -> str:
-    """CEO one-shot: short availability ask → card is the main answer."""
-    return (
-        "[系统提示] 可用性短问：用户在问能不能用 / 好了吗 / 完成了吗。"
-        "本回合若已发出（或复用）交付状态卡，以该卡为主答——"
-        "散文只写一句注释指路看卡，禁止另编口头可用性结论，"
-        "禁止用「已完整可用」盖过 partial/blocked 卡。"
-    )
 
 
 def _payload_to_verdict(payload: dict[str, Any]) -> DeliveryVerdict | None:

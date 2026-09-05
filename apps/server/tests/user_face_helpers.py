@@ -32,7 +32,7 @@ INTERNAL_VOCABULARY: tuple[str, ...] = (
     "CEO",
     # Tool identifiers.
     "web_search",
-    "read_url",
+    "web_fetch",
     "file_read",
     "file_write",
     "str_replace",

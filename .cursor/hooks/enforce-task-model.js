@@ -1,5 +1,5 @@
 /**
- * preToolUse hook: force Task tool `model` to cursor-grok-4.6-xhigh.
+ * preToolUse hook: force Task tool `model` to cursor-grok-4.6-high.
  * Fail-open: any parse/runtime error exits 0 with empty allow (no rewrite).
  *
  * Schema: https://cursor.com/docs/hooks (preToolUse)
@@ -9,7 +9,7 @@
 
 "use strict";
 
-const REQUIRED_MODEL = "cursor-grok-4.6-xhigh";
+const REQUIRED_MODEL = "cursor-grok-4.6-high";
 
 function readStdin() {
   return new Promise((resolve, reject) => {

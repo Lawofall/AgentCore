@@ -169,24 +169,23 @@ async def test_download_url_labels_installer_ext(tmp_path: Path, monkeypatch: py
 async def test_download_url_schema_points_off_shell_wget():
     schema = DownloadUrlTool().schema
     assert schema.name == "download_url"
-    assert "read_url" in schema.description
+    assert "web_fetch" in schema.description
     assert "code_execute" not in schema.description
     assert "terminal" not in schema.description
     assert "host(action=shell)" not in schema.description
     assert schema.approval.value == "grantable"
 
 
-def test_fetch_aliases_point_to_download_url_not_read_url():
+def test_fetch_aliases_point_to_download_url_not_web_fetch():
     reg = ToolRegistry()
-    reg.register(_StubTool("read_url"))
+    reg.register(_StubTool("web_fetch"))
     reg.register(_StubTool("download_url"))
     reg.register(_StubTool("web_search"))
 
-    for alias in ("fetch", "fetch_url", "web_fetch", "wget", "curl"):
+    for alias in ("fetch", "wget", "curl"):
         assert reg.suggest_names(alias) == ["download_url"], alias
-    # Deep-read aliases stay on read_url.
-    assert reg.suggest_names("web_read") == ["read_url"]
-    assert reg.suggest_names("browse") == ["read_url"]
+    # web_fetch is the deep-read canonical name, not an alias of download_url.
+    assert "download_url" not in reg.suggest_names("web_fetch")
 
 
 async def test_download_url_size_gate_via_content_length(

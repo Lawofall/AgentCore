@@ -296,7 +296,7 @@ def _as_browser_launch_error(exc: BaseException) -> BrowserSessionError:
     if code == EGRESS_UNAVAILABLE_CODE or is_netns_capability_error(exc):
         return BrowserSessionError(
             "云端浏览器沙箱网络隔离不可用（netns 创建失败），"
-            "browser_* 本回合不可用；请改用 web_search / read_url 等非浏览器路径。",
+            "browser_* 本回合不可用；请改用 web_search / web_fetch 等非浏览器路径。",
             code=EGRESS_UNAVAILABLE_CODE,
         )
     text = str(exc)
@@ -304,7 +304,7 @@ def _as_browser_launch_error(exc: BaseException) -> BrowserSessionError:
     if "netns" in lowered or "egress" in lowered or "出网" in text:
         return BrowserSessionError(
             "云端浏览器沙箱网络隔离不可用（netns 创建失败），"
-            "browser_* 本回合不可用；请改用 web_search / read_url 等非浏览器路径。",
+            "browser_* 本回合不可用；请改用 web_search / web_fetch 等非浏览器路径。",
             code=EGRESS_UNAVAILABLE_CODE,
         )
     return BrowserSessionError(f"浏览器会话启动失败：{type(exc).__name__}: {exc}")

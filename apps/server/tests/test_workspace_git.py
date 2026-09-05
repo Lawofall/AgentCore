@@ -81,7 +81,7 @@ async def test_clone_repo_rejects_non_http_urls(url: str, tmp_path: Path, monkey
 )
 async def test_clone_repo_blocks_ssrf_private_targets(url: str, tmp_path: Path, monkeypatch):
     """SEC-006: an http(s) URL resolving to a local/internal/reserved address is
-    refused by the shared SSRF guard (read_url / favicon parity), even though it
+    refused by the shared SSRF guard (web_fetch / favicon parity), even though it
     passes the http(s) scheme check — so git clone can't reach internal services."""
     monkeypatch.setattr(settings, "data_dir", str(tmp_path))
     with pytest.raises(ValueError):

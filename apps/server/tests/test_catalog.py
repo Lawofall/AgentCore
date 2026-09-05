@@ -95,7 +95,7 @@ def test_read_only_builtins_are_shared_with_ceo():
     # Read/retrieval built-ins the coordinator looks with.
     for name in (
         "web_search",
-        "read_url",
+        "web_fetch",
         "file_read",
         "file_list",
         "glob",

@@ -4,7 +4,13 @@ import {
   SettingsFormMessage,
   SettingsStack,
 } from "@/components/settings";
-import { Button, Card, ConfirmDialog, Input } from "@/components/ui";
+import {
+  Button,
+  Card,
+  ConfirmDialog,
+  Input,
+  PageHeader,
+} from "@/components/ui";
 import { errMsg } from "@/lib/errMsg";
 import { gitCredentialKeys } from "@/lib/queryKeys";
 import {
@@ -15,7 +21,6 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
-import { SettingsHeader } from "./SettingsHeader";
 
 /**
  * Git 凭据 (/more/git) — 本页只存账户 Token（云私仓）。
@@ -63,10 +68,7 @@ export function GitCredentialSettings() {
 
   return (
     <div>
-      <SettingsHeader
-        title="Git 凭据"
-        description="云端私有仓库用账户 Token。公网仓不用配。"
-      />
+      <PageHeader title="Git 凭据" />
       <SettingsStack>
         <Card className="space-y-4 p-4">
           <SettingsAsync
@@ -83,7 +85,7 @@ export function GitCredentialSettings() {
           <SettingField
             label="Token"
             htmlFor="git-pat"
-            hint="GitHub 勾选 repo 权限即可"
+            hint="云端私有仓库用账户 Token。公网仓不用配。GitHub 勾选 repo 权限即可。"
           >
             <Input
               id="git-pat"

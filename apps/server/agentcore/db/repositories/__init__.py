@@ -61,6 +61,8 @@ from .runs import (
     TurnJournalRepository,
     TurnMetricsRepository,
 )
+from .skill_slots import SkillMuteRepository, SkillSlotRepository
+from .skill_store import SkillStoreRepository
 from .standing_tasks import StandingTaskRepository, StandingTaskRunRepository
 from .stream_state import TurnStreamStateRepository
 from .user_workflows import UserWorkflowRepository
@@ -102,6 +104,9 @@ __all__ = [
     "PushDeviceRepository",
     "RefreshTokenRepository",
     "RunSessionRepository",
+    "SkillMuteRepository",
+    "SkillSlotRepository",
+    "SkillStoreRepository",
     "StandingTaskRepository",
     "StandingTaskRunRepository",
     "TurnJournalRepository",

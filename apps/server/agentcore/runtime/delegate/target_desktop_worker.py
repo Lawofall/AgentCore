@@ -26,7 +26,9 @@ async def registry_rewire_consult_tools(
     user_id: str,
 ) -> ToolRegistry:
     """Fresh registry: drop birth-desk consult, wire target-scoped unified consult."""
-    from agentcore.runtime.context.consult_sources import build_merged_consult_source
+    from agentcore.runtime.context.consult_sources import (
+        build_merged_consult_source_for_user,
+    )
     from agentcore.runtime.runs.executor.shared import _registry_without
     from agentcore.runtime.skills import build_system_skill_registry
     from agentcore.tools.builtin.consult import ConsultTool
@@ -36,7 +38,8 @@ async def registry_rewire_consult_tools(
     registry = _registry_without(registry, "consult_rule")
     registry = _registry_without(registry, "consult_skill")
     tool_names = {schema.name for schema in registry.list_all()}
-    source = build_merged_consult_source(
+    source = await build_merged_consult_source_for_user(
+        user_id=user_id,
         skill_registry=build_system_skill_registry(),
         tool_names=tool_names,
         memory_store=default_memory_store(),
@@ -59,7 +62,9 @@ async def rebuild_worker_prompt_for_target(
     permission_axes: Any = None,
 ) -> str:
     """Reassemble worker system prompt with target-folder rules + workspace facts."""
-    from agentcore.runtime.context.consult_sources import build_merged_consult_source
+    from agentcore.runtime.context.consult_sources import (
+        build_merged_consult_source_for_user,
+    )
     from agentcore.runtime.skills import build_system_skill_registry
     from agentcore.tools.builtin import build_worker_registry
 
@@ -97,7 +102,8 @@ async def rebuild_worker_prompt_for_target(
         desktop_online=desktop_online,
         languages=exec_languages if backend.location == "local" else None,
     )
-    source = build_merged_consult_source(
+    source = await build_merged_consult_source_for_user(
+        user_id=user_id,
         skill_registry=build_system_skill_registry(),
         tool_names={s.name for s in provisional.list_all()},
         memory_store=memory_store,

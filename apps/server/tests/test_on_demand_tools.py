@@ -322,6 +322,7 @@ def test_preamble_and_core_make_consult_discoverable():
     desc = ConsultTool(source=None).schema.description  # type: ignore[arg-type]
     assert "按需目录" in preamble
     assert "consult(name)" in preamble
+    assert "全文未常驻" not in preamble
     assert "低频工具" not in preamble
     assert "无需查阅" not in preamble
     assert "下一模型轮" not in preamble
@@ -392,7 +393,7 @@ async def test_browser_and_grant_consult_how_without_schema_reprint():
 _STUFFED_WORKER_RESIDENT = frozenset(
     {
         "web_search",
-        "read_url",
+        "web_fetch",
         "file_read",
         "file_write",
         "file_append",

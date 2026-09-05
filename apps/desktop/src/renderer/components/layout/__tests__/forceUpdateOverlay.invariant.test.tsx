@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/capabilities", () => ({
   hasAutoUpdater: vi.fn(() => true),
+  hasLocalFiles: () => true,
 }));
 vi.mock("@/lib/clientBuildInfo", () => ({
   clientVersion: vi.fn(() => "0.6.1"),

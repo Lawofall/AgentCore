@@ -186,6 +186,20 @@ async def test_rewrite_function_register_false_does_not_stamp(tmp_path: Path):
     assert ctx.project_shell.stripped_slug is None
 
 
+async def test_rewrite_strip_emits_no_note(tmp_path: Path):
+    ctx = _empty_ctx(tmp_path)
+    actual, note = await rewrite_project_shell_relpath(
+        "court-game/x", ctx, register=True
+    )
+    assert actual == "x"
+    assert note == ""
+    again, again_note = await rewrite_project_shell_relpath(
+        "court-game/y", ctx, register=True
+    )
+    assert again == "y"
+    assert again_note == ""
+
+
 async def test_child_folder_name_is_not_stripped(tmp_path: Path):
     ctx = _empty_ctx(tmp_path)
     ctx._workspace.child_folder_names = frozenset({"课题A"})
@@ -228,10 +242,12 @@ async def test_mkdir_bare_slug_then_write_strips(tmp_path: Path):
     assert made.success is True
     assert not (tmp_path / "court-game").exists()
     assert ctx.project_shell.stripped_slug == "court-game"
+    assert made.output.startswith("已创建目录 .")
     assert "空桌" not in made.output
     assert "工程壳" not in made.output
     assert "无需创建" not in made.output
-    assert "`court-game/` 即工作区根" in made.output
+    assert "即工作区根" not in made.output
+    assert "已对齐" not in made.output
 
     write = await FileWriteTool().execute(
         {"path": "court-game/x", "content": "hello"}, ctx
@@ -241,6 +257,8 @@ async def test_mkdir_bare_slug_then_write_strips(tmp_path: Path):
     assert not (tmp_path / "court-game").exists()
     assert "空桌" not in write.output
     assert "工程壳" not in write.output
+    assert "即工作区根" not in write.output
+    assert "已对齐" not in write.output
 
 
 async def test_bare_file_write_does_not_register_filename_as_slug(tmp_path: Path):

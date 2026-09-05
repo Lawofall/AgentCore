@@ -296,7 +296,7 @@ class ExternalEvidencePlan:
     mode: ExternalEvidenceMode
     retrieval_budget: int
     sides: tuple[str, ...]
-    allow_read_url: bool
+    allow_web_fetch: bool
     max_tasks_per_side: int
     reason: str
 
@@ -309,7 +309,7 @@ class ExternalEvidencePlan:
             "mode": self.mode,
             "retrieval_budget": self.retrieval_budget,
             "sides": list(self.sides),
-            "allow_read_url": self.allow_read_url,
+            "allow_web_fetch": self.allow_web_fetch,
             "max_tasks_per_side": self.max_tasks_per_side,
             "reason": self.reason,
             "allow_external": self.allow_external,
@@ -321,7 +321,7 @@ def _skip_plan(*, reason: str) -> ExternalEvidencePlan:
         mode="skip",
         retrieval_budget=0,
         sides=(),
-        allow_read_url=False,
+        allow_web_fetch=False,
         max_tasks_per_side=0,
         reason=reason,
     )

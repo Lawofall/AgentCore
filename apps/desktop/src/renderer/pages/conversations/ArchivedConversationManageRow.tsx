@@ -10,6 +10,7 @@ import {
   DELETE_CONVERSATION_LABEL,
   notifyConversationDeleted,
 } from "@/lib/conversationDeleteCopy";
+import { useConversationLocationId } from "@/lib/conversationLocation";
 import { timeAgo } from "@/lib/format";
 import { notifyError } from "@/lib/toast";
 import type { Conversation } from "@/stores/conversation";
@@ -37,7 +38,7 @@ export function ArchivedConversationManageRow({
   const dropConversationRuntime = useConversationStore(
     (s) => s.dropConversationRuntime,
   );
-  const currentId = useConversationStore((s) => s.currentConversationId);
+  const locationId = useConversationLocationId();
   const folders = useFolders();
   const [hovered, setHovered] = useState(false);
 
@@ -61,7 +62,7 @@ export function ArchivedConversationManageRow({
   };
 
   const handleDelete = async () => {
-    const wasActive = conversation.id === currentId;
+    const wasOnCanvas = conversation.id === locationId;
     const title = conversation.title;
     try {
       await deleteMutation.mutateAsync(conversation.id);
@@ -70,7 +71,7 @@ export function ArchivedConversationManageRow({
       return;
     }
     dropConversationRuntime(conversation.id);
-    if (wasActive) navigate("/");
+    if (wasOnCanvas) navigate("/");
     // An archived chat restores straight back into 已归档 — the delete took it from
     // there, so the undo must not quietly promote it to the live list.
     notifyConversationDeleted(title, () =>

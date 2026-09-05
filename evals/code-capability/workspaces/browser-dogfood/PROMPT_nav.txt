@@ -1,1 +1,1 @@
-﻿请用浏览器工具打开 https://example.com ，读取页面标题并告诉我。必须真正调用 browser_*（不要只用 read_url）。
+请用浏览器工具打开 https://example.com ，读取页面标题并告诉我。必须真正调用 browser_*（不要只用 web_fetch）。

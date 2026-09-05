@@ -124,6 +124,10 @@ describe("AssistantMessage footer gate", () => {
     genMock.value = false;
     renderBubble(settledMessage({ isStreaming: true, content: "流式中…" }));
     expect(screen.queryByTestId("assistant-footer")).toBeNull();
+    expect(screen.queryByRole("button", { name: "复制" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "有帮助" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "重新生成" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "更多" })).toBeNull();
   });
 
   it("空正文且非失败时不显示 footer", () => {

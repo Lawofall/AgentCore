@@ -13,7 +13,7 @@ import {
  *
  * 文案面向普通用户：入口名与「在哪工作」菜单逐字一致，内部实现词与设计文档术语一律不出现
  * （同名测试守着，防抄设计文档回潮）。
- * 云是推荐默认，本机只作并列说明、不给推荐标。
+ * 桌面第一屏并列「本地对话 / 云端对话」（默认本地）；网页/手机只有云端对话。
  */
 export function WorkspaceChannelGuideDialog({
   open,
@@ -39,19 +39,40 @@ export function WorkspaceChannelGuideDialog({
           <section className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
             <div className="flex items-center gap-1.5">
               <h3 className="text-sm font-medium text-foreground">这次聊哪</h3>
-              <Badge tone="primary">推荐</Badge>
+              {showLocalTraditional ? null : <Badge tone="primary">推荐</Badge>}
             </div>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              你在电脑、手机、网页看到的是同一份。它不会自动同步到你电脑：想在自己电脑上拿到，手动导出到某个文件夹，或者导出
-              ZIP。
-            </p>
+            {showLocalTraditional ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                两个都能直接聊，不用先选文件夹。默认在这台电脑上写文件、跑代码。对话记录仍在云上，不是离线。想换手机或网页接着改同一份文件，选云端对话。
+              </p>
+            ) : (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                你在电脑、手机、网页看到的是同一份。它不会自动同步到你电脑：想在自己电脑上拿到，手动导出到某个文件夹，或者导出
+                ZIP。
+              </p>
+            )}
             <dl className="space-y-2">
+              {showLocalTraditional ? (
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <dt className="text-xs font-medium text-foreground">
+                      本地对话
+                    </dt>
+                    <Badge tone="primary">推荐</Badge>
+                  </div>
+                  <dd className="text-xs leading-relaxed text-muted-foreground">
+                    不用先选地方，想到什么直接聊；文件和运行都在这台电脑
+                  </dd>
+                </div>
+              ) : null}
               <div className="space-y-0.5">
                 <dt className="text-xs font-medium text-foreground">
-                  快速对话
+                  云端对话
                 </dt>
                 <dd className="text-xs leading-relaxed text-muted-foreground">
-                  不用先选地方，想到什么直接聊；真要存文件时会自动建一个文件夹
+                  {showLocalTraditional
+                    ? "不用先选地方，想到什么直接聊；文件和运行在云上，手机和网页也能接着改"
+                    : "不用先选地方，想到什么直接聊；真要存文件时会自动建一个文件夹"}
                 </dd>
               </div>
               <div className="space-y-0.5">
@@ -119,9 +140,15 @@ export function WorkspaceChannelGuideDialog({
             <ul className="space-y-1 text-xs leading-relaxed text-muted-foreground">
               <li>
                 {showLocalTraditional
-                  ? "日常用、想在手机和网页接着看 → 快速对话、已有云文件夹，或新建或加入"
-                  : "日常用、想在手机和网页接着看 → 快速对话、已有云文件夹或新建文件夹"}
+                  ? "日常在这台电脑写、跑 → 本地对话"
+                  : "日常用、想在手机和网页接着看 → 云端对话、已有云文件夹或新建文件夹"}
               </li>
+              {showLocalTraditional ? (
+                <li>
+                  要手机和网页接着改同一份 →
+                  云端对话、已有云文件夹，或新建或加入
+                </li>
+              ) : null}
               {showLocalTraditional ? (
                 <li>
                   东西已经在你电脑上、又要用你电脑上的环境 → 直接改这个文件夹

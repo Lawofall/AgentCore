@@ -50,9 +50,9 @@ import {
   isBrowserDisplay,
 } from "./BrowserActivityCard";
 import {
-  ReadUrlSourceCollection,
-  isReadUrlSourceGroup,
-} from "./ReadUrlSourceCollection";
+  WebFetchSourceCollection,
+  isWebFetchSourceGroup,
+} from "./WebFetchSourceCollection";
 import { ThinkingDots } from "./message-bubble/Thinking";
 import {
   RUN_TARGET_ARG_TOOLS,
@@ -82,8 +82,8 @@ const PEEK_SUPPRESSED = new Set([
   "consult",
   // 跨会话对话日志：标题已自解释；search 场数 / read 对话标题走 inlineMeta。
   "search_conversations",
-  // read_url / read_conversation：peek 并进标题 inlineMeta，折叠无第二行。
-  "read_url",
+  // web_fetch / read_conversation：peek 并进标题 inlineMeta，折叠无第二行。
+  "web_fetch",
   "read_conversation",
   // 执行类：成功 stdout 不进折叠行；失败/未完成 inlineMeta 并进标题。
   "run",
@@ -514,7 +514,7 @@ export function ToolLine({
         return writeDiagPeek;
       }
       if (
-        step.tool_name === "read_url" ||
+        step.tool_name === "web_fetch" ||
         step.tool_name === "read_conversation"
       ) {
         return peek || null;
@@ -628,7 +628,7 @@ export function ToolLine({
 /** ≥2 consecutive `web_search` — flatten to top-level ToolLines (no outer group
  * shell). Each search already carries query + result count on its own row; wrapping
  * them in「Search web A · B」only adds a redundant disclosure layer (unlike
- * read_url, which merges into one source collection). */
+ * web_fetch, which merges into one source collection). */
 function isWebSearchFlatGroup(
   tools: Extract<ProcessStep, { kind: "tool" }>[],
 ): boolean {
@@ -653,12 +653,12 @@ export function ToolLineGroup({
   /** 所属对话（= conversationId）：透传给 browser 活动卡懒加载关键帧；其余分派忽略。 */
   conversationId?: string | null;
 }) {
-  // All-read_url groups (≥2) render as a self-folding source collection — no
+  // All-web_fetch groups (≥2) render as a self-folding source collection — no
   // ToolLineGroup chevron on top (would be double disclosure). Persistence key
-  // stays `${turnKey}:tgrp:${groupKey}` inside ReadUrlSourceCollection.
-  if (isReadUrlSourceGroup(tools)) {
+  // stays `${turnKey}:tgrp:${groupKey}` inside WebFetchSourceCollection.
+  if (isWebFetchSourceGroup(tools)) {
     return (
-      <ReadUrlSourceCollection
+      <WebFetchSourceCollection
         tools={tools}
         isStreaming={isStreaming}
         turnKey={turnKey}
@@ -667,7 +667,7 @@ export function ToolLineGroup({
     );
   }
   // All-browser_* runs (≥2) fold into one「团队浏览器」活动卡 (steps + key-frames),
-  // same single-disclosure chrome as the read_url collection.
+  // same single-disclosure chrome as the web_fetch collection.
   if (isBrowserActivityGroup(tools)) {
     return (
       <BrowserActivityCard

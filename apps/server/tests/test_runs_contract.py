@@ -283,8 +283,9 @@ def test_describe_deliverable_renders_rules():
             required_sections=["结论"], output_format="json"
         )
     )
-    # json + required_sections: JSON HOW is not in the spec block; no artifacts → empty
-    assert desc == ""
+    # json + required_sections: JSON HOW is not in the spec block; form HOW still lands
+    assert "form=files" in desc
+    assert "必须包含这些章节" not in desc
     # 已删字段不再渲染进文案
     assert "风险" not in desc
     assert "建议覆盖（软）" not in desc
@@ -297,7 +298,7 @@ def test_describe_deliverable_none_is_empty():
 
 
 def test_describe_deliverable_renders_section_names_without_skeleton():
-    """required_sections appear as an acceptance list; no Markdown skeleton / form HOW."""
+    """required_sections appear as an acceptance list; no Markdown skeleton."""
     desc = describe_deliverable(
         Deliverable(required_sections=["Bug清单", "每个Bug的详情"])
     )
@@ -306,6 +307,7 @@ def test_describe_deliverable_renders_section_names_without_skeleton():
     assert "## Bug清单" not in desc
     assert "建议正文骨架" not in desc
     assert "交付形态" not in desc
+    assert "form=files" in desc
     assert "50" not in desc  # min_length retired from describe
 
 
@@ -591,13 +593,14 @@ def test_prose_form_ignores_file_count():
 
 def test_describe_deliverable_form_files_without_artifacts():
     desc = describe_deliverable(Deliverable(form="files"))
-    assert desc == ""
+    assert "form=files" in desc
+    assert "成品写入工作区" in desc
 
 
 def test_describe_deliverable_omitted_form_has_no_must_write_line():
-    # 漏填 = files；交法在身份，规格无实例则空。
+    # 漏填 = files；交法在交付物规格。
     desc = describe_deliverable(Deliverable())
-    assert desc == ""
+    assert "form=files" in desc
     assert "file_write" not in desc
 
 
@@ -1114,14 +1117,14 @@ def test_needs_file_contents_loads_md_for_citation_surfaces():
 
 
 def test_format_cite_upgrade_feedback_is_light_strip_only():
-    """短修文案：禁 read_url/广搜/deep_read；只要求去掉未核实编号或改待核实。"""
+    """短修文案：禁 web_fetch/广搜/deep_read；只要求去掉未核实编号或改待核实。"""
     fb = format_cite_upgrade_feedback(
         ["`note.md`：正文用了 #r99 …"],
         checked_files=["note.md"])
     assert "引用短修" in fb
     assert "待核实" in fb
     assert "handoff" in fb
-    assert "read_url" not in fb
+    assert "web_fetch" not in fb
     assert "deep_read" not in fb
     assert "广搜" in fb  # 禁止广搜
     assert "`note.md`" in fb

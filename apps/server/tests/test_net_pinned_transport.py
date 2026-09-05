@@ -224,7 +224,7 @@ def test_describe_net_error_surfaces_pinned_reason():
 
 
 def test_pinned_error_is_a_network_error_for_the_egress_breaker():
-    # read_url._safe_request counts httpx.NetworkError toward the per-host breaker;
+    # web_fetch._safe_request counts httpx.NetworkError toward the per-host breaker;
     # PinnedAddressError must remain in that hierarchy so a rebind attempt is counted.
     err = PinnedAddressError(URLBlock.PRIVATE_IP.value)
     assert isinstance(err, httpx.ConnectError)

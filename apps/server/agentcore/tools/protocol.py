@@ -237,7 +237,7 @@ class TurnProjectShell:
 
 @dataclass
 class RetrievalBudgetState:
-    """Per-run ``web_search`` / ``read_url`` counter (提案 A1).
+    """Per-run ``web_search`` / ``web_fetch`` counter (提案 A1).
 
     Wired onto :class:`ToolContext` by the worker executor. ``used`` is reserved
     before a live call and refunded on cache hits / uncharged results so parallel
@@ -275,8 +275,8 @@ class RetrievalBudgetState:
 
     @property
     def reads_used(self) -> int:
-        """Charged ``read_url`` calls."""
-        return self.used_by_tool.get("read_url", 0)
+        """Charged ``web_fetch`` calls."""
+        return self.used_by_tool.get("web_fetch", 0)
 
     def note_search_empty(self) -> int:
         """Record an empty SERP; return the new consecutive-empty streak."""
@@ -354,7 +354,7 @@ class ToolContext:
     # from plain ``backend`` / ``material_paths`` arguments.
     _workspace: WorkspaceSlot = field(repr=False, compare=False)
     # The owning conversation, used by conversation-scoped tool state (e.g. the
-    # read_url fetch cache, web/url_cache.py). Set once on the pipeline's base
+    # web_fetch fetch cache, web/url_cache.py). Set once on the pipeline's base
     # context and inherited by every worker via ``dataclasses.replace``. Defaults
     # to "" for unscoped call sites (tests / evals) — a tool simply skips its
     # conversation-scoped optimisation when this is empty.
@@ -450,7 +450,7 @@ class ToolContext:
     # by the executor (引擎纯化, twin of ``on_phase``). ``None`` for call sites without a live sink
     # (tests / evals) — the tool simply skips the ping.
     on_progress: Callable[[str, dict[str, Any] | None], None] | None = None
-    # 检索预算 (提案 A1): per-run counter for ``web_search`` / ``read_url``. Wired by the
+    # 检索预算 (提案 A1): per-run counter for ``web_search`` / ``web_fetch``. Wired by the
     # worker executor from ``RunSpec.retrieval_budget``; ``None`` for CEO / tests without a
     # budget (no enforcement). Shared by reference across ``replace`` so parallel tool
     # calls in one run share one reserve/refund lock. Orthogonal to LoopController.
@@ -614,14 +614,14 @@ class ToolResult:
 
     ``output_limit`` overrides the default model-facing truncation budget for the
     ``output`` string. Most tools leave it ``None`` (4000 chars); read-heavy tools
-    (e.g. ``read_url``) raise it so a full page body is not truncated into invalid
+    (e.g. ``web_fetch``) raise it so a full page body is not truncated into invalid
     JSON. An over-budget output is HEAD+TAIL trimmed (``core.text.truncate_head_tail``)
     so trailing details survive rather than being head-chopped. ``final_text`` is never
     subject to this cap.
 
     ``citations`` carries structured web sources a tool consulted (each a
     ``{url, title, snippet, site}`` dict). Research tools (``web_search`` /
-    ``read_url``) populate it so the engine can aggregate per-turn sources and the
+    ``web_fetch``) populate it so the engine can aggregate per-turn sources and the
     client can render source cards under the answer; non-web tools leave it
     ``None``. The dicts themselves are UI metadata; the engine additionally
     assigns each source a canonical number (its card index) and folds *that
@@ -635,7 +635,7 @@ class ToolResult:
 
     ``display`` is an OPTIONAL render-oriented payload, distinct from the
     model-facing ``output`` string: a tool that has a richer client rendering than
-    plain text (``web_search`` → result cards, ``read_url`` → source card + body
+    plain text (``web_search`` → result cards, ``web_fetch`` → source card + body
     preview, ``code_execute`` → a terminal stdout/stderr view) populates it, and
     the desktop renders per tool — falling back to the ``output`` text when
     absent (工具结果富渲染). It rides the ``tool_use_end`` event → the process

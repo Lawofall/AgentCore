@@ -6,7 +6,7 @@
 import { Button } from "@/components/ui";
 import { usePersistentDisclosure } from "@/stores/disclosure";
 import type { AskAssumption } from "@/types/events";
-import { ChevronRight, Loader2, OctagonX, Rocket } from "lucide-react";
+import { ChevronRight, Loader2, Rocket } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   COMMENCE_TONE,
@@ -55,14 +55,7 @@ export function CommenceFooter({
       className={`${sticky ? "shrink-0 border-t border-border bg-card/95 backdrop-blur-sm" : ""} space-y-1.5 px-3 py-3 ${className}`}
     >
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button
-          size="md"
-          variant="ghost"
-          disabled={busy}
-          onClick={onStop}
-          className="text-muted-foreground hover:text-foreground"
-          icon={<OctagonX size={14} />}
-        >
+        <Button size="md" variant="outline" disabled={busy} onClick={onStop}>
           取消
         </Button>
         <Button

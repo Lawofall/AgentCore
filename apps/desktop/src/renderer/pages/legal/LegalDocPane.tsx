@@ -27,16 +27,13 @@ export function LegalDocPane({
           <ArrowLeft size={14} />
           返回
         </Button>
-        <span className="truncate text-sm text-muted-foreground">{title}</span>
+        <h1 className="min-w-0 flex-1 truncate text-sm font-medium">{title}</h1>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="mx-auto max-w-2xl">
-          <header className="mb-6 space-y-1">
-            <h1 className="text-xl font-semibold">{title}</h1>
-            <p className="text-xs text-muted-foreground">
-              更新日期：{updatedAt}
-            </p>
-          </header>
+          <p className="mb-6 text-sm text-muted-foreground">
+            更新日期：{updatedAt}
+          </p>
           <LegalDocBody docId={docId} />
         </div>
       </div>

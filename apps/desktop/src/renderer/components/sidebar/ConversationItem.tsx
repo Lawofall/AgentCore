@@ -34,6 +34,7 @@ import {
   notifyConversationDeleted,
 } from "@/lib/conversationDeleteCopy";
 import { buildMessagePreview } from "@/lib/conversationListPreview";
+import { useConversationLocationId } from "@/lib/conversationLocation";
 import { shouldShowConversationCloudIcon } from "@/lib/conversationWorkspaceMode";
 import { isMac } from "@/lib/platform";
 import {
@@ -121,7 +122,6 @@ export function ConversationItem({
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
-  const currentId = useConversationStore((s) => s.currentConversationId);
   const cachedMessages = useConversationStore(
     (s) => s.byId[conversation.id]?.messages ?? EMPTY_MESSAGES,
   );
@@ -158,7 +158,8 @@ export function ConversationItem({
   // ——从没在这台机器上打开过的对话也能亮灯（云对话多端同权 B2 · L1）。
   const awaitingAttention = useConversationAwaitingAttention(conversation.id);
   const navigate = useNavigate();
-  const isActive = conversation.id === currentId;
+  const locationId = useConversationLocationId();
+  const isActive = locationId === conversation.id;
   const showRowActions = hovered || moreOpen;
   const hotkeyIndex = useRailHotkeyIndex(conversation.id);
   const showHotkeyIndex =
@@ -227,7 +228,7 @@ export function ConversationItem({
 
   const handleDelete = async () => {
     setMoreOpen(false);
-    const wasActive = conversation.id === currentId;
+    const wasOnCanvas = locationId === conversation.id;
     const title = conversation.title;
     try {
       await deleteMutation.mutateAsync(conversation.id);
@@ -236,7 +237,7 @@ export function ConversationItem({
       return;
     }
     dropConversationRuntime(conversation.id);
-    if (wasActive) navigate("/");
+    if (wasOnCanvas) navigate("/");
     // Raised from the awaited handler, not a `mutate` callback: this row unmounts
     // the moment the conversation leaves the sidebar cache.
     notifyConversationDeleted(title, () =>
@@ -252,7 +253,7 @@ export function ConversationItem({
   };
 
   const handleArchive = async () => {
-    const wasActive = conversation.id === currentId;
+    const wasOnCanvas = locationId === conversation.id;
     const title = conversation.title;
     try {
       await archiveMutation.mutateAsync(conversation.id);
@@ -261,7 +262,7 @@ export function ConversationItem({
       return;
     }
     dropConversationRuntime(conversation.id);
-    if (wasActive) navigate("/");
+    if (wasOnCanvas) navigate("/");
     notifyInfo("已归档", {
       description: title,
       duration: 5000,
@@ -369,6 +370,7 @@ export function ConversationItem({
               <div
                 role="button"
                 tabIndex={0}
+                aria-current={isActive ? "page" : undefined}
                 aria-keyshortcuts={
                   hotkeyIndex != null
                     ? `${isMac ? "Meta" : "Control"}+${hotkeyIndex}`

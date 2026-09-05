@@ -89,6 +89,8 @@ describe("WhiteboardCanvasPage · 冲突色", () => {
       await Promise.resolve();
     });
     expect(screen.getByTestId("wb")).toBeTruthy();
+    expect(screen.queryByText("即将上线")).toBeNull();
+    expect(screen.queryByLabelText(/下达白板指令/)).toBeNull();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1600);

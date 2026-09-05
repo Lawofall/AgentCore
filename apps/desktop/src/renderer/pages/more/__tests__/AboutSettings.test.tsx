@@ -7,7 +7,8 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/capabilities", () => ({
+vi.mock("@/lib/capabilities", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/capabilities")>()),
   hasAutoUpdater: vi.fn(() => true),
   hasLocalEngine: vi.fn(() => true),
   isWebRuntime: vi.fn(() => false),

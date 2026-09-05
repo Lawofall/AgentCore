@@ -154,4 +154,48 @@ describe("ConversationItem onActivate", () => {
     expect(screen.queryByText("3")).toBeNull();
     expect(screen.getByLabelText("归档")).toBeTruthy();
   });
+
+  it("marks the row current only when the canvas is this conversation", () => {
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/conversations/c1"]}>
+        <TooltipProvider>
+          <ConversationItem conversation={conv} />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: /当前会话/ })
+        .getAttribute("aria-current"),
+    ).toBe("page");
+    unmount();
+
+    render(
+      <MemoryRouter initialEntries={["/toolbox"]}>
+        <TooltipProvider>
+          <ConversationItem conversation={conv} />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: /当前会话/ })
+        .getAttribute("aria-current"),
+    ).toBeNull();
+  });
+
+  it("keeps the row current on turn detail", () => {
+    render(
+      <MemoryRouter initialEntries={["/conversations/c1/turn/t9"]}>
+        <TooltipProvider>
+          <ConversationItem conversation={conv} />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: /当前会话/ })
+        .getAttribute("aria-current"),
+    ).toBe("page");
+  });
 });

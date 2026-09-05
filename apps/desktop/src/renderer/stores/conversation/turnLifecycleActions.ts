@@ -32,6 +32,7 @@ type TurnLifecycleActions = Pick<
   | "setTurnPhase"
   | "setExecutionVia"
   | "setWaitingForWorkspaceLock"
+  | "setWaitingForDeskProvision"
   | "stopGeneration"
   | "setError"
   | "clearError"
@@ -84,6 +85,11 @@ export function createTurnLifecycleActions(
     setWaitingForWorkspaceLock: (waiting, conversationId) =>
       patchConversation(conversationId, () => ({
         waitingForWorkspaceLock: waiting,
+      })),
+
+    setWaitingForDeskProvision: (waiting, conversationId) =>
+      patchConversation(conversationId, () => ({
+        waitingForDeskProvision: waiting,
       })),
 
     stopGeneration: () => {

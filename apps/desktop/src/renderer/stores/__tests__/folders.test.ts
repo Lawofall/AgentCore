@@ -1,9 +1,24 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { hasLocalFiles } from "@/lib/capabilities";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultDraftWorkspaceIntent, useFoldersStore } from "../folders";
+
+const { getComposerChannelPreference } = vi.hoisted(() => ({
+  getComposerChannelPreference: vi.fn(() => "local_traditional"),
+}));
+
+vi.mock("@/lib/capabilities", () => ({
+  hasLocalFiles: vi.fn(() => false),
+}));
+
+vi.mock("@/lib/composerChannelPreference", () => ({
+  getComposerChannelPreference,
+}));
 
 const store = () => useFoldersStore.getState();
 
 beforeEach(() => {
+  vi.mocked(hasLocalFiles).mockReturnValue(false);
+  getComposerChannelPreference.mockReturnValue("local_traditional");
   useFoldersStore.setState({
     pendingRenameId: null,
     draftWorkspaceIntent: defaultDraftWorkspaceIntent(),
@@ -50,7 +65,18 @@ describe("pending markers", () => {
 });
 
 describe("defaultDraftWorkspaceIntent", () => {
-  it("defaults to quick_cloud (桌面裸聊默认切云)", () => {
+  it("defaults to quick_cloud when there is no local disk", () => {
+    expect(defaultDraftWorkspaceIntent()).toEqual({ kind: "quick_cloud" });
+  });
+
+  it("defaults to quick_local on desktop when channel is unset", () => {
+    vi.mocked(hasLocalFiles).mockReturnValue(true);
+    expect(defaultDraftWorkspaceIntent()).toEqual({ kind: "quick_local" });
+  });
+
+  it("follows a remembered cloud channel on desktop", () => {
+    vi.mocked(hasLocalFiles).mockReturnValue(true);
+    getComposerChannelPreference.mockReturnValue("cloud");
     expect(defaultDraftWorkspaceIntent()).toEqual({ kind: "quick_cloud" });
   });
 });

@@ -1,14 +1,9 @@
 import { PageContainer } from "@/components/layout/PageContainer";
-import {
-  Badge,
-  Button,
-  Card,
-  CatalogIconShell,
-  SectionLabel,
-} from "@/components/ui";
+import { Badge, CatalogTile, PageHeader, SectionLabel } from "@/components/ui";
 import { type ArtifactKind, artifactColorVar } from "@/lib/catalogColors";
 import { cn } from "@/lib/utils";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
+import { useStandingInboxBadge } from "@/stores/standingInbox";
 import {
   BookOpen,
   ChevronRight,
@@ -16,6 +11,7 @@ import {
   Palette,
   Plug,
   ScrollText,
+  Store,
   Timer,
   Workflow,
   Wrench,
@@ -69,11 +65,18 @@ const CAPABILITIES: ToolboxEntry[] = [
   {
     id: "guidelines",
     title: "AI 提示词",
-    description:
-      "全员准则、三选一角色身份、队员交付合同，以及按需注入的工具进阶用法",
+    description: "全员准则、三选一角色身份，以及按需注入的工具进阶用法",
     icon: ScrollText,
     color: "guidelines",
     to: APP_PATHS.toolbox.guidelines,
+  },
+  {
+    id: "store",
+    title: "商店",
+    description: "浏览并一键安装别人上架的技能",
+    icon: Store,
+    color: "guidelines",
+    to: APP_PATHS.toolbox.store,
   },
   {
     id: "automations",
@@ -130,74 +133,64 @@ function ToolboxSectionHeader({
   );
 }
 
+/** Counts above this render as `99+` so a tile can't stretch. */
+const INBOX_BADGE_CAP = 99;
+
 function ToolboxTileCard({
   entry,
   comingSoon = false,
+  badge = 0,
 }: {
   entry: ToolboxEntry;
   comingSoon?: boolean;
+  badge?: number;
 }) {
   const navigate = useNavigate();
   const { icon: Icon, title, description, to, color } = entry;
-  const available = Boolean(to);
   const colorVar = artifactColorVar(color);
 
-  const inner = (
-    <Card
-      className={cn(
-        "flex h-full w-full min-w-0 flex-col gap-3 p-4",
-        available && "shadow-sm transition-shadow group-hover:shadow-md",
-      )}
-      variant={available ? "interactive" : "default"}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <CatalogIconShell colorVar={colorVar} muted={comingSoon}>
-          <Icon size={18} />
-        </CatalogIconShell>
-        {comingSoon ? (
+  return (
+    <CatalogTile
+      icon={<Icon size={18} />}
+      colorVar={colorVar}
+      title={title}
+      description={description}
+      muted={comingSoon}
+      onClick={to ? () => navigate(to) : undefined}
+      badge={
+        comingSoon ? (
           <Badge tone="muted" pill className="shrink-0">
             即将开放
           </Badge>
-        ) : available ? (
-          <ChevronRight
-            size={14}
-            className="mt-0.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
-          />
-        ) : null}
-      </div>
-      <div className="min-w-0 flex-1">
-        <h3 className="text-sm font-medium text-foreground">{title}</h3>
-        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-          {description}
-        </p>
-      </div>
-    </Card>
-  );
-
-  if (!to) {
-    return inner;
-  }
-
-  return (
-    <Button
-      variant="ghost"
-      onClick={() => navigate(to)}
-      className="group !flex h-full w-full min-w-0 flex-col items-stretch justify-start p-0 text-left font-normal"
-    >
-      {inner}
-    </Button>
+        ) : to ? (
+          <div className="flex shrink-0 items-center gap-1.5">
+            {badge > 0 ? (
+              <Badge
+                tone="primary"
+                pill
+                aria-label={`${badge} 条待处理`}
+                className="min-w-5 justify-center px-1"
+              >
+                {badge > INBOX_BADGE_CAP ? `${INBOX_BADGE_CAP}+` : badge}
+              </Badge>
+            ) : null}
+            <ChevronRight
+              size={14}
+              className="mt-0.5 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+            />
+          </div>
+        ) : null
+      }
+    />
   );
 }
 
 export function ToolboxPage() {
+  const inboxBadge = useStandingInboxBadge();
+
   return (
     <PageContainer width="canvas">
-      <header className="pb-2">
-        <h1 className="text-xl font-semibold text-foreground">工具箱</h1>
-        <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-          AI 工具与创作工具，人与 Agent 协同的能力中心
-        </p>
-      </header>
+      <PageHeader title="工具箱" />
 
       <div className={cn("mt-8", TOOLBOX_TILE_GRID)}>
         <ToolboxSectionHeader label="了解平台" />
@@ -213,6 +206,7 @@ export function ToolboxPage() {
             key={entry.id}
             entry={entry}
             comingSoon={!entry.to}
+            badge={entry.id === "automations" ? inboxBadge : 0}
           />
         ))}
 

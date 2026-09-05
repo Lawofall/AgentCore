@@ -993,8 +993,8 @@ def test_process_tool_result_cap_matches_sink():
     assert len(expected) == _PROCESS_RESULT_CAP + 1  # cap + ellipsis
 
     sink = EventSink()
-    sink.emit(tool_use_start("tc_big", "read_url", {"url": "https://example.com"}))
-    sink.emit(tool_use_end("tc_big", "read_url", success=True, output=big))
+    sink.emit(tool_use_start("tc_big", "web_fetch", {"url": "https://example.com"}))
+    sink.emit(tool_use_end("tc_big", "web_fetch", success=True, output=big))
 
     sink_tool = next(s for s in (sink.process_timeline() or []) if s.get("kind") == "tool")
     assert sink_tool["result"] == expected
@@ -1005,7 +1005,7 @@ def test_process_tool_result_cap_matches_sink():
             "type": "tool_use_start",
             "payload": {
                 "tool_call_id": "tc_big",
-                "tool_name": "read_url",
+                "tool_name": "web_fetch",
                 "arguments": {"url": "https://example.com"},
             },
             "timestamp": "2026-01-01T00:00:00.000Z",
@@ -1014,7 +1014,7 @@ def test_process_tool_result_cap_matches_sink():
             "type": "tool_use_end",
             "payload": {
                 "tool_call_id": "tc_big",
-                "tool_name": "read_url",
+                "tool_name": "web_fetch",
                 "status": "success",
                 "result": big,
             },

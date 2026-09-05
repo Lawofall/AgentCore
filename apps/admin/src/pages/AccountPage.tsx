@@ -254,7 +254,7 @@ function PasswordSection() {
 export function AccountPage() {
   return (
     <Page>
-      <PageHeader title="账户设置" description="管理你的个人资料与登录密码。" />
+      <PageHeader title="账户设置" />
       <div className="flex max-w-3xl flex-col gap-6">
         <ProfileSection />
         <PasswordSection />

@@ -5,7 +5,14 @@ import {
   SettingsSection,
   SettingsStack,
 } from "@/components/settings";
-import { Badge, Button, Card, ConfirmDialog, Input } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  ConfirmDialog,
+  Input,
+  PageHeader,
+} from "@/components/ui";
 import {
   EMAIL_CODE_LENGTH,
   isLikelyEmail,
@@ -29,7 +36,6 @@ import { type AuthUser, useAuthStore } from "@/stores/auth";
 import { Loader2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { LoginSessionsSection } from "./LoginSessionsSection";
-import { SettingsHeader } from "./SettingsHeader";
 
 // Mirror of the server's avatar_upload_max_bytes so an oversized pick fails fast,
 // before a pointless round-trip.
@@ -43,10 +49,7 @@ const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 export function AccountSettings() {
   return (
     <div>
-      <SettingsHeader
-        title="账户设置"
-        description="管理你的个人资料、登录密码、登录设备与账户。"
-      />
+      <PageHeader title="账户设置" />
       <SettingsStack>
         <AvatarSection />
         <ProfileSection />

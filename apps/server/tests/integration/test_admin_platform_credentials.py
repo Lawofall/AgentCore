@@ -71,6 +71,9 @@ async def test_pool_crud_disable_and_env_fallback(
 
     listed = await client.get("/v1/admin/platform-credentials")
     assert listed.json()["fallback"] == "pool"
+    listed_row = listed.json()["data"][0]
+    assert listed_row["picked"] is True
+    assert listed_row["same_as_env"] is False
     picked = platform_llm_credentials()
     assert picked is not None
     assert picked.api_key == "sk-pool-secret-aaaa"

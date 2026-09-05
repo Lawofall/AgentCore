@@ -182,7 +182,7 @@ def test_single_agent_tool_turn_nests_tool_under_captain():
             {
                 "run_id": "cap",
                 "tool_call_id": "c1",
-                "name": "read_url",
+                "name": "web_fetch",
                 "result": "r",
                 "success": True,
             },
@@ -222,7 +222,7 @@ def test_failed_tool_marks_run_tool_failures():
             {
                 "run_id": "cap",
                 "tool_call_id": "c1",
-                "name": "read_url",
+                "name": "web_fetch",
                 "result": "err",
                 "success": False,
             },
@@ -370,7 +370,7 @@ def test_log_exporter_truncates_with_markers_and_keeps_late_failures(monkeypatch
         _run_started("w1", "w1", kind="agent", parent="cap", ts="t1"),
         _fact(
             "tool_call",
-            {"run_id": "w1", "tool_call_id": "ok1", "name": "read_url", "success": True},
+            {"run_id": "w1", "tool_call_id": "ok1", "name": "web_fetch", "success": True},
         ),
         _run_started("w2", "w2", kind="agent", parent="cap", ts="t2"),
         _fact(
@@ -380,7 +380,7 @@ def test_log_exporter_truncates_with_markers_and_keeps_late_failures(monkeypatch
         _run_started("w3", "w3", kind="agent", parent="cap", ts="t3"),
         _fact(
             "tool_call",
-            {"run_id": "w3", "tool_call_id": "ok3", "name": "read_url", "success": True},
+            {"run_id": "w3", "tool_call_id": "ok3", "name": "web_fetch", "success": True},
         ),
         _run_completed("w1", "w1", ts="t4"),
         _run_completed("w2", "w2", ts="t5"),
@@ -435,7 +435,7 @@ def test_select_logged_spans_keeps_in_flight_over_ok_tools(monkeypatch):
     ok = Span(
         span_id="tool:ok",
         parent_span_id="run:w1",
-        name="execute_tool read_url",
+        name="execute_tool web_fetch",
         operation="execute_tool",
         status="ok",
     )

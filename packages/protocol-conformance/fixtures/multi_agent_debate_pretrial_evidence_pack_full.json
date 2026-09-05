@@ -120,7 +120,7 @@
           "mode": "skip",
           "retrieval_budget": 0,
           "sides": [],
-          "allow_read_url": false,
+          "allow_web_fetch": false,
           "max_tasks_per_side": 0,
           "reason": "evidence_pack_full",
           "allow_external": false

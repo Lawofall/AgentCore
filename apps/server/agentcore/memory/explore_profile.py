@@ -75,21 +75,6 @@ _NAMED_EXPLORE_REFRESH_PHRASES = (
     "刷新项目记忆",
 )
 
-# Empty-profile + 工程点名 → hard explore-pending（非意图分类器；短允许表）.
-# Bare empty profile alone is soft-hint only (不挡 delegate / 不置 pending).
-_NAMED_FOLDER_WORK_PHRASES = (
-    "继续开发",
-    "改这个文件夹",
-    "在这个文件夹",
-    "摸清这个文件夹",
-    "改这个项目",
-    "在这个项目",
-    "摸清这个项目",
-    "全面摸底",
-    "先摸仓",
-)
-
-
 def user_named_explore_refresh(user_message: str | None) -> bool:
     """True when user text hits an allow-listed refresh phrase (点名硬闸)."""
     text = (user_message or "").strip()
@@ -98,36 +83,21 @@ def user_named_explore_refresh(user_message: str | None) -> bool:
     return any(phrase in text for phrase in _NAMED_EXPLORE_REFRESH_PHRASES)
 
 
-def user_named_folder_work(user_message: str | None) -> bool:
-    """True when empty-profile should hard-gate (工程点名短语允许表)."""
-    text = (user_message or "").strip()
-    if not text:
-        return False
-    return any(phrase in text for phrase in _NAMED_FOLDER_WORK_PHRASES)
-
-
 def resolve_hard_explore_reason(
     explore_reason: str | None,
     user_message: str | None,
-) -> tuple[str | None, bool]:
-    """Named-refresh + soft-empty downgrade (assemble / resume must stay identical).
+) -> str | None:
+    """Only named 先了解 / 重新了解 / 刷新… opens the explore act.
 
-    Returns ``(hard_reason, folder_profile_empty_soft)``.
-    ``hard_reason`` is set for pending/write_scope=explore_memory; soft empty alone
-    yields ``(None, True)`` so the request is not blocked.
-    Named refresh (先了解 / 重新了解 / …) wins over empty-soft so a cleared 画像
-    plus 点名 still hard-opens; rebind stays rebind even if the message also
-    contains a refresh phrase.
+    Empty profile and workspace rebind no longer pending. Assemble / resume
+    must stay identical. Callers still read raw empty/rebind from
+    :func:`folder_profile_explore_reason` (omit stale notes, silent refresh).
     """
-    soft_empty = False
-    if user_named_explore_refresh(user_message) and (
-        not explore_reason or explore_reason == "empty"
-    ):
-        explore_reason = "refresh"
-    if explore_reason == "empty" and not user_named_folder_work(user_message):
-        soft_empty = True
-        explore_reason = None
-    return explore_reason, soft_empty
+    if user_named_explore_refresh(user_message):
+        return "refresh"
+    if explore_reason == "refresh":
+        return "refresh"
+    return None
 
 
 def profile_has_substance(markdown: str | None) -> bool:
@@ -275,6 +245,36 @@ async def resolve_folder_workspace_key(
             )
             return None
         raise
+
+
+async def resolve_turn_explore_gate(
+    store: MemoryStore,
+    user_id: str,
+    folder_id: str | None,
+    *,
+    binding: Any | None = None,
+    binding_injected: bool = False,
+) -> tuple[str | None, str | None]:
+    """Raw explore reason + workspace key for one turn (prepare / assemble / resume).
+
+    Reason is ``empty`` | ``rebind`` | ``None``. Named refresh is layered later
+    by :func:`resolve_hard_explore_reason`.
+    """
+    if not folder_id:
+        return None, None
+    current_key = await resolve_folder_workspace_key(
+        folder_id,
+        binding=binding,
+        binding_injected=binding_injected,
+    )
+    key_for_gates = current_key if current_key is not None else ""
+    reason = await folder_profile_explore_reason(
+        store,
+        user_id,
+        folder_id,
+        current_workspace_key=key_for_gates,
+    )
+    return reason, current_key
 
 
 async def load_explore_workspace_key(
@@ -444,9 +444,10 @@ async def folder_profile_explore_reason(
     """Auto-explore gate: ``\"empty\"`` | ``\"rebind\"`` | ``None``.
 
     Does **not** judge chitchat vs substance (prompt/routing). Bare chat never
-    explores. Missing stored key on a non-empty profile → no hard rebind (legacy).
-    Named refresh (``\"refresh\"``) is layered in assemble via
-    :func:`user_named_explore_refresh` — not returned here.
+    explores. Missing stored key on a non-empty profile → no rebind (legacy).
+    Named refresh (``\"refresh\"``) is layered via
+    :func:`resolve_hard_explore_reason` — not returned here. Empty / rebind
+    no longer pending; callers omit stale folder notes on rebind.
     """
     if not folder_id:
         return None
@@ -541,10 +542,12 @@ async def write_folder_profile_cas(
     folder_id: str,
     new_markdown: str,
     baseline: str | None = None,
+    replace: bool = False,
 ) -> tuple[bool, str, bool]:
-    """Merge-write folder ``画像.md`` under the per-user memory lock (CAS + retry).
+    """Write folder ``画像.md`` under the per-user memory lock (CAS + retry).
 
-    Returns ``(ok, resulting_markdown, conflict)``.
+    Default is section merge. ``replace=True`` overwrites (workspace rebind:
+    old-bind notes must not survive). Returns ``(ok, resulting_markdown, conflict)``.
     ``conflict=True`` when a caller-supplied ``baseline`` no longer matches after retries.
     """
     if not folder_id:
@@ -562,7 +565,11 @@ async def write_folder_profile_cas(
                     baseline = current_ver
                     continue
                 return False, current, True
-            merged = merge_profile_by_sections(current, new_markdown)
+            merged = (
+                new_markdown
+                if replace
+                else merge_profile_by_sections(current, new_markdown)
+            )
             if folder_profile_is_empty(merged):
                 return False, current, False
             if merged == current:

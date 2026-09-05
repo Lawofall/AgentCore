@@ -44,6 +44,9 @@ const row = {
   status: "healthy" as const,
   recovery_at: null,
   limit_name: null,
+  source: null,
+  picked: false,
+  same_as_env: false,
 };
 
 describe("PlatformCredentialsCard", () => {
@@ -101,6 +104,47 @@ describe("PlatformCredentialsCard", () => {
     );
     expect(toast.success).toHaveBeenCalled();
     expect(updatePlatformCredential).not.toHaveBeenCalled();
+  });
+
+  it("clears runtime on an exhausted member after a wallet top-up", async () => {
+    const exhausted = {
+      ...row,
+      status: "exhausted" as const,
+      source: "creditserror",
+    };
+    vi.mocked(listPlatformCredentials).mockResolvedValue({
+      data: [exhausted],
+      fallback: "pool",
+    });
+    vi.mocked(clearPlatformCredentialRuntime).mockResolvedValue({
+      ...exhausted,
+      status: "healthy",
+      source: null,
+    });
+    render(<PlatformCredentialsCard />);
+    fireEvent.click(await screen.findByText("解封"));
+    await waitFor(() =>
+      expect(clearPlatformCredentialRuntime).toHaveBeenCalledWith(exhausted.id),
+    );
+  });
+
+  it("marks the fill-first pick and the env-key duplicate", async () => {
+    vi.mocked(listPlatformCredentials).mockResolvedValue({
+      data: [
+        { ...row, picked: true },
+        {
+          ...row,
+          id: "22222222-2222-2222-2222-222222222222",
+          label: "Go-B",
+          same_as_env: true,
+          picked: false,
+        },
+      ],
+      fallback: "pool",
+    });
+    render(<PlatformCredentialsCard />);
+    expect(await screen.findByText("当前选中")).toBeTruthy();
+    expect(screen.getByText("与 env 同 key")).toBeTruthy();
   });
 
   it("reloads the pool when refreshEpoch changes", async () => {

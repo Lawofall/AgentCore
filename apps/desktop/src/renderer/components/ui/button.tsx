@@ -3,6 +3,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 export type ButtonVariant =
   | "primary"
+  | "outline"
   | "neutral"
   | "danger"
   | "destructive"
@@ -11,6 +12,7 @@ export type ButtonSize = "sm" | "md";
 
 const variantClass: Record<ButtonVariant, string> = {
   primary: "bg-primary text-primary-foreground hover:bg-primary/90",
+  outline: "border border-border bg-card text-foreground hover:bg-accent",
   neutral:
     "text-muted-foreground hover:bg-accent hover:text-foreground border border-transparent",
   danger: "text-destructive hover:bg-destructive/10",

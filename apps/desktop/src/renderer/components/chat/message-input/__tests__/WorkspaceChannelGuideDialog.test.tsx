@@ -10,7 +10,7 @@ afterEach(() => {
 const dialogText = () => screen.getByRole("dialog").textContent ?? "";
 
 describe("WorkspaceChannelGuideDialog", () => {
-  it("讲清这次聊哪：文件在云上、不自动同步、要手动导出", () => {
+  it("讲清这次聊哪：默认在这台电脑跑，云是选项", () => {
     render(
       <WorkspaceChannelGuideDialog
         open
@@ -24,14 +24,9 @@ describe("WorkspaceChannelGuideDialog", () => {
     expect(dialogText()).toContain("点云图标的接着聊");
     expect(dialogText()).toContain("点硬盘图标的，会再问怎么用");
     expect(dialogText()).toContain("硬盘图标那一行");
-    expect(screen.getByText(/看到的是同一份/)).toBeTruthy();
-    expect(screen.getByText(/不会自动同步到你电脑/)).toBeTruthy();
-    expect(dialogText()).toContain("导出 ZIP");
-    expect(
-      screen.getByText(
-        /日常用、想在手机和网页接着看 → 快速对话、已有云文件夹，或新建或加入/,
-      ),
-    ).toBeTruthy();
+    expect(dialogText()).toContain("文件和运行都在这台电脑");
+    expect(dialogText()).toContain("不是离线");
+    expect(screen.getByText(/日常在这台电脑写、跑 → 本地对话/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "知道了" })).toBeTruthy();
   });
 
@@ -44,7 +39,8 @@ describe("WorkspaceChannelGuideDialog", () => {
       />,
     );
     for (const label of [
-      "快速对话",
+      "本地对话",
+      "云端对话",
       "新建或加入…",
       "直接改这个文件夹",
       "复制到云上当新家",
@@ -116,7 +112,7 @@ describe("WorkspaceChannelGuideDialog", () => {
     expect(local.textContent).toMatch(/对话记录也仍然存在云上/);
   });
 
-  it("只有云被标「推荐」，本机不并列推荐", () => {
+  it("桌面只有本地对话被标「推荐」", () => {
     render(
       <WorkspaceChannelGuideDialog
         open
@@ -136,6 +132,8 @@ describe("WorkspaceChannelGuideDialog", () => {
       />,
     );
     expect(screen.getByText("这次聊哪")).toBeTruthy();
+    expect(screen.getByText("云端对话")).toBeTruthy();
+    expect(screen.queryByText("本地对话")).toBeNull();
     expect(screen.getByText("新建文件夹")).toBeTruthy();
     expect(screen.queryByText("我的文件")).toBeNull();
     expect(dialogText()).toContain("点列表里的文件夹接着聊");

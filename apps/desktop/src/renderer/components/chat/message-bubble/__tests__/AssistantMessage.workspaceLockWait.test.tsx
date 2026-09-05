@@ -56,6 +56,7 @@ describe("AssistantMessage · workspace_lock_wait", () => {
           toolStartedMs: {},
           executionVia: null,
           waitingForWorkspaceLock: false,
+          waitingForDeskProvision: false,
         },
       },
     });
@@ -76,15 +77,15 @@ describe("AssistantMessage · workspace_lock_wait", () => {
     expect(screen.queryByText("等待工作区…")).toBeNull();
   });
 
-  it("shows 等待工作区… when waitingForWorkspaceLock（不得静默等锁）", () => {
-    useConversationStore.getState().setWaitingForWorkspaceLock(true, CID);
+  it("shows 正在准备云端环境 when waitingForDeskProvision", () => {
+    useConversationStore.getState().setWaitingForDeskProvision(true, CID);
     const msg = useConversationStore.getState().byId[CID].messages[0];
     render(
       <MemoryRouter>
         <AssistantMessage message={msg} />
       </MemoryRouter>,
     );
-    expect(screen.getByText("等待工作区…")).toBeTruthy();
+    expect(screen.getByText("正在准备云端环境")).toBeTruthy();
     expect(screen.queryByText("Thinking…")).toBeNull();
   });
 });

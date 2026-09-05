@@ -272,19 +272,14 @@ async def _prepare_agent_node(
         )
         # allowed_tools stays None — "offer all" already includes the opening
         # lead_subteam tools now living in worker_tools.
-    # Topology-split handoff wording + deliverable.form: DAG is known at identity
-    # build — upstream nodes get imperative「必须 handoff」; leaves get conditional
-    # 「有增量才写」. form=prose/files/workspace selects the landing block
-    # (omit = files). Non-empty artifacts with form omitted → files block.
-    deliverable_form = deliverable.form if deliverable is not None else "files"
+    # Handoff must-vs-may lives on the handoff tool description, not identity.
+    # Form HOW is the per-turn 交付物规格 channel (describe_deliverable).
     from agentcore.runtime.engine.governance import registry_can_execute
 
     identity = build_worker_identity(
         has_dependents=node_has_dependents(env.plan, spec.run_id),
         captain=is_captain,
         depth=spec.depth,
-        form=deliverable_form,
-        artifacts=list(deliverable.artifacts) if deliverable else None,
         # 能写≠能跑: 只看注册表是否装配 ``run``（环境死不再卸工具）。
         can_execute=registry_can_execute(worker_tools, tool_ctx),
     )
@@ -292,7 +287,7 @@ async def _prepare_agent_node(
         spec.target_folder_id or env.session_folder_id
     ):
         identity = f"{identity.rstrip()}\n\n{SCRATCH_NO_WRITE_IDENTITY_HINT}"
-    # 真纯丙·H2：form=prose 不再硬卸写盘工具；形态靠 identity 提示自觉守岗。
+    # 真纯丙·H2：form=prose 不再硬卸写盘工具；形态靠交付物规格提示自觉守岗。
     # Short-round repair posture tool strip retired.
     # CEO may still stamp max_rounds; tools stay full surface.
     files_expected = _files_expected(deliverable)
@@ -316,7 +311,7 @@ async def _prepare_agent_node(
         files_expected=files_expected,
         has_execution_tools=node_holds_execution_tools(spec),
     )
-    # 检索预算 0 (提案 A1): strip web_search/read_url even for unrestricted workers
+    # 检索预算 0 (提案 A1): strip web_search/web_fetch even for unrestricted workers
     # (builder already tightens tasks[].tools when valid_tools is known).
     if spec.retrieval_budget == 0:
         worker_tools = _registry_without(worker_tools, *RETRIEVAL_TOOL_NAMES)
@@ -436,6 +431,7 @@ async def _prepare_agent_node(
     from agentcore.runtime.runs.executor.hooks import _two_phase_citation
 
     two_phase = _two_phase_citation(deliverable)
+    deliverable_form = deliverable.form if deliverable is not None else "files"
 
     return AgentNodePrepared(
         profile=profile,

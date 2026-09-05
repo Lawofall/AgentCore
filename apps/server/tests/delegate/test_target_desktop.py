@@ -1060,6 +1060,36 @@ async def test_ensure_bare_chat_auto_cloud_desk_skips_when_hint_exists(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_ensure_bare_chat_auto_cloud_desk_skips_local_workspace(monkeypatch):
+    from types import SimpleNamespace
+
+    from agentcore.runtime.delegate.target_desktop import ensure_bare_chat_auto_cloud_desk
+    from agentcore.tools.protocol import TurnTargetDeskHint
+
+    creates: list[str] = []
+
+    async def _fake_create(*, user_id: str, name: str) -> dict:
+        creates.append(name)
+        return {"id": "x", "name": name}
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.folders.create_cloud_folder",
+        _fake_create,
+    )
+    hint = TurnTargetDeskHint()
+    out = await ensure_bare_chat_auto_cloud_desk(
+        session_folder_id=None,
+        tasks_raw=[{"role": "工", "deliverable": {"form": "files"}}],
+        default_target_folder_id=None,
+        turn_target_desk=hint,
+        user_id="u1",
+        tool_context=SimpleNamespace(backend=SimpleNamespace(location="local")),
+    )
+    assert out is None
+    assert creates == []
+
+
+@pytest.mark.asyncio
 async def test_ensure_bare_chat_auto_cloud_desk_skips_prose(monkeypatch):
     from agentcore.runtime.delegate.target_desktop import ensure_bare_chat_auto_cloud_desk
     from agentcore.tools.protocol import TurnTargetDeskHint

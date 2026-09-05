@@ -34,7 +34,7 @@ function browserActionMeta(action: string): {
 }
 
 /** True when a tool-group is ≥2 consecutive browser steps → render as one activity card
- * (mirrors {@link isReadUrlSourceGroup}). A single browser step stays a normal ToolLine. */
+ * (mirrors {@link isWebFetchSourceGroup}). A single browser step stays a normal ToolLine. */
 export function isBrowserActivityGroup(tools: ToolStep[]): boolean {
   return tools.length >= 2 && tools.every((t) => isBrowserTool(t.tool_name));
 }
@@ -344,11 +344,11 @@ function BrowserStepRow({
 
 /**
  * Merged view for a tool-group of ≥2 consecutive `browser_*` steps — the browser activity
- * card. Collapses to a bare「浏览器 · N 步」header (aligned with the read_url source
+ * card. Collapses to a bare「浏览器 · N 步」header (aligned with the web_fetch source
  * collection / tool-group chrome); expands into a step list (action / detail / url) with
  * lazy key-frame thumbnails, each opening the full frame in a lightbox.
  * Card data comes ONLY from each step's durable `display`, so it rebuilds on journal replay.
- * Reuses ReadUrlSourceCollection's `${turnKey}:tgrp:${groupKey}` disclosure key.
+ * Reuses WebFetchSourceCollection's `${turnKey}:tgrp:${groupKey}` disclosure key.
  */
 export function BrowserActivityCard({
   tools,

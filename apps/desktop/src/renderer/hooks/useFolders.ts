@@ -128,8 +128,9 @@ export function useUpdateFolder() {
  * The renderer-side fallout of a folder leaving the live list: its member
  * conversations are gone from the sidebar already (soft-delete archives them
  * server-side in one statement), so drop their cached rows and unload their
- * runtime slices. Returns true when one of them was the conversation on screen —
- * the caller owns the navigation away from it.
+ * runtime slices. Returns true when one of them is the conversation currently
+ * on the canvas (route location, not the runtime pointer) — the caller owns
+ * the navigation away from it.
  *
  * Deliberately *not* an archive loop: routing these through the archive endpoint
  * would stamp them as「用户主动归档」and the server could no longer tell which
@@ -139,15 +140,15 @@ export function releaseFolderConversations(
   folderId: string,
   {
     dropRuntime,
-    currentId,
-  }: { dropRuntime: (id: string) => void; currentId: string | null },
+    locationId,
+  }: { dropRuntime: (id: string) => void; locationId: string | null },
 ): boolean {
   let releasedActive = false;
   for (const { id, folderId: owner } of getConversations()) {
     if (owner !== folderId) continue;
     removeConversationFromCache(id);
     dropRuntime(id);
-    if (id === currentId) releasedActive = true;
+    if (id === locationId) releasedActive = true;
   }
   return releasedActive;
 }

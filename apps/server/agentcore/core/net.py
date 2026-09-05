@@ -4,7 +4,7 @@ These primitives are pure, stateless infra (no business-module dependencies), so
 they live in ``core`` and are consumed by *both* the web tools
 (``tools/builtin/web``) and HTTP routes that fetch the open internet (e.g. the
 favicon proxy). Keeping them here avoids an ``api -> tools`` import just to reuse
-a security guard, and guarantees the favicon proxy and ``read_url`` apply the
+a security guard, and guarantees the favicon proxy and ``web_fetch`` apply the
 *same* SSRF policy (one definition, no drift).
 
 What lives here (stateless):
@@ -61,7 +61,7 @@ class PinnedAddressError(httpx.ConnectError):
     to a blocked address (or cannot be resolved), closing the DNS-rebinding TOCTOU.
 
     Subclasses ``httpx.ConnectError`` so existing ``except httpx.NetworkError`` paths
-    (e.g. the egress breaker in ``read_url._safe_request``) catch it unchanged; its
+    (e.g. the egress breaker in ``web_fetch._safe_request``) catch it unchanged; its
     ``str()`` is the honest, model-facing reason (see :func:`describe_net_error`).
 
     ``block`` keeps the :class:`URLBlock` that caused the refusal, so a caller can map a
@@ -255,7 +255,7 @@ def describe_net_error(
 
 
 # --- SSRF guard -------------------------------------------------------------
-# One definition, shared by read_url (the tool) and the favicon proxy (a route),
+# One definition, shared by web_fetch (the tool) and the favicon proxy (a route),
 # so both apply identical private-network protection with no drift.
 
 # ``localhost`` / ``0.0.0.0`` are NOT here: they are the same refusal as a 127.x / ::1
@@ -326,13 +326,13 @@ def _fake_ip_proxy_allowed() -> bool:
     """Whether Clash/Mihomo fake-IP placeholders (198.18/15) may be dialed."""
     from agentcore.config import settings
 
-    return bool(settings.read_url_allow_fake_ip_proxy)
+    return bool(settings.web_fetch_allow_fake_ip_proxy)
 
 
 def ip_is_safe(ip: str) -> bool:
     """True only for globally-routable addresses (blocks private/metadata).
 
-    When ``read_url_allow_fake_ip_proxy`` is on, 198.18.0.0/15 placeholders from
+    When ``web_fetch_allow_fake_ip_proxy`` is on, 198.18.0.0/15 placeholders from
     fake-IP DNS are treated as connectable — the local proxy routes them to the
     real destination. True private/loopback/link-local addresses stay blocked.
     """
@@ -464,7 +464,7 @@ class PinnedIPTransport(httpx.AsyncBaseTransport):
     hostname is preserved for the ``Host`` header and — over TLS — the SNI / cert
     hostname, so vhost routing and certificate verification are unaffected.
 
-    Scope: wrap clients that fetch *model/user-supplied* URLs (``read_url``, the
+    Scope: wrap clients that fetch *model/user-supplied* URLs (``web_fetch``, the
     favicon proxy). Intentionally NOT used for fixed, trusted infrastructure (e.g.
     the self-hosted SearXNG), which may legitimately resolve to a private IP.
     """

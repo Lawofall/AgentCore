@@ -17,7 +17,7 @@ export function ServiceUnavailablePage({
 }: ServiceUnavailablePageProps) {
   return (
     <div className="flex h-full w-full items-center justify-center bg-background p-6">
-      <div className="w-full max-w-sm text-center">
+      <div className="w-full max-w-xs text-center">
         <BrandMark
           size="md"
           layout="stack"

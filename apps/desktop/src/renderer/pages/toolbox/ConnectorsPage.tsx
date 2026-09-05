@@ -1,7 +1,7 @@
 import { PageContainer } from "@/components/layout/PageContainer";
-import { ToolboxPageHeader } from "@/components/toolbox/ToolboxPageHeader";
-import { Badge, Button, Card, Input } from "@/components/ui";
+import { Badge, Button, Card, Input, PageHeader } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { TOOLBOX_PAGE_BACK } from "@/pages/toolbox/manual/paths";
 import type { McpServerConfig, McpServerListItem } from "@shared/mcp-contract";
 import { Plug, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -48,7 +48,7 @@ export function ConnectorsPage() {
   if (!api) {
     return (
       <PageContainer width="canvas">
-        <ToolboxPageHeader />
+        <PageHeader title="连接器" back={TOOLBOX_PAGE_BACK} />
         <p className="text-sm text-muted-foreground">
           本机 MCP 仅桌面端可用（stdio 由本机进程拉起）。当前环境无法配置本地
           MCP Server，请使用 AgentCore 桌面应用。
@@ -139,18 +139,15 @@ export function ConnectorsPage() {
 
   return (
     <PageContainer width="canvas">
-      <ToolboxPageHeader
-        actions={
+      <PageHeader
+        title="连接器"
+        back={TOOLBOX_PAGE_BACK}
+        action={
           <Button size="md" onClick={openNew} icon={<Plus size={14} />}>
             添加 Server
           </Button>
         }
       />
-
-      <p className="max-w-2xl text-xs text-muted-foreground">
-        配置本机 stdio MCP Server。启用后，下一轮协作中 CEO 与队员均可发现并调用
-        （一律需审批；开场不灌工具表）。
-      </p>
 
       {error ? (
         <p className="mt-4 text-sm text-muted-foreground" role="alert">

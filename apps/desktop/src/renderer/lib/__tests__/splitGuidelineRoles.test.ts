@@ -1,12 +1,11 @@
 import {
   extractCeoIdentity,
   splitWorkerGuideline,
-  workerContractFromGuidelines,
 } from "@/lib/splitGuidelineRoles";
 import { describe, expect, it } from "vitest";
 
 const CONTRACT =
-  "你的交付形态是【落盘文件】。\n\n<写工具谨慎>\n谨慎写盘。\n</写工具谨慎>";
+  "【落盘文件】（form=files）成品写入工作区；正文只报路径、怎么用、关键取舍。";
 
 const LEAF = `<身份>
 叶子身份。
@@ -14,29 +13,18 @@ const LEAF = `<身份>
 
 ${CONTRACT}`;
 
-const NESTED = `<身份>
-可再委派身份。
-</身份>
-
-${CONTRACT}`;
-
 describe("splitWorkerGuideline", () => {
-  it("splits a tagged identity from the trailing contract", () => {
-    expect(splitWorkerGuideline(LEAF)).toEqual({
-      identity: "<身份>\n叶子身份。\n</身份>",
-      contract: CONTRACT,
-    });
+  it("keeps only the tagged identity and drops a trailing contract", () => {
+    expect(splitWorkerGuideline(LEAF)).toBe("<身份>\n叶子身份。\n</身份>");
+    expect(splitWorkerGuideline(LEAF)).not.toContain("落盘文件");
   });
 
   it("treats untagged catalog text as identity-only", () => {
-    expect(splitWorkerGuideline("叶子身份正文")).toEqual({
-      identity: "叶子身份正文",
-      contract: "",
-    });
+    expect(splitWorkerGuideline("叶子身份正文")).toBe("叶子身份正文");
   });
 
-  it("returns empty pieces for blank input", () => {
-    expect(splitWorkerGuideline("  ")).toEqual({ identity: "", contract: "" });
+  it("returns empty for blank input", () => {
+    expect(splitWorkerGuideline("  ")).toBe("");
   });
 });
 
@@ -58,17 +46,5 @@ describe("extractCeoIdentity", () => {
   it("strips an untagged 按需目录 when identity tags are missing", () => {
     const addon = "路由核心。\n\n<按需目录>\n- run：跑命令\n</按需目录>";
     expect(extractCeoIdentity(addon)).toBe("路由核心。");
-  });
-});
-
-describe("workerContractFromGuidelines", () => {
-  it("reads the shared contract from the leaf template", () => {
-    expect(workerContractFromGuidelines(LEAF, NESTED)).toBe(CONTRACT);
-  });
-
-  it("falls back to the nested template when the leaf has no contract", () => {
-    expect(
-      workerContractFromGuidelines("<身份>\n叶子。\n</身份>", NESTED),
-    ).toBe(CONTRACT);
   });
 });

@@ -32,6 +32,7 @@ describe("ManualCheckpointCardPreview", () => {
 
     expect(screen.queryByText("已按你的决定继续")).toBeNull();
     expect(screen.getByText(/同业务线 3 个试点/)).toBeTruthy();
+    expect(screen.queryByText(/我的答复/)).toBeNull();
     expect(screen.queryByRole("button", { name: "提交" })).toBeNull();
     expect(screen.getByText("演示，不会发给团队")).toBeTruthy();
 

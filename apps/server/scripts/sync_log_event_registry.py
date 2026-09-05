@@ -137,6 +137,10 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "op": "str",
         "error": "str",
     },
+    "platform_pool.reloaded": {
+        "members": "int",
+        "rows": "int",
+    },
     "chat.turn_start": {
         "preview": "str",
         "chars": "int",
@@ -426,7 +430,7 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
     },
     "tool.args_salvaged": {"args_preview": "str"},
     "tool.web_search": {"query": "str", "hosts": "list"},
-    "tool.read_url_error": {"url": "str", "host": "str", "error": "str"},
+    "tool.web_fetch_error": {"url": "str", "host": "str", "error": "str"},
     "worker.handoff": {
         "run_id": "str",
         "body_chars": "int",
@@ -1000,6 +1004,21 @@ HISTORICAL_COMPAT: dict[str, str] = {
         "历史兼容：曾在提示装了上轮交付缺口时记账；跨轮缺口易变尾已撤，不再发此事件。"
         "delegated / prior_gaps / recent_graph 字段保留兼容旧 JSONL"
     ),
+    "engine.audit_gate_hard_block": (
+        "历史兼容：曾因审计启发式硬拦收口；拦截已撤，不再发此事件"
+    ),
+    "engine.audit_gate_nudge": (
+        "历史兼容：曾因审计启发式软提醒；拦截已撤，不再发此事件"
+    ),
+    "engine.availability_status_nudge": (
+        "历史兼容：曾因可用性状态软提醒；拦截已撤，不再发此事件"
+    ),
+    "engine.debate_gate_nudge": (
+        "历史兼容：曾因辩论收口软提醒；拦截已撤，不再发此事件"
+    ),
+    "engine.retrieval_budget_critical": (
+        "历史兼容：曾在检索预算临界注入提示；提示已撤，不再发此事件"
+    ),
 }
 
 KEY_DESC: dict[str, str] = {
@@ -1020,17 +1039,21 @@ KEY_DESC: dict[str, str] = {
         "exceeded 为触发的维度名；max_* 为声明值（未声明的维度为 null）"
     ),
     "platform_pool.blocked": (
-        "平台池成员 401（封号或坏 key）或 403 RegionError 已摘除，需人工重新启用。"
-        "401 不换号重试；403 允许 commit 前换号"
+        "平台池成员 401 AuthError（封号或坏 key）或 403 RegionError 已摘除，需人工重新启用。"
+        "AuthError 不换号重试；403 允许 commit 前换号。CreditsError 走 cooling/exhausted"
     ),
     "platform_pool.cooling": (
-        "平台池成员因上游 429 进入 cooling/exhausted；recovery_at 为 unix 秒（上游 Retry-After）"
+        "平台池成员因上游 429 或 CreditsError / 工作区月限进入 cooling/exhausted；"
+        "recovery_at 为 unix 秒（Retry-After，缺头则窗口 5h / 月耗尽用订阅月末）"
     ),
     "platform_pool.failover": (
         "流式 commit 前换号：from_credential_id → to_credential_id（稳定账号 id，非 key）"
     ),
     "platform_pool.redis_fail_open": (
         "池状态 Redis 读写失败，本操当无记录（fail-open）；construct 失败则退回内存实现"
+    ),
+    "platform_pool.reloaded": (
+        "平台池快照热更完成；成员签名（id/enabled/url/day/key hash）未变打 debug，变化才 info"
     ),
     "chat.zero_output_send_deleted": (
         "本发新建 user + 空失败助手（LLM_RATE_LIMIT / KEY_INVALID / 余额不足，"
@@ -1091,9 +1114,9 @@ KEY_DESC: dict[str, str] = {
         "交付卡已发射（state + artifacts/accepted/rejected/gaps 计数）"
     ),
     "worker.escalate": "worker 升级求决策",
-    "tool.execute_start": "工具开始执行（read_url/download_url 带 url/host）",
+    "tool.execute_start": "工具开始执行（web_fetch/download_url 带 url/host）",
     "tool.execute_end": "工具执行结束（status/duration_ms；error 时带 reason；URL 工具带 url/host）",
-    "tool.read_url_error": "read_url 抓取失败（url/host/error）",
+    "tool.web_fetch_error": "web_fetch 抓取失败（url/host/error）",
     "tool.args_salvaged": "参数 JSON 结构修复成功（完整值后的尾部多余字符被丢掉）",
     "worker.handoff": "worker 收尾（body_chars=同轮交付正文长）",
     "worker.prepare_phase": "worker 冷开分段耗时（phase + ms；每 phase 一行）",

@@ -277,8 +277,8 @@ def _multi_agent_worker_process_timeline() -> list[SSEEvent]:
         tool_use_end("tc1", "web_search", success=True, output="命中 3 条", run_id="r1"),
         run_output_delta("r1", "w1", "初步结论：价格带偏高。"),
         run_reasoning_delta("r1", "w1", "再读一篇。"),
-        tool_use_start("tc2", "read_url", {"url": "https://example.com"}, run_id="r1"),
-        tool_use_end("tc2", "read_url", success=True, output="正文…", run_id="r1"),
+        tool_use_start("tc2", "web_fetch", {"url": "https://example.com"}, run_id="r1"),
+        tool_use_end("tc2", "web_fetch", success=True, output="正文…", run_id="r1"),
         run_output_delta("r1", "w1", " 最终建议：跟价。"),
         run_completed(
             "r1",

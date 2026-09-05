@@ -1,3 +1,5 @@
+import { hasLocalFiles } from "@/lib/capabilities";
+import { getComposerChannelPreference } from "@/lib/composerChannelPreference";
 import { createZustandUiStorage } from "@/lib/uiStorage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -9,8 +11,8 @@ const uiPersistStorage = createJSONStorage(() => createZustandUiStorage());
 
 /**
  * Draft-time「在哪工作」intent — single discriminant union.
- * Default = quick cloud scratch（桌面裸聊默认切云 §八.7）。
- * `quick_local` 仅类型遗留（入口已砍；发送时改导云，不再造本机草稿）。
+ * Desktop default = quick local scratch（`~/Documents/AgentCore/conversations/<id>`）。
+ * Web / 手机无本机盘 → quick cloud。
  */
 export type DraftWorkspaceIntent =
   | { kind: "quick_local" }
@@ -18,7 +20,10 @@ export type DraftWorkspaceIntent =
   | { kind: "folder"; folderId: string };
 
 export function defaultDraftWorkspaceIntent(): DraftWorkspaceIntent {
-  return { kind: "quick_cloud" };
+  if (!hasLocalFiles()) return { kind: "quick_cloud" };
+  return getComposerChannelPreference() === "cloud"
+    ? { kind: "quick_cloud" }
+    : { kind: "quick_local" };
 }
 
 /** Viewport rect for anchoring the「新建文件夹」cascade near a trigger. */

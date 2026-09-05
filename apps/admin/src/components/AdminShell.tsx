@@ -15,6 +15,7 @@ import {
   ScrollText,
   Server,
   ShieldCheck,
+  Store,
   Users,
   UsersRound,
   Wallet,
@@ -28,7 +29,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
 /**
- * The console's sections: 概览 / 用户 / 对话 / 分析 / 审计 / 公告 / 内测群 / 平台额度 / 系统.
+ * The console's sections: 概览 / 用户 / 对话 / 分析 / 审计 / 公告 / 商店 / 内测群 / 平台额度 / 系统.
  * URL-routed via react-router for bookmarkable deep links.
  */
 export type AdminTab =
@@ -38,6 +39,7 @@ export type AdminTab =
   | "analytics"
   | "audit"
   | "notices"
+  | "store"
   | "beta-group"
   | "quota"
   | "system";
@@ -52,7 +54,7 @@ interface NavItem {
 }
 
 /**
- * Nine flat entries read as one undifferentiated list. Grouping them by what the
+ * A flat list of entries reads as one undifferentiated list. Grouping them by what the
  * operator is doing — watching the platform, investigating a case, administering it —
  * gives the sidebar a shape you can scan instead of read.
  */
@@ -82,6 +84,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { id: "users", label: "用户", icon: Users, path: "/users", match: ["/users"] },
       { id: "notices", label: "公告", icon: Megaphone, path: "/notices" },
+      { id: "store", label: "商店", icon: Store, path: "/store" },
       { id: "beta-group", label: "内测群", icon: UsersRound, path: "/beta-group" },
       { id: "quota", label: "平台额度", icon: Wallet, path: "/quota" },
       { id: "system", label: "系统", icon: Server, path: "/system" },

@@ -14,6 +14,7 @@ from agentcore.llm.platform_pool_scheduler import (
     clear_account_runtime_state,
     failover_member,
     pick_schedulable_platform_pool_member,
+    record_platform_account_exhausted,
     record_platform_auth_block,
     record_platform_rate_limit,
 )
@@ -275,6 +276,48 @@ def test_monthly_limit_marks_exhausted_and_skips(monkeypatch):
     creds = platform_llm_credentials()
     assert creds is not None
     assert creds.platform_credential_id == b.id
+
+
+def test_credits_exhausted_skips_to_next_until_month_end(monkeypatch):
+    monkeypatch.setattr(settings, "platform_api_key", "")
+    monkeypatch.setattr(settings, "platform_model_credentials", "")
+    a, b = _two()
+    record_platform_account_exhausted(
+        api_key=a.api_key, base_url=a.base_url, reason="creditserror"
+    )
+    creds = platform_llm_credentials()
+    assert creds is not None
+    assert creds.platform_credential_id == b.id
+    rec = get_pool_state_store().get(a.id)
+    assert rec is not None
+    assert rec.status == "exhausted"
+    assert rec.source == "creditserror"
+    assert rec.recovery_at is not None
+    assert rec.recovery_at > time.time() + 60
+    runtime = account_runtime_for_admin(a.id)
+    assert runtime.status == "exhausted"
+    assert runtime.source == "creditserror"
+
+
+def test_window_429_without_retry_after_cools_five_hours(monkeypatch):
+    monkeypatch.setattr(settings, "platform_api_key", "")
+    monkeypatch.setattr(settings, "platform_model_credentials", "")
+    a, b = _two()
+    record_platform_rate_limit(
+        api_key=a.api_key,
+        base_url=a.base_url,
+        retry_after_seconds=None,
+        retry_after_source="local_backoff",
+        limit_name="5 hour",
+    )
+    creds = platform_llm_credentials()
+    assert creds is not None
+    assert creds.platform_credential_id == b.id
+    rec = get_pool_state_store().get(a.id)
+    assert rec is not None
+    assert rec.status == "cooling"
+    assert rec.recovery_at is not None
+    assert rec.recovery_at > time.time() + 5 * 3600 - 2
 
 
 def test_memory_store_expires_cooling():

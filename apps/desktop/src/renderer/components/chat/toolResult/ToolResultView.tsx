@@ -16,12 +16,12 @@ import type {
   ConversationLogDisplay,
   HostDisplay,
   MemoryConsultDisplay,
-  ReadUrlDisplay,
   RuleConsultDisplay,
   SkillConsultDisplay,
   ToolDisplay,
   ToolFailure,
   UnifiedConsultDisplay,
+  WebFetchDisplay,
   WebSearchDisplay,
 } from "@/types/events";
 import { Terminal } from "lucide-react";
@@ -70,7 +70,7 @@ function isWebSearchDisplay(d: unknown): d is WebSearchDisplay {
   return !!d && Array.isArray((d as { results?: unknown }).results);
 }
 
-function isReadUrlDisplay(d: unknown): d is ReadUrlDisplay {
+function isWebFetchDisplay(d: unknown): d is WebFetchDisplay {
   if (!d) return false;
   const x = d as { url?: unknown; content?: unknown };
   return typeof x.url === "string" && typeof x.content === "string";
@@ -293,7 +293,7 @@ export function toolResultPeek(d: ToolResultData): string {
     const n = d.display.count;
     return `${n} folder${n === 1 ? "" : "s"}`;
   }
-  if (isReadUrlDisplay(d.display)) {
+  if (isWebFetchDisplay(d.display)) {
     const title =
       cleanSourceTitle(d.display.title) || d.display.site || d.display.url;
     const site = d.display.site?.trim();
@@ -432,7 +432,7 @@ function WebSearchResult({ display }: { display: WebSearchDisplay }) {
  * site, opens in the system browser) plus the extracted body preview — mirrors
  * {@link WebSearchResult} / {@link SourceCards} for the header and the bordered
  * header+body shell of {@link SkillConsultResult}. */
-function ReadUrlResult({ display }: { display: ReadUrlDisplay }) {
+function WebFetchResult({ display }: { display: WebFetchDisplay }) {
   const title = cleanSourceTitle(display.title) || display.site || display.url;
   const body = (display.content ?? "").replace(/\n+$/, "");
   return (
@@ -712,7 +712,7 @@ function TextResult({
 
 /**
  * Rich rendering of a finished tool call (工具结果富渲染), keyed off the tool name
- * (形状是数据不是模式): web_search → result cards, read_url → source card + body,
+ * (形状是数据不是模式): web_search → result cards, web_fetch → source card + body,
  * code_execute → a terminal view, str_replace → a red/green diff, file_write → a
  * content card (the last two from the call args). Anything else — or a tool whose
  * rich data is absent — falls back to the model-facing text result.
@@ -757,8 +757,8 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
   if (isWebSearchDisplay(data.display)) {
     return <WebSearchResult display={data.display} />;
   }
-  if (isReadUrlDisplay(data.display)) {
-    return <ReadUrlResult display={data.display} />;
+  if (isWebFetchDisplay(data.display)) {
+    return <WebFetchResult display={data.display} />;
   }
   if (isCodeExecDisplay(data.display)) {
     return <CodeExecResult display={data.display} />;

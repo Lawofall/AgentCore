@@ -4,6 +4,7 @@
  * disclosure mock 跟真实收场默认（直播展开、收场收起）。
  */
 import { ProcessTimeline } from "@/components/chat/message-bubble/ProcessTimeline";
+import type { CheckpointDisplay } from "@/stores/conversation";
 import type { ProcessStep } from "@/types/events";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -87,5 +88,72 @@ describe("ProcessTimeline · 非末段正文进过程折", () => {
     );
     expect(screen.getByText("Used 1 tool")).toBeTruthy();
     expect(screen.getByText("清晰度是 1080p")).toBeTruthy();
+  });
+
+  it("hides a resolved ask behind the summary and keeps the trailing answer", () => {
+    const resolvedAsk: CheckpointDisplay = {
+      id: "cp-1",
+      question: "你心里的「Agent 生态」更接近哪种？",
+      assumptions: [],
+      questions: [],
+      intent: "decision",
+      status: "resolved",
+      decision: "continue",
+      note: "· 你心里的「Agent 生态」更接近哪种？：都不太对",
+      selected: [],
+    };
+    render(
+      <ProcessTimeline
+        process={[
+          { kind: "content", text: "先对齐方向" },
+          { kind: "checkpoint", checkpoint_id: "cp-1" },
+          toolDone,
+          { kind: "content", text: "按这个方向继续" },
+        ]}
+        isStreaming={false}
+        citations={[]}
+        composingTool={null}
+        fallbackContent=""
+        conversationId="c1"
+        checkpoints={[resolvedAsk]}
+        planReviews={[]}
+      />,
+    );
+    expect(screen.getByText("Used 1 tool")).toBeTruthy();
+    expect(screen.queryByText("先对齐方向")).toBeNull();
+    expect(screen.queryByText(/都不太对/)).toBeNull();
+    expect(screen.getByText("按这个方向继续")).toBeTruthy();
+  });
+
+  it("keeps the lead-in before a pending ask visible", () => {
+    const pendingAsk: CheckpointDisplay = {
+      id: "cp-pending",
+      question: "选哪条？",
+      assumptions: [],
+      questions: [],
+      intent: "decision",
+      status: "pending",
+      decision: null,
+      note: "",
+      selected: [],
+    };
+    render(
+      <ProcessTimeline
+        process={[
+          { kind: "content", text: "你选哪个？" },
+          { kind: "checkpoint", checkpoint_id: "cp-pending" },
+          toolDone,
+        ]}
+        isStreaming={false}
+        citations={[]}
+        composingTool={null}
+        fallbackContent=""
+        conversationId="c1"
+        checkpoints={[pendingAsk]}
+        planReviews={[]}
+      />,
+    );
+    expect(screen.getByText("Used 1 tool")).toBeTruthy();
+    expect(screen.getByText("你选哪个？")).toBeTruthy();
   });
 });

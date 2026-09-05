@@ -41,34 +41,33 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-function renderPage(note?: string) {
+function renderPage() {
   return render(
     <MemoryRouter initialEntries={[APP_PATHS.toolbox.tools]}>
-      <CapabilityPage note={note}>{() => <div>目录正文</div>}</CapabilityPage>
+      <CapabilityPage title="工具">{() => <div>目录正文</div>}</CapabilityPage>
     </MemoryRouter>,
   );
 }
 
 describe("CapabilityPage 统一页头", () => {
-  it("用工具箱页头承担返回与定位，不再自挂 h1 标题", async () => {
+  it("返回工具箱并挂本页标题", async () => {
     vi.mocked(getCapabilities).mockResolvedValue(catalog);
-    const { container } = renderPage();
+    renderPage();
 
     expect(
       screen.getByRole("link", { name: "工具箱" }).getAttribute("href"),
     ).toBe(APP_PATHS.toolbox.root);
-    expect(screen.getByRole("navigation", { name: "工具箱能力" })).toBeTruthy();
-    expect(container.querySelector("h1")).toBeNull();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "工具" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "工具箱能力" })).toBeNull();
     await waitFor(() => expect(screen.getByText("目录正文")).toBeTruthy());
   });
 
-  it("note 降级为内容区第一行 muted 小字", async () => {
+  it("does not render a page-level lede", async () => {
     vi.mocked(getCapabilities).mockResolvedValue(catalog);
-    renderPage("「全员」CEO 与队员都可用。");
-
-    const note = screen.getByText("「全员」CEO 与队员都可用。");
-    expect(note.className).toContain("text-xs");
-    expect(note.className).toContain("text-muted-foreground");
+    renderPage();
+    expect(screen.queryByText(/全员/)).toBeNull();
     await waitFor(() => expect(screen.getByText("目录正文")).toBeTruthy());
   });
 

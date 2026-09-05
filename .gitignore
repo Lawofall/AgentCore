@@ -163,6 +163,10 @@ coverage/
 logs/
 # Conversation timeline exports (stdout dumps from scripts/log_timeline.py)
 _*_timeline.txt
+# log_timeline --pack investigation packs (may include messages.json)
+apps/server/_pack_*/
+apps/server/--full/
+apps/server/--trace/
 
 # Database
 *.db

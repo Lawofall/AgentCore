@@ -12,11 +12,11 @@ don't refetch.
 
 Security:
 - **SSRF** — every fetched URL (and each redirect hop) is run through the same
-  private-IP guard as ``read_url`` (:func:`agentcore.core.net.is_safe_url`, the
+  private-IP guard as ``web_fetch`` (:func:`agentcore.core.net.is_safe_url`, the
   shared definition), so the proxy can't be used to reach internal hosts / cloud
   metadata.
 - **Isolated from the egress breaker** — favicon fetches deliberately do NOT use
-  ``read_url``'s shared per-host circuit breaker; a site whose *icon* fails must
+  ``web_fetch``'s shared per-host circuit breaker; a site whose *icon* fails must
   not trip the breaker that gates the agent's actual page reads of that host.
 - **Public, but bounded** — no auth (an ``<img>`` can't carry the session
   cookie cross-origin), response capped + restricted to image bytes.
@@ -177,7 +177,7 @@ async def _fetch_checked(client: httpx.AsyncClient, url: str) -> httpx.Response 
     """GET ``url`` re-checking SSRF on every redirect hop (client must not auto-follow).
 
     Returns the final response, or None if a hop is blocked / too many redirects.
-    Unlike ``read_url._safe_request`` this does NOT touch the shared egress breaker.
+    Unlike ``web_fetch._safe_request`` this does NOT touch the shared egress breaker.
     """
     request = client.build_request("GET", url, headers=_BROWSER_HEADERS)
     for _ in range(_MAX_REDIRECTS + 1):

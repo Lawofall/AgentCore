@@ -1,4 +1,4 @@
-"""Soft debate-commitment nudge: kickoff form selected but debate never ran."""
+"""Debate-form parser tests; engine commitment gate is withdrawn."""
 
 from __future__ import annotations
 
@@ -17,13 +17,10 @@ from agentcore.llm.provider.protocol import (
 )
 from agentcore.runtime.engine import react_loop
 from agentcore.runtime.engine.debate_commitment import (
-    debate_gate_nudge_prompt,
     user_selected_debate_form,
 )
 from agentcore.runtime.engine.governance import (
-    maybe_inject_debate_gate,
     note_delegate_batches,
-    should_debate_gate,
 )
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.loop_controller import LoopController, ToolAttempt
@@ -167,12 +164,10 @@ async def _run_captain(
     return content or "", messages
 
 
-def test_nudge_copy_is_soft_not_blocking():
-    text = debate_gate_nudge_prompt()
-    assert "辩论承诺复核" in text
-    assert "debate" in text
-    assert "豁免理由" in text
-    assert "不阻断" in text or "不再打扰" in text
+def test_nudge_copy_withdrawn():
+    from agentcore.runtime.engine import debate_commitment as mod
+
+    assert not hasattr(mod, "debate_gate_nudge_prompt")
 
 
 def test_user_selected_from_settled_reply():
@@ -259,16 +254,9 @@ def test_silent_when_no_kickoff_signal():
 
 
 def test_should_debate_gate_matrix():
-    controller = LoopController()
-    msgs = [LLMMessage(role="tool", content=_settled_reply_with_form())]
-    assert should_debate_gate(controller, role="captain", messages=msgs) is True
-    assert should_debate_gate(controller, role="worker", messages=msgs) is False
+    from agentcore.runtime.engine import governance as gov
 
-    controller.mark_debate_executed()
-    assert should_debate_gate(controller, role="captain", messages=msgs) is False
-
-    controller2 = LoopController()
-    assert should_debate_gate(controller2, role="captain", messages=[]) is False
+    assert not hasattr(gov, "should_debate_gate")
 
 
 def test_note_delegate_batches_marks_debate_executed():
@@ -299,14 +287,11 @@ async def test_selected_debate_not_executed_fires_nudge():
         [
             [_tool_chunk("delegate", json.dumps({"tasks": [{"role": "a", "task": "t"}]}), call_id="d1")],
             [_content_chunk("汇总已含论证，直接收官")],
-            [_content_chunk("最终交付")],
         ]
     )
     content, messages = await _run_captain(provider, _registry(delegate), history=history)
-    assert content == "最终交付"
-    gates = _debate_gate_msgs(messages)
-    assert len(gates) == 1
-    assert "豁免理由" in (gates[0].content or "")
+    assert content == "汇总已含论证，直接收官"
+    assert _debate_gate_msgs(messages) == []
 
 
 @pytest.mark.asyncio
@@ -343,12 +328,6 @@ async def test_already_executed_debate_does_not_fire():
 
 
 def test_maybe_inject_is_one_shot():
-    controller = LoopController()
-    messages = [LLMMessage(role="tool", content=_settled_reply_with_form())]
-    assert maybe_inject_debate_gate(
-        controller, messages=messages, run_id="r", round_idx=1, role="captain"
-    )
-    assert maybe_inject_debate_gate(
-        controller, messages=messages, run_id="r", round_idx=2, role="captain"
-    ) is False
-    assert sum(1 for m in messages if m.content and "辩论承诺复核" in m.content) == 1
+    from agentcore.runtime.engine import governance as gov
+
+    assert not hasattr(gov, "maybe_inject_debate_gate")

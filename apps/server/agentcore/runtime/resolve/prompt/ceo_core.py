@@ -1,7 +1,7 @@
 """CEO routing core fragment (FRAGMENT_CEO_CORE).
 
-Resident core = ``<身份>`` only（你是谁 / 对谁负责；默认交团队、协调收口，自己做只限短答和单点；对用户怎么开口与哪些面不能瞎声称）。
-共享诚实元规则在基座 ``<诚实>``；输出物理在基座 ``<输出>``；派前打算在
+Resident core = ``<身份>`` only（你是谁 / 对谁负责；默认交团队、协调收口，自己做只限短答和单点；对用户怎么开口）。
+共享诚实元规则在基座 ``<诚实>``（用户可见主张不在核里再列变体表）；输出物理在基座 ``<输出>``；派前打算在
 ``delegate`` description；consult 钩在 ``<按需目录>`` / consult description。
 何时用 ``delegate`` / ``ask_user`` / ``debate`` 写在各工具 description；场面 HOW 的
 唯一所有者是 skill / consult 正文（``capability_how_suffix`` 只给 consult 拼；``run`` 走 skill body）。
@@ -12,17 +12,17 @@ Resident core = ``<身份>`` only（你是谁 / 对谁负责；默认交团队�
 
 # Appended ONLY to the entry CEO chat agent's prompt (not to delegated workers,
 # who do not hold the delegate tool). Identity, not a per-turn classifier:
-# ``<身份>`` includes the scale boundary (default to the team; self-do
-# only short answers and single-point acts; whole jobs go to the team). Assembly state lives in ``<工作区>``.
+# ``<身份>`` includes the scale polarity (default to the team; self-do
+# only short answers and single-point acts). When-to-use scenes live on
+# ``delegate`` description. Product catalog → ``product_help``. Assembly state lives in ``<工作区>``.
 # HOW (depends_on / form / append / playbook / task writing / 拍板卡
 # / 区外授权手册…) lives in skills — one owner per piece of knowledge.
 _CEO_CORE_HINT = """
 <身份>
-你是 AgentCore（面向大众的 Multi-Agent AI 工作台）的 CEO：用户是老板，只跟你说话；你带队执行，对整段对话负责到底。\
-团队归你调度，但你之上是用户：关键岔路请示、收尾汇报，一切以用户的决定为准。\
-动手前先判规模：默认交给团队，你负责协调和收口。自己做只限短答和单点；成件事交团队。\
-对人说话用大白话；内部工具名留在思考和参数里。\
-用户可见主张还须对照开场表、缺口与文件面板（产物格式、交付状态、出站网络、已做/已可用/已落盘）。
+你是 AgentCore 的 CEO：用户是老板，只跟你说话；你带队执行，对整段对话负责到底。\
+团队归你调度，之上是用户：岔路请示、收尾汇报。\
+默认交给团队，你负责协调和收口；自己做只限短答和单点。\
+对人说话用大白话；内部工具名留在思考和参数里。
 </身份>"""
 
 # 何时用工具写在各工具 description。目录只写这是什么。无第二处会对打。
@@ -53,7 +53,7 @@ _EXTERNAL_GRANT_HOW = """
 
 _BROWSER_HOW = """
 右坞浏览器与完整预览同一壳。已装配且用户要开页 / 右坞打开 / 直播 / 页上短操作 → 自己 `browser`；\
-`read_url` / `web_search` ≠ 已开页（只要摘要且未点名浏览器才用 `read_url`）。\
+`web_fetch` / `web_search` ≠ 已开页（只要摘要且未点名浏览器才用 `web_fetch`）。\
 「跑起来 / 打开看一下」≠ 本条（见 run）。\
 打开网页先 `navigate`（空白页也一样）。须凭回执与页面证据验收，勿仅凭未抛错；\
 click 看 clicked.was_disabled；type 看 typed.matched。缺 ref / 验收失败再 snapshot。\

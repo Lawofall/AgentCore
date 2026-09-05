@@ -146,21 +146,22 @@ def test_invalid_form_defaults_to_files():
     assert d.form == "files"
 
 
-def test_identity_form_prose_has_no_file_write_guidance():
-    prose = build_worker_identity(has_dependents=False, form="prose")
-    files = build_worker_identity(has_dependents=False, form="files")
-    omitted = build_worker_identity(has_dependents=False, form=None)
-    workspace = build_worker_identity(has_dependents=False, form="workspace")
+def test_deliverable_form_how_has_no_file_write_guidance():
+    prose = describe_deliverable(Deliverable(form="prose"))
+    files = describe_deliverable(Deliverable(form="files"))
+    omitted = describe_deliverable(Deliverable())
+    workspace = describe_deliverable(Deliverable(form="workspace"))
 
     assert "form=prose" in prose
     assert "file_write" not in prose
     assert "纯文字" in prose
+    assert "不要落盘" in prose
 
     assert "form=files" in files
-    assert "file_write" in files
-    assert "必须" in files
-    # 压缩后的落盘纪律（identity，不只 CEO skill）。
-    assert "artifact manifest" in files
+    assert "成品写入工作区" in files
+    assert "file_write" not in files
+    assert "必须" not in files
+    assert "artifact manifest" not in files
     assert "落盘与修订" not in files
     assert "consult(long_form_landing)" not in files
     assert "consult(long_form_landing)" not in omitted
@@ -175,63 +176,58 @@ def test_identity_form_prose_has_no_file_write_guidance():
     # omit = files（无双向自判）
     assert "form=files" in omitted
     assert "可独立阅读的文字" not in omitted
-    assert "file_write" in omitted
-    assert "artifact manifest" in omitted
+    assert "成品写入工作区" in omitted
+    assert "artifact manifest" not in omitted
     assert "Artifact-first" not in omitted
     assert "落盘与修订" not in omitted
 
     assert "form=workspace" in workspace
     assert "改工程" in workspace
     assert "AgentCore/文档" in workspace
-    assert "file_write" in workspace
+    assert "file_write" not in workspace
     assert "consult(long_form_landing)" not in workspace
     assert "consult(verify_and_fix)" not in workspace
 
-def test_artifacts_inject_files_form_identity_block():
-    """非空 artifacts 且 form 省略 ⇒ 强制 files 形态提示，非 legacy。"""
-    by_artifacts = build_worker_identity(
-        has_dependents=False, artifacts=["report.md"]
-    )
+
+def test_artifacts_select_files_form_how():
+    """非空 artifacts 且 form 省略 ⇒ files 形态提示（Deliverable 默认 form=files）。"""
+    by_artifacts = describe_deliverable(Deliverable(artifacts=["report.md"]))
     assert "form=files" in by_artifacts
     assert "落盘文件" in by_artifacts
+    assert "report.md" in by_artifacts
 
-    # Omit form + empty artifacts → files（漏填默认）。
-    by_omit = build_worker_identity(has_dependents=False)
+    by_omit = describe_deliverable(Deliverable())
     assert "form=files" in by_omit
 
-    # Explicit prose still wins.
-    prose_wins = build_worker_identity(
-        has_dependents=False, form="prose", artifacts=["x.md"]
-    )
+    prose_wins = describe_deliverable(Deliverable(form="prose", artifacts=["x.md"]))
     assert "form=prose" in prose_wins
     assert "form=files" not in prose_wins
 
 
-def test_identity_prose_body_floor_copy_nonempty():
-    up = build_worker_identity(has_dependents=True, form="prose")
-    assert "非空即可" in up
-    assert "min_length" not in up
-
-def test_identity_handoff_topology_preserved_with_form():
-    up = build_worker_identity(has_dependents=True, form="prose")
-    leaf = build_worker_identity(has_dependents=False, form="prose")
-    assert "必须调用 handoff" in up
-    assert "默认不调用" in leaf
-    assert "必须调用 handoff" not in leaf
-    assert "结论与根因写在正文" in up
+def test_identity_omits_form_how_and_handoff_topology():
+    up = build_worker_identity(has_dependents=True)
+    leaf = build_worker_identity(has_dependents=False)
+    assert up == leaf
+    assert "form=prose" not in up
+    assert "form=files" not in leaf
+    assert "成品就是正文" not in up
+    assert "必须调用 handoff" not in up
+    assert "默认不调用" not in leaf
+    assert "结论与根因写在正文" not in up
     assert "不算正文" not in up
-    assert "不算正文" not in leaf
+    assert "非空即可" not in up
+    assert "min_length" not in up
 
 def test_describe_deliverable_form_split():
     prose = describe_deliverable(Deliverable(form="prose"))
-    assert prose == ""
+    assert "form=prose" in prose
     assert "file_write" not in prose
 
     files = describe_deliverable(Deliverable(form="files"))
-    assert files == ""
+    assert "form=files" in files
 
     workspace = describe_deliverable(Deliverable(form="workspace"))
-    assert workspace == ""
+    assert "form=workspace" in workspace
     assert DRAFTS_DIR not in workspace
 
 def test_schema_exposes_form_enum():
@@ -270,15 +266,16 @@ def test_schema_exposes_form_enum():
     assert "不要传 tasks" in playbook_desc
     assert "既填 code_audit 又传 tasks" not in DELEGATE_DESCRIPTION
     assert "HOW→consult(team_orchestration_advanced)" in DELEGATE_DESCRIPTION
-    # 协调 / 一张图 / 续派 HOW 的唯一所有者是 skill，不在工具 description。
+    # 图语义在 schema；skill 不复述协调立即返回 / 一张图标题。
     from agentcore.runtime.skills import build_system_skill_registry
 
     orch = build_system_skill_registry().get("team_orchestration_advanced")
     assert orch is not None
     orch_body = orch.body
-    assert "立即返回" in orch_body
+    assert "立即返回" not in orch_body
     assert "立即返回" not in DELEGATE_DESCRIPTION
-    assert "一回合一张协作图" in orch_body or "同一张图" in orch_body
+    assert "非终结" in DELEGATE_DESCRIPTION
+    assert "一回合一张协作图" not in orch_body
     assert "一张图" not in DELEGATE_DESCRIPTION
     # 弱模型空失败可抄：顶层非空 tasks 三件套骨架（与 empty 拒收同源）只留参数面。
     from agentcore.runtime.delegate.playbook_declaration import HANDWRITTEN_TASKS_SKELETON
@@ -362,14 +359,13 @@ def test_schema_exposes_form_enum():
         assert banned not in props
 
 def test_schema_depends_on_teaches_when_to_declare_dependency():
-    # 工具面瘦身：【何时填】长引导（生产者→消费者 + 正反例）在 skill；
-    # 参数只留「怎么填」短指针，工具 description 不再抄 HOW。
+    # 工具面：【何时填】短指针在参数；skill 不再复述 DAG 手册。
     deps = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["depends_on"][
         "description"
     ]
     assert "本批 id" in deps and "del_*" in deps
     assert "角色名" in deps or "role" in deps
-    assert "生产者→消费者" in deps  # 短指针，细节在 skill
+    assert "生产者→消费者" in deps
     assert "新开一队" in deps
     assert "append_to_execution_id" not in deps
     from agentcore.runtime.skills import build_system_skill_registry
@@ -377,9 +373,8 @@ def test_schema_depends_on_teaches_when_to_declare_dependency():
     orch = build_system_skill_registry().get("team_orchestration_advanced")
     assert orch is not None
     orch_body = orch.body
-    assert "生产者→消费者" in orch_body
-    assert "平铺并行" in orch_body
-    assert "新开一队、接续上一张图" in orch_body
+    assert "生产者→消费者" not in orch_body
+    assert "新开一队、接续上一张图" not in orch_body
     assert "生产者→消费者" not in DELEGATE_DESCRIPTION
     assert "平铺并行" not in DELEGATE_DESCRIPTION
     assert "新开一队、接续上一张图" not in DELEGATE_DESCRIPTION
@@ -387,7 +382,7 @@ def test_schema_depends_on_teaches_when_to_declare_dependency():
     assert "latest" in append and "一张图" in append
 
 async def test_prose_worker_still_offered_write_tools():
-    """真纯丙·H2：form=prose 仍装配写盘工具；identity 仍提示正文交付。"""
+    """真纯丙·H2：form=prose 仍装配写盘工具；交付物规格仍提示正文交付。"""
     from agentcore.runtime.events import EventSink
     from agentcore.runtime.runs.executor import build_agent_executor
     from agentcore.runtime.runs.types import RunPhase
@@ -440,8 +435,10 @@ async def test_prose_worker_still_offered_write_tools():
         approval_gate=None,
     )
     await WaveScheduler().run(plan2, id_exec)
-    assert "form=prose" in id_provider.system_messages[0]
+    assert "form=prose" not in id_provider.system_messages[0]
     assert "file_write" not in id_provider.system_messages[0]
+    assert "交付物规格" in id_provider.user_messages[0]
+    assert "form=prose" in id_provider.user_messages[0]
 
 async def test_files_worker_keeps_write_tools_and_identity():
     from agentcore.llm.provider.protocol import LLMChunk, ToolCallDelta
@@ -492,8 +489,11 @@ async def test_files_worker_keeps_write_tools_and_identity():
     )
     res = await WaveScheduler().run(plan, executor)
     assert res["t_1"].phase is RunPhase.COMPLETED
-    assert "form=files" in provider.system_messages[0]
-    assert "file_write" in provider.system_messages[0]
+    assert "form=files" not in provider.system_messages[0]
+    assert "file_write" not in provider.system_messages[0]
+    assert "交付物规格" in provider.user_messages[0]
+    assert "form=files" in provider.user_messages[0]
+    assert "成品写入工作区" in provider.user_messages[0]
 
 async def test_cold_start_pending_allows_single_worker_delegate():
     """pending ∧ 1 worker：不再因节点数拒（组队靠提示词）。"""

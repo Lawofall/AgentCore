@@ -33,8 +33,8 @@ from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
 _FOLDER_HOW_CONSULT = "HOW→consult(team_cross_folder)"
-# 跨文件夹百科（先建后派、开发双仓、禁猜最近）钉在 skill；本机进桌「导入到云」HOW 在 team_delivery_env。
-# 存在性见 test_skills.test_team_cross_folder_skill_teaches_parallel_command。
+# schema 短触发；禁猜最近 / 过闸催建在回执与 target_folder_id；百科不进按钮。
+# 对照句存在性见 test_skills.test_team_cross_folder_skill_teaches_parallel_command。
 _SCHEMA_ENCYCLOPEDIA_FORBIDDEN = (
     "先建后派",
     "导入到云",
@@ -269,7 +269,7 @@ def test_create_folder_schema_and_registration():
     # Must not read as "make a subdirectory" — that is mkdir.
     assert "mkdir" in desc
     assert "用户明确" in desc or "明确要求" in desc
-    # 过闸/裸聊写盘禁令在 team_cross_folder skill，schema 不复述。
+    # 过闸/裸聊写盘禁令在 target_folder_id description 与回执；create_folder 不复述。
     assert "禁止为过写盘闸" not in desc
     assert "自动建云文件夹" not in desc
     parent_desc = props["parent_path"]["description"]
@@ -490,8 +490,7 @@ async def test_resolve_zero(monkeypatch: pytest.MonkeyPatch):
     # Must not default-urge open_local_project as the create path (§4.9 ③A).
     assert "新建本机项目才用 open_local_project" not in result.output
     assert "open_local_project" in result.output or "导入到云" in result.output
-    assert "合法非默认" in result.output or "非默认" in result.output
-    assert "本机传统" in result.output or "导入到云" in result.output
+    assert "本机 scratch" in result.output or "导入到云" in result.output
 
 
 async def test_resolve_ambiguous(monkeypatch: pytest.MonkeyPatch):

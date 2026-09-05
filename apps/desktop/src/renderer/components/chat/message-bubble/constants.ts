@@ -54,7 +54,7 @@ import {
 /** Icon + English action label for a builtin tool, by its backend name. */
 export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   web_search: { Icon: Search, label: "Search web" },
-  read_url: { Icon: Globe, label: "Read page" },
+  web_fetch: { Icon: Globe, label: "Read page" },
   grep: { Icon: Code2, label: "Grep code" },
   code_search: { Icon: Code2, label: "Search code" },
   run: { Icon: Terminal, label: "Run" },
@@ -233,7 +233,7 @@ export const toolMeta = (
 /** Tool execution phase → waiting-state chrome (network UX): a running tool's coarse phase
  * (from a `tool_use_progress` event) as user-facing text — a slow builtin fires these while its
  * blocking leg is in flight so the waiting row is live instead of a dead spinner. web_search:
- * Searching / Queued / Trying fallback; read_url: Fetching page / Extracting; code_execute: Running.
+ * Searching / Queued / Trying fallback; web_fetch: Fetching page / Extracting; code_execute: Running.
  * git can wait ~2min, and each of its waits names itself: queued behind another write on the same
  * repo, resolving credentials, on the remote round trip, or running the local command. */
 const TOOL_PHASE_TEXT: Record<ToolPhase, string> = {
@@ -469,9 +469,9 @@ export function toolGroupSummary(
   tools: Extract<ProcessStep, { kind: "tool" }>[],
 ): string {
   const sameKind = tools.every((t) => t.tool_name === tools[0].tool_name);
-  // read_url args are bare URLs — baseName yields opaque article ids. Prefer a
+  // web_fetch args are bare URLs — baseName yields opaque article ids. Prefer a
   // count title (matches the merged source-collection header).
-  if (sameKind && tools[0]?.tool_name === "read_url") {
+  if (sameKind && tools[0]?.tool_name === "web_fetch") {
     const n = tools.length;
     return `Read page · ${n} source${n === 1 ? "" : "s"}`;
   }

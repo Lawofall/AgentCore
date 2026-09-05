@@ -32,7 +32,7 @@ export type MessageExportErrorSource = {
 /** Chrome labels for copy text — keep in sync with message-bubble/constants TOOL_META. */
 const TOOL_LABEL: Record<string, string> = {
   web_search: "Search web",
-  read_url: "Read page",
+  web_fetch: "Read page",
   grep: "Grep code",
   code_search: "Search code",
   run: "Run",

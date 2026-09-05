@@ -24,7 +24,9 @@ from agentcore.runtime.resolve.prompt import (
     compose_ceo_chat_prompt,
     derive_ceo_addon,
 )
-from agentcore.runtime.runs.executor.identities import build_worker_identity
+from agentcore.runtime.runs.executor.identities import (
+    build_worker_identity_catalog,
+)
 from agentcore.runtime.skills import build_system_skill_registry
 from agentcore.tools.catalog import AVAILABLE_TO_CEO, build_capability_catalog
 
@@ -69,8 +71,8 @@ async def get_capabilities(_user: AuthUser) -> CapabilitiesResponse:
     ]
 
     # Templates, not per-turn prompts: CEO compose uses the catalog's CEO tool names
-    # so the 按需目录 reflects the full repertoire; worker identities use the same
-    # ``build_worker_identity`` the live turn uses (default files form, no dependents).
+    # so the 按需目录 reflects the full repertoire; worker identities share the live
+    # ``<身份>`` builder (form HOW is per-turn 交付物规格, not catalogued here).
     # Memory / attachments stay out — this is the deployment-wide blueprint.
     ceo_tool_names = {
         entry.schema.name for entry in catalog if AVAILABLE_TO_CEO in entry.available_to
@@ -83,8 +85,8 @@ async def get_capabilities(_user: AuthUser) -> CapabilitiesResponse:
     )
     guidelines = CapabilityGuidelines(
         shared_base=shared_base,
-        worker_leaf=build_worker_identity(has_dependents=False, captain=False),
-        worker_captain=build_worker_identity(has_dependents=False, captain=True),
+        worker_leaf=build_worker_identity_catalog(captain=False),
+        worker_captain=build_worker_identity_catalog(captain=True),
         ceo_addon=derive_ceo_addon(shared_base, ceo),
         ceo=ceo,
     )

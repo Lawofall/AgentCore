@@ -162,7 +162,7 @@ function NoticeDetailBody({ detail }: { detail: ProductNoticeDetailView }) {
         </div>
       )}
 
-      <h1 className="text-lg font-semibold text-foreground">{detail.title}</h1>
+      <h1 className="text-xl font-semibold text-foreground">{detail.title}</h1>
       {detail.coverUrl && timeLabel ? (
         <p className="mt-1 text-xs text-muted-foreground">{timeLabel}</p>
       ) : null}

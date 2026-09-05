@@ -47,7 +47,7 @@ DEFAULT_MESSAGE = (
     "最后整合成一份结构化的报告文档。需求已明确，请直接开工、不必反问。"
 )
 
-# A research run with several workers (each doing multiple web_search + read_url +
+# A research run with several workers (each doing multiple web_search + web_fetch +
 # a writing pass) can take minutes. Generous ceiling; the probe exits earlier on a
 # normal message_end or a checkpoint pause.
 TIMEOUT_S = 600.0

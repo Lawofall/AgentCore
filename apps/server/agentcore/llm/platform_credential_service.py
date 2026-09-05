@@ -9,6 +9,7 @@ hosts boot/refresh (opens a session). Plaintext never appears on the view.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TypedDict
@@ -37,6 +38,25 @@ _GO_BASE_URL_HINT = "https://opencode.ai/zen/go/v1"
 # Other replicas pick up admin disable/add within this window. Local CRUD
 # reloads immediately and does not wait.
 PLATFORM_POOL_REFRESH_SECONDS = 10.0
+_last_reload_sig: tuple | None = None
+
+
+def _reload_signature(
+    members: tuple[PlatformPoolMember, ...] | list[PlatformPoolMember], rows: int
+) -> tuple:
+    return (
+        rows,
+        tuple(
+            (
+                m.id,
+                m.enabled,
+                m.base_url,
+                m.subscription_day,
+                hashlib.sha256(m.api_key.encode()).hexdigest()[:16],
+            )
+            for m in members
+        ),
+    )
 
 
 def _master_key_encryptor() -> KeyEncryptor | None:
@@ -81,7 +101,15 @@ async def reload_platform_credential_pool(session: AsyncSession) -> int:
         if member is not None:
             members.append(member)
     replace_platform_pool_snapshot(tuple(members))
-    logger.info("platform_pool.reloaded", members=len(members), rows=len(rows))
+    sig = _reload_signature(members, len(rows))
+    global _last_reload_sig
+    unchanged = sig == _last_reload_sig
+    _last_reload_sig = sig
+    # Two static logger.* calls so the event-registry scanner still sees this name.
+    if unchanged:
+        logger.debug("platform_pool.reloaded", members=len(members), rows=len(rows))
+    else:
+        logger.info("platform_pool.reloaded", members=len(members), rows=len(rows))
     return len(members)
 
 

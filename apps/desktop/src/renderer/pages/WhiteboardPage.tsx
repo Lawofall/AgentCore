@@ -1,5 +1,5 @@
 import { PageContainer } from "@/components/layout/PageContainer";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, EmptyHint, PageHeader } from "@/components/ui";
 import {
   Popover,
   PopoverContent,
@@ -85,66 +85,65 @@ export function WhiteboardPage() {
 
   return (
     <PageContainer width="canvas">
-      <header className="flex items-center justify-between gap-3 pb-2">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">白板</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            无限画布，人与 AI 团队同板协作
-          </p>
-        </div>
-        <Popover open={createOpen} onOpenChange={setCreateOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="primary"
-              size="md"
-              icon={<Plus size={16} />}
-              disabled={creating}
-            >
-              新建白板
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-64 p-3">
-            <p className="text-xs text-muted-foreground">归入文件夹（可选）</p>
-            <button
-              type="button"
-              onClick={() => setPickedFolderId(null)}
-              className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground hover:bg-accent"
-            >
-              {pickedFolderId == null ? (
-                <span className="size-1.5 rounded-full bg-primary" />
-              ) : (
-                <span className="size-1.5" />
-              )}
-              未归入文件夹
-            </button>
-            {folders.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setPickedFolderId(f.id)}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground hover:bg-accent"
+      <PageHeader
+        title="白板"
+        action={
+          <Popover open={createOpen} onOpenChange={setCreateOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="primary"
+                size="md"
+                icon={<Plus size={16} />}
+                disabled={creating}
               >
-                {pickedFolderId === f.id ? (
+                新建白板
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64 p-3">
+              <p className="text-xs text-muted-foreground">
+                归入文件夹（可选）
+              </p>
+              <button
+                type="button"
+                onClick={() => setPickedFolderId(null)}
+                className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground hover:bg-accent"
+              >
+                {pickedFolderId == null ? (
                   <span className="size-1.5 rounded-full bg-primary" />
                 ) : (
                   <span className="size-1.5" />
                 )}
-                <FolderOpen size={14} className="text-muted-foreground" />
-                <span className="truncate">{f.name}</span>
+                未归入文件夹
               </button>
-            ))}
-            <Button
-              variant="primary"
-              size="sm"
-              className="mt-3 w-full"
-              disabled={creating}
-              onClick={() => void handleCreate()}
-            >
-              {creating ? "创建中…" : `创建（${pickedFolderName}）`}
-            </Button>
-          </PopoverContent>
-        </Popover>
-      </header>
+              {folders.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setPickedFolderId(f.id)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground hover:bg-accent"
+                >
+                  {pickedFolderId === f.id ? (
+                    <span className="size-1.5 rounded-full bg-primary" />
+                  ) : (
+                    <span className="size-1.5" />
+                  )}
+                  <FolderOpen size={14} className="text-muted-foreground" />
+                  <span className="truncate">{f.name}</span>
+                </button>
+              ))}
+              <Button
+                variant="primary"
+                size="sm"
+                className="mt-3 w-full"
+                disabled={creating}
+                onClick={() => void handleCreate()}
+              >
+                {creating ? "创建中…" : `创建（${pickedFolderName}）`}
+              </Button>
+            </PopoverContent>
+          </Popover>
+        }
+      />
 
       {error ? (
         <div className="mt-8 rounded-xl border border-border bg-card p-6 text-center">
@@ -162,18 +161,21 @@ export function WhiteboardPage() {
           <Loader2 className="animate-spin text-muted-foreground" size={24} />
         </div>
       ) : boards.length === 0 ? (
-        <div className="mt-16 flex flex-col items-center gap-3 text-center">
-          <Presentation className="text-muted-foreground/60" size={40} />
-          <p className="text-sm text-muted-foreground">还没有白板</p>
-          <Button
-            variant="primary"
-            icon={<Plus size={16} />}
-            onClick={() => setCreateOpen(true)}
-            disabled={creating}
-          >
-            新建白板
-          </Button>
-        </div>
+        <EmptyHint
+          className="mt-16"
+          icon={<Presentation className="text-muted-foreground/60" size={40} />}
+          title="还没有白板"
+          action={
+            <Button
+              variant="primary"
+              icon={<Plus size={16} />}
+              onClick={() => setCreateOpen(true)}
+              disabled={creating}
+            >
+              新建白板
+            </Button>
+          }
+        />
       ) : (
         <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
           {boards.map((board) => (

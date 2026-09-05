@@ -703,7 +703,7 @@ def test_ask_user_organize_how_lives_in_skill():
 
     registry = build_system_skill_registry()
     ask = registry.get("asking_the_user")
-    desk = registry.get("team_delivery_env")
+    desk = registry.get("team_local_desk")
     assert ask is not None
     assert desk is not None
     from agentcore.runtime.resolve.prompt import capability_how_suffix
@@ -714,7 +714,7 @@ def test_ask_user_organize_how_lives_in_skill():
     assert "grant_organize_folder" in desk.body
     assert "consult(external_mount_readonly)" in desk.body
     assert "consult(external_mount_readonly)" in ask.body
-    assert "consult(team_delivery_env)" in ask.body
+    assert "consult(team_local_desk)" in ask.body
     assert "整题授权" in ask.body
     assert "区外旁根" in desk.body
     assert "区外旁根" in granted

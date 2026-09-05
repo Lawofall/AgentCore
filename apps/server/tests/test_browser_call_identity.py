@@ -12,7 +12,7 @@ def test_live_name_and_legacy_names_are_browser_tools():
     assert is_browser_tool_name("browser")
     assert is_browser_tool_name("browser_navigate")
     assert is_browser_tool_name("browser_screenshot")
-    assert not is_browser_tool_name("read_url")
+    assert not is_browser_tool_name("web_fetch")
     assert not is_browser_tool_name("host")
 
 

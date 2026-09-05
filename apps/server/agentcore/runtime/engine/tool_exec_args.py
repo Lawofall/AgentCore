@@ -11,9 +11,10 @@ from agentcore.core.logging import get_logger
 from agentcore.core.secrets import redact_secrets
 from agentcore.core.text import clip_preview
 from agentcore.llm.provider.protocol import LLMMessage
-from agentcore.runtime.events import EventSink, tool_use_end
+from agentcore.runtime.events import EventSink, tool_use_end, tool_use_start
 from agentcore.runtime.loop_controller import (
     ERROR_CLASS_PERMANENT,
+    ERROR_CLASS_VALIDATION,
     EXEC_RUN_TOOL_NAMES,
     ToolAttempt,
     classify_segmented_write_reject,
@@ -52,7 +53,7 @@ _TOOL_ERROR_REASON_MAX = 200
 _SHELL_OBSERVE_TOOLS = frozenset({"run", "host"})
 _SHELL_COMMAND_PREVIEW_MAX = 160
 _SHELL_CWD_PREVIEW_MAX = 80
-_URL_OBSERVE_TOOLS = frozenset({"read_url", "download_url"})
+_URL_OBSERVE_TOOLS = frozenset({"web_fetch", "download_url"})
 _URL_PREVIEW_MAX = 200
 
 
@@ -102,7 +103,7 @@ def _short_tool_error_reason(text: str, *, limit: int = _TOOL_ERROR_REASON_MAX) 
 
 
 def _url_observe_log_fields(name: str, args: Any) -> dict[str, Any]:
-    """``url`` / ``host`` for read_url / download_url execute_* logs."""
+    """``url`` / ``host`` for web_fetch / download_url execute_* logs."""
     if name not in _URL_OBSERVE_TOOLS or not isinstance(args, dict):
         return {}
     raw = args.get("url")
@@ -126,7 +127,7 @@ def _shell_observe_log_fields(name: str, args: Any) -> dict[str, Any]:
 
     CEO 可持 run/host，落盘不进 ``file_products``；查询时靠 preview + action
     由人判断是否写了工作区。命令可能含 token / key，故先 ``redact_secrets`` 再 clip。
-    ``read_url`` / ``download_url`` 带 url/host，对照 in_flight 挂起用。
+    ``web_fetch`` / ``download_url`` 带 url/host，对照 in_flight 挂起用。
     """
     if not isinstance(args, dict):
         return {}
@@ -391,3 +392,63 @@ def _format_args_parse_error(
     if tool_name in LANDING_TOOLS:
         return model_msg, _USER_WRITE_PARSE_MSG, parse_class
     return model_msg, model_msg, parse_class
+
+
+def emit_args_parse_failed(
+    *,
+    sink: EventSink,
+    tool_call_id: str,
+    name: str,
+    fingerprint: str,
+    raw_args: str,
+    parse_exc: json.JSONDecodeError,
+    event_run_id: str,
+) -> tuple[LLMMessage, None, ToolAttempt, list[Any]]:
+    """Wire + transcript for illegal tool JSON. Never runs the tool."""
+    model_msg, user_msg, parse_class = _format_args_parse_error(name, raw_args, parse_exc)
+    sink.emit(
+        tool_use_start(
+            tool_call_id, name, dict(_ARGS_PARSE_FAILED_MARKER), run_id=event_run_id
+        )
+    )
+    sink.emit(
+        tool_use_end(
+            tool_call_id,
+            name,
+            success=False,
+            output=model_msg,
+            failure=tool_failure_fields(
+                code="args_parse_failed",
+                product_message=user_msg if user_msg != model_msg else None,
+            ),
+            run_id=event_run_id,
+        )
+    )
+    logger.info(
+        "tool.args_parse_failed",
+        tool=name,
+        tool_call_id=tool_call_id,
+        pos=parse_exc.pos,
+        msg=parse_exc.msg,
+        args_preview=raw_args[:200],
+        parse_class=parse_class,
+    )
+    logger.info(
+        "tool.execute_end",
+        tool=name,
+        status="args_parse_failed",
+        duration_ms=0,
+    )
+    return (
+        _failed_tool_message(tool_call_id, model_msg),
+        None,
+        ToolAttempt(
+            fingerprint,
+            name,
+            success=False,
+            parse_failure=True,
+            error_summary=model_msg,
+            meta={"error_class": ERROR_CLASS_VALIDATION},
+        ),
+        [],
+    )

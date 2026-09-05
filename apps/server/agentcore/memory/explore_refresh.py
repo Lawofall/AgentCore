@@ -1,15 +1,19 @@
-"""R1 fingerprint-dirty explore refresh — consolidation-style background bypass.
+"""R1 fingerprint-dirty / rebind explore refresh — consolidation-style background bypass.
 
 When the top-tree + key-manifest fingerprint drifts, assemble marks dirty and
 schedules a **silent** per-folder refresh: workspace snapshot → memory-tier LLM →
 merge-write 导航/画像 (optional topics) → update fingerprint + clear dirty.
+
+Workspace rebind uses the same scheduler with ``blank_current_notes``: the LLM
+does not see old-bind 画像/导航, and the write **replaces** (not section-merge)
+so stale notes do not survive.
 
 Never blocks the user turn. Never runs CEO+delegate+team_preview.
 Thick folder dossiers are on-demand ``主题/`` entries; this bypass only
 merge-writes the short entry, so it never grows one.
 
 Empty folder 画像 is not "go fill it": skip the LLM and do not write. Named
-「先了解」 / 工程短语 still hard-explore in the user turn.
+「先了解」 still hard-explores in the user turn.
 """
 
 from __future__ import annotations
@@ -83,6 +87,7 @@ class _PendingRefresh:
     workspace_key: str
     snapshot: str
     live_fingerprint: str | None
+    blank_current_notes: bool = False
 
 
 Runner = Callable[[_PendingRefresh], Awaitable[object]]
@@ -170,6 +175,7 @@ async def refresh_folder_explore_from_snapshot(
     provider: LLMProvider,
     model: str,
     store: MemoryStore | None = None,
+    blank_current_notes: bool = False,
 ) -> bool:
     """Run one refresh pass. Returns True when fingerprint closeout cleared dirty."""
     store = store or default_memory_store()
@@ -177,7 +183,7 @@ async def refresh_folder_explore_from_snapshot(
         return False
 
     current_profile = await load_folder_profile(store, user_id, folder_id)
-    if folder_profile_is_empty(current_profile):
+    if not blank_current_notes and folder_profile_is_empty(current_profile):
         logger.info(
             "memory.explore_refresh_skip_empty_profile",
             user_id=user_id,
@@ -185,10 +191,20 @@ async def refresh_folder_explore_from_snapshot(
         )
         return False
     current_nav = await store.load(user_id, NAVIGATION_MEMORY_FILE, scope=folder_id)
+    shown_profile = "(empty)" if blank_current_notes else (current_profile.strip() or "(empty)")
+    shown_nav = "(empty)" if blank_current_notes else (current_nav.strip() or "(empty)")
+    bind_note = (
+        "Workspace bind changed. Prior folder 画像/导航 belonged to a different "
+        "workspace and were withheld. Write a fresh short entry from this snapshot; "
+        "use null only when the snapshot has no durable facts.\n\n"
+        if blank_current_notes
+        else ""
+    )
     user_prompt = (
+        f"{bind_note}"
         f"# Workspace snapshot\n{snapshot.strip()}\n\n"
-        f"# CURRENT folder 画像.md\n{current_profile.strip() or '(empty)'}\n\n"
-        f"# CURRENT folder 导航.md\n{current_nav.strip() or '(empty)'}\n\n"
+        f"# CURRENT folder 画像.md\n{shown_profile}\n\n"
+        f"# CURRENT folder 导航.md\n{shown_nav}\n\n"
         "Produce the refresh JSON now."
     )
 
@@ -257,6 +273,7 @@ async def refresh_folder_explore_from_snapshot(
             user_id=user_id,
             folder_id=folder_id,
             new_markdown=profile_md,
+            replace=blank_current_notes,
         )
         if ok and not conflict:
             wrote = True
@@ -329,6 +346,7 @@ async def _default_refresh_runner(pending: _PendingRefresh) -> bool:
                 live_fingerprint=pending.live_fingerprint,
                 provider=provider,
                 model=model,
+                blank_current_notes=pending.blank_current_notes,
             )
         finally:
             await provider.close()
@@ -434,6 +452,7 @@ def schedule_explore_refresh(
     workspace_key: str,
     snapshot: str,
     live_fingerprint: str | None = None,
+    blank_current_notes: bool = False,
 ) -> None:
     """Arm per-folder debounce for a dirty fingerprint (no-op when disabled)."""
     if not settings.memory_explore_refresh_enabled:
@@ -449,12 +468,36 @@ def schedule_explore_refresh(
             workspace_key=workspace_key or "",
             snapshot=snapshot,
             live_fingerprint=live_fingerprint,
+            blank_current_notes=blank_current_notes,
         )
     )
     logger.info(
         "memory.explore_refresh_scheduled",
         user_id=user_id,
         folder_id=folder_id,
+    )
+
+
+async def schedule_explore_refresh_for_backend(
+    *,
+    user_id: str,
+    folder_id: str,
+    workspace_key: str,
+    backend: Any,
+    blank_current_notes: bool = False,
+) -> None:
+    """Snapshot + fingerprint + schedule (fingerprint drift / rebind)."""
+    from agentcore.memory.explore_profile import compute_workspace_explore_fingerprint
+
+    live_fp = await compute_workspace_explore_fingerprint(backend)
+    snapshot = await build_workspace_explore_snapshot(backend)
+    schedule_explore_refresh(
+        user_id=user_id,
+        folder_id=folder_id,
+        workspace_key=workspace_key,
+        snapshot=snapshot,
+        live_fingerprint=live_fp,
+        blank_current_notes=blank_current_notes,
     )
 
 
@@ -469,5 +512,6 @@ __all__ = [
     "get_explore_refresh_scheduler",
     "refresh_folder_explore_from_snapshot",
     "schedule_explore_refresh",
+    "schedule_explore_refresh_for_backend",
     "shutdown_explore_refresh_scheduler",
 ]

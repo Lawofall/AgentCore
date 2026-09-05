@@ -5,6 +5,7 @@ import {
   SettingsSection,
   SettingsStack,
 } from "@/components/settings";
+import { PageHeader } from "@/components/ui";
 import { Switch } from "@/components/ui/Switch";
 import { errMsg } from "@/lib/errMsg";
 import { notifyError } from "@/lib/toast";
@@ -16,7 +17,6 @@ import {
   updateDirectory,
 } from "@/services/messaging";
 import { useCallback, useEffect, useState } from "react";
-import { SettingsHeader } from "./SettingsHeader";
 
 interface OptionRow<T extends string> {
   value: T;
@@ -98,10 +98,7 @@ export function ImPrivacySettings() {
 
   return (
     <div>
-      <SettingsHeader
-        title="消息隐私"
-        description="控制他人能否搜到你、谁可以加你为好友，以及谁可以向你发起私信。"
-      />
+      <PageHeader title="消息隐私" />
 
       <SettingsStack>
         {settings === null ? (

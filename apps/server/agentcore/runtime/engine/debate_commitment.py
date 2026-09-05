@@ -1,10 +1,6 @@
-"""Debate-commitment soft gate: user picked a debate form on kickoff, CEO never ran it.
+"""Debate-commitment parser: user picked a debate form on kickoff.
 
-Evidence (dev): conversation ``d63dfc35-d63e-4539-8ec4-543fac794e8b`` — kickoff card
-question「辩论环节采用哪种形式？」default/answer「辩论（正反攻防）」, CEO later skipped
-``debate`` citing「汇总已含论证」. Soft nudge only; never hard-blocks finalize.
-Signal source = settled ask_user kickoff tool result / call defaults in the CEO
-message window — if that signal is absent, the gate stays silent.
+Engine soft gate withdrawn — this module only classifies kickoff answers.
 """
 
 from __future__ import annotations
@@ -45,15 +41,6 @@ _AFFIRM_LINE_RE = re.compile(
     + "|".join(re.escape(a) for a in _FORM_AFFIRM)
     + r")"
 )
-
-
-def debate_gate_nudge_prompt() -> str:
-    """One-shot soft reminder: honor the kickoff debate form or state an exemption."""
-    return (
-        "[系统提示] 辩论承诺复核：开工卡上用户已选择辩论形态，但本回合尚未执行 `debate`。"
-        "收尾前请二选一——立即调用 `debate` 兑现；或在答复中明确向用户说明豁免理由"
-        "（为何汇总/其他产出可替代辩论）。系统只提示、不代开辩论、不阻断收尾；此后不再打扰。"
-    )
 
 
 def _is_ask_user_settled(text: str) -> bool:

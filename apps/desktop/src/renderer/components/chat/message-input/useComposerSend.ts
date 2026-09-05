@@ -24,6 +24,7 @@ import {
   requestAutoTitle,
 } from "@/services/conversations";
 import { submitDebateSteer } from "@/services/debate";
+import { ensureDefaultContainerRoot } from "@/services/defaultWorkspace";
 import { loadLatestWindow } from "@/services/messages";
 import { getLastUsedProfileId } from "@/services/models";
 import {
@@ -438,13 +439,16 @@ export function useComposerSend({
           const targetFolderId =
             intent.kind === "folder" ? intent.folderId : null;
           // Project chats inherit workspace — never write session-level local_*.
-          // Quick cloud (default) → null container.
-          // §7.2：残留 quick_local 意图硬改导云（禁新建本机草稿）；存量会话不经此分支。
-          const localContainerRootId: string | null = null;
+          // Quick cloud → null container. Quick local → default ~/Documents/AgentCore.
+          let localContainerRootId: string | null = null;
           if (intent.kind === "quick_local") {
-            useFoldersStore
-              .getState()
-              .setDraftWorkspaceIntent({ kind: "quick_cloud" });
+            localContainerRootId = await ensureDefaultContainerRoot();
+            if (!localContainerRootId) {
+              notifyError(
+                "无法在这台电脑上准备工作文件夹。请重试，或改选云端对话。",
+              );
+              return;
+            }
           }
           // 新建拍快照：POST 带 last-used（或草稿所选，已写入 last_profile_id）；
           // 省略则服务端写入当时账号默认。勿再 create 后 PATCH。

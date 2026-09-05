@@ -75,6 +75,7 @@ def test_registry_registers_the_system_skills():
         "lead_subteam",
         "team_cross_folder",
         "team_delivery_env",
+        "team_local_desk",
         "product_help",
         "debate_and_review",
         "asking_the_user",
@@ -144,6 +145,7 @@ def test_available_audience_hides_ceo_only_from_workers():
     assert "team_orchestration_advanced" not in worker
     assert "team_cross_folder" not in worker
     assert "team_delivery_env" not in worker
+    assert "team_local_desk" not in worker
     assert "build_website" not in worker
     assert "deep_multi_lens_research" not in worker
     assert "work_discipline" not in worker
@@ -160,6 +162,7 @@ def test_available_audience_hides_ceo_only_from_workers():
     assert "lead_subteam" not in ceo
     assert "team_cross_folder" in ceo
     assert "team_delivery_env" in ceo
+    assert "team_local_desk" in ceo
     assert "verify_and_fix" not in ceo
     assert "data_file_landing" in ceo
     assert "run" in ceo
@@ -178,6 +181,7 @@ async def test_worker_consult_source_hides_ceo_only_listing_and_fetch():
     assert "team_orchestration_advanced" not in names
     assert "team_cross_folder" not in names
     assert "team_delivery_env" not in names
+    assert "team_local_desk" not in names
     assert "long_form_landing" in names
     assert "verify_and_fix" not in names
     assert "data_file_landing" in names
@@ -188,6 +192,7 @@ async def test_worker_consult_source_hides_ceo_only_listing_and_fetch():
     assert await source.fetch_by_name("u", "lead_subteam") is None
     assert await source.fetch_by_name("u", "team_cross_folder") is None
     assert await source.fetch_by_name("u", "team_delivery_env") is None
+    assert await source.fetch_by_name("u", "team_local_desk") is None
     assert await source.fetch_by_name("u", "long_form_landing") is not None
     assert await source.fetch_by_name("u", "data_file_landing") is not None
 
@@ -202,6 +207,8 @@ async def test_nested_lead_consult_source_fetches_lead_subteam():
     names = {e.name for e in await source.list_directory("u")}
     assert "lead_subteam" in names
     assert "team_orchestration_advanced" not in names
+    assert "team_delivery_env" not in names
+    assert "team_local_desk" not in names
     body = await source.fetch_by_name("u", "lead_subteam")
     assert body is not None
     assert "阻塞" in body
@@ -560,10 +567,11 @@ def _retired_token_in(blob: str, token: str) -> bool:
 
 
 def test_retired_literals_absent_from_skill_injection():
-    """现行通道不留废字段名 / 禁复活编年；playbook↔tasks 二选一仍在编排 skill。"""
-    orch = _body("team_orchestration_advanced")
-    assert "与手写 tasks 二选一" in orch
-    assert "同时传" in orch
+    """现行通道不留废字段名 / 禁复活编年；playbook↔tasks 二选一在 schema。"""
+    from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
+
+    playbook_desc = DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
+    assert "二选一" in playbook_desc
     for skill in build_system_skill_registry().list_all():
         blob = f"{skill.summary}\n{skill.body}"
         for token in _RETIRED_SKILL_LITERALS:
@@ -571,7 +579,7 @@ def test_retired_literals_absent_from_skill_injection():
 
 
 def test_team_orchestration_skill_teaches_staffing_constitution():
-    """按活的结构组队；做软件专段 / 假两段已撤；不教形状词表 / 默认真两段 / 成文编号树。"""
+    """对比边界：按结构组队 / 探路停手 / 审≠写；废形状词表与做软件专段缺席。"""
     body = _body("team_orchestration_advanced")
     for term in (
         "并列对象分组",
@@ -606,30 +614,28 @@ def test_team_orchestration_skill_teaches_staffing_constitution():
     assert "结论真冲突" not in body
     assert "人数不是优化目标" in body
     assert "活本身是一块" in body
-    assert "cite_write_review" in body
-    assert "map_fanout" in body
-    assert "编制自选" in body
-    assert "成文交付" in body or "成篇" in body
-    assert "手写顶层" in body
+    assert "单 lead" in body and "二选一" in body
+    assert "探路停手" in body
+    assert "定位入口" in body
+    assert "成品文件只装成品" in body
+    assert "专业方案归专家" in body
+    assert "同一套原文" in body
+    assert "form=prose" in body
+    assert "审查者" in body and "作者" in body
+    assert "只报告" in body
+    assert "consult(asking_the_user)" in body
+    assert "consult(team_cross_folder)" in body
+    assert "consult(team_delivery_env)" in body
     assert "不硬拒" not in body
     assert "范围没钉" not in body
     assert 'playbook="build_app"' not in body
     assert "playbook=none" not in body
     assert "playbook_id" not in body
-    assert "路径 B" in body or "单 lead" in body
-    assert "缺主体" in body
-    assert "consult(asking_the_user)" in body
     assert "静默自拟" not in body
     assert "不得 continue 派工" not in body
-    assert "角 prose" in body and "仅主笔落盘" in body
-    assert "form=files" in body and "artifacts" in body
-    assert "独立审校" in body
-    assert "各角调研笔记" in body
     assert "怎么算修好" not in body
     assert "同一人验" not in body
     assert "已有代码上一个缺口" not in body
-    assert "代写实施" in body
-    assert "`run`" in body
     assert "diagnose_fix_verify" not in body
     assert "browser" not in body
     assert "白屏" not in body
@@ -637,24 +643,25 @@ def test_team_orchestration_skill_teaches_staffing_constitution():
     assert "tsc" in run_body or "pytest" in run_body
     for token in ("complexity_hint", "result_handling", "require_upstream"):
         assert token not in body, token
-    assert "代码审查" in body
-    assert "只报告" in body
-    assert "不改业务源码" in body
-    assert "审查类默认" in body
     assert "模板路" not in body and "手写路" not in body
     assert "playbook=code_audit" not in body
     assert "code_audit" not in body
-    assert "同时传" in body
-    assert "目录树" in body
     assert "上限 8" not in body and "上限8" not in body
     assert "主管速览" not in body
     assert "凡审计必两拨人" not in body
     assert "〇、人审速览" not in body
     assert "不扫 role/task" not in body
+    from agentcore.runtime.runs.playbooks import PLAYBOOKS
+
+    cite = PLAYBOOKS["cite_write_review"].summary
+    assert "可提交长文" in cite and "点名审校" in cite
+    assert "学术审校" in cite
+    assert "map_fanout" in PLAYBOOKS
 
 
 def test_team_orchestration_skill_teaches_opening_and_writing_without_lettered_tree():
-    """闲聊 / 不必派在 delegate description；成文按结构派；不设讨论三选 / 档位编号树。"""
+    """闲聊 / 不必派在 delegate description；探路停手 + 成品只装成品；不设档位编号树。"""
+    from agentcore.runtime.runs.playbooks import PLAYBOOKS
     from agentcore.tools.builtin.delegate.schema import DELEGATE_DESCRIPTION
 
     body = _body("team_orchestration_advanced")
@@ -670,47 +677,43 @@ def test_team_orchestration_skill_teaches_opening_and_writing_without_lettered_t
     assert "档 3" not in body
     assert "禁成文产线" not in body
     assert "明示成文不拦" not in body
-    assert "编制自选" in body
     assert "自动多人" not in body
     assert "闲聊" in DELEGATE_DESCRIPTION and "不必派" in DELEGATE_DESCRIPTION
     assert "闲聊自己回" not in body
     assert "干活默认派" not in body
-    assert "该落盘就落盘" in body
     assert "consumer_deps" not in body
     assert "design_impl_same_grant" not in body
     assert "root_slice_honesty" not in body
-    assert "depends_on" in body
     assert "成品文件只装成品" in body
     assert "deep_multi_lens_research" not in body
     assert "点名开辩" in body or "debate" in body
-    assert "【工作流】" in body
     assert "0～1" not in body
-    assert "规模与结构" in body
     assert "定位入口" in body
     assert "探路停手" in body
-    assert "cite_write_review" in body
-    assert "满编" in body
-    assert "【不】默认学术审校" in body
-    assert "map_fanout" in body
-    assert "写一篇" in body and "综述" in body
     assert "了解到什么算够" in body
     assert "够用即停" not in body
     assert "一页地图" not in body
     assert "一句目标" not in body
-    assert "handoff" in body
     assert "开局先招人" not in body
     assert "凑台账" not in body
     assert "定优化方案" not in body
-    assert "必读文件" in body or "书单" in body
+    cite = PLAYBOOKS["cite_write_review"].summary
+    assert "可提交长文" in cite
+    assert "学术审校" in cite
+    fanout = PLAYBOOKS["map_fanout"].summary
+    assert "handoff" in fanout
 
 
 def test_work_discipline_skill_is_gone():
-    """仓内贡献纪律不是产品 AI skill；.bat HOW 在 run。"""
+    """仓内贡献纪律不是产品 AI skill；.bat HOW 在 run；已确认约束在 task 参数。"""
+    from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
+
     assert build_system_skill_registry().get("work_discipline") is None
-    orch = _body("team_orchestration_advanced")
-    assert "已确认约束" in orch
-    assert "自拟的默认" in orch or "自拟默认" in orch
-    assert "扇入" in orch or "整合员" in orch
+    task_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["task"][
+        "description"
+    ]
+    assert "已确认约束" in task_desc
+    assert "自拟默认" in task_desc or "自拟" in task_desc
 
 
 def test_product_help_skill_teaches_short_answers_and_manual_deeplinks():
@@ -846,84 +849,50 @@ def test_product_help_does_not_host_diagnostic_ritual():
 
 
 def test_team_cross_folder_skill_teaches_parallel_command():
-    """跨文件夹并行指挥：对照句（坐哪张桌 / 认桌≠摸底 / 先建后派≠过闸催建）；不写 1–10 步菜单。"""
+    """对照句：派工换桌 / 认桌≠摸底 / 挂载≠换桌。指认·过闸·空壳百科不回潮。"""
     body = _body("team_cross_folder")
     orch = _body("team_orchestration_advanced")
-    assert "【跨文件夹并行指挥】" in body
-    assert "list_folders" in body and "resolve_folder" in body
-    # 嵌套：resolve 按路径，歧义候选带完整 rel_path。
-    assert "按路径" in body and "rel_path" in body
-    assert "ask_user" in body and "choice" in body
-    assert "禁止" in body and "最近" in body
+    desk = _body("team_local_desk")
     assert "target_folder_id" in body
-    assert "换桌" in body and "记忆" in body
-    assert "folder_id" in body
-    assert "默认桌" in body
-    assert "scratch" in body
-    assert "create_folder" in body
-    # 与 mkdir 划清界限：容器 vs 当前工作区里的普通子目录。
-    assert "mkdir" in body
-    assert "自动建云文件夹" in body
-    assert "register_local_project" in body  # 本机传统可教（禁当跨仓捷径）
-    assert "open_local_project" in body
-    assert "consult(team_delivery_env)" in body
+    assert "delegate" in body
+    assert "只读摸底" in body and "改盘" in body
+    assert "云端草稿" in body and "读不到" in body
+    assert "list_folder_dir" in body and "read_folder_file" in body
+    assert "认桌" in body and "摸底" in body
+    assert "挂载" in body and "换桌" in body
+    assert "consult(team_local_desk)" in body
+    assert "list_folders" not in body
+    assert "resolve_folder" not in body
+    assert "ask_user" not in body
+    assert "create_folder" not in body
+    assert "mkdir" not in body
+    assert "文件：空" not in body
+    assert "先建后派" not in body
+    assert "猜最近" not in body
     assert "导入到云" not in body
-    assert "连接 Git" not in body
-    assert "本机传统" in body
-    assert "新会话" in body or "遗留" in body or "打开当出生" in body or "只建云" in body
-    assert "混部" in body
-    assert "多" in body and "并行" in body
-    assert "暂不支持" not in body
-    assert "协作图不改" in body or "并行支线" in body
-    # 先建齐再派（仅显式新建/多线；禁先扇出再补建）。闸名不进提示词。
-    assert "先建后派" in body
-    assert "先扇出再补建" in body and "禁止" in body
-    assert "ask 齐" in body or "点名新建" in body
+    assert "bind_local_folder" not in body
+    assert "open_local_project" not in body
+    assert "external_mount_readonly" not in body
     assert "拒后禁塌缩" not in body
     assert "bare_chat_no_target" not in body
-    assert "窄例外" not in body
-    assert "裸聊单目标" in body or "运行时继承" in body
-    assert "能少则少" not in body
-    assert "拿不准先少派" not in body
-    assert "勿因拒闸" not in body
-    assert "塌成单线" not in body
-    # 跨文件夹读写通吃派工换桌；CEO 只读跨桌仅认桌（禁「云端读不到本地」当唯一路径）
-    assert "list_folder_dir" in body and "read_folder_file" in body
-    assert "认桌" in body or "抽样" in body
-    assert "出生桌" in body
-    assert "读写通吃" in body or "只读摸底与改盘" in body or "只读摸底" in body
     assert "写仍派工换桌" not in body
     assert "只读跨桌摸底" not in body
-    assert "云端读不到本地" in body and "禁止" in body
-    # 空壳/双文件夹 kickoff：先问、同次两路、≠open/bind/挂载冒充
-    assert "空壳" in body or "近空" in body
-    assert "文件：空" in body
-    assert "<工作区文件>" not in body
-    assert "file_list" in body
-    assert "file_list(pattern)" not in body
-    assert "同一次" in body or "同次" in body
-    assert "external_mount_readonly" in body
-    assert "开发双仓" in body or "区外挂载" in body or "冒充" in body
+    assert "【跨文件夹并行指挥】" not in body
     skill = build_system_skill_registry().get("team_cross_folder")
     assert skill is not None
-    assert "跨文件夹" in skill.summary or "target_folder_id" in skill.summary
-    assert "读写通吃" not in orch
+    assert skill.summary == "跨文件夹"
     assert "target_folder_id" not in orch
     assert "consult(team_cross_folder)" in orch
+    assert "consult(team_cross_folder)" in desk
     for n in range(1, 11):
         assert f"{n}. **" not in body, n
 
 
 def test_team_orchestration_skill_teaches_review_narrowing():
-    """审查收窄：探路已见路径当边界；单点展示 1 人；并行按产品缝不是配额。"""
+    """审查：默认 prose、只报告默认 1 人；废「收窄专段 / 配额」字面。"""
     body = _body("team_orchestration_advanced")
-    assert "审查·收窄" in body or "审查收窄" in body
-    assert "父目录" in body and "通读" in body
-    assert "单点展示" in body
-    assert "凑工种" in body
-    assert "不是配额" in body
-    assert "全面摸底" in body or "整仓审查" in body
-    assert "编制自选" in body
+    assert "form=prose" in body
+    assert "只报告" in body and "1 人" in body
     assert "冷启动建档除外" not in body
     assert "并列不打架" not in body
     assert "冷启动建档「≥2" not in body
@@ -931,6 +900,7 @@ def test_team_orchestration_skill_teaches_review_narrowing():
 
 def test_team_delivery_env_skill_teaches_empty_desk_no_project_shell():
     body = _body("team_delivery_env")
+    desk = _body("team_local_desk")
     orch = _body("team_orchestration_advanced")
     from agentcore.tools.builtin.file_ops.meta import MkdirTool
 
@@ -938,95 +908,62 @@ def test_team_delivery_env_skill_teaches_empty_desk_no_project_shell():
     assert "【空桌勿套工程壳】" not in body
     assert "工程壳" not in body
     assert "本文件夹根即工作区根" not in body
-    assert "create_folder" in body and "桌内工程根" in body
-    assert "mkdir" in body
-    assert "court-game/" not in body
-    assert "要不要再套一层" not in body
+    assert "create_folder" in desk and "桌内工程根" in desk
+    assert "mkdir" in desk
+    assert "court-game/" not in desk
+    assert "要不要再套一层" not in desk
     assert "结构目录" in desc
     assert "src/" in desc
     assert "套应用名/话题名当工程根" in desc
     assert "whiteboard" not in desc
     assert "【空桌勿套工程壳】" not in orch
     assert "空桌工程根" not in orch
-    assert "【本机进桌" in body
-    assert "可**推荐** Composer" not in body
+    assert "【本机进桌" not in body
+    assert "<本机进桌>" in desk
+    assert "【进桌】" in desk
+    assert "可**推荐** Composer" not in desk
     assert "consult(team_delivery_env)" in orch
+    assert "consult(team_local_desk)" in orch
 
 
 def test_team_orchestration_skill_teaches_delegate_knobs():
-    # Relocated from the old always-on hint: quality contract, output shaping,
-    # the DAG-vs-nesting distinction (model tiers were removed).
+    """图语义 / 填参在 schema；skill 只留 DAG vs lead 对比。废字段不回潮。"""
+    from agentcore.runtime.resolve.prompt import _CEO_CORE_HINT
+    from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
+
     body = _body("team_orchestration_advanced")
-    assert "timeout_ms" in body
-    assert "墙钟不够" not in body
-    assert "deliverable" in body
     assert "coordinate=false" not in body
     assert "轻量直出" not in body
     assert "单人直出" not in body
     assert "finalize" not in body
-    from agentcore.runtime.resolve.prompt import _CEO_CORE_HINT
-
     hint = _CEO_CORE_HINT
     assert "finalize" not in hint
     assert "讨论/判断默认自己答不必查" not in hint
     orch_sum = build_system_skill_registry().get("team_orchestration_advanced").summary
     assert orch_sum == "团队拆法"
-    assert "明示成文" in body
-    assert "资料源" in body
     delivery_sum = build_system_skill_registry().get("team_delivery_env").summary
     assert delivery_sum == "交付环境"
-    assert "depends_on" in body and "同一层" in body
-    # 依赖：生产者→消费者原则在 skill；正反例长表已出（schema 已有填法）。
-    assert "生产者→消费者" in body
+    desk_sum = build_system_skill_registry().get("team_local_desk").summary
+    assert desk_sum == "本机进桌"
+    deps = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["depends_on"][
+        "description"
+    ]
+    assert "生产者→消费者" in deps
+    assert "新开一队" in deps
+    append = DELEGATE_PARAMETERS["properties"]["append_to_execution_id"]["description"]
+    assert "latest" in append
     assert "正例·串行" not in body and "反例·勿串" not in body
-    assert "平铺并行" in body or "全平铺" in body
     assert "并行写盘" not in body
     assert "sibling_artifact" not in body
-    assert "整合员" in body and "先读上游指针" in body
-    assert "再派同名" in body
-    assert "嵌套委派" in body and "大模块" in body
-    assert "编排自主" in body
-    assert "摸底波" in body
     assert "假两段" not in body
-    assert "为编排而编排" in body or "禁为编排而编排" in body
-    assert "凡大活必嵌套" in body
-    assert "不是配额" in body
-    assert "modules" not in body
-    assert "必须扇出" not in body
-    assert "默认" in body and "二选一" in body
+    assert "单 lead" in body and "二选一" in body
     assert "再平铺" in body
-    # 协调补派失败节点须标 replaces_run_id，引擎改写下游 depends_on
-    assert "replaces_run_id" in body and "补派" in body
-    # 对用户用人话；字段名只留工具通道
-    assert "重新安排人补上" in body or "谁没交齐" in body
-    assert "勿复述字段名" in body or "工具通道用语" in body
-    # 派完「人已派出」唯一所有者 = how_you_act；本 skill 只留协调期可静默。
     assert "人已派出" not in body
-    assert "可静默" in body
     assert "谁还在跑" not in body
     assert "谁在后台、完成后会再汇报" not in body
-    # 纠正「一次只能一个 delegate / 同步阻塞到全队完成」误述：一回合一张图 + 同回合可再追加；
-    # 禁止同构重派在跑任务。
-    assert "一回合一张协作图" in body
-    assert "再调" in body and "delegate" in body
-    assert "同构" in body
-    assert "不必" in body or "不是" in body  # 否定「必须等全队完成」
-    # 新回合新图：跨回合新开一队接续（latest 不含图 id）；同回合合图仍在。
-    assert "【新回合新图】" in body
     assert "【跨回合延续】" not in body
-    assert "新开一队、接续上一张图" in body
     assert "向用户汇报用" not in body
-    assert "不要填图 id" in body
-    assert "append_to_execution_id" in body
     assert "已往上方协作图追加" not in body
-    assert "同回合再调" in body or "并入当前活跃图" in body
-    # 下游未定：先跑上游，再 replan(add=…) / 再 delegate（不教占位晚绑定填参）
-    assert "下游未定" in body
-    assert "replan(add=" in body
-    assert "再 `delegate`" in body or "再 delegate" in body
-    assert "有文件系统递路径" in body
-    assert "没文件尽量给全文" in body
-    assert "过长引擎" in body
     assert "`desktop_notify`" not in body
     assert "worker 可用 `desktop_notify`" not in body
     assert "CEO 不可" not in body
@@ -1043,28 +980,13 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
 
 
 def test_team_orchestration_skill_teaches_constraint_vs_solution_and_outline_step():
-    # 认知分工 + 结构跟着证据走（L3/L4，法律论文案例的根因修复）: the skill teaches that
-    # a deliverable's professional STRUCTURE belongs to the expert worker (not the
-    # CEO's task), that review sections in the task body are an acceptance floor (not a
-    # structure blueprint), and that研究级大型交付 should make「定结构」an evidence-driven,
-    # user-gated outline step (调研 → 提纲：明文才 checkpoint=true / 先派再问 → 全文) rather than the
-    # CEO fixing the skeleton up front. Pins the范式 so it can't silently drop out.
-    # 必备章节标题与验收同字面；禁藏裸报错。
+    """认知分工在 skill；提纲停靠 playbook slots；废字段 / 事故名不进编排手册。"""
+    from agentcore.runtime.runs.playbooks import PLAYBOOKS
+
     body = _body("team_orchestration_advanced")
-    assert "方案" in body  # 约束 vs 方案
-    assert "审查章节" in body
-    assert "task 正文" in body
+    assert "专业方案归专家" in body
+    assert "同一套原文" in body
     assert "required_sections" not in body
-    assert "同字面" in body or "同一套原文" in body
-    assert "近义" in body
-    assert "裸报错" in body or "藏起契约" in body or "藏契约" in body
-    assert "面向用户·大白话" in body or "用人话概括" in body
-    assert "缺章失败须诚实可见" in body or "缺章失败如实可见" in body
-    assert "提纲" in body
-    assert "playbook=cite_write_review" in body or "套餐提纲步" in body
-    assert "默认不停" in body
-    assert "checkpoint=true" in body
-    assert "先只派提纲" in body and "ask_user" in body
     for token in (
         "checkpoint_after",
         "bind_after_deps",
@@ -1074,64 +996,52 @@ def test_team_orchestration_skill_teaches_constraint_vs_solution_and_outline_ste
         "require_upstream",
     ):
         assert token not in body, token
-    # 定案 A：调研驱动大型交付 — 各角 MD 笔记 files，禁三人 prose 只靠主笔落盘
-    assert "三人 prose" in body or "角 prose" in body
-    assert "仅主笔落盘" in body or "只靠主笔落盘" in body
-    # 成文 PDF：HOW 唯一所有者 = team_delivery_env；编排 skill 只留 consult 钩
     assert "consult(team_delivery_env)" in body
     assert "md_to_pdf" not in body
     assert "reportlab" not in body
-    # 演讲/PPT：task 交需求 ≠ 代写章节大纲；事故名 Marp 不进 skill
-    assert "代写全章节大纲" in body
     assert "Marp" not in body
+    slots = PLAYBOOKS["cite_write_review"].slots
+    assert "checkpoint" in slots
+    assert "明文" in slots or "提纲" in slots
 
 
 def test_team_delivery_env_skill_teaches_presentation_pptx_honesty():
-    """有执行须真 pptx；无执行禁再派跑脚本、禁假称 Office 已落盘。
-
-    案 20260803-ppt-office A+B + docx-office-exec-capability-lie B/C。
-    案 5d25bfc3 / 08-08④：图形组织图直接拒+替代；仅文本/表格 Word；禁说满空派。
-    """
+    """点名后缀只认开场表；不可产不空派；等效替代先干。库名 / 说满空派不进本条。"""
     body = _body("team_delivery_env")
     orch = _body("team_orchestration_advanced")
-    assert "python-pptx" in body
+    assert "开场表" in body
     assert "静默" in body and ".md" in body
-    assert "PPT 已落盘可直接使用" in body or "Word 已落盘可直接使用" in body
     assert "交付缺口" in body or "标缺口" in body
     assert "form=files" in body or "artifacts" in body
     assert "file_copy" in body
     assert "当模板" in body
-    assert "Presentation()" in body
+    assert "Presentation()" not in body
+    assert "python-pptx" not in body
     assert "再派" in body and "跑脚本" in body
-    assert "数据文件整理" in body
     assert "consult(data_file_landing)" in body
     assert "结构报告" not in body
     assert "待跑变换脚本" not in body
     assert "暂时不可用" not in body
     assert "表格 → `.csv`" not in body
-    assert "不算过闸" in body or "不算" in body
     assert "压体积" not in body
     assert "模板保真" not in body
     assert "*_slim.pptx" not in body and "slim.pptx" not in body
     assert "相对模板" not in body
-    # 08-08④：图形组织图拒+替代；勿点名 SmartArt/DrawingML 当能力
     assert "图形组织图" in body
     assert "直接拒" in body
     assert "文本" in body and "表格" in body
-    assert "说满" in body and "空派" in body
+    assert "说满" not in body
     assert "SmartArt" not in body and "DrawingML" not in body
     assert "凭印象" in body
-    assert "先干再问" in body
+    assert "先干" in body
     assert "点名载体/手段" in body
     assert "顾问短对齐" not in body
-    assert "源数据文件下一步" in body
+    assert "源数据文件下一步" not in body
     assert "无法可靠解析的源数据文件" not in body
     assert "无法可靠解析的源数据文件" in _body("data_file_landing")
     assert "表质量基线" in body
     assert "冒充表结构" in body
-    assert "落盘回执" in body
     assert "交付对账" in body
-    assert "实际写下" in body or "在盘上" in body
     assert "python-pptx" not in orch
 
 
@@ -1140,8 +1050,8 @@ def test_team_delivery_env_skill_teaches_deterministic_word_pdf_export():
     body = _body("team_delivery_env")
     orch = _body("team_orchestration_advanced")
     assert "md_to_docx" in body
-    assert "python-docx" in body  # 只作禁用主路径出现
-    assert "目标格式不可产" in body
+    assert "python-docx" not in body
+    assert "不可产" in body
     assert "与执行正交" in body
     assert "确定性导出器" in body
     assert "`.docx`/`.pptx`/`.xlsx` 等且能力行" not in body
@@ -1157,20 +1067,23 @@ def test_run_skill_teaches_windows_bat_crlf_ascii():
     assert ".ps1" in run
     assert "转码" in run or "改换行" in run
     delivery = _body("team_delivery_env")
-    assert "consult(run)" in delivery and ".bat" in delivery
+    assert "consult(run)" not in delivery
+    assert ".bat" not in delivery
     assert "work_discipline" not in delivery
-    assert "双击即用" in delivery
+    assert "双击即用" not in delivery
     assert "ASCII-only" not in delivery
     orch = _body("team_orchestration_advanced")
     assert "双击即用" not in orch
 
 
 def test_team_delivery_env_skill_teaches_image_gen_key_boundary():
-    """案 image-gen-byok-egress-boundary：无 egress 禁代出图；Key 不进工作区。"""
+    """出图边界在 run skill；凭据卫生在基座；交付手册不抄。"""
     body = _body("team_delivery_env")
+    run = _body("run")
     orch = _body("team_orchestration_advanced")
-    assert "生图" in body
-    assert "代调" in body or "出图" in body
+    assert "生图" not in body
+    assert "代调" not in body
+    assert "无原生生图" in run
     assert "明文" not in body and "跨会话凭据脱敏" not in body
     from agentcore.runtime.resolve.prompt import assemble_system_prompt
 
@@ -1179,12 +1092,9 @@ def test_team_delivery_env_skill_teaches_image_gen_key_boundary():
     assert "<工作权威>" in shared
     assert "密钥" in shared and "明文" in shared
     assert "已识别凭据" in shared
-    # 下载 404 须列目录核对（路径 HOW）；禁语表已出手册
     assert "面板可见·落盘对账" not in body
-    assert "交付下载·面板路径" in body
-    assert "404" in body or "下载失败" in body
-    assert "file_list" in body
-    assert "file_list(pattern)" not in body
+    assert "交付下载·面板路径" not in body
+    assert "404" not in body
     assert "生图" not in orch
 
 
@@ -1201,26 +1111,25 @@ def test_orchestration_skill_teaches_cloud_install_boundary():
 
 
 def test_dispatch_writing_how_lives_in_skill_not_core():
-    """第七刀：必读锚点 / 交需求不代写骨架在编排 skill；核不复述百科。"""
+    """交需求不代写骨架：skill 留认知分工；已确认约束在 task 参数；核不复述百科。"""
     from agentcore.runtime.resolve.prompt import _CEO_CORE_HINT
+    from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
 
     hint = _CEO_CORE_HINT
     orch = _body("team_orchestration_advanced")
+    task_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["task"][
+        "description"
+    ]
 
-    assert "必读锚点" in orch
+    assert "专业方案归专家" in orch
     assert "正例·交需求" not in orch
     assert "反例·替它设计完" not in orch
     assert "向量数据库" not in orch
-    assert "代写全章节大纲" in orch
     assert "required_sections" not in orch
-    assert "worker 看不到对话历史" in orch
-    assert "权威线索" in orch
-    assert "设计稿" in orch
     assert "读全局规则" not in orch
     assert "读全局规则" not in hint
-    assert "团队负责人口吻" in orch
-    assert "已确认约束" in orch
-    assert "同字面" in orch or "同一套原文" in orch
+    assert "已确认约束" in task_desc
+    assert "同一套原文" in orch
 
     for token in (
         "必读锚点",
@@ -1270,6 +1179,7 @@ def test_delivery_landing_how_lives_in_skills_not_core():
 
     hint = _CEO_CORE_HINT
     delivery = _body("team_delivery_env")
+    desk = _body("team_local_desk")
     orch = _body("team_orchestration_advanced")
     help_map = _body("product_help")
     mkdir_desc = MkdirTool().schema.description
@@ -1288,21 +1198,19 @@ def test_delivery_landing_how_lives_in_skills_not_core():
         assert token not in hint, token
 
     assert "src/" in mkdir_desc
-    assert "mkdir" in delivery
-    assert "create_folder" in delivery and "桌内工程根" in delivery
-    assert "court-game/" not in delivery
+    assert "mkdir" in desk
+    assert "create_folder" in desk and "桌内工程根" in desk
+    assert "court-game/" not in desk
     assert "【空桌勿套工程壳】" not in delivery
     assert "写完再搬" in delivery
-    assert "工作区相对完整路径" in delivery
+    assert "工作区相对完整路径" in delivery or "工作区相对**完整**路径" in delivery
     assert "归位" in delivery and "移到工作区" in delivery
     assert "约定文档出口" in delivery
     assert "用户工程源码仍写业务路径" in delivery
     assert "裸 `reviews/…`" in delivery
     assert "混用两套前缀" in delivery
-    assert "交付下载·面板路径" in delivery
-    assert "404" in delivery or "下载失败" in delivery
-    assert "file_list" in delivery
-    assert "file_list(pattern)" not in delivery
+    assert "交付下载·面板路径" not in delivery
+    assert "404" not in delivery
     assert "site/" not in orch
     assert "consult(team_delivery_env)" in orch
 
@@ -1317,7 +1225,7 @@ def test_delivery_landing_how_lives_in_skills_not_core():
 
 
 def test_slice_honesty_how_lives_in_skills_not_core():
-    """切片默认 MVP / 真两段已撤；做软件专段已撤；核仍不写编制 HOW。嵌套路径仍在 skill。"""
+    """真两段 / 做软件专段已撤；核不写编制 HOW。skill 只留「先组队≠已拆」与 DAG/lead 二选一。"""
     from agentcore.runtime.resolve.prompt import _CEO_CORE_HINT
 
     hint = _CEO_CORE_HINT
@@ -1360,22 +1268,21 @@ def test_slice_honesty_how_lives_in_skills_not_core():
     assert "局部单功能" not in orch
     assert "形态跟桌上结果" not in orch
     assert "桌上结果是什么就派什么" not in orch
-    assert "整个里程碑" in orch
     assert "目标·约束·验收" in orch
     assert "你可以组队" in orch and "先组队" in orch
-    assert "不算" in orch and "已拆编制" in orch
-    assert "路径 A" in orch and "路径 B" in orch
-    assert "编排自主" in orch and "摸底波" in orch
-    assert "凡大活必嵌套" in orch
-    assert "单 lead" in orch
+    assert "已拆编制" in orch
+    assert "单 lead" in orch and "二选一" in orch
     assert "薄旁路" not in orch
     assert "薄旁路" not in hint
 
 
 def test_orchestration_skill_teaches_software_admission():
-    """做软件专段已撤；【默认】仍手写 tasks；不默认真两段 / 先装包清单。"""
+    """做软件专段已撤；手写 tasks 在 delegate description；不默认真两段。"""
+    from agentcore.runtime.runs.playbooks import PLAYBOOKS
+    from agentcore.tools.builtin.delegate.schema import DELEGATE_DESCRIPTION
+
     body = _body("team_orchestration_advanced")
-    assert "手写" in body and "tasks" in body
+    assert "手写" in DELEGATE_DESCRIPTION and "tasks" in DELEGATE_DESCRIPTION
     assert "【做软件】" not in body
     assert "假两段" not in body
     assert "形态跟桌上结果" not in body
@@ -1390,7 +1297,7 @@ def test_orchestration_skill_teaches_software_admission():
     assert "尚无工程清单" not in body
     assert "范围没钉" not in body
     assert "单 lead" in body
-    assert "满编" in body
+    assert "可提交长文" in PLAYBOOKS["cite_write_review"].summary
     assert 'playbook="build_app"' not in body
     assert "手写 1 人" not in body
     assert "局部单功能" not in body
@@ -1405,27 +1312,26 @@ def test_orchestration_skill_teaches_software_admission():
 
 
 def test_team_orchestration_skill_teaches_sections_not_deleted_deliverable_keys():
-    # 定案：已删 name/must_contain/min_length/requires_files；主题约束进 task /
-    # team_brief；审查章节写进 task 正文。
-    # 写盘用 form 三档；artifacts 仍作为 omit-unless 字段出现。已删字段不留负面清单。
+    """已删 deliverable 字段不回潮；form 三档在 schema；审查默认 prose 在 skill。"""
     body = _body("team_orchestration_advanced")
-    assert "审查章节" in body
-    assert "task 正文" in body
-    assert "验收项" in body or "验收要点" in body
+    assert "验收项" in body
     assert "2–4" not in body
     assert "2-4" not in body
     assert "字数门槛" not in body
-    from agentcore.tools.builtin.delegate.schema import TASK_DELIVERABLE_SCHEMA
+    from agentcore.tools.builtin.delegate.schema import (
+        DELEGATE_PARAMETERS,
+        TASK_DELIVERABLE_SCHEMA,
+    )
 
     form_desc = TASK_DELIVERABLE_SCHEMA["properties"]["form"]["description"]
     assert "【看】" in form_desc and "【存文档】" in form_desc and "【改工程】" in form_desc
-    assert "只看" in body and "prose" in body
+    assert "form=prose" in body
     assert "【看】" not in body
     assert "form=workspace" not in body
     assert "workspace" in form_desc
-    assert "form=files" in body or "form\": \"files\"" in body or '"form": "files"' in body
-    assert "artifacts" in body
-    assert "team_brief" in body
+    assert "artifacts" in TASK_DELIVERABLE_SCHEMA["properties"]
+    brief_desc = DELEGATE_PARAMETERS["properties"]["team_brief"]["description"]
+    assert "有共享口径才写" in brief_desc
     assert "required_sections" not in body
     assert "must_contain" not in body
     assert "细则清单进 `deliverable.must_contain`" not in body
@@ -1436,33 +1342,27 @@ def test_team_orchestration_skill_teaches_sections_not_deleted_deliverable_keys(
     assert "min_length" not in body
     assert "task.objective" not in body
     assert "Stanford" not in body and "McKinsey" not in body
-    assert "取证路径" in body or "机构名" in body
 
 
 def test_team_orchestration_skill_teaches_parallel_review_via_brief():
-    # 并行审查靠 team_brief 对齐口径，不再经 post_note 广播。
+    """并行口径走 team_brief 参数；skill 不教 post_note。"""
+    from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
+
     body = _body("team_orchestration_advanced")
+    brief_desc = DELEGATE_PARAMETERS["properties"]["team_brief"]["description"]
     assert "post_note" not in body
     assert "heads_up" not in body
-    assert "team_brief" in body
+    assert "有共享口径才写" in brief_desc
 
 
 def test_team_orchestration_skill_teaches_review_contract_template():
-    # 审查默认 prose；章节写进 task 正文；结构化 JSON 走文件通道（文件名写进 task）。
-    # 钉：task 写审查章节、web_search 软引导；废字段名缺席。
+    """审查默认 prose；废章节模板 / 评分字段不进 skill。"""
     body = _body("team_orchestration_advanced")
-    assert "审查类任务的统一契约" in body
-    assert "默认 prose" in body
+    assert "form=prose" in body
     assert "章节须含" not in body
     assert "问题 / 建议 / 评分" not in body
-    assert "审查章节写进 task 正文" in body or "审查章节" in body
     assert "required_sections" not in body
-    assert "结构化交付走文件通道" in body
-    assert "artifacts" in body
     assert "output_format" not in body
-    assert "web_search" in body
-    assert "全文" in body or "复制" in body
-    assert "deliverable" in body
     assert "legal.json" not in body
     assert "problems" not in body
     assert "suggestions" not in body
@@ -1474,7 +1374,9 @@ def test_team_orchestration_skill_teaches_team_brief():
 
     body = _body("team_orchestration_advanced")
     brief_desc = DELEGATE_PARAMETERS["properties"]["team_brief"]["description"]
-    assert "team_brief" in body
+    task_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["task"][
+        "description"
+    ]
     assert "seed_notes" not in body
     assert "建墙" not in body
     assert "有共享口径才写" in brief_desc
@@ -1482,11 +1384,6 @@ def test_team_orchestration_skill_teaches_team_brief():
     assert "正交扇出" not in body
     assert "不写 brief" not in body
     assert "换行堆" not in body
-    assert "一次完整写入" in body
-    assert "两篇成稿" in body
-    assert "短规格" in body
-    assert "互填" in body
-    assert "成环" in body
     for token in (
         "checkpoint_after",
         "bind_after_deps",
@@ -1496,12 +1393,8 @@ def test_team_orchestration_skill_teaches_team_brief():
         "require_upstream",
     ):
         assert token not in body, token
-    # 定稿漂移 A′：team_brief / task 固定「已确认约束」；约束优先于附件旧表；自拟默认不进该块
-    assert "已确认约束" in body
-    assert "约束块优先" in body or "优先" in body
-    assert "自拟的默认" in body
-    assert "冒充拍板" in body
-    assert "无已拍板项" in body
+    assert "已确认约束" in task_desc
+    assert "自拟默认" in task_desc or "自拟" in task_desc
 
 
 def test_team_orchestration_skill_teaches_coordination_wall_vs_none():
@@ -1509,7 +1402,6 @@ def test_team_orchestration_skill_teaches_coordination_wall_vs_none():
 
     body = _body("team_orchestration_advanced")
     brief_desc = DELEGATE_PARAMETERS["properties"]["team_brief"]["description"]
-    assert "team_brief" in body
     assert "建墙" not in body
     assert "有共享口径才写" in brief_desc
     assert "正交扇出" not in body
@@ -1627,39 +1519,35 @@ def test_orchestration_skill_teaches_recall_and_delegate_fallback():
     from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
 
     body = _body("team_orchestration_advanced")
+    landing = _body("long_form_landing")
     cont_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"][
         "continue_from_run_id"
     ]["description"]
-    assert "continue_from_run_id" in body
-    assert "delegate" in body
+    repl_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"][
+        "replaces_run_id"
+    ]["description"]
     assert "调查后确认修" in cont_desc
     assert "默认乙" not in body
-    assert "不算" in body and ("换职能" in body or "title" in body)
     assert "diagnose_fix_verify" not in body
-    assert "同一人" in body and "`run`" in body
-    assert "真换职能" in body and "replaces_run_id" in body
-    assert "冷委派" not in body
-    assert "补派" in body or "接手" in body
-    assert "成篇未写完" in body
+    assert "补缺口" in repl_desc or "接手" in repl_desc
     assert "只增不减" not in body
     assert "声明超集" not in body
     assert "白名单" not in body
     assert "相关工具" not in body
-    # 修订落盘纪律（有界返工环）：优先 str_replace / file_append；整盖允许但勿惰性省略。
-    assert "str_replace" in body and "file_append" in body
-    assert "file_write" in body
-    assert "优先" in body
-    assert "中间省略" in body
+    assert "str_replace" in landing
+    assert "file_append" in landing
     assert "全文重写" not in body
     assert "**禁止**对已有成篇成品再 `file_write`" not in body
     assert "禁止骨架/最小实现" not in body
 
 
 def test_team_orchestration_skill_teaches_revision_local_edit():
-    body = _body("team_orchestration_advanced")
-    assert "有界返工环" in body
-    assert "str_replace" in body
-    assert "中间省略" in body or "已保留首尾" in body
+    """修订落盘在 long_form_landing；编排手册不复述 str_replace 剧本。"""
+    orch = _body("team_orchestration_advanced")
+    landing = _body("long_form_landing")
+    assert "str_replace" in landing
+    assert "str_replace" not in orch
+    assert "有界返工环" not in orch
 
 
 def test_ask_user_kickoff_skill_teaches_short_clarify():
@@ -1823,18 +1711,19 @@ def test_ask_user_skill_teaches_fork_and_annotate():
     assert "断点" in body
     assert "ask_user_kickoff" not in body
     assert "ask_user_midtask" not in body
-    desk = _body("team_delivery_env")
+    desk = _body("team_local_desk")
     assert "open_local_project" in desk
     assert "≠默认开文件夹卡" in desk or "收窄本轮" in desk
     assert "在哪工作" in desk
     assert "仅新建会话" in desk
-    assert "勿推销本机草稿" in desk
+    assert "勿把云沙箱当桌面默认新建" in desk
+    assert "勿推销本机草稿" not in desk
     assert "开工前置" in desk
     assert "register_local_project" in desk
     assert "导入到云" in desk
     assert "从 Git 克隆" in desk
     assert "连接 Git" not in desk
-    assert "合法非默认" in desk or "非默认" in desk
+    assert "桌面默认本地对话" in desk
     assert "本机传统" in desk
     assert "Ask" not in desk or "改导" not in desk
     assert "consult(team_cross_folder)" in desk
@@ -1861,13 +1750,14 @@ def test_ask_user_skill_teaches_fork_and_annotate():
     assert "先写工作区" in granted and "file_copy" in granted
     assert "只读已挂" in granted
     assert "口头同意" in granted
-    assert "通道复检" in desk
-    assert "就好办了" in desk
-    assert "口述不得覆盖" in desk
-    assert "Folders" in desk
+    assert "客户端行" in desk and "缺口" in desk
+    assert "就好办了" not in desk
+    assert "口述覆盖" in desk
+    assert "Folders" not in desk
     assert "Composer" in desk
-    assert "授权在哪里" in desk
+    assert "授权在哪里" not in desk
     ask_body = skill.body
+    assert "consult(team_local_desk)" in ask_body
     assert "consult(team_delivery_env)" in ask_body
     assert "整题授权" in ask_body
     assert "grant_*" in ask_body
@@ -1880,20 +1770,14 @@ def test_ask_user_skill_teaches_fork_and_annotate():
 
 
 def test_orchestration_skill_teaches_wave_boundary_pause():
-    # 委派途中把关：明文才停；套餐默认不停，须 checkpoint=true 或先派再问。
+    """提纲过目在 cite_write_review slots；编排手册只留短问钩。"""
+    from agentcore.runtime.runs.playbooks import PLAYBOOKS
+
     body = _body("team_orchestration_advanced")
-    assert "playbook=cite_write_review" in body
-    assert "checkpoint=true" in body
-    assert "默认不停" in body
-    assert "先只派提纲" in body
-    assert "ask_user" in body
-    assert "再派撰稿" in body
-    assert "明文" in body
-    assert "结构化停" in body
-    assert "纯聊天" in body
-    assert "阻塞等待" in body
+    slots = PLAYBOOKS["cite_write_review"].slots
+    assert "checkpoint" in slots
+    assert "明文" in slots or "提纲" in slots
     assert "consult(asking_the_user)" in body
-    assert "cite_write_review" in body
     for token in (
         "checkpoint_after",
         "bind_after_deps",
@@ -1904,7 +1788,7 @@ def test_orchestration_skill_teaches_wave_boundary_pause():
 
 
 def test_delegate_checkpoint_skill_is_gone():
-    """提纲过目不是独立 skill：拆波 HOW 在编排手册。"""
+    """提纲过目不是独立 skill；停靠 playbook slots，不进目录。"""
     assert build_system_skill_registry().get("delegate_checkpoint") is None
     assert "delegate_checkpoint" not in render_skill_directory(
         build_system_skill_registry(), _FULL_TOOLS
@@ -1947,40 +1831,23 @@ def test_verify_and_fix_skill_is_gone():
 
 
 def test_long_form_dispatch_and_landing_how():
+    from agentcore.runtime.runs.playbooks import PLAYBOOKS
+
     orch = _body("team_orchestration_advanced")
-    assert "划界" in orch
-    assert "材料已齐" in orch
     assert "成文后梯度" not in orch
     assert "档 3" not in orch
-    assert "可提交长文" in orch or "点名审校" in orch
-    assert "大纲" in orch
-    assert "骨架" in orch
-    assert "单主文件" in orch or "同一主文件" in orch or "最终主文件" in orch
-    assert "合并责任" in orch or "merge" in orch.lower()
-    assert "各写各的" in orch
-    assert "分波" in orch
-    assert "章节范围" in orch or "第 1" in orch
-    assert "continue_from_run_id" in orch
-    assert "成篇未写完" in orch
-    assert "write_section" not in orch
-    assert "continue_writing" not in orch
-    assert "replaces_run_id" in orch
-    assert "多源合并" in orch and "成篇优先" in orch
-    assert "CEO 自写" in orch
-    assert "审校" in orch and "清理" in orch
-    assert "max_rounds" in orch
-    assert "流水线已在执行" not in orch
-    assert "合并进行中" not in orch
-    assert "SECTION:" in orch or "骨架" in orch
     assert "【成品文件只装成品】" in orch
-    assert "起诉状" in orch and "合同" in orch
-    assert "使用前请核对" in orch
-    assert "原样打印" in orch
     assert "提交" in orch
     assert "consult(team_delivery_env)" in orch
     assert "md_to_pdf" not in orch
     assert "reportlab" not in orch
+    assert "write_section" not in orch
+    assert "continue_writing" not in orch
+    assert "流水线已在执行" not in orch
+    assert "合并进行中" not in orch
     assert "参数不是合法 JSON" not in orch
+    cite = PLAYBOOKS["cite_write_review"].summary
+    assert "可提交长文" in cite or "点名审校" in cite
     for token in (
         "checkpoint_after",
         "bind_after_deps",

@@ -38,7 +38,7 @@ from agentcore.db.repositories import ConversationRepository
 from agentcore.llm.resolve import resolve_user_llm_credentials
 from agentcore.runtime.events import EventSink, EventType, SSEEvent
 
-INVESTIGATION = {"file_read", "file_list", "grep", "web_search", "read_url"}
+INVESTIGATION = {"file_read", "file_list", "grep", "web_search", "web_fetch"}
 CASE_TIMEOUT = 150.0
 REPEATS = 4
 

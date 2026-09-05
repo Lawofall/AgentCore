@@ -99,7 +99,7 @@ def test_describe_workspace_native_omits_drafts_hint():
     apply_artifact_dir_defaults(d)
     desc = describe_deliverable(d)
     assert DRAFTS_DIR not in desc
-    assert desc == ""
+    assert "form=workspace" in desc
 
 
 def test_resolve_skips_business_artifacts():
@@ -241,7 +241,7 @@ def test_build_run_plan_empty_files_does_not_inject_drafts_dir():
     assert d.artifact_dir == ""
     assert d.artifacts == []
     desc = describe_deliverable(d)
-    assert desc == ""
+    assert "form=files" in desc
     assert DRAFTS_DIR not in desc
 
 

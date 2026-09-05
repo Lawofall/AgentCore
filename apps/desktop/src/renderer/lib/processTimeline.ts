@@ -682,7 +682,7 @@ export function groupToolRuns(process: ProcessStep[]): TimelineNode[] {
   return nodes;
 }
 
-const EMPTY_PENDING_CHECKPOINTS: ReadonlySet<string> = new Set();
+const EMPTY_PENDING_GATES: ReadonlySet<string> = new Set();
 
 /** 气泡不画的标记：邻接与末段正文判定跳过，避免把答案算成「还在过程里」。 */
 function isUnpaintedCeoNode(node: TimelineNode): boolean {
@@ -733,12 +733,12 @@ function isContentBeforePendingCheckpoint(
 
 /**
  * CEO 气泡完成态过程折：true = 收进「Thought · Used tools」摘要。
- * 末段正文、待拍板检查点前的正文、强交互/图/插话不进折。
- * 纯渲染；不改 process[] / journal / conformance。
+ * 末段正文、待拍板检查点前的正文、待拍板 / 待复核、图 / 插话不进折。
+ * 已答复 ask 与已结算开工复核进折。纯渲染；不改 process[] / journal / conformance。
  */
 export function processFoldMask(
   nodes: readonly TimelineNode[],
-  pendingCheckpointIds: ReadonlySet<string> = EMPTY_PENDING_CHECKPOINTS,
+  pendingGateIds: ReadonlySet<string> = EMPTY_PENDING_GATES,
 ): boolean[] {
   const trailing = trailingAnswerContentIndices(nodes);
   return nodes.map((node, index) => {
@@ -749,13 +749,12 @@ export function processFoldMask(
       case "approval":
       case "stage_card":
         return true;
+      case "checkpoint":
+      case "plan_review":
+        return !pendingGateIds.has(node.checkpoint_id);
       case "content":
         if (trailing.has(index)) return false;
-        return !isContentBeforePendingCheckpoint(
-          nodes,
-          index,
-          pendingCheckpointIds,
-        );
+        return !isContentBeforePendingCheckpoint(nodes, index, pendingGateIds);
       default:
         return false;
     }

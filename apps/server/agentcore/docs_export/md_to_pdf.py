@@ -10,7 +10,8 @@ fenced code. Images are rendered as alt-text placeholders with a warning
 (embedding is out of scope for this MVP).
 
 段落几何按 ``layout`` 档位走，与 ``md_to_docx`` 同口径（见 ``docs_export.layout``）：
-一级标题两档都居中；首行缩进两字只在 ``official`` 档开。
+一级标题两档都居中；首行缩进两字只在 ``official`` 档开。PDF 不做公文页边距 /
+两端对齐 / 页码——行高 6mm ≈ 11pt × 1.5，与 Word 正文倍数对齐即可。
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ _MD = MarkdownIt("commonmark", {"html": False, "linkify": False, "breaks": False
 _HEADING_PT = {1: 20, 2: 16, 3: 14, 4: 12}
 _BODY_PT = 11
 _CODE_PT = 9
+# 6mm ≈ 11pt × 1.5（与 Word LINE_SPACING_MULTIPLE 对齐），不要另做一套视觉。
 _LINE = 6.0
 
 # fpdf2 is loaded on first convert (not at import) — same hygiene as python-docx.

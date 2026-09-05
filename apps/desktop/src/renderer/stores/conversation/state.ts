@@ -251,6 +251,11 @@ export interface ConversationState {
     waiting: boolean,
     conversationId?: string | null,
   ) => void;
+  /** Live-only desk_provision_wait UX（空气泡准备云端环境，禁空 Thinking…）. */
+  setWaitingForDeskProvision: (
+    waiting: boolean,
+    conversationId?: string | null,
+  ) => void;
   /** Explicit hard cancel of the in-flight turn (disconnect alone does not cancel). */
   stopGeneration: () => void;
   setError: (

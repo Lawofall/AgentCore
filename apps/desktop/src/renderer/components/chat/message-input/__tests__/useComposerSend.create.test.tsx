@@ -46,6 +46,9 @@ vi.mock("@/services/permissionAxes", () => ({
   })),
   setComposerDraftAxes: vi.fn(),
 }));
+vi.mock("@/services/defaultWorkspace", () => ({
+  ensureDefaultContainerRoot: vi.fn(async () => "root-default"),
+}));
 vi.mock("@/services/sidecarRouting", () => ({
   resolveSidecarRoot: vi.fn(async () => null),
 }));
@@ -61,6 +64,7 @@ vi.mock("../settleAttachments", () => ({
 import { __resetDraftRequestIdsForTests } from "@/lib/draftRequestId";
 import { notifyError } from "@/lib/toast";
 import { api } from "@/services/api";
+import { ensureDefaultContainerRoot } from "@/services/defaultWorkspace";
 import { sendTurn } from "@/services/turns";
 import { draftKeyFor, useComposerDraftStore } from "@/stores/composer";
 import { __resetComposerSendLatchesForTests } from "@/stores/composerSend";
@@ -215,6 +219,25 @@ beforeEach(() => {
 });
 
 describe("useComposerSend 草稿首发建会话", () => {
+  it("本机快速对话建会话带默认容器根", async () => {
+    useFoldersStore.setState({
+      draftWorkspaceIntent: { kind: "quick_local" },
+    });
+    post.mockResolvedValue({ id: NEW_CONV } as never);
+    seedDraft();
+    const { result } = renderHook(() => useSendHarness());
+
+    await act(async () => {
+      await result.current.send.handleSend();
+    });
+
+    expect(ensureDefaultContainerRoot).toHaveBeenCalled();
+    expect(post.mock.calls[0][1]).toMatchObject({
+      folder_id: null,
+      local_container_root_id: "root-default",
+    });
+  });
+
   it("创建窗口内重复触发只产生一次创建请求", async () => {
     let release!: (conv: { id: string }) => void;
     post.mockReturnValue(

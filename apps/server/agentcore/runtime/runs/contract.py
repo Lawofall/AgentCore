@@ -646,7 +646,7 @@ def format_cite_upgrade_feedback(
     """Phase-B light-repair prompt after auto-strip still leaves cite/bib issues.
 
     Instructs removing unverified ``#rN`` / bibliography claims or softening them
-    to「待核实」— does **not** encourage ``read_url`` / broad search / deep_read.
+    to「待核实」— does **not** encourage ``web_fetch`` / broad search / deep_read.
     """
     if not cite_failures:
         return ""
@@ -1035,17 +1035,37 @@ def format_soft_reminders(verdict: ContractVerdict) -> str:
     )
 
 
-def describe_deliverable(deliverable: Deliverable | None) -> str:
-    """This node's instance facts for the worker opening (paths / sections).
+# Node contract: which channel is the product. Identity is only ``<身份>``.
+# HOW / handoff topology / write-tool caution live on tools, consult, or the model.
+# 聊天大段粘贴由引擎闸拦。
+_DELIVERABLE_FORM_HOW = {
+    "prose": "【纯文字】（form=prose）成品就是正文。不要落盘。",
+    "workspace": (
+        "【改工程】（form=workspace）就地改用户工程，不要写入 `AgentCore/文档/`。"
+        "正文只报路径、怎么跑、关键取舍。"
+    ),
+    "files": (
+        "【落盘文件】（form=files）成品写入工作区；正文只报路径、怎么用、关键取舍。"
+    ),
+}
 
-    Form HOW (look / land files / edit the project) lives on worker identity.
-    The process-draft drawer lives on the workspace fact line. Empty → omit the
-    「交付物规格」channel. JSON / strict / retrieval budget are
-    not rendered here.
+
+def _deliverable_form_how(form: str) -> str:
+    return _DELIVERABLE_FORM_HOW.get(form, _DELIVERABLE_FORM_HOW["files"])
+
+
+def describe_deliverable(deliverable: Deliverable | None) -> str:
+    """This node's contract for the worker opening: form HOW + instance facts.
+
+    Form HOW (look / land files / edit the project) is selected by
+    ``deliverable.form`` — one line per turn. Identity is only ``<身份>``.
+    Instance facts (paths / sections) follow when declared. ``None`` (legacy)
+    omits the channel. JSON / strict / retrieval budget are not rendered here.
+    The process-draft drawer lives on the workspace fact line.
     """
     if deliverable is None:
         return ""
-    lines: list[str] = []
+    lines: list[str] = [_deliverable_form_how(deliverable.form)]
     if deliverable.required_sections and deliverable.output_format != "json":
         lines.append(
             "- 必须包含这些章节（用小标题）：" + "、".join(deliverable.required_sections)

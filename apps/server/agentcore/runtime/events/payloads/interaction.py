@@ -45,8 +45,8 @@ class AskOption(WirePayload):
     `action` marks an option that the desktop client fulfils with a
     native client action instead of a plain text answer (unknown/absent → plain option):
     `open_local_project` / `register_local_project` / `bind_local_folder` are
-    **本机传统** wire enums（合法非默认；云协作仍推荐「导入到云」；远程仓「从 Git 克隆」；≠离线；
-    勿当默认主推；``create_folder`` 仍只建云）；
+    **本机传统** wire enums（桌面默认同通道；云协作是选项：「导入到云」/「从 Git 克隆」；≠离线；
+    网页/手机无本机盘；``create_folder`` 仍只建云）；
     `grant_organize_folder` confirms organize-mode (move/copy/mkdir/trash-delete);
     `grant_attach_folder` confirms attach_rw (本机传统：该根可写可覆盖);
     still requires explicit user confirm (not silent).

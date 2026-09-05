@@ -29,7 +29,7 @@ _BLOCKED_HOSTNAMES = {"localhost", "0.0.0.0", "metadata.google.internal"}
 
 # Clash/Mihomo fake-IP placeholder range (RFC 2544). On a dev machine behind such
 # a proxy, public names resolve to 198.18.x.x and the local proxy routes them to
-# the real host. ``core/net.py`` allows these under ``read_url_allow_fake_ip_proxy``;
+# the real host. ``core/net.py`` allows these under ``web_fetch_allow_fake_ip_proxy``;
 # the PoC mirrors that so the happy path (proxy → real internet) is testable here.
 # True private / loopback / link-local targets stay blocked regardless.
 _FAKE_IP_NET = ipaddress.ip_network("198.18.0.0/15")

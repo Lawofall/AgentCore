@@ -534,7 +534,7 @@ async def test_execute_without_desk_does_not_start_detach(tmp_path: Path):
 
 @pytest.mark.parametrize("rpc_code", ["sandboxd_start_timeout", "sandboxd_timeout"])
 @pytest.mark.asyncio
-async def test_desk_start_rpc_timeout_closes_host_health(
+async def test_desk_start_rpc_timeout_does_not_close_host_health(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rpc_code: str
 ):
     from agentcore.tools.sandbox.cloud_health import (
@@ -574,11 +574,12 @@ async def test_desk_start_rpc_timeout_closes_host_health(
     with pytest.raises(SandboxError, match="云端隔离执行环境当前不可用") as failed:
         await sandbox.ensure_workspace_desk(str(ws))
     assert failed.value.details.get("code") == EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
-    assert cloud_sandbox_health() is False
+    assert cloud_sandbox_health() is True
     assert starts == [1]
     with pytest.raises(SandboxError, match="云端隔离执行环境当前不可用"):
         await sandbox.ensure_workspace_desk(str(ws))
-    assert starts == [1]
+    assert starts == [1, 1]
+    assert cloud_sandbox_health() is True
 
 
 async def test_exec_sandboxd_error_is_not_desk_start_failure(tmp_path: Path):

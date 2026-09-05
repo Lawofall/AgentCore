@@ -49,6 +49,7 @@ from agentcore.llm.errors import (
     is_temperature_deprecated,
     opencode_credits_product_message,
     opencode_go_limit_name,
+    opencode_pool_account_exhausted_reason,
     opencode_structured_error_type,
     opencode_typed_client_error,
     opencode_typed_rate_limit_message,
@@ -605,20 +606,25 @@ class OpenAICompatibleProvider:
             tools, api_key=self._api_key, base_url=self._base_url
         )
 
-    @staticmethod
-    def _is_pool_failover_signal(error: LLMError) -> bool:
+    def _is_pool_failover_signal(self, error: LLMError) -> bool:
         # Long attested 429s become LLMQuotaExceededError on the platform leaf;
         # that is the fill-first switch signal, not a reason to stick to the key.
         # 403 RegionError is a per-workspace config miss: hop before commit.
-        # 401 stays off this list — ban/bad-key must not walk the rest of the pool.
+        # CreditsError / workspace month-or-member caps: this key is empty, hop.
+        # AuthError (ban / bad key) stays off this list — must not walk the pool.
         if isinstance(error, LLMAuthError):
             return False
         if isinstance(error, (LLMRateLimitError, LLMQuotaExceededError)):
             return True
+        if isinstance(error, LLMInsufficientBalanceError):
+            return self._uses_platform_pool()
         preview = error.details.get("upstream_body_preview")
         if not isinstance(preview, str):
             return False
-        return opencode_structured_error_type(preview) == "regionerror"
+        kind = opencode_structured_error_type(preview)
+        if kind == "regionerror":
+            return True
+        return kind in {"monthlylimiterror", "userlimiterror"} and self._uses_platform_pool()
 
     def _platform_account_remaining(self) -> float:
         if not self._uses_platform_pool():
@@ -637,7 +643,7 @@ class OpenAICompatibleProvider:
         record_platform_rate_limit(
             api_key=self._api_key,
             base_url=self._base_url,
-            retry_after_seconds=retry_after.seconds,
+            retry_after_seconds=retry_after.declared,
             retry_after_source=retry_after.source,
             limit_name=opencode_go_limit_name(body),
         )
@@ -649,6 +655,25 @@ class OpenAICompatibleProvider:
 
         record_platform_auth_block(
             api_key=self._api_key, base_url=self._base_url, reason=reason
+        )
+
+    def _record_platform_pool_exhausted(
+        self, *, reason: str, retry_after: RetryAfter | None = None
+    ) -> None:
+        if not self._uses_platform_pool():
+            return
+        from agentcore.llm.platform_pool_scheduler import record_platform_account_exhausted
+
+        declared = (
+            retry_after.declared
+            if retry_after is not None and retry_after.declared is not None
+            else None
+        )
+        record_platform_account_exhausted(
+            api_key=self._api_key,
+            base_url=self._base_url,
+            reason=reason,
+            retry_after_seconds=declared,
         )
 
     async def _try_platform_pool_failover(self) -> bool:
@@ -1391,10 +1416,17 @@ class OpenAICompatibleProvider:
             typed = self._opencode_typed_client_error(
                 status=status_code, body=body
             )
+            kind = opencode_structured_error_type(body)
             if typed is not None:
-                if opencode_structured_error_type(body) == "regionerror":
+                if kind == "regionerror":
                     self._record_platform_pool_block(reason="regionerror")
+                exhausted = opencode_pool_account_exhausted_reason(body)
+                if exhausted is not None:
+                    self._record_platform_pool_exhausted(reason=exhausted)
                 raise typed
+            exhausted = opencode_pool_account_exhausted_reason(body)
+            if exhausted is not None:
+                self._record_platform_pool_exhausted(reason=exhausted)
             if is_balance_exhausted(body):
                 raise self._insufficient_balance_error(status=status_code, body=body)
             if is_auth_rejection(status_code, body):
@@ -1416,6 +1448,7 @@ class OpenAICompatibleProvider:
                 ),
             )
         if status_code == 402:
+            self._record_platform_pool_exhausted(reason="creditserror")
             raise self._insufficient_balance_error(status=status_code, body=body)
         if status_code >= 500:
             preview = body_preview(body)

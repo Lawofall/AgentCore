@@ -125,7 +125,7 @@ describe("ProviderSettings", () => {
     expect(screen.queryByText(/默认模型/)).toBeNull();
   });
 
-  it("describes the page job without platform-quota copy when platform models exist", () => {
+  it("does not advertise the page job in a header lede", () => {
     mockProviders(
       providersResponse({
         platform_available: true,
@@ -134,18 +134,14 @@ describe("ProviderSettings", () => {
     );
     renderPage();
     expect(screen.getByText("服务商")).toBeTruthy();
-    expect(
-      screen.getByText(
-        /接入自己的 OpenAI 兼容端点（可多个）。日常选用在「设置 · 模型」。/,
-      ),
-    ).toBeTruthy();
+    expect(screen.queryByText(/接入自己的 OpenAI 兼容端点/)).toBeNull();
     expect(screen.queryByText(/不接入也可用平台额度/)).toBeNull();
     expect(screen.queryByText("无需配置")).toBeNull();
     expect(screen.queryByText(/未接入自己的模型时/)).toBeNull();
     expect(screen.queryByText(/平台模型 deepseek-v4-flash/)).toBeNull();
   });
 
-  it("when platform is off, header says connect a provider to chat", () => {
+  it("when platform is off and no providers, empty state offers add", () => {
     mockProviders(
       providersResponse({
         providers: [],
@@ -154,7 +150,9 @@ describe("ProviderSettings", () => {
       }),
     );
     renderPage();
-    expect(screen.getByText(/需自行接入服务商后才能对话/)).toBeTruthy();
+    expect(screen.getByText("还没有接入服务商。")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "添加服务商" })).toBeTruthy();
+    expect(screen.queryByText(/需自行接入服务商后才能对话/)).toBeNull();
     expect(screen.queryByText(/不接入也可用平台额度/)).toBeNull();
     expect(screen.queryByText(/联系管理员/)).toBeNull();
   });

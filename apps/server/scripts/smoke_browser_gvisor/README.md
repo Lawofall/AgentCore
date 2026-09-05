@@ -35,7 +35,7 @@ docker build -t agentcore-server:browser-smoke --build-arg INSTALL_BROWSER=1 app
 # 2) privileged 容器内跑产品模块端到端冒烟。
 #    GVISOR_ENABLED=true 让 registry 走真 gVisor 沙箱工厂；
 #    BROWSER_SANDBOX_IGNORE_CGROUPS=true 为 Docker Desktop 嵌套 cgroup v1（PoC finding #6）；
-#    read_url_allow_fake_ip_proxy 默认 True，dev Clash fake-IP 下代理才能触达真公网（PoC finding #5）。
+#    web_fetch_allow_fake_ip_proxy 默认 True，dev Clash fake-IP 下代理才能触达真公网（PoC finding #5）。
 docker run --rm --privileged --user root `
   -e GVISOR_ENABLED=true -e BROWSER_SANDBOX_IGNORE_CGROUPS=true `
   -e SMOKE_OUT=/smoke/out `
@@ -112,7 +112,7 @@ docker run --rm --privileged --user root `
 2. **生产网络权限**：每会话 netns+veth 需 `CAP_NET_ADMIN`（本冒烟靠 `--privileged`）。真 gVisor 部署须在
    deploy 侧授权（部署配置，非代码）。
 3. **dev fake-IP 依赖**：本机 Docker Desktop 走 Clash fake-IP，公网名解析成 198.18.x.x，靠
-   `read_url_allow_fake_ip_proxy=True` 让代理放行该段才触达真公网（真私网仍拦）。生产无 fake-IP 时该项无影响。
+   `web_fetch_allow_fake_ip_proxy=True` 让代理放行该段才触达真公网（真私网仍拦）。生产无 fake-IP 时该项无影响。
 
 ## 文件清单
 

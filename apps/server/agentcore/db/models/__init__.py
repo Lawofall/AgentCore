@@ -55,6 +55,13 @@ from .runs import (
     TurnMetricsRow,
     TurnStreamStateRow,
 )
+from .skill_slots import SkillSlotMute, SkillSlotReplacement
+from .skill_store import (
+    SkillStoreInstall,
+    SkillStoreListing,
+    SkillStoreReport,
+    SkillStoreVersion,
+)
 from .standing_tasks import StandingTask, StandingTaskRun
 from .user_workflows import UserWorkflow
 from .users import (
@@ -108,6 +115,12 @@ __all__ = [
     "PushDeviceRow",
     "RefreshToken",
     "RunSessionRow",
+    "SkillSlotMute",
+    "SkillSlotReplacement",
+    "SkillStoreInstall",
+    "SkillStoreListing",
+    "SkillStoreReport",
+    "SkillStoreVersion",
     "StandingTask",
     "StandingTaskRun",
     "TurnJournalRow",

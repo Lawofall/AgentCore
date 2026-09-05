@@ -5,6 +5,7 @@ import {
   useUnarchiveConversation,
 } from "@/hooks/useConversations";
 import { notifyConversationDeleted } from "@/lib/conversationDeleteCopy";
+import { useConversationLocationId } from "@/lib/conversationLocation";
 import { notifyError } from "@/lib/toast";
 import type { Conversation } from "@/stores/conversation";
 import { useConversationStore } from "@/stores/conversation";
@@ -27,7 +28,7 @@ export function useConversationBulkSelect(
   const dropConversationRuntime = useConversationStore(
     (s) => s.dropConversationRuntime,
   );
-  const currentId = useConversationStore((s) => s.currentConversationId);
+  const locationId = useConversationLocationId();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `selectedFilter` is the intentional re-run key.
   useEffect(() => {
@@ -73,7 +74,7 @@ export function useConversationBulkSelect(
       try {
         await archiveMutation.mutateAsync(id);
         dropConversationRuntime(id);
-        if (id === currentId) navigate("/");
+        if (id === locationId) navigate("/");
       } catch (err) {
         notifyError(err, "批量归档失败");
         return;
@@ -98,7 +99,7 @@ export function useConversationBulkSelect(
       try {
         await deleteMutation.mutateAsync(id);
         dropConversationRuntime(id);
-        if (id === currentId) navigate("/");
+        if (id === locationId) navigate("/");
         deletedIds.push(id);
       } catch (err) {
         notifyError(err, "批量删除失败");

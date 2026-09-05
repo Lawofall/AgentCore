@@ -209,7 +209,7 @@ def test_cite_write_review_fans_out_one_researcher_per_angle_then_outline_then_w
     assert "post_note" not in by_id["research_1"]["task"]
     assert "#rN" not in by_id["research_1"]["task"]
     assert "待核实" not in by_id["research_1"]["task"]
-    assert "read_url" not in by_id["research_1"]["task"]
+    assert "web_fetch" not in by_id["research_1"]["task"]
     assert "法条" not in by_id["research_1"]["task"]
     # 成文综述：调研员盖学术检索挡位 + 纪律句；提纲/撰稿/审校不盖。
     for rid in research_ids:
@@ -228,7 +228,7 @@ def test_cite_write_review_fans_out_one_researcher_per_angle_then_outline_then_w
     assert all(
         n.search_policy == "" for n in plan.nodes if n.role != "调研员"
     )
-    assert "read_url" not in by_id["review"]["task"]
+    assert "web_fetch" not in by_id["review"]["task"]
     assert "法条" not in by_id["review"]["task"]
     assert "tools" not in by_id["review"]
     assert "检索纪律" not in by_id["review"]["task"]

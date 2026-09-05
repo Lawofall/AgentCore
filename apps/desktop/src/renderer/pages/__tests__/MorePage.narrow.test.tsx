@@ -48,4 +48,18 @@ describe("MorePage narrow", () => {
     expect(screen.getByText("账户正文")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "模型" })).toBeNull();
   });
+
+  it("legal doc uses the document title in the back header", () => {
+    render(
+      <MemoryRouter initialEntries={["/more/legal/terms"]}>
+        <Routes>
+          <Route path="/more" element={<MorePage />}>
+            <Route path="legal/:docId" element={<div>条款正文</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("heading", { name: "用户服务协议" })).toBeTruthy();
+    expect(screen.getByText("条款正文")).toBeTruthy();
+  });
 });

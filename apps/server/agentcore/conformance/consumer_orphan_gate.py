@@ -109,6 +109,7 @@ _EVENT_FACTORY_NAMES: frozenset[str] = frozenset(
         "team_synthesis_preview",
         "coordination_wait",
         "workspace_lock_wait",
+        "desk_provision_wait",
         "delivery_status",
         "user_interjection",
         "turn_queued",

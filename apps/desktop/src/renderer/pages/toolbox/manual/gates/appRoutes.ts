@@ -17,6 +17,7 @@ export const APP_STATIC_ROUTES: readonly string[] = [
   APP_PATHS.toolbox.root,
   APP_PATHS.toolbox.tools,
   APP_PATHS.toolbox.guidelines,
+  APP_PATHS.toolbox.store,
   APP_PATHS.toolbox.connectors,
   APP_PATHS.toolbox.automations.root,
   APP_PATHS.toolbox.automations.inbox,

@@ -1,4 +1,4 @@
-"""Idle cloud-desk reap: kill guest (no freeze), keep disk, next prepare/attach recreates."""
+"""Idle cloud-desk reap: kill guest (no freeze), keep disk, next prepare/attach recreates in seconds."""
 
 from __future__ import annotations
 

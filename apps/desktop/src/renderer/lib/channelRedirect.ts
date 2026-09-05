@@ -25,7 +25,7 @@ export const CHANNEL_REDIRECT_FACE: Record<
   source_dump_redirect: { label: "改用读文件", toolName: "file_read" },
   long_running_redirect: { label: "改用终端", toolName: "terminal" },
   not_a_web_url: { label: "改用读文件", toolName: "file_read" },
-  url_not_workspace_path: { label: "改用读网页", toolName: "read_url" },
+  url_not_workspace_path: { label: "改用读网页", toolName: "web_fetch" },
   loopback_host: { label: "改用本机查看", toolName: "browser" },
 };
 

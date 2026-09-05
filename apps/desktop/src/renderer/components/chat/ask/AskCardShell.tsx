@@ -11,7 +11,7 @@
  */
 import { Button } from "@/components/ui";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
-import { Loader2, type LucideIcon, OctagonX } from "lucide-react";
+import { Loader2, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 export function AskCardShell({
@@ -82,7 +82,7 @@ export function AskSectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-/** 底栏：提示占左，动作组贴右（取消 → 主 CTA）。取消 wire 仍 decision=stop 硬停。 */
+/** 底栏：提示占左，动作组贴右（取消 outline → 主 CTA）。取消 wire 仍 decision=stop 硬停。 */
 export function AskCardFooter({
   cta,
   ctaIcon: CtaIcon,
@@ -94,7 +94,8 @@ export function AskCardFooter({
   ctaDisabled = false,
 }: {
   cta: string;
-  ctaIcon: LucideIcon;
+  /** 仅有信息量时才传（下一题 / 授权文件夹 / 清单确认）。普通「提交」不挂装饰图标。 */
+  ctaIcon?: LucideIcon;
   busy: boolean;
   submitting: CheckpointUserDecision | null;
   onContinue: () => void;
@@ -113,16 +114,13 @@ export function AskCardFooter({
       )}
       <Button
         size="md"
-        variant="ghost"
+        variant="outline"
         disabled={busy}
         onClick={onStop}
-        className="text-muted-foreground hover:text-foreground"
         icon={
           submitting === "stop" ? (
             <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <OctagonX size={14} />
-          )
+          ) : undefined
         }
       >
         取消
@@ -130,15 +128,14 @@ export function AskCardFooter({
       <Button
         size="md"
         variant="primary"
-        className="bg-primary text-primary-foreground hover:bg-primary/90"
         disabled={busy || ctaDisabled}
         onClick={onContinue}
         icon={
           submitting === "continue" ? (
             <Loader2 size={14} className="animate-spin" />
-          ) : (
+          ) : CtaIcon ? (
             <CtaIcon size={14} />
-          )
+          ) : undefined
         }
       >
         {cta}

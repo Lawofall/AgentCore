@@ -9,7 +9,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import {
   afterEach,
   beforeAll,
@@ -101,9 +101,15 @@ const conv: Conversation = {
   lastMessagePreview: null,
 };
 
-function renderItem() {
+function PathProbe() {
+  const { pathname } = useLocation();
+  return <div data-testid="path">{pathname}</div>;
+}
+
+function renderItem(path = "/conversations/c1") {
   return render(
-    <MemoryRouter initialEntries={["/conversations/c1"]}>
+    <MemoryRouter initialEntries={[path]}>
+      <PathProbe />
       <TooltipProvider>
         <ConversationItem conversation={conv} />
       </TooltipProvider>
@@ -196,6 +202,26 @@ describe("ConversationItem delete", () => {
       | undefined;
     opts?.action?.onClick();
     expect(mocks.restoreMutate).toHaveBeenCalledWith("c1");
+  });
+
+  it("leaves the canvas when deleting the conversation on screen", async () => {
+    renderItem("/conversations/c1");
+
+    fireEvent.contextMenu(screen.getByText("当前会话"));
+    fireEvent.click(await screen.findByText("删除对话"));
+    await expectSoftDeleted();
+
+    expect(screen.getByTestId("path").textContent).toBe("/");
+  });
+
+  it("stays on another section when deleting the last-opened conversation", async () => {
+    renderItem("/toolbox");
+
+    fireEvent.contextMenu(screen.getByText("当前会话"));
+    fireEvent.click(await screen.findByText("删除对话"));
+    await expectSoftDeleted();
+
+    expect(screen.getByTestId("path").textContent).toBe("/toolbox");
   });
 });
 

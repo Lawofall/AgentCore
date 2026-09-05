@@ -9,14 +9,7 @@ import { MANUAL_HELP, ManualHelpLink } from "@/components/ManualHelpLink";
 import { escalationWaitNote } from "@/components/chat/escalationWaitCopy";
 import { Button, DecisionCard, DecisionCardIcon } from "@/components/ui";
 import { useSidePanelStore } from "@/stores/sidePanel";
-import {
-  ArrowRight,
-  Check,
-  Loader2,
-  LogIn,
-  OctagonX,
-  Radio,
-} from "lucide-react";
+import { ArrowRight, Loader2, LogIn, Radio } from "lucide-react";
 
 export type BrowserLoginSubmitKind = "logged_in" | "use_assumption" | "stop";
 
@@ -94,9 +87,7 @@ export function BrowserLoginDecisionCard({
           icon={
             submitting === "logged_in" ? (
               <Loader2 size={13} className="animate-spin" />
-            ) : (
-              <Check size={13} />
-            )
+            ) : undefined
           }
         >
           已登录，继续
@@ -119,15 +110,13 @@ export function BrowserLoginDecisionCard({
         ) : null}
         {onStop ? (
           <Button
-            variant="danger"
+            variant="outline"
             disabled={busy}
             onClick={onStop}
             icon={
               submitting === "stop" ? (
                 <Loader2 size={13} className="animate-spin" />
-              ) : (
-                <OctagonX size={13} />
-              )
+              ) : undefined
             }
           >
             取消

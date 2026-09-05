@@ -102,6 +102,16 @@ async def test_platform_balance_copy_offers_byok_exit_not_topup():
         await provider.close()
 
 
+def test_opencode_pool_account_exhausted_reason_splits_auth_from_wallet():
+    from agentcore.llm.errors import opencode_pool_account_exhausted_reason
+
+    assert opencode_pool_account_exhausted_reason(_CREDITS_BODY) == "creditserror"
+    auth = b'{"type":"error","error":{"type":"AuthError","message":"nope"}}'
+    assert opencode_pool_account_exhausted_reason(auth) is None
+    monthly = b'{"type":"error","error":{"type":"MonthlyLimitError","message":"cap"}}'
+    assert opencode_pool_account_exhausted_reason(monthly) == "monthlylimiterror"
+
+
 async def test_probe_401_with_credits_body_is_balance():
     provider = await _mock_provider(
         lambda request: httpx.Response(401, content=_CREDITS_BODY)

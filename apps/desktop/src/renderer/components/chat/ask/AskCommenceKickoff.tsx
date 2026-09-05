@@ -22,7 +22,7 @@ import {
 } from "@/lib/registerLocalFolder";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import type { AskAssumption, AskOption, AskQuestion } from "@/types/events";
-import { ChevronRight, Loader2, OctagonX, Rocket } from "lucide-react";
+import { ChevronRight, Loader2, Rocket } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -240,16 +240,13 @@ export function AskCommenceKickoffBody({
           </span>
           <Button
             size="md"
-            variant="ghost"
+            variant="outline"
             disabled={busy}
             onClick={onStop}
-            className="text-muted-foreground hover:text-foreground"
             icon={
               submitting === "stop" ? (
                 <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <OctagonX size={14} />
-              )
+              ) : undefined
             }
           >
             取消
@@ -257,7 +254,6 @@ export function AskCommenceKickoffBody({
           <Button
             size="md"
             variant="primary"
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
             disabled={busy}
             onClick={onContinue}
             icon={

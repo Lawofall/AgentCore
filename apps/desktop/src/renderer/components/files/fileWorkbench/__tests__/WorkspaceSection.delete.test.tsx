@@ -31,6 +31,7 @@ vi.mock("@/components/files/FileTree", () => ({
 
 vi.mock("react-router-dom", () => ({
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: "/files" }),
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),

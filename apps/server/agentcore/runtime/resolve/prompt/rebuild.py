@@ -16,7 +16,7 @@ from agentcore.runtime.context import (
     collect_outlet_inventory,
     detect_workspace_git,
 )
-from agentcore.runtime.context.consult_sources import build_merged_consult_source
+from agentcore.runtime.context.consult_sources import build_merged_consult_source_for_user
 from agentcore.runtime.resolve.prompt.compose import (
     assemble_system_prompt,
     compose_worker_base_prompt,
@@ -67,16 +67,16 @@ async def rebuild_fresh_worker_base_prompt(
         languages=exec_languages if backend.location == "local" else None,
         desktop_online=desktop_online,
     )
-    on_demand_entries = list(
-        await build_merged_consult_source(
-            skill_registry=skill_registry,
-            tool_names={s.name for s in provisional_tools.list_all()},
-            memory_store=memory_store,
-            folder_id=folder_id,
-            skill_audience="worker",
-            tool_registry=provisional_tools,
-        ).list_directory(user_id)
+    source = await build_merged_consult_source_for_user(
+        user_id=user_id,
+        skill_registry=skill_registry,
+        tool_names={s.name for s in provisional_tools.list_all()},
+        memory_store=memory_store,
+        folder_id=folder_id,
+        skill_audience="worker",
+        tool_registry=provisional_tools,
     )
+    on_demand_entries = list(await source.list_directory(user_id))
     return compose_worker_base_prompt(
         system_prompt,
         on_demand_entries=on_demand_entries,

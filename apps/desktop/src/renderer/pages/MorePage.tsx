@@ -1,6 +1,7 @@
 import { NarrowBackHeader } from "@/components/layout/NarrowBackHeader";
 import { SectionLabel, SurfaceNavLink } from "@/components/ui";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
+import { getLegalDoc } from "@/pages/legal/content";
 import {
   Cpu,
   Gauge,
@@ -105,6 +106,11 @@ function MoreNav({ groups }: { groups: NavGroup[] }) {
 }
 
 function titleForPath(pathname: string, groups: NavGroup[]): string {
+  const legalMatch = /^\/more\/legal\/([^/]+)/.exec(pathname);
+  if (legalMatch) {
+    const doc = getLegalDoc(legalMatch[1]);
+    if (doc) return doc.title;
+  }
   const items = groups.flatMap((g) => g.items);
   const exact = items.find((i) => i.path === pathname);
   if (exact) return exact.label;
@@ -163,7 +169,7 @@ export function MorePage() {
       {/* Content area — a left-anchored reading column (split layout, so it sets
           its own width rather than the centered content gradient). */}
       <div className="h-full w-full overflow-y-auto">
-        <div className="w-full max-w-3xl px-6 py-8">
+        <div className="w-full max-w-3xl px-6 py-6">
           <Outlet />
         </div>
       </div>

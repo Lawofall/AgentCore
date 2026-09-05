@@ -4,6 +4,7 @@ import {
   Card,
   EmptyHint,
   IconButton,
+  PageHeader,
   SearchField,
   SectionLabel,
   SurfaceRowButton,
@@ -97,12 +98,7 @@ export function ConversationsPage() {
   return (
     <div className="h-full w-full overflow-hidden">
       <div className="mx-auto flex h-full max-w-[1400px] flex-col px-6 py-6">
-        <header className="shrink-0">
-          <h1 className="text-xl font-semibold text-foreground">全部对话</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            按时间浏览与管理对话，点击即可打开
-          </p>
-        </header>
+        <PageHeader title="全部对话" className="shrink-0" />
 
         <div className="mt-5 flex min-h-0 flex-1 gap-5">
           <aside className="flex w-56 shrink-0 flex-col">

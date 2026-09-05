@@ -33,6 +33,7 @@ import { ShortcutsSettings } from "@/pages/more/ShortcutsSettings";
 import { UsageSettings } from "@/pages/more/UsageSettings";
 import { ConnectorsPage } from "@/pages/toolbox/ConnectorsPage";
 import { GuidelinesPage } from "@/pages/toolbox/GuidelinesPage";
+import { StorePage } from "@/pages/toolbox/StorePage";
 import { ToolsPage } from "@/pages/toolbox/ToolsPage";
 import {
   AutomationsPage,
@@ -127,6 +128,14 @@ export const router = createHashRouter([
         element: (
           <NarrowBlockedPage>
             <GuidelinesPage />
+          </NarrowBlockedPage>
+        ),
+      },
+      {
+        path: "toolbox/store",
+        element: (
+          <NarrowBlockedPage>
+            <StorePage />
           </NarrowBlockedPage>
         ),
       },

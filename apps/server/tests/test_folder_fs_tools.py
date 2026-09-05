@@ -86,7 +86,7 @@ def test_list_folder_dir_schema_and_registration():
     assert "max_depth" not in props
     assert "target_folder_id" not in props
     assert tool.schema.parameters["required"] == ["folder_id"]
-    # Nesting HOW lives in consult(team_cross_folder); schema is one-line function.
+    # 认桌 ≠ 摸底 在 consult；schema 一行功能。
     assert "列出" in tool.schema.description
     assert "HOW→consult(team_cross_folder)" in tool.schema.description
     assert "轻量认桌" not in tool.schema.description
@@ -94,8 +94,7 @@ def test_list_folder_dir_schema_and_registration():
 
     cross = build_system_skill_registry().get("team_cross_folder")
     assert cross is not None
-    assert "子文件夹" in cross.body
-    assert "轻量认桌" in cross.body
+    assert "认桌" in cross.body and "摸底" in cross.body
     assert "file_list" not in tool.schema.description
     assert "list_folders" not in tool.schema.description
     folder_id_desc = props["folder_id"]["description"]

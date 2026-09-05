@@ -7,7 +7,7 @@ alwaysApply: true
 
 ## 模型约束
 
-子代理（Task tool）**必须**指定 `model: "cursor-grok-4.6-xhigh"`，无例外；`resume` 与同任务线再起同样每次显式传。工具说明（resume 勿传 model）与实测不符：不传会静默回落主模型。本规则即用户指定。hook 会兜底，显式传仍是第一道防线。
+子代理（Task tool）**必须**指定 `model: "cursor-grok-4.6-high"`，无例外；`resume` 与同任务线再起同样每次显式传。工具说明（resume 勿传 model）与实测不符：不传会静默回落主模型。本规则即用户指定。hook 会兜底，显式传仍是第一道防线。
 
 ## 分工
 

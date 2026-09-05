@@ -53,6 +53,7 @@ function renderShell(path: string, element: React.ReactNode = <div>页面内容<
           <Route path="/conversations/:segment" element={element} />
           <Route path="/replay/:id" element={element} />
           <Route path="/quota" element={element} />
+          <Route path="/store" element={element} />
           <Route path="/system" element={element} />
           <Route path="/account" element={element} />
         </Route>
@@ -67,7 +68,7 @@ function currentNavLabel(): string | undefined {
 }
 
 describe("AdminShell navigation", () => {
-  it("groups the nine sections instead of listing them flat", () => {
+  it("groups the sections instead of listing them flat", () => {
     renderShell("/overview");
     for (const group of ["监控", "排查", "管理"]) {
       expect(screen.getByText(group)).toBeTruthy();
@@ -84,6 +85,7 @@ describe("AdminShell navigation", () => {
       "审计",
       "用户",
       "公告",
+      "商店",
       "内测群",
       "平台额度",
       "系统",
@@ -93,6 +95,11 @@ describe("AdminShell navigation", () => {
   it("marks the section matching the current route", () => {
     renderShell("/overview");
     expect(currentNavLabel()).toBe("概览");
+  });
+
+  it("marks 商店 on its own route", () => {
+    renderShell("/store");
+    expect(currentNavLabel()).toBe("商店");
   });
 
   it("marks 平台额度 on its own route", () => {

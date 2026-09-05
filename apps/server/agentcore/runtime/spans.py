@@ -117,7 +117,7 @@ def _parse_ts_ms(ts: str | None) -> float | None:
     """Epoch milliseconds for an ISO-8601 timestamp, or ``None`` if absent/unparseable.
 
     The journal's display events stamp ``time.strftime("%Y-%m-%dT%H:%M:%S.000Z")``
-    (second precision) — coarse, but enough to time a tool span (a read_url timeout is
+    (second precision) — coarse, but enough to time a tool span (a web_fetch timeout is
     5–15s, 案例 1). Run spans use the authoritative ``run_completed.duration_ms`` instead,
     so this only feeds best-effort tool-span durations.
     """

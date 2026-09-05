@@ -150,35 +150,70 @@ def _document_xml(docx_bytes: bytes) -> str:
         return zf.read("word/document.xml").decode("utf-8")
 
 
+def _footer_xml(docx_bytes: bytes) -> str:
+    with zipfile.ZipFile(io.BytesIO(docx_bytes)) as zf:
+        parts = [n for n in zf.namelist() if n.startswith("word/footer")]
+        return "\n".join(zf.read(n).decode("utf-8") for n in parts)
+
+
 def test_default_layout_centers_h1_without_first_line_indent():
-    """默认档（技术文档口径）：大标题居中，正文不缩进。"""
-    xml = _document_xml(convert_markdown_to_docx(_PLEADING_MD).docx_bytes)
+    """默认档（技术文档口径）：A4、正文 1.5 倍行距、大标题居中，正文不缩进、不对齐、无页码。"""
+    result = convert_markdown_to_docx(_PLEADING_MD)
+    xml = _document_xml(result.docx_bytes)
     assert xml.count('<w:jc w:val="center"/>') == 1  # 仅 H1，H2 不居中
     assert "w:firstLine" not in xml
+    assert '<w:jc w:val="both"/>' not in xml
+    assert "PAGE" not in _footer_xml(result.docx_bytes)
 
-    doc = Document(io.BytesIO(convert_markdown_to_docx(_PLEADING_MD).docx_bytes))
+    doc = Document(io.BytesIO(result.docx_bytes))
+    section = doc.sections[0]
+    assert section.page_width.cm == pytest.approx(21.0, abs=0.05)
+    assert section.page_height.cm == pytest.approx(29.7, abs=0.05)
+    assert section.top_margin.cm == pytest.approx(2.54, abs=0.05)
+    assert section.left_margin.cm == pytest.approx(3.17, abs=0.05)
     h1 = next(p for p in doc.paragraphs if p.text.strip() == "民事起诉状")
     assert h1.alignment == WD_ALIGN_PARAGRAPH.CENTER
     body = next(p for p in doc.paragraphs if p.text.startswith("原告："))
     assert body.paragraph_format.first_line_indent is None
     assert body.alignment is None
+    assert body.paragraph_format.line_spacing == pytest.approx(1.5)
+    assert body.paragraph_format.space_after == Pt(3)
+    item = next(p for p in doc.paragraphs if "证据一" in p.text)
+    assert item.paragraph_format.line_spacing == pytest.approx(1.5)
+    assert item.alignment is None or item.alignment == WD_ALIGN_PARAGRAPH.LEFT
 
 
 def test_official_layout_indents_body_first_line():
-    """公文档：正文首行缩进两字（firstLineChars 为准 + twips 兜底），标题/列表不吃缩进。"""
+    """公文档：正文首行缩进两字 + 两端对齐 + 公文页边距 + 页码；标题/列表不吃缩进与两端对齐。"""
     result = convert_markdown_to_docx(_PLEADING_MD, layout="official")
     xml = _document_xml(result.docx_bytes)
     assert xml.count('<w:jc w:val="center"/>') == 1
     # 三段正文（原告 / 被告 / 诉讼请求正文）各一条，标题与列表项不算。
     assert xml.count('<w:ind w:firstLine="480" w:firstLineChars="200"/>') == 3
     assert xml.count("w:firstLine=") == 3
+    assert xml.count('<w:jc w:val="both"/>') == 3
+    footer = _footer_xml(result.docx_bytes)
+    assert "PAGE" in footer
+    assert '<w:jc w:val="center"/>' in footer
 
     doc = Document(io.BytesIO(result.docx_bytes))
+    section = doc.sections[0]
+    assert section.page_width.cm == pytest.approx(21.0, abs=0.05)
+    assert section.page_height.cm == pytest.approx(29.7, abs=0.05)
+    assert section.top_margin.cm == pytest.approx(3.7, abs=0.05)
+    assert section.bottom_margin.cm == pytest.approx(3.5, abs=0.05)
+    assert section.left_margin.cm == pytest.approx(2.8, abs=0.05)
+    assert section.right_margin.cm == pytest.approx(2.6, abs=0.05)
     body = next(p for p in doc.paragraphs if p.text.startswith("原告："))
     assert body.paragraph_format.first_line_indent == Pt(24)
+    assert body.alignment == WD_ALIGN_PARAGRAPH.JUSTIFY
+    assert body.paragraph_format.line_spacing == pytest.approx(1.5)
     h1 = next(p for p in doc.paragraphs if p.text.strip() == "民事起诉状")
     assert h1.alignment == WD_ALIGN_PARAGRAPH.CENTER
     assert h1.paragraph_format.first_line_indent is None
+    item = next(p for p in doc.paragraphs if "证据一" in p.text)
+    assert item.alignment is None or item.alignment == WD_ALIGN_PARAGRAPH.LEFT
+    assert item.paragraph_format.first_line_indent in (None, Pt(0))
 
 
 def test_layout_never_inferred_from_body_text():

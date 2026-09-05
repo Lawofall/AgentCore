@@ -20,8 +20,7 @@ class Playbook:
     """One named, instantiable team shape: ``build(slots) -> (tasks, errors)``.
 
     ``summary`` / ``slots`` are the human-facing one-liners surfaced in the ``delegate`` schema
-    and the ``team_orchestration_advanced`` skill so the CEO knows the shape exists and what to
-    pass; ``build`` is the pure expander.
+    so the CEO knows the shape exists and what to pass; ``build`` is the pure expander.
     """
 
     name: str

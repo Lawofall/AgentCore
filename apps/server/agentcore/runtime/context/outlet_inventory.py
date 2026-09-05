@@ -1,8 +1,9 @@
 """Live file names under the four 约定文档出口 directories.
 
 ``<工作区>`` only lists an outlet when it has files. Empty dirs stay
-out — layout HOW lives in ``team_delivery_env``. This module lists what
-is actually there. Bodies stay out — paths only.
+out — layout HOW lives in ``team_delivery_env``；本机进桌 HOW 在
+``team_local_desk``。 This module lists what is actually there. Bodies stay
+out — paths only.
 """
 
 from __future__ import annotations

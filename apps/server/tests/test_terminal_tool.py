@@ -12,7 +12,6 @@ from agentcore.config import settings
 from agentcore.core.error_codes import ErrorCode
 from agentcore.runtime.events import EventType
 from agentcore.runtime.interaction import InteractionRegistry
-from agentcore.tools.builtin.long_running import DEFAULT_DEV_WAIT_FOR
 from agentcore.tools.builtin.run_process import (
     clamp_wait_timeout_seconds,
     process_manage,
@@ -82,7 +81,7 @@ def test_process_op_timeout_raises_for_wait_for():
     assert process_op_timeout_seconds({"subcommand": "start", "command": "x"}) == 60.0
     assert process_op_timeout_seconds(
         {"subcommand": "start", "command": "pnpm dev"}
-    ) == 30.0 + slack
+    ) == 60.0
     wait_args = {
         "subcommand": "start",
         "command": "x",
@@ -148,28 +147,29 @@ async def test_start_emits_process_start_op_and_formats_result():
     }
 
 
-async def test_start_long_running_defaults_wait_for():
+async def test_start_long_running_does_not_inject_wait_for():
     channel, registry = _channel()
     response = {
         "ok": True,
         "value": {
             "process_id": "p1",
             "status": "running",
-            "output": "Local: http://localhost:5173/\n",
-            "matched": True,
+            "output": "Serving HTTP on 0.0.0.0 port 8090\n",
         },
     }
     result, event = await _round_trip(
         process_manage(
-            {"subcommand": "start", "command": "npm run dev"},
+            {"subcommand": "start", "command": "python -m http.server 8090"},
             _ctx(channel),
         ),
         registry,
         response,
     )
-    assert event.payload["args"]["wait_for"] == DEFAULT_DEV_WAIT_FOR
+    assert "wait_for" not in event.payload["args"]
     assert result.success
-    assert "wait_for 已命中" in result.output
+    assert "wait_for 已命中" not in result.output
+    assert "请 read" not in result.output
+    assert "process_id: p1" in result.output
 
 
 async def test_start_matched_false_forbids_ready_claim():
@@ -197,6 +197,7 @@ async def test_start_matched_false_forbids_ready_claim():
     )
     assert result.success
     assert "禁止宣称已就绪" in result.output
+    assert "请 read" not in result.output
 
 
 async def test_read_stop_list_op_shapes():

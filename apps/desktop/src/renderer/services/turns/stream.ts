@@ -124,6 +124,7 @@ function rollbackUnstartedOptimisticTurn(
   store.setGenerating(false, conversationId);
   store.setTurnPhase("idle", conversationId);
   store.setWaitingForWorkspaceLock(false, conversationId);
+  store.setWaitingForDeskProvision(false, conversationId);
 }
 
 function surfaceTurnBanner(conversationId: string, err: unknown): void {
@@ -204,7 +205,8 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
   // during prepare/TTFT before the first content frame. A′: kickoff no longer
   // holds folder workspace_lock — 不得静默等锁. Residual write-lock short waits
   // emit ``workspace_lock_wait`` so the bubble shows「等待工作区…」instead of
-  // faking Thinking…. In-flight 同对话排队时 ``turn_queued`` 先到——仅 QueuedTurnsBar.
+  // faking Thinking…. Cloud desk boot emits ``desk_provision_wait`` →
+  // 「正在准备云端环境」. In-flight 同对话排队时 ``turn_queued`` 先到——仅 QueuedTurnsBar.
   store.createAssistantMessage(conversationId);
 
   const ac = new AbortController();

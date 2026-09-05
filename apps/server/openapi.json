@@ -591,7 +591,7 @@
         "type": "object"
       },
       "AccountRulesListResponse": {
-        "description": "Always rules for ``<设定>`` plus on_demand bodies for 规则目录 / ``consult``.\n\n``ancestor_*`` carry the enclosing folders' layers, outermost-first, and\n``folder_chain`` is that same chain by id with the current folder last: the engine may\nbe a desktop sidecar with no folders table, so the cloud is the only place that can\nresolve「谁在谁里面」(双模式工作区 §5.4 沿树继承).",
+        "description": "Always rules for ``<设定>`` plus on_demand bodies for 规则目录 / ``consult``.\n\n``ancestor_*`` carry the enclosing folders' layers, outermost-first, and\n``folder_chain`` is that same chain by id with the current folder last: the engine may\nbe a desktop sidecar with no folders table, so the cloud is the only place that can\nresolve「谁在谁里面」(双模式工作区 §5.4 沿树继承).\n\n``skill_replacements`` / ``skill_mutes`` are the merged overlay for this\n``folder_id`` (account farthest, then the desk-owner folder chain, near wins).\nBound documents are omitted from on_demand lists so the model does not see the\nsame HOW twice. Muted official slots ride ``skill_mutes`` so sidecar consult\nlisting matches the cloud overlay.",
         "properties": {
           "ancestor_on_demand_rules": {
             "items": {
@@ -640,6 +640,20 @@
               "$ref": "#/components/schemas/AccountRuleDoc"
             },
             "title": "Project Rules",
+            "type": "array"
+          },
+          "skill_mutes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skill Mutes",
+            "type": "array"
+          },
+          "skill_replacements": {
+            "items": {
+              "$ref": "#/components/schemas/AccountSkillReplacement"
+            },
+            "title": "Skill Replacements",
             "type": "array"
           }
         },
@@ -747,6 +761,40 @@
           }
         },
         "title": "AccountScopeStateSaveRequest",
+        "type": "object"
+      },
+      "AccountSkillReplacement": {
+        "description": "One account-level 换用: official slot → user on-demand body for consult.",
+        "properties": {
+          "content": {
+            "default": "",
+            "title": "Content",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_name": {
+            "title": "Document Name",
+            "type": "string"
+          },
+          "slot": {
+            "title": "Slot",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slot",
+          "document_id",
+          "document_name"
+        ],
+        "title": "AccountSkillReplacement",
         "type": "object"
       },
       "AccountTokenResponse": {
@@ -1637,6 +1685,220 @@
           "new_password"
         ],
         "title": "AdminSetPasswordRequest",
+        "type": "object"
+      },
+      "AdminSkillStoreListingDetail": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_user_id": {
+            "title": "Author User Id",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version_n": {
+            "title": "Version N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "author",
+          "author_user_id",
+          "version_n",
+          "status",
+          "updated_at",
+          "content"
+        ],
+        "title": "AdminSkillStoreListingDetail",
+        "type": "object"
+      },
+      "AdminSkillStoreListingList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AdminSkillStoreListingRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "AdminSkillStoreListingList",
+        "type": "object"
+      },
+      "AdminSkillStoreListingRow": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_user_id": {
+            "title": "Author User Id",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version_n": {
+            "title": "Version N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "author",
+          "author_user_id",
+          "version_n",
+          "status",
+          "updated_at"
+        ],
+        "title": "AdminSkillStoreListingRow",
+        "type": "object"
+      },
+      "AdminSkillStoreReportList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AdminSkillStoreReportRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "AdminSkillStoreReportList",
+        "type": "object"
+      },
+      "AdminSkillStoreReportRow": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "listing_id": {
+            "title": "Listing Id",
+            "type": "string"
+          },
+          "listing_name": {
+            "title": "Listing Name",
+            "type": "string"
+          },
+          "listing_status": {
+            "title": "Listing Status",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "reporter": {
+            "title": "Reporter",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing_id",
+          "listing_name",
+          "listing_status",
+          "user_id",
+          "reporter",
+          "reason",
+          "created_at"
+        ],
+        "title": "AdminSkillStoreReportRow",
         "type": "object"
       },
       "AdminSystemStatus": {
@@ -3955,7 +4217,7 @@
         "type": "object"
       },
       "CapabilityGuidelines": {
-        "description": "The system-prompt TEMPLATE the agents follow (静态 蓝图; the per-turn verbatim\nprompt is served separately, see the message prompt endpoint).\n\n``shared_base`` is the base every agent (CEO + workers) shares (identity, output\nstyle, tool-use, safety); ``worker_leaf`` / ``worker_captain`` are identity+contract\ntemplates (default files form, no dependents) — not the per-turn prompt (that is\nin 收到的上下文); ``ceo_addon`` is the CEO coordinator's layers on top of that base\n(routing core + 按需目录 + citation guidance); ``ceo`` is the full chat\nsystem-prompt template (shared base + ceo_addon), composed by the SAME\n``compose_ceo_chat_prompt`` the live turn uses, so it never drifts.",
+        "description": "The system-prompt TEMPLATE the agents follow (静态 蓝图; the per-turn verbatim\nprompt is served separately, see the message prompt endpoint).\n\n``shared_base`` is the base every agent (CEO + workers) shares (identity, output\nstyle, tool-use, safety); ``worker_leaf`` / ``worker_captain`` are ``<身份>``\ntemplates — not the per-turn prompt (form HOW is 交付物规格 in 收到的上下文);\n``ceo_addon`` is the CEO\ncoordinator's layers on top of that base\n(routing core + 按需目录 + citation guidance); ``ceo`` is the full chat\nsystem-prompt template (shared base + ceo_addon), composed by the SAME\n``compose_ceo_chat_prompt`` the live turn uses, so it never drifts.",
         "properties": {
           "ceo": {
             "title": "Ceo",
@@ -11067,6 +11329,46 @@
         "title": "MfaStatusResponse",
         "type": "object"
       },
+      "MineSkillView": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "occupies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Occupies",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "content",
+          "version"
+        ],
+        "title": "MineSkillView",
+        "type": "object"
+      },
       "ModelCatalogCurrent": {
         "properties": {
           "id": {
@@ -11916,7 +12218,7 @@
         "type": "object"
       },
       "PlatformCredentialView": {
-        "description": "Admin view of one platform-pool member — never the plaintext key.\n\n``status`` / ``recovery_at`` / ``limit_name`` are live pool-state (Redis or\nprocess memory), not Postgres columns. Absence of a store record is healthy.\n``tool_surface_limits`` is stored on the row; empty / all-null = unlimited.",
+        "description": "Admin view of one platform-pool member — never the plaintext key.\n\n``status`` / ``recovery_at`` / ``limit_name`` / ``source`` are live pool-state\n(Redis or process memory), not Postgres columns. Absence of a store record is\nhealthy. ``picked`` is the fill-first member ``platform_llm_credentials`` would\ntake right now. ``same_as_env`` is true when this row's ``(api_key, base_url)``\nmatches ``PLATFORM_API_KEY`` / ``PLATFORM_BASE_URL``.\n``tool_surface_limits`` is stored on the row; empty / all-null = unlimited.",
         "properties": {
           "base_url": {
             "title": "Base Url",
@@ -11968,6 +12270,11 @@
             ],
             "title": "Masked Key"
           },
+          "picked": {
+            "default": false,
+            "title": "Picked",
+            "type": "boolean"
+          },
           "recovery_at": {
             "anyOf": [
               {
@@ -11979,6 +12286,22 @@
               }
             ],
             "title": "Recovery At"
+          },
+          "same_as_env": {
+            "default": false,
+            "title": "Same As Env",
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
           },
           "status": {
             "default": "healthy",
@@ -12181,6 +12504,20 @@
           "port"
         ],
         "title": "PreviewTokenResponse",
+        "type": "object"
+      },
+      "PublishSkillRequest": {
+        "properties": {
+          "document_id": {
+            "minLength": 1,
+            "title": "Document Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id"
+        ],
+        "title": "PublishSkillRequest",
         "type": "object"
       },
       "QueuedTurnItem": {
@@ -12685,6 +13022,20 @@
           "code"
         ],
         "title": "RegisterVerifyRequest",
+        "type": "object"
+      },
+      "ReplaceSkillRequest": {
+        "properties": {
+          "document_id": {
+            "minLength": 1,
+            "title": "Document Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id"
+        ],
+        "title": "ReplaceSkillRequest",
         "type": "object"
       },
       "ReplayConversation": {
@@ -13211,6 +13562,20 @@
           "body_preview"
         ],
         "title": "ReplyToSnapshot",
+        "type": "object"
+      },
+      "ReportSkillRequest": {
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "ReportSkillRequest",
         "type": "object"
       },
       "ResolveApprovalInteraction": {
@@ -14115,6 +14480,398 @@
           "created_at"
         ],
         "title": "ShareSummary",
+        "type": "object"
+      },
+      "SkillCatalogView": {
+        "properties": {
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "mine": {
+            "items": {
+              "$ref": "#/components/schemas/MineSkillView"
+            },
+            "title": "Mine",
+            "type": "array"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/SkillSlotView"
+            },
+            "title": "Slots",
+            "type": "array"
+          },
+          "writable": {
+            "default": true,
+            "title": "Writable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "slots",
+          "mine"
+        ],
+        "title": "SkillCatalogView",
+        "type": "object"
+      },
+      "SkillReplacedBy": {
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "name"
+        ],
+        "title": "SkillReplacedBy",
+        "type": "object"
+      },
+      "SkillSlotView": {
+        "properties": {
+          "muted": {
+            "default": false,
+            "title": "Muted",
+            "type": "boolean"
+          },
+          "muted_layer": {
+            "anyOf": [
+              {
+                "enum": [
+                  "here",
+                  "inherited"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Muted Layer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "replaced_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SkillReplacedBy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "replaced_layer": {
+            "anyOf": [
+              {
+                "enum": [
+                  "here",
+                  "inherited"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaced Layer"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "summary"
+        ],
+        "title": "SkillSlotView",
+        "type": "object"
+      },
+      "SkillStoreInstalledItem": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "has_update": {
+            "title": "Has Update",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_document_id": {
+            "title": "Source Document Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version_n": {
+            "title": "Version N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "author",
+          "version_n",
+          "installed",
+          "has_update",
+          "status",
+          "source_document_id",
+          "document_id"
+        ],
+        "title": "SkillStoreInstalledItem",
+        "type": "object"
+      },
+      "SkillStoreInstalledResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SkillStoreInstalledItem"
+            },
+            "title": "Data",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "SkillStoreInstalledResponse",
+        "type": "object"
+      },
+      "SkillStoreListResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SkillStoreListingRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "SkillStoreListResponse",
+        "type": "object"
+      },
+      "SkillStoreListingDetail": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "has_update": {
+            "title": "Has Update",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_document_id": {
+            "title": "Source Document Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version_n": {
+            "title": "Version N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "author",
+          "version_n",
+          "installed",
+          "has_update",
+          "status",
+          "source_document_id",
+          "content"
+        ],
+        "title": "SkillStoreListingDetail",
+        "type": "object"
+      },
+      "SkillStoreListingRow": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "has_update": {
+            "title": "Has Update",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_document_id": {
+            "title": "Source Document Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version_n": {
+            "title": "Version N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "author",
+          "version_n",
+          "installed",
+          "has_update",
+          "status",
+          "source_document_id"
+        ],
+        "title": "SkillStoreListingRow",
+        "type": "object"
+      },
+      "SkillStoreMineResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SkillStoreListingRow"
+            },
+            "title": "Data",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "SkillStoreMineResponse",
+        "type": "object"
+      },
+      "SkillStoreReportView": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "listing_id": {
+            "title": "Listing Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing_id",
+          "reason"
+        ],
+        "title": "SkillStoreReportView",
         "type": "object"
       },
       "SnapshotListResponse": {
@@ -17465,7 +18222,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.14"
+    "version": "0.7.15"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -20985,6 +21742,362 @@
         "summary": "Clear Platform Credential Runtime",
         "tags": [
           "admin",
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/skill-store/listings": {
+      "get": {
+        "operationId": "admin_list_listings_v1_admin_skill_store_listings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSkillStoreListingList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admin List Listings",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/skill-store/listings/{listing_id}": {
+      "get": {
+        "operationId": "admin_get_listing_v1_admin_skill_store_listings__listing_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSkillStoreListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admin Get Listing",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/skill-store/listings/{listing_id}/takedown": {
+      "post": {
+        "operationId": "admin_takedown_listing_v1_admin_skill_store_listings__listing_id__takedown_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSkillStoreListingRow"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admin Takedown Listing",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/skill-store/reports": {
+      "get": {
+        "operationId": "admin_list_reports_v1_admin_skill_store_reports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSkillStoreReportList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admin List Reports",
+        "tags": [
           "admin"
         ]
       }
@@ -37766,6 +38879,1143 @@
         "summary": "Search",
         "tags": [
           "search"
+        ]
+      }
+    },
+    "/v1/skill-catalog": {
+      "get": {
+        "description": "Official slots + this account's global on-demand skills (换用 / 藏起 overlay).",
+        "operationId": "get_skill_catalog_v1_skill_catalog_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "folder_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Folder Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillCatalogView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Skill Catalog",
+        "tags": [
+          "skill-catalog"
+        ]
+      }
+    },
+    "/v1/skill-catalog/mutes/{slot}": {
+      "delete": {
+        "description": "Clear 藏起 at this layer (inherit outer mute if any).",
+        "operationId": "delete_skill_mute_v1_skill_catalog_mutes__slot__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot",
+            "required": true,
+            "schema": {
+              "title": "Slot",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folder_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Folder Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillCatalogView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Skill Mute",
+        "tags": [
+          "skill-catalog"
+        ]
+      },
+      "put": {
+        "description": "Hide this official slot from the model's on-demand catalog at this layer.",
+        "operationId": "put_skill_mute_v1_skill_catalog_mutes__slot__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot",
+            "required": true,
+            "schema": {
+              "title": "Slot",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folder_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Folder Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillCatalogView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Skill Mute",
+        "tags": [
+          "skill-catalog"
+        ]
+      }
+    },
+    "/v1/skill-catalog/replacements/{slot}": {
+      "delete": {
+        "description": "Clear 换用 at this layer (inherit outer / factory).",
+        "operationId": "delete_skill_replacement_v1_skill_catalog_replacements__slot__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot",
+            "required": true,
+            "schema": {
+              "title": "Slot",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folder_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Folder Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillCatalogView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Skill Replacement",
+        "tags": [
+          "skill-catalog"
+        ]
+      },
+      "put": {
+        "description": "Bind a global on-demand document onto an official skill slot at this layer.",
+        "operationId": "put_skill_replacement_v1_skill_catalog_replacements__slot__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slot",
+            "required": true,
+            "schema": {
+              "title": "Slot",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folder_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Folder Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceSkillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillCatalogView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Skill Replacement",
+        "tags": [
+          "skill-catalog"
+        ]
+      }
+    },
+    "/v1/skill-store": {
+      "get": {
+        "operationId": "list_skill_store_v1_skill_store_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillStoreListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Skill Store",
+        "tags": [
+          "skill-store"
+        ]
+      },
+      "post": {
+        "operationId": "publish_skill_v1_skill_store_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishSkillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillStoreListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Skill",
+        "tags": [
+          "skill-store"
+        ]
+      }
+    },
+    "/v1/skill-store/installed": {
+      "get": {
+        "operationId": "list_installed_v1_skill_store_installed_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillStoreInstalledResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Installed",
+        "tags": [
+          "skill-store"
+        ]
+      }
+    },
+    "/v1/skill-store/mine": {
+      "get": {
+        "operationId": "list_mine_listings_v1_skill_store_mine_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillStoreMineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Mine Listings",
+        "tags": [
+          "skill-store"
+        ]
+      }
+    },
+    "/v1/skill-store/{listing_id}": {
+      "delete": {
+        "operationId": "unpublish_listing_v1_skill_store__listing_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillStoreListingRow"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unpublish Listing",
+        "tags": [
+          "skill-store"
+        ]
+      },
+      "get": {
+        "operationId": "get_listing_v1_skill_store__listing_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillStoreListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Listing",
+        "tags": [
+          "skill-store"
+        ]
+      }
+    },
+    "/v1/skill-store/{listing_id}/install": {
+      "post": {
+        "operationId": "install_listing_v1_skill_store__listing_id__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillStoreInstalledItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Listing",
+        "tags": [
+          "skill-store"
+        ]
+      }
+    },
+    "/v1/skill-store/{listing_id}/reports": {
+      "post": {
+        "operationId": "report_listing_v1_skill_store__listing_id__reports_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportSkillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillStoreReportView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Listing",
+        "tags": [
+          "skill-store"
+        ]
+      }
+    },
+    "/v1/skill-store/{listing_id}/versions": {
+      "post": {
+        "operationId": "publish_new_version_v1_skill_store__listing_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillStoreListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish New Version",
+        "tags": [
+          "skill-store"
         ]
       }
     },

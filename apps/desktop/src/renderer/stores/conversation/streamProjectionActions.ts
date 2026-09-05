@@ -528,6 +528,7 @@ export function createStreamProjectionActions(
           isGenerating: true,
           // Fresh bubble: clear any prior lock-wait chrome（不得静默等锁）.
           waitingForWorkspaceLock: false,
+          waitingForDeskProvision: false,
           pendingTraceId: null,
         };
       });
@@ -550,6 +551,7 @@ export function createStreamProjectionActions(
           messages,
           isGenerating: conversationHasQueuedTurns(id),
           waitingForWorkspaceLock: false,
+          waitingForDeskProvision: false,
         };
       });
       // List cache is hydrate-once (`staleTime: ∞`); bump only moves/updatedAt.

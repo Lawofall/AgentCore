@@ -2,7 +2,7 @@
 
 Structured workspace download — **not** software install. Installer-shaped
 bytes may land and be labeled; they are never executed or silently installed.
-SSRF reuses ``read_url._safe_request`` + ``PinnedIPTransport`` (one policy).
+SSRF reuses ``web_fetch._safe_request`` + ``PinnedIPTransport`` (one policy).
 Size ceiling aligns with ``workspace_upload_max_bytes`` (not the 5 MiB AI read gate).
 """
 
@@ -35,7 +35,7 @@ from agentcore.tools.builtin.file_ops import (
     write_scope_rejection,
 )
 from agentcore.tools.builtin.file_ops.errors import CROSS_TURN_RETRY_KEY, CrossTurnRetry
-from agentcore.tools.builtin.web.read_url import _safe_request
+from agentcore.tools.builtin.web.web_fetch import _safe_request
 from agentcore.tools.file_products import file_product
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -149,7 +149,7 @@ class DownloadUrlTool:
                 f"大小上限与用户上传对齐（约 {max_mib} MiB），勿与 file_read 的 5 MiB 读闸混淆。"
                 "内网/私有地址与危险重定向按 SSRF 策略拒绝。"
                 "安装包（.exe/.msi/.dmg 等）允许落盘并标明类型，但本工具不执行、不静默安装。"
-                "需要网页正文深读时用 read_url，不要用本工具；"
+                "需要网页正文深读时用 web_fetch，不要用本工具；"
                 "已有工作区 zip 解压用 archive_extract。"
                 "参数：url + path（工作区相对路径，如 `uploads/data.csv`）。"
             ),

@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
 from agentcore.runtime.delegate.playbook_declaration import (
     _EMPTY_DELEGATE_MSG,
-    HANDWRITTEN_TASKS_SKELETON,
 )
 from agentcore.runtime.delegate.redispatch_hint import (
     prior_turn_has_redispatch_fingerprint,
-    render_redispatch_hint,
 )
 from agentcore.runtime.engine.tool_exec import TOOL_FAILED_MARKER, with_tool_failed_marker
 from agentcore.runtime.events.types import FinishReason
@@ -133,19 +129,11 @@ def test_other_delegate_contract_failures_do_not_trip_empty_gate():
     )
 
 
-def test_hint_wording_requires_nonempty_tasks_and_is_user_text_agnostic():
-    hint = render_redispatch_hint()
-    assert "<上轮重派>" in hint
-    assert "tasks" in hint
-    assert HANDWRITTEN_TASKS_SKELETON not in hint
-    assert "delegate" in hint
-    # Soft: one-shot / ignorable framing; no user-utterance triggers in the copy.
-    assert "一次性" in hint
-    assert "可忽略" in hint
-    assert "继续" not in hint
-    assert "禁止" not in hint
-    assert "只道歉" not in hint
-    assert "playbook" not in hint
+def test_hint_copy_withdrawn():
+    from agentcore.runtime.delegate import redispatch_hint as mod
+
+    assert not hasattr(mod, "render_redispatch_hint")
+    assert not hasattr(mod, "build_prior_failure_redispatch_hint")
 
 
 def test_fingerprint_ignores_user_message_content():
@@ -165,31 +153,7 @@ def test_fingerprint_ignores_user_message_content():
     )
 
 
-@pytest.mark.asyncio
-async def test_build_hint_injects_once_only_on_fingerprint(monkeypatch):
+def test_build_hint_withdrawn():
     from agentcore.runtime.delegate import redispatch_hint as mod
 
-    async def _empty(**_kwargs):
-        return []
-
-    async def _hit(**_kwargs):
-        return [
-            {
-                "kind": KIND_TURN_END,
-                "payload": {"finish_reason": FinishReason.UNPRODUCTIVE.value},
-            }
-        ]
-
-    monkeypatch.setattr(mod, "_load_latest_prior_journal", _empty)
-    assert (
-        await mod.build_prior_failure_redispatch_hint(conversation_id="c1")
-        == ""
-    )
-
-    monkeypatch.setattr(mod, "_load_latest_prior_journal", _hit)
-    text = await mod.build_prior_failure_redispatch_hint(
-        conversation_id="c1",
-        exclude_message_id="msg-current",
-    )
-    assert text == render_redispatch_hint()
-    assert text.count("<上轮重派>") == 1
+    assert not hasattr(mod, "build_prior_failure_redispatch_hint")

@@ -93,20 +93,16 @@ def _desk_start_error(
 ) -> SandboxError:
     """Cloud guest failed to start — not a missing local interpreter.
 
-    ``host_unhealthy``: stamp process-level cloud health only for sandboxd down /
-    start-detach timeout. A single dead guest must recycle, not close the gate.
+    ``host_unhealthy``: stamp process-level cloud health only when sandboxd
+    itself is down. A single desk start timeout must recycle that guest, not
+    close the host gate for every later conversation.
     """
     from agentcore.tools.sandbox.cloud_health import note_cloud_sandbox_unhealthy
 
     code = getattr(exc, "code", None)
     if host_unhealthy is None:
-        host_unhealthy = isinstance(
-            exc, (SandboxdUnavailableError, TimeoutError, SandboxTimeoutError)
-        ) or code in (
-            "sandboxd_unavailable",
-            "sandboxd_start_timeout",
-            # Start-path only. Old sandboxd reused the exec-wait code for -detach.
-            "sandboxd_timeout",
+        host_unhealthy = (
+            isinstance(exc, SandboxdUnavailableError) or code == "sandboxd_unavailable"
         )
     if host_unhealthy:
         note_cloud_sandbox_unhealthy(

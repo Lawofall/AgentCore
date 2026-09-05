@@ -376,7 +376,7 @@ def test_history_coalesces_run_deltas_per_run():
 def test_history_caps_tool_result():
     sink = EventSink()
     big = "x" * 20_000
-    sink.emit(tool_use_end("t1", "read_url", success=True, output=big))
+    sink.emit(tool_use_end("t1", "web_fetch", success=True, output=big))
     stored = sink._history[-1].payload["result"]
     assert stored.endswith("…")
     assert len(stored) < len(big)

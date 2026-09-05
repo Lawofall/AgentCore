@@ -32,8 +32,8 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { Fragment, memo } from "react";
 import { ThinkingDots, ThinkingHeader } from "./Thinking";
 
-/** Thought 折叠覆盖面：推理/工具/非末段正文 + 弱式决策痕迹（批准/委派授权/推进卡）。
- * 末段正文、强交互卡、协作图、插话仍外置可见。 */
+/** Thought 折叠覆盖面：推理/工具/非末段正文 + 弱式决策痕迹（批准/委派授权/推进卡）
+ * + 已答复 ask / 已结算开工复核。末段正文、待拍板、协作图、插话仍外置可见。 */
 
 function countProcessStats(nodes: TimelineNode[]) {
   let reasoningCount = 0;
@@ -265,10 +265,11 @@ export function ProcessTimeline({
   const nodeKeys = timelineNodeKeys(nodes);
 
   const { reasoningCount, toolCount } = countProcessStats(nodes);
-  const pendingCheckpointIds = new Set(
-    checkpoints.filter((c) => c.status === "pending").map((c) => c.id),
-  );
-  const foldMask = processFoldMask(nodes, pendingCheckpointIds);
+  const pendingGateIds = new Set([
+    ...checkpoints.filter((c) => c.status === "pending").map((c) => c.id),
+    ...planReviews.filter((p) => p.status === "pending").map((p) => p.id),
+  ]);
+  const foldMask = processFoldMask(nodes, pendingGateIds);
   const firstFoldIndex = foldMask.indexOf(true);
   // 仅有弱痕迹、无推理/工具时不折叠（避免空摘要按钮）；单段纯 Thought 也不折。
   const shouldCollapseProcess =

@@ -15,11 +15,7 @@ from agentcore.tools.protocol import Tool, ToolSchema, tool_schema_to_openai_for
 # Common model hallucinations → canonical tool name. Only surface when the target
 # is actually registered (did-you-mean message only — never auto-rewrite / execute).
 _KNOWN_TOOL_ALIASES: dict[str, str] = {
-    "web_read": "read_url",
-    "browse": "read_url",
-    # fetch* hallucinations → workspace binary download (not HTML deep-read).
-    "web_fetch": "download_url",
-    "fetch_url": "download_url",
+    # Unix fetch/wget/curl → workspace binary download (not HTML deep-read).
     "fetch": "download_url",
     "wget": "download_url",
     "curl": "download_url",

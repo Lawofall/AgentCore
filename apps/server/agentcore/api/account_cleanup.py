@@ -13,6 +13,9 @@ from agentcore.db.repositories import (
     ConversationRepository,
     ConversationShareRepository,
     LlmModelProfileRepository,
+    SkillMuteRepository,
+    SkillSlotRepository,
+    SkillStoreRepository,
     UserLlmProviderRepository,
 )
 from agentcore.folders.service import FolderDeskService
@@ -36,8 +39,10 @@ async def cleanup_account_resources(
     Soft-deletes the user's conversations (the retention sweeper later reclaims their
     workspaces), revokes every public share link the user created (no shared snapshot
     outlives the account), drops all BYOK providers + model profiles + Git PAT,
-    removes the avatar object, and cascades collaboration-desk membership
-    (owner folders stay for retention; member → drop membership rows + pending invites).
+    removes the avatar object, cascades collaboration-desk membership
+    (owner folders stay for retention; member → drop membership rows + pending invites),
+    and drops skill-store listings/installs/reports plus skill-slot overlay
+    (换用 / 藏起). Installed skill document copies stay.
     ``avatar_key`` must be captured by the caller *before* the user row is anonymized
     (soft-delete nulls it). Each step is independently idempotent, so re-running on
     an already-注销 account is harmless. The append-only cost ledger (不变量①) is
@@ -60,3 +65,6 @@ async def cleanup_account_resources(
     if folder_desk is not None:
         await folder_desk.cleanup_for_deleted_user(user_id)
     await conversations.delete_preferences_for_user(user_id)
+    await SkillStoreRepository(conversations._session).delete_all_for_user(user_id)
+    await SkillSlotRepository(conversations._session).delete_all_for_user(user_id)
+    await SkillMuteRepository(conversations._session).delete_all_for_user(user_id)

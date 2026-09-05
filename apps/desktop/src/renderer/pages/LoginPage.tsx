@@ -1,5 +1,5 @@
 import { BrandMark } from "@/components/brand/BrandMark";
-import { Button } from "@/components/ui";
+import { Button, SegmentedControl } from "@/components/ui";
 import {
   MIN_PASSWORD_LENGTH,
   emailCodeError,
@@ -340,7 +340,7 @@ export function LoginPage() {
 
   return (
     <div className="flex h-full w-full items-center justify-center bg-background p-6">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-xs">
         <div className="mb-8 text-center">
           <BrandMark
             size="md"
@@ -351,28 +351,18 @@ export function LoginPage() {
         </div>
 
         {mode !== "forgot" && (
-          <div
-            className="mb-4 flex gap-1 rounded-lg bg-muted p-1"
-            role="tablist"
+          <SegmentedControl
             aria-label="登录或注册"
-          >
-            {(["login", "register"] as const).map((m) => (
-              <Button
-                key={m}
-                variant="ghost"
-                role="tab"
-                aria-selected={mode === m}
-                onClick={() => switchMode(m)}
-                className={`h-8 flex-1 rounded-lg text-sm ${
-                  mode === m
-                    ? "bg-card text-foreground shadow-sm hover:bg-card"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {m === "login" ? "登录" : "注册"}
-              </Button>
-            ))}
-          </div>
+            className="mb-4"
+            value={mode === "register" ? "register" : "login"}
+            onChange={switchMode}
+            items={
+              [
+                { value: "login", label: "登录" },
+                { value: "register", label: "注册" },
+              ] as const
+            }
+          />
         )}
 
         {mode === "login" && (

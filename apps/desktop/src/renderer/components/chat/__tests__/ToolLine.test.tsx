@@ -80,7 +80,7 @@ function readUrlStep(
 ): ToolStep {
   return step({
     id,
-    tool_name: "read_url",
+    tool_name: "web_fetch",
     arguments: { url: over.url },
     result: "ok",
     display: {
@@ -208,7 +208,7 @@ describe("ToolLine · 过程工具默认折叠", () => {
         })}
       />,
     );
-    // Already collapsed by default — 计数并入标题行（对齐 read_url 组的「N sources」），
+    // Already collapsed by default — 计数并入标题行（对齐 web_fetch 组的「N sources」），
     // 不再另起一行 peek；结果卡标题隐藏。
     expect(screen.getByText(/1 result/)).toBeTruthy();
     expect(screen.queryByText("深圳天气预报")).toBeNull();
@@ -660,11 +660,11 @@ describe("ToolLine · 过程工具默认折叠", () => {
     expect(screen.queryByText(ack)).toBeNull();
   });
 
-  it("leaves read_url collapsed on completion (same default as every other tool)", () => {
+  it("leaves web_fetch collapsed on completion (same default as every other tool)", () => {
     const { rerender, container } = render(
       <ToolLine
         step={step({
-          tool_name: "read_url",
+          tool_name: "web_fetch",
           arguments: { url: "https://weather.example.com/sz" },
           status: "running",
         })}
@@ -673,7 +673,7 @@ describe("ToolLine · 过程工具默认折叠", () => {
     rerender(
       <ToolLine
         step={step({
-          tool_name: "read_url",
+          tool_name: "web_fetch",
           arguments: { url: "https://weather.example.com/sz" },
           result: '{"url":"…","title":"深圳天气","content":"正文"}',
           display: {
@@ -852,7 +852,7 @@ describe("ToolLine · browser 单步折叠一行", () => {
   });
 });
 
-describe("ToolLineGroup · read_url 来源集合", () => {
+describe("ToolLineGroup · web_fetch 来源集合", () => {
   const sources = [
     readUrlStep("r1", {
       url: "https://zhuanlan.zhihu.com/p/1050596771_121124370",
@@ -868,7 +868,7 @@ describe("ToolLineGroup · read_url 来源集合", () => {
     }),
   ];
 
-  it("merges ≥2 read_url into a count-title header without collapsed pills", () => {
+  it("merges ≥2 web_fetch into a count-title header without collapsed pills", () => {
     renderWithTooltip(<ToolLineGroup tools={sources} isStreaming={false} />);
     expect(screen.getByText("Read page · 2 sources")).toBeTruthy();
     // 折叠态收敛为纯标题行（对齐工具组 / 思考过程）——来源 pills 移到展开态，不再平铺。
@@ -1614,19 +1614,19 @@ describe("toolDetail · title chip", () => {
   });
 });
 
-describe("toolGroupSummary · read_url", () => {
+describe("toolGroupSummary · web_fetch", () => {
   it("uses a count title instead of URL basenames", () => {
     const tools = [
       step({
         id: "a",
-        tool_name: "read_url",
+        tool_name: "web_fetch",
         arguments: {
           url: "https://zhuanlan.zhihu.com/p/1050596771_121124370",
         },
       }),
       step({
         id: "b",
-        tool_name: "read_url",
+        tool_name: "web_fetch",
         arguments: { url: "https://baike.baidu.com/item/相对论" },
       }),
     ];

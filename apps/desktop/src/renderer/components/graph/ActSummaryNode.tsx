@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { agentColorVar, agentGlyph } from "@/lib/agentIdentity";
 import { formatDuration } from "@/lib/format";
 import type {
@@ -200,10 +201,10 @@ export function ActSummaryNode({ data }: NodeProps) {
 
         {durationMs != null && durationMs > 0 && (
           <div className="mt-2 flex items-center">
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            <Badge tone="muted" pill className="gap-1 font-medium">
               <Clock size={11} className="shrink-0" />
               用时 {formatDuration(durationMs)}
-            </span>
+            </Badge>
           </div>
         )}
 

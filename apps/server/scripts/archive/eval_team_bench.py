@@ -1,7 +1,7 @@
 """Bench: run a team eval case N times through the REAL in-process pipeline and report
 tool-call / investigation / cost / latency / quality means.
 
-Used to measure the over-investigation fix (system-prompt research discipline + read_url
+Used to measure the over-investigation fix (system-prompt research discipline + web_fetch
 anti-crawl failure guidance + the demoted finalize safety net) against a recorded
 baseline — the prompt fixes are global, so there is nothing meaningful to A/B per-arm;
 this just characterizes the current code so the numbers can be compared to a prior run.
@@ -34,7 +34,7 @@ from agentcore.evals.types import EvalCase, TurnOutcome
 
 # Read-only investigation tools (mirror the engine's category-derived set) — the calls
 # the over-investigation fix is meant to curb.
-_INVESTIGATION = {"web_search", "read_url", "file_read", "file_list", "grep"}
+_INVESTIGATION = {"web_search", "web_fetch", "file_read", "file_list", "grep"}
 
 
 def _find_case(case_id: str) -> EvalCase:

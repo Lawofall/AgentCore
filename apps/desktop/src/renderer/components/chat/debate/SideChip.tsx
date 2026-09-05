@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import type React from "react";
 import { ModelBadge } from "./ModelBadge";
 import { shouldShowModelBadge } from "./model";
@@ -18,7 +19,7 @@ export function SideNamePill({
   showDot?: boolean;
 }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+    <Badge tone="muted" pill className="gap-1.5 font-medium">
       {showDot && (
         <span
           className="size-1.5 shrink-0 rounded-full"
@@ -27,7 +28,7 @@ export function SideNamePill({
         />
       )}
       {name}
-    </span>
+    </Badge>
   );
 }
 

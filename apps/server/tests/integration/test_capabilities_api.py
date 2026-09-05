@@ -86,7 +86,14 @@ async def test_capabilities_exposes_prompt_template(client):
     captain = guidelines["worker_captain"]
     assert "<身份>" in leaf
     assert "不能再向下委派" in leaf
-    assert "还可以再向下委派一层子团队" not in leaf
+    assert "再向下委派一层子团队" not in leaf
     assert "<身份>" in captain
-    assert "还可以再向下委派一层子团队" in captain
+    assert "再向下委派一层子团队" in captain
+    assert "还可以再向下委派一层子团队" not in captain
     assert leaf != captain
+    # Catalog is identity only; form HOW is per-turn 交付物规格.
+    for body in (leaf, captain):
+        assert "form=files" not in body
+        assert "form=prose" not in body
+        assert "form=workspace" not in body
+        assert body.count("<身份>") == 1

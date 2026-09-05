@@ -23,7 +23,6 @@ from agentcore.runtime.resolve.prompt.ceo_core import (
 )
 from agentcore.runtime.resolve.prompt.cold_start import (
     _FOLDER_NAV_STALE_HINT,
-    _FOLDER_PROFILE_EMPTY_SOFT_HINT,
     _explore_act_block,
 )
 from agentcore.runtime.resolve.prompt.memory_rules import _format_rules
@@ -88,7 +87,7 @@ def _on_demand_preamble(*, with_summaries: bool) -> list[str]:
     detail = "name＋一行摘要" if with_summaries else "name"
     return [
         "<按需目录>",
-        f"这是按需目录（仅列{detail}、全文未常驻）。用 `consult(name)` 拉全文。",
+        f"这是按需目录（{detail}）。用 `consult(name)` 拉全文。",
     ]
 
 
@@ -252,7 +251,6 @@ def compose_ceo_chat_prompt(
     workspace_file_index: str | None = None,
     cold_start_explore: bool | str | None = False,
     folder_nav_stale: bool = False,
-    folder_profile_empty_soft: bool = False,
     attachment_material: bool = False,
     ceo_offered_names: set[str] | None = None,
     # Deprecated: skill_registry / memory_topics / on_demand_rules — prefer on_demand_entries.
@@ -275,20 +273,13 @@ def compose_ceo_chat_prompt(
     """
     del ceo_offered_names
     ceo_core = resolve(FRAGMENT_CEO_CORE, _CEO_CORE_HINT)
-    reason: str | None
-    if cold_start_explore is True:
-        reason = "empty"
-    elif cold_start_explore in ("empty", "rebind", "refresh"):
-        reason = str(cold_start_explore)
-    else:
-        reason = None
+    reason = (
+        "refresh"
+        if cold_start_explore is True or cold_start_explore == "refresh"
+        else None
+    )
     explore_block = _explore_act_block(reason)
     material_block = _attachment_material_block(attachment_material)
-    empty_soft_block = (
-        _FOLDER_PROFILE_EMPTY_SOFT_HINT.strip()
-        if folder_profile_empty_soft and not explore_block
-        else ""
-    )
     stale_block = (
         _FOLDER_NAV_STALE_HINT.strip()
         if folder_nav_stale and not explore_block
@@ -324,7 +315,6 @@ def compose_ceo_chat_prompt(
         .add("ceo_core", ceo_core, SectionOrder.CEO_CORE)
         .add("cold_start_explore", explore_block, SectionOrder.CEO_CORE)
         .add("attachment_material", material_block, SectionOrder.CEO_CORE)
-        .add("folder_profile_empty_soft", empty_soft_block, SectionOrder.CEO_CORE)
         .add("folder_nav_stale", stale_block, SectionOrder.CEO_CORE)
         .add("on_demand_directory", on_demand_block, SectionOrder.SKILL_DIRECTORY)
         .add(

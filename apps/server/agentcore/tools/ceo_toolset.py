@@ -11,7 +11,7 @@ from typing import Any
 from agentcore.config import settings
 from agentcore.llm.profiles import TurnProfiles as ProfileSet
 from agentcore.runtime.approvals import ApprovalGate
-from agentcore.runtime.context.consult_sources import build_merged_consult_source
+from agentcore.runtime.context.consult_sources import build_merged_consult_source_for_user
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.runtime.sessions import (
@@ -58,7 +58,8 @@ async def _wire_consult_if_entries(
 
     # Tool names already on the registry gate skill visibility (ask_user / debate / …).
     tool_names = {schema.name for schema in registry.list_all()}
-    source = build_merged_consult_source(
+    source = await build_merged_consult_source_for_user(
+        user_id=user_id,
         skill_registry=skill_registry,
         tool_names=tool_names,
         memory_store=default_memory_store(),

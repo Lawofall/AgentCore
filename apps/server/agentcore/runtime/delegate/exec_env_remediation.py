@@ -77,7 +77,7 @@ def exec_env_remediation_zh(
             f"{failure_clause}——**不要**再引导「导入到云」。"
             "可选：① 稍后重试（待宿主 gVisor/沙箱恢复）；"
             "② 有产物时 export_to_local 后在本机 npm/pip 运行；"
-            "③ 本机传统打开本地文件夹（合法非默认，≠离线）。"
+            "③ 打开本机文件夹（桌面默认通道，≠离线）。"
         )
 
     if kind == "capability_office":
@@ -144,7 +144,7 @@ def exec_env_remediation_zh(
         f"{failure_clause}（无 run）："
         "worker 只能写脚本 / 文件，无法真正运行或生成需执行才能产出的产物。"
         "【禁止】再引导「导入到云」。收尾如实标缺口，或 ask_user："
-        "稍后重试 / export_to_local 本机跑 / 本机传统（合法非默认）。"
+        "稍后重试 / export_to_local 本机跑 / 打开本机文件夹（≠离线）。"
     )
 
 

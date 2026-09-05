@@ -33,24 +33,26 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("AutomationsPage 页头", () => {
-  it("一级导航交给 ToolboxPageHeader，不再自绘返回链接与 h1", () => {
-    const { container } = renderPage(APP_PATHS.toolbox.automations.root);
+  it("返回工具箱并挂本页标题，不设能力兄弟导航", () => {
+    renderPage(APP_PATHS.toolbox.automations.root);
 
-    expect(screen.getByRole("navigation", { name: "工具箱能力" })).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "工具箱" }).getAttribute("href"),
     ).toBe(APP_PATHS.toolbox.root);
-    expect(container.querySelector("h1")).toBeNull();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "自动化" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "工具箱能力" })).toBeNull();
   });
 
-  it("页内只有一条二级导航，不再堆第二条 pill 分段", () => {
+  it("页内只有一条分区导航", () => {
     renderPage(APP_PATHS.toolbox.automations.root);
 
     expect(
       screen
         .getAllByRole("navigation")
         .map((n) => n.getAttribute("aria-label")),
-    ).toEqual(["工具箱能力", "自动化分区"]);
+    ).toEqual(["自动化分区"]);
   });
 
   it("页头不画下边框，接缝处只留下划线 tab 那一条横线", () => {
@@ -62,7 +64,7 @@ describe("AutomationsPage 页头", () => {
     expect(subNav().className).toContain("border-b");
   });
 
-  it("二级 tab 用下划线态，不用一级那套 pill 填充", () => {
+  it("二级 tab 用下划线态，不用 pill 填充", () => {
     renderPage(APP_PATHS.toolbox.automations.root);
 
     const nav = subNav();
@@ -114,13 +116,6 @@ describe("AutomationsPage 二级 tab 深链", () => {
         .getAttribute("aria-current"),
     ).toBeNull();
     expect(screen.getByText("收件箱面板")).toBeTruthy();
-    // 一级分段仍然停在「自动化」上。
-    const top = screen.getByRole("navigation", { name: "工具箱能力" });
-    expect(
-      within(top)
-        .getByRole("link", { name: /自动化/ })
-        .getAttribute("aria-current"),
-    ).toBe("page");
   });
 
   it("未读徽章同时挂在二级「收件箱」tab 上", () => {

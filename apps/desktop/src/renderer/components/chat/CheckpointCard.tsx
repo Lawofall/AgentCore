@@ -2,7 +2,7 @@ import {
   ResolvedDecisionRecord,
   askResolvedDisplay,
 } from "@/components/chat/decision";
-import { DecisionCard } from "@/components/ui";
+import { Badge, DecisionCard } from "@/components/ui";
 import { parseCheckpointIntent } from "@/lib/checkpointIntent";
 import { notifyError } from "@/lib/toast";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
@@ -13,6 +13,7 @@ import { useState } from "react";
 import { AskDecisionBody } from "./ask/AskDecisionBody";
 import {
   type AskUserContent,
+  displayAskReply,
   flattenAskNotes,
   useAskAnswer,
 } from "./ask/AskUserFields";
@@ -179,7 +180,7 @@ export function AskUserCard({
 /** Collapsed one-liner: user's answer first (note → selected), never the CEO
  * question — that reads like a live prompt next to a success label. */
 function resolvedCollapsedSummary(checkpoint: CheckpointDisplay): string {
-  const note = checkpoint.note.trim();
+  const note = displayAskReply(checkpoint.note.trim());
   if (note) return note;
   if (checkpoint.selected.length > 0) return checkpoint.selected.join(" · ");
   return "";
@@ -191,6 +192,7 @@ function resolvedCollapsedSummary(checkpoint: CheckpointDisplay): string {
  * 取消 / 确认 / 超时都占时间线存根；缺 decision 不猜超时。 */
 function ResolvedCheckpoint({ checkpoint }: { checkpoint: CheckpointDisplay }) {
   const resolved = askResolvedDisplay(checkpoint.intent, checkpoint.decision);
+  const reply = displayAskReply(checkpoint.note);
 
   return (
     <ResolvedDecisionRecord
@@ -209,20 +211,17 @@ function ResolvedCheckpoint({ checkpoint }: { checkpoint: CheckpointDisplay }) {
         {checkpoint.selected.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {checkpoint.selected.map((s) => (
-              <span
-                key={s}
-                className="rounded-full bg-muted px-2 py-0.5 text-xs text-foreground"
-              >
+              <Badge key={s} tone="muted" pill>
                 {s}
-              </span>
+              </Badge>
             ))}
           </div>
         )}
-        {checkpoint.note && (
+        {reply ? (
           <p className="whitespace-pre-wrap rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs text-foreground">
-            {checkpoint.note}
+            {reply}
           </p>
-        )}
+        ) : null}
       </div>
     </ResolvedDecisionRecord>
   );

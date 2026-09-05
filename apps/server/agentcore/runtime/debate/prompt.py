@@ -112,9 +112,9 @@ EVIDENCE_RULE = (
 
 # 查询取证：词数/截断唯一所有者是 web_search schema。此处只留辩论对照（当事方 vs 抽象文化词）。
 SEARCH_QUERY_RULE = (
-    "\n【web_search 取证】query 须含命题中的当事方 / 案由，禁止只搜抽象文化词。"
+    "\n【web_search 取证】query 须含命题中的当事方 / 案由 ≠ 只搜抽象文化词。"
     "核实数字用主体 + 类别词，不要把数字本身塞进 query。"
-    "空结果 ≠ 不存在：删最具体的限定词再搜一次，连空才标【待核实·推断】。"
+    "空结果 ≠ 不存在。"
 )
 
 
@@ -283,7 +283,7 @@ def debater_task(
     else:
         take_evidence = (
             f"请为开场立论做取证：优先用 file_read / file_list / grep 阅读工作区 {RESEARCH_DIR}/ "
-            "约定文档（若有）；独立检索（web_search / read_url）仅补约定文档没有的缺口；"
+            "约定文档（若有）；独立检索（web_search / web_fetch）仅补约定文档没有的缺口；"
             "然后产出【证据笔记】。"
         )
     research_task = (

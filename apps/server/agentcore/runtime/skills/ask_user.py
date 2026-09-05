@@ -57,7 +57,7 @@ _ASK_USER_MIDTASK = """\
 挑中后 `continue_from_run_id` 唤回、勾选修订 → `consult(team_orchestration_advanced)`。\
 主拍板每任务恰好一次；明文提纲拆波同该 consult。
 
-【区外目录授权】进桌 / 本机传统 → `consult(team_delivery_env)`。跨文件夹 → `consult(team_cross_folder)`。\
+【区外目录授权】进桌 / 本机传统 → `consult(team_local_desk)`。跨文件夹 → `consult(team_cross_folder)`。\
 区外授权 HOW → `consult(external_mount_readonly)`。范围/手段 choice 不加 action；整题授权才挂 grant_*。\
 整理方案用 `card="organize_plan"` → 确认后 `file_batch(organize_plan_id=…)`。
 </途中提问>"""

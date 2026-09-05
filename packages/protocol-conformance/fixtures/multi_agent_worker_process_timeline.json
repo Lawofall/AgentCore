@@ -105,7 +105,7 @@
       "type": "tool_use_start",
       "payload": {
         "tool_call_id": "tc2",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "arguments": {
           "url": "https://example.com"
         },
@@ -117,7 +117,7 @@
       "type": "tool_use_end",
       "payload": {
         "tool_call_id": "tc2",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "status": "success",
         "result": "正文…",
         "run_id": "r1"
@@ -296,7 +296,7 @@
           {
             "kind": "tool",
             "id": "tc2",
-            "tool_name": "read_url",
+            "tool_name": "web_fetch",
             "arguments": {
               "url": "https://example.com"
             },

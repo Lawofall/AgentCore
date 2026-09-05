@@ -28,7 +28,7 @@ from agentcore.tools.catalog import (
 # OpenAI defs). Keep in lockstep with tools.registration.DECLARED_TOOLS.
 _BUILTIN_ORDER = [
     "web_search",
-    "read_url",
+    "web_fetch",
     "file_read",
     "file_write",
     "file_append",
@@ -104,7 +104,7 @@ _CATALOG_ORCHESTRATION_ORDER = [
 _CATALOG_AVAILABLE_TO: dict[str, tuple[str, ...]] = {
     # Shared read/retrieval built-ins
     "web_search": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    "read_url": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "web_fetch": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "file_read": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "file_list": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "glob": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
@@ -203,7 +203,7 @@ def test_tool_registry_builtin_approvals_snapshot():
     approvals = {s.name: s.approval for s in build_builtin_registry().list_all()}
     never = {
         "web_search",
-        "read_url",
+        "web_fetch",
         "file_read",
         "file_list",
         "glob",
@@ -296,7 +296,7 @@ def test_tool_registry_declarations_cover_roster():
 
     _ceo_grantable = frozenset(_BUILTIN_ORDER) - {
         "web_search",
-        "read_url",
+        "web_fetch",
         "file_read",
         "file_list",
         "glob",

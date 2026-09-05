@@ -9,6 +9,7 @@ export const APP_PATHS = {
     root: "/toolbox",
     tools: "/toolbox/tools",
     guidelines: "/toolbox/guidelines",
+    store: "/toolbox/store",
     connectors: "/toolbox/connectors",
     automations: {
       root: "/toolbox/automations",
@@ -41,6 +42,12 @@ export const APP_PATHS = {
       privacy: "/more/legal/privacy",
     },
   },
+} as const;
+
+/** Toolbox subpage back-link for `PageHeader`. */
+export const TOOLBOX_PAGE_BACK = {
+  to: APP_PATHS.toolbox.root,
+  label: "工具箱",
 } as const;
 
 export type ManualChapterId =

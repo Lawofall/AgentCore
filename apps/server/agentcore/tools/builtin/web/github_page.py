@@ -1,4 +1,4 @@
-"""GitHub HTML page → api.github.com fast path for ``read_url``.
+"""GitHub HTML page → api.github.com fast path for ``web_fetch``.
 
 ``github.com/{owner}`` (profile / ``?tab=repositories``) is a JS shell over HTML;
 ``github.com/{owner}/{repo}`` (root / tree / blob) often times out or returns
@@ -311,7 +311,7 @@ async def try_fetch_github_page(
     """Fetch via api.github.com when ``url`` is an owner / repo / tree / blob page.
 
     Returns ``(title, text, description)`` on success, else ``None`` (fall back
-    to HTML). ``safe_request`` is ``read_url._safe_request`` (SSRF + breaker).
+    to HTML). ``safe_request`` is ``web_fetch._safe_request`` (SSRF + breaker).
     Account PAT is used when ``user_id`` has G3 credentials; missing PAT still
     tries the unauthenticated API.
     """
@@ -328,7 +328,7 @@ async def try_fetch_github_page(
         return await _fetch_repo(client, page, max_chars, safe_request, headers)
     except Exception as e:
         logger.info(
-            "tool.read_url_github_api_fallback",
+            "tool.web_fetch_github_api_fallback",
             url=url[:200],
             error=type(e).__name__,
             detail=_fallback_detail(e, token),

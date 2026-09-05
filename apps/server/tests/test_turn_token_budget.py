@@ -409,55 +409,18 @@ def test_maybe_inject_turn_token_budget_gate_one_shot(monkeypatch):
         reset_turn_token_meter(token)
 
 
-def test_audit_and_debate_gates_suppressed_when_ceiling_hit(monkeypatch):
-    """触顶后不可再派审计/辩论 —— soft gate 不得反向催派。"""
-    from agentcore.llm.provider.protocol import LLMMessage
-    from agentcore.runtime.engine.governance import (
-        should_audit_gate,
-        should_debate_gate,
-    )
-    from agentcore.runtime.loop_controller import LoopController
+def test_audit_and_debate_gates_suppressed_when_ceiling_hit():
+    """触顶收口仍走 token wrap；成篇/辩论承诺闸已撤，不再催派。"""
+    from agentcore.runtime.engine import governance as gov
 
-    debate_msgs = [
-        LLMMessage(role="tool", content="用户选择：辩论（正反攻防）"),
-    ]
-
-    # Ceiling off → gates eligible.
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 0,
-    )
-    controller = LoopController()
-    controller.mark_post_delegate(node_count=3, has_deps=True, audit_hard=True)
-    assert should_audit_gate(controller, role="captain") is True
-    assert should_debate_gate(controller, role="captain", messages=debate_msgs) is True
-
-    # Ceiling hit → both suppressed.
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 10,
-    )
-    token = bind_turn_token_meter(seed=10)
-    try:
-        assert is_turn_token_ceiling_hit()
-        assert should_audit_gate(controller, role="captain") is False
-        assert should_debate_gate(controller, role="captain", messages=debate_msgs) is False
-    finally:
-        reset_turn_token_meter(token)
+    assert not hasattr(gov, "should_audit_gate")
+    assert not hasattr(gov, "should_debate_gate")
 
 
-def test_should_audit_gate_skips_without_hard_when_ceiling_off(monkeypatch):
-    """Substantial map_fanout-style batch must not soft-nudge without audit_hard."""
-    from agentcore.runtime.engine.governance import should_audit_gate
-    from agentcore.runtime.loop_controller import LoopController
+def test_should_audit_gate_skips_without_hard_when_ceiling_off():
+    from agentcore.runtime.engine import governance as gov
 
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 0,
-    )
-    controller = LoopController()
-    controller.mark_post_delegate(node_count=3, has_deps=True)
-    assert should_audit_gate(controller, role="captain") is False
+    assert not hasattr(gov, "should_audit_gate")
 
 
 def test_turn_token_budget_gate_seed_round_trip():

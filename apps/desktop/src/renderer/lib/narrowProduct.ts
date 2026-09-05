@@ -31,6 +31,7 @@ export const NARROW_HIDDEN_PALETTE_IDS = new Set([
   "nav-toolbox",
   "nav-tools",
   "nav-guidelines",
+  "nav-store",
   "nav-manual",
   "nav-mechanism",
   "nav-automations",

@@ -41,12 +41,8 @@ from .governance import (
     apply_exec_env_dead_retire,
     apply_workspace_channel_dead_retire,
     classify_investigation_tools,
-    coordination_injection_has_all_completed,
     create_loop_controller,
     decide_llm_failure,
-    maybe_inject_audit_gate,
-    maybe_inject_availability_status_nudge,
-    maybe_inject_debate_gate,
     maybe_inject_turn_token_budget_gate,
     resolve_openai_tool_defs,
 )
@@ -312,20 +308,15 @@ async def react_loop(
         cutoff_reason_sink.clear()
 
     disabled_tools: set[str] = set()
-    # Re-apply run-scoped read_url retirement from a prior pass (stream-stall →
+    # Re-apply run-scoped web_fetch retirement from a prior pass (stream-stall →
     # Wave retry, or contract write_pass/retry) so the tool is not re-offered.
     # web_search stays closed with it — otherwise restart re-opens search thrash.
     if run_id:
-        from agentcore.tools.builtin.web._net import is_read_url_retired
+        from agentcore.tools.builtin.web._net import is_web_fetch_retired
 
-        if is_read_url_retired(run_id):
-            disabled_tools.add("read_url")
+        if is_web_fetch_retired(run_id):
+            disabled_tools.add("web_fetch")
             disabled_tools.add("web_search")
-    # 检索预算临界（剩 ≤2）一次性 reflection，缓解同轮 fan-out 超订。
-    retrieval_critical_warned = False
-    # 上次埋点过的分工具用量 (web_search, read_url)：只在变化时记一行。
-    retrieval_spend_logged: tuple[int, int] | None = None
-
     _emit_content_raw = on_content or (lambda delta: sink.emit(content_delta(delta)))
     _emit_reset_raw = on_reset or (lambda reason: sink.emit(content_reset(reason)))
 
@@ -458,12 +449,6 @@ async def react_loop(
         # resolved defs so allowed/disabled filtering is what the model sees.
         observe_tools_offered(tools, scope="worker_run", tool_defs=tool_defs or [])
     # 跑/修·打开验证·贴码写回：引擎不再扫用户文硬分叉；选型/验收靠提示词 + 结构字段。
-    if role == "captain":
-        maybe_inject_availability_status_nudge(
-            messages=messages,
-            run_id=run_id or "",
-            role=role,
-        )
     active_model: str | None = base_model
     finish_guard_reworks = 0
     ceiling_reason = "max_rounds"
@@ -652,11 +637,7 @@ async def react_loop(
                     )
                 if coord_msgs:
                     messages.extend(coord_msgs)
-                    # Soft gates (all_completed): remind before synthesis / wrap-up
-                    # while CEO is still in coordination — not only on no-tool Return.
-                    # Debate-commitment before audit (same order as soft_gates.py).
-                    # Turn-token wrap-up first: when ceiling is hit, audit/debate gates
-                    # are suppressed (cannot dispatch) — steer CEO to close on output.
+                    # Turn-token wrap-up: when ceiling is hit, steer CEO to close on output.
                     maybe_inject_turn_token_budget_gate(
                         controller,
                         messages=messages,
@@ -664,21 +645,6 @@ async def react_loop(
                         round_idx=round_idx,
                         role=role,
                     )
-                    if coordination_injection_has_all_completed(coord_msgs):
-                        maybe_inject_debate_gate(
-                            controller,
-                            messages=messages,
-                            run_id=run_id,
-                            round_idx=round_idx,
-                            role=role,
-                        )
-                        maybe_inject_audit_gate(
-                            controller,
-                            messages=messages,
-                            run_id=run_id,
-                            round_idx=round_idx,
-                            role=role,
-                        )
                 else:
                     # No coordination wake this round — still steer if ceiling already hit
                     # (e.g. reject path / resume seed over ceiling before next think).
@@ -944,7 +910,6 @@ async def react_loop(
                             and controller.take_delivery_idle_narrow_apply()
                         ):
                             wind_down.apply_delivery_idle_narrow()
-                        wind_down.inject_pending_breach_nudge(directive)
 
             applied = await apply_loop_directive(
                 directive=directive,
@@ -1034,7 +999,6 @@ async def react_loop(
                     _guard.end_grace_round()
             # Retrieval budget exhausted → enter wind-down early (don't wait for
             # wall-clock TIMEOUT while the worker can no longer search).
-            # Still open → refresh the balance the worker plans against next round.
             rb = getattr(tool_context, "retrieval_budget", None)
             if (
                 role == "worker"
@@ -1051,50 +1015,12 @@ async def react_loop(
                     used=rb.used,
                 )
             if role == "worker" and rb is not None and wind_down.wind_down_active:
-                # 收尾窗口已禁检索：上一轮那条余额播报会跟「禁止再检索」自相矛盾。
+                # 收尾窗口已禁检索：清掉 resume 窗口里残留的旧余额 [系统提示]。
                 from agentcore.runtime.runs.retrieval_budget import (
                     drop_retrieval_budget_awareness,
                 )
 
                 drop_retrieval_budget_awareness(messages)
-            elif role == "worker" and rb is not None:
-                # 预算感知 (BATS): a worker that already spent slots sees its balance
-                # + per-tool spend every round, else it searches blind. Never spent →
-                # no injection (多数 worker 一次都不检索，注入是纯噪音). Critical (剩 ≤2)
-                # rides the same single message.
-                from agentcore.runtime.runs.retrieval_budget import (
-                    sync_retrieval_budget_awareness,
-                )
-
-                awareness = sync_retrieval_budget_awareness(messages, rb)
-                if awareness is not None:
-                    if awareness.critical and not retrieval_critical_warned:
-                        retrieval_critical_warned = True
-                        logger.info(
-                            "engine.retrieval_budget_critical",
-                            run_id=run_id,
-                            remaining=awareness.remaining,
-                            limit=awareness.limit,
-                            used=awareness.used,
-                        )
-                    spend = (awareness.searches, awareness.reads)
-                    # Trajectory rows only when the split moved (a row per round would
-                    # repeat itself); the ``final=True`` row at exit is the one that
-                    # 分工具用量分布 aggregates on.
-                    if spend != retrieval_spend_logged:
-                        retrieval_spend_logged = spend
-                        logger.info(
-                            "engine.retrieval_budget_awareness",
-                            run_id=run_id,
-                            round=round_idx,
-                            limit=awareness.limit,
-                            used=awareness.used,
-                            searches=awareness.searches,
-                            reads=awareness.reads,
-                            remaining=awareness.remaining,
-                            critical=awareness.critical,
-                            final=False,
-                        )
             continue
 
         result = await ceiling_finalize(

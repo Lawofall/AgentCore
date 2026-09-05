@@ -513,6 +513,7 @@ async def assemble_injected_rules(
     enabled: bool,
     scope_chain: Sequence[str] | None = None,
     folder_user_id: str | None = None,
+    omit_current_folder_ai_memory: bool = False,
 ) -> str:
     """Load + compose this turn's ``<设定>`` body (read-side full injection).
 
@@ -520,6 +521,10 @@ async def assemble_injected_rules(
     ``enabled`` (False ⇒ slots omitted); user always-rules still inject. Display
     order is global → ancestors → current; inside a layer, protocol slots then
     that layer's user-written always md.
+
+    ``omit_current_folder_ai_memory`` skips current-folder ``画像.md`` / ``导航.md``
+    (workspace rebind: old-bind notes must not ride this turn). User folder
+    rules still inject.
 
     ``scope_chain`` (outermost-first, current last) is resolved by the caller —
     omitting it injects the current folder only. Production entry:
@@ -550,7 +555,7 @@ async def assemble_injected_rules(
             if enabled
             else frozenset()
         )
-        if enabled:
+        if enabled and not omit_current_folder_ai_memory:
             current_profile = await _slot_body(
                 store, folder_actor, CORE_MEMORY_FILE, current_id, disputed
             )
@@ -585,7 +590,11 @@ async def assemble_injected_rules(
 
 
 def _fragments_from_snapshot(
-    snapshot: AccountPrepareSnapshot, *, folder_id: str | None, enabled: bool
+    snapshot: AccountPrepareSnapshot,
+    *,
+    folder_id: str | None,
+    enabled: bool,
+    omit_current_folder_ai_memory: bool = False,
 ) -> list[RuleFragment]:
     payload = snapshot.rules_payload
     chain = snapshot_scope_chain(snapshot, folder_id)
@@ -608,7 +617,7 @@ def _fragments_from_snapshot(
     current_rules: list[str] = []
     current_id = chain[-1] if chain else None
     if current_id:
-        if enabled:
+        if enabled and not omit_current_folder_ai_memory:
             current_profile = _snapshot_slot(
                 snapshot, CORE_MEMORY_FILE, current_id
             )
@@ -646,6 +655,7 @@ async def assemble_turn_rules(
     folder_id: str | None,
     enabled: bool,
     folder_user_id: str | None = None,
+    omit_current_folder_ai_memory: bool = False,
 ) -> str:
     """Turn-time convenience over :func:`assemble_injected_rules` (the pipeline entry point).
 
@@ -671,7 +681,12 @@ async def assemble_turn_rules(
             if snap is None:
                 return ""
             return compose_injected_rules(
-                _fragments_from_snapshot(snap, folder_id=folder_id, enabled=enabled)
+                _fragments_from_snapshot(
+                    snap,
+                    folder_id=folder_id,
+                    enabled=enabled,
+                    omit_current_folder_ai_memory=omit_current_folder_ai_memory,
+                )
             )
         async with async_session_factory() as session:
             chain = await db_scope_chain(folder_actor, folder_id, session=session)
@@ -683,6 +698,7 @@ async def assemble_turn_rules(
                 enabled=enabled,
                 scope_chain=chain,
                 folder_user_id=folder_actor,
+                omit_current_folder_ai_memory=omit_current_folder_ai_memory,
             )
     except Exception as e:  # noqa: BLE001 - user rules must never break a turn's assembly
         logger.warning("memory.user_rules_load_failed", user_id=user_id, error=str(e))

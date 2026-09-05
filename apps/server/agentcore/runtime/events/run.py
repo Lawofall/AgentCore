@@ -508,6 +508,18 @@ def workspace_lock_wait(*, conversation_id: str, waiting: bool) -> SSEEvent:
     )
 
 
+def desk_provision_wait(*, conversation_id: str, waiting: bool) -> SSEEvent:
+    """云桌开通短等：ensure 前 ``waiting=true``，结束后 ``waiting=false``。
+
+    Emitted from ``provision_server_desk`` (prepare / resume). EPHEMERAL — no
+    journal; clients must not render empty 「Thinking…」 while the cloud desk boots.
+    """
+    return SSEEvent(
+        type=EventType.DESK_PROVISION_WAIT,
+        payload={"conversation_id": conversation_id, "waiting": waiting},
+    )
+
+
 def team_synthesis_preview(
     *,
     execution_id: str,

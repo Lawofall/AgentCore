@@ -31,58 +31,6 @@ logger = get_logger(__name__)
 LOCAL_RECON_TOOLS = frozenset({"file_list", "glob", "file_read", "grep"})
 
 
-def _user_intent_chunks(messages: list[LLMMessage]) -> list[str]:
-    """Real user turns only (skip system nudges / short affirmations)."""
-    from agentcore.llm.provider.protocol import llm_content_text
-    from agentcore.runtime.kickoff import is_short_affirmation
-
-    chunks: list[str] = []
-    for msg in messages:
-        if msg.role != "user" or not msg.content:
-            continue
-        text = llm_content_text(msg.content).strip()
-        if not text or text.startswith("[系统提示]"):
-            continue
-        if is_short_affirmation(text):
-            continue
-        chunks.append(text)
-    return chunks
-
-
-def maybe_inject_availability_status_nudge(
-    *,
-    messages: list[LLMMessage],
-    run_id: str,
-    role: str = "",
-) -> bool:
-    """可用性诚实性 · 甲：偏窄短问 → 注入「主答=卡」纪律（一次，船长路径）。
-
-    Reinject of the delivery card happens earlier in assemble; this nudge steers the
-    CEO prose to stay commentary-only. Returns True when injected.
-    """
-    if role != "captain":
-        return False
-    chunks = _user_intent_chunks(messages)
-    if not chunks:
-        return False
-    from agentcore.runtime.delegate.delivery_status import (
-        availability_status_nudge_prompt,
-        is_availability_status_question,
-    )
-
-    if not is_availability_status_question(chunks[-1]):
-        return False
-    nudge = availability_status_nudge_prompt()
-    logger.info("engine.availability_status_nudge", run_id=run_id or None)
-    messages.append(LLMMessage(role="user", content=nudge))
-    record_turn_fact(
-        NoteFact(
-            role="user", content=nudge, reason="availability_status", run_id=run_id
-        ).to_fact()
-    )
-    return True
-
-
 def maybe_inject_delivery_idle(
     controller: LoopController,
     *,
@@ -155,180 +103,11 @@ def maybe_inject_delivery_idle(
     return "none"
 
 
-def audit_gate_nudge_prompt() -> str:
-    """One-shot soft audit gate: independent review then default close to user."""
-    return (
-        "[系统提示] 收尾前审计复核：本回合为成文专线/结构长文，须经独立审计"
-        "（审计者≠作者）。默认派 1 名审计员读落盘成稿；重要材料可用 2-3 透镜分工。"
-        "独立审计完成后，默认向用户收口汇报结论与成稿状态——"
-        "同轮用 continue_from_run_id 唤回原作者修订不是默认路径"
-        "（仅当用户明示要改，或审计暴露硬缺口且收口会交残稿时才再派修订）。"
-        "禁止把「审完默认修订≤2 轮」当流程。"
-        "系统只提示、绝不代派；此后不再打扰。"
-    )
-
-
-def audit_gate_hard_prompt() -> str:
-    """Hard audit gate for cite_write_review (playbook stamp only)."""
-    return (
-        "[系统提示] 成篇审计硬门：本回合含成文专线 playbook=cite_write_review，"
-        "收尾前【必须】派独立审计员（审计者≠作者）审校落盘成稿，"
-        "或用 playbook=cite_write_review（内含审校）完成路径。"
-        "对齐推进 playbook=map_fanout / 普通多角摸底不进本门（软闸亦同）。"
-        "禁止在仅收到软提示后直接 end_turn 把半残稿当完结。"
-        "审后默认向用户收口；continue_from_run_id 修订非默认路径。"
-        "若本批已含审校节点或你已另派审计，请继续交付；"
-        "否则请先 delegate 审计员。"
-        "系统不代派，但本门未满足前不会放行收尾。"
-    )
-
-
-def should_audit_gate(controller: LoopController, *, role: str) -> bool:
-    """Whether the soft audit gate should fire (wrap-up or all_completed path).
-
-    Soft nudge aligns with the hard gate: only cite_write_review
-    (``audit_hard_required``). ``map_fanout`` / ordinary multi-angle
-    scouting never enter the soft gate.
-    """
-    if role != "captain" or controller.audit_gate_fired:
-        return False
-    if not controller.audit_hard_required:
-        return False
-    # Turn ceiling hit → new audit dispatch is rejected; don't push CEO to re-delegate.
-    from agentcore.runtime.turn.token_budget import is_turn_token_ceiling_hit
-
-    if is_turn_token_ceiling_hit():
-        return False
-    return controller.delegate_count == 1 and controller.first_batch_substantial
-
-
-def should_audit_hard_block(controller: LoopController, *, role: str) -> bool:
-    """True when hard audit gate must block end_turn after the soft nudge."""
-    if role != "captain":
-        return False
-    if not controller.audit_hard_required:
-        return False
-    if controller.audit_includes_review:
-        return False
-    # Soft nudge must have fired first (one Continue cycle), then hard-block.
-    if not controller.audit_gate_fired:
-        return False
-    from agentcore.runtime.turn.token_budget import is_turn_token_ceiling_hit
-
-    if is_turn_token_ceiling_hit():
-        return False
-    # Still only one batch and no review wave → block.
-    return controller.delegate_count < 2
-
-
 def coordination_injection_has_all_completed(messages: list[LLMMessage]) -> bool:
     """True when a coordination inject batch includes the all_completed event."""
     return any(
         m.role == "user" and m.content and "all_completed" in m.content for m in messages
     )
-
-
-def maybe_inject_audit_gate(
-    controller: LoopController,
-    *,
-    messages: list[LLMMessage],
-    run_id: str,
-    round_idx: int,
-    role: str,
-) -> bool:
-    """Inject the soft audit-gate nudge once for the CEO captain. Returns True if injected."""
-    if not should_audit_gate(controller, role=role):
-        return False
-
-    controller.mark_audit_gate_fired()
-    # cite_write_review 自带审校 → 软提示后即视为审校满足，不进入硬门死循环。
-    if controller.audit_includes_review:
-        nudge = audit_gate_nudge_prompt()
-    elif controller.audit_hard_required:
-        nudge = audit_gate_hard_prompt()
-    else:
-        nudge = audit_gate_nudge_prompt()
-    logger.info(
-        "engine.audit_gate_nudge",
-        round=round_idx,
-        delegate_count=controller.delegate_count,
-        first_batch_substantial=controller.first_batch_substantial,
-        audit_hard=controller.audit_hard_required,
-        includes_review=controller.audit_includes_review,
-    )
-    messages.append(LLMMessage(role="user", content=nudge))
-    record_turn_fact(
-        NoteFact(role="user", content=nudge, reason="audit_gate", run_id=run_id).to_fact()
-    )
-    return True
-
-
-def maybe_inject_audit_hard_block(
-    controller: LoopController,
-    *,
-    messages: list[LLMMessage],
-    run_id: str,
-    round_idx: int,
-    role: str,
-) -> bool:
-    """Block end_turn when hard audit is still unsatisfied after soft nudge."""
-    if not should_audit_hard_block(controller, role=role):
-        return False
-    nudge = audit_gate_hard_prompt()
-    logger.info(
-        "engine.audit_gate_hard_block",
-        round=round_idx,
-        delegate_count=controller.delegate_count,
-    )
-    messages.append(LLMMessage(role="user", content=nudge))
-    record_turn_fact(
-        NoteFact(
-            role="user", content=nudge, reason="audit_gate_hard", run_id=run_id
-        ).to_fact()
-    )
-    return True
-
-
-def should_debate_gate(
-    controller: LoopController,
-    *,
-    role: str,
-    messages: list[LLMMessage],
-) -> bool:
-    """Whether the soft debate-commitment gate should fire (wrap-up path)."""
-    if role != "captain" or controller.debate_gate_fired or controller.debate_executed:
-        return False
-    from agentcore.runtime.turn.token_budget import is_turn_token_ceiling_hit
-
-    if is_turn_token_ceiling_hit():
-        return False
-    from agentcore.runtime.engine.debate_commitment import user_selected_debate_form
-
-    return user_selected_debate_form(messages)
-
-
-def maybe_inject_debate_gate(
-    controller: LoopController,
-    *,
-    messages: list[LLMMessage],
-    run_id: str,
-    round_idx: int,
-    role: str,
-) -> bool:
-    """Inject the soft debate-commitment nudge once for the CEO captain."""
-    if not should_debate_gate(controller, role=role, messages=messages):
-        return False
-
-    from agentcore.runtime.engine.debate_commitment import debate_gate_nudge_prompt
-
-    controller.mark_debate_gate_fired()
-    nudge = debate_gate_nudge_prompt()
-    logger.info("engine.debate_gate_nudge", round=round_idx)
-    messages.append(LLMMessage(role="user", content=nudge))
-    record_turn_fact(
-        NoteFact(role="user", content=nudge, reason="debate_gate", run_id=run_id).to_fact()
-    )
-    return True
 
 
 def should_turn_token_budget_gate(controller: LoopController, *, role: str) -> bool:
@@ -547,7 +326,7 @@ def finalize_allows_persist(
     is registered. 真纯丙后执行层默认 unrestricted，不再依赖「名单缺写盘补写」。
 
     ``workspace_channel_dead`` / sticky session·channel dead → never retain persist
-    (Phase 1 may already strip tools; still avoid FINALIZE_INSTRUCTION_FILES 催写).
+    (Phase 1 may already strip tools; still avoid FINALIZE_INSTRUCTION_FILES).
     """
     if workspace_channel_dead or is_workspace_channel_sticky_dead():
         return False
@@ -580,7 +359,7 @@ def resolve_finalize_coordination_tools(
 
     Default = coordination only. When the worker surface still offers ``file_write``
     (form=files / artifacts / wind_down), also keep ``file_write`` + ``handoff``
-    so landing is possible — never strip persist tools then demand a final answer.
+    so landing is possible — never strip persist tools then claim a prose-only wrap.
     """
     if allowed_tool_names is None:
         candidates = list(tools.names) if tools.count > 0 else []
@@ -794,17 +573,17 @@ def apply_circuit_breaker(
                 run_id=run_id,
                 failure_count=controller.tool_failure_count(tool_name),
             )
-            # Persist read_url disable across react_loop restart (stream-stall →
+            # Persist web_fetch disable across react_loop restart (stream-stall →
             # Wave retry / contract write_pass). Same process + run_id.
             # Also strip web_search so deep-read death cannot become search thrash
             # (failures do not charge retrieval_budget).
-            if tool_name == "read_url":
+            if tool_name == "web_fetch":
                 from agentcore.tools.builtin.web._net import (
-                    READ_URL_RETIRE_STEER,
-                    mark_read_url_retired,
+                    WEB_FETCH_RETIRE_STEER,
+                    mark_web_fetch_retired,
                 )
 
-                mark_read_url_retired(run_id, message=READ_URL_RETIRE_STEER)
+                mark_web_fetch_retired(run_id, message=WEB_FETCH_RETIRE_STEER)
                 if "web_search" not in disabled_tools:
                     disabled_tools.add("web_search")
                     refresh = True
@@ -896,18 +675,6 @@ def govern_after_tools(
     Convergence and reflection are suppressed when the circuit breaker already
     steered this round (``breaker_message is not None``) so steers don't stack.
     """
-    # Post-delegate investigation check (优化六: 委派后工具降级)
-    if outcome.has_tool_calls:
-        called_tool_names = {a.tool_name for a in outcome.attempts if a.tool_name}
-        post_delegate_msg = controller.post_delegate_check(called_tool_names)
-        if post_delegate_msg is not None:
-            messages.append(LLMMessage(role="user", content=post_delegate_msg))
-            record_turn_fact(
-                NoteFact(
-                    role="user", content=post_delegate_msg, reason="post_delegate", run_id=run_id
-                ).to_fact()
-            )
-
     controller.note_round_productivity(
         had_tool_calls=outcome.has_tool_calls,
         all_failed=outcome.all_tools_failed,
@@ -940,11 +707,6 @@ def govern_after_tools(
             tool=signal.tool_name,
             count=signal.count,
             round=round_idx,
-        )
-        reflection = signal.reflection_message()
-        messages.append(LLMMessage(role="user", content=reflection))
-        record_turn_fact(
-            NoteFact(role="user", content=reflection, reason="nudge", run_id=run_id).to_fact()
         )
         maybe_inject_turn_token_budget_gate(
             controller,

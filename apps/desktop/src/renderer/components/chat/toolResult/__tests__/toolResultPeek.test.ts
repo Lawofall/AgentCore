@@ -30,11 +30,11 @@ describe("toolResultPeek", () => {
     ).toBe("2 results");
   });
 
-  it("summarizes a read_url as「标题 · 域名」", () => {
+  it("summarizes a web_fetch as「标题 · 域名」", () => {
     expect(
       toolResultPeek(
         data({
-          toolName: "read_url",
+          toolName: "web_fetch",
           display: {
             url: "https://weather.example.com/sz",
             title: "深圳天气",

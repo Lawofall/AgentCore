@@ -268,12 +268,12 @@ describe("ToolResultView · search_conversations / read_conversation", () => {
   });
 });
 
-describe("ToolResultView · read_url", () => {
+describe("ToolResultView · web_fetch", () => {
   it("renders a source-style header + body from display (not JSON result)", () => {
     render(
       <ToolResultView
         data={data({
-          toolName: "read_url",
+          toolName: "web_fetch",
           display: {
             url: "https://weather.example.com/sz",
             title: "深圳天气",

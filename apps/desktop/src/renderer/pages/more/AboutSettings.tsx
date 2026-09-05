@@ -5,7 +5,7 @@ import {
   SettingsSection,
   SettingsStack,
 } from "@/components/settings";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, PageHeader } from "@/components/ui";
 import {
   checkAndroidUpdate,
   openAndroidDownload,
@@ -32,7 +32,6 @@ import type { UpdaterStatus } from "@shared/updater-contract";
 import { Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { SettingsHeader } from "./SettingsHeader";
 
 /** Human-readable line for each updater phase (发布与门禁.md §7.6). */
 function updateStatusText(status: UpdaterStatus): string {
@@ -188,7 +187,7 @@ function UpdateSection() {
  * 品牌区 — 只留产品标记与两行 slogan。
  *
  * 原来这里是 `BrandMark`（含 text-xl 字标）+ 一行 text-base slogan 摞在页头之上，
- * 与 `SettingsHeader` 的 h1 同级同字号，看上去是两个并列大标题。产品名由页头
+ * 与 `PageHeader` 的 h1 同级同字号，看上去是两个并列大标题。产品名由页头
  * 「关于 AgentCore」承载，这里降级成一张说明卡：图标 + 定位语。
  */
 function BrandCard() {
@@ -319,10 +318,7 @@ function VersionSection() {
 export function AboutSettings() {
   return (
     <div>
-      <SettingsHeader
-        title="关于 AgentCore"
-        description="版本信息、软件更新与法律条款。"
-      />
+      <PageHeader title="关于 AgentCore" />
 
       <SettingsStack>
         <BrandCard />

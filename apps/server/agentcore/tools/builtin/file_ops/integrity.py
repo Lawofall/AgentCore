@@ -219,9 +219,10 @@ async def _prepare_write_relpath(
     """Rewrite empty-desk shell, then sanitize; return ``(actual, rename_note)``.
 
     Shell strip lives here (workspace + turn slot) — not in diskless
-    ``sanitize_write_relpath``. ``rename_note`` is a one-line tip when the
-    cleaned path differs from the request. ``/workspace/…`` strip alone does
-    not count as a rename; dangerous-char / dossier-flatten / shell-strip do.
+    ``sanitize_write_relpath``. Strip does not emit a note; ``rename_note`` is
+    only the sanitize tip when the cleaned path differs from the request.
+    ``/workspace/…`` strip alone does not count as a rename; dangerous-char /
+    dossier-flatten do.
     ``register=False`` (delete) applies an existing slug only.
     ``register_bare=True`` (mkdir) stamps a single-segment shell.
     """

@@ -206,7 +206,7 @@ def test_concurrent_same_url_dedup():
 
 
 def test_deep_read_upgrades_existing_entry():
-    """read_url 对已登记 URL 升级 deep_read，不新建 id。"""
+    """web_fetch 对已登记 URL 升级 deep_read，不新建 id。"""
     led = EvidenceLedgerCore(id_prefix="#r")
     eid = led.register_sync(
         url="https://example.com/article",
@@ -248,7 +248,7 @@ def test_draft_citable_requires_deep_read_or_selected():
     )
     assert led.citable_ids() == frozenset({"#r1", "#r2"})
     assert led.draft_citable_ids() == frozenset({"#r2"})
-    # read_url 升级后进入成稿闸
+    # web_fetch 升级后进入成稿闸
     led.register_sync(
         url="https://example.com/search-hit",
         title="Hit",

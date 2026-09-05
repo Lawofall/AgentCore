@@ -1762,7 +1762,7 @@ async def test_player_inlines_captain_tools_by_stripping_run_id(monkeypatch):
         {"kind": "run_started", "payload": {"run_id": "w1", "kind": "agent"}, "t_ms": 300},
         {
             "kind": "tool_use_start",
-            "payload": {"tool_call_id": "t2", "tool_name": "read_url", "arguments": {}, "run_id": "w1"},
+            "payload": {"tool_call_id": "t2", "tool_name": "web_fetch", "arguments": {}, "run_id": "w1"},
             "t_ms": 400,
         },
         {"kind": "content_delta", "payload": {"delta": "done"}, "t_ms": 500},
@@ -1791,14 +1791,14 @@ async def test_player_inlines_captain_tools_by_stripping_run_id(monkeypatch):
     }
     # CEO's own web_search: run_id stripped → turn-level inline step.
     assert "run_id" not in starts["web_search"]
-    # Worker's read_url: run_id preserved → its own run node in the graph.
-    assert starts["read_url"].get("run_id") == "w1"
+    # Worker's web_fetch: run_id preserved → its own run node in the graph.
+    assert starts["web_fetch"].get("run_id") == "w1"
     ends = [e.payload for e in sink._history if e.type is EventType.TOOL_USE_END]
     assert all("run_id" not in p for p in ends if p.get("tool_name") == "web_search")
     # Rendering outcome: the CEO's web_search is now a turn-level process step.
     inline_tools = [s for s in sink._process if s.get("kind") == "tool"]
     assert any(s.get("tool_name") == "web_search" for s in inline_tools)
-    assert all(s.get("tool_name") != "read_url" for s in inline_tools)
+    assert all(s.get("tool_name") != "web_fetch" for s in inline_tools)
 
 
 @pytest.mark.asyncio

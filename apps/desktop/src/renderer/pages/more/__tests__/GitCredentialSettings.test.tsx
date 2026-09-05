@@ -59,10 +59,11 @@ describe("GitCredentialSettings", () => {
       expect(screen.getByText("尚未配置")).toBeTruthy();
     });
     expect(
-      screen.getByText("云端私有仓库用账户 Token。公网仓不用配。"),
+      screen.getByText(
+        "云端私有仓库用账户 Token。公网仓不用配。GitHub 勾选 repo 权限即可。",
+      ),
     ).toBeTruthy();
     expect(screen.getByLabelText("Token")).toBeTruthy();
-    expect(screen.getByText("GitHub 勾选 repo 权限即可")).toBeTruthy();
     expect(
       (screen.getByRole("button", { name: "保存凭据" }) as HTMLButtonElement)
         .disabled,

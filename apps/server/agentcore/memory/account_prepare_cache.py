@@ -107,6 +107,14 @@ def drop_account_rules_memory_cache(
     _cache.pop(_cache_key(user_id, folder_id), None)
 
 
+def drop_account_rules_memory_cache_for_user(user_id: str) -> None:
+    """Drop every prepare-cache key for one account (换用 overlay changed)."""
+    uid = (user_id or "").strip()
+    stale = [key for key in _cache if key[0] == uid]
+    for key in stale:
+        _cache.pop(key, None)
+
+
 def clear_account_rules_memory_cache() -> None:
     """Drop every prepare-cache key (tests / process reset)."""
     _cache.clear()

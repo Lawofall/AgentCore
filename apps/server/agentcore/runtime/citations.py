@@ -34,7 +34,7 @@ from agentcore.core.citation_tier import (
 
 
 def _citation_key(citation: dict[str, Any]) -> str:
-    """来源去重用的归一化键（同一页面被 search + read_url、或被多个引擎命中时合并）：
+    """来源去重用的归一化键（同一页面被 search + web_fetch、或被多个引擎命中时合并）：
     去掉 ``#fragment`` 与结尾的 ``/``。"""
     return normalize_citation_url(citation.get("url") or "")
 

@@ -3,12 +3,11 @@ import { RunDetailScroll } from "@/components/chat/detail/RunDetailScroll";
 import { FileTypeIcon } from "@/components/files/FileTypeIcon";
 import { closeOsFloatWindowsForTabs } from "@/components/layout/DesktopFloatWindowBridge";
 import { FileTabSurface } from "@/components/layout/FileTabSurface";
-import { KillPtyConfirmDialog } from "@/components/terminal/KillPtyConfirmDialog";
 import {
   TerminalPanelBody,
   useTerminalRegion,
 } from "@/components/terminal/TerminalPanel";
-import { Button, IconButton, TabChip } from "@/components/ui";
+import { Button, ConfirmDialog, IconButton, TabChip } from "@/components/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -594,16 +593,19 @@ export function SidePanel() {
           </div>
         )}
       </div>
-      <KillPtyConfirmDialog
+      <ConfirmDialog
         open={terminalCloseBusyCount != null}
         onOpenChange={(next) => {
           if (!next && !terminalCloseBusy) setTerminalCloseBusyCount(null);
         }}
+        title="要终止正在运行的进程吗？"
         description={
           terminalCloseBusyCount != null && terminalCloseBusyCount > 1
             ? `关闭将终止 ${terminalCloseBusyCount} 个会话中的进程`
             : "关闭将终止此终端中的进程"
         }
+        confirmLabel="终止"
+        tone="danger"
         busy={terminalCloseBusy}
         onConfirm={() => void finishCloseTerminalTab()}
       />

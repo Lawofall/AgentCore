@@ -41,7 +41,7 @@ from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
 # 只读探路类工具（多轮模式下执行它们、把结果喂回、继续看 CEO 下一步真正的决策）。
-_RECON = {"file_read", "file_list", "grep", "web_search", "read_url"}
+_RECON = {"file_read", "file_list", "grep", "web_search", "web_fetch"}
 # 决策类工具（命中即 CEO 已做出路由抉择，探针就地记录、不执行）。
 _DECISION = {"ask_user", "delegate", "consult_skill", "debate", "replan"}
 

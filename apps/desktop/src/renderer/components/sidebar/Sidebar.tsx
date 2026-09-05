@@ -69,10 +69,9 @@ export function Sidebar() {
   // 搜索假入口两端都在侧栏（桌面顶栏不再放）。桌面 & 离线预览仍用顶栏放品牌/折叠。
   const webClient = isWebClient();
 
-  // 「对话」(route "/") 既是「新建对话」动作、又兼作对话区的区段指示：仅在「没有具体会话被
-  // 选中」的状态下高亮——空白草稿 `/` 与「全部对话」页 `/conversations`；一旦进入具体会话
-  // `/conversations/:id`，高亮就让位给下方最近列表里的那条会话行（避免导航与会话行双重高亮）。
-  // 其余导航是普通区段 tab，落在该区段（含子路由）即整段高亮。
+  // 顶栏区段跟路由；对话行选中态也跟路由（`conversationLocationId`），避免非对话页
+  // 与上场会话双高亮。`/` 兼「新建」与对话区段指示：仅空白草稿与「全部对话」页高亮，
+  // 进入 `/conversations/:id` 后让位给列表里那一行。其余导航落在该区段（含子路由）即亮。
   const isNavActive = (route: string) =>
     route === "/"
       ? pathname === "/" || pathname === "/conversations"

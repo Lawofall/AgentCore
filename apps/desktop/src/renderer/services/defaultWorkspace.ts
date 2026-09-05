@@ -1,9 +1,8 @@
 /**
- * 桌面默认本地**容器根**（双模式工作区 §八.7 / 工作区对称化 D1a）。
+ * 桌面默认本地**容器根**。
  *
- * 桌面裸聊默认走云 scratch（`local_container_root_id=null`）。本模块只在用户**显式**
- * 选「本机草稿」或创建本地项目时，解析/授权容器根（主进程 `fsApi.ensureDefaultRoot`
- * 建 + 授权 `~/Documents/AgentCore`），供建会话写入 `local_container_root_id`。
+ * 桌面「本地对话」默认走本机 scratch：建会话写入 `local_container_root_id`，
+ * 主进程 `fsApi.ensureDefaultRoot` 建 + 授权 `~/Documents/AgentCore`。
  * 不建任何 Folder，也不预建 per-对话子目录（懒建 `conversations/<id>/`）。
  *
  * web / 手机无 `window.fsApi`，整模块 no-op（恒 null）。
@@ -27,7 +26,7 @@ function isDesktop(): boolean {
  *
  * 幂等且并发安全：解析一次后缓存。**不创建任何 Folder / 对话子目录**——裸聊 scratch
  * 路径由 `conversations/<conversation_id>/` 决定（见 bareScratchPath），首次需要时懒建。
- * 失败只记录、返回 null。仅在显式本机草稿 / 本地项目创建路径调用。
+ * 失败只记录、返回 null。桌面本地对话首发与本地项目创建路径调用。
  */
 export async function ensureDefaultContainerRoot(): Promise<string | null> {
   if (!isDesktop()) return null;

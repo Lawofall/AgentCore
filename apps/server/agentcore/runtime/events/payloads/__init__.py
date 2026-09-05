@@ -60,7 +60,7 @@ TS_EXPORTS: tuple[TsExport, ...] = (
         chat.ToolPhase,
         doc=(
             "A running tool's coarse EXECUTION phase (工具执行阶段进度). Known values:\n"
-            "web_search → queued / querying / fallback; read_url → fetching / reading /\n"
+            "web_search → queued / querying / fallback; web_fetch → fetching / reading /\n"
             "blocked; code_execute / test_run → executing; git → git_queued (waiting behind\n"
             "another write on the same repo) / git_credentials (PAT / gh token lookup) /\n"
             "git_remote (push·pull·fetch network leg, create_pr's GitHub REST) / executing\n"
@@ -156,6 +156,7 @@ TS_EXPORTS: tuple[TsExport, ...] = (
     TsInterface(run.TeamSynthesisPreviewPayload),
     TsInterface(run.CoordinationWaitPayload),
     TsInterface(run.WorkspaceLockWaitPayload),
+    TsInterface(run.DeskProvisionWaitPayload),
     TsAlias(
         "DeliveryState",
         run.DeliveryState,
@@ -328,6 +329,7 @@ EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.TEAM_SYNTHESIS_PREVIEW: run.TeamSynthesisPreviewPayload,
     EventType.COORDINATION_WAIT: run.CoordinationWaitPayload,
     EventType.WORKSPACE_LOCK_WAIT: run.WorkspaceLockWaitPayload,
+    EventType.DESK_PROVISION_WAIT: run.DeskProvisionWaitPayload,
     EventType.DELIVERY_STATUS: run.DeliveryStatusPayload,
     EventType.USER_INTERJECTION: run.UserInterjectionPayload,
     EventType.TURN_QUEUED: run.TurnQueuedPayload,

@@ -19,7 +19,7 @@ Docker Desktop 的运行方式见本目录 README。
 诊断出现——即「停下回报」的证据。
 
 环境变量（docker run -e）：GVISOR_ENABLED=true、BROWSER_SANDBOX_IGNORE_CGROUPS=true
-（Docker Desktop 嵌套 cgroup v1，见 PoC finding #6）；read_url_allow_fake_ip_proxy 默认 True
+（Docker Desktop 嵌套 cgroup v1，见 PoC finding #6）；web_fetch_allow_fake_ip_proxy 默认 True
 （dev fake-IP，PoC finding #5）。
 """
 
@@ -188,7 +188,7 @@ async def main() -> int:
             "ignore_cgroups": settings.browser_sandbox_ignore_cgroups,
             "proxy_port": settings.browser_proxy_port,
             "veth_subnet_base": settings.browser_veth_subnet_base,
-            "allow_fake_ip_proxy": settings.read_url_allow_fake_ip_proxy,
+            "allow_fake_ip_proxy": settings.web_fetch_allow_fake_ip_proxy,
             "screencast_every_nth_frame": settings.browser_screencast_every_nth_frame,
         }
     }

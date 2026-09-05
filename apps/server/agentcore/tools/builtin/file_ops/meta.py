@@ -429,7 +429,9 @@ class MkdirTool:
             rel_path, context, register_bare=True
         )
         if not rel_path or rel_path == ".":
-            output = rename_note or "目录即工作区根，后续文件直接写在根下即可"
+            output = "已创建目录 ."
+            if rename_note:
+                output = f"{output}。{rename_note}"
             return ToolResult(
                 tool_call_id="",
                 success=True,

@@ -37,7 +37,7 @@ def test_safety_string_marks_original_length_and_is_idempotent():
 
 def test_journal_payload_caps_tool_use_end_result_not_live_alias():
     big = "x" * (_PROCESS_RESULT_CAP + 200)
-    wire = {"tool_call_id": "t1", "tool_name": "read_url", "result": big, "status": "success"}
+    wire = {"tool_call_id": "t1", "tool_name": "web_fetch", "result": big, "status": "success"}
     persisted = journal_payload_for_persist(EventType.TOOL_USE_END.value, wire)
     assert persisted is not wire
     assert persisted["result"] == cap_process_result(big)
@@ -81,7 +81,7 @@ def test_execution_tool_call_fact_bypasses_display_caps():
             ToolCallFact(
                 run_id="r1",
                 tool_call_id="t1",
-                name="read_url",
+                name="web_fetch",
                 result=big,
             ).to_fact()
         )

@@ -79,12 +79,12 @@ export function resolveEffectiveWorkspace(opts: {
 /**
  * Chip / mode-bar label（可见短标；有归属的会话只留文件夹名，通道靠图标 + title）:
  * - folder（local / cloud）: 「文件夹名」
- * - bare local: 「本机草稿」
- * - bare cloud（已建会话）: 「云端对话」（草稿 chip 仍用「快速对话」）
+ * - bare local: 「本地对话」
+ * - bare cloud: 「云端对话」
  */
 export function formatWorkspaceChipLabel(ws: EffectiveWorkspace): string {
   if (ws.viaFolder && ws.folderName) return ws.folderName;
-  if (ws.isLocal) return "本机草稿";
+  if (ws.isLocal) return "本地对话";
   return "云端对话";
 }
 
@@ -99,6 +99,6 @@ export function formatWorkspaceChipTitle(ws: EffectiveWorkspace): string {
       : "云端对话";
   }
   return ws.isLocal
-    ? "本机草稿（文件落本机默认目录，未归入文件夹）"
+    ? "本地对话（文件落本机默认目录，未归入文件夹）"
     : "云端对话";
 }

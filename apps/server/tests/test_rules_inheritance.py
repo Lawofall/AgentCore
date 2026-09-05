@@ -219,6 +219,33 @@ async def test_profile_memory_inherits_but_navigation_stays_local():
     assert md.index(_ANCESTOR_SETTINGS_LABEL) < md.index(_FOLDER_SETTINGS_LABEL)
 
 
+async def test_omit_current_folder_ai_memory_keeps_rules_and_ancestors():
+    """换绑：当前文件夹画像/导航不注入；用户规则与上层画像仍在。"""
+    repo = _FakeRuleRepo(
+        always={CURRENT: [_Doc("用户规则.md", "- 当前规则")]}
+    )
+    store = _FakeMemoryStore(
+        {
+            (OUTER, "画像.md"): "- 外层画像",
+            (CURRENT, "画像.md"): "- 当前画像",
+            (CURRENT, "导航.md"): "- 当前导航",
+        }
+    )
+    md = await assemble_injected_rules(
+        store,  # type: ignore[arg-type]
+        repo,  # type: ignore[arg-type]
+        "u1",
+        folder_id=CURRENT,
+        enabled=True,
+        scope_chain=(OUTER, CURRENT),
+        omit_current_folder_ai_memory=True,
+    )
+    assert "外层画像" in md
+    assert "当前规则" in md
+    assert "当前画像" not in md
+    assert "当前导航" not in md
+
+
 async def test_nearer_layer_is_injected_later_than_farther_one():
     """「近覆盖远」在提示词里就是这个顺序事实——外层在前，当前层贴着任务。"""
     repo = _FakeRuleRepo(

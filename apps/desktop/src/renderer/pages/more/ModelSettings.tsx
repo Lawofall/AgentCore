@@ -6,7 +6,13 @@ import {
   SettingsSection,
   SettingsStack,
 } from "@/components/settings";
-import { Button, ConfirmDialog, IconButton, Input } from "@/components/ui";
+import {
+  Button,
+  ConfirmDialog,
+  IconButton,
+  Input,
+  PageHeader,
+} from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useLlmModelProfiles } from "@/hooks/useLlmModelProfiles";
 import { useLlmProviders } from "@/hooks/useLlmProviders";
@@ -51,7 +57,6 @@ import type { LucideIcon } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ProfileModelSelect, canChooseFromGroups } from "./ProfileModelSelect";
-import { SettingsHeader } from "./SettingsHeader";
 
 /** 保存响应当次 reminders；列表/详情不带回，仅会话内按组合 id 挂住。 */
 function normalizeSaveWarnings(
@@ -183,14 +188,7 @@ export function ModelSettings() {
 
   return (
     <div>
-      <SettingsHeader
-        title="模型"
-        description={
-          platformAvailable
-            ? "选择账号默认组合（主模型 + 可选组队队员 / 后台 / 识图）。可用平台额度直接对话，也可接入服务商。"
-            : "选择账号默认组合（主模型 + 可选组队队员 / 后台 / 识图）。需自行接入服务商后才能对话。"
-        }
-      />
+      <PageHeader title="模型" />
 
       <SettingsStack>
         <SettingsAsync loading={isLoading} error={loadError}>

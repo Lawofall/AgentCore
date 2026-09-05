@@ -26,6 +26,7 @@ import {
   AskNoteField,
   AskQuestionFields,
   type AskUserContent,
+  displayAskReply,
   hasExplicitAskReply,
   useAskAnswer,
 } from "./ask/AskUserFields";
@@ -381,9 +382,7 @@ function PendingEscalation({
           icon={
             submitting === "answer" ? (
               <Loader2 size={13} className="animate-spin" />
-            ) : (
-              <Check size={13} />
-            )
+            ) : undefined
           }
         >
           提交
@@ -566,7 +565,7 @@ function ResolvedEscalation({
       ) : (
         escalation.answer && (
           <p className="mt-1.5 whitespace-pre-wrap rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs text-foreground">
-            {escalation.answer}
+            {displayAskReply(escalation.answer)}
           </p>
         )
       )}

@@ -58,7 +58,7 @@ def build_chat_system_prompt(
 ) -> str:
     """Render the turn's CEO system prompt from its sections — the ONE assembly point.
 
-    Variable tail AFTER the stable hint stack (redispatch + attachments +
+    Variable tail AFTER the stable hint stack (attachments +
     来源台账) so the CEO prefix (base + hints, including ``<工作区>``
     with the CEO file index already spliced) stays byte-identical across turns
     except when those facts themselves change. Empty sections are dropped, so a
@@ -110,7 +110,7 @@ async def assemble_ceo_turn(
     """Assemble the CEO coordinator toolset and the turn's chat system prompt."""
     # The CEO owns the conversation and replies directly, but it is a
     # COORDINATOR: it carries only the read / retrieval built-ins
-    # (``build_ceo_tool_registry`` — web_search/read_url/file_read/file_list/
+    # (``build_ceo_tool_registry`` — web_search/web_fetch/file_read/file_list/
     # grep) plus the on-demand orchestration primitive ``delegate``. It holds
     # NONE of the production / mutation tools (file_write/str_replace/
     # file_delete/file_move/code_execute); any work that produces or changes an
@@ -240,83 +240,64 @@ async def assemble_ceo_turn(
         )
     explore_reason: str | None = None
     folder_nav_stale = False
-    folder_profile_empty_soft = False
     if folder_id:
 
-        async def _run_explore_gates() -> tuple[str | None, bool, bool]:
-            from agentcore.conversation.scratch import resolve_conversation_local_binding
+        async def _run_explore_gates() -> tuple[str | None, bool]:
             from agentcore.memory.explore_profile import (
                 compute_workspace_explore_fingerprint,
                 evaluate_explore_fingerprint_drift,
-                folder_profile_explore_reason,
-                resolve_folder_workspace_key,
                 resolve_hard_explore_reason,
             )
 
-            reason: str | None = None
+            raw = prepared.folder_explore_reason
+            current_key = prepared.explore_workspace_key
+            hard = resolve_hard_explore_reason(raw, user_message)
             nav_stale = False
-            profile_empty_soft = False
-            mem_store = run_mod.default_memory_store()
-            ctx = prepared.base_tool_context
-            injected_binding = None
-            if ctx.folder_binding_injected:
-                injected_binding = resolve_conversation_local_binding(
-                    local_root_id=ctx.folder_local_root_id,
-                    local_subpath=ctx.folder_local_subpath,
-                )
-            # Injected → pure key (no PG). Else DB only for UUID-shaped folder_id;
-            # non-UUID memory scope → folder:<id>; connectivity/DataError → None.
-            # Unknown key: still run empty / named gates; skip rebind ("" sentinel).
-            current_key = await resolve_folder_workspace_key(
-                folder_id,
-                binding=injected_binding,
-                binding_injected=ctx.folder_binding_injected,
-            )
-            key_for_gates = current_key if current_key is not None else ""
-            reason = await folder_profile_explore_reason(
-                mem_store,
-                prepared.base_tool_context.user_id,
-                folder_id,
-                current_workspace_key=key_for_gates,
-            )
-            reason, profile_empty_soft = resolve_hard_explore_reason(
-                reason,
-                user_message,
-            )
-            # R2 soft hint + R1 background refresh: fingerprint drift never blocks.
-            # Soft-empty 画像 is not "go fill it": skip stale hint + silent refresh.
-            # Named 先了解 / 工程短语 already took the hard path above.
-            if not reason and not profile_empty_soft:
-                live_fp = await compute_workspace_explore_fingerprint(backend)
-                nav_stale = await evaluate_explore_fingerprint_drift(
-                    mem_store,
-                    prepared.base_tool_context.user_id,
-                    folder_id,
-                    live_fingerprint=live_fp,
-                    current_workspace_key=current_key,
-                )
-                if nav_stale and current_key:
+            # Empty 画像: do not pending, do not silent-fill.
+            # Rebind: do not pending; omit already happened in prepare; silent refresh
+            # with blank current notes so old-bind 画像 is not merged forward.
+            # Named 先了解 already took the hard path above.
+            if not hard and raw != "empty":
+                if raw == "rebind" and current_key:
                     from agentcore.memory.explore_refresh import (
-                        build_workspace_explore_snapshot,
-                        schedule_explore_refresh,
+                        schedule_explore_refresh_for_backend,
                     )
 
-                    snapshot = await build_workspace_explore_snapshot(backend)
-                    schedule_explore_refresh(
+                    await schedule_explore_refresh_for_backend(
                         user_id=prepared.base_tool_context.user_id,
                         folder_id=folder_id,
                         workspace_key=current_key,
-                        snapshot=snapshot,
-                        live_fingerprint=live_fp,
+                        backend=backend,
+                        blank_current_notes=True,
                     )
+                else:
+                    live_fp = await compute_workspace_explore_fingerprint(backend)
+                    nav_stale = await evaluate_explore_fingerprint_drift(
+                        run_mod.default_memory_store(),
+                        prepared.base_tool_context.user_id,
+                        folder_id,
+                        live_fingerprint=live_fp,
+                        current_workspace_key=current_key,
+                    )
+                    if nav_stale and current_key:
+                        from agentcore.memory.explore_refresh import (
+                            schedule_explore_refresh_for_backend,
+                        )
+
+                        await schedule_explore_refresh_for_backend(
+                            user_id=prepared.base_tool_context.user_id,
+                            folder_id=folder_id,
+                            workspace_key=current_key,
+                            backend=backend,
+                        )
             # Precompute close-out key so update_folder_profile does not re-hit PG.
             if current_key:
                 upd = chat_tools.get_optional("update_folder_profile")
                 if upd is not None and getattr(upd, "workspace_key", None) is None:
                     upd.workspace_key = current_key
-            return reason, nav_stale, profile_empty_soft
+            return hard, nav_stale
 
-        explore_reason, folder_nav_stale, folder_profile_empty_soft = await _timed_phase(
+        explore_reason, folder_nav_stale = await _timed_phase(
             "explore", _run_explore_gates()
         )
     # Sink explore-pending into ToolContext so delegate can suppress structured
@@ -347,17 +328,7 @@ async def assemble_ceo_turn(
         workspace_file_index=workspace_overview,
         cold_start_explore=explore_reason or False,
         folder_nav_stale=folder_nav_stale,
-        folder_profile_empty_soft=folder_profile_empty_soft,
         attachment_material=attachment_material_scene(prepared.attachment_context),
-    )
-    # 跨轮空委派/无产出：上轮 journal 结构化指纹 → 一次性再派软提示（不扫用户「继续」原文）。
-    from agentcore.runtime.delegate.redispatch_hint import (
-        build_prior_failure_redispatch_hint,
-    )
-
-    prior_delegate_retry = await build_prior_failure_redispatch_hint(
-        conversation_id=conversation_id,
-        exclude_message_id=message_id,
     )
     # 可用性诚实性 · 甲：偏窄短问 → 复用最近 delivery_status 发卡到本回合答复面。
     from agentcore.runtime.delegate.delivery_status import (
@@ -376,7 +347,7 @@ async def assemble_ceo_turn(
     # for this turn's prompt here.
     chat_system_prompt = build_chat_system_prompt(
         ceo_prompt=chat_system_prompt,
-        prior_delegate_retry=prior_delegate_retry,
+        prior_delegate_retry="",
         attachment_context=prepared.attachment_context,
         registered_sources=format_registered_sources_prompt(evidence_ledger),
         soft_cap=settings.prompt_budget_char_soft_cap,

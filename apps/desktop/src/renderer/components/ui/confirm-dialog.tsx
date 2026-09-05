@@ -88,7 +88,7 @@ export function ConfirmDialog({
         {children && <div className="px-5">{children}</div>}
         <DialogFooter>
           <Button
-            variant="neutral"
+            variant="outline"
             className="h-9 px-4"
             disabled={busy}
             onClick={() => requestClose(false)}

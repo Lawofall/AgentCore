@@ -20,8 +20,9 @@ alwaysApply: false
 - **凭据禁令**：`deploy/.env.deploy.local` 不入仓。禁止在 chat 索要/回显 token、SSH 私钥或其它部署凭据。
 - **不重新启用** deploy/release workflow 的 push/tag/schedule 自动触发。
 - **准备 ≠ 切流**：`pnpm deploy:backend <sha>` 只预构建（worktree、不 checkout 活树、不推 `latest`、不停 api）。切流 `pnpm deploy:backend:switch <sha>`。紧急一把上 `pnpm deploy:backend:now <sha>`。
+- **「部署」只授权准备段**：用户说部署/上线/发版，做到 CI 绿 + 预构建 + 桌面/Android draft + Mac GHA 即**停**。`--switch` / `--now` / Publish / admin·web·website **必须再问**「现在空闲、可以切吗？」——得到「切 / 空闲了 / 现在上」才继续。禁止把「部署全部改动」「同一坐席」理解成立刻停 api；禁止拿夜深当空闲。空闲 = 人确认没人在跑对话/任务。未点名紧急不得 `:now`。
 - **新增/改接口 → 后端必须先切流**。前端 deploy 脚本契约门探的是线上 `/version`，预构建不够。
-- **协议 / UI 混改**：准备可提前；**见用户的切同一坐席**（api + admin + desktop + Android + website）。同船内后端仍先 `--switch`。
+- **协议 / UI 混改**：准备可提前；**人确认空闲后**同一坐席切（api + admin + desktop + Android + website）。同船内后端仍先 `--switch`。
 - **桌面发版**：Win = 本地 `release:win`；Mac = GHA 仅 mac；**勿用 GHA 打 Win**。准备段停 draft，切流段才 Publish。
 - 发布前本地一键门禁：`pnpm release:gate`（含 schema gate）。日常可用 `:lite`；**发布仍须全量**。
 - **预构建 / 切流前须等 `ci.yml` 全绿**（本地 gate 不含 integration、且 Win≠Linux）。

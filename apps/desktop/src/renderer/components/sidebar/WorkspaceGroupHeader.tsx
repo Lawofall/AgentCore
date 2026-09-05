@@ -28,6 +28,7 @@ import {
   usePermanentDeleteFolder,
   useRestoreFolder,
 } from "@/hooks/useFolders";
+import { useConversationLocationId } from "@/lib/conversationLocation";
 import { deriveGroupWorkspaceIsLocal } from "@/lib/conversationWorkspaceMode";
 import { folderAncestorNames } from "@/lib/folderTree";
 import { startNewConversation } from "@/lib/newConversation";
@@ -97,7 +98,7 @@ export function WorkspaceGroupHeader({
   const deleteFolderMutation = useDeleteFolder();
   const permanentDeleteMutation = usePermanentDeleteFolder();
   const restoreFolderMutation = useRestoreFolder();
-  const currentId = useConversationStore((s) => s.currentConversationId);
+  const locationId = useConversationLocationId();
   const dropConversationRuntime = useConversationStore(
     (s) => s.dropConversationRuntime,
   );
@@ -149,7 +150,7 @@ export function WorkspaceGroupHeader({
         return;
       }
       dropConversationRuntime(id);
-      if (id === currentId) navigate("/");
+      if (id === locationId) navigate("/");
     }
   };
 
@@ -170,7 +171,7 @@ export function WorkspaceGroupHeader({
     setDeleteOpen(false);
     const leftActive = releaseFolderConversations(folder.id, {
       dropRuntime: dropConversationRuntime,
-      currentId,
+      locationId,
     });
     if (leftActive) navigate("/");
     notifyInfo("已删除文件夹", {
@@ -186,7 +187,7 @@ export function WorkspaceGroupHeader({
   const confirmPermanentDelete = () => {
     for (const { id } of convs) {
       dropConversationRuntime(id);
-      if (id === currentId) navigate("/");
+      if (id === locationId) navigate("/");
     }
     permanentDeleteMutation.mutate(folder.id, {
       onSuccess: () => setDeleteOpen(false),

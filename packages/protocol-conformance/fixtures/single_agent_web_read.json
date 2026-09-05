@@ -1,6 +1,6 @@
 {
   "name": "single_agent_web_read",
-  "description": "单聊：联网检索+深读富渲染（web_search 卡 · 单条 read_url 来源头+正文 · ≥2 read_url 来源集合）",
+  "description": "单聊：联网检索+深读富渲染（web_search 卡 · 单条 web_fetch 来源头+正文 · ≥2 web_fetch 来源集合）",
   "events": [
     {
       "type": "message_start",
@@ -72,7 +72,7 @@
       "type": "tool_use_start",
       "payload": {
         "tool_call_id": "tc2",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "arguments": {
           "url": "https://www.sohu.com/a/1050596771_121124370"
         }
@@ -83,7 +83,7 @@
       "type": "tool_use_end",
       "payload": {
         "tool_call_id": "tc2",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "status": "success",
         "result": "{\"url\": \"…\", \"title\": \"驴疯了？LV 起诉国家知识产权局！\", \"content\": \"…\"}",
         "display": {
@@ -107,7 +107,7 @@
       "type": "tool_use_start",
       "payload": {
         "tool_call_id": "tc3",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "arguments": {
           "url": "https://www.sohu.com/a/1050271277_349248"
         }
@@ -118,7 +118,7 @@
       "type": "tool_use_end",
       "payload": {
         "tool_call_id": "tc3",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "status": "success",
         "result": "正文……",
         "display": {
@@ -135,7 +135,7 @@
       "type": "tool_use_start",
       "payload": {
         "tool_call_id": "tc4",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "arguments": {
           "url": "https://www.sohu.com/a/1050304127_121811866"
         }
@@ -146,7 +146,7 @@
       "type": "tool_use_end",
       "payload": {
         "tool_call_id": "tc4",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "status": "success",
         "result": "正文……",
         "display": {
@@ -163,7 +163,7 @@
       "type": "tool_use_start",
       "payload": {
         "tool_call_id": "tc5",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "arguments": {
           "url": "https://zhuanlan.zhihu.com/p/700123456"
         }
@@ -174,7 +174,7 @@
       "type": "tool_use_end",
       "payload": {
         "tool_call_id": "tc5",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "status": "success",
         "result": "正文……",
         "display": {
@@ -298,7 +298,7 @@
       {
         "kind": "tool",
         "id": "tc2",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "arguments": {
           "url": "https://www.sohu.com/a/1050596771_121124370"
         },
@@ -319,7 +319,7 @@
       {
         "kind": "tool",
         "id": "tc3",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "arguments": {
           "url": "https://www.sohu.com/a/1050271277_349248"
         },
@@ -336,7 +336,7 @@
       {
         "kind": "tool",
         "id": "tc4",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "arguments": {
           "url": "https://www.sohu.com/a/1050304127_121811866"
         },
@@ -353,7 +353,7 @@
       {
         "kind": "tool",
         "id": "tc5",
-        "tool_name": "read_url",
+        "tool_name": "web_fetch",
         "arguments": {
           "url": "https://zhuanlan.zhihu.com/p/700123456"
         },

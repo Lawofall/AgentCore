@@ -900,6 +900,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/skill-store/listings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin List Listings */
+        get: operations["admin_list_listings_v1_admin_skill_store_listings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/skill-store/listings/{listing_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Get Listing */
+        get: operations["admin_get_listing_v1_admin_skill_store_listings__listing_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/skill-store/listings/{listing_id}/takedown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Takedown Listing */
+        post: operations["admin_takedown_listing_v1_admin_skill_store_listings__listing_id__takedown_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/skill-store/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin List Reports */
+        get: operations["admin_list_reports_v1_admin_skill_store_reports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/system": {
         parameters: {
             query?: never;
@@ -5029,6 +5097,195 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/skill-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Skill Catalog
+         * @description Official slots + this account's global on-demand skills (换用 / 藏起 overlay).
+         */
+        get: operations["get_skill_catalog_v1_skill_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skill-catalog/mutes/{slot}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Skill Mute
+         * @description Hide this official slot from the model's on-demand catalog at this layer.
+         */
+        put: operations["put_skill_mute_v1_skill_catalog_mutes__slot__put"];
+        post?: never;
+        /**
+         * Delete Skill Mute
+         * @description Clear 藏起 at this layer (inherit outer mute if any).
+         */
+        delete: operations["delete_skill_mute_v1_skill_catalog_mutes__slot__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skill-catalog/replacements/{slot}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Skill Replacement
+         * @description Bind a global on-demand document onto an official skill slot at this layer.
+         */
+        put: operations["put_skill_replacement_v1_skill_catalog_replacements__slot__put"];
+        post?: never;
+        /**
+         * Delete Skill Replacement
+         * @description Clear 换用 at this layer (inherit outer / factory).
+         */
+        delete: operations["delete_skill_replacement_v1_skill_catalog_replacements__slot__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skill-store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Skill Store */
+        get: operations["list_skill_store_v1_skill_store_get"];
+        put?: never;
+        /** Publish Skill */
+        post: operations["publish_skill_v1_skill_store_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skill-store/installed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Installed */
+        get: operations["list_installed_v1_skill_store_installed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skill-store/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Mine Listings */
+        get: operations["list_mine_listings_v1_skill_store_mine_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skill-store/{listing_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Listing */
+        get: operations["get_listing_v1_skill_store__listing_id__get"];
+        put?: never;
+        post?: never;
+        /** Unpublish Listing */
+        delete: operations["unpublish_listing_v1_skill_store__listing_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skill-store/{listing_id}/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Install Listing */
+        post: operations["install_listing_v1_skill_store__listing_id__install_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skill-store/{listing_id}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report Listing */
+        post: operations["report_listing_v1_skill_store__listing_id__reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skill-store/{listing_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish New Version */
+        post: operations["publish_new_version_v1_skill_store__listing_id__versions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/standing-task-runs": {
         parameters: {
             query?: never;
@@ -6547,6 +6804,12 @@ export interface components {
          *     ``folder_chain`` is that same chain by id with the current folder last: the engine may
          *     be a desktop sidecar with no folders table, so the cloud is the only place that can
          *     resolve「谁在谁里面」(双模式工作区 §5.4 沿树继承).
+         *
+         *     ``skill_replacements`` / ``skill_mutes`` are the merged overlay for this
+         *     ``folder_id`` (account farthest, then the desk-owner folder chain, near wins).
+         *     Bound documents are omitted from on_demand lists so the model does not see the
+         *     same HOW twice. Muted official slots ride ``skill_mutes`` so sidecar consult
+         *     listing matches the cloud overlay.
          */
         AccountRulesListResponse: {
             /** Ancestor On Demand Rules */
@@ -6563,6 +6826,10 @@ export interface components {
             project_on_demand_rules?: components["schemas"]["AccountRuleDoc"][];
             /** Project Rules */
             project_rules: components["schemas"]["AccountRuleDoc"][];
+            /** Skill Mutes */
+            skill_mutes?: string[];
+            /** Skill Replacements */
+            skill_replacements?: components["schemas"]["AccountSkillReplacement"][];
         };
         /** AccountScopeStateResponse */
         AccountScopeStateResponse: {
@@ -6593,6 +6860,28 @@ export interface components {
             last_semantic_at?: string | null;
             /** Scope */
             scope?: string | null;
+        };
+        /**
+         * AccountSkillReplacement
+         * @description One account-level 换用: official slot → user on-demand body for consult.
+         */
+        AccountSkillReplacement: {
+            /**
+             * Content
+             * @default
+             */
+            content: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Document Id */
+            document_id: string;
+            /** Document Name */
+            document_name: string;
+            /** Slot */
+            slot: string;
         };
         /**
          * AccountTokenResponse
@@ -7022,6 +7311,96 @@ export interface components {
             force_change: boolean;
             /** New Password */
             new_password: string;
+        };
+        /** AdminSkillStoreListingDetail */
+        AdminSkillStoreListingDetail: {
+            /** Author */
+            author: string;
+            /** Author User Id */
+            author_user_id: string;
+            /** Content */
+            content: string;
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version N */
+            version_n: number;
+        };
+        /** AdminSkillStoreListingList */
+        AdminSkillStoreListingList: {
+            /** Data */
+            data: components["schemas"]["AdminSkillStoreListingRow"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
+        /** AdminSkillStoreListingRow */
+        AdminSkillStoreListingRow: {
+            /** Author */
+            author: string;
+            /** Author User Id */
+            author_user_id: string;
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version N */
+            version_n: number;
+        };
+        /** AdminSkillStoreReportList */
+        AdminSkillStoreReportList: {
+            /** Data */
+            data: components["schemas"]["AdminSkillStoreReportRow"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
+        /** AdminSkillStoreReportRow */
+        AdminSkillStoreReportRow: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Listing Id */
+            listing_id: string;
+            /** Listing Name */
+            listing_name: string;
+            /** Listing Status */
+            listing_status: string;
+            /** Reason */
+            reason: string;
+            /** Reporter */
+            reporter: string;
+            /** User Id */
+            user_id: string;
         };
         /**
          * AdminSystemStatus
@@ -7964,9 +8343,10 @@ export interface components {
          *     prompt is served separately, see the message prompt endpoint).
          *
          *     ``shared_base`` is the base every agent (CEO + workers) shares (identity, output
-         *     style, tool-use, safety); ``worker_leaf`` / ``worker_captain`` are identity+contract
-         *     templates (default files form, no dependents) — not the per-turn prompt (that is
-         *     in 收到的上下文); ``ceo_addon`` is the CEO coordinator's layers on top of that base
+         *     style, tool-use, safety); ``worker_leaf`` / ``worker_captain`` are ``<身份>``
+         *     templates — not the per-turn prompt (form HOW is 交付物规格 in 收到的上下文);
+         *     ``ceo_addon`` is the CEO
+         *     coordinator's layers on top of that base
          *     (routing core + 按需目录 + citation guidance); ``ceo`` is the full chat
          *     system-prompt template (shared base + ceo_addon), composed by the SAME
          *     ``compose_ceo_chat_prompt`` the live turn uses, so it never drifts.
@@ -11064,6 +11444,21 @@ export interface components {
              */
             required: boolean;
         };
+        /** MineSkillView */
+        MineSkillView: {
+            /** Content */
+            content: string;
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Occupies */
+            occupies?: string[];
+            /** Version */
+            version: string;
+        };
         /** ModelCatalogCurrent */
         ModelCatalogCurrent: {
             /**
@@ -11472,8 +11867,11 @@ export interface components {
          * PlatformCredentialView
          * @description Admin view of one platform-pool member — never the plaintext key.
          *
-         *     ``status`` / ``recovery_at`` / ``limit_name`` are live pool-state (Redis or
-         *     process memory), not Postgres columns. Absence of a store record is healthy.
+         *     ``status`` / ``recovery_at`` / ``limit_name`` / ``source`` are live pool-state
+         *     (Redis or process memory), not Postgres columns. Absence of a store record is
+         *     healthy. ``picked`` is the fill-first member ``platform_llm_credentials`` would
+         *     take right now. ``same_as_env`` is true when this row's ``(api_key, base_url)``
+         *     matches ``PLATFORM_API_KEY`` / ``PLATFORM_BASE_URL``.
          *     ``tool_surface_limits`` is stored on the row; empty / all-null = unlimited.
          */
         PlatformCredentialView: {
@@ -11491,8 +11889,20 @@ export interface components {
             limit_name?: string | null;
             /** Masked Key */
             masked_key?: string | null;
+            /**
+             * Picked
+             * @default false
+             */
+            picked: boolean;
             /** Recovery At */
             recovery_at?: string | null;
+            /**
+             * Same As Env
+             * @default false
+             */
+            same_as_env: boolean;
+            /** Source */
+            source?: string | null;
             /**
              * Status
              * @default healthy
@@ -11575,6 +11985,11 @@ export interface components {
             port: number;
             /** Url */
             url: string;
+        };
+        /** PublishSkillRequest */
+        PublishSkillRequest: {
+            /** Document Id */
+            document_id: string;
         };
         /**
          * QueuedTurnItem
@@ -11795,6 +12210,11 @@ export interface components {
             /** Email */
             email: string;
         };
+        /** ReplaceSkillRequest */
+        ReplaceSkillRequest: {
+            /** Document Id */
+            document_id: string;
+        };
         /**
          * ReplayConversation
          * @description The conversation header for a 复盘 (owner identity + title + model profile).
@@ -12002,6 +12422,11 @@ export interface components {
             sender_display_name: string;
             /** Sender User Id */
             sender_user_id: string | null;
+        };
+        /** ReportSkillRequest */
+        ReportSkillRequest: {
+            /** Reason */
+            reason: string;
         };
         /**
          * ResolveApprovalInteraction
@@ -12463,6 +12888,148 @@ export interface components {
             title: string;
             /** Url */
             url: string;
+        };
+        /** SkillCatalogView */
+        SkillCatalogView: {
+            /** Folder Id */
+            folder_id?: string | null;
+            /** Mine */
+            mine: components["schemas"]["MineSkillView"][];
+            /** Slots */
+            slots: components["schemas"]["SkillSlotView"][];
+            /**
+             * Writable
+             * @default true
+             */
+            writable: boolean;
+        };
+        /** SkillReplacedBy */
+        SkillReplacedBy: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Document Id */
+            document_id: string;
+            /** Name */
+            name: string;
+        };
+        /** SkillSlotView */
+        SkillSlotView: {
+            /**
+             * Muted
+             * @default false
+             */
+            muted: boolean;
+            /** Muted Layer */
+            muted_layer?: ("here" | "inherited") | null;
+            /** Name */
+            name: string;
+            replaced_by?: components["schemas"]["SkillReplacedBy"] | null;
+            /** Replaced Layer */
+            replaced_layer?: ("here" | "inherited") | null;
+            /** Summary */
+            summary: string;
+        };
+        /** SkillStoreInstalledItem */
+        SkillStoreInstalledItem: {
+            /** Author */
+            author: string;
+            /** Description */
+            description: string;
+            /** Document Id */
+            document_id: string;
+            /** Has Update */
+            has_update: boolean;
+            /** Id */
+            id: string;
+            /** Installed */
+            installed: boolean;
+            /** Name */
+            name: string;
+            /** Source Document Id */
+            source_document_id: string;
+            /** Status */
+            status: string;
+            /** Version N */
+            version_n: number;
+        };
+        /** SkillStoreInstalledResponse */
+        SkillStoreInstalledResponse: {
+            /** Data */
+            data: components["schemas"]["SkillStoreInstalledItem"][];
+        };
+        /** SkillStoreListResponse */
+        SkillStoreListResponse: {
+            /** Data */
+            data: components["schemas"]["SkillStoreListingRow"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
+        /** SkillStoreListingDetail */
+        SkillStoreListingDetail: {
+            /** Author */
+            author: string;
+            /** Content */
+            content: string;
+            /** Description */
+            description: string;
+            /** Document Id */
+            document_id?: string | null;
+            /** Has Update */
+            has_update: boolean;
+            /** Id */
+            id: string;
+            /** Installed */
+            installed: boolean;
+            /** Name */
+            name: string;
+            /** Source Document Id */
+            source_document_id: string;
+            /** Status */
+            status: string;
+            /** Version N */
+            version_n: number;
+        };
+        /** SkillStoreListingRow */
+        SkillStoreListingRow: {
+            /** Author */
+            author: string;
+            /** Description */
+            description: string;
+            /** Has Update */
+            has_update: boolean;
+            /** Id */
+            id: string;
+            /** Installed */
+            installed: boolean;
+            /** Name */
+            name: string;
+            /** Source Document Id */
+            source_document_id: string;
+            /** Status */
+            status: string;
+            /** Version N */
+            version_n: number;
+        };
+        /** SkillStoreMineResponse */
+        SkillStoreMineResponse: {
+            /** Data */
+            data: components["schemas"]["SkillStoreListingRow"][];
+        };
+        /** SkillStoreReportView */
+        SkillStoreReportView: {
+            /** Id */
+            id: string;
+            /** Listing Id */
+            listing_id: string;
+            /** Reason */
+            reason: string;
         };
         /** SnapshotListResponse */
         SnapshotListResponse: {
@@ -15484,6 +16051,150 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlatformCredentialView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_listings_v1_admin_skill_store_listings_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                status?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSkillStoreListingList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_get_listing_v1_admin_skill_store_listings__listing_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSkillStoreListingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_takedown_listing_v1_admin_skill_store_listings__listing_id__takedown_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSkillStoreListingRow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_reports_v1_admin_skill_store_reports_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSkillStoreReportList"];
                 };
             };
             /** @description Validation Error */
@@ -23183,6 +23894,512 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_skill_catalog_v1_skill_catalog_get: {
+        parameters: {
+            query?: {
+                folder_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillCatalogView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_skill_mute_v1_skill_catalog_mutes__slot__put: {
+        parameters: {
+            query?: {
+                folder_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                slot: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillCatalogView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_skill_mute_v1_skill_catalog_mutes__slot__delete: {
+        parameters: {
+            query?: {
+                folder_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                slot: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillCatalogView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_skill_replacement_v1_skill_catalog_replacements__slot__put: {
+        parameters: {
+            query?: {
+                folder_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                slot: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceSkillRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillCatalogView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_skill_replacement_v1_skill_catalog_replacements__slot__delete: {
+        parameters: {
+            query?: {
+                folder_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                slot: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillCatalogView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_skill_store_v1_skill_store_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillStoreListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_skill_v1_skill_store_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishSkillRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillStoreListingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_installed_v1_skill_store_installed_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillStoreInstalledResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_mine_listings_v1_skill_store_mine_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillStoreMineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_listing_v1_skill_store__listing_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillStoreListingDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unpublish_listing_v1_skill_store__listing_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillStoreListingRow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    install_listing_v1_skill_store__listing_id__install_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillStoreInstalledItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_listing_v1_skill_store__listing_id__reports_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportSkillRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillStoreReportView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_new_version_v1_skill_store__listing_id__versions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillStoreListingDetail"];
                 };
             };
             /** @description Validation Error */

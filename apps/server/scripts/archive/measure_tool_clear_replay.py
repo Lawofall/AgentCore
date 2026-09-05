@@ -2,7 +2,7 @@
 对它做 clear_tool_uses 的 A/B —— 比合成场景更有代表性（真实读取分布/大小/工具混合）。
 
 与 measure_tool_clear.py 的区别：那条用合成的等长文件读；本条用 `window_from_journal`
-把**真实跑过**的回合（含真实系统提示、真实 web_search/read_url/file_read 结果）原样
+把**真实跑过**的回合（含真实系统提示、真实 web_search/web_fetch/file_read 结果）原样
 折回引擎当时喂给模型的 ``list[LLMMessage]``，再投影对比。
 
 只读：不写库、不改任何回合；显式 platform_llm_credentials → build_provider。
@@ -30,7 +30,7 @@ from agentcore.runtime.journal import window_from_journal
 # 真实「单 run 多大只读结果」回合（探针所得，captain run，可被 window_from_journal 重建）。
 DEFAULT_TURN = "a3aefcaf-7868-4a5a-9205-a452c8a37dcc"
 # 只读可重取工具（NEVER-approval FILESYSTEM / SEARCH / RESEARCH）= 可清理集。
-INVESTIGATION = frozenset({"file_read", "grep", "file_list", "web_search", "read_url"})
+INVESTIGATION = frozenset({"file_read", "grep", "file_list", "web_search", "web_fetch"})
 
 
 async def list_candidates() -> None:
@@ -143,7 +143,7 @@ async def main() -> None:
         cell = "基线" if kr is None else f"{saved:,}/{pct}"
         print(f"{label:<12}{n_cleared:>8}{base_chars - chars:>12,}{inp:>12,}{hit:>11,}{miss:>12,}{cell:>13}")
     print("-" * 80)
-    print("真实分布（混合 web_search/read_url/file_read，大小不一）下的稳态净收益。")
+    print("真实分布（混合 web_search/web_fetch/file_read，大小不一）下的稳态净收益。")
     print("=" * 80)
 
 

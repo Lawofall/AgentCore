@@ -287,6 +287,17 @@ class WorkspaceLockWaitPayload(WirePayload):
     waiting: bool
 
 
+class DeskProvisionWaitPayload(WirePayload):
+    """云桌开通短等（``desk_provision_wait``）：首句/续跑 prepare 时的前端 UX 信号。
+
+    ``waiting=true`` 即将阻塞在 ``ensure_workspace_desk``；结束（成功或失败）后
+    ``waiting=false``。EPHEMERAL——空气泡「正在准备云端环境」，禁空 Thinking… 冒充开机。
+    """
+
+    conversation_id: str
+    waiting: bool
+
+
 DeliveryState = Literal["delivered", "partial", "blocked", "notes"]
 
 
@@ -328,7 +339,7 @@ class DeliveryAction(WirePayload):
     工程尚在本机 → 云协作「导入到云」优先；远程仓进当前云桌走 git clone /
     Composer「从 Git 克隆」；**已是云端会话但沙箱未装配** →
     禁止再导「导入到云」，改稍后重试 / export_to_local / 本机传统；
-    本机传统合法非默认，≠离线)；
+    桌面默认同通道（本地对话 / 打开本机文件夹），≠离线；云端对话并列可选)；
     ``export_to_local`` (云端已有 delivered_files → 导出到本机文件夹后即可 npm install / 本地运行；
     与 bind_local_folder 可并存但语义不同);
     ``website_verify`` (legacy tape only — runtime 已停发整页 QA 续派按钮);

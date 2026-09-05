@@ -3,6 +3,7 @@ import {
   SettingsSection,
   SettingsStack,
 } from "@/components/settings";
+import { PageHeader } from "@/components/ui";
 import { Switch } from "@/components/ui/Switch";
 import { hasLocalEngine } from "@/lib/capabilities";
 import { type Theme, resolveDark } from "@/lib/theme";
@@ -10,7 +11,6 @@ import { cn } from "@/lib/utils";
 import { clearSidecarHealth } from "@/services/sidecarHealth";
 import { useUIStore } from "@/stores/ui";
 import { type LucideIcon, Monitor, Moon, Sun } from "lucide-react";
-import { SettingsHeader } from "./SettingsHeader";
 
 interface ThemeOption {
   value: Theme;
@@ -57,10 +57,7 @@ export function GeneralSettings() {
 
   return (
     <div>
-      <SettingsHeader
-        title="通用"
-        description={showAdvanced ? "界面主题与进阶开关。" : "界面主题。"}
-      />
+      <PageHeader title="通用" />
 
       <SettingsStack>
         <SettingsSection

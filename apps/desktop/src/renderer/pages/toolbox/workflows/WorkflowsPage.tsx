@@ -1,9 +1,8 @@
 import { PageContainer } from "@/components/layout/PageContainer";
-import { ToolboxPageHeader } from "@/components/toolbox/ToolboxPageHeader";
-import { Button, Card, EmptyHint } from "@/components/ui";
+import { Button, Card, EmptyHint, PageHeader } from "@/components/ui";
 import { notifyError } from "@/lib/toast";
 import { scheduleFromWorkflowPath } from "@/pages/toolbox/automations/scheduleFromWorkflow";
-import { APP_PATHS } from "@/pages/toolbox/manual/paths";
+import { APP_PATHS, TOOLBOX_PAGE_BACK } from "@/pages/toolbox/manual/paths";
 import { ApiError } from "@/services/api";
 import { emptyWorkflowDefinition } from "@/services/workflowDefinition";
 import {
@@ -127,8 +126,10 @@ export function WorkflowsPage() {
 
   return (
     <PageContainer width="canvas">
-      <ToolboxPageHeader
-        actions={
+      <PageHeader
+        title="工作流"
+        back={TOOLBOX_PAGE_BACK}
+        action={
           <Button
             size="md"
             disabled={creating}
@@ -145,10 +146,6 @@ export function WorkflowsPage() {
           </Button>
         }
       />
-
-      <p className="max-w-2xl text-xs text-muted-foreground">
-        可保存的团队拆法：画布定义队员步骤与等人关卡，开跑时强制按图执行。
-      </p>
 
       {showOfficial && (
         <section className="mt-6 space-y-3">

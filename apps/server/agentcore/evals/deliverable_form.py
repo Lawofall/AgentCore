@@ -24,7 +24,8 @@ from dataclasses import dataclass, field
 
 from agentcore.evals.types import EvalConfigError
 from agentcore.llm.provider.protocol import LLMMessage, LLMProvider, LLMRequest
-from agentcore.runtime.runs.executor.identities import build_worker_identity
+from agentcore.runtime.runs.contract import describe_deliverable
+from agentcore.runtime.runs.types import Deliverable
 from agentcore.runtime.skills import build_system_skill_registry
 from agentcore.tools.builtin.delegate.schema import (
     DELEGATE_DESCRIPTION,
@@ -192,13 +193,13 @@ def check_form_call(
 
 
 def check_prompt_contract() -> list[str]:
-    """零 LLM：生产提示 / schema / 身份注入含 form 分流契约。"""
+    """零 LLM：生产提示 / schema / 交付物规格含 form 分流契约。"""
     gaps: list[str] = []
-    # Form routing lives in team_orchestration_advanced skill (not CEO core).
+    # Form routing lives in delegate schema; skill only keeps the review exception.
     orch = build_system_skill_registry().get("team_orchestration_advanced")
     orch_body = orch.body if orch is not None else ""
-    if "form 三档" not in orch_body and "form=files" not in orch_body:
-        gaps.append("team_orchestration_missing_form_pointer")
+    if "form=prose" not in orch_body:
+        gaps.append("team_orchestration_missing_review_form_exception")
     # workspace / prose 档权威在 schema「【看】/【改工程】」；
     # 做软件专段已撤，skill 不再点名 form=workspace。
     if "自动静态质检" in orch_body or "可开 web_quality_scan" in orch_body:
@@ -235,18 +236,18 @@ def check_prompt_contract() -> list[str]:
         gaps.append("delegate_param_missing_form_hint")
     if "【存文档】" not in form_hint and "【改工程】" not in form_hint:
         gaps.append("delegate_param_missing_three_tier")
-    prose = build_worker_identity(has_dependents=False, form="prose")
-    files = build_worker_identity(has_dependents=False, form="files")
-    omitted = build_worker_identity(has_dependents=False)
-    workspace = build_worker_identity(has_dependents=False, form="workspace")
+    prose = describe_deliverable(Deliverable(form="prose"))
+    files = describe_deliverable(Deliverable(form="files"))
+    omitted = describe_deliverable(Deliverable())
+    workspace = describe_deliverable(Deliverable(form="workspace"))
     if "file_write" in prose:
-        gaps.append("prose_identity_still_mentions_file_write")
-    if "file_write" not in files:
-        gaps.append("files_identity_missing_file_write")
+        gaps.append("prose_spec_still_mentions_file_write")
+    if "成品写入工作区" not in files:
+        gaps.append("files_spec_missing_landing_contract")
     if "form=files" not in omitted or "可独立阅读的文字" in omitted:
-        gaps.append("omit_identity_not_files")
+        gaps.append("omit_spec_not_files")
     if "form=workspace" not in workspace or "AgentCore/文档" not in workspace:
-        gaps.append("workspace_identity_missing_in_place_copy")
+        gaps.append("workspace_spec_missing_in_place_copy")
     return gaps
 
 

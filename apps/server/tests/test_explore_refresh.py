@@ -222,6 +222,46 @@ async def test_refresh_skips_when_folder_profile_empty(tmp_path, monkeypatch):
     assert meta.explore_fingerprint == "fp-old"
 
 
+@pytest.mark.asyncio
+async def test_refresh_blank_current_notes_replaces_old_profile(tmp_path, monkeypatch):
+    """Rebind refresh must not section-merge old-bind 画像."""
+    from agentcore.memory.episode_store import InMemoryEpisodeStore
+
+    store = FileMemoryStore(tmp_path)
+    ep_store = InMemoryEpisodeStore()
+    monkeypatch.setattr(
+        "agentcore.memory.episode_store.default_episode_store", lambda: ep_store
+    )
+    uid = str(uuid4())
+    folder = str(uuid4())
+    await store.save(
+        uid,
+        CORE_MEMORY_FILE,
+        "## 技术栈与工具\n- OldStack\n\n## 项目约束\n- 旧仓约束\n",
+        scope=folder,
+    )
+    provider = _FakeProvider(
+        content='{"profile":"## 技术栈与工具\\n- NewStack\\n","navigation":null,"topics":[]}'
+    )
+    ok = await refresh_folder_explore_from_snapshot(
+        user_id=uid,
+        folder_id=folder,
+        workspace_key=f"folder:{folder}",
+        snapshot="# Top-level\n- [file] a",
+        live_fingerprint="fp-new",
+        provider=provider,  # type: ignore[arg-type]
+        model="fake",
+        store=store,
+        blank_current_notes=True,
+    )
+    assert ok is True
+    assert provider.calls == 1
+    written = await store.load(uid, CORE_MEMORY_FILE, scope=folder)
+    assert "NewStack" in written
+    assert "旧仓约束" not in written
+    assert "OldStack" not in written
+
+
 def test_stage_dirs_hold_products_only():
     """步 3：``文档/`` 退化成纯产物目录——厚约定文档已是 documents 条目。"""
     from agentcore.memory.explore_refresh import _REFRESH_SYSTEM

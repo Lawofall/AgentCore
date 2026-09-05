@@ -1,10 +1,12 @@
 /**
- * Composer「在哪工作」通道记忆（§七 · 双通道观察期）。
+ * Composer「在哪工作」通道记忆。
  *
- * `cloud` = 云协作（推荐默认）；`local_traditional` = 本机传统（打开本地文件夹）。
- * 仅桌面 UI 持久化（uiStorage）；新用户 / 无记忆 → 云；本机用户不被每次推回云。
+ * `local_traditional` = 本机（桌面默认：本地对话用本地引擎）；
+ * `cloud` = 云端对话（并列；网页/手机无本机盘时的唯一通道）。
+ * 仅桌面 UI 持久化（uiStorage）；有记忆跟上次；无记忆桌面 → 本机，其它 → 云。
  */
 
+import { hasLocalFiles } from "@/lib/capabilities";
 import { uiGet, uiSet } from "@/lib/uiStorage";
 
 const STORAGE_KEY = "composer-channel";
@@ -16,9 +18,17 @@ function parseChannel(raw: unknown): ComposerChannel | null {
   return null;
 }
 
-/** 读上次通道；无记忆或非法值 → `cloud`。 */
+function unsetDefault(): ComposerChannel {
+  return hasLocalFiles() ? "local_traditional" : "cloud";
+}
+
+export function storedComposerChannelPreference(): ComposerChannel | null {
+  return parseChannel(uiGet<unknown>(STORAGE_KEY));
+}
+
+/** 读上次通道；无记忆或非法值 → 桌面本机 / 其它云。 */
 export function getComposerChannelPreference(): ComposerChannel {
-  return parseChannel(uiGet<unknown>(STORAGE_KEY)) ?? "cloud";
+  return storedComposerChannelPreference() ?? unsetDefault();
 }
 
 /** 记上次通道（cloud | local_traditional）。 */

@@ -127,7 +127,7 @@ const run: RunNode = {
     {
       kind: "tool",
       id: "tc2",
-      tool_name: "read_url",
+      tool_name: "web_fetch",
       arguments: { url: "https://example.com" },
       result: "正文…",
       status: "success",

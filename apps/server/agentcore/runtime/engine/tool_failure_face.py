@@ -214,11 +214,11 @@ _CURATED_BY_CODE: dict[str, str] = {
         "这个地址指向你自己电脑上的服务，我这边访问不到，这一步没有执行。"
         "我会改用浏览器或终端来查看。"
     ),
-    # Path / file:// / drive letter fed to read_url — tool is fine; switch to file_read.
+    # Path / file:// / drive letter fed to web_fetch — tool is fine; switch to file_read.
     "not_a_web_url": (
         "这个不是公开网页地址，没法用读网页打开。我会改用读文件继续。"
     ),
-    # http(s) URL fed to file_read — switch to read_url; do not treat as a workspace path.
+    # http(s) URL fed to file_read — switch to web_fetch; do not treat as a workspace path.
     "url_not_workspace_path": (
         "这是网页地址，不是工作区里的文件。我会改用读网页继续。"
     ),
@@ -261,7 +261,7 @@ _CURATED_BY_CODE: dict[str, str] = {
         "这个链接是个没见过的域名，还带着一长串可疑参数，出于安全没有去访问。我会换个可靠来源继续。"
     ),
     # Deep reading is off for the rest of the task after repeated failures.
-    "read_url_retired": (
+    "web_fetch_retired": (
         "这次任务里网页深读连续失败太多，已经不再继续尝试了。我会基于已有材料继续。"
     ),
     # --- Git / 开 PR ---

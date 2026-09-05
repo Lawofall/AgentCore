@@ -257,7 +257,7 @@ def test_validation_error_exc_passes_through():
 # the default — a dozen live codes drifted in unnoticed that way, because the per-code tests
 # above only spell out a handful. These scan the producing sources instead of a hand list,
 # and follow the code through each tool's own ToolResult helper (a literal-only scan saw
-# none of read_url's, since every one of them arrives as ``_failed(code=…)``).
+# none of web_fetch's, since every one of them arrives as ``_failed(code=…)``).
 
 # Source trees that build the user failure face: tools author ``metadata["code"]`` /
 # ``failure_code``, the engine deny paths call ``tool_failure_fields(code=...)``, and
@@ -297,7 +297,7 @@ _DETERMINISTIC_CODES = (
     "private_address_blocked",
     "source_dump_redirect",
     "source_grep_redirect",
-    "read_url_retired",
+    "web_fetch_retired",
     "repo_unusable",
     "sandbox_network_unsupported",
     "session_bound_elsewhere",
@@ -336,7 +336,7 @@ _MODEL_IMPERATIVES = ("禁止", "不得", "不要原样重试", "请改用其他
 # Chinese steer out when a classifier returns ``(steer, code)`` pairs.
 _CODE_SHAPED = re.compile(r"^[a-z][a-z0-9_]{2,48}$")
 # Tools do not hand the engine a code directly: each file wraps ToolResult in its own
-# helper (``read_url._failed``, ``terminal._error``, ``file_ops._error``) and passes the
+# helper (``web_fetch._failed``, ``terminal._error``, ``file_ops._error``) and passes the
 # code as a keyword. The helper is therefore found by shape, never by a hardcoded name.
 _SINK_PARAM_NAMES = ("code", "failure_code")
 
@@ -760,7 +760,7 @@ def test_every_produced_failure_code_has_curated_copy():
         "verify_policy_inner": "ToolResult(metadata=…) 里的字面量",
         "allowlist_deny": "引擎 tool_failure_fields(code=…)",
         "workspace_channel_dead": "*_metadata() 辅助函数返回的整块 metadata",
-        "read_url_retired": "工具内 metadata 字面量",
+        "web_fetch_retired": "工具内 metadata 字面量",
         "local_workspace_required": "工具内部辅助函数 + 模块常量",
         "cloud_desk_required": "工具内部辅助函数 + 模块常量",
         "process_not_registered": "工具内部辅助函数 + 模块常量",

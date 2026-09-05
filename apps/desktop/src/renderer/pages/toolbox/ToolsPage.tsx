@@ -1,4 +1,5 @@
 import { CapabilityPage } from "@/components/tools/CapabilityPage";
+import { McpToolsSection } from "@/components/tools/McpToolsSection";
 import { ToolCard } from "@/components/tools/ToolCard";
 import { CATEGORY_META, CATEGORY_ORDER } from "@/components/tools/catalogMeta";
 import { CatalogIconShell } from "@/components/ui";
@@ -21,7 +22,7 @@ export function ToolsPage() {
   );
 
   return (
-    <CapabilityPage note="Agent 可调用的动作工具。「全员」CEO 与队员都可用，「CEO」仅协调者持有，「队员」交付时才动用。">
+    <CapabilityPage title="工具">
       {(data) => {
         const grouped = CATEGORY_ORDER.map((category) => ({
           category,
@@ -62,6 +63,7 @@ export function ToolsPage() {
                 </div>
               );
             })}
+            <McpToolsSection />
           </div>
         );
       }}

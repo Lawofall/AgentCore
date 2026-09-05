@@ -10,13 +10,13 @@ concurrency gate / per-host breaker — so duplicates make the WHOLE team more l
 to trip search-blind. This memoises a query's results per conversation so a repeat
 returns instantly from memory within a freshness TTL.
 
-Deliberately mirrors the ``read_url`` :class:`ConversationUrlCache` (``url_cache``):
+Deliberately mirrors the ``web_fetch`` :class:`ConversationUrlCache` (``url_cache``):
 same conversation scope, bounded the same three ways (entry TTL + per-conversation
 count / byte caps + idle-conversation reaping), same single-worker in-process
 posture (front with Redis to scale out; a miss just re-searches). It is kept a
-SEPARATE module rather than generalising the URL cache so the proven read_url path
+SEPARATE module rather than generalising the URL cache so the proven web_fetch path
 stays untouched and the two evolve independently — search keys on the normalised
-query + result-count budget, read_url on the URL + char budget. (A generic
+query + result-count budget, web_fetch on the URL + char budget. (A generic
 ``ConversationScopedCache`` base extracted from both is a possible later refactor.)
 
 Pure latency/resilience optimisation, never a correctness dependency: only
@@ -38,7 +38,7 @@ from agentcore.tools.builtin.web.search_backend import SearchResult
 logger = get_logger(__name__)
 
 # A search result set stays fresh this long within a conversation. Slightly shorter
-# than read_url's 15 min: search rankings / news move a bit faster than a fetched
+# than web_fetch's 15 min: search rankings / news move a bit faster than a fetched
 # page's body, but the common "the team re-runs this query a few rounds later" path
 # still hits.
 SEARCH_CACHE_TTL_SECONDS = 10 * 60.0
@@ -95,7 +95,7 @@ class SearchCacheEntry:
 
     ``max_results`` records the cap that produced ``results`` so a later call asking
     for MORE than we captured (when the backend was capped) correctly misses and
-    re-searches — the search analogue of the read_url cache's ``truncated`` flag.
+    re-searches — the search analogue of the web_fetch cache's ``truncated`` flag.
     """
 
     query: str
@@ -243,7 +243,7 @@ class SearchCacheRegistry:
     A conversation's search cache survives across turns so a later turn's re-query
     hits. Bounded by a conversation **count** cap (LRU-evict) and an idle **TTL** (a
     conversation untouched within the window is dropped). Same single-worker in-
-    process posture as the read_url cache / roster / approvals (front with Redis to
+    process posture as the web_fetch cache / roster / approvals (front with Redis to
     scale out).
     """
 

@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import type { HTMLAttributes, ReactNode } from "react";
 
 /**
- * Vertical rhythm for a settings subpage body: the gap below `SettingsHeader`
+ * Vertical rhythm for a settings subpage body: the gap below `PageHeader`
  * plus one uniform gap between sections. Wrap the sections of a subpage in this
  * instead of hand-tuning `mt-6 space-y-*` per page.
  */

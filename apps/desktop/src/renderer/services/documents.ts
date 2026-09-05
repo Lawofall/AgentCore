@@ -317,6 +317,7 @@ export function createRuleDocument(
   name: string,
   folderId: string | null = null,
   content = "",
+  applyMode: DocumentApplyMode = "always",
 ): Promise<DocumentDetail> {
   return api
     .post<DocumentDetailWire>("/v1/documents", {
@@ -326,7 +327,7 @@ export function createRuleDocument(
       content,
       parent_id: null,
       folder_id: folderId,
-      apply_mode: "always",
+      apply_mode: applyMode,
     })
     .then(toDetail)
     .then((doc) => {

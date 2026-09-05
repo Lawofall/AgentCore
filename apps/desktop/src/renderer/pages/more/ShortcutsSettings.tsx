@@ -3,7 +3,7 @@ import {
   SettingsSection,
   SettingsStack,
 } from "@/components/settings";
-import { Card } from "@/components/ui";
+import { Card, PageHeader } from "@/components/ui";
 import {
   COMMAND_CATEGORY_ORDER,
   type PaletteCommand,
@@ -14,7 +14,6 @@ import { useSidebarStore } from "@/stores/sidebar";
 import { useUIStore } from "@/stores/ui";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { SettingsHeader } from "./SettingsHeader";
 
 /**
  * 快捷键设置（/more/shortcuts）— 快捷键与命令参考。
@@ -45,16 +44,7 @@ export function ShortcutsSettings() {
 
   return (
     <div>
-      <SettingsHeader
-        title="快捷键"
-        description={
-          <>
-            全局快捷键随处可用；命令面板（
-            {shortcutChords(GLOBAL_SHORTCUTS[0])[0]}
-            ）里可搜索并运行下列所有命令。
-          </>
-        }
-      />
+      <PageHeader title="快捷键" />
 
       <SettingsStack>
         <SettingsSection title="全局快捷键" titleSize="base">

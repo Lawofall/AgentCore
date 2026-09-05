@@ -30,19 +30,9 @@ export function PackOverview({
           <ul className="flex flex-col gap-0.5">
             {pack.skills.map((skill) => {
               const rowClass = cn(
-                "flex w-full flex-col rounded-lg px-2 py-1.5 text-left",
+                "w-full rounded-lg px-2 py-1.5 text-left text-foreground text-sm",
                 onSelectSkill &&
                   "transition-colors hover:bg-accent hover:text-accent-foreground",
-              );
-              const body = (
-                <>
-                  <span className="text-foreground text-sm">
-                    {skill.summary}
-                  </span>
-                  <span className="font-mono text-muted-foreground text-xs">
-                    {skill.name}
-                  </span>
-                </>
               );
               return (
                 <li key={skill.name}>
@@ -52,10 +42,10 @@ export function PackOverview({
                       className={rowClass}
                       onClick={() => onSelectSkill(skill.name)}
                     >
-                      {body}
+                      {skill.summary}
                     </button>
                   ) : (
-                    <div className={rowClass}>{body}</div>
+                    <div className={rowClass}>{skill.summary}</div>
                   )}
                 </li>
               );

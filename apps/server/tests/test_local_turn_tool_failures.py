@@ -292,7 +292,7 @@ def test_tool_failures_from_journal_prefers_tool_call_facts():
         },
         {
             "kind": "tool_call",
-            "payload": {"name": "read_url", "success": True, "result": "ok"},
+            "payload": {"name": "web_fetch", "success": True, "result": "ok"},
         },
     ]
     failures = tool_failures_from_journal(entries)
@@ -492,7 +492,7 @@ async def test_record_local_turn_logs_tool_failures(monkeypatch):
         trace_id=_TRACE,
         tool_failures=[
             {"tool": "web_search", "code": "searxng_unreachable", "message": "down"},
-            {"tool": "read_url", "code": "other", "message": "HTTP 403 from example.com"},
+            {"tool": "web_fetch", "code": "other", "message": "HTTP 403 from example.com"},
             {
                 "tool": "file_read",
                 "code": "other",
@@ -509,7 +509,7 @@ async def test_record_local_turn_logs_tool_failures(monkeypatch):
                 "message_id": "m1",
                 "count": 3,
                 "codes": ["searxng_unreachable", "other", "other"],
-                "tools": ["web_search", "read_url", "file_read"],
+                "tools": ["web_search", "web_fetch", "file_read"],
                 "messages": [
                     "down",
                     "HTTP 403 from example.com",
@@ -553,7 +553,7 @@ async def test_record_local_turn_caps_logged_failure_messages(monkeypatch):
         user_message_id="u1",
         message_id="m1",
         trace_id=_TRACE,
-        tool_failures=[{"tool": "read_url", "code": "other", "message": "x" * 250}],
+        tool_failures=[{"tool": "web_fetch", "code": "other", "message": "x" * 250}],
     )
 
     assert logged[0][1]["messages"] == ["x" * 200]

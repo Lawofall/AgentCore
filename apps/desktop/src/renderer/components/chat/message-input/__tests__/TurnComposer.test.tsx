@@ -548,7 +548,7 @@ describe("TurnComposer variants", () => {
     const menu = screen.getByTestId("composer-plus-menu");
     fireEvent.click(screen.getByLabelText("在哪工作"));
     expect(menu.getAttribute("data-plus-panel")).toBe("workspace");
-    expect(within(menu).getByRole("button", { name: "快速对话" })).toBeTruthy();
+    expect(within(menu).getByRole("button", { name: "云端对话" })).toBeTruthy();
     expect(within(menu).getByRole("button", { name: "返回" })).toBeTruthy();
   });
 

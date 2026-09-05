@@ -1,7 +1,7 @@
 """场级证据台账（evidence_ledger）——辩论薄封装，核心委托平台共享核。
 
 与 :mod:`match_ledger`（对局状态事件）分工不同：本模块登记的是「本场被真正消费的来源」
-（``read_url`` 深读页 + 笔记实际引用的 search 命中 + 底料预登记），成稿
+（``web_fetch`` 深读页 + 笔记实际引用的 search 命中 + 底料预登记），成稿
 ``【已核实·#eN】`` 的机械闸基准是**本方笔记引用集**（结辩 = 本方历轮已引用并集）。
 
 规则（提案 O1 / O4 / 咬合点；共享核见 :mod:`agentcore.runtime.evidence_ledger`）：
@@ -211,7 +211,7 @@ class EvidenceLedger:
         return [self.register_citation(c, side_key=side_key) for c in citations]
 
     def commit_research(self, *, note_cited_ids: Collection[str]) -> frozenset[str]:
-        """检索结束后提交消费子集：``read_url``（deep_read）+ 笔记引用的 search 命中。
+        """检索结束后提交消费子集：``web_fetch``（deep_read）+ 笔记引用的 search 命中。
 
         返回本轮新提交的 id 集。未消费的 search 噪声留在核内供去重，不上 wire。
         """

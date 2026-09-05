@@ -34,13 +34,13 @@ def load_roster() -> tuple[type, ...]:
     from agentcore.tools.builtin.md_to_pdf import MdToPdfTool
     from agentcore.tools.builtin.run import RunTool
     from agentcore.tools.builtin.web.download_url import DownloadUrlTool
-    from agentcore.tools.builtin.web.read_url import ReadUrlTool
     from agentcore.tools.builtin.web.search import WebSearchTool
+    from agentcore.tools.builtin.web.web_fetch import WebFetchTool
 
     return (
         # platform base
         WebSearchTool,
-        ReadUrlTool,
+        WebFetchTool,
         FileReadTool,
         FileWriteTool,
         FileAppendTool,

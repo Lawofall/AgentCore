@@ -5,18 +5,17 @@ from agentcore.runtime.events import EventSink
 from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.executor import build_agent_executor
 from agentcore.runtime.runs.executor.retry import (
-    ROUND_BUDGET_AWARENESS_PREFIX,
     _pass_max_rounds,
     bind_round_budget_on_begin,
-    drop_round_budget_awareness,
-    format_round_budget_awareness,
-    sync_round_budget_awareness,
 )
 from agentcore.runtime.runs.types import RunPhase
 from agentcore.runtime.runs.wave import WaveScheduler
 from agentcore.tools.builtin.handoff import HandoffTool
 from agentcore.tools.registry import ToolRegistry
 from tests.runs_executor.conftest import _ctx, _FileWriteTool, _ScriptedRounds
+
+# Retired sermon prefix — absence probes only; production no longer injects it.
+ROUND_BUDGET_AWARENESS_PREFIX = "[系统提示] 本段上限"
 
 
 def test_light_pass_rounds_are_dedicated():
@@ -51,44 +50,12 @@ def test_max_rounds_input_keeps_explicit_stamp():
     assert plan_low.nodes[0].max_rounds is None
 
 
-def test_round_budget_awareness_is_cap_only():
-    text = format_round_budget_awareness(limit=56)
-    assert text.startswith(ROUND_BUDGET_AWARENESS_PREFIX)
-    assert "本段上限 56 轮" in text
-    assert "已用" not in text
-    assert "剩余" not in text
-    # No completion / quality / write-the-report steer.
-    assert "报告" not in text
-    assert "handoff" not in text
-    assert "请" not in text
+def test_round_budget_awareness_helpers_removed():
+    from agentcore.runtime.runs.executor import retry as retry_mod
 
-
-def test_sync_round_budget_awareness_replaces_stale_copy():
-    messages = [
-        LLMMessage(role="system", content="sys"),
-        LLMMessage(role="user", content="task"),
-    ]
-    first = sync_round_budget_awareness(messages, limit=8)
-    assert first is not None
-    assert sum(1 for m in messages if m.content.startswith(ROUND_BUDGET_AWARENESS_PREFIX)) == 1
-    second = sync_round_budget_awareness(messages, limit=4)
-    assert "本段上限 4 轮" in (second or "")
-    assert "本段上限 8 轮" not in (second or "")
-    facts = [m for m in messages if _is_fact(m)]
-    assert len(facts) == 1
-    assert facts[0].content == second
-    messages.append(LLMMessage(role="user", content="请补全缺失章节：结论"))
-    parked = sync_round_budget_awareness(
-        messages, limit=4, before_last_user=True
-    )
-    assert parked is not None
-    assert messages[-1].content == "请补全缺失章节：结论"
-    assert _is_fact(messages[-2])
-    assert "本段上限 4 轮" in (messages[-2].content or "")
-    assert drop_round_budget_awareness(messages) is True
-    assert not any(_is_fact(m) for m in messages)
-    assert messages[-1].content == "请补全缺失章节：结论"
-    assert sync_round_budget_awareness(messages, limit=0) is None
+    assert not hasattr(retry_mod, "format_round_budget_awareness")
+    assert not hasattr(retry_mod, "sync_round_budget_awareness")
+    assert not hasattr(retry_mod, "ROUND_BUDGET_AWARENESS_PREFIX")
 
 
 def test_bind_round_budget_on_begin_increments():

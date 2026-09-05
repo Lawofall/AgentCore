@@ -215,11 +215,8 @@ async def test_single_ordered_log_interleaves_display_and_execution_facts():
 
 
 async def test_loop_records_note_fact_on_nudge():
-    # Three identical tool calls trip the stuck-loop detector → a fact-anchored NUDGE
-    # injected into the window; the 4th round answers. The injected nudge is part of
-    # the real LLM window, so it is recorded as a note(reason="nudge") fact. A
-    # non-investigation tool (EXECUTION, not a read) keeps the over-investigation ladder
-    # dormant so this isolates the stuck-nudge → fact plumbing.
+    # Three identical tool calls trip the stuck-loop detector → NUDGE logs only
+    # (no [系统提示] in the window). The 4th round answers.
     same = _tool_chunk("compute", '{"q": "x"}')
     provider = _ScriptedProvider([[same], [same], [same], [_content_chunk("final")]])
     facts, content, messages = await _run(
@@ -228,14 +225,11 @@ async def test_loop_records_note_fact_on_nudge():
 
     assert content == "final"
     notes = [f for f in facts if f["kind"] == FactKind.NOTE]
-    assert len(notes) == 1
-    assert notes[0]["payload"]["reason"] == "nudge"
-    assert notes[0]["payload"]["role"] == "user"
-    # The note's content is the exact reflection injected into the transcript.
-    injected = [
-        m for m in messages if m.role == "user" and m.content == notes[0]["payload"]["content"]
-    ]
-    assert len(injected) == 1
+    assert notes == []
+    assert not any(
+        m.role == "user" and m.content and "[系统提示]" in m.content
+        for m in messages
+    )
 
 
 def test_journal_entries_for_turn_gates_on_plain_sink():

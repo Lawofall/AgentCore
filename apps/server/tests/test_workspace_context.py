@@ -4,9 +4,9 @@
 执行、桌、系统、Git、客户端、缺口（只报未装配）、非空挂载、非空约定文档出口。
 空状态不写。沙箱探测失败另起一行。禁止按能力复写成「装包事实 / 执行事实」散文。
 「该怎么做 / 禁止什么 / 怎么装上」的 HOW：
-按需面归 consult；本机进桌 / 通道复检归 ``team_delivery_env``；空桌 when-to-use 归
+按需面归 consult；本机进桌 / 通道归 ``team_local_desk``；空桌 when-to-use 归
 ``mkdir`` description；产物出口 UI 归 ``product_help``；
-跨文件夹百科归 ``team_cross_folder``；git 无仓政策归 git 工具描述；其余归共享基座。
+跨文件夹对照句归 ``team_cross_folder``；git 无仓政策归 git 工具描述；其余归共享基座。
 因此这里的用例成对写：事实留在 ``out``，HOW 断言指向 consult / skill / 基座/核。
 """
 
@@ -29,6 +29,7 @@ from agentcore.runtime.resolve.prompt import (
 from agentcore.runtime.skills import (
     _TEAM_CROSS_FOLDER,
     _TEAM_DELIVERY_ENV,
+    _TEAM_LOCAL_DESK,
     build_system_skill_registry,
 )
 from agentcore.tools.builtin import build_ceo_tool_registry
@@ -54,7 +55,7 @@ def _assert_no_capability_restatements(ctx: str) -> None:
 
 
 def _desk_how() -> str:
-    skill = build_system_skill_registry().get("team_delivery_env")
+    skill = build_system_skill_registry().get("team_local_desk")
     assert skill is not None
     return skill.body
 
@@ -211,7 +212,7 @@ def test_cloud_scratch_facts():
     # Host 面细则归 consult(host)；事实层不列短命令百科。
     assert "短命令" not in out
     assert "音响/系统信息" not in out
-    # 本机进桌 / 本机传统 HOW 在 team_delivery_env，事实层不写意图分流
+    # 本机进桌 / 本机传统 HOW 在 team_local_desk，事实层不写意图分流
     assert "bind_local_folder" not in out
     assert "open_local_project" not in out
     assert "register_local_project" not in out
@@ -222,7 +223,9 @@ def test_cloud_scratch_facts():
     assert "导入到云" in mid
     assert "从 Git 克隆" in mid
     assert "连接 Git" not in mid
-    assert "合法非默认" in mid or "非默认" in mid
+    assert "合法非默认" not in mid
+    assert "桌面默认本地对话" in mid
+    assert "勿把云沙箱当桌面默认新建" in mid
     assert "本机传统" in mid
     assert "改导" not in out  # skill/context 不得写 Ask 改导导入
     # 跨文件夹：事实层只留「默认坐哪张桌」；整条 HOW 归 team_cross_folder（核不常驻钩）
@@ -241,23 +244,19 @@ def test_cloud_scratch_facts():
     assert "【空桌落盘】" not in hint
     assert "【空桌勿套工程壳】" not in delivery
     assert "工程壳" not in delivery
-    assert "create_folder" in delivery and "桌内工程根" in delivery
+    assert "create_folder" not in delivery
+    assert "create_folder" in _TEAM_LOCAL_DESK and "桌内工程根" in _TEAM_LOCAL_DESK
     assert "要不要再套一层" not in delivery
     cross = _TEAM_CROSS_FOLDER
-    assert "list_folders" in cross and "resolve_folder" in cross
-    assert "按路径" in cross and "rel_path" in cross
-    assert "自动建云文件夹" in cross
-    assert "禁猜最近" in cross
-    assert "scratch" in cross
-    assert "协作图不改" in cross or "并行支线" in cross
-    assert "先建后派" in cross
+    assert "target_folder_id" in cross
+    assert "认桌" in cross and "摸底" in cross
+    assert "consult(team_local_desk)" in cross
     assert "拒后禁塌缩" not in cross
+    assert "文件：空" not in cross
+    assert "先建后派" not in cross
     assert "list_folder_dir" in cross and "read_folder_file" in cross
-    assert "认桌" in cross or "抽样" in cross
-    assert "云端读不到本地" in cross
-    assert "file_list" in cross
-    assert "开发双仓" in cross
-    # 区外授权：事实层只报可授权；工具名与姿势归 consult / team_delivery_env
+    assert "云端草稿" in cross and "读不到" in cross
+    # 区外授权：事实层只报可授权；工具名与姿势归 consult / team_local_desk
     assert "external_mount_readonly" not in out
     assert "grant_organize_folder" not in out
     assert "grant_attach_folder" not in out
@@ -296,7 +295,8 @@ def test_cloud_scratch_facts():
     assert "不可改绑" not in out
     assert "严禁引导" not in out
     assert "本机草稿" not in out
-    assert "勿推销本机草稿" in mid
+    assert "勿把云沙箱当桌面默认新建" in mid
+    assert "勿推销本机草稿" not in mid
     assert "本会话发绑定卡" not in out  # 旧口径：已改为意图分流
     assert "run" in _gaps(out)
     assert "package_install" in _gaps(out)
@@ -344,7 +344,7 @@ def test_cloud_scratch_facts():
     # 出图对照事实行；Key 不落明文归共享基座
     assert "代调" not in out
     assert "API Key" not in out and "明文" not in out
-    assert "出站网络" in hint
+    assert "出站网络" not in hint
     # 旧「云端临时空间」短标签已换成诚实草稿口径
     assert "工作区身份：云端临时空间" not in out
     # 约定文档布局 HOW 在 team_delivery_env；空抽屉不写进事实层
@@ -426,7 +426,8 @@ def test_cloud_folder_desk_identity_is_not_scratch():
     assert "【空桌落盘】" not in hint
     assert "【空桌勿套工程壳】" not in delivery
     assert "工程壳" not in delivery
-    assert "create_folder" in delivery and "桌内工程根" in delivery
+    assert "create_folder" not in delivery
+    assert "create_folder" in _TEAM_LOCAL_DESK and "桌内工程根" in _TEAM_LOCAL_DESK
 
 
 def test_cloud_conv_root_stays_scratch_identity():
@@ -502,7 +503,7 @@ def test_local_remote_channel_facts():
     assert "browser" in _gaps(out)
     assert "local_open" not in _gaps(out)
     assert "产物出口" not in out
-    # 本机传统工程：通道在线是事实；跑当前 / 勿再弹 open 归 team_delivery_env
+    # 本机传统工程：通道在线是事实；跑当前 / 勿再弹 open 归 team_local_desk
     assert "客户端：桌面已连接" in out
     assert "open_local_project" not in out
     assert "跑**当前**" not in out
@@ -532,7 +533,7 @@ def test_browser_capability_override():
     url_desc = BrowserTool().schema.parameters["properties"]["url"]["description"]
     assert "相对" in url_desc or "site/index.html" in url_desc
     assert "完整预览" in url_desc or "http(s)" in url_desc
-    # HOW 归 consult（登录接管 / 禁编造工具名 / 禁 read_url 冒充 / 意图梯度），事实层不复述
+    # HOW 归 consult（登录接管 / 禁编造工具名 / 禁 web_fetch 冒充 / 意图梯度），事实层不复述
     assert "ask_user(browser_login=true)" not in out
     assert "browser_open" not in out
     hint = _CEO_CORE_HINT
@@ -542,7 +543,7 @@ def test_browser_capability_override():
     assert "ask_user(browser_login=true)" in how
     assert "escalate(browser_login=true)" not in how
     assert "自己" in how
-    assert "read_url" in how and "已开页" in how
+    assert "web_fetch" in how and "已开页" in how
     assert "跑起来" in how
 
 
@@ -602,7 +603,7 @@ def test_browser_unassembled_guide_mentions_bind_or_gvisor():
     assert "browser" in _gaps(out)
     _assert_no_capability_restatements(out)
     assert "浏览器宿主：" not in out
-    # 本机传统可教非默认；云协作仍推荐——HOW 在 team_delivery_env，事实层不写装配步骤
+    # 本机传统 HOW 在 team_local_desk；事实层不写装配步骤 / 通道推销
     assert "本机传统" not in out
     assert "装配启用" not in out
     assert "bind_local_folder" not in out
@@ -729,26 +730,26 @@ def test_mobile_session_omits_bind_nudge():
     assert "本对话尚无会话级区外目录授权" not in out
     assert "本对话已授权区外目录：" not in out  # 无挂载不得声称已授权状态行
     # 案 20260803-cloud-local-root-auth-where A：自称桌面须复检通道；禁「就好办了」/臆造路径
-    # ——HOW 在 team_delivery_env，事实层只报通道未接
+    # ——HOW 在 team_local_desk，事实层只报通道未接
     assert "通道复检铁律" not in out
-    assert "口述不得覆盖" not in out
+    assert "口述覆盖" not in out
     assert "就好办了" not in out
     mid = _desk_how()
-    assert "通道复检" in mid
-    assert "口述不得覆盖" in mid
-    assert "就好办了" in mid
+    assert "客户端行" in mid and "缺口" in mid
+    assert "口述覆盖" in mid
+    assert "就好办了" not in mid
     assert "打开【本对话】" not in out and "打开本对话" not in out
     assert "打开【本对话】" in mid
     assert "装配启用" not in out
     assert "状态栏" not in out
     assert "Folders" not in out
     assert "臆造" not in out
-    assert "Folders" in mid
-    assert "臆造" in mid
+    assert "Folders" not in mid
+    assert "设置" in mid and "改模式" in mid
 
 
 def test_channel_offline_self_claim_desktop_recheck_honesty():
-    """案 A：通道未接时 workspace_context 只报通道事实；复检 / 禁臆造入口在 team_delivery_env。"""
+    """案 A：通道未接时 workspace_context 只报通道事实；复检 HOW 在 team_local_desk。"""
     out = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=False,
@@ -758,7 +759,7 @@ def test_channel_offline_self_claim_desktop_recheck_honesty():
     assert "local_open" in _gaps(out)
     assert "通道复检铁律" not in out
     assert "正在用客户端" not in out
-    assert "口述不得覆盖" not in out
+    assert "口述覆盖" not in out
     assert "就好办了" not in out
     assert "桌面就好办" not in out
     assert "①" not in out
@@ -768,17 +769,17 @@ def test_channel_offline_self_claim_desktop_recheck_honesty():
     assert "复述固定步骤" not in out
     assert "只指真源入口名" not in out
     mid = _desk_how()
-    assert "通道复检" in mid
+    assert "客户端行" in mid
     assert "正在用客户端" in mid or "已装桌面" in mid
-    assert "就好办了" in mid
-    assert "Folders" in mid
+    assert "就好办了" not in mid
+    assert "Folders" not in mid
     # 不得在离线分支广告可履约发卡
     assert "立即发卡" not in out
     assert "action=open_local_project" not in out
 
 
 def test_no_mounts_forbids_claiming_grant_confirmed():
-    """未见 external 挂载行时，事实层不写空状态；「禁止声称已确认」在 team_delivery_env。"""
+    """未见 external 挂载行时，事实层不写空状态；「仅当区外：才可声称已授权」在 team_local_desk。"""
     out = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=False,
@@ -788,7 +789,7 @@ def test_no_mounts_forbids_claiming_grant_confirmed():
     assert "本对话已授权区外目录：" not in out
     assert "禁止声称授权已确认" not in out
     mid = _desk_how()
-    assert "禁止" in mid and "授权已确认" in mid
+    assert "区外：" in mid and "授权已确认" in mid
     assert out.count("授权已确认") == 0
 
 
@@ -1065,8 +1066,9 @@ def test_no_exec_opaque_source_stays_out_of_facts():
     assert "表格解析" not in out
     assert "源数据文件下一步" not in out
     assert "稍后重试" not in out
-    assert "源数据文件下一步" in _TEAM_DELIVERY_ENV
-    assert "稍后重试" in _TEAM_DELIVERY_ENV
+    data = build_system_skill_registry().get("data_file_landing").body
+    assert "稍后再试" in data or "稍后重试" in _TEAM_LOCAL_DESK
+    assert "源数据文件下一步" not in _TEAM_DELIVERY_ENV
     assert "export_to_local" in _TEAM_DELIVERY_ENV
 
 

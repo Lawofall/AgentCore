@@ -183,7 +183,12 @@ from agentcore.runtime.resolve.prompt import (
 # 当次实测 1443。cap 降到 1450。
 # 2026-09-04 `<工作区>` 坐标化：诚实改对照开场表+缺口（能力行散文出基座）。
 # 当次实测 1436。cap 降到 1440。
-_RESIDENT_CAP = 1440
+# 2026-09-05 基座三刀：输出合并套话、删格式启发式；邻格补集出核；
+# 权威稿豁免清单出核（交付物即文档收成 ≠）、路径百科出核。当次实测 1324。
+# cap 降到 1330。
+# 2026-09-05 CEO 核删用户可见主张变体表（诚实双条件只在基座）。当次实测 1220。
+# cap 降到 1220。
+_RESIDENT_CAP = 1220
 
 # (门工具, 该手册的签名字面) —— 手册只在门开的回合出现，不许常驻。
 # run 的 HOW 在 skill body（consult(run) 命中 skill），不进 capability_how_suffix。
@@ -226,16 +231,16 @@ def test_core_states_no_tool_assembly_claims():
     # 后缀枚举同理：能产什么由开场表 + 缺口表达，核只教对照结构面。
     for suffix in ("pptx", "xlsx", "docx"):
         assert suffix not in hint.lower(), f"核不枚举 .{suffix}；对照开场表"
-    assert "产物格式" in hint
+    assert "产物格式" not in hint
     assert "产物格式" not in assemble_system_prompt()
 
 
 def test_core_does_not_restate_computed_workspace_facts():
     """已在事实行算出来的事实，核里不留第二份（第三份就是漂移的开始）。"""
     hint = _CEO_CORE_HINT
-    # 「无原生生图工具」已下沉 consult(run)；核只留用户可见面「出站网络」，对照开场表/缺口。
+    # 「无原生生图工具」已下沉 consult(run)；出网/生图声称走基座诚实双条件，核不点名。
     assert "无原生生图工具" not in hint
-    assert "出站网络" in hint
+    assert "出站网络" not in hint
     assert "出站网络" not in assemble_system_prompt()
 
 
@@ -291,7 +296,7 @@ def test_capability_how_has_no_ceo_must_delegate_leftovers():
 
 
 def test_honesty_floors_stay_resident():
-    """诚实底线不跟门走：核留对照结构面元规则；装包/格式细则在 skill，已装配反向在基座。"""
+    """诚实底线不跟门走：对照结构面元规则只在基座；装包/格式细则在 skill。"""
     from agentcore.runtime.skills.team_delivery_env import _TEAM_DELIVERY_ENV
 
     hint = _CEO_CORE_HINT
@@ -300,9 +305,10 @@ def test_honesty_floors_stay_resident():
     assert "未对照则不得声称" in base
     assert "未对照则不得声称" not in hint
     assert "已落盘" not in base
-    assert "已落盘" in hint
+    assert "已落盘" not in hint
     assert "结构自检" in _TEAM_DELIVERY_ENV
     assert "export_to_local" in _TEAM_DELIVERY_ENV
     assert "不可产" in _TEAM_DELIVERY_ENV and "等效替代" in _TEAM_DELIVERY_ENV
     assert "已装配" in base and "通道在" in base
-    assert "邻格" in base
+    assert "邻格" not in base
+    assert "用别的路继续" in base

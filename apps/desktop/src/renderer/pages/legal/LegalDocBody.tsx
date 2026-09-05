@@ -6,7 +6,7 @@ import type { LegalDocId } from "./types";
  * 设置·关于.
  *
  * The title + 更新日期 belong to whoever hosts the body: the settings route puts
- * them in its `SettingsHeader`, the pre-auth pane in its own header. Rendering
+ * them in its `PageHeader`, the pre-auth pane in its own header. Rendering
  * them here too is how `/more/legal/:docId` ended up with two `<h1>`s and the
  * date printed twice.
  */

@@ -1,18 +1,25 @@
+import { hasLocalFiles } from "@/lib/capabilities";
 import {
   getComposerChannelPreference,
   setComposerChannelPreference,
+  storedComposerChannelPreference,
 } from "@/lib/composerChannelPreference";
 import {
   __clearMemoryUiStorageForTests,
   __setUiStorageBackendForTests,
   uiStorageKey,
 } from "@/lib/uiStorage";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/capabilities", () => ({
+  hasLocalFiles: vi.fn(() => false),
+}));
 
 const memory = new Map<string, string>();
 
 describe("composerChannelPreference", () => {
   beforeEach(() => {
+    vi.mocked(hasLocalFiles).mockReturnValue(false);
     memory.clear();
     __setUiStorageBackendForTests({
       getItem: (key) => memory.get(key) ?? null,
@@ -31,8 +38,15 @@ describe("composerChannelPreference", () => {
     __clearMemoryUiStorageForTests();
   });
 
-  it("defaults to cloud when unset", () => {
+  it("defaults to cloud when unset and there is no local disk", () => {
+    expect(storedComposerChannelPreference()).toBeNull();
     expect(getComposerChannelPreference()).toBe("cloud");
+  });
+
+  it("defaults to local_traditional when unset on desktop", () => {
+    vi.mocked(hasLocalFiles).mockReturnValue(true);
+    expect(storedComposerChannelPreference()).toBeNull();
+    expect(getComposerChannelPreference()).toBe("local_traditional");
   });
 
   it("persists cloud and local_traditional", () => {
@@ -43,7 +57,7 @@ describe("composerChannelPreference", () => {
     expect(getComposerChannelPreference()).toBe("cloud");
   });
 
-  it("treats corrupt storage as cloud default", () => {
+  it("treats corrupt storage as the unset default", () => {
     memory.set(uiStorageKey("composer-channel"), JSON.stringify("nope"));
     expect(getComposerChannelPreference()).toBe("cloud");
 

@@ -51,7 +51,7 @@ from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
-_RECON = {"file_read", "file_list", "grep", "web_search", "read_url", "git"}
+_RECON = {"file_read", "file_list", "grep", "web_search", "web_fetch", "git"}
 # 终向决策：到此记账结束。consult_skill 不算终向——执行后继续看下一步。
 _TERMINAL = frozenset({"ask_user", "delegate", "debate", "replan"})
 _DECISION = _TERMINAL | {"consult_skill"}

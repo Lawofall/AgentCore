@@ -193,7 +193,7 @@ async def run_chat_pipeline(
     # into the durable frame — the resume window splices it ahead of the journal-folded
     # rounds (the journal stores only history's LENGTH). Reset in finally.
     history_token = turn_history.set(history)
-    # Web sources the chat agent consults this turn (web_search / read_url), aggregated +
+    # Web sources the chat agent consults this turn (web_search / web_fetch), aggregated +
     # de-duped by the loop for source cards + persistence. Published on ``turn_citations``
     # (same pattern as history) so a suspending face snapshots the pool into the durable
     # frame — the resume re-seeds it and pre-pause [n] markers keep their cards (引用池

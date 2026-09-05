@@ -391,7 +391,7 @@ def _events_local_turn(trace_id: str = "e" * 32) -> list[dict]:
             "message_id": "m-local",
             "count": 2,
             "codes": ["searxng_unreachable", "egress_connect"],
-            "tools": ["web_search", "read_url"],
+            "tools": ["web_search", "web_fetch"],
         },
         {
             "type": "log",
@@ -423,7 +423,7 @@ def test_local_turn_spine_head_and_tool_failure_codes() -> None:
     assert "tool.execute_end" not in events
     fail = next(d for d in spine["decisions"] if d["event"] == "chat.local_turn_tool_failures")
     assert fail["detail"]["codes"] == ["searxng_unreachable", "egress_connect"]
-    assert fail["detail"]["tools"] == ["web_search", "read_url"]
+    assert fail["detail"]["tools"] == ["web_search", "web_fetch"]
     text = format_decision_spine(spine)
     assert "chat.local_turn_tool_failures" in text
     assert "searxng_unreachable" in text

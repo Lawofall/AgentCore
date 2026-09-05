@@ -1,23 +1,20 @@
 import { PageContainer } from "@/components/layout/PageContainer";
-import { ToolboxPageHeader } from "@/components/toolbox/ToolboxPageHeader";
-import { Button } from "@/components/ui";
+import { Button, PageHeader } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { TOOLBOX_PAGE_BACK } from "@/pages/toolbox/manual/paths";
 import type { Capabilities } from "@/services/capabilities";
 import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCapabilities } from "./useCapabilities";
 
-/** Shared shell for the 能力 sub-pages (工具 / AI 提示词): the toolbox header
- * (back link + capability segments) and the loading / error / ready states around
- * the shared capability fetch. The page supplies a render function that gets the
- * loaded data. */
+/** Shared shell for the 能力 sub-pages (工具 / AI 提示词): toolbox page header
+ * and the loading / error / ready states around the shared capability fetch. */
 export function CapabilityPage({
-  note,
+  title,
   fill = false,
   children,
 }: {
-  /** 术语/范围说明，作为内容区第一行 muted 小字，不进页头。 */
-  note?: ReactNode;
+  title: string;
   /** 填满宿主高度（AI 提示词阅读器）；工具页保持整页滚动。 */
   fill?: boolean;
   children: (data: Capabilities) => ReactNode;
@@ -26,18 +23,11 @@ export function CapabilityPage({
 
   return (
     <PageContainer width="canvas" fill={fill}>
-      <ToolboxPageHeader className={fill ? "shrink-0" : undefined} />
-
-      {note ? (
-        <p
-          className={cn(
-            "text-muted-foreground text-xs",
-            fill ? "mb-3 shrink-0" : "mb-4",
-          )}
-        >
-          {note}
-        </p>
-      ) : null}
+      <PageHeader
+        title={title}
+        back={TOOLBOX_PAGE_BACK}
+        className={fill ? "shrink-0" : undefined}
+      />
 
       {status === "loading" && (
         <div

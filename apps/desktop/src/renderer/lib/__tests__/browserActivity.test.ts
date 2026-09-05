@@ -106,7 +106,7 @@ describe("isBrowserTool", () => {
     expect(isBrowserTool("browser_navigate")).toBe(true);
     expect(isBrowserTool("browser_screenshot")).toBe(true);
     expect(isBrowserTool("browser_console")).toBe(true);
-    expect(isBrowserTool("read_url")).toBe(false);
+    expect(isBrowserTool("web_fetch")).toBe(false);
     expect(isBrowserTool("web_search")).toBe(false);
   });
 });

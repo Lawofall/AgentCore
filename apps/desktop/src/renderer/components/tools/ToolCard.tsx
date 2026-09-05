@@ -1,10 +1,9 @@
-import { Button, CatalogIconShell } from "@/components/ui";
-import { catalogCategoryColorVar } from "@/lib/catalogColors";
+import { Badge, Button, CatalogTile } from "@/components/ui";
+import { artifactColorVar, catalogCategoryColorVar } from "@/lib/catalogColors";
 import type { CapabilityTool } from "@/services/capabilities";
-import { ChevronRight, Wrench } from "lucide-react";
+import { ChevronRight, Plug, Wrench } from "lucide-react";
 import { useState } from "react";
 import {
-  APPROVAL_BADGE,
   APPROVAL_LABEL,
   CATEGORY_META,
   availabilityLabel,
@@ -60,70 +59,67 @@ function ToolParams({ parameters }: { parameters: Record<string, unknown> }) {
 export function ToolCard({
   tool,
   capabilityHint,
+  accent,
 }: {
   tool: CapabilityTool;
   /** Soft capability note (e.g. tools probe unconfirmed) — never blocks expand/interaction. */
   capabilityHint?: string;
+  /** MCP tools share the card, not a builtin `ToolCategory`. */
+  accent?: "mcp";
 }) {
   const [open, setOpen] = useState(false);
-  const Icon = CATEGORY_META[tool.category]?.icon ?? Wrench;
-  const colorVar = catalogCategoryColorVar(tool.category);
+  const isMcp = accent === "mcp";
+  const Icon = isMcp ? Plug : (CATEGORY_META[tool.category]?.icon ?? Wrench);
+  const colorVar = isMcp
+    ? artifactColorVar("connectors")
+    : catalogCategoryColorVar(tool.category);
   return (
-    <div className="flex h-full min-w-0 flex-col rounded-xl border border-border bg-card p-4">
+    <CatalogTile
+      icon={<Icon size={18} />}
+      colorVar={colorVar}
+      title={tool.name}
+      description={tool.description}
+      descriptionClamp={!open}
+      onClick={() => setOpen((v) => !v)}
+      badge={
+        <div className="flex shrink-0 items-center gap-1.5">
+          {isMcp ? (
+            <Badge tone="muted" pill>
+              MCP
+            </Badge>
+          ) : null}
+          <Badge tone="muted" pill>
+            {availabilityLabel(tool.available_to)}
+          </Badge>
+          <Badge tone="muted" pill>
+            {APPROVAL_LABEL[tool.approval]}
+          </Badge>
+        </div>
+      }
+    >
       <Button
         variant="ghost"
         onClick={() => setOpen((v) => !v)}
-        className="h-auto w-full justify-between gap-2 p-0 text-left font-normal"
+        className="h-auto self-start gap-1 px-0 py-0 text-muted-foreground hover:text-foreground"
+        icon={
+          <ChevronRight
+            size={12}
+            className={`transition-transform ${open ? "rotate-90" : ""}`}
+          />
+        }
       >
-        <div className="flex min-w-0 items-center gap-2">
-          <CatalogIconShell colorVar={colorVar} className="size-8 rounded-lg">
-            <Icon size={14} />
-          </CatalogIconShell>
-          <span className="truncate font-medium text-foreground text-sm">
-            {tool.name}
-          </span>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground text-xs">
-            {availabilityLabel(tool.available_to)}
-          </span>
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs ${APPROVAL_BADGE[tool.approval]}`}
-          >
-            {APPROVAL_LABEL[tool.approval]}
-          </span>
-        </div>
+        调用参数
       </Button>
-      <p
-        className={`mt-2 text-muted-foreground text-xs ${open ? "" : "line-clamp-2"}`}
-      >
-        {tool.description}
-      </p>
-      <div className="mt-auto pt-2">
-        <Button
-          variant="ghost"
-          onClick={() => setOpen((v) => !v)}
-          className="h-auto self-start gap-1 px-0 py-0 text-muted-foreground hover:text-foreground"
-          icon={
-            <ChevronRight
-              size={12}
-              className={`transition-transform ${open ? "rotate-90" : ""}`}
-            />
-          }
-        >
-          调用参数
-        </Button>
-        {open && (
-          <div className="mt-2 border-border/60 border-t pt-2">
-            {capabilityHint && (
-              <p className="mb-2 text-xs text-muted-foreground/80">
-                {capabilityHint}
-              </p>
-            )}
-            <ToolParams parameters={tool.parameters} />
-          </div>
-        )}
-      </div>
-    </div>
+      {open ? (
+        <div className="mt-2 border-border/60 border-t pt-2">
+          {capabilityHint ? (
+            <p className="mb-2 text-xs text-muted-foreground/80">
+              {capabilityHint}
+            </p>
+          ) : null}
+          <ToolParams parameters={tool.parameters} />
+        </div>
+      ) : null}
+    </CatalogTile>
   );
 }

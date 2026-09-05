@@ -195,6 +195,10 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
         Disposition.EPHEMERAL,
         "同 folder 写锁短等——传输态；waiting 进出；不得静默等锁，reload 无需重放",
     ),
+    EventType.DESK_PROVISION_WAIT: (
+        Disposition.EPHEMERAL,
+        "云桌开通短等——传输态；waiting 进出；空气泡准备云端环境，reload 无需重放",
+    ),
     EventType.COORDINATION_WAIT: (
         Disposition.EPHEMERAL,
         "CEO 协调等待心跳——传输态（waiting true/false）；reload 时等待已结束或由 live SSE 重挂",

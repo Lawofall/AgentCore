@@ -1,7 +1,7 @@
 """Tests for the web tools (search backend, SSRF guard, extraction, breaker).
 
 Pure logic + offline paths only — no real network. SSRF rejection is verified by
-calling ``read_url`` against private/blocked hosts (classification short-circuits
+calling ``web_fetch`` against private/blocked hosts (classification short-circuits
 before any request), and search parsing is tested via the pure ``_parse_results``.
 """
 
@@ -36,21 +36,15 @@ from agentcore.core.net import (
 )
 from agentcore.runtime.citations import annotate_tool_citations, merge_citations
 from agentcore.tools.builtin.web import _net
-from agentcore.tools.builtin.web import read_url as read_url_mod
 from agentcore.tools.builtin.web import search as search_mod
 from agentcore.tools.builtin.web import search_backend as search_backend_mod
 from agentcore.tools.builtin.web import search_cache as search_cache_mod
 from agentcore.tools.builtin.web import url_cache as url_cache_mod
+from agentcore.tools.builtin.web import web_fetch as web_fetch_mod
 from agentcore.tools.builtin.web._net import (
     circuit_remaining,
     note_failure,
     note_success,
-)
-from agentcore.tools.builtin.web.read_url import (
-    ReadUrlTool,
-    _extract_page,
-    _extract_text,
-    _make_snippet,
 )
 from agentcore.tools.builtin.web.search import (
     _QUERY_ABSOLUTE_CHAR_LIMIT,
@@ -80,6 +74,12 @@ from agentcore.tools.builtin.web.url_cache import (
     ConversationUrlCache,
     UrlCacheEntry,
     UrlCacheRegistry,
+)
+from agentcore.tools.builtin.web.web_fetch import (
+    WebFetchTool,
+    _extract_page,
+    _extract_text,
+    _make_snippet,
 )
 from agentcore.tools.protocol import ToolContext, ToolResult
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -217,7 +217,7 @@ def test_describe_net_error_loopback_searxng_vs_public():
     assert "出网受限" not in localhost
     assert "docker" not in localhost.lower()
 
-    # Public target keeps the egress-restricted copy (read_url / favicon path).
+    # Public target keeps the egress-restricted copy (web_fetch / favicon path).
     public = describe_net_error(
         httpx.ConnectError("connection refused"),
         url="https://example.com/page",
@@ -254,7 +254,7 @@ def test_describe_searxng_error_marks_configured_host():
     assert "本地搜索" in via_backend
 
 
-# --- read_url: SSRF classification ---
+# --- web_fetch: SSRF classification ---
 
 
 def test_ip_is_safe_blocks_private_and_metadata():
@@ -353,7 +353,7 @@ async def test_classify_url_fake_ip_proxy_signature(monkeypatch):
     import agentcore.core.net as net
     from agentcore.config import settings
 
-    monkeypatch.setattr(settings, "read_url_allow_fake_ip_proxy", False)
+    monkeypatch.setattr(settings, "web_fetch_allow_fake_ip_proxy", False)
     monkeypatch.setattr(net, "_getaddrinfo", _fake_dns)
     block = await _classify_url("https://www.example.com/")
     assert block is _URLBlock.PRIVATE_IP_FAKE_PROXY
@@ -368,7 +368,7 @@ async def test_classify_url_allows_fake_ip_when_configured(monkeypatch):
     import agentcore.core.net as net
     from agentcore.config import settings
 
-    monkeypatch.setattr(settings, "read_url_allow_fake_ip_proxy", True)
+    monkeypatch.setattr(settings, "web_fetch_allow_fake_ip_proxy", True)
     monkeypatch.setattr(net, "_getaddrinfo", _fake_dns)
     assert await _classify_url("https://arxiv.org/abs/1") is None
 
@@ -376,20 +376,20 @@ async def test_classify_url_allows_fake_ip_when_configured(monkeypatch):
 async def test_ip_is_safe_allows_fake_ip_when_configured(monkeypatch):
     from agentcore.config import settings
 
-    monkeypatch.setattr(settings, "read_url_allow_fake_ip_proxy", True)
+    monkeypatch.setattr(settings, "web_fetch_allow_fake_ip_proxy", True)
     assert _ip_is_safe("198.18.0.21") is True
     assert _ip_is_safe("127.0.0.1") is False
 
 
-async def test_read_url_fake_ip_proxy_shows_environment_hint(monkeypatch):
+async def test_web_fetch_fake_ip_proxy_shows_environment_hint(monkeypatch):
     async def _fake_classify(_url):
         return _URLBlock.PRIVATE_IP_FAKE_PROXY
 
     from agentcore.config import settings
 
-    monkeypatch.setattr(settings, "read_url_allow_fake_ip_proxy", False)
-    monkeypatch.setattr(read_url_mod, "_classify_url", _fake_classify)
-    result = await ReadUrlTool().execute({"url": "https://www.example.com/"}, _ctx())
+    monkeypatch.setattr(settings, "web_fetch_allow_fake_ip_proxy", False)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _fake_classify)
+    result = await WebFetchTool().execute({"url": "https://www.example.com/"}, _ctx())
     assert result.success is False
     assert "fake-IP" in result.error
     assert "probe_egress.py" in result.error
@@ -399,7 +399,7 @@ async def test_read_url_fake_ip_proxy_shows_environment_hint(monkeypatch):
     assert "停止" in result.error or "收口" in result.error
 
 
-# --- read_url: HTML extraction ---
+# --- web_fetch: HTML extraction ---
 
 
 def test_extract_text_strips_scripts_and_keeps_title():
@@ -437,7 +437,7 @@ def test_extract_text_drops_nav_header_footer_chrome():
     assert "相关推荐" not in text
 
 
-# --- read_url: meta description seeds citation snippet ---
+# --- web_fetch: meta description seeds citation snippet ---
 
 
 def test_extract_page_reads_meta_description():
@@ -478,7 +478,7 @@ def test_make_snippet_collapses_whitespace_and_caps_length():
     assert "  " not in out  # whitespace collapsed to single spaces
 
 
-async def test_read_url_emits_citation_snippet_from_description(monkeypatch):
+async def test_web_fetch_emits_citation_snippet_from_description(monkeypatch):
     html = (
         "<html><head><title>深圳天气</title>"
         '<meta name="description" content="今天多云转晴，气温 20-28 度。">'
@@ -491,10 +491,10 @@ async def test_read_url_emits_citation_snippet_from_description(monkeypatch):
     async def _fake_request(_client, _method, url, **_kwargs):
         return httpx.Response(200, html=html, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    result = await ReadUrlTool().execute({"url": "https://weather.example.com/sz"}, _ctx())
+    result = await WebFetchTool().execute({"url": "https://weather.example.com/sz"}, _ctx())
 
     assert result.success is True
     assert result.citations is not None
@@ -515,8 +515,8 @@ async def test_read_url_emits_citation_snippet_from_description(monkeypatch):
     }
 
 
-async def test_read_url_emits_fetching_then_reading_phases(monkeypatch):
-    # 工具执行阶段进度 (联网前端展示优化): read_url signals 抓取→提取 while its blocking fetch
+async def test_web_fetch_emits_fetching_then_reading_phases(monkeypatch):
+    # 工具执行阶段进度 (联网前端展示优化): web_fetch signals 抓取→提取 while its blocking fetch
     # + parse legs run, so the waiting row is live (正在抓取网页 → 正在提取正文) not a dead spinner.
     from agentcore.tools.builtin.web import _net as net_mod
 
@@ -529,19 +529,19 @@ async def test_read_url_emits_fetching_then_reading_phases(monkeypatch):
     async def _fake_request(_client, _method, url, **_kwargs):
         return httpx.Response(200, html=html, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
     phases: list[str] = []
-    result = await ReadUrlTool().execute(
+    result = await WebFetchTool().execute(
         {"url": "https://x.example.com/a"}, _ctx(on_phase=phases.append)
     )
     assert result.success is True
     assert phases == ["fetching", "reading"]
 
 
-async def test_read_url_circuit_open_emits_blocked_phase(monkeypatch):
-    # 出网熔断是真实的「快速失败」瞬时态（read_url 无令牌桶/信号量，没有真实「排队」）：诚实报
+async def test_web_fetch_circuit_open_emits_blocked_phase(monkeypatch):
+    # 出网熔断是真实的「快速失败」瞬时态（web_fetch 无令牌桶/信号量，没有真实「排队」）：诚实报
     # blocked（出网受限·快速失败），随即照常由 ``_safe_request`` 的熔断器快速失败——不虚构 queued。
     from agentcore.tools.builtin.web import _net as net_mod
 
@@ -553,17 +553,17 @@ async def test_read_url_circuit_open_emits_blocked_phase(monkeypatch):
     async def _allow(_url: str):
         return None
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
 
     phases: list[str] = []
-    result = await ReadUrlTool().execute(
+    result = await WebFetchTool().execute(
         {"url": "https://blocked.example.com/a"}, _ctx(on_phase=phases.append)
     )
     assert result.success is False  # fast-failed via the per-host egress circuit breaker
     assert phases == ["blocked"]  # honest block, never a fake fetching/reading/queued
 
 
-async def test_read_url_cache_hit_emits_no_phase(monkeypatch):
+async def test_web_fetch_cache_hit_emits_no_phase(monkeypatch):
     # A served-from-cache read does no outbound fetch, so it emits no phase (nothing to wait on).
     html = "<html><head><title>T</title></head><body><p>正文</p></body></html>"
 
@@ -573,10 +573,10 @@ async def test_read_url_cache_hit_emits_no_phase(monkeypatch):
     async def _fake_request(_client, _method, url, **_kwargs):
         return httpx.Response(200, html=html, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    tool = ReadUrlTool()
+    tool = WebFetchTool()
     # Prime the conversation cache with a first (real) read, then the second is served hot.
     await tool.execute(
         {"url": "https://x.example.com/a"}, _ctx(conversation_id="conv-phase-cache")
@@ -591,7 +591,7 @@ async def test_read_url_cache_hit_emits_no_phase(monkeypatch):
     assert phases == []
 
 
-async def test_read_url_snippet_falls_back_to_body_when_no_meta(monkeypatch):
+async def test_web_fetch_snippet_falls_back_to_body_when_no_meta(monkeypatch):
     html = "<html><head><title>无摘要页</title></head><body><p>正文第一段</p></body></html>"
 
     async def _allow(_url: str):
@@ -600,10 +600,10 @@ async def test_read_url_snippet_falls_back_to_body_when_no_meta(monkeypatch):
     async def _fake_request(_client, _method, url, **_kwargs):
         return httpx.Response(200, html=html, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    result = await ReadUrlTool().execute({"url": "https://x.example.com/a"}, _ctx())
+    result = await WebFetchTool().execute({"url": "https://x.example.com/a"}, _ctx())
 
     assert result.success is True
     assert result.citations is not None
@@ -613,8 +613,8 @@ async def test_read_url_snippet_falls_back_to_body_when_no_meta(monkeypatch):
 # --- tool execute: offline rejection paths ---
 
 
-async def test_read_url_rejects_private_without_network():
-    result = await ReadUrlTool().execute({"url": "http://10.1.2.3:9999/"}, _ctx())
+async def test_web_fetch_rejects_private_without_network():
+    result = await WebFetchTool().execute({"url": "http://10.1.2.3:9999/"}, _ctx())
     assert result.success is False
     assert _URLBlock.PRIVATE_IP.value in (result.error or "")
     assert result.metadata.get("code") == "private_address_blocked"
@@ -626,9 +626,9 @@ async def test_read_url_rejects_private_without_network():
 @pytest.mark.parametrize(
     "url", ["http://127.0.0.1:9999/", "http://localhost:5173/health", "http://0.0.0.0:8080/"]
 )
-async def test_read_url_loopback_reroutes_instead_of_closing(url: str):
+async def test_web_fetch_loopback_reroutes_instead_of_closing(url: str):
     """本机地址：给可执行改道（browser / terminal curl），不给「停止深读、收口写作」。"""
-    result = await ReadUrlTool().execute({"url": url}, _ctx())
+    result = await WebFetchTool().execute({"url": url}, _ctx())
     err = result.error or ""
 
     assert result.success is False  # 边界不变：仍然拒绝
@@ -643,7 +643,7 @@ async def test_read_url_loopback_reroutes_instead_of_closing(url: str):
     assert "terminal" in err and "curl" in err
 
 
-async def test_read_url_loopback_refusal_survives_dns_rebinding(monkeypatch):
+async def test_web_fetch_loopback_refusal_survives_dns_rebinding(monkeypatch):
     """连接时才暴露的回环（DNS 重绑 / 本地开发域名）走同一条改道，不是「出网受限」。"""
     from agentcore.core.net import PinnedAddressError
 
@@ -657,9 +657,9 @@ async def test_read_url_loopback_refusal_survives_dns_rebinding(monkeypatch):
             block=_URLBlock.LOOPBACK_HOST,
         )
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _rebound)
-    result = await ReadUrlTool().execute({"url": "https://app.example/"}, _ctx())
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _rebound)
+    result = await WebFetchTool().execute({"url": "https://app.example/"}, _ctx())
     err = result.error or ""
     assert result.success is False
     assert result.metadata.get("code") == "loopback_host"
@@ -679,9 +679,9 @@ async def test_read_url_loopback_refusal_survives_dns_rebinding(monkeypatch):
         "_scratch/zoogame.cc/index.html",
     ],
 )
-async def test_read_url_not_a_web_url_reroutes_to_file_read(url: str):
+async def test_web_fetch_not_a_web_url_reroutes_to_file_read(url: str):
     """非 http(s)：改道 file_read，不贴收口话术，也不教补 https://。"""
-    result = await ReadUrlTool().execute({"url": url}, _ctx())
+    result = await WebFetchTool().execute({"url": url}, _ctx())
     err = result.error or ""
 
     assert result.success is False
@@ -695,9 +695,9 @@ async def test_read_url_not_a_web_url_reroutes_to_file_read(url: str):
     assert "加上 https://" not in err
 
 
-async def test_read_url_not_a_web_url_survives_file_redirect(monkeypatch):
+async def test_web_fetch_not_a_web_url_survives_file_redirect(monkeypatch):
     """公网跳到 file:// 走同一条改道，不是「停止深读」。"""
-    from agentcore.tools.builtin.web.read_url import BlockedRedirectError
+    from agentcore.tools.builtin.web.web_fetch import BlockedRedirectError
 
     async def _allow(_url: str):
         return None
@@ -705,9 +705,9 @@ async def test_read_url_not_a_web_url_survives_file_redirect(monkeypatch):
     async def _rebound(_client, _method, url, **_kwargs):
         raise BlockedRedirectError(_URLBlock.BAD_SCHEME)
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _rebound)
-    result = await ReadUrlTool().execute({"url": "https://example.com/x"}, _ctx())
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _rebound)
+    result = await WebFetchTool().execute({"url": "https://example.com/x"}, _ctx())
     err = result.error or ""
     assert result.success is False
     assert result.metadata.get("code") == "not_a_web_url"
@@ -716,8 +716,8 @@ async def test_read_url_not_a_web_url_survives_file_redirect(monkeypatch):
     assert "file_read" in err
 
 
-def test_read_url_schema_routes_workspace_paths_to_file_read():
-    schema = ReadUrlTool().schema
+def test_web_fetch_schema_routes_workspace_paths_to_file_read():
+    schema = WebFetchTool().schema
     assert "file_read" in schema.description
     assert "不要补 https://" in schema.description
     url_desc = schema.parameters["properties"]["url"]["description"]
@@ -734,14 +734,14 @@ def test_read_url_schema_routes_workspace_paths_to_file_read():
         (_URLBlock.PRIVATE_IP_FAKE_PROXY, "fake_ip_proxy_blocked"),
     ],
 )
-async def test_read_url_pre_flight_blocks_carry_distinct_codes(monkeypatch, block, code):
+async def test_web_fetch_pre_flight_blocks_carry_distinct_codes(monkeypatch, block, code):
     """DNS 失败 / 私有 IP / 保留域名各有语义，用户面不该塌成同一句。"""
 
     async def _blocked(_url: str):
         return block
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _blocked)
-    result = await ReadUrlTool().execute({"url": "https://example.com/x"}, _ctx())
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _blocked)
+    result = await WebFetchTool().execute({"url": "https://example.com/x"}, _ctx())
     assert result.success is False
     assert result.metadata.get("code") == code
     assert result.metadata.get("policy_failure") is not True
@@ -769,7 +769,7 @@ def _status_error(code: int) -> httpx.HTTPStatusError:
         (httpx.ReadTimeout("slow"), "read_timeout"),
     ],
 )
-async def test_read_url_fetch_failures_carry_distinct_codes(monkeypatch, exc, code):
+async def test_web_fetch_fetch_failures_carry_distinct_codes(monkeypatch, exc, code):
     """抓取失败各有语义（反爬 / 404 / 熔断 / 连不上 / 读超时），别都塞同一个 code。"""
 
     async def _allow(_url: str):
@@ -778,16 +778,16 @@ async def test_read_url_fetch_failures_carry_distinct_codes(monkeypatch, exc, co
     async def _raise(_client, _method, _url, **_kwargs):
         raise exc
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _raise)
-    result = await ReadUrlTool().execute({"url": "https://example.com/x"}, _ctx())
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _raise)
+    result = await WebFetchTool().execute({"url": "https://example.com/x"}, _ctx())
     assert result.success is False
     assert result.metadata.get("code") == code
     # 这些仍是环境类硬失败：继续计入 run 熔断（不是 policy_failure）。
     assert result.metadata.get("policy_failure") is not True
 
 
-async def test_read_url_connect_timeout_internal_cancel_is_tool_failure(monkeypatch):
+async def test_web_fetch_connect_timeout_internal_cancel_is_tool_failure(monkeypatch):
     """httpx connect timeout wraps CancelledError in context; must not abort the turn."""
 
     inner = TimeoutError()
@@ -801,21 +801,21 @@ async def test_read_url_connect_timeout_internal_cancel_is_tool_failure(monkeypa
     async def _raise(_client, _method, _url, **_kwargs):
         raise exc
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _raise)
-    result = await ReadUrlTool().execute({"url": "https://example.com/x"}, _ctx())
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _raise)
+    result = await WebFetchTool().execute({"url": "https://example.com/x"}, _ctx())
     assert result.success is False
     assert result.metadata.get("code") == "site_unreachable"
 
 
 async def test_safe_request_redirect_block_keeps_value_error_contract(monkeypatch):
     """逐跳拦截仍是 ValueError（download_url 按前缀分支），但带上了拒绝原因。"""
-    from agentcore.tools.builtin.web.read_url import BlockedRedirectError, _safe_request
+    from agentcore.tools.builtin.web.web_fetch import BlockedRedirectError, _safe_request
 
     async def _blocked(_url: str):
         return _URLBlock.PRIVATE_IP
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _blocked)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _blocked)
     async with httpx.AsyncClient() as client:
         with pytest.raises(BlockedRedirectError) as ei:
             await _safe_request(client, "GET", "https://example.com/x")
@@ -824,36 +824,36 @@ async def test_safe_request_redirect_block_keeps_value_error_contract(monkeypatc
     assert ei.value.block is _URLBlock.PRIVATE_IP
 
 
-async def test_read_url_retire_latch_blocks_fetch_after_disable(monkeypatch):
+async def test_web_fetch_retire_latch_blocks_fetch_after_disable(monkeypatch):
     """Run-scoped retirement survives a fresh tool call (simulates Wave retry)."""
     from agentcore.tools.builtin.web._net import (
-        READ_URL_RETIRE_STEER,
-        clear_read_url_retired,
-        mark_read_url_retired,
+        WEB_FETCH_RETIRE_STEER,
+        clear_web_fetch_retired,
+        mark_web_fetch_retired,
     )
 
     run_id = "retire-latch-run"
-    clear_read_url_retired(run_id)
-    mark_read_url_retired(run_id, message=READ_URL_RETIRE_STEER)
+    clear_web_fetch_retired(run_id)
+    mark_web_fetch_retired(run_id, message=WEB_FETCH_RETIRE_STEER)
 
     fetched = {"n": 0}
 
     async def _should_not_fetch(*_a, **_k):
         fetched["n"] += 1
-        raise AssertionError("retired read_url must not fetch")
+        raise AssertionError("retired web_fetch must not fetch")
 
-    monkeypatch.setattr(read_url_mod, "_safe_request", _should_not_fetch)
-    result = await ReadUrlTool().execute(
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _should_not_fetch)
+    result = await WebFetchTool().execute(
         {"url": "https://example.com/x"}, _ctx(run_id=run_id)
     )
     assert result.success is False
     assert fetched["n"] == 0
     assert "停用" in (result.error or "")
-    assert result.metadata.get("retire_tools") == ["read_url"]
-    clear_read_url_retired(run_id)
+    assert result.metadata.get("retire_tools") == ["web_fetch"]
+    clear_web_fetch_retired(run_id)
 
 
-async def test_read_url_403_steers_stop_read(monkeypatch):
+async def test_web_fetch_403_steers_stop_read(monkeypatch):
     async def _allow(_url: str):
         return None
 
@@ -863,9 +863,9 @@ async def test_read_url_403_steers_stop_read(monkeypatch):
             "denied", request=req, response=httpx.Response(403, request=req)
         )
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _forbidden)
-    result = await ReadUrlTool().execute({"url": "https://example.com/pay"}, _ctx())
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _forbidden)
+    result = await WebFetchTool().execute({"url": "https://example.com/pay"}, _ctx())
     assert result.success is False
     err = result.error or ""
     assert "403" in err
@@ -877,12 +877,12 @@ async def test_read_url_403_steers_stop_read(monkeypatch):
     assert "勿假装已登录" in err or "已登录抓取" in err
     # Same-reject-class: actionable — no same URL / same strategy; public sources OK.
     assert "同拒绝类" in err or "本 URL" in err
-    assert "再调 read_url" in err or "勿对" in err
+    assert "再调 web_fetch" in err or "勿对" in err
     assert result.metadata.get("policy_failure") is not True
 
 
 @pytest.mark.parametrize("code", [401, 429, 451])
-async def test_read_url_anti_crawl_steers_next_move(monkeypatch, code):
+async def test_web_fetch_anti_crawl_steers_next_move(monkeypatch, code):
     """401/429/451 share the 403 anti-crawl receipt: stop-read + workable next move."""
 
     async def _allow(_url: str):
@@ -894,9 +894,9 @@ async def test_read_url_anti_crawl_steers_next_move(monkeypatch, code):
             "blocked", request=req, response=httpx.Response(code, request=req)
         )
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _blocked)
-    result = await ReadUrlTool().execute({"url": "https://example.com/pay"}, _ctx())
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _blocked)
+    result = await WebFetchTool().execute({"url": "https://example.com/pay"}, _ctx())
     assert result.success is False
     err = result.error or ""
     assert str(code) in err
@@ -907,13 +907,13 @@ async def test_read_url_anti_crawl_steers_next_move(monkeypatch, code):
     assert result.metadata.get("policy_failure") is not True
 
 
-async def test_read_url_requires_url():
-    result = await ReadUrlTool().execute({}, _ctx())
+async def test_web_fetch_requires_url():
+    result = await WebFetchTool().execute({}, _ctx())
     assert result.success is False
     assert "url" in result.error
 
 
-# --- read_url: GitHub api.github.com fast path ---
+# --- web_fetch: GitHub api.github.com fast path ---
 
 
 def test_parse_github_page_url_repo_tree_blob():
@@ -967,7 +967,7 @@ def _assert_secret_absent(*blobs: object, secret: str) -> None:
             raise AssertionError("secret token leaked into test-visible output")
 
 
-async def test_read_url_github_repo_root_via_api(monkeypatch):
+async def test_web_fetch_github_repo_root_via_api(monkeypatch):
     import base64
 
     _no_git_pat(monkeypatch)
@@ -1006,10 +1006,10 @@ async def test_read_url_github_repo_root_via_api(monkeypatch):
             )
         raise AssertionError(f"unexpected URL (HTML must not be hit): {url}")
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    result = await ReadUrlTool().execute(
+    result = await WebFetchTool().execute(
         {"url": "https://github.com/octo/demo"}, _ctx()
     )
     assert result.success is True
@@ -1022,7 +1022,7 @@ async def test_read_url_github_repo_root_via_api(monkeypatch):
     assert result.citations[0]["snippet"] == "A demo repo"
 
 
-async def test_read_url_github_blob_via_api(monkeypatch):
+async def test_web_fetch_github_blob_via_api(monkeypatch):
     import base64
 
     _no_git_pat(monkeypatch)
@@ -1046,10 +1046,10 @@ async def test_read_url_github_blob_via_api(monkeypatch):
             request=httpx.Request("GET", url),
         )
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    result = await ReadUrlTool().execute(
+    result = await WebFetchTool().execute(
         {"url": "https://github.com/octo/demo/blob/main/src/app.py"}, _ctx()
     )
     assert result.success is True
@@ -1059,7 +1059,7 @@ async def test_read_url_github_blob_via_api(monkeypatch):
     assert body["title"] == "octo/demo/src/app.py"
 
 
-async def test_read_url_github_api_failure_falls_back_to_html(monkeypatch):
+async def test_web_fetch_github_api_failure_falls_back_to_html(monkeypatch):
     _no_git_pat(monkeypatch)
     html = (
         "<html><head><title>HTML fallback</title>"
@@ -1078,10 +1078,10 @@ async def test_read_url_github_api_failure_falls_back_to_html(monkeypatch):
         assert url == "https://github.com/octo/demo"
         return httpx.Response(200, html=html, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    result = await ReadUrlTool().execute(
+    result = await WebFetchTool().execute(
         {"url": "https://github.com/octo/demo"}, _ctx()
     )
     assert result.success is True
@@ -1090,7 +1090,7 @@ async def test_read_url_github_api_failure_falls_back_to_html(monkeypatch):
     assert body["content"] == "HTML body"
 
 
-async def test_read_url_github_user_page_via_api(monkeypatch):
+async def test_web_fetch_github_user_page_via_api(monkeypatch):
     _no_git_pat(monkeypatch)
     api_paths: list[str] = []
 
@@ -1124,10 +1124,10 @@ async def test_read_url_github_user_page_via_api(monkeypatch):
             )
         raise AssertionError(f"unexpected URL (HTML must not be hit): {url}")
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    result = await ReadUrlTool().execute({"url": "https://github.com/octo"}, _ctx())
+    result = await WebFetchTool().execute({"url": "https://github.com/octo"}, _ctx())
     assert result.success is True
     body = json.loads(result.output)
     assert body["title"] == "octo"
@@ -1138,7 +1138,7 @@ async def test_read_url_github_user_page_via_api(monkeypatch):
     assert any(p == "/users/octo/repos" or p == "/orgs/octo/repos" for p in api_paths)
 
 
-async def test_read_url_github_org_page_via_api(monkeypatch):
+async def test_web_fetch_github_org_page_via_api(monkeypatch):
     _no_git_pat(monkeypatch)
     api_paths: list[str] = []
 
@@ -1171,10 +1171,10 @@ async def test_read_url_github_org_page_via_api(monkeypatch):
             raise AssertionError("org listing must use /orgs/{org}/repos")
         raise AssertionError(f"unexpected URL (HTML must not be hit): {url}")
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    result = await ReadUrlTool().execute(
+    result = await WebFetchTool().execute(
         {"url": "https://github.com/acme?tab=repositories"}, _ctx()
     )
     assert result.success is True
@@ -1183,7 +1183,7 @@ async def test_read_url_github_org_page_via_api(monkeypatch):
     assert "/orgs/acme/repos" in api_paths
 
 
-async def test_read_url_github_user_page_sends_pat_authorization(monkeypatch):
+async def test_web_fetch_github_user_page_sends_pat_authorization(monkeypatch):
     from agentcore.workspace.git_credentials import GitAuthMaterial
 
     secret = "ghs_unit_test_pat_value"
@@ -1230,10 +1230,10 @@ async def test_read_url_github_user_page_sends_pat_authorization(monkeypatch):
             )
         raise AssertionError(f"unexpected URL (HTML must not be hit): {url}")
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    result = await ReadUrlTool().execute({"url": "https://github.com/octo"}, _ctx())
+    result = await WebFetchTool().execute({"url": "https://github.com/octo"}, _ctx())
     assert result.success is True
     assert seen_auth
     _assert_secret_absent(result.output, result.error or "", secret=secret)
@@ -1242,7 +1242,7 @@ async def test_read_url_github_user_page_sends_pat_authorization(monkeypatch):
     assert "private: true" in body["content"]
 
 
-async def test_read_url_github_user_page_api_failure_falls_back_to_html(monkeypatch):
+async def test_web_fetch_github_user_page_api_failure_falls_back_to_html(monkeypatch):
     _no_git_pat(monkeypatch)
     html = (
         "<html><head><title>User HTML</title>"
@@ -1260,17 +1260,17 @@ async def test_read_url_github_user_page_api_failure_falls_back_to_html(monkeypa
         assert url == "https://github.com/octo"
         return httpx.Response(200, html=html, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    result = await ReadUrlTool().execute({"url": "https://github.com/octo"}, _ctx())
+    result = await WebFetchTool().execute({"url": "https://github.com/octo"}, _ctx())
     assert result.success is True
     body = json.loads(result.output)
     assert body["title"] == "User HTML"
     assert "JS shell" in body["content"]
 
 
-async def test_read_url_github_repo_sends_pat_authorization(monkeypatch):
+async def test_web_fetch_github_repo_sends_pat_authorization(monkeypatch):
     import base64
 
     from agentcore.workspace.git_credentials import GitAuthMaterial
@@ -1321,10 +1321,10 @@ async def test_read_url_github_repo_sends_pat_authorization(monkeypatch):
             )
         raise AssertionError(f"unexpected URL (HTML must not be hit): {url}")
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    result = await ReadUrlTool().execute(
+    result = await WebFetchTool().execute(
         {"url": "https://github.com/octo/demo"}, _ctx()
     )
     assert result.success is True
@@ -2671,7 +2671,7 @@ def test_web_search_schema_documents_query_contract():
     assert "书名号" in blob  # 中文专名豁免
     assert "摘要优先" in blob  # 默认摘要优先基调
     assert "搜到 ≠ 可挂来源号" not in blob
-    assert "read_url" in blob  # 核对原文
+    assert "web_fetch" in blob  # 核对原文
     assert "2–3" in blob  # 建议一次 2–3 个核心词
     assert "聚焦查询" in schema.description
     assert "补搜" in schema.description
@@ -3057,7 +3057,7 @@ def test_tool_result_custom_lower_limit_keeps_both_ends():
     assert len(r.output) <= 200
 
 
-# --- read_url output budget: json escaping must not chop the envelope ---
+# --- web_fetch output budget: json escaping must not chop the envelope ---
 
 
 def _newline_dense_html(blocks: int) -> str:
@@ -3070,7 +3070,7 @@ def _newline_dense_html(blocks: int) -> str:
     return f"<html><head><title>密集换行页</title></head><body>{body}</body></html>"
 
 
-async def test_read_url_escape_heavy_page_stays_valid_json_and_declares_cut(monkeypatch):
+async def test_web_fetch_escape_heavy_page_stays_valid_json_and_declares_cut(monkeypatch):
     """转义膨胀超预算：仍是合法 JSON + 截断事实在带内可见（不许伪装成完整正文）。"""
     max_chars = 3000
     html = _newline_dense_html(2000)
@@ -3081,10 +3081,10 @@ async def test_read_url_escape_heavy_page_stays_valid_json_and_declares_cut(monk
     async def _fake_request(_client, _method, url, **_kwargs):
         return httpx.Response(200, html=html, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    result = await ReadUrlTool().execute(
+    result = await WebFetchTool().execute(
         {"url": "https://dense.example.com/table", "max_chars": max_chars}, _ctx()
     )
 
@@ -3101,11 +3101,11 @@ async def test_read_url_escape_heavy_page_stays_valid_json_and_declares_cut(monk
     assert "截断" in payload["note"]
     assert result.metadata["output_truncated"] is True
     # Budget actually holds now that it is spent on the SERIALIZED form.
-    assert len(result.output) <= max_chars + read_url_mod._OUTPUT_ENVELOPE_SLACK
+    assert len(result.output) <= max_chars + web_fetch_mod._OUTPUT_ENVELOPE_SLACK
     assert result.output_limit >= len(result.output)  # ToolResult must not re-trim
 
 
-async def test_read_url_plain_page_not_flagged_truncated(monkeypatch):
+async def test_web_fetch_plain_page_not_flagged_truncated(monkeypatch):
     """预算内的页面不加 truncated/note（截断标记必须只在真截断时出现）。"""
     html = "<html><head><title>短页</title></head><body><p>正文内容</p></body></html>"
 
@@ -3115,10 +3115,10 @@ async def test_read_url_plain_page_not_flagged_truncated(monkeypatch):
     async def _fake_request(_client, _method, url, **_kwargs):
         return httpx.Response(200, html=html, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    result = await ReadUrlTool().execute({"url": "https://short.example.com/p"}, _ctx())
+    result = await WebFetchTool().execute({"url": "https://short.example.com/p"}, _ctx())
 
     payload = json.loads(result.output)
     assert payload == {
@@ -3129,7 +3129,7 @@ async def test_read_url_plain_page_not_flagged_truncated(monkeypatch):
     assert result.metadata["output_truncated"] is False
 
 
-async def test_read_url_cache_hit_shares_the_output_budget(monkeypatch):
+async def test_web_fetch_cache_hit_shares_the_output_budget(monkeypatch):
     """缓存命中走同一预算收口：命中结果同样是合法 JSON + 带内截断声明。"""
     max_chars = 3000
     html = _newline_dense_html(2000)
@@ -3142,11 +3142,11 @@ async def test_read_url_cache_hit_shares_the_output_budget(monkeypatch):
         calls["n"] += 1
         return httpx.Response(200, html=html, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
     ctx = _ctx(conversation_id="conv-dense-budget")
-    tool = ReadUrlTool()
+    tool = WebFetchTool()
     args = {"url": "https://dense.example.com/cached", "max_chars": max_chars}
     await tool.execute(args, ctx)
     hit = await tool.execute(args, ctx)
@@ -3156,13 +3156,13 @@ async def test_read_url_cache_hit_shares_the_output_budget(monkeypatch):
     payload = json.loads(hit.output)
     assert payload["truncated"] is True
     assert hit.metadata["output_truncated"] is True
-    assert len(hit.output) <= max_chars + read_url_mod._OUTPUT_ENVELOPE_SLACK
+    assert len(hit.output) <= max_chars + web_fetch_mod._OUTPUT_ENVELOPE_SLACK
     assert hit.output_limit >= len(hit.output)
 
 
 def test_page_output_keeps_json_valid_when_envelope_alone_exceeds_budget():
     """退化情形（超长 title/url 撑爆信封）：宁可超预算，也不交半截 JSON。"""
-    output, truncated = read_url_mod._page_output(
+    output, truncated = web_fetch_mod._page_output(
         url="https://x.example.com/" + ("p" * 500),
         title="标题" * 500,
         text="正文" * 500,
@@ -3319,10 +3319,10 @@ def test_annotate_tool_citations_no_numbers_leaves_content_unchanged():
     assert annotate_tool_citations("R", [{"url": "https://a.com"}], {}) == "R"
 
 
-# --- read_url conversation-scoped fetch cache (P2) ---
+# --- web_fetch conversation-scoped fetch cache (P2) ---
 
 
-async def test_read_url_caches_within_conversation(monkeypatch):
+async def test_web_fetch_caches_within_conversation(monkeypatch):
     html = (
         "<html><head><title>缓存页</title>"
         '<meta name="description" content="摘要">'
@@ -3337,11 +3337,11 @@ async def test_read_url_caches_within_conversation(monkeypatch):
         calls["n"] += 1
         return httpx.Response(200, html=html, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
     ctx = _ctx(conversation_id="conv-cache-hit")
-    tool = ReadUrlTool()
+    tool = WebFetchTool()
     r1 = await tool.execute({"url": "https://x.example.com/p"}, ctx)
     r2 = await tool.execute({"url": "https://x.example.com/p"}, ctx)
 
@@ -3368,7 +3368,7 @@ async def test_read_url_caches_within_conversation(monkeypatch):
     assert r3.metadata.get("cached") is True
 
 
-async def test_read_url_skips_cache_without_conversation(monkeypatch):
+async def test_web_fetch_skips_cache_without_conversation(monkeypatch):
     html = "<html><head><title>T</title></head><body><p>x</p></body></html>"
     calls = {"n": 0}
 
@@ -3379,16 +3379,16 @@ async def test_read_url_skips_cache_without_conversation(monkeypatch):
         calls["n"] += 1
         return httpx.Response(200, html=html, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
-    tool = ReadUrlTool()
+    tool = WebFetchTool()
     await tool.execute({"url": "https://nocache.example.com/a"}, _ctx())
     await tool.execute({"url": "https://nocache.example.com/a"}, _ctx())
     assert calls["n"] == 2  # unscoped (conversation_id == "") → no caching, fetched twice
 
 
-async def test_read_url_cache_refetches_when_more_chars_needed(monkeypatch):
+async def test_web_fetch_cache_refetches_when_more_chars_needed(monkeypatch):
     body = "<html><body><p>" + ("z" * 500) + "</p></body></html>"
     calls = {"n": 0}
 
@@ -3399,11 +3399,11 @@ async def test_read_url_cache_refetches_when_more_chars_needed(monkeypatch):
         calls["n"] += 1
         return httpx.Response(200, html=body, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
-    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+    monkeypatch.setattr(web_fetch_mod, "_classify_url", _allow)
+    monkeypatch.setattr(web_fetch_mod, "_safe_request", _fake_request)
 
     ctx = _ctx(conversation_id="conv-cache-chars")
-    tool = ReadUrlTool()
+    tool = WebFetchTool()
     # first read captures only 100 chars (truncated); a later read needing 400 must
     # re-fetch with the bigger budget rather than serve the short cached copy.
     await tool.execute({"url": "https://big.example.com/p", "max_chars": 100}, ctx)
@@ -3518,7 +3518,7 @@ def test_url_cache_registry_reaps_idle_conversation(monkeypatch: pytest.MonkeyPa
 
 def test_stop_read_hint_aligns_closing_with_howto_path_honesty():
     """howto A′：读失败收口 ≠ 可伪精确逐步菜单（与基座 delivery_honesty / 读失败回执对齐）。"""
-    from agentcore.tools.builtin.web.read_url import _STOP_READ_HINT
+    from agentcore.tools.builtin.web.web_fetch import _STOP_READ_HINT
 
     assert "收口" in _STOP_READ_HINT
     assert "伪精确" in _STOP_READ_HINT or "逐步菜单" in _STOP_READ_HINT
@@ -3527,23 +3527,24 @@ def test_stop_read_hint_aligns_closing_with_howto_path_honesty():
     assert "web_search" not in _STOP_READ_HINT
 
 
-def test_read_url_retire_steer_closes_web_search_thrash():
-    """Retirement copy must close «继续 web_search» — not point at more search."""
-    from agentcore.tools.builtin.web._net import READ_URL_RETIRE_STEER
+def test_web_fetch_retire_steer_closes_web_search_thrash():
+    """Retirement copy states fetch+search-thrash closed; no HOW sermon."""
+    from agentcore.tools.builtin.web._net import WEB_FETCH_RETIRE_STEER
 
-    assert "停用" in READ_URL_RETIRE_STEER
-    assert "收束继续 web_search" in READ_URL_RETIRE_STEER
-    assert "不要把继续检索当默认出路" in READ_URL_RETIRE_STEER
-    assert "基于已有材料" in READ_URL_RETIRE_STEER
+    assert "停用" in WEB_FETCH_RETIRE_STEER
+    assert "收束继续 web_search" in WEB_FETCH_RETIRE_STEER
+    assert "请立即" not in WEB_FETCH_RETIRE_STEER
+    assert "不要把继续检索" not in WEB_FETCH_RETIRE_STEER
+    assert "基于已有材料" not in WEB_FETCH_RETIRE_STEER
 
 
-def test_search_notes_skip_read_url_nudge_when_retired():
-    """After read_url retirement, empty/hit search notes must not urge deep-read."""
+def test_search_notes_skip_web_fetch_nudge_when_retired():
+    """After web_fetch retirement, empty/hit search notes must not urge deep-read."""
     from agentcore.tools.builtin.web._net import (
         POST_READ_RETIRE_SEARCH_HINT,
-        clear_read_url_retired,
+        clear_web_fetch_retired,
         consume_post_read_retire_search_hint,
-        mark_read_url_retired,
+        mark_web_fetch_retired,
     )
     from agentcore.tools.builtin.web.search import (
         _empty_result_note,
@@ -3551,19 +3552,19 @@ def test_search_notes_skip_read_url_nudge_when_retired():
     )
 
     run_id = "search-after-read-retire"
-    clear_read_url_retired(run_id)
-    mark_read_url_retired(run_id)
+    clear_web_fetch_retired(run_id)
+    mark_web_fetch_retired(run_id)
 
-    empty = _empty_result_note("q", empty_streak=2, read_url_retired=True)
-    assert "先对已有命中 read_url" not in empty
-    assert "勿再催 read_url" in empty
+    empty = _empty_result_note("q", empty_streak=2, web_fetch_retired=True)
+    assert "先对已有命中 web_fetch" not in empty
+    assert "勿再催 web_fetch" in empty
     assert "继续检索当默认出路" in empty
 
-    weak = _strategy_change_note(empty_streak=2, read_url_retired=True)
-    assert "先 read_url" not in weak
-    assert "勿再催 read_url" in weak
+    weak = _strategy_change_note(empty_streak=2, web_fetch_retired=True)
+    assert "先 web_fetch" not in weak
+    assert "勿再催 web_fetch" in weak
 
     hint = consume_post_read_retire_search_hint(run_id)
     assert hint == POST_READ_RETIRE_SEARCH_HINT
     assert consume_post_read_retire_search_hint(run_id) is None  # one-shot
-    clear_read_url_retired(run_id)
+    clear_web_fetch_retired(run_id)

@@ -4,7 +4,7 @@ import {
 } from "@/components/llm/ModelKeyForm";
 import { ToolsCapabilityBadge } from "@/components/llm/ToolsCapabilityBadge";
 import { SettingsAsync } from "@/components/settings";
-import { Button, Card, ConfirmDialog } from "@/components/ui";
+import { Button, Card, ConfirmDialog, PageHeader } from "@/components/ui";
 import { useLlmProviders } from "@/hooks/useLlmProviders";
 import {
   llmModelProfileKeys,
@@ -25,11 +25,10 @@ import {
   XCircle,
 } from "lucide-react";
 import { useState } from "react";
-import { SettingsHeader } from "./SettingsHeader";
 
 /**
  * 服务商 (/more/providers) — BYOK 列表 / 表单 / 测连 + 安全说明。
- * 页头只说本页职责；平台额度由模型页承担。平台不可用时改准入说明。
+ * 页头只留标题；准入走空态，选用组合在「设置 · 模型」。
  */
 export function ProviderSettings() {
   const { data: response, isLoading, isError, error } = useLlmProviders();
@@ -105,19 +104,11 @@ export function ProviderSettings() {
     }
   };
 
-  const platformMode = response?.platform_available === true;
   const providers = response?.providers ?? [];
 
   return (
     <div>
-      <SettingsHeader
-        title="服务商"
-        description={
-          platformMode
-            ? "接入自己的 OpenAI 兼容端点（可多个）。日常选用在「设置 · 模型」。"
-            : "接入自己的 OpenAI 兼容端点（可多个）。需自行接入服务商后才能对话。"
-        }
-      />
+      <PageHeader title="服务商" />
 
       {isLoading || isError || !response ? (
         <SettingsAsync

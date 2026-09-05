@@ -4,6 +4,25 @@ export {
   type CatalogIconShellProps,
 } from "./catalog-icon-shell";
 export {
+  CatalogTile,
+  type CatalogTileProps,
+} from "./catalog-tile";
+export {
+  PageHeader,
+  type PageHeaderBack,
+  type PageHeaderProps,
+} from "./page-header";
+export {
+  SectionTabs,
+  type SectionTabItem,
+  type SectionTabsProps,
+} from "./section-tabs";
+export {
+  SegmentedControl,
+  type SegmentedControlItem,
+  type SegmentedControlProps,
+} from "./segmented-control";
+export {
   Button,
   type ButtonProps,
   type ButtonSize,
@@ -71,11 +90,6 @@ export { SearchTrigger } from "./search-trigger";
 export { PatternCardHeader } from "./pattern-card-header";
 export { EmptyHint, type EmptyHintProps } from "./empty-hint";
 export { SectionLabel } from "./section-label";
-export {
-  SegmentedNav,
-  type SegmentedNavItem,
-  type SegmentedNavProps,
-} from "./segmented-nav";
 export {
   SurfaceRow,
   SurfaceRowButton,

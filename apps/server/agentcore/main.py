@@ -39,6 +39,8 @@ from agentcore.api.routes import (
     realtime,
     search,
     sharing,
+    skill_catalog,
+    skill_store,
     standing_tasks,
     system,
     usage,
@@ -644,6 +646,8 @@ app.include_router(messages.router, prefix="/v1")
 app.include_router(model_catalog.router, prefix="/v1")
 app.include_router(realtime.router, prefix="/v1")
 app.include_router(search.router, prefix="/v1")
+app.include_router(skill_catalog.router, prefix="/v1")
+app.include_router(skill_store.router, prefix="/v1")
 # Conversation sharing (分享对话): owner-only manage under /v1, plus the public
 # read-only page at the root (/shared/{token}, no /v1, no auth).
 app.include_router(sharing.router, prefix="/v1")

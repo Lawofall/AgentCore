@@ -1,11 +1,10 @@
-import { KillPtyConfirmDialog } from "@/components/terminal/KillPtyConfirmDialog";
 import { XtermView } from "@/components/terminal/XtermView";
 /**
  * 右坞「终端」tab —— M1 后台进程 + M2 执行记录 + M3 用户交互 shell。
  *
  * 纵向会话列表（无分区标题）+ 后台进程 / 执行记录；选中项看滚屏/交互。
  */
-import { Button, IconButton } from "@/components/ui";
+import { Button, ConfirmDialog, IconButton } from "@/components/ui";
 import {
   type ExecutionRecord,
   deriveExecutionRecords,
@@ -399,12 +398,15 @@ export function TerminalPanelBody({
           {canOpenPty ? "新开或选择一项查看" : "选择一项查看输出"}
         </div>
       )}
-      <KillPtyConfirmDialog
+      <ConfirmDialog
         open={killConfirmId != null}
         onOpenChange={(next) => {
           if (!next && !killBusy) setKillConfirmId(null);
         }}
+        title="要终止正在运行的进程吗？"
         description="关闭将终止此终端中的进程"
+        confirmLabel="终止"
+        tone="danger"
         busy={killBusy}
         onConfirm={() => {
           if (killConfirmId) void finishKillSession(killConfirmId);

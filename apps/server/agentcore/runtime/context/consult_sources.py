@@ -12,8 +12,8 @@ Shadowed names log ``consult.name_shadowed``.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Sequence
-from dataclasses import dataclass
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from agentcore.core.logging import get_logger
@@ -26,6 +26,7 @@ from agentcore.memory.rules_injection import (
 from agentcore.memory.store import TOPIC_DIR, MemoryStore, topic_path
 from agentcore.runtime.context.consultable import ConsultDirectoryEntry
 from agentcore.runtime.skills.registry import SkillRegistry
+from agentcore.runtime.skills.replacements import SkillReplacement
 
 logger = get_logger(__name__)
 
@@ -55,29 +56,48 @@ class SkillConsultSource:
     ``audience`` is ``\"ceo\"`` / ``\"worker\"`` in production so listing and fetch
     cannot advertise a CEO-only manual to a worker. ``None`` keeps the tools-only
     filter (unit tests that exercise CEO hits without a wire path).
+
+    ``replacements`` is the account 换用 overlay (slot → user body). Directory
+    summary and fetch body both read it; ``requires_tools`` still follows the
+    official slot. ``muted`` names leave both listing and fetch (藏起). Unbound
+    same-name user rules stay shadowed by this source.
     """
 
     registry: SkillRegistry
     tool_names: Collection[str]
     audience: str | None = None
+    replacements: Mapping[str, SkillReplacement] = field(default_factory=dict)
+    muted: Collection[str] = field(default_factory=frozenset)
 
     async def list_directory(self, user_id: str) -> Sequence[ConsultDirectoryEntry]:
-        del user_id  # skills are code-defined, not per-user
+        del user_id  # overlay is preloaded; listing still filters by live tools
         names = set(self.tool_names)
-        return [
-            ConsultDirectoryEntry(name=s.name, summary=s.summary, section="skill")
-            for s in self.registry.available(names, audience=self.audience)
-        ]
+        hidden = set(self.muted)
+        entries: list[ConsultDirectoryEntry] = []
+        for skill in self.registry.available(names, audience=self.audience):
+            if skill.name in hidden:
+                continue
+            repl = self.replacements.get(skill.name)
+            entries.append(
+                ConsultDirectoryEntry(
+                    name=skill.name,
+                    summary=repl.summary if repl is not None else skill.summary,
+                    section="skill",
+                )
+            )
+        return entries
 
     async def fetch_by_name(self, user_id: str, name: str) -> str | None:
         del user_id
         key = name.strip()
-        if not key:
+        if not key or key in set(self.muted):
             return None
         names = set(self.tool_names)
         for skill in self.registry.available(names, audience=self.audience):
-            if skill.name == key:
-                return skill.body
+            if skill.name != key:
+                continue
+            repl = self.replacements.get(key)
+            return repl.body if repl is not None else skill.body
         return None
 
 
@@ -207,19 +227,22 @@ class RuleConsultSource:
     """
 
     folder_id: str | None = None
+    skip_names: Collection[str] = field(default_factory=frozenset)
 
     async def list_directory(self, user_id: str) -> Sequence[ConsultDirectoryEntry]:
         from agentcore.memory.rules_injection import load_on_demand_user_rules
 
+        skip = set(self.skip_names)
         rules = await load_on_demand_user_rules(user_id, folder_id=self.folder_id)
         return [
             ConsultDirectoryEntry(name=r.name, summary=r.summary, section="rule")
             for r in rules
+            if r.name not in skip
         ]
 
     async def fetch_by_name(self, user_id: str, name: str) -> str | None:
         key = rule_consult_name(name)
-        if not key:
+        if not key or key in set(self.skip_names):
             return None
         try:
             from agentcore.account.credentials import get_account_credentials
@@ -322,8 +345,15 @@ class MergedConsultSource:
         for kind, src in self._iters():
             body = await src.fetch_by_name(user_id, raw)
             if body is not None:
-                logger.info("consult.hit", name=raw, kind=kind)
-                return ConsultHit(body=body, origin=_ORIGIN_BY_KIND[kind])
+                origin = _ORIGIN_BY_KIND[kind]
+                if (
+                    kind == "skill"
+                    and self.skill is not None
+                    and raw in self.skill.replacements
+                ):
+                    origin = "user"
+                logger.info("consult.hit", name=raw, kind=kind, origin=origin)
+                return ConsultHit(body=body, origin=origin)
         return None
 
 
@@ -343,6 +373,8 @@ def expand_skill_tool_names(
             registry=skill.registry,
             tool_names=set(skill.tool_names) | set(extra_tools),
             audience=skill.audience,
+            replacements=skill.replacements,
+            muted=skill.muted,
         ),
         tool=source.tool,
         rule=source.rule,
@@ -359,13 +391,19 @@ def build_merged_consult_source(
     include_rules: bool = True,
     skill_audience: str | None = None,
     tool_registry: Any | None = None,
+    skill_replacements: Mapping[str, SkillReplacement] | None = None,
+    skip_rule_names: Collection[str] | None = None,
+    muted_skill_names: Collection[str] | None = None,
 ) -> MergedConsultSource:
     """Assemble the turn's unified consult source (CEO or worker)."""
+    replacements = skill_replacements or {}
     skill = (
         SkillConsultSource(
             registry=skill_registry,
             tool_names=tool_names,
             audience=skill_audience,
+            replacements=replacements,
+            muted=muted_skill_names or frozenset(),
         )
         if skill_registry is not None
         else None
@@ -380,8 +418,44 @@ def build_merged_consult_source(
         if memory_store is not None
         else None
     )
-    rule = RuleConsultSource(folder_id=folder_id) if include_rules else None
+    rule = (
+        RuleConsultSource(
+            folder_id=folder_id, skip_names=skip_rule_names or frozenset()
+        )
+        if include_rules
+        else None
+    )
     return MergedConsultSource(skill=skill, tool=tool, rule=rule, memory=memory)
+
+
+async def build_merged_consult_source_for_user(
+    *,
+    user_id: str,
+    skill_registry: SkillRegistry | None,
+    tool_names: Collection[str],
+    memory_store: MemoryStore | None,
+    folder_id: str | None,
+    include_rules: bool = True,
+    skill_audience: str | None = None,
+    tool_registry: Any | None = None,
+) -> MergedConsultSource:
+    """Same as :func:`build_merged_consult_source` plus this user's 换用 / 藏起 overlay."""
+    from agentcore.runtime.skills.replacements import load_skill_overlay
+
+    overlay = await load_skill_overlay(user_id, folder_id=folder_id)
+    skip = frozenset(item.document_name for item in overlay.replacements.values())
+    return build_merged_consult_source(
+        skill_registry=skill_registry,
+        tool_names=tool_names,
+        memory_store=memory_store,
+        folder_id=folder_id,
+        include_rules=include_rules,
+        skill_audience=skill_audience,
+        tool_registry=tool_registry,
+        skill_replacements=overlay.replacements,
+        skip_rule_names=skip,
+        muted_skill_names=overlay.muted,
+    )
 
 
 def _memory_slug(raw: str) -> str:

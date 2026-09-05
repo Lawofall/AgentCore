@@ -85,7 +85,7 @@ D9（长驻 stdio JSON-RPC）+ D10（restricted netstack + 宿主过滤代理）
 2. **出口隔离拓扑**：专用 netns + veth pair，宿主端跑代理、**不开 NAT/IP 转发** → 沙箱唯一可达的链外地址就是代理。这满足 D10「网络层强制」（沙箱内 raw socket 也无法绕过，因根本无路由）。
 3. **代理 = SSRF 执行点**：代理侧解析 DNS 并拒私网/链路本地/元数据；产品代理复用 `core/net.py`（`classify_url`/`ip_is_safe`/`PinnedIPTransport`），不用本 PoC 的简化实现。
 4. **Chromium link-local 怪癖**：Chromium 不把 `169.254.x.x` 走代理（直连并挂起）——元数据拦截改用「沙箱内 HTTP 经代理」路径验证（`proxy_fetch`）。产品里 raw netstack 无 link-local 路由 + 代理拒绝，双保险。
-5. **dev 环境 fake-IP**：本机 Docker Desktop 走 Clash/Mihomo fake-IP DNS（公网名解析成 `198.18.x.x`）；代理需按 `core/net.py` 的 `read_url_allow_fake_ip_proxy` 放行该段才能在 dev 触达真公网（真私网仍拦）。
+5. **dev 环境 fake-IP**：本机 Docker Desktop 走 Clash/Mihomo fake-IP DNS（公网名解析成 `198.18.x.x`）；代理需按 `core/net.py` 的 `web_fetch_allow_fake_ip_proxy` 放行该段才能在 dev 触达真公网（真私网仍拦）。
 6. **cgroups**：Docker Desktop 嵌套 cgroup v1 下非 rootless runsc 需 `--ignore-cgroups`（pids 控制器未委派）；生产宿主 cgroup 委派正常则不需要（限额在会话 OCI/宿主侧另加）。
 
 复跑：`docker run --rm --privileged -v <pocdir>:/poc -v <pocdir>/out:/out poc-browser-gvisor python3 -u /poc/run_channel.py`

@@ -68,7 +68,7 @@ worker 唯一向上通道。`blocking=false`（默认）= 已有合理默认、�
 | 叶子 | 正文（`form=prose` 整份 allowance）或文件指针 + 已核路径 | 默认不写；有增量才补，不复述结论 |
 | 有下游 | 只读简报（正文由下游经依赖上下文池完整读走） | 必须写，且带结论 |
 
-有下游时「正文 ↔ 简报重复」是**功能性冗余**（两个读者各需一份），不是缺陷，别再当重复去修。叶子不再靠简报当队长唯一信息源——队长读正文或落盘路径。→ 见代码: `runtime/runs/executor/identities.py` · `runtime/delegate/ceo_format.py`
+有下游时「正文 ↔ 简报重复」是**功能性冗余**（两个读者各需一份），不是缺陷，别再当重复去修。叶子不再靠简报当队长唯一信息源——队长读正文或落盘路径。→ 见代码: `tools/builtin/handoff.py` · `runtime/delegate/ceo_format.py`
 
 被否决：把便条塞进工具 JSON（刚写完长文再倒进 `summary`，引号/换行导致 `args_parse_failed`，窄 salvage 救不了；空 `{}` 是失败后最小合法对象）；从成稿切「## 交接简报」；JSON 里再留一个 `text` 字段；给最后一棒卸掉 handoff 工具；`key_points` 换成纯接力状态（计划复核卡 / CEO 确定性评审仍读历史四格；新回合不写这些字段）；门禁改「必须 ≥2 条 key_points」（数条数挡不住结论复述，却误伤只写长 summary 的合规上游 → [拦截纪律](/.cursor/rules/intercept-discipline.mdc)）；叶节点「干了不少」（用过工具 / 正文较长）也强制交接（误伤最后一棒，便条抄正文；队长已能看见正文或文件）。handoff 无参数字段，不做运行时拒收空便条（空交硬拒已撤）。
 
@@ -120,7 +120,7 @@ Agent 没有「文件开在编辑器里」。写盘占用只包住**这一次** 
 | 项 | 状态 |
 |---|---|
 | 完整 Preflight Audit | ⏳；薄预览不等于编制确认；编制到即开跑 |
-| 一等 Team 实体 / A2A | ⏳ 暂不启动（勿与现行 `delegate` 临时组队混淆）→ [定位 §四](/docs/01-产品/产品定位与品牌.md) |
+| 一等 Team 实体 / A2A | ⏳ 第一刀不做（商店只卖 Skill；勿与现行 `delegate` 临时组队混淆）→ [工具与能力 · 能力商店](/docs/03-AI核心/工具与能力系统.md#能力商店) |
 | 独立 Arena | **否决** |
 | 树级共享 Semaphore | **否决**（父子互等死锁） |
 | 便签墙 / worker 侧向广播 | **否决**（第四套实体；不留波内推送。旧 journal `team_note_posted` 跳过、不展示） |

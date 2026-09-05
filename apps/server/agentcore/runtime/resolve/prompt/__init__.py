@@ -23,11 +23,8 @@ from agentcore.runtime.resolve.prompt.ceo_core import (
     capability_how_suffix,
 )
 from agentcore.runtime.resolve.prompt.cold_start import (
-    _COLD_START_EXPLORE_HINT_EMPTY,
-    _COLD_START_EXPLORE_HINT_REBIND,
     _COLD_START_EXPLORE_HINT_REFRESH,
     _FOLDER_NAV_STALE_HINT,
-    _FOLDER_PROFILE_EMPTY_SOFT_HINT,
     _explore_act_block,
 )
 from agentcore.runtime.resolve.prompt.compose import (
@@ -49,12 +46,9 @@ __all__ = [
     "_ATTACHMENT_MATERIAL_HINT",
     "_CEO_CORE_HINT",
     "_CEO_CORE_HINT_TEMPLATE",
-    "_COLD_START_EXPLORE_HINT_EMPTY",
-    "_COLD_START_EXPLORE_HINT_REBIND",
     "_COLD_START_EXPLORE_HINT_REFRESH",
     "_DEFAULT_SYSTEM_PROMPT",
     "_FOLDER_NAV_STALE_HINT",
-    "_FOLDER_PROFILE_EMPTY_SOFT_HINT",
     "_MEMORY_ROUTING_FENCE",
     "_RULES_ROUTING_FENCE",
     "_RULES_TEMPLATE",

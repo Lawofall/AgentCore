@@ -439,7 +439,7 @@ class FileReadTool:
         return ToolSchema(
             name="file_read",
             description=(
-                "读取工作区文件。http(s) 用 read_url；定位用 grep / code_search / glob。"
+                "读取工作区文件。http(s) 用 web_fetch；定位用 grep / code_search / glob。"
                 "`.` 不是文件。正文用本工具，勿 dump。"
             ),
             parameters={
@@ -450,7 +450,7 @@ class FileReadTool:
                         "description": (
                             "工作区相对 POSIX 文件路径（`.`=根；`/<根标签>/…` 与裸 `/`、"
                             "`\\` 视为根；其它绝对路径如 /etc、盘符拒绝）。"
-                            "http(s) URL 请用 read_url。"
+                            "http(s) URL 请用 web_fetch。"
                             "Office/PDF 自动抽文本；表格（xlsx/csv 等）默认不抽文本。"
                         ),
                     },

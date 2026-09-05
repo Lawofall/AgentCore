@@ -303,4 +303,10 @@ export interface ConversationRuntime {
    * EPHEMERAL——reload 丢失；message_start / waiting=false 清除。
    */
   waitingForWorkspaceLock: boolean;
+  /**
+   * Live-only：云桌开通（`desk_provision_wait` SSE）。
+   * true 时空 assistant 气泡显示「正在准备云端环境」而非 Thinking…。
+   * EPHEMERAL——reload 丢失；message_start / waiting=false 清除。
+   */
+  waitingForDeskProvision: boolean;
 }

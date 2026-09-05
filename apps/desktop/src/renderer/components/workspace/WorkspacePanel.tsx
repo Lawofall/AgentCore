@@ -63,6 +63,7 @@ import { WorkspaceModeBar } from "./WorkspaceModeBar";
  */
 export function WorkspaceMode() {
   const conversationId = useConversationStore((s) => s.currentConversationId);
+  const draftKind = useFoldersStore((s) => s.draftWorkspaceIntent.kind);
   const conversations = useConversations();
   const folderId =
     conversations.find((c) => c.id === conversationId)?.folderId?.trim() ||
@@ -95,12 +96,13 @@ export function WorkspaceMode() {
   }, [ws, fsAvailable, source]);
 
   if (!conversationId) {
+    const localDraft = draftKind === "quick_local";
     return (
       <EmptyHint
         inline
         icon={<FolderOpen size={26} className="text-muted-foreground/40" />}
-        title="云端草稿"
-        hint="发送第一条消息后，快速对话产生的文件会出现在这里。"
+        title={localDraft ? "本地对话" : "云端对话"}
+        hint="发送第一条消息后，这次对话产生的文件会出现在这里。"
       />
     );
   }

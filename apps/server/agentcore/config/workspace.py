@@ -130,9 +130,10 @@ class WorkspaceSettings(BaseModel):
     # cloud gVisor. Covers disaster wall (1200s) + engine slack (30s).
     gvisor_timeout_max_seconds: int = 1230
     # Idle cloud-desk guest reap (kill+delete; disk stays; next prepare/attach
-    # recreates). Default matches browser session idle (10min). A desk with
-    # inflight execute/short_exec, a running desk_process (e.g. vite), or a live
-    # sandbox browser (including a watched live tab) is never reaped. Not freeze/pause.
+    # recreates in seconds). Default matches browser session idle (10min). A desk
+    # with inflight execute/short_exec, a running desk_process (e.g. vite), or a
+    # live sandbox browser (including a watched live tab) is never reaped.
+    # Recreate is the idle wake: long-running processes do not survive. Not freeze.
     gvisor_desk_idle_ttl_seconds: float = 10 * 60.0
 
     # ── L3 团队浏览器 M0（内置浏览器与Agent浏览器提案.md · D9–D11）────────────

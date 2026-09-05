@@ -593,7 +593,7 @@ describe("ModelSettings (profiles)", () => {
     renderPage();
     expect(screen.getByRole("link", { name: "接入服务商" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "接入服务商" })).toBeTruthy();
-    expect(screen.getByText(/需自行接入服务商后才能对话/)).toBeTruthy();
+    expect(screen.queryByText(/需自行接入服务商后才能对话/)).toBeNull();
     expect(screen.queryByText("模型组合")).toBeNull();
   });
 

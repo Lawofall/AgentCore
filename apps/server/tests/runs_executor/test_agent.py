@@ -100,10 +100,10 @@ async def test_worker_prompt_carries_role_and_task():
 
 
 async def test_worker_identity_states_output_is_user_visible():
-    """Worker identity still tells it prose is self-contained user-facing copy
-    (drillable in the UI) — P2, to motivate user-ready quality rather than
-    writing only for the CEO. The old「直接展示给用户」line moved into the
-    compressed form block as「可独立阅读」/「自包含」."""
+    """Form HOW is the per-turn 交付物规格 channel, not worker ``<身份>``.
+
+    prose = 成品就是正文 / 不要落盘. Withdrawn「可独立阅读」/「自包含」stay out.
+    """
     plan, _ = build_run_plan(
         [
             {
@@ -117,8 +117,13 @@ async def test_worker_identity_states_output_is_user_visible():
     provider = _ContentProvider(["X"])
     await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
     system = provider.system_messages[0]
-    assert "可独立阅读" in system
-    assert "自包含" in system
+    opening = provider.user_messages[0]
+    assert "可独立阅读" not in system
+    assert "自包含" not in system
+    assert "交付物规格" in opening
+    assert "form=prose" in opening
+    assert "成品就是正文" in opening
+    assert "不要落盘" in opening
 
 
 async def test_run_lifecycle_events_emitted():
@@ -661,12 +666,13 @@ async def test_contract_requirements_stated_in_first_prompt():
     assert "检索预算" not in provider.user_messages[0]
 
 
-async def test_default_files_omits_deliverable_spec_channel():
+async def test_default_files_includes_form_how_in_deliverable_spec():
     plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
     provider = _ContentProvider(["正文"])
     await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
     opening = provider.user_messages[0]
-    assert "交付物规格" not in opening
+    assert "交付物规格" in opening
+    assert "form=files" in opening
     assert "检索预算" not in opening
 
 
@@ -689,23 +695,18 @@ async def test_contract_section_miss_soft_completes_even_if_strict():
 
 
 async def test_worker_system_prompt_grants_structure_ownership():
-    # 认知分工的接收端（L3，worker 侧所有权）: the CEO brake (test_prompt.py) tells the
-    # CEO not to design the deliverable's structure; this is the counterpart that
-    # reaches the WORKER — its system prompt must empower it to OWN the professional
-    # structure and treat any skeleton leaked into the task as a starting suggestion
-    # (checked against the 原始用户请求, also in its prompt) rather than a fill-in
-    # template. Pins the fix so a refactor of the shared deliverable policy can't
-    # silently revert the worker to a「填字员」. Verified end-to-end (assembled system
-    # message), not just the constant, so the block must actually land in the prompt.
+    # Structure ownership stays on CEO skill (test_prompt.py 专业方案归专家).
+    # Worker ``<身份>`` does not resurrect 填字员 / 专业结构 / 起点线索 copy.
     plan, _ = build_run_plan([{"role": "写作者", "task": "写一篇文章"}], id_prefix="t")
     provider = _ContentProvider(["正文"])
     await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
     sys = provider.system_messages[0]
-    assert "专业结构" in sys
-    assert "填字" in sys
-    # 对称解锁：task 关注点是起点线索不是答题边界（审查类「指路不代答」的 worker 侧）。
-    assert "起点线索" in sys
-    assert "答题边界" in sys
+    assert "专业结构" not in sys
+    assert "填字" not in sys
+    assert "起点线索" not in sys
+    assert "答题边界" not in sys
+    assert "<身份>" in sys
+    assert "队员" in sys
 
 
 async def test_contract_retired_min_length_even_strict_ignored():
@@ -955,7 +956,7 @@ async def test_worker_with_explicit_tools_is_not_restricted():
 
 async def test_debater_path_offers_file_write_without_readonly_box():
     """真纯丙·H4：辩手路径不再靠系统只读箱；遗留 tools 声明仍被忽略，写盘可执行。"""
-    legacy_readonly = ("web_search", "read_url", "file_read", "file_list", "grep")
+    legacy_readonly = ("web_search", "web_fetch", "file_read", "file_list", "grep")
 
     plan, errs = build_run_plan(
         [{"role": "正方", "task": "立论取证", "tools": list(legacy_readonly)}],

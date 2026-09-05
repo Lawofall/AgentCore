@@ -5,7 +5,7 @@ import { processHasSuccessfulHandoff } from "@/components/chat/handoffBrief";
 import { ProcessTimeline } from "@/components/chat/message-bubble/ProcessTimeline";
 import { RunInterveneControls } from "@/components/graph/RunInterveneControls";
 import { runActCapabilities } from "@/components/graph/planCapabilities";
-import { Button } from "@/components/ui";
+import { Badge, Button } from "@/components/ui";
 import { useTurnAudit } from "@/hooks/useTurnAudit";
 import { openWorkspaceDeliverable } from "@/lib/openWorkspaceDeliverable";
 import type { AgentAuditEvent } from "@/services/audit";
@@ -167,21 +167,25 @@ export function RunDetailBody({
           {agent.role}
         </span>
         {run.replacesRunId != null && (
-          <span
+          <Badge
+            tone="muted"
+            pill
             title="同角色新人按新方向重做"
-            className="inline-flex shrink-0 items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
+            className="font-medium"
           >
             接手
-          </span>
+          </Badge>
         )}
         {turnPresetLabel && (
-          <span
+          <Badge
+            tone="muted"
+            pill
             title="本回合生效的权限模式"
-            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
+            className="gap-1 font-medium"
           >
             <Shield size={11} className="shrink-0" />
             {turnPresetLabel}
-          </span>
+          </Badge>
         )}
         <StatusBadge
           status={run.status}

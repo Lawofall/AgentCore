@@ -26,21 +26,12 @@ from agentcore.memory.explore_profile import (
     record_explore_workspace_key,
     resolve_hard_explore_reason,
     user_named_explore_refresh,
-    user_named_folder_work,
     write_folder_navigation,
     write_folder_profile_cas,
     write_folder_topics_replace,
 )
 from agentcore.memory.store import CORE_MEMORY_FILE, NAVIGATION_MEMORY_FILE, FileMemoryStore
 from agentcore.runtime.resolve.prompt import compose_ceo_chat_prompt
-from agentcore.runtime.resolve.prompt.cold_start import (
-    _COLD_START_EXPLORE_HINT_EMPTY,
-    _COLD_START_EXPLORE_HINT_REBIND,
-    _COLD_START_EXPLORE_HINT_REFRESH,
-    _COLD_START_EXPLORE_REASON_EMPTY,
-    _COLD_START_EXPLORE_REASON_REBIND,
-    _COLD_START_EXPLORE_REASON_REFRESH,
-)
 from agentcore.runtime.skills import build_system_skill_registry
 from agentcore.tools.builtin.remember import RememberTool
 from agentcore.tools.builtin.update_folder_profile import UpdateFolderProfileTool
@@ -336,6 +327,29 @@ async def test_write_folder_profile_cas_merge(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_write_folder_profile_cas_replace_drops_old_sections(tmp_path):
+    store = FileMemoryStore(tmp_path)
+    uid = str(uuid4())
+    folder = str(uuid4())
+    await store.save(
+        uid,
+        CORE_MEMORY_FILE,
+        "## 技术栈与工具\n- Python\n\n## 项目约束\n- 旧仓约束\n",
+        scope=folder,
+    )
+    ok, resulting, conflict = await write_folder_profile_cas(
+        store=store,
+        user_id=uid,
+        folder_id=folder,
+        new_markdown="## 技术栈与工具\n- Rust\n",
+        replace=True,
+    )
+    assert ok and not conflict
+    assert "Rust" in resulting
+    assert "旧仓约束" not in resulting
+
+
+@pytest.mark.asyncio
 async def test_write_folder_profile_cas_rejects_empty_content(tmp_path):
     store = FileMemoryStore(tmp_path)
     uid = str(uuid4())
@@ -451,13 +465,14 @@ def test_compose_prompt_cold_start_block_only_when_flagged():
         cold_start_explore=True,
     )
     assert "当前文件夹约定记忆「画像.md」为空" not in without
-    assert "当前文件夹约定记忆「画像.md」为空" in with_flag
+    assert "当前文件夹约定记忆「画像.md」为空" not in with_flag
     assert "<冷启动探索>" in with_flag
     block = with_flag[
         with_flag.find("<冷启动探索>") : with_flag.find("</冷启动探索>")
     ]
+    assert "用户点名刷新" in block
     assert "先轻探再 delegate 调研建档" in block
-    assert "闲聊不开幕" in block
+    assert "闲聊不开幕" not in block
     assert "remember" in block
     assert "写盘不得出 AgentCore/" in block
     assert "假画像" not in block
@@ -466,33 +481,19 @@ def test_compose_prompt_cold_start_block_only_when_flagged():
     assert "team_preview" not in block
 
 
-def test_hard_explore_three_reasons_share_one_principle():
-    """硬挡三因共用一条原则，只用 reason_line 区分。"""
-
-    def body(hint: str, reason: str) -> str:
-        assert reason in hint
-        return hint.replace(reason, "", 1)
-
-    empty = body(_COLD_START_EXPLORE_HINT_EMPTY, _COLD_START_EXPLORE_REASON_EMPTY)
-    rebind = body(_COLD_START_EXPLORE_HINT_REBIND, _COLD_START_EXPLORE_REASON_REBIND)
-    refresh = body(_COLD_START_EXPLORE_HINT_REFRESH, _COLD_START_EXPLORE_REASON_REFRESH)
-    assert empty == rebind == refresh
-    assert "【冷启动探索幕 · " not in empty
-
-
-def test_compose_prompt_rebind_gate():
+def test_compose_prompt_empty_and_rebind_no_longer_open_the_act():
     skills = build_system_skill_registry()
-    text = compose_ceo_chat_prompt(
-        "BASE",
-        skill_registry=skills,
-        ceo_tool_names={"update_folder_profile", "delegate"},
-        cold_start_explore="rebind",
-    )
-    assert "绑定已变" in text
-    assert "先轻探再 delegate 调研建档" in text
-    assert "合并更新" in text
-    assert "<冷启动探索>" in text
-    assert "画像.md」为空" not in text
+    names = {"update_folder_profile", "delegate"}
+    for reason in ("empty", "rebind"):
+        text = compose_ceo_chat_prompt(
+            "BASE",
+            skill_registry=skills,
+            ceo_tool_names=names,
+            cold_start_explore=reason,
+        )
+        assert "<冷启动探索>" not in text
+        assert "绑定已变" not in text
+        assert "当前文件夹约定记忆「画像.md」为空" not in text
 
 
 def test_compose_prompt_refresh_gate():
@@ -525,35 +526,14 @@ def test_user_named_explore_refresh_allow_list():
     assert user_named_explore_refresh("") is False
 
 
-def test_user_named_folder_work_allow_list():
-    assert user_named_folder_work("请继续开发这个功能") is True
-    assert user_named_folder_work("改这个项目的 README") is True
-    assert user_named_folder_work("改这个文件夹的 README") is True
-    assert user_named_folder_work("在这个项目里加测试") is True
-    assert user_named_folder_work("在这个文件夹里加测试") is True
-    assert user_named_folder_work("全面摸底一下架构") is True
-    assert user_named_folder_work("摸清这个项目结构") is True
-    assert user_named_folder_work("摸清这个文件夹结构") is True
-    assert user_named_folder_work("先摸仓再动手") is True
-    assert user_named_folder_work("今天天气怎么样") is False
-    assert user_named_folder_work("帮我改一下 README") is False
-    assert user_named_folder_work("") is False
-
-
-def test_resolve_hard_explore_reason_soft_empty_and_named_work():
-    """Empty alone → soft; empty+工程点名 → hard; refresh phrase → hard."""
-    hard, soft = resolve_hard_explore_reason("empty", "进度条卡 0% 请修一下")
-    assert hard is None and soft is True
-    hard, soft = resolve_hard_explore_reason("empty", "请继续开发这个功能")
-    assert hard == "empty" and soft is False
-    hard, soft = resolve_hard_explore_reason("empty", "请先了解一下这个仓库")
-    assert hard == "refresh" and soft is False
-    hard, soft = resolve_hard_explore_reason(None, "请重新了解项目")
-    assert hard == "refresh" and soft is False
-    hard, soft = resolve_hard_explore_reason("rebind", "随便说说")
-    assert hard == "rebind" and soft is False
-    hard, soft = resolve_hard_explore_reason("rebind", "请先了解一下这个仓库")
-    assert hard == "rebind" and soft is False
+def test_resolve_hard_explore_reason_only_named_refresh():
+    """Empty / 工程短语 / rebind 都不 pending；只有点名 refresh。"""
+    assert resolve_hard_explore_reason("empty", "进度条卡 0% 请修一下") is None
+    assert resolve_hard_explore_reason("empty", "请继续开发这个功能") is None
+    assert resolve_hard_explore_reason("empty", "请先了解一下这个仓库") == "refresh"
+    assert resolve_hard_explore_reason(None, "请重新了解项目") == "refresh"
+    assert resolve_hard_explore_reason("rebind", "随便说说") is None
+    assert resolve_hard_explore_reason("rebind", "请先了解一下这个仓库") == "refresh"
 
 
 def test_compose_prompt_without_profile_tool_skips_write_hint():
@@ -729,50 +709,41 @@ def test_compose_prompt_folder_nav_stale_soft_hint():
     assert "【文件夹结构提示】" in text
     assert "当前文件夹约定记忆「画像.md」为空" not in text
     assert "【冷启动探索幕 · 绑定已变】" not in text
-    # Blocking explore wins over soft hint.
+    # Named refresh still wins over the fingerprint soft hint.
     blocked = compose_ceo_chat_prompt(
+        "BASE",
+        skill_registry=skills,
+        ceo_tool_names={"update_folder_profile", "delegate"},
+        cold_start_explore="refresh",
+        folder_nav_stale=True,
+    )
+    assert "用户点名刷新" in blocked
+    assert "【文件夹结构提示】" not in blocked
+    assert "写盘不得出 AgentCore/" in blocked
+    assert "勿让 worker 以 form=files" not in blocked
+    # Empty / rebind no longer open the act — stale hint still shows.
+    empty = compose_ceo_chat_prompt(
         "BASE",
         skill_registry=skills,
         ceo_tool_names={"update_folder_profile", "delegate"},
         cold_start_explore="empty",
         folder_nav_stale=True,
     )
-    assert "当前文件夹约定记忆「画像.md」为空" in blocked
-    assert "【文件夹结构提示】" not in blocked
-    assert "写盘不得出 AgentCore/" in blocked
-    assert "勿让 worker 以 form=files" not in blocked
+    assert "<冷启动探索>" not in empty
+    assert "【文件夹结构提示】" in empty
 
 
-def test_compose_prompt_folder_profile_empty_soft_hint():
+def test_compose_prompt_folder_profile_empty_soft_hint_absent():
     skills = build_system_skill_registry()
-    soft = compose_ceo_chat_prompt(
+    text = compose_ceo_chat_prompt(
         "BASE",
         skill_registry=skills,
         ceo_tool_names={"update_folder_profile", "delegate"},
         cold_start_explore=False,
-        folder_profile_empty_soft=True,
     )
-    assert "<文件夹画像空>" in soft
-    assert "【文件夹画像提示】" in soft
-    assert "不挡" in soft
-    assert "先了解" in soft
-    assert "继续开发" in soft
-    assert "</冷启动探索>" not in soft
-    assert "写盘不得出 AgentCore/" not in soft
-    assert "不可当跳过" not in soft
-    # Hard empty wins over soft empty.
-    hard = compose_ceo_chat_prompt(
-        "BASE",
-        skill_registry=skills,
-        ceo_tool_names={"update_folder_profile", "delegate"},
-        cold_start_explore="empty",
-        folder_profile_empty_soft=True,
-    )
-    assert "</冷启动探索>" in hard
-    assert "</文件夹画像空>" not in hard
-    assert "写盘不得出 AgentCore/" in hard
-    assert "先轻探再 delegate 调研建档" in hard
-    assert "闲聊不开幕" in hard
+    assert "<文件夹画像空>" not in text
+    assert "【文件夹画像提示】" not in text
+    assert "</冷启动探索>" not in text
 
 
 @pytest.mark.asyncio

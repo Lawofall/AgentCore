@@ -1,4 +1,4 @@
-"""Built-in tool: read_url (fetch a web page and extract its main text)."""
+"""Built-in tool: web_fetch (fetch a web page and extract its main text)."""
 
 import contextlib
 import json
@@ -33,7 +33,7 @@ from agentcore.tools.builtin.web._net import (
     circuit_remaining,
     note_failure,
     note_success,
-    read_url_retire_message,
+    web_fetch_retire_message,
 )
 from agentcore.tools.builtin.web.github_page import try_fetch_github_page
 from agentcore.tools.builtin.web.source_domains import default_source_domain_registry
@@ -84,32 +84,32 @@ _STOP_READ_HINT = (
 )
 # 401/403/429/451：同拒绝类失败的可执行约束（对齐 retire steer 语气；不拦换公开源）。
 _ANTI_CRAWL_SAME_REJECT_HINT = (
-    "【同拒绝类】勿对本 URL、同站点同策略再调 read_url；换公开可抓来源仍可用 read_url。"
+    "【同拒绝类】勿对本 URL、同站点同策略再调 web_fetch；换公开可抓来源仍可用 web_fetch。"
 )
 # 回环地址不是「深读失败」，是「这个工具够不到，换个工具就能做」。贴 _STOP_READ_HINT
 # （停止深读 / 基于已有材料收口）等于把模型推向放弃一次它换工具就能完成的验收——线上
 # 就这么丢过一次。所以这里只给可执行改道，不给收口话术。
 _LOOPBACK_REROUTE_HINT = (
-    "。read_url 在服务端进程内发起请求，够不到用户本机上的服务："
+    "。web_fetch 在服务端进程内发起请求，够不到用户本机上的服务："
     "换 URL、重试、改 UA 都读不到，这既不是出网受限，也不是放弃本次验收的理由。"
     "改道（二选一）：① 用 browser 工具打开该地址（浏览器跑在用户机器上）；"
     "② 用 terminal 在用户本机跑 `curl -sS <url>` 取内容。"
     "两者都不可用时，请用户把页面内容贴过来。"
 )
-# 工作区路径 / file:// / 盘符误喂 read_url：同构 loopback——工具没坏，换 file_read
+# 工作区路径 / file:// / 盘符误喂 web_fetch：同构 loopback——工具没坏，换 file_read
 # 就能做。贴收口话术会让模型放弃一次本可完成的读文件；补 https:// 会去抓公网
 # （文件夹名长得像域名时更糟，例如工作区 `_scratch/zoogame.cc/`）。
 _NOT_A_WEB_URL_REROUTE_HINT = (
-    "。read_url 只接受 http/https 公网网页，不是读工作区文件的工具："
+    "。web_fetch 只接受 http/https 公网网页，不是读工作区文件的工具："
     "工作区相对路径、file://、盘符请改用 file_read(path=相对路径)。"
-    "不要给本参数补 https:// 再调 read_url——那会去抓公网，读不到工作区文件。"
+    "不要给本参数补 https:// 再调 web_fetch——那会去抓公网，读不到工作区文件。"
 )
 
 # --- 用户可见失败 code ---------------------------------------------------------
 # ``metadata["code"]`` keys the curated user sentence (runtime/engine/tool_failure_face);
 # ``error`` above stays the model's imperative steer. Two channels, one classification —
 # an uncoded path collapses into a single info-free sentence for the user, which is what
-# every read_url failure used to do regardless of cause.
+# every web_fetch failure used to do regardless of cause.
 _CODE_LOOPBACK_HOST = "loopback_host"
 _CODE_NOT_A_WEB_URL = "not_a_web_url"
 _CODE_PRIVATE_IP = "private_address_blocked"
@@ -278,7 +278,7 @@ async def _safe_request(
     不视为出网故障。
 
     逐跳走模块级 ``_classify_url``（``core.net`` 导入的别名），既保住拒绝原因、
-    也让 ``test_web_tools`` 对 ``read_url._classify_url`` 的 monkeypatch 仍生效。
+    也让 ``test_web_tools`` 对 ``web_fetch._classify_url`` 的 monkeypatch 仍生效。
     """
     request = client.build_request(method, url, **kwargs)
     host = (request.url.host or "").lower()
@@ -455,7 +455,7 @@ def _make_display(
     }
 
 
-class ReadUrlTool:
+class WebFetchTool:
     """Fetch a web page and return its extracted main text."""
 
     registration = ToolRegistration(
@@ -467,12 +467,12 @@ class ReadUrlTool:
     def _guard_novel_domain_exfil(url: str, conversation_id: str) -> str | None:
         """Observe (and, under the opt-in flag, refuse) the novel-domain exfil pattern.
 
-        Indirect prompt injection can drive read_url to ``https://attacker/?d=<secret>``
+        Indirect prompt injection can drive web_fetch to ``https://attacker/?d=<secret>``
         — the SSRF guard blocks only INTERNAL targets, so a public exfil URL passes. The
         deterministic tell: a legitimate deep-read targets a domain ``web_search``
         surfaced this conversation, while an exfil URL is a model-fabricated NOVEL domain
         carrying a long opaque query (the secret). When both hold, log it (always, for
-        observability) and refuse it when ``read_url_block_novel_query`` is on.
+        observability) and refuse it when ``web_fetch_block_novel_query`` is on.
 
         Returns an honest model-facing error string to BLOCK, else ``None`` (allow).
         Skipped for unscoped calls (no per-conversation source set to compare against)
@@ -492,14 +492,14 @@ class ReadUrlTool:
         if default_source_domain_registry().has_domain(conversation_id, domain):
             return None
         logger.warning(
-            "tool.read_url_novel_domain",
+            "tool.web_fetch_novel_domain",
             url=url[:200],
             site=domain,
             query_len=query_len,
             conversation_id=conversation_id,
-            blocked=settings.read_url_block_novel_query,
+            blocked=settings.web_fetch_block_novel_query,
         )
-        if settings.read_url_block_novel_query:
+        if settings.web_fetch_block_novel_query:
             return (
                 "[ERROR] 该链接指向本会话检索结果之外的新域名且携带较长查询参数，"
                 "已按出网外泄防护拦截。如确需读取该来源，请先用 web_search 找到它，"
@@ -510,7 +510,7 @@ class ReadUrlTool:
     @property
     def schema(self) -> ToolSchema:
         return ToolSchema(
-            name="read_url",
+            name="web_fetch",
             description=(
                 "仅 http/https 公网网页正文。工作区相对路径、file://、盘符路径用 file_read，"
                 "不要把路径传给本工具，也不要补 https:// 冒充网页。"
@@ -558,7 +558,7 @@ class ReadUrlTool:
 
         # Run-scoped retirement (survives react_loop restart after stream-stall /
         # Wave retry): refuse without fetching and re-trip the loop breaker.
-        retire_msg = read_url_retire_message(context.run_id)
+        retire_msg = web_fetch_retire_message(context.run_id)
         if retire_msg:
             return ToolResult(
                 tool_call_id="",
@@ -567,8 +567,8 @@ class ReadUrlTool:
                 error=f"网页读取失败：{retire_msg}",
                 duration_ms=int((time.monotonic() - start) * 1000),
                 metadata={
-                    "code": "read_url_retired",
-                    "retire_tools": ["read_url"],
+                    "code": "web_fetch_retired",
+                    "retire_tools": ["web_fetch"],
                     "error_class": "permanent",
                     # CircuitBreak.message() prefixes ``[系统提示]`` once.
                     "retire_message": retire_msg,
@@ -613,7 +613,7 @@ class ReadUrlTool:
                 output, output_truncated = _page_output(
                     url=url, title=cached.title, text=text, limit=limit
                 )
-                logger.info("tool.read_url_cache_hit", url=url, content_chars=len(text))
+                logger.info("tool.web_fetch_cache_hit", url=url, content_chars=len(text))
                 return ToolResult(
                     tool_call_id="",
                     success=True,
@@ -663,7 +663,7 @@ class ReadUrlTool:
         # 工具执行阶段进度 (联网前端展示优化): signal the slow blocking leg so the waiting row
         # is live, not a dead spinner — and stay honest about egress control. If THIS host's
         # circuit is OPEN, ``_safe_request`` is about to fast-fail (EgressError), NOT queue —
-        # so report「出网受限·快速失败」(blocked) rather than a fake「正在抓取」/「排队」; read_url
+        # so report「出网受限·快速失败」(blocked) rather than a fake「正在抓取」/「排队」; web_fetch
         # has no token-bucket/semaphore wait, so it never has a real「排队」state. Otherwise the
         # fetch proceeds → 「正在抓取网页」. Best-effort; ``on_phase`` is None on unscoped call
         # sites (tests / evals). Enforcement stays in ``_safe_request`` (single source of truth);
@@ -717,7 +717,7 @@ class ReadUrlTool:
             host = site_of(url)
             if host:
                 err_fields["host"] = host
-            logger.warning("tool.read_url_error", **err_fields)
+            logger.warning("tool.web_fetch_error", **err_fields)
             # A rebind / redirect that lands on the user's own machine is the same
             # situation as the pre-flight loopback refusal — reroute, do not close.
             if _is_loopback_refusal(e):

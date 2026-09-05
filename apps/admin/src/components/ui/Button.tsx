@@ -15,8 +15,8 @@ const VARIANTS: Record<Variant, string> = {
 };
 
 const SIZES: Record<Size, string> = {
-  sm: "h-8 px-3 text-sm",
-  md: "h-9 px-4 text-sm",
+  sm: "h-7 gap-1 px-2.5 text-xs",
+  md: "h-8 gap-1.5 px-3 text-xs",
 };
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -26,7 +26,7 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 export function Button({
   variant = "primary",
-  size = "md",
+  size = "sm",
   className,
   type = "button",
   ...props
@@ -35,7 +35,7 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-2 rounded-lg font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed",
+        "inline-flex shrink-0 items-center justify-center gap-1 rounded-lg font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40",
         VARIANTS[variant],
         SIZES[size],
         className,

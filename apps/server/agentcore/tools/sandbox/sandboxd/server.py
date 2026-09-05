@@ -736,40 +736,161 @@ class SandboxdServer:
         req_id: Any,
         writer: asyncio.StreamWriter,
     ) -> None:
+        """Return as soon as the guest is running.
+
+        ``runsc run -detach`` should exit after forking. On production it can
+        keep the parent alive long after ``state`` is already ``running``.
+        Waiting on ``communicate()`` then kills a live desk. Poll ``runsc state``
+        and succeed without tearing the guest down.
+        """
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+        asyncio.create_task(self._drain_stream(proc.stdout))
+        stderr_buf = asyncio.create_task(self._read_stream(proc.stderr))
         timeout = _start_detach_proc_timeout()
         started = time.monotonic()
+        wait_task = asyncio.create_task(proc.wait())
         try:
-            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except TimeoutError:
-            elapsed = time.monotonic() - started
-            logger.warning(
-                "sandboxd.start_detach_timeout",
-                container_id=container_id,
-                timeout_seconds=timeout,
-                elapsed_seconds=round(elapsed, 3),
-            )
+            while True:
+                remaining = timeout - (time.monotonic() - started)
+                if remaining <= 0:
+                    if await self._guest_is_running(container_id):
+                        await self._finish_detach(
+                            proc,
+                            wait_task,
+                            container_id,
+                            req_id,
+                            writer,
+                            via="running_after_wait",
+                        )
+                        return
+                    await self._fail_detach_timeout(proc, wait_task, container_id, started, timeout)
+                done, _pending = await asyncio.wait(
+                    {wait_task}, timeout=min(0.2, max(remaining, 0.05))
+                )
+                if wait_task in done:
+                    break
+                if await self._guest_is_running(container_id):
+                    await self._finish_detach(
+                        proc,
+                        wait_task,
+                        container_id,
+                        req_id,
+                        writer,
+                        via="running",
+                    )
+                    return
+            stderr = b""
+            if not stderr_buf.done():
+                stderr_buf.cancel()
+            else:
+                stderr = stderr_buf.result()
+            if proc.returncode != 0 and not await self._guest_is_running(container_id):
+                detail = stderr.decode("utf-8", errors="replace").strip()[:200]
+                await self._runsc_aux("delete", "--force", container_id)
+                raise RpcDeniedError(
+                    detail or "runsc run -detach failed",
+                    code="sandboxd_rpc",
+                )
+            self._detached.add(container_id)
+            logger.info("sandboxd.start_detach", container_id=container_id)
+            writer.write(_json_bytes(_ok(req_id, {"mode": "detach"})))
+            await writer.drain()
+        except RpcDeniedError:
+            raise
+        except Exception:
+            wait_task.cancel()
             await self._kill_proc(proc)
-            await self._runsc_aux("delete", "--force", container_id)
-            raise RpcDeniedError(
-                "start-detach timed out",
-                code="sandboxd_start_timeout",
-            ) from None
-        if proc.returncode != 0:
-            detail = (stderr or b"").decode("utf-8", errors="replace").strip()[:200]
-            await self._runsc_aux("delete", "--force", container_id)
-            raise RpcDeniedError(
-                detail or "runsc run -detach failed",
-                code="sandboxd_rpc",
+            raise
+
+    async def _finish_detach(
+        self,
+        proc: asyncio.subprocess.Process,
+        wait_task: asyncio.Task[int],
+        container_id: str,
+        req_id: Any,
+        writer: asyncio.StreamWriter,
+        *,
+        via: str,
+    ) -> None:
+        if proc.returncode is None:
+            await self._track(container_id, proc)
+            wait_task.add_done_callback(
+                lambda _t: asyncio.create_task(self._untrack(container_id))
             )
         self._detached.add(container_id)
-        logger.info("sandboxd.start_detach", container_id=container_id)
+        logger.info(
+            "sandboxd.start_detach",
+            container_id=container_id,
+            via=via,
+        )
         writer.write(_json_bytes(_ok(req_id, {"mode": "detach"})))
         await writer.drain()
+
+    async def _fail_detach_timeout(
+        self,
+        proc: asyncio.subprocess.Process,
+        wait_task: asyncio.Task[int],
+        container_id: str,
+        started: float,
+        timeout: float,
+    ) -> None:
+        elapsed = time.monotonic() - started
+        logger.warning(
+            "sandboxd.start_detach_timeout",
+            container_id=container_id,
+            timeout_seconds=timeout,
+            elapsed_seconds=round(elapsed, 3),
+        )
+        wait_task.cancel()
+        await self._kill_proc(proc)
+        await self._runsc_aux("delete", "--force", container_id)
+        raise RpcDeniedError(
+            "start-detach timed out",
+            code="sandboxd_start_timeout",
+        )
+
+    async def _guest_is_running(self, container_id: str) -> bool:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                self._runsc,
+                f"--root={self._runtime_root}",
+                "state",
+                container_id,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _stderr = await asyncio.wait_for(proc.communicate(), timeout=2.0)
+        except Exception:  # noqa: BLE001 — missing state is "not running"
+            return False
+        if proc.returncode != 0 or not stdout:
+            return False
+        try:
+            payload = json.loads(stdout.decode("utf-8", errors="replace"))
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(payload, dict):
+            return False
+        status = str(payload.get("status") or payload.get("Status") or "").lower()
+        return status == "running"
+
+    @staticmethod
+    async def _drain_stream(stream: asyncio.StreamReader | None) -> None:
+        if stream is None:
+            return
+        with contextlib.suppress(Exception):
+            await stream.read()
+
+    @staticmethod
+    async def _read_stream(stream: asyncio.StreamReader | None) -> bytes:
+        if stream is None:
+            return b""
+        with contextlib.suppress(Exception):
+            return await stream.read()
+        return b""
 
     def _parse_exec_env(self, raw: Any) -> list[str]:
         if raw is None:

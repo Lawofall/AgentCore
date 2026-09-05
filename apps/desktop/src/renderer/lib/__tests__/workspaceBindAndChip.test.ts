@@ -1,6 +1,7 @@
 import {
   type AskUserContent,
   composeAnswer,
+  displayAskReply,
   hasExplicitAskReply,
 } from "@/components/chat/ask/AskUserFields";
 import type { WorkspaceBinding } from "@/services/workspaceBinding";
@@ -97,7 +98,9 @@ describe("composeAnswer with bind_local_folder pick", () => {
       {},
     );
     expect(text).toContain("绑定本机执行环境（AgentCore-desktop）");
-    expect(text).toMatch(/^我的答复：/);
+    expect(text).toMatch(/^工作区：/);
+    expect(text).not.toContain("我的答复：");
+    expect(text).not.toMatch(/^· /);
   });
 
   it("composes open_local_project answer without implying current-session bind", () => {
@@ -133,7 +136,7 @@ describe("composeAnswer with bind_local_folder pick", () => {
       questions: [{ ...content.questions[0], default: "继续用云端" }],
     };
     const text = composeAnswer(withDefault, { q0: [] }, { q0: "我想自己定" });
-    expect(text).toContain("· 工作区：我想自己定");
+    expect(text).toContain("工作区：我想自己定");
     expect(text).not.toContain("按你的默认");
     expect(text.split("\n").some((l) => l.startsWith("· 补充："))).toBe(false);
   });
@@ -144,8 +147,20 @@ describe("composeAnswer with bind_local_folder pick", () => {
       { q0: ["继续用云端"] },
       { q0: "再加一句" },
     );
-    expect(text).toContain("· 工作区：继续用云端 · 补充：再加一句");
+    expect(text).toContain("工作区：继续用云端 · 补充：再加一句");
     expect(text.split("\n").some((l) => l.startsWith("· 补充："))).toBe(false);
+  });
+});
+
+describe("displayAskReply", () => {
+  it("strips the retired heading and line bullets, keeps 补充 separators", () => {
+    expect(displayAskReply("我的答复：\n· 工作区：继续用云端")).toBe(
+      "工作区：继续用云端",
+    );
+    expect(displayAskReply("· 工作区：继续用云端")).toBe("工作区：继续用云端");
+    expect(displayAskReply("工作区：继续用云端 · 补充：再加一句")).toBe(
+      "工作区：继续用云端 · 补充：再加一句",
+    );
   });
 });
 
@@ -227,7 +242,7 @@ describe("resolveEffectiveWorkspace (chip status source)", () => {
     expect(ws.rootId).toBe("root-bound");
     expect(ws.rootName).toBe("MyRepo");
     expect(ws.viaContainer).toBe(false);
-    expect(formatWorkspaceChipLabel(ws)).toBe("本机草稿");
+    expect(formatWorkspaceChipLabel(ws)).toBe("本地对话");
   });
 
   it("labels folder inheritance as folder name only", () => {
@@ -252,9 +267,9 @@ describe("resolveEffectiveWorkspace (chip status source)", () => {
     });
     expect(ws.isLocal).toBe(true);
     expect(ws.viaContainer).toBe(true);
-    expect(formatWorkspaceChipLabel(ws)).toBe("本机草稿");
+    expect(formatWorkspaceChipLabel(ws)).toBe("本地对话");
     expect(formatWorkspaceChipTitle(ws)).toBe(
-      "本机草稿（文件落本机默认目录，未归入文件夹）",
+      "本地对话（文件落本机默认目录，未归入文件夹）",
     );
   });
 

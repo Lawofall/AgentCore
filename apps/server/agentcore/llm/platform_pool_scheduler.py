@@ -3,11 +3,13 @@
 Selection stays inside ``platform_llm_credentials``. This module decides *which*
 enabled member is eligible: sticky conversation pin, then the oldest healthy
 member (fill-first). 80% demotion is not applied this round — only upstream
-429 / 401 / 403 ``RegionError`` move a member out of the healthy set.
+429 / CreditsError / workspace month-or-member caps / 403 ``RegionError`` move
+a member out of the healthy set. ``AuthError`` (401 ban / bad key) blocks
+without hopping the current request.
 
 Recovery times come from the 429 ``Retry-After`` (and ``metadata.limitName``
-to distinguish monthly exhausted from a 5h/weekly cool-off). We do not guess
-window length from the limit name when the header is present.
+to distinguish monthly exhausted from a 5h/weekly cool-off). Missing headers
+use the 5h window or this row's subscription-month end — not a 1s placeholder.
 """
 
 from __future__ import annotations
@@ -32,6 +34,9 @@ _MONTHLY_NAMES = frozenset({"monthly", "month"})
 _WINDOW_NAMES = frozenset(
     {"weekly", "week", "5 hour", "5h", "5-hour", "5_hour", "5hour"}
 )
+# Go's shortest shared window. Used only when a 429 carries no Retry-After —
+# a 1s placeholder would let fill-first bounce straight back onto the empty key.
+_DEFAULT_WINDOW_COOLING_SECONDS = 5 * 3600
 
 
 def classify_go_limit_name(name: str | None) -> LimitKind:
@@ -176,7 +181,9 @@ def record_platform_rate_limit(
             source=retry_after_source,
         )
     else:
-        recovery = now + wait if wait is not None else now + 1.0
+        recovery = (
+            now + wait if wait is not None else now + _DEFAULT_WINDOW_COOLING_SECONDS
+        )
         record = AccountRecord(
             status="cooling",
             recovery_at=recovery,
@@ -191,6 +198,47 @@ def record_platform_rate_limit(
         limit_name=limit_name or "",
         recovery_at=record.recovery_at,
         source=retry_after_source,
+    )
+
+
+def record_platform_account_exhausted(
+    *,
+    api_key: str,
+    base_url: str,
+    reason: str,
+    retry_after_seconds: float | None = None,
+) -> None:
+    """Mark the member monthly-exhausted (CreditsError / workspace month cap).
+
+    No-op for env / override keys. Missing Retry-After uses this row's
+    subscription-month end — not a 1s placeholder that fill-first would ignore.
+    """
+    member = member_for_credentials(api_key, base_url)
+    if member is None:
+        return
+    now = time.time()
+    wait = (
+        float(retry_after_seconds)
+        if retry_after_seconds is not None and retry_after_seconds > 0
+        else None
+    )
+    recovery = (
+        now + wait if wait is not None else _monthly_recovery_at(member.subscription_day, now=now)
+    )
+    record = AccountRecord(
+        status="exhausted",
+        recovery_at=recovery,
+        limit_name=None,
+        source=reason,
+    )
+    get_pool_state_store().set(member.id, record)
+    logger.info(
+        "platform_pool.cooling",
+        credential_id=member.id,
+        status=record.status,
+        limit_name="",
+        recovery_at=record.recovery_at,
+        source=reason,
     )
 
 
@@ -268,6 +316,7 @@ class AdminAccountRuntime:
     status: Literal["healthy", "cooling", "exhausted", "blocked"]
     recovery_at: datetime | None
     limit_name: str | None
+    source: str | None = None
 
 
 def account_runtime_for_admin(credential_id: str) -> AdminAccountRuntime:
@@ -283,7 +332,9 @@ def account_runtime_for_admin(credential_id: str) -> AdminAccountRuntime:
         if record.recovery_at is not None
         else None
     )
-    return AdminAccountRuntime(record.status, recovery, record.limit_name)
+    return AdminAccountRuntime(
+        record.status, recovery, record.limit_name, record.source or None
+    )
 
 
 def platform_pool_unavailable_error(

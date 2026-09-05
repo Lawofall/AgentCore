@@ -108,7 +108,7 @@ describe("releaseFolderConversations", () => {
 
     const leftActive = releaseFolderConversations("f1", {
       dropRuntime,
-      currentId: "c3",
+      locationId: "c3",
     });
 
     expect(leftActive).toBe(true);
@@ -122,7 +122,7 @@ describe("releaseFolderConversations", () => {
     expect(
       releaseFolderConversations("f1", {
         dropRuntime: vi.fn(),
-        currentId: "c2",
+        locationId: "c2",
       }),
     ).toBe(false);
     expect(getConversations().map((c) => c.id)).toEqual(["c2"]);

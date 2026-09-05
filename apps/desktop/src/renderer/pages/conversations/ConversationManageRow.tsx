@@ -28,6 +28,7 @@ import {
   DELETE_CONVERSATION_LABEL,
   notifyConversationDeleted,
 } from "@/lib/conversationDeleteCopy";
+import { useConversationLocationId } from "@/lib/conversationLocation";
 import { timeAgo } from "@/lib/format";
 import { notifyError, notifyInfo } from "@/lib/toast";
 import {
@@ -85,7 +86,7 @@ export function ConversationManageRow({
   const skipBlurRef = useRef(false);
 
   const navigate = useNavigate();
-  const currentId = useConversationStore((s) => s.currentConversationId);
+  const locationId = useConversationLocationId();
   const switchConversation = useConversationStore((s) => s.switchConversation);
   const dropConversationRuntime = useConversationStore(
     (s) => s.dropConversationRuntime,
@@ -164,7 +165,7 @@ export function ConversationManageRow({
   };
 
   const handleArchive = async () => {
-    const wasActive = conversation.id === currentId;
+    const wasOnCanvas = conversation.id === locationId;
     const title = conversation.title;
     try {
       await archiveMutation.mutateAsync(conversation.id);
@@ -173,7 +174,7 @@ export function ConversationManageRow({
       return;
     }
     dropConversationRuntime(conversation.id);
-    if (wasActive) navigate("/");
+    if (wasOnCanvas) navigate("/");
     notifyInfo("已归档", {
       description: title,
       duration: 5000,
@@ -189,7 +190,7 @@ export function ConversationManageRow({
   };
 
   const handleDelete = async () => {
-    const wasActive = conversation.id === currentId;
+    const wasOnCanvas = conversation.id === locationId;
     const title = conversation.title;
     try {
       await deleteMutation.mutateAsync(conversation.id);
@@ -198,7 +199,7 @@ export function ConversationManageRow({
       return;
     }
     dropConversationRuntime(conversation.id);
-    if (wasActive) navigate("/");
+    if (wasOnCanvas) navigate("/");
     notifyConversationDeleted(title, () =>
       restoreMutation.mutate(conversation.id),
     );

@@ -225,8 +225,8 @@ export function WorkspaceModeMenu({
       ? `文件夹 · ${folderName}`
       : "文件夹工作区"
     : isLocal
-      ? "本机草稿"
-      : "云端草稿";
+      ? "本地对话"
+      : "云端对话";
 
   const subtitle = isLocal
     ? rootMissing
@@ -235,7 +235,7 @@ export function WorkspaceModeMenu({
         ? viaFolder
           ? `本机路径 · ${rootName}`
           : `默认容器 · ${rootName}`
-        : "本机草稿"
+        : "本地对话"
     : borrowActive
       ? "原件尚未改动"
       : viaFolder

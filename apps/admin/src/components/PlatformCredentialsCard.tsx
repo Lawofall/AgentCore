@@ -43,7 +43,7 @@ const FALLBACK_HINT: Record<
   PlatformCredentialListResponse["fallback"],
   string
 > = {
-  pool: "选钥 fill-first 并会话粘号；429/403 换号，401 封禁。封禁/冷却可解封，不必删行。",
+  pool: "选钥 fill-first 并会话粘号；429 / 余额不足 / 403 换号，401 封禁不换。封禁/冷却/耗尽可解封，不必删行。",
   env: "当前无启用成员，平台调用回落 env 里的 PLATFORM_API_KEY（与改池前行为一致）。",
   none: "池中无启用成员，且未配置 PLATFORM_API_KEY。平台代付不可用。",
 };
@@ -53,7 +53,7 @@ type RuntimeStatus = NonNullable<PlatformCredentialView["status"]>;
 const RUNTIME_LABEL: Record<RuntimeStatus, string> = {
   healthy: "健康",
   cooling: "冷却中",
-  exhausted: "月额度耗尽",
+  exhausted: "额度耗尽",
   blocked: "已封禁",
 };
 
@@ -70,7 +70,7 @@ function runtimeTone(
 }
 
 function canClearRuntime(status: RuntimeStatus): boolean {
-  return status === "blocked" || status === "cooling";
+  return status === "blocked" || status === "cooling" || status === "exhausted";
 }
 
 function formatToolSurface(
@@ -174,7 +174,7 @@ export function PlatformCredentialsCard({
     <Card>
       <SectionHeader
         title="平台额度账号"
-        description="池成员可热更；空池回落 env 单 key。选钥 fill-first 并会话粘号，429/403 自动换号。"
+        description="池成员可热更；空池回落 env 单 key。选钥 fill-first 并会话粘号，429/余额不足/403 自动换号。"
         action={
           <Button
             size="sm"
@@ -233,7 +233,19 @@ export function PlatformCredentialsCard({
                   const status = runtimeStatus(row);
                   return (
                   <TableRow key={row.id}>
-                    <Td className="font-medium">{row.label}</Td>
+                    <Td className="font-medium">
+                      <div className="flex flex-col gap-0.5">
+                        <span>{row.label}</span>
+                        <div className="flex flex-wrap gap-1">
+                          {row.picked ? (
+                            <Badge tone="success">当前选中</Badge>
+                          ) : null}
+                          {row.same_as_env ? (
+                            <Badge tone="warning">与 env 同 key</Badge>
+                          ) : null}
+                        </div>
+                      </div>
+                    </Td>
                     <Td>
                       <code className="text-xs tabular-nums">{row.id}</code>
                     </Td>
@@ -261,6 +273,11 @@ export function PlatformCredentialsCard({
                         {row.limit_name ? (
                           <span className="text-muted-foreground text-xs">
                             {row.limit_name}
+                          </span>
+                        ) : null}
+                        {row.source ? (
+                          <span className="text-muted-foreground text-xs">
+                            {row.source}
                           </span>
                         ) : null}
                       </div>

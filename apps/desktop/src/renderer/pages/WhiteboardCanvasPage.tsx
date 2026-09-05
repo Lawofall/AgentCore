@@ -24,7 +24,7 @@ import {
   parseScene,
   serializeScene,
 } from "@/whiteboard";
-import { ArrowLeft, ArrowUp, Loader2, Sparkles, X } from "lucide-react";
+import { ArrowLeft, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -43,7 +43,7 @@ const STATUS_TEXT: Record<SaveStatus, string> = {
  * offers a reload (§七 不覆盖). The 2026-06-27 engine reversal replaced Excalidraw here; the
  * backend board_ops protocol is unchanged (§五.4), the applier now drives `applyOps`.
  *
- * AI 入口（老板命令栏 / 选区 AI 动作）暂下线，底部保留「即将上线」骨架；手动画布与
+ * AI 入口（老板命令栏 / 选区 AI 动作）暂下线，画布不摆命令栏空壳；手动画布与
  * board_ops / board_read 注册仍保留。 */
 export function WhiteboardCanvasPage() {
   const { boardId = "" } = useParams();
@@ -343,28 +343,6 @@ export function WhiteboardCanvasPage() {
           </div>
         )}
       </div>
-
-      {/* 老板命令栏 · AI 入口下线：保留视觉骨架，不可发送 */}
-      <footer className="flex shrink-0 items-end gap-2 border-t border-border bg-card px-4 py-3">
-        <output
-          className="flex max-h-28 min-h-[2.5rem] flex-1 items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-sm text-muted-foreground"
-          aria-label="向 AI 下达白板指令（即将上线）"
-        >
-          <Sparkles size={15} className="shrink-0 opacity-50" />
-          <span>即将上线</span>
-          <span className="ml-auto text-xs opacity-70">
-            手动画布可用 · AI 协作稍后开放
-          </span>
-        </output>
-        <IconButton
-          aria-label="下达指令（即将上线）"
-          tone="primary"
-          disabled
-          className="size-10 rounded-xl"
-        >
-          <ArrowUp size={18} />
-        </IconButton>
-      </footer>
 
       {textExpand ? (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm">

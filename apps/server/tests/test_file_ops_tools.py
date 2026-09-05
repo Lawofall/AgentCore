@@ -283,8 +283,7 @@ async def test_outside_workspace_error_is_actionable(tmp_path: Path):
     assert "bind_local_folder" in result.error or "open_local_project" in result.error
     assert "open_local_project" in result.error or "本机传统" in result.error
     assert "导入到云" in result.error
-    assert "合法非默认" in result.error or "非默认" in result.error
-    assert "推荐" in result.error or "导入到云" in result.error
+    assert "≠离线" in result.error
 
 
 # --- file_read ---
@@ -831,8 +830,8 @@ def test_file_read_schema_teaches_default_full_read():
     assert "grep" in desc or "code_search" in desc
     assert "glob" in desc
     assert "dump" in desc
-    assert "read_url" in desc
-    assert "read_url" in schema.parameters["properties"]["path"]["description"]
+    assert "web_fetch" in desc
+    assert "web_fetch" in schema.parameters["properties"]["path"]["description"]
     assert "默认不抽文本" in schema.parameters["properties"]["path"]["description"]
     offset = schema.parameters["properties"]["offset"]
     assert "开窗" in offset["description"]
@@ -850,7 +849,7 @@ def test_file_read_schema_teaches_default_full_read():
         "HTTPS://example.com/x",
     ],
 )
-async def test_file_read_http_url_reroutes_to_read_url(tmp_path: Path, path: str):
+async def test_file_read_http_url_reroutes_to_web_fetch(tmp_path: Path, path: str):
     result = await FileReadTool().execute({"path": path}, _ctx(tmp_path))
     err = result.error or ""
     assert result.success is False
@@ -858,7 +857,7 @@ async def test_file_read_http_url_reroutes_to_read_url(tmp_path: Path, path: str
     assert result.metadata.get("code") == "url_not_workspace_path"
     assert result.failure_code == "url_not_workspace_path"
     assert result.metadata.get("cross_turn_retry") == "futile"
-    assert "read_url" in err
+    assert "web_fetch" in err
     assert "不要把 URL 改写成路径再重试" in err
 
 

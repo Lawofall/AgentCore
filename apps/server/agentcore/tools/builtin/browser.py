@@ -105,11 +105,11 @@ BROWSER_TOOL_NAMES = frozenset({"browser"})
 
 _EGRESS_UNAVAILABLE_MSG = (
     "云端浏览器出网能力不可用（沙箱网络隔离失败），本回合 browser 已停用；"
-    "请勿再调用 browser；改用 web_search、read_url 等非浏览器工具继续。"
+    "请勿再调用 browser；改用 web_search、web_fetch 等非浏览器工具继续。"
 )
 
 _EGRESS_RETIRE_STEER = (
-    "browser 因沙箱出网能力不可用已停用——请改用 web_search / read_url 等非浏览器路径，"
+    "browser 因沙箱出网能力不可用已停用——请改用 web_search / web_fetch 等非浏览器路径，"
     "勿再尝试 browser。"
 )
 
@@ -693,7 +693,7 @@ class BrowserTool(_BrowserToolBase):
             description=(
                 "右坞真实 Chromium（本机 Local Bridge 或云端沙箱）。"
                 "禁编造 browser_open。"
-                "静态摘录用 read_url（非右坞直播）。"
+                "静态摘录用 web_fetch（非右坞直播）。"
                 "HOW→consult(browser)。"
             ),
             parameters=BROWSER_TOOL_PARAMETERS,

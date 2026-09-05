@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from agentcore.tools.file_products import LANDING_TOOLS
+from agentcore.tools.file_products import LANDING_TOOLS as LANDING_TOOLS
 
 DEFAULT_WINDOW = 8
 DEFAULT_THRESHOLD = 3
@@ -38,7 +38,7 @@ CIRCUIT_TALLY_KEEP_AVAILABLE = frozenset(
         "test_run",
         "code_execute",
         "terminal",
-        "read_url",
+        "web_fetch",
         "web_search",
         "browser",
     }
@@ -354,36 +354,12 @@ class StuckSignal:
     tool_name: str
     count: int
 
-    def reflection_message(self) -> str:
-        """Steer message anchored to the concrete observation.
-
-        Anchoring to the real fact ("you called X 3 times") rather than a vague
-        "think harder" is what keeps the injected reflection from diverging.
-        """
-        if self.reason is StuckReason.REPEATED_FAILURE:
-            return (
-                f"[系统提示] 工具 `{self.tool_name}` 已用相同方式失败 {self.count} 次，"
-                "继续重试只会再次失败。请不要再以相同参数调用它："
-                "改用不同的输入、换一个工具，或基于已有信息直接给出最终答案。"
-            )
-        if self.reason is StuckReason.ALTERNATING:
-            return (
-                f"[系统提示] 你在两个动作之间来回循环（其中之一是 `{self.tool_name}`）"
-                "却没有取得进展。请跳出循环：选定一个能真正推进到答案的具体下一步，"
-                "或现在就给出最终答案。"
-            )
-        return (
-            f"[系统提示] 你已用相同参数调用 `{self.tool_name}` {self.count} 次，"
-            "没有任何新进展。请停止重复：要么换一种实质不同的做法或参数，"
-            "要么基于现有信息直接给出最终答案。"
-        )
-
 
 @dataclass(frozen=True)
 class CircuitBreak:
     """Tools that crossed a cumulative-failure threshold this round (B2 熔断).
 
-    ``warned`` hit the warn threshold (tell the model to stop retrying them);
+    ``warned`` hit the warn threshold (logged, no model-facing sermon);
     ``disabled`` hit the disable threshold (the engine removes them from the
     toolset for the rest of the run). Each is a tuple of tool names; both empty
     means nothing tripped this round.
@@ -429,10 +405,9 @@ class CircuitBreak:
     def message(self) -> str | None:
         """The single ``[系统提示]`` to inject this round, or ``None``.
 
-        Anchored to the concrete fact (which tool, what now happens) like the
-        nudge messages — disable first (the stronger action), then force-segmented
-        write steer, then warn. Parse-only write failures steer to segmented
-        landing (not「原样重发」). ``read_url`` 仅在显式退役时走研究向收口文案
+        Anchored to the concrete fact (which tool, what now happens).
+        Disable first, then force-segmented write steer. Warn-only trips are
+        silent to the model. ``web_fetch`` 仅在显式退役时走研究向收口文案
         （累计失败不再警告/卸工具）。
         """
         parts: list[str] = []
@@ -442,101 +417,26 @@ class CircuitBreak:
             else:
                 parse_d = tuple(n for n in self.disabled if n in self.parse_only)
                 other_d = tuple(n for n in self.disabled if n not in self.parse_only)
-                read_d = tuple(n for n in other_d if n == "read_url")
-                other_d = tuple(n for n in other_d if n != "read_url")
+                read_d = tuple(n for n in other_d if n == "web_fetch")
+                other_d = tuple(n for n in other_d if n != "web_fetch")
                 if read_d:
-                    from agentcore.tools.builtin.web._net import READ_URL_RETIRE_STEER
+                    from agentcore.tools.builtin.web._net import WEB_FETCH_RETIRE_STEER
 
-                    parts.append(READ_URL_RETIRE_STEER)
+                    parts.append(WEB_FETCH_RETIRE_STEER)
                 if other_d:
                     names = "、".join(f"`{n}`" for n in other_d)
-                    parts.append(
-                        f"工具 {names} 已多次失败，本回合起停用，无法再调用——"
-                        "请改用其他工具或基于已有信息推进。"
-                    )
+                    parts.append(f"工具 {names} 已停用，无法再调用。")
                 if parse_d:
                     names = "、".join(f"`{n}`" for n in parse_d)
                     parts.append(
-                        f"工具 {names} 因参数不是合法 JSON 已多次失败，本回合起停用，无法再调用——"
-                        "请改用其他工具或基于已有信息推进。"
+                        f"工具 {names} 因参数不是合法 JSON 已停用，无法再调用。"
                     )
         if self.force_segmented:
             names = "、".join(f"`{n}`" for n in self.force_segmented)
             parts.append(
-                f"工具 {names} 连续写盘失败：写文件能力保持可用（`file_write` / `str_replace`）。"
-                "【强制】成篇后用 str_replace 修订；整文件覆盖须完整正文；"
-                "若参数过大易失败可改短骨架 + 按节填空；"
-                "`file_append` 已收窄；勿向用户讲解 JSON 转义。"
+                f"工具 {names} 连续写盘失败：写文件能力保持可用（`file_write` / `str_replace`）；"
+                "`file_append` 已收窄。"
             )
-        if self.warned:
-            parse_w = tuple(n for n in self.warned if n in self.parse_only)
-            other_w = tuple(n for n in self.warned if n not in self.parse_only)
-            read_w = tuple(n for n in other_w if n == "read_url")
-            other_w = tuple(n for n in other_w if n != "read_url")
-            if read_w:
-                parts.append(
-                    "工具 `read_url` 已多次失败，请不要再换 URL / 同策略空转重读——"
-                    "基于已有材料推进写作，或换一个非外网读页工具；"
-                    "不要把继续 web_search 当默认出路。"
-                )
-            if other_w:
-                live_w = tuple(n for n in other_w if n in self.liveness_warned)
-                plain_w = tuple(n for n in other_w if n not in self.liveness_warned)
-                if live_w:
-                    names = "、".join(f"`{n}`" for n in live_w)
-                    parts.append(
-                        f"工具 {names} 已多次活性挂起（无响应超时），请不要原样重试："
-                        "缩小范围、换路径策略或换工具，基于已有信息推进。"
-                    )
-                if plain_w:
-                    names = "、".join(f"`{n}`" for n in plain_w)
-                    parts.append(
-                        f"工具 {names} 已多次失败，请不要再以相同方式调用它："
-                        "换不同的输入、换一个工具，或基于已有信息直接推进。"
-                    )
-            if parse_w:
-                write_pw = tuple(n for n in parse_w if n in LANDING_TOOLS)
-                orch_pw = tuple(n for n in parse_w if n in ORCHESTRATION_TOOLS)
-                memory_pw = tuple(n for n in parse_w if n in MEMORY_TOOLS)
-                other_pw = tuple(
-                    n
-                    for n in parse_w
-                    if n not in LANDING_TOOLS
-                    and n not in ORCHESTRATION_TOOLS
-                    and n not in MEMORY_TOOLS
-                )
-                if write_pw:
-                    names = "、".join(f"`{n}`" for n in write_pw)
-                    parts.append(
-                        f"工具 {names} 的调用参数不是合法 JSON，已多次解析失败"
-                        "（常见于整篇正文塞进一次调用导致截断）："
-                        "【强制】可一次完整 file_write（须完整正文）或短骨架 + 分段 "
-                        "file_append / str_replace；不要原样重发整段；成篇后修订用 "
-                        "str_replace。"
-                    )
-                if orch_pw:
-                    names = "、".join(f"`{n}`" for n in orch_pw)
-                    parts.append(
-                        f"工具 {names} 的调用参数不是合法 JSON，已多次解析失败："
-                        "【强制】只发单一合法 JSON（禁止 XML/<parameter> 混入），"
-                        "按 schema 精简重试；工具保持可用，勿改用空回复交差。"
-                    )
-                if memory_pw:
-                    names = "、".join(f"`{n}`" for n in memory_pw)
-                    parts.append(
-                        f"工具 {names} 的调用参数不是合法 JSON，已多次解析失败："
-                        "【强制】记规则时若因截断则完整一句重发或分次写入；"
-                        "若因引号/转义错误则只修好转义后重试；"
-                        "禁止截断时原样重发全部。工具保持可用。"
-                    )
-                if other_pw:
-                    names = "、".join(f"`{n}`" for n in other_pw)
-                    parts.append(
-                        f"工具 {names} 的调用参数不是合法 JSON，已多次解析失败："
-                        "若因截断则缩短或分次后重发完整合法 JSON；"
-                        "若因引号/转义错误则修好转义后重发；"
-                        "截断场景禁止原样重发全部。也可换一个工具或基于已有信息直接推进。"
-                    )
         if self.validation_stop:
             parts.append(self.validation_stop.strip())
         if not parts:

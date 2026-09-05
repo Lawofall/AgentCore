@@ -17,7 +17,7 @@ from agentcore.tools.builtin import (
 
 _EXPECTED_NAMES = {
     "web_search",
-    "read_url",
+    "web_fetch",
     "download_url",
     "file_read",
     "file_write",
@@ -45,7 +45,7 @@ _EXPECTED_NAMES = {
 # exporters stay registered; opening FC table withholds them separately.
 _CEO_DEFAULT_NAMES = {
     "web_search",
-    "read_url",
+    "web_fetch",
     "file_read",
     "file_write",
     "file_append",
@@ -208,7 +208,8 @@ def test_run_description_routes_long_running_to_background():
     assert "background" in schema.parameters["properties"]
     wait_desc = schema.parameters["properties"]["wait_for"]["description"]
     bg_desc = schema.parameters["properties"]["background"]["description"]
-    assert "默认" in wait_desc
+    assert "省略" in wait_desc
+    assert "默认就绪" not in wait_desc
     assert "dev" in bg_desc.lower() or "watch" in bg_desc
     assert "pnpm" in schema.parameters["properties"]["command"]["description"]
     assert "仅本地" not in RunTool(location="server").schema.description
@@ -241,12 +242,12 @@ def test_run_description_server_omits_local_machine_wording():
     assert "云桌" in server
 
 
-def test_read_url_description_does_not_overclaim_completeness():
-    # read_url caps extracted text at max_chars (default 8000), so a long page is
+def test_web_fetch_description_does_not_overclaim_completeness():
+    # web_fetch caps extracted text at max_chars (default 8000), so a long page is
     # truncated — the description must disclose that and not promise the "complete"
     # body, or the model may state it read the whole page when it saw only the head.
     schemas = {s.name: s for s in build_builtin_registry().list_all()}
-    desc = schemas["read_url"].description
+    desc = schemas["web_fetch"].description
     assert "max_chars" in desc  # truncation is disclosed
     assert "完整正文" not in desc  # no blanket "complete body" claim
     # 挂号纪律在基座 delivery_honesty，schema 不复述 #rN。

@@ -234,8 +234,11 @@ class ToolSurfaceLimits(BaseModel):
 class PlatformCredentialView(BaseModel):
     """Admin view of one platform-pool member — never the plaintext key.
 
-    ``status`` / ``recovery_at`` / ``limit_name`` are live pool-state (Redis or
-    process memory), not Postgres columns. Absence of a store record is healthy.
+    ``status`` / ``recovery_at`` / ``limit_name`` / ``source`` are live pool-state
+    (Redis or process memory), not Postgres columns. Absence of a store record is
+    healthy. ``picked`` is the fill-first member ``platform_llm_credentials`` would
+    take right now. ``same_as_env`` is true when this row's ``(api_key, base_url)``
+    matches ``PLATFORM_API_KEY`` / ``PLATFORM_BASE_URL``.
     ``tool_surface_limits`` is stored on the row; empty / all-null = unlimited.
     """
 
@@ -250,6 +253,9 @@ class PlatformCredentialView(BaseModel):
     status: Literal["healthy", "cooling", "exhausted", "blocked"] = "healthy"
     recovery_at: datetime | None = None
     limit_name: str | None = None
+    source: str | None = None
+    same_as_env: bool = False
+    picked: bool = False
     tool_surface_limits: ToolSurfaceLimits = Field(default_factory=ToolSurfaceLimits)
 
 

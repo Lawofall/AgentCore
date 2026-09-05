@@ -156,7 +156,12 @@ async def _wire_continuation_toolset(
     from agentcore.runtime.pipeline.prepare import _timed_phase
     from agentcore.tools.sandbox.desk_provision import provision_server_desk
 
-    await _timed_phase("cloud_desk", provision_server_desk(backend))
+    await _timed_phase(
+        "cloud_desk",
+        provision_server_desk(
+            backend, conversation_id=conversation_id, sink=sink
+        ),
+    )
     worker_tools = build_worker_registry(
         backend=backend,
         permission_axes=permission_axes,
@@ -360,13 +365,12 @@ async def _wire_continuation_toolset(
     # Same explore-pending sink as fresh assemble (resume mid-explore: suppress
     # structured files_written inference + worker write_scope=explore_memory until
     # update_folder_profile clears the flag).
-    # Soft-empty / named-refresh via resolve_hard_explore_reason（与 assemble 同源）.
+    # Named-refresh via resolve_hard_explore_reason（与 assemble 同源）.
     if folder_id:
         from agentcore.conversation.scratch import resolve_conversation_local_binding
         from agentcore.memory.explore_profile import (
-            folder_profile_explore_reason,
-            resolve_folder_workspace_key,
             resolve_hard_explore_reason,
+            resolve_turn_explore_gate,
         )
         from agentcore.memory.store import default_memory_store
 
@@ -376,24 +380,29 @@ async def _wire_continuation_toolset(
                 local_root_id=folder_local_root_id,
                 local_subpath=folder_local_subpath,
             )
-        # Same resolve boundary as assemble: non-UUID scope → folder:<id>;
-        # connectivity/DataError → None (never HARD-kill resume over key resolve).
-        current_key = await resolve_folder_workspace_key(
+        raw_reason, current_key = await resolve_turn_explore_gate(
+            default_memory_store(),
+            user_id,
             folder_id,
             binding=injected_binding,
             binding_injected=folder_binding_injected,
         )
-        key_for_gates = current_key if current_key is not None else ""
-        explore_reason = await folder_profile_explore_reason(
-            default_memory_store(),
-            user_id,
-            folder_id,
-            current_workspace_key=key_for_gates,
-        )
-        explore_reason, _soft = resolve_hard_explore_reason(explore_reason, user_message)
+        explore_reason = resolve_hard_explore_reason(raw_reason, user_message)
         if explore_reason:
             base_tool_context.cold_start_explore_pending = True
             base_tool_context.write_scope = "explore_memory"
+        elif raw_reason == "rebind" and current_key:
+            from agentcore.memory.explore_refresh import (
+                schedule_explore_refresh_for_backend,
+            )
+
+            await schedule_explore_refresh_for_backend(
+                user_id=user_id,
+                folder_id=folder_id,
+                workspace_key=current_key,
+                backend=backend,
+                blank_current_notes=True,
+            )
         if current_key:
             upd = chat_tools.get_optional("update_folder_profile")
             if upd is not None and getattr(upd, "workspace_key", None) is None:

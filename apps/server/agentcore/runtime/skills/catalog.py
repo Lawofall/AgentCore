@@ -19,6 +19,7 @@ from agentcore.runtime.skills.registry import (
 from agentcore.runtime.skills.run import _RUN
 from agentcore.runtime.skills.team_cross_folder import _TEAM_CROSS_FOLDER
 from agentcore.runtime.skills.team_delivery_env import _TEAM_DELIVERY_ENV
+from agentcore.runtime.skills.team_local_desk import _TEAM_LOCAL_DESK
 from agentcore.runtime.skills.team_orchestration import (
     _TEAM_ORCHESTRATION_ADVANCED,
 )
@@ -52,6 +53,12 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         name="team_delivery_env",
         summary="交付环境",
         body=_TEAM_DELIVERY_ENV,
+        audience=AUDIENCE_CEO_ONLY,
+    ),
+    SystemSkill(
+        name="team_local_desk",
+        summary="本机进桌",
+        body=_TEAM_LOCAL_DESK,
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(

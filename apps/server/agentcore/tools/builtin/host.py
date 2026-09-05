@@ -669,7 +669,7 @@ async def _execute_shell(
             f"禁止用 host(action=shell) 启动长驻进程（检测到：{matched_long}）。"
             "host(action=shell) 有超时上限、不托管后台进程。"
             "请改用 run：同一命令设 background=true。"
-            "省略 wait_for 时用默认就绪信号；命中前不得宣称已启动。"
+            "省略 wait_for 则起来就返回。"
             "用 action=read|list 确认进程仍在跑。"
         )
     timeout_seconds = clamp_shell_timeout(arguments.get("timeout_seconds"))

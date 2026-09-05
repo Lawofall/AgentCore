@@ -1,6 +1,5 @@
 import { PromptDocument } from "@/components/prompt/PromptDocument";
-import { Button } from "@/components/ui";
-import { cn } from "@/lib/utils";
+import { SegmentedControl } from "@/components/ui";
 import { useState } from "react";
 
 type RoleId = "ceo" | "nested" | "leaf";
@@ -48,34 +47,17 @@ export function RoleIdentityBlock({
 
   return (
     <div>
-      <div
-        role="tablist"
+      <SegmentedControl
         aria-label="角色身份"
-        className="scrollbar-hidden flex min-w-0 overflow-x-auto rounded-lg border border-border p-0.5"
-      >
-        {ROLES.map((item) => {
-          const active = item.id === role;
-          return (
-            <Button
-              key={item.id}
-              variant="ghost"
-              role="tab"
-              aria-selected={active}
-              aria-controls="role-identity-panel"
-              id={`role-tab-${item.id}`}
-              onClick={() => setRole(item.id)}
-              className={cn(
-                "h-8 min-w-0 flex-1 shrink-0 rounded-lg px-3 text-sm",
-                active
-                  ? "bg-accent text-foreground hover:bg-accent"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {item.label}
-            </Button>
-          );
-        })}
-      </div>
+        value={role}
+        onChange={setRole}
+        items={ROLES.map((item) => ({
+          value: item.id,
+          label: item.label,
+          id: `role-tab-${item.id}`,
+          "aria-controls": "role-identity-panel",
+        }))}
+      />
       <p className="mt-2 text-muted-foreground text-xs">{selected.caption}</p>
       <div
         id="role-identity-panel"

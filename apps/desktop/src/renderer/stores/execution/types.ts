@@ -78,7 +78,7 @@ export const STANCE_META: Record<Stance, { label: string; short: string }> = {
  * in the store); keep the two in sync. An unknown tool falls back to its raw name. */
 export const TOOL_LABELS: Record<string, string> = {
   web_search: "Search web",
-  read_url: "Read page",
+  web_fetch: "Read page",
   grep: "Grep code",
   code_search: "Search code",
   run: "Run",

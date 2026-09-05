@@ -2,7 +2,7 @@
 /**
  * 草稿态「在哪工作」（双模式工作区 §5.1）。
  *
- * 第一屏只选地方；新建 / Git / 本机三选收进「新建或加入…」。
+ * 第一屏选地方：本地对话 + 云端对话 + 文件夹；新建 / Git / 本机三选收进「新建或加入…」。
  * 全菜单只有一条分隔线（文件夹列表 ↔ 新建或加入）。
  */
 
@@ -229,9 +229,10 @@ afterEach(() => {
 });
 
 describe("DraftChip pick view · 选地方", () => {
-  it("第一屏只有快速对话、文件夹和新建或加入，不铺六条动词", () => {
+  it("第一屏并列本地对话和云端对话，不铺六条动词", () => {
     const menu = within(openPicker());
-    expect(menu.getByRole("button", { name: "快速对话" })).toBeTruthy();
+    expect(menu.getByRole("button", { name: "本地对话" })).toBeTruthy();
+    expect(menu.getByRole("button", { name: "云端对话" })).toBeTruthy();
     expect(menu.getByRole("button", { name: "新建或加入…" })).toBeTruthy();
     expect(menu.getByText("了解区别")).toBeTruthy();
 
@@ -246,6 +247,22 @@ describe("DraftChip pick view · 选地方", () => {
       expect(menu.queryByRole("button", { name: buried })).toBeNull();
     }
     expect(menu.queryByText("在「我的文件」里新建文件夹")).toBeNull();
+  });
+
+  it("点本地对话走本机草稿", () => {
+    const menu = within(openPicker());
+    fireEvent.click(menu.getByRole("button", { name: "本地对话" }));
+    expect(useFoldersStore.getState().draftWorkspaceIntent).toEqual({
+      kind: "quick_local",
+    });
+  });
+
+  it("点云端对话走云草稿", () => {
+    const menu = within(openPicker());
+    fireEvent.click(menu.getByRole("button", { name: "云端对话" }));
+    expect(useFoldersStore.getState().draftWorkspaceIntent).toEqual({
+      kind: "quick_cloud",
+    });
   });
 
   it("全菜单只有一条分隔线，落在文件夹列表与新建或加入之间", () => {
@@ -270,6 +287,8 @@ describe("DraftChip pick view · 选地方", () => {
     expect(menu.getByRole("button", { name: "新建文件夹" })).toBeTruthy();
     expect(menu.getByRole("button", { name: "从 Git 克隆" })).toBeTruthy();
     expect(menu.getByRole("button", { name: "从本机加入" })).toBeTruthy();
+    expect(menu.queryByRole("button", { name: "云端对话" })).toBeNull();
+    expect(menu.queryByRole("button", { name: "本地对话" })).toBeNull();
   });
 
   it("从本机加入选完路径后三选一；直接改走已选根", async () => {
@@ -408,6 +427,8 @@ describe("DraftChip pick view · 选地方", () => {
     const content = openPicker();
     const menu = within(content);
 
+    expect(menu.getByRole("button", { name: "云端对话" })).toBeTruthy();
+    expect(menu.queryByRole("button", { name: "本地对话" })).toBeNull();
     expect(menu.getByRole("button", { name: "新建文件夹" })).toBeTruthy();
     expect(menu.queryByText("新建或加入…")).toBeNull();
     expect(menu.queryByText("从本机导入")).toBeNull();

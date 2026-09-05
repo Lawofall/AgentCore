@@ -1,7 +1,7 @@
 """Wrong-tool-channel steer — a process outcome, not a fault.
 
 The model called a tool that is the wrong *channel* for the job (``code_execute``
-as grep, ``read_url`` as ``file_read``, …). Runtime refused to execute and told
+as grep, ``web_fetch`` as ``file_read``, …). Runtime refused to execute and told
 the model which tool to use instead. User files are untouched.
 
 Wire ``tool_use_end.status`` is ``redirect`` (not ``error``). The LLM transcript

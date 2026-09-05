@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { Cpu } from "lucide-react";
 import { modelVendorLabel } from "./model";
 
@@ -13,12 +14,14 @@ export function ModelBadge({ model }: { model: string | null | undefined }) {
   const label = modelVendorLabel(model);
   if (!label) return null;
   return (
-    <span
-      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
+    <Badge
+      tone="muted"
+      pill
       title={model ? `由 ${label} 驱动（${model}）` : undefined}
+      className="gap-1 font-medium"
     >
       <Cpu size={11} aria-hidden />
       {label}
-    </span>
+    </Badge>
   );
 }

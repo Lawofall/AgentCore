@@ -1,7 +1,6 @@
 import {
   extractCeoIdentity,
   splitWorkerGuideline,
-  workerContractFromGuidelines,
 } from "@/lib/splitGuidelineRoles";
 import type {
   Capabilities,
@@ -9,7 +8,7 @@ import type {
   CapabilitySkill,
 } from "@/services/capabilities";
 
-export type PromptCatalogGroupId = "standing" | "on_demand" | "packs";
+export type PromptCatalogGroupId = "standing" | "mine" | "on_demand" | "packs";
 
 export type PromptCatalogItem =
   | {
@@ -31,20 +30,24 @@ export type PromptCatalogItem =
       leafIdentity: string;
     }
   | {
-      id: "contract";
-      kind: "contract";
-      group: "standing";
-      label: string;
-      depth: 0;
-      text: string;
-    }
-  | {
       id: string;
       kind: "skill";
       group: "on_demand" | "packs";
       label: string;
       depth: 0 | 1;
       skill: CapabilitySkill;
+    }
+  | {
+      id: string;
+      kind: "mine";
+      group: "mine";
+      label: string;
+      depth: 0;
+      mineId: string;
+      description: string;
+      content: string;
+      version: string;
+      occupies: string[];
     }
   | {
       id: string;
@@ -81,10 +84,6 @@ export function buildPromptCatalog(data: Capabilities): PromptCatalogGroup[] {
   const thinSkills = data.skills.filter(
     (skill) => !packSkillNames.has(skill.name),
   );
-  const contract = workerContractFromGuidelines(
-    data.guidelines.worker_leaf,
-    data.guidelines.worker_captain,
-  );
 
   const standing: PromptCatalogItem[] = [
     {
@@ -102,21 +101,10 @@ export function buildPromptCatalog(data: Capabilities): PromptCatalogGroup[] {
       label: "角色身份",
       depth: 0,
       ceoIdentity: extractCeoIdentity(data.guidelines.ceo_addon),
-      nestedIdentity: splitWorkerGuideline(data.guidelines.worker_captain)
-        .identity,
-      leafIdentity: splitWorkerGuideline(data.guidelines.worker_leaf).identity,
+      nestedIdentity: splitWorkerGuideline(data.guidelines.worker_captain),
+      leafIdentity: splitWorkerGuideline(data.guidelines.worker_leaf),
     },
   ];
-  if (contract) {
-    standing.push({
-      id: "contract",
-      kind: "contract",
-      group: "standing",
-      label: "队员交付合同",
-      depth: 0,
-      text: contract,
-    });
-  }
 
   const groups: PromptCatalogGroup[] = [
     { id: "standing", label: "常驻模板", items: standing },
@@ -170,4 +158,48 @@ export function flattenPromptCatalog(
   groups: PromptCatalogGroup[],
 ): PromptCatalogItem[] {
   return groups.flatMap((group) => group.items);
+}
+
+export function mineCatalogId(id: string): string {
+  return `mine:${id}`;
+}
+
+export interface MineCatalogRow {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  version: string;
+  occupies: string[];
+}
+
+/** Insert the always-visible「我的技能」group after 常驻模板. */
+export function withMineSkills(
+  groups: PromptCatalogGroup[],
+  mine: MineCatalogRow[],
+): PromptCatalogGroup[] {
+  const mineGroup: PromptCatalogGroup = {
+    id: "mine",
+    label: "我的技能",
+    testId: "my-skills",
+    items: mine.map((row) => ({
+      id: mineCatalogId(row.id),
+      kind: "mine" as const,
+      group: "mine" as const,
+      label: row.name,
+      depth: 0 as const,
+      mineId: row.id,
+      description: row.description,
+      content: row.content,
+      version: row.version,
+      occupies: row.occupies,
+    })),
+  };
+  const standingIdx = groups.findIndex((group) => group.id === "standing");
+  if (standingIdx === -1) return [mineGroup, ...groups];
+  return [
+    ...groups.slice(0, standingIdx + 1),
+    mineGroup,
+    ...groups.slice(standingIdx + 1),
+  ];
 }

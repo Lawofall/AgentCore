@@ -116,7 +116,7 @@ def citation_quality_reworks(
             f"正文用了 {marks} 这些台账引用来源，但它们不在本回合成稿可引用集中"
             "（须 deep_read 或 selected；search-only / 伪造 / 越界均不可）。"
             "请改成提示中「已登记来源」里成稿可引的 #rN，"
-            "或先 read_url 深读后再引用；没有依据就直接去掉这处引用。"
+            "或先 web_fetch 深读后再引用；没有依据就直接去掉这处引用。"
         )
     reworks.extend(_bibliography_reworks(content, ledger_entries))
     return reworks
@@ -216,7 +216,7 @@ def _bibliography_reworks(
         marks = "、".join(need_deep)
         reworks.append(
             f"正文以学位论文/期刊式著录绑定了 {marks}，但这些来源尚未 deep_read——"
-            "请先 read_url 深读后再用著录形态引用，或删除该书目式表述与 #rN。"
+            "请先 web_fetch 深读后再用著录形态引用，或删除该书目式表述与 #rN。"
         )
     if announcements:
         marks = "、".join(announcements)

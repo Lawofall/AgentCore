@@ -22,12 +22,6 @@ from agentcore.runtime.runs.retrieval_budget import RETRIEVAL_TOOL_NAMES
 
 _LIGHT_REPAIR_MAX_ROUNDS = 4
 
-# Pass-boundary cap announcement (light_repair / contract retry). Not a live
-# countdown: rounds are an engine ceiling, not a worker-planning budget (BATS
-# applies to retrieval slots only). Numbers only; no tool narrowing, no
-# completion / quality steer.
-ROUND_BUDGET_AWARENESS_PREFIX = "[系统提示] 轮次余额"
-
 
 def _pass_max_rounds(*, light_pass: bool, profile_max: int, spent: int = 0) -> int | None:
     """ReAct cap for this produce pass.
@@ -43,61 +37,6 @@ def _pass_max_rounds(*, light_pass: bool, profile_max: int, spent: int = 0) -> i
     if profile_max <= 0:
         return None
     return max(0, int(profile_max))
-
-
-def format_round_budget_awareness(*, limit: int) -> str:
-    """One-line pass-cap fact for a new produce segment. No advice, no intercept."""
-    limit_n = max(0, int(limit))
-    return f"{ROUND_BUDGET_AWARENESS_PREFIX}：本段上限 {limit_n} 轮。"
-
-
-def _is_round_budget_awareness(msg: LLMMessage) -> bool:
-    return (
-        msg.role == "user"
-        and isinstance(msg.content, str)
-        and msg.content.startswith(ROUND_BUDGET_AWARENESS_PREFIX)
-    )
-
-
-def drop_round_budget_awareness(messages: list[LLMMessage]) -> bool:
-    """Remove the pass-cap announcement; True ⇒ transcript changed."""
-    if not any(_is_round_budget_awareness(m) for m in messages):
-        return False
-    messages[:] = [m for m in messages if not _is_round_budget_awareness(m)]
-    return True
-
-
-def sync_round_budget_awareness(
-    messages: list[LLMMessage],
-    *,
-    limit: int,
-    before_last_user: bool = False,
-) -> str | None:
-    """Announce this produce segment's round cap once.
-
-    Call only at a new-pass boundary (light_repair / contract retry), not every
-    ReAct round — a live used/remaining ticker hijacks the next-think user slot.
-    ``limit <= 0`` ⇒ skip (no cap to report). Refresh = drop stale copy then
-    insert, so the transcript never carries two contradicting caps.
-
-    ``before_last_user`` parks the fact under the latest user instruction
-    (light_repair / retry shortfall stays last).
-    """
-    if limit <= 0:
-        return None
-    drop_round_budget_awareness(messages)
-    text = format_round_budget_awareness(limit=limit)
-    msg = LLMMessage(role="user", content=text)
-    if (
-        before_last_user
-        and messages
-        and messages[-1].role == "user"
-        and not _is_round_budget_awareness(messages[-1])
-    ):
-        messages.insert(-1, msg)
-    else:
-        messages.append(msg)
-    return text
 
 
 def stamp_coord_round_budget(
@@ -250,7 +189,7 @@ def _narrow_for_light_repair(
     """Keep local read/write/run; withhold billed retrieval only.
 
     Round cap still bounds the pass. Empty-handoff salvage needs grep /
-    file_list / run; ``web_search`` / ``read_url`` stay off.
+    file_list / run; ``web_search`` / ``web_fetch`` stay off.
     """
     narrowed_registry = _registry_without(worker_tools, *RETRIEVAL_TOOL_NAMES)
     if allowed_tools is None:

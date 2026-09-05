@@ -48,6 +48,31 @@ async def test_provision_swallows_ensure_failure():
     await provision_server_desk(_Boom())  # type: ignore[arg-type]
 
 
+@pytest.mark.asyncio
+async def test_provision_emits_desk_wait_on_sink():
+    events: list[tuple[str, bool]] = []
+
+    class _Sink:
+        def emit(self, event: object) -> None:
+            payload = getattr(event, "payload", {})
+            events.append((str(getattr(event, "type", "")), bool(payload.get("waiting"))))
+
+    class _Server:
+        location = "server"
+
+        async def ensure_workspace_desk(self) -> None:
+            events.append(("ensure", False))
+
+    await provision_server_desk(
+        _Server(),  # type: ignore[arg-type]
+        conversation_id="conv-1",
+        sink=_Sink(),
+    )
+    assert events[0] == ("desk_provision_wait", True)
+    assert events[1] == ("ensure", False)
+    assert events[2] == ("desk_provision_wait", False)
+
+
 def test_prepare_and_resume_call_provision():
     from agentcore.runtime.pipeline import prepare as prepare_mod
     from agentcore.runtime.pipeline.resume import wire as wire_mod

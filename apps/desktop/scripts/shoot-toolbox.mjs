@@ -1,5 +1,6 @@
-// Screenshot harness for 工具箱 (#/toolbox + the five 能力 sub-pages) — one PNG per
-// page so AI can read back what the reworked sub-page navigation actually looks like.
+// Screenshot harness for 工具箱 (#/toolbox + the 能力 sub-pages) — one PNG per
+// page so AI can read back hub-and-spoke headers (back + page title, no sibling
+// segment bar).
 //
 // Usage:
 //   node scripts/shoot-toolbox.mjs
@@ -10,16 +11,18 @@
 // Mechanism — same as scripts/shoot-settings.mjs, nothing new:
 //   • webapp 壳 (vite.webapp.config.ts → index.webapp.html) with the REAL AuthGate,
 //     satisfied by a stubbed `/v1/auth/me`. The offline preview entry (index.web.html)
-//     sets `__WEB_PREVIEW__`, which makes AppShell skip its pollers — 自动化 would then
-//     never fetch the standing-inbox badge, so the segment badge could not show up.
+//     sets `__WEB_PREVIEW__`, which makes AppShell skip its pollers — 自动化磁贴 /
+//     收件箱 tab 的未读角标就出不来。
 //   • Playwright `page.route` REST stubs with per-endpoint fixtures, so every page
 //     renders POPULATED rather than empty/loading. No product code is touched.
 //   • `VITE_API_URL` pinned to "" ⇒ same-origin API, no CORS on `route.fulfill`.
 //
-// One thing settings does not need: 连接器 talks to `window.mcpApi` (an Electron
-// preload bridge), which a browser never has — the page would honestly degrade to
-// 「本机 MCP 仅桌面端可用」. An `addInitScript` installs a stub bridge so the populated
-// server list renders; that is browser-side test scaffolding, not a product change.
+// One thing settings does not need: 连接器 / 工具页 MCP 并陈 talk to `window.mcpApi`
+// (an Electron preload bridge), which a browser never has — 连接器 would honestly
+// degrade to「本机 MCP 仅桌面端可用」, and 工具 would omit the MCP section. An
+// `addInitScript` installs a stub bridge so the populated server list (and
+// `list_tools` cards on 工具) render; that is browser-side test scaffolding, not a
+// product change.
 //
 // Known gaps vs the real Electron app (screenshots differ, product is fine):
 //   • Overlay scrollbars: headless Chromium's scrollbars take no width, so bugs where a
@@ -55,51 +58,64 @@ const FIT = process.env.SHOOT_FIT !== "0";
 const MAX_HEIGHT = Number(process.env.SHOOT_MAX_HEIGHT ?? 4000);
 const filter = (process.argv[2] ?? "").toLowerCase();
 
-/** The capability segment bar, in `ToolboxPageHeader` order. */
-const SEGMENTS = ["工具", "AI 提示词", "自动化", "工作流", "连接器"];
-
 /**
- * 工具箱首页 + the five 能力 sub-pages (自动化 twice, once per inner tab).
+ * 工具箱首页 + 能力子页（自动化 twice, once per inner tab）。
  *
- * `segment` is the segment expected to be lit — the sub-pages carry no `<h1>`
- * (current position is the segment highlight), so it doubles as the audit's
- * expected value. `ready` is a text marker that only exists once the page's data
- * arrived, so we never shoot an empty or loading state. `heading` is the `<h1>`
- * the 工具箱 index still owns.
+ * `heading` is the `<h1>` (index and spokes both own one). Spokes also carry a
+ * back link to `/toolbox`; the index does not. `ready` is a text marker that
+ * only exists once the page's data arrived, so we never shoot an empty or
+ * loading state. `tab` is the automations underline tab.
  */
 const PAGES = [
   { id: "01-toolbox-home", hash: "/toolbox", heading: "工具箱", ready: "产品手册" },
-  { id: "02-tools", hash: "/toolbox/tools", segment: "工具", ready: "调用参数" },
+  {
+    id: "02-tools",
+    hash: "/toolbox/tools",
+    heading: "工具",
+    ready: "调用参数",
+    overlayReady: "本机连接器",
+  },
   {
     id: "03-guidelines",
     hash: "/toolbox/guidelines",
-    segment: "AI 提示词",
+    heading: "AI 提示词",
     ready: "全员共享准则",
+    overlayReady: "提问卡",
+    click: "辩论与交叉审查",
+    afterClick: "已藏起",
   },
   {
-    id: "04-automations-tasks",
+    id: "04-store",
+    hash: "/toolbox/store",
+    heading: "商店",
+    ready: "审合同时用",
+    click: "合同审查",
+    afterClick: "展开正文",
+  },
+  {
+    id: "05-automations-tasks",
     hash: "/toolbox/automations",
-    segment: "自动化",
+    heading: "自动化",
     tab: "任务",
     ready: "立即触发",
   },
   {
-    id: "05-automations-inbox",
+    id: "06-automations-inbox",
     hash: "/toolbox/automations/inbox",
-    segment: "自动化",
+    heading: "自动化",
     tab: "收件箱",
     ready: "待拍板",
   },
   {
-    id: "06-workflows",
+    id: "07-workflows",
     hash: "/toolbox/workflows",
-    segment: "工作流",
+    heading: "工作流",
     ready: "跑一次",
   },
   {
-    id: "07-connectors",
+    id: "08-connectors",
     hash: "/toolbox/connectors",
-    segment: "连接器",
+    heading: "连接器",
     ready: "测试握手",
   },
 ];
@@ -157,7 +173,7 @@ const CAPABILITY_TOOLS = [
     ),
   ),
   tool(
-    "read_url",
+    "web_fetch",
     "research",
     "读取网页正文并转成可引用的文本；搜索结果不足以判断时用它把原文拉回来。",
     obj(
@@ -417,9 +433,9 @@ const CAPABILITIES = {
     shared_base:
       "# 全员共享准则\n\n## 身份\n\n你是 AgentCore 团队中的一员，与人类用户协作完成真实工作。\n\n## 表达\n\n- 先给结论，再给依据。\n- 不确定就说不确定，禁止编造出处。\n\n## 工具使用\n\n- 能用确定性工具拿到的事实，不要靠推测。\n- 写盘前先确认落点，破坏性操作一律先问。\n",
     worker_leaf:
-      "<身份>\n你是专家 worker。你只负责一个划定好的任务；你不能再向下委派。够不到用户。\n</身份>\n\n你的交付形态是【落盘文件】：调用 file_write 把产物写进工作区。正文只交代改了哪些路径。\n\n<写工具谨慎>\n破坏性操作要格外谨慎。\n</写工具谨慎>\n",
+      "<身份>\n你是 AgentCore 的队员，只负责划定好的这一件任务（所需上下文已给你）。不能再向下委派。够不到用户。\n</身份>\n\n【落盘文件】（form=files）成品写入工作区；正文只报路径、怎么用、关键取舍。\n\n【纯文字】（form=prose）成品就是正文。不要落盘。\n\n【改工程】（form=workspace）就地改用户工程，不要写入 `AgentCore/文档/`。正文只报路径、怎么跑、关键取舍。\n",
     worker_captain:
-      "<身份>\n你是专家 worker，还可以再向下委派一层子团队来分担。够不到用户。看到子队产出后由你整合。\n</身份>\n\n你的交付形态是【落盘文件】：调用 file_write 把产物写进工作区。正文只交代改了哪些路径。\n\n<写工具谨慎>\n破坏性操作要格外谨慎。\n</写工具谨慎>\n",
+      "<身份>\n你是 AgentCore 的队员，只负责划定好的这一件任务（所需上下文已给你）。够不到用户。你可以再向下委派一层子团队（只能再嵌套这一层，你的子成员不能再向下委派），看到产出后由你整合。\n</身份>\n\n【落盘文件】（form=files）成品写入工作区；正文只报路径、怎么用、关键取舍。\n\n【纯文字】（form=prose）成品就是正文。不要落盘。\n\n【改工程】（form=workspace）就地改用户工程，不要写入 `AgentCore/文档/`。正文只报路径、怎么跑、关键取舍。\n",
     ceo_addon:
       "<身份>\n你是 AgentCore 的 CEO：用户是老板，只跟你说话；你带队执行，对整段对话负责到底。默认交给团队，自己做只限短答和单点。\n</身份>\n\n<按需目录>\n- team_orchestration_advanced：团队拆法\n- lead_subteam：子队拆法\n</按需目录>\n",
     ceo: "# CEO 完整提示词\n\n（全员共享准则 + 主 Agent 身份，由同一套 compose 逻辑拼装，与线上回合逐字一致。）\n",
@@ -751,6 +767,49 @@ const FIXTURES = new Map([
 
   // 工具 / AI 提示词 (both read the same catalog through useCapabilities).
   ["/v1/capabilities", CAPABILITIES],
+  [
+    "/v1/skill-catalog",
+    {
+      slots: [
+        ...THIN_SKILLS.map((skill) => ({
+          name: skill.name,
+          summary: skill.summary,
+          replaced_by:
+            skill.name === "ask_user_card"
+              ? {
+                  document_id: "mine_1",
+                  name: "提问卡",
+                  description: "问用户时用这份",
+                }
+              : null,
+          muted: skill.name === "debate_and_review",
+          replaced_layer: skill.name === "ask_user_card" ? "here" : null,
+          muted_layer: skill.name === "debate_and_review" ? "here" : null,
+        })),
+        ...PACK_SKILLS.map((skill) => ({
+          name: skill.name,
+          summary: skill.summary,
+          replaced_by: null,
+          muted: false,
+          replaced_layer: null,
+          muted_layer: null,
+        })),
+      ],
+      mine: [
+        {
+          id: "mine_1",
+          name: "提问卡",
+          description: "问用户时用这份",
+          content:
+            "---\napply: on_demand\ndescription: 问用户时用这份\n---\n一次只问挡住推进的那件事。\n",
+          version: "v1",
+          occupies: ["ask_user_card"],
+        },
+      ],
+      folder_id: null,
+      writable: true,
+    },
+  ],
   // 工具页 additionally probes the chat model so it can decide whether to hang the
   // tools-gate hint on delegate/debate — a platform model with tools keeps it off.
   [
@@ -786,7 +845,7 @@ const FIXTURES = new Map([
     },
   ],
 
-  // 自动化 · 任务 / 收件箱 (+ the shell poller that feeds the segment badge).
+  // 自动化 · 任务 / 收件箱 (+ the shell poller that feeds the home-tile / inbox-tab badge).
   ["/v1/standing-tasks", STANDING_TASKS],
   ["/v1/standing-task-templates", STANDING_TASK_TEMPLATES],
   ["/v1/standing-task-runs", STANDING_TASK_RUNS],
@@ -794,6 +853,73 @@ const FIXTURES = new Map([
   // 工作流.
   ["/v1/workflows", USER_WORKFLOWS],
   ["/v1/workflow-playbook-templates", WORKFLOW_TEMPLATES],
+
+  // 能力商店（列表无正文；详情另见 pathname /v1/skill-store/:id）.
+  [
+    "/v1/skill-store",
+    {
+      data: [
+        {
+          id: "listing_contract",
+          name: "合同审查",
+          description: "审合同时用",
+          author: "甲",
+          version_n: 1,
+          installed: false,
+          has_update: false,
+          status: "published",
+          source_document_id: "doc_contract",
+        },
+        {
+          id: "listing_brief",
+          name: "竞品简报",
+          description: "每周出一份对照表",
+          author: "乙",
+          version_n: 2,
+          installed: true,
+          has_update: true,
+          status: "published",
+          source_document_id: "doc_brief",
+        },
+      ],
+      page: 1,
+      page_size: 24,
+      total: 2,
+    },
+  ],
+  [
+    "/v1/skill-store/mine",
+    {
+      data: [
+        {
+          id: "listing_ask",
+          name: "提问卡",
+          description: "问用户时用这份",
+          author: "我",
+          version_n: 1,
+          installed: false,
+          has_update: false,
+          status: "published",
+          source_document_id: "mine_1",
+        },
+      ],
+    },
+  ],
+  [
+    "/v1/skill-store/listing_contract",
+    {
+      id: "listing_contract",
+      name: "合同审查",
+      description: "审合同时用",
+      author: "甲",
+      version_n: 1,
+      installed: false,
+      has_update: false,
+      status: "published",
+      source_document_id: "doc_contract",
+      content: "先列争议条款，再对照模板改。\n",
+    },
+  ],
 
   // Workspaces back the task rows' 工作区 line and the sidebar tree.
   ["/v1/folders", FOLDERS],
@@ -882,26 +1008,21 @@ async function waitForLoaded(page, spec) {
 }
 
 /**
- * Read back what the header actually rendered, so a broken segment bar fails the
- * run instead of quietly shipping a wrong-looking PNG. Scoped to `<main>` — the
- * sidebar has its own 工具箱 entry and would otherwise count as a stray back link.
+ * Read back what the header actually rendered, so a leftover segment bar or a
+ * missing page title fails the run instead of quietly shipping a wrong-looking PNG.
+ * Scoped to `<main>` — the sidebar has its own 工具箱 entry and would otherwise
+ * count as a stray back link.
  */
 async function auditPage(page) {
   return page.evaluate(() => {
     const main = document.querySelector("main");
     if (!main) return null;
     const nav = main.querySelector('nav[aria-label="工具箱能力"]');
-    const links = nav ? [...nav.querySelectorAll("a")] : [];
-    const labelOf = (a) => (a.textContent ?? "").replace(/\d+\+?$/, "").trim();
-    const badgeOf = (a) => {
-      const chip = a?.querySelector("[aria-label]");
-      return chip ? (chip.textContent ?? "").trim() : null;
-    };
     const header = main.querySelector("header");
+    const h1El = main.querySelector("h1");
     const headerBorder = header
       ? Number.parseFloat(getComputedStyle(header).borderBottomWidth) || 0
       : 0;
-    // 页头压成一行后，内容比页头宽 = 这一行被撑破了。
     const headerOverflow = header
       ? Math.max(header.scrollWidth - header.clientWidth, 0)
       : 0;
@@ -910,14 +1031,13 @@ async function auditPage(page) {
         (a.getAttribute("href") ?? "").replace(/^#/, "") === "/toolbox" &&
         (a.textContent ?? "").includes("工具箱"),
     );
-    // 返回链接与分段条的垂直中心距：并排为 ~0，回到「返回链接独占一行」则是行高级别。
     const midOf = (el) => {
       const r = el.getBoundingClientRect();
       return (r.top + r.bottom) / 2;
     };
-    const backToNavGap =
-      nav && backs.length === 1
-        ? Math.round(Math.abs(midOf(backs[0]) - midOf(nav)))
+    const backToTitleGap =
+      h1El && backs.length === 1
+        ? Math.round(Math.abs(midOf(backs[0]) - midOf(h1El)))
         : null;
     const innerTabs = [
       ...(main.querySelector('nav[aria-label="自动化分区"]')?.querySelectorAll("a") ??
@@ -926,20 +1046,22 @@ async function auditPage(page) {
       label: (a.textContent ?? "").replace(/\d+\+?$/, "").trim(),
       active: a.getAttribute("aria-current") === "page",
     }));
+    const automationsTile = [...main.querySelectorAll("button")].find((b) =>
+      (b.textContent ?? "").includes("自动化"),
+    );
+    const homeAutomationsBadge = automationsTile
+      ?.querySelector("[aria-label$='条待处理']")
+      ?.textContent?.trim();
 
     return {
       hasSegmentNav: !!nav,
-      segments: links.map(labelOf),
-      active: links
-        .filter((a) => a.getAttribute("aria-current") === "page")
-        .map(labelOf),
-      automationsBadge: badgeOf(links.find((a) => labelOf(a) === "自动化")),
       h1: [...main.querySelectorAll("h1")].map((h) => (h.textContent ?? "").trim()),
       backLinks: backs.length,
-      backToNavGap,
+      backToTitleGap,
       headerBorder,
       headerOverflow,
       innerTabs,
+      homeAutomationsBadge: homeAutomationsBadge ?? null,
     };
   });
 }
@@ -948,32 +1070,32 @@ async function auditPage(page) {
 function auditProblems(audit, spec) {
   if (!audit) return ["audit failed: no <main>"];
   const out = [];
-  if (spec.segment) {
-    if (!audit.hasSegmentNav) out.push("缺少能力分段条");
-    else if (audit.segments.join("|") !== SEGMENTS.join("|")) {
-      out.push(`分段条项不对：${audit.segments.join(" / ")}`);
+  const isSpoke = spec.hash !== "/toolbox";
+  if (spec.heading && !audit.h1.includes(spec.heading)) {
+    out.push(
+      `标题应为「${spec.heading}」，实际「${audit.h1.join(" / ") || "无"}」`,
+    );
+  }
+  if (audit.hasSegmentNav) out.push("不该再有能力分段条");
+  if (isSpoke) {
+    if (audit.backLinks !== 1) {
+      out.push(`返回链接应恰好 1 个，实际 ${audit.backLinks}`);
     }
-    if (audit.active.join("|") !== spec.segment) {
+    if (audit.backToTitleGap === null || audit.backToTitleGap > 4) {
       out.push(
-        `高亮应为「${spec.segment}」，实际「${audit.active.join(" / ") || "无"}」`,
+        `返回链接没和标题并排（中心差 ${audit.backToTitleGap ?? "?"}px）`,
       );
-    }
-    if (audit.h1.length > 0) out.push(`子页不该有 h1：${audit.h1.join(" / ")}`);
-    if (audit.backLinks !== 1) out.push(`返回链接应恰好 1 个，实际 ${audit.backLinks}`);
-    // 页头只有一行：返回链接与分段条并排，动作插槽落在同一行右端。
-    if (audit.backToNavGap === null || audit.backToNavGap > 4) {
-      out.push(`返回链接没和分段条并排（中心差 ${audit.backToNavGap ?? "?"}px）`);
     }
     if (audit.headerOverflow > 0) {
       out.push(`页头这一行被撑破 ${audit.headerOverflow}px`);
     }
-    // 自动化页内的下划线 tab 自带基线，页头再画一条就成了两条叠着的横线。
     if (spec.tab) {
       if (audit.headerBorder > 0) out.push("页头下边框与页内 tab 基线叠成两条横线");
     } else if (audit.headerBorder <= 0) {
       out.push("页头与内容之间没有分隔线");
     }
-    if (!audit.automationsBadge) out.push("自动化分段没有徽章");
+  } else if (!audit.homeAutomationsBadge) {
+    out.push("自动化磁贴没有徽章");
   }
   if (spec.tab) {
     const active = audit.innerTabs.filter((t) => t.active).map((t) => t.label);
@@ -986,14 +1108,11 @@ function auditProblems(audit, spec) {
 
 /**
  * Overflow (in px) of the scroll container that owns the page, found by walking up
- * from the segment bar (sub-pages carry no `<h1>` to anchor on) or the index page's
- * `<h1>`; falls back to the document scroller. 0 when everything already fits.
+ * from the page `<h1>`; falls back to the document scroller. 0 when everything already fits.
  */
 async function measureOverflow(page) {
   return page.evaluate(() => {
-    const anchor =
-      document.querySelector('nav[aria-label="工具箱能力"]') ??
-      document.querySelector("main h1");
+    const anchor = document.querySelector("main h1");
     let el = anchor?.parentElement ?? null;
     while (el && el !== document.body) {
       const overflowY = getComputedStyle(el).overflowY;
@@ -1110,7 +1229,57 @@ async function main() {
       removeServer: list,
       setServerEnabled: async () => ({ ok: true, server: servers[0] }),
       testServer: async () => ({ ok: true, status: "ready", tools: [] }),
-      runOp: async () => ({ ok: false, error: { kind: "stub", detail: "shoot stub" } }),
+      runOp: async (input) => {
+        if (input?.op === "list_tools") {
+          return {
+            ok: true,
+            value: {
+              servers: [
+                {
+                  id: "mcp_filesystem",
+                  name: "Filesystem",
+                  status: "ready",
+                  tools: [
+                    {
+                      name: "read_file",
+                      description: "Read a file from the workspace.",
+                      inputSchema: {
+                        type: "object",
+                        properties: {
+                          path: {
+                            type: "string",
+                            description: "Absolute path.",
+                          },
+                        },
+                        required: ["path"],
+                      },
+                    },
+                    {
+                      name: "write_file",
+                      description: "Write a file to the workspace.",
+                      inputSchema: {
+                        type: "object",
+                        properties: {
+                          path: { type: "string" },
+                          content: { type: "string" },
+                        },
+                      },
+                    },
+                  ],
+                },
+                {
+                  id: "mcp_github",
+                  name: "GitHub",
+                  status: "failed",
+                  error: "握手失败：GITHUB_TOKEN 未配置（进程退出码 1）",
+                  tools: [],
+                },
+              ],
+            },
+          };
+        }
+        return { ok: false, error: { kind: "stub", detail: "shoot stub" } };
+      },
     };
   }, MCP_SERVERS);
 
@@ -1152,22 +1321,17 @@ async function main() {
       url.hash = spec.hash;
       await page.goto(url.href, { waitUntil: "load", timeout: 30_000 });
 
-      // AuthGate resolves (stubbed /v1/auth/me) → AppShell → the page. The index
-      // still owns an <h1>; the 能力 sub-pages are identified by the segment bar.
+      // AuthGate resolves (stubbed /v1/auth/me) → AppShell → the page.
       if (spec.heading) {
         await page
           .locator("main h1", { hasText: spec.heading })
           .first()
           .waitFor({ state: "visible", timeout: 20_000 });
-      } else {
+      }
+      if (spec.hash === "/toolbox") {
+        // The badge rides a shell-level poller, not the page's own query.
         await page
-          .locator('nav[aria-label="工具箱能力"]')
-          .first()
-          .waitFor({ state: "visible", timeout: 20_000 });
-        // The badge rides a shell-level poller, not the page's own query, so wait
-        // for it explicitly — otherwise a fast page gets shot badge-less.
-        await page
-          .locator('nav[aria-label="工具箱能力"] [aria-label$="条待处理"]')
+          .locator("main [aria-label$='条待处理']")
           .first()
           .waitFor({ state: "visible", timeout: 10_000 })
           .catch(() => notes.push("徽章未出现"));
@@ -1176,6 +1340,24 @@ async function main() {
       const loaded = await waitForLoaded(page, spec);
       if (!loaded.sawReady) notes.push(`没等到内容标记「${spec.ready}」`);
       if (!loaded.quiet) notes.push("仍有「加载中…」，图里可能是加载态");
+
+      if (spec.overlayReady) {
+        await page
+          .getByText(spec.overlayReady)
+          .first()
+          .waitFor({ state: "visible", timeout: 10_000 })
+          .catch(() => notes.push(`没等到 overlay「${spec.overlayReady}」`));
+      }
+      if (spec.click) {
+        await page.getByRole("button", { name: spec.click }).click();
+        if (spec.afterClick) {
+          await page
+            .getByText(spec.afterClick)
+            .first()
+            .waitFor({ state: "visible", timeout: 10_000 })
+            .catch(() => notes.push(`点「${spec.click}」后没看到「${spec.afterClick}」`));
+        }
+      }
 
       await page.evaluate(() => document.fonts?.ready).catch(() => {});
       await page.waitForTimeout(SETTLE_MS);

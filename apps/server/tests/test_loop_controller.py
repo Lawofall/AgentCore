@@ -273,7 +273,7 @@ def test_circuit_breaker_leaps_straight_to_disable_without_redundant_warn():
 
 def test_circuit_breaker_keep_available_tally_does_not_warn_or_disable():
     """run / 打开网页：累计失败只记账，不警告、不卸工具。"""
-    for name in ("run", "read_url", "web_search", "browser"):
+    for name in ("run", "web_fetch", "web_search", "browser"):
         c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
         c.record([_fail("a", name), _fail("b", name), _fail("c", name), _fail("d", name)])
         assert not c.tool_circuit_breaker()
@@ -306,25 +306,25 @@ def test_exec_env_timeout_does_not_retire_run():
     assert not c.tool_circuit_breaker()
 
 
-def test_circuit_breaker_read_url_explicit_retire_still_disables():
-    """出网硬退役仍卸 read_url（不是累计三次）。"""
+def test_circuit_breaker_web_fetch_explicit_retire_still_disables():
+    """出网硬退役仍卸 web_fetch（不是累计三次）。"""
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    steer = "工具 `read_url` 因出网不可用已停用"
+    steer = "工具 `web_fetch` 因出网不可用已停用"
     c.record(
         [
             ToolAttempt(
                 "a",
-                "read_url",
+                "web_fetch",
                 success=False,
                 meta={
-                    "retire_tools": ["read_url"],
+                    "retire_tools": ["web_fetch"],
                     "retire_message": steer,
                 },
             )
         ]
     )
     cb = c.tool_circuit_breaker()
-    assert cb.disabled == ("read_url",)
+    assert cb.disabled == ("web_fetch",)
     assert cb.retire_message == steer
 
 
@@ -337,7 +337,7 @@ def test_circuit_breaker_counts_failures_per_tool_and_ignores_success():
 
 def test_circuit_breaker_ignores_policy_failures():
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    policy = ToolAttempt("a", "read_url", success=False, policy_failure=True)
+    policy = ToolAttempt("a", "web_fetch", success=False, policy_failure=True)
     c.record([policy, policy, policy])
     assert not c.tool_circuit_breaker()
 
@@ -362,8 +362,13 @@ def test_circuit_breaker_still_counts_real_execution_failures():
     assert "file_write" in cb.force_segmented
     assert c.tool_failure_count("file_write") == 3
     msg = cb.message() or ""
-    assert "短骨架" in msg or "分段" in msg
+    assert "连续写盘失败" in msg
+    assert "file_write" in msg and "str_replace" in msg
+    assert "file_append" in msg and "已收窄" in msg
     assert "停用" not in msg
+    assert "短骨架" not in msg
+    assert "JSON 转义" not in msg
+    assert "【强制】" not in msg
 
 
 def test_circuit_breaker_parse_only_write_tools_force_segmented_not_disable():
@@ -376,15 +381,17 @@ def test_circuit_breaker_parse_only_write_tools_force_segmented_not_disable():
     warn = c.tool_circuit_breaker()
     assert warn.warned == ("file_write",)
     assert "file_write" in warn.parse_only
-    warn_msg = warn.message() or ""
-    assert "分段" in warn_msg or "短骨架" in warn_msg
-    assert "原样重发全部参数" not in warn_msg
+    assert warn.message() is None  # warn-only: no sermon
     c.record([ToolAttempt("c", "file_write", success=False, parse_failure=True)])
     disable = c.tool_circuit_breaker()
     assert disable.disabled == ()
     assert "file_write" in disable.force_segmented
-    assert "停用" not in (disable.message() or "")
-    assert "原样重发" not in (disable.message() or "")
+    disable_msg = disable.message() or ""
+    assert "连续写盘失败" in disable_msg
+    assert "file_append" in disable_msg and "已收窄" in disable_msg
+    assert "停用" not in disable_msg
+    assert "短骨架" not in disable_msg
+    assert "原样重发" not in disable_msg
 
 
 def test_retire_tools_hard_disables_family_on_first_failure():
@@ -1162,15 +1169,12 @@ def test_circuit_breaker_parse_failures_get_typed_warn_message():
     cb = c.tool_circuit_breaker()
     assert cb.warned == ("delegate",)
     assert "delegate" in cb.parse_only
-    msg = cb.message() or ""
-    assert "不是合法 JSON" in msg
-    assert "XML" in msg or "parameter" in msg or "合法 JSON" in msg
-    assert "换不同的输入" not in msg
+    assert cb.message() is None  # warn-only: no JSON教案
     # Parse-only: keep dispatcher (do not circuit-disable delegate).
     c.record([ToolAttempt("c", "delegate", success=False, parse_failure=True)])
     cb2 = c.tool_circuit_breaker()
     assert cb2.disabled == ()
-    assert "停用" not in (cb2.message() or "")
+    assert cb2.message() is None
     assert c.tool_failure_count("delegate") == 3
 
 
@@ -1184,14 +1188,14 @@ def test_circuit_breaker_orchestration_still_disables_on_real_failures():
 
 
 def test_circuit_breaker_mixed_failures_keep_generic_warn():
-    """If any non-parse failure contributed, keep the generic「换不同的输入」steer."""
+    """Warn-only trips (mixed parse/real) stay silent to the model."""
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
     c.record([ToolAttempt("a", "delegate", success=False, parse_failure=True)])
     c.record([ToolAttempt("b", "delegate", success=False, parse_failure=False)])
     cb = c.tool_circuit_breaker()
     assert cb.warned == ("delegate",)
     assert "delegate" not in cb.parse_only
-    assert "换不同的输入" in (cb.message() or "")
+    assert cb.message() is None
 
 
 def test_circuit_breaker_remember_parse_only_keeps_and_memory_steer():
@@ -1204,17 +1208,12 @@ def test_circuit_breaker_remember_parse_only_keeps_and_memory_steer():
     cb = c.tool_circuit_breaker()
     assert cb.warned == ("remember",)
     assert "remember" in cb.parse_only
-    msg = cb.message() or ""
-    assert "不是合法 JSON" in msg
-    assert "记规则" in msg
-    assert "禁止截断时原样重发全部" in msg
-    assert "勿改用空回复交差" not in msg
-    assert "后原样重发全部参数" not in msg
+    assert cb.message() is None
     # Parse-only: keep remember (do not circuit-disable).
     c.record([ToolAttempt("c", "remember", success=False, parse_failure=True)])
     cb2 = c.tool_circuit_breaker()
     assert cb2.disabled == ()
-    assert "停用" not in (cb2.message() or "")
+    assert cb2.message() is None
     assert c.tool_failure_count("remember") == 3
 
 
@@ -1235,12 +1234,7 @@ def test_circuit_breaker_other_parse_warn_is_class_aware():
     cb = c.tool_circuit_breaker()
     assert cb.warned == ("grep",)
     assert "grep" in cb.parse_only
-    msg = cb.message() or ""
-    assert "截断" in msg
-    assert "转义" in msg
-    # Must not teach truncated retries as verbatim resend-only.
-    assert "后原样重发全部参数" not in msg
-    assert "截断场景禁止原样重发全部" in msg
+    assert cb.message() is None
 
 
 def _prose_append_reject(fp: str, path: str) -> ToolAttempt:
@@ -1266,8 +1260,10 @@ def test_path_write_reject_streak_trips_force_segmented_at_two():
     assert "file_append" in cb.force_segmented
     assert "file_write" in cb.force_segmented
     msg = cb.message() or ""
-    assert "短骨架" in msg or "分段" in msg
+    assert "连续写盘失败" in msg
+    assert "file_append" in msg and "已收窄" in msg
     assert "停用" not in msg
+    assert "短骨架" not in msg
     # Idempotent: further same-path rejects do not re-fire.
     c.record([_prose_append_reject("c", "report.md")])
     assert not c.tool_circuit_breaker()
@@ -1510,7 +1506,7 @@ def _worker(finalize_rounds: int = 6) -> LoopController:
     # delegation do not change the knob.
     return LoopController(
         convergence_finalize_rounds=finalize_rounds,
-        investigation_tools=frozenset({"web_search", "read_url", "file_read"}),
+        investigation_tools=frozenset({"web_search", "web_fetch", "file_read"}),
     )
 
 
@@ -1619,7 +1615,7 @@ def test_safety_net_round_clock_survives_nudge_window_clear():
     c.record([_fail("a", "web_search"), _fail("a", "web_search"), _fail("a", "web_search")])
     assert c.decide(c.detect()) is Intervention.NUDGE  # clears the window
     assert c.investigation_rounds == 1  # survived the clear (fail round doesn't add)
-    c.record([_ok("b", "read_url")])  # 2nd successful investigation round
+    c.record([_ok("b", "web_fetch")])  # 2nd successful investigation round
     assert c.investigation_rounds == 2
     assert c.convergence_action() is Intervention.CONTINUE  # still ≪ 6
 

@@ -79,8 +79,8 @@ from agentcore.tools.protocol import ToolSchema
 # delegate 2409、ask_user 桌面 2235 / web 1686；git 政策表仍只在 description（2430）。
 # 2026-09-01 已确认约束填法收进 task 参数、deliverable 不再复述。实测 delegate 2380。
 # 2026-09-02 form=files 不再钉工作稿；裸文件名仍 join。实测 delegate 2294。
-# 2026-09-02 run：when-to-use 补进 description（验证直接跑 / dev 后台 / action 管已有进程）；
-# 长驻省略 wait_for 用默认就绪信号。实测 1026。cap 1010→1030（抬顶=when-to-use，非回潮）。
+# 2026-09-02 run：when-to-use 补进 description（验证直接跑 / dev 后台 / action 管已有进程）。
+# 省略 wait_for 则起来就返回（不再注入默认就绪信号）。cap 1030。
 _CAPS: dict[str, int] = {
     "browser": 1330,
     "git": 2430,
@@ -390,7 +390,8 @@ def test_on_demand_faces_point_how_to_consult():
     )
     assert "uvicorn --reload" not in RunTool().schema.description
     wait_desc = RunTool().schema.parameters["properties"]["wait_for"]["description"]
-    assert "默认" in wait_desc
+    assert "省略" in wait_desc
+    assert "默认就绪" not in wait_desc
     # description 不复述 action 表（取值语义留在 action 参数）。
     assert "navigate/click/type" not in BrowserTool().schema.description
     assert "status/os_log/shell：CEO" not in HostTool().schema.description

@@ -41,14 +41,13 @@ from agentcore.tools.registry import ToolRegistry
 from .timeout import outer_liveness_timeout_meta, resolve_tool_timeout
 from .tool_channel_redirect import tool_wire_status
 from .tool_exec_args import (
-    _ARGS_PARSE_FAILED_MARKER,
     _attempt_meta_with_landing_path,
     _failed_tool_message,
-    _format_args_parse_error,
     _leaked_cancel_quad,
     _missing_tool_feedback,
     _shell_observe_log_fields,
     _short_tool_error_reason,
+    emit_args_parse_failed,
     with_tool_failed_marker,
 )
 from .tool_exec_coalesce import _clone_tool_result, _file_read_round_coalesce_key
@@ -136,58 +135,14 @@ async def run_one_tool(
             raw_args = repaired
             fingerprint = fingerprint_tool_call(name, raw_args)
     if parse_exc is not None:
-        model_msg, user_msg, parse_class = _format_args_parse_error(
-            name or raw_name, raw_args, parse_exc
-        )
-        # Honest wire pair: marker args (not ``{}``) + error end — never run the tool.
-        # Model transcript + ``result`` keep technical tip; ``failure`` carries user face.
-        sink.emit(
-            tool_use_start(
-                tc.id, name or raw_name, dict(_ARGS_PARSE_FAILED_MARKER), run_id=event_run_id
-            )
-        )
-        sink.emit(
-            tool_use_end(
-                tc.id,
-                name or raw_name,
-                success=False,
-                output=model_msg,
-                failure=tool_failure_fields(
-                    code="args_parse_failed",
-                    # Write tools author a short human line; other tools keep
-                    # technical tip only on model face (user_msg == model_msg).
-                    product_message=user_msg if user_msg != model_msg else None,
-                ),
-                run_id=event_run_id,
-            )
-        )
-        logger.info(
-            "tool.args_parse_failed",
-            tool=name or raw_name,
+        return emit_args_parse_failed(
+            sink=sink,
             tool_call_id=tc.id,
-            pos=parse_exc.pos,
-            msg=parse_exc.msg,
-            args_preview=raw_args[:200],
-            parse_class=parse_class,
-        )
-        logger.info(
-            "tool.execute_end",
-            tool=name or raw_name,
-            status="args_parse_failed",
-            duration_ms=0,
-        )
-        return (
-            _failed_tool_message(tc.id, model_msg),
-            None,
-            ToolAttempt(
-                fingerprint,
-                name or raw_name,
-                success=False,
-                parse_failure=True,
-                error_summary=model_msg,
-                meta={"error_class": ERROR_CLASS_VALIDATION},
-            ),
-            [],
+            name=name or raw_name,
+            fingerprint=fingerprint,
+            raw_args=raw_args,
+            parse_exc=parse_exc,
+            event_run_id=event_run_id,
         )
 
     if isinstance(args, dict):
@@ -433,7 +388,7 @@ async def run_one_tool(
                             "code": "retrieval_budget_exhausted",
                             "retire_tools": sorted(RETRIEVAL_TOOL_NAMES),
                             "retire_message": (
-                                "检索预算已尽：web_search / read_url 本回合已停用——"
+                                "检索预算已尽：web_search / web_fetch 本回合已停用——"
                                 "请基于已有材料交付，禁止再调用检索工具。"
                             ),
                         },
@@ -677,6 +632,27 @@ async def run_one_tool(
             output = err_part
         else:
             output = "\n".join(p for p in (err_part, out_part) if p) or "Unknown error"
+    if budget_reserved and budget_state is not None and charges_retrieval_budget(result):
+        from agentcore.runtime.runs.retrieval_budget import (
+            format_retrieval_budget_receipt,
+            is_retrieval_budget_critical,
+        )
+
+        receipt = format_retrieval_budget_receipt(budget_state)
+        output = f"{output}\n{receipt}" if (output or "").strip() else receipt
+        logger.info(
+            "engine.retrieval_budget_awareness",
+            run_id=event_run_id,
+            limit=budget_state.limit,
+            used=budget_state.used,
+            searches=budget_state.searches_used,
+            reads=budget_state.reads_used,
+            remaining=budget_state.remaining,
+            critical=is_retrieval_budget_critical(
+                budget_state.remaining, limit=budget_state.limit
+            ),
+            final=False,
+        )
     # 挂起即收口: a SUSPEND terminal already persisted its *_required card in the
     # pause snapshot. Emitting a durable tool_use_end here would append a fact that
     # diverges snapshot vs DB (and the call stays PENDING — no tool_call fact either).

@@ -17,10 +17,20 @@ alwaysApply: false
 | canvas | `max-w-[1200px] mx-auto` | 列表、文件管理 |
 | 对话页 | `max-w-3xl mx-auto` | 消息区 + 输入区（768px） |
 | IM 会话列 | `max-w-[52rem] mx-auto` | 消息页右栏：消息区 + 输入区（832px；≠ 对话页 768px） |
+| 鉴权列 | `max-w-xs mx-auto` | 登录/注册/找回、服务不可用；admin 登录/强制改密/居中闸同源（320px）。MFA 设密钥/恢复码内容更密，仍 `max-w-md` |
 
 自有布局豁免：对话页、文件页、设置页、全屏页、消息页两栏壳不走 content/canvas 梯度。消息页右栏内走 IM 会话列。
 
 窄屏（`<768px`）：`AppShell` 收成底栏 4-tab + 对话 ☰ 抽屉 + 右坞全屏 sheet，**不要**把侧栏和 ≥280px 坞挤进主列。权威 → [前端技术 §五](/docs/04-前端/前端技术与架构.md)。字号仍 4 级：`sm` 14→16、`base` 16→17，`xs`/`xl` 不动（底栏、按钮、工具行保持密度）；`.markdown-body` 必须走 token。实现 → `globals.css`。
+
+## 页头
+
+权威 → [`UI-Pattern索引.md` · 页头层级](/docs/04-前端/UI-Pattern索引.md#页头层级)。
+
+- 产品工作面：一行标题（+ 右动作 / 同行 `meta`）。禁止 h1 下第二行说明。
+- 说明只落 `SettingsSection` / 字段 hint / `EmptyHint`。卡片/磁贴 description 不是页头，保留。
+- 一律 `PageHeader`：单行标题 + 可选同行 meta / 右动作；工具箱子页传 `back`。窄屏返回栏已点名则不画 h1。**否决**兄弟分段条顶替标题。页内切块用 `SectionTabs`；表单里就地互斥用 `SegmentedControl`，不要混。
+- 页顶留白与对话管理页对齐：`PageContainer` / 设置内容列 `py-6`。
 
 ## 禁止
 

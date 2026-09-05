@@ -20,8 +20,8 @@ import { isBorrowActive } from "@/lib/borrowOriginalPreference";
 import { startBorrowToCloudJob } from "@/lib/borrowToCloudJob";
 import { hasLocalFiles } from "@/lib/capabilities";
 import {
-  getComposerChannelPreference,
   setComposerChannelPreference,
+  storedComposerChannelPreference,
 } from "@/lib/composerChannelPreference";
 import { visibleDraftFolders } from "@/lib/draftWorkspaceFolders";
 import { folderAncestorNames } from "@/lib/folderTree";
@@ -58,8 +58,8 @@ import { WorkspaceChannelGuideDialog } from "./WorkspaceChannelGuideDialog";
 
 /**
  * Always-on「在哪工作」chip for the TurnComposer 底栏左簇（工作区首位）。
- * Draft first screen = pick a place (快速对话 + folders); join / local-use
- * nest 新建·Git·本机三选. Bound conversation: read-only status.
+ * Draft first screen = pick a place (本地对话 + 云端对话 + folders);
+ * join / local-use nest 新建·Git·本机三选. Bound conversation: read-only status.
  */
 export function ComposerWorkspaceChip({
   conversationId,
@@ -157,11 +157,10 @@ function draftLabel(
   folders: FolderMeta[],
 ): { icon: "local" | "cloud" | "folder"; text: string } {
   if (intent.kind === "quick_cloud") {
-    return { icon: "cloud", text: "快速对话" };
+    return { icon: "cloud", text: "云端对话" };
   }
-  // Legacy intent（入口已砍；发送时改导云，不再造本机草稿）
   if (intent.kind === "quick_local") {
-    return { icon: "local", text: "本机草稿" };
+    return { icon: "local", text: "本地对话" };
   }
   const folder = folders.find((f) => f.id === intent.folderId);
   if (!folder) return { icon: "folder", text: "文件夹" };
@@ -245,8 +244,8 @@ function DraftChip() {
   const setIntent = useFoldersStore((s) => s.setDraftWorkspaceIntent);
   const isDesktop = hasLocalFiles();
   const { isNarrow } = useNarrowLayoutState();
-  const lastChannel = getComposerChannelPreference();
-  const lastWasLocal = lastChannel === "local_traditional";
+  const lastWasLocal =
+    storedComposerChannelPreference() === "local_traditional";
 
   const grouped = useGroupedConversations().data;
   const sharedWithMe = useSharedWithMeFolders().data ?? [];
@@ -341,6 +340,12 @@ function DraftChip() {
   const pickQuickCloud = () => {
     setComposerChannelPreference("cloud");
     setIntent({ kind: "quick_cloud" });
+    closePick();
+  };
+
+  const pickQuickLocal = () => {
+    setComposerChannelPreference("local_traditional");
+    setIntent({ kind: "quick_local" });
     closePick();
   };
 
@@ -658,9 +663,17 @@ function DraftChip() {
       </div>
     ) : (
       <div className="max-h-[360px] overflow-y-auto p-1.5">
+        {isDesktop ? (
+          <DraftRow
+            icon={<HardDrive size={14} />}
+            label="本地对话"
+            selected={intent.kind === "quick_local"}
+            onClick={pickQuickLocal}
+          />
+        ) : null}
         <DraftRow
           icon={<Cloud size={14} />}
-          label="快速对话"
+          label="云端对话"
           selected={intent.kind === "quick_cloud"}
           onClick={pickQuickCloud}
         />

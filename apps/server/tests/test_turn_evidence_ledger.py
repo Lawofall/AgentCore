@@ -1,7 +1,7 @@
 """回合共享调研台账接线（引用即出处 P1 §十第 2 步）。
 
 覆盖：多 worker 并发不撞号且 id→URL 稳定；CEO 直答登记；weak citable=true（P2）；
-read_url 升级 deep_read；tool_exec / react_loop 对 worker 注入 ``#rN=url``（非旧 ``[n]``）。
+web_fetch 升级 deep_read；tool_exec / react_loop 对 worker 注入 ``#rN=url``（非旧 ``[n]``）。
 """
 
 from __future__ import annotations
@@ -101,7 +101,7 @@ async def test_ceo_direct_register_and_weak_citable():
 
 
 @pytest.mark.asyncio
-async def test_read_url_upgrades_deep_read_on_shared_ledger():
+async def test_web_fetch_upgrades_deep_read_on_shared_ledger():
     led = EvidenceLedgerCore(id_prefix="#r")
     eid = await led.register(
         url="https://news.example.com/story",

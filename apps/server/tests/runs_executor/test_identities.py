@@ -233,7 +233,7 @@ async def test_captain_identity_carries_when_to_split_guidance():
     from agentcore.runtime.runs.executor.identities import build_worker_identity
 
     identity = build_worker_identity(has_dependents=False, captain=True)
-    assert "<身份>" in identity and "一员" in identity
+    assert "<身份>" in identity and "队员" in identity
     assert "优先先嵌套" not in identity
     assert "consult(lead_subteam)" not in identity
     assert "未嵌套禁写" not in identity
@@ -242,7 +242,7 @@ async def test_captain_identity_carries_when_to_split_guidance():
     assert "4 个 sub-worker" not in identity
     leaf = build_worker_identity(has_dependents=False, captain=False)
     assert "<身份>" in leaf and "</身份>" in leaf
-    assert "一员" in leaf.split("<身份>", 1)[1].split("</身份>", 1)[0]
+    assert "队员" in leaf.split("<身份>", 1)[1].split("</身份>", 1)[0]
     assert "先招人再整合" not in leaf
     assert "写满步骤 ≠ 已切薄" not in leaf
     assert "≠ 两段" not in leaf
@@ -265,13 +265,8 @@ async def test_depth_three_subworker_keeps_leaf_identity():
     assert "再向下委派一层子团队" not in provider.system_messages[0]
 
 
-async def test_worker_identities_carry_tool_safety_caution():
-    # 按角色 right-size (反向): the environment-mutation caution (<写工具谨慎>) moved OUT of
-    # the shared base (where the CEO carried it as prefix weight) INTO the worker
-    # identities — workers hold the mutating tools (file_write / code_execute / file_delete…),
-    # so the caution rides them now. Pin it on BOTH the leaf and the captain identity so a
-    # refactor can't drop the mutation caution from the agents that can actually act
-    # (the absence-from-base/CEO side is pinned in tests/test_prompt.py).
+async def test_worker_identities_omit_tool_safety_caution():
+    # <写工具谨慎> left resident prompts (confirmation cards handle consent).
     leaf_provider = _ContentProvider(["X"])
     leaf_plan, _ = build_run_plan(
         [{"role": "A", "task": "做A"}],
@@ -282,8 +277,8 @@ async def test_worker_identities_carry_tool_safety_caution():
     leaf_exec = _nesting_executor(leaf_plan, leaf_provider, lambda rid, d: _stub_subteam())
     await leaf_exec(leaf_plan.by_id("t_1"), {})
     leaf_sys = leaf_provider.system_messages[0]
-    assert "<写工具谨慎>" in leaf_sys
-    assert "本地模式" in leaf_sys
+    assert "<写工具谨慎>" not in leaf_sys
+    assert "本地模式" not in leaf_sys
 
     captain_provider = _ContentProvider(["Y"])
     captain_plan = RunPlan()
@@ -292,71 +287,27 @@ async def test_worker_identities_carry_tool_safety_caution():
     await captain_exec(captain_plan.by_id("d1"), {})
     captain_sys = captain_provider.system_messages[0]
     assert "再向下委派一层子团队" in captain_sys  # captain identity in play
-    assert "<写工具谨慎>" in captain_sys
+    assert "<写工具谨慎>" not in captain_sys
 
 
-async def test_handoff_prompt_splits_by_topology():
-    """Identity handoff wording tracks DAG dependents.
-
-    Upstream (has_dependents) gets「必须调用」only; a leaf gets
-    「默认不调用」+ 仅增量才补 — writing shape stays on the
-    handoff tool description.
-    """
+async def test_handoff_topology_lives_on_tool_not_identity():
+    """Handoff must-vs-may is the tool description; form HOW is 交付物规格."""
+    from agentcore.runtime.runs.contract import describe_deliverable
     from agentcore.runtime.runs.executor.identities import build_worker_identity
+    from agentcore.runtime.runs.types import Deliverable
     from agentcore.tools.builtin.handoff import HandoffTool
 
     upstream = build_worker_identity(has_dependents=True, captain=False)
     leaf = build_worker_identity(has_dependents=False, captain=False)
-    assert "必须调用 handoff" in upstream
-    assert "须写清这次做出了什么" not in upstream
-    assert "默认不调用" not in upstream
-
-    prose_up = build_worker_identity(
-        has_dependents=True, captain=False, form="prose"
-    )
-    assert "结论与根因写在正文" in prose_up
-    assert "交接勿回灌" in prose_up
-    files_leaf = build_worker_identity(
-        has_dependents=False, captain=False, form="files"
-    )
-    assert "交接勿回灌" in files_leaf
-    assert "自包含可读" in files_leaf
-    assert "直接以产出本身开头" in files_leaf
-    assert "我来为你生成" not in files_leaf
-    assert "粘在回复正文" not in files_leaf
-    assert "聊天粘贴" not in files_leaf
-    # files 叶子：队长读正文或落盘路径，简报不是唯一信息源。
-    assert "主管唯一信息源" not in files_leaf
-    assert "须写清这次做出了什么" not in files_leaf
-    assert "默认不调用" in files_leaf
-    artifacts_leaf = build_worker_identity(
-        has_dependents=False, artifacts=["report.md"]
-    )
-    assert "form=files" in artifacts_leaf
-    assert "须写清这次做出了什么" not in artifacts_leaf
-    assert "默认不调用" in artifacts_leaf
-
-    prose_leaf = build_worker_identity(
-        has_dependents=False, captain=False, form="prose"
-    )
-    assert "结论、根因、关键取舍" in prose_leaf
-    assert "默认不调用" in prose_leaf
-    assert "增量" in prose_leaf
-    assert "主管唯一信息源" not in prose_leaf
-    assert "必须调用 handoff" not in prose_leaf
-
-    assert "默认不调用" in leaf
+    assert upstream == leaf
     assert "必须调用 handoff" not in leaf
-    assert "form=files" in leaf
-    assert "自包含可读" in leaf
-    assert "结论、根因、关键取舍" in leaf
-    assert "须写清这次做出了什么" not in leaf
+    assert "默认不调用" not in leaf
+    assert "form=files" not in leaf
+    assert "form=prose" not in leaf
+    assert "成品就是正文" not in leaf
     assert "它与 escalate 不同" not in leaf
-    assert "它与 escalate 不同" not in upstream
-    # 队员合同：原则标题 + 结构真相；不守卫完成话术近义词必须在场
-    assert "交接勿回灌" in leaf and "交接勿回灌" in upstream
-    assert "改文件" in leaf and "症状消失" in leaf
-    assert "系统已就绪" in leaf and "界面没改" in leaf
+    assert "改文件" not in leaf and "症状消失" not in leaf
+    assert "系统已就绪" not in leaf
     assert "勿回读刚写" not in leaf
     assert "最后一次同命令" not in leaf
     assert "分项分开写" not in leaf
@@ -365,7 +316,6 @@ async def test_handoff_prompt_splits_by_topology():
     assert "有工具活动或较长交付" not in leaf
     assert "权威文档冲突" not in leaf
     assert "静默改权威稿" not in leaf
-    # 找路径 HOW 归 file_read；身份不复述。
     assert "找路径" not in leaf
     assert "前置结果" not in leaf
     assert "全仓 glob" not in leaf
@@ -374,7 +324,26 @@ async def test_handoff_prompt_splits_by_topology():
     assert "勿按话题拼接" not in leaf
     assert "<工作区>" not in leaf
 
-    # Executor wires topology into the live system prompt (not just the helper).
+    prose = describe_deliverable(Deliverable(form="prose"))
+    files = describe_deliverable(Deliverable(form="files"))
+    assert "form=prose" in prose
+    assert "成品就是正文" in prose
+    assert "不要落盘" in prose
+    assert "file_write" not in prose
+    assert "结论与根因写在正文" not in prose
+    assert "form=files" in files
+    assert "成品写入工作区" in files
+    assert "正文只报路径" in files
+    assert "file_write" not in files
+    assert "自包含可读" not in files
+    assert "直接以产出本身开头" not in files
+    assert "交接勿回灌" not in files
+    assert "我来为你生成" not in files
+    assert "粘在回复正文" not in files
+    assert "聊天粘贴" not in files
+    assert "主管唯一信息源" not in files
+    assert "须写清这次做出了什么" not in files
+
     plan, _ = build_run_plan(
         [
             {"id": "arch", "role": "调研", "task": "查资料"},
@@ -395,12 +364,15 @@ async def test_handoff_prompt_splits_by_topology():
     await _nesting_executor(plan, leaf_provider, lambda rid, d: _stub_subteam())(
         plan.by_id("t_impl"), {}
     )
-    assert "必须调用 handoff" in up_provider.system_messages[0]
-    assert "默认不调用" in leaf_provider.system_messages[0]
-    assert "必须调用 handoff" not in leaf_provider.system_messages[0]
+    assert "必须调用 handoff" not in up_provider.system_messages[0]
+    assert "默认不调用" not in leaf_provider.system_messages[0]
+    assert "form=files" not in up_provider.system_messages[0]
+    assert "form=files" not in leaf_provider.system_messages[0]
+    assert "交付物规格" in up_provider.user_messages[0]
+    assert "form=files" in up_provider.user_messages[0]
+    assert "交付物规格" in leaf_provider.user_messages[0]
+    assert "form=files" in leaf_provider.user_messages[0]
 
-    # Tool description covers both branches so it never fights either prompt.
-    # Writing shape (结论 + 接缝) lives only on the button, not identity.
     desc = HandoffTool().schema.description
     assert "便条写在这一轮正文" in desc
     assert "必须" in desc
@@ -411,13 +383,38 @@ async def test_handoff_prompt_splits_by_topology():
     assert "未验证" in desc
     assert "2–4" not in desc
     assert "勿贴长文" not in desc
-    assert "下一棒要接" not in upstream
-    assert "现在什么已成立" not in upstream
-    assert "便条 ≠ 文件说明" not in upstream
     assert "下一棒要接" not in leaf
+    assert "现在什么已成立" not in leaf
     assert "便条 ≠ 文件说明" not in leaf
     assert "有工具活动或较长交付" not in desc
     assert HandoffTool().schema.parameters.get("properties") == {}
+
+
+def test_catalog_identity_is_identity_only():
+    from agentcore.runtime.runs.contract import describe_deliverable
+    from agentcore.runtime.runs.executor.identities import (
+        build_worker_identity,
+        build_worker_identity_catalog,
+    )
+    from agentcore.runtime.runs.types import Deliverable
+
+    live = build_worker_identity(has_dependents=False)
+    catalog = build_worker_identity_catalog(captain=False)
+    assert live == catalog
+    assert "form=files" not in live
+    assert "form=prose" not in live
+    assert "form=workspace" not in catalog
+    assert catalog.count("<身份>") == 1
+    assert "不能再向下委派" in catalog
+    nested = build_worker_identity_catalog(captain=True)
+    assert "再向下委派一层子团队" in nested
+    assert "还可以再向下委派一层子团队" not in nested
+    assert "form=prose" not in nested
+    assert "form=workspace" not in nested
+    files = describe_deliverable(Deliverable(form="files"))
+    assert "form=files" in files
+    assert "form=prose" not in files
+    assert "form=workspace" not in files
 
 
 def test_worker_identity_states_no_execution_capability():
@@ -447,7 +444,7 @@ def test_worker_identity_states_no_execution_capability():
     assert "刚落盘的表格" not in with_exec
     assert "consult(long_form_landing)" not in with_exec
     assert "consult(data_file_landing)" not in with_exec
-    assert "artifact manifest" in with_exec
+    assert "成品写入工作区" not in with_exec
     # 默认参数与显式 True 字节一致（不惊扰既有路径）。
     assert with_exec == build_worker_identity(has_dependents=False)
 
@@ -459,6 +456,11 @@ def test_worker_identity_teaches_escalate_blocking_choice():
 
     body = build_worker_identity(has_dependents=False)
     assert "小问题（路径拼写" not in body
+    assert "标假设继续" not in body
+    assert "信息不足就标假设" not in body
+    assert "专家 worker" not in body
+    assert "多 Agent AI 工作台" not in body
+    assert "实时答疑" not in body
     assert "blocking=false" not in body
     assert "blocking=true" not in body
     assert "escalate 不会打断你" not in body
@@ -473,6 +475,8 @@ def test_worker_identity_teaches_escalate_blocking_choice():
     assert "已拒凭据" in blocking
     captain = build_worker_identity(has_dependents=False, captain=True)
     assert "小问题（路径拼写" not in captain
+    assert "标假设继续" not in captain
+    assert "实时答疑" not in captain
 
 
 async def test_executor_never_wires_direct_to_user_register():

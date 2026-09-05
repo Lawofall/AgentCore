@@ -1,9 +1,13 @@
 import { AskUserCard } from "@/components/chat/CheckpointCard";
-import type { AskUserContent } from "@/components/chat/ask/AskUserFields";
+import {
+  type AskUserContent,
+  displayAskReply,
+} from "@/components/chat/ask/AskUserFields";
 import {
   ResolvedDecisionRecord,
   askResolvedOutcome,
 } from "@/components/chat/decision";
+import { Badge } from "@/components/ui/badge";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import { useState } from "react";
@@ -45,7 +49,7 @@ type DemoSettled = {
 };
 
 function collapsedSummary(settled: DemoSettled): string {
-  const note = settled.note.trim();
+  const note = displayAskReply(settled.note.trim());
   if (note) return note;
   if (settled.selected.length > 0) return settled.selected.join(" · ");
   return "";
@@ -59,6 +63,7 @@ function ManualAskSettledRecord({
   disclosureKey: string;
 }) {
   const resolved = askResolvedOutcome("decision", settled.decision);
+  const reply = displayAskReply(settled.note);
   return (
     <ResolvedDecisionRecord
       layout="toneStub"
@@ -76,18 +81,15 @@ function ManualAskSettledRecord({
         {settled.selected.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {settled.selected.map((s) => (
-              <span
-                key={s}
-                className="rounded-full bg-muted px-2 py-0.5 text-xs text-foreground"
-              >
+              <Badge key={s} tone="muted" pill>
                 {s}
-              </span>
+              </Badge>
             ))}
           </div>
         )}
-        {settled.note ? (
+        {reply ? (
           <p className="whitespace-pre-wrap rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs text-foreground">
-            {settled.note}
+            {reply}
           </p>
         ) : null}
       </div>

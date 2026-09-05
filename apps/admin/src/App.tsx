@@ -15,6 +15,7 @@ import { ReplayPage } from "@/pages/ReplayPage";
 import { BetaGroupPage } from "@/pages/BetaGroupPage";
 import { NoticesPage } from "@/pages/NoticesPage";
 import { PlatformQuotaPage } from "@/pages/PlatformQuotaPage";
+import { SkillStorePage } from "@/pages/SkillStorePage";
 import { SystemPage } from "@/pages/SystemPage";
 import { UsersPage } from "@/pages/UsersPage";
 import { setUnauthorizedHandler } from "@/services/api";
@@ -106,6 +107,7 @@ export function App() {
           <Route path="preview" element={<PreviewPage />} />
           <Route path="audit" element={<AuditPage />} />
           <Route path="notices" element={<NoticesPage />} />
+          <Route path="store" element={<SkillStorePage />} />
           <Route path="beta-group" element={<BetaGroupPage />} />
           <Route path="quota" element={<PlatformQuotaPage />} />
           <Route path="system" element={<SystemPage />} />
@@ -130,7 +132,7 @@ function CenteredCard({
 }) {
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
-      <div className="flex w-full max-w-sm flex-col items-center gap-4 text-center">
+      <div className="flex w-full max-w-xs flex-col items-center gap-4 text-center">
         {icon && (
           <div className="flex size-12 items-center justify-center rounded-xl bg-warning/10">
             {icon}

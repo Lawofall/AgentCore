@@ -1,4 +1,4 @@
-"""Pre-commit 429 and 403 RegionError swap the platform pool member; 401 and post-commit do not."""
+"""Pre-commit 429 / CreditsError / 403 RegionError swap the pool member; AuthError does not."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from agentcore.config import settings
 from agentcore.core.errors import (
     LLMAuthError,
     LLMError,
+    LLMInsufficientBalanceError,
     LLMQuotaExceededError,
     LLMRateLimitError,
 )
@@ -63,6 +64,24 @@ def _go_429(*, limit_name: str = "5 hour") -> bytes:
 def _go_401() -> bytes:
     return json.dumps(
         {"type": "error", "error": {"type": "AuthError", "message": "unauthorized"}}
+    ).encode()
+
+
+def _go_credits() -> bytes:
+    return json.dumps(
+        {
+            "type": "error",
+            "error": {"type": "CreditsError", "message": "Insufficient balance"},
+        }
+    ).encode()
+
+
+def _go_monthly_limit() -> bytes:
+    return json.dumps(
+        {
+            "type": "error",
+            "error": {"type": "MonthlyLimitError", "message": "monthly cap"},
+        }
     ).encode()
 
 
@@ -220,6 +239,84 @@ async def test_401_does_not_failover_to_the_next_key(monkeypatch):
             assert picked.api_key == "sk-b"
         finally:
             await later.close()
+    finally:
+        await provider.close()
+
+
+async def test_complete_pre_commit_creditserror_failsover(monkeypatch):
+    _pool()
+    seen: list[str] = []
+    sleeps: list[float] = []
+
+    async def fake_sleep(sec: float) -> None:
+        sleeps.append(sec)
+
+    monkeypatch.setattr("agentcore.llm.provider.openai_compatible.asyncio.sleep", fake_sleep)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        auth = request.headers.get("authorization", "")
+        seen.append(auth)
+        if auth == "Bearer sk-a":
+            return httpx.Response(401, content=_go_credits())
+        return httpx.Response(200, json=_ok_body())
+
+    _patch_client_factory(monkeypatch, handler)
+    provider = await _platform_leaf()
+    try:
+        result = await provider.complete(_req("title"))
+        assert result.content == "ok"
+        assert seen == ["Bearer sk-a", "Bearer sk-b"]
+        assert sleeps == []
+        exhausted = get_pool_state_store().get(_A)
+        assert exhausted is not None
+        assert exhausted.status == "exhausted"
+        assert exhausted.source == "creditserror"
+        picked = platform_llm_credentials()
+        assert picked is not None
+        assert picked.api_key == "sk-b"
+    finally:
+        await provider.close()
+
+
+async def test_complete_pre_commit_monthlylimit_failsover(monkeypatch):
+    _pool()
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        auth = request.headers.get("authorization", "")
+        seen.append(auth)
+        if auth == "Bearer sk-a":
+            return httpx.Response(401, content=_go_monthly_limit())
+        return httpx.Response(200, json=_ok_body())
+
+    _patch_client_factory(monkeypatch, handler)
+    provider = await _platform_leaf()
+    try:
+        result = await provider.complete(_req("title"))
+        assert result.content == "ok"
+        assert seen == ["Bearer sk-a", "Bearer sk-b"]
+        exhausted = get_pool_state_store().get(_A)
+        assert exhausted is not None
+        assert exhausted.status == "exhausted"
+        assert exhausted.source == "monthlylimiterror"
+    finally:
+        await provider.close()
+
+
+async def test_creditserror_on_last_member_raises_insufficient_balance(monkeypatch):
+    _pool()
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, content=_go_credits())
+
+    _patch_client_factory(monkeypatch, handler)
+    provider = await _platform_leaf()
+    try:
+        with pytest.raises(LLMInsufficientBalanceError):
+            await provider.complete(_req("title"))
+        assert get_pool_state_store().get(_A) is not None
+        assert get_pool_state_store().get(_B) is not None
+        assert platform_llm_credentials() is not None  # last-resort still returns a member
     finally:
         await provider.close()
 

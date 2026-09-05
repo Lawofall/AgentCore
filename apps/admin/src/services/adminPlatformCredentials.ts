@@ -12,13 +12,9 @@ type GeneratedView = components["schemas"]["PlatformCredentialView"];
 type GeneratedCreate = components["schemas"]["CreatePlatformCredentialRequest"];
 type GeneratedUpdate = components["schemas"]["UpdatePlatformCredentialRequest"];
 
-export type PlatformCredentialView = GeneratedView & {
-  tool_surface_limits?: ToolSurfaceLimits;
-};
-export type PlatformCredentialListResponse = Omit<
-  components["schemas"]["PlatformCredentialListResponse"],
-  "data"
-> & { data: PlatformCredentialView[] };
+export type PlatformCredentialView = GeneratedView;
+export type PlatformCredentialListResponse =
+  components["schemas"]["PlatformCredentialListResponse"];
 export type CreatePlatformCredentialRequest = GeneratedCreate & {
   tool_surface_limits?: ToolSurfaceLimits;
 };

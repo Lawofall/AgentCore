@@ -43,13 +43,6 @@ export const APPROVAL_LABEL: Record<ToolApproval, string> = {
   grantable: "需审批",
 };
 
-// Governance colors map to the project's status tokens: neutral (auto / asks the
-// user — 极简中性下分类态不再用琥珀). No hardcoded palette.
-export const APPROVAL_BADGE: Record<ToolApproval, string> = {
-  never: "bg-muted text-muted-foreground",
-  grantable: "bg-muted text-muted-foreground",
-};
-
 /** Which side of the team holds a tool — the CEO coordinator, the 队员 (workers),
  * or both. Neutral styling: this is metadata, not a status. */
 export function availabilityLabel(availableTo: string[]): string {

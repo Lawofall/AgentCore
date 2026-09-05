@@ -236,17 +236,15 @@ async def test_execute_tools_unknown_tool_returns_error_message():
 
 
 async def test_execute_tools_unknown_tool_suggests_alias():
-    """Hallucinated names (web_read / write) get did-you-mean — message only, no auto-exec."""
+    """Hallucinated names (write) get did-you-mean — message only, no auto-exec."""
     from agentcore.llm.provider.protocol import ToolCall, ToolCallFunction
 
-    read_tool = _StubTool("read_url")
     write_tool = _StubTool("file_write")
     reg = ToolRegistry()
-    reg.register(read_tool)
     reg.register(write_tool)
     sink = EventSink()
     messages, terminal, attempts = await execute_tools(
-        [ToolCall(id="c1", function=ToolCallFunction(name="web_read", arguments="{}"))],
+        [ToolCall(id="c1", function=ToolCallFunction(name="write", arguments="{}"))],
         reg,
         _context(),
         sink,
@@ -258,9 +256,7 @@ async def test_execute_tools_unknown_tool_suggests_alias():
     assert attempts[0].success is False
     content = messages[0].content or ""
     assert "not found" in content
-    assert "你是否想用：read_url" in content
-    # Alias suggestion must not silently execute the target tool.
-    assert read_tool.calls == 0
+    assert "你是否想用：file_write" in content
     assert write_tool.calls == 0
 
 
@@ -297,16 +293,15 @@ async def test_execute_tools_wait_not_found_no_fuzzy_to_unrelated():
 def test_registry_suggest_names_alias_and_close_match():
     reg = ToolRegistry()
     reg.register(_StubTool("web_search"))
-    reg.register(_StubTool("read_url"))
+    reg.register(_StubTool("web_fetch"))
     reg.register(_StubTool("download_url"))
     reg.register(_StubTool("file_write"))
     reg.register(_StubTool("file_list"))
     reg.register(_StubTool("glob"))
 
-    assert reg.suggest_names("web_read") == ["read_url"]
     assert reg.suggest_names("fetch") == ["download_url"]
-    assert reg.suggest_names("fetch_url") == ["download_url"]
-    assert reg.suggest_names("web_fetch") == ["download_url"]
+    assert reg.suggest_names("wget") == ["download_url"]
+    assert reg.suggest_names("curl") == ["download_url"]
     assert reg.suggest_names("write") == ["file_write"]
     assert reg.suggest_names("ls") == ["file_list"]
     assert reg.suggest_names("list_dir") == ["file_list"]

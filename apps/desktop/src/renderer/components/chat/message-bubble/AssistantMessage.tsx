@@ -2,20 +2,13 @@ import { Markdown } from "@/components/chat/Markdown";
 import { PausedContinueSurface } from "@/components/chat/PausedContinueSurface";
 import { SourceCards } from "@/components/chat/SourceCards";
 import { TurnWarningBanner } from "@/components/chat/TurnWarningBanner";
-import { Button, IconButton } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   noticeChipNeutral,
   statusAccentText,
   statusChip,
 } from "@/components/ui/tone-presets";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { buildCitationDisplayMap } from "@/lib/citationDisplayMap";
 import { copyText } from "@/lib/clipboard";
 import { hasUnpricedUsage, resolveTurnDisplayMoney } from "@/lib/cost";
@@ -28,8 +21,6 @@ import {
   formatCostCaption,
   pickCostMoney,
 } from "@/lib/format";
-import { MESSAGE_ACTION_REVEAL_CLASS } from "@/lib/messageActionReveal";
-import { formatMessageExport } from "@/lib/messageExport";
 import { openWorkspaceDeliverable } from "@/lib/openWorkspaceDeliverable";
 import {
   buildSupportDiagnosticPack,
@@ -55,7 +46,7 @@ import {
 import { useExecutionStore, useMessageExecution } from "@/stores/execution";
 import { useMessageInteractionCards } from "@/stores/interactions";
 import { useUsageStore } from "@/stores/usage";
-import { AlertTriangle, Check, Copy, KeyRound, RotateCcw } from "lucide-react";
+import { AlertTriangle, Copy, KeyRound, RotateCcw } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -69,7 +60,6 @@ import { SyncStatusHint } from "./SyncStatusHint";
 import { ThinkingDots, ThinkingPanel } from "./Thinking";
 import { WholeFilePasteHint } from "./WholeFilePasteHint";
 import type { MessageBubbleProps } from "./types";
-import { useCopyAction } from "./useCopyAction";
 
 /**
  * 「曾中断恢复」：这条回合中途崩过、由系统重驱跑完，成果仍在本条消息里。
@@ -111,6 +101,11 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
     const id = s.currentConversationId;
     if (!id) return false;
     return s.byId?.[id]?.waitingForWorkspaceLock ?? false;
+  });
+  const waitingForDeskProvision = useConversationStore((s) => {
+    const id = s.currentConversationId;
+    if (!id) return false;
+    return s.byId?.[id]?.waitingForDeskProvision ?? false;
   });
   const navigate = useNavigate();
   const finishReason = !message.isStreaming
@@ -287,31 +282,6 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
     }
   };
 
-  // 流式中可复制 (对话基础功能补齐): full footer is gated on THIS message's isStreaming
-  // (not session isGenerating — a settled bubble must keep regenerate/cost while another
-  // turn streams). Mid-stream usage/regenerate are meaningless, but a long reply is often
-  // worth copying early — lightweight copy while streaming. Default = 仅交付; with process
-  // timeline offer「含过程」too.
-  const exportError = { error: message.error, runs: message.runs };
-  const { copied: streamCopied, onCopy: onStreamCopy } = useCopyAction(() =>
-    formatMessageExport(
-      message.content,
-      message.process,
-      "deliverable",
-      exportError,
-    ),
-  );
-  const { copied: streamCopiedProcess, onCopy: onStreamCopyProcess } =
-    useCopyAction(() =>
-      formatMessageExport(
-        message.content,
-        message.process,
-        "with_process",
-        exportError,
-        message.isStreaming,
-      ),
-    );
-
   const handleRegenerate = () => {
     const userId = precedingUserMessageId(
       getActiveRuntime().messages,
@@ -381,7 +351,11 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
           <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
             <ThinkingDots />
             {/* 不得静默等锁：写锁短等用诚实等待态，禁空 Thinking… 冒充 */}
-            {waitingForWorkspaceLock ? "等待工作区…" : "Thinking…"}
+            {waitingForWorkspaceLock
+              ? "等待工作区…"
+              : waitingForDeskProvision
+                ? "正在准备云端环境"
+                : "Thinking…"}
           </span>
         ) : (
           <span
@@ -478,47 +452,6 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
       )}
       {/* 底部堆叠回退已废除（时间线一期）：交互卡只在 ProcessTimeline 标记槽渲染。
           不变量「有交互卡必有时间线标记」由 live 盖章 + reload journal 补标记保证。 */}
-      {message.isStreaming && message.content.length > 0 && (
-        <div
-          className={cn("mt-1 flex items-center", MESSAGE_ACTION_REVEAL_CLASS)}
-        >
-          {(message.process?.length ?? 0) > 0 ? (
-            <DropdownMenu>
-              <SimpleTooltip
-                label={streamCopied || streamCopiedProcess ? "已复制" : "复制"}
-              >
-                <DropdownMenuTrigger asChild>
-                  <IconButton size="sm" aria-label="复制">
-                    {streamCopied || streamCopiedProcess ? (
-                      <Check size={14} />
-                    ) : (
-                      <Copy size={14} />
-                    )}
-                  </IconButton>
-                </DropdownMenuTrigger>
-              </SimpleTooltip>
-              <DropdownMenuContent align="start" className="min-w-40">
-                <DropdownMenuItem onSelect={() => void onStreamCopy()}>
-                  仅交付
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void onStreamCopyProcess()}>
-                  含过程
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <SimpleTooltip label={streamCopied ? "已复制" : "复制"}>
-              <IconButton
-                size="sm"
-                aria-label="复制"
-                onClick={() => void onStreamCopy()}
-              >
-                {streamCopied ? <Check size={14} /> : <Copy size={14} />}
-              </IconButton>
-            </SimpleTooltip>
-          )}
-        </div>
-      )}
       {!message.isStreaming && message.syncStatus && (
         <div className="mt-1">
           <SyncStatusHint syncStatus={message.syncStatus} />

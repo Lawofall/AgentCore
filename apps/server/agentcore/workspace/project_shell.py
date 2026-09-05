@@ -197,14 +197,6 @@ async def _direct_child_folder_names(context: ToolContext) -> frozenset[str]:
         return frozenset()
 
 
-def _shell_note(slug: str, actual: str) -> str:
-    # User process card shares ``output`` with the model: path fact only, no
-    # empty-desk / project-shell jargon and no "need not create" refusal tone.
-    if not actual or actual == ".":
-        return f"`{slug}/` 即工作区根，文件直接写在根下。"
-    return f"`{slug}/` 已对齐到工作区根，实际路径 `{actual}`。"
-
-
 async def rewrite_project_shell_relpath(
     path: str,
     context: ToolContext,
@@ -233,8 +225,7 @@ async def rewrite_project_shell_relpath(
     shell = project_shell_of(context)
     slug = getattr(shell, "stripped_slug", None)
     if isinstance(slug, str) and slug and top == slug:
-        actual = rest if rest else ""
-        return actual, _shell_note(slug, actual)
+        return (rest if rest else ""), ""
 
     if not register or slug:
         return rel, ""
@@ -245,8 +236,7 @@ async def rewrite_project_shell_relpath(
     if top in await _direct_child_folder_names(context):
         return rel, ""
     shell.stripped_slug = top
-    actual = rest if rest else ""
-    return actual, _shell_note(top, actual)
+    return (rest if rest else ""), ""
 
 
 async def rewrite_deliverable_shell(deliverable: Any, context: ToolContext) -> None:

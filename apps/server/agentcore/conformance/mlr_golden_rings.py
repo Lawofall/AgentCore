@@ -40,7 +40,7 @@ EXPECTED_RESEARCH_FILES: tuple[str, ...] = (
     f"{RESEARCH_DIR}/汇总与命题卡.md",
 )
 
-_SEARCH_TOOLS = frozenset({"web_search", "read_url"})
+_SEARCH_TOOLS = frozenset({"web_search", "web_fetch"})
 _FILE_READ_TOOLS = frozenset({"file_read"})
 _LENS_RUN_PREFIXES = ("lens_0", "lens_1", "lens_2", "lens_3")
 _BRIEF_SKELETON_KEYS = ("crux", "leaning", "confidence", "recommendation")

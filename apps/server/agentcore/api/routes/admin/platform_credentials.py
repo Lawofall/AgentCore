@@ -24,10 +24,14 @@ from agentcore.llm.platform_credential_service import (
 from agentcore.llm.platform_credential_service import (
     PlatformCredentialView as ServiceView,
 )
-from agentcore.llm.platform_pool import pick_enabled_platform_pool_member
+from agentcore.llm.platform_pool import (
+    iter_platform_pool_members,
+    pick_enabled_platform_pool_member,
+)
 from agentcore.llm.platform_pool_scheduler import (
     account_runtime_for_admin,
     clear_account_runtime_state,
+    pick_schedulable_platform_pool_member,
 )
 from agentcore.llm.tool_surface import tool_surface_limits_as_dict
 
@@ -40,9 +44,27 @@ def get_platform_credential_service(
     return PlatformCredentialService(session)
 
 
-def _view(row: ServiceView) -> PlatformCredentialView:
+def _same_as_env(credential_id: str) -> bool:
+    env_key = settings.platform_api_key.strip()
+    env_url = (settings.platform_base_url or "").rstrip("/")
+    if not env_key:
+        return False
+    for member in iter_platform_pool_members():
+        if member.id != credential_id:
+            continue
+        return member.api_key == env_key and member.base_url.rstrip("/") == env_url
+    return False
+
+
+def _picked_id() -> str | None:
+    member = pick_schedulable_platform_pool_member()
+    return member.id if member is not None else None
+
+
+def _view(row: ServiceView, *, picked_id: str | None = None) -> PlatformCredentialView:
     runtime = account_runtime_for_admin(row.id)
     limits = row.tool_surface_limits
+    active = picked_id if picked_id is not None else _picked_id()
     return PlatformCredentialView(
         id=row.id,
         label=row.label,
@@ -55,6 +77,9 @@ def _view(row: ServiceView) -> PlatformCredentialView:
         status=runtime.status,
         recovery_at=runtime.recovery_at,
         limit_name=runtime.limit_name,
+        source=runtime.source,
+        same_as_env=_same_as_env(row.id),
+        picked=active is not None and row.id == active,
         tool_surface_limits=ToolSurfaceLimits(
             max_tools=limits.max_tools,
             max_properties_total=limits.max_properties_total,
@@ -88,8 +113,9 @@ async def list_platform_credentials(
 ) -> PlatformCredentialListResponse:
     """List platform-pool members. Ciphertext only; ``masked_key`` is last-4."""
     rows = await service.list_credentials()
+    picked = _picked_id()
     return PlatformCredentialListResponse(
-        data=[_view(r) for r in rows],
+        data=[_view(r, picked_id=picked) for r in rows],
         fallback=_fallback(),
     )
 

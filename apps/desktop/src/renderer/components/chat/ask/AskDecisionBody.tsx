@@ -431,7 +431,7 @@ export function AskDecisionBody({
     : grantPending === "grant_organize_folder" ||
         grantPending === "grant_attach_folder"
       ? FolderTree
-      : META.ctaIcon;
+      : undefined;
   const currentQuestion = hasQuestions
     ? content.questions[paged ? safeStep : 0]
     : undefined;

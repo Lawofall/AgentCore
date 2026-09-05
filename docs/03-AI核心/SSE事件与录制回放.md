@@ -1,4 +1,4 @@
-﻿---
+---
 status: landed
 code: apps/server/agentcore/runtime/events/,apps/server/agentcore/replay/
 related:
@@ -32,9 +32,10 @@ skip_if:
 - **`resume_settled`**（✅ EPHEMERAL）：冷卡「继续」提交时帧已被上一次续跑吃掉——回 200 + 本帧（`kind` / `checkpoint_id` / `decision` / `decided_at` / `turn_status`）而非 404，客户端据此把卡收成结果态；`turn_status=running` 表示同连接紧接着续那次跑的流。本帧只是这条连接的幂等 ack（与 `resume_deferred` 同款）：执行事实的权威是 `turn_journal`，**结算结论**的权威是 `paused_turn_outcomes`（抢到帧的那一方同事务写下），本帧转述的是赢家那份，不是本次提交的那份。语义 → [运行时三模型 · 冷 resume 与 live 交叉](/docs/03-AI核心/运行时三模型与挂起.md#冷-resume-与-live-交叉deferred)。
 - **`user_interjection`**（✅ DURABLE）：运行中插话（经典 steer + 协调共用）；同 `interjection_id` 保最新 `status`。协调：`received` → `injected` → `addressed` / `queued` / `failed`；经典：`received` → `injected`（终态）/ `queued` / `failed`（无 `addressed`）。`injected` = 内容真正进模型上下文。POST 短流 ack 看 `received`。可选 `attachments`（名字 + 路径 + 二进制标记）与可选 `agent_mentions`（`{agent_id, role}` 软芯片，非硬路由；旧客户端忽略）。→ 见代码：`runtime/events/run.py:user_interjection` · `runtime/turn/steer.py` · `runtime/coordination/interjections.py`
 - **`workspace_lock_wait`**（✅ EPHEMERAL）：同 folder 写锁短等（A′ 后仅写路径争用）；`waiting` 进出。桌面空气泡「等待工作区…」——**不得静默等锁** / 禁空 Thinking… 冒充。与同对话 `turn_queued` 正交。→ 见代码：`workspace/locks.py` · `runtime/events/run.py:workspace_lock_wait`
+- **`desk_provision_wait`**（✅ EPHEMERAL）：云桌开通短等（prepare / resume `ensure_workspace_desk`）；`waiting` 进出。桌面空气泡「正在准备云端环境」——禁空 Thinking… 冒充开机。缺桌仍不装配 `run`。→ 见代码：`tools/sandbox/desk_provision.py` · `runtime/events/run.py:desk_provision_wait`
 - **`replace`**（✅ additive；四条正文类 delta：`content_delta` / `reasoning_delta` / `run_output_delta` / `run_reasoning_delta`）：帧级标记，`true` = 本帧携带该通道**末尾那个尚未闭合的文本块**的完整内容，客户端换掉那一块而非追加（末尾已被工具/标记步闭合时当普通新块折）。attach 回放段专用，覆盖两种全文帧——按通道合成的整块，以及增量段里跨游标那步 `process_*` 行携带的整步全文（客户端手里只有它的前半截）；两者互斥（已被 process 覆盖的通道不再出合成块），故一个语义够用。live 帧永不带。→ 见代码：`runtime/events/attach_replay.py`
 - **`run_failed.failure_kind`**（✅ additive）：协作图失败脸优先按此类贴文案——`quality`→「未达标」、`format`→「格式未过」（结构/格式闸：缺章节·JSON）、`model`→「模型中断」、`call`→「调用失败」；缺省→「失败」/空 error「调用失败」。禁前端扫正文猜脸。→ 见代码：`RunFailureKind` · `runtime/events/payloads/run.py`
-- **`tool_use_end.status=redirect`（✅ additive）**：选错工具通道（短执行里 dump/grep 源码、`read_url`↔`file_read` 互斥、长驻走错短核等）运行时拒执行并改道。项目级 install/test/typecheck **不是**改道——统一 `run` 按命令分类进验证核直接跑。模型面 `result` 仍是失败回执；过程步不是 `error`。旧 journal 的 `status=error` + 改道 `failure.code`（含已停发的 `project_verify_redirect`）由 fold 归一为 `redirect`。→ 见代码：`runtime/engine/tool_channel_redirect.py`
+- **`tool_use_end.status=redirect`（✅ additive）**：选错工具通道（短执行里 dump/grep 源码、`web_fetch`↔`file_read` 互斥、长驻走错短核等）运行时拒执行并改道。项目级 install/test/typecheck **不是**改道——统一 `run` 按命令分类进验证核直接跑。模型面 `result` 仍是失败回执；过程步不是 `error`。旧 journal 的 `status=error` + 改道 `failure.code`（含已停发的 `project_verify_redirect`）由 fold 归一为 `redirect`。→ 见代码：`runtime/engine/tool_channel_redirect.py`
 - **`message_end.team_batch`**（✅）：本回合团队状态，turn journal 派生。`no_batch` | `in_flight` | `settled`。没派工是确定态。不进 ProjectedTurn（旁路字段，与 `collab` 同）；**用户面不渲染**。→ [执行引擎 · 团队状态](/docs/03-AI核心/执行引擎架构设计.md)
 
 `finish_reason` → 见代码 `FinishReason`。

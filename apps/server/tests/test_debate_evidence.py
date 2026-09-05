@@ -138,6 +138,8 @@ def test_side_system_carries_search_query_rule():
     assert "2–3 个核心词" not in SEARCH_QUERY_RULE
     assert "茉莉奶白" not in SEARCH_QUERY_RULE
     assert "连搜两次" not in SEARCH_QUERY_RULE
+    assert "再搜一次" not in SEARCH_QUERY_RULE
+    assert "禁止只搜" not in SEARCH_QUERY_RULE
     assert "当事方" in text or "案由" in text
     assert "抽象文化词" in text
     assert "空结果" in text and "≠" in SEARCH_QUERY_RULE

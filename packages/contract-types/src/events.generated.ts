@@ -61,7 +61,7 @@ export interface ToolProgressPayload {
 }
 
 /** A running tool's coarse EXECUTION phase (工具执行阶段进度). Known values:
- * web_search → queued / querying / fallback; read_url → fetching / reading /
+ * web_search → queued / querying / fallback; web_fetch → fetching / reading /
  * blocked; code_execute / test_run → executing; git → git_queued (waiting behind
  * another write on the same repo) / git_credentials (PAT / gh token lookup) /
  * git_remote (push·pull·fetch network leg, create_pr's GitHub REST) / executing
@@ -189,8 +189,8 @@ export interface AskAssumption {
  * `action` marks an option that the desktop client fulfils with a
  * native client action instead of a plain text answer (unknown/absent → plain option):
  * `open_local_project` / `register_local_project` / `bind_local_folder` are
- * **本机传统** wire enums（合法非默认；云协作仍推荐「导入到云」；远程仓「从 Git 克隆」；≠离线；
- * 勿当默认主推；``create_folder`` 仍只建云）；
+ * **本机传统** wire enums（桌面默认同通道；云协作是选项：「导入到云」/「从 Git 克隆」；≠离线；
+ * 网页/手机无本机盘；``create_folder`` 仍只建云）；
  * `grant_organize_folder` confirms organize-mode (move/copy/mkdir/trash-delete);
  * `grant_attach_folder` confirms attach_rw (本机传统：该根可写可覆盖);
  * still requires explicit user confirm (not silent).
@@ -598,6 +598,15 @@ export interface WorkspaceLockWaitPayload {
   waiting: boolean;
 }
 
+/** 云桌开通短等（``desk_provision_wait``）：首句/续跑 prepare 时的前端 UX 信号。
+ * 
+ * ``waiting=true`` 即将阻塞在 ``ensure_workspace_desk``；结束（成功或失败）后
+ * ``waiting=false``。EPHEMERAL——空气泡「正在准备云端环境」，禁空 Thinking… 冒充开机。 */
+export interface DeskProvisionWaitPayload {
+  conversation_id: string;
+  waiting: boolean;
+}
+
 /** Overall verdict of a delegate batch's delivery reconciliation (交付诚实性):
  * delivered = 无缺口且有落盘产物; partial = 有产物也有缺口; blocked = 有缺口且
  * 无落盘产物. */
@@ -643,7 +652,7 @@ export interface DeliveryGap {
  * 工程尚在本机 → 云协作「导入到云」优先；远程仓进当前云桌走 git clone /
  * Composer「从 Git 克隆」；**已是云端会话但沙箱未装配** →
  * 禁止再导「导入到云」，改稍后重试 / export_to_local / 本机传统；
- * 本机传统合法非默认，≠离线)；
+ * 桌面默认同通道（本地对话 / 打开本机文件夹），≠离线；云端对话并列可选)；
  * ``export_to_local`` (云端已有 delivered_files → 导出到本机文件夹后即可 npm install / 本地运行；
  * 与 bind_local_folder 可并存但语义不同);
  * ``website_verify`` (legacy tape only — runtime 已停发整页 QA 续派按钮);
@@ -1667,6 +1676,7 @@ export type SSEPayloadMap = {
   team_synthesis_preview: TeamSynthesisPreviewPayload;
   coordination_wait: CoordinationWaitPayload;
   workspace_lock_wait: WorkspaceLockWaitPayload;
+  desk_provision_wait: DeskProvisionWaitPayload;
   delivery_status: DeliveryStatusPayload;
   user_interjection: UserInterjectionPayload;
   turn_queued: TurnQueuedPayload;

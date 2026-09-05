@@ -145,5 +145,6 @@ describe("EscalationCard · resolved collapse", () => {
     ).toBe("true");
     expect(screen.getByText(/请移交写权或改路径/)).toBeTruthy();
     expect(screen.getByText(/移交写权，继续落位 v1\.2 定稿/)).toBeTruthy();
+    expect(screen.queryByText(/我的答复/)).toBeNull();
   });
 });

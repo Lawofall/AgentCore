@@ -155,7 +155,7 @@ def test_legacy_captain_tool_run_id_strip_only_captain_tools():
             "type": "tool_use_start",
             "payload": {
                 "tool_call_id": "t2",
-                "tool_name": "read_url",
+                "tool_name": "web_fetch",
                 "run_id": "w1",
             },
         },

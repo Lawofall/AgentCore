@@ -23,28 +23,16 @@ MAX_PARALLEL_TOOLS = 5
 # the bubble ever feels jittery (raise) or laggy (lower).
 TOOL_PROGRESS_STEP = 64
 
-# Injected when convergence governance forces finalize (a stuck loop trips a hard
-# finalize, or the round budget is exhausted mid-tool-call).
+# Injected when convergence governance forces finalize (stuck loop / round or
+# token ceiling). Tools are already narrowed; copy is a fact, not a HOW sermon.
 FINALIZE_INSTRUCTION = (
-    "[系统提示] 请停止使用调查与执行类工具，基于目前已掌握的全部信息，立即给出你最好的最终答案。"
-    "若仍需委派或向用户确认，可调用 delegate / consult / ask_user。"
-    "除上述可用工具外，其余工具本轮已停用；请直接用正文写出答案，"
-    "切勿在正文里书写或模拟任何工具调用格式（如 <tool_call>…</> 之类标签），那不会被执行。"
+    "[系统提示] 调查与执行类工具已停用。本轮仅保留 delegate / consult / ask_user。"
 )
 
-# Files-form / artifacts workers: finalize must still allow real landing (align
-# with wind_down). Without this the model is told to "give a final answer" while
-# file_write is stripped — and may paste a DSML pseudo tool_call into prose.
+# Files-form / artifacts: persist tools stay on the surface (align with wind_down).
 FINALIZE_INSTRUCTION_FILES = (
-    "[系统提示] 请停止调查与新战线。你的交付须落盘到真实产品路径：立即调用 file_write "
-    "把代码/约定产物写进工作区，并调用 handoff 提交交接简报（若适用）。"
-    "先定稿落盘，再 handoff 一次；handoff 即收尾，勿再改同一产物二次交接。"
-    "禁止把 AgentCore/文档/research|reviews|debate 下的方案/笔记 md "
-    "冒充修码或 form=files 产品交付；"
-    "若当前无法改源码，请 handoff 诚实说明阻塞（缺权限、缺路径、契约矛盾等），勿用约定文档交差。"
-    "勿把整份文件内容粘在正文里；若仍需向用户确认，可调用 ask_user。"
-    "除上述落盘/交接工具外，其余工具本轮已停用；正文请直接书写，"
-    "切勿在正文里模拟任何工具调用格式（如 <tool_call>…</> 之类标签），那不会被执行。"
+    "[系统提示] 调查与新战线工具已停用。"
+    "本轮仅保留 file_write / handoff 与 delegate / consult / ask_user。"
 )
 
 # Coordination tools still offered during a forced-finalize round; investigation and
@@ -63,7 +51,7 @@ FINALIZE_FORBIDDEN_TOOLS = frozenset(
         "file_read",
         "grep",
         "web_search",
-        "read_url",
+        "web_fetch",
         "file_write",
         "str_replace",
         "run",

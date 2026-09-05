@@ -28,7 +28,8 @@ describe("PackOverview 纯展示", () => {
     expect(screen.getByText("法律能力")).toBeTruthy();
     expect(screen.getByText("合同审查、法规检索与合规把关。")).toBeTruthy();
     expect(screen.getByText("包内技能")).toBeTruthy();
-    expect(screen.getByText("contract_review")).toBeTruthy();
+    expect(screen.getByText("审查合同风险条款")).toBeTruthy();
+    expect(screen.queryByText("contract_review")).toBeNull();
     expect(screen.queryByRole("button", { name: /启用|停用/ })).toBeNull();
     expect(screen.queryByText("未启用")).toBeNull();
     expect(screen.queryByText("已启用")).toBeNull();

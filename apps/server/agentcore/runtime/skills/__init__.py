@@ -35,6 +35,7 @@ from agentcore.runtime.skills.lead_subteam import _LEAD_SUBTEAM
 from agentcore.runtime.skills.registry import SkillRegistry, SystemSkill
 from agentcore.runtime.skills.team_cross_folder import _TEAM_CROSS_FOLDER
 from agentcore.runtime.skills.team_delivery_env import _TEAM_DELIVERY_ENV
+from agentcore.runtime.skills.team_local_desk import _TEAM_LOCAL_DESK
 from agentcore.runtime.skills.team_orchestration import (
     _TEAM_ORCHESTRATION_ADVANCED,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "_LEAD_SUBTEAM",
     "_TEAM_CROSS_FOLDER",
     "_TEAM_DELIVERY_ENV",
+    "_TEAM_LOCAL_DESK",
     "_TEAM_ORCHESTRATION_ADVANCED",
     "build_system_skill_registry",
     "render_skill_directory",

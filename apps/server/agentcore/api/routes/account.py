@@ -324,6 +324,16 @@ class AccountRuleDoc(BaseModel):
     folder_id: str | None = None
 
 
+class AccountSkillReplacement(BaseModel):
+    """One account-level 换用: official slot → user on-demand body for consult."""
+
+    slot: str
+    document_id: str
+    document_name: str
+    description: str = ""
+    content: str = ""
+
+
 class AccountRulesListResponse(BaseModel):
     """Always rules for ``<设定>`` plus on_demand bodies for 规则目录 / ``consult``.
 
@@ -331,6 +341,12 @@ class AccountRulesListResponse(BaseModel):
     ``folder_chain`` is that same chain by id with the current folder last: the engine may
     be a desktop sidecar with no folders table, so the cloud is the only place that can
     resolve「谁在谁里面」(双模式工作区 §5.4 沿树继承).
+
+    ``skill_replacements`` / ``skill_mutes`` are the merged overlay for this
+    ``folder_id`` (account farthest, then the desk-owner folder chain, near wins).
+    Bound documents are omitted from on_demand lists so the model does not see the
+    same HOW twice. Muted official slots ride ``skill_mutes`` so sidecar consult
+    listing matches the cloud overlay.
     """
 
     global_rules: list[AccountRuleDoc]
@@ -340,6 +356,8 @@ class AccountRulesListResponse(BaseModel):
     project_on_demand_rules: list[AccountRuleDoc] = Field(default_factory=list)
     ancestor_on_demand_rules: list[AccountRuleDoc] = Field(default_factory=list)
     folder_chain: list[str] = Field(default_factory=list)
+    skill_replacements: list[AccountSkillReplacement] = Field(default_factory=list)
+    skill_mutes: list[str] = Field(default_factory=list)
 
 
 def _rule_docs(docs: Sequence[Document]) -> list[AccountRuleDoc]:
@@ -351,6 +369,18 @@ def _rule_docs(docs: Sequence[Document]) -> list[AccountRuleDoc]:
             folder_id=str(d.folder_id) if d.folder_id else None,
         )
         for d in docs
+    ]
+
+
+def _on_demand_rule_docs(
+    docs: Sequence[Document], *, skip_names: set[str]
+) -> list[AccountRuleDoc]:
+    from agentcore.memory.rules_injection import rule_consult_name
+
+    return [
+        doc
+        for doc in _rule_docs(docs)
+        if rule_consult_name(doc.name) not in skip_names
     ]
 
 
@@ -401,18 +431,42 @@ async def list_account_user_rules(
         project_on_demand = await repo.list_on_demand_user_rules(
             user.user_id, current_id
         )
+    from agentcore.runtime.skills.replacements import resolve_skill_overlay
+
+    overlay = await resolve_skill_overlay(
+        session, user.user_id, folder_id=body.folder_id
+    )
+    skip_names = {item.document_name for item in overlay.replacements.values()}
+    skill_replacements = [
+        AccountSkillReplacement(
+            slot=slot,
+            document_id=item.document_id,
+            document_name=item.document_name,
+            description=item.summary,
+            content=item.body,
+        )
+        for slot, item in sorted(overlay.replacements.items())
+    ]
+
     return AccountRulesListResponse(
         global_rules=_rule_docs(
             await repo.list_injectable_rules(user.user_id, None, ai_maintained=False)
         ),
         project_rules=_rule_docs(project_docs),
         ancestor_rules=_rule_docs(ancestor_docs),
-        global_on_demand_rules=_rule_docs(
-            await repo.list_on_demand_user_rules(user.user_id, None)
+        global_on_demand_rules=_on_demand_rule_docs(
+            await repo.list_on_demand_user_rules(user.user_id, None),
+            skip_names=skip_names,
         ),
-        project_on_demand_rules=_rule_docs(project_on_demand),
-        ancestor_on_demand_rules=_rule_docs(ancestor_on_demand),
+        project_on_demand_rules=_on_demand_rule_docs(
+            project_on_demand, skip_names=skip_names
+        ),
+        ancestor_on_demand_rules=_on_demand_rule_docs(
+            ancestor_on_demand, skip_names=skip_names
+        ),
         folder_chain=folder_chain,
+        skill_replacements=skill_replacements,
+        skill_mutes=sorted(overlay.muted),
     )
 
 

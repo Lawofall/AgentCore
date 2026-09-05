@@ -35,6 +35,7 @@ beforeEach(() => {
         toolStartedMs: {},
         executionVia: null,
         waitingForWorkspaceLock: false,
+        waitingForDeskProvision: false,
       },
     },
   });

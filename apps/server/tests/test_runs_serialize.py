@@ -470,7 +470,7 @@ def test_spec_round_trips_with_nested_policy_and_deliverable():
         task="做A",
         kind=RunKind.AGENT,
         role="研究员",
-        tools=["web_search", "read_url"],
+        tools=["web_search", "web_fetch"],
         deliverable=Deliverable(
             required_sections=["结论"],
             strict=True,
@@ -480,7 +480,7 @@ def test_spec_round_trips_with_nested_policy_and_deliverable():
     restored = spec_from_json(spec_to_json(spec))
     assert restored.run_id == "del_abc_1"
     assert restored.role == "研究员"
-    assert restored.tools == ["web_search", "read_url"]
+    assert restored.tools == ["web_search", "web_fetch"]
     # kind coerced back to the enum
     assert restored.kind is RunKind.AGENT
     # nested policy is a real RunPolicy, and its deliverable a real Deliverable — so

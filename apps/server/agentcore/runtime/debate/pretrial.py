@@ -101,7 +101,7 @@ def _log_external_plan(plan: ExternalEvidencePlan, *, path: str) -> None:
         reason=plan.reason,
         retrieval_budget=plan.retrieval_budget,
         sides=list(plan.sides),
-        allow_read_url=plan.allow_read_url,
+        allow_web_fetch=plan.allow_web_fetch,
         max_tasks_per_side=plan.max_tasks_per_side,
         allow_external=plan.allow_external,
     )

@@ -923,6 +923,29 @@ def is_balance_exhausted(body: bytes | str | None) -> bool:
     return bool(extracted and _BALANCE_MARKERS.search(extracted))
 
 
+_POOL_ACCOUNT_EXHAUSTED_KINDS = frozenset(
+    {
+        "creditserror",
+        "monthlylimiterror",
+        "userlimiterror",
+    }
+)
+
+
+def opencode_pool_account_exhausted_reason(body: bytes | str | None) -> str | None:
+    """Structured type that means *this* OpenCode workspace is out of funds/quota.
+
+    Platform-pool fill-first hops on these (commit 前). ``AuthError`` / ``ModelError``
+    stay off the list — ban vs bad key, and model allowlist, are not "next key".
+    """
+    kind = opencode_structured_error_type(body)
+    if kind in _POOL_ACCOUNT_EXHAUSTED_KINDS:
+        return kind
+    if is_balance_exhausted(body):
+        return "creditserror"
+    return None
+
+
 def is_auth_rejection(status_code: int, body: bytes | str | None) -> bool:
     """True when a 401/403 should surface as key/auth failure (not model-not-allowed)."""
     kind = opencode_structured_error_type(body)

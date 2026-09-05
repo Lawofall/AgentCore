@@ -185,7 +185,7 @@ def _registry_without(base: ToolRegistry, *names: str) -> ToolRegistry:
     """A per-worker registry = the team tools MINUS ``names`` (absent names ignored).
 
     Used when a node withholds a tool family (e.g. retrieval_budget==0 strips
-    web_search / read_url). Returns a fresh registry; the shared ``base`` is never
+    web_search / web_fetch). Returns a fresh registry; the shared ``base`` is never
     mutated."""
     drop = set(names)
     registry = ToolRegistry()

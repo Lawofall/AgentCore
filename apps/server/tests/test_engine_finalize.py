@@ -132,6 +132,21 @@ def test_channel_dead_finalize_disables_persist():
     assert names == FINALIZE_COORDINATION_TOOLS
 
 
+def test_finalize_instruction_is_fact_only():
+    from agentcore.runtime.engine.constants import FINALIZE_INSTRUCTION
+
+    for text in (FINALIZE_INSTRUCTION, FINALIZE_INSTRUCTION_FILES):
+        assert text.startswith("[系统提示]")
+        assert "已停用" in text
+        assert "请立即" not in text
+        assert "切勿" not in text
+        assert "禁止" not in text
+        assert "最终答案" not in text
+    assert "delegate" in FINALIZE_INSTRUCTION
+    assert "file_write" in FINALIZE_INSTRUCTION_FILES
+    assert "handoff" in FINALIZE_INSTRUCTION_FILES
+
+
 @pytest.mark.asyncio
 async def test_channel_dead_finalize_round_uses_coordination_instruction_not_files():
     from agentcore.runtime.engine.constants import FINALIZE_INSTRUCTION

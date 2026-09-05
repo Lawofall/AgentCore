@@ -28,6 +28,7 @@ vi.mock("@/components/folders/FolderMembersDialog", () => ({
 
 vi.mock("react-router-dom", () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ pathname: "/files" }),
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),

@@ -31,6 +31,7 @@ import { useQueuedTurnsStore } from "@/stores/queuedTurns";
 import type {
   ContentDeltaPayload,
   ContentResetPayload,
+  DeskProvisionWaitPayload,
   ErrorPayload,
   MessageEndPayload,
   MessageStartPayload,
@@ -154,12 +155,21 @@ export function handleMessageStreamEvent(
         .setWaitingForWorkspaceLock(Boolean(p.waiting), conversationId);
       return true;
     }
+    case "desk_provision_wait": {
+      // EPHEMERAL：云桌开通 — 空气泡「正在准备云端环境」而非 Thinking…。
+      const p = event.payload as DeskProvisionWaitPayload;
+      useConversationStore
+        .getState()
+        .setWaitingForDeskProvision(Boolean(p.waiting), conversationId);
+      return true;
+    }
     case "message_start": {
       const payload = event.payload as MessageStartPayload;
       // Resume = same-turn continuation: if an assistant already matches the
       // server message_id, reuse it (idempotent). Never delete+create.
       const store = useConversationStore.getState();
       store.setWaitingForWorkspaceLock(false, conversationId);
+      store.setWaitingForDeskProvision(false, conversationId);
       // 跨回合回放 / 同连接下一回合：上一回合 message_end 已进 terminal，须先拨回
       // streaming，否则 ensureStreamingAssistant 与后续生长帧会被门禁丢掉。
       if (isTerminalPhase(getTurnPhase(conversationId))) {

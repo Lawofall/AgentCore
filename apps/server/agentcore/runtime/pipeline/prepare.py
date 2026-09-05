@@ -111,6 +111,8 @@ class PreparedTurn:
     execution_id_token: object
     mcp_discover: McpDiscoverResult
     member_turn: bool
+    folder_explore_reason: str | None = None
+    explore_workspace_key: str | None = None
 
 
 async def prepare_fresh_turn(
@@ -148,6 +150,31 @@ async def prepare_fresh_turn(
     # display order; write-side quota owns「常驻满了」. AI memory rides the (patchable) store
     # seam; user rules degrade to none on failure so this can never break a turn.
     # Member turns still inject the owner's folder-layer 规则/记忆; account-level stays private.
+    # Workspace rebind: omit current-folder 画像/导航 so old-bind notes do not ride this turn.
+    injected_binding = None
+    folder_explore_reason: str | None = None
+    explore_workspace_key: str | None = None
+    omit_current_folder_ai_memory = False
+    if folder_id:
+        from agentcore.conversation.scratch import resolve_conversation_local_binding
+        from agentcore.memory.explore_profile import resolve_turn_explore_gate
+
+        if folder_binding_injected:
+            injected_binding = resolve_conversation_local_binding(
+                local_root_id=folder_local_root_id,
+                local_subpath=folder_local_subpath,
+            )
+        folder_explore_reason, explore_workspace_key = await _timed_phase(
+            "explore_gate",
+            resolve_turn_explore_gate(
+                memory_store,
+                folder_rules_user_id,
+                folder_id,
+                binding=injected_binding,
+                binding_injected=folder_binding_injected,
+            ),
+        )
+        omit_current_folder_ai_memory = folder_explore_reason == "rebind"
     rules_markdown = await _timed_phase(
         "rules",
         assemble_turn_rules(
@@ -156,6 +183,7 @@ async def prepare_fresh_turn(
             folder_id=folder_id,
             enabled=True,
             folder_user_id=folder_rules_user_id,
+            omit_current_folder_ai_memory=omit_current_folder_ai_memory,
         ),
     )
     desk_folder_label = await _timed_phase(
@@ -230,9 +258,15 @@ async def prepare_fresh_turn(
         )
     from agentcore.tools.sandbox.desk_provision import provision_server_desk
 
-    # Outside the local-IO span: cloud guest boot is minutes-scale and must
-    # not spend the 20s local presence budget. Chat-path ``run`` never waits this.
-    await _timed_phase("cloud_desk", provision_server_desk(backend))
+    # Outside the local-IO span: cloud guest boot must not spend the 20s local
+    # presence budget. Chat-path ``run`` never waits this. Air bubble uses
+    # ``desk_provision_wait`` (preparing-cloud), not empty Thinking…
+    await _timed_phase(
+        "cloud_desk",
+        provision_server_desk(
+            backend, conversation_id=conversation_id, sink=sink
+        ),
+    )
     workspace_facts = build_workspace_context(
         backend,
         desktop_online=desktop_online,
@@ -467,4 +501,6 @@ async def prepare_fresh_turn(
         execution_id_token=execution_id_token,
         mcp_discover=mcp_discover,
         member_turn=member_turn,
+        folder_explore_reason=folder_explore_reason,
+        explore_workspace_key=explore_workspace_key,
     )

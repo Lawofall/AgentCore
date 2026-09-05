@@ -81,4 +81,7 @@ def test_md_to_docx_schema_advertises_layout():
     assert layout["enum"] == ["standard", "official"]
     assert layout["default"] == "standard"
     assert "正式文书" in layout["description"]
+    assert "两端对齐" in layout["description"]
+    assert "页码" in layout["description"]
+    assert "Word 另加" in layout["description"]
     assert "layout" not in schema.parameters["required"]

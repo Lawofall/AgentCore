@@ -45,7 +45,7 @@ export function ForcePasswordChangePage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-xs">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <div className="flex size-12 items-center justify-center rounded-xl bg-warning/10 text-warning">
             <ShieldCheck size={24} />

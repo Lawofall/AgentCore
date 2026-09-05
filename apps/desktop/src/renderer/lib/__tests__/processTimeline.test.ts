@@ -432,15 +432,32 @@ describe("processFoldMask · 非末段正文进过程折", () => {
   it("folds content before a resolved checkpoint", () => {
     expect(
       maskOf([content("你选哪个？"), checkpoint("cp1"), tool("a")]),
-    ).toEqual([true, false, true]);
+    ).toEqual([true, true, true]);
+  });
+
+  it("keeps a pending checkpoint out of the fold", () => {
+    expect(
+      maskOf([reasoning("想"), checkpoint("cp1"), content("答案")], ["cp1"]),
+    ).toEqual([true, false, false]);
+  });
+
+  it("folds a resolved checkpoint with the trailing answer out", () => {
+    expect(
+      maskOf([reasoning("想"), checkpoint("cp1"), content("答案")]),
+    ).toEqual([true, true, false]);
   });
 
   it("treats content before a trailing plan_review as the answer", () => {
     const process = [tool("a"), content("请过目这份提纲"), planReview("pr1")];
-    expect(maskOf(process)).toEqual([true, false, false]);
+    expect(maskOf(process)).toEqual([true, false, true]);
     expect([...trailingAnswerContentIndices(groupToolRuns(process))]).toEqual([
       1,
     ]);
+  });
+
+  it("keeps a pending plan_review out of the fold", () => {
+    const process = [tool("a"), content("请过目这份提纲"), planReview("pr1")];
+    expect(maskOf(process, ["pr1"])).toEqual([true, false, false]);
   });
 
   it("skips trailing graph_append when finding the answer", () => {
@@ -449,15 +466,14 @@ describe("processFoldMask · 非末段正文进过程折", () => {
     );
   });
 
-  it("does not fold team / checkpoint / interjection / escalation", () => {
+  it("does not fold team / interjection / escalation", () => {
     expect(
       maskOf([
         team("e1"),
-        checkpoint("cp1"),
         { kind: "user_interjection", interjection_id: "inj-1" },
         { kind: "escalation", escalation_id: "esc-1" },
       ]),
-    ).toEqual([false, false, false, false]);
+    ).toEqual([false, false, false]);
   });
 
   it("folds reasoning, tool-groups, and weak decision traces", () => {

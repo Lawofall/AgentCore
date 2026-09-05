@@ -7,7 +7,7 @@ import {
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { PlanReviewUserDecision } from "@/services/planReview";
 import type { PendingResume } from "@/stores/pausedTurns";
-import { Check, GitBranch, Loader2, OctagonX, Pencil } from "lucide-react";
+import { GitBranch, Loader2, Pencil } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConclusionHero } from "./ConclusionHero";
 import { PlanReviewContextBand } from "./PlanReviewContextBand";
@@ -24,7 +24,7 @@ export function PlanReviewResumeCard({ turn }: { turn: PendingResume }) {
 
   const spinnerOr = (
     decision: PlanReviewUserDecision,
-    icon: React.ReactNode,
+    icon?: React.ReactNode,
   ) =>
     submitting === decision || (settlementLocked && decision === "continue") ? (
       <Loader2 size={13} className="animate-spin" />
@@ -50,7 +50,7 @@ export function PlanReviewResumeCard({ turn }: { turn: PendingResume }) {
   const continueBtn = (
     <Button
       variant="primary"
-      icon={spinnerOr("continue", <Check size={13} />)}
+      icon={spinnerOr("continue")}
       disabled={busy}
       onClick={() => send("continue", [], note.trim())}
       aria-label={gateHint ? "继续。继续后，把关要点将发给下游" : undefined}
@@ -106,9 +106,8 @@ export function PlanReviewResumeCard({ turn }: { turn: PendingResume }) {
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             {!settlementLocked ? (
               <Button
-                variant="ghost"
-                className="text-muted-foreground hover:text-foreground"
-                icon={spinnerOr("stop", <OctagonX size={13} />)}
+                variant="outline"
+                icon={spinnerOr("stop")}
                 disabled={busy}
                 onClick={() => send("stop", [], note.trim())}
               >

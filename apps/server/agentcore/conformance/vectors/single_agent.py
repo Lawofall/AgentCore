@@ -383,11 +383,11 @@ def _single_agent_citations() -> list[SSEEvent]:
     ]
 
 def _single_agent_web_read() -> list[SSEEvent]:
-    """单聊·联网检索与深读的富渲染 (工具结果富渲染 · read_url display + 工具组合并)：
-    web_search 出来源卡片列表；单条 read_url 出「来源头 + 正文」卡片（display 携
-    url/title/site/snippet/content）；≥2 条连续 read_url 折叠成来源集合（favicon pill +
-    「读取网页 · N 个来源」/ 展开来源列表，无内联正文）。钉住三端 process fold 对 read_url
-    display 的渲染分流与工具组合并阈值（≥2 全 read_url → tool-group → 来源集合）。"""
+    """单聊·联网检索与深读的富渲染 (工具结果富渲染 · web_fetch display + 工具组合并)：
+    web_search 出来源卡片列表；单条 web_fetch 出「来源头 + 正文」卡片（display 携
+    url/title/site/snippet/content）；≥2 条连续 web_fetch 折叠成来源集合（favicon pill +
+    「读取网页 · N 个来源」/ 展开来源列表，无内联正文）。钉住三端 process fold 对 web_fetch
+    display 的渲染分流与工具组合并阈值（≥2 全 web_fetch → tool-group → 来源集合）。"""
 
     def _hit(title: str, url: str, snippet: str, site: str) -> dict:
         return {"title": title, "url": url, "snippet": snippet, "site": site}
@@ -436,11 +436,11 @@ def _single_agent_web_read() -> list[SSEEvent]:
         ),
         reasoning_delta("摘要不够，深读第一篇看细节。"),
         tool_use_start(
-            "tc2", "read_url", {"url": "https://www.sohu.com/a/1050596771_121124370"}
+            "tc2", "web_fetch", {"url": "https://www.sohu.com/a/1050596771_121124370"}
         ),
         tool_use_end(
             "tc2",
-            "read_url",
+            "web_fetch",
             success=True,
             output='{"url": "…", "title": "驴疯了？LV 起诉国家知识产权局！", "content": "…"}',
             display=_rd(
@@ -454,11 +454,11 @@ def _single_agent_web_read() -> list[SSEEvent]:
         ),
         reasoning_delta("再多读几篇核对细节。"),
         tool_use_start(
-            "tc3", "read_url", {"url": "https://www.sohu.com/a/1050271277_349248"}
+            "tc3", "web_fetch", {"url": "https://www.sohu.com/a/1050271277_349248"}
         ),
         tool_use_end(
             "tc3",
-            "read_url",
+            "web_fetch",
             success=True,
             output="正文……",
             display=_rd(
@@ -470,11 +470,11 @@ def _single_agent_web_read() -> list[SSEEvent]:
             ),
         ),
         tool_use_start(
-            "tc4", "read_url", {"url": "https://www.sohu.com/a/1050304127_121811866"}
+            "tc4", "web_fetch", {"url": "https://www.sohu.com/a/1050304127_121811866"}
         ),
         tool_use_end(
             "tc4",
-            "read_url",
+            "web_fetch",
             success=True,
             output="正文……",
             display=_rd(
@@ -486,11 +486,11 @@ def _single_agent_web_read() -> list[SSEEvent]:
             ),
         ),
         tool_use_start(
-            "tc5", "read_url", {"url": "https://zhuanlan.zhihu.com/p/700123456"}
+            "tc5", "web_fetch", {"url": "https://zhuanlan.zhihu.com/p/700123456"}
         ),
         tool_use_end(
             "tc5",
-            "read_url",
+            "web_fetch",
             success=True,
             output="正文……",
             display=_rd(
@@ -854,7 +854,7 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
     ),
     "single_agent_citations": ("单聊：思考→工具→正文 + citations 来源卡", _single_agent_citations),
     "single_agent_web_read": (
-        "单聊：联网检索+深读富渲染（web_search 卡 · 单条 read_url 来源头+正文 · ≥2 read_url 来源集合）",
+        "单聊：联网检索+深读富渲染（web_search 卡 · 单条 web_fetch 来源头+正文 · ≥2 web_fetch 来源集合）",
         _single_agent_web_read,
     ),
     "single_agent_content_reset": ("单聊：交付前核验回炉 (finish_guard) content_reset 丢弃违规版正文、重写修正版", _single_agent_content_reset),

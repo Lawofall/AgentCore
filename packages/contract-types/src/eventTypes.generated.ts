@@ -23,6 +23,7 @@ export type SSEEventType =
   | "debate_round"
   | "debate_round_started"
   | "delivery_status"
+  | "desk_provision_wait"
   | "desktop_notify_required"
   | "error"
   | "escalation_required"

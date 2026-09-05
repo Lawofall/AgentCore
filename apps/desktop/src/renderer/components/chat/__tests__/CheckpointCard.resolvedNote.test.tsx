@@ -34,8 +34,27 @@ describe("ResolvedCheckpoint 单行折叠", () => {
 
     fireEvent.click(screen.getByText(/就按这个方案开做/));
     expect(document.body.textContent).toContain(resolvedDecision.question);
-    expect(document.body.textContent).toContain("· 定位？：综述型");
-    expect(document.body.textContent).toContain("· 篇幅？：精简干货");
+    expect(document.body.textContent).toContain("定位？：综述型");
+    expect(document.body.textContent).toContain("篇幅？：精简干货");
+  });
+
+  it("收起摘要不展示已退役的「我的答复：」和行首 ·", () => {
+    render(
+      <CheckpointCard
+        checkpoint={{
+          ...resolvedDecision,
+          id: "cp-legacy-heading",
+          note: "我的答复：\n· 你心里的「Agent 生态」更接近哪种？：都不太对",
+        }}
+      />,
+    );
+    expect(document.body.textContent).not.toContain("我的答复：");
+    expect(document.body.textContent).not.toContain(
+      "· 你心里的「Agent 生态」更接近哪种？",
+    );
+    expect(document.body.textContent).toContain(
+      "你心里的「Agent 生态」更接近哪种？",
+    );
   });
 
   it("无 note 时折叠摘要用 selected；无答复则只留拍板存根", () => {

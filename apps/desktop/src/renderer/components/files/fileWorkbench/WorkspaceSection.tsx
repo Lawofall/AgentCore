@@ -1,4 +1,3 @@
-import { ClearScratchDialog } from "@/components/files/ClearScratchDialog";
 import { CloneRepoDialog } from "@/components/files/CloneRepoDialog";
 import { FileTree, type FileTreeHandle } from "@/components/files/FileTree";
 import {
@@ -10,7 +9,7 @@ import { IconButton } from "@/components/files/parts";
 import { DeleteFolderDialog } from "@/components/folders/DeleteFolderDialog";
 import { FolderCollabMark } from "@/components/folders/FolderCollabMark";
 import { FolderMembersDialog } from "@/components/folders/FolderMembersDialog";
-import { Button } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -34,6 +33,7 @@ import {
 } from "@/hooks/useFolders";
 import { removeConversationScratch } from "@/hooks/useWorkspaces";
 import { notifyConversationDeleted } from "@/lib/conversationDeleteCopy";
+import { useConversationLocationId } from "@/lib/conversationLocation";
 import { deriveGroupWorkspaceIsLocal } from "@/lib/conversationWorkspaceMode";
 import type { FileSource } from "@/lib/fileSource";
 import { queryClient } from "@/lib/queryClient";
@@ -179,7 +179,7 @@ export function WorkspaceSection({
   const deleteFolderMutation = useDeleteFolder();
   const permanentDeleteMutation = usePermanentDeleteFolder();
   const restoreFolderMutation = useRestoreFolder();
-  const currentId = useConversationStore((s) => s.currentConversationId);
+  const locationId = useConversationLocationId();
   const dropConversationRuntime = useConversationStore(
     (s) => s.dropConversationRuntime,
   );
@@ -300,7 +300,7 @@ export function WorkspaceSection({
 
   const handleDeleteConversation = async () => {
     if (!conversationId) return;
-    const wasActive = conversationId === currentId;
+    const wasOnCanvas = conversationId === locationId;
     const title = ws.name;
     try {
       await deleteMutation.mutateAsync(conversationId);
@@ -309,7 +309,7 @@ export function WorkspaceSection({
       return;
     }
     dropConversationRuntime(conversationId);
-    if (wasActive) navigate("/");
+    if (wasOnCanvas) navigate("/");
     notifyConversationDeleted(title, () =>
       restoreConversationMutation.mutate(conversationId),
     );
@@ -329,7 +329,7 @@ export function WorkspaceSection({
     setDeleteFolderOpen(false);
     const leftActive = releaseFolderConversations(folderId, {
       dropRuntime: dropConversationRuntime,
-      currentId,
+      locationId,
     });
     if (leftActive) navigate("/");
     notifyInfo("已删除文件夹", {
@@ -346,7 +346,7 @@ export function WorkspaceSection({
     if (!folderId) return;
     for (const { id } of liveFolderConvs()) {
       dropConversationRuntime(id);
-      if (id === currentId) navigate("/");
+      if (id === locationId) navigate("/");
     }
     permanentDeleteMutation.mutate(folderId, {
       onSuccess: () => setDeleteFolderOpen(false),
@@ -675,10 +675,13 @@ export function WorkspaceSection({
         />
       )}
       {canClearScratch && (
-        <ClearScratchDialog
+        <ConfirmDialog
           open={clearScratchOpen}
           onOpenChange={setClearScratchOpen}
-          name={ws.name}
+          title={`清空「${ws.name}」的对话产物？`}
+          description="将立刻删除本对话工作区下的全部文件，对话本身保留。云端产物清空后不可恢复。"
+          confirmLabel="清空产物"
+          tone="danger"
           busy={clearingScratch}
           onConfirm={() => void confirmClearScratch()}
         />

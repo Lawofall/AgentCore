@@ -214,6 +214,9 @@ async def ensure_bare_chat_auto_cloud_desk(
     """
     if session_folder_id:
         return None
+    backend = getattr(tool_context, "backend", None) if tool_context else None
+    if getattr(backend, "location", None) == "local":
+        return None
     if not user_id:
         return None
     if not _bare_chat_write_tasks_need_target(

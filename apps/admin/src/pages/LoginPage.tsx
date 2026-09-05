@@ -121,7 +121,7 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-xs">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <ShieldCheck size={24} />

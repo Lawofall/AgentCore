@@ -142,17 +142,20 @@ async def test_context_blocks_channel_sequence_and_single_source():
     assert blocks[-2].body == "把关要点文"
     deliverable = next(b for b in blocks if b.channel == "deliverable")
     assert "结论" in deliverable.body
+    assert "form=files" in deliverable.body
     assert "建议正文骨架" not in deliverable.body
     assert "检索预算" not in deliverable.body
     assert "交付形态" not in deliverable.body
 
 
-async def test_context_blocks_omit_deliverable_when_no_instance_facts():
+async def test_context_blocks_include_form_how_without_instance_facts():
     plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
     spec = plan.by_id("t_1")
     blocks = _build_context_blocks(plan, spec, {}, "原始请求", None)
-    assert [b.channel for b in blocks] == ["request", "task"]
-    assert not any(b.channel == "deliverable" for b in blocks)
+    assert [b.channel for b in blocks] == ["request", "task", "deliverable"]
+    deliverable = next(b for b in blocks if b.channel == "deliverable")
+    assert "form=files" in deliverable.body
+    assert "成品写入工作区" in deliverable.body
 
 
 async def test_context_blocks_dependency_carries_provenance():

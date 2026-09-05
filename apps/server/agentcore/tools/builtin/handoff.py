@@ -6,7 +6,7 @@ that same assistant message's ``content`` (harvested by
 tool arguments — stuffing a wrap-up into JSON is how argument parse used to
 fail after a long ``file_write``.
 
-When to call (identity + this description + engine gate say the same sentence):
+When to call (this description + engine gate; identity no longer repeats topology):
 - Has dependents: **must** handoff; the closing-round prose carries the conclusion.
 - No dependents: **skip** by default; call only for incremental briefing the body
   or files do not already carry.

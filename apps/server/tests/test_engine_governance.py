@@ -194,12 +194,11 @@ async def test_repeated_failure_nudge_is_failure_flavored():
     (content, *_), messages = await _run(provider, tool, max_rounds=20)
 
     assert content == "gave up, here is what I know"
-    # the distinctive repeated-failure nudge (anchored to the exact-repeat count) is
-    # injected exactly once
+    # Fingerprint NUDGE is log-only; withdrawn copy must not re-enter the transcript.
     nudges = [
         m for m in messages if m.role == "user" and m.content and "已用相同方式失败" in m.content
     ]
-    assert len(nudges) == 1
+    assert nudges == []
 
 
 async def test_failed_tool_surfaces_diagnostic_output_not_just_error():
@@ -1297,22 +1296,22 @@ async def test_circuit_breaker_warns_then_disables_failing_tool():
     )
 
     steers = [m.content or "" for m in messages if m.role == "user"]
-    assert any("请不要再以相同方式调用" in s for s in steers)  # warn at 2 failures
+    assert not any("请不要再以相同方式调用" in s for s in steers)  # warn-only trips are silent
     assert any("停用" in s for s in steers)  # disable at 3 failures
     # the disabled tool is gone from the toolset offered on the round AFTER disable
     assert provider.offered[0] == ["flaky", "other"]
     assert provider.offered[-1] == ["other"]
 
 
-async def test_read_url_tally_does_not_retire_or_strip_search():
-    """网页打不开三次不卸 read_url，也不连带收走 web_search。"""
+async def test_web_fetch_tally_does_not_retire_or_strip_search():
+    """网页打不开三次不卸 web_fetch，也不连带收走 web_search。"""
     from agentcore.tools.builtin.web._net import (
-        clear_read_url_retired,
-        is_read_url_retired,
+        clear_web_fetch_retired,
+        is_web_fetch_retired,
     )
 
     run_id = "read-url-tally-keep"
-    clear_read_url_retired(run_id)
+    clear_web_fetch_retired(run_id)
     ctx = ToolContext.create(
         execution_id="e",
         run_id=run_id,
@@ -1321,14 +1320,14 @@ async def test_read_url_tally_does_not_retire_or_strip_search():
         user_id="u",
     )
     reg = ToolRegistry()
-    reg.register(_StubTool(success=False, name="read_url"))
+    reg.register(_StubTool(success=False, name="web_fetch"))
     reg.register(_StubTool(success=True, name="web_search"))
     reg.register(_StubTool(success=True, name="other"))
     provider = _ToolsRecordingProvider(
         [
-            [_content_chunk("t0"), _tool_chunk("read_url", '{"url": "a"}')],
-            [_content_chunk("t1"), _tool_chunk("read_url", '{"url": "b"}')],
-            [_content_chunk("t2"), _tool_chunk("read_url", '{"url": "c"}')],
+            [_content_chunk("t0"), _tool_chunk("web_fetch", '{"url": "a"}')],
+            [_content_chunk("t1"), _tool_chunk("web_fetch", '{"url": "b"}')],
+            [_content_chunk("t2"), _tool_chunk("web_fetch", '{"url": "c"}')],
             [_content_chunk("done")],
         ]
     )
@@ -1344,25 +1343,25 @@ async def test_read_url_tally_does_not_retire_or_strip_search():
         run_id=run_id,
         approval_gate=None,
     )
-    assert not is_read_url_retired(run_id)
+    assert not is_web_fetch_retired(run_id)
     steers = [m.content or "" for m in messages if m.role == "user"]
-    assert not any("停用" in s and "read_url" in s for s in steers)
-    assert "read_url" in provider.offered[-1]
+    assert not any("停用" in s and "web_fetch" in s for s in steers)
+    assert "web_fetch" in provider.offered[-1]
     assert "web_search" in provider.offered[-1]
-    clear_read_url_retired(run_id)
+    clear_web_fetch_retired(run_id)
 
 
-async def test_read_url_explicit_retire_survives_react_loop_restart():
+async def test_web_fetch_explicit_retire_survives_react_loop_restart():
     """显式退役闩仍跨 react_loop 重启（Wave / write_pass），并连带收 web_search。"""
     from agentcore.tools.builtin.web._net import (
-        READ_URL_RETIRE_STEER,
-        clear_read_url_retired,
-        mark_read_url_retired,
+        WEB_FETCH_RETIRE_STEER,
+        clear_web_fetch_retired,
+        mark_web_fetch_retired,
     )
 
     run_id = "read-url-survive-restart"
-    clear_read_url_retired(run_id)
-    mark_read_url_retired(run_id, message=READ_URL_RETIRE_STEER)
+    clear_web_fetch_retired(run_id)
+    mark_web_fetch_retired(run_id, message=WEB_FETCH_RETIRE_STEER)
     ctx = ToolContext.create(
         execution_id="e",
         run_id=run_id,
@@ -1371,7 +1370,7 @@ async def test_read_url_explicit_retire_survives_react_loop_restart():
         user_id="u",
     )
     reg = ToolRegistry()
-    reg.register(_StubTool(success=True, name="read_url"))
+    reg.register(_StubTool(success=True, name="web_fetch"))
     reg.register(_StubTool(success=True, name="web_search"))
     reg.register(_StubTool(success=True, name="other"))
     provider = _ToolsRecordingProvider([[_content_chunk("done2")]])
@@ -1387,7 +1386,7 @@ async def test_read_url_explicit_retire_survives_react_loop_restart():
         approval_gate=None,
     )
     assert provider.offered[0] == ["other"]
-    clear_read_url_retired(run_id)
+    clear_web_fetch_retired(run_id)
 
 
 async def test_unproductive_rounds_early_stop_and_salvage_answer():

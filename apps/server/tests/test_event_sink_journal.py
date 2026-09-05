@@ -506,8 +506,8 @@ def test_journal_persist_caps_tool_use_end_live_payload_stays_full():
     try:
         big = "x" * 9000
         sink.emit(_plan())
-        sink.emit(tool_use_start("t1", "read_url", {"url": "https://example.com"}))
-        ev = tool_use_end("t1", "read_url", success=True, output=big)
+        sink.emit(tool_use_start("t1", "web_fetch", {"url": "https://example.com"}))
+        ev = tool_use_end("t1", "web_fetch", success=True, output=big)
         sink.emit(ev)
 
         assert ev.payload["result"] == big

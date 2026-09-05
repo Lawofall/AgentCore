@@ -7,8 +7,9 @@ resolved limit is 0. Runtime counter lives on ``ToolContext.retrieval_budget``
 query-contract rejects do not consume budget. CEO / delegate schema 不可配置该
 字段；额度只来自统一常量（辩手有约定文档窄例外由辩论内部 writer 补写）。
 
-预算感知：花过额度的 worker 每轮由 :func:`sync_retrieval_budget_awareness` 注入一条
-当前余额（含分工具已用），临界告知并进同一条——不改共享池语义，只让模型别盲搜。
+预算感知：花过额度的检索调用在工具回执上挂一行已用/剩余数字；不再每轮注入
+``[系统提示]`` 教案。耗尽转 wind_down。存量窗口里的旧余额播报由
+:func:`drop_retrieval_budget_awareness` 在收尾窗口清掉。
 """
 
 from __future__ import annotations
@@ -40,17 +41,16 @@ __all__ = [
     "default_retrieval_budget",
     "drop_retrieval_budget_awareness",
     "exclude_retrieval_tools",
-    "format_retrieval_budget_awareness_prompt",
-    "format_retrieval_budget_critical_prompt",
     "format_retrieval_budget_line",
+    "format_retrieval_budget_receipt",
     "is_retrieval_budget_critical",
     "parse_retrieval_budget",
     "rework_refill_slots",
     "sync_retrieval_budget_awareness",
 ]
 
-# Tools that share one per-run retrieval budget (web_search + read_url combined).
-RETRIEVAL_TOOL_NAMES: frozenset[str] = frozenset({"web_search", "read_url"})
+# Tools that share one per-run retrieval budget (web_search + web_fetch combined).
+RETRIEVAL_TOOL_NAMES: frozenset[str] = frozenset({"web_search", "web_fetch"})
 
 # 全员统一默认：普通 worker → 14（含 form=prose）。开发期无真实产线数据，14 为假设
 # 统一阀（原 RESEARCH 档复用；已删 prose→0 / ROOT/DOWNSTREAM / 透镜 base/gap /
@@ -61,7 +61,7 @@ DEFAULT_RETRIEVAL_BUDGET = 14
 # 窄硬例外（内部 writer 写入 RunSpec，非 CEO 可配置），不是结构猜档。无约定文档路径不动。
 DEFAULT_RETRIEVAL_BUDGET_DEBATER_WITH_DOSSIER = 2
 
-# 同轮超订缓解：剩余槽位 ≤ 此值时经 reflection 注入提前告知，避免当轮 fan-out 超订被挡回。
+# 同轮超订：剩余槽位 ≤ 此值时埋点 ``critical=true``（不再注入 reflection）。
 RETRIEVAL_BUDGET_CRITICAL_REMAINING = 2
 
 # 预算感知（BATS 实测：知不知道余额比额度大小更决定效果）每轮只留一条，靠此前缀识别并替换旧的。
@@ -70,7 +70,7 @@ RETRIEVAL_BUDGET_AWARENESS_PREFIX = "[系统提示] 检索余额"
 
 BUDGET_EXHAUSTED_FEEDBACK = (
     "检索预算已尽：请基于证据台账中现有材料交付，并在交接（handoff）中如实标注检索缺口"
-    "（缺什么、为何没补上）。不要再调用 web_search / read_url。"
+    "（缺什么、为何没补上）。不要再调用 web_search / web_fetch。"
 )
 
 
@@ -105,7 +105,7 @@ def exclude_retrieval_tools(
     tools: list[str] | None,
     valid_tools: set[str] | None,
 ) -> list[str] | None:
-    """Remove web_search/read_url from an allow-list (预算 0 → 不装配检索工具).
+    """Remove web_search/web_fetch from an allow-list (预算 0 → 不装配检索工具).
 
     Unrestricted (``None``) becomes an explicit list of ``valid_tools`` minus
     retrieval tools when ``valid_tools`` is known. Returns ``[]`` (not ``None``)
@@ -162,62 +162,32 @@ def format_retrieval_budget_line(budget: int | None) -> str:
         return ""
     if budget <= 0:
         return (
-            "- 检索预算：0（本任务不装配 web_search / read_url；"
+            "- 检索预算：0（本任务不装配 web_search / web_fetch；"
             "基于上游与台账现有证据交付，缺口在交接中标注）"
         )
     return (
-        f"- 检索预算：本 run 合计最多 {budget} 次 web_search/read_url"
+        f"- 检索预算：本 run 合计最多 {budget} 次 web_search/web_fetch"
         "（缓存命中不计）；用尽后基于台账现有证据交付并在交接中标注检索缺口。"
+    )
+
+
+def format_retrieval_budget_receipt(state: RetrievalBudgetState) -> str:
+    """Fact line for a charged ``web_search`` / ``web_fetch`` tool result. Numbers only."""
+    return (
+        f"检索余额：已用 {state.used} 次（web_search {state.searches_used} · "
+        f"web_fetch {state.reads_used}），剩余 {state.remaining}/{state.limit}"
     )
 
 
 def is_retrieval_budget_critical(remaining: int, *, limit: int) -> bool:
     """True when budget is still open but remaining slots are critically low.
 
-    Used by the engine to inject a one-shot reflection before the next think round,
-    so the model does not fan out more ``web_search``/``read_url`` calls than slots left.
+    Used for ``engine.retrieval_budget_awareness`` ``critical`` on receipts / run exit.
     Exhausted (``remaining <= 0``) is handled by wind_down, not this path.
     """
     if limit <= 0:
         return False
     return 0 < remaining <= RETRIEVAL_BUDGET_CRITICAL_REMAINING
-
-
-def _spend_clause(searches: int | None, reads: int | None) -> str:
-    """``；已用 N 次：web_search a · read_url b`` — empty when no split is known."""
-    if searches is None or reads is None:
-        return ""
-    return f"；已用 {searches + reads} 次：web_search {searches} · read_url {reads}"
-
-
-def format_retrieval_budget_critical_prompt(
-    *, remaining: int, limit: int, searches: int | None = None, reads: int | None = None
-) -> str:
-    """``[系统提示]`` steer when retrieval slots are critically low (同轮超订缓解).
-
-    Also the 临界轮的余额播报：分项用量并进同一条，不另发一段预算文字。
-    """
-    return (
-        f"{RETRIEVAL_BUDGET_AWARENESS_PREFIX}：仅剩 {remaining} 次"
-        f"（本 run 上限 {limit} 次 web_search/read_url，共用一池、缓存命中不计"
-        f"{_spend_clause(searches, reads)}）。"
-        "下一轮请只发起不超过剩余次数的检索调用，"
-        "优先深读最关键来源；勿并行扇出超过剩余槽位的查询——超订会被挡回并浪费本轮。"
-        "若现有证据已够，请直接基于台账交付并在交接中标注检索缺口。"
-    )
-
-
-def format_retrieval_budget_awareness_prompt(
-    *, remaining: int, limit: int, searches: int, reads: int
-) -> str:
-    """Per-round balance readout for a worker that already spent slots."""
-    return (
-        f"{RETRIEVAL_BUDGET_AWARENESS_PREFIX}：已用 {searches + reads} 次"
-        f"（web_search {searches} · read_url {reads}），剩余 {remaining} 次"
-        f"（本 run 上限 {limit} 次 web_search/read_url，共用一池、缓存命中不计）。"
-        "请按剩余额度规划：先明确这一轮要验证什么再检索，避免重复查询与低价值扇出；"
-        "额度用尽后只能基于台账现有证据交付，并在交接中标注检索缺口。"
-    )
 
 
 @dataclass(frozen=True)
@@ -256,45 +226,13 @@ def drop_retrieval_budget_awareness(messages: list[LLMMessage]) -> bool:
 def sync_retrieval_budget_awareness(
     messages: list[LLMMessage], state: RetrievalBudgetState
 ) -> RetrievalBudgetAwareness | None:
-    """Refresh the single balance message at the tail; ``None`` ⇒ nothing injected.
+    """No longer injects a ``[系统提示]``. Drops leftover sermons from resumed windows.
 
-    预算感知（BATS）：花过额度的 worker 每轮都要看到「已用多少 / 还剩多少」，否则只能盲搜。
-    Skipped for a worker that never spent a slot（生产上多数 worker 一次都不检索，注入是纯
-    噪音）、关闭额度（``limit <= 0``）、以及已耗尽（收尾话术归 wind_down，行为不变）。
-    临界（剩余 ≤ :data:`RETRIEVAL_BUDGET_CRITICAL_REMAINING`）与提前告知合并成同一条。
-    Refreshing = drop the stale copy then append, so the transcript never carries two
-    contradicting balances and the current one stays adjacent to the next think round.
+    Balance lives on charged ``web_search`` / ``web_fetch`` receipts.
     """
+    del state
     drop_retrieval_budget_awareness(messages)
-    limit = state.limit
-    used = state.used
-    if limit <= 0 or used <= 0:
-        return None
-    remaining = state.remaining
-    if remaining <= 0:
-        return None
-    searches = state.searches_used
-    reads = state.reads_used
-    critical = is_retrieval_budget_critical(remaining, limit=limit)
-    text = (
-        format_retrieval_budget_critical_prompt(
-            remaining=remaining, limit=limit, searches=searches, reads=reads
-        )
-        if critical
-        else format_retrieval_budget_awareness_prompt(
-            remaining=remaining, limit=limit, searches=searches, reads=reads
-        )
-    )
-    messages.append(LLMMessage(role="user", content=text))
-    return RetrievalBudgetAwareness(
-        text=text,
-        critical=critical,
-        limit=limit,
-        used=used,
-        remaining=remaining,
-        searches=searches,
-        reads=reads,
-    )
+    return None
 
 
 def rework_refill_slots(
@@ -306,7 +244,7 @@ def rework_refill_slots(
     """How many retrieval slots a contract rework may add (预算语义不绕过).
 
     - Write-disk form (``form=files`` / artifacts landing) rework: **0** — worker
-      needs a directed write/repair pass, not more ``web_search``/``read_url``.
+      needs a directed write/repair pass, not more ``web_search``/``web_fetch``.
     - After token / timeout wind_down: **0** — rework must not restore investigation.
     - Otherwise: half the original resolved budget (min 1), same slice size as before.
     Caller must apply via :meth:`RetrievalBudgetState.refill_within_cap` with

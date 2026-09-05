@@ -5,8 +5,9 @@ fenced code, relative-path images (embedded), links. Missing images produce
 explicit warnings (never silent). Default styles target a clean Chinese
 公文-like look (黑体 headings / 宋体 body with Latin fallbacks).
 
-段落几何按 ``layout`` 档位走（见 ``docs_export.layout``）：一级标题两档都居中；
-首行缩进两字只在 ``official`` 档开——档位来自调用方入参，绝不看正文内容猜。
+段落几何按 ``layout`` 档位走（见 ``docs_export.layout``）：两档都是 A4、正文/列表
+1.5 倍行距、一级标题居中；首行缩进两字、两端对齐、公文页边距、页码只在
+``official`` 档开——档位来自调用方入参，绝不看正文内容猜。
 """
 
 from __future__ import annotations
@@ -23,9 +24,15 @@ from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
 from agentcore.docs_export.layout import (
+    A4_HEIGHT_CM,
+    A4_WIDTH_CM,
+    BODY_SPACE_AFTER_PT,
     FIRST_LINE_INDENT_CHARS,
     LAYOUT_OFFICIAL,
     LAYOUT_STANDARD,
+    LINE_SPACING_MULTIPLE,
+    OFFICIAL_MARGINS_CM,
+    STANDARD_MARGINS_CM,
     DocLayout,
 )
 
@@ -164,14 +171,14 @@ def convert_markdown_to_docx(
     warned and rendered as alt text (+ URL when present).
 
     ``layout`` 选排版档位：``standard``（默认）= 技术文档/报告；``official`` =
-    中文正式文书，正文首行缩进两字。
+    中文正式文书（首行缩进、两端对齐、公文页边距、页码）。
     """
     _ensure_docx()
     image_map = dict(images or {})
     warnings: list[str] = []
     indent_body = layout == LAYOUT_OFFICIAL
     doc = _DocumentFactory()
-    _apply_document_defaults(doc)
+    _apply_document_defaults(doc, layout)
 
     tokens = _MD.parse(markdown or "")
     i = 0
@@ -205,7 +212,9 @@ def convert_markdown_to_docx(
                 )
             else:
                 p = doc.add_paragraph()
-                _style_body_paragraph(p, first_line_indent=indent_body)
+                _style_body_paragraph(
+                    p, first_line_indent=indent_body, justify=indent_body
+                )
                 if inline is not None and inline.type == "inline":
                     _render_inline(p, inline, images=image_map, warnings=warnings)
             i += 3
@@ -262,12 +271,19 @@ def convert_markdown_to_docx(
 # ---------------------------------------------------------------------------
 
 
-def _apply_document_defaults(doc: Document) -> None:
+def _apply_document_defaults(doc: Document, layout: DocLayout) -> None:
     section = doc.sections[0]
-    section.top_margin = _Cm(2.54)
-    section.bottom_margin = _Cm(2.54)
-    section.left_margin = _Cm(3.17)
-    section.right_margin = _Cm(3.17)
+    section.page_width = _Cm(A4_WIDTH_CM)
+    section.page_height = _Cm(A4_HEIGHT_CM)
+    top, bottom, left, right = (
+        OFFICIAL_MARGINS_CM if layout == LAYOUT_OFFICIAL else STANDARD_MARGINS_CM
+    )
+    section.top_margin = _Cm(top)
+    section.bottom_margin = _Cm(bottom)
+    section.left_margin = _Cm(left)
+    section.right_margin = _Cm(right)
+    if layout == LAYOUT_OFFICIAL:
+        _add_page_number_footer(section)
 
     normal = doc.styles["Normal"]
     normal.font.name = _FONT_LATIN
@@ -307,11 +323,47 @@ def _set_run_font(
         run.font.size = _Pt(size_pt)
 
 
-def _style_body_paragraph(p: Any, *, first_line_indent: bool = False) -> None:
-    p.paragraph_format.space_after = _Pt(6)
-    p.paragraph_format.line_spacing = 1.15
+def _style_body_paragraph(
+    p: Any, *, first_line_indent: bool = False, justify: bool = False
+) -> None:
+    p.paragraph_format.space_after = _Pt(BODY_SPACE_AFTER_PT)
+    p.paragraph_format.line_spacing = LINE_SPACING_MULTIPLE
+    if justify:
+        p.alignment = _WD_ALIGN_PARAGRAPH.JUSTIFY
     if first_line_indent:
         _apply_first_line_indent(p)
+
+
+def _style_list_paragraph(p: Any) -> None:
+    p.paragraph_format.space_after = _Pt(BODY_SPACE_AFTER_PT)
+    p.paragraph_format.line_spacing = LINE_SPACING_MULTIPLE
+
+
+def _add_page_number_footer(section: Any) -> None:
+    """official 档：页码底端居中（PAGE 域）。standard 不建页脚。"""
+    footer = section.footer
+    footer.is_linked_to_previous = False
+    p = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+    p.alignment = _WD_ALIGN_PARAGRAPH.CENTER
+    run = p.add_run()
+    _set_run_font(run, cjk=_FONT_BODY_CJK, size_pt=9)
+    r = run._r
+    begin = _OxmlElement("w:fldChar")
+    begin.set(_qn("w:fldCharType"), "begin")
+    instr = _OxmlElement("w:instrText")
+    instr.set(_qn("xml:space"), "preserve")
+    instr.text = " PAGE "
+    sep = _OxmlElement("w:fldChar")
+    sep.set(_qn("w:fldCharType"), "separate")
+    cached = _OxmlElement("w:t")
+    cached.text = "1"
+    end = _OxmlElement("w:fldChar")
+    end.set(_qn("w:fldCharType"), "end")
+    r.append(begin)
+    r.append(instr)
+    r.append(sep)
+    r.append(cached)
+    r.append(end)
 
 
 def _apply_first_line_indent(p: Any) -> None:
@@ -385,6 +437,7 @@ def _render_list(
                 if tokens[i].type == "paragraph_open":
                     inline = tokens[i + 1] if i + 1 < len(tokens) else None
                     p = doc.add_paragraph(style=style)
+                    _style_list_paragraph(p)
                     if level:
                         p.paragraph_format.left_indent = _Cm(0.75 * level)
                     if inline is not None and inline.type == "inline":

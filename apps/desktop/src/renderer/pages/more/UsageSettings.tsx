@@ -3,7 +3,7 @@ import {
   SettingsAsync,
   SettingsSection,
 } from "@/components/settings";
-import { Button, Card, IconButton } from "@/components/ui";
+import { Button, Card, IconButton, PageHeader } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { formatCompact, formatCost, formatDisplayCost } from "@/lib/format";
 import { useUsageStore } from "@/stores/usage";
@@ -13,7 +13,6 @@ import {
 } from "@agentcore/protocol-fold-kit";
 import { KeyRound, RefreshCw } from "lucide-react";
 import { useEffect } from "react";
-import { SettingsHeader } from "./SettingsHeader";
 
 /**
  * Account usage dashboard (§7.3D) — the manager's view of the team's spend.
@@ -44,13 +43,8 @@ export function UsageSettings() {
 
   return (
     <div>
-      <SettingsHeader
+      <PageHeader
         title="用量"
-        description={
-          byok
-            ? "自带 Key 模式：平台不限额。有估算价时按社区美元价目显示 ≈$（非上游账单），并以 token 用量为主。"
-            : "本月额度与今日用量，以人民币展示。"
-        }
         action={
           // Manual refresh once data exists — numbers go stale after running tasks
           // elsewhere (mount-only fetch otherwise). First load / first-load failure

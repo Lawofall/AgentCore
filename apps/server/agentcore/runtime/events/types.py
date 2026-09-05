@@ -125,6 +125,10 @@ class EventType(StrEnum):
     # acquire 后 waiting=false。EPHEMERAL——桌面禁空「Thinking…」冒充；无争用不发射
     # （不得静默等锁）。与同对话 FIFO turn_queued 正交。
     WORKSPACE_LOCK_WAIT = "workspace_lock_wait"
+    # 云桌开通短等：prepare/resume 里 ``ensure_workspace_desk`` 即将阻塞 → waiting=true；
+    # 开通结束（成功或失败）waiting=false。EPHEMERAL——空气泡「正在准备云端环境」，
+    # 禁空 Thinking… 冒充开机。缺桌仍不装配 run（诚实失败，不冒充测过代码）。
+    DESK_PROVISION_WAIT = "desk_provision_wait"
     # 交付状态（能力闸门与交付诚实性）：delegate 批次收尾时把已有的完成度缺口 / artifacts
     # 对账 / degraded 信号汇成结构化交付对账（已交付文件 / 缺口 / 操作元数据），
     # 模板拼接、不调 LLM。DURABLE——落 journal；前端 fold 同 execution_id 保最新（反映

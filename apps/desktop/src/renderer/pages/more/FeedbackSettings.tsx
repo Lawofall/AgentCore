@@ -5,12 +5,18 @@ import {
   SettingsSection,
   SettingsStack,
 } from "@/components/settings";
-import { Button, Card, Input, Select, Textarea } from "@/components/ui";
+import {
+  Button,
+  Card,
+  Input,
+  PageHeader,
+  Select,
+  Textarea,
+} from "@/components/ui";
 import { errMsg } from "@/lib/errMsg";
 import { api } from "@/services/api";
 import { Loader2 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { SettingsHeader } from "./SettingsHeader";
 
 interface FeedbackSummary {
   id: string;
@@ -144,10 +150,7 @@ export function FeedbackSettings() {
 
   return (
     <div>
-      <SettingsHeader
-        title="反馈"
-        description="遇到问题或有好想法？随时告诉我们。"
-      />
+      <PageHeader title="反馈" />
 
       <SettingsStack>
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">

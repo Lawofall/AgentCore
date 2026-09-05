@@ -1,24 +1,24 @@
 import { Badge, Button } from "@/components/ui";
 import { cleanSourceTitle } from "@/lib/citations";
 import { useStreamAwareDisclosure } from "@/stores/disclosure";
-import type { Citation, ProcessStep, ReadUrlDisplay } from "@/types/events";
+import type { Citation, ProcessStep, WebFetchDisplay } from "@/types/events";
 import { ChevronDown, ChevronRight, Globe } from "lucide-react";
 import { Favicon } from "./Favicon";
 import { ThinkingDots } from "./message-bubble/Thinking";
 
 type ToolStep = Extract<ProcessStep, { kind: "tool" }>;
 
-function isReadUrlDisplay(d: unknown): d is ReadUrlDisplay {
+function isWebFetchDisplay(d: unknown): d is WebFetchDisplay {
   if (!d) return false;
   const x = d as { url?: unknown; content?: unknown };
   return typeof x.url === "string" && typeof x.content === "string";
 }
 
-/** Aggregate source cards from each read_url step's display (never parse result JSON). */
+/** Aggregate source cards from each web_fetch step's display (never parse result JSON). */
 function sourcesFromTools(tools: ToolStep[]): Citation[] {
   const out: Citation[] = [];
   for (const t of tools) {
-    if (isReadUrlDisplay(t.display)) {
+    if (isWebFetchDisplay(t.display)) {
       out.push({
         url: t.display.url,
         title: t.display.title,
@@ -36,14 +36,14 @@ function sourcesFromTools(tools: ToolStep[]): Citation[] {
 }
 
 /**
- * Merged view for a tool-group of ≥2 consecutive `read_url` calls: collapses to a bare
+ * Merged view for a tool-group of ≥2 consecutive `web_fetch` calls: collapses to a bare
  *「Read page · N sources」header row (对齐工具组 / 思考过程的折叠态——折叠即收起细节，不再
  * 平铺来源 pills), expands into a SourceCards-aligned vertical list (index · favicon ·
- * title · domain · snippet). No inline page body — that stays on the single-`read_url`
+ * title · domain · snippet). No inline page body — that stays on the single-`web_fetch`
  * card. Replaces ToolLineGroup's chevron so there is only one disclosure layer;
  * persistence reuses the same `${turnKey}:tgrp:${groupKey}` key.
  */
-export function ReadUrlSourceCollection({
+export function WebFetchSourceCollection({
   tools,
   isStreaming,
   turnKey,
@@ -140,6 +140,6 @@ export function ReadUrlSourceCollection({
 }
 
 /** True when a tool-group should render as a merged source collection. */
-export function isReadUrlSourceGroup(tools: ToolStep[]): boolean {
-  return tools.length >= 2 && tools.every((t) => t.tool_name === "read_url");
+export function isWebFetchSourceGroup(tools: ToolStep[]): boolean {
+  return tools.length >= 2 && tools.every((t) => t.tool_name === "web_fetch");
 }

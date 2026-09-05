@@ -502,7 +502,7 @@ class EvidenceLedgerCore:
         origin_id: str = "",
         dossier_label: str = "",
     ) -> None:
-        """同 URL / 底料去重命中时：``read_url`` 可升级 ``deep_read``；空字段可补填。"""
+        """同 URL / 底料去重命中时：``web_fetch`` 可升级 ``deep_read``；空字段可补填。"""
         if not (
             deep_read
             or selected

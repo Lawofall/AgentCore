@@ -526,7 +526,7 @@ def test_wind_down_keeps_file_read_for_files_deliverable():
 
     available = {
         "web_search",
-        "read_url",
+        "web_fetch",
         "grep",
         "file_read",
         "file_write",
@@ -536,7 +536,7 @@ def test_wind_down_keeps_file_read_for_files_deliverable():
     }
     allowed = [
         "web_search",
-        "read_url",
+        "web_fetch",
         "grep",
         "file_read",
         "file_write",
@@ -549,7 +549,7 @@ def test_wind_down_keeps_file_read_for_files_deliverable():
     assert "file_write" in narrowed
     assert "handoff" in narrowed
     assert "web_search" not in narrowed
-    assert "read_url" not in narrowed
+    assert "web_fetch" not in narrowed
     assert "grep" not in narrowed
     assert "code_execute" not in narrowed
 
@@ -576,7 +576,6 @@ def test_wind_down_does_not_keep_note_tools():
         narrow_tools_for_wind_down,
         narrow_tools_for_wind_down_breach,
         wind_down_allowed_tools,
-        wind_down_breach_nudge,
         wind_down_instruction_timeout,
         wind_down_instruction_token,
     )
@@ -610,12 +609,14 @@ def test_wind_down_does_not_keep_note_tools():
     for text in (
         wind_down_instruction_token(),
         wind_down_instruction_timeout(),
-        wind_down_breach_nudge(keep_landing=True),
-        wind_down_breach_nudge(keep_landing=False),
     ):
         assert "post_note" not in text
         assert "可贴/读/改" not in text
-    assert "仅 handoff" in wind_down_breach_nudge(keep_landing=False)
+        assert "请立即" not in text
+        assert "禁止继续" not in text
+    from agentcore.runtime.runs import cutoff as cutoff_mod
+
+    assert not hasattr(cutoff_mod, "wind_down_breach_nudge")
 
 
 def test_wind_down_breach_detection_and_local_force():
@@ -628,9 +629,9 @@ def test_wind_down_breach_detection_and_local_force():
 
     assert wind_down_breach_tool_names(["handoff", "file_write"]) == []
     assert wind_down_breach_tool_names(["web_search", "handoff"]) == ["web_search"]
-    assert wind_down_breach_tool_names(["web_search", "web_search", "read_url"]) == [
+    assert wind_down_breach_tool_names(["web_search", "web_search", "web_fetch"]) == [
         "web_search",
-        "read_url",
+        "web_fetch",
     ]
 
     assert narrow_tools_for_handoff_only({"handoff", "file_write"}) == ["handoff"]
@@ -655,7 +656,7 @@ def test_wind_down_breach_detection_and_local_force():
         keep_landing=False,
     ) == ["handoff"]
 
-    # First breach under ceiling → nudge path (not local).
+    # First breach under ceiling → another LLM round (tools already narrowed; no sermon).
     assert (
         should_force_local_after_wind_down_breach(
             prior_breaches=0, tokens=100_000, token_budget=120_000
@@ -804,6 +805,10 @@ async def test_wind_down_breach_journals_denied_tool(monkeypatch):
     ]
     assert ends, f"expected journaled wind_down deny for web_search, got {journal!r}"
     assert any("收尾窗口" in ((e.get("payload") or {}).get("result") or "") for e in ends)
+    assert not any(
+        m.role == "user" and m.content and "收尾窗口违约" in m.content
+        for m in messages
+    )
     # 收尾窗口 / 白名单 / 落盘 / handoff steer the model; the user reads a plain sentence.
     from agentcore.runtime.engine.tool_failure_face import _CURATED_BY_CODE
     from tests.user_face_helpers import assert_user_face_clean

@@ -469,6 +469,7 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
       case "tool_use_progress":
       case "coordination_wait":
       case "workspace_lock_wait":
+      case "desk_provision_wait":
       case "turn_queued":
       case "turn_queue_started":
       case "turn_queue_cancelled":

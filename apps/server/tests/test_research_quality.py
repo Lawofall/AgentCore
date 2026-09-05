@@ -10,10 +10,6 @@ import pytest
 from agentcore.runtime.delegate.batch_shape import annotate_batch_meta
 from agentcore.runtime.delegate.delivery_status import build_delivery_status
 from agentcore.runtime.delegate.playbook_declaration import resolve_playbook_declaration
-from agentcore.runtime.engine.governance import (
-    maybe_inject_audit_hard_block,
-    should_audit_hard_block,
-)
 from agentcore.runtime.loop_controller import LoopController
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.research_quality import (
@@ -186,23 +182,14 @@ def test_parallel_brief_does_not_signal_long_form_audit():
 
 
 def test_audit_hard_block_after_soft_nudge():
+    """Engine no longer hard-blocks wrap-up after cite_write_review; stamps remain."""
+    from agentcore.runtime.engine import governance as gov
+    from agentcore.runtime.loop_controller import LoopController
+
+    assert not hasattr(gov, "maybe_inject_audit_hard_block")
     c = LoopController()
     c.mark_post_delegate(node_count=5, has_deps=True, audit_hard=True)
     assert c.audit_hard_required is True
-    assert should_audit_hard_block(c, role="captain") is False  # soft not fired
-    c.mark_audit_gate_fired()
-    assert should_audit_hard_block(c, role="captain") is True
-    from agentcore.llm.provider.protocol import LLMMessage
-
-    msgs: list[LLMMessage] = []
-    assert maybe_inject_audit_hard_block(
-        c, messages=msgs, run_id="r", round_idx=1, role="captain"
-    )
-    assert any("硬门" in (m.content or "") for m in msgs)
-    assert any("playbook=cite_write_review" in (m.content or "") for m in msgs)
-    # Second delegate satisfies.
-    c.mark_post_delegate(node_count=1, has_deps=False, includes_review=True)
-    assert should_audit_hard_block(c, role="captain") is False
 
 
 def test_research_report_includes_review_skips_hard_block():
@@ -210,8 +197,8 @@ def test_research_report_includes_review_skips_hard_block():
     c.mark_post_delegate(
         node_count=5, has_deps=True, audit_hard=True, includes_review=True
     )
-    c.mark_audit_gate_fired()
-    assert should_audit_hard_block(c, role="captain") is False
+    assert c.audit_includes_review is True
+    assert c.audit_hard_required is True
 
 
 def test_upstream_body_floor_predicate():

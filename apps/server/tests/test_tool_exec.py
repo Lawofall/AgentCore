@@ -287,12 +287,12 @@ async def test_parent_cancel_still_propagates_through_tool_exec(
         await task
 
 
-async def test_execute_start_logs_read_url_host():
-    class _ReadUrlStub:
+async def test_execute_start_logs_web_fetch_host():
+    class _WebFetchStub:
         @property
         def schema(self) -> ToolSchema:
             return ToolSchema(
-                name="read_url",
+                name="web_fetch",
                 description="stub",
                 parameters={"type": "object", "properties": {"url": {"type": "string"}}},
                 category=ToolCategory.RESEARCH,
@@ -302,10 +302,10 @@ async def test_execute_start_logs_read_url_host():
             return ToolResult(tool_call_id="", success=True, output="ok")
 
     reg = ToolRegistry()
-    reg.register(_ReadUrlStub())
+    reg.register(_WebFetchStub())
     with capture_logs() as logs:
         await execute_tools(
-            [_call("c1", "read_url", '{"url": "https://tldraw.dev/community/license"}')],
+            [_call("c1", "web_fetch", '{"url": "https://tldraw.dev/community/license"}')],
             reg,
             _ctx(),
             EventSink(),
@@ -1337,12 +1337,12 @@ def test_shell_observe_log_fields_records_facts_not_write_guess():
     assert _shell_observe_log_fields("file_write", {"path": "a.py", "command": "x"}) == {}
     assert _shell_observe_log_fields("run", "not-a-dict") == {}
     license_url = "https://www.tldraw.dev/community/license"
-    url_fields = _shell_observe_log_fields("read_url", {"url": license_url})
+    url_fields = _shell_observe_log_fields("web_fetch", {"url": license_url})
     assert url_fields["host"] == "tldraw.dev"
     assert url_fields["url"].startswith("https://")
     assert "license" in url_fields["url"]
     key_url = "https://example.com/x?OPENAI_API_KEY=sk-abcdefgh12345678"
-    redacted_url = _shell_observe_log_fields("read_url", {"url": key_url})
+    redacted_url = _shell_observe_log_fields("web_fetch", {"url": key_url})
     assert "sk-abcdefgh12345678" not in redacted_url["url"]
     assert redacted_url["host"] == "example.com"
 

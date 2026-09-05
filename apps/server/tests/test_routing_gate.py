@@ -67,7 +67,7 @@ def test_corpus_and_coordination_tools_stay_silent():
         "grep",
         "code_search",
         "web_search",
-        "read_url",
+        "web_fetch",
         "escalate",
         "handoff",
         "delegate",
