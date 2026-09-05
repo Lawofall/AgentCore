@@ -50,11 +50,17 @@ export function Dialog({
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descriptionId = useId();
+  const busyRef = useRef(busy);
+  const onCloseRef = useRef(onClose);
+  busyRef.current = busy;
+  onCloseRef.current = onClose;
 
+  // Refs keep Escape/overlay in sync with the current busy flag without
+  // tearing down the capture listener between confirm → done.
   const requestClose = useCallback(() => {
-    if (busy) return;
-    onClose();
-  }, [busy, onClose]);
+    if (busyRef.current) return;
+    onCloseRef.current();
+  }, []);
 
   // Restore focus to whatever opened the dialog, then move focus inside it.
   useEffect(() => {
