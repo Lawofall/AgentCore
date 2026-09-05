@@ -85,12 +85,10 @@ export function useFileTreeBatch(opts: {
   const [confirm, setConfirm] = useState<BatchConfirmState | null>(null);
   const [failure, setFailure] = useState<BatchFailureState | null>(null);
 
-  // 可见行每渲染一次就是个新数组，放进 useCallback 依赖会让所有回调每帧换身份；用 ref 取最新
-  // 值即可（用户点击总在 effect 之后发生）。
+  // 可见行每渲染一次就是个新数组，放进 useCallback 依赖会让所有回调每帧换身份。
+  // 渲染期写 ref：全选发生在同一拍 DOM 已有行、effect 还没跑时（测试/极快按键）也能读到。
   const visibleRef = useRef(visibleRows);
-  useEffect(() => {
-    visibleRef.current = visibleRows;
-  });
+  visibleRef.current = visibleRows;
 
   const selectedPaths = useMemo(() => selectionPaths(selection), [selection]);
   // 祖先已选中的后代不单独动手：父目录一走，子项路径就不成立了。删除 / 剪切 / 拖拽都
