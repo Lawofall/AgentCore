@@ -265,7 +265,7 @@ function main() {
         "hit = [n for n in blocked if n in sys.modules]",
         "assert not hit, hit",
         "print('sidecar turn-path import OK')",
-      ].join("; "),
+      ].join("\n"),
     ],
     { env: { ...process.env, PYTHONPATH: sitePackages, PYTHONUTF8: "1" } },
   );
