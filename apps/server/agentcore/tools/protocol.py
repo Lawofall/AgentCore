@@ -405,7 +405,7 @@ class ToolContext:
     # "not on a board" error instead of touching anything. The channel owns the mechanism
     # (suspend / emit / await the desktop); the tool owns only the op→result mapping (引擎纯化).
     board_channel: BoardChannel | None = None
-    # Desktop Client Tools: per-run channel for ``desktop_notify`` + Host + MCP.
+    # Desktop Client Tools: per-run channel for Host + MCP + external mount.
     # Set when the desktop client is online (local workspace **or** cloud +
     # ``desktop_online``) so tools can backfill via ClientTool SSE; ``None`` when
     # no desktop is attached. MCP stdio is fulfilled only on the desktop process.

@@ -1,6 +1,6 @@
 """CLIENT_TOOL ``*_required`` frames: registry payload + fulfill-side re-hang.
 
-``*_op_required`` / notify / board_read stay EPHEMERAL (not journaled). Delivery
+``*_op_required`` / board_read stay EPHEMERAL (not journaled). Delivery
 goes through the device-level fulfill hub (:func:`push_client_tool_required`),
 not the turn display EventSink. On fulfiller connect / reconnect / root binding,
 :func:`rehang_pending_client_tools` re-pushes still-open registry entries so an
@@ -30,8 +30,7 @@ from agentcore.fulfill import grace
 from agentcore.fulfill.origin import current_origin_device
 from agentcore.runtime.events.board import board_op_required, board_read_required
 from agentcore.runtime.events.desktop import (
-    desktop_notify_required,
-    external_mount_readonly_required,
+    external_mount_required,
     host_op_required,
     mcp_op_required,
 )
@@ -48,7 +47,6 @@ CHANNEL_MCP = "mcp"
 CHANNEL_WORKSPACE = "workspace"
 CHANNEL_BOARD = "board"
 CHANNEL_BOARD_READ = "board_read"
-CHANNEL_NOTIFY = "notify"
 CHANNEL_EXTERNAL_MOUNT = "external_mount"
 
 # Meta keys on the registry payload (not forwarded into the SSE wire body).
@@ -141,18 +139,13 @@ def build_client_tool_required(req: InteractionRequest) -> SSEEvent | None:
             op=str(params.get("op") or ""),
             args=dict(params.get("args") or {}),
         )
-    if channel == CHANNEL_NOTIFY:
-        return desktop_notify_required(
-            request_id=rid,
-            conversation_id=cid,
-            title=str(params.get("title") or ""),
-            body=str(params.get("body") or ""),
-        )
     if channel == CHANNEL_EXTERNAL_MOUNT:
         path = params.get("path")
         well_known = params.get("well_known")
         target_name = params.get("target_name")
-        return external_mount_readonly_required(
+        mode = params.get("mode")
+        root_id = params.get("root_id")
+        return external_mount_required(
             request_id=rid,
             conversation_id=cid,
             path=str(path) if isinstance(path, str) and path.strip() else None,
@@ -164,6 +157,17 @@ def build_client_tool_required(req: InteractionRequest) -> SSEEvent | None:
             target_name=(
                 str(target_name)
                 if isinstance(target_name, str) and target_name.strip()
+                else None
+            ),
+            mode=(
+                str(mode)
+                if isinstance(mode, str)
+                and mode.strip() in {"organize", "attach_rw"}
+                else None
+            ),
+            root_id=(
+                str(root_id)
+                if isinstance(root_id, str) and root_id.strip()
                 else None
             ),
         )
@@ -475,6 +479,5 @@ def _channel_from_event_type(event_type: Any) -> str | None:
         "board_read_required": CHANNEL_BOARD_READ,
         "host_op_required": CHANNEL_HOST,
         "mcp_op_required": CHANNEL_MCP,
-        "desktop_notify_required": CHANNEL_NOTIFY,
-        "external_mount_readonly_required": CHANNEL_EXTERNAL_MOUNT,
+        "external_mount_required": CHANNEL_EXTERNAL_MOUNT,
     }.get(event_type)

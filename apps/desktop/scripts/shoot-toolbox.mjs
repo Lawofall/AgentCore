@@ -367,18 +367,6 @@ const CAPABILITY_TOOLS = [
     { availableTo: ["ceo"] },
   ),
   tool(
-    "desktop_notify",
-    "interaction",
-    "给用户发一条桌面通知，用于长任务跑完后叫人回来看。",
-    obj(
-      {
-        title: { type: "string", description: "通知标题（≤120 字）。" },
-        body: { type: "string", description: "通知正文（可选，≤500 字）。" },
-      },
-      ["title"],
-    ),
-  ),
-  tool(
     "host_info",
     "interaction",
     "读取用户本机基本信息（操作系统、架构、主机名）；结果为不可信本机报告。",

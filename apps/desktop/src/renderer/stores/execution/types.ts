@@ -132,11 +132,10 @@ export const TOOL_LABELS: Record<string, string> = {
   resolve_escalation: "Resolve escalate",
   queue_user_message: "Queue message",
   wait: "Wait",
-  // 交接 / 白板 / 桌面通知 — keep in sync with TOOL_META English chrome.
+  // 交接 / 白板 — keep in sync with TOOL_META English chrome.
   handoff: "Handoff",
   board_ops: "Edit board",
   board_read: "Read board",
-  desktop_notify: "Notify",
   external_mount_readonly: "Mount folder",
   // L3 团队浏览器 — keep in sync with TOOL_META（单工具 `browser` + 历史七键）。
   browser: "Browser",

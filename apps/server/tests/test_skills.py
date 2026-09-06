@@ -1741,18 +1741,16 @@ def test_ask_user_skill_teaches_fork_and_annotate():
     assert "consult(product_help)" in desk
     assert "授权已确认" in desk
     assert "区外：" in desk
-    assert "consult(external_mount_readonly)" in desk
+    assert "consult(external_mount_readonly)" not in desk
+    assert "file_read" in desk and "本机" in desk
     assert "授权后发现" not in desk
-    assert "口头同意" not in desk
+    assert "口头同意" in desk
     assert "失败分型" not in desk
     from agentcore.runtime.resolve.prompt import capability_how_suffix
 
     granted = capability_how_suffix({"external_mount_readonly"})
-    assert "well_known" in granted
-    assert "target_name" in granted
-    assert "先写工作区" in granted and "file_copy" in granted
-    assert "只读已挂" in granted
-    assert "口头同意" in granted
+    assert granted == ""
+    assert "先写工作区" in desk and "file_copy" in desk
     assert "客户端行" in desk and "缺口" in desk
     assert "就好办了" not in desk
     assert "口述覆盖" in desk
@@ -1762,8 +1760,8 @@ def test_ask_user_skill_teaches_fork_and_annotate():
     ask_body = skill.body
     assert "consult(team_local_desk)" in ask_body
     assert "consult(team_delivery_env)" in ask_body
-    assert "整题授权" in ask_body
-    assert "grant_*" in ask_body
+    assert "整题进桌" in ask_body
+    assert "grant_*" not in ask_body
     assert "grant_organize_folder" not in ask_body
     assert "导入到云" not in ask_body
     assert "就好办了" not in ask_body

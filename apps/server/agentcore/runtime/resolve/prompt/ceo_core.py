@@ -28,8 +28,8 @@ _CEO_CORE_HINT = """
 # 何时用工具写在各工具 description。目录只写这是什么。无第二处会对打。
 _CEO_CORE_HINT_TEMPLATE = _CEO_CORE_HINT
 
-# Capability HOW — consult payload for on-demand faces (host /
-# browser / external_mount_readonly). ``run`` HOW is skill ``run``.
+# Capability HOW — consult payload for on-demand faces (host / browser).
+# ``run`` HOW is skill ``run``.
 # Not appended to the frozen CEO core;
 # ``compose_ceo_chat_prompt`` must not hang these manuals (catalog/eval used
 # to, by falling back to the full registry when ``offered`` was omitted).
@@ -40,15 +40,7 @@ _HOST_HOW = """
  / `host(action=open_settings)` / `host(action=set_audio)` / `host(action=restart_service)`\
  / `host(action=install_package)`；通识 FAQ ≠ 已查本机。\
 装包 ≠ `shell` → `install_package`；长驻 ≠ `shell` → `run`。\
-已知文件夹（桌面/下载）→ `external_mount_readonly` ≠ 盲探路径。
-"""
-
-_EXTERNAL_GRANT_HOW = """
-只读看/分析点到的本机目录 → 直接 `external_mount_readonly`（path 和/或 well_known+target_name）；\
-成功即可 `external/<别名>/…`。整理/写回 ≠ 只读已挂 → `ask_user`+`grant_organize_folder`。\
-用户已口头同意整理 → 立刻发卡履约。授权后交付：先写工作区，再 `file_copy` 到 `external/<别名>/`（单向、不覆盖）。\
-区外旁根可覆盖（非整理 copy、非写当前工作区）→ `ask_user`+`grant_attach_folder`。\
-点名找路径 ≠ `host(action=shell)` / `run` 探家目录。
+已知文件夹（桌面/下载）→ `file_read` / `file_list` 本机路径 ≠ `host(action=shell)` 盲探。
 """
 
 _BROWSER_HOW = """
@@ -69,10 +61,6 @@ def capability_how_suffix(ceo_tool_names: set[str]) -> str:
     parts: list[str] = []
     if "host" in ceo_tool_names:
         parts.append(_HOST_HOW.strip())
-    # ``external_mount_readonly`` 是 ``desktop_online_class``——装配 ⇔ 桌面回填通道在线，
-    # 正是授权手册唯一能履约的条件。通道不在时核里只留底线（勿挂载 / 勿发卡 / 勿要手填路径）。
-    if "external_mount_readonly" in ceo_tool_names:
-        parts.append(_EXTERNAL_GRANT_HOW.strip())
     if "browser" in ceo_tool_names:
         parts.append(_BROWSER_HOW.strip())
     return "\n".join(parts)

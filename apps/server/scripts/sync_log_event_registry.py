@@ -1259,7 +1259,7 @@ KEY_DESC: dict[str, str] = {
     ),
     "sandboxd.exec": "sandboxd 已 ``runsc exec`` 进允许表解释器",
     "sandboxd.exec_stdio": "sandboxd 已 ``runsc exec`` stdio 进桌内驱动（不另起 guest）",
-    "sandboxd.package_proxy_failed": "sandboxd 启动装包 allowlist 代理失败（仍监听 socket）",
+    "sandboxd.package_proxy_failed": "sandboxd 启动云桌出站 SSRF 代理失败（仍监听 socket）",
     "sandboxd.preview_proxy_failed": "sandboxd 启动用户预览 HTTP/WS 反代失败（仍监听 socket）",
     "sandboxd.preview_proxy_started": "sandboxd 用户预览 HTTP/WS 反代已监听",
     "sandboxd.preview_proxy_stopped": "sandboxd 用户预览 HTTP/WS 反代已停止",

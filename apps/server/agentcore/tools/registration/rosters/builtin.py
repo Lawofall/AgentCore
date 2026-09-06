@@ -13,7 +13,6 @@ def load_roster() -> tuple[type, ...]:
     from agentcore.tools.builtin.browser import BrowserTool
     from agentcore.tools.builtin.code_diagnostics import CodeDiagnosticsTool
     from agentcore.tools.builtin.code_search import CodeSearchTool
-    from agentcore.tools.builtin.external_mount_readonly import ExternalMountReadonlyTool
     from agentcore.tools.builtin.file_ops import (
         FileBatchTool,
         FileCopyTool,
@@ -64,6 +63,4 @@ def load_roster() -> tuple[type, ...]:
         BrowserTool,
         # Host 第三能力面：单一 ``host``（schema NEVER · action 政策表 · host_class）
         HostTool,
-        # C1 silent read-only external mount (CEO+worker · desktop_online only)
-        ExternalMountReadonlyTool,
     )

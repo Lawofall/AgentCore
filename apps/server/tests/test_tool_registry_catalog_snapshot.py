@@ -56,11 +56,6 @@ _HOST_ORDER = [
     "host",
 ]
 
-# C1: CEO+worker NEVER · desktop_online_class（仅 desktop_online 装配；目录仍常挂）
-_DESKTOP_ONLINE_ORDER = [
-    "external_mount_readonly",
-]
-
 # CEO+worker GRANTABLE：单一 ``browser``（builtin · browser_class · include_browser 闸）
 _BROWSER_CEO_ORDER = [
     "browser",
@@ -69,7 +64,6 @@ _BROWSER_CEO_ORDER = [
 _WORKER_ONLY_ORDER = [
     "escalate",
     "handoff",
-    "desktop_notify",
 ]
 
 # manual_wire conversation log tools: catalog-advertised, not in default
@@ -126,10 +120,8 @@ _CATALOG_AVAILABLE_TO: dict[str, tuple[str, ...]] = {
     "download_url": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "run": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "host": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    "external_mount_readonly": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "escalate": (AVAILABLE_TO_WORKER,),
     "handoff": (AVAILABLE_TO_WORKER,),
-    "desktop_notify": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "search_conversations": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "read_conversation": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     # CEO orchestration (catalog advertise)
@@ -250,7 +242,6 @@ def test_tool_registry_worker_with_host_order():
     assert names == (
         _BUILTIN_ORDER
         + _HOST_ORDER
-        + _DESKTOP_ONLINE_ORDER
         + _WORKER_ONLY_ORDER
     )
 
@@ -261,7 +252,6 @@ def test_catalog_order_and_available_to_snapshot():
     assert names == (
         _BUILTIN_ORDER
         + _HOST_ORDER
-        + _DESKTOP_ONLINE_ORDER
         + _WORKER_ONLY_ORDER
         + _WORKER_GATED_ORDER
         + _CATALOG_ORCHESTRATION_ORDER

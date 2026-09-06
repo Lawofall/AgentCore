@@ -268,8 +268,8 @@ export const FS_CHANNELS = {
    * 把服务端回执里的别名写到会话授权根上（`external/<别名>/` 的唯一真相源）。
    *
    * 别名是服务端登记这条授权时 mint 的命名空间，模型与 UI 见到的都是它；桌面建根
-   * 时不再自算一份。不写下来，本机引擎的 externalMounts 快照就没有这个挂载点，
-   * `external/<别名>/` 恒定 PathNotFound。
+   * 时不再自算一份。不写下来，本机引擎的 externalMounts 快照（含同回合热推）
+   * 就没有这个挂载点，`external/<别名>/` 恒定 PathNotFound。
    */
   adoptSessionRootAlias: "fs:adoptSessionRootAlias",
   listDir: "fs:listDir",
@@ -413,15 +413,18 @@ export interface GrantSessionReadonlyRootParams {
   path?: string;
   wellKnown?: GrantSessionWellKnown;
   targetName?: string;
+  /** Existing session root — upgrade mode without resolving a path (no picker). */
+  rootId?: string;
 }
 
-/** Failure reasons from grant resolve (no picker; not_found ≠ cancelled). */
+/** Failure reasons from grant resolve / write confirm (picker never opens). */
 export type GrantSessionReadonlyRootFailReason =
   | "not_found"
   | "permission_denied"
   | "not_directory"
   | "ambiguous"
-  | "invalid";
+  | "invalid"
+  | "cancelled";
 
 /**
  * Result of {@link FsApi.grantSessionReadonlyRoot}.
@@ -508,8 +511,10 @@ export interface FsApi {
   /**
    * W3/P1: session root (readonly | organize | attach_rw) bound to conversation.
    * Accepts legacy `(conversationId, mode?)` or a params object with optional
-   * `path` / `wellKnown` / `targetName` (resolve only — never opens a folder picker).
-   * Failure reasons distinguish not_found / permission_denied / not_directory / ambiguous (≠ cancelled).
+   * `path` / `wellKnown` / `targetName` / `rootId` (resolve or upgrade —
+   * never opens a folder picker). Write modes confirm in main (system dialog).
+   * Failure reasons: not_found / permission_denied / not_directory / ambiguous /
+   * cancelled (user dismissed the write-grant dialog).
    */
   grantSessionReadonlyRoot(
     conversationIdOrParams: string | GrantSessionReadonlyRootParams,

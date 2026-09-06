@@ -79,9 +79,10 @@ def test_tape_excluded_kinds_cut_lifecycle_settlements_and_client_ops():
     assert "followups_generated" in TAPE_EXCLUDED_KINDS
     # Client-tool requests must never replay (real side effects on the desktop).
     assert "workspace_op_required" in TAPE_EXCLUDED_KINDS
-    assert "desktop_notify_required" in TAPE_EXCLUDED_KINDS
-    assert "external_mount_readonly_required" in TAPE_EXCLUDED_KINDS
-    assert "external_mount_readonly_required" in CLIENT_TOOL_REQUIRED_KINDS
+    assert "desktop_notify_required" not in TAPE_EXCLUDED_KINDS
+    assert "desktop_notify_required" not in CLIENT_TOOL_REQUIRED_KINDS
+    assert "external_mount_required" in TAPE_EXCLUDED_KINDS
+    assert "external_mount_required" in CLIENT_TOOL_REQUIRED_KINDS
     # Content / liveliness stays. Living cold/hot required cards stay on tape.
     assert "content_delta" not in TAPE_EXCLUDED_KINDS
     assert "tool_progress" not in TAPE_EXCLUDED_KINDS

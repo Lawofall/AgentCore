@@ -2,8 +2,8 @@
 /**
  * 「我的文件」的软删区 —— 云端工作区的可逆删除按 ws id 列出并一键还原。
  *
- * 与右坞同一块面板、同一套文案：保留天数取服务端的数，且必须继续说清「系统回收站里的
- * 删除不在此列」——这块面板从来只管工作区软删区那一条轨。
+ * 与右坞同一块面板。保留天数落在空态；顶栏不解释系统回收站（那是本机另一条轨）。
+ * 文件页 tab 保活时切回可见会静默重拉，不挂人手刷新。
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -80,9 +80,9 @@ describe("文件页的软删区", () => {
 
     expect(await screen.findByText("终稿.md")).toBeTruthy();
     expect(wsListTrash).toHaveBeenCalledWith("folder:f1");
-    expect(screen.getByText(/保留约 30 天/)).toBeTruthy();
-    // 系统回收站是另一条轨，面板不得冒充能一键找回。
-    expect(screen.getByText(/本地系统回收站删除不在此列/)).toBeTruthy();
+    expect(screen.queryByLabelText("刷新")).toBeNull();
+    expect(screen.queryByText(/本地系统回收站删除不在此列/)).toBeNull();
+    expect(screen.queryByText(/保留约 30 天/)).toBeNull();
 
     fireEvent.click(screen.getByLabelText("还原"));
     await waitFor(() =>
@@ -105,6 +105,35 @@ describe("文件页的软删区", () => {
     );
 
     expect(await screen.findByText("软删区为空")).toBeTruthy();
+    expect(screen.getByText(/约 30 天后自动清除/)).toBeTruthy();
+  });
+
+  it("tab 从隐藏切回可见时静默重拉，隐藏期间不拉", async () => {
+    vi.mocked(wsListTrash).mockResolvedValue({
+      entries: [],
+      retentionDays: 30,
+    });
+
+    const { rerender } = render(
+      <TooltipProvider>
+        <WorkspaceTrashSection wsId="folder:f1" active />
+      </TooltipProvider>,
+    );
+    await waitFor(() => expect(wsListTrash).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <TooltipProvider>
+        <WorkspaceTrashSection wsId="folder:f1" active={false} />
+      </TooltipProvider>,
+    );
+    expect(wsListTrash).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <TooltipProvider>
+        <WorkspaceTrashSection wsId="folder:f1" active />
+      </TooltipProvider>,
+    );
+    await waitFor(() => expect(wsListTrash).toHaveBeenCalledTimes(2));
   });
 });
 

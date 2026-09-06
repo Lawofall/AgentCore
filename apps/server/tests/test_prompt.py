@@ -95,6 +95,19 @@ def test_anti_filler_and_formatting_restraint():
     assert "表情符号" not in out
 
 
+def test_output_landed_file_is_shared_not_form_catalog():
+    """已落盘则结论是路径/要点/增量：基座 <输出> 同真句。三档交法仍只在当场交付物规格。"""
+    base = _DEFAULT_SYSTEM_PROMPT
+    style = base.split("<输出>", 1)[1].split("</输出>", 1)[0]
+    assert "写进文件" in style
+    assert "增量" in style
+    assert "form=files" not in base
+    assert "form=prose" not in base
+    assert "form=workspace" not in base
+    assert "交付物规格" not in base
+    assert "不要落盘" not in base
+
+
 def test_render_capabilities_advertised():
     out = assemble_system_prompt()
     assert "Markdown" in out
@@ -351,10 +364,11 @@ def test_capability_how_gated_on_ceo_tool_names():
     assert "队员 `screenshot`" not in browser
 
     grant = capability_how_suffix({"external_mount_readonly"})
-    assert "先写工作区" in grant
-    assert "只读已挂" in grant
-    assert "wait_for" not in grant
-    assert "通识 FAQ" not in grant
+    assert grant == ""
+    assert "先写工作区" in _TEAM_LOCAL_DESK
+    assert "file_copy" in _TEAM_LOCAL_DESK
+    assert "wait_for" not in _TEAM_LOCAL_DESK
+    assert "通识 FAQ" not in _TEAM_LOCAL_DESK
     assert "先写工作区" not in browser
 
     # Catalog/eval used to hang HOW by omitting offered (fallback = full registry).
@@ -1472,7 +1486,11 @@ def test_core_teaches_image_gen_egress_and_key_boundary():
     assert "URL→工作区文件" not in delivery
     assert "生图" not in delivery
     assert "无原生生图" in run
-    assert "HTTPS" in run
+    assert "官方源" in run
+    from agentcore.tools.builtin.run import run_description
+
+    assert "download_url" in run_description("server")
+    assert "私网" in run_description("server")
 
 
 def test_credential_hygiene_forbids_reask_plaintext_and_user_self_run():
@@ -1723,13 +1741,7 @@ def test_ceo_core_does_not_host_cross_folder_how():
 
 
 def test_core_guides_out_of_workspace_absolute_paths():
-    """区外路径：常驻只留底线 + 指针；可履约的授权手册跟 ``external_mount_readonly`` 装配走。
-
-    授权全流程（挂载 / 升整理 / well_known 选点 / 失败分型）只有桌面回填通道在线才做得成，
-    而该工具是 ``desktop_online_class``——装配即通道在线。通道不在的回合把这 900 字符手册
-    常驻，等于让模型读一份本回合证明履行不了的操作说明。底线相反：它恰在通道缺失时才生效，
-    所以不进常驻核。未装配 ≠ 写进队员任务 在 delegate task 参数。
-    """
+    """区外路径：常驻核不写手册；HOW 在 team_local_desk；file_* 运行时挂载。"""
     hint = _CEO_CORE_HINT
     assert "工作区外" not in hint
     assert "host=未装配" not in hint
@@ -1737,32 +1749,29 @@ def test_core_guides_out_of_workspace_absolute_paths():
     assert "未装配能力" not in hint
     # 可履约手册不常驻：唯一所有者是 consult（``capability_how_suffix``），含授权后两步交付。
     for manual_only in ("well_known", "口头同意", "先写工作区", "只读已挂"):
-        assert manual_only not in hint, f"{manual_only} 应只在 consult 手册里"
+        assert manual_only not in hint, f"{manual_only} 不应进常驻核"
     granted = capability_how_suffix({"external_mount_readonly"})
-    assert "external_mount_readonly" in granted
-    assert "grant_organize_folder" in granted
-    assert "grant_attach_folder" in granted
-    assert "well_known" in granted
-    assert "口头同意" in granted
-    assert "只读已挂" in granted
+    assert granted == ""
+    desk = _TEAM_LOCAL_DESK
+    assert "file_read" in desk
+    assert "file_copy" in desk
+    assert "先写工作区" in desk
+    assert "口头同意" in desk
+    assert "grant_organize_folder" not in desk
+    assert "grant_attach_folder" not in desk
+    assert "external_mount_readonly" not in desk
     assert "grant_readonly_folder" not in granted
-    assert "先写工作区" in granted and "file_copy" in granted
-    # 不得无条件鼓动「立即发卡」——本机 Host/区外叙述只留在 workspace_context。
     assert "立即发卡" not in hint
-    assert "立即发卡" not in granted
     ask = build_system_skill_registry().get("asking_the_user")
     assert ask is not None
-    desk = _TEAM_LOCAL_DESK
-    assert "external_mount_readonly" in desk or "区外目录" in desk
     assert "organize_plan" in ask.body
-    assert "consult(external_mount_readonly)" in desk
-    assert "consult(external_mount_readonly)" in ask.body
+    assert "consult(external_mount_readonly)" not in desk
+    assert "consult(external_mount_readonly)" not in ask.body
+    assert "consult(team_local_desk)" in ask.body
     assert "授权后发现" not in desk
     assert "选择器兜底" not in desk
     assert "grant_readonly_folder" not in desk
-    assert "口头同意" not in desk
     assert "失败分型" not in desk
-    assert "well_known" in granted
 
 
 def test_core_teaches_narrowed_attachment_scope_must_start():

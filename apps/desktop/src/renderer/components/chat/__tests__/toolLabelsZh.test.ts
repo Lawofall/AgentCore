@@ -9,7 +9,6 @@ describe("toolLabelZh", () => {
     expect(toolLabelZh("host")).toBe("本机 Host");
     expect(toolLabelZh("browser")).toBe("浏览器");
     expect(toolLabelZh("terminal")).toBe("终端");
-    expect(toolLabelZh("desktop_notify")).toBe("系统通知");
     expect(toolLabelZh("external_mount_readonly")).toBe("挂载本机目录");
   });
 

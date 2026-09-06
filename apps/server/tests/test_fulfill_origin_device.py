@@ -12,7 +12,6 @@ import pytest
 
 from agentcore.desktop.channel import (
     DesktopClientChannel,
-    DesktopNotifyError,
     HostOp,
     HostOpError,
     McpOp,
@@ -162,35 +161,9 @@ async def test_external_mount_refuses_to_move_to_another_device(monkeypatch):
     assert peer is not None
 
     with origin_device("desk-A"), pytest.raises(ExternalMountError) as ei:
-        await _desktop_channel().request_external_mount_readonly(path="/tmp/x")
+        await _desktop_channel().request_external_mount(path="/tmp/x")
     assert ORIGIN_DEVICE_OFFLINE in str(ei.value)
     assert peer._queue.qsize() == 0
-
-
-# --- reminder channel: unchanged --------------------------------------------
-
-
-async def test_notify_still_reaches_the_remaining_device(monkeypatch):
-    hub = _two_devices(monkeypatch, origin_online=False)
-    peer = hub.get_session(USER, "desk-B")
-    assert peer is not None
-    channel = _desktop_channel()
-
-    with origin_device("desk-A"):
-        task = _spawn(channel.notify(title="done", body=""))
-        frame = await _next_frame(peer)
-    assert frame["type"] == "desktop_notify_required"
-    task.cancel()
-
-
-async def test_notify_with_no_device_at_all_still_fails_as_before(monkeypatch):
-    hub = FulfillerHub()
-    monkeypatch.setattr(
-        "agentcore.fulfill.dispatch.default_fulfiller_hub", lambda: hub
-    )
-    with origin_device("desk-A"), pytest.raises(DesktopNotifyError) as ei:
-        await _desktop_channel().notify(title="t", body="")
-    assert "no fulfiller" in str(ei.value)
 
 
 # --- single device: nothing changes ------------------------------------------

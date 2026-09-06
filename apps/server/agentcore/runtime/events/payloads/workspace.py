@@ -70,20 +70,12 @@ class BoardReadRequiredPayload(WirePayload):
     ids: list[str]
 
 
-class DesktopNotifyRequiredPayload(WirePayload):
-    """Transport-only client-tool request: show an OS notification on the bound desktop
-    (`desktop_notify`). NOT journaled."""
-
-    request_id: str
-    conversation_id: str
-    title: str
-    body: str | None = absent()
-
-
-class ExternalMountReadonlyRequiredPayload(WirePayload):
-    """Transport-only client-tool request: silently mount a local directory read-only
-    (`external_mount_readonly`). Path transport exception — may carry `path` /
-    `well_known`+`target_name` for desktop resolve; success result must not include abs.
+class ExternalMountRequiredPayload(WirePayload):
+    """Transport-only client-tool request: mount a local directory for file tools.
+    Path transport exception — may carry `path` / `well_known`+`target_name` for
+    desktop resolve; success result must not include abs. ``mode`` is omitted
+    on silent readonly; ``organize`` / ``attach_rw`` confirm. ``root_id``
+    upgrades an existing session root (no picker).
     NOT journaled."""
 
     request_id: str
@@ -91,6 +83,8 @@ class ExternalMountReadonlyRequiredPayload(WirePayload):
     path: str | None = absent()
     well_known: str | None = absent()
     target_name: str | None = absent()
+    mode: Literal["organize", "attach_rw"] | None = absent()
+    root_id: str | None = absent()
 
 
 class HostOpRequiredPayload(WirePayload):

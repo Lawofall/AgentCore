@@ -13,6 +13,7 @@ from typing import Literal
 from agentcore.core.logging import get_logger
 from agentcore.runtime.facts import CrossTurnRetry
 from agentcore.tools.protocol import ToolContext, ToolResult
+from agentcore.workspace.host_path import GrantMode
 
 from .errors import _error
 
@@ -202,14 +203,48 @@ def _norm_rel_path(path: str) -> str:
     return (path or "").strip().replace("\\", "/")
 
 
+class WritePathPrepareError(Exception):
+    """Host-path mint failed; ``result`` is ready to return from the tool."""
+
+    def __init__(self, result: ToolResult) -> None:
+        super().__init__(result.error or "path")
+        self.result = result
+
+
+async def prepared_write_relpath(
+    path: str,
+    context: ToolContext,
+    *,
+    register: bool = True,
+    register_bare: bool = False,
+    host_grant_mode: GrantMode = "organize",
+) -> tuple[str, str] | ToolResult:
+    """Like ``_prepare_write_relpath`` but returns the ToolResult on host-path failure."""
+    try:
+        return await _prepare_write_relpath(
+            path,
+            context,
+            register=register,
+            register_bare=register_bare,
+            host_grant_mode=host_grant_mode,
+        )
+    except WritePathPrepareError as e:
+        return e.result
+
+
 async def _prepare_write_relpath(
     path: str,
     context: ToolContext,
     *,
     register: bool = True,
     register_bare: bool = False,
+    host_grant_mode: GrantMode = "organize",
 ) -> tuple[str, str]:
     """Rewrite empty-desk shell, then sanitize; return ``(actual, rename_note)``.
+
+    Host OS paths mint a session grant first (never passed to
+    ``sanitize_write_relpath``). ``WritePathPrepareError`` carries the
+    model-facing ToolResult.
 
     Shell strip lives here (workspace + turn slot) — not in diskless
     ``sanitize_write_relpath``. Strip does not emit a note; ``rename_note`` is
@@ -225,9 +260,20 @@ async def _prepare_write_relpath(
     )
     from agentcore.workspace.project_shell import rewrite_project_shell_relpath
 
+    from .prepare_path import prepare_tool_path
+
     requested = (path or "").strip()
     if not requested:
         return "", ""
+    prepared = await prepare_tool_path(
+        requested,
+        context,
+        as_directory=register_bare,
+        grant_mode=host_grant_mode,
+    )
+    if isinstance(prepared, ToolResult):
+        raise WritePathPrepareError(prepared)
+    requested = prepared
     rewritten, shell_note = await rewrite_project_shell_relpath(
         requested, context, register=register, register_bare=register_bare
     )

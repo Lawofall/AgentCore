@@ -36,79 +36,12 @@ def test_normalize_options_preserves_bind_local_folder_action():
     assert "action" not in out[3]
     assert "detail" not in out[3]  # 普通短问丢掉第二句
     assert "action" not in out[4]  # unknown actions drop
-    assert "action" not in out[5]  # grant_readonly_folder dropped
-    assert out[6]["action"] == "grant_organize_folder"
-    assert out[7]["action"] == "grant_attach_folder"
+    assert "action" not in out[5]
+    assert "action" not in out[6]
+    assert "action" not in out[7]
 
 
-def test_normalize_options_passthrough_well_known_and_target_name():
-    out = normalize_options(
-        [
-            {
-                "label": "授权桌面",
-                "action": "grant_organize_folder",
-                "well_known": "desktop",
-                "target_name": "咨询报告",
-            },
-            {
-                "label": "授权下载",
-                "action": "grant_organize_folder",
-                "well_known": "Downloads",  # case-insensitive
-                "target_name": "foo.zip",
-            },
-            {
-                "label": "坏路径名",
-                "action": "grant_organize_folder",
-                "well_known": "documents",
-                "target_name": "a/b",
-            },
-            {
-                "label": "未知 well_known",
-                "action": "grant_organize_folder",
-                "well_known": "home",
-                "target_name": "ok",
-            },
-            {
-                "label": "非 grant 不透传",
-                "action": "bind_local_folder",
-                "well_known": "desktop",
-                "target_name": "x",
-            },
-            {
-                "label": "反斜杠拒绝",
-                "action": "grant_organize_folder",
-                "well_known": "desktop",
-                "target_name": r"a\b",
-            },
-            {
-                "label": "绝对 path",
-                "action": "grant_organize_folder",
-                "path": r"D:\新建文件夹\资料",
-            },
-            {
-                "label": "相对 path 丢",
-                "action": "grant_organize_folder",
-                "path": "relative/folder",
-            },
-        ],
-        max_options=10,
-    )
-    assert out[0]["well_known"] == "desktop"
-    assert out[0]["target_name"] == "咨询报告"
-    assert out[1]["well_known"] == "downloads"
-    assert out[1]["target_name"] == "foo.zip"
-    assert out[2]["well_known"] == "documents"
-    assert "target_name" not in out[2]  # path separators rejected
-    assert "well_known" not in out[3]
-    assert out[3]["target_name"] == "ok"
-    assert "well_known" not in out[4]
-    assert "target_name" not in out[4]
-    assert "target_name" not in out[5]
-    assert out[6]["path"] == r"D:\新建文件夹\资料"
-    assert "path" not in out[7]
-
-
-def test_normalize_options_drops_grant_readonly_folder_and_hints():
+def test_normalize_options_drops_unknown_folder_actions_and_hints():
     out = normalize_options(
         [
             {
@@ -118,9 +51,31 @@ def test_normalize_options_drops_grant_readonly_folder_and_hints():
                 "target_name": "咨询报告",
                 "path": r"D:\新建文件夹\资料",
             },
+            {
+                "label": "授权整理目录",
+                "action": "grant_organize_folder",
+                "well_known": "desktop",
+                "target_name": "咨询报告",
+                "path": r"D:\新建文件夹\资料",
+            },
+            {
+                "label": "加入可读写",
+                "action": "grant_attach_folder",
+                "well_known": "desktop",
+                "target_name": "设计稿",
+            },
+            {
+                "label": "绑定本机",
+                "action": "bind_local_folder",
+                "well_known": "desktop",
+                "target_name": "x",
+            },
         ]
     )
-    assert out == [{"label": "授权只读目录"}]
+    assert out[0] == {"label": "授权只读目录"}
+    assert out[1] == {"label": "授权整理目录"}
+    assert out[2] == {"label": "加入可读写"}
+    assert out[3] == {"label": "绑定本机", "action": "bind_local_folder"}
 
 
 def test_normalize_options_drops_detail_by_default():
@@ -140,25 +95,6 @@ def test_normalize_options_keeps_detail_when_flagged():
         keep_detail=True,
     )
     assert out[0]["detail"] == "一行取舍"
-
-
-def test_normalize_options_drops_detail_but_keeps_grant_hints():
-    """通用卡「将整理：…」由前端合成；丢掉第二句不得误删 grant 字段。"""
-    out = normalize_options(
-        [
-            {
-                "label": "允许整理桌面",
-                "detail": "将整理：桌面上的咨询报告",
-                "action": "grant_organize_folder",
-                "well_known": "desktop",
-                "target_name": "咨询报告",
-            }
-        ]
-    )
-    assert "detail" not in out[0]
-    assert out[0]["action"] == "grant_organize_folder"
-    assert out[0]["well_known"] == "desktop"
-    assert out[0]["target_name"] == "咨询报告"
 
 
 def test_normalize_questions_passthrough_to_checkpoint_shape():
@@ -559,16 +495,15 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     props2 = advertised.schema.parameters["properties"]["questions"]["items"]["properties"][
         "options"
     ]["items"]["properties"]
-    # 未标 location = 云桌：本机传统入口 + 整理；不广告 attach_rw。
+    # 未标 location = 云桌：本机传统入口；不广告 grant。
     assert props2["action"]["enum"] == [
         "open_local_project",
         "register_local_project",
         "bind_local_folder",
-        "grant_organize_folder",
     ]
-    assert props2["well_known"]["enum"] == ["desktop", "downloads", "documents"]
-    assert "target_name" in props2
-    assert "path" in props2
+    assert "well_known" not in props2
+    assert "target_name" not in props2
+    assert "path" not in props2
     assert "open_local_project" not in advertised.schema.description
     assert "register_local_project" not in advertised.schema.description
     assert "bind_local_folder" not in advertised.schema.description
@@ -587,7 +522,7 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     assert "2-3" not in advertised.schema.description
     action_desc = props2["action"]["description"]
     assert "open/register/bind_local_*" in action_desc
-    assert "grant_organize_folder" in action_desc
+    assert "grant_organize_folder" not in action_desc
     assert "grant_organize_folder=整理" not in action_desc
     assert "本机传统" not in action_desc
     assert "改导" not in action_desc
@@ -598,8 +533,8 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     assert "口头同意" not in action_desc
     assert "2～3" not in action_desc
     assert "2-3" not in action_desc
-    assert "选择器兜底" not in props2["well_known"]["description"]
-    assert "picker" not in props2["target_name"]["description"].lower()
+    assert "well_known" not in props2
+    assert "target_name" not in props2
     # Desktop advertise must stay compact (dogfood ~3796 before slim); HOW → skill.
     adv_blob = advertised.schema.description + json.dumps(
         advertised.schema.parameters, ensure_ascii=False
@@ -618,15 +553,11 @@ def test_advertised_option_actions_splits_local_vs_cloud():
         "open_local_project",
         "register_local_project",
         "bind_local_folder",
-        "grant_organize_folder",
     )
-    assert advertised_option_actions(desktop=True, workspace_location="local") == (
-        "grant_organize_folder",
-        "grant_attach_folder",
-    )
+    assert advertised_option_actions(desktop=True, workspace_location="local") == ()
 
 
-def test_ask_user_local_schema_advertises_attach_not_open_bind():
+def test_ask_user_local_schema_omits_grant_and_open_bind():
     tool = AskUserTool(
         sink=EventSink(),
         conversation_id="c1",
@@ -637,13 +568,8 @@ def test_ask_user_local_schema_advertises_attach_not_open_bind():
     props = tool.schema.parameters["properties"]["questions"]["items"]["properties"][
         "options"
     ]["items"]["properties"]
-    assert props["action"]["enum"] == [
-        "grant_organize_folder",
-        "grant_attach_folder",
-    ]
-    assert "grant_attach_folder" in props["action"]["description"]
-    assert "grant_attach_folder=区外旁根可覆盖" not in props["action"]["description"]
-    assert "open/register/bind" not in props["action"]["description"]
+    assert "action" not in props
+    assert "well_known" not in props
     assert "open_local_project" not in tool.schema.description
     assert "grant_attach_folder" not in tool.schema.description
     assert "HOW→consult(asking_the_user)" in tool.schema.description
@@ -661,13 +587,12 @@ def test_ask_user_organize_how_lives_in_skill():
     from agentcore.runtime.resolve.prompt import capability_how_suffix
 
     granted = capability_how_suffix({"external_mount_readonly"})
-    assert "口头同意" in granted
-    assert "grant_organize_folder" in granted
-    assert "grant_organize_folder" in desk.body
-    assert "consult(external_mount_readonly)" in desk.body
-    assert "consult(external_mount_readonly)" in ask.body
+    assert granted == ""
+    assert "口头同意" in desk.body
+    assert "grant_organize_folder" not in desk.body
+    assert "consult(external_mount_readonly)" not in desk.body
+    assert "consult(external_mount_readonly)" not in ask.body
     assert "consult(team_local_desk)" in ask.body
-    assert "整题授权" in ask.body
-    assert "区外旁根" in desk.body
-    assert "区外旁根" in granted
-    assert "非写当前工作区" in granted
+    assert "整题进桌" in ask.body
+    assert "旁根" in desk.body
+    assert "可写授权" in desk.body

@@ -1,12 +1,17 @@
 """Same-turn hot attach of conversation external mounts onto a live backend.
 
-Turn entry (``build_turn_backend``) and ``external_mount_readonly`` after a
-successful ClientTool mint both call :func:`attach_grants_to_backend` so
-``file_read external/…`` works without waiting for the next resume.
+Turn entry (``build_turn_backend``) and file-tool host-path mint both call
+:func:`attach_grants_to_backend` so ``file_read external/…`` works without
+waiting for the next resume.
+
+Sidecar Path-I/O needs ``abs_path``. Grant rows never store it; desktop
+hot-pushes it onto the live backend first. This helper copies live abs onto
+grant-store rows so ``_mint`` cannot wipe the snapshot.
 """
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from agentcore.workspace import grant_store
@@ -16,6 +21,26 @@ from agentcore.workspace.protocol import WorkspaceBackend
 if TYPE_CHECKING:
     from agentcore.desktop.channel import DesktopClientChannel
     from agentcore.workspace.channel import WorkspaceChannel
+
+
+def _merge_live_abs(
+    grants: dict[str, ExternalMount],
+    live: dict[str, ExternalMount],
+) -> dict[str, ExternalMount]:
+    """Keep live abs when grant-store rows are root_id-only; keep live-only abs."""
+    if not live:
+        return grants
+    out: dict[str, ExternalMount] = {}
+    for alias, mount in grants.items():
+        prev = live.get(alias)
+        if not mount.abs_path and prev is not None and prev.abs_path:
+            out[alias] = replace(mount, abs_path=prev.abs_path)
+        else:
+            out[alias] = mount
+    for alias, prev in live.items():
+        if alias not in out and prev.abs_path:
+            out[alias] = prev
+    return out
 
 
 def _ensure_external_channel(
@@ -64,8 +89,13 @@ async def attach_grants_to_backend(
 
     Ensures a cloud / root_id-only bridge via ``desktop_channel`` or an existing
     ``workspace_channel`` (sidecar terminal channel) when needed.
+
+    Sidecar: grant rows have no abs. Merge copies abs from the live backend
+    (desktop ``updateExternalMounts``) so this call cannot drop Path-I/O.
     """
-    mounts = await grant_store.grants_as_dict(conversation_id)
+    grants = await grant_store.grants_as_dict(conversation_id)
+    live = dict(getattr(backend, "_mounts", None) or {})
+    mounts = _merge_live_abs(grants, live) if grants else grants
     attach = getattr(backend, "attach_external_mounts", None)
     if mounts and callable(attach):
         attach(mounts)

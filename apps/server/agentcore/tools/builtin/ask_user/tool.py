@@ -120,33 +120,10 @@ class AskUserTool:
             bits: list[str] = []
             if "open_local_project" in allowed_actions:
                 bits.append("open/register/bind_local_*")
-            if "grant_organize_folder" in allowed_actions:
-                bits.append("grant_organize_folder")
-            if "grant_attach_folder" in allowed_actions:
-                bits.append("grant_attach_folder")
             option_properties["action"] = {
                 "type": "string",
                 "enum": list(allowed_actions),
-                "description": "可选。整题授权才填：" + "；".join(bits) + "。",
-            }
-            option_properties["well_known"] = {
-                "type": "string",
-                "enum": ["desktop", "downloads", "documents"],
-                "description": (
-                    "仅 grant_*。点名桌面/下载/文档时填；模糊可省略。解析失败即找不到。"
-                ),
-            }
-            option_properties["target_name"] = {
-                "type": "string",
-                "description": (
-                    "仅 grant_*。子目录/压缩包模糊名（禁 / \\）；有 well_known 时在其下匹配。"
-                ),
-            }
-            option_properties["path"] = {
-                "type": "string",
-                "description": (
-                    "仅 grant_*。已知运输 path（与 well_known/target_name 互补）。"
-                ),
+                "description": "可选。整题进桌才填：" + "；".join(bits) + "。",
             }
         return ToolSchema(
             name="ask_user",
@@ -275,25 +252,15 @@ class AskUserTool:
                 workspace_location=self.workspace_location,
             )
         )
-        if not allowed:
-            for q in questions:
-                for opt in q.get("options") or []:
-                    if isinstance(opt, dict):
-                        opt.pop("action", None)
-                        opt.pop("well_known", None)
-                        opt.pop("target_name", None)
-                        opt.pop("path", None)
-        else:
-            for q in questions:
-                for opt in q.get("options") or []:
-                    if not isinstance(opt, dict):
-                        continue
-                    action = str(opt.get("action") or "").strip()
-                    if action not in allowed:
-                        opt.pop("action", None)
-                        opt.pop("well_known", None)
-                        opt.pop("target_name", None)
-                        opt.pop("path", None)
+        for q in questions:
+            for opt in q.get("options") or []:
+                if not isinstance(opt, dict):
+                    continue
+                action = str(opt.get("action") or "").strip()
+                if action not in allowed:
+                    opt.pop("action", None)
+                opt.pop("well_known", None)
+                opt.pop("target_name", None)
 
         browser_login = bool(arguments.get("browser_login"))
 

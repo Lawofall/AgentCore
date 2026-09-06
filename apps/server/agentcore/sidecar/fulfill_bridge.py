@@ -4,7 +4,7 @@ Cloud mode: the desktop holds one ``GET /v1/fulfill`` SSE against the API proces
 and :mod:`agentcore.fulfill.dispatch` routes ``*_required`` frames onto it. The
 sidecar hosts the SAME engine in a process the desktop spawned, so it has its own
 in-process :class:`~agentcore.fulfill.hub.FulfillerHub` — with nobody registered
-there, every channel op (host / mcp / notify / board / board_read /
+there, every channel op (host / mcp / board / board_read /
 external_mount / terminal) settles instantly as 「no fulfiller（无履约方）」.
 
 This bridge registers exactly one session on that in-process hub and drains it
@@ -122,7 +122,7 @@ class SidecarFulfillBridge:
         """Add a root this device can serve (cloud parity: registration receipts).
 
         Root-scoped ``workspace`` frames only reach a session whose roots contain
-        the id; unscoped channels (host / mcp / notify / board / board_read /
+        the id; unscoped channels (host / mcp / board / board_read /
         external_mount / terminal) match regardless. Reached both with the turn's
         own ``localRootId`` and, as each local workspace is built, with a
         cross-desk target's root (:mod:`agentcore.fulfill.local_roots`).

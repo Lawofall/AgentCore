@@ -1,6 +1,6 @@
 import { adoptServerAlias } from "@/lib/adoptServerAlias";
 import { hasLocalFiles } from "@/lib/capabilities";
-import type { GrantFolderHints } from "@/lib/grantFolderHints";
+import { type GrantFolderHints, grantIpcFields } from "@/lib/grantFolderHints";
 import { revokeExternalGrant } from "@/lib/revokeExternalGrant";
 import { ApiError, api } from "@/services/api";
 import { invalidateExternalGrants } from "@/services/externalGrants";
@@ -41,6 +41,7 @@ const RESOLVE_FAIL_FALLBACK: Record<
   permission_denied: "定位到了，但这台电脑不让程序读取该目录",
   not_directory: "路径指向的是文件，不是目录",
   ambiguous: "匹配到多个目录，请说得更具体",
+  cancelled: "用户拒绝授权",
 };
 
 type ExternalGrantBody = { grant: { alias: string; namespace: string } };
@@ -52,27 +53,10 @@ function describeGrantError(e: unknown): string {
   return e instanceof Error ? e.message : "授权失败，请重试";
 }
 
-/** Answer text so the CEO sees which folder was granted (no absolute path). */
-export function formatGrantOrganizeFolderAnswer(
-  optionLabel: string,
-  folderName: string,
-  namespace: string,
-): string {
-  return `${optionLabel}（${folderName} → ${namespace}；可移动/重命名/复制/删除进回收站、仅本次对话、可撤销）`;
-}
-
-export function formatGrantAttachFolderAnswer(
-  optionLabel: string,
-  folderName: string,
-  namespace: string,
-): string {
-  return `${optionLabel}（${folderName} → ${namespace}；本对话可改可覆盖、仅本次对话、可撤销）`;
-}
-
 /**
  * Resolve grant hints → session organize root → POST grant.
  * Never opens a folder picker; unresolved → not_found (≠ cancelled).
- * Same root upgrading from readonly still requires this fresh confirm card.
+ * Same root upgrading from readonly confirms in main (system dialog).
  */
 export async function pickAndGrantSessionFolder(
   conversationId: string,
@@ -86,9 +70,7 @@ export async function pickAndGrantSessionFolder(
     const granted = await window.fsApi.grantSessionReadonlyRoot({
       conversationId,
       mode,
-      ...(hints?.path ? { path: hints.path } : {}),
-      ...(hints?.wellKnown ? { wellKnown: hints.wellKnown } : {}),
-      ...(hints?.targetName ? { targetName: hints.targetName } : {}),
+      ...grantIpcFields(hints),
     });
     if (!granted.ok) {
       const reason = granted.reason;

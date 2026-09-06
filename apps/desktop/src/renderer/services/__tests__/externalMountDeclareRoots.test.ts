@@ -9,7 +9,7 @@
  * **先后**。
  * @vitest-environment jsdom
  */
-import type { ExternalMountReadonlyRequiredPayload } from "@/types/events";
+import type { ExternalMountRequiredPayload } from "@/types/events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** 调用顺序流水：登记与别名落地都必须排在回执之前。 */
@@ -53,11 +53,11 @@ vi.mock("@/services/api", () => ({
 }));
 
 import { resetClientToolFulfillmentForTests } from "../clientToolFulfill";
-import { performExternalMountReadonly } from "../externalMountOps";
+import { performExternalMount } from "../externalMountOps";
 
 function payload(
-  over: Partial<ExternalMountReadonlyRequiredPayload> = {},
-): ExternalMountReadonlyRequiredPayload {
+  over: Partial<ExternalMountRequiredPayload> = {},
+): ExternalMountRequiredPayload {
   return {
     request_id: "req-1",
     conversation_id: "conv-1",
@@ -92,7 +92,7 @@ describe("external_mount 成功回执与授权登记的时序", () => {
       return { grant: { alias: "咨询", namespace: "external/咨询" } };
     });
 
-    await performExternalMountReadonly(payload(), "conv-1", "cloud");
+    await performExternalMount(payload(), "conv-1", "cloud");
 
     expect(order).toEqual(["register", "alias", "settle"]);
     expect(resolveInteraction).toHaveBeenCalledWith(
@@ -114,7 +114,7 @@ describe("external_mount 成功回执与授权登记的时序", () => {
       message: "找不到该目录",
     });
 
-    await performExternalMountReadonly(payload(), "conv-1", "cloud");
+    await performExternalMount(payload(), "conv-1", "cloud");
 
     expect(apiPost).not.toHaveBeenCalled();
     expect(order).toEqual(["settle"]);

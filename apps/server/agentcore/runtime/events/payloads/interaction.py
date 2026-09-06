@@ -40,17 +40,8 @@ class AskOption(WirePayload):
     native client action instead of a plain text answer (unknown/absent → plain option):
     `open_local_project` / `register_local_project` / `bind_local_folder` are
     **本机传统** wire enums（桌面默认同通道；云协作是选项：「导入到云」/「从 Git 克隆」；≠离线；
-    网页/手机无本机盘；``create_folder`` 仍只建云）；
-    `grant_organize_folder` confirms organize-mode (move/copy/mkdir/trash-delete);
-    `grant_attach_folder` confirms attach_rw (本机传统：该根可写可覆盖);
-    still requires explicit user confirm (not silent).
-    For ``grant_*`` only: optional ``well_known`` (``desktop`` / ``downloads`` /
-    ``documents``) and optional ``target_name`` (short basename, no path separators)
-    resolve on the desktop with **no** system folder picker — failure is structured
-    not_found / not_directory / ambiguous (never picker fallback). Optional ``path``
-    may carry an absolute directory hint for organize confirm (mount-only transport
-    exception; success surfaces never return abs).
-    Structured ``op`` / ``source`` / ``destination`` / ``path`` fields also carry
+    网页/手机无本机盘；``create_folder`` 仍只建云）。
+    Structured ``op`` / ``source`` / ``destination`` / ``path`` fields carry
     organize_plan items for plan-bound ``file_batch``. ``review_kind`` / ``body`` /
     ``slug`` / ``section`` carry daily_review proposals for server-side apply on
     confirm."""
@@ -62,17 +53,9 @@ class AskOption(WirePayload):
             "open_local_project",
             "register_local_project",
             "bind_local_folder",
-            "grant_organize_folder",
-            "grant_attach_folder",
         ]
         | None
     ) = absent()
-    well_known: Literal["desktop", "downloads", "documents"] | None = absent(
-        "仅 grant_*：常见目录提示；桌面解析直授，失败明确报错（无 picker 兜底）。"
-    )
-    target_name: str | None = absent(
-        "仅 grant_*：子目录名模糊词（无路径分隔符）；与 well_known 合用尽量唯一匹配。"
-    )
     op: Literal["move", "copy", "delete", "mkdir"] | None = absent()
     source: str | None = absent()
     destination: str | None = absent()

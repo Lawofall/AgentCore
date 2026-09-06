@@ -42,8 +42,7 @@ from agentcore.runtime.events.debate import (
     debate_round_started,
 )
 from agentcore.runtime.events.desktop import (
-    desktop_notify_required,
-    external_mount_readonly_required,
+    external_mount_required,
     host_op_required,
     mcp_op_required,
 )
@@ -143,8 +142,7 @@ __all__ = [
     "board_read_required",
     "browser_live_frame",
     "browser_live_status",
-    "desktop_notify_required",
-    "external_mount_readonly_required",
+    "external_mount_required",
     "host_op_required",
     "mcp_op_required",
     "auto_folder_created",

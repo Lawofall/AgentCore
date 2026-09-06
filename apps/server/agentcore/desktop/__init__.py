@@ -2,7 +2,6 @@
 
 from agentcore.desktop.channel import (
     DesktopClientChannel,
-    DesktopNotifyError,
     ExternalMountError,
     HostOp,
     HostOpError,
@@ -10,7 +9,6 @@ from agentcore.desktop.channel import (
 
 __all__ = [
     "DesktopClientChannel",
-    "DesktopNotifyError",
     "ExternalMountError",
     "HostOp",
     "HostOpError",

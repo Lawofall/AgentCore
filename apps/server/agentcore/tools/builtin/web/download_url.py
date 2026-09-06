@@ -31,7 +31,7 @@ from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.tools.builtin.file_ops import (
     _mark_landed_files,
     _outside_workspace_msg,
-    _prepare_write_relpath,
+    prepared_write_relpath,
     write_scope_rejection,
 )
 from agentcore.tools.builtin.file_ops.errors import CROSS_TURN_RETRY_KEY, CrossTurnRetry
@@ -187,7 +187,10 @@ class DownloadUrlTool:
         if (parsed.scheme or "").lower() not in ("http", "https"):
             return _fail("仅支持 http/https URL", start)
 
-        rel_path, rename_note = await _prepare_write_relpath(path_raw, context)
+        prepared = await prepared_write_relpath(path_raw, context)
+        if isinstance(prepared, ToolResult):
+            return prepared
+        rel_path, rename_note = prepared
         if not rel_path or rel_path in (".",):
             return _fail("path 无效：请提供工作区相对文件路径（含文件名）", start)
         if rel_path.endswith("/"):

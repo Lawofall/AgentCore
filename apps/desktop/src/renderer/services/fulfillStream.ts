@@ -57,7 +57,6 @@ export const FULFILL_CAPS = [
   "mcp",
   "board",
   "board_read",
-  "notify",
   "external_mount",
 ] as const;
 

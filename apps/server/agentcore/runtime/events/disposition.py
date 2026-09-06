@@ -212,13 +212,9 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
     EventType.WORKSPACE_OP_REQUIRED: (Disposition.EPHEMERAL, "客户端工具请求（请求/响应交换，非回合内容）"),
     EventType.BOARD_OP_REQUIRED: (Disposition.EPHEMERAL, "白板客户端工具请求（请求/响应交换，非回合内容）"),
     EventType.BOARD_READ_REQUIRED: (Disposition.EPHEMERAL, "白板栅格化读取客户端工具请求（非回合内容）"),
-    EventType.DESKTOP_NOTIFY_REQUIRED: (
+    EventType.EXTERNAL_MOUNT_REQUIRED: (
         Disposition.EPHEMERAL,
-        "桌面系统通知客户端工具请求（非回合内容）",
-    ),
-    EventType.EXTERNAL_MOUNT_READONLY_REQUIRED: (
-        Disposition.EPHEMERAL,
-        "区外只读静默挂载客户端工具请求（非回合内容）",
+        "区外目录挂载客户端工具请求（只读静默 / 写确认；非回合内容）",
     ),
     EventType.MCP_OP_REQUIRED: (
         Disposition.EPHEMERAL,

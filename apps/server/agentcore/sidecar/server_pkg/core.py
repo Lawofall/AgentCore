@@ -120,8 +120,12 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
         self._pending_sends: set[asyncio.Task[None]] = set()
         # This process's CLIENT_TOOL 履约方 on the in-process fulfill hub. Built on
         # ``initialize`` (needs a running loop + the account id); without it every
-        # host / mcp / notify / board / terminal op would fail「无履约方」.
+        # host / mcp / board / terminal op would fail「无履约方」.
         self._fulfill_bridge: SidecarFulfillBridge | None = None
+        # Live turn backends keyed by conversation_id so desktop can mid-turn
+        # hot-push ``externalMounts`` (abs paths) onto the same ServerWorkspace
+        # ``_make_backend`` just built. Unregistered in the turn/resume finally.
+        self._live_backends: dict[str, list[ServerWorkspace]] = {}
         # Flipped by ``shutdown`` so the process loop can exit cleanly.
         self.shutdown_requested = asyncio.Event()
 
@@ -165,6 +169,27 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
         self._queue_turns.pop(turn_id, None)
         if cid:
             self._wake_resume_deferred_if_idle(cid)
+
+    def _register_live_backend(
+        self, conversation_id: str, backend: ServerWorkspace
+    ) -> None:
+        cid = (conversation_id or "").strip()
+        if not cid:
+            return
+        self._live_backends.setdefault(cid, []).append(backend)
+
+    def _unregister_live_backend(
+        self, conversation_id: str, backend: ServerWorkspace
+    ) -> None:
+        cid = (conversation_id or "").strip()
+        bag = self._live_backends.get(cid)
+        if not bag:
+            return
+        remaining = [b for b in bag if b is not backend]
+        if remaining:
+            self._live_backends[cid] = remaining
+        else:
+            self._live_backends.pop(cid, None)
 
     def live_turn_task(self, conversation_id: str) -> asyncio.Task[None] | None:
         """Live ``_turns`` task holding ``conversation_id``, if any."""
@@ -440,6 +465,8 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
             await self._on_warm_mcp_discover(request_id, params)
         elif method == "warmAccountRulesMemory":
             await self._on_warm_account_rules_memory(request_id, params)
+        elif method == "updateExternalMounts":
+            await self._on_update_external_mounts(request_id, params)
         elif method == "shutdown":
             from agentcore.demo_tape.recorder import uninstall_recorder
 
@@ -521,37 +548,72 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
             root_label=self._root.name or "workspace",
             location="local",
         )
-        if external_mounts:
-            from agentcore.workspace.external_mounts import (
-                ExternalMount,
-                normalize_mount_mode,
-            )
-
-            items: list[dict] = []
-            if isinstance(external_mounts, list):
-                items = [m for m in external_mounts if isinstance(m, dict)]
-            elif isinstance(external_mounts, dict):
-                items = [
-                    {"alias": a, **m} if isinstance(m, dict) else {"alias": a}
-                    for a, m in external_mounts.items()
-                ]
-            mounts: dict[str, ExternalMount] = {}
-            for m in items:
-                alias = str(m.get("alias") or "").strip()
-                abs_path = str(m.get("absPath") or m.get("abs_path") or "").strip()
-                if not alias or not abs_path:
-                    continue
-                mounts[alias] = ExternalMount(
-                    alias=alias,
-                    root_id=str(m.get("rootId") or m.get("root_id") or ""),
-                    label=str(m.get("label") or alias),
-                    abs_path=abs_path,
-                    mode=normalize_mount_mode(str(m.get("mode") or "")),
-                )
-            if mounts:
-                backend.attach_external_mounts(mounts)
+        mounts = self._parse_external_mounts(external_mounts)
+        if mounts:
+            backend.attach_external_mounts(mounts)
         # Index maintenance: write paths / code_search only — not at turn entry.
         return backend
+
+    def _parse_external_mounts(self, raw: Any) -> dict[str, Any]:
+        """Parse startTurn / resume / updateExternalMounts snapshots (alias+abs)."""
+        from agentcore.workspace.external_mounts import (
+            ExternalMount,
+            normalize_mount_mode,
+        )
+
+        if not raw:
+            return {}
+        items: list[dict] = []
+        if isinstance(raw, list):
+            items = [m for m in raw if isinstance(m, dict)]
+        elif isinstance(raw, dict):
+            items = [
+                {"alias": a, **m} if isinstance(m, dict) else {"alias": a}
+                for a, m in raw.items()
+            ]
+        mounts: dict[str, ExternalMount] = {}
+        for m in items:
+            alias = str(m.get("alias") or "").strip()
+            abs_path = str(m.get("absPath") or m.get("abs_path") or "").strip()
+            if not alias or not abs_path:
+                continue
+            mounts[alias] = ExternalMount(
+                alias=alias,
+                root_id=str(m.get("rootId") or m.get("root_id") or ""),
+                label=str(m.get("label") or alias),
+                abs_path=abs_path,
+                mode=normalize_mount_mode(str(m.get("mode") or "")),
+            )
+        return mounts
+
+    async def _on_update_external_mounts(
+        self, request_id: Any, params: dict[str, Any]
+    ) -> None:
+        """Mid-turn replace of ``external/<alias>/`` mounts on live backends.
+
+        Desktop pushes the same abs snapshot as startTurn after grant/adopt so
+        the next ``file_*`` in this turn can Path-I/O. No live turn → ``attached:
+        false`` (not an error): cloud conversations and idle sidecars no-op.
+        """
+        cid = str(params.get("conversationId") or "").strip()
+        if not cid:
+            await self._reply_error(
+                request_id,
+                protocol.INVALID_PARAMS,
+                "updateExternalMounts requires conversationId",
+            )
+            return
+        mounts = self._parse_external_mounts(params.get("externalMounts"))
+        backends = list(self._live_backends.get(cid) or ())
+        if not backends:
+            await self._reply(request_id, {"ok": True, "attached": False})
+            return
+        for backend in backends:
+            backend.attach_external_mounts(mounts)
+        await self._reply(
+            request_id,
+            {"ok": True, "attached": True, "count": len(mounts)},
+        )
 
     def _suspension_hooks(
         self,

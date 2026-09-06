@@ -63,8 +63,7 @@ CLIENT_TOOL_REQUIRED_KINDS = frozenset(
         "workspace_op_required",
         "board_op_required",
         "board_read_required",
-        "desktop_notify_required",
-        "external_mount_readonly_required",
+        "external_mount_required",
         "host_op_required",
     }
 )
@@ -82,7 +81,7 @@ CLIENT_TOOL_REQUIRED_KINDS = frozenset(
 #   compatibility (chips mint offline; meta.followups on replay is ignored);
 # - error — a transient banner from the source run must not replay as a real error;
 # - transport-only client-tool requests — replaying them would drive REAL side
-#   effects on the attached desktop (file ops / board mutations / OS notifications).
+#   effects on the attached desktop (file ops / board mutations).
 TAPE_EXCLUDED_KINDS = PAUSE_RESOLVED_KINDS | CLIENT_TOOL_REQUIRED_KINDS | frozenset(
     {
         "message_start",

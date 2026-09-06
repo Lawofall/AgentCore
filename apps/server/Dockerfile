@@ -69,25 +69,20 @@ RUN mkdir -p /out \
          python /fetch_ripgrep.py /out/rg && chmod 0755 /out/rg; \
        fi
 
-# ---- runtime：精简镜像，只带 venv + 源码 ----
-FROM python:3.12-slim AS runtime
+# ---- guest：云桌用户态（菜单）。guest 看见这份树，不是 sandboxd/API 活着的 /usr。
+# 解释器 = 系统 python3（/usr/local/bin，与 runtime venv 隔离）、node、bash、git、curl。
+# ① 中文字体：文档/图表产物（pptx、matplotlib）没有 CJK 会全是豆腐块。
+# ② nodejs + npm：code_execute 声明支持 javascript；npm 供外环验绿 / Vite build。
+#    随基础镜像 Debian 版本，当前 trixie ≈ node 20。
+# ⑥ git：guest 内 `run` 与脚本用的系统 git（AI 结构化 git 工具走 API 进程，runtime 另装）。
+# ⑦ curl：公网 HTTP 与 download_url 同政策后，bash / 脚本需要 HTTP 客户端。不装 wget。
+# ⑧ gcc / make：网页/手机克隆 native 仓要能编 C。用 build-essential（gcc、g++、make、
+#    libc 头文件）；不装 cmake / go / rust。只进 guest 阶，禁止装进 runtime /usr。
+FROM python:3.12-slim AS guest
 
-ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
+    PYTHONDONTWRITEBYTECODE=1
 
-# ── 沙箱运行环境（gVisor 云端 code_execute）──
-# 沙箱经 ro bind 看到本镜像的 /usr /bin /etc：解释器 = 系统 python3（/usr/local/bin，
-# 与 venv 隔离，不污染 uv.lock 管的应用依赖）、node、bash。
-# ① 中文字体：文档/图表产物（pptx、matplotlib 图）没有 CJK 字体会全是豆腐块。
-# ② nodejs + npm：code_execute 声明支持 javascript；npm 供云沙箱外环验绿 /
-#    Vite build（build_app smoke 等）。随基础镜像 Debian 版本，当前 trixie ≈ node 20。
-# ⑥ git：云工作区 exec 系统 git——AI 的 git 工具（含账户级 PAT 注入）与用户「从 GitHub
-#    克隆」端点都靠它，base slim 不含。缺它两者一起 FileNotFoundError，PAT 设置项形同虚设。
-#    HTTPS 走 git 主包自带的 git-remote-http + libcurl（Depends，recommends 关掉也在）。
-# APT_MIRROR：生产机默认阿里云（fonts-noto-cjk ~57MB，官方 deb.debian.org 跨境可到几十 KB/s）；
-# GHA/境外传空字符串保留官方源。与 PYPI_INDEX 对称。
 ARG APT_MIRROR=mirrors.aliyun.com
 ARG PYPI_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple/
 RUN set -eux; \
@@ -101,31 +96,65 @@ RUN set -eux; \
       fi; \
     fi; \
     apt-get update; \
-    apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig nodejs npm git; \
+    apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig nodejs npm git curl build-essential; \
     rm -rf /var/lib/apt/lists/*
 
-# ③ 文档/数据常用库装进【系统 site-packages】（沙箱 python3 可见）。
+# ③ 文档/数据常用库装进【系统 site-packages】（guest python3 可见）。
 #    清单单一事实源：agentcore/tools/sandbox/cloud_python.txt（勿在此手写包名）。
-#    装最新版即可——沙箱库不是应用依赖，不进 uv.lock；升级随镜像重建。
 COPY agentcore/tools/sandbox/cloud_python.txt /tmp/cloud_python.txt
 RUN pip install --no-cache-dir -i "${PYPI_INDEX}" -r /tmp/cloud_python.txt
 
-# ⑤ L3 团队浏览器（内置浏览器与Agent浏览器提案.md · M0，PoC 已验证）：
-#    Playwright 装进【系统 site-packages】（沙箱 python3 经 /usr bind 可见，同 ③）；
-#    Chromium bundle 落 /opt/ms-playwright（会话 OCI 额外 ro-bind 这一条——产品既有 5 条
-#    host bind 覆盖不到 /opt，见 PoC 差异清单）。--with-deps 补齐 Chromium 的 OS 依赖。
-#    默认包含；INSTALL_BROWSER=0 可跳过省 ~1.3GB（不装则 GVISOR 浏览器工具不可用，仿 runsc）。
+# ⑤ Chromium：Playwright 进 guest site-packages；bundle 落 guest /opt/ms-playwright。
+#    INSTALL_BROWSER=0 可跳过省 ~1.3GB（不装则 GVISOR 浏览器工具不可用，仿 runsc）。
 ARG INSTALL_BROWSER=1
 RUN set -eux; \
     if [ "$INSTALL_BROWSER" = "1" ]; then \
       pip install --no-cache-dir -i "${PYPI_INDEX}" playwright; \
       playwright install --with-deps chromium; \
-      apt-get update; \
-      apt-get install -y --no-install-recommends iproute2; \
-      rm -rf /var/lib/apt/lists/*; \
     fi
-# iproute2：形状 B 的 netns + veth 由独立 sandboxd（uid 0）exec `ip`；
-# base slim 不含 `ip`，随浏览器层一并装（仅 INSTALL_BROWSER=1 时需要）。
+
+# usrmerge：/bin /lib /sbin 是指向 usr 的符号链接。打成一份可作 OCI root 的树。
+RUN set -eux; \
+    mkdir -p /guest-root; \
+    cp -a /usr /guest-root/usr; \
+    cp -a /etc /guest-root/etc; \
+    if [ -d /opt ]; then cp -a /opt /guest-root/opt; else mkdir -p /guest-root/opt; fi; \
+    ln -s usr/bin /guest-root/bin; \
+    ln -s usr/lib /guest-root/lib; \
+    ln -s usr/sbin /guest-root/sbin; \
+    if [ -d /guest-root/usr/lib64 ]; then ln -s usr/lib64 /guest-root/lib64; fi; \
+    mkdir -p /guest-root/tmp /guest-root/proc /guest-root/sys /guest-root/dev \
+             /guest-root/run /guest-root/workspace /guest-root/scratch \
+             /guest-root/var /guest-root/home /guest-root/root; \
+    chmod 1777 /guest-root/tmp; \
+    printf 'agentcore-guest-rootfs\n' > /guest-root/.agentcore-guest-rootfs
+
+# ---- runtime：精简镜像，只带 venv + 源码 + 打包好的 guest 树 ----
+FROM python:3.12-slim AS runtime
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
+    GVISOR_GUEST_ROOTFS=/opt/agentcore/guest-rootfs
+
+# API / sandboxd 宿主用户态：git（结构化 git 工具与克隆端点）、CJK 字体（服务端 PDF）、
+# iproute2（sandboxd 在宿主持 `ip netns`）。node / curl / cloud_python / Chromium 只进 guest 树。
+# APT_MIRROR：生产机默认阿里云；GHA/境外传空字符串保留官方源。
+ARG APT_MIRROR=mirrors.aliyun.com
+RUN set -eux; \
+    if [ -n "$APT_MIRROR" ]; then \
+      if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" \
+          /etc/apt/sources.list.d/debian.sources; \
+      elif [ -f /etc/apt/sources.list ]; then \
+        sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" \
+          /etc/apt/sources.list; \
+      fi; \
+    fi; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig git iproute2; \
+    rm -rf /var/lib/apt/lists/*
 
 # ④ runsc 二进制（INSTALL_RUNSC=0 时该层只拷到一个空目录占位）。
 COPY --from=runsc /out/ /usr/local/bin/
@@ -154,10 +183,20 @@ ENV HOME=/home/app \
 
 COPY --from=builder --chown=app:app /app /app
 
+# Guest 用户态：与 runtime /usr 分开。OCI root 指向这里，禁止再 rbind 本镜像 /usr。
+COPY --from=guest /guest-root /opt/agentcore/guest-rootfs
+RUN set -eux; \
+    uid=$(getent passwd app | cut -d: -f3); \
+    gid=$(getent passwd app | cut -d: -f4); \
+    grep -q '^app:' /opt/agentcore/guest-rootfs/etc/passwd \
+      || echo "app:x:${uid}:${gid}::/tmp:/bin/bash" >> /opt/agentcore/guest-rootfs/etc/passwd; \
+    grep -q '^app:' /opt/agentcore/guest-rootfs/etc/group \
+      || echo "app:x:${gid}:" >> /opt/agentcore/guest-rootfs/etc/group
+
 # 构建溯源：构建期钉入镜像 ENV，运行时经 GET /version 暴露（部署与运维.md §7.1）。
-# 必须放在 apt/pip/Playwright 等重型层之后：这两个值每次构建都变，而 ARG 声明后的
-# RUN 会隐式把 ARG 值计入缓存 key——放 runtime 开头会把整段重型层缓存打穿
-# （热修被迫重下 Chromium ~110s + apt 字体 ~47s）。放这里只影响元数据层，零成本。
+# 必须放在 apt / guest 树 / Chromium 等重型层之后：这两个值每次构建都变，而 ARG
+# 声明后的 RUN 会隐式把 ARG 值计入缓存 key——放 runtime 开头会把整段重型层缓存打穿。
+# 放这里只影响元数据层，零成本。
 ARG GIT_SHA=unknown
 ARG BUILT_AT=unknown
 ENV GIT_SHA=${GIT_SHA} \
@@ -167,7 +206,7 @@ USER app
 
 EXPOSE 8000
 
-# 存活探针：/livez 进程在即恒 200（部署与运维.md §7）。用 urllib 免装 curl。
+# 存活探针：/livez 进程在即恒 200（部署与运维.md §7）。仍用 urllib，不改绑 curl。
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD ["python", "-c", "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/livez', timeout=3).status==200 else 1)"]
 

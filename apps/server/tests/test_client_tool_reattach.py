@@ -14,8 +14,8 @@ from agentcore.runtime.events import EventSink, content_delta
 from agentcore.runtime.events.client_tool_reattach import (
     CHANNEL_BOARD,
     CHANNEL_BOARD_READ,
+    CHANNEL_EXTERNAL_MOUNT,
     CHANNEL_HOST,
-    CHANNEL_NOTIFY,
     CHANNEL_WORKSPACE,
     build_client_tool_required,
     client_tool_payload,
@@ -90,13 +90,6 @@ async def test_channel_discrimination_builds_correct_event_types():
             {"board_id": "b1", "ids": ["e1"]},
             EventType.BOARD_READ_REQUIRED,
         ),
-        (
-            "req-notify",
-            CHANNEL_NOTIFY,
-            EventType.DESKTOP_NOTIFY_REQUIRED.value,
-            {"title": "hi", "body": "there"},
-            EventType.DESKTOP_NOTIFY_REQUIRED,
-        ),
     ]
     for rid, channel, et, params, expected_type in cases:
         fut = registry.create(
@@ -114,6 +107,29 @@ async def test_channel_discrimination_builds_correct_event_types():
         assert event.payload["conversation_id"] == CONV
         assert not fut.done()
         registry.discard(rid)
+
+
+async def test_external_mount_reattach_preserves_root_id():
+    registry = InteractionRegistry()
+    fut = registry.create(
+        "req-ext",
+        CONV,
+        kind=InteractionKind.CLIENT_TOOL,
+        payload=client_tool_payload(
+            CHANNEL_EXTERNAL_MOUNT,
+            EventType.EXTERNAL_MOUNT_REQUIRED.value,
+            params={"mode": "organize", "root_id": "root-1"},
+        ),
+    )
+    req = registry.get("req-ext")
+    assert req is not None
+    event = build_client_tool_required(req)
+    assert event is not None
+    assert event.type == EventType.EXTERNAL_MOUNT_REQUIRED
+    assert event.payload["root_id"] == "root-1"
+    assert event.payload["mode"] == "organize"
+    assert not fut.done()
+    registry.discard("req-ext")
 
 
 async def test_attach_does_not_resend_client_tool(monkeypatch):
@@ -312,9 +328,9 @@ async def test_build_skips_done_future():
         CONV,
         kind=InteractionKind.CLIENT_TOOL,
         payload=client_tool_payload(
-            CHANNEL_NOTIFY,
-            EventType.DESKTOP_NOTIFY_REQUIRED.value,
-            params={"title": "t", "body": ""},
+            CHANNEL_HOST,
+            EventType.HOST_OP_REQUIRED.value,
+            params={"op": "host_ping", "args": {}},
         ),
     )
     fut.set_result({"ok": True, "value": {}})

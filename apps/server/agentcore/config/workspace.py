@@ -102,6 +102,9 @@ class WorkspaceSettings(BaseModel):
     # Local default tracks ``data_dir``; compose sets ``/data/sandbox`` when
     # ``DATA_DIR=/data``.
     gvisor_runtime_root: str = "./data/sandbox"
+    # Packed guest userland (Dockerfile guest stage). Not sandboxd/API live /usr.
+    # Empty / missing → health fails closed (run unassembled), no host-bind fallback.
+    gvisor_guest_rootfs: str = "/opt/agentcore/guest-rootfs"
     # Unix socket to the independent sandboxd service (compose overlay). API
     # never execs runsc/ip; missing socket is fail-closed (unassembled), not
     # None-pass.
@@ -175,8 +178,9 @@ class WorkspaceSettings(BaseModel):
     # session OCI cgroup is not a supported surface. Container ``mem_limit`` still
     # bounds memory. This flag is unused by the production argv allowlist.
     browser_sandbox_ignore_cgroups: bool = False
-    # Playwright Chromium bundle location inside the runtime image (ro-bind into the
-    # sandbox; the product's 5 host binds don't cover /opt, so add exactly this one).
+    # Playwright Chromium path *inside the guest* (packed into guest-rootfs).
+    # If the same path also exists on the sandboxd host, desk OCI still ro-binds
+    # it as an overlay; the packed tree is the default when the host path is absent.
     browser_playwright_browsers_path: str = "/opt/ms-playwright"
     # Host SSRF filter proxy: the per-session veth /24 base and listen port. Each
     # session gets 10.<base2>.<n>.0/24 (host .1 = proxy, sandbox .2); no NAT/forward
@@ -184,8 +188,9 @@ class WorkspaceSettings(BaseModel):
     browser_proxy_port: int = 8899
     browser_veth_subnet_base: str = "10.201"
 
-    # Packaging install egress (allowlist proxy + netns; distinct from browser SSRF).
-    # Hostnames from ``ALLOWED_NPM_REGISTRIES`` + ``ALLOWED_NPM_HOSTS`` (CDN ≠ pin).
+    # Desk guest egress (SSRF proxy + netns; same classify_url policy as
+    # download_url / browser proxy; different port + veth range). Registry
+    # host lists pin the install *tool*, not this listener.
     package_egress_proxy_port: int = 8898
     package_veth_subnet_base: str = "10.202"
 

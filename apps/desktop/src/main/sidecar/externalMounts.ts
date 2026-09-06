@@ -10,7 +10,8 @@ export interface SidecarExternalMount {
 }
 
 /**
- * Session grants → the `externalMounts` snapshot sent with startTurn / resume.
+ * Session grants → the `externalMounts` snapshot sent with startTurn / resume
+ * and mid-turn `updateExternalMounts`.
  *
  * `alias` must be the server-issued one (written back when the grant was
  * registered): the model addresses `external/<alias>/` from the server's grant

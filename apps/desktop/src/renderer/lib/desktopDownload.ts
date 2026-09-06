@@ -23,23 +23,12 @@ export function isDesktopFolderAction(
 ): action is
   | "open_local_project"
   | "register_local_project"
-  | "bind_local_folder"
-  | "grant_organize_folder"
-  | "grant_attach_folder" {
+  | "bind_local_folder" {
   return (
     action === "open_local_project" ||
     action === "register_local_project" ||
-    action === "bind_local_folder" ||
-    action === "grant_organize_folder" ||
-    action === "grant_attach_folder"
+    action === "bind_local_folder"
   );
-}
-
-/** Organize / attach_rw 都走桌面解析履约（无 picker）。 */
-export function isGrantFolderAction(
-  action: string | undefined,
-): action is "grant_organize_folder" | "grant_attach_folder" {
-  return action === "grant_organize_folder" || action === "grant_attach_folder";
 }
 
 /** Web / 无本地文件：展示引导并打开下载页；不写入答案、不 toggleChoice。 */

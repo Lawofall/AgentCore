@@ -33,6 +33,7 @@ from agentcore.tools.builtin.file_ops.integrity import (
     has_skeleton_markers,
     is_severe_shrink,
     is_skeleton_content,
+    prepared_write_relpath,
     write_scope_rejection,
 )
 from agentcore.tools.builtin.file_ops.listing import expand_brace_globs
@@ -80,5 +81,6 @@ __all__ = [
     "has_skeleton_markers",
     "is_severe_shrink",
     "is_skeleton_content",
+    "prepared_write_relpath",
     "write_scope_rejection",
 ]

@@ -15,6 +15,7 @@ from agentcore.tools.registration import (
     ToolRegistration,
     ToolSurface,
 )
+from agentcore.workspace.host_path import GrantMode
 from agentcore.workspace.limits import is_presence_disconnected_detail
 from agentcore.workspace.protocol import (
     AlreadyExists,
@@ -24,7 +25,8 @@ from agentcore.workspace.protocol import (
 )
 
 from .errors import _error, _liveness_workspace_error, _outside_workspace_msg
-from .integrity import _prepare_write_relpath, write_scope_rejection
+from .integrity import prepared_write_relpath, write_scope_rejection
+from .prepare_path import prepare_tool_path
 
 logger = get_logger(__name__)
 
@@ -286,9 +288,12 @@ class FileBatchTool:
             requested = str(item.get("path", "")).strip()
             if not requested:
                 return "fail", "mkdir · path 不能为空", []
-            path, rename_note = await _prepare_write_relpath(
+            prepared = await prepared_write_relpath(
                 requested, context, register_bare=True
             )
+            if isinstance(prepared, ToolResult):
+                return "fail", prepared.error or "mkdir · 路径失败", []
+            path, rename_note = prepared
             if not path:
                 detail = "mkdir .（工作区根已存在）"
                 if rename_note:
@@ -326,9 +331,12 @@ class FileBatchTool:
             requested = str(item.get("path", "")).strip()
             if not requested:
                 return "fail", "delete · path 不能为空", []
-            path, rename_note = await _prepare_write_relpath(
+            prepared = await prepared_write_relpath(
                 requested, context, register=False
             )
+            if isinstance(prepared, ToolResult):
+                return "fail", prepared.error or "delete · 路径失败", []
+            path, rename_note = prepared
             if not path:
                 return "fail", "delete · path 不能为空", []
             scope_err = write_scope_rejection(context, path)
@@ -367,8 +375,15 @@ class FileBatchTool:
             return "fail", f"{op} · source 与 destination 均为必填", []
         from agentcore.workspace.project_shell import rewrite_project_shell_relpath
 
-        # Dest first: empty-desk first shot may register; source then shares that slug.
-        destination, rename_note = await _prepare_write_relpath(requested_dest, context)
+        prepared_dest = await prepared_write_relpath(requested_dest, context)
+        if isinstance(prepared_dest, ToolResult):
+            return "fail", prepared_dest.error or f"{op} · 目标路径失败", []
+        destination, rename_note = prepared_dest
+        src_mode: GrantMode = "readonly" if op == "copy" else "organize"
+        prepared_src = await prepare_tool_path(source, context, grant_mode=src_mode)
+        if isinstance(prepared_src, ToolResult):
+            return "fail", prepared_src.error or f"{op} · 源路径失败", []
+        source = prepared_src
         source, _src_note = await rewrite_project_shell_relpath(
             source, context, register=False
         )

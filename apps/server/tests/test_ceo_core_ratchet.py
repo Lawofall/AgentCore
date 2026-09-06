@@ -188,7 +188,10 @@ from agentcore.runtime.resolve.prompt import (
 # cap 降到 1330。
 # 2026-09-05 CEO 核删用户可见主张变体表（诚实双条件只在基座）。当次实测 1220。
 # cap 降到 1220。
-_RESIDENT_CAP = 1220
+# 2026-09-07 基座 <输出>：已落盘则结论是路径/要点/增量
+# （把「直接给结论」写锋利；三档交法仍当场交付物规格）。当次实测 1249。
+# cap 1250（抬顶=输出同真句，非回潮）。
+_RESIDENT_CAP = 1250
 
 # (门工具, 该手册的签名字面) —— 手册只在门开的回合出现，不许常驻。
 # run 的 HOW 在 skill body（consult(run) 命中 skill），不进 capability_how_suffix。
@@ -198,8 +201,6 @@ _GATED_MANUALS: tuple[tuple[str, str], ...] = (
     ("host", "Get-WinEvent"),
     ("browser", "ask_user(browser_login=true)"),
     ("browser", "永不代填密码"),
-    ("external_mount_readonly", "先写工作区"),
-    ("external_mount_readonly", "只读已挂"),
 )
 
 

@@ -6,25 +6,17 @@ import json
 import re
 from typing import Any
 
-from agentcore.core.paths import is_absolute_os_path
-
 # Caps so a runaway prompt can't bloat the card / event. The free-form note on the
 # card always lets the user steer beyond these.
 _MAX_QUESTIONS = 5  # 开场重点问题最多 5 个（对齐 Cursor 2.1 的 3–5）
 _MAX_OPTIONS = 6  # 每个 choice 问题的选项上限
 _MAX_OPTION_DETAIL = 120  # 单个选项的权衡说明上限（一行内）
-_MAX_TARGET_NAME = 120  # grant_* target_name 截断上限
-_WELL_KNOWN_DIRS = frozenset({"desktop", "downloads", "documents"})
 _LOCAL_PROJECT_ACTIONS: tuple[str, ...] = (
     "open_local_project",
     "register_local_project",
     "bind_local_folder",
 )
-_GRANT_ORGANIZE = "grant_organize_folder"
-_GRANT_ATTACH = "grant_attach_folder"
-_ALLOWED_OPTION_ACTIONS = frozenset(
-    (*_LOCAL_PROJECT_ACTIONS, _GRANT_ORGANIZE, _GRANT_ATTACH)
-)
+_ALLOWED_OPTION_ACTIONS = frozenset(_LOCAL_PROJECT_ACTIONS)
 
 
 def advertised_option_actions(
@@ -32,14 +24,14 @@ def advertised_option_actions(
 ) -> tuple[str, ...]:
     """Desktop AskOption.action enum for this turn's workspace location.
 
-    Cloud / unknown：本机传统入口 + 整理，不广告 attach_rw。
-    已在本机传统：整理 + 区外旁根 attach，不再广告 open/register/bind。
+    Cloud / unknown：本机传统入口（open/register/bind）。
+    已在本机传统：不再广告 open/register/bind（进桌已完成）。
     """
     if not desktop:
         return ()
     if (workspace_location or "").strip().lower() == "local":
-        return (_GRANT_ORGANIZE, _GRANT_ATTACH)
-    return (*_LOCAL_PROJECT_ACTIONS, _GRANT_ORGANIZE)
+        return ()
+    return _LOCAL_PROJECT_ACTIONS
 
 
 # Claude Code-style tendency: the advised option is first, name ends with
@@ -157,11 +149,7 @@ def normalize_options(
     ``detail`` (the one-line trade-off under the label) is kept only when
     ``keep_detail`` is true — dedicated cards ``organize_plan`` / ``daily_review``.
     Ordinary short asks and escalate drop it even if the model filled it; put the
-    trade-off in ``label``. For ``grant_organize_folder`` only,
-    ``well_known`` (``desktop`` / ``downloads`` / ``documents``), ``target_name``
-    (basename fuzzy token; path separators rejected; truncated ≤120), and absolute
-    ``path`` (C1 mount transport; non-absolute dropped) pass through — dropping
-    ``detail`` must not strip these. Empty-label entries drop. Names may carry
+    trade-off in ``label``. Empty-label entries drop. Names may carry
     ``（推荐）`` / ``(recommended)``.
     """
     cap = max(1, int(max_options))
@@ -180,21 +168,6 @@ def normalize_options(
             action = str(it.get("action") or "").strip()
             if action in _ALLOWED_OPTION_ACTIONS:
                 opt["action"] = action
-            # grant_* folder hints for desktop one-click / resolve-then-grant
-            # (drop otherwise; unknown actions already omitted above).
-            if action in {"grant_organize_folder", "grant_attach_folder"}:
-                well_known = str(it.get("well_known") or "").strip().lower()
-                if well_known in _WELL_KNOWN_DIRS:
-                    opt["well_known"] = well_known
-                target_name = str(it.get("target_name") or "").strip()
-                if target_name and "/" not in target_name and "\\" not in target_name:
-                    opt["target_name"] = target_name[:_MAX_TARGET_NAME]
-                # Absolute only — matches desktop resolveGrantAbsPath (no CWD-relative).
-                # Absoluteness is the client's, not this host's: the API runs on Linux
-                # and most desks are Windows.
-                grant_path = str(it.get("path") or "").strip()
-                if grant_path and is_absolute_os_path(grant_path):
-                    opt["path"] = grant_path[:512]
             # organize_plan structured fields (passed through for plan binding).
             op = str(it.get("op") or "").strip()
             if op in ("move", "copy", "delete", "mkdir"):

@@ -272,8 +272,7 @@ TS_EXPORTS: tuple[TsExport, ...] = (
     TsInterface(workspace.BoardOp),
     TsInterface(workspace.BoardOpRequiredPayload),
     TsInterface(workspace.BoardReadRequiredPayload),
-    TsInterface(workspace.DesktopNotifyRequiredPayload),
-    TsInterface(workspace.ExternalMountReadonlyRequiredPayload),
+    TsInterface(workspace.ExternalMountRequiredPayload),
     TsInterface(workspace.HostOpRequiredPayload),
     TsInterface(workspace.McpOpRequiredPayload),
     TsInterface(workspace.AutoFolderCreatedPayload),
@@ -356,9 +355,8 @@ EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.WORKSPACE_OP_REQUIRED: workspace.WorkspaceOpRequiredPayload,
     EventType.BOARD_OP_REQUIRED: workspace.BoardOpRequiredPayload,
     EventType.BOARD_READ_REQUIRED: workspace.BoardReadRequiredPayload,
-    EventType.DESKTOP_NOTIFY_REQUIRED: workspace.DesktopNotifyRequiredPayload,
-    EventType.EXTERNAL_MOUNT_READONLY_REQUIRED: (
-        workspace.ExternalMountReadonlyRequiredPayload
+    EventType.EXTERNAL_MOUNT_REQUIRED: (
+        workspace.ExternalMountRequiredPayload
     ),
     EventType.HOST_OP_REQUIRED: workspace.HostOpRequiredPayload,
     EventType.MCP_OP_REQUIRED: workspace.McpOpRequiredPayload,

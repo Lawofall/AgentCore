@@ -216,13 +216,15 @@ async def test_grep_bare_slash_means_workspace_root(tmp_path: Path):
         assert "app.py:2: return a + b  # TODO: validate" in result.output
 
 
-async def test_grep_rejects_true_absolute_escapes(tmp_path: Path):
+async def test_grep_absolute_host_path_needs_desktop(tmp_path: Path):
+    """``/etc`` is a host path, not a workspace escape; minting needs a desktop."""
     _seed(tmp_path)
     result = await GrepTool().execute(
         {"pattern": "TODO", "path": "/etc"}, _ctx(tmp_path)
     )
     assert result.success is False
-    assert "超出了工作区范围" in (result.error or "")
+    assert "桌面" in (result.error or "")
+    assert result.failure_code == "no_desktop"
 
 
 async def test_grep_rejects_missing_path(tmp_path: Path):

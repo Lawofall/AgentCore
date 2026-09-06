@@ -1344,13 +1344,6 @@ describe("ToolLine · ack 族成功无 peek", () => {
       ack: '{"events":[]}',
       detail: null,
     },
-    {
-      tool: "desktop_notify",
-      label: "Notify",
-      args: {},
-      ack: "已发送桌面通知。",
-      detail: null,
-    },
   ] as const)(
     "suppresses $tool success peek",
     ({ tool, label, args, ack, detail }) => {
@@ -1375,7 +1368,6 @@ describe("ToolLine · ack 族成功无 peek", () => {
     ["file_delete", "Delete file"],
     ["host", "Host status"],
     ["host_storage", "Host storage"],
-    ["desktop_notify", "Notify"],
   ] as const)("keeps collapsed %s error to one line", (tool, label) => {
     const { container } = render(
       <ToolLine

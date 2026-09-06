@@ -447,7 +447,9 @@ class FileReadTool:
         return ToolSchema(
             name="file_read",
             description=(
-                "读取工作区文件。http(s) 用 web_fetch；定位用 grep / code_search / glob。"
+                "读取工作区文件，或本机绝对路径 / ~/Desktop|Downloads|Documents"
+                "（桌面在线时运行时静默只读挂载）。"
+                "http(s) 用 web_fetch；定位用 grep / code_search / glob。"
                 "目录用 file_list。勿 dump。"
             ),
             parameters={
@@ -457,7 +459,8 @@ class FileReadTool:
                         "type": "string",
                         "description": (
                             "工作区相对 POSIX 文件路径（`.`=根；`/<根标签>/…` 与裸 `/`、"
-                            "`\\` 视为根；其它绝对路径如 /etc、盘符拒绝）。"
+                            "`\\` 视为根）。本机绝对路径或 ~/Desktop|Downloads|Documents"
+                            "在桌面在线时由运行时挂载。"
                             "http(s) URL 请用 web_fetch。"
                             "Office/PDF 自动抽文本；表格（xlsx/csv 等）默认不抽文本。"
                         ),
@@ -501,6 +504,13 @@ class FileReadTool:
 
         if looks_like_http_url(str(rel_path or "")):
             return _url_not_workspace_path_error(str(rel_path).strip(), start)
+
+        from .prepare_path import prepare_tool_path
+
+        prepared = await prepare_tool_path(rel_path, context, start=start)
+        if isinstance(prepared, ToolResult):
+            return prepared
+        rel_path = prepared
 
         from agentcore.workspace.project_shell import rewrite_project_shell_relpath
 
@@ -894,7 +904,8 @@ class FileListTool:
             description=(
                 "列出一个已知目录的当前层（默认工作区根）。"
                 "按文件名在整棵树上查找请用 glob。"
-                "区外目录须 `external/<别名>/`（勿传裸 `external`）。"
+                "本机目录可直接给绝对路径或 ~/Downloads。"
+                "已挂载区外须 `external/<别名>/`（勿传裸 `external`）。"
             ),
             parameters={
                 "type": "object",
@@ -903,8 +914,9 @@ class FileListTool:
                         "type": "string",
                         "description": (
                             "工作区相对 POSIX 目录（默认 `.`=整仓根；`/<根标签>/…` 与裸 `/`、"
-                            "`\\` 视为根；区外授权目录用 `external/<别名>/`，禁止裸 `external`；"
-                            "其它绝对路径拒绝。）"
+                            "`\\` 视为根；区外已挂载用 `external/<别名>/`，禁止裸 `external`；"
+                            "本机绝对路径或 ~/Desktop|Downloads|Documents "
+                            "在桌面在线时由运行时挂载。）"
                             "只填本回合已证实存在的目录。"
                         ),
                         "default": ".",
@@ -925,6 +937,15 @@ class FileListTool:
         directory = str(arguments.get("directory") or ".").strip() or "."
         if is_bare_external_directory(directory):
             return bare_external_error(directory, context.backend, start)
+
+        from .prepare_path import prepare_tool_path
+
+        prepared = await prepare_tool_path(
+            directory, context, start=start, as_directory=True
+        )
+        if isinstance(prepared, ToolResult):
+            return prepared
+        directory = prepared
 
         from agentcore.workspace.project_shell import rewrite_project_shell_relpath
 

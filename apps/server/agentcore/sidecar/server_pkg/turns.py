@@ -409,6 +409,7 @@ class TurnExecutionMixin:
                 )
             )
         backend = self._make_backend(external_mounts=params.get("externalMounts"))
+        self._register_live_backend(conversation_id, backend)
         saver, deleter = self._suspension_hooks()
         session_saver, session_loader = self._session_hooks(conversation_id)
         outbox = self._outbox_store
@@ -683,6 +684,7 @@ class TurnExecutionMixin:
             self._stamp_closed_turn(conversation_id, user_message, closed)
             if outbox is not None:
                 outbox.clear_turn(message_id)
+            self._unregister_live_backend(conversation_id, backend)
             self._unregister_turn(turn_id)
 
     async def _outbox_finalize(
@@ -836,6 +838,7 @@ class TurnExecutionMixin:
             conversation_id=conversation_id, sink=sink, user_id=self._user_id
         )
         backend = self._make_backend(external_mounts=external_mounts)
+        self._register_live_backend(conversation_id, backend)
         saver, deleter = self._suspension_hooks()
         session_saver, session_loader = self._session_hooks(conversation_id)
         outbox = self._outbox_store
@@ -891,6 +894,7 @@ class TurnExecutionMixin:
                     await self._paused_store.rollback_claim(turn_id)
                 if outbox is not None:
                     outbox.clear_turn(turn_id)
+                self._unregister_live_backend(conversation_id, backend)
                 self._unregister_turn(turn_id)
                 logger.warning(
                     "sidecar.resume_settlement_prewrite_failed",
@@ -1101,6 +1105,7 @@ class TurnExecutionMixin:
             self._stamp_closed_turn(conversation_id, user_message, closed)
             if outbox is not None:
                 outbox.clear_turn(turn_id)
+            self._unregister_live_backend(conversation_id, backend)
             self._unregister_turn(turn_id)
 
     async def _pump(

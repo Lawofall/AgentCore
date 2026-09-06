@@ -7,11 +7,13 @@ Execution model (安全权限与治理.md §五):
   guest. Only the current workspace is rw-bound at ``/workspace``.
 - OCI uid/gid ≡ API ``os.getuid`` / ``os.getgid`` (``app``). No nobody, no
   chmod of the workspace, no guest root, no replica disk, no copy-in/out.
-- Outbound is the desk-resident packaging allowlist chokepoint (netns + proxy
-  opened once per guest), not a per-install hole punch.
+- Outbound is the desk-resident SSRF chokepoint (netns + proxy opened once
+  per guest; same ``classify_url`` policy as ``download_url``), not a
+  packaging-host allowlist and not a per-install hole punch.
 - Concurrent exec slots + memory/duration ceilings still apply.
 - Cloud Chromium is ``sandboxd exec`` stdio into this same guest (not a second
-  runsc jail). Playwright is ro-bound here; ``/tmp`` is Chromium-sized.
+  runsc jail). Guest userland is the packed rootfs (not a bind of sandboxd
+  ``/usr``). ``/tmp`` is Chromium-sized.
 """
 
 from __future__ import annotations
@@ -65,8 +67,6 @@ _FILE_EXTENSIONS: dict[str, str] = {
     "javascript": ".js",
     "bash": ".sh",
 }
-
-_HOST_BIND_PATHS = ("/usr", "/lib", "/lib64", "/bin", "/etc")
 
 _STALE_DESK_MARKERS = ("already exists", "cannot lock container metadata")
 _DEAD_DESK_MARKERS = (
@@ -582,7 +582,7 @@ class GVisorSandbox:
             success=exit_code == 0,
             stdout=stdout_str,
             stderr=stderr_str,
-            exit_code=exit_code or 0,
+            exit_code=0 if exit_code is None else exit_code,
             duration_ms=duration_ms,
             written_files=written,
         )
@@ -607,6 +607,7 @@ class GVisorSandbox:
             "GIT_TERMINAL_PROMPT": "0",
             "PYTHONDONTWRITEBYTECODE": "1",
             "MPLBACKEND": "Agg",
+            "PLAYWRIGHT_BROWSERS_PATH": settings.browser_playwright_browsers_path,
         }
         proxy_url = getattr(desk.egress, "proxy_url", None)
         if proxy_url:
@@ -816,20 +817,6 @@ class GVisorSandbox:
             netns_path=netns_path,
         )
 
-    def _host_bind_mounts(self) -> list[dict]:
-        mounts: list[dict] = []
-        for path in _HOST_BIND_PATHS:
-            if os.path.isdir(path):
-                mounts.append(
-                    {
-                        "destination": path,
-                        "type": "bind",
-                        "source": path,
-                        "options": ["ro", "rbind", "nosuid"],
-                    }
-                )
-        return mounts
-
     def _build_desk_oci(
         self,
         *,
@@ -855,6 +842,7 @@ class GVisorSandbox:
             "GIT_TERMINAL_PROMPT": "0",
             "PYTHONDONTWRITEBYTECODE": "1",
             "MPLBACKEND": "Agg",
+            "PLAYWRIGHT_BROWSERS_PATH": settings.browser_playwright_browsers_path,
             **install_proxy_env(proxy_url),
         }
         mounts = [
@@ -882,7 +870,6 @@ class GVisorSandbox:
                 "source": cache_host_dir,
                 "options": ["rw", "bind", "nosuid", "nodev"],
             },
-            *self._host_bind_mounts(),
         ]
         pw = playwright_browsers_mount(settings.browser_playwright_browsers_path)
         if pw is not None:

@@ -8,7 +8,7 @@ import {
   restoreTrash,
 } from "@/services/workspace";
 import { wsListTrash, wsRestoreTrash } from "@/services/workspaces";
-import { Loader2, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import { Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
@@ -16,8 +16,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
  *
  * Three flavours, one panel: cloud addressed by conversation (chat side dock),
  * cloud addressed by workspace id (文件页), and the desktop no-OS-trash fallback.
- * They differ only in **which IO** they call and **what the header honestly says**
- * — the OS recycle bin is a separate track that this panel never claims to list.
+ * They differ in which IO they call. The OS recycle bin is a separate track
+ * this panel never lists; only the local fallback header says so.
  */
 
 interface TrashLoad {
@@ -32,26 +32,32 @@ function TrashPanel({
   emptyHint,
   load,
   restore,
+  active = true,
 }: {
-  /** Header copy; receives the retention the last load reported. */
-  hint: (retentionDays: number) => string;
+  /** Local fallback header only. Cloud chrome already says 软删区. */
+  hint?: string;
   emptyTitle: string;
-  emptyHint: string;
+  emptyHint: string | ((retentionDays: number) => string);
   load: () => Promise<TrashLoad>;
   restore: (entryId: string) => Promise<void>;
+  /**
+   * Files page tabs stay mounted while hidden. Flip false→true to silently
+   * reload; omit / true for the chat overlay (remounts on open).
+   */
+  active?: boolean;
 }) {
   const [entries, setEntries] = useState<WorkspaceTrashEntry[] | null>(null);
   const [retentionDays, setRetentionDays] = useState(30);
   const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(false);
   // 切会话 / ws / root 不关层：丢弃在途 list，还原闭包绑到列出这批的身份。
   const genRef = useRef(0);
   const restoreForListRef = useRef(restore);
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   const reload = useCallback(async () => {
     const gen = ++genRef.current;
     const restoreForThisLoad = restore;
-    setLoading(true);
     setError(false);
     try {
       const res = await load();
@@ -62,8 +68,6 @@ function TrashPanel({
     } catch {
       if (gen !== genRef.current) return;
       setError(true);
-    } finally {
-      if (gen === genRef.current) setLoading(false);
     }
   }, [load, restore]);
 
@@ -71,32 +75,31 @@ function TrashPanel({
   useEffect(() => {
     setEntries(null);
     setError(false);
+    if (activeRef.current === false) return;
     void reload();
     return () => {
       genRef.current += 1;
     };
   }, [reload]);
 
+  // 文件页 tab 从 hidden 切回：静默重拉，不清空现有列表。
+  const prevActiveRef = useRef(active);
+  useEffect(() => {
+    const wasHidden = prevActiveRef.current === false;
+    prevActiveRef.current = active;
+    if (active !== false && wasHidden) void reload();
+  }, [active, reload]);
+
+  const resolvedEmptyHint =
+    typeof emptyHint === "function" ? emptyHint(retentionDays) : emptyHint;
+
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-3 py-2">
-        <p className="min-w-0 flex-1 text-xs text-muted-foreground">
-          {hint(retentionDays)}
-        </p>
-        <SimpleTooltip label="刷新">
-          <IconButton
-            disabled={loading}
-            onClick={() => void reload()}
-            aria-label="刷新"
-          >
-            {loading ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <RefreshCw size={14} />
-            )}
-          </IconButton>
-        </SimpleTooltip>
-      </div>
+      {hint ? (
+        <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
+          <p className="min-w-0 flex-1 text-xs text-muted-foreground">{hint}</p>
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 pt-2">
         {error ? (
@@ -113,7 +116,7 @@ function TrashPanel({
             inline
             icon={<Trash2 size={22} className="text-muted-foreground/40" />}
             title={emptyTitle}
-            hint={emptyHint}
+            hint={resolvedEmptyHint}
           />
         ) : (
           <ul className="space-y-1">
@@ -133,10 +136,8 @@ function TrashPanel({
 }
 
 const CLOUD_EMPTY_TITLE = "软删区为空";
-const CLOUD_EMPTY_HINT = "云端可逆删除会进入此处；可用「还原」放回原路径。";
-
-const cloudHint = (retentionDays: number) =>
-  `工作区软删区（保留约 ${retentionDays} 天）。本地系统回收站删除不在此列，请在本机回收站恢复。`;
+const cloudEmptyHint = (retentionDays: number) =>
+  `云端可逆删除会进入此处；可用「还原」放回原路径。约 ${retentionDays} 天后自动清除。`;
 
 /**
  * Cloud AgentCore/trash for a conversation's workspace (chat side dock).
@@ -152,9 +153,8 @@ export function TrashSection({ conversationId }: { conversationId: string }) {
   );
   return (
     <TrashPanel
-      hint={cloudHint}
       emptyTitle={CLOUD_EMPTY_TITLE}
-      emptyHint={CLOUD_EMPTY_HINT}
+      emptyHint={cloudEmptyHint}
       load={load}
       restore={restore}
     />
@@ -163,11 +163,18 @@ export function TrashSection({ conversationId }: { conversationId: string }) {
 
 /**
  * Cloud AgentCore/trash addressed by workspace id — the 文件页 twin of
- * {@link TrashSection}. Same zone, same copy; the hub just has no conversation
- * to address it with. Cloud `folder:` / `conv:` workspaces only (the server
- * refuses local), so the caller gates the entry point.
+ * {@link TrashSection}. Same zone; the hub just has no conversation to address
+ * it with. Cloud `folder:` / `conv:` workspaces only (the server refuses local),
+ * so the caller gates the entry point.
  */
-export function WorkspaceTrashSection({ wsId }: { wsId: string }) {
+export function WorkspaceTrashSection({
+  wsId,
+  active = true,
+}: {
+  wsId: string;
+  /** Files page keeps the tab mounted while hidden. */
+  active?: boolean;
+}) {
   const load = useCallback(() => wsListTrash(wsId), [wsId]);
   const restore = useCallback(
     (entryId: string) => wsRestoreTrash(wsId, entryId),
@@ -175,11 +182,11 @@ export function WorkspaceTrashSection({ wsId }: { wsId: string }) {
   );
   return (
     <TrashPanel
-      hint={cloudHint}
       emptyTitle={CLOUD_EMPTY_TITLE}
-      emptyHint={CLOUD_EMPTY_HINT}
+      emptyHint={cloudEmptyHint}
       load={load}
       restore={restore}
+      active={active}
     />
   );
 }
@@ -210,9 +217,7 @@ export function LocalTrashSection({ rootId }: { rootId: string }) {
   );
   return (
     <TrashPanel
-      hint={() =>
-        "仅列出工作区软删兜底（无系统回收站时）。经系统回收站删除的文件请在本机回收站恢复——产品不提供一键还原。"
-      }
+      hint="仅列出工作区软删兜底（无系统回收站时）。经系统回收站删除的文件请在本机回收站恢复——产品不提供一键还原。"
       emptyTitle="工作区软删区为空"
       emptyHint="默认删除进系统回收站；仅当无系统回收站时才会落入此处。"
       load={load}

@@ -356,4 +356,6 @@ async def test_dedicated_card_keeps_option_detail(card, n, multiple):
     required = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
     opts = required.payload["questions"][0]["options"]
     assert all(o.get("detail") == "一行取舍" for o in opts)
+    if card == "organize_plan":
+        assert [o.get("path") for o in opts] == [f"p{i}" for i in range(n)]
     assert saved[0].intent == card

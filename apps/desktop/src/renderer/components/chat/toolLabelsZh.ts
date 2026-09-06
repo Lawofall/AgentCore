@@ -17,7 +17,6 @@ export const TOOL_LABELS_ZH: Record<string, string> = {
   browser: "浏览器",
   host: "本机 Host",
   terminal: "终端",
-  desktop_notify: "系统通知",
   external_mount_readonly: "挂载本机目录",
   delete_folder: "删除文件夹",
 };

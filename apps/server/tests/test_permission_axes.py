@@ -189,12 +189,6 @@ def test_command_auto_skips_kickoff_and_local_exec_auto_pass():
         )
         is True
     )
-    assert (
-        execution_tool_auto_passes(
-            _LocalBackend(), "desktop_notify", permission_axes=axes
-        )
-        is True
-    )
     # Host / MCP never ride command=auto silent pass.
     assert (
         execution_tool_auto_passes(
@@ -222,7 +216,6 @@ def test_less_interrupt_and_managed_same_axes():
     for tool in (
         "run",
         "browser",
-        "desktop_notify",
     ):
         assert (
             execution_tool_auto_passes(
@@ -233,12 +226,11 @@ def test_less_interrupt_and_managed_same_axes():
 
 
 def test_command_ask_no_execution_auto_pass():
-    """谨慎档 command=ask：execution_class / desktop_notify 仍需审批卡。"""
+    """谨慎档 command=ask：execution_class 仍需审批卡。"""
     axes = recipe_to_axes(AutonomyPolicy.CAUTIOUS)
     for tool in (
         "run",
         "browser",
-        "desktop_notify",
     ):
         assert (
             execution_tool_auto_passes(

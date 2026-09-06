@@ -1,8 +1,10 @@
-import type { ExternalMountReadonlyRequiredPayload } from "@/types/events";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+import type { ExternalMountRequiredPayload } from "@/types/events";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const resolveInteraction = vi.fn().mockResolvedValue(undefined);
 const pickAndGrantReadonlyFolder = vi.fn();
+const pickAndGrantSessionFolder = vi.fn();
 
 vi.mock("@/services/interaction", () => ({
   resolveInteraction: (...args: unknown[]) => resolveInteraction(...args),
@@ -13,12 +15,17 @@ vi.mock("@/lib/grantReadonlyFolder", () => ({
     pickAndGrantReadonlyFolder(...args),
 }));
 
-import { resetClientToolFulfillmentForTests } from "../clientToolFulfill";
-import { performExternalMountReadonly } from "../externalMountOps";
+vi.mock("@/lib/grantOrganizeFolder", () => ({
+  pickAndGrantSessionFolder: (...args: unknown[]) =>
+    pickAndGrantSessionFolder(...args),
+}));
 
-function payload(
-  over: Partial<ExternalMountReadonlyRequiredPayload> = {},
-): ExternalMountReadonlyRequiredPayload {
+import { resetClientToolFulfillmentForTests } from "../clientToolFulfill";
+import { performExternalMount } from "../externalMountOps";
+
+type MountPayload = ExternalMountRequiredPayload;
+
+function payload(over: Partial<MountPayload> = {}): MountPayload {
   return {
     request_id: "req-1",
     conversation_id: "conv-1",
@@ -28,11 +35,17 @@ function payload(
   };
 }
 
-describe("performExternalMountReadonly", () => {
+describe("performExternalMount", () => {
   beforeEach(() => {
     resetClientToolFulfillmentForTests();
     resolveInteraction.mockClear();
     pickAndGrantReadonlyFolder.mockReset();
+    pickAndGrantSessionFolder.mockReset();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("grants via IPC+POST and posts client_tool result (no abs)", async () => {
@@ -44,7 +57,7 @@ describe("performExternalMountReadonly", () => {
       displayLabel: "咨询",
     });
 
-    await performExternalMountReadonly(payload(), "conv-1", "cloud");
+    await performExternalMount(payload(), "conv-1", "cloud");
 
     expect(pickAndGrantReadonlyFolder).toHaveBeenCalledWith("conv-1", {
       wellKnown: "desktop",
@@ -81,7 +94,7 @@ describe("performExternalMountReadonly", () => {
       message: "找不到该目录",
     });
 
-    await performExternalMountReadonly(
+    await performExternalMount(
       payload({
         path: "C:/missing",
         well_known: undefined,
@@ -117,7 +130,7 @@ describe("performExternalMountReadonly", () => {
       message: "匹配到多个目录，请说得更具体",
     });
 
-    await performExternalMountReadonly(payload(), "conv-1", "cloud");
+    await performExternalMount(payload(), "conv-1", "cloud");
 
     expect(resolveInteraction).toHaveBeenCalledWith(
       "conv-1",
@@ -140,7 +153,7 @@ describe("performExternalMountReadonly", () => {
       reason: "unavailable",
     });
 
-    await performExternalMountReadonly(payload(), "conv-1", "cloud");
+    await performExternalMount(payload(), "conv-1", "cloud");
 
     expect(resolveInteraction).toHaveBeenCalledWith(
       "conv-1",
@@ -165,10 +178,82 @@ describe("performExternalMountReadonly", () => {
       namespace: "external/咨询",
     });
 
-    await performExternalMountReadonly(payload(), "conv-1", "cloud");
-    await performExternalMountReadonly(payload(), "conv-1", "cloud");
+    await performExternalMount(payload(), "conv-1", "cloud");
+    await performExternalMount(payload(), "conv-1", "cloud");
 
     expect(pickAndGrantReadonlyFolder).toHaveBeenCalledTimes(1);
     expect(resolveInteraction).toHaveBeenCalledTimes(1);
+  });
+
+  it("organize + root_id upgrades without window.confirm", async () => {
+    pickAndGrantSessionFolder.mockResolvedValue({
+      ok: true,
+      root: { id: "root-1", name: "咨询", alias: "desk", mode: "organize" },
+      alias: "desk",
+      namespace: "external/desk",
+      displayLabel: "咨询",
+    });
+
+    await performExternalMount(
+      payload({
+        well_known: undefined,
+        target_name: undefined,
+        mode: "organize",
+        root_id: "root-1",
+      }),
+      "conv-1",
+      "cloud",
+    );
+
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(pickAndGrantReadonlyFolder).not.toHaveBeenCalled();
+    expect(pickAndGrantSessionFolder).toHaveBeenCalledWith(
+      "conv-1",
+      "organize",
+      { rootId: "root-1" },
+    );
+    expect(resolveInteraction).toHaveBeenCalledWith(
+      "conv-1",
+      "req-1",
+      expect.objectContaining({
+        ok: true,
+        value: expect.objectContaining({ root_id: "root-1" }),
+      }),
+      "cloud",
+    );
+  });
+
+  it("maps cancelled from main-process dialog", async () => {
+    pickAndGrantSessionFolder.mockResolvedValue({
+      ok: false,
+      reason: "cancelled",
+      message: "用户拒绝授权",
+    });
+
+    await performExternalMount(
+      payload({
+        mode: "organize",
+        root_id: "root-1",
+        well_known: undefined,
+        target_name: undefined,
+      }),
+      "conv-1",
+      "cloud",
+    );
+
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(resolveInteraction).toHaveBeenCalledWith(
+      "conv-1",
+      "req-1",
+      expect.objectContaining({
+        ok: false,
+        error: {
+          kind: "ExternalMountError",
+          detail: "用户拒绝授权",
+          reason: "cancelled",
+        },
+      }),
+      "cloud",
+    );
   });
 });

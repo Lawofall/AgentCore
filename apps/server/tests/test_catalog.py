@@ -107,9 +107,10 @@ def test_read_only_builtins_are_shared_with_ceo():
         assert set(entries[name].available_to) == {AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER}
 
 
-def test_notify_and_conversation_logs_are_ceo_and_worker():
+def test_conversation_logs_are_ceo_and_worker():
     entries = _by_name()
-    for name in ("desktop_notify", "search_conversations", "read_conversation"):
+    assert "desktop_notify" not in entries
+    for name in ("search_conversations", "read_conversation"):
         assert name in entries, f"{name} missing from catalog"
         assert set(entries[name].available_to) == {
             AVAILABLE_TO_CEO,

@@ -245,8 +245,8 @@ def build_builtin_registry(
     ``include_host_tools`` gates the Host face (``host_class``): only when the
     desktop backfill channel is reachable and ``host≠off``.
 
-    ``include_desktop_online_tools`` gates ``desktop_online_class`` tools (e.g.
-    ``external_mount_readonly``): desktop online only — not ``host≠off``.
+    ``include_desktop_online_tools`` gates ``desktop_online_class`` tools:
+    desktop online only — not ``host≠off``.
 
     ``include_git`` gates ``git_class`` (``git``): the workspace must have a root to
     spawn git under, or a live desktop channel (see ``git_execution_enabled_for``).

@@ -141,7 +141,7 @@ uv run python scripts/demo_tape_export.py \
   --out ../../demos/tapes/my-multi.json
 ```
 
-导出即剪辑 + 门禁：按 `TAPE_EXCLUDED_KINDS` 剪掉回合生命周期（message_start/end）、录到的暂停结算（冷路 `*_resolved` + 热路 `approval_resolved`，回放时现场重发）、回合元信息（turn_saved/标题/citations）与客户端工具请求（workspace/board/desktop notify——回放不得触发真实副作用），其余逐字节保留；随后跑入库脱敏双防线（剥 `run_context` system 内用户长期记忆 `<rules>` → 合成占位，保留块结构；再扫描记忆标记 / system 体内邮箱·手机，命中即拒绝——与 conformance `recording_cut` 共用 `demo_tape/sanitize.py`）。导出期另拒：未接线 pause（当前无——冷路 `team_preview` / `checkpoint` / `plan_review` 与热路 `approval_*` 均已接线；`--force` 可越过未接线类，**不能**越过客户端工具断言与脱敏扫描）。成品磁带断言不得含四类 `*_op_required` / `desktop_notify_required`（剪辑表之上的验证层）。原「下一步」followups chips **已产品下线**：导出若仍把历史 `followups_generated` 抬进 `meta.followups`，回放会忽略、不再落库/重发；开辩入口走阶段推进卡。`--user-prompt` 可覆盖 DB 查询（异机导出用）。磁带放仓库根 `demos/tapes/*.json`；命令面板按文件名 stem 列出。
+导出即剪辑 + 门禁：按 `TAPE_EXCLUDED_KINDS` 剪掉回合生命周期（message_start/end）、录到的暂停结算（冷路 `*_resolved` + 热路 `approval_resolved`，回放时现场重发）、回合元信息（turn_saved/标题/citations）与客户端工具请求（workspace/board——回放不得触发真实副作用），其余逐字节保留；随后跑入库脱敏双防线（剥 `run_context` system 内用户长期记忆 `<rules>` → 合成占位，保留块结构；再扫描记忆标记 / system 体内邮箱·手机，命中即拒绝——与 conformance `recording_cut` 共用 `demo_tape/sanitize.py`）。导出期另拒：未接线 pause（当前无——冷路 `team_preview` / `checkpoint` / `plan_review` 与热路 `approval_*` 均已接线；`--force` 可越过未接线类，**不能**越过客户端工具断言与脱敏扫描）。成品磁带断言不得含 `*_op_required` 客户端工具请求（剪辑表之上的验证层）。原「下一步」followups chips **已产品下线**：导出若仍把历史 `followups_generated` 抬进 `meta.followups`，回放会忽略、不再落库/重发；开辩入口走阶段推进卡。`--user-prompt` 可覆盖 DB 查询（异机导出用）。磁带放仓库根 `demos/tapes/*.json`；命令面板按文件名 stem 列出。
 
 ## 导演控制台（第二屏 · OBS 录屏用）
 

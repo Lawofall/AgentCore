@@ -123,8 +123,6 @@ def test_cloud_gvisor_on_chain_flips_end_to_end(tmp_path: Path, monkeypatch: pyt
     assert execution_approval_posture(backend) is ExecutionApprovalPosture.AUTO_PASS
     assert execution_tool_auto_passes(backend, "run") is True
     assert execution_tool_auto_passes(backend, "browser") is True
-    # desktop_notify 不吃 gVisor AUTO_PASS（仅 command=auto）。
-    assert execution_tool_auto_passes(backend, "desktop_notify") is False
     assert execution_tool_auto_passes(backend, "host") is False
 
 
@@ -203,6 +201,8 @@ def test_gvisor_desk_oci_workspace_rw(tmp_path: Path):
     ws_mount = next(m for m in staged["mounts"] if m["destination"] == "/workspace")
     assert "rw" in ws_mount["options"]
     assert ws_mount["type"] == "bind"
+    dests = {m["destination"] for m in staged["mounts"]}
+    assert "/usr" not in dests
     assert staged["linux"]["resources"]["memory"]["limit"] == 512 * 1024 * 1024
     assert staged["process"]["user"]["uid"] != 65534
 

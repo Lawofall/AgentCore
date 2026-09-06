@@ -93,12 +93,10 @@ def test_registry_excludes_ceo_only_delegate():
 
 
 # Worker-surface extras auto-registered on the worker roster (not builtin catalog).
-# escalate / handoff stay CEO-absent forever. desktop_notify is worker-surface +
-# extra CEO register in assemble (``build_ceo_tool_registry`` still omits it).
+# escalate / handoff stay CEO-absent forever.
 _WORKER_SURFACE_NAMES = {
     "escalate",
     "handoff",
-    "desktop_notify",
 }
 
 
@@ -110,8 +108,7 @@ def test_worker_registry_adds_worker_surface_tools_without_leaking_them():
     # builtins + the worker-surface primitives, nothing else.
     assert worker == _EXPECTED_NAMES | _WORKER_SURFACE_NAMES
     assert builtin.isdisjoint(_WORKER_SURFACE_NAMES)
-    # Default CEO registry still omits worker-surface names (notify is extra-wired
-    # in assemble; escalate/handoff never join CEO).
+    # Default CEO registry omits worker-surface names (escalate/handoff never join CEO).
     assert ceo.isdisjoint(_WORKER_SURFACE_NAMES)
 
 
@@ -171,6 +168,9 @@ def test_run_description_does_not_overpromise_sandbox():
 
     assert "用户本机" in run_description("local")
     assert "云桌" in run_description("server")
+    assert "download_url" in run_description("server")
+    assert "私网" in run_description("server")
+    assert "无任意 HTTPS" not in run_description("server")
     assert "用户本机" in RunTool(location="local").schema.description
     assert "云桌" in RunTool(location="server").schema.description
 

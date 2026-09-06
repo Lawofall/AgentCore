@@ -1,21 +1,21 @@
-"""Host-side allowlist CONNECT/HTTP proxy — packaging egress chokepoint.
+"""Host-side CONNECT/HTTP proxy — cloud-desk egress chokepoint.
 
-Only dials hostnames in the packaging allowlist. Deliberately separate from
-``browser.proxy`` (SSRF deny-private): a deny-private proxy is **not** an
-allowlist and must not be reused as one.
+Policy is :func:`core.net.resolve_ssrf_dial_target` (same as ``download_url`` /
+``web_fetch`` / the sandbox browser proxy): public http(s) is allowed; private /
+loopback / link-local / metadata is refused. Packaging registry *pinning* stays
+on the install tool (env + reject ``--registry``), not this proxy.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
-import socket
 from collections.abc import Callable
 from urllib.parse import urlsplit
 
 from agentcore.config import settings
 from agentcore.core.logging import get_logger
-from agentcore.tools.sandbox.egress.hosts import host_is_allowed_registry
+from agentcore.core.net import resolve_ssrf_dial_target
 
 logger = get_logger(__name__)
 
@@ -26,58 +26,8 @@ def _refusal(status: str) -> bytes:
     return f"HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".encode()
 
 
-async def resolve_allowlist_dial_target(
-    host: str, port: int
-) -> tuple[str | None, str]:
-    """Allowlist-vet ``host`` and return ``(dial_ip_or_host, reason)``.
-
-    Non-allowlisted hosts are refused before DNS. Allowed hostnames are resolved
-    and dialed by address; literals must themselves be on the allowlist (normally
-    they are not — registries are hostnames).
-    """
-    if not host_is_allowed_registry(host):
-        return None, "NOT_ALLOWLISTED"
-    try:
-        # Rare: allowlist somehow contains an IP literal.
-        socket.inet_pton(socket.AF_INET, host)
-        return host, "ok_literal"
-    except OSError:
-        pass
-    try:
-        socket.inet_pton(socket.AF_INET6, host)
-        return host, "ok_literal"
-    except OSError:
-        pass
-    try:
-        infos = await asyncio.get_running_loop().getaddrinfo(
-            host, port, proto=socket.IPPROTO_TCP
-        )
-    except OSError:
-        return None, "DNS_FAIL"
-    for info in infos:
-        ip = info[4][0]
-        if isinstance(ip, str) and ip:
-            return ip, "ok"
-    return None, "DNS_FAIL"
-
-
-async def _pump(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-    try:
-        while True:
-            chunk = await reader.read(65536)
-            if not chunk:
-                break
-            writer.write(chunk)
-            await writer.drain()
-    except (OSError, asyncio.IncompleteReadError):
-        pass
-    finally:
-        with contextlib.suppress(OSError):
-            writer.write_eof()
-
-
-class AllowlistEgressProxy:
-    """Process-wide async CONNECT/HTTP proxy enforcing packaging host allowlist."""
+class DeskEgressProxy:
+    """Process-wide async CONNECT/HTTP proxy enforcing SSRF (not registry allowlist)."""
 
     def __init__(
         self,
@@ -159,7 +109,7 @@ class AllowlistEgressProxy:
         host, _, port_s = target.rpartition(":")
         port = int(port_s or "443")
         await self._drain_headers(reader)
-        ip, reason = await resolve_allowlist_dial_target(host, port)
+        ip, reason = await resolve_ssrf_dial_target(host, port, scheme="https")
         if ip is None:
             self._decide("CONNECT", host, False, reason)
             writer.write(_refusal("403 Forbidden"))
@@ -193,7 +143,8 @@ class AllowlistEgressProxy:
         parts = urlsplit(url)
         host = parts.hostname or ""
         port = parts.port or 80
-        ip, reason = await resolve_allowlist_dial_target(host, port)
+        scheme = parts.scheme or "http"
+        ip, reason = await resolve_ssrf_dial_target(host, port, scheme=scheme)
         headers = await self._drain_headers(reader)
         if ip is None:
             self._decide(method, host, False, reason)
@@ -222,14 +173,29 @@ class AllowlistEgressProxy:
             up_writer.close()
 
 
-_proxy: AllowlistEgressProxy | None = None
+async def _pump(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    try:
+        while True:
+            chunk = await reader.read(65536)
+            if not chunk:
+                break
+            writer.write(chunk)
+            await writer.drain()
+    except (OSError, asyncio.IncompleteReadError):
+        pass
+    finally:
+        with contextlib.suppress(OSError):
+            writer.write_eof()
 
 
-async def ensure_package_egress_proxy() -> AllowlistEgressProxy:
-    """Start (once) the process-wide packaging allowlist proxy."""
+_proxy: DeskEgressProxy | None = None
+
+
+async def ensure_package_egress_proxy() -> DeskEgressProxy:
+    """Start (once) the process-wide desk SSRF proxy (port name is historical)."""
     global _proxy
     if _proxy is None:
-        _proxy = AllowlistEgressProxy()
+        _proxy = DeskEgressProxy()
     if not _proxy.running:
         await _proxy.start("0.0.0.0", int(settings.package_egress_proxy_port))
     return _proxy

@@ -10,25 +10,14 @@ import { hasLocalFiles } from "@/lib/capabilities";
 import {
   guideDesktopDownload,
   isDesktopFolderAction,
-  isGrantFolderAction,
 } from "@/lib/desktopDownload";
-import {
-  grantHintsFromAskOption,
-  organizeConfirmDetail,
-} from "@/lib/grantFolderHints";
-import {
-  formatGrantAttachFolderAnswer,
-  formatGrantOrganizeFolderAnswer,
-  pickAndGrantAttachFolder,
-  pickAndGrantOrganizeFolder,
-} from "@/lib/grantOrganizeFolder";
 import { pickAndOpenLocalFolder } from "@/lib/openLocalFolder";
 import {
   formatRegisterLocalFolderAnswer,
   pickAndRegisterLocalFolder,
 } from "@/lib/registerLocalFolder";
 import type { AskOption, AskQuestion, CheckpointIntent } from "@/types/events";
-import { FolderOpen, FolderTree, Loader2 } from "lucide-react";
+import { FolderOpen, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
@@ -240,47 +229,6 @@ export function AskQuestionFields({
       }
       return;
     }
-    if (
-      opt.action === "grant_organize_folder" ||
-      opt.action === "grant_attach_folder"
-    ) {
-      const hints = grantHintsFromAskOption(opt);
-      const result =
-        opt.action === "grant_attach_folder"
-          ? await pickAndGrantAttachFolder(conversationId, hints)
-          : await pickAndGrantOrganizeFolder(conversationId, hints);
-      if (!result.ok) {
-        if (result.reason === "unavailable") {
-          setBindError(
-            opt.action === "grant_attach_folder"
-              ? "附加可写授权仅桌面端可用"
-              : "整理授权仅桌面端可用",
-          );
-        } else {
-          setBindError(result.message);
-        }
-        setBindBusyLabel(null);
-        return;
-      }
-      const value =
-        opt.action === "grant_attach_folder"
-          ? formatGrantAttachFolderAnswer(
-              opt.label,
-              result.displayLabel ?? result.root.name,
-              result.namespace,
-            )
-          : formatGrantOrganizeFolderAnswer(
-              opt.label,
-              result.displayLabel ?? result.root.name,
-              result.namespace,
-            );
-      try {
-        await onBindResolve(answer.composeWithAnswer("decision", q.id, value));
-      } catch {
-        setBindBusyLabel(null);
-      }
-      return;
-    }
     const result = await pickAndBindLocalFolder(conversationId);
     if (!result.ok) {
       applyPickerFailure(
@@ -451,14 +399,12 @@ function QuestionField({
                 const isDefault =
                   !!question.default && opt.label === question.default;
                 const desktopFolder = isDesktopFolderAction(opt.action);
-                const organizeGrant = isGrantFolderAction(opt.action);
                 const canRunFolder =
                   desktopFolder &&
                   (opt.action === "open_local_project"
                     ? canLocalFs
                     : canBindAction);
                 const bindBusy = bindBusyLabel === opt.label;
-                const confirmDetail = organizeConfirmDetail(opt);
                 return (
                   <div key={opt.label} className="flex w-full flex-col">
                     <Button
@@ -495,11 +441,6 @@ function QuestionField({
                               size={14}
                               className="shrink-0 animate-spin text-muted-foreground"
                             />
-                          ) : organizeGrant ? (
-                            <FolderTree
-                              size={14}
-                              className="shrink-0 text-muted-foreground"
-                            />
                           ) : (
                             <FolderOpen
                               size={14}
@@ -516,11 +457,6 @@ function QuestionField({
                         </span>
                       )}
                     </Button>
-                    {confirmDetail && (
-                      <span className="mt-0.5 px-2.5 text-xs text-muted-foreground">
-                        {confirmDetail}
-                      </span>
-                    )}
                   </div>
                 );
               })}

@@ -266,7 +266,7 @@ def _outside_workspace_msg(
 
     relative_fix = (
         "请使用工作区相对路径（如 AgentCore/文档/research/report.md；"
-        "`.` 或裸 `/` 表示整仓）；勿使用工作区外的绝对路径（如 /etc、盘符）。"
+        "`.` 或裸 `/` 表示整仓）。本机目录请直接给绝对路径或 ~/Downloads。"
     )
     if location == "server":
         return (
@@ -280,7 +280,8 @@ def _outside_workspace_msg(
         )
     return (
         f"路径 '{path}' 超出了工作区范围。"
-        "若要把该本机目录加入本对话可改可覆盖：请让用户确认 `grant_attach_folder`。"
+        "若要把该本机目录加入本对话可改可覆盖：对该路径 `file_write` / `file_copy`"
+        "（运行时会请用户确认可写授权）。"
         "不要去改权限徽章。"
         f"{relative_fix}"
     )

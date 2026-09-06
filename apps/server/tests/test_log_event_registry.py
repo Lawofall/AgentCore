@@ -43,6 +43,8 @@ def test_catalog_covers_key_runtime_events():
     ):
         assert required in names, required
     assert "engine.finish_guard_auto_deep_read" not in names
+    assert "desktop.notify_request" not in names
+    assert "desktop.notify_timeout" not in names
     assert len(names) >= 100
 
 

@@ -782,6 +782,41 @@ export class SidecarManager {
   }
 
   /**
+   * 活回合中把当前会话 `externalMounts`（含 abs）热推到 sidecar。
+   * 无进程 / 无活回合静默返回（云对话走 grant_store，不经这条）。
+   * 须在 adopt / 升档 grant 返回前 await，好让 ClientTool settle 前引擎已有 abs。
+   */
+  async pushLiveExternalMounts(conversationId: string): Promise<void> {
+    const cid = conversationId.trim();
+    if (!cid) return;
+    const live = this.findLiveTurn(cid);
+    if (!live) return;
+    const entry = this.entries.get(
+      entryKey(live.turn.rootId, live.turn.subpath),
+    );
+    if (!entry) return;
+    try {
+      await entry.ready;
+    } catch {
+      return;
+    }
+    const externalMounts = buildExternalMounts(listSessionRoots(cid));
+    try {
+      await entry.client.request("updateExternalMounts", {
+        conversationId: cid,
+        externalMounts,
+      });
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err);
+      logDesktop({
+        level: "warn",
+        event: "sidecar.external_mounts_push_failed",
+        fields: { conversationId: cid, detail },
+      });
+    }
+  }
+
+  /**
    * 有票且该快照键已过期时续暖 ``warmAccountRulesMemory``（登记 inflightWarms），
    * 返回本键的在途暖（无需暖 / 无票时 undefined）。
    *

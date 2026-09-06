@@ -109,6 +109,9 @@ const fsApi: FsApi = {
             ...(conversationIdOrParams.targetName
               ? { targetName: conversationIdOrParams.targetName }
               : {}),
+            ...(conversationIdOrParams.rootId
+              ? { rootId: conversationIdOrParams.rootId }
+              : {}),
           };
     return ipcRenderer.invoke(FS_CHANNELS.grantSessionReadonlyRoot, params);
   },

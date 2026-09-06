@@ -38,6 +38,7 @@ import {
   ipcInvalidArgsLogFields,
 } from "../ipc-validate";
 import { logDesktop } from "../log-service";
+import { setLiveExternalMountsPusher } from "./liveExternalMounts";
 import { SidecarManager } from "./manager";
 import { resolveWorkspaceRoot } from "./workspace";
 
@@ -69,6 +70,7 @@ function assertSidecarShape(
 /** 注册全部 sidecar IPC handler。须在 app ready 后调用。 */
 export function registerSidecarIpc(): void {
   const manager = new SidecarManager();
+  setLiveExternalMountsPusher((cid) => manager.pushLiveExternalMounts(cid));
 
   // IPC-004（第五轮 IPC 权限面审计）：每个句柄进入业务前在边界结构校验寻址 / 标识类 string
   // 字段（rootId / turnId / …）+ 可选 subpath。畸形入参（仅来自被攻破的 renderer）抛

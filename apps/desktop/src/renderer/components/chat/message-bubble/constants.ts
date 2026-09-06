@@ -6,7 +6,6 @@ import { formatCompact } from "@/lib/format";
 import type { ProcessStep, ToolPhase } from "@/types/events";
 import {
   ArrowUp,
-  Bell,
   BookOpen,
   Brain,
   Camera,
@@ -124,7 +123,6 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   handoff: { Icon: Forward, label: "Handoff" },
   board_ops: { Icon: Presentation, label: "Edit board" },
   board_read: { Icon: Presentation, label: "Read board" },
-  desktop_notify: { Icon: Bell, label: "Notify" },
   external_mount_readonly: { Icon: Folder, label: "Mount folder" },
   // 本机 Host（第三能力面 · 单工具 `host`，按 action 展示；同构 git + subcommand）
   host: { Icon: Monitor, label: "Host" },

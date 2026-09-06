@@ -1,11 +1,11 @@
-"""Cloud-controlled package install — network-layer registry allowlist (A) + cache (B).
+"""Cloud-controlled package install — registry pin (A) + cache (B).
 
 Supports JS (npm/pnpm/yarn) and Python (uv/pip/poetry) with the same discipline.
 
-- **A**：云端装包走桌上常驻 allowlist chokepoint（netns + proxy，与
-  ``code_execute`` 同一 desk guest）；辅以 argv 形态白名单 + 固定包装源 env +
-  拒绝改 registry/index 的 CLI 参数。本地（``backend.location=local``）不走主机
-  gVisor 门禁，只钉源 + 权限轴。
+- **A**：云端装包走桌上常驻 SSRF chokepoint（netns + proxy，与 ``run`` 同一
+  desk guest、与 ``download_url`` 同政策）；辅以 argv 形态白名单 + 固定包装源
+  env + 拒绝改 registry/index 的 CLI 参数。本地（``backend.location=local``）
+  不走主机 gVisor 门禁，只钉源 + 权限轴。
 - **B**：云端 ``install_cache_env`` → 沙箱 ``/pkg-cache``（OCI bind 到
   ``DATA_DIR/pkg-cache/<bucket>``）。工作区 rw-bind 为 ``/workspace``，
   ``node_modules`` / ``.venv`` 直接落在真盘。
@@ -404,7 +404,7 @@ def validate_install_argv(argv: list[str]) -> str | None:
 def registry_pin_env() -> dict[str, str]:
     """Env that pins common package managers to the default allowlisted registry.
 
-    Complements the network-layer allowlist proxy (egress); argv overrides still rejected.
+    Complements the network-layer SSRF proxy (egress); argv overrides still rejected.
     """
     reg = DEFAULT_NPM_REGISTRY
     pypi = DEFAULT_PYPI_INDEX

@@ -1,6 +1,6 @@
 import { adoptServerAlias } from "@/lib/adoptServerAlias";
 import { hasLocalFiles } from "@/lib/capabilities";
-import type { GrantFolderHints } from "@/lib/grantFolderHints";
+import { type GrantFolderHints, grantIpcFields } from "@/lib/grantFolderHints";
 import { revokeExternalGrant } from "@/lib/revokeExternalGrant";
 import { ApiError, api } from "@/services/api";
 import { invalidateExternalGrants } from "@/services/externalGrants";
@@ -10,7 +10,6 @@ import type {
 } from "@shared/ipc-contract";
 
 export type { GrantFolderHints } from "@/lib/grantFolderHints";
-export { grantHintsFromAskOption } from "@/lib/grantFolderHints";
 
 export type GrantReadonlyFailReason =
   | "unavailable"
@@ -42,6 +41,7 @@ const RESOLVE_FAIL_FALLBACK: Record<
   permission_denied: "定位到了，但这台电脑不让程序读取该目录",
   not_directory: "路径指向的是文件，不是目录",
   ambiguous: "匹配到多个目录，请说得更具体",
+  cancelled: "用户拒绝授权",
 };
 
 type ExternalGrantBody = { grant: { alias: string; namespace: string } };
@@ -78,9 +78,7 @@ export async function pickAndGrantReadonlyFolder(
     const granted = await window.fsApi.grantSessionReadonlyRoot({
       conversationId,
       mode: "readonly",
-      ...(hints?.path ? { path: hints.path } : {}),
-      ...(hints?.wellKnown ? { wellKnown: hints.wellKnown } : {}),
-      ...(hints?.targetName ? { targetName: hints.targetName } : {}),
+      ...grantIpcFields(hints),
     });
     if (!granted.ok) {
       const reason = granted.reason;

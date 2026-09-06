@@ -268,19 +268,19 @@ def test_cloud_scratch_facts():
     assert "选择器兜底" not in out
     assert "口头同意闭环" not in out
     assert "失败分型" not in out
-    # 口头同意 / 只读≠整理 / 授权后先写工作区：归 consult 手册；事实块自己不抄。
+    # 口头同意 / 授权后先写工作区：归 team_local_desk；事实块自己不抄。
     granted = capability_how_suffix({"external_mount_readonly"})
-    assert granted.count("口头同意") == 1
-    assert "只读已挂" in granted
+    assert granted == ""
+    assert "口头同意" in mid
+    assert "先写工作区" in mid and "file_copy" in mid
     assert "grant_readonly_folder" not in granted
-    assert "well_known" in granted
-    assert "先写工作区" in granted and "file_copy" in granted
     assert "well_known" not in out
     assert "在哪工作" not in out
     assert "仅新建会话" not in out
     assert "在哪工作" in mid
     assert "仅新建会话" in mid
-    assert "grant_organize_folder" in mid
+    assert "grant_organize_folder" not in mid
+    assert "file_copy" in mid
     assert "与工作区绑定正交" not in out
     assert "勿引导用户去设置改模式" not in out
     assert "勿引导用户去设置改模式" in mid
@@ -738,7 +738,7 @@ def test_sidecar_local_without_channel():
     assert "当前目录已可写" not in out
     assert "grant_attach_folder" not in out
     mid = _desk_how()
-    assert "grant_attach_folder" in mid
+    assert "可写授权" in mid
 
 
 def test_mobile_session_omits_bind_nudge():
@@ -841,11 +841,12 @@ def test_cloud_desktop_online_allows_external_grant_without_bind():
     assert "本机某目录" not in out
     assert "区外目录授权需先处在本地工作区" not in out
     assert "选择器兜底" not in out
-    # 怎么定位目录（禁手填绝对路径 / 禁探家目录 / 只读禁再发卡）归 consult——桌面在线这一回合
-    # `external_mount_readonly` 已装配，HOW 在 consult 正文；事实块自己不抄。
+    # 怎么定位目录归 team_local_desk；事实块自己不抄。
     granted = capability_how_suffix({"external_mount_readonly"})
-    assert "探家目录" in granted
-    assert "host(action=shell)" in granted
+    assert granted == ""
+    mid = _desk_how()
+    assert "探家目录" in mid
+    assert "host(action=shell)" in mid
     assert "grant_readonly_folder" not in granted
     assert "grant_readonly_folder" not in out
 

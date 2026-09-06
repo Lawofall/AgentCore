@@ -135,7 +135,6 @@ const PEEK_SUPPRESSED = new Set([
   "wait",
   // grep 计数走标题 inlineMeta；未知结果形状不得再起一行贴正则/命中原文。
   "grep",
-  "desktop_notify",
   // 本机 Host：标题已自解释；折叠不 peek。
   "host",
   // 单工具 browser 的 peek 由 isBrowserTool 覆盖（精确名 + 历史 browser_*）。

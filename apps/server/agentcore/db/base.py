@@ -92,10 +92,10 @@ probe_engine = create_async_engine(
 class _TicketGuardedSessionFactory:
     """``async_sessionmaker`` proxy that refuses checkout on a ticketed sidecar turn."""
 
-    def __init__(self, inner: async_sessionmaker) -> None:
+    def __init__(self, inner: async_sessionmaker[AsyncSession]) -> None:
         self._inner = inner
 
-    def __call__(self, *args: object, **kwargs: object) -> object:
+    def __call__(self, *args: object, **kwargs: object) -> AsyncSession:
         from agentcore.db.sidecar_tickets import raise_if_sidecar_local_db_forbidden
 
         raise_if_sidecar_local_db_forbidden()

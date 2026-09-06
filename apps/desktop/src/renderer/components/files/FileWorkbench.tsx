@@ -777,7 +777,10 @@ export function FileWorkbench({
                           name={panelWsName}
                         />
                       ) : wsPanel === WS_TRASH_PATH ? (
-                        <WorkspaceTrashSection wsId={t.wsId} />
+                        <WorkspaceTrashSection
+                          wsId={t.wsId}
+                          active={key === activeKey}
+                        />
                       ) : src ? (
                         projFolderId ? (
                           <MemoryProfileSplitEditor

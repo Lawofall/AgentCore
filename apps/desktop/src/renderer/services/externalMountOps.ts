@@ -1,23 +1,25 @@
+import { pickAndGrantSessionFolder } from "@/lib/grantOrganizeFolder";
 import {
   type GrantFolderHints,
   pickAndGrantReadonlyFolder,
 } from "@/lib/grantReadonlyFolder";
 import { fulfillClientToolOnce } from "@/services/clientToolFulfill";
 import type { InteractionSettleOrigin } from "@/services/interaction";
-import type { ExternalMountReadonlyRequiredPayload } from "@/types/events";
+import type { ExternalMountRequiredPayload } from "@/types/events";
 import type { GrantSessionWellKnown } from "@shared/ipc-contract";
 
+type MountMode = "readonly" | "organize" | "attach_rw";
+
 /**
- * Desktop half of the ``external_mount_readonly`` client-tool channel (C1 phase 2).
+ * Desktop half of the external-mount client-tool channel.
  *
- * After the server suspends and streams ``external_mount_readonly_required``, we
- * resolve path / well_known+target_name via ``grantSessionReadonlyRoot`` (no
- * picker), POST ``external-grants``, and settle over the unified interaction
- * bridge (kind ``client_tool``). Same ``request_id`` is de-duplicated in-process
- * so attach rehang does not re-mint the session root.
+ * After the server suspends and streams ``external_mount_required``,
+ * resolve path / well_known+target_name / root_id (no picker), POST
+ * ``external-grants``, and settle. Read-only is silent; organize / attach_rw
+ * confirm in main (system dialog).
  */
-export async function performExternalMountReadonly(
-  payload: ExternalMountReadonlyRequiredPayload,
+export async function performExternalMount(
+  payload: ExternalMountRequiredPayload,
   conversationId: string,
   origin: InteractionSettleOrigin,
 ): Promise<void> {
@@ -53,7 +55,7 @@ const WELL_KNOWN = new Set<GrantSessionWellKnown>([
 ]);
 
 function hintsFromPayload(
-  payload: ExternalMountReadonlyRequiredPayload,
+  payload: ExternalMountRequiredPayload,
 ): GrantFolderHints | undefined {
   const path =
     typeof payload.path === "string" && payload.path.trim()
@@ -66,22 +68,35 @@ function hintsFromPayload(
     typeof payload.target_name === "string" && payload.target_name.trim()
       ? payload.target_name.trim()
       : undefined;
-  if (!path && !wellKnown && !targetName) return undefined;
+  const rootId =
+    typeof payload.root_id === "string" && payload.root_id.trim()
+      ? payload.root_id.trim()
+      : undefined;
+  if (!path && !wellKnown && !targetName && !rootId) return undefined;
   return {
     ...(path ? { path } : {}),
     ...(wellKnown ? { wellKnown } : {}),
     ...(targetName ? { targetName } : {}),
+    ...(rootId ? { rootId } : {}),
   };
 }
 
+function mountMode(payload: ExternalMountRequiredPayload): MountMode {
+  return payload.mode === "organize" || payload.mode === "attach_rw"
+    ? payload.mode
+    : "readonly";
+}
+
 async function runExternalMount(
-  payload: ExternalMountReadonlyRequiredPayload,
+  payload: ExternalMountRequiredPayload,
   conversationId: string,
 ): Promise<ClientToolResult> {
-  const result = await pickAndGrantReadonlyFolder(
-    conversationId,
-    hintsFromPayload(payload),
-  );
+  const mode = mountMode(payload);
+  const hints = hintsFromPayload(payload);
+  const result =
+    mode === "readonly"
+      ? await pickAndGrantReadonlyFolder(conversationId, hints)
+      : await pickAndGrantSessionFolder(conversationId, mode, hints);
   if (!result.ok) {
     if (result.reason === "unavailable") {
       return {
@@ -98,7 +113,7 @@ async function runExternalMount(
       error: {
         kind: "ExternalMountError",
         detail: result.message,
-        // Keep structured grant/IPC reason (not_found / not_directory / …).
+        // Keep structured grant/IPC reason (not_found / not_directory / cancelled / …).
         reason: result.reason,
       },
     };

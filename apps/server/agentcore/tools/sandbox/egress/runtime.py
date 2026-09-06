@@ -1,4 +1,4 @@
-"""Open/close a packaging egress session (netns + allowlist proxy + cache dir)."""
+"""Open/close a desk egress session (netns + SSRF proxy + cache dir)."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def package_cache_host_dir(bucket: str | None = None) -> Path:
 
 
 def install_proxy_env(proxy_url: str) -> dict[str, str]:
-    """Env that pins package managers / HTTP clients at the allowlist proxy."""
+    """Env that pins package managers / HTTP clients at the desk SSRF proxy."""
     return {
         "HTTP_PROXY": proxy_url,
         "HTTPS_PROXY": proxy_url,
@@ -134,14 +134,14 @@ class PackageEgressSession:
 
 
 async def open_package_egress(*, cache_bucket: str | None = None) -> PackageEgressSession:
-    """Allocate netns + bind the sandboxd-resident allowlist proxy URL.
+    """Allocate netns + bind the sandboxd-resident desk SSRF proxy URL.
 
     The proxy process itself runs inside sandboxd (veth host IP lives there).
     The API must not bind it. Caller must ``await session.close()``.
     """
     if not registry_egress_available():
         raise SandboxError(
-            "无法云端装包：主机不具备包装源白名单出网能力（需 Linux gVisor + netns）。"
+            "无法云端装包：主机不具备云端出网隔离（需 Linux gVisor + netns）。"
             "不会在无 chokepoint 时假装装包。",
             code=EGRESS_UNAVAILABLE_CODE,
         )

@@ -14,6 +14,32 @@ _COMPOSE = _REPO / "deploy" / "docker-compose.sandbox.yml"
 _APP_COMPOSE = _REPO / "deploy" / "docker-compose.app.yml"
 
 
+def test_dockerfile_guest_menu_has_curl_and_gcc_not_on_runtime():
+    text = _DOCKERFILE.read_text(encoding="utf-8")
+    guest_apt = next(
+        line
+        for line in text.splitlines()
+        if "fonts-noto-cjk" in line and "nodejs" in line and "apt-get install" in line
+    )
+    assert " curl" in guest_apt or guest_apt.rstrip(";").endswith("curl")
+    assert "build-essential" in guest_apt
+    assert "wget" not in guest_apt
+    assert "cmake" not in guest_apt
+    runtime_apt = next(
+        line
+        for line in text.splitlines()
+        if "iproute2" in line and "apt-get install" in line
+    )
+    assert "nodejs" not in runtime_apt
+    assert " curl" not in runtime_apt
+    assert "gcc" not in runtime_apt
+    assert "build-essential" not in runtime_apt
+    assert "COPY --from=guest /guest-root /opt/agentcore/guest-rootfs" in text
+    assert "AS guest" in text
+    # API 存活探针不改绑 curl。
+    assert "urllib.request" in text
+
+
 def test_dockerfile_creates_app_home_and_sets_home_env():
     text = _DOCKERFILE.read_text(encoding="utf-8")
     assert "--no-create-home" not in text

@@ -65,7 +65,7 @@ async def grant_external_folder(
 ):
     """Register a conversation external mount (readonly, organize, or attach_rw).
 
-    Called after desktop mint (silent ``external_mount_readonly`` or user-confirmed
+    Called after desktop mint (silent read-only host-path mount or user-confirmed
     organize / attach_rw grant). Body carries ``root_id`` / label / mode only — never
     absolute paths. ``attach_rw`` is local-traditional only.
 

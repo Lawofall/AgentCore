@@ -18059,7 +18059,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.16"
+    "version": "0.7.17"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -31519,7 +31519,7 @@
         ]
       },
       "post": {
-        "description": "Register a conversation external mount (readonly, organize, or attach_rw).\n\nCalled after desktop mint (silent ``external_mount_readonly`` or user-confirmed\norganize / attach_rw grant). Body carries ``root_id`` / label / mode only — never\nabsolute paths. ``attach_rw`` is local-traditional only.\n\nThe response doubles as the device's declaration for this root: the caller's\n``X-Client-Device`` is bound onto its live fulfill session *and* stored on the\ngrant (``fulfill/declare.py``), so the very first ``external/<alias>/`` op of\nthe resuming turn has a machine to route to.",
+        "description": "Register a conversation external mount (readonly, organize, or attach_rw).\n\nCalled after desktop mint (silent read-only host-path mount or user-confirmed\norganize / attach_rw grant). Body carries ``root_id`` / label / mode only — never\nabsolute paths. ``attach_rw`` is local-traditional only.\n\nThe response doubles as the device's declaration for this root: the caller's\n``X-Client-Device`` is bound onto its live fulfill session *and* stored on the\ngrant (``fulfill/declare.py``), so the very first ``external/<alias>/`` op of\nthe resuming turn has a machine to route to.",
         "operationId": "grant_external_folder_v1_conversations__conversation_id__workspace_external_grants_post",
         "parameters": [
           {

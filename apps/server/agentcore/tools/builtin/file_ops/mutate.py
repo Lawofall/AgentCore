@@ -40,10 +40,10 @@ from .integrity import (
     _claim_write_path,
     _mark_landed_files,
     _norm_rel_path,
-    _prepare_write_relpath,
     _reject_write_scope,
     classify_write_kind,
     format_artifact_manifest,
+    prepared_write_relpath,
     stale_overwrite_rejection,
 )
 from .read import _format_numbered_lines
@@ -463,7 +463,12 @@ class FileWriteTool:
         if not requested_path:
             return _error("path 不能为空：请提供工作区内的相对文件路径（如 report.md）", start)
 
-        rel_path, rename_note = await _prepare_write_relpath(requested_path, context)
+        prepared = await prepared_write_relpath(
+            requested_path, context, host_grant_mode="attach_rw"
+        )
+        if isinstance(prepared, ToolResult):
+            return prepared
+        rel_path, rename_note = prepared
         if not rel_path:
             return _error("path 不能为空：请提供工作区内的相对文件路径（如 report.md）", start)
 
@@ -672,7 +677,10 @@ class StrReplaceTool:
         if not rel_path:
             return _error("path 不能为空：请提供工作区内的相对文件路径", start)
 
-        rel_path, rename_note = await _prepare_write_relpath(rel_path, context)
+        prepared = await prepared_write_relpath(rel_path, context, host_grant_mode="attach_rw")
+        if isinstance(prepared, ToolResult):
+            return prepared
+        rel_path, rename_note = prepared
 
         scope_denied = _reject_write_scope(
             context, rel_path, start, event="str_replace.scope_rejected"

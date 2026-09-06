@@ -212,6 +212,18 @@ def check_oci_config_shape() -> list[str]:
         _fail("process.cwd != /workspace")
     else:
         _ok("OCI cwd=/workspace")
+    dests = set(mounts)
+    if dests & {"/usr", "/bin", "/etc", "/lib", "/lib64"}:
+        errors.append("desk OCI still bind-mounts host userland")
+        _fail("OCI host userland bind present")
+    else:
+        _ok("OCI has no host /usr bind (packed guest rootfs)")
+    dockerfile = (SERVER_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    if "/opt/agentcore/guest-rootfs" not in dockerfile:
+        errors.append("Dockerfile missing guest-rootfs copy")
+        _fail("Dockerfile missing guest-rootfs")
+    else:
+        _ok("Dockerfile packs guest-rootfs")
     return errors
 
 

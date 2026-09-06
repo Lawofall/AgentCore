@@ -460,18 +460,12 @@ def test_assembled_idle_surface_split():
     assert names.isdisjoint(COORDINATION_GATED_TOOLS)
 
 
-def test_assembled_ceo_holds_deferred_desktop_notify_not_escalate():
-    """Notify is extra-registered on CEO (on-demand); escalate/handoff stay worker-only."""
+def test_assembled_ceo_omits_escalate_and_handoff():
+    """escalate/handoff stay worker-only."""
     reg = _assemble()
-    assert "desktop_notify" in reg.names
-    assert "desktop_notify" in reg.deferred_names
+    assert "desktop_notify" not in reg.names
     assert "escalate" not in reg.names
     assert "handoff" not in reg.names
-    offered = {
-        (d.get("function") or {}).get("name") or d.get("name")
-        for d in reg.get_openai_definitions()
-    }
-    assert "desktop_notify" not in offered
 
 
 def test_assembled_offers_create_folder():

@@ -605,7 +605,7 @@ export interface SidecarEventPush {
 /**
  * 主进程 → renderer 的**本机履约帧**推送（与回合事件流分开的第二条链路）。
  *
- * 本机引擎的 CLIENT_TOOL（host / mcp / notify / board / board_read /
+ * 本机引擎的 CLIENT_TOOL（host / mcp / board / board_read /
  * external_mount / terminal）不再经回合 EventSink 下发：sidecar 在自己进程内的
  * 履约中枢注册一个会话，帧经 `fulfill/frame` JSON-RPC 通知过来，主进程按
  * `payload.conversation_id` 投给持有该活回合的窗口。形状与云端设备级履约流

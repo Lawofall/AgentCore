@@ -11,7 +11,7 @@ inside an already-running guest. gVisor ``runsc`` (release-20260817+) accepts
 from __future__ import annotations
 
 # Interpreters the API may ``runsc exec`` into a desk guest. Paths are the
-# in-guest names from host binds; no shell, no extra binaries.
+# in-guest names from the packed rootfs; no shell, no extra binaries.
 EXEC_BINS = frozenset({"python3", "node", "bash"})
 
 

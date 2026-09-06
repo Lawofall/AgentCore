@@ -26,6 +26,7 @@ from agentcore.tools.sandbox.sandboxd.server import (
     peer_allowed,
     peer_uid,
 )
+from tests.guest_rootfs_testutil import install_fake_guest_rootfs
 
 _REAL_EXEC = asyncio.create_subprocess_exec
 
@@ -58,6 +59,7 @@ async def _running(
     netns_dir = tmp_path / "netns"
     runtime_root.mkdir()
     netns_dir.mkdir()
+    install_fake_guest_rootfs(tmp_path, monkeypatch)
     captured: list[list[str]] = []
     bundles: list[dict] = []
 
@@ -269,11 +271,44 @@ async def test_health_net_is_probe_plus_shape_b(tmp_path, monkeypatch):
         cfg = bundles[-1]
         assert cfg["process"]["args"] == ["/bin/true"]
         assert cfg["process"]["user"]["uid"] != 65534
+        dests = {m["destination"] for m in cfg["mounts"]}
+        assert "/usr" not in dests
+        assert "/bin" not in dests
+        assert "/etc" not in dests
         blob = json.dumps(cfg)
         assert "playwright" not in blob.lower()
         assert "chromium" not in blob.lower()
         net = next(n for n in cfg["linux"]["namespaces"] if n.get("type") == "network")
         assert PROBE_NETNS_NAME in str(net.get("path"))
+
+
+@pytest.mark.asyncio
+async def test_health_fails_closed_without_guest_rootfs(tmp_path, monkeypatch):
+    from agentcore.config import settings
+
+    async with _running(tmp_path, monkeypatch) as (_s, client, _c, _b):
+        monkeypatch.setattr(settings, "gvisor_guest_rootfs", str(tmp_path / "missing-guest"))
+        ok, detail = await client.health("net")
+        assert ok is False
+        assert "guest rootfs" in detail
+
+
+@pytest.mark.asyncio
+async def test_start_detach_fails_closed_without_guest_rootfs(tmp_path, monkeypatch):
+    from agentcore.config import settings
+
+    async with _running(tmp_path, monkeypatch) as (server, client, _c, _b):
+        monkeypatch.setattr(settings, "gvisor_guest_rootfs", str(tmp_path / "missing-guest"))
+        bundle = Path(server._runtime_root) / "b"
+        bundle.mkdir()
+        netns = Path(server._netns_run_dir) / "acpkg0"
+        with pytest.raises(SandboxdRpcError) as failed:
+            await client.start_detach(
+                bundle_dir=str(bundle),
+                container_id="agentcore-desk1",
+                netns_path=str(netns),
+            )
+        assert failed.value.code == "guest_rootfs"
 
 
 @pytest.mark.asyncio
@@ -369,6 +404,7 @@ async def test_start_detach_then_exec(tmp_path, monkeypatch):
             argv=["python3", "-u", "/scratch/x.py"],
             timeout_seconds=5,
         )
+        assert code == 0
         assert "out-chunk" in stdout
         assert "err-chunk" in stderr
         detach = next(a for a in captured if "-detach" in a)

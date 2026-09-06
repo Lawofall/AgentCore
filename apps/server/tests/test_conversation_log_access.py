@@ -65,14 +65,13 @@ def test_worker_registry_omits_log_tools_until_wired():
     assert worker.get_optional("read_conversation") is None
 
 
-def test_log_and_notify_are_not_in_worker_only_names():
+def test_log_tools_are_not_in_worker_only_names():
     from agentcore.tools.registration import worker_only_tool_names
 
     names = worker_only_tool_names()
     assert {"escalate", "handoff"} <= names
-    assert names.isdisjoint(
-        {"desktop_notify", "search_conversations", "read_conversation"}
-    )
+    assert names.isdisjoint({"search_conversations", "read_conversation"})
+    assert "desktop_notify" not in names
 
 
 def test_wire_registers_log_tools():
@@ -130,7 +129,7 @@ def _assemble_ceo_chat_tools():
 
 def test_ceo_assemble_and_wire_holds_log_tools():
     chat_tools = _assemble_ceo_chat_tools()
-    assert chat_tools.get_optional("desktop_notify") is not None
+    assert chat_tools.get_optional("desktop_notify") is None
     assert "escalate" not in chat_tools.names
     assert "handoff" not in chat_tools.names
     assert chat_tools.get_optional("search_conversations") is None

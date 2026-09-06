@@ -20,7 +20,7 @@ from agentcore.storage._archive import (
 )
 from agentcore.tools.builtin.file_ops import (
     _outside_workspace_msg,
-    _prepare_write_relpath,
+    prepared_write_relpath,
     write_scope_rejection,
 )
 from agentcore.tools.file_products import FileProduct, file_product
@@ -125,7 +125,10 @@ class ArchiveExtractTool:
                 start,
             )
 
-        dest_path, dest_note = await _prepare_write_relpath(dest_raw, context)
+        prepared = await prepared_write_relpath(dest_raw, context)
+        if isinstance(prepared, ToolResult):
+            return prepared
+        dest_path, dest_note = prepared
         if not dest_path:
             return _fail("dest 无效", start)
         if dest_path in ("..",) or dest_path.startswith("../"):

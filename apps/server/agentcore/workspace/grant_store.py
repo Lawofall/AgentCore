@@ -95,7 +95,7 @@ async def add_grant(
     """Register or refresh a conversation grant. Same ``root_id`` updates label/mode.
 
     Upgrading readonly → organize (or the reverse) on the same root keeps the
-    alias stable; the product still requires a fresh authorization card before
+    alias stable; the product still requires a fresh desktop confirm before
     the client calls this with the new mode.
 
     ``device_id`` records which install holds the folder (see

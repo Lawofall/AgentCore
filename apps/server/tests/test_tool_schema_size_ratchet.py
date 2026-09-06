@@ -81,7 +81,7 @@ from agentcore.tools.protocol import ToolSchema
 # 2026-09-02 form=files 不再钉工作稿；裸文件名仍 join。实测 delegate 2294。
 # 2026-09-02 run：when-to-use 补进 description（验证直接跑 / dev 后台 / action 管已有进程）。
 # 省略 wait_for 则起来就返回（不再注入默认就绪信号）。cap 1030。
-# 2026-09-06 ask_user：撤起步计划 assumptions 槽。桌面 1949、web 1400。
+# 2026-09-06 ask_user：撤 grant_* 模型面广告（区外改走 file_* 运行时授权）。桌面云 1565、web 1400。
 # 2026-09-06 delegate.task：自包含 ≠ 逐步改法/改哪些文件/章节骨架（根可见面补对比边界）。
 # 实测 2305。cap 2300→2310（抬顶=新语义，非回潮）。
 # 2026-09-06 delegate.task：点名路径用工作区相对 POSIX（与工具 path 同形）。
@@ -93,7 +93,7 @@ _CAPS: dict[str, int] = {
     "run": 1030,
     "delegate": 2340,
     "debate": 1380,
-    "ask_user": 1950,
+    "ask_user": 1570,
     "list_folders": 240,
     "resolve_folder": 370,
     "create_folder": 510,
@@ -136,14 +136,17 @@ _WORKER_CAPS: dict[str, int] = {
     "file_write": 500,
     "str_replace": 640,
 }
+# 2026-09-06 区外路径改走 file_* 本机路径（运行时挂载）：when-to-use 进 description。
+# 2026-09-06 已挂 external/ 写升档：file_copy dest 补已挂路径。实测 file_copy 431。
+# 实测 file_read 854 / grep 980 / glob 729 / file_list 472。
 _FILE_CAPS: dict[str, int] = {
     "file_delete": 360,
-    "file_read": 770,
-    "grep": 940,
+    "file_read": 860,
+    "grep": 980,
     "file_move": 330,
-    "file_copy": 380,
-    "glob": 690,
-    "file_list": 410,
+    "file_copy": 440,
+    "glob": 730,
+    "file_list": 480,
     "mkdir": 330,
     "code_search": 630,
     "code_diagnostics": 420,

@@ -32,8 +32,6 @@ ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
         # Browser face — single ``browser`` (action policy table).
         "browser",
         # run is always-on (coding main path). Do not defer.
-        # Desktop-only silent mount.
-        "external_mount_readonly",
         # Export / fetch / unpack (not the daily write loop).
         "md_to_docx",
         "md_to_pdf",
@@ -43,15 +41,12 @@ ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
         # Rare CEO folder admin (list/resolve/peek stay resident).
         "create_folder",
         "delete_folder",
-        # Desktop toast.
-        "desktop_notify",
     }
 )
 
 ON_DEMAND_SUMMARIES: dict[str, str] = {
     "host": "本机排查 / 修理 / 查看这台电脑",
     "browser": "右坞真实浏览器",
-    "external_mount_readonly": "只读挂载本机目录",
     "md_to_docx": "导出 Word",
     "md_to_pdf": "导出 PDF",
     "archive_extract": "工作区 zip 解压到指定目录",
@@ -59,7 +54,6 @@ ON_DEMAND_SUMMARIES: dict[str, str] = {
     "download_url": "HTTP(S) URL 落盘到工作区相对路径",
     "create_folder": "新建云文件夹",
     "delete_folder": "软删文件夹",
-    "desktop_notify": "向本机桌面发一条通知",
 }
 
 # Consulting any member offers every assembled sibling in the same family.

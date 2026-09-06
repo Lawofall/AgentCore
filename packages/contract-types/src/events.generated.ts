@@ -184,28 +184,15 @@ export type CheckpointDecision =
  * native client action instead of a plain text answer (unknown/absent → plain option):
  * `open_local_project` / `register_local_project` / `bind_local_folder` are
  * **本机传统** wire enums（桌面默认同通道；云协作是选项：「导入到云」/「从 Git 克隆」；≠离线；
- * 网页/手机无本机盘；``create_folder`` 仍只建云）；
- * `grant_organize_folder` confirms organize-mode (move/copy/mkdir/trash-delete);
- * `grant_attach_folder` confirms attach_rw (本机传统：该根可写可覆盖);
- * still requires explicit user confirm (not silent).
- * For ``grant_*`` only: optional ``well_known`` (``desktop`` / ``downloads`` /
- * ``documents``) and optional ``target_name`` (short basename, no path separators)
- * resolve on the desktop with **no** system folder picker — failure is structured
- * not_found / not_directory / ambiguous (never picker fallback). Optional ``path``
- * may carry an absolute directory hint for organize confirm (mount-only transport
- * exception; success surfaces never return abs).
- * Structured ``op`` / ``source`` / ``destination`` / ``path`` fields also carry
+ * 网页/手机无本机盘；``create_folder`` 仍只建云）。
+ * Structured ``op`` / ``source`` / ``destination`` / ``path`` fields carry
  * organize_plan items for plan-bound ``file_batch``. ``review_kind`` / ``body`` /
  * ``slug`` / ``section`` carry daily_review proposals for server-side apply on
  * confirm. */
 export interface AskOption {
   label: string;
   detail?: string;
-  action?: "open_local_project" | "register_local_project" | "bind_local_folder" | "grant_organize_folder" | "grant_attach_folder";
-  /** 仅 grant_*：常见目录提示；桌面解析直授，失败明确报错（无 picker 兜底）。 */
-  well_known?: "desktop" | "downloads" | "documents";
-  /** 仅 grant_*：子目录名模糊词（无路径分隔符）；与 well_known 合用尽量唯一匹配。 */
-  target_name?: string;
+  action?: "open_local_project" | "register_local_project" | "bind_local_folder";
   op?: "move" | "copy" | "delete" | "mkdir";
   source?: string;
   destination?: string;
@@ -1539,25 +1526,20 @@ export interface BoardReadRequiredPayload {
   ids: string[];
 }
 
-/** Transport-only client-tool request: show an OS notification on the bound desktop
- * (`desktop_notify`). NOT journaled. */
-export interface DesktopNotifyRequiredPayload {
-  request_id: string;
-  conversation_id: string;
-  title: string;
-  body?: string;
-}
-
-/** Transport-only client-tool request: silently mount a local directory read-only
- * (`external_mount_readonly`). Path transport exception — may carry `path` /
- * `well_known`+`target_name` for desktop resolve; success result must not include abs.
+/** Transport-only client-tool request: mount a local directory for file tools.
+ * Path transport exception — may carry `path` / `well_known`+`target_name` for
+ * desktop resolve; success result must not include abs. ``mode`` is omitted
+ * on silent readonly; ``organize`` / ``attach_rw`` confirm. ``root_id``
+ * upgrades an existing session root (no picker).
  * NOT journaled. */
-export interface ExternalMountReadonlyRequiredPayload {
+export interface ExternalMountRequiredPayload {
   request_id: string;
   conversation_id: string;
   path?: string;
   well_known?: string;
   target_name?: string;
+  mode?: "organize" | "attach_rw";
+  root_id?: string;
 }
 
 /** Transport-only client-tool request: run a Host op on the bound desktop
@@ -1697,8 +1679,7 @@ export type SSEPayloadMap = {
   workspace_op_required: WorkspaceOpRequiredPayload;
   board_op_required: BoardOpRequiredPayload;
   board_read_required: BoardReadRequiredPayload;
-  desktop_notify_required: DesktopNotifyRequiredPayload;
-  external_mount_readonly_required: ExternalMountReadonlyRequiredPayload;
+  external_mount_required: ExternalMountRequiredPayload;
   host_op_required: HostOpRequiredPayload;
   mcp_op_required: McpOpRequiredPayload;
   auto_folder_created: AutoFolderCreatedPayload;

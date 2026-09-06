@@ -93,8 +93,8 @@ class ToolRegistration:
     # Host 第三能力面: gated by ``host≠off`` + desktop backfill channel (desktop_online).
     # Must NOT set ``execution_class`` — L2/L3 never enter kickoff silent grant.
     host_class: bool = False
-    # Desktop-online-only tools (≠ Host face): gated solely by ``desktop_online``
-    # (e.g. ``external_mount_readonly``). Not gated by ``host≠off``.
+    # Desktop-online-only tools (≠ Host face): gated solely by ``desktop_online``.
+    # Not gated by ``host≠off``.
     desktop_online_class: bool = False
     # Workspace-git face (``git``): gated by ``git_execution_enabled_for`` — a root
     # to spawn ``git`` under (cloud / sidecar), else a live desktop channel.

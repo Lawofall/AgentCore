@@ -1,7 +1,8 @@
-"""Package-registry egress chokepoint (install path only).
+"""Cloud-desk egress session (netns + SSRF proxy + package cache dir).
 
-Allowlist-only (hosts from ``ALLOWED_NPM_REGISTRIES`` + egress-only
-``ALLOWED_NPM_HOSTS`` CDN; CDN ≠ pin registry), not browser SSRF deny-private.
+The proxy policy is :func:`core.net.resolve_ssrf_dial_target` (same as
+``download_url``). Registry host lists in ``hosts`` pin the *install tool*,
+not the network chokepoint.
 """
 
 from __future__ import annotations

@@ -2,8 +2,7 @@ import { logEvent } from "@/lib/log";
 import { performBoardOp } from "@/services/boardOps";
 import { performBoardRead } from "@/services/boardRead";
 import { abortClientToolRequest } from "@/services/clientToolFulfill";
-import { performDesktopNotify } from "@/services/desktopNotify";
-import { performExternalMountReadonly } from "@/services/externalMountOps";
+import { performExternalMount } from "@/services/externalMountOps";
 import { performHostOp } from "@/services/hostOps";
 import type { InteractionSettleOrigin } from "@/services/interaction";
 import { performMcpOp } from "@/services/mcpOps";
@@ -11,8 +10,7 @@ import { performWorkspaceOp } from "@/services/workspaceOps";
 import type {
   BoardOpRequiredPayload,
   BoardReadRequiredPayload,
-  DesktopNotifyRequiredPayload,
-  ExternalMountReadonlyRequiredPayload,
+  ExternalMountRequiredPayload,
   HostOpRequiredPayload,
   McpOpRequiredPayload,
   WorkspaceOpRequiredPayload,
@@ -22,7 +20,7 @@ import type {
 export type { InteractionSettleOrigin };
 
 /**
- * Seven CLIENT_TOOL `*_required` wire types. Both engines deliver them on a
+ * Six CLIENT_TOOL `*_required` wire types. Both engines deliver them on a
  * fulfill channel — cloud on the device SSE, sidecar on its stdio push — never
  * on the conversation event stream.
  */
@@ -32,8 +30,7 @@ export const CLIENT_TOOL_REQUIRED_TYPES = [
   "mcp_op_required",
   "board_op_required",
   "board_read_required",
-  "desktop_notify_required",
-  "external_mount_readonly_required",
+  "external_mount_required",
 ] as const;
 
 export type ClientToolRequiredType =
@@ -109,16 +106,9 @@ export function dispatchClientToolRequired(
         origin,
       );
       return;
-    case "desktop_notify_required":
-      void performDesktopNotify(
-        payload as DesktopNotifyRequiredPayload,
-        conversationId,
-        origin,
-      );
-      return;
-    case "external_mount_readonly_required":
-      void performExternalMountReadonly(
-        payload as ExternalMountReadonlyRequiredPayload,
+    case "external_mount_required":
+      void performExternalMount(
+        payload as ExternalMountRequiredPayload,
         conversationId,
         origin,
       );

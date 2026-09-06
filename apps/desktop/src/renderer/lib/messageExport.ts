@@ -86,7 +86,6 @@ const TOOL_LABEL: Record<string, string> = {
   handoff: "Handoff",
   board_ops: "Edit board",
   board_read: "Read board",
-  desktop_notify: "Notify",
   external_mount_readonly: "Mount folder",
   browser: "Browser",
   browser_navigate: "Navigate",

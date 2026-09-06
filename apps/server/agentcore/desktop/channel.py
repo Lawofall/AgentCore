@@ -1,17 +1,16 @@
 """DesktopClientChannel — route desktop Client Tools to the bound Electron app.
 
 Counterpart of :class:`agentcore.board.channel.BoardChannel` for OS-level desktop
-affordances that only exist in the Electron shell (native notifications + Host ops).
+affordances that only exist in the Electron shell (Host ops, MCP stdio, and
+external directory mounts).
 
 Wired whenever the desktop client is online (local workspace **or** cloud +
 ``desktop_online``) — never by pinging ``127.0.0.1`` from the cloud API process.
 Delivery goes through the device-level fulfill hub (not the turn display sink).
 
-Host ops, MCP stdio servers and read-only mounts all act on one specific
+Host ops, MCP stdio servers and external mounts all act on one specific
 machine, so they are pinned to the device that started the turn
 (``fulfill.hub.ORIGIN_PINNED_CHANNELS``) and fail honestly when it goes away.
-Native notifications are not: a reminder is worth showing on whichever install
-the user still has open.
 """
 
 from __future__ import annotations
@@ -27,13 +26,11 @@ from agentcore.runtime.events.client_tool_reattach import (
     CHANNEL_EXTERNAL_MOUNT,
     CHANNEL_HOST,
     CHANNEL_MCP,
-    CHANNEL_NOTIFY,
     client_tool_payload,
     push_client_tool_required,
 )
 from agentcore.runtime.events.desktop import (
-    desktop_notify_required,
-    external_mount_readonly_required,
+    external_mount_required,
     host_op_required,
     mcp_op_required,
 )
@@ -42,10 +39,6 @@ from agentcore.runtime.interaction import InteractionKind
 from agentcore.runtime.ports import ClientRequestBridge
 
 logger = get_logger(__name__)
-
-
-class DesktopNotifyError(Exception):
-    """A desktop notify request failed (desktop error, drop, or timeout)."""
 
 
 class ExternalMountError(Exception):
@@ -106,73 +99,22 @@ class DesktopClientChannel:
     registry: ClientRequestBridge
     timeout_seconds: float
 
-    async def notify(
-        self,
-        *,
-        title: str,
-        body: str = "",
-    ) -> dict[str, Any]:
-        """Emit a notify request, await the desktop, return its ``value`` envelope."""
-        request_id = new_id()
-        try:
-            result = await self.registry.suspend(
-                request_id,
-                self.conversation_id,
-                kind=InteractionKind.CLIENT_TOOL,
-                payload=client_tool_payload(
-                    CHANNEL_NOTIFY,
-                    EventType.DESKTOP_NOTIFY_REQUIRED.value,
-                    params={"title": title, "body": body},
-                    user_id=self.user_id,
-                ),
-                timeout=self.timeout_seconds,
-                on_suspended=lambda: push_client_tool_required(
-                    user_id=self.user_id,
-                    conversation_id=self.conversation_id,
-                    channel=CHANNEL_NOTIFY,
-                    root_id=None,
-                    event=desktop_notify_required(
-                        request_id=request_id,
-                        conversation_id=self.conversation_id,
-                        title=title,
-                        body=body,
-                    ),
-                    registry=self.registry,
-                    request_id=request_id,
-                    error_kind="DesktopNotifyError",
-                    error_detail="桌面通知失败: no fulfiller（无履约方）",
-                    deadline_seconds=self.timeout_seconds,
-                ),
-            )
-        except TimeoutError as e:
-            logger.info(
-                "desktop.notify_timeout",
-                conversation_id=self.conversation_id,
-                request_id=request_id,
-            )
-            raise DesktopNotifyError("桌面通知超时（客户端未响应）") from e
-
-        if not isinstance(result, dict) or not result.get("ok"):
-            detail = ""
-            if isinstance(result, dict):
-                err = result.get("error")
-                if isinstance(err, dict):
-                    detail = str(err.get("detail", "") or "")
-                elif err:
-                    detail = str(err)
-            raise DesktopNotifyError(detail or "桌面通知失败")
-        value = result.get("value")
-        return value if isinstance(value, dict) else {"shown": True}
-
-    async def request_external_mount_readonly(
+    async def request_external_mount(
         self,
         *,
         path: str | None = None,
         well_known: str | None = None,
         target_name: str | None = None,
+        mode: str | None = None,
+        root_id: str | None = None,
         timeout: float | None = None,
     ) -> dict[str, Any]:
-        """Emit a silent read-only mount request; return desktop ``value`` (no abs)."""
+        """Emit a mount request; return desktop ``value`` (no abs).
+
+        ``mode`` / ``root_id`` are transport-only (readonly silent; write
+        confirm upgrades the same session root). Event name is
+        ``external_mount_required``.
+        """
         request_id = new_id()
         params: dict[str, Any] = {}
         if path:
@@ -181,6 +123,10 @@ class DesktopClientChannel:
             params["well_known"] = well_known
         if target_name:
             params["target_name"] = target_name
+        if mode and mode != "readonly":
+            params["mode"] = mode
+        if root_id:
+            params["root_id"] = root_id
         deadline = self.timeout_seconds if timeout is None else timeout
         try:
             result = await self.registry.suspend(
@@ -189,7 +135,7 @@ class DesktopClientChannel:
                 kind=InteractionKind.CLIENT_TOOL,
                 payload=client_tool_payload(
                     CHANNEL_EXTERNAL_MOUNT,
-                    EventType.EXTERNAL_MOUNT_READONLY_REQUIRED.value,
+                    EventType.EXTERNAL_MOUNT_REQUIRED.value,
                     params=params,
                     user_id=self.user_id,
                 ),
@@ -199,12 +145,14 @@ class DesktopClientChannel:
                     conversation_id=self.conversation_id,
                     channel=CHANNEL_EXTERNAL_MOUNT,
                     root_id=None,
-                    event=external_mount_readonly_required(
+                    event=external_mount_required(
                         request_id=request_id,
                         conversation_id=self.conversation_id,
                         path=path,
                         well_known=well_known,
                         target_name=target_name,
+                        mode=mode if mode and mode != "readonly" else None,
+                        root_id=root_id,
                     ),
                     registry=self.registry,
                     request_id=request_id,

@@ -31,7 +31,6 @@ from agentcore.runtime.events.client_tool_reattach import (
     CHANNEL_EXTERNAL_MOUNT,
     CHANNEL_HOST,
     CHANNEL_MCP,
-    CHANNEL_NOTIFY,
     CHANNEL_WORKSPACE,
     push_client_tool_required,
 )
@@ -95,7 +94,7 @@ async def test_bind_user_registers_every_channel(bridge, hub: FulfillerHub) -> N
     assert session is not None
     assert session.caps == FULFILL_CHANNELS
     assert session.platform == "sidecar"
-    # 未绑定根：无根 op（host/mcp/notify/board/board_read/external_mount/terminal）即可履约。
+    # 未绑定根：无根 op（host/mcp/board/board_read/external_mount/terminal）即可履约。
     assert session.roots == set()
 
 
@@ -104,7 +103,6 @@ async def test_bind_user_registers_every_channel(bridge, hub: FulfillerHub) -> N
     [
         CHANNEL_HOST,
         CHANNEL_MCP,
-        CHANNEL_NOTIFY,
         CHANNEL_BOARD,
         CHANNEL_BOARD_READ,
         CHANNEL_EXTERNAL_MOUNT,

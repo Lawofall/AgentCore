@@ -464,6 +464,8 @@ async def _read_wait_stream(
             if on_output and chunk:
                 on_output(kind, chunk)
         elif kind == "exit":
-            exit_code = int(event.get("code") or 1)
+            raw_code = event.get("code")
+            # 0 is success — must not use `or 1` (Python treats 0 as falsy).
+            exit_code = 1 if raw_code is None else int(raw_code)
             break
     return exit_code, "".join(stdout_buf), "".join(stderr_buf)

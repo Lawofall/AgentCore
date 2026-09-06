@@ -20,7 +20,7 @@ from agentcore.runtime.facts import CROSS_TURN_RETRY_KEY, CrossTurnRetry
 from agentcore.storage._archive import ArchiveLimitError, zip_dir
 from agentcore.tools.builtin.file_ops import (
     _outside_workspace_msg,
-    _prepare_write_relpath,
+    prepared_write_relpath,
     write_scope_rejection,
 )
 from agentcore.tools.file_products import FileProduct, file_product
@@ -101,7 +101,10 @@ class ArchiveCreateTool:
         if not dest_raw:
             return _fail("dest 不能为空：请提供目标 `.zip` 相对路径", start)
 
-        dest_path, dest_note = await _prepare_write_relpath(dest_raw, context)
+        prepared = await prepared_write_relpath(dest_raw, context)
+        if isinstance(prepared, ToolResult):
+            return prepared
+        dest_path, dest_note = prepared
         if not dest_path or dest_path == ".":
             return _fail("dest 无效：请提供目标 `.zip` 相对路径", start)
         if _escapes_workspace(dest_path):

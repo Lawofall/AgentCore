@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  formatGrantOrganizeFolderAnswer,
-  pickAndGrantOrganizeFolder,
-} from "../grantOrganizeFolder";
+import { pickAndGrantOrganizeFolder } from "../grantOrganizeFolder";
 
 vi.mock("@/lib/capabilities", () => ({
   hasLocalFiles: vi.fn(() => true),
@@ -25,21 +22,6 @@ vi.mock("@/services/api", () => ({
     post: vi.fn(),
   },
 }));
-
-describe("formatGrantOrganizeFolderAnswer", () => {
-  it("mentions organize session scope without absolute paths", () => {
-    const text = formatGrantOrganizeFolderAnswer(
-      "允许整理",
-      "桌面 › 咨询",
-      "external/咨询",
-    );
-    expect(text).toContain("可移动");
-    expect(text).toContain("仅本次对话");
-    expect(text).toContain("可撤销");
-    expect(text).toContain("external/咨询");
-    expect(text).not.toMatch(/^[A-Za-z]:\\/);
-  });
-});
 
 describe("pickAndGrantOrganizeFolder", () => {
   beforeEach(async () => {
@@ -148,6 +130,39 @@ describe("pickAndGrantOrganizeFolder", () => {
       ok: false,
       reason: "not_found",
       message: "找不到该目录",
+    });
+  });
+
+  it("forwards rootId for upgrade (no path)", async () => {
+    const { api } = await import("@/services/api");
+    vi.mocked(window.fsApi.grantSessionReadonlyRoot).mockResolvedValue({
+      ok: true,
+      root: { id: "r1", name: "咨询", alias: "desk", mode: "organize" },
+    });
+    vi.mocked(api.post).mockResolvedValue({
+      grant: { alias: "desk", namespace: "external/desk" },
+    });
+
+    await pickAndGrantOrganizeFolder("conv-1", { rootId: "r1" });
+
+    expect(window.fsApi.grantSessionReadonlyRoot).toHaveBeenCalledWith({
+      conversationId: "conv-1",
+      mode: "organize",
+      rootId: "r1",
+    });
+  });
+
+  it("maps cancelled from the system dialog", async () => {
+    vi.mocked(window.fsApi.grantSessionReadonlyRoot).mockResolvedValue({
+      ok: false,
+      reason: "cancelled",
+      message: "用户拒绝授权",
+    });
+    const result = await pickAndGrantOrganizeFolder("conv-1", { rootId: "r1" });
+    expect(result).toEqual({
+      ok: false,
+      reason: "cancelled",
+      message: "用户拒绝授权",
     });
   });
 });

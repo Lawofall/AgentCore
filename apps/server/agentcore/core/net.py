@@ -18,9 +18,11 @@ What lives here (stateless):
 - :func:`describe_net_error` — turn opaque httpx errors into an honest,
   model-facing reason (so logs show the real cause, not ``error: ""``).
 - :func:`site_of` — display hostname for source/citation cards.
-- :func:`classify_url` / :func:`is_safe_url` — the SSRF guard: reject
-  non-http(s), reserved hostnames, and any host that resolves to a
-  private/loopback/link-local/reserved address (blocks cloud-metadata SSRF).
+- :func:`classify_url` / :func:`is_safe_url` / :func:`resolve_ssrf_dial_target`
+  — the SSRF guard: reject non-http(s), reserved hostnames, and any host
+  that resolves to a private/loopback/link-local/reserved address (blocks
+  cloud-metadata SSRF). ``web_fetch`` / ``download_url`` / 云桌 guest 出站 /
+  云端浏览器代理共用这一把尺。
 
 The *stateful* per-host egress circuit breaker lives in
 ``tools/builtin/web/_net`` (agent-runtime egress state, not generic infra).
@@ -410,6 +412,37 @@ async def is_safe_url(url: str) -> bool:
     return await classify_url(url) is None
 
 
+async def resolve_ssrf_dial_target(
+    host: str, port: int, *, scheme: str = "https"
+) -> tuple[str | None, str]:
+    """SSRF-vet ``host`` and return ``(pinned_ip, reason)`` — ``None`` ip ⇒ refuse.
+
+    Same policy as :func:`classify_url` + :class:`PinnedIPTransport`: every
+    resolved address must be globally routable, then dial the first safe IP.
+    Used by the cloud-desk egress proxy and the sandbox browser proxy so
+    guest ``run`` HTTP matches ``download_url``.
+    """
+    block = await classify_url(f"{scheme}://{host}:{port}/")
+    if block is not None:
+        return None, block.name
+    try:
+        ipaddress.ip_address(host)
+        return host, "ok_literal"
+    except ValueError:
+        pass
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(
+            host, port, proto=socket.IPPROTO_TCP
+        )
+    except OSError:
+        return None, "DNS_FAIL"
+    for info in infos:
+        ip = info[4][0]
+        if ip_is_safe(ip):
+            return ip, "ok"
+    return None, "PRIVATE_IP"
+
+
 # --- SEC-007: pinned-IP transport (DNS-rebinding TOCTOU close) ---------------
 # classify_url (pre-flight) and httpx's own connect-time resolution are two
 # separate DNS lookups; a hostile resolver can answer "public" to the first and
@@ -525,6 +558,7 @@ __all__ = [
     "classify_url",
     "describe_net_error",
     "ip_is_safe",
+    "resolve_ssrf_dial_target",
     "is_fake_ip_proxy_signature",
     "is_local_machine_host",
     "is_loopback_host",

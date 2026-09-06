@@ -75,8 +75,9 @@ class GlobTool:
                         "description": (
                             "搜索根，工作区相对 POSIX 目录（默认 `.`=整仓）。"
                             "`directory` 与 path 同义。不存在时从根按目录名/同一 pattern 续找。"
-                            "`/<根标签>/…` 与裸 `/`、`\\` 视为根；区外用 "
-                            "`external/<别名>/`，禁止裸 `external`；其它绝对路径拒绝。"
+                            "`/<根标签>/…` 与裸 `/`、`\\` 视为根；区外已挂载用 "
+                            "`external/<别名>/`，禁止裸 `external`；本机绝对路径或 "
+                            "~/Desktop|Downloads|Documents 在桌面在线时由运行时挂载。"
                         ),
                     },
                     "max_entries": {
@@ -114,6 +115,15 @@ class GlobTool:
 
         if is_bare_external_directory(directory):
             return bare_external_error(directory, context.backend, start)
+
+        from .prepare_path import prepare_tool_path
+
+        prepared = await prepare_tool_path(
+            directory, context, start=start, as_directory=True
+        )
+        if isinstance(prepared, ToolResult):
+            return prepared
+        directory = prepared
 
         from agentcore.workspace.project_shell import rewrite_project_shell_relpath
 

@@ -44,7 +44,7 @@ async def build_turn_backend(
         local_binding=local_binding,
     )
     # Cloud root_id-only grants: build a channel from sink so external/ ops reach desktop.
-    # (Same helper mid-turn ``external_mount_readonly`` uses after a silent mint.)
+    # (Same helper mid-turn host-path mint uses after a silent grant.)
     from agentcore.config import settings
     from agentcore.runtime.interaction import default_interaction_registry
     from agentcore.workspace.channel import WorkspaceChannel

@@ -137,7 +137,7 @@ def external_directory_hint(backend: Any) -> str:
     if not mounts:
         return (
             f"{guide}；本对话尚无会话级区外目录授权"
-            "（用户经 ask_user grant_* 确认后才会出现 mounts）。"
+            "（对本机路径 `file_read` / `file_copy` 后才会出现 mounts）。"
         )
     parts = [f"`external/{a}/`" for a in mounts]
     return f"{guide}；当前 mounts：{'；'.join(parts)}。"

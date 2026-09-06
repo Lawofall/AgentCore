@@ -17,24 +17,7 @@ import { hasLocalFiles } from "@/lib/capabilities";
 import {
   guideDesktopDownload,
   isDesktopFolderAction,
-  isGrantFolderAction,
 } from "@/lib/desktopDownload";
-import {
-  ATTACH_CONFIRM_CAPTION,
-  ATTACH_CONFIRM_CTA,
-  ORGANIZE_CONFIRM_CAPTION,
-  ORGANIZE_CONFIRM_CTA,
-  grantHintsFromAskOption,
-  optionsAreGrantOnly,
-  organizeConfirmDetail,
-  pickOralGrantOption,
-} from "@/lib/grantFolderHints";
-import {
-  formatGrantAttachFolderAnswer,
-  formatGrantOrganizeFolderAnswer,
-  pickAndGrantAttachFolder,
-  pickAndGrantOrganizeFolder,
-} from "@/lib/grantOrganizeFolder";
 import { pickAndOpenLocalFolder } from "@/lib/openLocalFolder";
 import {
   formatRegisterLocalFolderAnswer,
@@ -42,7 +25,7 @@ import {
 } from "@/lib/registerLocalFolder";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import type { AskOption, AskQuestion } from "@/types/events";
-import { ArrowRight, FolderOpen, FolderTree, Loader2 } from "lucide-react";
+import { ArrowRight, FolderOpen, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AskCardFooter, AskCardShell } from "./AskCardShell";
@@ -159,13 +142,6 @@ export function AskDecisionBody({
   const canLocalFs = hasLocalFiles() && !!window.fsApi;
   const canBindAction = !!conversationId && !!onBindResolve && canLocalFs;
 
-  const hasOrganizeGrantOption = content.questions.some((q) =>
-    q.options.some((o) => o.action === "grant_organize_folder"),
-  );
-  const hasAttachGrantOption = content.questions.some((q) =>
-    q.options.some((o) => o.action === "grant_attach_folder"),
-  );
-
   const clearPickerFeedback = () => {
     setBindError(null);
     setPickerFailure(null);
@@ -180,8 +156,9 @@ export function AskDecisionBody({
     setBindError(message ?? "本机目录操作失败");
   };
 
-  /** 当前选中落在须本机履约的 option 上时返回之；Continue 不得退化成口头「已授权」。
-   * 打开不再因 default 预选而出现「允许整理」——点授权行履约；人话短同意仍可交。 */
+  /** 当前选中落在须本机履约的 option 上时返回之；Continue 不得退化成口头「已绑定」。
+   * 打开不再因 default 预选而出现本机履约 CTA——点目录行履约。 */
+
   const findPendingFolderOption = (): {
     q: AskQuestion;
     opt: AskOption;
@@ -194,24 +171,6 @@ export function AskDecisionBody({
           return { q, opt };
         }
       }
-    }
-    return null;
-  };
-
-  /**
-   * 本题人话短允许表口头同意 → 同题 pending grant_*（hints 取自该选项）。
-   * 仅当该题 listed 未勾选；已勾选 grant 仍走 {@link findPendingFolderOption}。
-   * 禁对长文意图分类；未命中返回 null，Continue 走原 compose。
-   */
-  const findOralOrganizeGrant = (): {
-    q: AskQuestion;
-    opt: AskOption;
-  } | null => {
-    for (const q of content.questions) {
-      if (questionPresentsAsText(q)) continue;
-      if ((answer.answers[q.id] ?? []).length > 0) continue;
-      const opt = pickOralGrantOption(q.options, answer.notes[q.id] ?? "");
-      if (opt) return { q, opt };
     }
     return null;
   };
@@ -274,50 +233,6 @@ export function AskDecisionBody({
       return;
     }
 
-    if (
-      opt.action === "grant_organize_folder" ||
-      opt.action === "grant_attach_folder"
-    ) {
-      const hints = grantHintsFromAskOption(opt);
-      const result =
-        opt.action === "grant_attach_folder"
-          ? await pickAndGrantAttachFolder(conversationId, hints)
-          : await pickAndGrantOrganizeFolder(conversationId, hints);
-      if (!result.ok) {
-        if (result.reason === "unavailable") {
-          setBindError(
-            opt.action === "grant_attach_folder"
-              ? "附加可写授权仅桌面端可用"
-              : "整理授权仅桌面端可用",
-          );
-        } else {
-          setBindError(result.message);
-        }
-        setBindBusyLabel(null);
-        return;
-      }
-      const value =
-        opt.action === "grant_attach_folder"
-          ? formatGrantAttachFolderAnswer(
-              opt.label,
-              result.displayLabel ?? result.root.name,
-              result.namespace,
-            )
-          : formatGrantOrganizeFolderAnswer(
-              opt.label,
-              result.displayLabel ?? result.root.name,
-              result.namespace,
-            );
-      try {
-        await onBindResolve(answer.composeWithAnswer("decision", q.id, value));
-      } catch {
-        // resume 失败：留在卡上
-      } finally {
-        setBindBusyLabel(null);
-      }
-      return;
-    }
-
     const result = await pickAndBindLocalFolder(conversationId);
     if (!result.ok) {
       applyPickerFailure(
@@ -338,15 +253,13 @@ export function AskDecisionBody({
   };
 
   /**
-   * 继续：普通选项 → 原 onContinue；选中 grant_organize / bind_* / open_local_project /
-   * register_local_project → 一键履约（对齐点选项行）。未知已删 action 当普通选项。
-   * grant_organize 无系统选文件夹；找不到则卡面失败。同 root 只读已挂仍须点允许走
-   * organize 履约（禁止静默升写）。本题人话命中整理短允许表且 listed 未勾选 → 同真
-   * grant（非纯文本冒充已授权）。register 履约后 resume 本对话；open 开新会话不 resume。
+   * 继续：普通选项 → 原 onContinue；选中 bind_* / open_local_project /
+   * register_local_project → 一键履约（对齐点选项行）。未知 action 当普通选项。
+   * register 履约后 resume 本对话；open 开新会话不 resume。
    */
   const handleContinue = () => {
     if (busy || bindBusyLabel) return;
-    const pending = findPendingFolderOption() ?? findOralOrganizeGrant();
+    const pending = findPendingFolderOption();
     if (!pending) {
       onContinue();
       return;
@@ -385,26 +298,8 @@ export function AskDecisionBody({
     }, ASK_AUTO_ADVANCE_MS);
   };
 
-  const grantPending = findPendingFolderOption()?.opt.action;
-  const grantOnlyCard = content.questions.every(
-    (q) => q.kind !== "choice" || optionsAreGrantOnly(q.options),
-  );
-  const showAttachChrome =
-    grantPending === "grant_attach_folder" ||
-    (!grantPending &&
-      grantOnlyCard &&
-      hasAttachGrantOption &&
-      !hasOrganizeGrantOption);
-  const showOrganizeChrome =
-    grantPending === "grant_organize_folder" ||
-    (!grantPending && grantOnlyCard && hasOrganizeGrantOption);
-  const hasFolderGrant = showAttachChrome || showOrganizeChrome;
-  const shellCaption = showAttachChrome
-    ? ATTACH_CONFIRM_CAPTION
-    : showOrganizeChrome
-      ? ORGANIZE_CONFIRM_CAPTION
-      : (caption ?? META.activeCaption);
-  const shellIcon = hasFolderGrant ? FolderTree : META.icon;
+  const shellCaption = caption ?? META.activeCaption;
+  const shellIcon = META.icon;
   const hasQuestions = content.questions.length > 0;
   /** 无题：message 当唯一题干进壳标题。有题：不画总标题，题干在体内。 */
   const shellTitle = hasQuestions ? undefined : content.question;
@@ -419,19 +314,8 @@ export function AskDecisionBody({
     visited,
   );
   const advancing = primaryAction.type === "advance";
-  const shellCta = advancing
-    ? "下一题"
-    : grantPending === "grant_attach_folder"
-      ? ATTACH_CONFIRM_CTA
-      : grantPending === "grant_organize_folder"
-        ? ORGANIZE_CONFIRM_CTA
-        : META.cta;
-  const shellCtaIcon = advancing
-    ? ArrowRight
-    : grantPending === "grant_organize_folder" ||
-        grantPending === "grant_attach_folder"
-      ? FolderTree
-      : undefined;
+  const shellCta = advancing ? "下一题" : META.cta;
+  const shellCtaIcon = advancing ? ArrowRight : undefined;
   const currentQuestion = hasQuestions
     ? content.questions[paged ? safeStep : 0]
     : undefined;
@@ -462,7 +346,6 @@ export function AskDecisionBody({
     const picked = answer.answers[q.id] ?? [];
     const rows: AskRow[] = q.options.map((opt) => {
       const desktopFolder = isDesktopFolderAction(opt.action);
-      const organizeGrant = isGrantFolderAction(opt.action);
       const canRunFolder =
         desktopFolder &&
         (opt.action === "open_local_project" ? canLocalFs : canBindAction);
@@ -470,14 +353,10 @@ export function AskDecisionBody({
       return {
         key: opt.label,
         label: opt.label,
-        // 通用卡一行；整理授权只留结构化「将整理：…」（helper 不透传模型副标题）。
-        detail: organizeConfirmDetail(opt),
         hint: q.default && opt.label === q.default ? "默认" : undefined,
         icon: desktopFolder ? (
           bindBusy ? (
             <Loader2 size={12} className="animate-spin" />
-          ) : organizeGrant ? (
-            <FolderTree size={12} />
           ) : (
             <FolderOpen size={12} />
           )

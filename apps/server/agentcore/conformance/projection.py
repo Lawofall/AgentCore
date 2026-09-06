@@ -1004,7 +1004,7 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
 
         else:
             # message_start / turn_saved / title_generated / followups_generated /
-            # board_op_required / board_read_required / desktop_notify_required /
+            # board_op_required / board_read_required /
             # host_op_required / tool_progress / workspace_op_required /
             # handoff_* / turn_queued / turn_queue_started / turn_queue_cancelled /
             # interaction_orphaned / escalation_* (run escalations folded above) —

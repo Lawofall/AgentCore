@@ -32,7 +32,6 @@ from agentcore.tools.builtin import (
 from agentcore.tools.builtin.ask_user import AskUserTool
 from agentcore.tools.builtin.consult import ConsultTool
 from agentcore.tools.builtin.delegate import DelegateTool
-from agentcore.tools.builtin.desktop_notify import DesktopNotifyTool
 from agentcore.tools.builtin.remember import RememberTool
 from agentcore.tools.builtin.update_folder_profile import UpdateFolderProfileTool
 from agentcore.tools.protocol import ToolContext
@@ -222,8 +221,6 @@ def _assemble_ceo_toolset(
                 workspace_location=backend_location,
             )
         )
-    # Same as workers: always registered (on-demand); execute fails without a channel.
-    chat_tools.register(DesktopNotifyTool())
     return delegate_tool, debate_tool, chat_tools
 
 

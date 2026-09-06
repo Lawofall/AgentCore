@@ -1,4 +1,4 @@
-"""Tests for ``external_mount_readonly`` (C1 silent read-only mount)."""
+"""Runtime host-path mount (file tools mint; no FC mount tool)."""
 
 from __future__ import annotations
 
@@ -8,13 +8,10 @@ import pytest
 
 from agentcore.desktop.channel import ExternalMountError
 from agentcore.tools.builtin import build_ceo_tool_registry, build_worker_registry
-from agentcore.tools.builtin.external_mount_readonly import (
-    EXTERNAL_MOUNT_READONLY_TOOL_NAME,
-    ExternalMountReadonlyTool,
-    format_external_mount_error,
-)
-from agentcore.tools.protocol import ToolContext
+from agentcore.tools.builtin.file_ops.prepare_path import prepare_tool_path
+from agentcore.tools.protocol import ToolContext, ToolResult
 from agentcore.workspace import grant_store
+from agentcore.workspace.ensure_host_path import format_external_mount_error
 from agentcore.workspace.hot_attach import attach_grants_to_backend
 from agentcore.workspace.server import ServerWorkspace
 
@@ -39,63 +36,13 @@ def _ctx(**kwargs) -> ToolContext:
     )
 
 
-@pytest.mark.asyncio
-async def test_requires_desktop_channel():
-    tool = ExternalMountReadonlyTool()
-    result = await tool.execute(
-        {"well_known": "desktop", "target_name": "咨询"},
-        _ctx(desktop_channel=None),
-    )
-    assert result.success is False
-    assert "桌面" in (result.error or "")
-
-
-@pytest.mark.asyncio
-async def test_requires_path_or_well_known():
-    tool = ExternalMountReadonlyTool()
-    channel = MagicMock()
-    channel.request_external_mount_readonly = AsyncMock()
-    result = await tool.execute({}, _ctx(desktop_channel=channel))
-    assert result.success is False
-    assert "path" in (result.error or "")
-    channel.request_external_mount_readonly.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_maps_not_found_error():
-    tool = ExternalMountReadonlyTool()
-    channel = MagicMock()
-    channel.request_external_mount_readonly = AsyncMock(
-        side_effect=ExternalMountError("找不到该目录", reason="not_found")
-    )
-    result = await tool.execute(
-        {"well_known": "desktop", "target_name": "nope"},
-        _ctx(desktop_channel=channel),
-    )
-    assert result.success is False
-    assert "找不到" in (result.error or "")
-    assert "挂载只接受文件夹" in (result.error or "")
-    assert "reason=not_found" in (result.error or "")
-    assert "盲重试" in (result.error or "")
-    assert result.metadata.get("code") == "not_found"
-
-
-@pytest.mark.asyncio
-async def test_maps_ambiguous_error_with_stable_reason():
-    tool = ExternalMountReadonlyTool()
-    channel = MagicMock()
-    channel.request_external_mount_readonly = AsyncMock(
-        side_effect=ExternalMountError(
-            "匹配到多个目录，请说得更具体", reason="ambiguous"
-        )
-    )
-    result = await tool.execute(
-        {"well_known": "desktop", "target_name": "docs"},
-        _ctx(desktop_channel=channel),
-    )
-    assert result.success is False
-    assert "reason=ambiguous" in (result.error or "")
-    assert result.metadata.get("code") == "ambiguous"
+def test_mount_tool_absent_from_registries():
+    online = {s.name for s in build_ceo_tool_registry(desktop_online=True).list_all()}
+    offline = {s.name for s in build_ceo_tool_registry(desktop_online=False).list_all()}
+    assert "external_mount_readonly" not in online
+    assert "external_mount_readonly" not in offline
+    worker_on = {s.name for s in build_worker_registry(desktop_online=True).list_all()}
+    assert "external_mount_readonly" not in worker_on
 
 
 def test_format_external_mount_error_preserves_reason():
@@ -118,12 +65,121 @@ def test_format_external_mount_not_found_names_folder_only():
     assert "reason=not_found" in text
 
 
-def test_schema_mentions_reason_and_soft_recovery():
-    tool = ExternalMountReadonlyTool()
-    desc = tool.schema.description
-    assert "reason" in desc
-    assert "盲重试" in desc
-    assert "well_known" in desc
+def test_format_cancelled():
+    text = format_external_mount_error(ExternalMountError("nope", reason="cancelled"))
+    assert "拒绝" in text
+    assert "盲重试" in text
+
+
+@pytest.mark.asyncio
+async def test_prepare_requires_desktop_channel():
+    result = await prepare_tool_path(
+        "~/Desktop/咨询", _ctx(desktop_channel=None), as_directory=True
+    )
+    assert isinstance(result, ToolResult)
+    assert result.success is False
+    assert "桌面" in (result.error or "")
+
+
+@pytest.mark.asyncio
+async def test_prepare_maps_not_found():
+    channel = MagicMock()
+    channel.request_external_mount = AsyncMock(
+        side_effect=ExternalMountError("找不到该目录", reason="not_found")
+    )
+    result = await prepare_tool_path(
+        "~/Desktop/nope", _ctx(desktop_channel=channel), as_directory=True
+    )
+    assert isinstance(result, ToolResult)
+    assert result.success is False
+    assert "找不到" in (result.error or "")
+    assert "reason=not_found" in (result.error or "")
+    assert result.metadata.get("code") == "not_found"
+
+
+@pytest.mark.asyncio
+async def test_file_retry_parent_on_not_directory(tmp_path):
+    from agentcore.tools.sandbox.subprocess import SubprocessSandbox
+
+    channel = MagicMock()
+    channel.sink = MagicMock()
+    channel.registry = MagicMock()
+    channel.request_external_mount = AsyncMock(
+        side_effect=[
+            ExternalMountError("not a dir", reason="not_directory"),
+            {
+                "root_id": "root-1",
+                "alias": "downloads",
+                "label": "下载",
+                "display_label": "下载",
+                "namespace": "external/downloads",
+            },
+        ]
+    )
+    backend = ServerWorkspace(
+        root=tmp_path,
+        sandbox=SubprocessSandbox(),
+        root_label="conv:x",
+        location="server",
+    )
+    got = await prepare_tool_path(
+        r"D:\Downloads\foo.pdf",
+        _ctx(desktop_channel=channel, backend=backend, conversation_id="conv-hot"),
+    )
+    assert got == "external/downloads/foo.pdf"
+    assert channel.request_external_mount.await_count == 2
+    grants = await grant_store.list_grants("conv-hot")
+    assert len(grants) == 1
+    assert grants[0].root_id == "root-1"
+
+
+@pytest.mark.asyncio
+async def test_well_known_rewrites_remainder(tmp_path):
+    from agentcore.tools.sandbox.subprocess import SubprocessSandbox
+
+    channel = MagicMock()
+    channel.sink = MagicMock()
+    channel.registry = MagicMock()
+    channel.request_external_mount = AsyncMock(
+        return_value={
+            "root_id": "root-1",
+            "alias": "consult",
+            "label": "咨询",
+            "display_label": "咨询",
+            "namespace": "external/consult",
+        }
+    )
+    backend = ServerWorkspace(
+        root=tmp_path,
+        sandbox=SubprocessSandbox(),
+        root_label="conv:x",
+        location="server",
+    )
+    got = await prepare_tool_path(
+        "~/Desktop/咨询/a.md",
+        _ctx(desktop_channel=channel, backend=backend, conversation_id="conv-hot"),
+    )
+    assert got == "external/consult/a.md"
+    grants = await grant_store.list_grants("conv-hot")
+    assert len(grants) == 1
+    assert "consult" in backend._mounts  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_cloud_file_write_host_path_denied():
+    channel = MagicMock()
+    channel.request_external_mount = AsyncMock()
+    backend = MagicMock()
+    backend.location = "server"
+    result = await prepare_tool_path(
+        r"D:\out\a.md",
+        _ctx(desktop_channel=channel, backend=backend),
+        grant_mode="attach_rw",
+    )
+    assert isinstance(result, ToolResult)
+    assert result.success is False
+    assert "云对话" in (result.error or "")
+    channel.request_external_mount.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -148,7 +204,7 @@ async def test_channel_preserves_error_reason():
         timeout_seconds=1.0,
     )
     with pytest.raises(ExternalMountError) as ei:
-        await channel.request_external_mount_readonly(well_known="desktop")
+        await channel.request_external_mount(well_known="desktop")
     assert ei.value.reason == "not_found"
     assert "找不到" in str(ei.value)
 
@@ -175,43 +231,6 @@ def test_workspace_op_error_roundtrips_reason():
 
 
 @pytest.mark.asyncio
-async def test_success_registers_grant_and_hot_attaches(tmp_path):
-    from agentcore.tools.sandbox.subprocess import SubprocessSandbox
-
-    tool = ExternalMountReadonlyTool()
-    channel = MagicMock()
-    channel.sink = MagicMock()
-    channel.registry = MagicMock()
-    channel.request_external_mount_readonly = AsyncMock(
-        return_value={
-            "root_id": "root-1",
-            "alias": "consult",
-            "label": "咨询",
-            "display_label": "咨询",
-            "namespace": "external/consult",
-        }
-    )
-    backend = ServerWorkspace(
-        root=tmp_path,
-        sandbox=SubprocessSandbox(),
-        root_label="conv:x",
-        location="server",
-    )
-    result = await tool.execute(
-        {"well_known": "desktop", "target_name": "咨询"},
-        _ctx(desktop_channel=channel, backend=backend, conversation_id="conv-hot"),
-    )
-    assert result.success is True
-    assert "external/consult" in (result.output or "")
-    assert "abs" not in (result.output or "").lower()
-    grants = await grant_store.list_grants("conv-hot")
-    assert len(grants) == 1
-    assert grants[0].root_id == "root-1"
-    assert "consult" in backend._mounts  # noqa: SLF001
-    assert backend._external_bridge is not None  # noqa: SLF001
-
-
-@pytest.mark.asyncio
 async def test_hot_attach_helper_merges_mounts(tmp_path):
     from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 
@@ -235,21 +254,184 @@ async def test_hot_attach_helper_merges_mounts(tmp_path):
     assert backend._external_bridge is not None  # noqa: SLF001
 
 
-def test_tool_assembled_only_when_desktop_online():
-    online = {s.name for s in build_ceo_tool_registry(desktop_online=True).list_all()}
-    offline = {s.name for s in build_ceo_tool_registry(desktop_online=False).list_all()}
-    assert EXTERNAL_MOUNT_READONLY_TOOL_NAME in online
-    assert EXTERNAL_MOUNT_READONLY_TOOL_NAME not in offline
+@pytest.mark.asyncio
+async def test_external_ns_write_upgrades_readonly_by_root_id(tmp_path):
+    from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 
-    worker_on = {s.name for s in build_worker_registry(desktop_online=True).list_all()}
-    worker_off = {s.name for s in build_worker_registry(desktop_online=False).list_all()}
-    assert EXTERNAL_MOUNT_READONLY_TOOL_NAME in worker_on
-    assert EXTERNAL_MOUNT_READONLY_TOOL_NAME not in worker_off
+    channel = MagicMock()
+    channel.sink = MagicMock()
+    channel.registry = MagicMock()
+    channel.request_external_mount = AsyncMock(
+        return_value={
+            "root_id": "root-1",
+            "alias": "desk",
+            "label": "桌面",
+            "namespace": "external/desk",
+        }
+    )
+    backend = ServerWorkspace(
+        root=tmp_path,
+        sandbox=SubprocessSandbox(),
+        root_label="conv:x",
+        location="server",
+    )
+    await grant_store.add_grant(
+        "conv-up", root_id="root-1", label="桌面", alias_hint="desk", mode="readonly"
+    )
+    await attach_grants_to_backend(
+        backend, "conv-up", desktop_channel=channel
+    )
+    got = await prepare_tool_path(
+        "external/desk/out.md",
+        _ctx(desktop_channel=channel, backend=backend, conversation_id="conv-up"),
+        grant_mode="organize",
+    )
+    assert got == "external/desk/out.md"
+    channel.request_external_mount.assert_awaited_once()
+    kwargs = channel.request_external_mount.await_args.kwargs
+    assert kwargs["root_id"] == "root-1"
+    assert kwargs["mode"] == "organize"
+    assert kwargs["path"] is None
+    grants = await grant_store.list_grants("conv-up")
+    assert grants[0].mode == "organize"
+    assert backend._mounts["desk"].mode == "organize"  # noqa: SLF001
 
 
-def test_approval_never_and_audience_both():
-    tool = ExternalMountReadonlyTool()
-    assert tool.schema.approval.value == "never"
-    from agentcore.tools.registration import AUDIENCE_BOTH, tool_registration
+@pytest.mark.asyncio
+async def test_external_ns_write_skips_mint_when_mode_covers(tmp_path):
+    from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 
-    assert tool_registration(ExternalMountReadonlyTool).audience == AUDIENCE_BOTH
+    channel = MagicMock()
+    channel.request_external_mount = AsyncMock()
+    backend = ServerWorkspace(
+        root=tmp_path,
+        sandbox=SubprocessSandbox(),
+        root_label="conv:x",
+        location="server",
+    )
+    await grant_store.add_grant(
+        "conv-ok", root_id="root-1", label="桌面", alias_hint="desk", mode="organize"
+    )
+    got = await prepare_tool_path(
+        "external/desk/out.md",
+        _ctx(desktop_channel=channel, backend=backend, conversation_id="conv-ok"),
+        grant_mode="organize",
+    )
+    assert got == "external/desk/out.md"
+    channel.request_external_mount.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_external_ns_cloud_attach_rw_does_not_upgrade():
+    """Cloud file_write on an existing mount must not mint attach_rw.
+
+    Backend organize/readonly policy is the model-facing reason.
+    """
+    channel = MagicMock()
+    channel.request_external_mount = AsyncMock()
+    backend = MagicMock()
+    backend.location = "server"
+    backend._mounts = {}
+    await grant_store.add_grant(
+        "conv-rw", root_id="root-1", label="桌面", alias_hint="desk", mode="organize"
+    )
+    got = await prepare_tool_path(
+        "external/desk/a.md",
+        _ctx(desktop_channel=channel, backend=backend, conversation_id="conv-rw"),
+        grant_mode="attach_rw",
+    )
+    assert got == "external/desk/a.md"
+    channel.request_external_mount.assert_not_called()
+
+
+def test_event_carries_root_id():
+    from agentcore.runtime.events.desktop import external_mount_required
+
+    ev = external_mount_required(
+        request_id="r1",
+        conversation_id="c1",
+        mode="organize",
+        root_id="root-1",
+    )
+    assert ev.payload["root_id"] == "root-1"
+    assert ev.payload["mode"] == "organize"
+    assert "path" not in ev.payload
+    from agentcore.runtime.events.payloads.workspace import ExternalMountRequiredPayload
+
+    ExternalMountRequiredPayload.model_validate(ev.payload)
+
+
+def test_old_sse_event_name_absent():
+    from agentcore.runtime.events.types import EventType
+
+    names = {e.value for e in EventType}
+    assert "external_mount_required" in names
+    assert "external_mount_readonly_required" not in names
+
+
+@pytest.mark.asyncio
+async def test_hot_attach_preserves_live_abs_path(tmp_path):
+    """Sidecar Path-I/O: grant-store has no abs; live snapshot must survive _mint."""
+    from agentcore.tools.sandbox.subprocess import SubprocessSandbox
+    from agentcore.workspace.external_mounts import ExternalMount
+
+    abs_dir = str(tmp_path / "desk")
+    backend = ServerWorkspace(
+        root=tmp_path,
+        sandbox=SubprocessSandbox(),
+        root_label="conv:x",
+        location="local",
+    )
+    backend.attach_external_mounts(
+        {
+            "desk": ExternalMount(
+                alias="desk",
+                root_id="r1",
+                label="桌面",
+                abs_path=abs_dir,
+                mode="readonly",
+            )
+        }
+    )
+    await grant_store.add_grant(
+        "conv-abs", root_id="r1", label="桌面", alias_hint="desk", mode="organize"
+    )
+    mounts = await attach_grants_to_backend(backend, "conv-abs")
+    assert mounts["desk"].abs_path == abs_dir
+    assert mounts["desk"].mode == "organize"
+    assert backend._mounts["desk"].abs_path == abs_dir  # noqa: SLF001
+    assert backend._mounts["desk"].mode == "organize"  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_hot_attach_keeps_live_only_abs_mount(tmp_path):
+    """Push can land before sidecar add_grant; do not drop the new alias."""
+    from agentcore.tools.sandbox.subprocess import SubprocessSandbox
+    from agentcore.workspace.external_mounts import ExternalMount
+
+    extra = str(tmp_path / "extra")
+    backend = ServerWorkspace(
+        root=tmp_path,
+        sandbox=SubprocessSandbox(),
+        root_label="conv:x",
+        location="local",
+    )
+    backend.attach_external_mounts(
+        {
+            "extra": ExternalMount(
+                alias="extra",
+                root_id="r-new",
+                label="新目录",
+                abs_path=extra,
+                mode="readonly",
+            )
+        }
+    )
+    await grant_store.add_grant(
+        "conv-keep", root_id="r-old", label="旧", alias_hint="old"
+    )
+    mounts = await attach_grants_to_backend(backend, "conv-keep")
+    assert "old" in mounts
+    assert mounts["extra"].abs_path == extra
+    assert backend._mounts["extra"].abs_path == extra  # noqa: SLF001
+

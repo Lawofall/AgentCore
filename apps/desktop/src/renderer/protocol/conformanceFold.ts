@@ -461,8 +461,7 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
       case "title_generated":
       case "board_op_required":
       case "board_read_required":
-      case "desktop_notify_required":
-      case "external_mount_readonly_required":
+      case "external_mount_required":
       case "host_op_required":
       case "mcp_op_required":
       case "tool_progress":

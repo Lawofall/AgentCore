@@ -19,8 +19,8 @@ EXTERNAL_PREFIX = "external/"
 _ALIAS_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _ALIAS_SAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _READONLY_MSG = (
-    "会话授权目录为只读授权，不能改动；如需在此目录交付或整理，"
-    "请让用户升级为整理授权（交付：先写工作区，再 `file_copy` 到此目录）"
+    "会话授权目录为只读授权，不能改动；对该路径 `file_copy` / `file_write` "
+    "会请用户确认升级授权（交付：先写工作区再 copy）"
 )
 _ORGANIZE_DENY_MSG = (
     "整理授权不允许此操作（仅 list/read/grep/stat + move/copy/mkdir + 回收站删除）"

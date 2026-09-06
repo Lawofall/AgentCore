@@ -14,12 +14,14 @@ import {
 } from "@shared/ipc-contract";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
 import { isRecord, requireStringFields } from "../ipc-validate";
+import { pushLiveExternalMounts } from "../sidecar/liveExternalMounts";
 import { checkoutArchive, previewArchive } from "./checkout";
 import {
   confirmOpenPath,
   grantSessionRun,
   requiresOpenConfirm,
 } from "./execGate";
+import { confirmFolderWriteGrant, sessionModeCovers } from "./grantConfirm";
 import { coerceIpcBytes } from "./ipcBytes";
 import { openTempFileFromBytes } from "./openTemp";
 import { readFile, readTextFile, writeTextFile } from "./preview";
@@ -97,6 +99,12 @@ function parseGrantPath(p: unknown): string | undefined {
   return trimmed || undefined;
 }
 
+function parseRootId(p: unknown): string | undefined {
+  if (!isRecord(p) || typeof p.rootId !== "string") return undefined;
+  const trimmed = p.rootId.trim();
+  return trimmed || undefined;
+}
+
 async function realpathOrSelf(absPath: string): Promise<string> {
   try {
     return await fs.realpath(absPath);
@@ -122,7 +130,7 @@ async function createOrUpgradeSessionRoot(
   const absPath = await realpathOrSelf(absPathIn);
   const name = basename(absPath) || absPath;
 
-  // Same abs path: upgrade/downgrade mode (re-auth card already shown by client).
+  // Same abs path: upgrade/downgrade mode (write confirm already shown here).
   const same = listSessionRoots(conversationId).find(
     (r) => r.absPath === absPath,
   );
@@ -339,8 +347,9 @@ export function registerFsIpc(): void {
 
   // W3/P1: conversation-scoped root (readonly | organize) — persisted to
   // fs-session-grants.json (not permanent fs-roots.json).
-  // Optional path / wellKnown / targetName: resolve only (no folder picker);
-  // abs paths never returned to renderer (displayLabel = basename only).
+  // Optional path / wellKnown / targetName: resolve only (no folder picker).
+  // Optional rootId: upgrade that session root (no path, no picker).
+  // Write modes confirm here (system dialog). Abs never returned to renderer.
   ipcMain.handle(
     FS_CHANNELS.grantSessionReadonlyRoot,
     async (_e, p: unknown): Promise<GrantSessionReadonlyRootResult> => {
@@ -361,30 +370,78 @@ export function registerFsIpc(): void {
       const wellKnown = parseWellKnown(p);
       const targetName = parseTargetName(p);
       const pathHint = parseGrantPath(p);
+      const rootId = parseRootId(p);
       await ensureReady();
 
-      const resolved = await resolveGrantAbsPath({
-        path: pathHint,
-        wellKnown,
-        targetName,
-        resolveWellKnown: async (key) => app.getPath(key),
-      });
-      if (!resolved.ok) {
-        return {
-          ok: false,
-          reason: resolved.reason,
-          message: GRANT_FAIL_MESSAGES[resolved.reason],
-        };
+      let absPath: string;
+      let displayLabel: string | undefined;
+      let existing = listSessionRoots(args.conversationId).find(
+        (r) => r.id === rootId,
+      );
+
+      if (rootId) {
+        if (!existing) {
+          return {
+            ok: false,
+            reason: "not_found",
+            message: GRANT_FAIL_MESSAGES.not_found,
+          };
+        }
+        absPath = existing.absPath;
+        displayLabel = existing.name;
+      } else {
+        const resolved = await resolveGrantAbsPath({
+          path: pathHint,
+          wellKnown,
+          targetName,
+          resolveWellKnown: async (key) => app.getPath(key),
+        });
+        if (!resolved.ok) {
+          return {
+            ok: false,
+            reason: resolved.reason,
+            message: GRANT_FAIL_MESSAGES[resolved.reason],
+          };
+        }
+        absPath = resolved.absPath;
+        displayLabel = resolved.displayLabel;
+        const canon = await realpathOrSelf(absPath);
+        existing = listSessionRoots(args.conversationId).find(
+          (r) => r.absPath === canon,
+        );
       }
+
+      const haveMode =
+        existing?.mode === "organize" ||
+        existing?.mode === "attach_rw" ||
+        existing?.mode === "readonly"
+          ? existing.mode
+          : existing
+            ? "readonly"
+            : undefined;
+      if (mode !== "readonly" && !sessionModeCovers(haveMode, mode)) {
+        const allowed = await confirmFolderWriteGrant({
+          mode,
+          displayLabel: displayLabel || existing?.name || "该文件夹",
+        });
+        if (!allowed) {
+          return { ok: false, reason: "cancelled", message: "用户拒绝授权" };
+        }
+      }
+
       const root = await createOrUpgradeSessionRoot(
         args.conversationId,
-        resolved.absPath,
+        absPath,
         mode,
       );
+      // 升档时根上已有 alias：立刻热推。首次 mint 还没有 alias，等 adopt。
+      if (root.alias) {
+        await pushLiveExternalMounts(args.conversationId);
+      }
       return {
         ok: true,
         root,
-        displayLabel: resolved.displayLabel,
+        displayLabel,
       };
     },
   );
@@ -418,11 +475,13 @@ export function registerFsIpc(): void {
         "alias",
       ]);
       if (!args) return false;
-      return adoptSessionRootAlias(
+      const ok = await adoptSessionRootAlias(
         args.conversationId,
         args.rootId,
         args.alias,
       );
+      if (ok) await pushLiveExternalMounts(args.conversationId);
+      return ok;
     },
   );
 
@@ -434,7 +493,10 @@ export function registerFsIpc(): void {
       await ensureReady();
       closeWatchersForRoot(args.rootId);
       const ok = revokeSessionRoot(args.conversationId, args.rootId);
-      if (ok) await saveSessionGrants();
+      if (ok) {
+        await saveSessionGrants();
+        await pushLiveExternalMounts(args.conversationId);
+      }
       return ok;
     },
   );
@@ -449,6 +511,7 @@ export function registerFsIpc(): void {
         closeWatchersForRoot(id);
       }
       await saveSessionGrants();
+      await pushLiveExternalMounts(args.conversationId);
     },
   );
 

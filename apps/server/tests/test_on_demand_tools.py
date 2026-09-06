@@ -27,7 +27,6 @@ from agentcore.tools.builtin.archive_create import ArchiveCreateTool
 from agentcore.tools.builtin.archive_extract import ArchiveExtractTool
 from agentcore.tools.builtin.browser import BrowserTool
 from agentcore.tools.builtin.consult import ConsultTool
-from agentcore.tools.builtin.external_mount_readonly import ExternalMountReadonlyTool
 from agentcore.tools.builtin.file_ops.read import FileReadTool
 from agentcore.tools.builtin.host import HostTool
 from agentcore.tools.builtin.md_to_docx import MdToDocxTool
@@ -347,7 +346,7 @@ def test_family_of_covers_browser_and_solo_tools():
     assert browser == frozenset({"browser"})
     assert family_of("run") == frozenset({"run"})
     assert family_of("host") == frozenset({"host"})
-    assert family_of("desktop_notify") == frozenset({"desktop_notify"})
+    assert "desktop_notify" not in ON_DEMAND_TOOL_NAMES
     # Without a live registry the Server siblings are unknown — name stands alone.
     assert family_of("mcp_playwright_browser_navigate") == frozenset(
         {"mcp_playwright_browser_navigate"}
@@ -379,15 +378,10 @@ async def test_browser_and_grant_consult_how_without_schema_reprint():
     assert "队员 `screenshot`" not in browser
     assert "禁止自己截图" not in browser
 
-    grant_reg = ToolRegistry()
-    grant_reg.register(ExternalMountReadonlyTool())
-    grant = await ToolConsultSource(registry=grant_reg, audience="ceo").fetch_by_name(
-        "u", "external_mount_readonly"
-    )
-    assert grant is not None
-    assert "先写工作区" in grant
-    assert "只读已挂" in grant
-    assert "not_found/not_directory/ambiguous" not in grant
+    missing = await ToolConsultSource(
+        registry=ToolRegistry(), audience="ceo"
+    ).fetch_by_name("u", "external_mount_readonly")
+    assert missing is None
 
 
 _STUFFED_WORKER_RESIDENT = frozenset(
@@ -434,9 +428,9 @@ def _stuffed_worker() -> ToolRegistry:
 
 
 def test_stuffed_worker_opening_table_omits_on_demand_tools():
-    """Locks the opening FC win: 28 registered; consult 另 wire，不在此表."""
+    """Locks the opening FC win: 26 registered; consult 另 wire，不在此表."""
     registry = _stuffed_worker()
-    assert registry.count == 28
+    assert registry.count == 26
     offered = _def_names(registry)
     assert offered == _STUFFED_WORKER_RESIDENT
     chars = sum(
@@ -477,12 +471,12 @@ async def test_stuffed_worker_opening_table_omits_mcp_tools():
     registry = _stuffed_worker()
     opening_before = _def_names(registry)
     count_before = registry.count
-    assert count_before == 28
+    assert count_before == 26
     assert opening_before == _STUFFED_WORKER_RESIDENT
 
     registered = register_mcp_tools(registry, _playwright_mcp_result(tool_count=24))
     assert registered == 24
-    assert registry.count == 52
+    assert registry.count == 50
     offered = _def_names(registry)
     assert offered == opening_before
     mcp_names = {n for n in registry.names if n.startswith("mcp_")}
@@ -547,11 +541,12 @@ def test_ceo_chat_tools_after_assemble_wire_hold_deferred_work_tools():
 
     names = set(chat_tools.names)
     mcp_names = {n for n in names if n.startswith("mcp_")}
-    assert {"desktop_notify", "search_conversations", "read_conversation"} <= names
+    assert {"search_conversations", "read_conversation"} <= names
+    assert "desktop_notify" not in names
     assert len(mcp_names) == 2
     assert names.isdisjoint({"escalate", "handoff"})
 
-    deferred = {"desktop_notify", *mcp_names}
+    deferred = set(mcp_names)
     assert deferred <= set(chat_tools.deferred_names)
     offered = _def_names(chat_tools)
     assert deferred.isdisjoint(offered)

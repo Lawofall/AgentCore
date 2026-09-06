@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from agentcore.core.logging import get_logger
+from agentcore.tools.sandbox.guest_rootfs import GuestRootfsError, prepare_bundle_rootfs
 from agentcore.tools.sandbox.sandboxd.argv import build_runsc_cmd, build_runsc_exec_cmd
 from agentcore.tools.sandbox.sandboxd.netns_ops import (
     NETNS_RUN_DIR,
@@ -70,7 +71,6 @@ def _start_detach_proc_timeout() -> float:
         return _START_DETACH_PROC_TIMEOUT
 
 
-_HOST_BIND_PATHS = ("/usr", "/lib", "/lib64", "/bin", "/etc")
 _SUBNET_RE = re.compile(r"^[0-9]{1,3}\.[0-9]{1,3}$")
 _CONTAINER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _ALLOWED_SIGNALS = frozenset({"SIGKILL", "SIGTERM", "SIGINT", "SIGHUP"})
@@ -162,21 +162,6 @@ def _err(req_id: Any, error: str, *, code: str = "sandboxd_rpc") -> dict[str, An
     return {"id": req_id, "ok": False, "error": error, "code": code}
 
 
-def _host_bind_mounts() -> list[dict[str, Any]]:
-    mounts: list[dict[str, Any]] = []
-    for path in _HOST_BIND_PATHS:
-        if os.path.isdir(path):
-            mounts.append(
-                {
-                    "destination": path,
-                    "type": "bind",
-                    "source": path,
-                    "options": ["ro", "rbind", "nosuid"],
-                }
-            )
-    return mounts
-
-
 def _health_oci_config(*, netns_path: str | None = None, uid: int, gid: int) -> dict[str, Any]:
     namespaces: list[dict[str, Any]] = [
         {"type": "pid"},
@@ -203,7 +188,6 @@ def _health_oci_config(*, netns_path: str | None = None, uid: int, gid: int) -> 
                 "source": "tmpfs",
                 "options": ["nosuid", "nodev", "size=8m"],
             },
-            *_host_bind_mounts(),
         ],
         "linux": {
             "resources": {
@@ -503,8 +487,12 @@ class SandboxdServer:
         netns_path: str | None = None
         try:
             netns_path = await probe_setup(PROBE_NETNS_NAME, run_dir=self._netns_run_dir)
-            rootfs = Path(bundle_dir) / "rootfs"
-            rootfs.mkdir()
+            try:
+                prepare_bundle_rootfs(bundle_dir)
+            except GuestRootfsError as exc:
+                detail = str(exc)[:200]
+                logger.warning("sandboxd.health_failed", shape="net", detail=detail)
+                return False, detail
             uid, gid = _guest_ids(self._app_user)
             config = _health_oci_config(netns_path=netns_path, uid=uid, gid=gid)
             (Path(bundle_dir) / "config.json").write_text(json.dumps(config), encoding="utf-8")
@@ -562,6 +550,10 @@ class SandboxdServer:
         if not isinstance(netns_path_raw, str) or not netns_path_raw:
             raise RpcDeniedError("netns_path is required for shape=net")
         self._require_under_root(netns_path_raw, self._netns_run_dir, label="netns_path")
+        try:
+            prepare_bundle_rootfs(bundle_dir)
+        except GuestRootfsError as exc:
+            raise RpcDeniedError(str(exc), code="guest_rootfs") from exc
         cmd = build_runsc_cmd(
             runsc_path=self._runsc,
             runtime_root=self._runtime_root,

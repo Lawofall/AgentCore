@@ -121,35 +121,19 @@ const toOptions = (raw: unknown): AskOption[] =>
   Array.isArray(raw)
     ? raw.map((o) => {
         const obj = (o ?? {}) as Record<string, unknown>;
-        const wellKnown =
-          obj.well_known === "desktop" ||
-          obj.well_known === "downloads" ||
-          obj.well_known === "documents"
-            ? obj.well_known
-            : undefined;
-        const targetName =
-          typeof obj.target_name === "string" && obj.target_name.trim()
-            ? obj.target_name.trim()
-            : undefined;
         return {
           label: String(obj.label ?? ""),
           ...(obj.detail ? { detail: String(obj.detail) } : {}),
           ...(obj.action === "open_local_project" ||
           obj.action === "register_local_project" ||
-          obj.action === "bind_local_folder" ||
-          obj.action === "grant_organize_folder" ||
-          obj.action === "grant_attach_folder"
+          obj.action === "bind_local_folder"
             ? {
                 action: obj.action as
                   | "open_local_project"
                   | "register_local_project"
-                  | "bind_local_folder"
-                  | "grant_organize_folder"
-                  | "grant_attach_folder",
+                  | "bind_local_folder",
               }
             : {}),
-          ...(wellKnown ? { well_known: wellKnown } : {}),
-          ...(targetName ? { target_name: targetName } : {}),
         };
       })
     : [];

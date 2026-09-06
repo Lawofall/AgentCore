@@ -21,14 +21,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import ipaddress
-import socket
 from collections.abc import Callable
 from urllib.parse import urlsplit
 
 from agentcore.config import settings
 from agentcore.core.logging import get_logger
-from agentcore.core.net import classify_url, ip_is_safe
+from agentcore.core.net import resolve_ssrf_dial_target
 
 logger = get_logger(__name__)
 
@@ -43,33 +41,8 @@ def _refusal(status: str) -> bytes:
 async def resolve_dial_target(
     host: str, port: int, *, scheme: str = "https"
 ) -> tuple[str | None, str]:
-    """SSRF-vet ``host`` and return ``(pinned_ip, reason)`` — ``None`` ip ⇒ refuse.
-
-    Authoritative decision via :func:`core.net.classify_url` (covers scheme,
-    reserved hostnames, DNS failure, "any resolved IP private", and the Clash
-    fake-IP allowance); then pin to the first globally-routable resolved address
-    (mirrors ``PinnedIPTransport``). Testable in isolation by monkeypatching the
-    resolver used by ``core.net`` / this module.
-    """
-    block = await classify_url(f"{scheme}://{host}:{port}/")
-    if block is not None:
-        return None, block.name
-    try:
-        ipaddress.ip_address(host)  # already an IP literal — classify_url vetted it
-        return host, "ok_literal"
-    except ValueError:
-        pass
-    try:
-        infos = await asyncio.get_running_loop().getaddrinfo(
-            host, port, proto=socket.IPPROTO_TCP
-        )
-    except OSError:
-        return None, "DNS_FAIL"
-    for info in infos:
-        ip = info[4][0]
-        if ip_is_safe(ip):
-            return ip, "ok"
-    return None, "PRIVATE_IP"
+    """SSRF-vet ``host``; policy lives in :func:`core.net.resolve_ssrf_dial_target`."""
+    return await resolve_ssrf_dial_target(host, port, scheme=scheme)
 
 
 async def _pump(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

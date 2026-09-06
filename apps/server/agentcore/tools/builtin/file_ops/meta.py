@@ -29,9 +29,10 @@ from .errors import (
 )
 from .integrity import (
     _claim_write_path,
-    _prepare_write_relpath,
     _reject_write_scope,
+    prepared_write_relpath,
 )
+from .prepare_path import prepare_tool_path
 
 
 class FileDeleteTool:
@@ -82,6 +83,13 @@ class FileDeleteTool:
             return _error("path 不能为空：请提供工作区内的相对文件路径", start)
 
         from agentcore.workspace.project_shell import rewrite_project_shell_relpath
+
+        prepared = await prepare_tool_path(
+            rel_path, context, start=start, grant_mode="organize"
+        )
+        if isinstance(prepared, ToolResult):
+            return prepared
+        rel_path = prepared
 
         rel_path, _shell_note = await rewrite_project_shell_relpath(
             rel_path, context, register=False
@@ -184,7 +192,16 @@ class FileMoveTool:
         from agentcore.workspace.project_shell import rewrite_project_shell_relpath
 
         # Dest first: empty-desk first shot may register; source then shares that slug.
-        destination, rename_note = await _prepare_write_relpath(requested_dest, context)
+        prepared_dest = await prepared_write_relpath(requested_dest, context)
+        if isinstance(prepared_dest, ToolResult):
+            return prepared_dest
+        destination, rename_note = prepared_dest
+        prepared_src = await prepare_tool_path(
+            source, context, start=start, grant_mode="organize"
+        )
+        if isinstance(prepared_src, ToolResult):
+            return prepared_src
+        source = prepared_src
         source, _src_note = await rewrite_project_shell_relpath(
             source, context, register=False
         )
@@ -308,7 +325,9 @@ class FileCopyTool:
                     "destination": {
                         "type": "string",
                         "description": (
-                            "目标相对路径（必须尚不存在；区外交付写 `external/<别名>/…`）"
+                            "目标相对路径（必须尚不存在）。本机绝对路径、已挂 "
+                            "`external/<别名>/…` 或 ~/Desktop|Downloads|Documents，"
+                            "桌面在线时由运行时请用户确认整理授权。"
                         ),
                     },
                 },
@@ -329,7 +348,16 @@ class FileCopyTool:
         from agentcore.workspace.project_shell import rewrite_project_shell_relpath
 
         # Dest first: empty-desk first shot may register; source then shares that slug.
-        destination, rename_note = await _prepare_write_relpath(requested_dest, context)
+        prepared_dest = await prepared_write_relpath(requested_dest, context)
+        if isinstance(prepared_dest, ToolResult):
+            return prepared_dest
+        destination, rename_note = prepared_dest
+        prepared_src = await prepare_tool_path(
+            source, context, start=start, grant_mode="readonly"
+        )
+        if isinstance(prepared_src, ToolResult):
+            return prepared_src
+        source = prepared_src
         source, _src_note = await rewrite_project_shell_relpath(
             source, context, register=False
         )
@@ -425,9 +453,12 @@ class MkdirTool:
         if not rel_path:
             return _error("path 不能为空：请提供工作区内的相对目录路径", start)
 
-        rel_path, rename_note = await _prepare_write_relpath(
+        prepared = await prepared_write_relpath(
             rel_path, context, register_bare=True
         )
+        if isinstance(prepared, ToolResult):
+            return prepared
+        rel_path, rename_note = prepared
         if not rel_path or rel_path == ".":
             output = "已创建目录 ."
             if rename_note:

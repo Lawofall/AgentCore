@@ -57,12 +57,9 @@ class EventType(StrEnum):
     # back so the vision reader can read it. Like BOARD_OP_REQUIRED it is NOT journaled (a
     # request/response exchange, not turn content), so it stays out of the journal sets.
     BOARD_READ_REQUIRED = "board_read_required"
-    # Desktop Client Tools: transport-only client-tool request — the server asks the
-    # bound Electron app to show an OS notification and report back. NOT journaled.
-    DESKTOP_NOTIFY_REQUIRED = "desktop_notify_required"
-    # C1 silent read-only external mount: transport-only client-tool — desktop mints
-    # a session root from path / well_known+target_name (no picker). NOT journaled.
-    EXTERNAL_MOUNT_READONLY_REQUIRED = "external_mount_readonly_required"
+    # External directory mount: transport-only client-tool — desktop mints a
+    # session root (readonly silent; organize / attach_rw confirms). NOT journaled.
+    EXTERNAL_MOUNT_REQUIRED = "external_mount_required"
     # Host 第三能力面 P0: transport-only client-tool — desktop fulfils host_* ops
     # (ping / info / audio_devices / open_settings) via backfill. NOT journaled.
     HOST_OP_REQUIRED = "host_op_required"

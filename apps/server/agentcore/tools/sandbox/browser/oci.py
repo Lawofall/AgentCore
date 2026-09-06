@@ -12,7 +12,11 @@ CHROMIUM_TMPFS_SIZE = "512m"
 
 
 def playwright_browsers_mount(browsers_path: str) -> dict | None:
-    """Ro-bind Playwright's Chromium tree when it exists on the host."""
+    """Ro-bind Playwright's Chromium tree when it exists on the sandboxd host.
+
+Packed guest-rootfs already contains the bundle at this path; the extra bind
+is only an overlay for deploys that still keep browsers on the live host.
+"""
     if not browsers_path or not os.path.isdir(browsers_path):
         return None
     return {

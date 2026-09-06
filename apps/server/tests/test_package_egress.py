@@ -1,4 +1,4 @@
-"""Unit tests for packaging registry allowlist egress (A) + cache env (B)."""
+"""Unit tests for desk SSRF egress + packaging registry pin (tool layer) + cache env."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 
 from agentcore.config import settings
+from agentcore.core.net import resolve_ssrf_dial_target
 from agentcore.tools.builtin.package_install import install_cache_env, registry_pin_env
 from agentcore.tools.sandbox.egress.hosts import (
     allowed_registry_hosts,
     host_is_allowed_registry,
 )
-from agentcore.tools.sandbox.egress.proxy import resolve_allowlist_dial_target
 from agentcore.tools.sandbox.egress.ready import registry_egress_available
 from agentcore.tools.sandbox.egress.runtime import (
     PACKAGE_CACHE_MOUNT,
@@ -59,26 +59,44 @@ def test_host_is_allowed_registry(host: str, ok: bool):
 
 
 @pytest.mark.asyncio
-async def test_allowlist_proxy_allows_registry_host(monkeypatch: pytest.MonkeyPatch):
-    async def _run():
-        real_loop = __import__("asyncio").get_running_loop()
+async def test_desk_proxy_allows_public_hostname(monkeypatch: pytest.MonkeyPatch):
+    async def classify_addrs(host, port=None):
+        return ["1.2.3.4"]
 
-        async def gai(host, port, *, family=0, type=0, proto=0, flags=0):
-            return [(0, 0, 0, "", ("1.2.3.4", port))]
+    monkeypatch.setattr("agentcore.core.net._getaddrinfo", classify_addrs)
+    loop = __import__("asyncio").get_running_loop()
 
-        monkeypatch.setattr(real_loop, "getaddrinfo", gai)
-        ip, reason = await resolve_allowlist_dial_target("registry.npmjs.org", 443)
-        assert ip == "1.2.3.4"
-        assert reason == "ok"
+    async def gai(host, port, *, family=0, type=0, proto=0, flags=0):
+        return [(0, 0, 0, "", ("1.2.3.4", port))]
 
-    await _run()
+    monkeypatch.setattr(loop, "getaddrinfo", gai)
+    ip, reason = await resolve_ssrf_dial_target("evil.example.com", 443)
+    assert ip == "1.2.3.4"
+    assert reason == "ok"
 
 
 @pytest.mark.asyncio
-async def test_allowlist_proxy_refuses_non_allowlisted():
-    ip, reason = await resolve_allowlist_dial_target("evil.example.com", 443)
+async def test_desk_proxy_allows_registry_host(monkeypatch: pytest.MonkeyPatch):
+    async def classify_addrs(host, port=None):
+        return ["1.2.3.4"]
+
+    monkeypatch.setattr("agentcore.core.net._getaddrinfo", classify_addrs)
+    loop = __import__("asyncio").get_running_loop()
+
+    async def gai(host, port, *, family=0, type=0, proto=0, flags=0):
+        return [(0, 0, 0, "", ("1.2.3.4", port))]
+
+    monkeypatch.setattr(loop, "getaddrinfo", gai)
+    ip, reason = await resolve_ssrf_dial_target("registry.npmjs.org", 443)
+    assert ip == "1.2.3.4"
+    assert reason == "ok"
+
+
+@pytest.mark.asyncio
+async def test_desk_proxy_refuses_metadata_literal():
+    ip, reason = await resolve_ssrf_dial_target("169.254.169.254", 80, scheme="http")
     assert ip is None
-    assert reason == "NOT_ALLOWLISTED"
+    assert reason in ("PRIVATE_IP", "LOOPBACK_HOST", "BLOCKED_HOST", "BAD_SCHEME")
 
 
 def test_install_cache_env_non_empty():
@@ -358,6 +376,11 @@ def test_desk_oci_rw_binds_workspace_without_base64_wrap(tmp_path: Path):
     assert "base64" not in joined
     assert PACKAGE_CACHE_MOUNT in mounts
     assert cfg["process"]["user"]["uid"] != 65534
+    dests = set(mounts)
+    assert "/usr" not in dests
+    assert "/bin" not in dests
+    assert "/etc" not in dests
+    assert "/lib" not in dests
 
 
 @pytest.mark.asyncio
