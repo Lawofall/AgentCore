@@ -11,9 +11,12 @@ from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agentcore.core.logging import get_logger
 from agentcore.db.models import Conversation, Folder
 from agentcore.db.repositories.folder_members import FolderMemberRepository
 from agentcore.db.repositories.folders import FolderRepository
+
+logger = get_logger(__name__)
 
 DeskRole = Literal["owner", "editor", "viewer"]
 WRITABLE_ROLES: frozenset[str] = frozenset({"owner", "editor"})
@@ -120,19 +123,69 @@ async def caller_is_desk_member(*, user_id: str, folder_id: str | None) -> bool:
 async def resolve_folder_owner_user_id(
     folder_id: str | None, *, session: AsyncSession | None = None
 ) -> str | None:
-    """Folder.user_id for disk / lock / folder-layer injection. None if missing."""
+    """Folder.user_id for disk / lock / folder-layer injection. None if missing.
+
+    Sidecar (folders 窄票 bound, no session) asks cloud ``GET /v1/folders/{id}`` —
+    desktop has no local Postgres. Cloud API / explicit ``session`` keep the
+    in-process row. Connectivity failure degrades to None (same posture as
+    explore-gate / desk label), never ``PIPELINE_ERROR``.
+    """
     from agentcore.core.types import is_uuid_id
 
     if not folder_id or not is_uuid_id(folder_id):
         return None
-    from agentcore.db.base import async_session_factory
+    if session is None:
+        from agentcore.folders.credentials import (
+            FoldersCloudError,
+            cloud_get_folder,
+            get_folders_credentials,
+        )
 
-    if session is not None:
-        folder = await FolderRepository(session).get_by_id_unscoped(folder_id)
-        return folder.user_id if folder is not None else None
-    async with async_session_factory() as owned:
-        folder = await FolderRepository(owned).get_by_id_unscoped(folder_id)
-        return folder.user_id if folder is not None else None
+        creds = get_folders_credentials()
+        if creds is not None:
+            try:
+                summary = await cloud_get_folder(creds, folder_id=folder_id)
+            except FoldersCloudError as e:
+                logger.warning(
+                    "folders.owner_cloud_failed",
+                    folder_id=folder_id,
+                    error=str(e),
+                    code=e.code,
+                )
+                return None
+            if summary is None:
+                return None
+            owner = summary.get("owner_user_id")
+            return str(owner) if isinstance(owner, str) and owner.strip() else None
+        from agentcore.db.sidecar_tickets import sidecar_narrow_tickets_bound
+
+        if sidecar_narrow_tickets_bound():
+            return None
+    return await _folder_owner_from_db(folder_id, session=session)
+
+
+async def _folder_owner_from_db(
+    folder_id: str, *, session: AsyncSession | None
+) -> str | None:
+    from agentcore.db.base import async_session_factory
+    from agentcore.db.errors import DatabaseUnavailableError, is_db_connectivity_error
+
+    try:
+        if session is not None:
+            folder = await FolderRepository(session).get_by_id_unscoped(folder_id)
+            return folder.user_id if folder is not None else None
+        async with async_session_factory() as owned:
+            folder = await FolderRepository(owned).get_by_id_unscoped(folder_id)
+            return folder.user_id if folder is not None else None
+    except Exception as e:  # noqa: BLE001 — connectivity vs programming split below
+        if isinstance(e, DatabaseUnavailableError) or is_db_connectivity_error(e):
+            logger.warning(
+                "folders.owner_db_unavailable",
+                folder_id=folder_id,
+                error=str(e),
+            )
+            return None
+        raise
 
 
 def billing_actor_user_id(*, caller_user_id: str) -> str:

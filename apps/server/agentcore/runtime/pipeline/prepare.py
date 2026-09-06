@@ -75,6 +75,41 @@ async def resolve_desk_folder_label(
     if not fid:
         return None
     try:
+        from agentcore.folders.credentials import (
+            FoldersCloudError,
+            cloud_get_folder,
+            get_folders_credentials,
+        )
+
+        creds = get_folders_credentials()
+        if creds is not None:
+            try:
+                summary = await cloud_get_folder(creds, folder_id=fid)
+            except FoldersCloudError as e:
+                logger.warning(
+                    "desk_folder_label.cloud_failed",
+                    user_id=user_id,
+                    folder_id=fid,
+                    error=str(e),
+                    code=e.code,
+                )
+                return None
+            if summary is None:
+                return None
+            rel = summary.get("rel_path")
+            name = summary.get("name")
+            label = (
+                normalize_rel_path(rel)
+                if isinstance(rel, str) and rel.strip()
+                else None
+            )
+            if not label and isinstance(name, str):
+                label = name.strip() or None
+            return label
+        from agentcore.db.sidecar_tickets import sidecar_narrow_tickets_bound
+
+        if sidecar_narrow_tickets_bound():
+            return None
         async with async_session_factory() as session:
             folder = await FolderRepository(session).get_by_id(fid, user_id=user_id)
     except Exception as e:  # noqa: BLE001 - label miss must never break a turn

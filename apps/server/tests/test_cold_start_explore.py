@@ -267,6 +267,53 @@ async def test_resolve_folder_workspace_key_db_unavailable_degrades(monkeypatch)
     assert key is None
 
 
+@pytest.mark.asyncio
+async def test_resolve_folder_workspace_key_folders_ticket_uses_cloud(monkeypatch):
+    from agentcore.folders.credentials import FoldersCredentials, folders_credentials_scope
+    from agentcore.memory.explore_profile import resolve_folder_workspace_key
+
+    fid = "11111111-1111-1111-1111-111111111111"
+
+    async def _cloud(creds, *, folder_id):
+        assert folder_id == fid
+        return {
+            "local_root_id": "root-a",
+            "local_subpath": "app",
+            "name": "支付",
+        }
+
+    def boom_factory():
+        raise AssertionError("ticketed explore key must not open local PG")
+
+    monkeypatch.setattr("agentcore.folders.credentials.cloud_get_folder", _cloud)
+    monkeypatch.setattr("agentcore.db.base.async_session_factory", boom_factory)
+
+    creds = FoldersCredentials(
+        api_key="tok", base_url="https://api.example.com/v1/folders"
+    )
+    with folders_credentials_scope(creds):
+        key = await resolve_folder_workspace_key(fid)
+    assert key == "local:root-a:app"
+
+
+@pytest.mark.asyncio
+async def test_resolve_folder_workspace_key_account_ticket_skips_db(monkeypatch):
+    from agentcore.account.credentials import AccountCredentials, account_credentials_scope
+    from agentcore.memory.explore_profile import resolve_folder_workspace_key
+
+    def boom_factory():
+        raise AssertionError("account-ticketed explore key must not open local PG")
+
+    monkeypatch.setattr("agentcore.db.base.async_session_factory", boom_factory)
+
+    creds = AccountCredentials(
+        api_key="tok", base_url="https://api.example.com/v1/account"
+    )
+    with account_credentials_scope(creds):
+        key = await resolve_folder_workspace_key("11111111-1111-1111-1111-111111111111")
+    assert key is None
+
+
 # --- 合并语义 -----------------------------------------------------------------
 
 

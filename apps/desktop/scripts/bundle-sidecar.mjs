@@ -10,6 +10,9 @@
  *      agentcore 包本体，而非整个 server。剔掉 FastAPI/uvicorn/alembic/redis/boto3/jose/
  *      cryptography 等不在 sidecar 回合路径上的重依赖；**保留**与云对齐的 Office 栈
  *      （markitdown[docx,pdf,pptx] + python-docx + fpdf2 + markdown-it-py）。
+ *      回合路径（``git_execution_enabled_for``）禁止再拉 pwdlib / python-jose：构建冒烟
+ *      会在捆绑解释器里断言这两个模块未进 ``sys.modules``。缺依赖时修导入闭包，不要把
+ *      密码学栈加回 sidecar extra。
  * 运行期主进程 `resolveSpawnConfig`（`src/main/sidecar-service.ts`）在 `app.isPackaged` 时指向
  * `<resources>/sidecar/python` 的解释器，并以 `PYTHONPATH=<resources>/sidecar/site-packages`
  * 注入引擎包——用 `--target` 旁路目录而非 venv，绕开「venv 记录的 base python 绝对路径在用户机
@@ -244,6 +247,26 @@ function main() {
   run(
     bundledExe,
     ["-c", "import agentcore.sidecar.server; print('sidecar import OK')"],
+    { env: { ...process.env, PYTHONPATH: sitePackages, PYTHONUTF8: "1" } },
+  );
+  console.log("冒烟自检: 回合路径不得拉入 pwdlib / python-jose");
+  run(
+    bundledExe,
+    [
+      "-c",
+      [
+        "import sys",
+        "from agentcore.tools.builtin import git_execution_enabled_for",
+        "class _B:",
+        "    location = 'local'",
+        "    root = '.'",
+        "git_execution_enabled_for(_B(), desktop_online=True)",
+        "blocked = ('pwdlib', 'jose', 'agentcore.security.passwords', 'agentcore.security.tokens')",
+        "hit = [n for n in blocked if n in sys.modules]",
+        "assert not hit, hit",
+        "print('sidecar turn-path import OK')",
+      ].join("; "),
+    ],
     { env: { ...process.env, PYTHONPATH: sitePackages, PYTHONUTF8: "1" } },
   );
   console.log("冒烟自检: Office literacy (docx + pdf + markitdown extract)");

@@ -121,7 +121,6 @@ from agentcore.tools.builtin.git_ops.spawn import (
     _workspace_has_local_git,
     git_transport_scope,
 )
-from agentcore.tools.builtin.git_ops.tool import GitTool
 
 __all__ = [
     "GIT_PHASES",
@@ -194,3 +193,13 @@ __all__ = [
     "repo_write_lock",
     "report_phase",
 ]
+
+
+def __getattr__(name: str):
+    # ``GitTool`` pulls clone/remote cmds. Capability probes (``binary_health`` /
+    # ``git_execution_enabled_for``) only need this package's light modules.
+    if name == "GitTool":
+        from agentcore.tools.builtin.git_ops.tool import GitTool
+
+        return GitTool
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

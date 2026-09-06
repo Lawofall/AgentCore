@@ -61,6 +61,28 @@ async def resolve_folder_placement(
     """
     if not folder_id:
         return SCRATCH_PLACEMENT
+    if session is None:
+        from agentcore.folders.credentials import (
+            FoldersCloudError,
+            cloud_get_folder,
+            get_folders_credentials,
+        )
+
+        creds = get_folders_credentials()
+        if creds is not None:
+            try:
+                summary = await cloud_get_folder(creds, folder_id=folder_id)
+            except FoldersCloudError:
+                return FolderPlacement(folder_id=folder_id, rel_path=None)
+            rel_path = summary.get("rel_path") if summary else None
+            return FolderPlacement(
+                folder_id=folder_id,
+                rel_path=rel_path if isinstance(rel_path, str) and rel_path else None,
+            )
+        from agentcore.db.sidecar_tickets import sidecar_narrow_tickets_bound
+
+        if sidecar_narrow_tickets_bound():
+            return FolderPlacement(folder_id=folder_id, rel_path=None)
     stmt = select(Folder.rel_path).where(Folder.id == folder_id)
     if not include_deleted:
         stmt = stmt.where(Folder.deleted_at.is_(None))

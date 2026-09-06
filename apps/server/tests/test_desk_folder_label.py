@@ -84,3 +84,42 @@ async def test_resolve_desk_folder_label_failure_returns_none(monkeypatch):
     monkeypatch.setattr(prepare_mod, "FolderRepository", _Repo)
 
     assert await resolve_desk_folder_label("u1", "fid-pay") is None
+
+
+async def test_resolve_desk_folder_label_uses_cloud_when_folders_creds_bound(monkeypatch):
+    from agentcore.folders.credentials import FoldersCredentials, folders_credentials_scope
+
+    fid = "11111111-1111-1111-1111-111111111111"
+
+    async def _cloud(creds, *, folder_id):
+        assert folder_id == fid
+        return {"name": "支付", "rel_path": "工作/支付", "owner_user_id": "owner-1"}
+
+    def _boom_factory():
+        raise AssertionError("sidecar with folders ticket must not open local PG")
+
+    monkeypatch.setattr("agentcore.folders.credentials.cloud_get_folder", _cloud)
+    monkeypatch.setattr(prepare_mod, "async_session_factory", _boom_factory)
+
+    creds = FoldersCredentials(
+        api_key="tok", base_url="https://api.example.com/v1/folders"
+    )
+    with folders_credentials_scope(creds):
+        assert await resolve_desk_folder_label("u1", fid) == "工作/支付"
+
+
+async def test_resolve_desk_folder_label_account_ticket_skips_db(monkeypatch):
+    from agentcore.account.credentials import AccountCredentials, account_credentials_scope
+
+    fid = "11111111-1111-1111-1111-111111111111"
+
+    def _boom_factory():
+        raise AssertionError("account-ticketed desk label must not open local PG")
+
+    monkeypatch.setattr(prepare_mod, "async_session_factory", _boom_factory)
+
+    creds = AccountCredentials(
+        api_key="tok", base_url="https://api.example.com/v1/account"
+    )
+    with account_credentials_scope(creds):
+        assert await resolve_desk_folder_label("u1", fid) is None

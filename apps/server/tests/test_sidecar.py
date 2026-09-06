@@ -128,6 +128,7 @@ def _stub_conversation_folder_id(monkeypatch: pytest.MonkeyPatch, request: pytes
         "test_sidecar_start_turn_local_binding_reaches_pipeline",
         "test_sidecar_start_turn_explicit_null_folder_id_skips_db",
         "test_sidecar_start_turn_absent_folder_id_still_loads_db",
+        "test_sidecar_start_turn_ticketed_absent_folder_id_skips_db",
         "test_resolve_start_turn_folder_id_key_present",
         "test_resolve_rpc_folder_binding_key_presence",
         "test_apply_rpc_folder_binding_overlays_folder_id",
@@ -572,6 +573,23 @@ async def test_resolve_start_turn_folder_id_key_present(monkeypatch):
     assert called["db"] is False
 
 
+@pytest.mark.asyncio
+async def test_resolve_start_turn_folder_id_skip_local_db(monkeypatch):
+    """Ticketed sidecar with no folderId key must not load conv.folder_id from PG."""
+    from agentcore.sidecar.server_pkg.turns import resolve_start_turn_folder_id
+
+    async def boom(_conversation_id: str) -> str | None:
+        raise AssertionError("DB loader must not run when skip_local_db")
+
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
+        boom,
+    )
+    assert (
+        await resolve_start_turn_folder_id({}, "c1", skip_local_db=True)
+    ) is None
+
+
 def test_resolve_rpc_folder_binding_key_presence():
     """``localRootId`` key present → injected; absent → not (DB fallback later)."""
     from agentcore.sidecar.server_pkg.turns import resolve_rpc_folder_binding
@@ -974,6 +992,72 @@ def test_sidecar_start_turn_absent_folder_id_still_loads_db(tmp_path, monkeypatc
     asyncio.run(drive())
     assert db_calls["n"] == 1
     assert captured["folder_id"] == "from-legacy-db"
+
+
+def test_sidecar_start_turn_ticketed_absent_folder_id_skips_db(tmp_path, monkeypatch):
+    """Old desktop shape + folders/account ticket must not load conv.folder_id from PG."""
+    captured: dict[str, Any] = {}
+    db_calls = {"n": 0}
+
+    async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
+        captured["folder_id"] = kwargs.get("folder_id")
+        kwargs["sink"].close()
+        return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
+
+    async def boom_db(_conversation_id: str) -> str | None:
+        db_calls["n"] += 1
+        raise AssertionError("ticketed sidecar must not load folder_id from local PG")
+
+    monkeypatch.setattr("agentcore.sidecar.server.run_chat_pipeline", fake_pipeline)
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
+        boom_db,
+    )
+
+    sent, write_line = _recorder()
+    server = SidecarServer(write_line)
+
+    async def drive() -> None:
+        await server.handle_line(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "userId": "u",
+                        "workspaceRoot": str(tmp_path),
+                        "approvalsEnabled": True,
+                        "inference": _FAKE_INFERENCE,
+                    },
+                }
+            )
+        )
+        await server.handle_line(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "startTurn",
+                    "params": {
+                        **_CLIENT_TURN_IDS,
+                        "turnId": "t1",
+                        "conversationId": "c1",
+                        "userMessage": "有票旧桌面无 folderId",
+                        "foldersAuth": {
+                            "baseUrl": "https://api.example.com/v1/folders",
+                            "apiKey": "folders-tok",
+                        },
+                    },
+                }
+            )
+        )
+        await asyncio.gather(*list(server._turns.values()))
+
+    asyncio.run(drive())
+    assert db_calls["n"] == 0
+    assert captured["folder_id"] is None
+    assert "error" not in _response(sent, 2)
 
 
 @pytest.mark.asyncio

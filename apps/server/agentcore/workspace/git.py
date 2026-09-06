@@ -27,14 +27,17 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from agentcore.config import settings
 from agentcore.core.net import PRIVATE_IP_BLOCKS, URLBlock, classify_url
 from agentcore.workspace._paths import resolve_safe_path
-from agentcore.workspace.git_credentials import GitAuthMaterial, embed_http_basic_auth
 from agentcore.workspace.locate import resolve_workspace_root, workspace_storage_key
 from agentcore.workspace.locks import workspace_lock
+
+if TYPE_CHECKING:
+    from agentcore.workspace.git_credentials import GitAuthMaterial
 
 _ALLOWED_SCHEMES = ("http", "https")
 
@@ -117,6 +120,8 @@ async def clone_repo(
 
         clone_url = repo_url
         if auth is not None:
+            from agentcore.workspace.git_credentials import embed_http_basic_auth
+
             clone_url = embed_http_basic_auth(
                 repo_url, username=auth.username, token=auth.token
             )

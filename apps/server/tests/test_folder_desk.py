@@ -408,3 +408,140 @@ async def test_caller_is_desk_member_matches_owner_lookup(monkeypatch):
     assert await caller_is_desk_member(user_id="member-1", folder_id="desk-1") is True
     assert await caller_is_desk_member(user_id="member-1", folder_id=None) is False
     assert await caller_is_desk_member(user_id="member-1", folder_id="missing") is False
+
+
+@pytest.mark.asyncio
+async def test_resolve_folder_owner_uses_cloud_when_folders_creds_bound(monkeypatch):
+    from agentcore.folders.credentials import FoldersCredentials, folders_credentials_scope
+    from agentcore.folders.desk import resolve_folder_owner_user_id
+
+    fid = "11111111-1111-1111-1111-111111111111"
+
+    async def _cloud(creds, *, folder_id):
+        assert folder_id == fid
+        return {"owner_user_id": "owner-cloud"}
+
+    def _boom_factory():
+        raise AssertionError("sidecar with folders ticket must not open local PG")
+
+    monkeypatch.setattr("agentcore.folders.credentials.cloud_get_folder", _cloud)
+    monkeypatch.setattr("agentcore.db.base.async_session_factory", _boom_factory)
+
+    creds = FoldersCredentials(
+        api_key="tok", base_url="https://api.example.com/v1/folders"
+    )
+    with folders_credentials_scope(creds):
+        assert await resolve_folder_owner_user_id(fid) == "owner-cloud"
+
+
+@pytest.mark.asyncio
+async def test_resolve_folder_owner_explicit_session_skips_cloud(monkeypatch):
+    from agentcore.folders.credentials import FoldersCredentials, folders_credentials_scope
+    from agentcore.folders.desk import resolve_folder_owner_user_id
+
+    fid = "11111111-1111-1111-1111-111111111111"
+
+    class _Folder:
+        user_id = "from-db"
+
+    class _Repo:
+        def __init__(self, session):  # noqa: ANN001
+            pass
+
+        async def get_by_id_unscoped(self, folder_id):
+            assert folder_id == fid
+            return _Folder()
+
+    async def _cloud(*_a, **_k):
+        raise AssertionError("explicit session must not call cloud GET")
+
+    monkeypatch.setattr("agentcore.folders.desk.FolderRepository", _Repo)
+    monkeypatch.setattr("agentcore.folders.credentials.cloud_get_folder", _cloud)
+
+    creds = FoldersCredentials(
+        api_key="tok", base_url="https://api.example.com/v1/folders"
+    )
+    with folders_credentials_scope(creds):
+        assert await resolve_folder_owner_user_id(fid, session=object()) == "from-db"
+
+
+@pytest.mark.asyncio
+async def test_resolve_folder_owner_db_connectivity_returns_none(monkeypatch):
+    from agentcore.folders.desk import resolve_folder_owner_user_id
+
+    fid = "11111111-1111-1111-1111-111111111111"
+
+    class _CM:
+        async def __aenter__(self):
+            raise ConnectionRefusedError()
+
+        async def __aexit__(self, *args):
+            return False
+
+    monkeypatch.setattr("agentcore.db.base.async_session_factory", lambda: _CM())
+    assert await resolve_folder_owner_user_id(fid) is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_folder_placement_uses_cloud_when_folders_creds_bound(monkeypatch):
+    from agentcore.folders.credentials import FoldersCredentials, folders_credentials_scope
+    from agentcore.folders.placement import resolve_folder_placement
+
+    fid = "11111111-1111-1111-1111-111111111111"
+
+    async def _cloud(creds, *, folder_id):
+        assert folder_id == fid
+        return {"rel_path": "设计/图标", "owner_user_id": "owner-1"}
+
+    def _boom_factory():
+        raise AssertionError("sidecar with folders ticket must not open local PG")
+
+    monkeypatch.setattr("agentcore.folders.credentials.cloud_get_folder", _cloud)
+    monkeypatch.setattr("agentcore.db.base.async_session_factory", _boom_factory)
+
+    creds = FoldersCredentials(
+        api_key="tok", base_url="https://api.example.com/v1/folders"
+    )
+    with folders_credentials_scope(creds):
+        placement = await resolve_folder_placement(fid)
+    assert placement.folder_id == fid
+    assert placement.rel_path == "设计/图标"
+
+
+@pytest.mark.asyncio
+async def test_resolve_folder_owner_account_ticket_skips_db(monkeypatch):
+    from agentcore.account.credentials import AccountCredentials, account_credentials_scope
+    from agentcore.folders.desk import resolve_folder_owner_user_id
+
+    def _boom_factory():
+        raise AssertionError("account-ticketed owner lookup must not open local PG")
+
+    monkeypatch.setattr("agentcore.db.base.async_session_factory", _boom_factory)
+
+    creds = AccountCredentials(
+        api_key="tok", base_url="https://api.example.com/v1/account"
+    )
+    with account_credentials_scope(creds):
+        assert await resolve_folder_owner_user_id(
+            "11111111-1111-1111-1111-111111111111"
+        ) is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_folder_placement_account_ticket_skips_db(monkeypatch):
+    from agentcore.account.credentials import AccountCredentials, account_credentials_scope
+    from agentcore.folders.placement import resolve_folder_placement
+
+    def _boom_factory():
+        raise AssertionError("account-ticketed placement must not open local PG")
+
+    monkeypatch.setattr("agentcore.db.base.async_session_factory", _boom_factory)
+
+    creds = AccountCredentials(
+        api_key="tok", base_url="https://api.example.com/v1/account"
+    )
+    fid = "11111111-1111-1111-1111-111111111111"
+    with account_credentials_scope(creds):
+        placement = await resolve_folder_placement(fid)
+    assert placement.folder_id == fid
+    assert placement.rel_path is None

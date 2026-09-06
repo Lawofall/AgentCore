@@ -201,15 +201,23 @@ async def load_conversation_folder_id(conversation_id: str) -> str | None:
 
 
 async def resolve_start_turn_folder_id(
-    params: dict[str, Any], conversation_id: str
+    params: dict[str, Any], conversation_id: str, *, skip_local_db: bool = False
 ) -> str | None:
     """Prefer RPC ``params.folderId``; only hit local PG when the key is absent (old desktop).
 
     Key present (including explicit ``null`` / ``""``) → normalize, no DB.
-    Key missing → ``load_conversation_folder_id`` (compat); connect refuse stays honest fail.
+    Key missing + ``skip_local_db`` (folders/account ticket on this sidecar) →
+    ``None`` (never open local PG). Key missing without tickets →
+    ``load_conversation_folder_id`` (compat); connect refuse stays honest fail.
     """
     if "folderId" in params:
         return normalize_folder_id_param(params.get("folderId"))
+    if skip_local_db:
+        logger.warning(
+            "sidecar.folder_id_uninjected_ticketed",
+            conversation_id=conversation_id,
+        )
+        return None
     return await load_conversation_folder_id(conversation_id)
 
 
@@ -477,7 +485,12 @@ class TurnExecutionMixin:
 
             # Prefer params.folderId (desktop inject); key absent → DB load (old desktop).
             # Explicit null/"" = bare chat — do not open local PG just to learn that.
-            folder_id = await resolve_start_turn_folder_id(params, conversation_id)
+            folder_id = await resolve_start_turn_folder_id(
+                params,
+                conversation_id,
+                skip_local_db=self._folders_creds is not None
+                or self._account_creds is not None,
+            )
             # Same for Folder local bind (explore workspace_key): desktop stamps
             # localRootId/localSubpath so assemble never HARD-fails on PG-down.
             binding_injected, folder_local_root_id, folder_local_subpath = (

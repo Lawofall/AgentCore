@@ -200,7 +200,8 @@ async def resolve_folder_workspace_key(
 
     - Non-UUID ``folder_id`` (memory scope string) → **no** ``folders`` query;
       same as row miss → ``folder:<id>``.
-    - Formal UUID → load the Folder row; miss → ``folder:<id>``.
+    - Folders narrow ticket → cloud ``GET /folders/{id}`` (no local PG).
+    - Formal UUID, no ticket → load the Folder row; miss → ``folder:<id>``.
     - DB connectivity / ``DataError`` (illegal cast, …) → ``None`` + warning.
 
     Never HARD-kills the turn over key resolution; never silently pretends
@@ -220,6 +221,37 @@ async def resolve_folder_workspace_key(
     from agentcore.db.base import async_session_factory
     from agentcore.db.errors import DatabaseUnavailableError, is_db_connectivity_error
     from agentcore.db.repositories import FolderRepository
+    from agentcore.folders.credentials import (
+        FoldersCloudError,
+        cloud_get_folder,
+        get_folders_credentials,
+    )
+
+    creds = get_folders_credentials()
+    if creds is not None:
+        try:
+            summary = await cloud_get_folder(creds, folder_id=folder_id)
+        except FoldersCloudError as e:
+            logger.warning(
+                "memory.explore_workspace_key_cloud_failed",
+                folder_id=folder_id,
+                error=str(e),
+                code=e.code,
+            )
+            return None
+        if summary is None:
+            return build_workspace_key(folder_id=folder_id, binding=None)
+        resolved = resolve_conversation_local_binding(
+            local_root_id=summary.get("local_root_id"),
+            local_subpath=summary.get("local_subpath"),
+            label=str(summary.get("name") or "workspace"),
+        )
+        return build_workspace_key(folder_id=folder_id, binding=resolved)
+
+    from agentcore.db.sidecar_tickets import sidecar_narrow_tickets_bound
+
+    if sidecar_narrow_tickets_bound():
+        return None
 
     try:
         async with async_session_factory() as session:

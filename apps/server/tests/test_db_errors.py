@@ -14,6 +14,7 @@ from agentcore.db.errors import (
     DATABASE_UNAVAILABLE_CODE,
     DATABASE_UNAVAILABLE_MESSAGE,
     DatabaseUnavailableError,
+    SidecarLocalDbForbiddenError,
     is_db_connectivity_error,
     is_pool_timeout_error,
     is_schema_error,
@@ -102,3 +103,9 @@ def test_pool_timeout_is_not_connectivity_but_reraises_product_error():
         assert str(wrapped) == DATABASE_UNAVAILABLE_MESSAGE
         assert wrapped.status_code == 503
         assert wrapped.__cause__ is err
+
+
+def test_sidecar_local_db_forbidden_is_not_rewritten_as_unavailable():
+    err = SidecarLocalDbForbiddenError("ticketed sidecar must not open local Postgres")
+    assert is_db_connectivity_error(err) is False
+    reraise_as_database_unavailable(err)

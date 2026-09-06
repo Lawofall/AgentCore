@@ -39,11 +39,21 @@ __all__ = [
     "DATABASE_UNAVAILABLE_CODE",
     "DATABASE_UNAVAILABLE_MESSAGE",
     "DatabaseUnavailableError",
+    "SidecarLocalDbForbiddenError",
     "is_db_connectivity_error",
     "is_pool_timeout_error",
     "is_schema_error",
     "reraise_as_database_unavailable",
 ]
+
+
+class SidecarLocalDbForbiddenError(RuntimeError):
+    """Folders/account narrow ticket is bound — this process must not open local PG.
+
+    Not a connectivity fault and not a user-facing product code. Uncaught, it
+    fails the turn so a new leak cannot hide behind ``ConnectionRefusedError``.
+    Best-effort writers (audit / journal probe) already swallow ``Exception``.
+    """
 
 
 def is_schema_error(exc: BaseException) -> bool:

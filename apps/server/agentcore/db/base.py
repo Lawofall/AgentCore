@@ -89,17 +89,36 @@ probe_engine = create_async_engine(
     connect_args={"timeout": _DB_PROBE_TIMEOUT_S},
 )
 
-async_session_factory = async_sessionmaker(
+class _TicketGuardedSessionFactory:
+    """``async_sessionmaker`` proxy that refuses checkout on a ticketed sidecar turn."""
+
+    def __init__(self, inner: async_sessionmaker) -> None:
+        self._inner = inner
+
+    def __call__(self, *args: object, **kwargs: object) -> object:
+        from agentcore.db.sidecar_tickets import raise_if_sidecar_local_db_forbidden
+
+        raise_if_sidecar_local_db_forbidden()
+        return self._inner(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+
+_primary_session_factory = async_sessionmaker(
     engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )
 
-telemetry_session_factory = async_sessionmaker(
+_telemetry_session_factory = async_sessionmaker(
     telemetry_engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+async_session_factory = _TicketGuardedSessionFactory(_primary_session_factory)
+telemetry_session_factory = _TicketGuardedSessionFactory(_telemetry_session_factory)
 
 # Holder tracking for both QueuePools. Probe (NullPool) is intentionally omitted:
 # readiness must stay independent of primary-pool saturation.
