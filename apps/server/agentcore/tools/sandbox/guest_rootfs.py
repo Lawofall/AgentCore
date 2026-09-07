@@ -9,6 +9,7 @@ sees; adding a compiler later goes only into the guest stage.
 from __future__ import annotations
 
 import contextlib
+import ctypes
 import os
 import shutil
 import sys
@@ -17,6 +18,12 @@ from pathlib import Path
 DEFAULT_GUEST_ROOTFS = "/opt/agentcore/guest-rootfs"
 MARKER_NAME = ".agentcore-guest-rootfs"
 HOST_USERLAND_PATHS = frozenset({"/usr", "/lib", "/lib64", "/bin", "/etc"})
+
+# mount(2) / umount2(2) — Linux uapi. Not taken from ``os.MS_*``: this
+# image's CPython does not export ``os.mount``.
+_MS_BIND = 4096
+_MS_REC = 16384
+_MNT_DETACH = 2
 
 
 class GuestRootfsError(Exception):
@@ -50,38 +57,57 @@ def require_guest_rootfs(path: Path | None = None) -> Path:
     return root.resolve()
 
 
-def _linux_root_can_bind_mount() -> bool:
-    """sandboxd is uid 0 + SYS_ADMIN. Tests and the API process are not."""
+def _sandboxd_bind_path() -> bool:
+    """True only for Linux uid 0 (sandboxd). API and tests are not this."""
     geteuid = getattr(os, "geteuid", None)
-    mount = getattr(os, "mount", None)
-    return sys.platform == "linux" and geteuid is not None and geteuid() == 0 and mount is not None
+    return sys.platform == "linux" and geteuid is not None and geteuid() == 0
 
 
-def _mount_bind_ro(source: Path, dest: Path) -> None:
-    """Bind the packed guest onto ``dest`` (not a symlink into that tree).
+def _libc_mount_umount2() -> tuple[object, object]:
+    libc = ctypes.CDLL(None, use_errno=True)
+    mount = libc.mount
+    mount.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_ulong,
+        ctypes.c_void_p,
+    ]
+    mount.restype = ctypes.c_int
+    umount2 = libc.umount2
+    umount2.argtypes = [ctypes.c_char_p, ctypes.c_int]
+    umount2.restype = ctypes.c_int
+    return mount, umount2
 
-    runsc gofer safe-mount rejects ``bundle/rootfs`` as a symlink: extra OCI
-    binds (``/workspace``) resolve into the shared packed tree
-    (``expected …/rootfs/workspace, but found /opt/agentcore/guest-rootfs/workspace``)
-    and the sentry dies with an empty mounts JSON / client-sync EOF.
-    """
-    mount = getattr(os, "mount", None)
-    if mount is None:
-        raise GuestRootfsError("os.mount 不可用")
-    flags = int(getattr(os, "MS_BIND", 4096)) | int(getattr(os, "MS_REC", 16384))
-    mount(str(source), str(dest), "none", flags)
-    remount = flags | int(getattr(os, "MS_RDONLY", 1)) | int(getattr(os, "MS_REMOUNT", 32))
-    mount(str(source), str(dest), "none", remount)
+
+def _sys_mount_bind(source: Path, dest: Path) -> None:
+    """mount(2) MS_BIND|MS_REC. Kernel call; not ``os.mount``."""
+    try:
+        mount, _umount2 = _libc_mount_umount2()
+    except AttributeError as exc:
+        raise OSError(0, "libc mount 不可用") from exc
+    flags = _MS_BIND | _MS_REC
+    rc = mount(os.fsencode(str(source)), os.fsencode(str(dest)), b"none", flags, None)
+    if rc != 0:
+        err = ctypes.get_errno()
+        raise OSError(err, os.strerror(err), str(dest))
+
+
+def _sys_umount(dest: Path) -> None:
+    _mount, umount2 = _libc_mount_umount2()
+    rc = umount2(os.fsencode(str(dest)), _MNT_DETACH)
+    if rc != 0:
+        err = ctypes.get_errno()
+        raise OSError(err, os.strerror(err), str(dest))
 
 
 def unmount_bundle_rootfs(bundle_dir: str | Path) -> None:
     """Drop a bind-mounted bundle rootfs. No-op when it was a symlink/copy."""
-    umount = getattr(os, "umount", None)
-    if umount is None:
+    if sys.platform != "linux":
         return
     dest = Path(bundle_dir) / "rootfs"
-    with contextlib.suppress(OSError):
-        umount(str(dest))
+    with contextlib.suppress(OSError, AttributeError):
+        _sys_umount(dest)
 
 
 def prepare_bundle_rootfs(
@@ -90,8 +116,10 @@ def prepare_bundle_rootfs(
     """Point ``bundle/rootfs`` at the shared guest tree.
 
     Linux sandboxd (uid 0): bind-mount so OCI extra binds land on this path.
+    Failure raises — it does not fall back to a symlink (runsc gofer rejects
+    that and the desk dies with client-sync EOF).
     Linux tests (non-root): symlink so ``rmtree`` cannot walk the shared tree.
-    Elsewhere: copy the tree so unit tests can run without symlink privilege.
+    Elsewhere: copy the tree so unit tests can run without mount privilege.
     """
     bundle = Path(bundle_dir)
     guest = require_guest_rootfs(guest_rootfs)
@@ -103,10 +131,10 @@ def prepare_bundle_rootfs(
             dest.rmdir()
         except OSError as exc:
             raise GuestRootfsError(f"bundle rootfs 不是空目录，拒绝覆盖: {dest}") from exc
-    if _linux_root_can_bind_mount():
+    if _sandboxd_bind_path():
         dest.mkdir()
         try:
-            _mount_bind_ro(guest, dest)
+            _sys_mount_bind(guest, dest)
         except OSError as exc:
             raise GuestRootfsError(f"无法把 guest rootfs bind 到 bundle: {exc}") from exc
     elif sys.platform == "linux":

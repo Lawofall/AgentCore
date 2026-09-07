@@ -52,25 +52,25 @@ def test_prepare_bundle_rootfs_does_not_delete_shared_tree(
     assert looks_like_guest_rootfs(guest)
 
 
-def test_prepare_bundle_rootfs_bind_mounts_when_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    mounts: list[tuple[str, str, int]] = []
-
+def _linux_root(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("agentcore.tools.sandbox.guest_rootfs.sys.platform", "linux")
     monkeypatch.setattr(
         "agentcore.tools.sandbox.guest_rootfs.os.geteuid", lambda: 0, raising=False
     )
-    monkeypatch.setattr("agentcore.tools.sandbox.guest_rootfs.os.MS_BIND", 4096, raising=False)
-    monkeypatch.setattr("agentcore.tools.sandbox.guest_rootfs.os.MS_REC", 16384, raising=False)
-    monkeypatch.setattr("agentcore.tools.sandbox.guest_rootfs.os.MS_RDONLY", 1, raising=False)
-    monkeypatch.setattr("agentcore.tools.sandbox.guest_rootfs.os.MS_REMOUNT", 32, raising=False)
 
-    def _mount(source: str, target: str, _fs: str, flags: int, *_rest: object) -> None:
-        mounts.append((source, target, int(flags)))
 
+def test_prepare_bundle_rootfs_bind_mounts_when_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    mounts: list[tuple[str, str]] = []
+
+    def _mount(source: Path, dest: Path) -> None:
+        mounts.append((str(source), str(dest)))
+
+    _linux_root(monkeypatch)
+    monkeypatch.delattr("os.mount", raising=False)
     monkeypatch.setattr(
-        "agentcore.tools.sandbox.guest_rootfs.os.mount", _mount, raising=False
+        "agentcore.tools.sandbox.guest_rootfs._sys_mount_bind", _mount
     )
     guest = install_fake_guest_rootfs(tmp_path, monkeypatch)
     bundle = tmp_path / "bundle"
@@ -78,10 +78,29 @@ def test_prepare_bundle_rootfs_bind_mounts_when_root(
     dest = prepare_bundle_rootfs(bundle)
     assert dest.is_dir()
     assert not dest.is_symlink()
-    assert len(mounts) == 2
-    assert mounts[0][0] == str(guest)
-    assert mounts[0][1] == str(dest)
-    assert mounts[1][2] & 32  # MS_REMOUNT
+    assert mounts == [(str(guest), str(dest))]
+
+
+def test_prepare_bundle_rootfs_root_does_not_symlink_when_mount_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _linux_root(monkeypatch)
+    monkeypatch.delattr("os.mount", raising=False)
+
+    def _boom(_source: Path, _dest: Path) -> None:
+        raise OSError(1, "mount denied")
+
+    monkeypatch.setattr(
+        "agentcore.tools.sandbox.guest_rootfs._sys_mount_bind", _boom
+    )
+    install_fake_guest_rootfs(tmp_path, monkeypatch)
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    with pytest.raises(GuestRootfsError, match="bind"):
+        prepare_bundle_rootfs(bundle)
+    dest = bundle / "rootfs"
+    assert dest.is_dir()
+    assert not dest.is_symlink()
 
 
 def test_unmount_bundle_rootfs_swallows_missing(tmp_path: Path):
