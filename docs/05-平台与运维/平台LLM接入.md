@@ -115,6 +115,7 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 | 项 | 约束 |
 |---|---|
 | 协议 | 只跑 OpenAI `chat/completions` 子集。已知只走 `/responses`（`grok-4.5`、`gpt-5.6-luna`）或 `/messages`（`minimax-m2.7`、`qwen3.7-max`）的 id **不进种子**（与目录过滤同一份清单）。目录合并层仍列出这些 id（不静默隐藏），但标为不可选并带结构化原因「本网关未实现该模型所需的上游协议」。过滤不在 HTTP discovery：`GET /models` 原样返回。被区域闸住的 id 仍可能出现在发现结果里——目录有 ≠ 一定能跑 |
+| 会话头 | Go/Zen 出站 `POST /chat/completions` 必带稳定 `x-opencode-session`（值=对话 id；无对话时 `probe:{trace}`）。User-Agent=`AgentCore/1.0`。不冒充 `opencode-cli`。`GET /models` 不带 session。缺头上游 400（2026-09-06 起硬拒） |
 | BYOK | 用户自备**对应端点**的 key；估算价卡按现有 BYOK 两层解析；**不**进平台配额。打错端点时付费 Flash 会在 Zen 路上 `CreditsError`（扣的是 Zen 余额，Go 订阅管不到） |
 | 平台代付 | ✅ `PLATFORM_*` 可指向 Zen **或** Go；**现网钉 Go + 付费 Flash**（见 §五·附）。换上游 / 改 `quota_*` 须改生产 `.env` 并重启 api |
 | 上下文 | 按 **SKU id**：付费 `deepseek-v4-flash` **1M**；仅 `deepseek-v4-flash-free` **200K**（Zen 网关 cap）。禁止按端点猜窗（Go 无 free 档也不把 Flash 当成 200K） |

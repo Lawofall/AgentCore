@@ -60,6 +60,7 @@ from agentcore.llm.errors import (
     upstream_error,
     vendor_5xx_product_message,
 )
+from agentcore.llm.opencode_headers import opencode_client_headers, opencode_session_headers
 from agentcore.llm.provider.call_budget import provider_retry_ceiling
 from agentcore.llm.provider.cooldown_gate import (
     arm_cooldown,
@@ -107,6 +108,28 @@ def _request_attribution_headers() -> dict[str, str]:
         return attribution_headers_from_context()
     except Exception:  # noqa: BLE001 — never let billing headers break LLM I/O
         return {}
+
+
+def _leaf_http_headers(
+    *,
+    api_key: str,
+    base_url: str,
+    extra: dict[str, str] | None,
+) -> dict[str, str]:
+    """Default client headers. OpenCode UA is constant; session is per-request."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        **opencode_client_headers(base_url),
+    }
+    if extra:
+        headers.update(extra)
+    return headers
+
+
+def _outbound_call_headers(base_url: str) -> dict[str, str]:
+    """Per-POST headers: billing attribution + OpenCode session (no-op off Go/Zen)."""
+    return {**_request_attribution_headers(), **opencode_session_headers(base_url)}
 
 
 # Local aliases keep call sites readable; values live on the public protocol layer.
@@ -478,15 +501,13 @@ class OpenAICompatibleProvider:
                     raise ValidationError(
                         "自定义请求头含有非 ASCII 字符，无法发送。请检查服务商额外 Header。"
                     ) from e
-        headers = {
-            "Authorization": f"Bearer {self._api_key}",
-            "Content-Type": "application/json",
-        }
-        if self._extra_headers:
-            headers.update(self._extra_headers)
         self._client = outbound_async_client(
             base_url=self._base_url,
-            headers=headers,
+            headers=_leaf_http_headers(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                extra=self._extra_headers,
+            ),
             timeout=httpx.Timeout(_REQUEST_TIMEOUT, connect=10.0),
         )
         self._cooldown_key = cooldown_key(self._name, self._api_key, self._base_url)
@@ -692,15 +713,11 @@ class OpenAICompatibleProvider:
             return False
         new_key = require_http_header_safe_api_key(nxt.api_key)
         new_url = nxt.base_url.rstrip("/")
-        headers = {
-            "Authorization": f"Bearer {new_key}",
-            "Content-Type": "application/json",
-        }
-        if self._extra_headers:
-            headers.update(self._extra_headers)
         new_client = outbound_async_client(
             base_url=new_url,
-            headers=headers,
+            headers=_leaf_http_headers(
+                api_key=new_key, base_url=new_url, extra=self._extra_headers
+            ),
             timeout=httpx.Timeout(_REQUEST_TIMEOUT, connect=10.0),
         )
         old = self._client
@@ -950,7 +967,7 @@ class OpenAICompatibleProvider:
                     "POST",
                     "/chat/completions",
                     json=payload,
-                    headers=_request_attribution_headers() or None,
+                    headers=_outbound_call_headers(self._base_url) or None,
                 ) as response:
                     in_flight = response
                     body = await response.aread() if response.status_code >= 400 else None
@@ -1681,7 +1698,7 @@ class OpenAICompatibleProvider:
                 response = await self._client.post(
                     "/chat/completions",
                     json=payload,
-                    headers=_request_attribution_headers() or None,
+                    headers=_outbound_call_headers(self._base_url) or None,
                 )
                 body = response.content if response.status_code >= 400 else None
                 if body is not None and self._try_omit_temperature_once(
@@ -1790,7 +1807,11 @@ class OpenAICompatibleProvider:
         }
         dialect.apply_token_limit(payload, 1)
         try:
-            response = await self._client.post("/chat/completions", json=payload)
+            response = await self._client.post(
+                "/chat/completions",
+                json=payload,
+                headers=_outbound_call_headers(self._base_url) or None,
+            )
         except httpx.HTTPError as e:
             raise_if_task_cancelled(e)
             raise self._probe_connect_error(e) from e
@@ -1919,7 +1940,11 @@ class OpenAICompatibleProvider:
         if tool_choice is not None:
             payload["tool_choice"] = tool_choice
         try:
-            response = await self._client.post("/chat/completions", json=payload)
+            response = await self._client.post(
+                "/chat/completions",
+                json=payload,
+                headers=_outbound_call_headers(self._base_url) or None,
+            )
         except (httpx.TimeoutException, httpx.HTTPError):
             return None
         code = response.status_code
