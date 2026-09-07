@@ -14,6 +14,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 DEFAULT_GUEST_ROOTFS = "/opt/agentcore/guest-rootfs"
 MARKER_NAME = ".agentcore-guest-rootfs"
@@ -63,7 +64,7 @@ def _sandboxd_bind_path() -> bool:
     return sys.platform == "linux" and geteuid is not None and geteuid() == 0
 
 
-def _libc_mount_umount2() -> tuple[object, object]:
+def _libc_mount_umount2() -> tuple[Any, Any]:
     libc = ctypes.CDLL(None, use_errno=True)
     mount = libc.mount
     mount.argtypes = [
