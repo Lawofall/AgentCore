@@ -18,7 +18,11 @@ from pathlib import Path
 from typing import Any
 
 from agentcore.core.logging import get_logger
-from agentcore.tools.sandbox.guest_rootfs import GuestRootfsError, prepare_bundle_rootfs
+from agentcore.tools.sandbox.guest_rootfs import (
+    GuestRootfsError,
+    prepare_bundle_rootfs,
+    unmount_bundle_rootfs,
+)
 from agentcore.tools.sandbox.sandboxd.argv import build_runsc_cmd, build_runsc_exec_cmd
 from agentcore.tools.sandbox.sandboxd.netns_ops import (
     NETNS_RUN_DIR,
@@ -220,6 +224,7 @@ class SandboxdServer:
         self._server: asyncio.Server | None = None
         self._procs: dict[str, asyncio.subprocess.Process] = {}
         self._detached: set[str] = set()
+        self._bundles: dict[str, str] = {}
         self._proc_lock = asyncio.Lock()
 
     @classmethod
@@ -253,6 +258,7 @@ class SandboxdServer:
             await self._kill_tracked(container_id)
             await self._runsc_aux("delete", "--force", container_id)
             self._detached.discard(container_id)
+            self._release_bundle(container_id)
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
@@ -293,6 +299,11 @@ class SandboxdServer:
         if not resolved.is_relative_to(root_res):
             raise RpcDeniedError(f"{label} must be under runtime root")
         return resolved
+
+    def _release_bundle(self, container_id: str) -> None:
+        bundle = self._bundles.pop(container_id, None)
+        if bundle:
+            unmount_bundle_rootfs(bundle)
 
     async def _on_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         sock = writer.get_extra_info("socket")
@@ -525,6 +536,7 @@ class SandboxdServer:
             await self._runsc_aux("delete", "--force", container_id)
             with contextlib.suppress(Exception):
                 await probe_teardown(PROBE_NETNS_NAME)
+            unmount_bundle_rootfs(bundle_dir)
             shutil.rmtree(bundle_dir, ignore_errors=True)
 
     async def _run(
@@ -554,6 +566,7 @@ class SandboxdServer:
             prepare_bundle_rootfs(bundle_dir)
         except GuestRootfsError as exc:
             raise RpcDeniedError(str(exc), code="guest_rootfs") from exc
+        self._bundles[container_id] = bundle_dir
         cmd = build_runsc_cmd(
             runsc_path=self._runsc,
             runtime_root=self._runtime_root,
@@ -567,7 +580,11 @@ class SandboxdServer:
             mode="detach",
             container_id=container_id,
         )
-        await self._run_detach(cmd, container_id, req_id, writer)
+        try:
+            await self._run_detach(cmd, container_id, req_id, writer)
+        except Exception:
+            self._release_bundle(container_id)
+            raise
         return False
 
     async def _track(self, container_id: str, proc: asyncio.subprocess.Process) -> None:
@@ -982,6 +999,7 @@ class SandboxdServer:
         extra_flags = ("--force",) if force else ()
         await self._runsc_aux("delete", *extra_flags, container_id)
         self._detached.discard(container_id)
+        self._release_bundle(container_id)
 
     async def _kill(self, params: dict[str, Any]) -> None:
         container_id = self._require_container_id(params.get("container_id"))

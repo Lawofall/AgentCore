@@ -2299,8 +2299,13 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(
         name='sandbox.desk_provision_failed',
-        description='回合外开通云桌失败（不中断回合；execute 要求已注册桌）',
+        description=(
+            '回合外开通云桌失败（不中断回合；execute 要求已注册桌）；error 为用户套话，code/cause '
+            '为 sandboxd/runsc 原错'
+        ),
         fields={
+            'cause': FieldType('str'),
+            'code': FieldType('str'),
             'error': FieldType('str'),
         },
     ),

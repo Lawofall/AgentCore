@@ -15,6 +15,44 @@ from agentcore.workspace.protocol import WorkspaceBackend
 logger = get_logger(__name__)
 
 
+def _exc_code(exc: BaseException) -> str:
+    details = getattr(exc, "details", None)
+    if isinstance(details, dict):
+        nested = details.get("code")
+        if nested:
+            return str(nested).strip()[:80]
+    raw = getattr(exc, "code", None)
+    return str(raw).strip()[:80] if raw else ""
+
+
+def desk_provision_log_fields(exc: BaseException) -> dict[str, str]:
+    """User-facing ``error`` plus the pre-wrap sandboxd/runsc ``code`` / ``cause``."""
+    error = " ".join(str(exc).split())[:200]
+    origin: BaseException = exc
+    for candidate in (exc.__cause__, exc.__context__):
+        if candidate is not None:
+            origin = candidate
+            break
+    code = _exc_code(origin)
+    cause = ""
+    if origin is not exc:
+        cause = " ".join(str(origin).split())[:200]
+    if not cause:
+        from agentcore.tools.sandbox.cloud_health import cloud_sandbox_health_failure
+
+        failure = cloud_sandbox_health_failure()
+        if failure:
+            reason, detail = failure
+            cause = " ".join(part for part in (reason, detail) if part)[:200]
+            code = code or str(reason).strip()[:80]
+    fields = {"error": error}
+    if code:
+        fields["code"] = code
+    if cause and cause != error:
+        fields["cause"] = cause
+    return fields
+
+
 async def provision_server_desk(
     backend: WorkspaceBackend,
     *,
@@ -40,10 +78,7 @@ async def provision_server_desk(
     try:
         await ensure()
     except Exception as exc:  # noqa: BLE001 — missing desk withholds run, must not abort the turn
-        logger.warning(
-            "sandbox.desk_provision_failed",
-            error=str(exc)[:200],
-        )
+        logger.warning("sandbox.desk_provision_failed", **desk_provision_log_fields(exc))
     finally:
         if waiting and sink is not None and conversation_id:
             from agentcore.runtime.events import desk_provision_wait

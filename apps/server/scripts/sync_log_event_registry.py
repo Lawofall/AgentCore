@@ -774,6 +774,8 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
     },
     "sandbox.desk_provision_failed": {
         "error": "str",
+        "code": "str",
+        "cause": "str",
     },
     "sandbox.desk_reaped": {
         "workspace": "str",
@@ -1249,7 +1251,10 @@ KEY_DESC: dict[str, str] = {
     "sandbox.desk_process_started": "云桌 guest 内已短 exec 拉起按对话记账的长驻进程",
     "sandbox.desk_process_stopped": "云桌 guest 内已短 exec 结束一条长驻进程",
     "sandbox.desk_processes_dropped": "关停 desk 时丢掉该桌的进程登记（guest kill 收掉 pid）",
-    "sandbox.desk_provision_failed": "回合外开通云桌失败（不中断回合；execute 要求已注册桌）",
+    "sandbox.desk_provision_failed": (
+        "回合外开通云桌失败（不中断回合；execute 要求已注册桌）；"
+        "error 为用户套话，code/cause 为 sandboxd/runsc 原错"
+    ),
     "sandbox.desk_reaped": "空闲云桌 guest 已 kill+delete（盘保留；下次 prepare/attach 再创建）",
     "sandbox.desk_reaper_error": "桌级 idle reap 扫一轮失败（不打死 browser_reaper 循环）",
     "sandbox.desk_reaper_swept": "桌级 idle reap 扫到并关掉了若干空闲 guest",

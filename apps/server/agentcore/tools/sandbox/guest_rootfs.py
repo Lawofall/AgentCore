@@ -8,6 +8,7 @@ sees; adding a compiler later goes only into the guest stage.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import sys
@@ -49,14 +50,48 @@ def require_guest_rootfs(path: Path | None = None) -> Path:
     return root.resolve()
 
 
+def _linux_root_can_bind_mount() -> bool:
+    """sandboxd is uid 0 + SYS_ADMIN. Tests and the API process are not."""
+    geteuid = getattr(os, "geteuid", None)
+    mount = getattr(os, "mount", None)
+    return sys.platform == "linux" and geteuid is not None and geteuid() == 0 and mount is not None
+
+
+def _mount_bind_ro(source: Path, dest: Path) -> None:
+    """Bind the packed guest onto ``dest`` (not a symlink into that tree).
+
+    runsc gofer safe-mount rejects ``bundle/rootfs`` as a symlink: extra OCI
+    binds (``/workspace``) resolve into the shared packed tree
+    (``expected …/rootfs/workspace, but found /opt/agentcore/guest-rootfs/workspace``)
+    and the sentry dies with an empty mounts JSON / client-sync EOF.
+    """
+    mount = getattr(os, "mount", None)
+    if mount is None:
+        raise GuestRootfsError("os.mount 不可用")
+    flags = int(getattr(os, "MS_BIND", 4096)) | int(getattr(os, "MS_REC", 16384))
+    mount(str(source), str(dest), "none", flags)
+    remount = flags | int(getattr(os, "MS_RDONLY", 1)) | int(getattr(os, "MS_REMOUNT", 32))
+    mount(str(source), str(dest), "none", remount)
+
+
+def unmount_bundle_rootfs(bundle_dir: str | Path) -> None:
+    """Drop a bind-mounted bundle rootfs. No-op when it was a symlink/copy."""
+    umount = getattr(os, "umount", None)
+    if umount is None:
+        return
+    dest = Path(bundle_dir) / "rootfs"
+    with contextlib.suppress(OSError):
+        umount(str(dest))
+
+
 def prepare_bundle_rootfs(
     bundle_dir: str | Path, *, guest_rootfs: Path | None = None
 ) -> Path:
     """Point ``bundle/rootfs`` at the shared guest tree.
 
-    Linux: symlink (``rmtree`` on the bundle must not walk into the shared
-    tree). Elsewhere: copy the tree so unit tests can run without symlink
-    privilege. Production is Linux.
+    Linux sandboxd (uid 0): bind-mount so OCI extra binds land on this path.
+    Linux tests (non-root): symlink so ``rmtree`` cannot walk the shared tree.
+    Elsewhere: copy the tree so unit tests can run without symlink privilege.
     """
     bundle = Path(bundle_dir)
     guest = require_guest_rootfs(guest_rootfs)
@@ -68,7 +103,13 @@ def prepare_bundle_rootfs(
             dest.rmdir()
         except OSError as exc:
             raise GuestRootfsError(f"bundle rootfs 不是空目录，拒绝覆盖: {dest}") from exc
-    if sys.platform == "linux":
+    if _linux_root_can_bind_mount():
+        dest.mkdir()
+        try:
+            _mount_bind_ro(guest, dest)
+        except OSError as exc:
+            raise GuestRootfsError(f"无法把 guest rootfs bind 到 bundle: {exc}") from exc
+    elif sys.platform == "linux":
         dest.symlink_to(guest, target_is_directory=True)
     else:
         shutil.copytree(guest, dest, symlinks=True)

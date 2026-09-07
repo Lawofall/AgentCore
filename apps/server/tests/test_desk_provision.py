@@ -8,7 +8,11 @@ import pytest
 
 from agentcore.core.errors import SandboxError
 from agentcore.tools.builtin.run_short import execute_short
-from agentcore.tools.sandbox.desk_provision import provision_server_desk
+from agentcore.tools.sandbox.desk_provision import (
+    desk_provision_log_fields,
+    provision_server_desk,
+)
+from agentcore.tools.sandbox.sandboxd.errors import SandboxdRpcError
 from agentcore.workspace.server import ServerWorkspace
 
 
@@ -46,6 +50,58 @@ async def test_provision_swallows_ensure_failure():
             raise SandboxError("boot failed", code="exec_env_sandbox_unavailable")
 
     await provision_server_desk(_Boom())  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_provision_logs_sandboxd_cause_not_user_face():
+    from structlog.testing import capture_logs
+
+    class _Boom:
+        location = "server"
+
+        async def ensure_workspace_desk(self) -> None:
+            try:
+                raise SandboxdRpcError(
+                    "cannot read client sync file: waiting for sandbox to start: EOF",
+                    code="sandboxd_rpc",
+                )
+            except SandboxdRpcError as exc:
+                raise SandboxError(
+                    "云端隔离执行环境当前不可用，代码没有运行。我会换个方式继续。",
+                    code="exec_env_sandbox_unavailable",
+                ) from exc
+
+    with capture_logs() as logs:
+        await provision_server_desk(_Boom())  # type: ignore[arg-type]
+    failed = [e for e in logs if e.get("event") == "sandbox.desk_provision_failed"]
+    assert len(failed) == 1
+    assert failed[0]["code"] == "sandboxd_rpc"
+    assert "client sync file" in failed[0]["cause"]
+    assert "云端隔离执行环境当前不可用" in failed[0]["error"]
+
+
+def test_desk_provision_log_fields_uses_health_hint_without_cause():
+    from agentcore.tools.sandbox.cloud_health import (
+        reset_cloud_sandbox_health_for_tests,
+        set_cloud_sandbox_health_for_tests,
+    )
+
+    reset_cloud_sandbox_health_for_tests()
+    set_cloud_sandbox_health_for_tests(
+        False, failure=("runsc_failed", "cannot create sandbox: EOF")
+    )
+    try:
+        fields = desk_provision_log_fields(
+            SandboxError(
+                "云端隔离执行环境当前不可用，代码没有运行。我会换个方式继续。",
+                code="exec_env_sandbox_unavailable",
+            )
+        )
+    finally:
+        reset_cloud_sandbox_health_for_tests()
+    assert fields["code"] == "exec_env_sandbox_unavailable"
+    assert "runsc_failed" in fields["cause"]
+    assert "EOF" in fields["cause"]
 
 
 @pytest.mark.asyncio
