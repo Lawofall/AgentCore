@@ -182,6 +182,8 @@ def test_format_evidence_ledger_for_judge_and_brief():
     assert "本轮引用证据台账" in judge_block
     assert f"{eid} · tier=official" in judge_block
     assert "官方原文" in judge_block
+    assert "深读=" in judge_block
+    assert "弱源" not in judge_block
     assert format_evidence_ledger_for_judge(led, []) == ""
     assert format_evidence_ledger_for_judge(None, turns) == ""
 
@@ -189,6 +191,7 @@ def test_format_evidence_ledger_for_judge_and_brief():
     assert "本场证据台账" in brief_block
     assert f"{eid} · tier=official" in brief_block
     assert "不得抹平" in brief_block
+    assert "弱源实锤" not in brief_block
 
 
 def test_evidence_notes_spec_requires_line_tail_id():

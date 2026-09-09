@@ -415,7 +415,6 @@ export function NoticesPage() {
     <Page>
       <PageHeader
         title="公告"
-        description="产品全局 Notice · 发布后写入桌面横幅/弹窗与/或 IM「AgentCore 官方」"
         note="发布与归档立即对用户生效；已投递的 IM 消息不会被撤回"
         actions={
           <>

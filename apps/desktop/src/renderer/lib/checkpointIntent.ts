@@ -1,9 +1,9 @@
 /** Unrecognized checkpoint intent (including retired ask shells) → decision. */
-export type AskUiIntent = "decision" | "organize_plan" | "daily_review";
+export type AskUiIntent = "decision" | "organize_plan";
 
-/** Normalize wire/recovery `intent` — only the three chrome intents; all else → decision. */
+/** Normalize wire/recovery `intent` — only organize_plan keeps chrome; all else → decision. */
 export function parseCheckpointIntent(raw: unknown): AskUiIntent {
-  if (raw === "organize_plan" || raw === "daily_review") {
+  if (raw === "organize_plan") {
     return raw;
   }
   return "decision";

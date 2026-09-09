@@ -1011,6 +1011,34 @@ describe("streamConversationViaSidecar", () => {
     expect(startTurnMock).toHaveBeenCalledTimes(1);
   });
 
+  it("maps occupy failure to occupy code (not 本地引擎出错, not stale spawn)", async () => {
+    takeRecentSidecarFailureMock.mockReturnValue(
+      "找不到 Python，无法启动本地引擎",
+    );
+    seedOriginalUserBubble("c1", "u-opt", "你好");
+    startTurnMock.mockRejectedValue(
+      new Error(
+        "Error invoking remote method 'sidecar:startTurn': Error: OCCUPY_FAILED: 云端占位失败，本地回合未启动",
+      ),
+    );
+
+    const err = await streamConversationViaSidecar({
+      conversationId: "c1",
+      rootId: "r1",
+      content: "你好",
+      optimisticUserId: "u-opt",
+    }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(StreamError);
+    const se = err as StreamError;
+    expect(se.kind).toBe("sidecar");
+    expect(se.code).toBe("sidecar_occupy_failed");
+    expect(se.recoverable).toBe(true);
+    expect(se.serverMessage).toBe("云端占位失败，本地回合未启动");
+    expect(se.serverMessage).not.toContain("本地引擎出错");
+    expect(se.serverMessage).not.toContain("找不到 Python");
+  });
+
   it("does not report turnCommit when outbox flush is still pending", async () => {
     flushTurnMock.mockResolvedValue({
       ok: false,

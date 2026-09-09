@@ -51,6 +51,11 @@ export function isTerminalPhase(phase: TurnPhase): boolean {
   return phase === "stopped" || phase === "completed" || phase === "failed";
 }
 
+/** 本轮还在写（含开流前 / 停止中）。idle 与终态都不是。 */
+export function isWritingTurnPhase(phase: TurnPhase): boolean {
+  return phase === "preflight" || phase === "streaming" || phase === "stopping";
+}
+
 /** stopping / terminal：禁止新开流（探活恢复点、sidecar invoke、云 fetch）。 */
 export function blocksStreamOpen(phase: TurnPhase): boolean {
   return phase === "stopping" || isTerminalPhase(phase);

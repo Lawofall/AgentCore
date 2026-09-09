@@ -91,11 +91,21 @@ def build_captain_executor(
         for msg in history:
             messages.append(LLMMessage(role=msg["role"], content=msg["content"]))
         messages.append(LLMMessage(role="user", content=user_content))
+        from agentcore.runtime.engine.governance import resolve_openai_tool_defs
+
+        opening_tools = (
+            None
+            if supports_tools is False
+            else resolve_openai_tool_defs(tools, None, set())
+        )
         return await _drive_captain_loop(
             spec=spec,
             messages=messages,
             received_blocks=_build_captain_context_blocks(
-                chat_system_prompt, history, user_message
+                chat_system_prompt,
+                history,
+                user_message,
+                tool_defs=opening_tools,
             ),
             llm=llm,
             tools=tools,

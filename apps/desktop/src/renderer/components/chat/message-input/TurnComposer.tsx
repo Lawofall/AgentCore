@@ -601,7 +601,7 @@ export function TurnComposer({
 
   // 左簇顺序：工作区 · Git? · 模型 · 权限 · @
   // bar：整簇收进 ComposerPlusMenu（权限/@ 带文案）；card：底栏摊开（iconOnly）。
-  // 否决 Composer 并排「本地引擎/云端过桥」切换器；过桥事后弱提示见助手泡脚注 CloudBridgeHint。
+  // 否决 Composer 并排「本地引擎/云端过桥」切换器；引擎不可用走诊断横幅，不自动过桥。
   const sessionChrome = (
     <>
       <ComposerWorkspaceChip conversationId={conversationId} />

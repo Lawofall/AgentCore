@@ -11,7 +11,7 @@
 **致命的从来不是名单少了谁，是默认不安全**：漏登记 = 静默通过。翻转成自报之后，同一个
 形状会变成「新工具忘了填 ``file_products``」，所以这里加一道棘轮，让它必然变红：
 
-1. **谁必须表态**（结构判据，不扫工具名、不猜语义）：``ToolCategory.FILESYSTEM``（拿
+1. **谁必须表态**（结构判据，不扫工具名、不猜语义）：``workspace_io``（拿
    工作区相对路径干活的那一族）∪ ``registration.execution_class``（在工作区 / 沙箱里跑
    东西的那一族）= 「落盘面」。落盘面上的每个工具都必须在 ``ToolRegistration.file_products``
    上显式声明契约（:class:`FileProductsContract`），漏声明 = ``UNDECLARED`` = 红。
@@ -54,7 +54,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval
 from agentcore.tools.builtin.archive_create import ArchiveCreateTool
 from agentcore.tools.builtin.archive_extract import ArchiveExtractTool
 from agentcore.tools.builtin.file_ops import (
@@ -105,7 +105,7 @@ def _landing_face() -> tuple[_FaceTool, ...]:
     for cls in declared_tools():
         reg = tool_registration(cls)
         schema = declared_tool_schema(cls)
-        if schema.category is ToolCategory.FILESYSTEM or reg.execution_class:
+        if reg.workspace_io or reg.execution_class:
             face.append(_FaceTool(schema.name, schema, reg.file_products))
     return tuple(face)
 

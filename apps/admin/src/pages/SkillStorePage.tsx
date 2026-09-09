@@ -19,7 +19,6 @@ import { cn, fmtTime } from "@/lib/utils";
 import { errorMessage } from "@/services/api";
 import {
   type SkillStoreListing,
-  type SkillStoreListingDetail,
   type SkillStoreListingStatus,
   type SkillStoreReport,
   getSkillStoreListing,
@@ -27,6 +26,12 @@ import {
   listSkillStoreReports,
   takedownSkillStoreListing,
 } from "@/services/adminSkillStore";
+import {
+  getWorkflowStoreListing,
+  listWorkflowStoreListings,
+  listWorkflowStoreReports,
+  takedownWorkflowStoreListing,
+} from "@/services/adminWorkflowStore";
 import { Eye, Flag, RefreshCw, Store, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -57,6 +62,10 @@ const STATUS_FILTERS: SelectOption[] = STATUS_FILTER_VALUES.map((value) => ({
 
 const LISTING_FILTERS = { status: oneOf(STATUS_FILTER_VALUES, "all") };
 
+const KIND_VALUES = ["skills", "workflows"] as const satisfies readonly string[];
+type StoreKind = (typeof KIND_VALUES)[number];
+const KIND_FILTERS = { kind: oneOf(KIND_VALUES, "skills") };
+
 function asStatus(raw: string): SkillStoreListingStatus {
   if (raw === "published" || raw === "unpublished" || raw === "taken_down") {
     return raw;
@@ -79,12 +88,18 @@ export function SkillStorePage() {
   const [listingsTotal, setListingsTotal] = useState(0);
   const [page, setPage] = useAdminListPage();
   const { values, set, reset } = useUrlFilters(LISTING_FILTERS);
+  const { values: kindValues, set: setKind } = useUrlFilters(KIND_FILTERS);
   const statusFilter = values.status;
+  const kind = kindValues.kind;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pending, setPending] = useState<SkillStoreListing | null>(null);
-  const [preview, setPreview] = useState<SkillStoreListingDetail | null>(null);
+  const [preview, setPreview] = useState<{
+    name: string;
+    description: string;
+    body: string;
+  } | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
 
   const loadGenRef = useRef(0);
@@ -98,20 +113,36 @@ export function SkillStorePage() {
     setLoading(true);
     setError(null);
     try {
-      const [reportsRes, listingsRes] = await Promise.all([
-        listSkillStoreReports(
-          { page, pageSize: PAGE_SIZE },
-          ac.signal,
-        ),
-        listSkillStoreListings(
-          {
-            status: statusFilter === "all" ? undefined : statusFilter,
-            page: 1,
-            pageSize: PAGE_SIZE,
-          },
-          ac.signal,
-        ),
-      ]);
+      const [reportsRes, listingsRes] =
+        kind === "workflows"
+          ? await Promise.all([
+              listWorkflowStoreReports(
+                { page, pageSize: PAGE_SIZE },
+                ac.signal,
+              ),
+              listWorkflowStoreListings(
+                {
+                  status: statusFilter === "all" ? undefined : statusFilter,
+                  page: 1,
+                  pageSize: PAGE_SIZE,
+                },
+                ac.signal,
+              ),
+            ])
+          : await Promise.all([
+              listSkillStoreReports(
+                { page, pageSize: PAGE_SIZE },
+                ac.signal,
+              ),
+              listSkillStoreListings(
+                {
+                  status: statusFilter === "all" ? undefined : statusFilter,
+                  page: 1,
+                  pageSize: PAGE_SIZE,
+                },
+                ac.signal,
+              ),
+            ]);
       if (ac.signal.aborted || gen !== loadGenRef.current) return;
       setReports(reportsRes.data);
       setReportsTotal(reportsRes.total);
@@ -125,7 +156,7 @@ export function SkillStorePage() {
         setLoading(false);
       }
     }
-  }, [page, statusFilter]);
+  }, [page, statusFilter, kind]);
 
   useEffect(() => {
     void load();
@@ -155,7 +186,10 @@ export function SkillStorePage() {
     if (busyId) return;
     setBusyId(listing.id);
     try {
-      const updated = await takedownSkillStoreListing(listing.id);
+      const updated =
+        kind === "workflows"
+          ? await takedownWorkflowStoreListing(listing.id)
+          : await takedownSkillStoreListing(listing.id);
       applyTakenDown(updated);
       toast.success("已从货架下架");
       if (statusFilter === "published") void load();
@@ -171,7 +205,21 @@ export function SkillStorePage() {
     if (busyId || previewBusy) return;
     setPreviewBusy(true);
     try {
-      setPreview(await getSkillStoreListing(listingId));
+      if (kind === "workflows") {
+        const row = await getWorkflowStoreListing(listingId);
+        setPreview({
+          name: row.name,
+          description: row.description,
+          body: JSON.stringify(row.definition, null, 2),
+        });
+      } else {
+        const row = await getSkillStoreListing(listingId);
+        setPreview({
+          name: row.name,
+          description: row.description,
+          body: row.content,
+        });
+      }
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -204,18 +252,20 @@ export function SkillStorePage() {
     <Page>
       <PageHeader
         title="商店"
-        description="能力商店举报队列与 listing 下架。开放上架无预审，靠人举报后平台下架。"
         note="下架只从公开货架撤下，不会删除用户已安装的副本。"
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void load()}
-            disabled={loading}
-            aria-label="刷新"
-          >
-            <RefreshCw size={14} className={cn(loading && "animate-spin")} />
-          </Button>
+          <>
+            <KindToggle value={kind} onChange={(next) => setKind({ kind: next })} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void load()}
+              disabled={loading}
+              aria-label="刷新"
+            >
+              <RefreshCw size={14} className={cn(loading && "animate-spin")} />
+            </Button>
+          </>
         }
         filters={
           <Select
@@ -262,7 +312,6 @@ export function SkillStorePage() {
                   <EmptyState
                     icon={Flag}
                     title="还没有举报"
-                    description="开放上架没有预审。有人举报后会出现在这里。"
                   />
                 )}
               </Card>
@@ -313,7 +362,7 @@ export function SkillStorePage() {
                               onClick={() => void openPreview(listing.id)}
                             >
                               {previewBusy ? <Spinner /> : <Eye size={14} />}
-                              看正文
+                              {kind === "workflows" ? "看定义" : "看正文"}
                             </Button>
                             {status !== "taken_down" && (
                               <Button
@@ -347,9 +396,6 @@ export function SkillStorePage() {
           <section>
             <div className="mb-3">
               <h2 className="text-sm font-semibold text-foreground">Listing</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                货架条目状态。平台下架后公开货架不再展示。
-              </p>
             </div>
             {listings.length === 0 ? (
               <Card>
@@ -363,7 +409,7 @@ export function SkillStorePage() {
                   description={
                     filtered
                       ? "换个状态再看，或清除筛选查看全部 listing。"
-                      : "用户上架技能后会出现在这里。"
+                      : undefined
                   }
                   action={
                     filtered ? (
@@ -423,7 +469,7 @@ export function SkillStorePage() {
                               onClick={() => void openPreview(row.id)}
                             >
                               {previewBusy ? <Spinner /> : <Eye size={14} />}
-                              看正文
+                              {kind === "workflows" ? "看定义" : "看正文"}
                             </Button>
                             {status !== "taken_down" && (
                               <Button
@@ -461,6 +507,43 @@ export function SkillStorePage() {
         <BodyDialog listing={preview} onClose={() => setPreview(null)} />
       )}
     </Page>
+  );
+}
+
+function KindToggle({
+  value,
+  onChange,
+}: {
+  value: StoreKind;
+  onChange: (s: StoreKind) => void;
+}) {
+  const items: { id: StoreKind; label: string }[] = [
+    { id: "skills", label: "提示词" },
+    { id: "workflows", label: "工作流" },
+  ];
+  return (
+    <div
+      className="inline-flex items-center rounded-lg border border-border p-0.5"
+      role="group"
+      aria-label="货架种类"
+    >
+      {items.map((it) => (
+        <button
+          key={it.id}
+          type="button"
+          aria-pressed={value === it.id}
+          onClick={() => onChange(it.id)}
+          className={cn(
+            "h-7 rounded-lg px-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+            value === it.id
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {it.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -510,7 +593,7 @@ function BodyDialog({
   listing,
   onClose,
 }: {
-  listing: SkillStoreListingDetail;
+  listing: { name: string; description: string; body: string };
   onClose: () => void;
 }) {
   return (
@@ -527,7 +610,7 @@ function BodyDialog({
       }
     >
       <pre className="whitespace-pre-wrap break-words text-sm text-foreground">
-        {listing.content || "（没有正文）"}
+        {listing.body || "（没有正文）"}
       </pre>
     </Dialog>
   );

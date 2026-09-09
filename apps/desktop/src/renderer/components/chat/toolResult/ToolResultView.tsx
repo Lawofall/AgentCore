@@ -24,9 +24,7 @@ import type {
   WebFetchDisplay,
   WebSearchDisplay,
 } from "@/types/events";
-import { Terminal } from "lucide-react";
-import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { type ReactNode, useMemo } from "react";
 import { Favicon } from "../Favicon";
 import { CodeDiagnosticsResult } from "./CodeDiagnosticsResult";
 import { SearchHitResult } from "./SearchHitResult";
@@ -42,7 +40,11 @@ import {
   stripFileReadFooter,
 } from "./fileReadWindow";
 import { isSearchHitTool } from "./parseSearchHits";
-import { specificToolFailureMessage } from "./productFailureFace";
+import {
+  compactToolFailureFace,
+  specificToolFailureMessage,
+} from "./productFailureFace";
+import { isSelfExplanatoryLookupError } from "./toolFaultFace";
 import { isVerifyBudgetExceeded, verifyIncompleteFace } from "./verifyBudget";
 
 /** Normalized data a tool result renders from, shared by the single-agent process
@@ -204,11 +206,17 @@ export function hasToolResultBody(d: ToolResultData): boolean {
     }
   } else if (isConsultDisplay(d)) {
     if (consultHasExpandBody(d)) return true;
+  } else if (isConversationLogDisplay(d.display)) {
+    // Title already has the conversation name +「打开」; expand only for transcript.
+    return Boolean(d.result?.trim());
   } else if (d.display) {
     return true;
   }
   if (isFileEdit(d)) return true;
   if (isFileWrite(d)) return true;
+  if (d.status === "error") {
+    return Boolean(compactToolFailureFace(d) || d.result?.trim());
+  }
   if (specificToolFailureMessage(d)) return true;
   return !!d.result?.trim();
 }
@@ -303,9 +311,7 @@ export function toolResultPeek(d: ToolResultData): string {
   if (isCodeExecDisplay(d.display)) {
     if (isVerifyBudgetExceeded(d.display))
       return verifyIncompleteFace(d.display);
-    const code =
-      typeof d.display.exit_code === "number" ? d.display.exit_code : 0;
-    if (code !== 0) return `退出码 ${code}`;
+    // Exit number lives in ToolRowTail — don't also peek「退出码 N」.
     return "";
   }
   if (isSkillConsultDisplay(d.display)) {
@@ -324,9 +330,9 @@ export function toolResultPeek(d: ToolResultData): string {
     if (typeof d.display.conversation_id === "string") {
       const title = d.display.title?.trim();
       if (title) {
-        return clampLine(d.display.truncated ? `${title} · 已截断` : title);
+        return clampLine(d.display.truncated ? `${title} · 截断` : title);
       }
-      return d.display.truncated ? "已截断" : "已查阅对话";
+      return d.display.truncated ? "截断" : "已查阅对话";
     }
     if (typeof d.display.result_count === "number") {
       const n = d.display.result_count;
@@ -473,27 +479,14 @@ function WebFetchResult({ display }: { display: WebFetchDisplay }) {
   );
 }
 
-/** Terminal-style stdout/stderr. Language / failure exit code / incomplete face
- * live on the ToolLine; success keeps「退出码 0」on this bar (not a second title). */
+/** Terminal-style stdout/stderr. Exit number lives on the ToolLine. */
 function CodeExecResult({ display }: { display: CodeExecDisplay }) {
-  const exitCode =
-    typeof display.exit_code === "number" ? display.exit_code : 0;
   const incomplete = isVerifyBudgetExceeded(display);
-  const failed = !incomplete && exitCode !== 0;
   const stdout = (display.stdout ?? "").replace(/\n+$/, "");
   const stderr = (display.stderr ?? "").replace(/\n+$/, "");
   const empty = !stdout && !stderr;
-  const showExitBar = !failed && !incomplete;
   return (
     <div className="mt-1 overflow-hidden rounded-lg border border-border">
-      {showExitBar && (
-        <div className="flex items-center gap-2 border-border/60 border-b bg-muted/40 px-2.5 py-1 text-xs">
-          <Terminal size={12} className="shrink-0 text-muted-foreground" />
-          <span className="ml-auto tabular-nums text-success">
-            退出码 {exitCode}
-          </span>
-        </div>
-      )}
       <div className="max-h-72 overflow-auto bg-muted/30 px-3 py-2 font-mono text-xs leading-relaxed">
         {empty && <span className="text-muted-foreground/60">（无输出）</span>}
         {stdout && (
@@ -548,55 +541,22 @@ function ConsultEntryCard({
  * Aligns with the display wire-cap (~6000) discipline (跨会话对话日志定案). */
 const CONVERSATION_LOG_PREVIEW_CHARS = 6000;
 
-/** Worker conversation-log expand body. Title / hit-count live on the ToolLine;
- * read keeps conversation id +「打开对话」(not on the line). */
-function ConversationLogOpenRow({
-  conversationId,
-}: { conversationId: string }) {
-  const navigate = useNavigate();
-  return (
-    <div className="flex items-center gap-2 border-border/60 border-b bg-muted/40 px-2.5 py-1 text-xs">
-      <span className="min-w-0 truncate font-mono text-muted-foreground">
-        {conversationId}
-      </span>
-      <button
-        type="button"
-        onClick={() => navigate(`/conversations/${conversationId}`)}
-        className="ml-auto shrink-0 text-xs text-muted-foreground hover:text-foreground hover:underline"
-      >
-        打开对话
-      </button>
-    </div>
-  );
-}
-
-function ConversationLogResult({
-  display,
-  result,
-}: {
-  display: ConversationLogDisplay;
-  result: string;
-}) {
-  const isRead = typeof display.conversation_id === "string";
-  const conversationId = isRead ? display.conversation_id : undefined;
+/** Worker conversation-log expand body. Title / hit-count /「打开」live on the
+ * ToolLine; this card is transcript-only (no id chrome). */
+function ConversationLogResult({ result }: { result: string }) {
   const preview =
     result.length > CONVERSATION_LOG_PREVIEW_CHARS
       ? `${result.slice(0, CONVERSATION_LOG_PREVIEW_CHARS)}\n…`
       : result;
   const previewClipped = result.length > CONVERSATION_LOG_PREVIEW_CHARS;
   const body = preview.trim();
-  if (!isRead && !body) return null;
+  if (!body) return null;
 
   return (
     <div className="mt-1 overflow-hidden rounded-lg border border-border">
-      {conversationId ? (
-        <ConversationLogOpenRow conversationId={conversationId} />
-      ) : null}
-      {body ? (
-        <div className="px-1 pb-1">
-          <PromptDocument text={preview} maxHeightClass="max-h-72" />
-        </div>
-      ) : null}
+      <div className="px-1 pb-1">
+        <PromptDocument text={preview} maxHeightClass="max-h-72" />
+      </div>
       {previewClipped && (
         <div className="border-border/60 border-t bg-muted/40 px-2.5 py-1 text-muted-foreground text-xs">
           预览已截断（完整内容在工具结果中，可续读拼回）
@@ -714,8 +674,8 @@ function TextResult({
  * Rich rendering of a finished tool call (工具结果富渲染), keyed off the tool name
  * (形状是数据不是模式): web_search → result cards, web_fetch → source card + body,
  * code_execute → a terminal view, str_replace → a red/green diff, file_write → a
- * content card (the last two from the call args). Anything else — or a tool whose
- * rich data is absent — falls back to the model-facing text result.
+ * content card (the last two from the call args). Lookup misses skip the
+ * redundant「没找到…」line; expand shows the receipt directly (no nested「详情」).
  */
 export function ToolResultView({ data }: { data: ToolResultData }) {
   if (data.status === "redirect") {
@@ -730,8 +690,12 @@ export function ToolResultView({ data }: { data: ToolResultData }) {
       </p>
     );
   }
+  const rich = renderRichToolResult(data);
+  if (data.status === "error" && !rich) {
+    return <PlainToolError data={data} />;
+  }
   const face = specificToolFailureMessage(data);
-  const body = <ToolResultBody data={data} />;
+  const body = rich ?? <ToolResultText data={data} />;
   if (!face) return body;
   return (
     <div>
@@ -746,12 +710,38 @@ export function ToolResultView({ data }: { data: ToolResultData }) {
   );
 }
 
-function ToolResultBody({ data }: { data: ToolResultData }) {
+function PlainToolError({ data }: { data: ToolResultData }) {
+  const lookupMiss = isSelfExplanatoryLookupError({
+    tool_name: data.toolName,
+    status: data.status,
+    failure: data.failure,
+    display: data.display,
+  });
+  const face = lookupMiss ? null : compactToolFailureFace(data);
+  const detail = (data.result ?? "").trim();
+  const showDetail = Boolean(detail && detail !== face);
+  if (!face && !showDetail) return null;
+  return (
+    <div>
+      {face ? (
+        <p
+          className="mt-1 break-words text-xs text-muted-foreground"
+          data-testid="tool-product-failure"
+        >
+          {face}
+        </p>
+      ) : null}
+      {showDetail ? <TextResult result={detail} status="success" /> : null}
+    </div>
+  );
+}
+
+function renderRichToolResult(data: ToolResultData): ReactNode {
   const diagnostics = extractCodeDiagnostics(data.display);
 
   // Successful handoff face lives on HandoffBriefCard (ToolLine), not this expand body.
   if (isSuccessfulHandoff(data.toolName, data.status)) {
-    return null;
+    return <></>;
   }
 
   if (isWebSearchDisplay(data.display)) {
@@ -781,12 +771,7 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
     return <ConsultEntryCard result={data.result ?? ""} />;
   }
   if (isConversationLogDisplay(data.display)) {
-    return (
-      <ConversationLogResult
-        display={data.display}
-        result={data.result ?? ""}
-      />
-    );
+    return <ConversationLogResult result={data.result ?? ""} />;
   }
   if (isBrowserDisplay(data.display)) {
     return (
@@ -818,12 +803,9 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
       </div>
     );
   }
-  // Standalone / write-tool-attached diagnostics (not a write preview above).
   if (diagnostics) {
     return <CodeDiagnosticsResult display={diagnostics} />;
   }
-  // grep / code_search: clickable workspace paths → side-panel file preview.
-  // Empty「可执行下一步」notes have no hit lines → plain TextResult below.
   if (
     data.status === "success" &&
     isSearchHitTool(data.toolName) &&
@@ -831,6 +813,10 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
   ) {
     return <SearchHitResult result={data.result} kind={data.toolName} />;
   }
+  return null;
+}
+
+function ToolResultText({ data }: { data: ToolResultData }) {
   if (data.toolName === "file_read" && data.status === "success") {
     const body = stripFileReadFooter(data.result ?? "");
     if (!body.trim()) return null;

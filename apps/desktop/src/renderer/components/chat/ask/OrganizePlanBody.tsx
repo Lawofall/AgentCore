@@ -1,6 +1,6 @@
 /**
  * organize_plan — 清单确认体：行式多选、默认全选（seedAllMultiple）。
- * 取消勾选即剔除。原路径→新路径进 detail。铬条 caption 与普通澄清相同。
+ * 取消勾选即剔除。原路径→新路径进 detail。卡头是批次标题，不画套话铬条。
  */
 import { ASK_INTENT_META } from "@/components/chat/decision";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
@@ -47,7 +47,6 @@ export function OrganizePlanBody({
   answer,
   busy,
   submitting,
-  caption,
   onContinue,
   onStop,
 }: {
@@ -55,7 +54,6 @@ export function OrganizePlanBody({
   answer: ReturnType<typeof useAskAnswer>;
   busy: boolean;
   submitting: CheckpointUserDecision | null;
-  caption?: string;
   onContinue: () => void;
   onStop: () => void;
 }) {
@@ -68,8 +66,6 @@ export function OrganizePlanBody({
   return (
     <AskCardShell
       variant="organize_plan"
-      icon={META.icon}
-      caption={caption ?? META.activeCaption}
       title={content.question}
       subtitle={subtitle}
       footer={

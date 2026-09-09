@@ -12,6 +12,7 @@ import {
   type ConversationTrash,
   deleteConversation as apiDeleteConversation,
   duplicateConversation as apiDuplicateConversation,
+  purgeTrashedConversation as apiPurgeTrashedConversation,
   renameConversation as apiRenameConversation,
   restoreConversation as apiRestoreConversation,
   setConversationArchived as apiSetArchived,
@@ -288,6 +289,21 @@ export function useRestoreConversation() {
         queryKey: conversationKeys.archived,
       });
       void queryClient.invalidateQueries({ queryKey: conversationKeys.trash });
+      void queryClient.invalidateQueries({ queryKey: workspaceKeys.list });
+    },
+  });
+}
+
+/** 彻底删除一条「最近删除」里的对话。409（过期 / 已被清理）走 hook 级 toast。 */
+export function usePurgeTrashedConversation() {
+  return useMutation({
+    mutationFn: (id: string) => apiPurgeTrashedConversation(id),
+    onError: (err) => notifyError(err, "彻底删除失败"),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: conversationKeys.trash });
+      void queryClient.invalidateQueries({
+        queryKey: conversationKeys.archived,
+      });
       void queryClient.invalidateQueries({ queryKey: workspaceKeys.list });
     },
   });

@@ -1,17 +1,21 @@
-import { Badge, IconButton, SurfaceRow } from "@/components/ui";
+import { Badge, ConfirmDialog, IconButton, SurfaceRow } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useRestoreConversation } from "@/hooks/useConversations";
+import {
+  usePurgeTrashedConversation,
+  useRestoreConversation,
+} from "@/hooks/useConversations";
 import { useFolders } from "@/hooks/useFolders";
 import { timeAgo } from "@/lib/format";
 import type { DeletedConversationMeta } from "@/services/conversations";
-import { ArchiveRestore } from "lucide-react";
+import { ArchiveRestore, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { retentionRemainingLabel } from "./constants";
 import { folderAccentVar } from "./folderAccent";
 
 /**
  * One row of「最近删除」— a deleted conversation waiting out its retention window.
  * Same density / chrome as {@link DeletedFolderManageRow}: the transcript cannot be
- * opened while it sits in the bin, so the row is inert apart from 恢复.
+ * opened while it sits in the bin, so the row is inert apart from 恢复 / 彻底删除.
  *
  * A chat whose project was deleted too says so, because restoring it alone puts it in
  * 快速对话 rather than back under that project — the one case where「回到原来的位置」
@@ -23,11 +27,14 @@ export function DeletedConversationManageRow({
   conversation: DeletedConversationMeta;
 }) {
   const restoreMutation = useRestoreConversation();
+  const purgeMutation = usePurgeTrashedConversation();
   const folders = useFolders();
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const folder = conversation.folderId
     ? (folders.find((f) => f.id === conversation.folderId) ?? null)
     : null;
   const orphanedByFolder = !!conversation.folderId && folder === null;
+  const busy = restoreMutation.isPending || purgeMutation.isPending;
 
   return (
     <SurfaceRow className="group relative min-h-14 items-stretch gap-3 px-3 py-2.5 hover:bg-accent/60">
@@ -62,15 +69,25 @@ export function DeletedConversationManageRow({
       </div>
 
       <div className="flex shrink-0 flex-col items-end justify-between gap-1 py-0.5">
-        <span className="flex h-6 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <span className="flex h-6 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
           <SimpleTooltip label="恢复到对话列表">
             <IconButton
               aria-label={`恢复对话 ${conversation.title}`}
               onClick={() => restoreMutation.mutate(conversation.id)}
-              disabled={restoreMutation.isPending}
+              disabled={busy}
               className="size-6 text-muted-foreground hover:text-foreground"
             >
               <ArchiveRestore size={13} />
+            </IconButton>
+          </SimpleTooltip>
+          <SimpleTooltip label="彻底删除">
+            <IconButton
+              aria-label={`彻底删除对话 ${conversation.title}`}
+              onClick={() => setConfirmOpen(true)}
+              disabled={busy}
+              className="size-6 text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 size={13} />
             </IconButton>
           </SimpleTooltip>
         </span>
@@ -78,6 +95,21 @@ export function DeletedConversationManageRow({
           {retentionRemainingLabel(conversation.purgeAt)}
         </Badge>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`彻底删除「${conversation.title}」？`}
+        description="对话和全部消息将永久删除，不可恢复。"
+        confirmLabel="彻底删除"
+        tone="danger"
+        busy={purgeMutation.isPending}
+        onConfirm={() => {
+          purgeMutation.mutate(conversation.id, {
+            onSuccess: () => setConfirmOpen(false),
+          });
+        }}
+      />
     </SurfaceRow>
   );
 }

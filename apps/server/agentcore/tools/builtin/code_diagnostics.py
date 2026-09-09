@@ -15,7 +15,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.builtin.write_diagnostics import (
     JS_TS_SUFFIXES,
     diagnostics_display,
@@ -126,6 +126,7 @@ class CodeDiagnosticsTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.READ_ONLY,
+        workspace_io=True,
     )
 
     @property
@@ -152,7 +153,7 @@ class CodeDiagnosticsTool:
                 },
                 "required": [],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.EXECUTION,
             approval=ToolApproval.NEVER,
             timeout_seconds=25,
         )

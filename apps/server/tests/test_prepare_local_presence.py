@@ -75,8 +75,8 @@ def test_presence_gate_desktop_offline():
     with pytest.raises(WorkspaceIOError) as ei:
         raise_if_local_workspace_fulfiller_absent(user_id=USER, backend=backend)
     assert str(ei.value) == LOCAL_DESKTOP_OFFLINE
-    assert "重新生成" in str(ei.value)
-    assert "不要再次发送" in str(ei.value)
+    assert "打开桌面" in str(ei.value)
+    assert "不要再次发送" not in str(ei.value)
 
 
 def test_presence_gate_root_not_held():
@@ -89,7 +89,8 @@ def test_presence_gate_root_not_held():
         with pytest.raises(WorkspaceIOError) as ei:
             raise_if_local_workspace_fulfiller_absent(user_id=USER, backend=backend)
         assert str(ei.value) == LOCAL_ROOT_NOT_HELD
-        assert "重新生成" in str(ei.value)
+        assert "重新授权" in str(ei.value)
+        assert "重新生成" not in str(ei.value)
     finally:
         hub.unregister(session)
 
@@ -148,7 +149,7 @@ def test_presence_gate_origin_device_offline():
             )
         assert str(ei.value) == LOCAL_ORIGIN_DEVICE_OFFLINE
         assert "发起本回合的设备不在线" in str(ei.value)
-        assert "重新生成" in str(ei.value)
+        assert "重新生成" not in str(ei.value)
     finally:
         hub.unregister(session)
 
@@ -186,18 +187,19 @@ def test_presence_gate_single_device_answer_is_unchanged():
 
 
 def test_error_fields_for_prepare_abort_messages():
-    for message in (
-        LOCAL_DESKTOP_OFFLINE,
-        LOCAL_ROOT_NOT_HELD,
-        LOCAL_CHANNEL_DEAD,
-        LOCAL_ORIGIN_DEVICE_OFFLINE,
-    ):
+    expected = {
+        LOCAL_DESKTOP_OFFLINE: ErrorCode.LOCAL_DESKTOP_OFFLINE,
+        LOCAL_ROOT_NOT_HELD: ErrorCode.LOCAL_ROOT_NOT_HELD,
+        LOCAL_CHANNEL_DEAD: ErrorCode.LOCAL_CHANNEL_DEAD,
+        LOCAL_ORIGIN_DEVICE_OFFLINE: ErrorCode.LOCAL_ORIGIN_DEVICE_OFFLINE,
+    }
+    for message, want in expected.items():
         code, text, _ctx = error_fields_for(
             WorkspaceIOError(message),
             fallback_code=ErrorCode.STREAM_ERROR,
             fallback_message="服务出错了，请稍后重试。",
         )
-        assert code == ErrorCode.STREAM_ERROR
+        assert code == want
         assert text == message
         assert "服务出错了" not in text
 
@@ -420,3 +422,56 @@ async def test_prepare_span_is_noop_for_backends_without_a_desktop_channel():
     for backend in (_Cloud(), _SidecarLocal()):
         with prepare_local_io_span(backend):
             assert not prepare_local_io_budget_active()
+
+
+async def test_run_and_persist_presence_abort_persists_failed_placeholder(monkeypatch):
+    """Gate abort after the placeholder must stamp failed — not leave running for hydrate."""
+    from unittest.mock import AsyncMock
+
+    from agentcore.conversation import turn_runner
+    from agentcore.core.error_codes import ErrorCode
+
+    persisted: list[dict] = []
+
+    async def _spy_persist(**kwargs):
+        persisted.append(kwargs["result"])
+
+    async def _must_not_pipeline(**_k):
+        raise AssertionError("pipeline must not run after presence abort")
+
+    monkeypatch.setattr(turn_runner, "create_assistant_placeholder", AsyncMock())
+    monkeypatch.setattr(
+        "agentcore.conversation.turn_persistence.persist_turn_result",
+        _spy_persist,
+    )
+    monkeypatch.setattr(turn_runner, "run_chat_pipeline", _must_not_pipeline)
+
+    hub = default_fulfiller_hub()
+    session = hub.register(
+        USER, "dev-wrong-root", caps=["workspace"], roots=["wrong"]
+    )
+    sink = EventSink()
+    try:
+        result = await turn_runner.run_and_persist(
+            conversation_id=CONV,
+            user_message="讨论写更多的skill",
+            user_id=USER,
+            folder_id=None,
+            sink=sink,
+            history=[],
+            attachments=None,
+            backend=_local(ROOT),
+            llm_credentials=None,
+        )
+    finally:
+        hub.unregister(session)
+
+    assert result is not None
+    assert result["error_code"] == ErrorCode.LOCAL_ROOT_NOT_HELD
+    assert result["error"] == LOCAL_ROOT_NOT_HELD
+    assert persisted and persisted[0]["error_code"] == ErrorCode.LOCAL_ROOT_NOT_HELD
+    err = sink.last_turn_error()
+    assert err is not None
+    assert err["code"] == ErrorCode.LOCAL_ROOT_NOT_HELD
+    assert err["message"] == LOCAL_ROOT_NOT_HELD
+

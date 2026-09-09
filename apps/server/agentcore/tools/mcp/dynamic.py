@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.desktop.channel import McpOp, McpOpError
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 
@@ -71,7 +71,7 @@ class McpDynamicTool:
             name=fc_name,
             description=prefix + desc,
             parameters=_parameters_schema(input_schema),
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
             approval=ToolApproval.GRANTABLE,
             timeout_seconds=_MCP_ENGINE_TIMEOUT_SECONDS,
         )

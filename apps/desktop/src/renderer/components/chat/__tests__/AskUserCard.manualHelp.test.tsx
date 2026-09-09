@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * 拍板卡不挂手册「?」：挡路冻结时跳走读手册是错时机。
- * 手册仍从工具箱 / 命令面板进；辩论室 / 审批保留现场 `?`。全屏协作画布不挂。
+ * 手册仍从设置 · 关于 / 命令面板进；辩论室 / 审批保留现场 `?`。全屏协作画布不挂。
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,7 +17,7 @@ vi.mock("@/lib/toast", () => ({
 
 afterEach(cleanup);
 
-const INTENTS: AskUiIntent[] = ["decision", "organize_plan", "daily_review"];
+const INTENTS: AskUiIntent[] = ["decision", "organize_plan"];
 
 describe("AskUserCard manual help", () => {
   it.each(INTENTS)("%s 拍板卡不挂「看手册说明」", (intent) => {

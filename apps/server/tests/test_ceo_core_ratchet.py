@@ -191,7 +191,11 @@ from agentcore.runtime.resolve.prompt import (
 # 2026-09-07 基座 <输出>：已落盘则结论是路径/要点/增量
 # （把「直接给结论」写锋利；三档交法仍当场交付物规格）。当次实测 1249。
 # cap 1250（抬顶=输出同真句，非回潮）。
-_RESIDENT_CAP = 1250
+# 2026-09-08 基座 <输出>：emoji 用户先用/明确要求例外出核，禁令并进语气句。
+# 当次实测 1221。cap 降到 1230。
+# 2026-09-09 基座换词：结构面/开场表/权威稿 → 产品面中文（不扩写）。当次实测 1218。
+# cap 降到 1220。
+_RESIDENT_CAP = 1220
 
 # (门工具, 该手册的签名字面) —— 手册只在门开的回合出现，不许常驻。
 # run 的 HOW 在 skill body（consult(run) 命中 skill），不进 capability_how_suffix。
@@ -298,18 +302,19 @@ def test_capability_how_has_no_ceo_must_delegate_leftovers():
 
 def test_honesty_floors_stay_resident():
     """诚实底线不跟门走：对照结构面元规则只在基座；装包/格式细则在 skill。"""
-    from agentcore.runtime.skills.team_delivery_env import _TEAM_DELIVERY_ENV
+    from agentcore.runtime.skills.delivery import _DELIVERY
 
     hint = _CEO_CORE_HINT
     base = assemble_system_prompt()
-    assert "对照本回合结构面" in base
+    assert "对得上这回合" in base
     assert "未对照则不得声称" in base
     assert "未对照则不得声称" not in hint
     assert "已落盘" not in base
     assert "已落盘" not in hint
-    assert "结构自检" in _TEAM_DELIVERY_ENV
-    assert "export_to_local" in _TEAM_DELIVERY_ENV
-    assert "不可产" in _TEAM_DELIVERY_ENV and "等效替代" in _TEAM_DELIVERY_ENV
+    assert "结构自检" not in _DELIVERY
+    assert "外环已跑通" in _DELIVERY
+    assert "export_to_local" in _DELIVERY
+    assert "不可产" in _DELIVERY and "等效替代" in _DELIVERY
     assert "已装配" in base and "通道在" in base
     assert "邻格" not in base
     assert "用别的路继续" in base

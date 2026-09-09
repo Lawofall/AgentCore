@@ -372,9 +372,8 @@ def test_intentional_dead_manual_links_fail_gate():
 # Desktop product copy uses「设置 · {侧栏}」；narrow hub is 底栏「我的」+ MorePage 行。
 # Cheap fork gate: each desktop page name must share a sentence with 手机,
 # and every「我的 → X」must be a real narrow-visible MorePage label.
-# 「设置 → 反馈」在 product_help FAQ；手机无此入口，须写在同一句。
 _SURFACE_FORK_SKILL_NAMES = _PRODUCT_HELP_SKILL_NAMES
-_DESKTOP_SETTINGS_PAGES = ("设置 · 服务商", "设置 · 模型", "设置 · 用量", "设置 → 反馈")
+_DESKTOP_SETTINGS_PAGES = ("设置 · 服务商", "设置 · 模型组合", "设置 · 用量")
 _DESKTOP_MORE_PAGE = (
     _REPO_ROOT / "apps" / "desktop" / "src" / "renderer" / "pages" / "MorePage.tsx"
 )
@@ -435,7 +434,7 @@ def test_product_help_settings_page_names_fork_by_surface():
     tab_labels = frozenset(_TAB_LABEL.findall(tab_src))
     more_routes = frozenset(path for _, path in items)
 
-    _require("模型" in all_labels, f"expected 模型 row in {_DESKTOP_MORE_PAGE.name}")
+    _require("模型组合" in all_labels, f"expected 模型组合 row in {_DESKTOP_MORE_PAGE.name}")
     _require("服务商" in all_labels, f"expected 服务商 row in {_DESKTOP_MORE_PAGE.name}")
     _require("用量" in all_labels, f"expected 用量 row in {_DESKTOP_MORE_PAGE.name}")
     _require("我的" in tab_labels, f"expected 我的 tab in {_NARROW_TAB_BAR.name}")

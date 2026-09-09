@@ -51,9 +51,13 @@ describe("parseMcpListToolsValue", () => {
     expect(fs.status).toBe("ready");
     expect(fs.tools).toHaveLength(1);
     expect(fs.tools[0].name).toBe("mcp_fs_read_file");
+    expect(fs.tools[0].face).toBe("web");
+    expect(fs.tools[0].resident).toBe(false);
+    expect(fs.tools[0].summary).toBe("Read a file");
     expect(fs.tools[0].approval).toBe("grantable");
     expect(fs.tools[0].available_to).toEqual(["ceo", "worker"]);
-    expect(fs.tools[0].description).toContain("[MCP · Filesystem]");
+    expect(fs.tools[0].description).toBe("Read a file");
+    expect(fs.tools[0].description).not.toContain("MCP");
     expect(gh.status).toBe("failed");
     expect(gh.tools).toEqual([]);
     expect(gh.error).toContain("GITHUB_TOKEN");

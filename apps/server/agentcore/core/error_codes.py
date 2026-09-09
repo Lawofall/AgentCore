@@ -75,6 +75,12 @@ class ErrorCode(StrEnum):
     # Primary pool exhausted (or DB unreachable on the request path) → HTTP 503.
     DATABASE_UNAVAILABLE = "DATABASE_UNAVAILABLE"
 
+    # ── Local workspace presence (prepare / turn-start abort) ────────
+    LOCAL_DESKTOP_OFFLINE = "LOCAL_DESKTOP_OFFLINE"
+    LOCAL_ROOT_NOT_HELD = "LOCAL_ROOT_NOT_HELD"
+    LOCAL_ORIGIN_DEVICE_OFFLINE = "LOCAL_ORIGIN_DEVICE_OFFLINE"
+    LOCAL_CHANNEL_DEAD = "LOCAL_CHANNEL_DEAD"
+
     # ── Tools / sandbox ──────────────────────────────────────────────────
     TOOL_ERROR = "TOOL_ERROR"
     TOOL_NOT_FOUND = "TOOL_NOT_FOUND"

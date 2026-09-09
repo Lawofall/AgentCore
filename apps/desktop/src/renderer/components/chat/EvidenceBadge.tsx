@@ -1,4 +1,3 @@
-import { CitationTierBadge } from "@/components/chat/CitationTierBadge";
 import { useEvidenceLedgerMap } from "@/components/chat/EvidenceLedgerContext";
 import {
   Popover,
@@ -10,7 +9,6 @@ import {
   extractLedgerId,
   ledgerBadgeLabel,
   ledgerDateLabel,
-  ledgerTierLabel,
 } from "@/lib/evidenceLedger";
 import { useSidePanelStore } from "@/stores/sidePanel";
 import type { EvidenceLedgerEntry } from "@/types/events";
@@ -24,6 +22,7 @@ import { Children, type ReactNode, isValidElement } from "react";
  *
  * - **已核实 (verified)** → success tone. Note 含 `#eN` 且台账命中 → 徽章文案换成
  *   site/title，点击开溯源 Popover；未命中 / 旧自由文本 → 今日纯文案徽章（不可点）。
+ *   不叠域名档位徽标（官方 / 弱源 / 待评）——用户面只留已核实 / 待核实。
  * - **待核实 (unverified)** → muted tone（非琥珀）。
  * - 约定文档预登记条目：面板展示透镜/文件名，可跳转工作区打开该文件（批 D2）。
  *
@@ -58,7 +57,6 @@ export function EvidenceBadge({
             <Icon size={11} className="shrink-0" aria-hidden />
             {label}
             <span className="opacity-80">·{display}</span>
-            <CitationTierBadge tier={entry.tier} />
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-72 p-3" align="start" side="top">
@@ -100,11 +98,8 @@ function EvidenceLedgerCard({ entry }: { entry: EvidenceLedgerEntry }) {
 
   return (
     <div className="space-y-1.5 text-sm">
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span className="min-w-0 truncate font-medium tabular-nums text-foreground">
-          {entry.id}
-        </span>
-        <span className="shrink-0">{ledgerTierLabel(entry.tier)}</span>
+      <div className="truncate text-xs font-medium tabular-nums text-foreground">
+        {entry.id}
       </div>
       <div className="font-medium text-foreground">
         {title || site || entry.id}

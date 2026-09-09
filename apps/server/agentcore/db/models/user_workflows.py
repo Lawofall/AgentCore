@@ -1,8 +1,8 @@
-"""User workflows (账户级可保存的团队拆法定义)."""
+"""User workflows (账户级可保存的团队拆法定义 + 一口钟)."""
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, Integer, String, Text, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -13,7 +13,7 @@ from ._helpers import _new_uuid
 
 
 class UserWorkflow(Base):
-    """Account-scoped workflow definition (画布 JSON + version + 服务端来源标记)."""
+    """Account-scoped workflow definition (画布 JSON + version + optional trigger)."""
 
     __tablename__ = "user_workflows"
     __table_args__ = (
@@ -26,6 +26,38 @@ class UserWorkflow(Base):
             text("(source ->> 'message_id')"),
             postgresql_where=text("source ->> 'kind' = 'turn'"),
         ),
+        # Schedule XOR webhook XOR none — see migration e7c2b9d4a1f6.
+        CheckConstraint(
+            """
+            (
+              trigger_kind IS NULL
+              AND trigger_cron IS NULL
+              AND trigger_webhook_id IS NULL
+              AND trigger_folder_id IS NULL
+            )
+            OR (
+              trigger_kind = 'schedule'
+              AND trigger_cron IS NOT NULL
+              AND trigger_webhook_id IS NULL
+              AND trigger_folder_id IS NOT NULL
+            )
+            OR (
+              trigger_kind = 'webhook'
+              AND trigger_webhook_id IS NOT NULL
+              AND trigger_cron IS NULL
+              AND trigger_next_run_at IS NULL
+              AND trigger_folder_id IS NOT NULL
+            )
+            """,
+            name="ck_user_workflows_trigger_xor",
+        ),
+        Index(
+            "ix_user_workflows_trigger_due",
+            "trigger_kind",
+            "trigger_enabled",
+            "trigger_next_run_at",
+        ),
+        Index("ix_user_workflows_webhook_id", "trigger_webhook_id", unique=True),
     )
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
@@ -45,4 +77,30 @@ class UserWorkflow(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), onupdate=datetime.now
+    )
+    # Clock: schedule XOR webhook XOR none. Changing these does not pin a conversation.
+    trigger_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    trigger_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    trigger_folder_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=False), nullable=True
+    )
+    trigger_cron: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    trigger_webhook_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=False), nullable=True
+    )
+    trigger_webhook_secret_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    trigger_next_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    trigger_last_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_trigger_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trigger_lease_owner: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    trigger_lease_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

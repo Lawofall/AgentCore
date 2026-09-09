@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { CONTENT_CHAPTERS } from "./content";
 import { resolveManualIcon } from "./icons";
+import { APP_PATHS } from "./paths";
 import {
   type SearchEntry,
   buildContentSearchEntries,
@@ -171,7 +172,7 @@ function ManualNavBody({
 export function ManualShell() {
   const navigate = useNavigate();
   const location = useLocation();
-  const exit = useCallback(() => navigate("/toolbox"), [navigate]);
+  const exit = useCallback(() => navigate(APP_PATHS.more.about), [navigate]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");

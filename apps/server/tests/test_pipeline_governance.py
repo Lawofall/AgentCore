@@ -25,7 +25,7 @@ clean END_TURN — governance never mis-finishes a recovering turn.
 from pathlib import Path
 from types import SimpleNamespace
 
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, ToolCallDelta
 from agentcore.runtime import pipeline
 from agentcore.runtime.events import EventSink, EventType, FinishReason, title_generated
@@ -79,7 +79,7 @@ class _StubTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001

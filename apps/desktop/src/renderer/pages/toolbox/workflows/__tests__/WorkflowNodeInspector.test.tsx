@@ -4,7 +4,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkflowNodeInspector } from "../WorkflowNodeInspector";
 
-/** 交付契约不止 `form`：其余字段只有服务端与 playbook 会写，前端必须原样带走。 */
 function definitionWithDeliverable(
   deliverable: Record<string, unknown> | undefined,
 ): WorkflowDefinition {
@@ -30,8 +29,6 @@ const CONTRACT_REST = {
   citation_mode: "inline",
 };
 
-const FULL_CONTRACT = { form: "files", ...CONTRACT_REST };
-
 function renderInspector(definition: WorkflowDefinition) {
   const onChange = vi.fn();
   render(
@@ -44,70 +41,44 @@ function renderInspector(definition: WorkflowDefinition) {
   return onChange;
 }
 
-function nextDeliverable(onChange: ReturnType<typeof vi.fn>) {
+function nextStep(onChange: ReturnType<typeof vi.fn>) {
   expect(onChange).toHaveBeenCalledTimes(1);
   const next = onChange.mock.calls[0][0] as WorkflowDefinition;
   const node = next.nodes[0];
-  return node.kind === "agent_step" ? node.deliverable : undefined;
-}
-
-function deliverableSelect() {
-  return screen.getByLabelText(/交付形式/) as HTMLSelectElement;
+  expect(node.kind).toBe("agent_step");
+  return node.kind === "agent_step" ? node : undefined;
 }
 
 afterEach(() => {
   cleanup();
 });
 
-describe("WorkflowNodeInspector 交付形式", () => {
-  it("改交付形式不会抹掉 artifacts / required_sections / strict", () => {
-    const onChange = renderInspector(definitionWithDeliverable(FULL_CONTRACT));
+describe("WorkflowNodeInspector 节点编辑", () => {
+  it("没有交付形式下拉，改角色仍保留 artifacts / required_sections / strict", () => {
+    const onChange = renderInspector(definitionWithDeliverable(CONTRACT_REST));
 
-    fireEvent.change(deliverableSelect(), {
-      target: { value: "workspace" },
+    expect(screen.queryByLabelText(/交付形式/)).toBeNull();
+    expect(screen.queryByText("纯文字")).toBeNull();
+    expect(screen.queryByText("改工程")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("角色"), {
+      target: { value: "分析员" },
     });
 
-    expect(nextDeliverable(onChange)).toEqual({
-      ...CONTRACT_REST,
-      form: "workspace",
-    });
+    const node = nextStep(onChange);
+    expect(node?.role).toBe("分析员");
+    expect(node?.task).toBe("扫一遍竞品动态");
+    expect(node?.deliverable).toEqual(CONTRACT_REST);
   });
 
-  it("非法旧自由文按文档档显示，改档仍保留其余契约", () => {
-    const onChange = renderInspector(
-      definitionWithDeliverable({ form: "自由文旧值", ...CONTRACT_REST }),
-    );
-
-    expect(deliverableSelect().value).toBe("files");
-
-    fireEvent.change(deliverableSelect(), {
-      target: { value: "prose" },
-    });
-
-    expect(nextDeliverable(onChange)).toEqual({
-      ...CONTRACT_REST,
-      form: "prose",
-    });
-  });
-
-  it("未声明 form 按文档档显示，选项是三选一", () => {
-    renderInspector(definitionWithDeliverable(undefined));
-    expect(deliverableSelect().value).toBe("files");
-    expect([...deliverableSelect().options].map((o) => o.value)).toEqual([
-      "prose",
-      "files",
-      "workspace",
-    ]);
-  });
-
-  it("原本没有交付契约时改档只写 form", () => {
+  it("可以改任务说明", () => {
     const onChange = renderInspector(definitionWithDeliverable(undefined));
 
-    fireEvent.change(deliverableSelect(), {
-      target: { value: "prose" },
+    fireEvent.change(screen.getByLabelText("任务说明"), {
+      target: { value: "重写结论" },
     });
 
-    expect(nextDeliverable(onChange)).toEqual({ form: "prose" });
+    expect(nextStep(onChange)?.task).toBe("重写结论");
   });
 });
 

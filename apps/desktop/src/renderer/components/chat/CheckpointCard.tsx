@@ -13,11 +13,11 @@ import { useState } from "react";
 import { AskDecisionBody } from "./ask/AskDecisionBody";
 import {
   type AskUserContent,
+  collapsedAskGlance,
   displayAskReply,
   flattenAskNotes,
   useAskAnswer,
 } from "./ask/AskUserFields";
-import { DailyReviewBody } from "./ask/DailyReviewBody";
 import { OrganizePlanBody } from "./ask/OrganizePlanBody";
 
 /**
@@ -67,19 +67,17 @@ export function collectAskSelected(
  * (ResumePrompt). Settled by 提交 (→ continue) or 取消 (→ stop 硬停). Picks compose into ONE readable
  * note (答复模型 α), handed to `onSubmit`.
  *
- * 清单确认（`organize_plan` / `daily_review`）走清单体；其余一律 {@link AskDecisionBody}。
- * 铬条 caption 都是「需要你拍板」。真·风险审批由 ApprovalPrompt 承载（蓝）。
+ * 清单确认（`organize_plan`）走清单体；其余一律 {@link AskDecisionBody}。
+ * 卡头是题干 / 批次标题；可见面不画「需要你拍板」和图标。真·风险审批由 ApprovalPrompt 承载（蓝）。
  */
 export function AskUserCard({
   content,
   intent,
-  caption,
   onSubmit,
   conversationId,
 }: {
   content: AskUserContent;
   intent: CheckpointIntent;
-  caption?: string;
   onSubmit: (
     decision: CheckpointUserDecision,
     note: string,
@@ -92,14 +90,13 @@ export function AskUserCard({
 }) {
   const chrome = parseCheckpointIntent(intent);
   const ans = useAskAnswer(content, {
-    seedAllMultiple: chrome === "organize_plan" || chrome === "daily_review",
+    seedAllMultiple: chrome === "organize_plan",
   });
   const [submitting, setSubmitting] = useState<CheckpointUserDecision | null>(
     null,
   );
   const busy = submitting !== null;
-  const carriesSelected =
-    chrome === "organize_plan" || chrome === "daily_review";
+  const carriesSelected = chrome === "organize_plan";
 
   const send = (decision: CheckpointUserDecision, noteOverride?: string) => {
     if (busy) return;
@@ -142,20 +139,7 @@ export function AskUserCard({
         className="flex max-h-[min(60vh,36rem)] flex-col overflow-hidden p-0"
         data-ask-intent="organize_plan"
       >
-        <OrganizePlanBody {...shared} caption={caption} />
-      </DecisionCard>
-    );
-  }
-
-  if (chrome === "daily_review") {
-    return (
-      <DecisionCard
-        tone="neutral"
-        animate
-        className="flex max-h-[min(60vh,36rem)] flex-col overflow-hidden p-0"
-        data-ask-intent="daily_review"
-      >
-        <DailyReviewBody {...shared} caption={caption} />
+        <OrganizePlanBody {...shared} />
       </DecisionCard>
     );
   }
@@ -169,7 +153,6 @@ export function AskUserCard({
     >
       <AskDecisionBody
         {...shared}
-        caption={caption}
         conversationId={conversationId}
         onBindResolve={onBindResolve}
       />
@@ -177,18 +160,17 @@ export function AskUserCard({
   );
 }
 
-/** Collapsed one-liner: user's answer first (note → selected), never the CEO
- * question — that reads like a live prompt next to a success label. */
+/** Collapsed glance: picks / short reply, never the CEO question or compose dump. */
 function resolvedCollapsedSummary(checkpoint: CheckpointDisplay): string {
-  const note = displayAskReply(checkpoint.note.trim());
-  if (note) return note;
-  if (checkpoint.selected.length > 0) return checkpoint.selected.join(" · ");
-  return "";
+  return collapsedAskGlance({
+    selected: checkpoint.selected,
+    note: checkpoint.note,
+    prompts: checkpoint.questions.map((q) => q.prompt),
+  });
 }
 
 /** The settled record of an ask_user card: how it was decided, plus the user's
- * answer note. Outcome tone stays on badge/label so a glance still reads the
- * verdict; shell is quiet card chrome (not a success toast).
+ * answer note. Process-row stub — not a success toast or DecisionCard.
  * 取消 / 确认 / 超时都占时间线存根；缺 decision 不猜超时。 */
 function ResolvedCheckpoint({ checkpoint }: { checkpoint: CheckpointDisplay }) {
   const resolved = askResolvedDisplay(checkpoint.intent, checkpoint.decision);
@@ -204,7 +186,7 @@ function ResolvedCheckpoint({ checkpoint }: { checkpoint: CheckpointDisplay }) {
       collapsedSummary={resolvedCollapsedSummary(checkpoint)}
       askIntent={checkpoint.intent}
     >
-      <div className="space-y-1.5 pb-3 pl-10 pr-3">
+      <div className="mt-1.5 space-y-1.5">
         <p className="whitespace-pre-wrap text-sm text-foreground">
           {checkpoint.question}
         </p>
@@ -218,7 +200,7 @@ function ResolvedCheckpoint({ checkpoint }: { checkpoint: CheckpointDisplay }) {
           </div>
         )}
         {reply ? (
-          <p className="whitespace-pre-wrap rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs text-foreground">
+          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
             {reply}
           </p>
         ) : null}

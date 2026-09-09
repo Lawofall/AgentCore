@@ -21,6 +21,7 @@ const trashItems: DeletedConversationMeta[] = [];
 const requiredIds = new Set<string>();
 const folderGroupOrder: string[] = [];
 const restore = vi.fn();
+const purge = vi.fn();
 const setConversationDrawerOpen = vi.fn();
 const reorderFolderGroups = vi.fn();
 
@@ -40,6 +41,7 @@ vi.mock("@/hooks/useConversations", () => ({
     isLoading: false,
   }),
   useRestoreConversation: () => ({ mutate: restore, isPending: false }),
+  usePurgeTrashedConversation: () => ({ mutate: purge, isPending: false }),
 }));
 
 vi.mock("@/hooks/useFolders", () => ({
@@ -146,6 +148,7 @@ beforeEach(() => {
   trashItems.length = 0;
   requiredIds.clear();
   restore.mockReset();
+  purge.mockReset();
   setConversationDrawerOpen.mockReset();
   reorderFolderGroups.mockReset();
   folderGroupOrder.length = 0;
@@ -179,12 +182,32 @@ describe("NarrowConversationDrawer", () => {
 
     expect(screen.getByText("最近删除")).toBeTruthy();
     expect(screen.getByText("定价讨论")).toBeTruthy();
-    expect(screen.queryByText("彻底删除")).toBeNull();
+    expect(screen.getByLabelText("彻底删除对话 定价讨论")).toBeTruthy();
     expect(screen.queryByText(/文件夹/)).toBeNull();
 
     fireEvent.click(screen.getByLabelText("恢复对话 定价讨论"));
 
     expect(restore).toHaveBeenCalledWith("gone");
+  });
+
+  it("asks before permanently deleting a trash conversation", () => {
+    conversations.push(makeConv("live"));
+    trashItems.push({
+      id: "gone",
+      title: "定价讨论",
+      folderId: null,
+      messageCount: 4,
+      deletedAt: "2026-08-20T00:00:00Z",
+      purgeAt: "2026-09-19T00:00:00Z",
+    });
+
+    renderDrawer();
+    fireEvent.click(screen.getByRole("button", { name: "最近删除" }));
+    fireEvent.click(screen.getByLabelText("彻底删除对话 定价讨论"));
+
+    expect(purge).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "彻底删除" }));
+    expect(purge).toHaveBeenCalledWith("gone");
   });
 
   it("hides local folders when this runtime has no local disk", () => {

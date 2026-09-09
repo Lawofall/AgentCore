@@ -1,9 +1,8 @@
-import { Badge, ConfirmDialog } from "@/components/ui";
+import { ConfirmDialog } from "@/components/ui";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { isFeatureUnavailable } from "@/lib/errors";
@@ -16,7 +15,6 @@ import {
   listScopeEntries,
   renameDocument,
   setDocumentDisputed,
-  updateDocumentApplyMode,
 } from "@/services/documents";
 import { type MemoryKind, writeMemoryFile } from "@/services/memory";
 import {
@@ -45,7 +43,13 @@ import {
   Trash2,
   Undo2,
 } from "lucide-react";
-import { type ReactNode, forwardRef, useEffect, useState } from "react";
+import {
+  type HTMLAttributes,
+  type ReactNode,
+  forwardRef,
+  useEffect,
+  useState,
+} from "react";
 import { DisputeEntryDialog } from "./DisputeEntryDialog";
 import { loadMemoryTopicsExpanded, saveMemoryTopicsExpanded } from "./storage";
 
@@ -55,16 +59,6 @@ export type EntryScope =
   | { kind: "folder"; folderId: string };
 
 const ENTRIES_QUERY_KEY = ["scope-entries"] as const;
-
-const APPLY_LABEL: Record<DocumentApplyMode, string> = {
-  always: "常驻",
-  on_demand: "按需",
-};
-
-const APPLY_HINT: Record<DocumentApplyMode, string> = {
-  always: "每次对话都会带上",
-  on_demand: "需要时再查阅",
-};
 
 /**
  * Rows under this print no size at all. A row's char count exists to answer
@@ -254,10 +248,11 @@ export function formatAlwaysChars(n: number): string {
 
 /**
  * Flat entry list for one AgentCore scope (目标形态 · 文件页形态).
- * No 记忆/规则/文档 folders — partition is scope only; each row shows 常驻/按需 +
- * description + frontmatter errors. ``主题/*.md`` nest under a default-collapsed
- * 主题 row. Create lives on the section / `.agentcore` header so it still works
- * while this list is unmounted (collapsed).
+ * No 记忆/规则/文档 folders — partition is scope only; each row shows
+ * description + frontmatter errors. Location is the 加载档 (root = always,
+ * ``主题/*.md`` nest under a default-collapsed 主题 row = on_demand). Create
+ * lives on the section / `.agentcore` header so it still works while this list
+ * is unmounted (collapsed).
  */
 export function EntriesSection({
   scope,
@@ -369,16 +364,6 @@ export function EntriesSection({
     }
   };
 
-  const setApplyMode = async (doc: DocumentNode, mode: DocumentApplyMode) => {
-    if (doc.aiMaintained || doc.applyMode === mode) return;
-    try {
-      await updateDocumentApplyMode(doc.id, mode);
-      await refresh();
-    } catch (e) {
-      notifyError(e, "切换失败");
-    }
-  };
-
   // 纠错通道: only the user can say「这条不对」, and saying it stops the entry from being
   // used without deleting it — the text stays here to read, re-check and undo.
   const setDisputed = async (doc: DocumentNode, disputed: boolean) => {
@@ -415,9 +400,6 @@ export function EntriesSection({
     doc: DocumentNode,
     opts?: { paddingLeft?: number; label?: string },
   ) => {
-    const mode = doc.applyMode;
-    const other: DocumentApplyMode = mode === "always" ? "on_demand" : "always";
-    const canToggleApply = !doc.aiMaintained && !doc.frontmatterError;
     const disputed = doc.disputedAt != null;
     const target = entryOpenTarget(doc);
     return (
@@ -434,29 +416,10 @@ export function EntriesSection({
             disputed={disputed}
             active={isActive(target)}
             onOpen={() => onOpen(target)}
-            applyMode={mode}
             alwaysChars={doc.alwaysChars}
-            onToggleApplyMode={
-              canToggleApply ? () => void setApplyMode(doc, other) : undefined
-            }
           />
         </ContextMenuTrigger>
         <ContextMenuContent className="min-w-36">
-          <ContextMenuItem
-            disabled={!canToggleApply || mode === "always"}
-            title={APPLY_HINT.always}
-            onSelect={() => void setApplyMode(doc, "always")}
-          >
-            <span className="flex-1 truncate">设为常驻</span>
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={!canToggleApply || mode === "on_demand"}
-            title={APPLY_HINT.on_demand}
-            onSelect={() => void setApplyMode(doc, "on_demand")}
-          >
-            <span className="flex-1 truncate">设为按需</span>
-          </ContextMenuItem>
-          <ContextMenuSeparator />
           {disputed ? (
             <ContextMenuItem
               title="恢复后 AI 会重新使用这条"
@@ -465,7 +428,7 @@ export function EntriesSection({
               <Undo2 size={14} className="shrink-0" />
               <span className="flex-1 truncate">恢复使用</span>
             </ContextMenuItem>
-          ) : (
+          ) : doc.aiMaintained ? (
             <ContextMenuItem
               title="停用整个条目：AI 不再使用，内容保留，可随时恢复"
               onSelect={() => setDisputing(doc)}
@@ -473,7 +436,7 @@ export function EntriesSection({
               <ThumbsDown size={14} className="shrink-0" />
               <span className="flex-1 truncate">这条不对…</span>
             </ContextMenuItem>
-          )}
+          ) : null}
           <ContextMenuItem
             disabled={doc.aiMaintained}
             onSelect={() => void renameEntry(doc)}
@@ -517,7 +480,6 @@ export function EntriesSection({
         disputed={false}
         active={isActive(target)}
         onOpen={() => onOpen(target)}
-        applyMode={leaf.applyMode}
       />
     );
   };
@@ -573,9 +535,6 @@ export function EntriesSection({
         >
           <p className="text-xs text-muted-foreground/60">
             {scope.kind === "global" ? "还没有全局条目" : "本文件夹还没有条目"}
-          </p>
-          <p className="text-xs text-muted-foreground/50">
-            短硬约束用常驻，厚知识用按需
           </p>
         </div>
       ) : (
@@ -679,11 +638,10 @@ const EntryLeafRow = forwardRef<
     disputed?: boolean;
     active: boolean;
     onOpen: () => void;
-    applyMode?: DocumentApplyMode;
-    /** Always-pool chars for this row; only shown when always + non-null. */
+    /** Always-pool chars for this row; only shown when non-null and above floor. */
     alwaysChars?: number | null;
-    onToggleApplyMode?: () => void;
-  }
+    dimmed?: boolean;
+  } & Omit<HTMLAttributes<HTMLDivElement>, "onClick">
 >(function EntryLeafRow(
   {
     paddingLeft,
@@ -694,9 +652,10 @@ const EntryLeafRow = forwardRef<
     disputed = false,
     active,
     onOpen,
-    applyMode,
     alwaysChars,
-    onToggleApplyMode,
+    dimmed = false,
+    className,
+    style,
     ...rest
   },
   ref,
@@ -706,7 +665,6 @@ const EntryLeafRow = forwardRef<
   // Empty rows stay silent too, which is also what keeps a cold-start placeholder and a
   // written-but-empty entry looking the same.
   const showAlwaysChars =
-    applyMode === "always" &&
     !disputed &&
     typeof alwaysChars === "number" &&
     Number.isFinite(alwaysChars) &&
@@ -715,13 +673,15 @@ const EntryLeafRow = forwardRef<
     <div
       ref={ref}
       {...rest}
-      style={{ paddingLeft }}
+      style={{ paddingLeft, ...style }}
       className={cn(
         "flex w-full items-start gap-1.5 rounded-lg py-1 pr-1 text-sm transition-colors",
         hasMeta ? "min-h-7" : "h-7 items-center",
+        dimmed && !active && "text-muted-foreground opacity-60",
         active
           ? "bg-accent text-foreground"
           : "text-foreground hover:bg-accent/60",
+        className,
       )}
     >
       <button
@@ -781,30 +741,9 @@ const EntryLeafRow = forwardRef<
           {formatAlwaysChars(alwaysChars)}
         </span>
       ) : null}
-      {applyMode && onToggleApplyMode ? (
-        <button
-          type="button"
-          title={
-            disputed
-              ? `${APPLY_LABEL[applyMode]} · 已停用，AI 不会用（点击切换生效方式）`
-              : `${APPLY_LABEL[applyMode]} · ${APPLY_HINT[applyMode]}（点击切换）`
-          }
-          aria-label={`生效方式：${APPLY_LABEL[applyMode]}，点击切换`}
-          onClick={onToggleApplyMode}
-          className={cn("shrink-0 rounded-full", hasMeta ? "mt-0.5" : "")}
-        >
-          <Badge tone="muted" pill className="pointer-events-none font-normal">
-            {APPLY_LABEL[applyMode]}
-          </Badge>
-        </button>
-      ) : applyMode ? (
-        <span className={cn("shrink-0", hasMeta ? "mt-0.5" : "")}>
-          <Badge tone="muted" pill className="font-normal">
-            {APPLY_LABEL[applyMode]}
-          </Badge>
-        </span>
-      ) : null}
     </div>
   );
 });
 EntryLeafRow.displayName = "EntryLeafRow";
+
+export { EntryLeafRow };

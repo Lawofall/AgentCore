@@ -8,18 +8,19 @@ import { Card } from "@/components/ui";
 import { countPillMuted, statusCardChrome } from "@/components/ui/tone-presets";
 import { getConversations } from "@/hooks/useConversations";
 import { queryClient } from "@/lib/queryClient";
+import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 import {
   MEMORY_DISPUTED_LINES_KEY,
   MEMORY_UPDATES_KEY,
 } from "@/services/memory";
 import {
-  memoryLeafTabName,
-  parseProjectMemoryFolderId,
+  filesMemoryLeafNavState,
+  isAccountMemoryTarget,
 } from "@/services/sources/memorySource";
 import { type MemoryUpdate, useConversationStore } from "@/stores/conversation";
 import { usePersistentDisclosure } from "@/stores/disclosure";
 import { Brain, ChevronDown, ChevronRight } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { memoryAnchorTime } from "./messageTimeline";
 
 /**
@@ -46,16 +47,14 @@ export function MemoryUpdateCard({ update }: { update: MemoryUpdate }) {
   if (items.length === 0 && !(update.summary ?? "").trim()) return null;
 
   const openLeaf = (target: string, projectId?: string | null) => {
-    const folderId = parseProjectMemoryFolderId(target) ?? projectId ?? null;
-    navigate("/files", {
-      state: {
-        openMemoryLeaf: {
-          path: target,
-          name: memoryLeafTabName(target),
-          ...(projectId ? { projectId } : {}),
-        },
-        ...(folderId ? { focusWsId: `folder:${folderId}` } : {}),
-      },
+    if (isAccountMemoryTarget(target, projectId)) {
+      navigate(APP_PATHS.toolbox.guidelines, {
+        state: { openMineLeaf: target },
+      });
+      return;
+    }
+    navigate(APP_PATHS.files, {
+      state: filesMemoryLeafNavState(target, projectId),
     });
   };
 
@@ -67,7 +66,6 @@ export function MemoryUpdateCard({ update }: { update: MemoryUpdate }) {
     void queryClient.invalidateQueries({ queryKey: MEMORY_DISPUTED_LINES_KEY });
   };
 
-  const hasAnyTarget = items.some((it) => it.target);
   const scopeOverview = memoryScopeOverview(items);
   // A quota card is not a change log: its summary IS the message (什么没写进来、为什么),
   // and the rows below it name the entries.
@@ -131,17 +129,15 @@ export function MemoryUpdateCard({ update }: { update: MemoryUpdate }) {
               />
             ))}
           </ul>
-          {!hasAnyTarget && (
-            <div className="mt-2 flex justify-end">
-              <a
-                href="#/files"
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              >
-                在「全局设定」中查看
-                <ChevronRight size={13} />
-              </a>
-            </div>
-          )}
+          <div className="mt-2 flex justify-end">
+            <Link
+              to={APP_PATHS.toolbox.guidelinesUpdates}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              去看最近更新
+              <ChevronRight size={13} />
+            </Link>
+          </div>
         </div>
       )}
     </Card>

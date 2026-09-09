@@ -132,6 +132,14 @@ FIELD_CONSUMER_BASELINE: tuple[FieldConsumerBaselineGroup, ...] = (
         ),
         leaves=frozenset({"motion_card"}),
     ),
+    FieldConsumerBaselineGroup(
+        id="ask_option.review_kind",
+        reason=(
+            "日复盘卡已撤；checkpoint/escalation 选项上的 review_kind "
+            "仍在 wire（契约注明 historical events），桌面不读。"
+        ),
+        leaves=frozenset({"review_kind"}),
+    ),
 )
 
 

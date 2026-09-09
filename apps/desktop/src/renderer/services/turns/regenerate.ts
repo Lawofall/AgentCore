@@ -35,7 +35,10 @@ import {
   resumeConversationViaSidecar,
   streamConversationViaSidecar,
 } from "@/services/streamConversationViaSidecar";
-import type { CloudStreamPathReason } from "@/services/streamPathReason";
+import {
+  type CloudStreamPathReason,
+  SIDECAR_OCCUPY_FAILED_CODE,
+} from "@/services/streamPathReason";
 import {
   type AgentMentionMeta,
   type MessageAttachmentMeta,
@@ -155,8 +158,9 @@ export type RegenerateMaterials = {
  * consistent. On a transport failure it raises an error banner (no one-click
  * regenerate from the banner — bubble regenerate remains).
  *
- * 本机会话与 ``sendTurn`` 同形：探活通过走 sidecar（占用时截断），探活失败 /
- * 启动期 recoverable 降级云端 regenerate；中途失败不降级。续跑帧仍永不降级。
+ * 本机会话与 ``sendTurn`` 同形：探活通过走 sidecar（占用时截断）；探活 /
+ * 启动期失败出诊断横幅、不降级云。云端占位失败仍可改走云 regenerate。
+ * 续跑帧永不降级。
  */
 export async function runRegenerate(
   userMessageId: string,
@@ -216,6 +220,20 @@ export async function runRegenerate(
     throwIfCannotOpenStream(conversationId, ac.signal);
     const probe = sidecarTarget ? await probeSidecar(sidecarTarget) : null;
     throwIfCannotOpenStream(conversationId, ac.signal);
+    if (sidecarTarget && probe && !probe.healthy) {
+      const reason = probe.probed ? "probe_unhealthy" : "probe_cache_bad";
+      logEvent("info", "turn.stream_path", {
+        conversation_id: conversationId,
+        via: "sidecar",
+        reason,
+        regenerate: true,
+        root_id: sidecarTarget.rootId,
+        probe_detail: probe.detail,
+      });
+      throw new StreamError("sidecar", undefined, {
+        serverMessage: probe.detail?.trim() || "本地引擎未能启动",
+      });
+    }
     if (sidecarTarget && probe?.healthy) {
       store.setExecutionVia("sidecar", conversationId);
       logEvent("info", "turn.stream_path", {
@@ -251,20 +269,32 @@ export async function runRegenerate(
         }
         const fallbackDetail =
           sidecarErr.serverMessage?.trim() || "本地引擎未能启动";
-        markSidecarUnhealthy(sidecarTarget, fallbackDetail);
-        store.setExecutionVia("cloud_bridge", conversationId);
-        store.truncateAfter(userMessageId, conversationId);
-        store.createAssistantMessage(conversationId);
-        beginTurnPreflight(conversationId);
-        logEvent("info", "turn.stream_path", {
-          conversation_id: conversationId,
-          via: "cloud",
-          reason: "sidecar_fallback",
-          regenerate: true,
-          root_id: sidecarTarget.rootId,
-          detail: fallbackDetail,
-        });
-        await runCloud("sidecar_fallback");
+        if (sidecarErr.code === SIDECAR_OCCUPY_FAILED_CODE) {
+          store.setExecutionVia(null, conversationId);
+          store.truncateAfter(userMessageId, conversationId);
+          store.createAssistantMessage(conversationId);
+          beginTurnPreflight(conversationId);
+          logEvent("info", "turn.stream_path", {
+            conversation_id: conversationId,
+            via: "cloud",
+            reason: "occupy_failed",
+            regenerate: true,
+            root_id: sidecarTarget.rootId,
+            detail: fallbackDetail,
+          });
+          await runCloud("occupy_failed");
+        } else {
+          markSidecarUnhealthy(sidecarTarget, fallbackDetail);
+          logEvent("info", "turn.stream_path", {
+            conversation_id: conversationId,
+            via: "sidecar",
+            reason: "start_failed",
+            regenerate: true,
+            root_id: sidecarTarget.rootId,
+            detail: fallbackDetail,
+          });
+          throw sidecarErr;
+        }
       }
     } else {
       const bridging =
@@ -275,11 +305,7 @@ export async function runRegenerate(
         ? "no_local_engine"
         : !isSidecarEnabled()
           ? "switch_off"
-          : sidecarTarget && probe?.healthy === false
-            ? probe.probed
-              ? "probe_unhealthy"
-              : "probe_cache_bad"
-            : "no_local_target";
+          : "no_local_target";
       logEvent("info", "turn.stream_path", {
         conversation_id: conversationId,
         via: "cloud",

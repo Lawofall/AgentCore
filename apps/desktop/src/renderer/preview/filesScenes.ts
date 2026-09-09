@@ -11,7 +11,7 @@ export const FILES_PREVIEW_SCENES = [
   {
     id: "files-entries",
     title: "有条目",
-    description: "常驻/按需徽章 · 行尾字数 · 不生效/已停用",
+    description: "行尾字数 · 不生效/已停用",
   },
 ] as const;
 
@@ -20,8 +20,9 @@ export type FilesPreviewSceneId = (typeof FILES_PREVIEW_SCENES)[number]["id"];
 export const FILES_PREVIEW_PROJECT_FOLDER_ID = "folder-demo";
 
 /**
- * 文件夹自己的盘上文件——预览里跟条目同屏：全局设定单独钉顶；文件夹条目经
- * ``renderWorkroomLead`` 进 ``.agentcore``（盘上 ``AgentCore/``），钉在同级最前。
+ * 文件夹自己的盘上文件——预览里跟条目同屏：左栏只有文件夹树；
+ * 文件夹条目经 ``renderWorkroomLead`` 进 ``.agentcore``（盘上 ``AgentCore/``），钉在同级最前。
+ * 账号提示词与流水账在工具箱 `/toolbox/mine/skills?updates=1`。
  */
 const PREVIEW_WORKSPACE_TREE: FileNode[] = [
   { path: "合同", name: "合同", isDir: true },

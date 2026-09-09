@@ -187,8 +187,7 @@ export type CheckpointDecision =
  * 网页/手机无本机盘；``create_folder`` 仍只建云）。
  * Structured ``op`` / ``source`` / ``destination`` / ``path`` fields carry
  * organize_plan items for plan-bound ``file_batch``. ``review_kind`` / ``body`` /
- * ``slug`` / ``section`` carry daily_review proposals for server-side apply on
- * confirm. */
+ * ``slug`` / ``section`` remain on the wire for historical events. */
 export interface AskOption {
   label: string;
   detail?: string;
@@ -212,7 +211,7 @@ export interface AskQuestion {
   default: string;
 }
 
-export type CheckpointIntent = "decision" | "organize_plan" | "daily_review";
+export type CheckpointIntent = "decision" | "organize_plan";
 
 /** The CEO paused the turn on an ask_user checkpoint (blocking). */
 export interface CheckpointRequiredPayload {
@@ -387,7 +386,7 @@ export interface RunStartedPayload {
 }
 
 export interface ContextBlockWire {
-  channel: "system" | "history" | "request" | "team_position" | "dependency" | "workspace" | "task" | "deliverable" | "team_brief" | "gate_notes" | "steer" | "team_result" | "round_focus" | "opponent" | "challenge" | "interjection" | "continuation" | "cross_exam" | "witness_exam" | "closing" | "attack" | "defense" | "rebuttal" | "thread" | "crux";
+  channel: "system" | "tools" | "history" | "request" | "team_position" | "dependency" | "workspace" | "task" | "deliverable" | "team_brief" | "gate_notes" | "steer" | "team_result" | "round_focus" | "opponent" | "challenge" | "interjection" | "continuation" | "cross_exam" | "witness_exam" | "closing" | "attack" | "defense" | "rebuttal" | "thread" | "crux";
   heading: string;
   body: string;
   chars: number;

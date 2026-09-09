@@ -2,7 +2,7 @@
 /**
  * 多题通用澄清卡：n≥2 一题一面；编号可点切换（没写补充也能切）；非末题「下一题」不 resume。
  * 单选首次勾选自动切下一题（末题不交卡；回看改选停在本题）。
- * choice 选项下本题人话。不是 Wizard（无「下一步」、无进度条、可回看已访）。
+ * choice 选项组末行本题人话。不是 Wizard（无「下一步」、无进度条、可回看已访）。
  */
 import { AskDecisionBody } from "@/components/chat/ask/AskDecisionBody";
 import {
@@ -256,6 +256,73 @@ describe("AskDecisionBody question pager", () => {
     expect(primaryButton(/^提交$/).disabled).toBe(false);
     fireEvent.click(primaryButton(/^提交$/));
     expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders 人话 as the last list row, not a numbered option", () => {
+    render(
+      <Harness
+        content={{
+          question: "只一题",
+          questions: [
+            {
+              id: "q0",
+              prompt: "选一种",
+              kind: "choice",
+              options: [{ label: "甲" }, { label: "乙" }],
+              multiple: false,
+              default: "甲",
+            },
+          ],
+        }}
+      />,
+    );
+    const note = screen.getByPlaceholderText(ASK_NOTE_PLACEHOLDER);
+    expect(note.closest("[data-ask-note-row]")).toBeTruthy();
+    expect(note.closest("button")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: ASK_NOTE_PLACEHOLDER }),
+    ).toBeNull();
+  });
+
+  it("keeps a pick after writing a note, and keeps a note after picking", () => {
+    render(
+      <Harness
+        content={{
+          question: "只一题",
+          questions: [
+            {
+              id: "q0",
+              prompt: "选一种",
+              kind: "choice",
+              options: [{ label: "甲" }, { label: "乙" }],
+              multiple: false,
+              default: "甲",
+            },
+          ],
+        }}
+      />,
+    );
+    const note = () =>
+      screen.getByPlaceholderText(ASK_NOTE_PLACEHOLDER) as HTMLTextAreaElement;
+
+    fireEvent.click(screen.getByText("甲"));
+    expect(
+      screen.getByText("甲").closest("button")?.getAttribute("aria-pressed"),
+    ).toBe("true");
+    fireEvent.change(note(), { target: { value: "补充一句" } });
+    expect(note().value).toBe("补充一句");
+    expect(
+      screen.getByText("甲").closest("button")?.getAttribute("aria-pressed"),
+    ).toBe("true");
+
+    fireEvent.click(screen.getByText("乙"));
+    expect(note().value).toBe("补充一句");
+    expect(
+      screen.getByText("乙").closest("button")?.getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen.getByText("甲").closest("button")?.getAttribute("aria-pressed"),
+    ).toBe("false");
   });
 
   it("keeps 提交 enabled on a no-question card", () => {

@@ -1,4 +1,4 @@
-"""Product-landing path gate for ``form=files`` / non-empty ``artifacts``.
+"""Product-landing path gate for pinned ``artifacts`` / ``artifact_dir``.
 
 Any successful workspace write counts as product landing — including intermediate
 dossier notes under ``AgentCore/文档/{research,reviews,debate}/``. Declared

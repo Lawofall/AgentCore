@@ -1,6 +1,7 @@
 import { AskUserCard } from "@/components/chat/CheckpointCard";
 import {
   type AskUserContent,
+  collapsedAskGlance,
   displayAskReply,
 } from "@/components/chat/ask/AskUserFields";
 import {
@@ -48,10 +49,11 @@ type DemoSettled = {
 };
 
 function collapsedSummary(settled: DemoSettled): string {
-  const note = displayAskReply(settled.note.trim());
-  if (note) return note;
-  if (settled.selected.length > 0) return settled.selected.join(" · ");
-  return "";
+  return collapsedAskGlance({
+    selected: settled.selected,
+    note: settled.note,
+    prompts: DEMO_ASK.questions.map((q) => q.prompt),
+  });
 }
 
 function ManualAskSettledRecord({
@@ -73,7 +75,7 @@ function ManualAskSettledRecord({
       collapsedSummary={collapsedSummary(settled)}
       askIntent="decision"
     >
-      <div className="space-y-1.5 pb-3 pl-10 pr-3">
+      <div className="mt-1.5 space-y-1.5">
         <p className="whitespace-pre-wrap text-sm text-foreground">
           {DEMO_ASK.question}
         </p>
@@ -87,7 +89,7 @@ function ManualAskSettledRecord({
           </div>
         )}
         {reply ? (
-          <p className="whitespace-pre-wrap rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs text-foreground">
+          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
             {reply}
           </p>
         ) : null}

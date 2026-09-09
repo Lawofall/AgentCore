@@ -14,6 +14,7 @@ import { queryClient } from "@/lib/queryClient";
 import { conversationKeys } from "@/lib/queryKeys";
 import {
   CONVERSATION_SLICE_LRU_LIMIT,
+  conversationStillWriting,
   getActiveRuntime,
   getRuntime,
   useConversationStore,
@@ -278,6 +279,20 @@ describe("conversation store", () => {
       }
       expect(store().byId.busy?.isGenerating).toBe(true);
     });
+
+    it("never evicts a slice still writing after isGenerating was cleared", () => {
+      store().switchConversation("busy");
+      store().createAssistantMessage();
+      store().setGenerating(false, "busy");
+      store().setTurnPhase("streaming", "busy");
+      for (let i = 0; i < CONVERSATION_SLICE_LRU_LIMIT + 1; i++) {
+        const id = `idle-${i}`;
+        store().switchConversation(id);
+        store().addMessage({ ...userMsg, id: `m-${id}`, content: id });
+      }
+      expect(store().byId.busy).toBeDefined();
+      expect(conversationStillWriting(getRuntime("busy"))).toBe(true);
+    });
   });
 
   // Step 6: the sidebar status dot (useConversationGenerating) reads each
@@ -309,6 +324,19 @@ describe("conversation store", () => {
       store().switchConversation("b"); // a retained in LRU
       expect(store().byId.a).toBeDefined();
       expect(getRuntime("a").isGenerating).toBe(false);
+      expect(conversationStillWriting(getRuntime("a"))).toBe(false);
+    });
+
+    it("still writing when turnPhase is streaming after isGenerating cleared", () => {
+      store().switchConversation("a");
+      store().createAssistantMessage();
+      store().setGenerating(false, "a");
+      store().setTurnPhase("streaming", "a");
+      expect(getRuntime("a").isGenerating).toBe(false);
+      expect(conversationStillWriting(getRuntime("a"))).toBe(true);
+
+      store().setTurnPhase("completed", "a");
+      expect(conversationStillWriting(getRuntime("a"))).toBe(false);
     });
   });
 

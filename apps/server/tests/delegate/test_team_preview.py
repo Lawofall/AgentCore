@@ -108,9 +108,9 @@ def test_worker_rows_shape():
     assert "debate" not in rows[0]
     assert rows[1]["depends_on"] == ["r1"]
     assert "debate" not in rows[1]
-    # D4: omitted form = files
-    assert rows[0]["write_capability"] == "can_write_files"
-    assert rows[0]["write_capability_label"] == "可改文件"
+    # D4: omitted deliverable = 仅文字报告
+    assert rows[0]["write_capability"] == "text_only"
+    assert rows[0]["write_capability_label"] == "仅文字报告"
     # 无显式 model → 行上不透出（跟槽）
     assert "model" not in rows[0]
     # 无 target / 无会话桌 → 仅显示名「本会话工作区」（勿留空）
@@ -199,20 +199,20 @@ def test_worker_rows_write_capability_from_form():
             run_id="r1",
             task="构建报告",
             role="构建工程师",
-            deliverable=Deliverable(form="prose"),
+            deliverable=Deliverable(),
         ),
         RunSpec(
             run_id="r2",
             task="修源码",
             role="修补员",
-            deliverable=Deliverable(form="files"),
+            deliverable=Deliverable(artifacts=["out.md"]),
         ),
     )
     rows = worker_rows(plan)
-    assert rows[0]["form"] == "prose"
+    assert "form" not in rows[0]
     assert rows[0]["write_capability"] == "text_only"
     assert rows[0]["write_capability_label"] == "仅文字报告"
-    assert rows[1]["form"] == "files"
+    assert "form" not in rows[1]
     assert rows[1]["write_capability"] == "can_write_files"
     assert rows[1]["write_capability_label"] == "可改文件"
 

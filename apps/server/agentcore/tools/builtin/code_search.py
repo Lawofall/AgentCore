@@ -13,7 +13,7 @@ maintenance without awaiting ``ensure_code_index``.
 import time
 from typing import Any
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
     AUDIENCE_BOTH,
@@ -69,6 +69,7 @@ class CodeSearchTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.READ_ONLY,
+        workspace_io=True,
     )
 
     @property
@@ -80,7 +81,7 @@ class CodeSearchTool:
                 "精确符号、字符串或正则用 grep。"
             ),
             parameters=CODE_SEARCH_PARAMETERS,
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.SEARCH,
             approval=ToolApproval.NEVER,
             timeout_seconds=30.0,
         )

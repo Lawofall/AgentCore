@@ -221,9 +221,10 @@ def test_single_dependency_free_worker_infers_light(monkeypatch):
     assert spy.get("delegate.complexity_hint_inferred")["hint"] == "light"
 
 
-def test_omitted_form_single_worker_stays_standard():
+def test_omitted_deliverable_single_worker_infers_light():
+    """Omitted / empty deliverable auto-lights a single dependency-free worker."""
     out = accepted({"tasks": _ONE_TASK})
-    assert out.complexity_hint == "standard"
+    assert out.complexity_hint == "light"
 
 
 def test_explicit_hint_is_never_auto_inferred():

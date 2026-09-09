@@ -120,10 +120,10 @@ async def test_worker_identity_states_output_is_user_visible():
     opening = provider.user_messages[0]
     assert "可独立阅读" not in system
     assert "自包含" not in system
-    assert "交付物规格" in opening
-    assert "form=prose" in opening
-    assert "成品就是正文" in opening
-    assert "不要落盘" in opening
+    assert "交付物规格" not in opening
+    assert "form=prose" not in opening
+    assert "成品就是正文" not in opening
+    assert "不要落盘" not in opening
 
 
 async def test_run_lifecycle_events_emitted():
@@ -671,8 +671,8 @@ async def test_default_files_includes_form_how_in_deliverable_spec():
     provider = _ContentProvider(["正文"])
     await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
     opening = provider.user_messages[0]
-    assert "交付物规格" in opening
-    assert "form=files" in opening
+    assert "交付物规格" not in opening
+    assert "form=files" not in opening
     assert "检索预算" not in opening
 
 
@@ -764,7 +764,7 @@ async def test_no_contract_passes_first_try_without_extra_call():
 async def test_files_form_soft_completes_without_forcing_write():
     """甲⁺：form=files 粘贴正文不落盘 → soft-complete；不再 write_pass 逼写。"""
     plan, _ = build_run_plan(
-        [{"role": "前端", "task": "建页面", "deliverable": {"form": "files"}}],
+        [{"role": "前端", "task": "建页面", "deliverable": {"artifacts": ["index.html"]}}],
         id_prefix="t",
     )
     reg = ToolRegistry()
@@ -793,7 +793,7 @@ async def test_files_form_soft_completes_without_forcing_write():
 async def test_files_form_soft_completes_without_write_pass():
     """甲⁺：form=files 零落盘 soft-complete，不触发 write_pass，不 FAILED。"""
     plan, _ = build_run_plan(
-        [{"role": "前端", "task": "建页面", "deliverable": {"form": "files"}}],
+        [{"role": "前端", "task": "建页面", "deliverable": {"artifacts": ["index.html"]}}],
         id_prefix="t",
     )
     provider = _ContentProvider(["只有文字一", "只有文字二"])
@@ -812,7 +812,7 @@ async def test_files_form_strict_soft_completes_when_never_written():
             {
                 "role": "前端",
                 "task": "建页面",
-                "deliverable": {"form": "files", "strict": True},
+                "deliverable": {"artifacts": ["index.html"], "strict": True},
             }
         ],
         id_prefix="t",
@@ -828,8 +828,8 @@ async def test_files_form_strict_soft_completes_when_never_written():
     assert EventType.RUN_FAILED not in types
 
 
-async def test_requires_files_alone_defaults_to_files_zero_disk_soft():
-    """Deleted requires_files key is ignored; omitted form is files → 零落盘 soft."""
+async def test_requires_files_alone_does_not_expect_landing():
+    """Deleted requires_files key is ignored; omitted paths do not urge writes."""
     plan, _ = build_run_plan(
         [{"role": "前端", "task": "建页面", "deliverable": {"requires_files": True}}],
         id_prefix="t",
@@ -838,7 +838,7 @@ async def test_requires_files_alone_defaults_to_files_zero_disk_soft():
     res = await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
     state = res["t_1"]
     assert state.phase is RunPhase.COMPLETED
-    assert any("未把产物写入工作区" in w for w in (state.warnings or []))
+    assert not any("未把产物写入工作区" in w for w in (state.warnings or []))
 
 
 async def test_worker_grantable_tool_gated_when_gate_denies():

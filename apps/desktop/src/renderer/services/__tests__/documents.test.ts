@@ -17,6 +17,7 @@ vi.mock("@/services/refreshAccountRulesMemory", () => ({
 import { api } from "@/services/api";
 import {
   createRuleDocument,
+  createRuleFolder,
   deleteDocument,
   getAlwaysQuota,
   getDocument,
@@ -24,6 +25,7 @@ import {
   listScopeEntries,
   listUserRules,
   renameDocument,
+  reparentDocument,
   updateDocumentApplyMode,
   writeDocument,
 } from "@/services/documents";
@@ -269,6 +271,39 @@ describe("documents client", () => {
       "/v1/documents",
       expect.objectContaining({ folder_id: null }),
     );
+  });
+
+  it("createRuleDocument can parent under a 夹", async () => {
+    vi.mocked(api.post).mockResolvedValue(node({ id: "new" }));
+    await createRuleDocument("g.md", null, "", "on_demand", "other-1");
+    expect(api.post).toHaveBeenCalledWith(
+      "/v1/documents",
+      expect.objectContaining({
+        parent_id: "other-1",
+        apply_mode: "on_demand",
+      }),
+    );
+  });
+
+  it("createRuleFolder posts a rule folder", async () => {
+    vi.mocked(api.post).mockResolvedValue(node({ id: "f1", kind: "folder" }));
+    await createRuleFolder("法律");
+    expect(api.post).toHaveBeenCalledWith("/v1/documents", {
+      name: "法律",
+      kind: "folder",
+      role: "rule",
+      parent_id: null,
+    });
+  });
+
+  it("reparentDocument patches parent and apply_mode together", async () => {
+    vi.mocked(api.patch).mockResolvedValue(node({ id: "d1" }));
+    await reparentDocument("d1", "f1", "on_demand");
+    expect(api.patch).toHaveBeenCalledWith("/v1/documents/d1", {
+      parent_id: "f1",
+      reparent: true,
+      apply_mode: "on_demand",
+    });
   });
 
   it("writeDocument sends the content + CAS baseline and maps quota_warning", async () => {

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agentcore.core.types import ToolCategory, ToolEffect
+from agentcore.core.types import ToolEffect, ToolFace
 from agentcore.llm.profiles import ProfileParams
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
 from agentcore.runtime.captain_profile import apply_captain_max_rounds
@@ -72,10 +72,10 @@ class _StubTool:
         self,
         name: str = "search",
         *,
-        category: ToolCategory = ToolCategory.SEARCH,
+        face: ToolFace = ToolFace.SEARCH,
     ) -> None:
         self._name = name
-        self._category = category
+        self._face = face
         self.calls = 0
 
     @property
@@ -84,7 +84,7 @@ class _StubTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=self._category,
+            face=self._face,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
@@ -226,7 +226,7 @@ class _AuditHardStubTool(_StubTool):
 
 @pytest.mark.asyncio
 async def test_substantial_batch_fires_once_on_wrap_up():
-    delegate = _AuditHardStubTool(name="delegate", category=ToolCategory.ORCHESTRATION)
+    delegate = _AuditHardStubTool(name="delegate", face=ToolFace.ORCHESTRATION)
     provider = _ScriptedProvider(
         [
             [_tool_chunk("delegate", _substantial_tasks_args(), call_id="d1")],
@@ -245,7 +245,7 @@ async def test_hard_required_without_review_blocks_then_second_delegate_delivers
 
     class _HardNoReview(_StubTool):
         def __init__(self) -> None:
-            super().__init__(name="delegate", category=ToolCategory.ORCHESTRATION)
+            super().__init__(name="delegate", face=ToolFace.ORCHESTRATION)
             self._n = 0
 
         async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
@@ -291,7 +291,7 @@ async def test_hard_required_without_review_blocks_then_second_delegate_delivers
 @pytest.mark.asyncio
 async def test_substantial_without_audit_hard_skips_soft_gate():
     """map_fanout / ordinary multi-angle: substantial but no hard → no soft nudge."""
-    delegate = _StubTool(name="delegate", category=ToolCategory.ORCHESTRATION)
+    delegate = _StubTool(name="delegate", face=ToolFace.ORCHESTRATION)
     provider = _ScriptedProvider(
         [
             [_tool_chunk("delegate", _substantial_tasks_args(), call_id="d1")],
@@ -306,7 +306,7 @@ async def test_substantial_without_audit_hard_skips_soft_gate():
 
 @pytest.mark.asyncio
 async def test_fires_at_most_once():
-    delegate = _AuditHardStubTool(name="delegate", category=ToolCategory.ORCHESTRATION)
+    delegate = _AuditHardStubTool(name="delegate", face=ToolFace.ORCHESTRATION)
     provider = _ScriptedProvider(
         [
             [_tool_chunk("delegate", _substantial_tasks_args(), call_id="d1")],
@@ -321,7 +321,7 @@ async def test_fires_at_most_once():
 
 @pytest.mark.asyncio
 async def test_second_delegate_suppresses_gate():
-    delegate = _AuditHardStubTool(name="delegate", category=ToolCategory.ORCHESTRATION)
+    delegate = _AuditHardStubTool(name="delegate", face=ToolFace.ORCHESTRATION)
     provider = _ScriptedProvider(
         [
             [_tool_chunk("delegate", _substantial_tasks_args(), call_id="d1")],
@@ -349,7 +349,7 @@ async def test_light_batch_no_gate():
                 metadata={"audit_hard": True, "batch_nodes": 2, "batch_has_deps": False},
             )
 
-    delegate = _HardLight(name="delegate", category=ToolCategory.ORCHESTRATION)
+    delegate = _HardLight(name="delegate", face=ToolFace.ORCHESTRATION)
     provider = _ScriptedProvider(
         [
             [_tool_chunk("delegate", _light_tasks_args(), call_id="d1")],
@@ -369,7 +369,7 @@ async def test_light_batch_with_deps_is_substantial():
         {"role": "乙", "task": "审", "depends_on": ["a"]},
     ]
     args = json.dumps({"tasks": tasks}, ensure_ascii=False)
-    delegate = _AuditHardStubTool(name="delegate", category=ToolCategory.ORCHESTRATION)
+    delegate = _AuditHardStubTool(name="delegate", face=ToolFace.ORCHESTRATION)
     provider = _ScriptedProvider(
         [
             [_tool_chunk("delegate", args, call_id="d1")],
@@ -384,7 +384,7 @@ async def test_light_batch_with_deps_is_substantial():
 
 @pytest.mark.asyncio
 async def test_worker_role_never_fires():
-    delegate = _AuditHardStubTool(name="delegate", category=ToolCategory.ORCHESTRATION)
+    delegate = _AuditHardStubTool(name="delegate", face=ToolFace.ORCHESTRATION)
     provider = _ScriptedProvider(
         [
             [_tool_chunk("delegate", _substantial_tasks_args(), call_id="d1")],

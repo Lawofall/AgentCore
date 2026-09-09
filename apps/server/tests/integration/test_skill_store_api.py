@@ -61,11 +61,14 @@ async def test_skill_store_publish_list_install_update_unpublish_report(client):
     shelf = await client.get("/v1/skill-store")
     assert shelf.status_code == 200, shelf.text
     rows = shelf.json()["data"]
-    assert len(rows) == 1
-    assert rows[0]["id"] == lid
-    assert "content" not in rows[0]
-    assert rows[0]["installed"] is False
-    assert rows[0]["has_update"] is False
+    community = next(r for r in rows if r["id"] == lid)
+    assert "content" not in community
+    assert community["installed"] is False
+    assert community["has_update"] is False
+    names = {r["name"] for r in rows}
+    from agentcore.runtime.legal_skills import LEGAL_SKILLS
+
+    assert {s.name for s in LEGAL_SKILLS} <= names
 
     detail = await client.get(f"/v1/skill-store/{lid}")
     assert detail.status_code == 200, detail.text
@@ -90,7 +93,7 @@ async def test_skill_store_publish_list_install_update_unpublish_report(client):
     assert catalog.status_code == 200, catalog.text
     mine_skills = catalog.json()["mine"]
     copy = next(m for m in mine_skills if m["id"] == copy_id)
-    assert copy["occupies"] == []
+    assert "occupies" not in copy
     assert "怎么审合同" in copy["content"]
 
     await _login(client, "ssauthor")
@@ -126,7 +129,7 @@ async def test_skill_store_publish_list_install_update_unpublish_report(client):
     catalog = await client.get("/v1/skill-catalog")
     copy = next(m for m in catalog.json()["mine"] if m["id"] == copy_id)
     assert "新版本正文" in copy["content"]
-    assert copy["occupies"] == []
+    assert "occupies" not in copy
 
     reported = await client.post(
         f"/v1/skill-store/{lid}/reports", json={"reason": "正文有问题"}
@@ -250,3 +253,51 @@ async def test_skill_store_admin_sees_reports(client, make_admin):
     assert body.status_code == 200, body.text
     assert "怎么审合同" in body.json()["content"]
     assert body.json()["id"] == lid
+
+
+async def test_platform_legal_skus_list_install_and_refuse_author_ops(client):
+    from agentcore.runtime.legal_skills import LEGAL_SKILLS
+    from agentcore.runtime.skills.platform_shelf import platform_listing_id
+
+    await register_and_login(client, "sslegal")
+    shelf_ids = {s.name: platform_listing_id(s.name) for s in LEGAL_SKILLS}
+
+    shelf = await client.get("/v1/skill-store")
+    assert shelf.status_code == 200, shelf.text
+    by_id = {row["id"]: row for row in shelf.json()["data"]}
+    for name, listing_id in shelf_ids.items():
+        assert listing_id in by_id
+        assert by_id[listing_id]["author"] == "官方"
+        assert by_id[listing_id]["name"] == name
+        assert by_id[listing_id]["installed"] is False
+
+    brief_id = shelf_ids["legal_answer_brief"]
+
+    detail = await client.get(f"/v1/skill-store/{brief_id}")
+    assert detail.status_code == 200, detail.text
+    brief_body = next(s.body for s in LEGAL_SKILLS if s.name == "legal_answer_brief")
+    assert detail.json()["content"] == brief_body
+
+    installed = await client.post(f"/v1/skill-store/{brief_id}/install")
+    assert installed.status_code == 200, installed.text
+    assert installed.json()["installed"] is True
+    copy_id = installed.json()["document_id"]
+
+    catalog = await client.get("/v1/skill-catalog")
+    copy = next(m for m in catalog.json()["mine"] if m["id"] == copy_id)
+    assert "occupies" not in copy
+    assert "原告红队" in copy["content"]
+
+    again = await client.post(f"/v1/skill-store/{brief_id}/install")
+    assert again.status_code == 200, again.text
+    assert again.json()["document_id"] == copy_id
+
+    assert (await client.delete(f"/v1/skill-store/{brief_id}")).status_code == 403
+    assert (await client.post(f"/v1/skill-store/{brief_id}/versions")).status_code == 403
+    reported = await client.post(
+        f"/v1/skill-store/{brief_id}/reports", json={"reason": "测试"}
+    )
+    assert reported.status_code == 400
+
+    installed_list = await client.get("/v1/skill-store/installed")
+    assert any(row["id"] == brief_id for row in installed_list.json()["data"])

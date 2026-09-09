@@ -31,9 +31,12 @@ async def _seed_user_desk_and_bare(
         uid = (await UserRepository(s).create(username=username, display_name=username)).user_id
     async with session_factory() as s:
         desk = await FolderRepository(s).create(user_id=uid, name="AutoDesk")
-        board = await BoardRepository(s).create(
-            user_id=uid, title="filed", folder_id=desk.id
+        board = await BoardRepository(s).create(user_id=uid, title="filed")
+        # Leftover unread ``Board.folder_id`` (no longer written on create).
+        await s.execute(
+            update(Board).where(Board.id == board.id).values(folder_id=desk.id)
         )
+        await s.commit()
         bare = await ConversationRepository(s).create(user_id=uid, title="bare")
         await ConversationRepository(s).set_auto_desk_folder_id(
             bare.id, desk.id, user_id=uid
@@ -58,7 +61,7 @@ async def test_soft_delete_clears_auto_desk_folder_id(session_factory):
     assert bare.auto_desk_folder_id is None
     assert bare.folder_id is None
     assert board is not None
-    assert board.folder_id is None
+    assert board.folder_id == desk_id
     assert folder is not None
     assert folder.deleted_at is not None
 
@@ -85,7 +88,7 @@ async def test_permanent_delete_clears_auto_desk_folder_id(
     assert bare is not None
     assert bare.auto_desk_folder_id is None
     assert board is not None
-    assert board.folder_id is None
+    assert board.folder_id == desk_id
     assert desk_id not in folders
 
     build_storage_provider.cache_clear()
@@ -132,7 +135,7 @@ async def test_retention_purge_clears_auto_desk_folder_id(
     assert bare is not None
     assert bare.auto_desk_folder_id is None
     assert board is not None
-    assert board.folder_id is None
+    assert board.folder_id == desk_id
     assert desk_id not in folders
 
     build_storage_provider.cache_clear()

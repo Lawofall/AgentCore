@@ -322,7 +322,7 @@ describe("settleAttachments", () => {
       id: "d-1",
       key: "document:setting:doc-1",
       name: "说话简短",
-      path: "设定",
+      path: "提示词",
       text: "",
       truncated: false,
       kind: "document",
@@ -336,7 +336,7 @@ describe("settleAttachments", () => {
     expect(res.outgoing[0]).toMatchObject({
       kind: "document",
       document_id: "doc-1",
-      path: "设定",
+      path: "提示词",
     });
     expect(ensure).not.toHaveBeenCalled();
   });

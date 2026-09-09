@@ -259,7 +259,8 @@ async def create_document(
         if parent.kind != "folder":
             raise HTTPException(status_code=400, detail="parent is not a folder")
         folder_id = parent.folder_id
-    elif body.role == "rule" and body.kind == "document":
+    elif body.role == "rule" and parent_id is None:
+        # Documents *and* user-made 夹 land under AgentCore/规则/.
         rules_dir = await repo.ensure_rules_dir(user.user_id, folder_id)
         parent_id = rules_dir.id
         folder_id = rules_dir.folder_id

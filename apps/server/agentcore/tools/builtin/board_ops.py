@@ -29,7 +29,7 @@ from typing import Any
 
 from agentcore.board.channel import BoardOpError
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
     AUDIENCE_CEO_ONLY,
@@ -54,6 +54,8 @@ class BoardOpsTool:
         surface=ToolSurface.CEO_ORCHESTRATION,
         audience=AUDIENCE_CEO_ONLY,
         ceo_wire=CeoWire.BOARD,
+        resident=False,
+        catalog_summary="白板上作画",
     )
 
     @property
@@ -141,7 +143,7 @@ class BoardOpsTool:
                 },
                 "required": ["ops"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.BOARD,
             approval=ToolApproval.NEVER,
         )
 

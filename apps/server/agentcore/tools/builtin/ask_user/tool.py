@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory, ToolEffect, new_id
+from agentcore.core.types import ToolApproval, ToolEffect, ToolFace, new_id
 from agentcore.runtime.events import (
     EventSink,
     checkpoint_required,
@@ -99,18 +99,18 @@ class AskUserTool:
             },
             "detail": {
                 "type": "string",
-                "description": "仅 organize_plan / daily_review 填一行说明。普通短问勿填。",
+                "description": "仅 organize_plan 填一行说明。普通提问勿填。",
             },
         }
-        # Schema: short trigger. HOW → asking_the_user skill.
+        # Schema: short trigger. HOW → ask_kickoff / ask_midtask skills.
         questions_desc = (
             "可选：问句写 prompt（最多 5）。卡面不预选。"
-            "detail 仅 organize_plan / daily_review。"
+            "detail 仅 organize_plan。"
         )
         tool_desc = (
             "向用户发问（唯一问用户原语）。暂停回合等人答复。"
-            "挡路才问：桌上结果未钉、猜错会做错 → 先短问；仅可逆低杠杆才标假设。"
-            "HOW→consult(asking_the_user)。"
+            "挡路才问：交付形态未钉、猜错会做错 → 先问；仅可逆低杠杆才标假设。"
+            "HOW→consult(ask_kickoff)、consult(ask_midtask)。"
         )
         allowed_actions = advertised_option_actions(
             desktop=self.advertise_bind_local_folder,
@@ -123,7 +123,7 @@ class AskUserTool:
             option_properties["action"] = {
                 "type": "string",
                 "enum": list(allowed_actions),
-                "description": "可选。整题进桌才填：" + "；".join(bits) + "。",
+                "description": "可选。整题接到工作区才填：" + "；".join(bits) + "。",
             }
         return ToolSchema(
             name="ask_user",
@@ -182,16 +182,16 @@ class AskUserTool:
                     },
                     "card": {
                         "type": "string",
-                        "enum": ["organize_plan", "daily_review"],
+                        "enum": ["organize_plan"],
                         "description": (
-                            "可选。整理清单 organize_plan / 每日复盘 daily_review"
-                            "（恰好 1 题多选）。多问题用普通 ask_user（questions≤5）。"
+                            "可选。整理清单 organize_plan（恰好 1 题多选）。"
+                            "多问题用普通 ask_user（questions≤5）。"
                         ),
                     },
                 },
                 "required": ["message"],
             },
-            category=ToolCategory.INTERACTION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 

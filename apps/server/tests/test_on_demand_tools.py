@@ -7,6 +7,8 @@ from pathlib import Path
 
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
 from agentcore.runtime.context.consult_sources import (
+    MergedConsultSource,
+    SkillConsultSource,
     ToolConsultSource,
     build_merged_consult_source,
 )
@@ -100,8 +102,20 @@ def test_resident_tools_are_not_on_the_roster():
         "run",
         "search_conversations",
         "read_conversation",
+        "mkdir",
+        "file_delete",
     ):
         assert not is_on_demand_tool(name), name
+    for name in (
+        "file_move",
+        "file_copy",
+        "file_batch",
+        "board_ops",
+        "board_read",
+        "read_image",
+    ):
+        assert is_on_demand_tool(name), name
+        assert name in ON_DEMAND_TOOL_NAMES
     # Dynamic MCP names are not in the static set, but still ride the same gate.
     assert "mcp_playwright_browser_navigate" not in ON_DEMAND_TOOL_NAMES
     assert is_mcp_tool_name("mcp_playwright_browser_navigate")
@@ -165,15 +179,41 @@ def test_directory_groups_sections_and_compacts_tool_families():
         family_label="导出 Word/PDF",
     )
     skill = ConsultDirectoryEntry(
-        name="data_file_landing", summary="表格落盘", section="skill"
+        name="data_file_landing", summary="表格落盘", section="skill", group="交付"
     )
     out = render_on_demand_directory([host, docx, pdf, skill])
     assert "能力指引：" in out
+    assert "交付：" in out
     assert "低频工具：" in out
     assert "- host：本机排查" in out
     assert "导出 Word/PDF（查阅任一即整组启用）：md_to_docx、md_to_pdf" in out
     assert "- md_to_docx：导出 docx" not in out
     assert "- data_file_landing：表格落盘" in out
+
+
+async def test_merged_consult_copies_group_and_face():
+    """MergedConsultSource 合并时必须拷贝 group 和 face（face 曾漏拷）。"""
+    from agentcore.tools.registry import ToolRegistry
+
+    skill_reg = build_system_skill_registry()
+    tools = ToolRegistry()
+    tools.register(HostTool())
+    merged = MergedConsultSource(
+        skill=SkillConsultSource(
+            registry=skill_reg,
+            tool_names={"delegate", "ask_user", "debate", "run"},
+            audience="ceo",
+        ),
+        tool=ToolConsultSource(registry=tools),
+    )
+    entries = await merged.list_directory("u")
+    by_name = {e.name: e for e in entries}
+    staffing = by_name["staffing"]
+    assert staffing.group == "编排"
+    assert staffing.section == "skill"
+    host = by_name["host"]
+    assert host.face
+    assert host.section == "tool"
 
 
 def test_offer_tools_from_window_promotes_consulted_and_called():
@@ -394,10 +434,7 @@ _STUFFED_WORKER_RESIDENT = frozenset(
         "file_list",
         "glob",
         "file_delete",
-        "file_move",
-        "file_copy",
         "mkdir",
-        "file_batch",
         "grep",
         "code_search",
         "code_diagnostics",
@@ -630,6 +667,7 @@ async def test_consult_mcp_server_alias_offers_family():
     src = ToolConsultSource(registry=registry)
     entries = await src.list_directory("u")
     rendered = render_on_demand_directory(entries)
+    assert "连接器：" in rendered
     assert "MCP · Echo（查阅任一即整组启用）：mcp_echo_ping、mcp_echo_list" in rendered
     assert "- mcp_echo_ping：" not in rendered
     body = await src.fetch_by_name("u", "echo")

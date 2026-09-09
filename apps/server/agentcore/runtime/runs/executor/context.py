@@ -132,6 +132,7 @@ def _build_messages(
     blocks_sink: list[ContextBlock] | None = None,
     team_brief: str | None = None,
     context_inject: Mapping[str, str] | None = None,
+    tool_defs: list[dict] | None = None,
 ) -> list[LLMMessage]:
     """Assemble the worker's OPENING (system, user) messages from its inline role,
     the original request, its upstream dependency products, and its task.
@@ -149,7 +150,9 @@ def _build_messages(
     :func:`_build_context_blocks` RENDER the user message — they are NOT joined with
     the system block (that would double-inject the prompt into the user turn). When
     ``blocks_sink`` is given, the sink is ``[system block mirroring system_content]``
-    plus the material list, so ``run_context`` shows the same system the LLM ate."""
+    plus an optional ``tools`` block (opening ``tool_defs``, same list the first LLM
+    round is offered) plus the material list, so ``run_context`` shows the same
+    system + tool table the LLM ate."""
     # Stable ``<身份>`` sits in front of the shared base so leaf workers share a
     # cacheable prefix; node contract (form / handoff) stays after the base.
     core, sep, rest = identity.partition("</身份>")
@@ -188,6 +191,9 @@ def _build_messages(
                 body=system_content,
             )
         )
+        tools_block = _offered_tools_block(tool_defs)
+        if tools_block is not None:
+            blocks_sink.append(tools_block)
         blocks_sink.extend(blocks)
     user_content = "\n\n".join(f"## {b.heading}\n{b.body}" for b in blocks)
     return [
@@ -290,23 +296,94 @@ def _format_captain_history(history: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
+def _offered_tools_block(tool_defs: list[dict] | None) -> ContextBlock | None:
+    """Mirror the opening OpenAI ``tools`` array as one ``channel=tools`` block.
+
+    Same list the first LLM round is offered — not a registry replay. Empty / missing
+    defs omit the block (no empty「本回合工具」row). Mid-turn consult promote and
+    wind-down narrowing are later rounds; this snapshot is 开场.
+    """
+    if not tool_defs:
+        return None
+    body = _render_offered_tools(tool_defs)
+    if not body.strip():
+        return None
+    return ContextBlock(
+        channel="tools",
+        heading="本回合工具（开场发给模型的工具表）",
+        body=body,
+    )
+
+
+def _render_offered_tools(tool_defs: list[dict]) -> str:
+    """Human-readable projection of OpenAI function-calling defs (name / 一句 / 参数表)."""
+    parts: list[str] = []
+    for raw in tool_defs:
+        fn = raw.get("function") if isinstance(raw.get("function"), dict) else raw
+        if not isinstance(fn, dict):
+            continue
+        name = str(fn.get("name") or "").strip() or "?"
+        desc = str(fn.get("description") or "").strip()
+        desc_line = desc.split("\n", 1)[0].strip() if desc else ""
+        lines = [f"**{name}**"]
+        if desc_line:
+            lines.append(desc_line)
+        params = fn.get("parameters")
+        props = params.get("properties") if isinstance(params, dict) else None
+        required_raw = params.get("required") if isinstance(params, dict) else None
+        required = (
+            {
+                str(item)
+                for item in required_raw
+                if isinstance(item, str) and item.strip()
+            }
+            if isinstance(required_raw, list)
+            else set()
+        )
+        if isinstance(props, dict) and props:
+            lines.append("")
+            for pname, spec in props.items():
+                lines.append(_format_tool_param(str(pname), spec, pname in required))
+        parts.append("\n".join(lines))
+    return "\n\n".join(parts)
+
+
+def _format_tool_param(name: str, spec: object, required: bool) -> str:
+    """One markdown bullet for a top-level JSON-schema property."""
+    req = "必填" if required else "可选"
+    if not isinstance(spec, dict):
+        return f"- `{name}`: any（{req}）"
+    typ = spec.get("type")
+    if isinstance(typ, list):
+        type_s = " | ".join(str(t) for t in typ if t)
+    elif isinstance(typ, str) and typ.strip():
+        type_s = typ.strip()
+    else:
+        type_s = "any"
+    desc = str(spec.get("description") or "").strip()
+    desc_line = desc.split("\n", 1)[0].strip() if desc else ""
+    extra = f"— {desc_line}" if desc_line else ""
+    return f"- `{name}`: {type_s}（{req}）{extra}"
+
+
 def _build_captain_context_blocks(
     chat_system_prompt: str,
     history: list[dict],
     user_message: str,
+    tool_defs: list[dict] | None = None,
 ) -> list[ContextBlock]:
     """The ordered :class:`ContextBlock` list describing the CEO captain's OPENING context
     (上下文传递可视化, CEO 侧 通道①): its ``system`` prompt (决策②: 桌面按需弹窗对所有人可见 /
-    手机恒隐藏, 旧 powerMode/usageDetail 门控已退役), the ``history`` it carries, and this
-    turn's ``request``.
+    手机恒隐藏, 旧 powerMode/usageDetail 门控已退役), the opening ``tools`` array, the
+    ``history`` it carries, and this turn's ``request``.
 
-    The captain is fed a real multi-message chat (system + history + user), so these
-    blocks MIRROR that ``messages`` array (one per channel) rather than being the
-    source it's rendered from; built from the SAME three inputs
-    ``build_captain_executor`` assembles ``messages`` from, they can't drift.
-    Workers use the same mirror for ``system`` (see :func:`_build_messages`); their
-    user message is still rendered FROM material blocks only. Every fold routes the
-    captain's run_context turn-level (``captainContext`` on the chat bubble), never
+    The captain is fed a real multi-message chat (system + history + user) plus a
+    sibling ``tools`` table, so these blocks MIRROR that LLM request rather than
+    being the source it's rendered from; built from the SAME inputs
+    ``build_captain_executor`` assembles the request from, they can't drift.
+    Workers use the same mirror for ``system`` + ``tools`` (see :func:`_build_messages`);
+    their user message is still rendered FROM material blocks only. Every fold routes
+    the captain's run_context turn-level (``captainContext`` on the chat bubble), never
     onto a graph node. 通道⑤ (the CEO reading workers' products back on resume) is a
     separate ratchet, not this opening."""
     blocks: list[ContextBlock] = [
@@ -316,6 +393,9 @@ def _build_captain_context_blocks(
             body=chat_system_prompt,
         )
     ]
+    tools_block = _offered_tools_block(tool_defs)
+    if tools_block is not None:
+        blocks.append(tools_block)
     history_text = _format_captain_history(history)
     if history_text:
         blocks.append(
@@ -376,7 +456,7 @@ def _upstream_intermediate_persist_hint(spec: RunSpec) -> str:
     filename — never workspace-root ``findings-<role>.md``. Does not replace
     playbook pinning; only guides free teams.
 
-    不知放哪才进工作稿，不把 ``form=files`` 钉成工作稿义务；``research/`` 仍只接
+    不知放哪才进工作稿，不把省略 deliverable 钉成工作稿义务；``research/`` 仍只接
     playbook / 显式声明 → [术语表 · 成品归位].
     """
     pinned = [

@@ -42,6 +42,7 @@ from .types import (
     _PERMANENT_RETIRE_STEER,
     _VALIDATION_PATH_STOP_STEER,
     CIRCUIT_TALLY_KEEP_AVAILABLE,
+    DEFAULT_CHANNEL_OP_HANG_LATCH,
     DEFAULT_EMPTY_THRESHOLD,
     DEFAULT_EXEC_ENV_TIMEOUT_RETIRE,
     DEFAULT_THRESHOLD,
@@ -75,6 +76,7 @@ from .types import (
 
 __all__ = [
     "CIRCUIT_TALLY_KEEP_AVAILABLE",
+    "DEFAULT_CHANNEL_OP_HANG_LATCH",
     "DEFAULT_EMPTY_THRESHOLD",
     "DEFAULT_EXEC_ENV_TIMEOUT_RETIRE",
     "DEFAULT_THRESHOLD",
@@ -130,7 +132,7 @@ class LoopController(
         unproductive_threshold: int = DEFAULT_UNPRODUCTIVE_THRESHOLD,
         convergence_finalize_rounds: int = 0,
         convergence_spin_rounds: int = DEFAULT_THRESHOLD,
-        form_prose: bool = False,
+        expects_landing: bool = False,
         # Idle bars (nudge → optional tool narrow). Product factory never arms
         # any delivery_idle bar (files or recon). Explicit construction may still
         # set these. Orthogonal to token/timeout wind_down. ≤0 disables each step.
@@ -167,7 +169,7 @@ class LoopController(
         self._convergence_spin_rounds = max(0, convergence_spin_rounds)
         # Idle-round counter (explicit construction with bars still uses it).
         # Factory leaves bars at 0 so tracking stays off.
-        self._form_prose = bool(form_prose)
+        self._expects_landing = bool(expects_landing)
         self._delivery_idle_nudge_rounds = max(0, int(delivery_idle_nudge_rounds))
         self._delivery_idle_narrow_rounds = max(0, int(delivery_idle_narrow_rounds))
         self._delivery_idle_recon = bool(delivery_idle_recon)
@@ -200,6 +202,9 @@ class LoopController(
         self._tool_liveness_last: dict[str, bool] = {}
         # Sticky: local workspace channel dead → allow disabling LANDING_TOOLS too.
         self._workspace_channel_dead: bool = False
+        # Per-run hang latch (consecutive channel_op timeouts). Not session sticky.
+        self._channel_hang_dead: bool = False
+        self._consecutive_channel_op_timeouts: int = 0
         # Consecutive sandbox wall-clock timeouts across run.
         self._exec_env_timeout_hits: int = 0
         self._tool_warned: set[str] = set()
@@ -384,6 +389,42 @@ class LoopController(
 
         return is_product_landing_path(str(path), self._product_landing_artifacts)
 
+    def _note_channel_op_hang(self, attempt: ToolAttempt) -> None:
+        """Count consecutive channel_op hangs; latch pens after the second."""
+        if self._channel_hang_dead:
+            return
+        if attempt.success:
+            self._consecutive_channel_op_timeouts = 0
+            return
+        meta = attempt.meta or {}
+        is_hang = meta.get("timeout_layer") == "channel_op" and bool(
+            meta.get("liveness_timeout")
+        )
+        if not is_hang:
+            self._consecutive_channel_op_timeouts = 0
+            return
+        self._consecutive_channel_op_timeouts += 1
+        if self._consecutive_channel_op_timeouts >= DEFAULT_CHANNEL_OP_HANG_LATCH:
+            self._latch_channel_hang_dead()
+
+    def _latch_channel_hang_dead(self) -> None:
+        """Stop this run's local file pens; do not stamp session presence-dead."""
+        from agentcore.workspace.limits import (
+            WORKSPACE_CHANNEL_DEAD_RETIRE_STEER,
+            WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS,
+        )
+
+        self._channel_hang_dead = True
+        for name in WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS:
+            self._tool_force_retire.add(name)
+            self._tool_failures[name] = max(
+                int(self._tool_failures.get(name, 0)),
+                self._tool_failure_disable,
+            )
+            self._tool_succeeded_after_fail[name] = False
+        if not self._pending_retire_message:
+            self._pending_retire_message = WORKSPACE_CHANNEL_DEAD_RETIRE_STEER
+
     def record(self, attempts: list[ToolAttempt]) -> None:
         """Append one round's tool attempts (in call order) to the window.
 
@@ -403,7 +444,7 @@ class LoopController(
         delivery_idle_tracking = (
             self._delivery_idle_nudge_rounds > 0 or self._delivery_idle_narrow_rounds > 0
         )
-        files_product_gate = delivery_idle_tracking and not self._form_prose
+        files_product_gate = delivery_idle_tracking and self._expects_landing
         if files_product_gate:
             landing_success = any(
                 self._is_product_landing_success(a) for a in attempts
@@ -439,6 +480,7 @@ class LoopController(
         inv_fps: set[str] = set()
         for attempt in attempts:
             self._recent.append(attempt)
+            self._note_channel_op_hang(attempt)
             error_class = resolve_error_class(attempt)
             meta = attempt.meta or {}
             # ``policy_failure`` (upstream block / permission) and ``contract_failure``

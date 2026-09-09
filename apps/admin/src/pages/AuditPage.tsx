@@ -229,7 +229,6 @@ export function AuditPage() {
     <Page>
       <PageHeader
         title="操作审计"
-        description="管理员特权操作记录"
         note="时间为本机时区，格式 MM-DD HH:mm"
         actions={
           <Button

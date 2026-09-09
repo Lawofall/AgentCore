@@ -36,6 +36,7 @@ from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 from agentcore.workspace.stage_dirs import REVIEWS_PREFIX
+from tests.user_face_helpers import assert_user_face_clean
 
 
 def _ctx(workspace: Path, *, agent_id: str = "a") -> ToolContext:
@@ -409,6 +410,8 @@ async def test_file_read_table_without_code_execute_omits_tool_name(tmp_path: Pa
     assert "code_execute" not in (csv.output or "")
     assert "手抄" in (xlsx.output or "")
     assert "结构报告" in (xlsx.output or "")
+    assert "列名" in (xlsx.output or "")
+    assert "结构面" not in (xlsx.output or "")
     assert "待跑" in (xlsx.output or "")
     assert "无法可靠处理" not in (xlsx.output or "")
 
@@ -914,6 +917,11 @@ async def test_str_replace_failure_does_not_change_disk(tmp_path: Path):
         ctx,
     )
     assert fail.success is False
+    assert fail.error is not None
+    assert "找不到 old_string" in fail.error
+    assert fail.failure_message == "这段内容和文件对不上，我会换个方式改。"
+    assert_user_face_clean(fail.failure_message)
+    assert "old_string" not in (fail.failure_message or "")
     assert (tmp_path / "edit.md").read_text(encoding="utf-8") == "hello world\n"
     still = await FileReadTool().execute({"path": "edit.md"}, ctx)
     assert still.success is True
@@ -1134,12 +1142,10 @@ async def test_write_allows_short_skeleton_with_section_markers(tmp_path: Path):
 
 
 def test_write_schema_does_not_teach_completeness_gates():
-    """按钮只留这是什么 + HOW；完整性硬拒不进 schema / landing。"""
-    from agentcore.runtime.skills import build_system_skill_registry
-
+    """按钮只留这是什么；完整性硬拒不进 schema。"""
     write_desc = FileWriteTool().schema.description
     assert "写入文件" in write_desc
-    assert "HOW→consult(long_form_landing)" in write_desc
+    assert "HOW→consult(long_form_landing)" not in write_desc
     assert "主路径" not in write_desc
     assert "省略标记" not in write_desc
     assert "50%" not in write_desc
@@ -1147,13 +1153,11 @@ def test_write_schema_does_not_teach_completeness_gates():
     assert "括号" not in write_desc
     assert "硬拒" not in write_desc
     assert "清参后改稿" not in write_desc
-    landing = build_system_skill_registry().get("long_form_landing")
-    assert landing is not None
-    assert "省略标记" not in landing.body
-    assert "allow_shrink" not in landing.body
-    assert "硬拒" not in landing.body
-    assert "file_append" not in landing.body
-    assert "HOW→consult(long_form_landing)" in StrReplaceTool().schema.description
+    assert "file_append" not in write_desc
+    from agentcore.runtime.skills import build_system_skill_registry
+
+    assert build_system_skill_registry().get("long_form_landing") is None
+    assert "HOW→consult(long_form_landing)" not in StrReplaceTool().schema.description
     content_desc = FileWriteTool().schema.parameters["properties"]["content"]["description"]
     assert "完整正文" in content_desc
     assert "硬拒" not in content_desc
@@ -1788,8 +1792,7 @@ async def test_file_read_missing_with_parent_gives_landmark(tmp_path: Path):
     assert result.error is not None
     assert result.error.startswith("文件不存在：apps/desktop/package.json")
     assert result.failure_code == "not_found"
-    assert result.failure_message is not None
-    assert result.failure_message.startswith("文件不存在：apps/desktop/package.json")
+    assert result.failure_message == "没找到 apps/desktop/package.json，我会换个方式继续。"
     assert result.contract_failure is True
     assert "父目录" in result.error
     assert "apps/desktop/" in result.error
@@ -1800,6 +1803,9 @@ async def test_file_read_missing_with_parent_gives_landmark(tmp_path: Path):
     assert "更宽查找" in result.error
     assert "已知路径" in result.error
     assert "反复重试" in result.error
+    assert "反复重试" not in (result.failure_message or "")
+    assert "glob" not in (result.failure_message or "")
+    assert_user_face_clean(result.failure_message or "")
 
 
 async def test_file_list_missing_with_parent_gives_landmark(tmp_path: Path):

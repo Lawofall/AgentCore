@@ -517,9 +517,9 @@ class FolderRepository:
         — no reconciliation, no retry.
 
         Only conversations this project's delete archived are un-archived, and their
-        ``updated_at`` self-assigns for the same reason the delete's does. Soft-pointers
-        cleared on delete (board ``folder_id``, bare-chat ``auto_desk_folder_id``) stay
-        cleared: the board's original owner is unrecoverable, and re-pointing a bare chat
+        ``updated_at`` self-assigns for the same reason the delete's does.         Soft-pointers
+        cleared on delete (bare-chat ``auto_desk_folder_id``) stay
+        cleared: re-pointing a bare chat
         at a resurrected desk is the ghost-workspace bug
         ``tests/integration/test_folder_unbind_auto_desk.py`` exists to prevent.
 

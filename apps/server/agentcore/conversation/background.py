@@ -1,6 +1,6 @@
 """Detached asyncio tasks for fire-and-forget work.
 
-The only intentionally shared primitive across standing_tasks, workflows, and
+The only intentionally shared primitive across workflows and
 handoff job shells. Credential / pause / result tables stay product-specific
 (see docs/02-架构/后端架构.md · 后台派活三壳).
 """

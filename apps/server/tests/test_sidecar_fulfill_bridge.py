@@ -233,6 +233,12 @@ async def _apply_cross_desk_target(
             "agentcore.runtime.delegate.target_desktop.rebuild_worker_prompt_for_target",
             new=_fake_rebuild,
         ),
+        # Seam under test is hub root declaration, not desktop liveness.
+        # ``exists .`` needs a settler this fixture does not provide.
+        patch(
+            "agentcore.runtime.delegate.target_desktop._assert_target_local_root_ready",
+            new=AsyncMock(return_value=None),
+        ),
     ):
         applied = await apply_target_desktop(
             target_folder_id="f-target",

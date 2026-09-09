@@ -7,15 +7,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.runtime.delegate.target_desktop import (
+    CONV_ID_AS_FOLDER_MSG,
     NO_TARGET_SCRATCH_GATE_MSG,
     LocalRootClaimBook,
     TargetDesktopError,
     apply_target_desktop,
+    bare_chat_local_scratch_write_ok,
     effective_target_folder_id,
     format_bare_chat_no_target_error,
     gate_bare_chat_requires_target,
+    gate_conversation_id_is_not_folder,
     load_target_folder_binding,
     resolve_bare_chat_write_scope,
     task_structurally_requires_write_desk,
@@ -54,31 +57,34 @@ def test_effective_target_folder_id_prefers_explicit():
 
 
 def test_task_structurally_requires_write_desk():
-    assert task_structurally_requires_write_desk({"task": "打招呼"}) is True
+    assert task_structurally_requires_write_desk({"task": "打招呼"}) is False
     assert task_structurally_requires_write_desk(
         {"deliverable": {"form": "prose"}}
     ) is False
-    assert task_structurally_requires_write_desk({"deliverable": {}}) is True
+    assert task_structurally_requires_write_desk({"deliverable": {}}) is False
     assert task_structurally_requires_write_desk(
         {"deliverable": {"form": "files"}}
-    ) is True
+    ) is False
     assert task_structurally_requires_write_desk(
         {"deliverable": {"form": "workspace"}}
-    ) is True
+    ) is False
     assert task_structurally_requires_write_desk(
         {"deliverable": {"requires_files": True}}
-    ) is True
+    ) is False
     assert task_structurally_requires_write_desk(
         {"deliverable": {"requires_files": False}}
-    ) is True
+    ) is False
     assert task_structurally_requires_write_desk(
         {"deliverable": {"artifacts": ["a.py"]}}
     ) is True
     assert task_structurally_requires_write_desk(
         {"deliverable": {"artifacts": ["  ", ""]}}
-    ) is True
+    ) is False
     assert task_structurally_requires_write_desk(
         {"deliverable": {"artifacts": []}}
+    ) is False
+    assert task_structurally_requires_write_desk(
+        {"deliverable": {"artifact_dir": "docs"}}
     ) is True
 
 
@@ -142,17 +148,72 @@ def test_resolve_bare_chat_write_scope():
         )
         == "project"
     )
+    assert (
+        resolve_bare_chat_write_scope(
+            target_folder_id=None,
+            session_folder_id=None,
+            base_write_scope="none",
+            allow_local_scratch_write=True,
+        )
+        == "project"
+    )
+    assert (
+        resolve_bare_chat_write_scope(
+            target_folder_id=None,
+            session_folder_id=None,
+            base_write_scope="explore_memory",
+            allow_local_scratch_write=True,
+        )
+        == "project"
+    )
+
+
+def test_bare_chat_local_scratch_write_ok():
+    local = SimpleNamespace(location="local")
+    cloud = SimpleNamespace(location="server")
+    assert (
+        bare_chat_local_scratch_write_ok(
+            session_folder_id=None, backend=local
+        )
+        is True
+    )
+    assert (
+        bare_chat_local_scratch_write_ok(
+            session_folder_id="birth", backend=local
+        )
+        is False
+    )
+    assert (
+        bare_chat_local_scratch_write_ok(
+            session_folder_id=None, backend=cloud
+        )
+        is False
+    )
+    multi = SimpleNamespace(_seen={"a", "b"}, folder_id=None)
+    assert (
+        bare_chat_local_scratch_write_ok(
+            session_folder_id=None, backend=local, turn_target_desk=multi
+        )
+        is False
+    )
+    unique = SimpleNamespace(_seen={"a"}, folder_id="a")
+    assert (
+        bare_chat_local_scratch_write_ok(
+            session_folder_id=None, backend=local, turn_target_desk=unique
+        )
+        is True
+    )
 
 
 def test_gate_bare_chat_blocks_write_deliverable_without_target():
-    """纯闸：无目标 + form=files → 拒（ensure 未跑时的残余拒文案）。"""
+    """纯闸：无目标 + 钉路径 → 拒（ensure 未跑时的残余拒文案）。"""
     msg = gate_bare_chat_requires_target(
         session_folder_id=None,
         tasks_raw=[
             {
                 "role": "工",
                 "task": "写文件勿泄露正文",
-                "deliverable": {"form": "files"},
+                "deliverable": {"artifacts": ["out.md"]},
             }
         ],
     )
@@ -168,14 +229,77 @@ def test_gate_bare_chat_blocks_write_deliverable_without_target():
     assert "写文件勿泄露正文" not in msg
 
 
-def test_gate_bare_chat_allows_prose_only():
-    """仅显式 form=prose 免写桌；漏填 / 无 deliverable 须写桌。"""
+def test_gate_bare_chat_allows_local_scratch_write():
+    assert (
+        gate_bare_chat_requires_target(
+            session_folder_id=None,
+            tasks_raw=[
+                {
+                    "role": "工",
+                    "deliverable": {"artifacts": ["index.html"]},
+                }
+            ],
+            allow_local_scratch_write=True,
+        )
+        is None
+    )
+    # Multi-folder same turn: caller must not pass the flag.
+    assert (
+        gate_bare_chat_requires_target(
+            session_folder_id=None,
+            tasks_raw=[
+                {
+                    "role": "甲",
+                    "deliverable": {"artifacts": ["a.md"]},
+                }
+            ],
+            allow_local_scratch_write=False,
+        )
+        is not None
+    )
+
+
+def test_gate_conversation_id_is_not_a_folder():
+    cid = "82b9ff66-363d-4882-b52c-d74763537664"
+    assert (
+        gate_conversation_id_is_not_folder(
+            conversation_id=cid,
+            tasks_raw=[{"role": "工", "target_folder_id": cid}],
+        )
+        == CONV_ID_AS_FOLDER_MSG
+    )
+    assert (
+        gate_conversation_id_is_not_folder(
+            conversation_id=cid,
+            tasks_raw=[{"role": "工", "target_folder_id": "real-folder"}],
+        )
+        is None
+    )
+    assert (
+        gate_conversation_id_is_not_folder(
+            conversation_id=cid,
+            tasks_raw=[{"role": "工"}],
+            default_target_folder_id=cid,
+        )
+        == CONV_ID_AS_FOLDER_MSG
+    )
+    assert (
+        gate_conversation_id_is_not_folder(
+            conversation_id=None,
+            tasks_raw=[{"role": "工", "target_folder_id": cid}],
+        )
+        is None
+    )
+
+
+def test_gate_bare_chat_allows_when_not_landing():
+    """省略 / leftover form / 无 deliverable = 不催写盘，免写桌。"""
     assert (
         gate_bare_chat_requires_target(
             session_folder_id=None,
             tasks_raw=[{"role": "客服", "task": "打招呼"}],
         )
-        is not None
+        is None
     )
     assert (
         gate_bare_chat_requires_target(
@@ -201,18 +325,18 @@ def test_gate_bare_chat_lists_all_missing_write_targets():
                 "role": "甲",
                 "task": "有目标正文勿泄露",
                 "target_folder_id": "proj_a",
-                "deliverable": {"form": "files"},
+                "deliverable": {"artifacts": ["out.md"]},
             },
             {
                 "id": "n2",
                 "role": "乙",
                 "task": "缺目标的长任务说明不应出现",
-                "deliverable": {"form": "files"},
+                "deliverable": {"artifacts": ["out.md"]},
             },
             {
                 "role": "丙",
                 "task": "也缺写盘",
-                "deliverable": {"form": "files"},
+                "deliverable": {"artifacts": ["out.md"]},
             },
             {"role": "丁", "task": "纯对话不进拒名单", "deliverable": {"form": "prose"}},
         ],
@@ -234,12 +358,12 @@ def test_gate_bare_chat_lists_all_missing_write_targets():
                 "id": "n2",
                 "role": "乙",
                 "task": "缺目标的长任务说明不应出现",
-                "deliverable": {"form": "files"},
+                "deliverable": {"artifacts": ["out.md"]},
             },
             {
                 "role": "丙",
                 "task": "也缺写盘",
-                "deliverable": {"form": "files"},
+                "deliverable": {"artifacts": ["out.md"]},
             },
         ]
     )
@@ -254,7 +378,7 @@ def test_gate_bare_chat_allows_with_target():
                     "role": "工",
                     "task": "写",
                     "target_folder_id": "proj_a",
-                    "deliverable": {"form": "files"},
+                    "deliverable": {"artifacts": ["out.md"]},
                 }
             ],
         )
@@ -280,7 +404,7 @@ def test_gate_birth_allows_omit_target():
         gate_bare_chat_requires_target(
             session_folder_id="birth",
             tasks_raw=[
-                {"role": "工", "task": "写", "deliverable": {"form": "files"}}
+                {"role": "工", "task": "写", "deliverable": {"artifacts": ["out.md"]}}
             ],
         )
         is None
@@ -292,7 +416,7 @@ def test_gate_bare_inherits_default_target():
         gate_bare_chat_requires_target(
             session_folder_id=None,
             tasks_raw=[
-                {"role": "子", "task": "续", "deliverable": {"form": "files"}}
+                {"role": "子", "task": "续", "deliverable": {"artifacts": ["out.md"]}}
             ],
             default_target_folder_id="parent_desk",
         )
@@ -437,6 +561,101 @@ async def test_apply_target_desktop_switches_backend_and_memory():
     assert applied.tool_ctx.backend is target_backend
     assert applied.tool_ctx.shared_workspace is True
     assert applied.target_folder_id == "target_f"
+
+
+@pytest.mark.asyncio
+async def test_apply_target_desktop_local_root_unauthorized_fails_before_react():
+    """Sit on a local folder whose desktop root is gone → worker fails at prepare."""
+    from agentcore.workspace.protocol import WorkspaceIOError
+
+    async def _denied(_op, _args, **_kwargs):
+        raise WorkspaceIOError("本地目录未授权或已移除")
+
+    target_backend = SimpleNamespace(
+        location="local",
+        _channel=SimpleNamespace(request=_denied, root_id="stale-root"),
+    )
+    ctx = ToolContext.create(
+        execution_id="e",
+        run_id="r",
+        agent_id="a",
+        backend=SimpleNamespace(location="local", _channel=None),  # type: ignore[arg-type]
+        user_id="u1",
+        conversation_id="c1",
+    )
+    binding = SimpleNamespace(
+        folder_id="local_a",
+        rel_path="local_a",
+        name="本地A",
+        local_binding=LocalBinding(root_id="stale-root", root_label="A"),
+    )
+    with (
+        patch(
+            "agentcore.runtime.delegate.target_desktop.load_target_folder_binding",
+            new=AsyncMock(return_value=binding),
+        ),
+        patch(
+            "agentcore.runtime.delegate.target_desktop.build_target_backend",
+            return_value=target_backend,
+        ),
+        pytest.raises(TargetDesktopError, match="不存在或无权"),
+    ):
+        await apply_target_desktop(
+            target_folder_id="local_a",
+            session_folder_id=None,
+            env_system_prompt="P",
+            base_tool_context=ctx,
+            worker_tools=ToolRegistry(),
+            sink=MagicMock(),
+            local_root_claims=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_apply_target_desktop_local_root_ping_timeout_fails_before_react():
+    from agentcore.workspace.protocol import WorkspaceIOError
+
+    async def _hang(_op, _args, **_kwargs):
+        raise WorkspaceIOError("local workspace op 'exists' timed out（活性挂起）")
+
+    target_backend = SimpleNamespace(
+        location="local",
+        _channel=SimpleNamespace(request=_hang, root_id="hung-root"),
+    )
+    ctx = ToolContext.create(
+        execution_id="e",
+        run_id="r",
+        agent_id="a",
+        backend=SimpleNamespace(location="local", _channel=None),  # type: ignore[arg-type]
+        user_id="u1",
+        conversation_id="c1",
+    )
+    binding = SimpleNamespace(
+        folder_id="local_hang",
+        rel_path="local_hang",
+        name="卡住",
+        local_binding=LocalBinding(root_id="hung-root", root_label="H"),
+    )
+    with (
+        patch(
+            "agentcore.runtime.delegate.target_desktop.load_target_folder_binding",
+            new=AsyncMock(return_value=binding),
+        ),
+        patch(
+            "agentcore.runtime.delegate.target_desktop.build_target_backend",
+            return_value=target_backend,
+        ),
+        pytest.raises(TargetDesktopError, match="本机通道无响应"),
+    ):
+        await apply_target_desktop(
+            target_folder_id="local_hang",
+            session_folder_id=None,
+            env_system_prompt="P",
+            base_tool_context=ctx,
+            worker_tools=ToolRegistry(),
+            sink=MagicMock(),
+            local_root_claims=None,
+        )
 
 
 @pytest.mark.asyncio
@@ -752,7 +971,7 @@ class _NamedTool:
             name=self._name,
             description="t",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.EXECUTION,
+            face=ToolFace.EXECUTION,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
@@ -1016,7 +1235,7 @@ async def test_delegate_execute_bare_chat_auto_provisions(monkeypatch):
                 {
                     "role": "工",
                     "task": "写 README",
-                    "deliverable": {"form": "files"},
+                    "deliverable": {"artifacts": ["out.md"]},
                 }
             ]
         },
@@ -1049,7 +1268,7 @@ async def test_ensure_bare_chat_auto_cloud_desk_skips_when_hint_exists(monkeypat
     hint.note_folder("existing")
     out = await ensure_bare_chat_auto_cloud_desk(
         session_folder_id=None,
-        tasks_raw=[{"role": "工", "deliverable": {"form": "files"}}],
+        tasks_raw=[{"role": "工", "deliverable": {"artifacts": ["out.md"]}}],
         default_target_folder_id="existing",
         turn_target_desk=hint,
         user_id="u1",
@@ -1079,7 +1298,7 @@ async def test_ensure_bare_chat_auto_cloud_desk_skips_local_workspace(monkeypatc
     hint = TurnTargetDeskHint()
     out = await ensure_bare_chat_auto_cloud_desk(
         session_folder_id=None,
-        tasks_raw=[{"role": "工", "deliverable": {"form": "files"}}],
+        tasks_raw=[{"role": "工", "deliverable": {"artifacts": ["out.md"]}}],
         default_target_folder_id=None,
         turn_target_desk=hint,
         user_id="u1",
@@ -1171,7 +1390,7 @@ async def test_ensure_bare_chat_auto_cloud_desk_persists_on_first_mint(monkeypat
     sink = _RecordingSink()
     out = await ensure_bare_chat_auto_cloud_desk(
         session_folder_id=None,
-        tasks_raw=[{"role": "工", "deliverable": {"form": "files"}}],
+        tasks_raw=[{"role": "工", "deliverable": {"artifacts": ["out.md"]}}],
         default_target_folder_id=None,
         turn_target_desk=hint,
         user_id="u1",
@@ -1234,7 +1453,7 @@ async def test_ensure_bare_chat_auto_cloud_desk_reuses_persisted(monkeypatch):
     sink = _RecordingSink()
     out = await ensure_bare_chat_auto_cloud_desk(
         session_folder_id=None,
-        tasks_raw=[{"role": "工", "deliverable": {"form": "files"}}],
+        tasks_raw=[{"role": "工", "deliverable": {"artifacts": ["out.md"]}}],
         default_target_folder_id=None,
         turn_target_desk=hint,
         user_id="u1",
@@ -1281,7 +1500,7 @@ async def test_ensure_bare_chat_explicit_target_skips_persist_reuse(monkeypatch)
         tasks_raw=[
             {
                 "role": "工",
-                "deliverable": {"form": "files"},
+                "deliverable": {"artifacts": ["out.md"]},
                 "target_folder_id": "explicit-target",
             }
         ],
@@ -1321,7 +1540,7 @@ async def test_ensure_bare_chat_birth_session_skips_auto_desk(monkeypatch):
     hint = TurnTargetDeskHint()
     out = await ensure_bare_chat_auto_cloud_desk(
         session_folder_id="birth-project",
-        tasks_raw=[{"role": "工", "deliverable": {"form": "files"}}],
+        tasks_raw=[{"role": "工", "deliverable": {"artifacts": ["out.md"]}}],
         default_target_folder_id=None,
         turn_target_desk=hint,
         user_id="u1",
@@ -1409,7 +1628,7 @@ async def test_ensure_bare_chat_race_loser_reclaims_orphan_mint(monkeypatch):
     sink = _RecordingSink()
     out = await ensure_bare_chat_auto_cloud_desk(
         session_folder_id=None,
-        tasks_raw=[{"role": "工", "deliverable": {"form": "files"}}],
+        tasks_raw=[{"role": "工", "deliverable": {"artifacts": ["out.md"]}}],
         default_target_folder_id=None,
         turn_target_desk=hint,
         user_id="u1",
@@ -1483,7 +1702,7 @@ async def test_ensure_bare_chat_dead_pointer_remints_after_bind_miss(monkeypatch
     )
     out = await ensure_bare_chat_auto_cloud_desk(
         session_folder_id=None,
-        tasks_raw=[{"role": "工", "deliverable": {"form": "files"}}],
+        tasks_raw=[{"role": "工", "deliverable": {"artifacts": ["out.md"]}}],
         default_target_folder_id=None,
         turn_target_desk=hint,
         user_id="u1",

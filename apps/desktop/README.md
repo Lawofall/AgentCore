@@ -17,7 +17,7 @@
 | 布局、协作图、检查点 UX | [`前端 UX 设计`](../../docs/04-前端/前端UX设计.md) |
 | 云+本地工作区 | [`双模式工作区`](../../docs/02-架构/双模式工作区.md) |
 | clone 后跑通 | [`本地开发`](../../docs/02-架构/本地开发.md) |
-| 离线回放 AI 态 / 截图自检 | `.cursor/rules/frontend-preview.mdc`（AI How，贡献者可不读）；入口见本地开发 §3 |
+| 离线回放 AI 态 / 渲染冒烟 | `.cursor/rules/frontend-preview.mdc`（AI How，贡献者可不读；改完默认仍是点名 vitest）；入口见本地开发 §3 |
 
 ## 目录速览
 
@@ -49,7 +49,7 @@ pnpm -C apps/desktop dev
 | 命令 | 作用 |
 |------|------|
 | `pnpm -C apps/desktop dev:web` | 纯浏览器跑渲染层（无 Electron，便于 UI 迭代） |
-| `pnpm -C apps/desktop shoot` | 无头截图自检 |
+| `pnpm -C apps/desktop shoot` | 无头渲染冒烟（需要对画面 / 发布门禁；非改完默认） |
 | `pnpm -C apps/desktop shoot:graph-probe` | 协作图视口探针 |
 | `pnpm -C apps/desktop shoot:graph-perf` | 协作图离线掉帧探针（`#/preview`） |
 | `pnpm -C apps/desktop shoot:graph-perf-live` | 协作图**实时**掉帧探针（CDP 连正在跑的 dev 应用） |

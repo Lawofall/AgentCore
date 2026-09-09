@@ -2,7 +2,7 @@
 
 import pytest
 
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
 from agentcore.runtime.engine.constants import (
     FINALIZE_COORDINATION_TOOLS,
@@ -49,9 +49,9 @@ class _ScriptedProvider:
 
 
 class _StubTool:
-    def __init__(self, name: str, *, category: ToolCategory = ToolCategory.SEARCH) -> None:
+    def __init__(self, name: str, *, face: ToolFace = ToolFace.SEARCH) -> None:
         self._name = name
-        self._category = category
+        self._face = face
 
     @property
     def schema(self) -> ToolSchema:
@@ -59,7 +59,7 @@ class _StubTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=self._category,
+            face=self._face,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
@@ -68,13 +68,13 @@ class _StubTool:
 
 def _registry(*, with_persist: bool = False) -> ToolRegistry:
     reg = ToolRegistry()
-    reg.register(_StubTool("file_read", category=ToolCategory.FILESYSTEM))
-    reg.register(_StubTool("delegate", category=ToolCategory.ORCHESTRATION))
-    reg.register(_StubTool("consult", category=ToolCategory.ORCHESTRATION))
-    reg.register(_StubTool("ask_user", category=ToolCategory.INTERACTION))
+    reg.register(_StubTool("file_read", face=ToolFace.FILE))
+    reg.register(_StubTool("delegate", face=ToolFace.ORCHESTRATION))
+    reg.register(_StubTool("consult", face=ToolFace.ORCHESTRATION))
+    reg.register(_StubTool("ask_user", face=ToolFace.ORCHESTRATION))
     if with_persist:
-        reg.register(_StubTool("file_write", category=ToolCategory.FILESYSTEM))
-        reg.register(_StubTool("handoff", category=ToolCategory.ORCHESTRATION))
+        reg.register(_StubTool("file_write", face=ToolFace.FILE))
+        reg.register(_StubTool("handoff", face=ToolFace.ORCHESTRATION))
     return reg
 
 
@@ -89,8 +89,10 @@ def test_resolve_finalize_coordination_tools_filters_to_allowlist():
 def test_files_form_force_finalize_surface_keeps_file_write_and_handoff():
     """form=files / artifacts：force_finalize 工具面含 file_write+handoff。"""
     reg = _registry(with_persist=True)
-    assert finalize_allows_persist(reg, None) is True
-    defs = resolve_finalize_coordination_tools(reg, None, set())
+    assert finalize_allows_persist(reg, None, expects_landing=True) is True
+    defs = resolve_finalize_coordination_tools(
+        reg, None, set(), expects_landing=True
+    )
     names = {d["function"]["name"] for d in (defs or [])}
     assert names >= FINALIZE_PERSIST_TOOLS
     assert "file_write" in names
@@ -105,10 +107,10 @@ def test_files_form_force_finalize_surface_keeps_file_write_and_handoff():
     assert "file_write" not in prose_names
     # files_expected + narrow allowlist missing write → still persist (催写补授权)
     narrow = ["file_read", "grep", "handoff"]
-    assert finalize_allows_persist(reg, narrow, files_expected=True) is True
-    assert finalize_allows_persist(reg, narrow, files_expected=True, form_prose=True) is False
+    assert finalize_allows_persist(reg, narrow, files_expected=True, expects_landing=True) is True
+    assert finalize_allows_persist(reg, narrow, files_expected=True, expects_landing=False) is False
     narrow_defs = resolve_finalize_coordination_tools(
-        reg, narrow, set(), files_expected=True
+        reg, narrow, set(), files_expected=True, expects_landing=True
     )
     narrow_names = {d["function"]["name"] for d in (narrow_defs or [])}
     assert "file_write" in narrow_names
@@ -184,6 +186,7 @@ async def test_channel_dead_finalize_round_uses_coordination_instruction_not_fil
         disabled_tools=set(),
         emit_content=lambda _d: None,
         emit_reasoning=lambda _d: None,
+        expects_landing=True,
     )
     assert result.kind == "answer"
     assert "file_write" in (provider.last_tool_names or [])

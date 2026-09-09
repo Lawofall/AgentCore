@@ -545,7 +545,7 @@ function foldCeoLeadInThenTeam() {
     {
       id: "c1",
       name: "consult",
-      args: { name: "team_orchestration_advanced" },
+      args: { name: "staffing" },
     },
     { id: "c2", name: "list_folders", args: {} },
     {
@@ -600,7 +600,7 @@ describe("协作图下重复工具 · 同一批 tool_use_start 再折", () => {
       startPayload({
         tool_call_id: "c1",
         tool_name: "consult",
-        arguments: { name: "team_orchestration_advanced" },
+        arguments: { name: "staffing" },
       }),
     );
     lane = foldToolUseStart(

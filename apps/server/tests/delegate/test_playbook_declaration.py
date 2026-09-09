@@ -537,6 +537,7 @@ def test_software_greenfield_named_build_app_unknown():
     assert "未知" in err
     assert "手写" in err
     assert "不要再传" in err
+    assert "consult(staffing)" not in err
     assert "consult(team_orchestration_advanced)" not in err
     assert "绿场推荐" not in err
     assert "绿场软件推荐" not in err

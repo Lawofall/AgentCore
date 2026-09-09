@@ -157,7 +157,7 @@ async def test_single_worker_section_miss_still_folds_to_ceo():
 
 
 def test_should_auto_light_delegate():
-    assert not delegate_prelude_mod._should_auto_light_delegate(
+    assert delegate_prelude_mod._should_auto_light_delegate(
         [{"role": "工程师", "task": "做A"}]
     )
     assert delegate_prelude_mod._should_auto_light_delegate(
@@ -780,23 +780,25 @@ def test_schema_cues_xor_and_top_level_completion_criteria():
 
 
 def test_ceo_deliverable_schema_omits_internal_qa_knobs():
-    """派活单三档：CEO 只见 form+artifacts；strict 等内部闸不进填参面。"""
+    """CEO 只见 artifacts；strict 等内部闸不进填参面。"""
     t = tool(Provider([]))
     deliverable_props = t.schema.parameters["properties"]["tasks"]["items"]["properties"][
         "deliverable"
     ]
     props = deliverable_props["properties"]
-    assert "form" in props and "artifacts" in props
+    assert "artifacts" in props
+    assert "form" not in props
     for banned in ("strict", "required_sections", "output_format", "citation_mode"):
         assert banned not in props
-    assert "【看】" in props["form"]["description"]
-    assert "team_orchestration_advanced" in t.schema.description
+    assert "用户点名" in props["artifacts"]["description"] or "流水线" in props["artifacts"]["description"]
+    assert "staffing" in t.schema.description
 
 
 def test_nested_delegate_description_points_at_lead_subteam():
     t = tool(Provider([]))
-    assert "HOW→consult(team_orchestration_advanced)" in t.schema.description
+    assert "HOW→consult(staffing)" in t.schema.description
     t._depth = 1
     assert "HOW→consult(lead_subteam)" in t.schema.description
     assert "等到子队收工" in t.schema.description
+    assert "staffing" not in t.schema.description
     assert "team_orchestration_advanced" not in t.schema.description

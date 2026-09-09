@@ -97,6 +97,7 @@ def test_stream_path_reason_for_log_allowlists() -> None:
     assert stream_path_reason_for_log("not-a-reason") is None
     assert stream_path_reason_for_log("probe_unhealthy") == "probe_unhealthy"
     assert stream_path_reason_for_log("  Probe_Unhealthy  ") == "probe_unhealthy"
+    assert stream_path_reason_for_log("occupy_failed") == "occupy_failed"
 
 
 async def test_middleware_binds_stream_path_reason_when_allowlisted() -> None:

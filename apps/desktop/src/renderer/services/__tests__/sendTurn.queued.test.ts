@@ -226,6 +226,32 @@ describe("sendTurn — Class B 零产出回滚（流 resolve）", () => {
     expect(rt.error).toBeTruthy();
   });
 
+  it("流 resolve + 空助手 LOCAL_ROOT_NOT_HELD → 回滚 idle", async () => {
+    streamMock.mockImplementation(async (opts) => {
+      reportCommitted(opts);
+      persistEmptyAssistantFailure({ code: "LOCAL_ROOT_NOT_HELD" });
+    });
+
+    const result = await sendTurn(spec());
+
+    expect(result.unstartedRefusal).toBe(true);
+    expect(getRuntime(CID).messages).toHaveLength(0);
+    expect(getRuntime(CID).turnPhase).toBe("idle");
+  });
+
+  it("流 resolve + 空助手 STREAM_ERROR → 不回滚", async () => {
+    streamMock.mockImplementation(async (opts) => {
+      reportCommitted(opts);
+      persistEmptyAssistantFailure({ code: "STREAM_ERROR" });
+    });
+
+    const result = await sendTurn(spec());
+
+    expect(result.unstartedRefusal).toBe(false);
+    expect(getRuntime(CID).messages.some((m) => m.role === "user")).toBe(true);
+    expect(getRuntime(CID).turnPhase).toBe("failed");
+  });
+
   it("已换 id 但传输未报告提交 → 不按 Class B 回滚", async () => {
     streamMock.mockImplementation(async () => {
       persistEmptyAssistantFailure();

@@ -1,7 +1,7 @@
 /**
  * User workflows REST client (定案 §10.6 / §10.7 / §10.8).
  *
- * Wire shapes hand-written; domain stays camelCase like `standingTasks`.
+ * Wire shapes hand-written (camelCase), aligned with OpenAPI; do not gen:types.
  * Official templates: GET /v1/workflow-playbook-templates；复制:
  * POST /v1/workflows/from-playbook. Templates 404/501 → empty list (UI hides section).
  * Slot definitions come from the backend catalog only — no local replica.
@@ -22,6 +22,72 @@ import {
   parseWorkflowSource,
 } from "@/services/workflowSource";
 
+/** Built-in schedule presets (UI + PUT trigger). Custom uses `cron`. */
+export type SchedulePreset =
+  | "daily"
+  | "weekdays"
+  | "weekly_mon"
+  | "weekly_fri"
+  | "monthly_1"
+  | "custom";
+
+export type TriggerKind = "schedule" | "webhook";
+
+export const SCHEDULE_PRESET_ORDER: SchedulePreset[] = [
+  "daily",
+  "weekdays",
+  "weekly_mon",
+  "weekly_fri",
+  "monthly_1",
+  "custom",
+];
+
+export const SCHEDULE_PRESET_LABELS: Record<SchedulePreset, string> = {
+  daily: "每天",
+  weekdays: "工作日",
+  weekly_mon: "每周一",
+  weekly_fri: "每周五",
+  monthly_1: "每月 1 日",
+  custom: "自定义 cron",
+};
+
+export const TRIGGER_KIND_ORDER: TriggerKind[] = ["schedule", "webhook"];
+
+export const TRIGGER_KIND_LABELS: Record<TriggerKind, string> = {
+  schedule: "定时",
+  webhook: "Webhook",
+};
+
+export interface WorkflowTrigger {
+  kind: TriggerKind;
+  schedulePreset: SchedulePreset | null;
+  cron: string | null;
+  folderId: string;
+  enabled: boolean;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastError: string | null;
+  webhookId: string | null;
+  /** Relative path, e.g. `/v1/hooks/workflows/{webhook_id}`. */
+  webhookUrl: string | null;
+  /** One-shot plaintext; only on PUT / rotate responses. */
+  webhookSecret: string | null;
+}
+
+export interface PutWorkflowTriggerInput {
+  kind: TriggerKind;
+  folderId: string;
+  enabled?: boolean;
+  schedulePreset?: SchedulePreset;
+  cron?: string | null;
+}
+
+export interface RotateWorkflowSecretResult {
+  webhookSecret: string;
+  webhookUrl: string | null;
+  webhookId: string | null;
+}
+
 export interface UserWorkflow {
   id: string;
   name: string;
@@ -29,6 +95,8 @@ export interface UserWorkflow {
   definition: WorkflowDefinition;
   /** 出处（服务端权威字段，见 workflowSource.ts）；`null` = 不是固化来的。 */
   source: WorkflowSource | null;
+  /** Clock / webhook; `null` / omitted = 只手点「跑一次」。 */
+  trigger?: WorkflowTrigger | null;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -94,6 +162,22 @@ export interface FromPlaybookInput {
 }
 
 /** Wire: snake_case — mirrors OpenAPI. */
+/** Wire: nested `trigger` on GET/PATCH WorkflowSummary. */
+export interface WorkflowTriggerWire {
+  kind?: string | null;
+  trigger_kind?: string | null;
+  schedule_preset?: string | null;
+  cron?: string | null;
+  folder_id?: string | null;
+  enabled?: boolean;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  last_error?: string | null;
+  webhook_id?: string | null;
+  webhook_url?: string | null;
+  webhook_secret?: string | null;
+}
+
 export interface UserWorkflowWire {
   id: string;
   name: string;
@@ -101,9 +185,16 @@ export interface UserWorkflowWire {
   definition: unknown;
   /** `WorkflowSummary` 顶层的出处；definition 里的同名键不再是它。 */
   source?: unknown;
+  trigger?: WorkflowTriggerWire | null;
   version: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface RotateWorkflowSecretWire {
+  webhook_secret?: string | null;
+  webhook_url?: string | null;
+  webhook_id?: string | null;
 }
 
 /** Wire: GET /v1/workflow-playbook-templates item. */
@@ -129,6 +220,63 @@ export interface WorkflowTemplateWire {
   slots?: WorkflowTemplateSlotWire[];
 }
 
+function asPreset(raw: string | null | undefined): SchedulePreset | null {
+  if (!raw) return null;
+  return (SCHEDULE_PRESET_ORDER as string[]).includes(raw)
+    ? (raw as SchedulePreset)
+    : "custom";
+}
+
+function asTriggerKind(raw: string | null | undefined): TriggerKind {
+  return raw === "webhook" ? "webhook" : "schedule";
+}
+
+/** Display / copy as a relative path; never absolutize. */
+export function relativeWebhookUrl(
+  raw: string | null | undefined,
+  webhookId?: string | null,
+): string | null {
+  if (raw) {
+    if (/^https?:\/\//i.test(raw)) {
+      try {
+        return new URL(raw).pathname || null;
+      } catch {
+        const path = raw.replace(/^https?:\/\/[^/]+/i, "");
+        return path.startsWith("/") ? path : `/${path}`;
+      }
+    }
+    return raw.startsWith("/") ? raw : `/${raw}`;
+  }
+  const id = webhookId?.trim();
+  if (!id) return null;
+  return `/v1/hooks/workflows/${encodeURIComponent(id)}`;
+}
+
+export function toWorkflowTrigger(
+  raw: WorkflowTriggerWire | null | undefined,
+): WorkflowTrigger | null {
+  if (!raw || typeof raw !== "object") return null;
+  const kind = asTriggerKind(raw.kind ?? raw.trigger_kind);
+  const webhookId = raw.webhook_id ?? null;
+  const lastError = raw.last_error?.trim() || null;
+  return {
+    kind,
+    schedulePreset: asPreset(raw.schedule_preset),
+    cron: raw.cron ?? null,
+    folderId: raw.folder_id ?? "",
+    enabled: raw.enabled !== false,
+    nextRunAt: raw.next_run_at ?? null,
+    lastRunAt: raw.last_run_at ?? null,
+    lastError,
+    webhookId,
+    webhookUrl:
+      kind === "webhook"
+        ? relativeWebhookUrl(raw.webhook_url, webhookId)
+        : null,
+    webhookSecret: raw.webhook_secret ?? null,
+  };
+}
+
 export function toUserWorkflow(w: UserWorkflowWire): UserWorkflow {
   return {
     id: w.id,
@@ -136,10 +284,61 @@ export function toUserWorkflow(w: UserWorkflowWire): UserWorkflow {
     description: w.description ?? null,
     definition: parseWorkflowDefinition(w.definition),
     source: parseWorkflowSource(w.source),
+    trigger: toWorkflowTrigger(w.trigger),
     version: w.version,
     createdAt: w.created_at,
     updatedAt: w.updated_at,
   };
+}
+
+/**
+ * Parse UTC daily cron ``M H * * *`` → local wall-clock hour/minute.
+ * Falls back to 09:00 local when the expression is missing or not daily.
+ */
+export function localHmFromUtcCron(cron: string | null | undefined): {
+  hour: number;
+  minute: number;
+} {
+  const m = cron?.trim().match(/^(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+\*$/);
+  if (!m) return { hour: 9, minute: 0 };
+  const utcMin = Number(m[1]);
+  const utcHour = Number(m[2]);
+  if (
+    !Number.isFinite(utcMin) ||
+    !Number.isFinite(utcHour) ||
+    utcMin < 0 ||
+    utcMin > 59 ||
+    utcHour < 0 ||
+    utcHour > 23
+  ) {
+    return { hour: 9, minute: 0 };
+  }
+  const d = new Date();
+  d.setUTCHours(utcHour, utcMin, 0, 0);
+  return { hour: d.getHours(), minute: d.getMinutes() };
+}
+
+/** Local hour/minute → UTC daily cron ``M H * * *``. */
+export function utcCronFromLocalHm(hour: number, minute: number): string {
+  const h = Math.max(0, Math.min(23, Math.floor(hour)));
+  const min = Math.max(0, Math.min(59, Math.floor(minute)));
+  const d = new Date();
+  d.setHours(h, min, 0, 0);
+  return `${d.getUTCMinutes()} ${d.getUTCHours()} * * *`;
+}
+
+/** Row subtitle for an attached trigger. */
+export function triggerSummary(
+  trigger: WorkflowTrigger | null | undefined,
+): string | null {
+  if (!trigger) return null;
+  if (trigger.kind === "webhook") return TRIGGER_KIND_LABELS.webhook;
+  if (trigger.schedulePreset && trigger.schedulePreset !== "custom") {
+    return SCHEDULE_PRESET_LABELS[trigger.schedulePreset];
+  }
+  if (trigger.cron) return trigger.cron;
+  if (trigger.schedulePreset === "custom") return "自定义";
+  return TRIGGER_KIND_LABELS.schedule;
 }
 
 function toTemplateSlotChoice(
@@ -265,12 +464,77 @@ export async function suggestWorkflowSlots(id: string): Promise<UserWorkflow> {
   return toUserWorkflow(res);
 }
 
-/** Lightweight list for standing-task binder (id + name only). */
-export async function listWorkflowOptions(): Promise<
-  Array<{ id: string; name: string }>
-> {
-  const list = await listWorkflows();
-  return list.map((w) => ({ id: w.id, name: w.name }));
+function putTriggerBody(
+  input: PutWorkflowTriggerInput,
+): Record<string, unknown> {
+  const kind = input.kind;
+  const body: Record<string, unknown> = {
+    kind,
+    folder_id: input.folderId,
+    enabled: input.enabled ?? true,
+  };
+  if (kind === "schedule") {
+    const preset = input.schedulePreset ?? "weekly_mon";
+    body.schedule_preset = preset;
+    if (preset === "custom") {
+      body.cron = input.cron ?? null;
+    }
+  }
+  return body;
+}
+
+/** Attach or replace the clock / webhook. Response is the workflow with `trigger`. */
+export async function putWorkflowTrigger(
+  id: string,
+  input: PutWorkflowTriggerInput,
+): Promise<UserWorkflow> {
+  const res = await api.put<UserWorkflowWire>(
+    `/v1/workflows/${encodeURIComponent(id)}/trigger`,
+    putTriggerBody(input),
+  );
+  return toUserWorkflow(res);
+}
+
+/** Clear the trigger. Prefers a workflow payload; otherwise re-GETs. */
+export async function deleteWorkflowTrigger(id: string): Promise<UserWorkflow> {
+  const res = await api.delete<UserWorkflowWire | { status?: string }>(
+    `/v1/workflows/${encodeURIComponent(id)}/trigger`,
+  );
+  if (
+    res &&
+    typeof res === "object" &&
+    "id" in res &&
+    typeof res.id === "string"
+  ) {
+    return toUserWorkflow(res as UserWorkflowWire);
+  }
+  return getWorkflow(id);
+}
+
+/**
+ * Rotate webhook secret. Plaintext `webhook_secret` is returned once.
+ * Path: POST /v1/workflows/{id}/trigger/rotate-secret
+ */
+export async function rotateWorkflowTriggerSecret(
+  id: string,
+): Promise<RotateWorkflowSecretResult> {
+  const res = await api.post<RotateWorkflowSecretWire & UserWorkflowWire>(
+    `/v1/workflows/${encodeURIComponent(id)}/trigger/rotate-secret`,
+    {},
+  );
+  const secret = res?.webhook_secret;
+  if (!secret) {
+    throw new Error("rotate-secret response missing webhook_secret");
+  }
+  const webhookId = res.webhook_id ?? res.trigger?.webhook_id ?? null;
+  return {
+    webhookSecret: secret,
+    webhookUrl: relativeWebhookUrl(
+      res.webhook_url ?? res.trigger?.webhook_url,
+      webhookId,
+    ),
+    webhookId,
+  };
 }
 
 /**

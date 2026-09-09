@@ -458,7 +458,7 @@ export function UsersPage() {
     <Page>
       <PageHeader
         title="用户管理"
-        description={`共 ${fmtCount(total, loaded)} 个账号 · 禁用 / 启用、改角色、改配额`}
+        description={`共 ${fmtCount(total, loaded)} 个账号`}
         note="注册日期筛选与「注册时间」列均按 UTC 日切，可能与本地日期相差一天"
         actions={
           <Button

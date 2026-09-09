@@ -22,6 +22,7 @@ import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const showBrowser = vi.fn();
+const navigate = vi.fn();
 vi.mock("@/stores/sidePanel", () => ({
   useSidePanelStore: Object.assign(
     (selector: (s: { showBrowser: typeof showBrowser }) => unknown) =>
@@ -29,6 +30,17 @@ vi.mock("@/stores/sidePanel", () => ({
     { getState: () => ({ showBrowser }) },
   ),
 }));
+
+vi.mock("react-router-dom", async () => {
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
+  return {
+    ...actual,
+    useNavigate: () => navigate,
+  };
+});
 
 vi.mock("@/components/chat/Markdown", () => ({
   Markdown: ({ content }: { content: string }) => <div>{content}</div>,
@@ -41,6 +53,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   showBrowser.mockReset();
+  navigate.mockReset();
 });
 
 function renderWithTooltip(ui: ReactElement) {
@@ -105,7 +118,8 @@ describe("ToolLine · 过程工具默认折叠", () => {
         })}
       />,
     );
-    // Running: nothing to expand yet — the terminal (退出码 badge) is absent.
+    // Running: nothing to expand yet — no result face on the tail.
+    expect(screen.queryByTestId("tool-fault-label")).toBeNull();
     expect(screen.queryByText(/退出码 0/)).toBeNull();
 
     rerender(
@@ -124,15 +138,17 @@ describe("ToolLine · 过程工具默认折叠", () => {
         })}
       />,
     );
-    // Done: one line — language in title, stdout stays in expanded terminal card.
+    // Done: one line — language in title, stdout in expand. Success hangs no mark.
     expect(screen.getByText("python")).toBeTruthy();
     expect(screen.queryByText(/hello world/)).toBeNull();
     expect(screen.queryByText(/退出码 0/)).toBeNull();
+    expect(screen.queryByTestId("tool-fault-label")).toBeNull();
     expect(collapsedSubline(container)).toBeNull();
 
     fireEvent.click(screen.getByText("Run code"));
     expect(screen.getByText(/hello world/)).toBeTruthy();
-    expect(screen.getByText(/退出码 0/)).toBeTruthy();
+    expect(screen.queryByText(/退出码 0/)).toBeNull();
+    expect(screen.queryByTestId("tool-fault-label")).toBeNull();
     expect(screen.getAllByText("python")).toHaveLength(1);
   });
 
@@ -487,7 +503,36 @@ describe("ToolLine · 过程工具默认折叠", () => {
     expect(screen.queryByText(/很长的 transcript/)).toBeNull();
     expect(screen.queryByText("conv_abc")).toBeNull();
     expect(container.textContent).toContain("上周方案");
+    expect(screen.getByRole("button", { name: "打开" })).toBeTruthy();
     expect(collapsedSubline(container)).toBeNull();
+  });
+
+  it("read_conversation 未读完时标题写「截断」，行尾「打开」不展开正文", () => {
+    const { container } = render(
+      <ToolLine
+        step={step({
+          tool_name: "read_conversation",
+          arguments: { conversation_id: "conv_abc", query: "适配" },
+          result: "### User\n很长的 transcript 正文",
+          display: {
+            title: "法庭迷局游戏设计",
+            conversation_id: "conv_abc",
+            truncated: true,
+          },
+          status: "success",
+        })}
+      />,
+    );
+    expect(container.textContent).toContain("法庭迷局游戏设计 · 截断");
+    expect(container.textContent).not.toContain("还有后续");
+    expect(container.textContent).not.toContain("适配");
+    expect(collapsedSubline(container)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "打开" }));
+    expect(navigate).toHaveBeenCalledWith("/conversations/conv_abc");
+    expect(screen.queryByText(/很长的 transcript/)).toBeNull();
+    fireEvent.click(screen.getByText("Read conversation"));
+    expect(screen.getByText(/很长的 transcript/)).toBeTruthy();
+    expect(navigate).toHaveBeenCalledTimes(1);
   });
 
   it("suppresses the peek for consult_skill — the summary shows only when expanded", () => {
@@ -846,6 +891,7 @@ describe("ToolLine · browser 单步折叠一行", () => {
       />,
     );
     expect(screen.getByText("Click")).toBeTruthy();
+    expect(screen.getByTestId("tool-fault-label").textContent).toBe("未找到");
     expect(screen.queryByText("未找到元素 e13。")).toBeNull();
     expect(screen.queryByText(/ElementNotFound/)).toBeNull();
     expect(collapsedSubline(container)).toBeNull();
@@ -1094,6 +1140,38 @@ describe("ToolLineGroup · 混杂组浏览器 CTA", () => {
   });
 });
 
+describe("ToolLineGroup · 折叠失败脸", () => {
+  it("collapsed group shows 未通过, not a red failed badge", () => {
+    render(
+      <ToolLineGroup
+        tools={[
+          step({
+            id: "f1",
+            tool_name: "file_read",
+            arguments: { path: "a.ts" },
+            result: "ok",
+            status: "success",
+          }),
+          step({
+            id: "u1",
+            tool_name: "run",
+            arguments: { command: "npm test" },
+            result: "测试未通过",
+            status: "error",
+            display: { stdout: "fail", stderr: "", exit_code: 1 },
+          }),
+        ]}
+        isStreaming={false}
+      />,
+    );
+    expect(screen.getByTestId("tool-group-fault").textContent).toBe("未通过");
+    expect(screen.queryByText(/failed/i)).toBeNull();
+    fireEvent.click(screen.getByText("Read file 1 · Run 1"));
+    expect(screen.queryByTestId("tool-group-fault")).toBeNull();
+    expect(screen.getByTestId("tool-fault-label").textContent).toBe("未通过");
+  });
+});
+
 describe("ToolLine · handoff brief card", () => {
   const receipt = "已收尾。";
 
@@ -1129,6 +1207,9 @@ describe("ToolLine · handoff brief card", () => {
     expect(screen.getByRole("button", { name: "交接简报" })).toBeTruthy();
     expect(screen.queryByText("只写了结论")).toBeNull();
     expect(collapsedSubline(container)).toBeNull();
+    const face = screen.getByRole("button", { name: "交接简报" });
+    expect(face.className).toContain("w-auto");
+    expect(face.className).not.toContain("w-full");
     expect(container.querySelector(".lucide-chevron-right")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "交接简报" }));
     expect(screen.getByText("只写了结论")).toBeTruthy();
@@ -1223,6 +1304,7 @@ describe("ToolLine · handoff brief card", () => {
     fireEvent.click(screen.getByText("Handoff"));
     expect(screen.getByText("空交付不得交接。")).toBeTruthy();
     expect(screen.getByText(/空交付不得交接：本轮正文 0 字/)).toBeTruthy();
+    expect(screen.queryByTestId("tool-error-detail-toggle")).toBeNull();
   });
 });
 
@@ -1263,12 +1345,14 @@ describe("ToolLine · wait 一行收口", () => {
       />,
     );
     expect(screen.getByText("Wait")).toBeTruthy();
+    expect(screen.getByTestId("tool-fault-label").textContent).toBe("未完成");
     expect(screen.queryByText("等待队员超时。")).toBeNull();
     expect(screen.queryByText(/WaitError/)).toBeNull();
     expect(collapsedSubline(container)).toBeNull();
     fireEvent.click(screen.getByText("Wait"));
     expect(screen.getByText("等待队员超时。")).toBeTruthy();
     expect(screen.getByText(/WaitError/)).toBeTruthy();
+    expect(screen.queryByTestId("tool-error-detail-toggle")).toBeNull();
   });
 });
 
@@ -1497,6 +1581,17 @@ describe("toolDetail · title chip", () => {
     ).toBe("");
     expect(toolDetail({ conversation_id: "c-8f31ab02" })).toBe("");
     expect(toolDetail({ interjection_id: "i-77120c9a" })).toBe("");
+  });
+
+  it("read_conversation 不把查找词摆进标题（对话名走 peek）", () => {
+    expect(
+      toolDetail(
+        { conversation_id: "c-8f31ab02", query: "适配" },
+        "read_conversation",
+      ),
+    ).toBe("");
+    expect(toolDetail({ query: "适配" }, "web_search")).toBe("适配");
+    expect(toolDetail({ query: "适配" }, "search_conversations")).toBe("适配");
   });
 
   it("does not leak update_synthesis draft into the title", () => {
@@ -1745,6 +1840,7 @@ describe("ToolLine · tool_use_end.failure product face", () => {
     fireEvent.click(screen.getByText("Search web"));
     expect(screen.getByText("搜索服务暂时不可用，请稍后重试。")).toBeTruthy();
     expect(screen.getByText(/searxng\.internal:8080/)).toBeTruthy();
+    expect(screen.queryByTestId("tool-error-detail-toggle")).toBeNull();
   });
 
   it("does not peek technical result on a collapsed error row", () => {
@@ -1762,9 +1858,10 @@ describe("ToolLine · tool_use_end.failure product face", () => {
     expect(collapsedSubline(container)).toBeNull();
     fireEvent.click(screen.getByText("Run code"));
     expect(screen.getByText(/ExecEnvProbeFailed: 127.0.0.1:5432/)).toBeTruthy();
+    expect(screen.queryByTestId("tool-error-detail-toggle")).toBeNull();
   });
 
-  it("peek-suppressed tools stay one line; specific copy is in the expanded detail", () => {
+  it("peek-suppressed tools stay one line until expand; lookup miss skips the extra sentence", () => {
     const { container } = renderWithTooltip(
       <ToolLine
         step={step({
@@ -1783,8 +1880,9 @@ describe("ToolLine · tool_use_end.failure product face", () => {
     expect(screen.queryByText(/FileNotFoundError/)).toBeNull();
     expect(collapsedSubline(container)).toBeNull();
     fireEvent.click(screen.getByText("Read file"));
-    expect(screen.getByText("读取文件失败。")).toBeTruthy();
+    expect(screen.queryByText("读取文件失败。")).toBeNull();
     expect(screen.getByText(/FileNotFoundError/)).toBeTruthy();
+    expect(screen.queryByTestId("tool-error-detail-toggle")).toBeNull();
   });
 });
 
@@ -1930,7 +2028,7 @@ describe("ToolLine · code_execute / test_run / terminal 一行契约", () => {
     expect(collapsedSubline(container)).toBeNull();
   });
 
-  it("code_execute failure inlineMeta shows exit code, one line", () => {
+  it("code_execute failure shows 未通过, not a fault X or exit number", () => {
     const { container } = renderWithTooltip(
       <ToolLine
         step={step({
@@ -1943,12 +2041,32 @@ describe("ToolLine · code_execute / test_run / terminal 一行契约", () => {
       />,
     );
     expect(screen.getByText("python")).toBeTruthy();
-    expect(screen.getByText(/退出码 1/)).toBeTruthy();
-    expect(container.querySelector(".text-destructive")).toBeTruthy();
+    expect(screen.getByTestId("tool-fault-label").textContent).toBe("未通过");
+    expect(screen.queryByText(/退出码 1/)).toBeNull();
+    expect(container.querySelector(".text-destructive")).toBeNull();
     expect(collapsedSubline(container)).toBeNull();
     fireEvent.click(screen.getByText("Run code"));
     expect(screen.getByText("boom")).toBeTruthy();
-    expect(screen.getAllByText(/退出码 1/)).toHaveLength(1);
+    expect(screen.getByTestId("tool-fault-label").textContent).toBe("未通过");
+    expect(screen.queryByText(/退出码 1/)).toBeNull();
+  });
+
+  it("run error with exit 0 shows 未通过, not 0 or 1", () => {
+    const { container } = renderWithTooltip(
+      <ToolLine
+        step={step({
+          tool_name: "run",
+          arguments: { command: "npm test 2>&1 | tail -60" },
+          result: "测试未通过（失败 1）",
+          status: "error",
+          display: { stdout: "1 failed", stderr: "", exit_code: 0 },
+        })}
+      />,
+    );
+    expect(screen.getByTestId("tool-fault-label").textContent).toBe("未通过");
+    expect(screen.queryByTestId("tool-exit-code")).toBeNull();
+    expect(container.querySelector(".text-destructive")).toBeNull();
+    expect(screen.queryByText(/退出码/)).toBeNull();
   });
 
   it("terminal with command in title suppresses result first line", () => {

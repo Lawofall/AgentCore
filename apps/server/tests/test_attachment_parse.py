@@ -649,7 +649,8 @@ async def test_persist_csv_structure_does_not_inline_full_table(tmp_path: Path):
 
     ctx = await _build_attachment_context(out, available_tools=frozenset())
     assert ctx is not None
-    assert "[表格 / 结构面]" in ctx
+    assert "[表格 / 列名与样例]" in ctx
+    assert "[表格 / 结构面]" not in ctx
     assert "rows: 20" in ctx
     assert "date:date" in ctx
     assert "amount:float" in ctx
@@ -684,7 +685,8 @@ async def test_persist_xlsx_structure_does_not_inline_full_table(tmp_path: Path)
     assert _SECRET_TAIL not in str(out[0]["table_preview"])
     ctx = await _build_attachment_context(out, available_tools=frozenset())
     assert ctx is not None
-    assert "[表格 / 结构面]" in ctx
+    assert "[表格 / 列名与样例]" in ctx
+    assert "[表格 / 结构面]" not in ctx
     assert "rows: 20" in ctx
     assert _SECRET_TAIL not in ctx
     assert "includes code_execute" not in ctx

@@ -31,10 +31,21 @@ AVAILABLE_TO_WORKER = AUDIENCE_WORKER
 
 @dataclass(frozen=True)
 class CatalogTool:
-    """One tool in the capability catalog: its schema + who may call it."""
+    """One tool in the capability catalog: schema + who may call it + catalog policy."""
 
     schema: ToolSchema
     available_to: tuple[str, ...]
+    resident: bool
+    summary: str
+
+
+def _policy_by_name() -> dict[str, tuple[bool, str]]:
+    """``resident`` + ``catalog_summary`` for every declared class."""
+    out: dict[str, tuple[bool, str]] = {}
+    for cls in declared_tools():
+        reg = tool_registration(cls)
+        out[declared_tool_name(cls)] = (reg.resident, reg.catalog_summary)
+    return out
 
 
 def _static_schema(tool_cls: type) -> ToolSchema:
@@ -67,32 +78,33 @@ def build_capability_catalog() -> list[CatalogTool]:
     orchestration primitives (declaration order).
     """
     audience_by_name = _runtime_audience_by_name()
+    policy_by_name = _policy_by_name()
     catalog: list[CatalogTool] = []
+
+    def _entry(schema: ToolSchema, available: tuple[str, ...]) -> CatalogTool:
+        resident, summary = policy_by_name.get(schema.name, (True, ""))
+        return CatalogTool(
+            schema=schema,
+            available_to=available,
+            resident=resident,
+            summary=summary,
+        )
+
     # Catalog advertises Host tools even when the calling session has no desktop —
     # runtime registries still gate on desktop_online ∧ host≠off.
     for schema in build_worker_registry(
         desktop_online=True,
     ).list_all():
         available = audience_by_name.get(schema.name, (AVAILABLE_TO_WORKER,))
-        catalog.append(CatalogTool(schema=schema, available_to=available))
+        catalog.append(_entry(schema, available))
     # manual_wire conversation log tools: catalog-advertised; runtime wires after
     # ``build_*_registry`` (CEO + worker). Product-always-on, opening-table resident.
     for tool_cls in declared_tools(surface=ToolSurface.WORKER_ONLY):
         reg = tool_registration(tool_cls)
         if not reg.manual_wire:
             continue
-        catalog.append(
-            CatalogTool(
-                schema=_static_schema(tool_cls),
-                available_to=reg.audience,
-            )
-        )
+        catalog.append(_entry(_static_schema(tool_cls), reg.audience))
     for tool_cls in declared_tools(surface=ToolSurface.CEO_ORCHESTRATION):
         reg = tool_registration(tool_cls)
-        catalog.append(
-            CatalogTool(
-                schema=_static_schema(tool_cls),
-                available_to=reg.audience,
-            )
-        )
+        catalog.append(_entry(_static_schema(tool_cls), reg.audience))
     return catalog

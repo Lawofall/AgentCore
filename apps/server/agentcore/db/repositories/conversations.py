@@ -78,8 +78,7 @@ class ConversationRepository:
         # this insert racy-by-design against the partial unique index, so HTTP
         # callers go through :meth:`create_idempotent` rather than here.
         #
-        # Pass ``commit=False`` when pairing with HandoffJobRepository.create or
-        # StandingTaskRepository.attach_conversation.
+        # Pass ``commit=False`` when pairing with HandoffJobRepository.create.
         conv = Conversation(id=new_id(), user_id=user_id)
         if title is not None:
             conv.title = title
@@ -364,7 +363,8 @@ class ConversationRepository:
         archived: bool = False,
     ) -> tuple[Sequence[Conversation], int]:
         # Hidden system conversations never show in the sidebar:
-        # handoff (双模式 P2e/e2) hosts local→云 job runs; standing hosts 站立任务钉对话.
+        # handoff (双模式 P2e/e2) hosts local→云 job runs; ``standing`` is a
+        # retired leftover mode kept hidden.
         # ``archived`` selects one side of the archive split: the default (False) is
         # the live list (sidebar / 全部对话), True backs the「已归档」view.
         pref_pinned = func.coalesce(ConversationPreference.pinned, False)
@@ -561,9 +561,11 @@ class ConversationRepository:
         scopes to one folder/工作区.
 
         Cross-session log tool extras (跨会话对话日志访问定案):
-        ``include_archived`` (default False), ``global_chats_only`` (``folder_id IS NULL``),
-        ``exclude_conversation_id`` (host turn's own chat). Empty ``query`` lists by
-        ``updated_at`` without a title or body filter.
+        ``include_archived`` (this method / GET ``/v1/search`` default False;
+        ``search_conversations`` defaults True), ``global_chats_only``
+        (``folder_id IS NULL``), ``exclude_conversation_id`` (host turn's own
+        chat). Empty ``query`` lists by ``updated_at`` without a title or body
+        filter.
         """
         stmt = select(Conversation).where(
             conversation_visible_clause(user_id),
@@ -993,9 +995,10 @@ class ConversationRepository:
         """Physically remove a conversation and all its rows (messages + cost ledger
         + turn journal).
 
-        App-level cascade (no DB FK, per repo convention). Used only by retention
-        after the grace period — distinct from ``soft_delete`` (the user-facing
-        recoverable delete). The ``turn_journal`` replay stream (唯一事实源, §8.3)
+        App-level cascade (no DB FK, per repo convention). Used by retention after
+        the grace period, and by user-triggered「最近删除」彻底删除 (gated on
+        :meth:`hard_delete_if_soft_deleted`). Distinct from ``soft_delete``. The
+        ``turn_journal`` replay stream (唯一事实源, §8.3)
         is dropped here too — it would otherwise orphan (it has no own TTL sweep).
         Per-user ``conversation_preferences`` have no DB FK and go first.
         In-flight ``turn_stream_state`` snapshots go next (keyed by message id,
@@ -1042,6 +1045,32 @@ class ConversationRepository:
         await RunSessionRepository(self._session).delete_for_conversation(conversation_id)
         await self._session.execute(delete(Conversation).where(Conversation.id == conversation_id))
         await self._session.commit()
+
+    async def hard_delete_if_soft_deleted(
+        self, conversation_id: str, *, user_id: str, not_before: datetime
+    ) -> bool:
+        """Hard-delete a trash row; ``False`` when restore or the sweeper already won.
+
+        ``SELECT … FOR UPDATE`` plus the same retention predicate as :meth:`restore`
+        serializes the two: a restore that lands first clears ``deleted_at`` and
+        this no-ops; if we lock first, restore's conditional UPDATE hits 0 rows.
+        ``user_id`` is the owner-visibility gate (same as :meth:`get_deleted_by_id`).
+        """
+        result = await self._session.execute(
+            select(Conversation.id)
+            .where(
+                Conversation.id == conversation_id,
+                conversation_deleted_visible_clause(user_id),
+                Conversation.deleted_at.is_not(None),
+                Conversation.deleted_at > not_before,
+                Conversation.mode.notin_(HIDDEN_CONVERSATION_MODES),
+            )
+            .with_for_update()
+        )
+        if result.scalar_one_or_none() is None:
+            return False
+        await self.hard_delete(conversation_id)
+        return True
 
     async def set_memory_synced_at(self, conversation_id: str, synced_at: datetime) -> None:
         """Advance the long-term-memory consolidation watermark (Agent记忆 §1.5).

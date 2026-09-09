@@ -9,7 +9,7 @@ The memory system splits how durable knowledge is written (Agent记忆与知识�
   it. Same ``<设定>`` block as AI memory, ordered by folder not author. Effect is immediate:
   next turn's ``<设定>``.
 - **inferred preference → not this tool**: preferences merely observed in conversation are
-  not written by idle digest. The user must say so, or use explore / daily review / the
+  not written by idle digest. The user must say so, or use explore / the
   file page. The tool description steers the model to that split.
 
 Same master-switch neutrality as user rules generally: a user rule is the user's own instruction,
@@ -24,7 +24,7 @@ from typing import Any
 
 from agentcore.account.credentials import AccountCloudError
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import DocumentRepository
 from agentcore.memory.always_quota import AlwaysQuotaExceededError
@@ -118,7 +118,7 @@ class RememberTool:
                 },
                 "required": [],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.FOLDER,
             approval=ToolApproval.NEVER,
         )
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
     AUDIENCE_BOTH,
@@ -167,6 +167,7 @@ class GitTool:
         # degraded_handoff 软化），若换工作树算落盘，一个毫无产出、交接残缺的 worker 只要切
         # 一次分支就能把 blocked 刷成 delivered。定案钉在 tests/test_file_products_ratchet.py。
         file_products=FileProductsContract.NO_PRODUCT,
+        workspace_io=True,
     )
 
     @property
@@ -186,7 +187,7 @@ class GitTool:
                 "禁项见失败回执。"
             ),
             parameters=GIT_TOOL_PARAMETERS,
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.EXECUTION,
             approval=ToolApproval.NEVER,
             # Dynamic ceiling via resolve_tool_timeout → git_tool_timeout_seconds.
             timeout_seconds=None,

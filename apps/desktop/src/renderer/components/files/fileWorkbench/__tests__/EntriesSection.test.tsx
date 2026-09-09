@@ -39,7 +39,6 @@ import {
   getDocument,
   listScopeEntries,
   setDocumentDisputed,
-  updateDocumentApplyMode,
 } from "@/services/documents";
 import { writeMemoryFile } from "@/services/memory";
 import {
@@ -240,7 +239,7 @@ describe("coreMemoryLeafKind", () => {
 });
 
 describe("EntriesSection (global)", () => {
-  it("lists flat entries with 常驻/按需 badges and description — no 记忆/规则 folders", async () => {
+  it("lists flat entries with description — no 记忆/规则 folders", async () => {
     vi.mocked(listScopeEntries).mockResolvedValue([
       entry({
         id: "g1",
@@ -273,8 +272,8 @@ describe("EntriesSection (global)", () => {
     expect(screen.getByText("偶发.md")).toBeTruthy();
     // Missing core 偏好.md still appears as a cold-start placeholder.
     expect(screen.getByText("偏好.md")).toBeTruthy();
-    expect(screen.getAllByText("常驻").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("按需")).toBeTruthy();
+    expect(screen.queryByText("常驻")).toBeNull();
+    expect(screen.queryByText("按需")).toBeNull();
     expect(screen.queryByText("记忆")).toBeNull();
     expect(screen.queryByText("规则")).toBeNull();
     expect(screen.queryByText(/^文档$/)).toBeNull();
@@ -334,7 +333,7 @@ describe("EntriesSection (global)", () => {
     });
   });
 
-  it("does not toggle apply_mode for AI-maintained entries", async () => {
+  it("does not expose apply_mode on AI-maintained rows", async () => {
     vi.mocked(listScopeEntries).mockResolvedValue([
       entry({
         id: "g2",
@@ -345,9 +344,10 @@ describe("EntriesSection (global)", () => {
     ]);
     renderScope("global");
     expect(await screen.findByText("画像.md")).toBeTruthy();
-    // Read-only badge (no clickable apply control).
-    expect(screen.queryByLabelText(/生效方式：常驻，点击切换/)).toBeNull();
-    expect(updateDocumentApplyMode).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText(/生效方式/)).toBeNull();
+    expect(screen.queryByText("常驻")).toBeNull();
+    expect(screen.queryByText("设为常驻")).toBeNull();
+    expect(screen.queryByText("设为按需")).toBeNull();
   });
 
   it("surfaces frontmatter_error as 不生效", async () => {
@@ -361,21 +361,6 @@ describe("EntriesSection (global)", () => {
     renderScope("global");
     expect(await screen.findByText("不生效")).toBeTruthy();
     expect(screen.getByText("unclosed frontmatter")).toBeTruthy();
-  });
-
-  it("toggles apply_mode via the badge", async () => {
-    vi.mocked(listScopeEntries).mockResolvedValue([
-      entry({ id: "g1", name: "语气.md", applyMode: "always" }),
-    ]);
-    vi.mocked(updateDocumentApplyMode).mockResolvedValue(
-      entry({ id: "g1", name: "语气.md", applyMode: "on_demand" }),
-    );
-    renderScope("global");
-    expect(await screen.findByText("语气.md")).toBeTruthy();
-    fireEvent.click(screen.getByLabelText(/生效方式：常驻/));
-    await waitFor(() =>
-      expect(updateDocumentApplyMode).toHaveBeenCalledWith("g1", "on_demand"),
-    );
   });
 
   it("marks a disputed entry as 已停用 and stops counting its always chars", async () => {
@@ -400,10 +385,20 @@ describe("EntriesSection (global)", () => {
 
   it("lets the user mark an entry wrong and undo it from the row menu", async () => {
     vi.mocked(listScopeEntries).mockResolvedValue([
-      entry({ id: "g1", name: "偏好.md", applyMode: "always" }),
+      entry({
+        id: "g1",
+        name: "偏好.md",
+        aiMaintained: true,
+        applyMode: "always",
+      }),
     ]);
     vi.mocked(setDocumentDisputed).mockResolvedValue(
-      entry({ id: "g1", name: "偏好.md", disputedAt: "2026-07-19T12:00:00Z" }),
+      entry({
+        id: "g1",
+        name: "偏好.md",
+        aiMaintained: true,
+        disputedAt: "2026-07-19T12:00:00Z",
+      }),
     );
     renderScope("global");
 
@@ -422,6 +417,7 @@ describe("EntriesSection (global)", () => {
       entry({
         id: "g1",
         name: "偏好.md",
+        aiMaintained: true,
         applyMode: "always",
         disputedAt: "2026-07-19T12:00:00Z",
       }),
@@ -432,6 +428,43 @@ describe("EntriesSection (global)", () => {
     expect(screen.queryByText("这条不对…")).toBeNull();
     // Undo only gives usage back, so it needs no warning about collateral.
     fireEvent.click(await screen.findByText("恢复使用"));
+    await waitFor(() =>
+      expect(setDocumentDisputed).toHaveBeenCalledWith("g1", false),
+    );
+  });
+
+  it("does not offer 这条不对 on handwritten entries; delete remains", async () => {
+    vi.mocked(listScopeEntries).mockResolvedValue([
+      entry({ id: "g1", name: "语气.md" }),
+    ]);
+    renderScope("global");
+
+    fireEvent.contextMenu(await screen.findByText("语气.md"));
+    expect(screen.queryByText("这条不对…")).toBeNull();
+    expect(screen.queryByText("停用整个「语气.md」？")).toBeNull();
+    expect(screen.getByText("删除")).toBeTruthy();
+  });
+
+  it("keeps 已停用 and 恢复使用 on a disputed handwritten leftover", async () => {
+    vi.mocked(listScopeEntries).mockResolvedValue([
+      entry({
+        id: "g1",
+        name: "语气.md",
+        disputedAt: "2026-07-19T12:00:00Z",
+      }),
+    ]);
+    vi.mocked(setDocumentDisputed).mockResolvedValue(
+      entry({ id: "g1", name: "语气.md" }),
+    );
+    renderScope("global");
+
+    const label = await screen.findByText("语气.md");
+    expect(label.className).toContain("line-through");
+    expect(screen.getByText("已停用")).toBeTruthy();
+
+    fireEvent.contextMenu(label);
+    expect(screen.queryByText("这条不对…")).toBeNull();
+    fireEvent.click(screen.getByText("恢复使用"));
     await waitFor(() =>
       expect(setDocumentDisputed).toHaveBeenCalledWith("g1", false),
     );
@@ -464,18 +497,19 @@ describe("EntriesSection (global)", () => {
 
   it("does not cry collateral for an entry that holds a single line", async () => {
     vi.mocked(listScopeEntries).mockResolvedValue([
-      entry({ id: "g1", name: "语气.md" }),
+      entry({ id: "g1", name: "偏好.md", aiMaintained: true }),
     ]);
     vi.mocked(getDocument).mockResolvedValue(
       entryDetail({
         id: "g1",
-        name: "语气.md",
+        name: "偏好.md",
+        aiMaintained: true,
         content: "## 沟通偏好\n- 你喜欢简洁的回答\n",
       }),
     );
     renderScope("global");
 
-    fireEvent.contextMenu(await screen.findByText("语气.md"));
+    fireEvent.contextMenu(await screen.findByText("偏好.md"));
     fireEvent.click(await screen.findByText("这条不对…"));
 
     expect(
@@ -485,7 +519,7 @@ describe("EntriesSection (global)", () => {
 
   it("backs out without marking anything when the user cancels", async () => {
     vi.mocked(listScopeEntries).mockResolvedValue([
-      entry({ id: "g1", name: "偏好.md" }),
+      entry({ id: "g1", name: "偏好.md", aiMaintained: true }),
     ]);
     renderScope("global");
 
@@ -502,7 +536,7 @@ describe("EntriesSection (global)", () => {
 
   it("still says the mark is entry-level when the body cannot be read", async () => {
     vi.mocked(listScopeEntries).mockResolvedValue([
-      entry({ id: "g1", name: "偏好.md" }),
+      entry({ id: "g1", name: "偏好.md", aiMaintained: true }),
     ]);
     vi.mocked(getDocument).mockRejectedValue(new ApiError(404, "missing"));
     renderScope("global");

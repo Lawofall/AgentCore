@@ -10,7 +10,6 @@ import {
   KeyRound,
   Keyboard,
   type LucideIcon,
-  MessageSquarePlus,
   Shield,
   SlidersHorizontal,
   UserCog,
@@ -28,12 +27,12 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// Settings are grouped by intent, four groups over ten items: 账户（含 Git 凭据 /
-// 用量）、模型（组合 + Key 相邻）、偏好、关于（含反馈）。之前是六组，其中三组只有
-// 一项——组标题比内容还多，扫读全是分隔线。合并时只动分组，路径不变。
+// Settings are grouped by intent, three groups over nine items: 账户（含 Git 凭据 /
+// 用量）、模型（组合 + Key 相邻）、偏好（含关于，避免单列组）。旧 /more/feedback
+// 书签见 router 重定向。
 // 「外观」→「通用」（多收了原本藏在关于页的诊断类开关）；旧路径见 router 重定向。
 // Opening /more 宽屏落点见 MoreIndexRedirect；窄屏 /more 是设置列表，不重定向。
-// 「自动化」已迁至工具箱 #/toolbox/automations。
+// 「自动化」已收进工具箱工作流行上的「设为定时」；旧书签见 router 重定向。
 // 设定（画像 / 偏好 / 规则）在「文件」页，不设设置子页。
 // 新会话默认权限配方：对话内权限徽章「设为新会话默认」（无设置子页）。
 // 产品公告 inbox 已迁 IM 官方号（消息页）；顶栏 Banner 仍走 notices/active。
@@ -49,7 +48,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "模型",
     items: [
-      { icon: Cpu, label: "模型", path: "/more/model" },
+      { icon: Cpu, label: "模型组合", path: "/more/model" },
       { icon: KeyRound, label: "服务商", path: "/more/providers" },
     ],
   },
@@ -59,23 +58,16 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: SlidersHorizontal, label: "通用", path: "/more/general" },
       { icon: Shield, label: "消息隐私", path: "/more/messages" },
       { icon: Keyboard, label: "快捷键", path: "/more/shortcuts" },
-    ],
-  },
-  {
-    label: "关于",
-    items: [
       { icon: Info, label: "关于", path: "/more/about" },
-      { icon: MessageSquarePlus, label: "反馈", path: "/more/feedback" },
     ],
   },
 ];
 
-/** 窄屏不上：Git 本机凭据、暗色/诊断、快捷键、反馈。权威 → 前端技术 §五。 */
+/** 窄屏不上：Git 本机凭据、暗色/诊断、快捷键。权威 → 前端技术 §五。 */
 const NARROW_HIDE_PATHS = new Set([
   "/more/git",
   "/more/general",
   "/more/shortcuts",
-  "/more/feedback",
 ]);
 
 function visibleGroups(narrow: boolean): NavGroup[] {

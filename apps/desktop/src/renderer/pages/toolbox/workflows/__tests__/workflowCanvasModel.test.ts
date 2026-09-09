@@ -7,7 +7,12 @@ import type {
   WorkflowDefinition,
 } from "@/services/workflowDefinition";
 import { describe, expect, it } from "vitest";
-import { defToFlow, flowToDef } from "../workflowCanvasModel";
+import {
+  defToFlow,
+  flowToDef,
+  mergeFlowEdges,
+  mergeFlowNodes,
+} from "../workflowCanvasModel";
 
 const DEFINITION: WorkflowDefinition = {
   nodes: [
@@ -73,5 +78,42 @@ describe("workflowCanvasModel", () => {
     expect(flowToDef(plain, flow.nodes, flow.edges, defMap(plain))).toEqual(
       plain,
     );
+  });
+
+  it("同内容再投影时 merge 保住节点引用（StoreUpdater 才能跳过）", () => {
+    const a = defToFlow(DEFINITION);
+    const b = defToFlow({ ...DEFINITION });
+    expect(a.nodes).not.toBe(b.nodes);
+    expect(mergeFlowNodes(a.nodes, b.nodes)).toBe(a.nodes);
+    expect(mergeFlowEdges(a.edges, b.edges)).toBe(a.edges);
+  });
+
+  it("改任务文案时换 data、拖过的坐标保留", () => {
+    const a = defToFlow(DEFINITION);
+    const moved = a.nodes[0];
+    if (!moved) throw new Error("expected node");
+    a.nodes[0] = {
+      ...moved,
+      position: { x: 99, y: 88 },
+      measured: { width: 200, height: 72 },
+    };
+    const edited: WorkflowDefinition = {
+      ...DEFINITION,
+      nodes: [
+        {
+          id: "step1",
+          kind: "agent_step",
+          role: "调研员",
+          task: "调研 {{topic}} 的竞品",
+        },
+        { id: "gate1", kind: "human_gate", label: "审初稿" },
+      ],
+    };
+    const b = defToFlow(edited);
+    const merged = mergeFlowNodes(a.nodes, b.nodes);
+    expect(merged).not.toBe(a.nodes);
+    expect(merged[0]?.position).toEqual({ x: 99, y: 88 });
+    expect(merged[0]?.measured).toEqual({ width: 200, height: 72 });
+    expect(merged[0]?.data.subtitle).toBe("调研 {{topic}} 的竞品");
   });
 });

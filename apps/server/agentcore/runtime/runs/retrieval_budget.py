@@ -52,7 +52,7 @@ __all__ = [
 # Tools that share one per-run retrieval budget (web_search + web_fetch combined).
 RETRIEVAL_TOOL_NAMES: frozenset[str] = frozenset({"web_search", "web_fetch"})
 
-# 全员统一默认：普通 worker → 14（含 form=prose）。开发期无真实产线数据，14 为假设
+# 全员统一默认：普通 worker → 14（含只报告节点）。开发期无真实产线数据，14 为假设
 # 统一阀（原 RESEARCH 档复用；已删 prose→0 / ROOT/DOWNSTREAM / 透镜 base/gap /
 # CEO 显式覆盖）。不做批级共享池 / 按 worker 数缩放——接受 N×线性税。
 DEFAULT_RETRIEVAL_BUDGET = 14
@@ -243,7 +243,7 @@ def rework_refill_slots(
 ) -> int:
     """How many retrieval slots a contract rework may add (预算语义不绕过).
 
-    - Write-disk form (``form=files`` / artifacts landing) rework: **0** — worker
+    - Pinned-path landing rework: **0** — worker
       needs a directed write/repair pass, not more ``web_search``/``web_fetch``.
     - After token / timeout wind_down: **0** — rework must not restore investigation.
     - Otherwise: half the original resolved budget (min 1), same slice size as before.

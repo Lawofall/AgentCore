@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * 全屏画布不挂手册「?」：看这张图时不跳走读图例。
- * 图例仍从工具箱手册选读章进。
+ * 图例仍从手册选读章进。
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";

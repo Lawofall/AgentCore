@@ -158,7 +158,7 @@ async def test_slug_shared_across_replace_and_workspace_fork(tmp_path: Path):
 
 async def test_artifacts_and_write_claim_use_stripped_path(tmp_path: Path):
     ctx = _empty_ctx(tmp_path)
-    deliverable = Deliverable(form="files", artifacts=["court-game/x", "court-game/y"])
+    deliverable = Deliverable(artifacts=["court-game/x", "court-game/y"])
     await rewrite_deliverable_shell(deliverable, ctx)
     assert deliverable.artifacts == ["x", "y"]
     assert ctx.project_shell.stripped_slug == "court-game"

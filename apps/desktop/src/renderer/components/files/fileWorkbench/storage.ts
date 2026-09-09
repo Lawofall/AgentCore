@@ -114,7 +114,7 @@ export function saveRulesExpanded(set: Set<string>): void {
   saveStringSet(RULES_EXPANDED_KEY, set);
 }
 
-// 全局设定轨**默认展开**，故只持久化「被折叠」。文件夹 ``.agentcore`` 的展开态走 FileTree
+// 文件夹 ``.agentcore`` 的展开态走 FileTree
 // per-source 折叠（默认折叠）；AGENTCORE_EXPANDED_KEY 仅 AgentCoreSection 的 folder 残留路径还读。
 const AGENTCORE_COLLAPSED_KEY = "files-agentcore-collapsed";
 const AGENTCORE_EXPANDED_KEY = "files-agentcore-expanded";

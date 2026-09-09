@@ -48,6 +48,22 @@ describe("formatProcessExport", () => {
     expect(text).toContain("方向跑偏");
   });
 
+  it("查阅历史对话的复制稿不摆查找词", () => {
+    const text = formatProcessExport([
+      {
+        kind: "tool",
+        id: "t1",
+        tool_name: "read_conversation",
+        arguments: { conversation_id: "c-8f31ab02-77de", query: "适配" },
+        result: "ok",
+        status: "success",
+      },
+    ]);
+    expect(text).toContain("Read conversation");
+    expect(text).not.toContain("适配");
+    expect(text).not.toContain("c-8f31ab02");
+  });
+
   it("does not export wait.reason; labels the row Wait", () => {
     expect(
       formatProcessExport([

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * 设置二级导航的信息架构：四组十项（原来是六组，其中三组各只有一项）。
+ * 设置二级导航的信息架构：三组九项（关于在偏好末项）。
  */
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -20,13 +20,13 @@ afterEach(() => {
 });
 
 describe("MorePage 导航分组", () => {
-  it("groups the ten sub-pages under four headings", () => {
+  it("groups the nine sub-pages under three headings", () => {
     const { container } = renderNav();
     const groups = Array.from(container.querySelectorAll("nav h2")).map(
       (h) => h.textContent,
     );
-    expect(groups).toEqual(["账户", "模型", "偏好", "关于"]);
-    expect(container.querySelectorAll("nav a")).toHaveLength(10);
+    expect(groups).toEqual(["账户", "模型", "偏好"]);
+    expect(container.querySelectorAll("nav a")).toHaveLength(9);
   });
 
   it("keeps every group multi-item, so no heading outweighs its content", () => {
@@ -36,7 +36,7 @@ describe("MorePage 导航分组", () => {
     }
   });
 
-  it("points 偏好 at 通用 / 消息隐私 / 快捷键", () => {
+  it("points 偏好 at 通用 / 消息隐私 / 快捷键 / 关于", () => {
     renderNav();
     expect(
       screen.getByRole("link", { name: "通用" }).getAttribute("href"),
@@ -47,13 +47,10 @@ describe("MorePage 导航分组", () => {
     expect(
       screen.getByRole("link", { name: "快捷键" }).getAttribute("href"),
     ).toBe("/more/shortcuts");
-    expect(screen.queryByRole("link", { name: "外观" })).toBeNull();
-  });
-
-  it("keeps 反馈 next to 关于 instead of owning a group", () => {
-    renderNav();
     expect(
-      screen.getByRole("link", { name: "反馈" }).getAttribute("href"),
-    ).toBe("/more/feedback");
+      screen.getByRole("link", { name: "关于" }).getAttribute("href"),
+    ).toBe("/more/about");
+    expect(screen.queryByRole("link", { name: "外观" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "反馈" })).toBeNull();
   });
 });

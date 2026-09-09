@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agentcore.core.types import ToolCategory, ToolEffect
+from agentcore.core.types import ToolEffect, ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
 from agentcore.runtime.citations import annotate_ledger_ids, normalize_citation_url
 from agentcore.runtime.engine import ReactLoopOut, react_loop
@@ -157,7 +157,7 @@ class _StubTool:
             name="search",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001

@@ -8,7 +8,7 @@
 
 ## 版权与素材
 
-- Remotion 品牌片与代码：随仓库 **MIT**。
+- Remotion 品牌片与代码：随仓库许可（[FSL-1.1-ALv2](/LICENSE)）。
 - 内嵌字体：Inter / Noto Sans SC，见 [`src/core/fonts/NOTICE.md`](./src/core/fonts/NOTICE.md)（SIL OFL 1.1）。
 - 真机捕获静帧/短片：**不入公开仓**（见 `assets/lv-molihua/MANIFEST.md`）；本地宣传制作请自备素材。片中出现的第三方商标归各权利人所有，仅作产品演示语境。
 - BGM：不入库，成片由剪辑侧自行添加。

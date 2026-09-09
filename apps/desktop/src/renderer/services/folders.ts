@@ -346,6 +346,11 @@ export async function restoreFolder(id: string): Promise<FolderMeta> {
   return toFolder(res);
 }
 
+/** Permanently remove a trash project. Past retention / a restore that won is 409. */
+export async function purgeTrashedFolder(id: string): Promise<void> {
+  await api.delete(`/v1/folders/trash/${id}`);
+}
+
 /** Hard-delete a folder and every member conversation + cloud workspace (彻底删除文件夹). */
 export async function permanentDeleteFolder(id: string): Promise<void> {
   await api.delete(`/v1/folders/${id}/permanent`);

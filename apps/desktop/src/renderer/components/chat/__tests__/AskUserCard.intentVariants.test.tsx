@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
- * ask_user list-confirm chrome: organize_plan / daily_review keep the checklist
- * body (second line, seed-all, side-effect CTA). Caption is the shared 需要你拍板.
+ * ask_user list-confirm chrome: organize_plan keeps the checklist
+ * body (second line, seed-all, side-effect CTA). Caption is sr-only 需要你拍板.
+ * daily_review chrome is absent.
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -41,36 +42,6 @@ const organizeContent: AskUserContent = {
   ],
 };
 
-const dailyReviewContent: AskUserContent = {
-  question: "确认要落盘的项？\n来自今日对话摘要。",
-  questions: [
-    {
-      id: "q0",
-      prompt: "勾选要写入的项",
-      kind: "choice",
-      multiple: true,
-      default: "",
-      options: [
-        {
-          label: "偏好简洁回复",
-          review_kind: "preference",
-          body: "用户偏好短句答复",
-        },
-        {
-          label: "主题：周报节奏",
-          review_kind: "topic",
-          body: "每周五整理周报",
-        },
-        {
-          label: "规则：先问再改文件",
-          review_kind: "rule",
-          body: "改文件前先征得确认",
-        },
-      ],
-    },
-  ],
-};
-
 function renderCard(
   intent: AskUiIntent,
   content: AskUserContent,
@@ -86,7 +57,7 @@ function renderCard(
 }
 
 describe("AskUserCard intent variants", () => {
-  it("organize_plan 默认全选、第二行总览、副作用 CTA；caption 为需要你拍板", async () => {
+  it("organize_plan 默认全选、第二行总览、副作用 CTA；批次标题在卡头", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     renderCard("organize_plan", organizeContent, onSubmit);
 
@@ -96,7 +67,10 @@ describe("AskUserCard intent variants", () => {
     expect(
       document.querySelector('[data-ask-card="organize_plan"]'),
     ).toBeTruthy();
-    expect(screen.getByText("需要你拍板")).toBeTruthy();
+    expect(screen.getByText("需要你拍板").classList.contains("sr-only")).toBe(
+      true,
+    );
+    expect(screen.getByText("确认要执行的整理项？")).toBeTruthy();
     expect(screen.queryByText(/整理方案/)).toBeNull();
     expect(
       screen.getByText(
@@ -125,31 +99,15 @@ describe("AskUserCard intent variants", () => {
     expect(onSubmit).toHaveBeenCalledWith("stop", "", []);
   });
 
-  it("daily_review 默认全选，取消勾选后提交带 selected；caption 为需要你拍板", async () => {
-    const onSubmit = vi.fn().mockResolvedValue(undefined);
-    renderCard("daily_review", dailyReviewContent, onSubmit);
+  it("daily_review chrome is absent — wire falls back to decision", () => {
+    renderCard("daily_review" as AskUiIntent, organizeContent);
 
     expect(
       document.querySelector('[data-ask-intent="daily_review"]'),
-    ).toBeTruthy();
-    expect(
-      document.querySelector('[data-ask-card="daily_review"]'),
-    ).toBeTruthy();
-    expect(screen.getByText("需要你拍板")).toBeTruthy();
-    expect(screen.queryByText(/复盘提案/)).toBeNull();
-    expect(screen.getByText("偏好简洁回复")).toBeTruthy();
-    expect(screen.getByText(/偏好 · 用户偏好短句答复/)).toBeTruthy();
-    expect(
-      screen.getByText(/确认后服务端直接写入记忆\/规则\/文档/),
-    ).toBeTruthy();
-
-    fireEvent.click(screen.getByText("主题：周报节奏"));
-    fireEvent.click(screen.getByRole("button", { name: /确认落盘/ }));
-
-    expect(onSubmit).toHaveBeenCalledWith("continue", "", [
-      "偏好简洁回复",
-      "规则：先问再改文件",
-    ]);
+    ).toBeNull();
+    expect(document.querySelector('[data-ask-card="daily_review"]')).toBeNull();
+    expect(document.querySelector('[data-ask-intent="decision"]')).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /确认落盘/ })).toBeNull();
   });
 
   it("collectAskSelected 扁平化多题 picks", () => {

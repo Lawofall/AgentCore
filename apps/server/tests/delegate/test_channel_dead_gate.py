@@ -32,7 +32,7 @@ def _files_plan() -> RunPlan:
                 run_id="w1",
                 role="写手",
                 task="落盘报告",
-                deliverable=Deliverable(form="files"),
+                deliverable=Deliverable(artifacts=["out.md"]),
             )
         ]
     )
@@ -45,7 +45,7 @@ def _prose_plan() -> RunPlan:
                 run_id="p1",
                 role="顾问",
                 task="口头总结",
-                deliverable=Deliverable(form="prose"),
+                deliverable=Deliverable(),
             )
         ]
     )
@@ -176,13 +176,13 @@ def test_skip_completed_write_nodes_allows_prose_tail():
                     run_id="done",
                     role="写手",
                     task="已落盘",
-                    deliverable=Deliverable(form="files"),
+                    deliverable=Deliverable(artifacts=["out.md"]),
                 ),
                 RunSpec(
                     run_id="tail",
                     role="顾问",
                     task="总结",
-                    deliverable=Deliverable(form="prose"),
+                    deliverable=Deliverable(),
                 ),
             ]
         )
@@ -209,7 +209,7 @@ def test_write_tasks_error_for_replan_adds():
     try:
         err = channel_dead_write_tasks_error(
             _tool(),
-            [{"role": "写手", "task": "补文件", "deliverable": {"form": "files"}}],
+            [{"role": "写手", "task": "补文件", "deliverable": {"artifacts": ["out.md"]}}],
         )
         assert err == CHANNEL_DEAD_WRITE_DESK_REJECT
         assert (
@@ -252,7 +252,7 @@ async def test_delegate_rejects_files_form_when_session_workspace_channel_dead()
                     {
                         "role": "写手",
                         "task": "写文件",
-                        "deliverable": {"form": "files"},
+                        "deliverable": {"artifacts": ["out.md"]},
                     }
                 ],
                 "coordinate": False,
@@ -358,7 +358,7 @@ async def test_apply_replan_rejects_files_add_when_channel_dead():
                 {
                     "role": "写手",
                     "task": "补落盘",
-                    "deliverable": {"form": "files"},
+                    "deliverable": {"artifacts": ["out.md"]},
                     "target_folder_id": "desk1",
                 }
             ],

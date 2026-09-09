@@ -2,7 +2,7 @@
 
 Schema layer (工具面瘦身): short trigger + 拆任务合同 + playbook/tasks 互斥.
 何时用写在本 description；根 CEO 编制 HOW →
-``consult(team_orchestration_advanced)``；嵌套 lead → ``consult(lead_subteam)``.
+``consult(staffing)``；嵌套 lead → ``consult(lead_subteam)``.
 """
 
 from __future__ import annotations
@@ -13,22 +13,15 @@ from agentcore.runtime.runs.constants import MAX_DELEGATION_TASKS, MAX_GAP_FILL_
 from agentcore.runtime.runs.playbooks import PLAYBOOKS, playbook_args_schema_description
 
 # Shared task-level deliverable shape (delegate tasks + replan binds/add).
-# CEO / replan fill-in: three-tier form + optional artifact paths only.
+# CEO / replan fill-in: optional artifact paths only. Write-vs-chat is task
+# acceptance + the model; the engine only recognizes pinned paths.
 # Playbook-internal knobs still parse in builder; they are not on this schema.
 TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
     "type": "object",
     "description": (
-        "交付形态。省略或空对象=form=files。"
+        "可选。用户点名或流水线写死才填 artifacts；省略/空对象=不催写盘。"
     ),
     "properties": {
-        "form": {
-            "type": "string",
-            "enum": ["prose", "files", "workspace"],
-            "description": (
-                "【看】prose；【存文档】files（默认）；"
-                "【改工程】workspace。漏填=files。裸文件名进工作稿。"
-            ),
-        },
         "artifacts": {
             "type": "array",
             "items": {"type": "string"},
@@ -42,8 +35,8 @@ DELEGATE_DESCRIPTION = (
     f"拆任务给临时团队（默认手写顶层 tasks：role+task，≤{MAX_DELEGATION_TASKS}；非终结）。"
     "默认用本工具（成篇落盘、可运行应用、成规模查证、要并行、实质讨论尤然）；"
     "闲聊、窗口里已有证据的一问一答、一眼写完的短文或小落盘、纯启服不必派。"
-    "有写权 ≠ 自己做完。"
-    "HOW→consult(team_orchestration_advanced)。"
+    "有写权 ≠ 自己做完。不知读哪 ≠ 自己连搜。"
+    "HOW→consult(staffing)。"
 )
 
 # Nested captain: blocking wait, not coordination. HOW is a different consult.
@@ -64,7 +57,6 @@ DELEGATE_PARAMETERS = {
             "description": (
                 f"默认主路（≤{MAX_DELEGATION_TASKS}）。"
                 f"顶层非空数组可抄：{HANDWRITTEN_TASKS_SKELETON}（deliverable 可选）。"
-                "摸底抄骨架 form=prose。"
             ),
             "items": {
                 "type": "object",
@@ -74,11 +66,12 @@ DELEGATE_PARAMETERS = {
                         "type": "string",
                         "description": (
                             "自包含=目标+边界+验收（worker 看不到完整历史）。"
-                            "≠逐步改法、改哪些文件、章节骨架。"
+                            "≠逐步改法、章节骨架。"
                             "凭据写入 task 供队员填 env。"
-                            "已拍板写同一行「已确认约束：①…；②…」；无则「（无）」；自拟默认标假设不进本行。"
+                            "已拍板写同一行「已确认约束：①…；②…」；无则「（无）」；"
+                            "自拟默认标假设、改法现状不进本行。"
                             "未装配能力 ≠ 写进 task。"
-                            "点名路径用工作区相对 POSIX（与工具 path 同形）。"
+                            "点名入口或成品路径用工作区相对 POSIX（与 path 同形）。"
                         ),
                     },
                     "deliverable": TASK_DELIVERABLE_SCHEMA,
@@ -90,7 +83,9 @@ DELEGATE_PARAMETERS = {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": (
-                            "生产者→消费者（本批 id / 角色名；勿手抄 del_*）。"
+                            "生产者→消费者：空=同波并行；"
+                            "排队只认本字段（本批 id / 角色名；勿手抄 del_*）"
+                            "≠ task 里写先后。"
                             "跨回合是新开一队，不是 depends_on 连旧图。"
                         ),
                     },
@@ -103,7 +98,7 @@ DELEGATE_PARAMETERS = {
                     },
                     "continue_from_run_id": {
                         "type": "string",
-                        # 「动同一支团队 / 不限条数 / 勿冷派整团」HOW → team_orchestration_advanced。
+                        # 「动同一支团队 / 不限条数 / 勿冷派整团」HOW → staffing。
                         # 这里只留本字段自己的填法。
                         "description": (
                             "同人续派（调查后确认修 / 改稿 / 收口后接着干）；填已完成 run_id。"
@@ -112,8 +107,10 @@ DELEGATE_PARAMETERS = {
                     "target_folder_id": {
                         "type": "string",
                         "description": (
-                            "已解析文件夹 id（该队员坐哪张桌）。跨已登记文件夹须点名；"
-                            "裸聊写盘缺桌由运行时建云桌，勿为过闸 create_folder。"
+                            "已解析文件夹 id（该队员坐哪张桌）。"
+                            "跨已登记文件夹（只读摸底与改盘通吃）须点名；"
+                            "云端草稿 ≠ 读不到已有文件夹。接到工作区 / 挂载 ≠ 换桌。"
+                            "缺桌：云端建云桌；本机坐本次对话。勿为过闸 create_folder。"
                         ),
                     },
                     **TASK_MODEL_SCHEMA_PROPS,

@@ -196,22 +196,45 @@ def validate_permission_axes(
     )
 
 
-class ToolCategory(StrEnum):
-    FILESYSTEM = "filesystem"
+class ToolFace(StrEnum):
+    """Capability face for the shared tool catalog (human 图鉴 + AI 按需目录).
+
+    Grouping only — the engine acts on ToolResult / explicit name sets, not on face.
+    Display face ≠ registration surface: ``ceo_orchestration`` is how CEO tools
+    are wired, not a dumpster for this enum.
+    """
+
+    FILE = "file"
+    FOLDER = "folder"
     SEARCH = "search"
+    WEB = "web"
     EXECUTION = "execution"
-    RESEARCH = "research"
+    HOST_BROWSER = "host_browser"
+    BOARD = "board"
     ORCHESTRATION = "orchestration"
-    # A tool that pauses the turn to ask the user (the CEO ``ask_user`` checkpoint).
-    # Category is declarative metadata for classification/tooling; the engine no
-    # longer branches on tool category (it acts on the ToolResult, not the name).
-    INTERACTION = "interaction"
-    # Currently UNUSED: ``consult_skill`` was recategorised to ORCHESTRATION (it is a CEO
-    # orchestration primitive, and 技能 are Prompt injection shown in the「AI 提示词」
-    # catalog — not a tool group). Kept as declarative metadata so the contract type is
-    # stable; removable via ``pnpm gen:types`` once we're sure no future skill-category
-    # tool wants it. Like every category, the engine never branches on it.
-    SKILL = "skill"
+
+
+TOOL_FACE_LABELS: dict[ToolFace, str] = {
+    ToolFace.FILE: "文件",
+    ToolFace.FOLDER: "文件夹",
+    ToolFace.SEARCH: "检索",
+    ToolFace.WEB: "网络",
+    ToolFace.EXECUTION: "执行",
+    ToolFace.HOST_BROWSER: "本机 · 浏览器",
+    ToolFace.BOARD: "白板",
+    ToolFace.ORCHESTRATION: "编排",
+}
+
+TOOL_FACE_ORDER: tuple[ToolFace, ...] = (
+    ToolFace.FILE,
+    ToolFace.FOLDER,
+    ToolFace.SEARCH,
+    ToolFace.WEB,
+    ToolFace.EXECUTION,
+    ToolFace.HOST_BROWSER,
+    ToolFace.BOARD,
+    ToolFace.ORCHESTRATION,
+)
 
 
 class ToolEffect(StrEnum):

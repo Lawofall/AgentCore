@@ -5,8 +5,8 @@ type Schemas = components["schemas"];
 
 /** Tool governance level (generated from backend `ToolApproval`). */
 export type ToolApproval = Schemas["ToolApproval"];
-/** Tool grouping (generated from backend `ToolCategory`). */
-export type ToolCategory = Schemas["ToolCategory"];
+/** Capability face for the shared tool catalog (generated from backend `ToolFace`). */
+export type ToolFace = Schemas["ToolFace"];
 /** A tool's catalog entry; `parameters` is the call JSON Schema, `available_to` a
  * subset of ["ceo","worker"] saying which side of the team holds it. */
 export type CapabilityTool = Schemas["CapabilityTool"];
@@ -14,8 +14,6 @@ export type CapabilityTool = Schemas["CapabilityTool"];
 export type CapabilitySkill = Schemas["CapabilitySkill"];
 /** The system-prompt template the agents follow (静态 蓝图). */
 export type CapabilityGuidelines = Schemas["CapabilityGuidelines"];
-/** Deployment-listed capability pack (catalog display; nested `skills` are pack contents). */
-export type CapabilityPack = Schemas["CapabilityPack"];
 /** Complete capability picture for 工具箱 → 能力图鉴. */
 export type Capabilities = Schemas["CapabilitiesResponse"];
 

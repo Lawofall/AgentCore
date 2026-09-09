@@ -21,7 +21,6 @@ const SECTION_IDS = [
   "control",
   "memory",
   "workflow",
-  "automation",
 ] as const;
 
 describe("ManualCollaboration", () => {
@@ -83,50 +82,29 @@ describe("ManualCollaboration", () => {
     expect(text).toMatch(/结构锁定/);
     expect(text).toMatch(/不再由 CEO 即兴组队/);
     expect(text).toMatch(/复制一份成你自己的工作流/);
-    // 「模板」只用于工作流页的官方模板
+    // 「模板」只用于官方工作流模板，不用于自动化预制任务
     expect(text).toMatch(/官方模板/);
     expect(text).not.toMatch(/系统模板/);
     expect(text).not.toMatch(/存为工作流/);
     expect(text).not.toMatch(/从满意的那一轮存起/);
     expect(text).not.toMatch(/回合状态条/);
-  });
-
-  it("renders automation section: triggers, inbox, system tasks, workflow binding", () => {
-    render(
-      <MemoryRouter initialEntries={["/toolbox/manual/collaboration"]}>
-        <ManualCollaboration />
-      </MemoryRouter>,
-    );
-
-    const text = sectionText("automation");
-    expect(text).toMatch(/定时（每天 \/ 每周 \/ 自定义 cron）/);
+    expect(text).toMatch(/设为定时/);
     expect(text).toMatch(/Webhook/);
-    expect(text).toMatch(/收件箱/);
-    expect(text).toMatch(/系统任务/);
-    expect(text).toMatch(/立即触发/);
-    expect(text).toMatch(/云端文件夹/);
-    expect(text).toMatch(/绑一张工作流（可选）/);
-    expect(text).toMatch(/在工具箱里设计好再绑上/);
-    expect(text).not.toMatch(/存为工作流/);
-    expect(text).toMatch(/重新触发/);
-    // 内部词 / 退役词不得外泄；自动化页的预制件不叫「模板」
-    expect(text).not.toMatch(/站立任务/);
-    expect(text).not.toMatch(/系统模板/);
-    expect(text).not.toMatch(/重跑/);
+    expect(text).not.toMatch(/系统任务/);
+    expect(text).not.toMatch(/收件箱/);
   });
 
-  it("relates the two: workflow = how to split, automation = when to run", () => {
+  it("does not keep a separate automations section", () => {
     render(
       <MemoryRouter initialEntries={["/toolbox/manual/collaboration"]}>
         <ManualCollaboration />
       </MemoryRouter>,
     );
 
-    expect(sectionText("workflow")).toMatch(
+    expect(document.getElementById("automation")).toBeNull();
+    expect(sectionText("workflow")).toMatch(/设为定时/);
+    expect(sectionText("workflow")).not.toMatch(
       /工作流管「活儿怎么拆」.*管「什么时候跑」/,
-    );
-    expect(sectionText("automation")).toMatch(
-      /绑了就按图跑.*不绑就按目标文案让 CEO 即兴组队/,
     );
   });
 

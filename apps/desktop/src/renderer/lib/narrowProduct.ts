@@ -1,13 +1,12 @@
 /**
  * Viewport policy for narrow / Capacitor chrome — not physical capabilities.
- * 权威 → 前端技术 §五：窄屏不上工具箱 / 白板 / 手册 / 站立任务 / 快捷键设置…
+ * 权威 → 前端技术 §五：窄屏不上工具箱 / 白板 / 手册 / 快捷键设置…
  */
 
 export const NARROW_HIDDEN_SETTINGS_PATHS = new Set([
   "/more/git",
   "/more/general",
   "/more/shortcuts",
-  "/more/feedback",
   "/more/appearance",
 ]);
 
@@ -34,9 +33,7 @@ export const NARROW_HIDDEN_PALETTE_IDS = new Set([
   "nav-store",
   "nav-manual",
   "nav-mechanism",
-  "nav-automations",
   "nav-workflows",
-  "nav-automations-inbox",
   "nav-settings-general",
   "nav-settings-shortcuts",
   "nav-preview",

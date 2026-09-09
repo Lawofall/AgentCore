@@ -1,4 +1,4 @@
-"""Attachment prompt block: structure preview + capability-aware steer.
+"""Attachment prompt block: column/type/sample preview + capability-aware steer.
 
 ``_build_attachment_context`` walks this-turn attachments and renders the
 ``<附件>`` block. ``code_execute`` copy follows ``available_tools``
@@ -259,8 +259,8 @@ async def _build_attachment_prompt(
     Text files carry pre-extracted text; pre-parsed binaries (docx/pdf/…) carry
     inline text (context-capped) plus a pointer to the ``*.md`` workspace copy;
     office/PDF that missed pre-parse steer ``file_read`` (transparent extract);
-    spreadsheet / delimited files carry a **structure preview** only (never the
-    full table). ``code_execute`` steer follows ``available_tools`` (this turn's
+    spreadsheet / delimited files carry **column names, types, and sample rows**
+    only (never the full table). ``code_execute`` steer follows ``available_tools`` (this turn's
     assembled table); when the table is omitted or lacks the tool, the block
     does not tell the model to call it.
     Resident **image** attachments: when ``main_native_vision`` and
@@ -376,15 +376,15 @@ async def _build_attachment_prompt(
             if preview is not None:
                 structure = format_table_preview(preview)
                 add_block(
-                    f"--- File: {name} ({path}) [表格 / 结构面] ---\n"
+                    f"--- File: {name} ({path}) [表格 / 列名与样例] ---\n"
                     f"{structure}\n\n"
-                    "This is a structure preview only — the full table stays in "
-                    f"the workspace file. {steer}"
+                    "This shows column names, types, and sample rows only — "
+                    f"the full table stays in the workspace file. {steer}"
                 )
             else:
                 add_block(
                     f"--- File: {name} ({path}) [表格 / 仅路径] ---\n"
-                    "Could not build a structure preview. "
+                    "Could not read column names and sample rows. "
                     f"{steer} Do NOT treat file_list emptiness as missing."
                 )
         elif parse_status == "ok" and text:
@@ -508,8 +508,8 @@ async def _build_attachment_prompt(
             else ""
         ),
         table_note=(
-            " Spreadsheet / delimited attachments include a structure preview only "
-            "(columns, row count, inferred types, sample rows). Full data stays in "
+            " Spreadsheet / delimited attachments include column names, row counts, "
+            "inferred types, and sample rows only. Full data stays in "
             "the workspace file and is not inlined."
             if has_table
             else ""

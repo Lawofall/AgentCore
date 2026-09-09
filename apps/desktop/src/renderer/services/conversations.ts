@@ -194,6 +194,11 @@ export async function restoreConversation(id: string): Promise<Conversation> {
   return toConversation(res);
 }
 
+/** Permanently remove a trash row. Past retention / a restore that won is 409. */
+export async function purgeTrashedConversation(id: string): Promise<void> {
+  await api.delete(`/v1/conversations/trash/${id}`);
+}
+
 /** Persist a new conversation title. */
 export async function renameConversation(
   id: string,

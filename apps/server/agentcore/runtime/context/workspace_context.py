@@ -6,7 +6,7 @@
 （工具 path 只认相对 POSIX；盘符进任务会让队员按错坐标系）。
 
 空状态不写。空桌只标「顶层空」。CEO 文件索引仍拼在本块末节（工人不加）。
-HOW → ``product_help`` / ``team_delivery_env`` / ``team_local_desk`` / 工具 description / consult。
+HOW → ``product_help`` / ``delivery`` / ``local_desk`` / 工具 description / consult。
 分层 → docs/03-AI核心/上下文工程.md「提示词设计原则」。
 """
 
@@ -338,7 +338,7 @@ def build_workspace_context(
     Git line. Repo-policy lives on the git tool description.
 
     ``outlet_inventory`` lists the four 约定文档出口 dirs. Empty / ``None`` omit
-    (layout HOW → ``team_delivery_env``).
+    (layout HOW → ``delivery``).
 
     ``desk_folder_id`` / ``desk_folder_label`` name the sitting desk.
     ``desk_is_birth`` is accepted for call-site compatibility; the label is enough.

@@ -88,7 +88,6 @@ export function OverviewPage() {
     <Page>
       <PageHeader
         title="概览"
-        description="平台此刻 · 今日活跃 / 成本 / 回合健康 + 部署状态（点卡片进对应详情）"
         note={UTC_WINDOW_HINT}
         actions={
           <Button
@@ -311,7 +310,6 @@ function ErrorsPreview({
     <Card className="overflow-hidden">
       <SectionHeader
         title="近期错误"
-        description="最近失败的回合 · 点击行进入会话复盘"
         action={<DetailLink label="查看全部" onClick={onViewAll} />}
       />
       <TableFrame minWidth={640} className="rounded-none border-0">
@@ -351,7 +349,6 @@ function ErrorsPreview({
               <EmptyState
                 icon={CheckCircle2}
                 title="近期暂无错误回合"
-                description="失败的回合会出现在这里，可直接点进会话复盘。"
                 className="py-0"
               />
             </TableMessageRow>

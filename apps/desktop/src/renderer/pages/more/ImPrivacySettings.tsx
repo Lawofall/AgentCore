@@ -164,7 +164,6 @@ export function ImPrivacySettings() {
         <SettingRow
           variant="nav"
           label="已拉黑"
-          description="查看并管理拉黑列表"
           onClick={() => setBlocksOpen(true)}
         />
       </SettingsStack>

@@ -509,6 +509,23 @@ export type TimelineNode =
   | { kind: "tool"; step: ToolStep }
   | { kind: "tool-group"; tools: ToolStep[] };
 
+export function estimateTimelineNodeSize(
+  node: TimelineNode | undefined,
+): number {
+  if (!node) return 36;
+  switch (node.kind) {
+    case "content":
+      return 72;
+    case "reasoning":
+      return 36;
+    case "tool":
+    case "tool-group":
+      return 32;
+    default:
+      return 40;
+  }
+}
+
 /**
  * CEO 协调空转工具（`wait`）：无用户可见副作用，只确认继续听团。
  * 过程线降噪用——这类工具步及其紧邻 reasoning 默认不对用户逐段展开。

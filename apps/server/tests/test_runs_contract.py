@@ -201,9 +201,9 @@ def test_format_light_repair_feedback_carries_prior_and_skips_reinvestigate():
 
 def test_zero_files_gap_and_write_pass_feedback():
     # 甲⁺：零落盘进 warnings，不再是 hard gap / write_pass 触发条件。
-    # 写盘期望认 form=files / workspace / artifacts（漏填=files）。
+    # 写盘期望认非空 artifacts / artifact_dir。
     v = check_contract(
-        "只有文字", Deliverable(form="files"), files_written=0
+        "只有文字", Deliverable(artifacts=["out.md"]), files_written=0
     )
     assert v.ok
     assert any("本队员本波未交卷" in w for w in v.warnings)
@@ -211,7 +211,7 @@ def test_zero_files_gap_and_write_pass_feedback():
     assert not is_zero_files_gap(v)
     # 显式 prose → 不再产生零落盘 soft tip
     legacy_flag = check_contract(
-        "只有文字", Deliverable(form="prose"), files_written=0
+        "只有文字", Deliverable(), files_written=0
     )
     assert legacy_flag.ok
     assert not any("未把产物写入工作区" in w for w in legacy_flag.warnings)
@@ -224,7 +224,7 @@ def test_zero_files_gap_and_write_pass_feedback():
     assert "短写盘 pass" in fb
     assert "file_write" in fb
     assert not is_zero_files_gap(
-        check_contract("ok", Deliverable(form="files"), files_written=1)
+        check_contract("ok", Deliverable(artifacts=["out.md"]), files_written=1)
     )
 
 
@@ -283,8 +283,9 @@ def test_describe_deliverable_renders_rules():
             required_sections=["结论"], output_format="json"
         )
     )
-    # json + required_sections: JSON HOW is not in the spec block; form HOW still lands
-    assert "form=files" in desc
+    # json + required_sections: JSON HOW is not in the spec block; no form HOW
+    assert desc == ""
+    assert "form=" not in desc
     assert "必须包含这些章节" not in desc
     # 已删字段不再渲染进文案
     assert "风险" not in desc
@@ -307,14 +308,13 @@ def test_describe_deliverable_renders_section_names_without_skeleton():
     assert "## Bug清单" not in desc
     assert "建议正文骨架" not in desc
     assert "交付形态" not in desc
-    assert "form=files" in desc
+    assert "form=" not in desc
     assert "50" not in desc  # min_length retired from describe
 
 
 def test_describe_deliverable_json_file_channel():
     desc = describe_deliverable(
         Deliverable(
-            form="files",
             output_format="json",
             artifacts=["AgentCore/文档/reviews/legal.json"])
     )
@@ -383,7 +383,7 @@ def test_form_files_soft_when_none_written():
     """甲⁺：form=files ∧ 零落盘 → soft warning，不 fail；定案 B 标本队员本波未交卷。"""
     from agentcore.runtime.runs.contract import zero_files_gap_message
 
-    v = check_contract("我把整份代码贴在这里", RunContract(form="files"), files_written=0)
+    v = check_contract("我把整份代码贴在这里", RunContract(artifacts=["out.md"]), files_written=0)
     assert v.ok
     assert not v.failures
     assert any("工作区" in w for w in v.warnings)
@@ -394,18 +394,18 @@ def test_form_files_soft_when_none_written():
     assert not is_zero_files_gap(v)
 
 
-def test_omitted_form_zero_disk_soft():
-    """漏填 form=files → 零落盘仍只 soft warning。"""
+def test_omitted_form_zero_disk_not_soft():
+    """省略不催写：零落盘不进 files_not_landed 软提醒。"""
     v = check_contract(
         "我把整份代码贴在这里", RunContract(), files_written=0
     )
     assert v.ok
-    assert any("未把产物写入工作区" in w for w in v.warnings)
+    assert not any("未把产物写入工作区" in w for w in v.warnings)
 
 
 def test_prose_form_no_zero_disk_soft():
     v = check_contract(
-        "我把整份代码贴在这里", RunContract(form="prose"), files_written=0
+        "我把整份代码贴在这里", RunContract(), files_written=0
     )
     assert v.ok
     assert not any("未把产物写入工作区" in w for w in v.warnings)
@@ -424,7 +424,7 @@ def test_form_files_zero_disk_attributes_channel_dead_not_paste():
 
     v = check_contract(
         "写了但通道挂了",
-        RunContract(form="files"),
+        RunContract(artifacts=["out.md"]),
         files_written=0,
         landing_failure_kind="channel_dead")
     assert v.ok
@@ -438,7 +438,7 @@ def test_form_files_zero_disk_attributes_channel_dead_not_paste():
 def test_form_files_zero_disk_attributes_write_failed_not_paste():
     v = check_contract(
         "试过写盘",
-        RunContract(form="files"),
+        RunContract(artifacts=["out.md"]),
         files_written=0,
         landing_failure_kind="write_failed")
     assert v.ok
@@ -447,7 +447,7 @@ def test_form_files_zero_disk_attributes_write_failed_not_paste():
 
 
 def test_form_files_passes_when_a_file_was_written():
-    assert check_contract("已写入 index.html", RunContract(form="files"), files_written=1).ok
+    assert check_contract("已写入 index.html", RunContract(artifacts=["out.md"]), files_written=1).ok
 
 
 def test_form_files_passes_when_file_copy_landed():
@@ -479,7 +479,7 @@ def test_form_files_passes_when_file_copy_landed():
     assert touched == ["deck.pptx"]
     v = check_contract(
         "已复制成品",
-        RunContract(form="files"),
+        RunContract(artifacts=["out.md"]),
         files_written=len(touched))
     assert v.ok
     assert not any("未把产物写入工作区" in f for f in v.failures)
@@ -513,7 +513,7 @@ def test_requires_files_passes_when_str_replace_landed():
     assert touched == ["site/index.html"]
     v = check_contract(
         "",
-        Deliverable(form="files", artifacts=["site/index.html"]),
+        Deliverable( artifacts=["site/index.html"]),
         files_written=len(touched),
         workspace_paths=["site/index.html", "site/styles.css"],
         artifact_contents={"site/index.html": "<html></html>"})
@@ -526,7 +526,7 @@ def test_file_deliverable_empty_body_passes_when_artifact_text_loaded():
     qa_body = "# QA\n\n## 通过项\n- HTML 结构完整\n"
     v = check_contract(
         "",
-        Deliverable(form="files", artifacts=["site/QA.md"]),
+        Deliverable( artifacts=["site/QA.md"]),
         files_written=1,
         workspace_paths=["site/QA.md"],
         artifact_contents={"site/QA.md": qa_body})
@@ -538,7 +538,7 @@ def test_file_deliverable_empty_body_still_fails_baseline_when_nothing_landed():
     """甲⁺：零落盘不再单独 fail；但空正文+零盘+无 handoff 仍触「产出为空」基线。"""
     v = check_contract(
         "",
-        Deliverable(form="files", artifacts=["site/QA.md"]),
+        Deliverable( artifacts=["site/QA.md"]),
         files_written=0,
         workspace_paths=["site/index.html"],
         artifact_contents=None)
@@ -552,7 +552,7 @@ def test_form_files_reviews_landing_counts_as_product():
 
     v = check_contract(
         "已写修复方案",
-        Deliverable(form="files"),
+        Deliverable(artifacts=["out.md"]),
         files_written=1,
         workspace_paths=[f"{REVIEWS_DIR}/修复方案.md"])
     assert v.ok
@@ -563,7 +563,7 @@ def test_artifact_path_mismatch_is_warning_not_zero_gap():
     """Declared artifacts missing → warning only; not a zero-disk write_pass gap."""
     v = check_contract(
         "已写别处",
-        Deliverable(form="files", artifacts=["expected.md"]),
+        Deliverable( artifacts=["expected.md"]),
         files_written=1,
         workspace_paths=["other.md"])
     assert v.ok
@@ -577,7 +577,7 @@ def test_artifact_dir_miss_with_landing_is_silent():
 
     v = check_contract(
         "已写",
-        Deliverable(form="files", artifact_dir=DRAFTS_DIR, artifacts=[]),
+        Deliverable( artifact_dir=DRAFTS_DIR, artifacts=[]),
         files_written=1,
         workspace_paths=["docs/法庭迷局侦探游戏_GDD.md"],
     )
@@ -588,20 +588,19 @@ def test_artifact_dir_miss_with_landing_is_silent():
 
 def test_prose_form_ignores_file_count():
     # 显式 prose 从不因零写失败。
-    assert check_contract("纯文字分析", RunContract(form="prose"), files_written=0).ok
+    assert check_contract("纯文字分析", RunContract(), files_written=0).ok
 
 
 def test_describe_deliverable_form_files_without_artifacts():
-    desc = describe_deliverable(Deliverable(form="files"))
-    assert "form=files" in desc
-    assert "成品写入工作区" in desc
+    desc = describe_deliverable(Deliverable(artifacts=["out.md"]))
+    assert "form=" not in desc
+    assert "`out.md`" in desc
 
 
 def test_describe_deliverable_omitted_form_has_no_must_write_line():
-    # 漏填 = files；交法在交付物规格。
     desc = describe_deliverable(Deliverable())
-    assert "form=files" in desc
-    assert "file_write" not in desc
+    assert desc == ""
+    assert "form=" not in desc
 
 
 # --- artifacts: declarative path reconciliation ---------------------------------
@@ -778,11 +777,10 @@ def test_node_has_dependents():
 
 
 def test_is_file_deliverable_predicate():
-    assert is_file_deliverable(Deliverable(form="files"))
-    assert is_file_deliverable(Deliverable(form="workspace"))
+    assert is_file_deliverable(Deliverable(artifacts=["out.md"]))
+    assert is_file_deliverable(Deliverable(artifact_dir="src"))
     assert is_file_deliverable(Deliverable(artifacts=["a.md"]))
-    assert not is_file_deliverable(Deliverable(form="prose"))
-    assert is_file_deliverable(Deliverable())
+    assert not is_file_deliverable(Deliverable())
     assert not is_file_deliverable(None)
     assert not hasattr(Deliverable(), "requires_files")
     assert not hasattr(Deliverable(), "min_length")
@@ -796,38 +794,38 @@ def test_is_file_deliverable_predicate():
 
 
 def test_needs_file_contents_predicate():
-    # file-form + section check → must read the file
-    assert needs_file_contents(Deliverable(form="files", required_sections=["X"]))
+    # sections without pinned paths → body-only, no file read
+    assert not needs_file_contents(Deliverable(required_sections=["X"]))
     assert needs_file_contents(Deliverable(artifacts=["a.md"], required_sections=["X"]))
     # existence-only files（漏填默认 files）→ no read needed
     assert not needs_file_contents(Deliverable())
     # JSON file gate still needs contents
     assert needs_file_contents(Deliverable(output_format="json", artifacts=["a.json"]))
     # file-form but existence-only (no content rule) → no read needed
-    assert not needs_file_contents(Deliverable(form="files"))
+    assert not needs_file_contents(Deliverable(artifacts=["out.md"]))
     assert not needs_file_contents(Deliverable(artifacts=["a.md"]))
     # prose (body-only) → no file read
-    assert not needs_file_contents(Deliverable(form="prose"))
+    assert not needs_file_contents(Deliverable())
     assert not needs_file_contents(None)
     # HTML / Markdown are citation content surfaces (not a quality scan)
     assert needs_file_contents(
-        Deliverable(form="files"),
+        Deliverable(artifacts=["out.md"]),
         landed_paths=["index.html", "style.css"])
     assert needs_file_contents(None, landed_paths=["index.html", "app.js"])
     # content surface (Markdown) → citation gate may need a read
     assert needs_file_contents(
-        Deliverable(form="files"),
+        Deliverable(artifacts=["out.md"]),
         landed_paths=["report.md"])
     # CSS/JS-only existence landing → no read
     assert not needs_file_contents(
-        Deliverable(form="files"),
+        Deliverable(artifacts=["out.md"]),
         landed_paths=["style.css"])
     assert not needs_file_contents(
-        Deliverable(form="files"),
+        Deliverable(artifacts=["out.md"]),
         landed_paths=["app.js"])
     # code-only landing → still no read for existence-only deliverable
     assert not needs_file_contents(
-        Deliverable(form="files"),
+        Deliverable(artifacts=["out.md"]),
         landed_paths=["main.py"])
 
 
@@ -847,7 +845,7 @@ def test_landed_html_css_skip_web_quality_and_seam():
     contents = {"index.html": html, "style.css": css}
     v = check_contract(
         "已落盘网页",
-        Deliverable(form="files"),
+        Deliverable(artifacts=["out.md"]),
         files_written=2,
         workspace_paths=list(contents),
         artifact_contents=contents,
@@ -878,7 +876,7 @@ def test_landed_copy_self_notes_are_not_contract_warnings():
     )
     v = check_contract(
         "报告已写入",
-        Deliverable(form="files", artifacts=["report.md"]),
+        Deliverable( artifacts=["report.md"]),
         files_written=1,
         workspace_paths=["report.md"],
         artifact_contents={"report.md": md},
@@ -892,7 +890,8 @@ def test_landed_copy_self_notes_are_not_contract_warnings():
 def test_file_form_section_satisfied_by_file_only():
     # The paper's sections live ONLY in the landed file; the chat body is a terse note.
     contract = Deliverable(
-        form="files", required_sections=["方法", "结论"]
+        artifacts=["paper.md"],
+        required_sections=["方法", "结论"]
     )
     v = check_contract(
         "论文已写入 paper.md",
@@ -906,7 +905,8 @@ def test_file_form_section_satisfied_by_file_only():
 
 def test_file_form_section_missing_in_both_fails():
     contract = Deliverable(
-        form="files", required_sections=["参考文献"]
+        artifacts=["paper.md"],
+        required_sections=["参考文献"]
     )
     v = check_contract(
         "论文已写入",
@@ -920,7 +920,7 @@ def test_file_form_section_missing_in_both_fails():
 
 def test_file_form_must_contain_ignored():
     # 已删 must_contain：即使文件/正文都缺词也不再 soft tip。
-    contract = Deliverable(form="files")
+    contract = Deliverable(artifacts=["out.md"])
     v = check_contract(
         "见 paper.md",
         contract,
@@ -933,7 +933,7 @@ def test_file_form_must_contain_ignored():
 
 def test_file_form_min_length_ignored():
     # 已删 min_length：短正文+短文件也不再 soft tip。
-    contract = Deliverable(form="files")
+    contract = Deliverable(artifacts=["out.md"])
     v = check_contract(
         "正" * 60,
         contract,
@@ -946,7 +946,7 @@ def test_file_form_min_length_ignored():
 
 def test_prose_deliverable_ignores_file_contents():
     # A prose (non-file) deliverable keeps body-only semantics even if contents are passed.
-    contract = Deliverable(form="prose", required_sections=["结论"])
+    contract = Deliverable(required_sections=["结论"])
     v = check_contract(
         "正文没有结论章节",
         contract,
@@ -969,7 +969,7 @@ def test_artifacts_deliverable_section_from_file_without_form():
 
 def test_file_form_falls_back_to_body_when_contents_unavailable():
     # A read failure (no artifact_contents) degrades to body-only rather than crashing.
-    contract = Deliverable(form="files", required_sections=["结论"])
+    contract = Deliverable( required_sections=["结论"])
     ok_body = check_contract(
         "# 结论\n正文里有章节", contract, files_written=1, workspace_paths=["p.md"]
     )
@@ -983,7 +983,7 @@ def test_file_form_falls_back_to_body_when_contents_unavailable():
 def test_format_feedback_annotates_checked_channels():
     v = check_contract(
         "缺章节",
-        Deliverable(form="files", required_sections=["结论"]),
+        Deliverable( required_sections=["结论"]),
         files_written=1,
         workspace_paths=["paper.md"],
         artifact_contents={"paper.md": "# 方法"})
@@ -1000,7 +1000,7 @@ def test_format_feedback_no_channel_note_for_prose():
 
 def test_artifact_unbound_bibliography_fails_when_ledger_connected():
     """File deliverable with GB/T [D] and no #rN fails contract when ledger is on."""
-    contract = Deliverable(form="files")
+    contract = Deliverable(artifacts=["out.md"])
     body = "郝万鑫. 某问题研究[D]. 长江大学, 2026."
     v = check_contract(
         "已写入综述",
@@ -1015,7 +1015,7 @@ def test_artifact_unbound_bibliography_fails_when_ledger_connected():
 
 
 def test_artifact_bound_bibliography_passes():
-    contract = Deliverable(form="files")
+    contract = Deliverable(artifacts=["out.md"])
     entries = [
         {
             "id": "#r1",
@@ -1039,7 +1039,7 @@ def test_artifact_bound_bibliography_passes():
 
 def test_artifact_bibliography_skipped_without_ledger():
     """Without ledger connection, unbound [D] in files does not fail (legacy scope)."""
-    contract = Deliverable(form="files")
+    contract = Deliverable(artifacts=["out.md"])
     v = check_contract(
         "已写入综述",
         contract,
@@ -1050,7 +1050,7 @@ def test_artifact_bibliography_skipped_without_ledger():
 
 
 def test_artifact_invalid_r_ref_fails():
-    contract = Deliverable(form="files")
+    contract = Deliverable(artifacts=["out.md"])
     v = check_contract(
         "已写入",
         contract,
@@ -1068,7 +1068,6 @@ def test_phase_a_skips_citation_gate():
     from agentcore.runtime.runs.contract import partition_citation_failures
 
     contract = Deliverable(
-        form="files",
         citation_mode="two_phase")
     body = "结论见 #r99，广搜摘要。"
     skipped = check_contract(
@@ -1097,7 +1096,7 @@ def test_phase_a_skips_citation_gate():
 
 def test_non_research_citation_gate_unchanged():
     """非调研路径（citation_mode 默认）仍立刻跑引用闸。"""
-    contract = Deliverable(form="files")
+    contract = Deliverable(artifacts=["out.md"])
     v = check_contract(
         "已写入",
         contract,
@@ -1147,7 +1146,7 @@ def test_strip_invalid_ledger_refs_from_surfaces_artifacts_and_body():
     # 剥完后引用闸应过
     v = check_contract(
         "已写入",
-        Deliverable(form="files"),
+        Deliverable(artifacts=["out.md"]),
         files_written=1,
         workspace_paths=["note.md"],
         artifact_contents=arts,

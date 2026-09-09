@@ -1,10 +1,11 @@
 """Dispatch + run a user workflow via mechanism-direct (no CEO 编队).
 
-Turn envelope is ``run_mechanism_direct_and_persist`` (shared with standing
-bound-workflow): placeholder / lease / log_context / persist. Inner execution
-remains ``run_workflow_pipeline``. Credential preflight shares
-``preflight_resolved_llm_credentials`` with ``standing_tasks.runner``. Shared
+Turn envelope is ``run_mechanism_direct_and_persist``: placeholder / lease /
+log_context / persist. Inner execution remains ``run_workflow_pipeline``.
+Credential preflight shares ``preflight_resolved_llm_credentials``. Shared
 with handoff: only ``spawn_background``. Pause truth is ``paused_turns``.
+A clock/webhook fire may pass ``trigger_lease_owner`` so the job releases the
+trigger lease when it finishes.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from agentcore.db.repositories import (
     FolderRepository,
     MessageRepository,
     UserRepository,
+    UserWorkflowRepository,
 )
 from agentcore.llm.credentials import LLMCredentials
 from agentcore.llm.resolve import (
@@ -65,6 +67,7 @@ async def dispatch_workflow_run(
     workflow_name: str = "工作流",
     permission_axes: dict | None = None,
     slot_values: Mapping[str, str] | None = None,
+    trigger_lease_owner: str | None = None,
 ) -> str:
     """Validate definition, preflight credentials, ensure conversation, spawn job.
 
@@ -140,6 +143,7 @@ async def dispatch_workflow_run(
             tasks=tasks,
             note=note,
             llm_credentials=credentials,
+            trigger_lease_owner=trigger_lease_owner,
         )
     )
     return conv_id
@@ -156,12 +160,14 @@ async def run_workflow_job(
     tasks: list[dict],
     note: str | None = None,
     llm_credentials: LLMCredentials | None = None,
+    trigger_lease_owner: str | None = None,
 ) -> None:
     """Background: persist user message + mechanism-direct turn envelope.
 
     Inner pipeline remains ``run_workflow_pipeline``; outer envelope is
-    ``run_mechanism_direct_and_persist`` (same as standing bound-workflow).
+    ``run_mechanism_direct_and_persist``.
     ``llm_credentials`` come from the sync dispatch preflight (do not re-gate here).
+    ``trigger_lease_owner`` is the clock/webhook lease held across this job.
     """
     sink = EventSink()
     try:
@@ -197,7 +203,6 @@ async def run_workflow_job(
             run_mechanism_direct_and_persist,
         )
 
-        # Shared envelope with standing bound-workflow (placeholder/lease/persist).
         await run_mechanism_direct_and_persist(
             conversation_id=conversation_id,
             user_id=user_id,
@@ -228,5 +233,17 @@ async def run_workflow_job(
             exc_info=True,
         )
     finally:
+        if trigger_lease_owner:
+            try:
+                async with async_session_factory() as session:
+                    await UserWorkflowRepository(session).clear_trigger_lease(
+                        workflow_id, owner=trigger_lease_owner
+                    )
+            except Exception:
+                logger.warning(
+                    "workflow.trigger.lease_clear_failed",
+                    workflow_id=workflow_id,
+                    exc_info=True,
+                )
         if not sink._closed:
             sink.close(reason="workflow_finally")

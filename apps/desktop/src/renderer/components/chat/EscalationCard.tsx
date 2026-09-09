@@ -26,6 +26,7 @@ import {
   AskNoteField,
   AskQuestionFields,
   type AskUserContent,
+  collapsedAskGlance,
   displayAskReply,
   hasExplicitAskReply,
   useAskAnswer,
@@ -37,7 +38,7 @@ import { escalationWaitNote } from "./escalationWaitCopy";
 function escalationDisclosureKey(
   escalation: RunEscalation,
   role: string,
-  facet: "raised" | "resolved",
+  facet: "raised" | "resolved" | "dormant",
 ): string {
   if (escalation.id) return `escalation:${facet}:${escalation.id}`;
   return `escalation:${facet}:${role}:${escalation.question.slice(0, 80)}`;
@@ -449,24 +450,21 @@ function DormantEscalation({
   role: string;
 }) {
   return (
-    <DecisionCard tone="neutral">
-      <div className="flex items-start gap-2">
-        <DecisionCardIcon tone="neutral">
-          <HelpCircle size={16} />
-        </DecisionCardIcon>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-muted-foreground">
-            {role} 曾请你拍板（本回合已结束）
-          </p>
-          <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">
-            {escalation.question}
-          </p>
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            暂定假设：{escalation.assumption}
-          </p>
-        </div>
-      </div>
-    </DecisionCard>
+    <ResolvedDecisionRecord
+      layout="neutralCollapsible"
+      disclosureKey={escalationDisclosureKey(escalation, role, "dormant")}
+      icon={Megaphone}
+      summary={`${role} · 曾请你拍板`}
+    >
+      <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">
+        {escalation.question}
+      </p>
+      {escalation.assumption ? (
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          暂定假设：{escalation.assumption}
+        </p>
+      ) : null}
+    </ResolvedDecisionRecord>
   );
 }
 
@@ -476,8 +474,8 @@ function isEarlyStopSource(source: string | undefined): boolean {
 }
 
 /** 非阻塞 raised（run_escalation）:
- * - 真·边干边上报：被动 notice，标题「边干边上报（无需你拍板）」；有 assumption 才渲染「暂定假设」。
- * - 卡住早停（source=validation_thrash|ceiling_backstop）：标题「卡住早停（交付可能不完整）」；
+ * - 真·边干边上报：被动 notice，折叠「边干边上报」；有 assumption 才渲染「暂定假设」。
+ * - 卡住早停（source=validation_thrash|ceiling_backstop）：折叠「卡住早停」；
  *   正文 question；不写边干边上报 / 已按假设继续 / 无需你拍板。
  * 默认收起为一行（对齐 TeamPreview / ResolvedDecisionRecord），点开再看全文。 */
 function RaisedEscalation({
@@ -490,8 +488,8 @@ function RaisedEscalation({
   const kind = escalationKindTag(escalation);
   const earlyStop = isEarlyStopSource(escalation.source);
   const summary = earlyStop
-    ? `${role} · 卡住早停（交付可能不完整）${kind ? ` · ${kind}` : ""}`
-    : `${role} · 边干边上报（无需你拍板）${kind ? ` · ${kind}` : ""}`;
+    ? `${role} · 卡住早停${kind ? ` · ${kind}` : ""}`
+    : `${role} · 边干边上报${kind ? ` · ${kind}` : ""}`;
   return (
     <ResolvedDecisionRecord
       layout="neutralCollapsible"
@@ -503,7 +501,7 @@ function RaisedEscalation({
         {escalation.question}
       </p>
       {!earlyStop && escalation.assumption ? (
-        <p className="mt-1.5 text-xs text-muted-foreground">
+        <p className="mt-1.5 text-sm text-muted-foreground">
           暂定假设：{escalation.assumption}
         </p>
       ) : null}
@@ -524,46 +522,58 @@ function ResolvedEscalation({
   const timedOut = escalation.status === "timed_out";
   const isFallback = assumed || timedOut;
   const ownershipConflict = (escalation.ownershipPaths?.length ?? 0) > 0;
-  let headline: string;
+  const userReplied = !isFallback && !byCeo;
+  let summary: string;
   if (assumed) {
-    headline = ownershipConflict
-      ? byCeo
-        ? "主管选按假设继续（未移交写权）"
-        : "你选了按假设继续（未移交写权）"
-      : byCeo
-        ? "主管选按假设继续"
-        : "你选了按假设继续";
+    summary = `${role} · ${
+      ownershipConflict
+        ? byCeo
+          ? "主管选按假设继续（未移交写权）"
+          : "你选了按假设继续（未移交写权）"
+        : byCeo
+          ? "主管选按假设继续"
+          : "你选了按假设继续"
+    }`;
   } else if (timedOut) {
-    headline = ownershipConflict
-      ? byCeo
-        ? "主管未裁 · 超时按假设（未移交写权）"
-        : "超时未答 · 已按假设继续（未移交写权）"
-      : byCeo
-        ? "主管未裁 · 超时按假设继续"
-        : "超时未答 · 已按假设继续";
+    summary = `${role} · ${
+      ownershipConflict
+        ? byCeo
+          ? "主管未裁 · 超时按假设（未移交写权）"
+          : "超时未答 · 已按假设继续（未移交写权）"
+        : byCeo
+          ? "主管未裁 · 超时按假设继续"
+          : "超时未答 · 已按假设继续"
+    }`;
   } else if (byCeo) {
-    headline = viaUser ? "CEO 已仲裁（经用户）" : "CEO 已仲裁";
+    summary = `${role} · ${viaUser ? "CEO 已仲裁（经用户）" : "CEO 已仲裁"}`;
   } else {
-    headline = "已答复";
+    summary = collapsedAskGlance({
+      selected: [],
+      note: escalation.answer ?? "",
+      prompts: escalation.questions.map((q) => q.prompt),
+    });
   }
   return (
     <ResolvedDecisionRecord
       layout="neutralCollapsible"
       disclosureKey={escalationDisclosureKey(escalation, role, "resolved")}
-      icon={isFallback ? Clock : Check}
-      summary={`${role} · ${headline}`}
+      icon={isFallback ? Clock : Megaphone}
+      summary={summary}
     >
+      {userReplied ? (
+        <p className="text-sm text-muted-foreground">{role}</p>
+      ) : null}
       <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">
         {escalation.question}
       </p>
       {isFallback ? (
-        <p className="mt-1.5 text-xs text-muted-foreground">
+        <p className="mt-1.5 text-sm text-muted-foreground">
           {timedOut ? "超时回落假设：" : "按假设继续："}
           {escalation.assumption}
         </p>
       ) : (
         escalation.answer && (
-          <p className="mt-1.5 whitespace-pre-wrap rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs text-foreground">
+          <p className="mt-1.5 whitespace-pre-wrap text-sm text-muted-foreground">
             {displayAskReply(escalation.answer)}
           </p>
         )
@@ -677,23 +687,22 @@ export function EscalationCards({
         />
       ))}
       {raised.length > 0 && collapseRaised && (
-        <button
-          type="button"
-          className="flex w-full items-center gap-1.5 rounded-lg bg-card/60 px-2.5 py-2 text-left text-xs text-muted-foreground hover:bg-card"
+        <Button
+          variant="ghost"
           onClick={() => setRaisedOpen((v) => !v)}
           aria-expanded={showRaisedCards}
+          className="h-auto w-auto justify-start gap-2 px-0 py-0 text-sm font-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
         >
+          <span className="flex h-5 shrink-0 items-center justify-center text-muted-foreground">
+            <Megaphone size={14} />
+          </span>
+          {raised.length} 条边干边上报
           {showRaisedCards ? (
             <ChevronDown size={14} className="shrink-0" />
           ) : (
             <ChevronRight size={14} className="shrink-0" />
           )}
-          <Megaphone size={14} className="shrink-0" />
-          <span>
-            {raised.length} 条边干边上报（无需你拍板）
-            {showRaisedCards ? " · 收起" : " · 展开"}
-          </span>
-        </button>
+        </Button>
       )}
       {showRaisedCards &&
         raised.map((i) => (

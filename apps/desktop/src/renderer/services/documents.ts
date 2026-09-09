@@ -7,8 +7,9 @@ import { scheduleAccountRulesMemoryRefresh } from "@/services/refreshAccountRule
  *
  * Nodes are addressed by **id**. Scope is `folderId` (`null` = GLOBAL). The file rail
  * lists entries flat by scope (no 记忆/规则/文档 folders). `apply_mode` / `description`
- * are derived indexes of body frontmatter; UI shows 常驻/按需 badges, never the raw
- * `apply` key. `frontmatter_error` means the entry does not inject — surface it.
+ * are derived indexes of body frontmatter; the UI never shows the raw `apply` key,
+ * and no longer paints 常驻/按需 badges — location is the 加载档. `frontmatter_error`
+ * means the entry does not inject — surface it.
  *
  * Write-side always cap (file rail does not meter remaining chars). Editing an
  * existing always entry past the cap returns `quota_warning`; create / promote
@@ -237,6 +238,45 @@ export async function listScopeEntries(
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "zh"));
 }
 
+/** Account-layer `AgentCore/规则/` children: 夹 + one level of documents. */
+export async function listAccountPromptTree(): Promise<{
+  rulesDirId: string | null;
+  folders: DocumentNode[];
+  documents: DocumentNode[];
+}> {
+  const tops = await listDocuments(null);
+  const agentcores = tops.filter(
+    (n) =>
+      n.kind === "folder" &&
+      n.name === AGENTCORE_ROOT_NAME &&
+      n.folderId == null,
+  );
+  const folders: DocumentNode[] = [];
+  const documents: DocumentNode[] = [];
+  let rulesDirId: string | null = null;
+  for (const ac of agentcores) {
+    const kids = await listDocuments(ac.id);
+    const rulesDir = kids.find(
+      (k) => k.kind === "folder" && k.name === RULES_DIR_NAME,
+    );
+    if (!rulesDir) continue;
+    rulesDirId = rulesDir.id;
+    const children = await listDocuments(rulesDir.id);
+    for (const child of children) {
+      if (child.kind === "folder") {
+        folders.push(child);
+        const nested = await listDocuments(child.id);
+        for (const leaf of nested) {
+          if (leaf.kind === "document") documents.push(leaf);
+        }
+      } else if (child.kind === "document") {
+        documents.push(child);
+      }
+    }
+  }
+  return { rulesDirId, folders, documents };
+}
+
 /**
  * All user-owned rule documents across scopes (legacy helper). Prefer
  * {@link listScopeEntries} for the flat file-rail list.
@@ -318,6 +358,7 @@ export function createRuleDocument(
   folderId: string | null = null,
   content = "",
   applyMode: DocumentApplyMode = "always",
+  parentId: string | null = null,
 ): Promise<DocumentDetail> {
   return api
     .post<DocumentDetailWire>("/v1/documents", {
@@ -325,7 +366,7 @@ export function createRuleDocument(
       kind: "document",
       role: "rule",
       content,
-      parent_id: null,
+      parent_id: parentId,
       folder_id: folderId,
       apply_mode: applyMode,
     })
@@ -333,6 +374,41 @@ export function createRuleDocument(
     .then((doc) => {
       scheduleAccountRulesMemoryRefresh();
       return doc;
+    });
+}
+
+/** User-made 夹 under `AgentCore/规则/` (`role=rule` + `kind=folder`). */
+export function createRuleFolder(name: string): Promise<DocumentNode> {
+  return api
+    .post<DocumentNodeWire>("/v1/documents", {
+      name,
+      kind: "folder",
+      role: "rule",
+      parent_id: null,
+    })
+    .then(toNode)
+    .then((node) => {
+      scheduleAccountRulesMemoryRefresh();
+      return node;
+    });
+}
+
+/** Move a rule document. Passing `applyMode` keeps location and 加载档 in lockstep. */
+export function reparentDocument(
+  id: string,
+  parentId: string | null,
+  applyMode?: DocumentApplyMode,
+): Promise<DocumentNode> {
+  return api
+    .patch<DocumentNodeWire>(`/v1/documents/${encodeURIComponent(id)}`, {
+      parent_id: parentId,
+      reparent: true,
+      ...(applyMode ? { apply_mode: applyMode } : {}),
+    })
+    .then(toNode)
+    .then((node) => {
+      scheduleAccountRulesMemoryRefresh();
+      return node;
     });
 }
 

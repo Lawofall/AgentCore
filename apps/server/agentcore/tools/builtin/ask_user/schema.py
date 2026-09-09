@@ -141,13 +141,13 @@ def normalize_options(
 ) -> list[dict[str, Any]]:
     """Cap choice options, accepting either bare strings or rich objects.
 
-    Default cap is 6 (ordinary choice). ``card=organize_plan`` / ``daily_review``
-    raise the cap to their list hats. A bare ``"Postgres"`` becomes
+    Default cap is 6 (ordinary choice). ``card=organize_plan``
+    raises the cap to its list hat. A bare ``"Postgres"`` becomes
     ``{"label": "Postgres"}``; an object may add ``action`` (a desktop client action
     such as ``open_local_project`` / ``register_local_project`` / ``bind_local_folder``
     — unknown values drop so a hallucinated action never reaches the wire).
     ``detail`` (the one-line trade-off under the label) is kept only when
-    ``keep_detail`` is true — dedicated cards ``organize_plan`` / ``daily_review``.
+    ``keep_detail`` is true — dedicated card ``organize_plan``.
     Ordinary short asks and escalate drop it even if the model filled it; put the
     trade-off in ``label``. Empty-label entries drop. Names may carry
     ``（推荐）`` / ``(recommended)``.
@@ -183,7 +183,7 @@ def normalize_options(
                     p = str(it.get("path") or "").strip()
                     if p:
                         opt["path"] = p
-            # daily_review structured fields (server apply on confirm).
+            # Historical option fields (retired daily_review); still passed through.
             review_kind = str(it.get("review_kind") or "").strip()
             if review_kind in ("preference", "profile", "topic", "rule", "doc"):
                 opt["review_kind"] = review_kind
@@ -241,8 +241,8 @@ def normalize_questions(
     ``default`` is optional here (unlike the old kickoff): an opening question should
     pre-fill one, but a mid-task fork usually wants the user to actively choose, so it
     is left empty when the CEO omits it.     ``max_options`` / ``keep_detail`` forward to
-    :func:`normalize_options` (cap raised for ``organize_plan`` / ``daily_review``;
-    ``keep_detail`` only for those dedicated cards).
+    :func:`normalize_options` (cap raised for ``organize_plan``;
+    ``keep_detail`` only for that dedicated card).
 
     Choice with no options after absorb is lowered to ``text`` so the card is
     fill-in, never a zero-button choice. A question-level ``label`` with absent

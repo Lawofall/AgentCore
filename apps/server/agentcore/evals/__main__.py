@@ -85,20 +85,6 @@ from agentcore.evals.debate_speech_format import (
 from agentcore.evals.debate_speech_format import (
     lint_samples as lint_speech_format_samples,
 )
-from agentcore.evals.deliverable_form import (
-    SAMPLES as DELIVERABLE_FORM_SAMPLES,
-)
-from agentcore.evals.deliverable_form import (
-    _form_provider_and_model as _deliverable_form_provider_and_model,
-)
-from agentcore.evals.deliverable_form import (
-    deliverable_form_to_dict,
-    format_deliverable_form_report,
-    run_deliverable_form,
-)
-from agentcore.evals.deliverable_form import (
-    lint_samples as lint_deliverable_form_samples,
-)
 from agentcore.evals.judge import build_default_judge, build_default_milestone_judge
 from agentcore.evals.observe import format_observe, observe_report
 from agentcore.evals.report import format_report, report_to_dict
@@ -259,11 +245,6 @@ def _build_parser() -> argparse.ArgumentParser:
         "--debate-speech-format",
         action="store_true",
         help="辩手发言格式合规：直连 complete 量论点骨架纪律（无前言/无总标题/无加粗伪标题）",
-    )
-    p.add_argument(
-        "--deliverable-form",
-        action="store_true",
-        help="交付形态 form=prose|files：直连 complete 量 CEO 看/用分流与落盘指示",
     )
     p.add_argument(
         "--playbook-routing",
@@ -477,35 +458,10 @@ async def _run_debate_speech_format(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _run_deliverable_form(args: argparse.Namespace) -> int:
-    """交付形态 form 分流：classifier system + 用户请求 → complete → 查 form / 落盘指示。
-
-    诊断性：``--lint-only`` 零 LLM（含生产契约静态门禁）；真跑需 eval key。
-    """
-    lint_deliverable_form_samples(DELIVERABLE_FORM_SAMPLES)
-    if args.lint_only:
-        print(f"[lint] OK — {len(DELIVERABLE_FORM_SAMPLES)} 个交付形态样本 + 生产契约合法")
-        return 0
-
-    provider, model = _deliverable_form_provider_and_model(args.judge_mode)
-    result = await run_deliverable_form(provider, model, DELIVERABLE_FORM_SAMPLES)
-    print(format_deliverable_form_report(result))
-
-    if args.out:
-        out = Path(args.out)
-        out.write_text(
-            json.dumps(deliverable_form_to_dict(result), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        print(f"\n[report] 已写出 JSON -> {out}")
-
-    return 0
-
-
 async def _run_compaction_fidelity(args: argparse.Namespace) -> int:
     """摘要保真：生产 compact prompt + 合成探针 → complete → 子串检查。
 
-    诊断性（与 ``--deliverable-form`` 同）：``--lint-only`` 零 LLM；真跑出保真率。
+    诊断性：``--lint-only`` 零 LLM；真跑出保真率。
     失败禁止把判例写入压缩器常驻。
     """
     samples = select_compaction_fidelity_samples(COMPACTION_FIDELITY_SAMPLES, args.keys)
@@ -600,8 +556,6 @@ async def _run(args: argparse.Namespace) -> int:
         return await _run_playbook_routing(args)
     if args.compaction_fidelity:
         return await _run_compaction_fidelity(args)
-    if args.deliverable_form:
-        return await _run_deliverable_form(args)
     if args.debate_speech_format:
         return await _run_debate_speech_format(args)
     if args.debate_converge:

@@ -36,7 +36,6 @@ from agentcore.db.repositories import (
     CredentialsRepository,
     DocumentRepository,
     EmailChallengeRepository,
-    FeedbackRepository,
     FolderMemberRepository,
     FolderRepository,
     FriendRepository,
@@ -47,8 +46,6 @@ from agentcore.db.repositories import (
     ProductNoticeRepository,
     PushDeviceRepository,
     RefreshTokenRepository,
-    StandingTaskRepository,
-    StandingTaskRunRepository,
     TurnJournalRepository,
     TurnMetricsRepository,
     UserBlockRepository,
@@ -247,18 +244,6 @@ def get_handoff_job_repo(session: AsyncSession = Depends(get_db)) -> HandoffJobR
     return HandoffJobRepository(session)
 
 
-def get_standing_task_repo(
-    session: AsyncSession = Depends(get_db),
-) -> StandingTaskRepository:
-    return StandingTaskRepository(session)
-
-
-def get_standing_task_run_repo(
-    session: AsyncSession = Depends(get_db),
-) -> StandingTaskRunRepository:
-    return StandingTaskRunRepository(session)
-
-
 def get_user_workflow_repo(
     session: AsyncSession = Depends(get_db),
 ) -> UserWorkflowRepository:
@@ -269,10 +254,6 @@ def get_push_device_repo(
     session: AsyncSession = Depends(get_db),
 ) -> PushDeviceRepository:
     return PushDeviceRepository(session)
-
-
-def get_feedback_repo(session: AsyncSession = Depends(get_db)) -> FeedbackRepository:
-    return FeedbackRepository(session)
 
 
 def get_notice_repo(session: AsyncSession = Depends(get_db)) -> ProductNoticeRepository:

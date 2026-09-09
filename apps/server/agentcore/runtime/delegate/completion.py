@@ -120,36 +120,15 @@ def plan_declares_artifacts(plan: RunPlan) -> bool:
             return True
     return False
 
-def plan_declares_files_form(plan: RunPlan) -> bool:
-    """True when any worker deliverable declares ``form=files`` or ``workspace``."""
-    for node in plan.nodes:
-        d = node.deliverable
-        if d is not None and d.form in ("files", "workspace"):
-            return True
-    return False
-
-def plan_all_workers_prose(plan: RunPlan) -> bool:
-    """True when every worker explicitly declares ``form=prose`` (non-empty plan)."""
-    if not plan.nodes:
-        return False
-    for node in plan.nodes:
-        d = node.deliverable
-        if d is None or d.form != "prose":
-            return False
-    return True
 
 def plan_has_writable_worker(plan: RunPlan) -> bool:
-    """True when at least one worker can land files (not ``form=prose``).
+    """True when at least one worker expects on-disk landing (pinned paths).
 
-    Omitted form is files; only explicit ``prose`` withholds landing expectation.
+    Omitted / empty deliverable does not expect landing.
     """
-    if not plan.nodes:
-        return False
-    for node in plan.nodes:
-        d = node.deliverable
-        if d is None or d.form != "prose":
-            return True
-    return False
+    from agentcore.runtime.runs.types import deliverable_expects_landing
+
+    return any(deliverable_expects_landing(node.deliverable) for node in plan.nodes)
 
 def plan_mentions_binary_artifact(plan: RunPlan) -> bool:
     """True when any worker task reads like a binary / playable deliverable."""
@@ -187,7 +166,7 @@ def plan_suggests_exec_office_deliverable(plan: RunPlan) -> bool:
 def node_holds_write_tools(spec: Any) -> bool:
     """真纯丙：不再用 ``spec.tools`` 白名单判断写盘能力；默认视为具备。
 
-    H2 已取消 ``form=prose`` 硬卸写盘；本函数恒 True（写盘仍过用户授权 / write_scope）。
+    H2 已取消「只报告」硬卸写盘；本函数恒 True（写盘仍过用户授权 / write_scope）。
     """
     del spec
     return True
@@ -783,17 +762,22 @@ def _worker_gaps_have_hard(
 
 def format_worker_gaps_block(
     gaps_by_worker: list[tuple[str, list[dict[str, str]]]] | list[tuple[str, list[str]]],
+    *,
+    plan_open: bool = False,
 ) -> str:
     """CEO-facing「契约缺口」section, or "" when nobody has residual gaps.
 
     Cutoff reasons (token_budget / worker_timeout / degraded_handoff) are listed
-    for the CEO's replan / continue decisions. User-facing gap disclosure is owned
+    for the CEO's continue decisions. User-facing gap disclosure is owned
     by structured ``delivery_status.gaps`` + the presentation layer — the synopsis
     only gets a light anti-contradiction discipline (no completeness claims).
 
     Soft-only gaps (``_SOFT_GAP_REASONS``) ban completeness assertions but do **not**
     force「部分交付 / 尚未齐备」. Any hard gap keeps the partial-delivery closing
     copy unchanged.
+
+    ``plan_open``: 波边界 / 部分失败 stash 时 True（replan 仍可用）；批次已收口
+    时 False（只指路 delegate 点名续派，不提 replan）。
     """
     from agentcore.runtime.runs.cutoff import CUTOFF_REASONS
 
@@ -801,12 +785,20 @@ def format_worker_gaps_block(
         return ""
     has_cutoff = False
     has_hard = _worker_gaps_have_hard(gaps_by_worker)
+    if plan_open:
+        fill_how = (
+            "优先同一协作图 `replan(add)` + `replaces_run_id` / "
+            "`continue_from_run_id` 按缺口点名补；禁止无缺口另开大派，别假装收工。"
+        )
+    else:
+        fill_how = (
+            "批次已收口：再调 delegate，续派填 continue_from_run_id，"
+            "补失败/跳过填 replaces_run_id；禁止无缺口另开大派，别假装收工。"
+        )
     lines = [
         "\n### ⚠️ 契约缺口（请据缺口同图点名补，勿整团重开）\n"
         "以下是各队员收尾后仍未对齐的声明交付物 / 交接缺口（含收敛强制收尾后无法再写文件"
-        "留下的缺口，以及预算/超时掐断信号）。优先同一协作图 `replan(add)` +"
-        "`replaces_run_id` / `continue_from_run_id` 按缺口点名补；禁止无缺口另开大派，"
-        "别假装收工。\n"
+        f"留下的缺口，以及预算/超时掐断信号）。{fill_how}\n"
     ]
     for label, gaps in gaps_by_worker:
         parts: list[str] = []

@@ -21,6 +21,10 @@ class ConsultDirectoryEntry:
     group the prompt directory — not shown as an internal type name.
     ``family`` / ``family_label`` collapse sibling tools (MCP Server, export pair)
     into one directory line; consult still uses a member name (or the family key).
+    ``face`` is ``ToolFace.value`` for builtin tools (prompt subgrouping); MCP
+    rows leave it empty and render under 连接器.
+    ``group`` is the Chinese 能力指引 subtitle for system skills (编排 / 工作区 /
+    交付 / 产品 / 工具); empty groups are omitted at render.
     """
 
     name: str
@@ -28,6 +32,8 @@ class ConsultDirectoryEntry:
     section: str = ""
     family: str = ""
     family_label: str = ""
+    face: str = ""
+    group: str = ""
 
 
 @runtime_checkable

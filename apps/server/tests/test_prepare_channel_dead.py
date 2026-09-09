@@ -14,7 +14,7 @@ def test_error_fields_for_surfaces_channel_dead_prepare_abort():
         fallback_code=ErrorCode.STREAM_ERROR,
         fallback_message="服务出错了，请稍后重试。",
     )
-    assert code == ErrorCode.STREAM_ERROR
+    assert code == ErrorCode.LOCAL_CHANNEL_DEAD
     assert "本机工作区通道无响应" in message
     assert "服务出错了" not in message
     assert is_channel_dead_detail(CHANNEL_DEAD_PREPARE_ABORT)

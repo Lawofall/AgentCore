@@ -17,7 +17,7 @@ alwaysApply: false
 
 **前端 vitest**（3.2.6）：点名文件 `pnpm --filter agentcore-desktop exec vitest run <路径>`；点名用例追加 `-t "<用例名>"`；按改动文件反查相关测试 `pnpm --filter <包> exec vitest related --run <改动文件...>`（`related` 是**子命令**不是 flag，且必须带 `--run`，否则进 watch 挂住）。包级 `pnpm --filter <包> test -- --run` 只在收尾跑。
 
-**桌面截图**：`pnpm -C apps/desktop shoot <场景名过滤>` —— **默认带场景过滤**，无过滤的全量（数百张）只在发布门禁跑。
+**桌面截图**：`pnpm -C apps/desktop shoot <场景名过滤>` —— **需要看画面时才跑**（何时 → `frontend-preview.mdc`）；无过滤的全量（数百张）只在发布门禁跑。改完桌面默认仍是点名 vitest，禁止默认 shoot 再读 PNG。
 
 **类型 / lint**：改动落在单包就 `pnpm --filter <包> typecheck|lint`。
 

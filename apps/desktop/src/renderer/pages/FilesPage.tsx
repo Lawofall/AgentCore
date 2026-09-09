@@ -9,7 +9,8 @@ import { useLocation } from "react-router-dom";
  * roots (`folder:<id>`，云 + 本地 + 与我共享) without first
  * opening a conversation. Layout is VSCode 式左树右详情: the left rail stacks
  * 我的文件（嵌套树）/ 本机文件夹 / 与我共享 as collapsible sections over their
- * own {@link FileSource}. `conv:` scratch is not a hub zone — 裸聊写盘进自动建桌.
+ * own {@link FileSource}. Local `conv:` with user-visible files mixes into
+ * 本机文件夹; cloud `conv:` stays off this rail（裸聊写盘进自动建桌）.
  *
  * 文件夹（Folder）生命周期删除入口在本页各 `folder:` 根的右键菜单；对话列表页
  * `/conversations` 只做对话归档/删除。「浏览文件」jumps here with

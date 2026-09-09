@@ -4,8 +4,7 @@ import {
 } from "@/lib/splitGuidelineRoles";
 import { describe, expect, it } from "vitest";
 
-const CONTRACT =
-  "【落盘文件】（form=files）成品写入工作区；正文只报路径、怎么用、关键取舍。";
+const CONTRACT = "【落盘文件】成品写入工作区；正文只报路径、怎么用、关键取舍。";
 
 const LEAF = `<身份>
 叶子身份。
@@ -35,7 +34,7 @@ describe("extractCeoIdentity", () => {
 </身份>
 
 <按需目录>
-- team_orchestration_advanced：团队拆法
+- staffing：团队拆法
 - lead_subteam：子队拆法
 </按需目录>`;
     expect(extractCeoIdentity(addon)).toBe("<身份>\n主 Agent 核。\n</身份>");

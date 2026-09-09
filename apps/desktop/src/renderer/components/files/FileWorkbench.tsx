@@ -1,8 +1,6 @@
 import { FileDetail } from "@/components/files/FileDetail";
 import { MemoryProfileSplitEditor } from "@/components/files/MemoryProfileSplitEditor";
-import { MemoryUpdatesView } from "@/components/files/MemoryUpdatesView";
 import type { FileSortBy } from "@/components/files/fileTreeTypes";
-import { AgentCoreSection } from "@/components/files/fileWorkbench/AgentCoreSection";
 import { DetailTabs } from "@/components/files/fileWorkbench/DetailTabs";
 import {
   EntriesSection,
@@ -20,8 +18,14 @@ import {
   MyFilesRailHeader,
   SharedWithMeRailHeader,
 } from "@/components/files/fileWorkbench/RailHeaders";
+import { WorkspaceSection } from "@/components/files/fileWorkbench/WorkspaceSection";
 import { WorkspaceVersionsPanel } from "@/components/files/fileWorkbench/WorkspaceVersionsPanel";
 import { createAndOpenScopeEntry } from "@/components/files/fileWorkbench/createScopeEntry";
+import {
+  localConvDeskLabel,
+  mixLocalRailItems,
+  scratchHasUserVisibleFiles,
+} from "@/components/files/fileWorkbench/localConvScratch";
 import {
   type Tab,
   WS_TRASH_PATH,
@@ -93,16 +97,16 @@ const RULES_WS = "__rules__";
  * zones (双模式工作区 §5.4 / §八 — 界面上没有「项目」，容器只有文件夹):
  *
  * - **我的文件** — the cloud folder tree the user owns, nested by `rel_path`.
- * - **本机文件夹** — disk folders, most recently active first (VS Code 语义).
+ * - **本机文件夹** — disk folders plus local `conv:` desks that have user-visible
+ *   files, most recently active first (VS Code 语义).
  * - **与我共享** — cloud desks this user joined (flat roots; same `folder:` tree).
  *
- * `conv:` scratch is conversation-panel addressing, not a hub zone: 裸聊写盘
- * 自动建桌，产物进「我的文件」。
+ * Cloud `conv:` scratch stays off this rail（裸聊写盘自动建桌，产物进「我的文件」）.
  *
  * 段**默认折叠**（只露根标题），点标题展开/收起、展开态持久化（`expandedWs`）；折叠时不
  * 挂载 {@link FileTree}，故云端 eager 源的「整树递归拉取」推迟到展开时才发——文件夹一多时
- * 既清爽又省掉打开页面即 N 次全量请求。顶层另挂全局 ``AgentCore/``（条目 + 最近更新），
- * 不再三分「记忆 / 规则 / 文档」夹。The right pane is a **tab strip** — opening files
+ * 既清爽又省掉打开页面即 N 次全量请求。账号共用提示词在工具箱；本页左栏只挂文件夹树，
+ * 条目进各文件夹 ``.agentcore``，不再三分「记忆 / 规则 / 文档」夹。The right pane is a **tab strip** — opening files
  * stacks tabs, each {@link FileDetail} stays mounted (hidden when inactive) so
  * switching never drops editor / draft state. The tree always stays visible (unlike
  * the swap-style {@link FileBrowser} used in narrow side panels).
@@ -132,13 +136,14 @@ export function FileWorkbench({
   focusWsId,
   focusKey,
   openMemoryLeaf,
+  probeLocalScratchHasFiles,
 }: {
   workspaces: WorkspaceInfo[];
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
   fsAvailable: boolean;
-  /** Show the pinned global entries rail atop the file hub.
+  /** Show folder ``.agentcore`` entries in the tree.
    * 侧栏把文件夹条目挂进 ``.agentcore`` 树行；本 flag 只管 FileWorkbench 宿主。 */
   showMemory?: boolean;
   /** When navigated here with a target workspace (`/conversations`「浏览文件」),
@@ -155,6 +160,15 @@ export function FileWorkbench({
     projectId?: string | null;
   } | null;
   focusKey?: string;
+  /**
+   * Local `conv:` desks appear only when the scratch has user-visible files.
+   * Default probes `source.listDir` (ignores `AgentCore/` · `.agentcore` ·
+   * `attachments/`). Tests may pass `hasFiles` and/or a mocked source here.
+   */
+  probeLocalScratchHasFiles?: (
+    ws: WorkspaceInfo,
+    source: FileSource | null,
+  ) => boolean | Promise<boolean>;
 }) {
   const { isNarrow } = useNarrowLayoutState();
   const offline = useReadOnlyOffline();
@@ -171,12 +185,10 @@ export function FileWorkbench({
   const [sortBy, setSortBy] = useState<FileSortBy>(() => loadFileSort());
   // 从 /conversations「浏览文件」跳来时高亮的工作区根（1.5s 后消失，呼应对话页的 flash）。
   const [flashWsId, setFlashWsId] = useState<string | null>(null);
-  // 最近更新 / 对话卡深链到文件夹条目时，强制展开该文件夹下的 AgentCore（一次性）。
+  // 对话卡深链到文件夹条目时，强制展开该文件夹下的 AgentCore（一次性）。
   const [revealMemoryFolderId, setRevealMemoryFolderId] = useState<
     string | null
   >(null);
-  // 深链到全局条目时，强制展开顶层 AgentCore（一次性）。
-  const [revealGlobalAgentCore, setRevealGlobalAgentCore] = useState(false);
   const appliedFocusRef = useRef<string | null>(null);
   const appliedMemoryLeafRef = useRef<string | null>(null);
 
@@ -184,21 +196,95 @@ export function FileWorkbench({
   const folders = useFolders();
   const openCreateFolder = useFoldersStore((s) => s.openCreateFolder);
 
-  /** Folder workspaces only — `conv:` scratch is conversation-panel addressing. */
+  /** 本机文件夹段只在能读本机盘的宿主里出现（Web 版没有）。 */
+  const localFsAvailable = fsAvailable && hasLocalFiles();
+
+  /** Folder workspaces only — cloud `conv:` stays off this rail. */
   const personalWorkspaces = useMemo(
     () => workspaces.filter((w) => w.wsId.startsWith("folder:")),
     [workspaces],
   );
 
+  const localConvKey = useMemo(
+    () =>
+      workspaces
+        .filter((w) => w.wsId.startsWith("conv:") && w.location === "local")
+        .map((w) => `${w.wsId}:${w.rootId ?? ""}:${w.subpath}`)
+        .join("\0"),
+    [workspaces],
+  );
+
+  const probeScratchRef = useRef(probeLocalScratchHasFiles);
+  probeScratchRef.current = probeLocalScratchHasFiles;
+
+  const [visibleLocalConvWsIds, setVisibleLocalConvWsIds] = useState<
+    Set<string>
+  >(() => new Set());
+  const [localConvProbeDone, setLocalConvProbeDone] = useState(
+    () => !localFsAvailable || !localConvKey,
+  );
+
+  useEffect(() => {
+    if (!localFsAvailable) {
+      setVisibleLocalConvWsIds(new Set());
+      setLocalConvProbeDone(true);
+      return;
+    }
+    const candidates = workspaces.filter(
+      (w) => w.wsId.startsWith("conv:") && w.location === "local",
+    );
+    if (candidates.length === 0) {
+      setVisibleLocalConvWsIds(new Set());
+      setLocalConvProbeDone(true);
+      return;
+    }
+    let cancelled = false;
+    setLocalConvProbeDone(false);
+    void (async () => {
+      const ids = new Set<string>();
+      await Promise.all(
+        candidates.map(async (w) => {
+          const src = resolveWorkspaceSource(w, fsAvailable);
+          const override = probeScratchRef.current;
+          const ok = override
+            ? await override(w, src)
+            : src
+              ? await scratchHasUserVisibleFiles(src)
+              : false;
+          if (ok) ids.add(w.wsId);
+        }),
+      );
+      if (!cancelled) {
+        setVisibleLocalConvWsIds(ids);
+        setLocalConvProbeDone(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [localFsAvailable, fsAvailable, workspaces]);
+
+  const localConvDesks = useMemo(() => {
+    return workspaces
+      .filter(
+        (w) =>
+          w.wsId.startsWith("conv:") &&
+          w.location === "local" &&
+          visibleLocalConvWsIds.has(w.wsId),
+      )
+      .map((w) => ({ ...w, name: localConvDeskLabel(w, conversations) }));
+  }, [workspaces, visibleLocalConvWsIds, conversations]);
+
   /** Every rail row's workspace, folder rows included even when `/v1/workspaces`
-   * has not caught up with a folder the user just created. */
+   * has not caught up with a folder the user just created. Local `conv:` desks
+   * with user-visible files join here so the tree source resolves. */
   const railWorkspaces = useMemo(() => {
     const known = new Set(personalWorkspaces.map((w) => w.wsId));
     const extra = folders
       .filter((f) => !known.has(`folder:${f.id}`))
       .map(folderWorkspaceFallback);
-    return [...personalWorkspaces, ...extra];
-  }, [personalWorkspaces, folders]);
+    return [...personalWorkspaces, ...extra, ...localConvDesks];
+  }, [personalWorkspaces, folders, localConvDesks]);
 
   const railWorkspaceByWsId = useMemo(
     () => new Map(railWorkspaces.map((w) => [w.wsId, w])),
@@ -227,7 +313,6 @@ export function FileWorkbench({
 
   const clearMemoryReveal = useCallback(() => {
     setRevealMemoryFolderId(null);
-    setRevealGlobalAgentCore(false);
   }, []);
 
   /** Expand project AgentCore for a deep-linked memory leaf. */
@@ -235,15 +320,12 @@ export function FileWorkbench({
     (path: string, projectId?: string | null) => {
       const folderId = parseProjectMemoryFolderId(path) ?? projectId ?? null;
       setFilter("");
-      if (folderId) {
-        const wsId = `folder:${folderId}`;
-        expandWs(wsId);
-        setRevealMemoryFolderId(folderId);
-        setFlashWsId(wsId);
-        window.setTimeout(() => setFlashWsId(null), 1500);
-      } else {
-        setRevealGlobalAgentCore(true);
-      }
+      if (!folderId) return;
+      const wsId = `folder:${folderId}`;
+      expandWs(wsId);
+      setRevealMemoryFolderId(folderId);
+      setFlashWsId(wsId);
+      window.setTimeout(() => setFlashWsId(null), 1500);
     },
     [expandWs],
   );
@@ -320,11 +402,13 @@ export function FileWorkbench({
   // focusKey（导航键）只应用一次。记忆源与工作区列表无关，故无需等 workspaces 就绪即可打开；
   // 文件夹画像叶子的双栏编辑器会在列表到位后自行解析文件夹名。内联开 tab 逻辑（与 openFile
   // 文件夹叶子额外展开对应文件夹 + ``.agentcore`` 节点；主题叶再展「主题」。
+  // 账号层流水账不在本页打开（工具箱 `/toolbox/mine/skills?updates=1`）。
   useEffect(() => {
     if (!openMemoryLeaf || !focusKey) return;
     if (appliedMemoryLeafRef.current === focusKey) return;
     appliedMemoryLeafRef.current = focusKey;
     const { path, name, projectId } = openMemoryLeaf;
+    if (path === MEMORY_UPDATES_PATH) return;
     const key = tabKey(MEMORY_WS, path);
     setTabs((prev) =>
       prev.some((t) => tabKey(t.wsId, t.path) === key)
@@ -393,7 +477,7 @@ export function FileWorkbench({
     );
   }, [folders, filter, matchesFilter]);
 
-  /** 本机文件夹 = 最近打开列表（VS Code 语义）：同一本机路径可能被多条文件夹记录绑定，去重后按最近活跃排。 */
+  /** 本机文件夹 = 最近打开列表 + local `conv:` desks with user-visible files. */
   const localFolders = useMemo(() => {
     const local = dedupeFoldersByLocalBinding(
       folders.filter((f) => f.mode === "local"),
@@ -402,6 +486,16 @@ export function FileWorkbench({
       matchesFilter(f.name, `folder:${f.id}`),
     );
   }, [folders, conversations, matchesFilter]);
+
+  const visibleLocalConvDesks = useMemo(
+    () => localConvDesks.filter((w) => matchesFilter(w.name, w.wsId)),
+    [localConvDesks, matchesFilter],
+  );
+
+  const localRailItems = useMemo(
+    () => mixLocalRailItems(localFolders, visibleLocalConvDesks, conversations),
+    [localFolders, visibleLocalConvDesks, conversations],
+  );
 
   const sharedWithMeFolders = useMemo(() => {
     return sortFoldersByRecentActivity(
@@ -412,7 +506,11 @@ export function FileWorkbench({
 
   const treeFilterQuery = filter.trim();
 
-  const railEmpty = folders.length === 0 && personalWorkspaces.length === 0;
+  const railEmpty =
+    folders.length === 0 &&
+    personalWorkspaces.length === 0 &&
+    localConvDesks.length === 0 &&
+    (localConvProbeDone || !localFsAvailable);
 
   const activeTab = useMemo(
     () => tabs.find((t) => tabKey(t.wsId, t.path) === activeKey) ?? null,
@@ -428,16 +526,6 @@ export function FileWorkbench({
         : [...prev, { wsId, path, name }],
     );
     setActiveKey(key);
-  };
-
-  /** Open a memory leaf and, for project-scoped paths, expand that project AgentCore. */
-  const openMemoryLeafInRail = (
-    path: string,
-    name: string,
-    projectId?: string | null,
-  ) => {
-    openFile(MEMORY_WS, path, name);
-    revealMemoryInRail(path, projectId);
   };
 
   // 关标签：关的是激活页则跳到相邻页（优先右、否则左），全关则回空态。
@@ -486,9 +574,6 @@ export function FileWorkbench({
     setTabs([]);
     setActiveKey(null);
   };
-
-  /** 本机文件夹段只在能读本机盘的宿主里出现（Web 版没有）。 */
-  const localFsAvailable = fsAvailable && hasLocalFiles();
 
   /** One bundle every folder row reads from, instead of drilling a dozen props. */
   const railHost: FolderRailHost = {
@@ -565,30 +650,6 @@ export function FileWorkbench({
           />
         </div>
 
-        {/* Pinned global entries + 最近更新. Per-folder entries mount inside
-            each folder's ``.agentcore`` tree row. */}
-        {showMemory && (
-          <div className="shrink-0 border-b border-border px-2 py-1">
-            <AgentCoreSection
-              scope={{ kind: "global" }}
-              memoryActivePath={
-                activeTab?.wsId === MEMORY_WS ? activeTab.path : null
-              }
-              documentActivePath={
-                activeTab?.wsId === RULES_WS ? activeTab.path : null
-              }
-              onOpenEntry={openEntry}
-              onEntryDeleted={closeEntry}
-              onEntryRenamed={renameEntryTab}
-              onOpenUpdates={() =>
-                openFile(MEMORY_WS, MEMORY_UPDATES_PATH, "记忆动态")
-              }
-              forceOpen={revealGlobalAgentCore}
-              onRevealApplied={clearMemoryReveal}
-            />
-          </div>
-        )}
-
         <PendingFolderInvites
           onAccepted={(folder) => {
             const wsId = `folder:${folder.id}`;
@@ -611,13 +672,12 @@ export function FileWorkbench({
           <EmptyHint
             icon={<FolderOpen size={24} className="text-muted-foreground/40" />}
             title="还没有文件夹"
-            hint="在「我的文件」里新建文件夹或打开本机文件夹；别人邀请你的协作桌会出现在「与我共享」。"
           />
         ) : (
           <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 py-1">
             {filter.trim() &&
             cloudFolderNodes.length === 0 &&
-            localFolders.length === 0 &&
+            localRailItems.length === 0 &&
             sharedWithMeFolders.length === 0 ? (
               <p className="px-2 py-6 text-center text-xs text-muted-foreground">
                 没有匹配「{filter.trim()}」的文件夹或已展开树中的文件
@@ -636,22 +696,47 @@ export function FileWorkbench({
                 )}
 
                 {localFsAvailable &&
-                  (localFolders.length > 0 || !filter.trim()) && (
+                  (localRailItems.length > 0 || !filter.trim()) && (
                     <LocalFoldersRailHeader />
                   )}
                 {localFsAvailable &&
-                  (localFolders.length === 0 && !filter.trim() ? (
+                  (localRailItems.length === 0 &&
+                  !filter.trim() &&
+                  localConvProbeDone ? (
                     <p className="px-2 py-2 text-xs text-muted-foreground/70">
                       打开过的本机文件夹会出现在这里
                     </p>
                   ) : (
-                    localFolders.map((folder) => (
-                      <FolderRailRow
-                        key={folder.id}
-                        folder={folder}
-                        host={railHost}
-                      />
-                    ))
+                    localRailItems.map((item) =>
+                      item.kind === "folder" ? (
+                        <FolderRailRow
+                          key={item.folder.id}
+                          folder={item.folder}
+                          host={railHost}
+                        />
+                      ) : (
+                        <WorkspaceSection
+                          key={item.ws.wsId}
+                          ws={item.ws}
+                          source={sourceByWs.get(item.ws.wsId) ?? null}
+                          activePath={
+                            activeTab?.wsId === item.ws.wsId
+                              ? activeTab.path
+                              : null
+                          }
+                          expanded={expandedWs.has(item.ws.wsId)}
+                          onToggle={() => toggleWs(item.ws.wsId)}
+                          onOpenFile={(path, name) =>
+                            openFile(item.ws.wsId, path, name)
+                          }
+                          flashing={item.ws.wsId === flashWsId}
+                          filterQuery={treeFilterQuery}
+                          sortBy={sortBy}
+                          showLocationBadge={false}
+                          offlineCloud={false}
+                        />
+                      ),
+                    )
                   ))}
 
                 {sharedWithMeFolders.length > 0 && (
@@ -704,7 +789,6 @@ export function FileWorkbench({
               inline
               icon={<FileText size={26} className="text-muted-foreground/40" />}
               title="选择一个文件"
-              hint="从左侧的文件夹树里点开文件，可同时打开多个、用标签页来回切换。"
             />
           ) : (
             <>
@@ -727,10 +811,6 @@ export function FileWorkbench({
               <div className="relative min-h-0 flex-1">
                 {tabs.map((t) => {
                   const key = tabKey(t.wsId, t.path);
-                  // The synthetic「记忆动态」tab is not a file — render the cross-conversation
-                  // feed view instead of a source-backed editor.
-                  const isMemoryUpdates =
-                    t.wsId === MEMORY_WS && t.path === MEMORY_UPDATES_PATH;
                   // 版本 / 软删区面板：挂在真实工作区下的合成 tab，不是文件，故不解析文件源。
                   const wsPanel =
                     t.wsId === MEMORY_WS ||
@@ -765,13 +845,7 @@ export function FileWorkbench({
                         key === activeKey ? "" : "hidden",
                       )}
                     >
-                      {isMemoryUpdates ? (
-                        <MemoryUpdatesView
-                          onOpenLeaf={(path, name) =>
-                            openMemoryLeafInRail(path, name)
-                          }
-                        />
-                      ) : wsPanel === WS_VERSIONS_PATH ? (
+                      {wsPanel === WS_VERSIONS_PATH ? (
                         <WorkspaceVersionsPanel
                           wsId={t.wsId}
                           name={panelWsName}

@@ -11,7 +11,7 @@ import pytest
 from pydantic import ValidationError
 
 from agentcore.api.routes.documents import DocumentCreateRequest, DocumentPatchRequest
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.memory.rules_injection import OnDemandUserRule, rule_consult_name
 from agentcore.runtime.context.consult_sources import MergedConsultSource, RuleConsultSource
 from agentcore.runtime.context.consultable import Consultable, ConsultDirectoryEntry
@@ -73,7 +73,7 @@ def test_rule_source_implements_consultable():
 def test_consult_schema_orchestration():
     schema = _rule_tool().schema
     assert schema.name == "consult"
-    assert schema.category is ToolCategory.ORCHESTRATION
+    assert schema.face is ToolFace.ORCHESTRATION
 
 
 async def test_consult_rule_hit_soft_miss():

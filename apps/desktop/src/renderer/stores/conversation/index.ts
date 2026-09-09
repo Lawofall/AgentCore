@@ -33,6 +33,7 @@ export {
   useActiveMessageProcess,
   useActiveMemoryUpdates,
   useActiveGenerating,
+  conversationStillWriting,
   useActiveExecutionVia,
   useActiveTurnPhase,
   useConversationGenerating,
@@ -54,6 +55,7 @@ export {
   allowsStreamingMutations,
   blocksStreamOpen,
   isTerminalPhase,
+  isWritingTurnPhase,
 } from "./turnPhase";
 export {
   beginTurnPreflight,

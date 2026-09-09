@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from structlog.testing import capture_logs
 
-from agentcore.core.types import ToolCategory, ToolEffect
+from agentcore.core.types import ToolEffect, ToolFace
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
 from agentcore.runtime.engine.ask_user_absorb import (
     absorb_blocking_ask_user_content,
@@ -66,7 +66,7 @@ class _AskUserStub:
             name="ask_user",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:

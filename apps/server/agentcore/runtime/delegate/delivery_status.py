@@ -23,9 +23,9 @@ blocked 抬成 partial（空交/零声明清单 ≠ 整轮失败）。
 
 ``degraded_handoff`` 一律 warning。空交接风暴 / 取消零落盘附加缺口 **已撤**。
 甲⁺：**队员** ``COMPLETED`` 不因零落盘改 FAILED。用户面正式完成只认磁盘上
-``accepted`` 路径：写盘形态（``form=files`` / ``workspace`` / 非空 ``artifacts``，
-漏填=files）的 ``files_not_landed`` **blocking**，不得 ``delivered``；全员
-``form=prose`` 仍 soft（warning/notes）。同图已有 continue_from / replaces
+``accepted`` 路径：写盘形态（非空 ``artifacts`` / ``artifact_dir``）
+的 ``files_not_landed`` **blocking**，不得 ``delivered``；未钉路径
+仍 soft（warning/notes）。同图已有 continue_from / replaces
 补派已跑时，收掉并排「计划收口时跳过」。
 
 用户面零落盘按队员投影「本队员本波未交卷」（定案 B）；仅批次谓词时仍可落
@@ -42,7 +42,7 @@ blocked 抬成 partial（空交/零声明清单 ≠ 整轮失败）。
 ``evidence_gap`` + ``search_policy=academic_literature``（兼容旧
 ``evidence_deficit`` 戳）；不扫完成话术词，不套 ``map_fanout``。
 
-已声明复核落盘（``form=files`` + ``reviews/``）：声明路径未 accepted / 拒收 /
+已声明复核落盘（钉 ``reviews/`` artifacts）：声明路径未 accepted / 拒收 /
 空壳 → ``reason=thin_review`` blocking（见
 ``research_quality.collect_thin_review_gaps``）；不扫角色名；有合格报告则短
 handoff 不硬降档。``requires_draft_ack`` 扩至 ``evidence_deficit`` /
@@ -636,7 +636,7 @@ def _harden_expected_landing_gaps(
 ) -> list[dict[str, Any]]:
     """写盘形态：``files_not_landed`` 不得 warning（用户面不得 delivered）。
 
-    全员 ``form=prose`` 保持甲⁺ soft。队员 phase 仍是 COMPLETED。
+    未钉路径保持甲⁺ soft。队员 phase 仍是 COMPLETED。
     """
     from agentcore.runtime.delegate.completion import plan_has_writable_worker
 

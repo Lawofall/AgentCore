@@ -240,7 +240,7 @@ def test_zero_landing_worker_keeps_role_blocking_gap():
             run_id="w1",
             task="生成 pptx",
             role="执行工程师",
-            deliverable=Deliverable(form="files"),
+            deliverable=Deliverable(artifacts=["out.md"]),
         )
     )
     results = {
@@ -291,13 +291,13 @@ def test_zero_landing_mixed_batch_attributes_empty_worker_only():
             run_id="ok",
             task="写 A",
             role="修码员",
-            deliverable=Deliverable(form="files"),
+            deliverable=Deliverable(artifacts=["out.md"]),
         ),
         RunSpec(
             run_id="empty",
             task="写 B",
             role="前端工程师",
-            deliverable=Deliverable(form="files"),
+            deliverable=Deliverable(artifacts=["out.md"]),
         ),
     )
     results = {
@@ -345,7 +345,7 @@ def test_zero_landing_gap_attributes_channel_dead_from_transcript():
             run_id="w1",
             task="写文件",
             role="工程师",
-            deliverable=Deliverable(form="files"),
+            deliverable=Deliverable(artifacts=["out.md"]),
         )
     )
     transcript = [
@@ -453,7 +453,7 @@ def test_zero_landing_gap_attributes_write_failed_from_transcript():
             run_id="w1",
             task="复制成品",
             role="工程师",
-            deliverable=Deliverable(form="files"),
+            deliverable=Deliverable(artifacts=["out.md"]),
         )
     )
     transcript = [
@@ -607,7 +607,7 @@ def test_unverified_note_mixed_with_declared_path_mismatch_is_delivered():
             task="写调研",
             role="调研员",
             deliverable=Deliverable(
-                form="files", artifacts=["docs/research/findings.md"]
+ artifacts=["docs/research/findings.md"]
             ),
         )
     )
@@ -680,7 +680,7 @@ def test_declared_path_a_landed_b_is_the_product():
             run_id="w1",
             task="写调研",
             role="调研员",
-            deliverable=Deliverable(form="files", artifacts=[declared]),
+            deliverable=Deliverable( artifacts=[declared]),
         )
     )
     results = {
@@ -724,15 +724,13 @@ def test_workspace_leftover_dir_keeps_bare_names_delivered_at_worker_path():
     results: dict[str, RunState] = {}
     for i, name in enumerate(names, start=1):
         deliverable = Deliverable(
-            form="files",
             artifacts=[name],
             artifact_dir=REVIEWS_DIR,
-            workspace_native=True,
         )
         apply_artifact_dir_defaults(deliverable)
-        assert deliverable.form == "workspace"
-        assert deliverable.artifact_dir == ""
-        assert deliverable.artifacts == [name]
+        joined = f"{REVIEWS_DIR}/{name}"
+        assert deliverable.artifact_dir == REVIEWS_DIR
+        assert deliverable.artifacts == [joined]
         run_id = f"w{i}"
         nodes.append(
             RunSpec(
@@ -745,8 +743,8 @@ def test_workspace_leftover_dir_keeps_bare_names_delivered_at_worker_path():
         results[run_id] = RunState(
             phase=RunPhase.COMPLETED,
             content="ok",
-            files_touched=[name],
-            file_acceptance=_accepted(name),
+            files_touched=[joined],
+            file_acceptance=_accepted(joined),
         )
     payload = build_delivery_status(
         RunPlan(nodes=nodes),
@@ -755,10 +753,11 @@ def test_workspace_leftover_dir_keeps_bare_names_delivered_at_worker_path():
     )
     assert payload is not None
     assert payload["state"] == "delivered"
-    assert payload["delivered_files"] == names
+    expected = [f"{REVIEWS_DIR}/{n}" for n in names]
+    assert payload["delivered_files"] == expected
     by_path = {a["path"]: a for a in payload["artifacts"]}
-    for name in names:
-        assert by_path[name]["status"] == "accepted"
+    for path in expected:
+        assert by_path[path]["status"] == "accepted"
     assert not any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])
 
 
@@ -770,7 +769,7 @@ def test_declared_path_match_still_delivered():
             run_id="w1",
             task="写调研",
             role="调研员",
-            deliverable=Deliverable(form="files", artifacts=[path]),
+            deliverable=Deliverable( artifacts=[path]),
         )
     )
     results = {
@@ -796,7 +795,7 @@ def test_undeclared_extra_omitted_when_declared_file_accepted():
             run_id="w1",
             task="更新汇总",
             role="审计主管",
-            deliverable=Deliverable(form="files", artifacts=[declared]),
+            deliverable=Deliverable( artifacts=[declared]),
         )
     )
     results = {
@@ -832,7 +831,7 @@ def test_execution_artifacts_union_across_hops():
             run_id="audit_0",
             task="成文",
             role="代码审计员",
-            deliverable=Deliverable(form="files", artifacts=[first]),
+            deliverable=Deliverable( artifacts=[first]),
         )
     )
     maybe_emit_delivery_status(
@@ -855,7 +854,7 @@ def test_execution_artifacts_union_across_hops():
             run_id="synth",
             task="更新汇总",
             role="审计主管",
-            deliverable=Deliverable(form="files", artifacts=[summary]),
+            deliverable=Deliverable( artifacts=[summary]),
         )
     )
     payload = build_delivery_status(
@@ -899,7 +898,7 @@ def test_union_drops_historical_path_mismatch_extras():
             run_id="w1",
             task="写汇总",
             role="主管",
-            deliverable=Deliverable(form="files", artifacts=[declared]),
+            deliverable=Deliverable( artifacts=[declared]),
         )
     )
     payload = build_delivery_status(
@@ -928,7 +927,7 @@ def test_workspace_prefix_declared_matches_relative_landing():
             run_id="w1",
             task="写首页",
             role="前端",
-            deliverable=Deliverable(form="files", artifacts=["/workspace/index.html"]),
+            deliverable=Deliverable( artifacts=["/workspace/index.html"]),
         )
     )
     results = {
@@ -952,7 +951,7 @@ def test_artifact_dir_landed_outside_is_the_product():
             run_id="w1",
             task="调研 Miro 落盘",
             role="竞品分析师",
-            deliverable=Deliverable(form="files", artifact_dir="docs/research"),
+            deliverable=Deliverable( artifact_dir="docs/research"),
         )
     )
     results = {
@@ -979,7 +978,7 @@ def test_declared_artifact_path_mismatch_from_warnings_alone_is_soft():
             task="调研",
             role="研究员",
             deliverable=Deliverable(
-                form="files", artifacts=["docs/research/notes.md"]
+ artifacts=["docs/research/notes.md"]
             ),
         )
     )
@@ -1256,7 +1255,6 @@ def test_qa_deferred_budget_does_not_emit_website_verify_action():
             role="页面 QA",
             task="独立【整页验收】站点【GEO 官网】…",
             deliverable=Deliverable(
-                form="files",
                 artifacts=["site/QA.md"],
             ),
         )
@@ -1726,7 +1724,7 @@ def test_priced_failure_landings_are_partial_not_blocked():
             run_id="w1",
             task="整理成 CSV",
             role="数据整理员",
-            deliverable=Deliverable(form="files", workspace_native=True),
+            deliverable=Deliverable(),
         )
     )
     payload = build_delivery_status(plan, {"w1": failed}, execution_id="e-priced-fail")
@@ -1959,9 +1957,9 @@ def test_two_phase_predicate_and_playbook_stamp():
     from agentcore.workspace.stage_dirs import RESEARCH_PREFIX
 
     assert is_two_phase_citation_deliverable(
-        Deliverable(citation_mode="two_phase", form="files", artifacts=["a.md"])
+        Deliverable(citation_mode="two_phase",  artifacts=["a.md"])
     )
-    assert not is_two_phase_citation_deliverable(Deliverable(form="files", artifacts=["a.md"]))
+    assert not is_two_phase_citation_deliverable(Deliverable( artifacts=["a.md"]))
     assert not is_two_phase_citation_deliverable(None)
     # 路径入口已撤：约定文档落点由扫 role·task 的正则填出，不得当两阶段入口。
     from agentcore.workspace.stage_dirs import REVIEWS_PREFIX
@@ -1969,21 +1967,20 @@ def test_two_phase_predicate_and_playbook_stamp():
     research_path = f"{RESEARCH_PREFIX}pricing_summary.md"
     reviews_path = f"{REVIEWS_PREFIX}legal_review.md"
     assert not is_two_phase_citation_deliverable(
-        Deliverable(form="files", artifacts=[research_path])
+        Deliverable( artifacts=[research_path])
     )
     assert not is_two_phase_citation_deliverable(
-        Deliverable(form="files", artifacts=[reviews_path])
+        Deliverable( artifacts=[reviews_path])
     )
     assert not is_two_phase_citation_deliverable(
-        Deliverable(form="files", artifact_dir=RESEARCH_PREFIX)
+        Deliverable( artifact_dir=RESEARCH_PREFIX)
     )
     # 显式盖戳仍进；省略退出
     assert is_two_phase_citation_deliverable(
-        Deliverable(citation_mode="two_phase", form="files", artifacts=[research_path])
+        Deliverable(citation_mode="two_phase",  artifacts=[research_path])
     )
     assert not is_two_phase_citation_deliverable(
         Deliverable(
-            form="files",
             artifacts=[research_path],
         )
     )
@@ -2017,7 +2014,6 @@ def _literature_report_plan() -> RunPlan:
             task="成文",
             role="撰稿人",
             deliverable=Deliverable(
-                form="files",
                 artifacts=[main],
                 citation_mode="two_phase",
             ),
@@ -2028,7 +2024,6 @@ def _literature_report_plan() -> RunPlan:
             role="学术审校员",
             depends_on=["write"],
             deliverable=Deliverable(
-                form="files",
                 artifacts=[f"{REVIEWS_PREFIX}审校报告.md"],
             ),
         ),
@@ -2217,7 +2212,6 @@ def test_map_fanout_junk_citations_not_evidence_deficit():
             task="摸底",
             role="方向专员",
             deliverable=Deliverable(
-                form="files",
                 artifacts=[note],
                 citation_mode="two_phase",
             ),
@@ -2277,7 +2271,7 @@ def _thin_review_plan(report_path: str):
             run_id="fix",
             task="修 bug",
             role="修复工程师",
-            deliverable=Deliverable(form="files", artifacts=["src/a.ts"]),
+            deliverable=Deliverable( artifacts=["src/a.ts"]),
         ),
         RunSpec(
             run_id="review",
@@ -2285,7 +2279,6 @@ def _thin_review_plan(report_path: str):
             role="独立复核员",
             depends_on=["fix"],
             deliverable=Deliverable(
-                form="files",
                 artifacts=[report_path],
             ),
         ),
@@ -2822,7 +2815,7 @@ def test_prose_wave_keeps_files_not_landed_soft():
             run_id="w1",
             task="口头结论",
             role="研究员",
-            deliverable=Deliverable(form="prose"),
+            deliverable=Deliverable(),
         )
     )
     results = {
@@ -2856,7 +2849,7 @@ def test_path_mismatch_latches_draft_ack_when_empty():
             run_id="w1",
             task="做图标",
             role="工程师",
-            deliverable=Deliverable(form="workspace", artifacts=[declared]),
+            deliverable=Deliverable(artifacts=[declared]),
         )
     )
     results = {

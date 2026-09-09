@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.resolve.ceo_surface import measure_openai_tool_chars
 from agentcore.tools.builtin.ask_user.tool import AskUserTool
@@ -78,7 +78,7 @@ from agentcore.tools.protocol import ToolSchema
 # 2026-09-01 schema 同层去重（手册出按钮）：browser 1329、host 2567、run 1004、
 # delegate 2409、ask_user 桌面 2235 / web 1686；git 政策表仍只在 description（2430）。
 # 2026-09-01 已确认约束填法收进 task 参数、deliverable 不再复述。实测 delegate 2380。
-# 2026-09-02 form=files 不再钉工作稿；裸文件名仍 join。实测 delegate 2294。
+# 2026-09-08 删 deliverable.form 三档：schema 只留 artifacts。实测 delegate 2153。cap 2340→2160。
 # 2026-09-02 run：when-to-use 补进 description（验证直接跑 / dev 后台 / action 管已有进程）。
 # 省略 wait_for 则起来就返回（不再注入默认就绪信号）。cap 1030。
 # 2026-09-06 ask_user：撤 grant_* 模型面广告（区外改走 file_* 运行时授权）。桌面云 1565、web 1400。
@@ -86,22 +86,34 @@ from agentcore.tools.protocol import ToolSchema
 # 实测 2305。cap 2300→2310（抬顶=新语义，非回潮）。
 # 2026-09-06 delegate.task：点名路径用工作区相对 POSIX（与工具 path 同形）。
 # 实测 2335。cap 2310→2340（抬顶=新语义，非回潮）。
+# 2026-09-08 ask_user HOW 同时指 ask_kickoff + ask_midtask（废名 asking_the_user 拆本）。
+# 桌面实测 1582。cap 1570→1590。web 实测 1417。cap 1400→1420。
+# 抬顶=HOW 指针多一本，不是把提问百科抄回按钮。
+# 2026-09-08 撤 desks skill：换桌对照下沉 target_folder_id（实测 delegate 2337，仍 ≤2340）；
+# list_folders / resolve_folder / create_folder 去掉 HOW→consult(desks) 指针。
+# 实测 207 / 335 / 474。cap 240→210、370→340、510→480。
+# 2026-09-10 delegate：读侧极性「不知读哪 ≠ 自己连搜」（与「有写权 ≠」对偶）。
+# 实测 2168。cap 2160→2170（抬顶=when-to-use 补漏，非回潮）。
+# 2026-09-10 delegate.task：已确认约束不装改法/现状；点名入口或成品路径
+# （收掉「≠改哪些文件」，避免和点名打架）。换字不抬顶。
+# 2026-09-10 delegate.depends_on：空=同波并行 + 本字段 ≠ task 里写先后
+# （对比边界，切开「把流水线写进 task」替身）。实测 2196。cap 2170→2200。
 _CAPS: dict[str, int] = {
     "browser": 1330,
     "git": 2430,
     "host": 2570,
     "run": 1030,
-    "delegate": 2340,
+    "delegate": 2200,
     "debate": 1380,
-    "ask_user": 1570,
-    "list_folders": 240,
-    "resolve_folder": 370,
-    "create_folder": 510,
+    "ask_user": 1590,
+    "list_folders": 210,
+    "resolve_folder": 340,
+    "create_folder": 480,
 }
 _TOTAL_CAP = sum(_CAPS.values())
 
 # 非桌面（web）态 ask_user：桌面独有的 action / well_known 等选项不装配。
-_ASK_USER_WEB_CAP = 1400
+_ASK_USER_WEB_CAP = 1420
 
 # Worker-only：escalate / handoff / 写盘三件套曾把身份段或 consult HOW 再抄一遍到按钮上。
 # 2026-08-29 escalate blocking：已拒凭据→false 短触发（身份段不进按钮）。当次实测 1698。cap 1690→1700。
@@ -112,6 +124,8 @@ _ASK_USER_WEB_CAP = 1400
 # 2026-09-02 形状改为「现在什么已成立 / 便条 ≠ 文件说明」，去掉 2–4 条配额。实测 247。cap 260→250。
 # 2026-09-01 写盘三件套 / escalate description 去重。实测 write 498 / append 413 /
 # str_replace 632 / escalate 1508。
+# 2026-09-08 撤 long_form_landing：写工具 description 去掉 HOW→consult。实测 write 334 /
+# str_replace 601。cap write 500→340、str_replace 640→610。
 # 2026-09-01 常驻文件面：回收站/扁平化手册出按钮，恢复路径留回执。实测
 # delete 353 / read 766 / grep 938 / move 328 / copy 375 / glob 684 /
 # list 404 / mkdir 223。
@@ -133,8 +147,8 @@ _COORD_CAPS: dict[str, int] = {
 _WORKER_CAPS: dict[str, int] = {
     "escalate": 1510,
     "handoff": 250,
-    "file_write": 500,
-    "str_replace": 640,
+    "file_write": 340,
+    "str_replace": 610,
 }
 # 2026-09-06 区外路径改走 file_* 本机路径（运行时挂载）：when-to-use 进 description。
 # 2026-09-06 已挂 external/ 写升档：file_copy dest 补已挂路径。实测 file_copy 431。
@@ -151,10 +165,10 @@ _FILE_CAPS: dict[str, int] = {
     "code_search": 630,
     "code_diagnostics": 420,
 }
-# 2026-09-02 对话稿默认 + query 跳转 + 消息游标（新语义）。
-# 实测 search_conversations 884 / read_conversation 828。
+# 2026-09-09 query 定位（唯一命中打开 / 多场列出）。
+# 实测 search_conversations 857 / read_conversation 825。
 _LOG_CAPS: dict[str, int] = {
-    "search_conversations": 890,
+    "search_conversations": 860,
     "read_conversation": 830,
 }
 
@@ -165,7 +179,7 @@ def _delegate_schema() -> ToolSchema:
         name="delegate",
         description=DELEGATE_DESCRIPTION,
         parameters=DELEGATE_PARAMETERS,
-        category=ToolCategory.ORCHESTRATION,
+        face=ToolFace.ORCHESTRATION,
         approval=ToolApproval.NEVER,
     )
 
@@ -176,7 +190,7 @@ def _debate_schema() -> ToolSchema:
         name="debate",
         description=DEBATE_DESCRIPTION,
         parameters=DEBATE_PARAMETERS,
-        category=ToolCategory.ORCHESTRATION,
+        face=ToolFace.ORCHESTRATION,
         approval=ToolApproval.NEVER,
     )
 
@@ -375,10 +389,11 @@ def test_on_demand_faces_point_how_to_consult():
     assert "HOW→consult(run)" in RunTool().schema.description
     assert "HOW→consult(browser)" in BrowserTool().schema.description
     assert "HOW→consult(debate_and_review)" in DEBATE_DESCRIPTION
-    assert "HOW→consult(team_orchestration_advanced)" in DELEGATE_DESCRIPTION
+    assert "HOW→consult(staffing)" in DELEGATE_DESCRIPTION
     from agentcore.tools.builtin.delegate.schema import NESTED_DELEGATE_DESCRIPTION
 
     assert "HOW→consult(lead_subteam)" in NESTED_DELEGATE_DESCRIPTION
+    assert "staffing" not in NESTED_DELEGATE_DESCRIPTION
     assert "team_orchestration_advanced" not in NESTED_DELEGATE_DESCRIPTION
     assert "lead_subteam" not in DELEGATE_DESCRIPTION
     assert "等到子队收工" in NESTED_DELEGATE_DESCRIPTION

@@ -98,16 +98,11 @@ export function AnalyticsPage() {
   const setSegment = (s: AnalyticsSegment) => navigate(`/analytics/${s}`);
 
   const activeLoading = segment === "cost" ? costLoading : healthLoading;
-  const subtitle =
-    segment === "cost"
-      ? "跨用户聚合 · Go 三窗口名义价校准、今日 / 本月成本、按模型拆分、Top 花销用户、近 7 日趋势"
-      : "跨用户聚合 · 回合健康（错误率 / P95 延迟 / 委派率 / 协作质量）、近 7 日趋势、近期错误";
 
   return (
     <Page>
       <PageHeader
         title="分析"
-        description={subtitle}
         note={UTC_WINDOW_HINT}
         actions={
           <Button
@@ -370,7 +365,6 @@ function CostPanel({
                   <EmptyState
                     icon={Coins}
                     title="本月暂无模型调用记录"
-                    description="有 LLM 调用落账后，按模型的用量与成本会出现在这里。"
                     className="py-0"
                   />
                 </TableMessageRow>
@@ -382,7 +376,7 @@ function CostPanel({
         <Card className="overflow-hidden">
           <SectionHeader
             title="本月 Top 花销用户"
-            description="按本月成本降序，仅列有花销的账号 · 点击行进入用户详情"
+            description="按本月成本降序"
           />
           <TableFrame minWidth={640} className="rounded-none border-0">
             <THead>
@@ -420,7 +414,6 @@ function CostPanel({
                   <EmptyState
                     icon={Coins}
                     title="本月暂无花销记录"
-                    description="有账号产生花销后，本月的 Top 花销榜会出现在这里。"
                     className="py-0"
                   />
                 </TableMessageRow>
@@ -610,10 +603,7 @@ function ErrorsTable({
 }) {
   return (
     <Card className="overflow-hidden">
-      <SectionHeader
-        title="近期错误"
-        description="最近失败的回合（newest-first）· 点击行进入会话复盘"
-      />
+      <SectionHeader title="近期错误" />
       <TableFrame minWidth={860} className="rounded-none border-0">
         <THead>
           <Th title={UTC_WINDOW_HINT}>时间（UTC）</Th>
@@ -664,7 +654,6 @@ function ErrorsTable({
               <EmptyState
                 icon={CheckCircle2}
                 title="近期暂无错误回合"
-                description="失败的回合会出现在这里，可直接点进会话复盘。"
                 className="py-0"
               />
             </TableMessageRow>

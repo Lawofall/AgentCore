@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
 from agentcore.runtime.coordination.session import (
     CoordinationSession,
@@ -53,9 +53,9 @@ def _tool_chunk(name: str, args: str, *, call_id: str = "c") -> LLMChunk:
 
 
 class _StubTool:
-    def __init__(self, name: str, *, category: ToolCategory = ToolCategory.EXECUTION) -> None:
+    def __init__(self, name: str, *, face: ToolFace = ToolFace.EXECUTION) -> None:
         self._name = name
-        self._category = category
+        self._face = face
         self.calls = 0
 
     @property
@@ -64,7 +64,7 @@ class _StubTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=self._category,
+            face=self._face,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
@@ -174,7 +174,7 @@ async def test_sibling_worker_still_offers_run_when_exec_env_dead():
     try:
         reg = ToolRegistry()
         reg.register(_StubTool("run"))
-        reg.register(_StubTool("other", category=ToolCategory.SEARCH))
+        reg.register(_StubTool("other", face=ToolFace.SEARCH))
         provider = _ToolsRecordingProvider([[_content_chunk("done")]])
         await react_loop(
             messages=[LLMMessage(role="user", content="go")],
@@ -267,7 +267,7 @@ async def test_react_loop_round_poll_exec_env_dead_keeps_family():
     try:
         reg = ToolRegistry()
         reg.register(_StubTool("run"))
-        reg.register(_StubTool("other", category=ToolCategory.SEARCH))
+        reg.register(_StubTool("other", face=ToolFace.SEARCH))
 
         def _mark_dead_after_round0() -> list[LLMMessage]:
             session.exec_env_dead = True

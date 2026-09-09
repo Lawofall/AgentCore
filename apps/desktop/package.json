@@ -1,6 +1,6 @@
 {
   "name": "agentcore-desktop",
-  "version": "0.9.24",
+  "version": "0.9.25",
   "description": "AgentCore Desktop - Multi-Agent AI Workspace",
   "author": "AgentCore",
   "main": "./out/main/index.js",
@@ -17,7 +17,6 @@
     "shoot:files": "node scripts/shoot-files.mjs",
     "shoot:settings": "node scripts/shoot-settings.mjs",
     "shoot:toolbox": "node scripts/shoot-toolbox.mjs",
-    "shoot:capability-packs": "node scripts/shoot-capability-packs.mjs",
     "shoot:graph-probe": "node scripts/shoot-graph-probe.mjs",
     "shoot:graph-perf": "node scripts/shoot-graph-perf.mjs",
     "shoot:graph-perf-live": "node scripts/shoot-graph-perf-live.mjs",

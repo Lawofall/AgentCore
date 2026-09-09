@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.llm.provider.protocol import ToolCall, ToolCallFunction
 from agentcore.runtime.approvals import ApprovalDecision
 from agentcore.runtime.engine.tool_call_fact_code import tool_call_fact_cross_turn_retry
@@ -79,7 +79,7 @@ class _OkTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -97,7 +97,7 @@ class _GrantableStub:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
             approval=ToolApproval.GRANTABLE,
         )
 
@@ -116,7 +116,7 @@ class _TimeoutStub:
             name="grep",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             timeout_seconds=0.01,
         )
 
@@ -133,7 +133,7 @@ class _FailNoStamp:
             name="web_search",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:

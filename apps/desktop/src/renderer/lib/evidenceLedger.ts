@@ -53,21 +53,7 @@ export function ledgerBadgeLabel(entry: EvidenceLedgerEntry): string {
   return entry.id;
 }
 
-/** tier 人话（提案视觉：官方来源 / 权威媒体 / 自媒体 / 来源待评）。 */
-export function ledgerTierLabel(tier: string | undefined): string {
-  switch (tier) {
-    case "official":
-      return "官方来源";
-    case "media":
-      return "权威媒体";
-    case "weak":
-      return "自媒体";
-    default:
-      return "来源待评";
-  }
-}
-
-/** 日期展示：空 →「日期未知」（O5，勿当弱源标记）。 */
+/** 日期展示：空 →「日期未知」（不是质量档）。 */
 export function ledgerDateLabel(date: string | undefined): string {
   const d = (date ?? "").trim();
   return d || "日期未知";

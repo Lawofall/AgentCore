@@ -11,6 +11,7 @@ vi.mock("@/hooks/useConversations", () => ({
     isLoading: false,
   }),
   useRestoreConversation: () => ({ mutate: vi.fn(), isPending: false }),
+  usePurgeTrashedConversation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("@/hooks/useFolders", () => ({
   useFolders: () => [],
@@ -46,11 +47,6 @@ vi.mock("@/services/teamActivityNotifications", () => ({
 }));
 vi.mock("@/stores/productNotices", () => ({
   useProductNoticesStore: {
-    getState: () => ({ startPolling: () => () => undefined }),
-  },
-}));
-vi.mock("@/stores/standingInbox", () => ({
-  useStandingInboxStore: {
     getState: () => ({ startPolling: () => () => undefined }),
   },
 }));

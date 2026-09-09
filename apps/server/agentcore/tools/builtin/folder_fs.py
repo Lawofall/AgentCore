@@ -17,7 +17,7 @@ from dataclasses import replace
 from typing import Any
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.delegate.target_desktop import (
     TargetDesktopError,
     build_target_backend,
@@ -171,7 +171,7 @@ class ListFolderDirTool:
             name=LIST_FOLDER_DIR_TOOL_NAME,
             description=(
                 "只读跨文件夹：列出【另一张已有桌】某目录当前层（须 folder_id）。"
-                "HOW→consult(team_cross_folder)。"
+                "派前认桌 ≠ 摸底主通道。"
             ),
             parameters={
                 "type": "object",
@@ -194,7 +194,7 @@ class ListFolderDirTool:
                 },
                 "required": ["folder_id"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.FOLDER,
             approval=ToolApproval.NEVER,
         )
 
@@ -226,7 +226,7 @@ class ReadFolderFileTool:
             name=READ_FOLDER_FILE_TOOL_NAME,
             description=(
                 "只读跨文件夹：读取【另一张已有桌】内某文件（folder_id + path）。"
-                "HOW→consult(team_cross_folder)。"
+                "派前认桌 ≠ 摸底主通道。"
             ),
             parameters={
                 "type": "object",
@@ -262,7 +262,7 @@ class ReadFolderFileTool:
                 },
                 "required": ["folder_id", "path"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.FOLDER,
             approval=ToolApproval.NEVER,
         )
 

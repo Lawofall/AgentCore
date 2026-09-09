@@ -29,15 +29,15 @@ export const referenceChapter: ManualChapterContent = {
               desc: "工具箱里可自由摆元素；AI 指挥白板即将上线。",
             },
             {
-              title: "其他创作工具（即将上线）",
-              desc: "文档 / 思维导图 / 表格 / 幻灯片 / 可运行产物——尚未开放。",
+              title: "其他创作工具（尚未开放）",
+              desc: "文档 / 思维导图 / 表格 / 幻灯片——尚未开放。",
             },
             {
               title: "MCP（本机连接器）",
               desc: [
                 "在工具箱 ",
                 {
-                  text: "集成 · 连接器",
+                  text: "工具 · 连接器",
                   link: { kind: "go", to: APP_PATHS.toolbox.connectors },
                 },
                 " 配置本机 stdio MCP Server；启用后 worker 可调用其工具（一律需审批）。仅桌面端；Web / 手机无本地 MCP。",
@@ -124,7 +124,7 @@ export const referenceChapter: ManualChapterContent = {
             },
             {
               title: "删了能找回",
-              desc: "对话删掉不弹确认，进「最近删除」，保留期内都能恢复：刚删完点提示上的「撤销」，或去「全部对话」页左边的「最近删除」。对话连同全部消息回到原来的位置，但公开分享链接不会一起回来，需要重新分享。文件夹删除仍弹窗：这张桌的 AI 设定一并退出，恢复时和归档的对话一起回来；白板留在顶层白板列表。弹窗里勾「立即永久清除」才连设定一起不可逆清掉。本机文件夹在你电脑上的文件，删除与恢复都不会动。",
+              desc: "对话删掉不弹确认，进「最近删除」，保留期内都能恢复：刚删完点提示上的「撤销」，或去「全部对话」页左边的「最近删除」。对话连同全部消息回到原来的位置，但公开分享链接不会一起回来，需要重新分享。进「最近删除」后也可以彻底删除（再确认一次）。文件夹删除仍弹窗：这张桌的 AI 设定一并退出，恢复时和归档的对话一起回来；白板留在顶层白板列表。弹窗里勾「立即永久清除」，或之后在「最近删除」里彻底删除，才连设定一起不可逆清掉。本机文件夹在你电脑上的文件，删除与恢复都不会动。",
             },
           ],
         },
@@ -148,7 +148,7 @@ export const referenceChapter: ManualChapterContent = {
           type: "settingsRows",
           rows: [
             {
-              label: "模型",
+              label: "模型组合",
               desc: "账号默认组合与组合管理",
               to: APP_PATHS.more.model,
             },
@@ -158,9 +158,9 @@ export const referenceChapter: ManualChapterContent = {
               to: APP_PATHS.more.providers,
             },
             {
-              label: "全局设定",
-              desc: "在文件页查看、编辑画像、偏好与规则",
-              to: APP_PATHS.files,
+              label: "提示词",
+              desc: "所有对话共用的提示词，在工具箱查看与调整",
+              to: APP_PATHS.toolbox.guidelines,
             },
             {
               label: "用量",
@@ -178,13 +178,8 @@ export const referenceChapter: ManualChapterContent = {
               to: APP_PATHS.more.shortcuts,
             },
             {
-              label: "反馈",
-              desc: "提 Bug、功能建议或体验改进",
-              to: APP_PATHS.more.feedback,
-            },
-            {
               label: "关于",
-              desc: "版本与产品信息",
+              desc: "版本、产品手册与法律信息",
               to: APP_PATHS.more.about,
             },
           ],
@@ -266,25 +261,17 @@ export const referenceChapter: ManualChapterContent = {
               ],
             },
             {
-              q: "工作流和自动化有什么区别？",
+              q: "工作流怎么定时跑？",
               a: [
                 {
                   type: "text",
                   text: [
-                    "工作流管「活儿怎么拆」——去工具箱新建或套官方模板，在画布上设计可复用的团队拆法；自动化管「什么时候跑」——给任务配定时或 Webhook，到点由 CEO 自动开一轮。任务绑一张工作流就按图跑，不绑就按目标文案让 CEO 即兴组队。展开见 ",
+                    "在工作流行上点「设为定时」：配周期（每天 / 每周 / 自定义 cron）或 Webhook，只绑云端文件夹。电脑关着也会跑。展开见 ",
                     {
                       text: "工作流",
                       link: {
                         kind: "jump",
                         to: MANUAL_SECTION_IDS.collaboration.workflow,
-                      },
-                    },
-                    " 与 ",
-                    {
-                      text: "自动化",
-                      link: {
-                        kind: "jump",
-                        to: MANUAL_SECTION_IDS.collaboration.automation,
                       },
                     },
                     "。",
@@ -298,12 +285,12 @@ export const referenceChapter: ManualChapterContent = {
                 {
                   type: "text",
                   text: [
-                    "会——任务跑在云端，所以只能绑云端文件夹，本机文件夹选不了。跑完的摘要与待你拍板的挂起项都留在 ",
+                    "会——任务跑在云端，所以只能绑云端文件夹，本机文件夹选不了。入口在 ",
                     {
-                      text: "自动化 · 收件箱",
+                      text: "工具箱 · 工作流",
                       link: {
                         kind: "go",
-                        to: APP_PATHS.toolbox.automations.inbox,
+                        to: APP_PATHS.toolbox.workflows.root,
                       },
                     },
                     "。",
@@ -341,14 +328,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: [
-                    "去 ",
-                    {
-                      text: "设置 · 反馈",
-                      link: { kind: "go", to: APP_PATHS.more.feedback },
-                    },
-                    "，选分类、写标题和描述即可。我们会附带当前页面路由（方便定位你在哪），不含文件夹里的文件内容。",
-                  ],
+                  text: "讨论请去消息页内测群；意见与投诉请走官网 https://fashitianxia.xyz。",
                 },
               ],
             },
@@ -391,7 +371,12 @@ export const referenceChapter: ManualChapterContent = {
                       text: "服务商",
                       link: { kind: "go", to: APP_PATHS.more.providers },
                     },
-                    " 接 OpenAI / DeepSeek / Kimi / 智谱 / 豆包 / OpenRouter，或填自定义端点；可同时接多家服务商，在「设置 · 模型」里配组合，聊天框里随时切换。每个回合全链路用你选的那一个模型。",
+                    " 接 OpenAI / DeepSeek / Kimi / 智谱 / 豆包 / OpenRouter，或填自定义端点；可同时接多家服务商，在 ",
+                    {
+                      text: "设置 · 模型组合",
+                      link: { kind: "go", to: APP_PATHS.more.model },
+                    },
+                    " 里配组合，聊天框里随时切换。每个回合全链路用你选的那一个模型。",
                   ],
                 },
               ],
@@ -545,11 +530,7 @@ export const referenceChapter: ManualChapterContent = {
             },
             {
               title: "记忆",
-              desc: "团队记住的偏好来自你的对话；想改写或清掉，直接说即可，或在「文件」页的「全局设定」里编辑、清理。",
-            },
-            {
-              title: "反馈附带的上下文",
-              desc: "提交反馈时会自动带上当前页面路由（如所在对话），便于复现问题；不含文件夹里的文件内容。",
+              desc: "团队记住的偏好来自你的对话；想改写或清掉，直接说即可，或在工具箱的提示词页查看、调整。",
             },
           ],
         },
@@ -741,25 +722,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "在工具箱里设计的团队拆法——谁做什么、先后怎么排。可新建空白图，或从官方模板复制一份再改；开跑时再选文件夹。官方模板只读，「使用」= 复制一份成你自己的。",
-                },
-              ],
-            },
-            {
-              q: "系统任务",
-              a: [
-                {
-                  type: "text",
-                  text: "自动化页里平台预制的任务（如每日对话复盘）——目标由系统托管、不可改，你只配触发时间、范围与落点。与工作流页的「官方模板」不是一回事。",
-                },
-              ],
-            },
-            {
-              q: "收件箱",
-              a: [
-                {
-                  type: "text",
-                  text: "自动化任务每次运行的结果列表——成功摘要、失败原因、待你拍板的挂起项；tab 红点是还没处理的条数。",
+                  text: "在工具箱里设计的团队拆法——谁做什么、先后怎么排。可新建空白图，或从官方模板复制一份再改；开跑时再选文件夹。行上「设为定时」配周期或 Webhook。官方模板只读，「使用」= 复制一份成你自己的。",
                 },
               ],
             },
@@ -768,7 +731,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "设置 → 通用 → 进阶。开启后，绑定本机文件夹的对话可在本机跑回合（直连磁盘）。这不是离线模式：AI 推理仍走云端。",
+                  text: "设置 → 通用 → 进阶。开启后，绑定本机文件夹的对话可在本机跑回合（直连磁盘）。这不是离线模式：AI 推理仍走云端。关闭则全部过桥；「我的文件」始终走云。启动失败会自动改走云。断网时只能浏览缓存与本机文件（只读），不能发送。",
                 },
               ],
             },

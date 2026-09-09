@@ -12,20 +12,18 @@ import {
 import type { CheckpointDecision, CheckpointIntent } from "@/types/events";
 import {
   Ban,
-  BookOpenCheck,
   Check,
-  CircleHelp,
   Clock,
   FolderTree,
   type LucideIcon,
-  OctagonX,
   Pencil,
 } from "lucide-react";
+import { QuestionMark } from "./QuestionMark";
 
 export type ResolvedToneKey = keyof typeof resolvedCheckpointTone;
 
 export type AskIntentMeta = {
-  icon: LucideIcon;
+  /** 读屏套话；可见面不画。 */
   activeCaption: string;
   cta: string;
   ctaIcon: LucideIcon;
@@ -36,19 +34,19 @@ export type AskIntentMeta = {
   >;
 };
 
-/** Decision → icon for ask_user settled stubs (tone comes from intent.resolved). */
+/** Decision → icon for ask_user settled stubs (tone comes from intent.resolved).
+ * 确认 / 取消都用问号：存根身份是「问过你」，结论留给文案。超时 / 失效 / 调整仍各用专属图标。 */
 export const ASK_RESOLVED_DECISION_ICON = {
-  continue: Check,
+  continue: QuestionMark,
   adjust: Pencil,
-  stop: OctagonX,
-  research_first: OctagonX,
+  stop: QuestionMark,
+  research_first: QuestionMark,
   timeout: Clock,
   orphaned: Ban,
 } as const satisfies Record<CheckpointDecision, LucideIcon>;
 
-/** Shared ask chrome — one caption for every live card. */
+/** Shared ask chrome — one sr-only caption for every live card. */
 const ASK_CLARIFY_META = {
-  icon: CircleHelp,
   activeCaption: "需要你拍板",
   cta: "提交",
   ctaIcon: Check,
@@ -72,15 +70,8 @@ export const ASK_INTENT_META = {
   decision: ASK_CLARIFY_META,
   organize_plan: {
     ...ASK_CLARIFY_META,
-    icon: FolderTree,
     cta: "确认并整理",
     ctaIcon: FolderTree,
-  },
-  daily_review: {
-    ...ASK_CLARIFY_META,
-    icon: BookOpenCheck,
-    cta: "确认落盘",
-    ctaIcon: BookOpenCheck,
   },
 } as const satisfies Record<AskUiIntent, AskIntentMeta>;
 
@@ -109,7 +100,7 @@ export const SETTLED_UNKNOWN_LABEL = "已经处理过了";
 const SETTLED_UNKNOWN: AskResolvedOutcome = {
   label: SETTLED_UNKNOWN_LABEL,
   tone: "muted",
-  icon: Check,
+  icon: QuestionMark,
 };
 
 /**

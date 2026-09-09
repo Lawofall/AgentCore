@@ -9,7 +9,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from agentcore.core.errors import SandboxError
-from agentcore.core.types import ToolApproval, ToolCategory, ToolEffect
+from agentcore.core.types import ToolApproval, ToolEffect, ToolFace
 from agentcore.llm.provider.protocol import ToolCall, ToolCallFunction
 from agentcore.runtime.engine.tool_exec import execute_tools
 from agentcore.runtime.engine.tool_failure_face import DEFAULT_TOOL_FAILURE_MESSAGE
@@ -49,7 +49,7 @@ class _OkTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -68,7 +68,7 @@ class _CrashTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -89,7 +89,7 @@ class _CancelLeakTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -107,7 +107,7 @@ class _HangTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -122,7 +122,7 @@ class _SuspendTool:
             name="ask",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.INTERACTION,
+            face=ToolFace.ORCHESTRATION,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -144,7 +144,7 @@ class _HandoffTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -170,7 +170,7 @@ class _ContractRejectTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.RESEARCH,
+            face=ToolFace.WEB,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -295,7 +295,7 @@ async def test_execute_start_logs_web_fetch_host():
                 name="web_fetch",
                 description="stub",
                 parameters={"type": "object", "properties": {"url": {"type": "string"}}},
-                category=ToolCategory.RESEARCH,
+                face=ToolFace.WEB,
             )
 
         async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -346,7 +346,7 @@ async def test_tool_result_error_keeps_model_detail_and_curated_failure():
                 name="projects",
                 description="x",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.SEARCH,
+                face=ToolFace.SEARCH,
             )
 
         async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -429,7 +429,7 @@ class _MissingFileTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -792,7 +792,7 @@ class _CapturingArgsTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -1275,7 +1275,7 @@ class _CodeSearchMetaTool:
             name="code_search",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -1403,7 +1403,7 @@ class _GrantableRunTool(_OkTool):
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.EXECUTION,
+            face=ToolFace.EXECUTION,
             approval=ToolApproval.GRANTABLE,
         )
 
@@ -1754,7 +1754,7 @@ class _GrantableBrowser:
             name="browser",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.EXECUTION,
+            face=ToolFace.EXECUTION,
             approval=ToolApproval.GRANTABLE,
         )
 
@@ -1837,7 +1837,7 @@ async def test_captain_legacy_browser_navigate_does_not_skip_gate():
                 name="browser_navigate",
                 description="stub",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.EXECUTION,
+                face=ToolFace.EXECUTION,
                 approval=ToolApproval.GRANTABLE,
             )
 
@@ -1885,7 +1885,7 @@ async def test_cloud_worker_file_write_ask_still_prompts():
                 name="file_write",
                 description="stub",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.FILESYSTEM,
+                face=ToolFace.FILE,
                 approval=ToolApproval.GRANTABLE,
             )
 
@@ -1951,7 +1951,7 @@ async def test_cloud_worker_file_write_session_still_ungated():
                 name="file_write",
                 description="stub",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.FILESYSTEM,
+                face=ToolFace.FILE,
                 approval=ToolApproval.GRANTABLE,
             )
 
@@ -2012,7 +2012,7 @@ class _GrantableWrite:
             name="file_write",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.GRANTABLE,
         )
 
@@ -2095,7 +2095,7 @@ async def test_cloud_code_execute_outer_timeout_is_sandbox_unavailable(
                 name="run",
                 description="stub",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.EXECUTION,
+                face=ToolFace.EXECUTION,
             )
 
         async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -2131,7 +2131,7 @@ async def test_local_code_execute_outer_timeout_stays_liveness():
                 name="code_execute",
                 description="stub",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.EXECUTION,
+                face=ToolFace.EXECUTION,
                 timeout_seconds=0.05,
             )
 

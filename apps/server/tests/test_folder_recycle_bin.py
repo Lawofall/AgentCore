@@ -27,6 +27,7 @@ from sqlalchemy.dialects import postgresql
 
 from agentcore.api.routes.folders import (
     list_deleted_folders,
+    purge_deleted_folder,
     restore_deleted_folder,
     router,
 )
@@ -38,6 +39,7 @@ from agentcore.db.repositories.folders import (
     FOLDER_DELETE_ORIGIN_USER,
     FolderRepository,
 )
+from agentcore.workspace.locks import WorkspaceBusyError
 
 FOLDER_ID = "11111111-2222-4333-8444-555555555555"
 USER_ID = "66666666-7777-4888-8999-aaaaaaaaaaaa"
@@ -511,13 +513,107 @@ async def test_trash_list_computes_purge_moment_server_side(
     assert repo.listed[0]["not_before"] < datetime.now(UTC)
 
 
+# --- 彻底删除：过期 409、竞态 409、未知 404 ----------------------------------------
+
+
+class _TrashPurgeSpy:
+    def __init__(self, wiped: bool = True, busy: bool = False) -> None:
+        self.wiped = wiped
+        self.busy = busy
+        self.calls: list[dict[str, Any]] = []
+
+    async def __call__(self, *, folder_id: str, user_id: str) -> bool:
+        self.calls.append({"folder_id": folder_id, "user_id": user_id})
+        if self.busy:
+            raise WorkspaceBusyError("busy")
+        return self.wiped
+
+
+def _spy_on_trash_purge(
+    monkeypatch: pytest.MonkeyPatch, *, wiped: bool = True, busy: bool = False
+) -> _TrashPurgeSpy:
+    spy = _TrashPurgeSpy(wiped=wiped, busy=busy)
+    monkeypatch.setattr("agentcore.api.routes.folders.purge_trashed_folder", spy)
+    return spy
+
+
+async def test_purge_past_retention_is_409_not_silent_success(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "workspace_retention_days", 30)
+    expired = _fake_folder(
+        deleted_at=datetime.now(UTC) - timedelta(days=31),
+        delete_origin=FOLDER_DELETE_ORIGIN_USER,
+    )
+    repo = _StubRepo(deleted=expired)
+    spy = _spy_on_trash_purge(monkeypatch)
+
+    with pytest.raises(ConflictError) as exc:
+        await purge_deleted_folder(FOLDER_ID, _user(), repo=repo)
+
+    assert exc.value.status_code == 409
+    assert "30 天" in str(exc.value)
+    assert spy.calls == []
+
+
+async def test_purge_race_with_restore_surfaces_as_409(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "workspace_retention_days", 30)
+    repo = _StubRepo(
+        deleted=_fake_folder(
+            deleted_at=datetime.now(UTC) - timedelta(days=1),
+            delete_origin=FOLDER_DELETE_ORIGIN_USER,
+        )
+    )
+    spy = _spy_on_trash_purge(monkeypatch, wiped=False)
+
+    with pytest.raises(ConflictError) as exc:
+        await purge_deleted_folder(FOLDER_ID, _user(), repo=repo)
+
+    assert exc.value.status_code == 409
+    assert "已被清理" in str(exc.value)
+    assert spy.calls == [{"folder_id": FOLDER_ID, "user_id": USER_ID}]
+
+
+async def test_purge_busy_workspace_is_409(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "workspace_retention_days", 30)
+    repo = _StubRepo(
+        deleted=_fake_folder(
+            deleted_at=datetime.now(UTC) - timedelta(days=1),
+            delete_origin=FOLDER_DELETE_ORIGIN_USER,
+        )
+    )
+    _spy_on_trash_purge(monkeypatch, busy=True)
+
+    with pytest.raises(ConflictError) as exc:
+        await purge_deleted_folder(FOLDER_ID, _user(), repo=repo)
+
+    assert exc.value.status_code == 409
+    assert "正忙" in str(exc.value)
+
+
+async def test_purge_unknown_project_is_404(monkeypatch: pytest.MonkeyPatch):
+    repo = _StubRepo(deleted=None)
+    spy = _spy_on_trash_purge(monkeypatch)
+
+    with pytest.raises(NotFoundError):
+        await purge_deleted_folder(FOLDER_ID, _user(), repo=repo)
+
+    assert spy.calls == []
+
+
 # --- 路由注册顺序 ------------------------------------------------------------------
 
 
 def test_trash_routes_are_registered_before_the_folder_id_matcher():
     """FastAPI 按注册顺序匹配：``/trash`` 晚于 ``/{folder_id}`` 就会被当成项目 id。"""
     paths = [getattr(r, "path", "") for r in router.routes]
-    assert paths.index("/folders/trash") < paths.index("/folders/{folder_id}")
+    trash = paths.index("/folders/trash")
+    trash_item = paths.index("/folders/trash/{folder_id}")
+    folder = paths.index("/folders/{folder_id}")
+    assert trash < folder
+    assert trash_item < folder
 
 
 # --- 彻底删除：名册与成员开的帖 ----------------------------------------------------

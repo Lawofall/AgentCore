@@ -51,7 +51,8 @@ def _error(
     omitted — never default. Orthogonal to loop-controller ``error_class``.
 
     ``product_face``: optional user-channel copy that must stay even when a stable
-    ``failure_code`` is set (path-missing sibling listings). Default: lift ``error``
+    ``failure_code`` is set. Path-missing uses a short sentence; the model receipt
+    (sibling listings, retry steer) stays on ``error``. Default: lift ``error``
     only when ``user_face`` and there is no code.
 
     User face (``tool_use_end.failure``):
@@ -190,7 +191,31 @@ def _map_workspace_read_error(exc: WorkspaceError, *, path: str, start: float) -
     return _error(f"读取文件失败：{exc}", start, user_face=False)
 
 
-def _path_missing_error(error: str, start: float) -> ToolResult:
+# User channel: one sentence. Model steer (glob / 勿反复重试 / sibling listing)
+# stays on ``error``. Byte-equal twin: desktop ``MISSING_PATH_USER_FACE``.
+MISSING_PATH_USER_FACE = "没找到这个路径，我会换个方式继续。"
+_MISSING_PATH_USER_FACE_MAX = 80
+
+STR_REPLACE_NO_MATCH_USER_FACE = "这段内容和文件对不上，我会换个方式改。"
+STR_REPLACE_AMBIGUOUS_USER_FACE = "要改的这段在文件里出现了不止一次，我会换个方式锁定。"
+
+
+def missing_path_user_face(path: str | None = None) -> str:
+    """Short user sentence for a missing workspace path. Never includes retry steer."""
+    clipped = (path or "").strip()
+    if not clipped:
+        return MISSING_PATH_USER_FACE
+    if len(clipped) > _MISSING_PATH_USER_FACE_MAX:
+        clipped = clipped[: _MISSING_PATH_USER_FACE_MAX - 1] + "…"
+    return f"没找到 {clipped}，我会换个方式继续。"
+
+
+def _path_missing_error(
+    error: str,
+    start: float,
+    *,
+    path: str | None = None,
+) -> ToolResult:
     """Path / entry does not exist — fix by changing args; skip breaker tally.
 
     Platform bugs (missing attachment in a delegated workspace) and model path
@@ -203,7 +228,7 @@ def _path_missing_error(error: str, start: float) -> ToolResult:
         start,
         contract_failure=True,
         failure_code="not_found",
-        product_face=error,
+        product_face=missing_path_user_face(path),
     )
 
 

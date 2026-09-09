@@ -26,7 +26,7 @@ breaks the fold, add it here FIRST, then fix the projection.
 import json
 from pathlib import Path
 
-from agentcore.core.types import ToolCategory  # noqa: F401 — parity with engine-facts harness
+from agentcore.core.types import ToolFace  # noqa: F401 — parity with engine-facts harness
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
 from agentcore.runtime.engine import react_loop
 from agentcore.runtime.events import EventSink
@@ -85,7 +85,7 @@ class _StubTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments, context):  # noqa: ANN001

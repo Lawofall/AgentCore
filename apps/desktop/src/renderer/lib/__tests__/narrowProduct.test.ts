@@ -21,6 +21,9 @@ describe("isNarrowBlockedPath", () => {
     expect(isNarrowBlockedPath("/messages")).toBe(false);
     expect(isNarrowBlockedPath("/more")).toBe(false);
     expect(isNarrowBlockedPath("/more/account")).toBe(false);
+    expect(isNarrowBlockedPath("/more/about")).toBe(false);
+    // 旧书签 /more/feedback 走 router 重定向到关于，不能进 NarrowBlocked。
+    expect(isNarrowBlockedPath("/more/feedback")).toBe(false);
   });
 });
 

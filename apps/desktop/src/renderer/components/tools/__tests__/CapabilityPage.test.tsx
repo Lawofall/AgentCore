@@ -31,7 +31,6 @@ const catalog: Capabilities = {
   },
   skills: [],
   tools: [],
-  packs: [],
 };
 
 beforeEach(() => {
@@ -44,23 +43,17 @@ afterEach(cleanup);
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={[APP_PATHS.toolbox.tools]}>
-      <CapabilityPage title="工具">{() => <div>目录正文</div>}</CapabilityPage>
+      <CapabilityPage>{() => <div>目录正文</div>}</CapabilityPage>
     </MemoryRouter>,
   );
 }
 
-describe("CapabilityPage 统一页头", () => {
-  it("返回工具箱并挂本页标题", async () => {
+describe("CapabilityPage", () => {
+  it("不再自带页头，由工具箱壳认路", async () => {
     vi.mocked(getCapabilities).mockResolvedValue(catalog);
     renderPage();
-
-    expect(
-      screen.getByRole("link", { name: "工具箱" }).getAttribute("href"),
-    ).toBe(APP_PATHS.toolbox.root);
-    expect(
-      screen.getByRole("heading", { level: 1, name: "工具" }),
-    ).toBeTruthy();
-    expect(screen.queryByRole("navigation", { name: "工具箱能力" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(screen.queryByRole("link", { name: "工具箱" })).toBeNull();
     await waitFor(() => expect(screen.getByText("目录正文")).toBeTruthy());
   });
 

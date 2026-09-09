@@ -125,7 +125,7 @@ def test_no_exec_trio_soft_notes_do_not_force_partial_delivery():
     }
     verdict = check_contract(
         "结构报告与待跑脚本已落盘",
-        Deliverable(form="files", artifacts=paths),
+        Deliverable( artifacts=paths),
         files_written=2,
         workspace_paths=paths,
         artifact_contents=contents,
@@ -162,7 +162,7 @@ def test_no_exec_source_csv_itself_is_not_a_landed_table():
     contents = {paths[0]: _CLEAN_REPORT, paths[1]: "print('ok')\n"}
     verdict = check_contract(
         "结构报告与待跑脚本已落盘",
-        Deliverable(form="files", artifacts=paths),
+        Deliverable( artifacts=paths),
         files_written=2,
         workspace_paths=[_SOURCE_CSV, *paths],
         artifact_contents=contents,
@@ -191,7 +191,7 @@ def test_no_exec_fabricated_table_still_flagged():
     }
     verdict = check_contract(
         "交了一张结果表",
-        Deliverable(form="files", artifacts=paths),
+        Deliverable( artifacts=paths),
         files_written=3,
         workspace_paths=paths,
         artifact_contents=contents,
@@ -223,7 +223,7 @@ def test_no_exec_attached_csv_source_still_flagged():
     paths = ["AgentCore/文档/工作稿/income.csv"]
     verdict = check_contract(
         "已落盘",
-        Deliverable(form="files", artifacts=paths),
+        Deliverable( artifacts=paths),
         files_written=1,
         workspace_paths=paths,
         artifact_contents={paths[0]: _CLEAN_CSV},
@@ -246,7 +246,7 @@ def test_no_exec_inline_table_is_not_a_gap():
     contents = {p: _CLEAN_CSV for p in paths}
     verdict = check_contract(
         "已整理成收入/支出分表",
-        Deliverable(form="files", artifacts=paths),
+        Deliverable( artifacts=paths),
         files_written=2,
         workspace_paths=paths,
         artifact_contents=contents,
@@ -277,7 +277,7 @@ def test_no_exec_xlsx_flagged_without_file_text():
     }
     verdict = check_contract(
         "已落盘",
-        Deliverable(form="files", artifacts=paths),
+        Deliverable( artifacts=paths),
         files_written=3,
         workspace_paths=paths,
         artifact_contents=contents,
@@ -306,7 +306,7 @@ def test_with_exec_trio_self_note_is_not_a_contract_warning():
     contents = {paths[0]: _REPORT, paths[1]: _SCRIPT}
     no_exec = check_contract(
         "已落盘",
-        Deliverable(form="files", artifacts=paths),
+        Deliverable( artifacts=paths),
         files_written=2,
         workspace_paths=paths,
         artifact_contents=contents,
@@ -315,7 +315,7 @@ def test_with_exec_trio_self_note_is_not_a_contract_warning():
     )
     with_exec = check_contract(
         "已落盘",
-        Deliverable(form="files", artifacts=paths),
+        Deliverable( artifacts=paths),
         files_written=2,
         workspace_paths=paths,
         artifact_contents=contents,
@@ -324,7 +324,7 @@ def test_with_exec_trio_self_note_is_not_a_contract_warning():
     )
     default_exec = check_contract(
         "已落盘",
-        Deliverable(form="files", artifacts=paths),
+        Deliverable( artifacts=paths),
         files_written=2,
         workspace_paths=paths,
         artifact_contents=contents,
@@ -349,7 +349,7 @@ def test_no_exec_trio_keeps_skeleton_warning_as_soft():
     }
     verdict = check_contract(
         "已落盘",
-        Deliverable(form="files", artifacts=paths),
+        Deliverable( artifacts=paths),
         files_written=2,
         workspace_paths=paths,
         artifact_contents=contents,

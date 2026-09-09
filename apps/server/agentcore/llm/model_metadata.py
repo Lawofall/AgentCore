@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from agentcore.llm.image_accept import model_accepts_images
+from agentcore.llm.profiles import DEEPSEEK_V41_FLASH
 
 # The three capability flags surfaced in the catalog (contract §1). Kept as a
 # module constant so the schema layer and tests share one source of truth.
@@ -74,6 +75,14 @@ _METADATA: dict[str, ModelMeta] = {
     ),
     "deepseek-v4-pro": ModelMeta(
         display_name="DeepSeek V4 Pro",
+        vendor="DeepSeek",
+        capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
+        context_length=1_000_000,
+    ),
+    # Official preview wire id (BYOK). Exact row so the expires suffix is not
+    # humanized into the picker label; vision bit comes from image_accept.
+    DEEPSEEK_V41_FLASH: ModelMeta(
+        display_name="DeepSeek V4.1 Flash",
         vendor="DeepSeek",
         capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
         context_length=1_000_000,

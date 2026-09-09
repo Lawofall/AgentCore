@@ -7,10 +7,16 @@ import {
   folderGroupInsertPlace,
 } from "@/components/sidebar/folderGroupDragFeedback";
 import { useFolderGroupReorder } from "@/components/sidebar/useFolderGroupReorder";
-import { IconButton, SurfaceRow, SurfaceRowButton } from "@/components/ui";
+import {
+  ConfirmDialog,
+  IconButton,
+  SurfaceRow,
+  SurfaceRowButton,
+} from "@/components/ui";
 import {
   useConversationTrash,
   useConversations,
+  usePurgeTrashedConversation,
   useRestoreConversation,
 } from "@/hooks/useConversations";
 import { useFolders } from "@/hooks/useFolders";
@@ -60,6 +66,7 @@ export function NarrowConversationDrawer() {
     isNarrow && conversationDrawerOpen && view === "trash",
   );
   const restoreMutation = useRestoreConversation();
+  const purgeMutation = usePurgeTrashedConversation();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const folderGroupOrder = useSidebarStore((s) => s.folderGroupOrder);
 
@@ -154,8 +161,10 @@ export function NarrowConversationDrawer() {
             <TrashView
               items={trashItems}
               loading={trashQuery.isLoading}
-              restoring={restoreMutation.isPending}
+              busy={restoreMutation.isPending || purgeMutation.isPending}
               onRestore={(id) => restoreMutation.mutate(id)}
+              onPurge={(id) => purgeMutation.mutate(id)}
+              purging={purgeMutation.isPending}
             />
           ) : (
             <>
@@ -301,13 +310,17 @@ export function NarrowConversationDrawer() {
 function TrashView({
   items,
   loading,
-  restoring,
+  busy,
+  purging,
   onRestore,
+  onPurge,
 }: {
   items: DeletedConversationMeta[];
   loading: boolean;
-  restoring: boolean;
+  busy: boolean;
+  purging: boolean;
   onRestore: (id: string) => void;
+  onPurge: (id: string) => void;
 }) {
   if (loading && items.length === 0) {
     return (
@@ -327,18 +340,65 @@ function TrashView({
   return (
     <div className="space-y-0.5 px-2 py-1">
       {items.map((item) => (
-        <SurfaceRow key={item.id} variant="sidebar" className="h-8 px-2">
-          <span className="min-w-0 flex-1 truncate">{item.title}</span>
-          <IconButton
-            tone="sidebar"
-            aria-label={`恢复对话 ${item.title}`}
-            disabled={restoring}
-            onClick={() => onRestore(item.id)}
-          >
-            <ArchiveRestore size={13} />
-          </IconButton>
-        </SurfaceRow>
+        <TrashItemRow
+          key={item.id}
+          item={item}
+          busy={busy}
+          purging={purging}
+          onRestore={onRestore}
+          onPurge={onPurge}
+        />
       ))}
     </div>
+  );
+}
+
+function TrashItemRow({
+  item,
+  busy,
+  purging,
+  onRestore,
+  onPurge,
+}: {
+  item: DeletedConversationMeta;
+  busy: boolean;
+  purging: boolean;
+  onRestore: (id: string) => void;
+  onPurge: (id: string) => void;
+}) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  return (
+    <SurfaceRow variant="sidebar" className="h-8 px-2">
+      <span className="min-w-0 flex-1 truncate">{item.title}</span>
+      <IconButton
+        tone="sidebar"
+        aria-label={`恢复对话 ${item.title}`}
+        disabled={busy}
+        onClick={() => onRestore(item.id)}
+      >
+        <ArchiveRestore size={13} />
+      </IconButton>
+      <IconButton
+        tone="sidebar"
+        aria-label={`彻底删除对话 ${item.title}`}
+        disabled={busy}
+        onClick={() => setConfirmOpen(true)}
+      >
+        <Trash2 size={13} />
+      </IconButton>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`彻底删除「${item.title}」？`}
+        description="对话和全部消息将永久删除，不可恢复。"
+        confirmLabel="彻底删除"
+        tone="danger"
+        busy={purging}
+        onConfirm={() => {
+          onPurge(item.id);
+          setConfirmOpen(false);
+        }}
+      />
+    </SurfaceRow>
   );
 }

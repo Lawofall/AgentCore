@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from agentcore.core.types import AutonomyPolicy, ToolApproval, ToolCategory, recipe_to_axes
+from agentcore.core.types import AutonomyPolicy, ToolApproval, ToolFace, recipe_to_axes
 from agentcore.llm.provider.protocol import ToolCall, ToolCallFunction
 from agentcore.runtime.approvals import ApprovalDecision, ApprovalGate
 from agentcore.runtime.engine import tool_exec as tool_exec_mod
@@ -641,7 +641,7 @@ async def test_full_trust_auto_pass_bypassed_for_destructive_via_tool_exec():
                 name="run",
                 description="t",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.EXECUTION,
+                face=ToolFace.EXECUTION,
                 approval=ToolApproval.GRANTABLE,
             )
 
@@ -728,7 +728,7 @@ async def test_sensitive_credential_read_forces_approval():
                 name="file_read",
                 description="t",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.FILESYSTEM,
+                face=ToolFace.FILE,
                 approval=ToolApproval.NEVER,
             )
 
@@ -812,7 +812,7 @@ async def test_sensitive_path_read_ask_approve_always_grants_same_tool():
                 name="file_read",
                 description="t",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.FILESYSTEM,
+                face=ToolFace.FILE,
                 approval=ToolApproval.NEVER,
             )
 
@@ -896,7 +896,7 @@ async def test_sensitive_credential_preview_soft_fail_still_asks():
                 name="file_read",
                 description="t",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.FILESYSTEM,
+                face=ToolFace.FILE,
                 approval=ToolApproval.NEVER,
             )
 
@@ -950,7 +950,7 @@ async def test_sensitive_key_read_denied_as_policy_failure():
                 name="file_read",
                 description="t",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.FILESYSTEM,
+                face=ToolFace.FILE,
                 approval=ToolApproval.NEVER,
             )
 

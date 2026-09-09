@@ -63,8 +63,9 @@ describe("Markdown evidence badges (render seam)", () => {
     });
     expect(verified.textContent).toContain("court.gov.cn");
     expect(verified.textContent).not.toContain("#e3");
-    // M2：徽章本体带 tier 小标（官方 / 媒体 / 弱源 / 待评）。
-    expect(verified.textContent).toContain("官方");
+    expect(verified.textContent).not.toContain("官方");
+    expect(verified.textContent).not.toContain("弱源");
+    expect(verified.textContent).not.toContain("待评");
   });
 
   it("falls back to plain text badge when #eN is unresolved", () => {
@@ -100,6 +101,8 @@ describe("Markdown evidence badges (render seam)", () => {
       </EvidenceLedgerProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: /已核实 · 法律/ }));
+    expect(screen.queryByText("来源待评")).toBeNull();
+    expect(screen.queryByText("待评")).toBeNull();
     expect(screen.getByText(/约定文档来源/)).toBeTruthy();
     expect(screen.getByText(/法律透镜报告\.md/)).toBeTruthy();
     expect(screen.getByText(/幕1 出处 #r1/)).toBeTruthy();

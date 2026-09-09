@@ -145,7 +145,6 @@ export function ConversationChangesPanel() {
         inline
         icon={<Diff size={26} className="text-muted-foreground/40" />}
         title="暂无改动"
-        hint="发送消息后，本对话 AI 写入工作区的文件改动或可恢复基线会出现在这里。"
       />
     );
   }
@@ -156,12 +155,7 @@ export function ConversationChangesPanel() {
         <AutoBackupFailedNotice conversationId={conversationId} />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
           <Diff size={26} className="text-muted-foreground/40" />
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">暂无改动</p>
-            <p className="text-xs text-muted-foreground">
-              本对话尚无 AI 文件改动，也没有可恢复的回合基线。
-            </p>
-          </div>
+          <p className="text-sm text-muted-foreground">暂无改动</p>
         </div>
       </div>
     );

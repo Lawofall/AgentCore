@@ -148,9 +148,9 @@ pnpm -C apps/desktop dev
 
 改 schema / SSE / fold 后：先 `pnpm gen:types`，再 `pnpm conformance`，勿只 gen 漏对账。
 
-## 开源与贡献
+## 源码与贡献
 
-本仓库（[`Lawofall/AgentCore`](https://github.com/Lawofall/AgentCore)）为对外公开的产品 monorepo，许可证 [MIT](./LICENSE)。
+本仓库（[`Lawofall/AgentCore`](https://github.com/Lawofall/AgentCore)）为对外公开的产品 monorepo，源码许可 [FSL-1.1-ALv2](./LICENSE)（源码公开，非 OSI 开源：可看、可改、可内部自用；不得作为竞品对外提供或托管；每个版本满两年后该版本转为 Apache 2.0）。竞品或对外托管请经[官网](https://fashitianxia.xyz)公示渠道洽谈商业许可。
 
 桌面安装包与 electron-updater 元数据发布在独立仓 [`Lawofall/AgentCore-releases`](https://github.com/Lawofall/AgentCore-releases)（双仓 = 产物与源码分工，不是为了藏源码）。Issue / PR 请提到**本仓**；发布仓不接受源码贡献。
 

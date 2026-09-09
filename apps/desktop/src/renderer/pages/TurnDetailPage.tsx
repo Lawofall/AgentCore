@@ -38,13 +38,7 @@ import {
 } from "@/stores/execution";
 import { dismissFocusedFloat, useSidePanelStore } from "@/stores/sidePanel";
 import type { TurnDetailView } from "@/stores/ui";
-import {
-  ArrowLeft,
-  GitCompare,
-  MessagesSquare,
-  Network,
-  Square,
-} from "lucide-react";
+import { ArrowLeft, GitCompare, MessagesSquare, Network } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { isDebateViewPending, resolveTurnDetailView } from "./turnDetailView";
@@ -57,7 +51,7 @@ function parseView(raw: string | null): TurnDetailView | null {
 /**
  * Full-screen turn detail — graph / debate / compare for one turn.
  * Pure deep-read / replay surface (协作图与双视图UX.md §六 两个入口：聊天内嵌 ⇄ 全屏放大); no conversation-level
- * composer. Live turns only expose a top-bar Stop for the turn being viewed.
+ * composer. Top bar is back + view switch only (no whole-turn stop, no taskSummary).
  */
 export function TurnDetailPage() {
   const { id: conversationId, turnId } = useParams<{
@@ -281,7 +275,6 @@ export function TurnDetailPage() {
 
   const execution = useMessageExecution(scopeKey);
   const showTeamGraph = teamGraphVisible(execution?.runs);
-  const taskSummary = execution?.taskSummary;
   // Scoped to the turn being viewed — not "conversation is generating somewhere".
   const liveViewedTurn =
     messages.find(
@@ -344,10 +337,6 @@ export function TurnDetailPage() {
     else navigate(-1);
   }, [navigate, conversationId]);
 
-  const stopGeneration = useCallback(() => {
-    useConversationStore.getState().stopGeneration();
-  }, []);
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -407,23 +396,7 @@ export function TurnDetailPage() {
           >
             返回
           </Button>
-          {taskSummary && (
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-              {taskSummary}
-            </span>
-          )}
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            {liveViewedTurn && (
-              <Button
-                variant="ghost"
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                icon={<Square size={14} />}
-                onClick={stopGeneration}
-                aria-label="停止生成"
-              >
-                停止
-              </Button>
-            )}
             <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
               <Button
                 variant="ghost"

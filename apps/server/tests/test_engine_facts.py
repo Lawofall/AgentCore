@@ -12,7 +12,7 @@ executor / pipeline, not the bare loop, so they are out of scope here.
 
 from pathlib import Path
 
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
 from agentcore.runtime.engine import ReactLoopOut, react_loop
 from agentcore.runtime.events import EventSink
@@ -65,10 +65,10 @@ class _ScriptedProvider:
 
 class _StubTool:
     def __init__(
-        self, name: str = "search", *, category: ToolCategory = ToolCategory.SEARCH
+        self, name: str = "search", *, face: ToolFace = ToolFace.SEARCH
     ) -> None:
         self._name = name
-        self._category = category
+        self._face = face
         self.calls = 0
 
     @property
@@ -77,7 +77,7 @@ class _StubTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=self._category,
+            face=self._face,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
@@ -99,7 +99,7 @@ class _CitingTool:
             name="search",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
@@ -220,7 +220,7 @@ async def test_loop_records_note_fact_on_nudge():
     same = _tool_chunk("compute", '{"q": "x"}')
     provider = _ScriptedProvider([[same], [same], [same], [_content_chunk("final")]])
     facts, content, messages = await _run(
-        provider, _StubTool(name="compute", category=ToolCategory.EXECUTION)
+        provider, _StubTool(name="compute", face=ToolFace.EXECUTION)
     )
 
     assert content == "final"

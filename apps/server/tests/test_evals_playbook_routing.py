@@ -58,6 +58,8 @@ def test_scenarios_lint_ok():
     assert "discuss_license_round2_short_answers" in keys
     assert "write_prd_save_file" in keys
     assert "discuss_worker_params_industry" in keys
+    assert "survey_codebase_layout" in keys
+    assert "explain_named_readme" in keys
     assert "discuss_arch_bug_maintain_facets" in keys
     assert "identity_who_are_you" in keys
     assert "compare_three_js_frameworks" in keys
@@ -69,7 +71,6 @@ def test_legacy_named_playbook_scenarios_unchanged():
         sc = by_key[key]
         assert sc.expect_playbook == pb
         assert sc.expect_action == ""
-        assert sc.expect_form is None
         assert sc.expect_max_workers is None
         assert sc.prior_turns == ()
     assert "先别写成文档" in by_key["research_mit_vs_gpl_chat"].user_message
@@ -84,7 +85,6 @@ def test_audit_expects_handwritten_delegate():
         sc = by_key[key]
         assert sc.expect_playbook == ""
         assert sc.expect_action == "DELEGATE"
-        assert sc.expect_form == "files"
         assert sc.category == "code_audit"
         assert sc.workspace == "codebase"
 
@@ -95,7 +95,6 @@ def test_greenfield_expects_handwritten_delegate():
         sc = by_key[key]
         assert sc.expect_playbook == ""
         assert sc.expect_action == "DELEGATE"
-        assert sc.expect_form is None
         assert sc.category == "greenfield_app"
     assert "完整可跑" in by_key["greenfield_spa_build_app"].user_message
     assert "SPA" in by_key["greenfield_spa_build_app"].user_message
@@ -116,14 +115,21 @@ def test_discuss_and_prd_fixture_fields():
     assert prd.expect_playbook == ""
     assert prd.expect_action == "DELEGATE"
     assert prd.expect_max_workers == 1
-    assert prd.expect_form == "files"
     bound = by_key["discuss_worker_params_industry"]
     assert bound.workspace == "codebase"
     assert bound.expect_playbook == ""
     assert bound.expect_action == "DELEGATE"
-    assert bound.expect_form == "prose"
     assert bound.expect_min_workers == 1
     assert bound.expect_max_recon_rounds == 1
+    survey = by_key["survey_codebase_layout"]
+    assert survey.workspace == "codebase"
+    assert survey.expect_action == "DELEGATE"
+    assert survey.expect_max_recon_rounds == 1
+    named = by_key["explain_named_readme"]
+    assert named.workspace == "codebase"
+    assert named.expect_action == "DIRECT"
+    assert named.expect_max_recon_rounds == 1
+    assert "README" in named.user_message
     facets = by_key["discuss_arch_bug_maintain_facets"]
     assert facets.workspace == "empty"
     assert facets.expect_playbook == ""
@@ -131,7 +137,6 @@ def test_discuss_and_prd_fixture_fields():
     assert "DIRECT" not in facets.expect_action
     assert facets.expect_max_workers == 2
     assert facets.expect_min_workers == 1
-    assert facets.expect_form == "prose"
     assert "写成文档" in facets.user_message
     identity = by_key["identity_who_are_you"]
     assert identity.expect_playbook == ""
@@ -219,21 +224,19 @@ def test_parse_delegate_reads_intensity():
     assert raw["playbook"] == "cite_write_review"
     assert raw["intensity"] == "lean"
     assert raw["task_count"] == 0
-    assert raw["forms"] == []
-    assert raw["form"] is None
+    assert "form" not in raw
 
 
-def test_parse_delegate_reads_deliverable_form_and_max_workers():
+def test_parse_delegate_reads_max_workers():
     raw = parse_delegate_rich(
-        '{"tasks":[{"role":"撰稿","task":"写 PRD","deliverable":{"form":"files"}}],'
+        '{"tasks":[{"role":"撰稿","task":"写 PRD","deliverable":{"artifacts":["prd.md"]}}],'
         '"playbook_args":{"max_workers":1}}'
     )
     assert raw["playbook"] is None
     assert raw["task_count"] == 1
-    assert raw["form"] == "files"
-    assert raw["forms"] == ["files"]
+    assert "form" not in raw
     assert raw["max_workers"] == 1
-    assert raw["tasks_preview"][0]["form"] == "files"
+    assert "form" not in raw["tasks_preview"][0]
 
 
 def test_classify_landing_variants():
@@ -273,21 +276,18 @@ def test_classify_landing_extended_observation():
         expect="map_fanout",
         offered=offered,
         task_count=2,
-        form="files",
         expect_action="DIRECT|ASK",
     )
-    assert duo["landing"] == "files_duo"
-    assert duo["files_duo"] is True
+    assert duo["landing"] == "handwritten_tasks"
+    assert duo["files_duo"] is False
     one = classify_landing(
         action="DELEGATE",
         playbook=None,
         expect="",
         offered=offered,
         task_count=1,
-        form="files",
         expect_action="DELEGATE",
         expect_max_workers=1,
-        expect_form="files",
     )
     assert one["landing"] == "handwritten_expected"
     over = classify_landing(
@@ -296,24 +296,10 @@ def test_classify_landing_extended_observation():
         expect="",
         offered=offered,
         task_count=2,
-        form="files",
         expect_action="DELEGATE",
         expect_max_workers=1,
-        expect_form="files",
     )
-    assert over["landing"] == "files_duo"
-    mismatch = classify_landing(
-        action="DELEGATE",
-        playbook=None,
-        expect="",
-        offered=offered,
-        task_count=1,
-        form="prose",
-        expect_action="DELEGATE",
-        expect_max_workers=1,
-        expect_form="files",
-    )
-    assert mismatch["landing"] == "form_mismatch"
+    assert over["landing"] == "workers_over"
     recon = classify_landing(
         action="DELEGATE",
         playbook="map_fanout",
@@ -321,7 +307,6 @@ def test_classify_landing_extended_observation():
         offered=offered,
         task_count=0,
         expect_action="DELEGATE",
-        expect_form="prose",
         expect_min_workers=2,
         recon_rounds=3,
         expect_max_recon_rounds=1,
@@ -333,9 +318,7 @@ def test_classify_landing_extended_observation():
         expect="map_fanout",
         offered=offered,
         task_count=1,
-        form="prose",
         expect_action="DELEGATE",
-        expect_form="prose",
         expect_min_workers=2,
         expect_max_recon_rounds=1,
     )
@@ -346,9 +329,7 @@ def test_classify_landing_extended_observation():
         expect="",
         offered=offered,
         task_count=3,
-        form="prose",
         expect_action="DELEGATE|ASK",
-        expect_form="prose",
         expect_min_workers=1,
         expect_max_workers=2,
     )
@@ -360,9 +341,7 @@ def test_classify_landing_extended_observation():
         expect="map_fanout",
         offered=offered,
         task_count=2,
-        form="prose",
         expect_action="DELEGATE",
-        expect_form="prose",
         expect_min_workers=2,
         expect_max_recon_rounds=1,
         recon_rounds=1,
@@ -375,7 +354,6 @@ def test_classify_landing_extended_observation():
         offered=offered,
         task_count=0,
         expect_action="DELEGATE",
-        expect_form="prose",
         expect_min_workers=2,
         expect_max_recon_rounds=1,
         recon_rounds=0,

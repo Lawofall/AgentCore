@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from agentcore.config import settings
-from agentcore.core.types import ToolCategory, ToolEffect
+from agentcore.core.types import ToolEffect, ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, TokenUsage, ToolCallDelta
 from agentcore.runtime.engine import ReactLoopOut, react_loop, resolve_tool_timeout
 from agentcore.runtime.events import EventSink, EventType, FinishReason, SSEEvent
@@ -72,11 +72,11 @@ class _StubTool:
         citation_script: list[list[dict]] | None = None,
         terminal: bool = False,
         fail_output: str = "",
-        category: ToolCategory = ToolCategory.SEARCH,
+        face: ToolFace = ToolFace.SEARCH,
     ) -> None:
         self._name = name
         self._success = success
-        self._category = category
+        self._face = face
         self._citations = citations
         # Diagnostic detail a failing tool puts in ``output`` (mirrors code_execute,
         # whose stdout/stderr ride output while ``error`` is just the exit code).
@@ -93,7 +93,7 @@ class _StubTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=self._category,
+            face=self._face,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
@@ -808,36 +808,51 @@ async def test_usage_sink_empty_when_first_round_raises():
 # --- B1: engine-level tool timeout backstop ----------------------------------
 
 
-def _schema(category: ToolCategory, timeout: float | None = None) -> ToolSchema:
+def _schema(face: ToolFace, timeout: float | None = None) -> ToolSchema:
     return ToolSchema(
         name="t",
         description="d",
         parameters={"type": "object", "properties": {}},
-        category=category,
+        face=face,
         timeout_seconds=timeout,
     )
 
 
-def test_resolve_tool_timeout_by_category():
-    # The exemption policy is the part most likely to silently regress and break a
-    # legitimate long wait (delegate's sub-DAG / ask_user's user round-trip), so pin it.
-    assert resolve_tool_timeout(_schema(ToolCategory.ORCHESTRATION)) is None
-    assert resolve_tool_timeout(_schema(ToolCategory.INTERACTION)) is None
-    # execution runs code → higher ceiling; everything else → the flat default
+def test_resolve_tool_timeout_by_face():
+    from agentcore.runtime.engine.constants import TIMEOUT_EXEMPT_FACES
+
+    # ORCHESTRATION is exempt (delegate sub-DAG / ask_user round-trip). INTERACTION is
+    # gone — ask_user is ORCHESTRATION; host uses a name-based timeout.
+    # FOLDER / BOARD left the dumpster and take the default, not the exemption.
+    assert frozenset({ToolFace.ORCHESTRATION}) == TIMEOUT_EXEMPT_FACES
+    assert resolve_tool_timeout(_schema(ToolFace.ORCHESTRATION)) is None
+    # HOST_BROWSER and EXECUTION share the execution ceiling; FILE gets the default.
     assert (
-        resolve_tool_timeout(_schema(ToolCategory.EXECUTION))
+        resolve_tool_timeout(_schema(ToolFace.EXECUTION))
         == settings.tool_execution_timeout_seconds
     )
     assert (
-        resolve_tool_timeout(_schema(ToolCategory.SEARCH)) == settings.tool_default_timeout_seconds
+        resolve_tool_timeout(_schema(ToolFace.HOST_BROWSER))
+        == settings.tool_execution_timeout_seconds
     )
     assert (
-        resolve_tool_timeout(_schema(ToolCategory.FILESYSTEM))
+        resolve_tool_timeout(_schema(ToolFace.SEARCH)) == settings.tool_default_timeout_seconds
+    )
+    assert (
+        resolve_tool_timeout(_schema(ToolFace.FILE))
         == settings.tool_default_timeout_seconds
     )
-    # an explicit per-tool override wins over the category rule — even the exemption
-    assert resolve_tool_timeout(_schema(ToolCategory.ORCHESTRATION, 12.5)) == 12.5
-    assert resolve_tool_timeout(_schema(ToolCategory.EXECUTION, 5.0)) == 5.0
+    assert (
+        resolve_tool_timeout(_schema(ToolFace.FOLDER))
+        == settings.tool_default_timeout_seconds
+    )
+    assert (
+        resolve_tool_timeout(_schema(ToolFace.BOARD))
+        == settings.tool_default_timeout_seconds
+    )
+    # an explicit per-tool override wins over the face rule — even the exemption
+    assert resolve_tool_timeout(_schema(ToolFace.ORCHESTRATION, 12.5)) == 12.5
+    assert resolve_tool_timeout(_schema(ToolFace.EXECUTION, 5.0)) == 5.0
 
 
 def _run_schema() -> ToolSchema:
@@ -845,7 +860,7 @@ def _run_schema() -> ToolSchema:
         name="run",
         description="d",
         parameters={"type": "object", "properties": {}},
-        category=ToolCategory.EXECUTION,
+        face=ToolFace.EXECUTION,
     )
 
 
@@ -893,7 +908,7 @@ class _SlowTool:
             name="slow",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
             timeout_seconds=self._timeout_seconds,
         )
 
@@ -1513,7 +1528,7 @@ async def test_many_different_target_reads_do_not_force_finalize_with_delegate(m
     monkeypatch.setattr(settings, "engine_convergence_finalize_rounds", 6)
     reg = ToolRegistry()
     reg.register(_StubTool(name="file_read"))
-    reg.register(_StubTool(name="delegate", category=ToolCategory.ORCHESTRATION))
+    reg.register(_StubTool(name="delegate", face=ToolFace.ORCHESTRATION))
     provider = _read_then_answer(12)
     content, messages = await _run_with_registry(provider, reg)
 
@@ -1588,7 +1603,7 @@ async def test_worker_nested_lead_replan_follows_supervised(supervised: bool, ex
             async for chunk in super().stream(request):
                 yield chunk
 
-    delegate = _StubTool(name="delegate", category=ToolCategory.ORCHESTRATION)
+    delegate = _StubTool(name="delegate", face=ToolFace.ORCHESTRATION)
     delegate._supervised = object() if supervised else None
     delegate._depth = 1
     delegate._sink = None

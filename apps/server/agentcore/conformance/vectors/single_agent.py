@@ -758,10 +758,10 @@ def _empty_face_paused() -> list[SSEEvent]:
 
 def _empty_face_channel_dead() -> list[SSEEvent]:
     # 生产真值：prepare 阶段 WorkspaceIOError(CHANNEL_DEAD_PREPARE_ABORT)
-    # 经 error_fields_for 映射为 STREAM_ERROR + 原文（见 core/errors.py）。
+    # 经 error_fields_for 映射为 LOCAL_CHANNEL_DEAD + 原文（见 core/errors.py）。
     # 引常量而非抄字面量，避免文案改动后向量再次失真。
     return _empty_face_shell(
-        code=ErrorCode.STREAM_ERROR,
+        code=ErrorCode.LOCAL_CHANNEL_DEAD,
         message=CHANNEL_DEAD_PREPARE_ABORT,
         finish=FinishReason.ERROR,
     )
@@ -894,7 +894,7 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
         _empty_face_paused,
     ),
     "empty_face_channel_dead": (
-        "空脸：channel_dead / STREAM_ERROR → 非空脸",
+        "空脸：channel_dead / LOCAL_CHANNEL_DEAD → 非空脸",
         _empty_face_channel_dead,
     ),
     "empty_face_insufficient_balance": (

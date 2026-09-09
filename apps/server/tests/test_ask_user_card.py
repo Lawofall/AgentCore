@@ -1,4 +1,4 @@
-"""ask_user card=organize_plan / daily_review validation + retired-name reject."""
+"""ask_user card=organize_plan validation + retired-name reject."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def test_ask_user_schema_does_not_expose_blocking():
     assert "blocking" not in blob
     assert '"context"' not in json.dumps(tool.schema.parameters, ensure_ascii=False)
     card_enum = props["card"]["enum"]
-    assert card_enum == ["organize_plan", "daily_review"]
+    assert card_enum == ["organize_plan"]
     assert frozenset(card_enum) == CARD_KINDS
 
 
@@ -89,10 +89,13 @@ async def test_ask_user_drops_extra_context_key():
 
 def test_parse_card_unknown():
     err = parse_card("foo")
-    assert isinstance(err, str) and "organize_plan" in err and "daily_review" in err
+    assert isinstance(err, str) and "organize_plan" in err
+    assert "daily_review" not in err
+    absent = parse_card("daily_review")
+    assert isinstance(absent, str) and "未知 card" in absent
 
 
-@pytest.mark.parametrize("card", ["proposal_pick", "risk_ack", "kickoff"])
+@pytest.mark.parametrize("card", ["proposal_pick", "risk_ack", "kickoff", "daily_review"])
 async def test_schema_rejects_retired_card_names(card):
     """Write path rejects retired names; does not rewrite to decision."""
     tool = _tool()
@@ -320,7 +323,6 @@ async def test_ordinary_ask_drops_option_detail_even_if_model_filled():
     "card,n,multiple",
     [
         ("organize_plan", 1, True),
-        ("daily_review", 1, True),
     ],
 )
 async def test_dedicated_card_keeps_option_detail(card, n, multiple):
@@ -333,14 +335,9 @@ async def test_dedicated_card_keeps_option_detail(card, n, multiple):
     token = _with_ask_transcript(message="专用卡", card=card)
     try:
         questions = _detailed_choice(n=n, multiple=multiple)
-        if card == "daily_review":
-            for opt in questions[0]["options"]:
-                opt["review_kind"] = "preference"
-                opt["body"] = "x"
-        elif card == "organize_plan":
-            for i, opt in enumerate(questions[0]["options"]):
-                opt["op"] = "mkdir"
-                opt["path"] = f"p{i}"
+        for i, opt in enumerate(questions[0]["options"]):
+            opt["op"] = "mkdir"
+            opt["path"] = f"p{i}"
         res = await tool.execute(
             {
                 "message": "专用卡",
@@ -356,6 +353,5 @@ async def test_dedicated_card_keeps_option_detail(card, n, multiple):
     required = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
     opts = required.payload["questions"][0]["options"]
     assert all(o.get("detail") == "一行取舍" for o in opts)
-    if card == "organize_plan":
-        assert [o.get("path") for o in opts] == [f"p{i}" for i in range(n)]
+    assert [o.get("path") for o in opts] == [f"p{i}" for i in range(n)]
     assert saved[0].intent == card

@@ -36,6 +36,11 @@ describe("DebriefSection", () => {
     render(<DebriefSection debrief={baseDebrief} />);
     const face = screen.getByRole("button", { name: "交接简报" });
     expect(face).toBeTruthy();
+    expect(face.className).toContain("w-auto");
+    expect(face.className).not.toContain("w-full");
+    expect(
+      face.lastElementChild?.classList.contains("lucide-chevron-right"),
+    ).toBe(true);
     expect(face.closest(".bg-muted")).toBeNull();
     expect(screen.queryByText("交叉验证完成")).toBeNull();
     expect(screen.queryByText("结论")).toBeNull();

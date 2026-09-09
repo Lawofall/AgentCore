@@ -150,9 +150,7 @@ async def _wire_continuation_toolset(
         desktop_channel, cache_scope=user_id, cache_only=True
     )
     mcp_label = mcp_capability_label(mcp_discover, desktop_online=desktop_online)
-    from agentcore.runtime.capability_packs import enabled_packs
-
-    skill_registry = build_system_skill_registry(enabled_packs=enabled_packs())
+    skill_registry = build_system_skill_registry()
     from agentcore.runtime.pipeline.prepare import _timed_phase
     from agentcore.tools.sandbox.desk_provision import provision_server_desk
 
@@ -180,7 +178,7 @@ async def _wire_continuation_toolset(
         folder_id=folder_id,
     )
     # Same system-skill registry as a fresh turn so the continued CEO loop can
-    # still consult (提示词瘦身 P2), including deployment-gated capability packs.
+    # still consult (提示词瘦身 P2).
     # The CEO prompt itself is replayed from the stored transcript
     # (already slim + 按需目录), so no directory re-render.
     # AI 协作白板 (§六 M2): a board-bound turn regains its BoardChannel so the

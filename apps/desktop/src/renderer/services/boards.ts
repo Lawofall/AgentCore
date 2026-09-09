@@ -19,14 +19,10 @@ export function listBoards(): Promise<BoardSummary[]> {
   return api.get<BoardSummary[]>("/v1/boards");
 }
 
-/** Create a board. `folderId` files it under a folder; omit = ungrouped (top-level list). */
-export function createBoard(input?: {
-  title?: string;
-  folderId?: string | null;
-}): Promise<BoardSummary> {
+/** Create a board. Boards are account-scoped — they do not file under a folder. */
+export function createBoard(input?: { title?: string }): Promise<BoardSummary> {
   return api.post<BoardSummary>("/v1/boards", {
     title: input?.title ?? null,
-    folder_id: input?.folderId ?? null,
   });
 }
 

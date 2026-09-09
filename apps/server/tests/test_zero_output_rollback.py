@@ -42,6 +42,10 @@ def test_empty_failure_deletes_for_each_class_b_code():
         ErrorCode.LLM_RATE_LIMIT,
         ErrorCode.LLM_KEY_INVALID,
         ErrorCode.LLM_INSUFFICIENT_BALANCE,
+        ErrorCode.LOCAL_DESKTOP_OFFLINE,
+        ErrorCode.LOCAL_ROOT_NOT_HELD,
+        ErrorCode.LOCAL_ORIGIN_DEVICE_OFFLINE,
+        ErrorCode.LOCAL_CHANNEL_DEAD,
     ):
         assert _yes(error_code=code) is True
 
@@ -73,6 +77,7 @@ def test_wrong_code_does_not_delete():
         ErrorCode.LLM_TIMEOUT,
         ErrorCode.PIPELINE_ERROR,
         ErrorCode.LLM_ERROR,
+        ErrorCode.STREAM_ERROR,
         None,
         "",
     ):
@@ -100,6 +105,10 @@ def test_class_b_codes_are_the_small_set_and_disjoint_from_class_a():
             ErrorCode.LLM_RATE_LIMIT,
             ErrorCode.LLM_KEY_INVALID,
             ErrorCode.LLM_INSUFFICIENT_BALANCE,
+            ErrorCode.LOCAL_DESKTOP_OFFLINE,
+            ErrorCode.LOCAL_ROOT_NOT_HELD,
+            ErrorCode.LOCAL_ORIGIN_DEVICE_OFFLINE,
+            ErrorCode.LOCAL_CHANNEL_DEAD,
         }
     ) == ZERO_OUTPUT_SEND_REFUSAL_CODES
     assert ZERO_OUTPUT_SEND_REFUSAL_CODES.isdisjoint(_CLASS_A_PRECHECK_CODES)

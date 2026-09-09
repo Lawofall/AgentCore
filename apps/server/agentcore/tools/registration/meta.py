@@ -35,7 +35,7 @@ class FileProductsContract(StrEnum):
     漏登记 = 静默通过。
 
     翻转成自报后，同一形状的事故会变成「新工具忘了填 ``file_products``」。所以「落盘面」上
-    （FILESYSTEM 类 ∪ ``execution_class``）的每个工具都必须在这里**显式**表态属于哪一类，
+    （``workspace_io`` ∪ ``execution_class``）的每个工具都必须在这里**显式**表态属于哪一类，
     漏声明就停在 :attr:`UNDECLARED` 上、被 ``tests/test_file_products_ratchet.py`` 判红。
     红了怎么办：那个测试的模块 docstring 逐类写了修法。
     """
@@ -49,7 +49,7 @@ class FileProductsContract(StrEnum):
     # 现已清空——再用这一档要先推翻棘轮里那条「下界是空」的断言。
     SELF_REPORT_PENDING = "self_report_pending"
     # 不往工作区写任何字节（file_read / file_list / glob / grep / code_search / code_diagnostics）。
-    # 与审批面互锁：FILESYSTEM 类里只有 ``ToolApproval.NEVER`` 才配声明只读——要写盘授权
+    # 与审批面互锁：``workspace_io`` 里只有 ``ToolApproval.NEVER`` 才配声明只读——要写盘授权
     # 又自称只读的组合会被棘轮拦下。
     READ_ONLY = "read_only"
     # 会动工作区，但落的不是台账要记的产物：只建目录 / 只删文件 / 浏览器关键帧 /
@@ -113,6 +113,13 @@ class ToolRegistration:
     # 工具只写「没有专用导出器、靠脚本才能产」的格式。事实行读本字段 + 本回合装配闸，
     # 不另维护一份格式白名单。
     produces_formats: tuple[str, ...] = ()
+    # Opening FC table when assembled. False → ``<按需目录>`` until ``consult``.
+    resident: bool = True
+    # One-line catalog trigger ("这是什么"). Required when ``resident`` is False.
+    catalog_summary: str = ""
+    # Takes workspace-relative paths / may land files. Ratchet landing surface
+    # (with ``execution_class``); not a grouping axis — grouping is ``ToolFace``.
+    workspace_io: bool = False
 
 
 def tool_registration(cls: type) -> ToolRegistration:

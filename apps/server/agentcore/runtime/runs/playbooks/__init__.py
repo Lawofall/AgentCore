@@ -51,7 +51,7 @@ PLAYBOOKS: dict[str, Playbook] = {
         summary=(
             "【成文专线】可提交长文 / 用户点名审校时用：调研→提纲→写作→审校"
             "（N 路并行调研汇拢成纲再成文；成篇验收钉死单一主文件 `.md`；"
-            "PDF/Word → consult(team_delivery_env)）。"
+            "PDF/Word → consult(delivery)）。"
             "普通构想勿默认学术审校；摸清方向请用 map_fanout"
         ),
         slots=(
@@ -90,7 +90,7 @@ def playbook_args_schema_description() -> str:
     return (
         "具名 playbook 快捷槽位对象（与 playbook 联用）。"
         f"必填槽：{required_cues}。"
-        "其余可选槽→consult(team_orchestration_advanced)。"
+        "其余可选槽→consult(staffing)。"
     )
 
 

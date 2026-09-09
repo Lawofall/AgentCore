@@ -287,7 +287,7 @@ async def run_semantic_for_scope(
 
     ``store`` / ``credentials`` / ``eager`` / ``anchor_at`` are accepted for
     call-site compatibility and ignored. Always-files are written by remember /
-    explore / daily review / the file page — not this pass. Returns False
+    explore / the file page — not this pass. Returns False
     (never a preference/profile/navigation change).
     """
     del store, credentials, eager, anchor_at

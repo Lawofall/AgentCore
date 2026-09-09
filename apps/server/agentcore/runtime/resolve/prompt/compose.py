@@ -5,6 +5,7 @@ import time
 from collections.abc import Sequence
 
 from agentcore.config import settings
+from agentcore.core.types import TOOL_FACE_LABELS, TOOL_FACE_ORDER
 from agentcore.runtime.context import ContextAssembler, SectionOrder
 from agentcore.runtime.context.consultable import ConsultDirectoryEntry
 from agentcore.runtime.context.workspace_overview import attach_workspace_file_index
@@ -26,6 +27,7 @@ from agentcore.runtime.resolve.prompt.cold_start import (
     _explore_act_block,
 )
 from agentcore.runtime.resolve.prompt.memory_rules import _format_rules
+from agentcore.runtime.skills.registry import SKILL_GROUP_ORDER
 
 
 def assemble_system_prompt(
@@ -105,6 +107,58 @@ def _catalog_row(entry: ConsultDirectoryEntry, *, with_summaries: bool) -> str:
     return f"- {entry.name}"
 
 
+def _tool_section_lines(
+    entries: Sequence[ConsultDirectoryEntry], *, with_summaries: bool
+) -> list[str]:
+    """低频工具栏：连接器单独；其余按能力面小标题。无 face 的测试行保持扁列。"""
+    mcp: list[ConsultDirectoryEntry] = []
+    leftover: list[ConsultDirectoryEntry] = []
+    by_face: dict[str, list[ConsultDirectoryEntry]] = {}
+    for entry in entries:
+        if entry.name.startswith("mcp_"):
+            mcp.append(entry)
+        elif entry.face:
+            by_face.setdefault(entry.face, []).append(entry)
+        else:
+            leftover.append(entry)
+    lines: list[str] = []
+    if leftover:
+        lines.extend(_grouped_tool_rows(leftover, with_summaries=with_summaries))
+    if mcp:
+        lines.append("连接器：")
+        lines.extend(_grouped_tool_rows(mcp, with_summaries=with_summaries))
+    for face in TOOL_FACE_ORDER:
+        group = by_face.get(face.value)
+        if not group:
+            continue
+        lines.append(f"{TOOL_FACE_LABELS[face]}：")
+        lines.extend(_grouped_tool_rows(group, with_summaries=with_summaries))
+    return lines
+
+
+def _skill_section_lines(
+    entries: Sequence[ConsultDirectoryEntry], *, with_summaries: bool
+) -> list[str]:
+    """能力指引栏：按 SystemSkill.group 中文子标题分组。空组不出现。"""
+    leftover: list[ConsultDirectoryEntry] = []
+    by_group: dict[str, list[ConsultDirectoryEntry]] = {}
+    for entry in entries:
+        if entry.group:
+            by_group.setdefault(entry.group, []).append(entry)
+        else:
+            leftover.append(entry)
+    lines: list[str] = []
+    if leftover:
+        lines.extend(_catalog_row(e, with_summaries=with_summaries) for e in leftover)
+    for heading in SKILL_GROUP_ORDER:
+        group = by_group.get(heading)
+        if not group:
+            continue
+        lines.append(f"{heading}：")
+        lines.extend(_catalog_row(e, with_summaries=with_summaries) for e in group)
+    return lines
+
+
 def _grouped_tool_rows(
     entries: Sequence[ConsultDirectoryEntry], *, with_summaries: bool
 ) -> list[str]:
@@ -170,7 +224,9 @@ def render_on_demand_directory(
             continue
         lines.append(f"{heading}：")
         if key == "tool":
-            lines.extend(_grouped_tool_rows(group, with_summaries=with_summaries))
+            lines.extend(_tool_section_lines(group, with_summaries=with_summaries))
+        elif key == "skill":
+            lines.extend(_skill_section_lines(group, with_summaries=with_summaries))
         else:
             lines.extend(_catalog_row(e, with_summaries=with_summaries) for e in group)
     lines.append("</按需目录>")
@@ -301,7 +357,10 @@ def compose_ceo_chat_prompt(
             for skill in skill_registry.available(ceo_tool_names, audience="ceo"):  # type: ignore[union-attr]
                 entries.append(
                     ConsultDirectoryEntry(
-                        name=skill.name, summary=skill.summary, section="skill"
+                        name=skill.name,
+                        summary=skill.summary,
+                        section="skill",
+                        group=getattr(skill, "group", "") or "",
                     )
                 )
     on_demand_block = (

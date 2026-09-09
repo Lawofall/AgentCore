@@ -10,11 +10,18 @@ import {
 } from "../workflowDefinition";
 import {
   createWorkflowFromPlaybook,
+  deleteWorkflowTrigger,
   listWorkflowTemplates,
   listWorkflows,
+  localHmFromUtcCron,
+  putWorkflowTrigger,
+  relativeWebhookUrl,
+  rotateWorkflowTriggerSecret,
   runWorkflow,
   toUserWorkflow,
   toWorkflowTemplate,
+  triggerSummary,
+  utcCronFromLocalHm,
 } from "../workflows";
 
 vi.mock("@/services/api", async (importOriginal) => {
@@ -25,6 +32,7 @@ vi.mock("@/services/api", async (importOriginal) => {
       get: vi.fn(),
       post: vi.fn(),
       patch: vi.fn(),
+      put: vi.fn(),
       delete: vi.fn(),
     },
   };
@@ -33,11 +41,15 @@ vi.mock("@/services/api", async (importOriginal) => {
 const apiGet = vi.mocked(api.get);
 const apiPost = vi.mocked(api.post);
 const apiPatch = vi.mocked(api.patch);
+const apiPut = vi.mocked(api.put);
+const apiDelete = vi.mocked(api.delete);
 
 beforeEach(() => {
   apiGet.mockReset();
   apiPost.mockReset();
   apiPatch.mockReset();
+  apiPut.mockReset();
+  apiDelete.mockReset();
 });
 
 describe("workflowDefinition", () => {
@@ -140,6 +152,110 @@ describe("workflows client", () => {
     expect(w.name).toBe("三步质检");
     expect(w.version).toBe(2);
     expect(w.definition.nodes).toEqual([]);
+    expect(w.trigger).toBeNull();
+  });
+
+  it("maps nested trigger and keeps webhook URL relative", () => {
+    const w = toUserWorkflow({
+      id: "wf-1",
+      name: "三步质检",
+      definition: emptyWorkflowDefinition(),
+      version: 1,
+      created_at: "2026-07-31T00:00:00Z",
+      updated_at: "2026-07-31T00:00:00Z",
+      trigger: {
+        kind: "webhook",
+        folder_id: "fold-cloud",
+        enabled: true,
+        last_error: "timeout",
+        webhook_id: "wh-1",
+        webhook_url: "https://api.example.com/v1/hooks/workflows/wh-1",
+        webhook_secret: "sec_once",
+      },
+    });
+    expect(w.trigger?.kind).toBe("webhook");
+    expect(w.trigger?.webhookUrl).toBe("/v1/hooks/workflows/wh-1");
+    expect(w.trigger?.webhookSecret).toBe("sec_once");
+    expect(w.trigger?.lastError).toBe("timeout");
+    expect(triggerSummary(w.trigger)).toBe("Webhook");
+  });
+
+  it("maps schedule preset labels and utc daily cron", () => {
+    const w = toUserWorkflow({
+      id: "wf-1",
+      name: "三步质检",
+      definition: emptyWorkflowDefinition(),
+      version: 1,
+      created_at: "2026-07-31T00:00:00Z",
+      updated_at: "2026-07-31T00:00:00Z",
+      trigger: {
+        kind: "schedule",
+        schedule_preset: "weekly_mon",
+        folder_id: "fold-cloud",
+        enabled: true,
+      },
+    });
+    expect(triggerSummary(w.trigger)).toBe("每周一");
+    const cron = utcCronFromLocalHm(9, 30);
+    expect(cron).toMatch(/^\d{1,2} \d{1,2} \* \* \*$/);
+    expect(localHmFromUtcCron(cron)).toEqual({ hour: 9, minute: 30 });
+    expect(relativeWebhookUrl(null, "wh-2")).toBe("/v1/hooks/workflows/wh-2");
+  });
+
+  it("PUT /trigger sends schedule without cron for named presets", async () => {
+    apiPut.mockResolvedValueOnce({
+      id: "wf-1",
+      name: "三步质检",
+      definition: { nodes: [], edges: [] },
+      version: 1,
+      created_at: "2026-07-31T00:00:00Z",
+      updated_at: "2026-07-31T00:00:00Z",
+      trigger: {
+        kind: "schedule",
+        schedule_preset: "weekly_mon",
+        folder_id: "fold-cloud",
+        enabled: true,
+      },
+    });
+    await putWorkflowTrigger("wf-1", {
+      kind: "schedule",
+      schedulePreset: "weekly_mon",
+      folderId: "fold-cloud",
+    });
+    expect(apiPut).toHaveBeenCalledWith("/v1/workflows/wf-1/trigger", {
+      kind: "schedule",
+      schedule_preset: "weekly_mon",
+      folder_id: "fold-cloud",
+      enabled: true,
+    });
+  });
+
+  it("DELETE /trigger then POST rotate-secret", async () => {
+    apiDelete.mockResolvedValueOnce({
+      id: "wf-1",
+      name: "三步质检",
+      definition: { nodes: [], edges: [] },
+      version: 1,
+      created_at: "2026-07-31T00:00:00Z",
+      updated_at: "2026-07-31T00:00:00Z",
+      trigger: null,
+    });
+    const cleared = await deleteWorkflowTrigger("wf-1");
+    expect(cleared.trigger).toBeNull();
+    expect(apiDelete).toHaveBeenCalledWith("/v1/workflows/wf-1/trigger");
+
+    apiPost.mockResolvedValueOnce({
+      webhook_secret: "sec_rotated",
+      webhook_url: "/v1/hooks/workflows/wh-1",
+      webhook_id: "wh-1",
+    });
+    const rotated = await rotateWorkflowTriggerSecret("wf-1");
+    expect(apiPost).toHaveBeenCalledWith(
+      "/v1/workflows/wf-1/trigger/rotate-secret",
+      {},
+    );
+    expect(rotated.webhookSecret).toBe("sec_rotated");
+    expect(rotated.webhookUrl).toBe("/v1/hooks/workflows/wh-1");
   });
 
   it("surfaces API errors instead of a local shadow store", async () => {

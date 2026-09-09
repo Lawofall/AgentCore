@@ -4,8 +4,8 @@ User workflows are **not** registered into ``PLAYBOOKS``. 「使用」= expand o
 persist a definition snapshot under ``user_workflows``.
 
 Product rule: the template catalog is a **curated subset** of ``PLAYBOOKS``,
-not 1:1. Templates = short, repeatable, boss-facing shapes for toolbox copy /
-standing tasks. CEO shapes stay the full runtime vocabulary (narrow / recovery /
+not 1:1. Templates = short, repeatable, boss-facing shapes for toolbox copy.
+CEO shapes stay the full runtime vocabulary (narrow / recovery /
 continuation playbooks stay out of the catalog).
 """
 
@@ -110,14 +110,8 @@ _TITLE: dict[str, str] = {
 
 # User-facing blurbs (not raw CEO/runtime summaries).
 _SUMMARY: dict[str, str] = {
-    "map_fanout": (
-        "多人并行摸清议题并写一页方向笔记；适合「先弄懂」。"
-        "要交长文/落盘报告请用「调研报告成文」。"
-    ),
-    "cite_write_review": (
-        "调研→提纲→写作→审校；仅当你明确要落盘成文或交报告时用。"
-        "只想弄懂议题请用「多角摸底」。"
-    ),
+    "map_fanout": "多人并行摸清议题并写一页方向笔记；适合先弄懂。",
+    "cite_write_review": "调研→提纲→写作→审校；产出能落盘的长文报告。",
 }
 
 _DEGRADE_NOTE = (

@@ -12,6 +12,40 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GuidelinesPage } from "../GuidelinesPage";
 
+vi.mock("@/components/markdown/MarkdownSourceEditor", async () => {
+  const React = await import("react");
+  let current = "";
+  return {
+    MarkdownSourceEditor: React.forwardRef(function Stub(
+      props: {
+        initialDoc?: string;
+        onChange?: (value: string) => void;
+      },
+      ref: React.Ref<unknown>,
+    ) {
+      if (props.initialDoc != null) current = props.initialDoc;
+      React.useImperativeHandle(ref, () => ({
+        getValue: () => current,
+        getView: () => null,
+        getSelectionContext: () => null,
+        startRewriteReview: () => false,
+        endRewriteReview: () => undefined,
+      }));
+      return React.createElement("textarea", {
+        "aria-label": "正文",
+        defaultValue: props.initialDoc,
+        onChange: (event: { target: { value: string } }) => {
+          current = event.target.value;
+          props.onChange?.(event.target.value);
+        },
+      });
+    }),
+  };
+});
+vi.mock("@/components/markdown/sourceToolbar", () => ({
+  SourceToolbar: () => null,
+}));
+
 vi.mock("@/services/capabilities", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/services/capabilities")>();
@@ -25,16 +59,43 @@ vi.mock("@/hooks/useFolders", () => ({
   useFolders: () => [],
 }));
 
+vi.mock("@/services/documents", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/documents")>();
+  return {
+    ...actual,
+    listScopeEntries: vi.fn(async () => []),
+    listAccountPromptTree: vi.fn(async () => ({
+      rulesDirId: "rules",
+      folders: [],
+      documents: [],
+    })),
+    createRuleDocument: vi.fn(),
+    createRuleFolder: vi.fn(),
+    reparentDocument: vi.fn(),
+    deleteDocument: vi.fn(),
+    getDocument: vi.fn(),
+    renameDocument: vi.fn(),
+    writeDocument: vi.fn(),
+    setDocumentDisputed: vi.fn(),
+    updateDocumentApplyMode: vi.fn(),
+  };
+});
+
+vi.mock("@/services/memory", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/memory")>();
+  return {
+    ...actual,
+    getMemoryFile: vi.fn(async () => ({ content: "", version: "v0" })),
+    writeMemoryFile: vi.fn(),
+  };
+});
+
 vi.mock("@/services/skillCatalog", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/services/skillCatalog")>();
   return {
     ...actual,
     getSkillCatalog: vi.fn(),
-    replaceSkillSlot: vi.fn(),
-    restoreSkillSlot: vi.fn(),
-    muteSkillSlot: vi.fn(),
-    unmuteSkillSlot: vi.fn(),
   };
 });
 
@@ -43,6 +104,7 @@ vi.mock("@/services/skillStore", async (importOriginal) => {
   return {
     ...actual,
     listMySkillListings: vi.fn(async () => []),
+    listInstalledSkills: vi.fn(async () => []),
     publishSkill: vi.fn(),
     publishSkillVersion: vi.fn(),
     unpublishSkill: vi.fn(),
@@ -50,15 +112,14 @@ vi.mock("@/services/skillStore", async (importOriginal) => {
 });
 
 const { getCapabilities } = await import("@/services/capabilities");
-const { getSkillCatalog, replaceSkillSlot, muteSkillSlot } = await import(
-  "@/services/skillCatalog"
-);
+const { getSkillCatalog } = await import("@/services/skillCatalog");
 const {
   listMySkillListings,
   publishSkill,
   publishSkillVersion,
   unpublishSkill,
 } = await import("@/services/skillStore");
+const { listScopeEntries } = await import("@/services/documents");
 
 const base: Capabilities = {
   guidelines: {
@@ -70,7 +131,6 @@ const base: Capabilities = {
   },
   skills: [],
   tools: [],
-  packs: [],
 };
 
 const mineCatalog = {
@@ -82,7 +142,6 @@ const mineCatalog = {
       description: "审合同时用",
       content: "HOW",
       version: "v1",
-      occupies: [],
     },
   ],
   folderId: null,
@@ -95,8 +154,6 @@ beforeEach(() => {
   vi.mocked(getCapabilities).mockResolvedValue(base);
   vi.mocked(getSkillCatalog).mockReset();
   vi.mocked(getSkillCatalog).mockResolvedValue(mineCatalog);
-  vi.mocked(replaceSkillSlot).mockReset();
-  vi.mocked(muteSkillSlot).mockReset();
   vi.mocked(listMySkillListings).mockReset();
   vi.mocked(listMySkillListings).mockResolvedValue([]);
   vi.mocked(publishSkill).mockReset();
@@ -109,11 +166,14 @@ beforeEach(() => {
     installed: false,
     hasUpdate: false,
     documentId: "d1",
+    installDocumentId: null,
     status: "published",
   });
   vi.mocked(publishSkillVersion).mockReset();
   vi.mocked(unpublishSkill).mockReset();
   vi.mocked(unpublishSkill).mockResolvedValue(undefined);
+  vi.mocked(listScopeEntries).mockReset();
+  vi.mocked(listScopeEntries).mockResolvedValue([]);
 });
 
 afterEach(cleanup);
@@ -126,19 +186,17 @@ function renderPage() {
   );
 }
 
-describe("我的技能上架入口", () => {
-  it("可写 mine 行有上架，不走换槽 API", async () => {
+describe("我的提示词上架入口", () => {
+  it("可写 mine 行有上架", async () => {
     renderPage();
     fireEvent.click(await screen.findByText("合同审查"));
     fireEvent.click(await screen.findByRole("button", { name: "上架" }));
     await waitFor(() => {
       expect(publishSkill).toHaveBeenCalledWith("d1");
     });
-    expect(replaceSkillSlot).not.toHaveBeenCalled();
-    expect(muteSkillSlot).not.toHaveBeenCalled();
   });
 
-  it("已上架的可写下架，仍不换槽", async () => {
+  it("已上架的可写下架", async () => {
     vi.mocked(listMySkillListings).mockResolvedValue([
       {
         id: "listing-1",
@@ -149,6 +207,7 @@ describe("我的技能上架入口", () => {
         installed: false,
         hasUpdate: false,
         documentId: "d1",
+        installDocumentId: null,
         status: "published",
       },
     ]);
@@ -159,7 +218,6 @@ describe("我的技能上架入口", () => {
     await waitFor(() => {
       expect(unpublishSkill).toHaveBeenCalledWith("listing-1");
     });
-    expect(replaceSkillSlot).not.toHaveBeenCalled();
   });
 
   it("作者下架后再上架走 POST /skill-store，不走 /versions", async () => {
@@ -173,6 +231,7 @@ describe("我的技能上架入口", () => {
         installed: false,
         hasUpdate: false,
         documentId: "d1",
+        installDocumentId: null,
         status: "unpublished",
       },
     ]);

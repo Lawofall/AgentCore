@@ -361,7 +361,7 @@ export function MentionMenu({
                               : item.kind === "conversation"
                                 ? "对话"
                                 : item.kind === "document"
-                                  ? "设定"
+                                  ? "提示词"
                                   : item.display}
                           </span>
                         </span>

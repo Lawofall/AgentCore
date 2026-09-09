@@ -196,15 +196,7 @@ export function BetaGroupPage() {
     <Page>
       <PageHeader
         title="内测群"
-        description={
-          <>
-            任命 / 撤销「内测群管理员」（群内{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
-              chat_members.role=admin
-            </code>
-            ）· 共 {fmtCount(total, totalKnown)} 人
-          </>
-        }
+        description={`共 ${fmtCount(total, totalKnown)} 人`}
         note="群管理员只获得该群的治理能力，不会获得管理后台或平台级权限；平台 admin 已自带群治理权，无需任命。"
         actions={
           <Button
@@ -337,7 +329,7 @@ export function BetaGroupPage() {
               <EmptyState
                 icon={UsersRound}
                 title="还没有内测群管理员"
-                description="这里只列群内角色为 admin 的成员。平台 admin 本身已有群治理权，不需要任命；要把某位内测用户提为管理员，用上方表单。"
+                description="只列群内管理员；平台 admin 不必任命。"
               />
             </Card>
           ) : (

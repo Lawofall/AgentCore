@@ -20,9 +20,8 @@ export function SubTeamGroupNode({ data }: NodeProps) {
 
   // 辩论整场外框不画（阶段只挂 DebateStageBands 轮次/结辩标签，无阶段填充）；仅保留布局与 Handle。
   const isDebate = d.variant === "debate";
-  const boxClass = isDebate
-    ? ""
-    : "rounded-xl border border-dashed border-muted-foreground/40 bg-muted/20";
+  // 浅色画布上 --muted 已接近白，bg-muted/20 看不见；深 token 低透明。
+  const boxClass = isDebate ? "" : "rounded-xl bg-muted-foreground/3";
 
   return (
     <div className={`h-full w-full ${boxClass} ${graphNodeDimClass(dimmed)}`}>

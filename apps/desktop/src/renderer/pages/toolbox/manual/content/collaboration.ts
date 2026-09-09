@@ -404,8 +404,8 @@ export const collaborationChapter: ManualChapterContent = {
               desc: "直接说「忘掉上次说的……」或「改成……」即可。",
             },
             {
-              title: "文件页 · 全局设定",
-              desc: "打开文件页顶部的「全局设定」，可查看、编辑或清理。",
+              title: "工具箱 · 提示词",
+              desc: "打开工具箱的提示词页，可查看或调整所有对话共用的提示词；流水账也在这一页。",
             },
           ],
         },
@@ -415,10 +415,15 @@ export const collaborationChapter: ManualChapterContent = {
           text: [
             "入口：",
             {
-              text: "文件",
-              link: { kind: "go", to: APP_PATHS.files },
+              text: "工具箱",
+              link: { kind: "go", to: APP_PATHS.toolbox.guidelines },
             },
-            " → 全局设定。记忆来自你的对话偏好；与数据留存、导出等关系见 ",
+            " · 提示词。流水账：",
+            {
+              text: "提示词流水账",
+              link: { kind: "go", to: APP_PATHS.toolbox.guidelinesUpdates },
+            },
+            "。记忆来自你的对话偏好；与数据留存、导出等关系见 ",
             {
               text: "数据与隐私",
               link: {
@@ -467,8 +472,8 @@ export const collaborationChapter: ManualChapterContent = {
               desc: "点「新建工作流」从空白画布起步，自己排队员、关卡和先后。",
             },
             {
-              title: "在画布上设计，再跑一次或交给定时",
-              desc: "画好后点「跑一次」选个文件夹就能直起；也可以让自动化里的任务绑着它按时跑。",
+              title: "在画布上设计，再跑一次或设为定时",
+              desc: "画好后点「跑一次」选个文件夹就能直起；也可以点「设为定时」配周期或 Webhook，到点按这张图跑。",
             },
           ],
         },
@@ -505,133 +510,36 @@ export const collaborationChapter: ManualChapterContent = {
         },
         {
           type: "paragraph",
-          text: "工作流页顶部列着官方模板（多角摸底、调研报告成文），先看目标再挑。点「使用」是复制一份成你自己的工作流，再改名字和步骤；原模板只读，改坏了随时重新复制一份。",
-        },
-        {
-          type: "callout",
-          variant: "info",
-          text: [
-            "工作流管「活儿怎么拆」，",
-            {
-              text: "自动化",
-              link: {
-                kind: "jump",
-                to: MANUAL_SECTION_IDS.collaboration.automation,
-              },
-            },
-            " 管「什么时候跑」。日常聊天不需要它——没绑工作流时，CEO 照常即兴组队。",
-          ],
-        },
-      ],
-    },
-    {
-      id: MANUAL_SECTION_IDS.collaboration.automation,
-      title: "自动化",
-      icon: "CalendarClock",
-      blocks: [
-        {
-          type: "lead",
-          text: "常做的活配上定时或 Webhook，到点由 CEO 自动开一轮协作；你回来只在收件箱看摘要，处理待你拍板的那几条。",
+          text: "市场里套官方模板。「使用」会复制一份成你自己的工作流，再改名字和步骤；原模板只读，改坏了随时重新复制一份。",
         },
         {
           type: "paragraph",
-          text: "一个任务要配什么",
+          text: "定时或 Webhook",
           emphasis: true,
         },
         {
           type: "bullets",
           items: [
             {
-              title: "触发方式",
-              desc: "定时（每天 / 每周 / 自定义 cron）或 Webhook（外部系统 POST 一下就开跑，事件正文会带进本轮上下文）。一个任务只选一种，密钥只在创建或轮换时显示一次。",
+              title: "设为定时",
+              desc: "在工作流行上打开本页对话框：定时与 Webhook 互斥，只绑云端文件夹，可随时启用或清除。",
             },
             {
-              title: "目标",
-              desc: "到点要完成什么，写法与在对话里下任务一样——目标、约束、期望产出。",
-            },
-            {
-              title: "云端文件夹",
-              desc: "产物落在哪个云端文件夹。任务只能绑云端文件夹：你关机的时候，本机文件夹跑不了。",
-            },
-            {
-              title: "自主度",
-              desc: [
-                "和对话里同一套",
-                {
-                  text: "配方",
-                  link: {
-                    kind: "jump",
-                    to: MANUAL_SECTION_IDS.collaboration.autonomy,
-                  },
-                },
-                "。无人值守时若撞上要你拍板的检查点，这一轮会挂起等你，不会替你做决定。",
-              ],
-            },
-            {
-              title: "绑一张工作流（可选）",
-              desc: "绑了就按图跑，目标文案只当本轮补充；不绑就按目标文案让 CEO 即兴组队。",
+              title: "跑一次仍是手点",
+              desc: "「跑一次」当场开一轮；定时 / Webhook 是到点或收到外部 POST 再按图跑，没有另开的「立即跑」。",
             },
           ],
-        },
-        {
-          type: "paragraph",
-          text: "结果去哪看",
-          emphasis: true,
-        },
-        {
-          type: "bullets",
-          items: [
-            {
-              title: "收件箱",
-              desc: "每次运行一条：成功摘要、失败原因、待你拍板的挂起项；tab 上的红点是还没处理的条数。",
-            },
-            {
-              title: "点进对话",
-              desc: "每次运行都是一轮真实对话——点「去拍板 / 进对话」照样看协作图、回检查点，和平时一样。",
-            },
-            {
-              title: "收尾",
-              desc: "看完标为已读；失败的那条可以重新触发一次。",
-            },
-          ],
-        },
-        {
-          type: "paragraph",
-          text: "系统任务",
-          emphasis: true,
-        },
-        {
-          type: "paragraph",
-          text: "自动化页顶部是平台预制的系统任务（如每日对话复盘）：目标由系统托管、不可改，你只配触发时间、复盘范围与报告落点。开启前它不会跑，之后也能随时暂停。",
-        },
-        {
-          type: "callout",
-          variant: "tip",
-          text: "想确认配得对不对，不用等到点——在任务上点「立即触发」，当场跑一轮看看。",
         },
         {
           type: "callout",
           variant: "info",
           text: [
-            "入口：",
+            "电脑关着也会跑——任务在云端，所以只能绑云端文件夹。入口：",
             {
-              text: "工具箱 · 自动化",
-              link: { kind: "go", to: APP_PATHS.toolbox.automations.root },
+              text: "工具箱 · 工作流",
+              link: { kind: "go", to: APP_PATHS.toolbox.workflows.root },
             },
-            "；结果在 ",
-            {
-              text: "收件箱",
-              link: { kind: "go", to: APP_PATHS.toolbox.automations.inbox },
-            },
-            "。想让它每次都按同一套拆法跑，先去 ",
-            {
-              text: "工作流",
-              link: {
-                kind: "jump",
-                to: MANUAL_SECTION_IDS.collaboration.workflow,
-              },
-            },
-            " 在工具箱里设计好再绑上。",
+            "。日常聊天不需要它——没绑工作流时，CEO 照常即兴组队。",
           ],
         },
       ],

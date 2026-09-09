@@ -25,6 +25,10 @@ type ConfirmTarget =
   | { kind: "one"; session: SessionSummary }
   | { kind: "others" };
 
+/** How many rows the account page shows before "还有 N 台". Google / Microsoft
+ *  security overviews use 3-5; this is the only device manager, so 5. */
+const SESSION_PREVIEW_LIMIT = 5;
+
 /**
  * 登录设备 — list active refresh-token families and revoke one / all others.
  * Placed on 账户设置 between 修改密码 and 危险区域.
@@ -36,6 +40,7 @@ export function LoginSessionsSection() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmTarget | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -118,11 +123,12 @@ export function LoginSessionsSection() {
   const showRevokeOthers = sessions.length > 1;
   const actionBusy = busyId !== null;
   const copy = revokeCopy(confirm);
+  const hidden = Math.max(0, sessions.length - SESSION_PREVIEW_LIMIT);
+  const shown = previewSessions(sessions, expanded);
 
   return (
     <SettingsSection
       title="登录设备"
-      description="查看当前账号的活跃登录，并可退出指定设备。"
       action={
         showRevokeOthers && !loading && !loadError ? (
           <Button
@@ -148,7 +154,7 @@ export function LoginSessionsSection() {
           }}
         >
           <ul className="divide-y divide-border">
-            {sessions.map((s) => (
+            {shown.map((s) => (
               <SessionRow
                 key={s.id}
                 session={s}
@@ -158,6 +164,19 @@ export function LoginSessionsSection() {
               />
             ))}
           </ul>
+          {hidden > 0 && (
+            <div className="mt-1 border-t border-border pt-2">
+              <Button
+                variant="ghost"
+                size="md"
+                className="w-full"
+                aria-expanded={expanded}
+                onClick={() => setExpanded((v) => !v)}
+              >
+                {expanded ? "收起" : `还有 ${hidden} 台`}
+              </Button>
+            </div>
+          )}
         </SettingsAsync>
         <SettingsFormMessage className="mt-3">
           {actionError}
@@ -177,6 +196,17 @@ export function LoginSessionsSection() {
       />
     </SettingsSection>
   );
+}
+
+/** Current device first (must not be folded away), then the rest in list order. */
+function previewSessions(
+  sessions: SessionSummary[],
+  expanded: boolean,
+): SessionSummary[] {
+  if (expanded || sessions.length <= SESSION_PREVIEW_LIMIT) return sessions;
+  const current = sessions.filter((s) => s.current);
+  const rest = sessions.filter((s) => !s.current);
+  return [...current, ...rest].slice(0, SESSION_PREVIEW_LIMIT);
 }
 
 function SessionRow({

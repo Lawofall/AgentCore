@@ -57,7 +57,7 @@ def test_find_thrash_collision_on_similar_task_and_artifacts():
             run_id="w2",
             role="修码员",
             task="修复 TopBar named export 缺失问题",
-            deliverable=Deliverable(form="files", artifacts=["src/TopBar.tsx"]),
+            deliverable=Deliverable( artifacts=["src/TopBar.tsx"]),
         )
     )
     hit = find_thrash_collision(cold, recent_thrash_records("conv-1"))
@@ -79,7 +79,7 @@ def test_continue_from_thrash_run_skips_collision():
             role="工程师",
             task="修复导出错误并验证",
             continue_from_run_id="w1",
-            deliverable=Deliverable(form="files", artifacts=["a.ts"]),
+            deliverable=Deliverable( artifacts=["a.ts"]),
         )
     )
     assert find_thrash_collision(cont, recent_thrash_records("conv-1")) is None
@@ -121,7 +121,7 @@ def test_thrash_memory_expires_after_ttl(monkeypatch):
             run_id="w2",
             role="工程师",
             task="修复 TopBar named export 缺失问题",
-            deliverable=Deliverable(form="files", artifacts=["a.ts"]),
+            deliverable=Deliverable( artifacts=["a.ts"]),
         )
     )
     assert find_thrash_collision(cold, recent_thrash_records("conv-ttl")) is None
@@ -156,7 +156,7 @@ def test_thrash_records_still_collide_within_ttl():
             run_id="w2",
             role="工程师",
             task="修复 TopBar named export 缺失问题",
-            deliverable=Deliverable(form="files", artifacts=["a.ts"]),
+            deliverable=Deliverable( artifacts=["a.ts"]),
         )
     )
     assert find_thrash_collision(cold, records) is not None
@@ -176,7 +176,7 @@ def test_post_worker_progress_thrash_fail_soft(monkeypatch):
             run_id="w-thrash",
             role="工程师",
             task="修 TopBar",
-            deliverable=Deliverable(form="files", artifacts=["src/TopBar.tsx"]),
+            deliverable=Deliverable( artifacts=["src/TopBar.tsx"]),
         )
     )
     session = CoordinationSession(

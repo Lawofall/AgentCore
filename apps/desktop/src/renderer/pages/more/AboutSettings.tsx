@@ -18,6 +18,7 @@ import {
   formatGitSha,
 } from "@/lib/clientBuildInfo";
 import { formatDownloadProgress } from "@/lib/format";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import {
   clientChannelLabelZh,
   clientReleaseChannel,
@@ -31,7 +32,7 @@ import { useUpdatesStore } from "@/stores/updates";
 import type { UpdaterStatus } from "@shared/updater-contract";
 import { Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 /** Human-readable line for each updater phase (发布与门禁.md §7.6). */
 function updateStatusText(status: UpdaterStatus): string {
@@ -310,18 +311,30 @@ function VersionSection() {
 }
 
 /**
- * 关于（/more/about）— 品牌、版本溯源、软件更新、法律与合规。
+ * 关于（/more/about）— 品牌、产品手册、版本溯源、软件更新、法律与合规。
  *
  * 「允许本机执行」原本挂在本页（挨着构建溯源），用户找不到，
- * 已搬到「通用」（/more/general）的「进阶」区。
+ * 已搬到「通用」（/more/general）的「进阶」区。手册入口从工具箱顶栏迁来：
+ * 查阅不占工作面；窄屏不上手册页，故本行也不挂。
  */
 export function AboutSettings() {
+  const navigate = useNavigate();
+  const { isNarrow } = useNarrowLayoutState();
+
   return (
     <div>
       <PageHeader title="关于 AgentCore" />
 
       <SettingsStack>
         <BrandCard />
+
+        {!isNarrow && (
+          <SettingRow
+            variant="nav"
+            label="产品手册"
+            onClick={() => navigate(APP_PATHS.toolbox.manual.root)}
+          />
+        )}
 
         <VersionSection />
 
@@ -333,9 +346,28 @@ export function AboutSettings() {
 
         <SettingsSection
           title="法律与合规"
-          description="用户协议与隐私政策。"
           divider
+          contentClassName="space-y-3"
         >
+          <p className="text-sm text-muted-foreground">
+            讨论请去{" "}
+            <Link
+              to="/messages"
+              className="text-foreground underline-offset-2 hover:underline"
+            >
+              消息页内测群
+            </Link>
+            ；意见与投诉请走官网{" "}
+            <a
+              href="https://fashitianxia.xyz"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground underline-offset-2 hover:underline"
+            >
+              https://fashitianxia.xyz
+            </a>
+            。
+          </p>
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
             <Link
               to={APP_PATHS.more.legal.terms}

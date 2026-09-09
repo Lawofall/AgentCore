@@ -9,7 +9,7 @@ alwaysApply: true
 
 ## 新会话冷启动
 
-定位任务 → `docs/索引.md`「任务路由」；跑通 → `docs/02-架构/本地开发.md`；接缝 → `seam-audit.mdc`；桌面渲染自检 → `frontend-preview.mdc`；本地产品 AI / eval / probe → `local-llm-dogfood.mdc`（`dev` OpenCode Zen，禁默认踩 `PLATFORM_API_KEY`）；沉淀 → `memory.mdc`。产品介绍与仓地图 → `AGENTS.md`。
+定位任务 → `docs/索引.md`「任务路由」；跑通 → `docs/02-架构/本地开发.md`；接缝 → `seam-audit.mdc`；离线预览 / 渲染冒烟配方 → `frontend-preview.mdc`；本地产品 AI / eval / probe → `local-llm-dogfood.mdc`（`dev` OpenCode Zen，禁默认踩 `PLATFORM_API_KEY`）；沉淀 → `memory.mdc`。产品介绍与仓地图 → `AGENTS.md`。
 
 ## 决策权限
 

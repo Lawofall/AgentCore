@@ -28,7 +28,7 @@ from agentcore.core.net import (
     classify_url as _classify_url,
 )
 from agentcore.core.task_cancel import raise_if_task_cancelled
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.builtin.web._net import (
     circuit_remaining,
     note_failure,
@@ -539,7 +539,7 @@ class WebFetchTool:
                 },
                 "required": ["url"],
             },
-            category=ToolCategory.RESEARCH,
+            face=ToolFace.WEB,
             approval=ToolApproval.NEVER,
         )
 

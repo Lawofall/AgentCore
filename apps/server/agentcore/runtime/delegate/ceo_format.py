@@ -532,7 +532,9 @@ def build_ceo_synthesis(
                 gaps[existing_roles[role]][1].extend(rows)
             else:
                 gaps.append((role, rows))
-    gaps_block = format_worker_gaps_block(gaps)
+    gaps_block = format_worker_gaps_block(
+        gaps, plan_open=getattr(tool, "_supervised", None) is not None
+    )
     if gaps_block:
         lines.append(gaps_block)
 
@@ -552,7 +554,8 @@ def build_ceo_synthesis(
             f"\n### {wp['role']}（{wp['status']}） · run_id: `{wp['run_id']}`\n{wp['body']}"
         )
     # Lean footer: product-format facts the model cannot invent. HOW
-    # (过程简述 / 粘名册 / replan) lives on wait / replan description.
+    # (过程简述 / 粘名册) lives on wait description；收口后补缺口 HOW 在缺口段
+    # （plan_open 才提 replan，否则只指路 delegate 点名）。
     closing_text = (
         "\n---\n以上为团队产出。「文件产出（路径已核）」= 落盘且路径核对通过的地面真相。\n"
         "⚠️ 防幻觉铁律：是否真交付文件只看「文件产出（路径已核）」行——"

@@ -6,7 +6,7 @@ directory↔tool gate). Skills / rules covered in ``test_skills`` / ``test_consu
 
 from pathlib import Path
 
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.memory import MemoryTopic
 from agentcore.memory.store import CORE_MEMORY_FILE, FileMemoryStore, topic_path
 from agentcore.runtime.context.consult_sources import (
@@ -50,7 +50,7 @@ def test_consult_schema_is_orchestration_primitive(tmp_path):
     tool = _memory_tool(FileMemoryStore(tmp_path))
     schema = tool.schema
     assert schema.name == "consult"
-    assert schema.category is ToolCategory.ORCHESTRATION
+    assert schema.face is ToolFace.ORCHESTRATION
     assert "name" in schema.parameters["properties"]
 
 
@@ -190,9 +190,10 @@ async def test_wire_worker_consult_when_topics_exist(tmp_path, monkeypatch):
     assert consult is not None
     names = {e.name for e in await consult.source.list_directory("u")}
     assert "部署流程" in names
+    assert "staffing" not in names
     assert "team_orchestration_advanced" not in names
     assert "product_help" not in names
-    assert "long_form_landing" in names
+    assert "long_form_landing" not in names
 
 
 async def test_merged_source_directory_and_fetch_agree(tmp_path):

@@ -56,11 +56,13 @@ function toCapabilityTool(
   const mcpName = String(tool.name || "").trim();
   if (!mcpName) return null;
   const description = String(tool.description || "").trim();
-  const prefix = `[MCP · ${serverName}] `;
+  const fallback = description || `${serverName} · ${mcpName}`;
   return {
     name: sanitizeMcpToolName(serverId, mcpName),
-    description: prefix + (description || `MCP 工具 ${mcpName}`),
-    category: "search",
+    description: fallback,
+    face: "web",
+    resident: false,
+    summary: fallback,
     approval: "grantable",
     parameters: asObjectSchema(tool.inputSchema ?? tool.input_schema),
     available_to: ["ceo", "worker"],
@@ -119,11 +121,11 @@ export async function listMcpCatalog(): Promise<McpCatalogServer[] | null> {
   if (!api?.runOp) return null;
   const res = await api.runOp({ op: "list_tools" });
   if (!res.ok) {
-    throw new Error(res.error.detail || "列出本机连接器失败");
+    throw new Error(res.error.detail || "列出已接上的工具失败");
   }
   const parsed = parseMcpListToolsValue(res.value);
   if (!parsed) {
-    throw new Error("列出本机连接器失败");
+    throw new Error("列出已接上的工具失败");
   }
   return parsed;
 }

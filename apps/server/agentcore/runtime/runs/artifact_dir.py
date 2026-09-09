@@ -1,22 +1,17 @@
 """约定文档 ``artifact_dir``：布局常量 → 委派交付目录 + 验收前缀。
 
-工作区布局事实见 ``workspace_context``；本模块只在 ``form=files`` /
-已声明 ``artifacts`` 时按 ``stage_dirs`` 填落盘目录。Worker 自定位文件名。
-``form=workspace``（及入参 ``workspace_native`` 升档）无约定文档落点，
-leftover ``artifact_dir`` 不得把 workspace 拧进工作稿。
+工作区布局事实见 ``workspace_context``；本模块只在已声明 ``artifacts`` /
+显式 ``artifact_dir`` 时按 ``stage_dirs`` 填落盘目录。Worker 自定位文件名。
+写不写盘由 task 验收 + 模型决定；引擎只认结构钉路径。
 
-**落点只认显式来源**（按序）：``form=workspace`` / ``workspace_native``（无约定落点）
-→ 已声明 ``artifacts`` 推导出的目录 → 显式 ``deliverable.artifact_dir`` →
-裸文件名才填 ``DRAFTS_DIR``（仅 ``form=files``）。空 ``artifacts`` 不钉目录。
-运行时**不**扫 role / task 自由文。
+**落点只认显式来源**（按序）：已声明 ``artifacts`` 推导出的目录 → 显式
+``deliverable.artifact_dir`` → 裸文件名才填 ``DRAFTS_DIR``。空 ``artifacts``
+且无显式 dir 不钉目录。业务向路径（``src/`` · ``site/`` 等）自带落点，
+不套约定文档目录、不拧进 ``AgentCore/文档/``。运行时**不**扫 role / task 自由文。
 
 **验收 vs 归属分键**：``artifact_dir`` / 目录前缀 / 通配 = 写时目录与 sibling
 分键，**不是**收口催搬。仅目录未命中且已有落盘 → 认实际路径，不发软待办。
 具体文件路径 = C3 归属与 sibling 互斥。裸目录**永不**注入 ``artifacts`` 冒充归属键。
-
-**与声明产物对齐**：非空 ``artifacts`` 若已落在 ``AgentCore/文档/…``（含自定义
-子目录如 ``AI开发/``，不限于约定 stage 目录），案卷核对目录由这些路径推导；
-业务向 ``artifacts``（``src/`` · ``site/`` 等）自带落点，不套约定文档目录。
 
 不做：``file_write`` 启发式改写、根目录搬迁、省略 playbook 手写特例。
 """
@@ -35,8 +30,6 @@ from agentcore.workspace.stage_dirs import (
 
 if TYPE_CHECKING:
     from agentcore.runtime.runs.types import Deliverable, RunSpec
-
-from agentcore.runtime.runs.types import is_workspace_landing
 
 _STAGE_DIRS = (DRAFTS_DIR, RESEARCH_DIR, DEBATE_DIR, REVIEWS_DIR)
 
@@ -135,20 +128,13 @@ def _dir_from_artifacts(artifacts: list[str]) -> str:
 
 
 def resolve_artifact_dir(deliverable: Deliverable) -> str:
-    """Resolve the dossier dir for a file deliverable, or ``\"\"`` when not applicable.
+    """Resolve the dossier dir for a pinned-path deliverable, or ``\"\"``.
 
     Explicit sources only — the deliverable itself. Role / task free text is
-    **not** an input: no signature to read it from, so the deleted intent
-    classifier cannot creep back in.
+    **not** an input: no signature to read it from, so an intent classifier
+    cannot creep back in. Business paths (``src/`` · ``site/``) keep their own
+    landing; they are not twisted into ``AgentCore/文档/``.
     """
-    # 最高优先级：form=workspace / workspace_native → 无约定落点。
-    # 压过 ``artifacts`` 推导与 leftover ``artifact_dir``：不得拧进工作稿。
-    if is_workspace_landing(deliverable) or deliverable.form == "prose":
-        return ""
-    fileish = deliverable.form == "files" or bool(deliverable.artifacts)
-    if not fileish:
-        return ""
-
     # Declared product paths win over a mismatched/default ``artifact_dir``
     # (e.g. writer artifacts under ``文档/AI开发`` must not keep ``research``).
     derived = _dir_from_artifacts(list(deliverable.artifacts or []))
@@ -194,21 +180,12 @@ def is_file_ownership_path(path: str) -> bool:
 def apply_artifact_dir_defaults(deliverable: Deliverable) -> None:
     """Fill ``artifact_dir``; relocate bare filenames under it (in-place).
 
-    Empty ``artifacts`` stays empty — no ``artifact_dir`` pin, no injected
-    ``[dir/]`` (that falsely exclusivizes a shared dossier).
+    Empty ``artifacts`` stays empty — no injected ``[dir/]`` (that falsely
+    exclusivizes a shared dossier). An explicit ``artifact_dir`` still pins.
 
-    ``form=workspace`` (and ``workspace_native``) never takes a dossier default:
-    leftover ``artifact_dir`` is cleared so workspace is not twisted into
-    ``工作稿/``. Bare filenames stay where the worker locates them.
-    ``form=files`` still joins bare names under the resolved dir (``DRAFTS_DIR``
-    when the name has no path).
+    Bare filenames join under the resolved dir (``DRAFTS_DIR`` when the name
+    has no path). Business paths with a directory prefix stay where declared.
     """
-    if is_workspace_landing(deliverable):
-        deliverable.form = "workspace"
-        deliverable.workspace_native = True
-        deliverable.artifact_dir = ""
-        return
-
     resolved = resolve_artifact_dir(deliverable)
     if not resolved:
         return

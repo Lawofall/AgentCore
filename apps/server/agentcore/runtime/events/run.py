@@ -388,7 +388,7 @@ def run_failed(
     if execution_id:
         payload["execution_id"] = execution_id
     # True when product files already landed before the terminal failure (e.g. write ok,
-    # then upstream 503). Face →「产出已落盘」.
+    # then upstream 503). Turn strip →「部分完成」.
     if product_landed:
         payload["product_landed"] = True
     # Additive transient/terminal signals (AgentCoreError.code / retryable / retry_after).

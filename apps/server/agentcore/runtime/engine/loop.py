@@ -171,7 +171,7 @@ async def react_loop(
     report_delivery: bool = False,
     short_write_posture: bool = False,
     tighten_verify_exec_thrash: bool = False,
-    form_prose: bool = False,
+    expects_landing: bool = False,
     product_landing_artifacts: list[str] | tuple[str, ...] | None = None,
 ) -> tuple[str, str, TokenUsage, int]:
     """Run the ReAct loop.
@@ -378,7 +378,7 @@ async def react_loop(
         short_write_posture=short_write_posture,
         tighten_verify_exec_thrash=tighten_verify_exec_thrash,
         max_rounds=profile.max_rounds,
-        form_prose=form_prose,
+        expects_landing=expects_landing,
         product_landing_artifacts=product_landing_artifacts,
     )
 
@@ -944,7 +944,7 @@ async def react_loop(
                 content_before_round=content_before_round,
                 finish_guard_reworks=finish_guard_reworks,
                 files_expected=files_expected,
-                form_prose=form_prose,
+                expects_landing=expects_landing,
             )
             if applied.action == "return":
                 if _should_hold_return_for_interjection(
@@ -1055,7 +1055,7 @@ async def react_loop(
             gate_escalation_sink=gate_escalation_sink,
             cutoff_reason_sink=cutoff_reason_sink,
             files_expected=files_expected,
-            form_prose=form_prose,
+            expects_landing=expects_landing,
         )
         return _exit(*result)
     finally:

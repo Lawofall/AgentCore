@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.context.consultable import Consultable
 from agentcore.runtime.memory_consult_cache import (
     lookup_consult,
@@ -83,7 +83,7 @@ class ConsultTool:
                 },
                 "required": ["name"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 

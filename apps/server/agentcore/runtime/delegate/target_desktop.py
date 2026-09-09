@@ -50,12 +50,15 @@ from agentcore.runtime.delegate.target_desktop_binding import (
     backend_local_root_id as _backend_local_root_id,
 )
 from agentcore.runtime.delegate.target_desktop_gate import (
+    CONV_ID_AS_FOLDER_MSG,
     NO_TARGET_SCRATCH_GATE_MSG,
     SCRATCH_NO_WRITE_IDENTITY_HINT,
     TargetDesktopError,
+    bare_chat_local_scratch_write_ok,
     effective_target_folder_id,
     format_bare_chat_no_target_error,
     gate_bare_chat_requires_target,
+    gate_conversation_id_is_not_folder,
     resolve_bare_chat_write_scope,
     task_structurally_requires_write_desk,
 )
@@ -71,6 +74,7 @@ from agentcore.tools.registry import ToolRegistry
 logger = get_logger(__name__)
 
 __all__ = [
+    "CONV_ID_AS_FOLDER_MSG",
     "NO_TARGET_SCRATCH_GATE_MSG",
     "SCRATCH_NO_WRITE_IDENTITY_HINT",
     "AppliedTargetDesktop",
@@ -78,18 +82,55 @@ __all__ = [
     "TargetDesktopError",
     "TargetFolderBinding",
     "apply_target_desktop",
+    "bare_chat_local_scratch_write_ok",
     "bind_tool_context_to_landing_desk",
     "build_target_backend",
     "effective_target_folder_id",
     "ensure_bare_chat_auto_cloud_desk",
     "format_bare_chat_no_target_error",
     "gate_bare_chat_requires_target",
+    "gate_conversation_id_is_not_folder",
     "load_target_folder_binding",
     "lookup_folder_display_names",
     "rebuild_worker_prompt_for_target",
     "resolve_bare_chat_write_scope",
     "task_structurally_requires_write_desk",
 ]
+
+
+_TARGET_ROOT_PING_TIMEOUT_S = 5.0
+
+
+async def _assert_target_local_root_ready(backend: Any, *, folder_id: str) -> None:
+    """Fail the worker before ReAct when the target local root is not usable.
+
+    Hub presence can still say the device holds the root while desktop ``getRoot``
+    is empty (stale declaration). A cheap ``exists`` on ``.`` meets the same
+    fact the first file tool would. Cloud / Path-backed desks skip.
+    """
+    if getattr(backend, "location", None) != "local":
+        return
+    channel = getattr(backend, "_channel", None)
+    request = getattr(channel, "request", None)
+    if not callable(request):
+        return
+    from agentcore.workspace.channel import WorkspaceOp
+    from agentcore.workspace.limits import is_liveness_timeout_detail
+    from agentcore.workspace.protocol import WorkspaceIOError
+
+    try:
+        await request(
+            WorkspaceOp.EXISTS, {"path": "."}, timeout=_TARGET_ROOT_PING_TIMEOUT_S
+        )
+    except WorkspaceIOError as exc:
+        detail = str(exc)
+        if is_liveness_timeout_detail(detail):
+            raise TargetDesktopError(
+                f"目标文件夹 `{folder_id}` 本机通道无响应；请确认桌面在线后重派。"
+            ) from exc
+        raise TargetDesktopError(
+            f"目标文件夹 `{folder_id}` 不存在或无权访问；请重新列/解析文件夹后再派。"
+        ) from exc
 
 
 async def bind_tool_context_to_landing_desk(
@@ -388,6 +429,7 @@ async def apply_target_desktop(
         sink=sink,
         local_binding=binding.local_binding,
     )
+    await _assert_target_local_root_ready(backend, folder_id=binding.folder_id)
 
     # C0: record local root; never reject a second distinct root (sidecar same).
     target_root = _backend_local_root_id(backend)

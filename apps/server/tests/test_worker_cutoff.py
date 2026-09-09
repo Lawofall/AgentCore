@@ -207,7 +207,7 @@ async def test_ceiling_finalize_coordination_tools_pass_approval_gate():
     from agentcore.core.types import (
         AutonomyPolicy,
         ToolApproval,
-        ToolCategory,
+        ToolFace,
         recipe_to_axes,
     )
     from agentcore.llm.provider.protocol import ToolCall, ToolCallFunction
@@ -229,7 +229,7 @@ async def test_ceiling_finalize_coordination_tools_pass_approval_gate():
                 name="file_write",
                 description="stub",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.FILESYSTEM,
+                face=ToolFace.FILE,
                 approval=ToolApproval.GRANTABLE,
             )
 
@@ -699,7 +699,7 @@ async def test_wind_down_breach_journals_denied_tool(monkeypatch):
     from pathlib import Path
 
     from agentcore.config import settings
-    from agentcore.core.types import ToolCategory
+    from agentcore.core.types import ToolFace
     from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
     from agentcore.runtime.engine import react_loop
     from agentcore.runtime.events import EventSink
@@ -752,9 +752,9 @@ async def test_wind_down_breach_journals_denied_tool(monkeypatch):
             yield LLMChunk(usage=TokenUsage(input_tokens=50, output_tokens=20))
 
     class _Stub:
-        def __init__(self, name: str, *, category: ToolCategory) -> None:
+        def __init__(self, name: str, *, face: ToolFace) -> None:
             self._name = name
-            self._category = category
+            self._face = face
 
         @property
         def schema(self) -> ToolSchema:
@@ -762,7 +762,7 @@ async def test_wind_down_breach_journals_denied_tool(monkeypatch):
                 name=self._name,
                 description="stub",
                 parameters={"type": "object", "properties": {}},
-                category=self._category,
+                face=self._face,
             )
 
         async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
@@ -770,11 +770,11 @@ async def test_wind_down_breach_journals_denied_tool(monkeypatch):
 
     reg = ToolRegistry()
     for name, cat in (
-        ("web_search", ToolCategory.SEARCH),
-        ("file_write", ToolCategory.FILESYSTEM),
-        ("handoff", ToolCategory.ORCHESTRATION),
+        ("web_search", ToolFace.SEARCH),
+        ("file_write", ToolFace.FILE),
+        ("handoff", ToolFace.ORCHESTRATION),
     ):
-        reg.register(_Stub(name, category=cat))
+        reg.register(_Stub(name, face=cat))
 
     sink = EventSink()
     messages: list[LLMMessage] = [LLMMessage(role="user", content="go")]
@@ -829,7 +829,7 @@ async def test_single_round_jump_past_soft_still_gets_wind_down(monkeypatch):
     from pathlib import Path
 
     from agentcore.config import settings
-    from agentcore.core.types import ToolCategory
+    from agentcore.core.types import ToolFace
     from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
     from agentcore.runtime.engine import react_loop
     from agentcore.runtime.events import EventSink
@@ -874,9 +874,9 @@ async def test_single_round_jump_past_soft_still_gets_wind_down(monkeypatch):
             yield LLMChunk(usage=TokenUsage(input_tokens=100, output_tokens=50))
 
     class _Stub:
-        def __init__(self, name: str, *, category: ToolCategory) -> None:
+        def __init__(self, name: str, *, face: ToolFace) -> None:
             self._name = name
-            self._category = category
+            self._face = face
 
         @property
         def schema(self) -> ToolSchema:
@@ -884,7 +884,7 @@ async def test_single_round_jump_past_soft_still_gets_wind_down(monkeypatch):
                 name=self._name,
                 description="stub",
                 parameters={"type": "object", "properties": {}},
-                category=self._category,
+                face=self._face,
             )
 
         async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
@@ -892,11 +892,11 @@ async def test_single_round_jump_past_soft_still_gets_wind_down(monkeypatch):
 
     reg = ToolRegistry()
     for name, cat in (
-        ("web_search", ToolCategory.SEARCH),
-        ("file_write", ToolCategory.FILESYSTEM),
-        ("handoff", ToolCategory.ORCHESTRATION),
+        ("web_search", ToolFace.SEARCH),
+        ("file_write", ToolFace.FILE),
+        ("handoff", ToolFace.ORCHESTRATION),
     ):
-        reg.register(_Stub(name, category=cat))
+        reg.register(_Stub(name, face=cat))
 
     provider = _Scripted()
     messages: list[LLMMessage] = [LLMMessage(role="user", content="go")]

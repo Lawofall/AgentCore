@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.facts import CROSS_TURN_RETRY_KEY, CrossTurnRetry
 from agentcore.storage._archive import ArchiveLimitError, zip_dir
 from agentcore.tools.builtin.file_ops import (
@@ -57,6 +57,9 @@ class ArchiveCreateTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
+        workspace_io=True,
+        resident=False,
+        catalog_summary="工作区文件/目录打成 zip",
     )
 
     @property
@@ -85,7 +88,7 @@ class ArchiveCreateTool:
                 },
                 "required": ["sources", "dest"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.GRANTABLE,
         )
 

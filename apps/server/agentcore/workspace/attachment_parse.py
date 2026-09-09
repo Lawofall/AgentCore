@@ -3,7 +3,7 @@
 分流：``.docx`` 用 python-docx（段落+表格）抽文本；pdf/pptx/odt/rtf 用 markitdown。
 写出与原件并存的 ``原名.ext.md``。``.txt`` / ``.md`` / HTML 等可直接 UTF-8 读的
 格式只内联正文（原件已是可读副本）；xlsx/csv/tsv 不把全表抽进 prompt，只产
-**结构面**（列名 / 行数 / 推断类型 / 样例行），原始数据留在工作区文件。扫描版
+列名 / 行数 / 推断类型 / 样例行，原始数据留在工作区文件。扫描版
 PDF 首版不做 OCR，写入明确降级提示。解析失败不阻塞驻留，回落路径提示。
 
 工作区 ``file_read`` 与附件预解析共用公开核 ``extract_office_file`` /
@@ -48,7 +48,7 @@ _IS_WINDOWS = sys.platform == "win32"
 _EXTRACT_OUTPUT_ENV = "AGENTCORE_OFFICE_EXTRACT_OUTPUT"
 # 已是文本层：直接 UTF-8 解码；原件本身即工作区可读副本。
 PLAIN_TEXT_EXTENSIONS = frozenset({".txt", ".md", ".markdown", ".html", ".htm"})
-# 大表 / 计算场景：不预解析全表进 prompt；只产结构面。``file_read`` 亦不透明抽。
+# 大表 / 计算场景：不预解析全表进 prompt；只产列名 / 行数 / 类型 / 样例。``file_read`` 亦不透明抽。
 SKIP_EXTENSIONS = frozenset({".xlsx", ".xlsm", ".xls", ".csv", ".tsv"})
 TABLE_EXTENSIONS = SKIP_EXTENSIONS
 
@@ -62,7 +62,7 @@ _SCAN_LARGE_MIN_ALNUM = 200
 # 全文落在 ``*.md`` 副本，Agent 可用 file_read 续读。多附件时各自独立截断。
 ATTACHMENT_INLINE_MAX_CHARS = 24_000
 
-# 表格结构面：只读到此字节数；样例/列/单元格各自封顶。全量行不进 prompt。
+# 表格预览：只读到此字节数；样例/列/单元格各自封顶。全量行不进 prompt。
 TABLE_PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 TABLE_PREVIEW_MAX_SAMPLE_ROWS = 5
 TABLE_PREVIEW_MAX_COLUMNS = 24
@@ -1264,7 +1264,7 @@ def _preview_xlsx(data: bytes, *, bytes_truncated: bool) -> TablePreviewResult:
 
 
 def extract_table_preview(data: bytes, ext: str) -> TablePreviewResult:
-    """Build a capped structure preview. Never returns the full table body."""
+    """Build a capped column/type/sample preview. Never returns the full table body."""
     normalized = ext.lower() if ext.startswith(".") else (f".{ext.lower()}" if ext else "")
     if normalized not in TABLE_EXTENSIONS:
         return TablePreviewResult(status=ParseStatus.SKIPPED, detail=f"not_table:{normalized}")
@@ -1299,7 +1299,7 @@ def extract_table_preview(data: bytes, ext: str) -> TablePreviewResult:
 
 
 def format_table_preview(preview: TablePreview) -> str:
-    """Render a structure-only block. Caps total characters; never dumps the table."""
+    """Render columns, types, and sample rows. Caps total characters; never dumps the table."""
     lines: list[str] = []
     if preview.bytes_truncated:
         lines.append(
@@ -1341,7 +1341,7 @@ async def preview_table_resident(
     workspace_path: str,
     name: str | None,
 ) -> TablePreviewResult:
-    """Read a resident spreadsheet / delimited file and build a structure preview.
+    """Read a resident spreadsheet / delimited file and build a column/type/sample preview.
 
     Never raises for parse failures. Does not write a ``*.md`` copy and never
     returns the full table body.

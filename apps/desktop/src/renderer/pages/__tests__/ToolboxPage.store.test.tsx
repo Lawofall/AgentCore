@@ -1,7 +1,6 @@
-import { ToolboxPage } from "@/pages/ToolboxPage";
+import { ToolboxShell } from "@/pages/toolbox/ToolboxShell";
 import { isKnownAppRoute } from "@/pages/toolbox/manual/gates/appRoutes";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
-import { useStandingInboxStore } from "@/stores/standingInbox";
 // @vitest-environment jsdom
 import {
   cleanup,
@@ -11,50 +10,109 @@ import {
   within,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
-beforeEach(() => {
-  useStandingInboxStore.setState({ badge: 0 });
-});
+import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(cleanup);
 
-function renderHome() {
+function renderShell(entry: string) {
   return render(
-    <MemoryRouter initialEntries={[APP_PATHS.toolbox.root]}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
-        <Route path={APP_PATHS.toolbox.root} element={<ToolboxPage />} />
-        <Route
-          path={APP_PATHS.toolbox.store}
-          element={<div data-testid="store-page">商店页</div>}
-        />
+        <Route path="/toolbox" element={<ToolboxShell />}>
+          <Route path="mine/skills" element={<div>技能内容</div>} />
+          <Route path="mine/tools" element={<div>工具内容</div>} />
+          <Route path="mine/creation" element={<div>创作内容</div>} />
+          <Route path="mine/mcp" element={<div>MCP内容</div>} />
+          <Route path="mine/workflows" element={<div>工作流内容</div>} />
+          <Route
+            path="market"
+            element={<div data-testid="market">市场内容</div>}
+          />
+        </Route>
       </Routes>
     </MemoryRouter>,
   );
 }
 
-describe("工具箱商店入口", () => {
-  it("能力组有商店瓦片，点进去走 /toolbox/store", () => {
-    renderHome();
-    expect(APP_PATHS.toolbox.store).toBe("/toolbox/store");
-    expect(isKnownAppRoute(APP_PATHS.toolbox.store)).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: /商店/ }));
-    expect(screen.getByTestId("store-page")).toBeTruthy();
+describe("工具箱壳", () => {
+  it("顶栏是种类 tab + 右槽市场，不重复可见「工具箱」标题", () => {
+    renderShell(APP_PATHS.toolbox.mine.skills);
+    expect(
+      screen.getByRole("heading", { level: 1, name: "提示词" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { level: 1, name: "工具箱" }),
+    ).toBeNull();
+    expect(screen.queryByRole("tablist", { name: "工具箱" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "我的" })).toBeNull();
+    const kinds = screen.getByRole("navigation", { name: "工具箱种类" });
+    const kindLinks = within(kinds).getAllByRole("link").slice(0, 4);
+    expect(kindLinks.map((el) => el.textContent)).toEqual([
+      "提示词",
+      "工具",
+      "创作",
+      "工作流",
+    ]);
+    expect(kindLinks.every((el) => el.querySelector("svg"))).toBe(true);
+    expect(
+      screen.getByRole("link", { name: "市场" }).getAttribute("href"),
+    ).toBe(APP_PATHS.toolbox.market);
+    expect(screen.queryByRole("link", { name: "手册" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "连接器" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "工具箱" })).toBeNull();
+    expect(screen.getByText("技能内容")).toBeTruthy();
   });
-});
 
-describe("工具箱首页自动化角标", () => {
-  it("收件箱未读挂在自动化磁贴上", () => {
-    useStandingInboxStore.setState({ badge: 4 });
-    renderHome();
-    const tile = screen.getByRole("button", { name: /自动化/ });
-    expect(within(tile).getByLabelText("4 条待处理").textContent).toBe("4");
+  it("工具页也不再把连接器放进顶栏", () => {
+    renderShell(APP_PATHS.toolbox.mine.tools);
+    expect(screen.queryByRole("link", { name: "连接器" })).toBeNull();
+    expect(screen.getByRole("link", { name: "市场" })).toBeTruthy();
   });
 
-  it("徽章过百收敛成 99+", () => {
-    useStandingInboxStore.setState({ badge: 128 });
-    renderHome();
-    const tile = screen.getByRole("button", { name: /自动化/ });
-    expect(within(tile).getByLabelText("128 条待处理").textContent).toBe("99+");
+  it("提示词工作台贴边，其它种类仍走页面留白", () => {
+    const skills = renderShell(APP_PATHS.toolbox.mine.skills);
+    const skillsInner = skills.container.querySelector(".mx-auto");
+    expect(skillsInner?.className).not.toContain("px-6");
+    expect(skillsInner?.className).not.toContain("py-6");
+    cleanup();
+    const tools = renderShell(APP_PATHS.toolbox.mine.tools);
+    const toolsInner = tools.container.querySelector(".mx-auto");
+    expect(toolsInner?.className).toContain("px-6");
+    expect(toolsInner?.className).toContain("py-6");
+    expect(toolsInner?.className).toContain("flex-1");
+  });
+
+  it("切到市场后种类 tab 仍在，页头市场为当前页", () => {
+    renderShell(APP_PATHS.toolbox.mine.skills);
+    fireEvent.click(screen.getByRole("link", { name: "市场" }));
+    expect(screen.getByTestId("market")).toBeTruthy();
+    const kinds = screen.getByRole("navigation", { name: "工具箱种类" });
+    expect(kinds).toBeTruthy();
+    for (const label of ["提示词", "工具", "创作", "工作流"]) {
+      expect(
+        within(kinds)
+          .getByRole("link", { name: label })
+          .getAttribute("aria-current"),
+      ).not.toBe("page");
+    }
+    expect(
+      screen.getByRole("link", { name: "市场" }).getAttribute("aria-current"),
+    ).toBe("page");
+    expect(
+      screen.getByRole("heading", { level: 1, name: "市场" }),
+    ).toBeTruthy();
+  });
+
+  it("创作 tab 可达", () => {
+    renderShell(APP_PATHS.toolbox.mine.skills);
+    fireEvent.click(screen.getByRole("link", { name: "创作" }));
+    expect(screen.getByText("创作内容")).toBeTruthy();
+  });
+
+  it("商店别名仍是已知路由", () => {
+    expect(APP_PATHS.toolbox.store).toBe("/toolbox/market");
+    expect(isKnownAppRoute(APP_PATHS.toolbox.market)).toBe(true);
+    expect(isKnownAppRoute("/toolbox/store")).toBe(true);
+    expect(isKnownAppRoute(APP_PATHS.toolbox.mine.creation)).toBe(true);
   });
 });

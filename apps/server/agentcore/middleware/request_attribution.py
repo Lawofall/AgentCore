@@ -48,6 +48,7 @@ STREAM_PATH_REASONS = frozenset(
         "probe_cache_bad",
         "no_local_target",
         "sidecar_fallback",
+        "occupy_failed",
     }
 )
 

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import (
     LLMChunk,
     LLMMessage,
@@ -79,7 +79,7 @@ class _StubSearchTool:
             name="search",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001

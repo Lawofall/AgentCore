@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 export interface EmptyHintProps {
   title: string;
-  /** Second line — what to do next, or why it's empty. */
+  /** Optional one-line next step. Omit when title + action already cover it. */
   hint?: string;
   icon?: ReactNode;
   /** Optional primary action (新建 / 去某处). */

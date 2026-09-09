@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { parseCheckpointIntent } from "../checkpointIntent";
 
 describe("parseCheckpointIntent", () => {
-  it("keeps the three chrome intents", () => {
+  it("keeps organize_plan chrome; daily_review is absent", () => {
     expect(parseCheckpointIntent("decision")).toBe("decision");
     expect(parseCheckpointIntent("organize_plan")).toBe("organize_plan");
-    expect(parseCheckpointIntent("daily_review")).toBe("daily_review");
+    expect(parseCheckpointIntent("daily_review")).toBe("decision");
   });
 
   it("folds leftover wire names and unknowns into decision", () => {

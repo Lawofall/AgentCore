@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import replace
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, TokenUsage, ToolCallDelta
 from agentcore.runtime.costing import WorkerResultAccumulator
 from agentcore.runtime.events import EventSink, EventType
@@ -33,7 +33,7 @@ class _StubDelegate:
             name="delegate",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 
@@ -50,7 +50,7 @@ class _StubReplan:
             name="replan",
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 
@@ -213,6 +213,7 @@ async def test_captain_identity_carries_when_to_split_guidance():
     await executor(plan.by_id("t_1"), {})
     sys = provider.system_messages[0]
     assert "再向下委派一层子团队" in sys
+    assert "consult(staffing)" not in sys
     assert "consult(team_orchestration_advanced)" not in sys
     assert "薄切片" not in sys
     assert "先招人再整合" not in sys
@@ -324,16 +325,16 @@ async def test_handoff_topology_lives_on_tool_not_identity():
     assert "勿按话题拼接" not in leaf
     assert "<工作区>" not in leaf
 
-    prose = describe_deliverable(Deliverable(form="prose"))
-    files = describe_deliverable(Deliverable(form="files"))
-    assert "form=prose" in prose
-    assert "成品就是正文" in prose
-    assert "不要落盘" in prose
+    prose = describe_deliverable(Deliverable())
+    files = describe_deliverable(Deliverable(artifacts=["report.md"]))
+    assert prose == ""
+    assert "form=" not in files
+    assert "`report.md`" in files
+    assert "成品就是正文" not in prose
+    assert "不要落盘" not in prose
     assert "file_write" not in prose
-    assert "结论与根因写在正文" not in prose
-    assert "form=files" in files
-    assert "成品写入工作区" in files
-    assert "正文只报路径" in files
+    assert "成品写入工作区" not in files
+    assert "正文只报路径" not in files
     assert "file_write" not in files
     assert "自包含可读" not in files
     assert "直接以产出本身开头" not in files
@@ -368,10 +369,10 @@ async def test_handoff_topology_lives_on_tool_not_identity():
     assert "默认不调用" not in leaf_provider.system_messages[0]
     assert "form=files" not in up_provider.system_messages[0]
     assert "form=files" not in leaf_provider.system_messages[0]
-    assert "交付物规格" in up_provider.user_messages[0]
-    assert "form=files" in up_provider.user_messages[0]
-    assert "交付物规格" in leaf_provider.user_messages[0]
-    assert "form=files" in leaf_provider.user_messages[0]
+    assert "交付物规格" not in up_provider.user_messages[0]
+    assert "form=files" not in up_provider.user_messages[0]
+    assert "交付物规格" not in leaf_provider.user_messages[0]
+    assert "form=files" not in leaf_provider.user_messages[0]
 
     desc = HandoffTool().schema.description
     assert "便条写在这一轮正文" in desc
@@ -411,10 +412,11 @@ def test_catalog_identity_is_identity_only():
     assert "还可以再向下委派一层子团队" not in nested
     assert "form=prose" not in nested
     assert "form=workspace" not in nested
-    files = describe_deliverable(Deliverable(form="files"))
-    assert "form=files" in files
+    files = describe_deliverable(Deliverable(artifacts=["report.md"]))
+    assert "form=files" not in files
     assert "form=prose" not in files
     assert "form=workspace" not in files
+    assert "`report.md`" in files
 
 
 def test_worker_identity_states_no_execution_capability():
@@ -470,7 +472,7 @@ def test_worker_identity_teaches_escalate_blocking_choice():
     blocking = EscalateTool().schema.parameters["properties"]["blocking"]["description"]
     assert "报一声" in desc or "报一声" in blocking
     assert "猜错作废" in desc
-    assert "权威稿" in desc
+    assert "设计稿" in desc
     assert "扩范围" in desc
     assert "已拒凭据" in blocking
     captain = build_worker_identity(has_dependents=False, captain=True)

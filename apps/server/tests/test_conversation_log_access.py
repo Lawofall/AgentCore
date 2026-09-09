@@ -81,6 +81,8 @@ def test_wire_registers_log_tools():
     assert worker.get_optional("read_conversation") is not None
     search = worker.get("search_conversations")
     assert getattr(search, "folder_id", None) == "F1"
+    read = worker.get("read_conversation")
+    assert getattr(read, "folder_id", None) == "F1"
 
 
 def _assemble_ceo_chat_tools():
@@ -139,6 +141,8 @@ def test_ceo_assemble_and_wire_holds_log_tools():
     assert chat_tools.get_optional("read_conversation") is not None
     search = chat_tools.get("search_conversations")
     assert getattr(search, "folder_id", None) == "F1"
+    read = chat_tools.get("read_conversation")
+    assert getattr(read, "folder_id", None) == "F1"
     offered = {
         str((d.get("function") or {}).get("name") or d.get("name") or "")
         for d in chat_tools.get_openai_definitions()
@@ -387,6 +391,170 @@ async def test_read_missing_id_is_param_failure():
     tool = ReadConversationTool()
     result = await tool.execute({}, _ctx())
     assert result.success is False
+    assert "query" in result.output
+
+
+@pytest.mark.asyncio
+async def test_read_non_uuid_locator_miss_does_not_read(monkeypatch):
+    from agentcore.tools.builtin.search_conversations import ConversationSearchRun
+
+    async def _fake_search(**kwargs):
+        del kwargs
+        return ConversationSearchRun(
+            rows=[], folder_miss=False, soft_note=None, scope="folder"
+        )
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.run_conversation_search",
+        _fake_search,
+    )
+
+    def _boom_factory():
+        raise AssertionError("locator miss must not open a read DB session")
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.async_session_factory",
+        _boom_factory,
+    )
+    result = await ReadConversationTool().execute(
+        {"conversation_id": "旧项目"}, _ctx()
+    )
+    assert result.success is True
+    assert "未找到" in result.output
+
+
+@pytest.mark.asyncio
+async def test_read_locator_forwards_folder_id(monkeypatch):
+    from agentcore.tools.builtin.search_conversations import ConversationSearchRun
+
+    captured: dict = {}
+
+    async def _fake_search(*, folder_id, arguments, context):
+        captured["folder_id"] = folder_id
+        captured["query"] = arguments.get("query")
+        del context
+        return ConversationSearchRun(
+            rows=[], folder_miss=False, soft_note=None, scope="folder"
+        )
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.run_conversation_search",
+        _fake_search,
+    )
+    result = await ReadConversationTool(folder_id="F1").execute(
+        {"query": "旧项目"}, _ctx()
+    )
+    assert result.success is True
+    assert captured["folder_id"] == "F1"
+    assert captured["query"] == "旧项目"
+
+
+@pytest.mark.asyncio
+async def test_read_query_unique_hit_opens(monkeypatch):
+    from agentcore.tools.builtin.search_conversations import ConversationSearchRun
+
+    past = "11111111-1111-4111-8111-111111111111"
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    conv = SimpleNamespace(
+        id=past,
+        title="旧项目",
+        mode="chat",
+        created_at=now,
+        updated_at=now,
+    )
+    msg = SimpleNamespace(
+        id="m1",
+        role="user",
+        content="继续",
+        reasoning_content=None,
+        attachments=None,
+        evidence_ledger=None,
+        citations=None,
+        usage=None,
+        created_at=now,
+    )
+
+    async def _fake_search(**kwargs):
+        del kwargs
+        return ConversationSearchRun(
+            rows=[{"conversation_id": past, "title": "旧项目", "message_count": 1}],
+            folder_miss=False,
+            soft_note=None,
+            scope="folder",
+        )
+
+    class FakeConvRepo:
+        def __init__(self, session):
+            pass
+
+        async def get_by_id(self, cid, *, user_id):
+            assert cid == past
+            return conv
+
+    class FakeMsgRepo:
+        def __init__(self, session):
+            pass
+
+        async def list_all_for_conversation(self, cid):
+            return [msg]
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.run_conversation_search",
+        _fake_search,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.ConversationRepository",
+        FakeConvRepo,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.MessageRepository",
+        FakeMsgRepo,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.async_session_factory",
+        lambda: _AsyncCm(),
+    )
+    result = await ReadConversationTool().execute({"query": "旧项目"}, _ctx())
+    assert result.success is True
+    assert "继续" in result.output
+    assert result.display["conversation_id"] == past
+
+
+@pytest.mark.asyncio
+async def test_read_locator_multi_lists_ids(monkeypatch):
+    from agentcore.tools.builtin.search_conversations import ConversationSearchRun
+
+    a = "11111111-1111-4111-8111-111111111111"
+    b = "22222222-2222-4222-8222-222222222222"
+
+    async def _fake_search(**kwargs):
+        del kwargs
+        return ConversationSearchRun(
+            rows=[
+                {"conversation_id": a, "title": "旧项目甲", "message_count": 1},
+                {"conversation_id": b, "title": "旧项目乙", "message_count": 2},
+            ],
+            folder_miss=False,
+            soft_note=None,
+            scope="folder",
+        )
+
+    def _boom_factory():
+        raise AssertionError("multi hit must not open a read DB session")
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.run_conversation_search",
+        _fake_search,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.read_conversation.async_session_factory",
+        _boom_factory,
+    )
+    result = await ReadConversationTool().execute({"query": "旧项目"}, _ctx())
+    assert result.success is True
+    assert "命中多场" in result.output
+    assert a in result.output
+    assert b in result.output
 
 
 @pytest.mark.asyncio
@@ -414,24 +582,6 @@ async def test_read_soft_miss_for_other_or_deleted(monkeypatch):
     )
     assert result.success is True
     assert "无法打开" in result.output
-
-
-@pytest.mark.asyncio
-async def test_read_invalid_id_is_soft_miss_without_db(monkeypatch):
-    tool = ReadConversationTool()
-
-    def _boom_factory():
-        raise AssertionError("non-UUID must not open a DB session")
-
-    monkeypatch.setattr(
-        "agentcore.tools.builtin.read_conversation.async_session_factory",
-        _boom_factory,
-    )
-    for cid in ("x", "nonexistent"):
-        result = await tool.execute({"conversation_id": cid}, _ctx())
-        assert result.success is True
-        assert "无法打开" in result.output
-        assert result.display["conversation_id"] == cid
 
 
 class _AsyncCm:
@@ -684,6 +834,9 @@ def test_search_schema_is_folder_default_and_body_when():
     assert "续做" in schema.description
     scope = schema.parameters["properties"]["scope"]
     assert scope.get("default") == "folder"
+    archived = schema.parameters["properties"]["include_archived"]
+    assert "已归档" in archived["description"]
+    assert "false" in archived["description"].lower()
     assert "标题或正文" in schema.parameters["properties"]["query"]["description"]
 
 
@@ -722,6 +875,44 @@ async def test_search_default_scope_uses_host_folder(monkeypatch):
     result = await tool.execute({"query": "oauth"}, _ctx())
     assert result.success is True
     assert captured.get("folder_id") == "F1"
+    assert captured.get("include_archived") is True
+
+
+@pytest.mark.asyncio
+async def test_search_explicit_exclude_archived(monkeypatch):
+    captured: dict = {}
+
+    class FakeConvRepo:
+        def __init__(self, session):
+            pass
+
+        async def search_with_projections(self, *a, **kw):
+            captured.update(kw)
+            return []
+
+    class FakeMsgRepo:
+        def __init__(self, session):
+            pass
+
+        async def list_all_for_conversation(self, cid):
+            return []
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.search_conversations.ConversationRepository",
+        FakeConvRepo,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.search_conversations.MessageRepository",
+        FakeMsgRepo,
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.search_conversations.async_session_factory",
+        lambda: _AsyncCm(),
+    )
+    tool = SearchConversationsTool(folder_id="F1")
+    result = await tool.execute({"query": "oauth", "include_archived": False}, _ctx())
+    assert result.success is True
+    assert captured.get("include_archived") is False
 
 
 @pytest.mark.asyncio

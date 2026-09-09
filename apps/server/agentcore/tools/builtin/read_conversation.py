@@ -20,12 +20,16 @@ from agentcore.conversation.log_export import (
     page_conversation,
 )
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory, is_uuid_id
+from agentcore.core.types import ToolApproval, ToolFace, is_uuid_id
 from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import (
     ConversationRepository,
     MessageRepository,
     TurnJournalRepository,
+)
+from agentcore.tools.builtin.search_conversations import (
+    _format_search_output,
+    run_conversation_search,
 )
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -40,6 +44,8 @@ _SOFT_MISS = (
     "无法打开该对话（可能不存在、已删除、为 handoff 宿主，或不在可访问范围内）。"
 )
 _HOST_MISS = "那是本回合正在进行的宿主会话——请直接看本会话工作记忆，无需 read_conversation。"
+_MISSING_LOCATOR = "请提供 conversation_id，或用 query 按标题/关键词定位。"
+_MULTI_HIT_LEAD = "命中多场，请带 conversation_id 打开其中一场。"
 
 
 def _is_account_cloud_failure(exc: BaseException) -> bool:
@@ -170,16 +176,21 @@ class ReadConversationTool:
         manual_wire=True,
     )
 
+    folder_id: str | None = None
+
+    def __init__(self, *, folder_id: str | None = None) -> None:
+        self.folder_id = folder_id
+
     @property
     def schema(self) -> ToolSchema:
         return ToolSchema(
             name="read_conversation",
             description=(
-                "按 conversation_id 读取一场历史对话。"
+                "读取一场历史对话。conversation_id 来自 search_conversations；"
+                "也可只传 query：唯一命中则打开，多场列出。"
                 "默认 focus=dialogue（用户/助手原文，不含工具过程）。"
-                "用户点到以前的具体内容时传 query，从第一条命中读起。"
-                "超长按消息分页，返回 truncated + next_cursor（m:下标），带着 cursor 续读。"
-                "要查工具/辩论/证据时 focus=process。"
+                "有编号且点到具体内容时 query 从第一条命中读起。"
+                "超长分页 truncated + next_cursor（m:下标）续读；过程稿 focus=process。"
                 "读完蒸馏结论并记下出处，不要把整场原文塞回用户。"
             ),
             parameters={
@@ -187,13 +198,14 @@ class ReadConversationTool:
                 "properties": {
                     "conversation_id": {
                         "type": "string",
-                        "description": "要打开的对话 id（来自 search_conversations）。",
+                        "description": (
+                            "search_conversations 返回的 id；非 id 时按标题检索。"
+                        ),
                     },
                     "query": {
                         "type": "string",
                         "description": (
-                            "可选；从第一条正文命中读起（与 search 同一关键词）。"
-                            "省略则从最早消息起。"
+                            "无 id 时按标题/正文定位；有 id 时从第一条命中读起。"
                         ),
                     },
                     "cursor": {
@@ -216,18 +228,141 @@ class ReadConversationTool:
                         ),
                     },
                 },
-                "required": ["conversation_id"],
+                "required": [],
             },
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
             approval=ToolApproval.NEVER,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         cid = str(arguments.get("conversation_id") or "").strip()
-        if not cid:
-            msg = "缺少 conversation_id 参数。"
-            return ToolResult(tool_call_id="", success=False, output=msg, error=msg)
+        if cid and context.conversation_id and cid == context.conversation_id:
+            logger.info(
+                "conversation_log.read",
+                result="host_exclude",
+                conversation_id=cid,
+                run_id=context.run_id,
+            )
+            return ToolResult(
+                tool_call_id="",
+                success=True,
+                output=_HOST_MISS,
+                display={
+                    "title": "",
+                    "conversation_id": cid,
+                    "truncated": False,
+                    "depth": DEFAULT_FOCUS,
+                },
+            )
+        query_s = str(arguments.get("query") or "").strip() or None
+        cursor = arguments.get("cursor")
+        cursor_s = str(cursor).strip() if cursor else None
+        focus_n = normalize_focus(str(arguments.get("focus") or DEFAULT_FOCUS))
+        if focus_n is None:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="focus 须为 dialogue / process。",
+                error="invalid focus",
+            )
+        max_chars: int | None = None
+        if arguments.get("max_chars") is not None:
+            try:
+                max_chars = int(arguments["max_chars"])
+            except (TypeError, ValueError):
+                max_chars = None
 
+        if is_uuid_id(cid):
+            return await self._read_identified(
+                cid,
+                query_s=query_s,
+                cursor_s=cursor_s,
+                focus_n=focus_n,
+                max_chars=max_chars,
+                context=context,
+            )
+
+        locator = cid or query_s
+        if not locator:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output=_MISSING_LOCATOR,
+                error=_MISSING_LOCATOR,
+            )
+        resolved = await self._resolve_locator(locator, context)
+        if isinstance(resolved, ToolResult):
+            return resolved
+        return await self._read_identified(
+            resolved,
+            query_s=query_s,
+            cursor_s=cursor_s,
+            focus_n=focus_n,
+            max_chars=max_chars,
+            context=context,
+        )
+
+    async def _resolve_locator(
+        self, locator: str, context: ToolContext
+    ) -> str | ToolResult:
+        run = await run_conversation_search(
+            folder_id=self.folder_id,
+            arguments={"query": locator},
+            context=context,
+        )
+        if run.error is not None:
+            return run.error
+        if run.folder_miss or not run.rows:
+            logger.info(
+                "conversation_log.read",
+                result="locator_miss",
+                locator=locator,
+                run_id=context.run_id,
+            )
+            return _format_search_output(
+                [], scope=run.scope, soft_note=run.soft_note
+            )
+        if len(run.rows) > 1:
+            logger.info(
+                "conversation_log.read",
+                result="locator_multi",
+                locator=locator,
+                count=len(run.rows),
+                run_id=context.run_id,
+            )
+            return _format_search_output(
+                run.rows,
+                scope=run.scope,
+                soft_note=run.soft_note,
+                lead=_MULTI_HIT_LEAD,
+            )
+        resolved = str(run.rows[0].get("conversation_id") or "").strip()
+        if not is_uuid_id(resolved):
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="检索结果缺少有效 conversation_id。",
+                error="invalid search row",
+            )
+        logger.info(
+            "conversation_log.read",
+            result="locator_unique",
+            locator=locator,
+            conversation_id=resolved,
+            run_id=context.run_id,
+        )
+        return resolved
+
+    async def _read_identified(
+        self,
+        cid: str,
+        *,
+        query_s: str | None,
+        cursor_s: str | None,
+        focus_n: str,
+        max_chars: int | None,
+        context: ToolContext,
+    ) -> ToolResult:
         if context.conversation_id and cid == context.conversation_id:
             logger.info(
                 "conversation_log.read",
@@ -246,43 +381,6 @@ class ReadConversationTool:
                     "depth": DEFAULT_FOCUS,
                 },
             )
-
-        if not is_uuid_id(cid):
-            logger.info(
-                "conversation_log.read",
-                result="soft_miss",
-                conversation_id=cid,
-                run_id=context.run_id,
-            )
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output=_SOFT_MISS,
-                display={
-                    "title": "",
-                    "conversation_id": cid,
-                    "truncated": False,
-                    "depth": DEFAULT_FOCUS,
-                },
-            )
-
-        cursor = arguments.get("cursor")
-        cursor_s = str(cursor).strip() if cursor else None
-        query_s = str(arguments.get("query") or "").strip() or None
-        focus_n = normalize_focus(str(arguments.get("focus") or DEFAULT_FOCUS))
-        if focus_n is None:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="focus 须为 dialogue / process。",
-                error="invalid focus",
-            )
-        max_chars: int | None = None
-        if arguments.get("max_chars") is not None:
-            try:
-                max_chars = int(arguments["max_chars"])
-            except (TypeError, ValueError):
-                max_chars = None
 
         from agentcore.account.credentials import get_account_credentials
 

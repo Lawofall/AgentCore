@@ -40,7 +40,10 @@ import { continuePausedTurn } from "@/services/turns/continuePaused";
 import {
   type CheckpointDisplay,
   assistantProjectionId,
+  conversationStillWriting,
   getActiveRuntime,
+  lastAssistantMessageId,
+  runtimeOf,
   useConversationStore,
 } from "@/stores/conversation";
 import { useExecutionStore, useMessageExecution } from "@/stores/execution";
@@ -52,6 +55,7 @@ import { useNavigate } from "react-router-dom";
 import {
   AssistantMessageFooter,
   AssistantMessageMetaSummary,
+  MessageMoreMenu,
 } from "./AssistantMessageFooter";
 import { CloudBridgeHint } from "./CloudBridgeHint";
 import { MessageTime } from "./MessageActions";
@@ -97,6 +101,14 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
   const loadMessageCost = useUsageStore((s) => s.loadMessageCost);
   const cachedTurn = useUsageStore((s) => s.messageCosts[message.id] ?? null);
   const conversationId = useConversationStore((s) => s.currentConversationId);
+  const liveTailWriting = useConversationStore((s) => {
+    const id = s.currentConversationId;
+    if (!id || !s.byId) return false;
+    const rt = runtimeOf(s, id);
+    if (!conversationStillWriting(rt)) return false;
+    return lastAssistantMessageId(rt.messages) === message.id;
+  });
+  const bubbleLive = message.isStreaming || liveTailWriting;
   const waitingForWorkspaceLock = useConversationStore((s) => {
     const id = s.currentConversationId;
     if (!id) return false;
@@ -108,7 +120,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
     return s.byId?.[id]?.waitingForDeskProvision ?? false;
   });
   const navigate = useNavigate();
-  const finishReason = !message.isStreaming
+  const finishReason = !bubbleLive
     ? (message.finishReason ?? message.runs?.finishReason)
     : undefined;
   // Execution / graph slot key = server turn id when stamped (pause/resume share it).
@@ -130,6 +142,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
     hasDedicatedPauseOrAskUi,
     hasTeamStrip,
     finishReason,
+    isStreaming: bubbleLive,
   });
   // Prefer live message.error when it is the face source so context (upstream
   // preview / credential_source / empty_diagnosis) survives formatAssistantErrorMessage.
@@ -271,13 +284,13 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
     costText = COST_UNPRICED_LABEL;
   }
   const showCostMeta =
-    !message.isStreaming &&
+    !bubbleLive &&
     (costText != null ||
       (message.rounds != null && message.rounds > 1) ||
       (message.durationMs != null && message.durationMs > 0));
 
   const onPeekCost = () => {
-    if (!message.isStreaming && message.cost == null) {
+    if (!bubbleLive && message.cost == null) {
       void loadMessageCost(message.id);
     }
   };
@@ -303,7 +316,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
   const turnBody = hasProcess ? (
     <ProcessTimeline
       process={message.process ?? []}
-      isStreaming={message.isStreaming}
+      isStreaming={bubbleLive}
       citations={citations}
       citationToDisplay={citationDisplay.toDisplay}
       knownLedgerIds={knownLedgerIds}
@@ -324,7 +337,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
       {hasReasoning && (
         <ThinkingPanel
           reasoning={message.reasoning ?? ""}
-          isStreaming={message.isStreaming}
+          isStreaming={bubbleLive}
           persistKey={`${message.id}:reasoning`}
         />
       )}
@@ -340,11 +353,11 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
           citationToDisplay={citationDisplay.toDisplay}
           knownLedgerIds={knownLedgerIds}
           evidenceLedger={evidenceLedger}
-          isStreaming={message.isStreaming}
+          isStreaming={bubbleLive}
           onOpenWorkspacePath={onOpenWorkspacePath}
         />
       )}
-      {message.isStreaming &&
+      {bubbleLive &&
         (message.composingTool && message.executionId === null ? (
           <ComposingToolLine tool={message.composingTool} />
         ) : displayContent.length === 0 && !hasReasoning ? (
@@ -373,7 +386,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
         <TurnWarningBanner message={message.turnWarning} />
       )}
       {turnBody}
-      {!message.isStreaming && (
+      {!bubbleLive && (
         <WholeFilePasteHint
           content={message.content}
           process={message.process}
@@ -452,31 +465,48 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
       )}
       {/* 底部堆叠回退已废除（时间线一期）：交互卡只在 ProcessTimeline 标记槽渲染。
           不变量「有交互卡必有时间线标记」由 live 盖章 + reload journal 补标记保证。 */}
-      {!message.isStreaming && message.syncStatus && (
+      {!bubbleLive && message.syncStatus && (
         <div className="mt-1">
           <SyncStatusHint syncStatus={message.syncStatus} />
         </div>
       )}
-      {showCostMeta && !outcome.showFooter && (
-        <div className="mt-1 flex items-center justify-end gap-1.5">
-          <AssistantMessageMetaSummary
-            rounds={message.rounds}
-            costText={costText}
-            durationMs={message.durationMs}
-          />
-          <MessageTime iso={message.createdAt} />
-        </div>
-      )}
       <CloudBridgeHint messageId={message.id} />
-      {outcome.showFooter && (
+      {outcome.showFooter ? (
         <AssistantMessageFooter
           message={message}
           captainContext={captainContext}
           costText={costText}
           onRegenerate={handleRegenerate}
           displayError={displayError}
+          pinSupportPack={outcome.supportPackHost === "more"}
         />
-      )}
+      ) : showCostMeta || outcome.supportPackHost === "more" ? (
+        <div
+          className={cn(
+            "mt-1 flex items-center gap-2",
+            outcome.supportPackHost === "more"
+              ? "justify-between"
+              : "justify-end",
+          )}
+        >
+          {outcome.supportPackHost === "more" ? (
+            <MessageMoreMenu
+              message={message}
+              captainContext={captainContext}
+            />
+          ) : null}
+          {showCostMeta ? (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <AssistantMessageMetaSummary
+                rounds={message.rounds}
+                costText={costText}
+                durationMs={message.durationMs}
+              />
+              <MessageTime iso={message.createdAt} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

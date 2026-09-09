@@ -60,7 +60,7 @@ from agentcore.db.repositories import (
 )
 from agentcore.folders.desk import resolve_desk_access
 from agentcore.folders.service import FolderDeskService
-from agentcore.workspace.retention import retention_cutoff
+from agentcore.workspace.retention import _purge_conversation_space, retention_cutoff
 
 from ._helpers import _get_owned_conversation, _require_conversation_write
 
@@ -481,6 +481,44 @@ async def restore_deleted_conversation(
     return conversation_summary_from_orm(
         restored, message_count=counts.get(conversation_id, 0)
     )
+
+
+@router.delete("/trash/{conversation_id}", response_model=StatusResponse)
+async def purge_deleted_conversation(
+    conversation_id: str,
+    user: AuthUser,
+    repo: ConversationRepository = Depends(get_conversation_repo),
+):
+    """从「最近删除」彻底删除一条对话：清盘裸聊 scratch，再物理删行。
+
+    Claim is a conditional hard-delete (still soft-deleted, still in window)
+    so a restore that lands first is 409, never a wipe of a live transcript.
+    Disk follows the claim: a 裸聊 whose restore won keeps its files.
+    """
+    conv = await repo.get_deleted_by_id(conversation_id, user_id=user.user_id)
+    if not conv:
+        raise NotFoundError("对话不存在或不在最近删除中")
+    if conv.deleted_at <= retention_cutoff():
+        raise ConflictError(
+            f"该对话已超过 {settings.workspace_retention_days} 天保留期，无法彻底删除"
+        )
+
+    folder_id = conv.folder_id
+    wiped = await repo.hard_delete_if_soft_deleted(
+        conversation_id, user_id=user.user_id, not_before=retention_cutoff()
+    )
+    if not wiped:
+        raise ConflictError("该对话已被清理，无法彻底删除")
+    await _purge_conversation_space(
+        user_id=user.user_id, conversation_id=conversation_id, folder_id=folder_id
+    )
+    logger.info(
+        "conversation.trash_purged",
+        conversation_id=conversation_id,
+        user_id=user.user_id,
+        folder_id=folder_id,
+    )
+    return StatusResponse()
 
 
 @router.get("/{conversation_id}", response_model=ConversationSummary)

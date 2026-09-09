@@ -145,13 +145,6 @@ from .demo_tape import (
     DemoTapeSummary,
 )
 from .devices import DeviceListResponse, DeviceRegistration, DeviceSummary
-from .feedback import (
-    AdminFeedbackSummary,
-    CreateFeedbackRequest,
-    FeedbackListResponse,
-    FeedbackSummary,
-    UpdateFeedbackStatusRequest,
-)
 from .files import RewriteRequest, RewriteResponse
 from .git_credentials import (
     GitCredentialView,
@@ -287,22 +280,9 @@ from .notices import (
 )
 from .search import SearchItem, SearchResponse, SearchSection
 from .sharing import CreateShareRequest, ShareListResponse, ShareSummary
-from .standing_tasks import (
-    CreateStandingTaskRequest,
-    EnsureStandingTaskTemplateRequest,
-    RotateWebhookSecretResponse,
-    StandingTaskRunListResponse,
-    StandingTaskRunSummary,
-    StandingTaskSummary,
-    StandingTaskTemplateConfig,
-    StandingTaskTemplateSummary,
-    TriggerStandingTaskResponse,
-    UpdateStandingTaskRequest,
-)
 from .tools import (
     CapabilitiesResponse,
     CapabilityGuidelines,
-    CapabilityPack,
     CapabilitySkill,
     CapabilityTool,
 )
@@ -320,14 +300,18 @@ from .usage import (
 )
 from .workflows import (
     CreateWorkflowRequest,
+    FireWorkflowWebhookResponse,
     FromPlaybookRequest,
     PlaybookTemplateSummary,
+    PutWorkflowTriggerRequest,
+    RotateWorkflowTriggerResponse,
     RunWorkflowRequest,
     RunWorkflowResponse,
     UpdateWorkflowRequest,
     WorkflowDefinitionModel,
     WorkflowSourceModel,
     WorkflowSummary,
+    WorkflowTriggerModel,
 )
 from .workspaces import (
     BindLocalWorkspaceRequest,
@@ -595,17 +579,6 @@ __all__ = [
     "ShareSummary",
     "CreateShareRequest",
     "ShareListResponse",
-    # standing tasks
-    "CreateStandingTaskRequest",
-    "UpdateStandingTaskRequest",
-    "EnsureStandingTaskTemplateRequest",
-    "StandingTaskSummary",
-    "StandingTaskTemplateConfig",
-    "StandingTaskTemplateSummary",
-    "StandingTaskRunSummary",
-    "StandingTaskRunListResponse",
-    "TriggerStandingTaskResponse",
-    "RotateWebhookSecretResponse",
     # workflows
     "CreateWorkflowRequest",
     "UpdateWorkflowRequest",
@@ -616,16 +589,14 @@ __all__ = [
     "RunWorkflowResponse",
     "PlaybookTemplateSummary",
     "FromPlaybookRequest",
+    "PutWorkflowTriggerRequest",
+    "WorkflowTriggerModel",
+    "RotateWorkflowTriggerResponse",
+    "FireWorkflowWebhookResponse",
     # devices
     "DeviceRegistration",
     "DeviceSummary",
     "DeviceListResponse",
-    # feedback
-    "CreateFeedbackRequest",
-    "FeedbackSummary",
-    "FeedbackListResponse",
-    "UpdateFeedbackStatusRequest",
-    "AdminFeedbackSummary",
     # notices
     "CreateNoticeRequest",
     "UpdateNoticeRequest",
@@ -644,7 +615,6 @@ __all__ = [
     # tools + capabilities
     "CapabilityTool",
     "CapabilitySkill",
-    "CapabilityPack",
     "CapabilityGuidelines",
     "CapabilitiesResponse",
     # cost & usage

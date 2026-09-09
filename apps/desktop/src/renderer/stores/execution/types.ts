@@ -395,7 +395,7 @@ export interface RunNode {
   checkpoint: RunCheckpoint | null;
   /** 收到的上下文 (上下文传递可视化): the structured ContextBlocks this run was fed at
    * assembly time, from its `run_context` frame — the SAME data the LLM saw (原始请求 /
-   * 团队位置 / 前置结果 / 工作区 / 任务…). Empty until that frame folds in (or for a run
+   * 本回合工具 / 团队位置 / 前置结果 / 工作区 / 任务…). Empty until that frame folds in (or for a run
    * whose opening wasn't block-assembled). Drives the run detail's「收到的上下文」area. */
   receivedContext: ContextBlockWire[];
   /** 升级实时可见: escalations this run raised via `escalate`, in fire order. Empty for

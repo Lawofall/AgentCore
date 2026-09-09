@@ -43,7 +43,6 @@ from .devices import PushDeviceRepository
 from .documents import DocumentRepository
 from .email_auth import EmailChallengeRepository, PendingRegistrationRepository
 from .external_grants import ExternalGrantRepository
-from .feedback import FeedbackRepository
 from .folder_members import FolderMemberRepository
 from .folders import FolderRepository
 from .friends import FriendRepository
@@ -60,9 +59,7 @@ from .runs import (
     TurnJournalRepository,
     TurnMetricsRepository,
 )
-from .skill_slots import SkillMuteRepository, SkillSlotRepository
 from .skill_store import SkillStoreRepository
-from .standing_tasks import StandingTaskRepository, StandingTaskRunRepository
 from .stream_state import TurnStreamStateRepository
 from .user_workflows import UserWorkflowRepository
 from .users import (
@@ -70,6 +67,7 @@ from .users import (
     UserDirectoryRepository,
     UserRepository,
 )
+from .workflow_store import WorkflowStoreRepository
 
 __all__ = [
     "_UNSET",
@@ -87,7 +85,6 @@ __all__ = [
     "EmailChallengeRepository",
     "CredentialsRepository",
     "ExternalGrantRepository",
-    "FeedbackRepository",
     "FolderMemberRepository",
     "FolderRepository",
     "HandoffJobRepository",
@@ -102,11 +99,7 @@ __all__ = [
     "PushDeviceRepository",
     "RefreshTokenRepository",
     "RunSessionRepository",
-    "SkillMuteRepository",
-    "SkillSlotRepository",
     "SkillStoreRepository",
-    "StandingTaskRepository",
-    "StandingTaskRunRepository",
     "TurnJournalRepository",
     "TurnMetricsRepository",
     "TurnStreamStateRepository",
@@ -116,4 +109,5 @@ __all__ = [
     "UserLlmProviderRepository",
     "UserRepository",
     "UserWorkflowRepository",
+    "WorkflowStoreRepository",
 ]

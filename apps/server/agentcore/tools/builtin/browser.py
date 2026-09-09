@@ -25,7 +25,7 @@ from typing import Any
 
 from agentcore.config import settings
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.browser.keyframes import KeyframeTracker
 from agentcore.runtime.browser.local_session import BRIDGE_UNAUTHORIZED_CODE
 from agentcore.runtime.browser.navigate_target import (
@@ -135,6 +135,8 @@ _BROWSER_REGISTRATION = ToolRegistration(
     # 关键帧 jpeg 确实落在工作区 ``browser/`` 下，但它是给这一步配的画面（已随
     # ``display.frame`` 走），不是本回合的交付物——台账不记它。
     file_products=FileProductsContract.NO_PRODUCT,
+    resident=False,
+    catalog_summary="右坞真实浏览器",
 )
 
 
@@ -687,7 +689,7 @@ class BrowserTool(_BrowserToolBase):
                 "HOW→consult(browser)。"
             ),
             parameters=BROWSER_TOOL_PARAMETERS,
-            category=ToolCategory.EXECUTION,
+            face=ToolFace.HOST_BROWSER,
             approval=ToolApproval.GRANTABLE,
         )
 

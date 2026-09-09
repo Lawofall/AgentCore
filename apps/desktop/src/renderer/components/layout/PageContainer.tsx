@@ -5,14 +5,17 @@ import type { ReactNode } from "react";
  * 页面宽度档位（见 `.cursor/rules/desktop-layout.mdc`）：
  * - `content` 896px：线性阅读（设置、详情、表单）
  * - `canvas` 1200px：网格/多列（探索、列表、工具箱）
+ * - `full`：不限宽（工具箱提示词工作台）
  *
  * 对话页与文件页有各自的分栏布局，不走本组件。
  */
-export type PageWidth = "content" | "canvas";
+export type PageWidth = "content" | "canvas" | "full";
+export type PagePadding = "page" | "none";
 
 const WIDTH_CLASS: Record<PageWidth, string> = {
   content: "max-w-4xl",
   canvas: "max-w-[1200px]",
+  full: "",
 };
 
 interface PageContainerProps {
@@ -24,6 +27,11 @@ interface PageContainerProps {
    * 内层变成 `flex-col` 填满剩余高度，由子项自己 `min-h-0 flex-1` 分栏滚。
    */
   fill?: boolean;
+  /**
+   * 内层留白。`page`（默认）= `px-6 py-6`。
+   * `none` = 贴边（种类 tab 自己留顶/左右白，工作台铺满剩余）。
+   */
+  padding?: PagePadding;
   /** 合并到外层滚动容器（如作为 flex 子项时传 `flex-1`）。 */
   className?: string;
 }
@@ -36,6 +44,7 @@ export function PageContainer({
   children,
   width = "content",
   fill = false,
+  padding = "page",
   className,
 }: PageContainerProps) {
   return (
@@ -48,7 +57,8 @@ export function PageContainer({
     >
       <div
         className={cn(
-          "mx-auto w-full px-6 py-6",
+          "mx-auto w-full",
+          padding === "page" && "px-6 py-6",
           WIDTH_CLASS[width],
           fill && "flex min-h-0 flex-1 flex-col",
         )}

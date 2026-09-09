@@ -210,19 +210,6 @@ async def _settle_resume(
                 conversation_id=suspension.conversation_id,
                 operations=kept,
             )
-        daily_review_apply = None
-        if suspension.intent == "daily_review" and response.decision is CheckpointDecision.CONTINUE:
-            from agentcore.standing_tasks.review_apply import (
-                apply_daily_review_selections,
-            )
-
-            daily_review_apply = await apply_daily_review_selections(
-                user_id=suspension.user_id,
-                folder_id=suspension.folder_id or "",
-                conversation_id=suspension.conversation_id,
-                questions=list(suspension.questions or []),
-                selected_labels=list(response.selected),
-            )
         sink.emit(
             checkpoint_resolved(
                 checkpoint_id=suspension.checkpoint_id,
@@ -274,7 +261,6 @@ async def _settle_resume(
                     set_active_coordination(session)
         from agentcore.tools.builtin.ask_user import ask_user_tool_result
         from agentcore.tools.builtin.ask_user.result import (
-            ask_user_daily_review_result,
             ask_user_organize_plan_result,
         )
 
@@ -287,16 +273,6 @@ async def _settle_resume(
                 response,
                 plan_id=suspension.checkpoint_id,
                 kept_count=kept_n,
-            )
-        elif suspension.intent == "daily_review":
-            applied = daily_review_apply.applied if daily_review_apply else 0
-            skipped = daily_review_apply.skipped if daily_review_apply else 0
-            errors = daily_review_apply.errors if daily_review_apply else ()
-            result = ask_user_daily_review_result(
-                response,
-                applied=applied,
-                skipped=skipped,
-                errors=errors,
             )
         else:
             result = ask_user_tool_result(

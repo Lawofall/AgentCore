@@ -49,7 +49,7 @@ def entry_from_paused_row(row: PausedTurnRow) -> dict[str, Any] | None:
         turn_id=row.message_id,
         interaction_id=str(frame.get("checkpoint_id") or ""),
         kind=kind.value,
-        title=attention_title(kind, {"question": str(frame.get("question") or "")}),
+        title=attention_title(kind),
     )
 
 
@@ -78,7 +78,7 @@ def entries_from_registry_hot_cards(user_id: str) -> list[dict[str, Any]]:
             turn_id=live_turn_id[req.conversation_id],
             interaction_id=req.id,
             kind=kind.value,
-            title=attention_title(kind, req.payload),
+            title=attention_title(kind),
         )
         if entry is not None:
             out.append(entry)

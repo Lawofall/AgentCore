@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.desktop.channel import HostOp, HostOpError
 from agentcore.tools.builtin.long_running import long_running_command_match
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
@@ -806,6 +806,8 @@ class HostTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         host_class=True,
+        resident=False,
+        catalog_summary="本机排查 / 修理 / 查看这台电脑",
     )
 
     @property
@@ -820,7 +822,7 @@ class HostTool:
                 "HOW→consult(host)。"
             ),
             parameters=HOST_TOOL_PARAMETERS,
-            category=ToolCategory.INTERACTION,
+            face=ToolFace.HOST_BROWSER,
             approval=ToolApproval.NEVER,
             timeout_seconds=None,
         )

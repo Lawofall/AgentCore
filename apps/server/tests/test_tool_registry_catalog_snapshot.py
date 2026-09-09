@@ -7,7 +7,7 @@ this snapshot alongside their declaration.
 
 from __future__ import annotations
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.always_confirm import requires_always_confirm
 from agentcore.tools.builtin import (
     approval_class_tool_names,
@@ -75,6 +75,7 @@ _WORKER_GATED_ORDER = [
 
 _CEO_BUILTIN_ORDER = list(_BUILTIN_ORDER)
 
+# CEO_ORCHESTRATION *surface* roster order (wiring / catalog append), not ToolFace.
 _CATALOG_ORCHESTRATION_ORDER = [
     "delegate",
     "replan",
@@ -263,10 +264,12 @@ def test_catalog_order_and_available_to_snapshot():
 
 
 def test_catalog_categories_present():
-    """Every catalog entry keeps a real ToolCategory (governance UI)."""
+    """Every catalog entry keeps a real ToolFace (governance UI)."""
     for entry in build_capability_catalog():
-        assert isinstance(entry.schema.category, ToolCategory)
+        assert isinstance(entry.schema.face, ToolFace)
         assert isinstance(entry.schema.approval, ToolApproval)
+        assert isinstance(entry.resident, bool)
+        assert isinstance(entry.summary, str)
 
 
 def test_tool_registry_declarations_cover_roster():

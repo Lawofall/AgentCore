@@ -1,6 +1,6 @@
 """M3: mechanism-direct turn envelope (placeholder / lease / persist).
 
-Workflow「跑一次」and standing bound-workflow share
+Workflow「跑一次」and clock/webhook 代跑 share
 ``run_mechanism_direct_and_persist`` — same outer contract as chat
 ``run_and_persist``, inner pipeline stays ``run_workflow_pipeline``.
 """
@@ -214,52 +214,3 @@ async def test_run_workflow_job_uses_mechanism_direct_envelope(monkeypatch):
     assert "补充" in env["user_message"]
     assert len(env["tasks"]) == 1
 
-
-@pytest.mark.asyncio
-async def test_standing_bound_workflow_wrapper_uses_same_envelope(monkeypatch):
-    """Standing `_run_workflow_pipeline` expands definition then hits the shared envelope."""
-    from agentcore.standing_tasks import runner as standing_runner
-
-    called: dict = {}
-
-    async def fake_envelope(**kwargs):
-        called["envelope"] = kwargs
-        return {
-            "finish_reason": FinishReason.END_TURN,
-            "content": "站立绑工作流",
-            "message_id": "m-standing",
-        }
-
-    monkeypatch.setattr(
-        "agentcore.conversation.turn_runner.run_mechanism_direct_and_persist",
-        fake_envelope,
-    )
-
-    result = await standing_runner._run_workflow_pipeline(
-        conversation_id="conv-s",
-        user_message="按工作流「三步」执行。",
-        user_id="u1",
-        folder_id="f1",
-        sink=EventSink(),
-        history=[],
-        backend=MagicMock(),
-        llm_credentials=None,
-        profile_set=None,
-        permission_axes=None,
-        workflow_id="wf-1",
-        workflow_version=2,
-        workflow_name="三步",
-        definition={
-            "nodes": [
-                {"id": "s1", "kind": "agent_step", "role": "质检", "task": "查一查"},
-            ],
-            "edges": [],
-        },
-    )
-
-    assert called["envelope"]["workflow_id"] == "wf-1"
-    assert called["envelope"]["workflow_version"] == 2
-    assert called["envelope"]["conversation_id"] == "conv-s"
-    assert len(called["envelope"]["tasks"]) == 1
-    assert result is not None
-    assert result["message_id"] == "m-standing"

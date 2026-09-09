@@ -12,7 +12,7 @@ describe("workflow routes isolated from collaboration graph", () => {
     expect(APP_PATHS.toolbox.workflows.root).not.toContain("conversations");
     expect(APP_PATHS.toolbox.workflows.edit("x")).toBe("/toolbox/workflows/x");
     expect(APP_PATHS.toolbox.workflows.root).not.toBe(
-      APP_PATHS.toolbox.automations.root,
+      APP_PATHS.toolbox.mine.automations,
     );
   });
 });

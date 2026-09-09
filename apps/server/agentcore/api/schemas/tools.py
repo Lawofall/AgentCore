@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 
 
 class CapabilityTool(BaseModel):
@@ -18,7 +18,9 @@ class CapabilityTool(BaseModel):
 
     name: str
     description: str
-    category: ToolCategory
+    face: ToolFace
+    resident: bool
+    summary: str
     approval: ToolApproval
     parameters: dict[str, Any]
     available_to: list[str]
@@ -26,24 +28,13 @@ class CapabilityTool(BaseModel):
 
 class CapabilitySkill(BaseModel):
     """A system Skill in the catalog (渐进披露): its catalog ``summary`` (the always-on
-    one-line trigger) plus the full ``body`` guidance the CEO pulls via consult."""
+    one-line trigger) plus the full ``body`` guidance the CEO pulls via consult.
+    ``group`` is the Chinese 能力指引 subtitle (编排 / 工作区 / 交付 / 产品 / 工具)."""
 
     name: str
     summary: str
     body: str
-
-
-class CapabilityPack(BaseModel):
-    """A deployment-listed capability pack (catalog display only).
-
-    ``skills`` are the pack's domain skills. When the pack is listed, those skills are
-    also registered for every user (see top-level ``skills`` = runtime repertoire).
-    """
-
-    id: str
-    name: str
-    summary: str
-    skills: list[CapabilitySkill]
+    group: str = ""
 
 
 class CapabilityGuidelines(BaseModel):
@@ -70,11 +61,10 @@ class CapabilityGuidelines(BaseModel):
 class CapabilitiesResponse(BaseModel):
     """The complete capability picture for the 能力图鉴 page (single fetch).
 
-    ``skills`` = runtime repertoire (platform + deployment-enabled packs; same for all users).
-    ``packs`` = deployment-listed packs as a display catalog (empty when none listed).
+    ``skills`` = runtime repertoire (platform system Skills; same for all users).
+    Domain SOPs are store SKUs, not this blueprint.
     """
 
     tools: list[CapabilityTool]
     skills: list[CapabilitySkill]
-    packs: list[CapabilityPack] = []
     guidelines: CapabilityGuidelines

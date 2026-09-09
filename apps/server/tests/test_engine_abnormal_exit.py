@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from agentcore.core.types import ToolCategory, ToolEffect
+from agentcore.core.types import ToolEffect, ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
 from agentcore.runtime.engine import ReactLoopOut, react_loop
 from agentcore.runtime.events import EventSink
@@ -45,7 +45,7 @@ class _FailingTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:

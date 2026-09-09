@@ -4,13 +4,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { statusPillInline } from "@/components/ui/tone-presets";
 import type { CitationDisplayMap } from "@/lib/citationDisplayMap";
 import { cleanSourceTitle } from "@/lib/citations";
-import { ledgerDateLabel, ledgerTierLabel } from "@/lib/evidenceLedger";
+import { ledgerDateLabel } from "@/lib/evidenceLedger";
 import { usePersistentDisclosure } from "@/stores/disclosure";
 import type { Citation, TurnEvidenceLedgerEntry } from "@/types/events";
 import { ChevronDown, ChevronUp, Globe, Info } from "lucide-react";
-import { CitationTierBadge } from "./CitationTierBadge";
 import { Favicon } from "./Favicon";
 import { SourceTooltip } from "./SourcePreview";
 
@@ -34,6 +34,26 @@ const COLLAPSED_COUNT = 3;
 /** How many favicons to stack as a preview inside the overflow chip. */
 const STACK_PREVIEW = 3;
 
+function sourceWasRead(
+  citation: Citation,
+  entry: TurnEvidenceLedgerEntry | null | undefined,
+): boolean {
+  return Boolean(entry?.deep_read ?? citation.deep_read);
+}
+
+/** Positive-only: search-snippet cites stay silent; fetched pages mark 已读. */
+function SourceReadBadge({ read }: { read: boolean }) {
+  if (!read) return null;
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center ${statusPillInline.success}`}
+      title="团队已读取该页全文"
+    >
+      已读
+    </span>
+  );
+}
+
 export function SourceCards({
   citations,
   displayMap,
@@ -45,7 +65,7 @@ export function SourceCards({
   displayMap?: CitationDisplayMap | null;
   /** 回合作用域（= messageId）：给了才把「展开全部」跨卸载/刷新记住。 */
   turnKey?: string;
-  /** 回合调研台账：来源卡 id 溯源面板（query / deep_read / tier / registrant）。 */
+  /** 回合调研台账：来源卡 id 溯源面板（query / deep_read / registrant）。 */
   evidenceLedger?: TurnEvidenceLedgerEntry[] | null;
 }) {
   const [expanded, setExpanded] = usePersistentDisclosure(
@@ -127,6 +147,8 @@ export function SourceCards({
             {rows.map(({ poolIndex, display, cited }) => {
               const c = citations[poolIndex];
               if (!c) return null;
+              const entry = c.id ? (ledgerById.get(c.id) ?? null) : null;
+              const read = sourceWasRead(c, entry);
               return (
                 <div
                   key={`${c.url}-${display}`}
@@ -136,7 +158,7 @@ export function SourceCards({
                     href={c.url}
                     target="_blank"
                     rel="noreferrer"
-                    aria-label={`来源 ${display}：${cleanSourceTitle(c.title) || c.site || c.url}`}
+                    aria-label={`来源 ${display}：${cleanSourceTitle(c.title) || c.site || c.url}${read ? "（已读）" : ""}`}
                     className="flex min-w-0 flex-1 items-start gap-2.5"
                   >
                     <span className="mt-0.5 w-5 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
@@ -153,7 +175,7 @@ export function SourceCards({
                         <span className="block min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                           {cleanSourceTitle(c.title) || c.site || c.url}
                         </span>
-                        <CitationTierBadge tier={c.tier} />
+                        <SourceReadBadge read={read} />
                       </span>
                       {c.site && (
                         <span className="mt-0.5 block truncate text-xs text-muted-foreground">
@@ -167,10 +189,7 @@ export function SourceCards({
                       )}
                     </span>
                   </a>
-                  <SourceLedgerTrace
-                    citation={c}
-                    entry={c.id ? (ledgerById.get(c.id) ?? null) : null}
-                  />
+                  <SourceLedgerTrace citation={c} entry={entry} />
                 </div>
               );
             })}
@@ -193,6 +212,8 @@ export function SourceCards({
           {collapsed.map(({ poolIndex, display, cited }) => {
             const c = citations[poolIndex];
             if (!c) return null;
+            const entry = c.id ? (ledgerById.get(c.id) ?? null) : null;
+            const read = sourceWasRead(c, entry);
             return (
               <SourceTooltip
                 key={`${c.url}-${display}`}
@@ -203,7 +224,7 @@ export function SourceCards({
                   href={c.url}
                   target="_blank"
                   rel="noreferrer"
-                  aria-label={`来源 ${display}：${cleanSourceTitle(c.title) || c.site || c.url}`}
+                  aria-label={`来源 ${display}：${cleanSourceTitle(c.title) || c.site || c.url}${read ? "（已读）" : ""}`}
                   className={`flex items-center gap-1.5 rounded-full border border-border bg-card py-1 pl-2 pr-2.5 transition-colors hover:bg-accent ${dimClass(cited)}`}
                 >
                   <span className="tabular-nums text-xs text-muted-foreground">
@@ -213,7 +234,7 @@ export function SourceCards({
                   <span className="max-w-[140px] truncate text-xs text-foreground">
                     {c.site || c.url}
                   </span>
-                  <CitationTierBadge tier={c.tier} />
+                  <SourceReadBadge read={read} />
                 </a>
               </SourceTooltip>
             );
@@ -261,9 +282,8 @@ function SourceLedgerTrace({
   const id = entry?.id || citation.id;
   if (!id) return null;
   const query = (entry?.query ?? citation.query ?? "").trim();
-  const deepRead = entry?.deep_read ?? citation.deep_read ?? false;
+  const deepRead = sourceWasRead(citation, entry);
   const registrant = (entry?.registrant ?? citation.registrant ?? "").trim();
-  const tier = entry?.tier ?? citation.tier;
   const date = entry?.date ?? citation.date;
   return (
     <Popover>
@@ -286,11 +306,8 @@ function SourceLedgerTrace({
         side="top"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span className="min-w-0 truncate font-medium tabular-nums text-foreground">
-            {id}
-          </span>
-          <span className="shrink-0">{ledgerTierLabel(tier)}</span>
+        <div className="truncate text-xs font-medium tabular-nums text-foreground">
+          {id}
         </div>
         <div className="text-xs text-muted-foreground">
           {ledgerDateLabel(date)}
@@ -302,7 +319,7 @@ function SourceLedgerTrace({
           </div>
         ) : null}
         <div className="text-xs">
-          <span className="text-muted-foreground">深读 </span>
+          <span className="text-muted-foreground">已读 </span>
           <span className="text-foreground">{deepRead ? "是" : "否"}</span>
         </div>
         {registrant ? (

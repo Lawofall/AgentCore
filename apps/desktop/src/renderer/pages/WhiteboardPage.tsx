@@ -1,23 +1,17 @@
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button, Card, EmptyHint, PageHeader } from "@/components/ui";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { useFolders } from "@/hooks/useFolders";
-import {
   type BoardSummary,
   createBoard,
   deleteBoard,
   listBoards,
 } from "@/services/boards";
-import { FolderOpen, Loader2, Plus, Presentation, Trash2 } from "lucide-react";
+import { Loader2, Plus, Presentation, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-// 顶部「白板」入口 = 跨文件夹板列表（AI协作白板.md §三 A / §九 M1）：列出本人全部白板、
-// 建板、开板、删板。板的 folder 归属（G3）在此为可空，未归组板也在列表里。
+// 顶部「白板」入口 = 账号级板列表：列出本人全部白板、建板、开板、删板。
+// 白板不挂文件夹（AI协作白板.md 关键决策 · 否决 board ∈ folder）。
 function formatUpdated(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString("zh-CN", {
@@ -30,12 +24,9 @@ function formatUpdated(iso: string): string {
 
 export function WhiteboardPage() {
   const navigate = useNavigate();
-  const folders = useFolders();
   const [boards, setBoards] = useState<BoardSummary[] | null>(null);
   const [error, setError] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [pickedFolderId, setPickedFolderId] = useState<string | null>(null);
   // 二次确认删除：首点亮「确认删除」、再点才删，避免误删（不用原生 confirm）。
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
@@ -55,22 +46,13 @@ export function WhiteboardPage() {
   const handleCreate = useCallback(async () => {
     setCreating(true);
     try {
-      const board = await createBoard({
-        folderId: pickedFolderId,
-      });
-      setCreateOpen(false);
-      setPickedFolderId(null);
+      const board = await createBoard();
       navigate(`/whiteboard/${board.id}`);
     } catch {
       setError(true);
       setCreating(false);
     }
-  }, [navigate, pickedFolderId]);
-
-  const pickedFolderName =
-    pickedFolderId == null
-      ? "未归入文件夹"
-      : (folders.find((f) => f.id === pickedFolderId)?.name ?? "文件夹");
+  }, [navigate]);
 
   const handleDelete = useCallback(async (id: string) => {
     try {
@@ -83,67 +65,21 @@ export function WhiteboardPage() {
     }
   }, []);
 
+  const createButton = () => (
+    <Button
+      variant="primary"
+      size="md"
+      icon={<Plus size={16} />}
+      disabled={creating}
+      onClick={() => void handleCreate()}
+    >
+      {creating ? "创建中…" : "新建白板"}
+    </Button>
+  );
+
   return (
     <PageContainer width="canvas">
-      <PageHeader
-        title="白板"
-        action={
-          <Popover open={createOpen} onOpenChange={setCreateOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="primary"
-                size="md"
-                icon={<Plus size={16} />}
-                disabled={creating}
-              >
-                新建白板
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-64 p-3">
-              <p className="text-xs text-muted-foreground">
-                归入文件夹（可选）
-              </p>
-              <button
-                type="button"
-                onClick={() => setPickedFolderId(null)}
-                className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground hover:bg-accent"
-              >
-                {pickedFolderId == null ? (
-                  <span className="size-1.5 rounded-full bg-primary" />
-                ) : (
-                  <span className="size-1.5" />
-                )}
-                未归入文件夹
-              </button>
-              {folders.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setPickedFolderId(f.id)}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground hover:bg-accent"
-                >
-                  {pickedFolderId === f.id ? (
-                    <span className="size-1.5 rounded-full bg-primary" />
-                  ) : (
-                    <span className="size-1.5" />
-                  )}
-                  <FolderOpen size={14} className="text-muted-foreground" />
-                  <span className="truncate">{f.name}</span>
-                </button>
-              ))}
-              <Button
-                variant="primary"
-                size="sm"
-                className="mt-3 w-full"
-                disabled={creating}
-                onClick={() => void handleCreate()}
-              >
-                {creating ? "创建中…" : `创建（${pickedFolderName}）`}
-              </Button>
-            </PopoverContent>
-          </Popover>
-        }
-      />
+      <PageHeader title="白板" action={createButton()} />
 
       {error ? (
         <div className="mt-8 rounded-xl border border-border bg-card p-6 text-center">
@@ -165,16 +101,7 @@ export function WhiteboardPage() {
           className="mt-16"
           icon={<Presentation className="text-muted-foreground/60" size={40} />}
           title="还没有白板"
-          action={
-            <Button
-              variant="primary"
-              icon={<Plus size={16} />}
-              onClick={() => setCreateOpen(true)}
-              disabled={creating}
-            >
-              新建白板
-            </Button>
-          }
+          action={createButton()}
         />
       ) : (
         <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3">

@@ -50,8 +50,8 @@ def _has_wave_boundary_features(tasks_raw: list[Any]) -> bool:
 
 
 def _has_deep_deliverable_signal(tasks_raw: list[Any]) -> bool:
-    """True when any task declares a landing deliverable (files / workspace /
-    non-empty artifacts / omitted form). Only explicit ``form=prose`` is exempt.
+    """True when any task declares a landing deliverable (non-empty artifacts
+    or artifact_dir). Omitted / empty object does not expect landing.
     """
     from agentcore.runtime.runs.types import raw_deliverable_expects_landing
 
@@ -66,9 +66,8 @@ def _has_deep_deliverable_signal(tasks_raw: list[Any]) -> bool:
 def _should_auto_light_delegate(tasks_raw: list[Any]) -> bool:
     """True when a single dependency-free worker needs no multi-agent coordination.
 
-    Skips auto-light when the task expects on-disk landing (``form=files`` /
-    ``workspace`` / omitted form / non-empty artifacts). Only explicit
-    ``form=prose`` auto-lights.
+    Skips auto-light when the task expects on-disk landing (pinned artifacts /
+    artifact_dir). Omitted / empty deliverable auto-lights.
     ``complexity_hint=light`` no longer stamps short ``max_rounds``; browser tool
     surfaces are not excluded from auto-light for round-budget reasons.
     """
@@ -264,7 +263,7 @@ def resolve_delegate_prelude(
         logger.info("delegate.complexity_hint_inferred", hint="light")
     elif complexity_hint == "light" and _has_wave_boundary_features(tasks_raw):
         # 显式 light 与 DAG/波边界并存时忽略 light（避免关掉 on_boundary）。
-        # 已删字数字段 / form=files / artifacts alone 不挡 light（修码快修）。
+        # 已删字数字段 / 钉路径 artifacts 不挡 light（修码快修）。
         complexity_hint = "standard"
         logger.info(
             "delegate.complexity_hint_ignored",

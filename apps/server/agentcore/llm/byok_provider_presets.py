@@ -64,7 +64,13 @@ BYOK_PROVIDER_PRESETS: tuple[ByokProviderPreset, ...] = (
         base_url="https://api.deepseek.com",
         base_url_aliases=("https://api.deepseek.com/v1",),
         default_model="deepseek-v4-flash",
-        models=("deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4-flash-vision-exp"),
+        # V4.1 Flash preview is DeepSeek official API only (not OpenCode Go).
+        models=(
+            "deepseek-v4-flash",
+            "deepseek-v4.1-flash-expires-on-0910",
+            "deepseek-v4-pro",
+            "deepseek-v4-flash-vision-exp",
+        ),
     ),
     ByokProviderPreset(
         id="openai",

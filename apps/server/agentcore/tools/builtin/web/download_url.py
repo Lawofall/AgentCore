@@ -27,7 +27,7 @@ from agentcore.core.net import (
     web_timeout,
 )
 from agentcore.core.task_cancel import raise_if_task_cancelled
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.builtin.file_ops import (
     _mark_landed_files,
     _outside_workspace_msg,
@@ -137,6 +137,9 @@ class DownloadUrlTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
+        workspace_io=True,
+        resident=False,
+        catalog_summary="HTTP(S) URL 落盘到工作区相对路径",
     )
 
     @property
@@ -167,7 +170,7 @@ class DownloadUrlTool:
                 },
                 "required": ["url", "path"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.WEB,
             approval=ToolApproval.GRANTABLE,
         )
 

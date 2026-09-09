@@ -93,3 +93,77 @@ export function flowToDef(
     .map((e) => ({ from: e.source, to: e.target }));
   return { ...base, nodes: outNodes, edges: outEdges };
 }
+
+function slotLabelsEqual(
+  a: Record<string, string> | undefined,
+  b: Record<string, string> | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const k of keys) {
+    if (a[k] !== b[k]) return false;
+  }
+  return true;
+}
+
+function nodeDataEqual(
+  a: WorkflowCanvasNodeData,
+  b: WorkflowCanvasNodeData,
+): boolean {
+  return (
+    a.kind === b.kind &&
+    a.title === b.title &&
+    a.subtitle === b.subtitle &&
+    slotLabelsEqual(a.slotLabels, b.slotLabels)
+  );
+}
+
+/**
+ * Re-hydrate flow nodes from definition without breaking ReactFlow identity.
+ * Same id + same data → keep the previous node (position / measured / selected).
+ */
+export function mergeFlowNodes(
+  prev: Node<WorkflowCanvasNodeData>[],
+  next: Node<WorkflowCanvasNodeData>[],
+): Node<WorkflowCanvasNodeData>[] {
+  if (prev.length === next.length) {
+    const prevById = new Map(prev.map((n) => [n.id, n]));
+    const same =
+      next.every((n) => {
+        const p = prevById.get(n.id);
+        return p != null && nodeDataEqual(p.data, n.data);
+      }) && prev.every((p, i) => p.id === next[i]?.id);
+    if (same) return prev;
+  }
+  const old = new Map(prev.map((n) => [n.id, n]));
+  return next.map((n) => {
+    const p = old.get(n.id);
+    if (!p) return n;
+    return {
+      ...n,
+      position: p.position,
+      selected: p.selected,
+      width: p.width,
+      height: p.height,
+      measured: p.measured,
+    };
+  });
+}
+
+/** Same topology → keep previous edge array (StoreUpdater skips). */
+export function mergeFlowEdges(prev: Edge[], next: Edge[]): Edge[] {
+  if (
+    prev.length === next.length &&
+    prev.every(
+      (e, i) =>
+        e.id === next[i]?.id &&
+        e.source === next[i]?.source &&
+        e.target === next[i]?.target,
+    )
+  ) {
+    return prev;
+  }
+  return next;
+}

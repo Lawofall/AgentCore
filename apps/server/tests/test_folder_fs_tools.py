@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.delegate.target_desktop import (
     TargetDesktopError,
     TargetFolderBinding,
@@ -76,7 +76,7 @@ def _local_binding() -> TargetFolderBinding:
 def test_list_folder_dir_schema_and_registration():
     tool = ListFolderDirTool()
     assert tool.schema.name == "list_folder_dir"
-    assert tool.schema.category is ToolCategory.ORCHESTRATION
+    assert tool.schema.face is ToolFace.FOLDER
     assert tool.schema.approval is ToolApproval.NEVER
     props = tool.schema.parameters["properties"]
     assert "folder_id" in props
@@ -86,15 +86,12 @@ def test_list_folder_dir_schema_and_registration():
     assert "max_depth" not in props
     assert "target_folder_id" not in props
     assert tool.schema.parameters["required"] == ["folder_id"]
-    # 认桌 ≠ 摸底 在 consult；schema 一行功能。
+    # 认桌 ≠ 摸底 写在本工具 description；换桌主通道在 delegate target_folder_id。
     assert "列出" in tool.schema.description
-    assert "HOW→consult(team_cross_folder)" in tool.schema.description
+    assert "派前认桌" in tool.schema.description
+    assert "摸底" in tool.schema.description
+    assert "HOW→consult(desks)" not in tool.schema.description
     assert "轻量认桌" not in tool.schema.description
-    from agentcore.runtime.skills import build_system_skill_registry
-
-    cross = build_system_skill_registry().get("team_cross_folder")
-    assert cross is not None
-    assert "认桌" in cross.body and "摸底" in cross.body
     assert "file_list" not in tool.schema.description
     assert "list_folders" not in tool.schema.description
     folder_id_desc = props["folder_id"]["description"]
@@ -126,7 +123,7 @@ async def test_list_folder_dir_leftover_pattern_does_not_point_at_glob(tmp_path:
 def test_read_folder_file_schema_and_registration():
     tool = ReadFolderFileTool()
     assert tool.schema.name == "read_folder_file"
-    assert tool.schema.category is ToolCategory.ORCHESTRATION
+    assert tool.schema.face is ToolFace.FOLDER
     assert tool.schema.approval is ToolApproval.NEVER
     props = tool.schema.parameters["properties"]
     assert "folder_id" in props
@@ -136,7 +133,9 @@ def test_read_folder_file_schema_and_registration():
     assert "target_folder_id" not in props
     assert set(tool.schema.parameters["required"]) == {"folder_id", "path"}
     assert "读取" in tool.schema.description
-    assert "HOW→consult(team_cross_folder)" in tool.schema.description
+    assert "派前认桌" in tool.schema.description
+    assert "摸底" in tool.schema.description
+    assert "HOW→consult(desks)" not in tool.schema.description
     assert "轻量认桌" not in tool.schema.description
     assert "抽样" not in tool.schema.description
     assert "读到文件末尾" not in tool.schema.description

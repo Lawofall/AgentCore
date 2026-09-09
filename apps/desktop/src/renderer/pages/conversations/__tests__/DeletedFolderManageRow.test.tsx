@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/folders", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/folders")>();
-  return { ...actual, restoreFolder: vi.fn() };
+  return { ...actual, restoreFolder: vi.fn(), purgeTrashedFolder: vi.fn() };
 });
 
 vi.mock("@/lib/toast", () => ({
@@ -15,10 +15,11 @@ vi.mock("@/lib/toast", () => ({
 }));
 
 import { notifyError, notifyInfo } from "@/lib/toast";
-import { restoreFolder } from "@/services/folders";
+import { purgeTrashedFolder, restoreFolder } from "@/services/folders";
 import { DeletedFolderManageRow } from "../DeletedFolderManageRow";
 
 const restore = vi.mocked(restoreFolder);
+const purge = vi.mocked(purgeTrashedFolder);
 const errorToast = vi.mocked(notifyError);
 const infoToast = vi.mocked(notifyInfo);
 
@@ -43,6 +44,7 @@ function renderRow() {
 
 beforeEach(() => {
   restore.mockReset();
+  purge.mockReset();
   errorToast.mockReset();
   infoToast.mockReset();
 });
@@ -94,5 +96,17 @@ describe("DeletedFolderManageRow", () => {
     await waitFor(() => expect(errorToast).toHaveBeenCalledTimes(1));
     expect(errorToast.mock.calls[0][1]).toBe("恢复失败");
     expect(restore).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks before permanently deleting", async () => {
+    purge.mockResolvedValue(undefined);
+    renderRow();
+
+    fireEvent.click(screen.getByLabelText("彻底删除文件夹 商标案"));
+    expect(purge).not.toHaveBeenCalled();
+    expect(screen.getByText("彻底删除「商标案」？")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "彻底删除" }));
+    await waitFor(() => expect(purge).toHaveBeenCalledWith("f1"));
   });
 });

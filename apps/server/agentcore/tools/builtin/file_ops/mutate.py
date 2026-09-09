@@ -8,7 +8,7 @@ from difflib import SequenceMatcher
 from typing import Any, Literal
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.engine.write_args_clear import cleared_write_stub_rejection
 from agentcore.tools.builtin.write_diagnostics import attach_write_diagnostics
 from agentcore.tools.file_products import file_product
@@ -30,6 +30,8 @@ from agentcore.workspace.protocol import (
 )
 
 from .errors import (
+    STR_REPLACE_AMBIGUOUS_USER_FACE,
+    STR_REPLACE_NO_MATCH_USER_FACE,
     _error,
     _maybe_channel_dead_error,
     _outside_workspace_error,
@@ -415,17 +417,15 @@ class FileWriteTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
+        workspace_io=True,
     )
 
     @property
     def schema(self) -> ToolSchema:
-        # Schema layer: 这是什么 + HOW。落盘姿势在 consult(long_form_landing)。
+        # Schema layer: 这是什么。
         return ToolSchema(
             name="file_write",
-            description=(
-                "把内容写入文件：创建（含上级目录）或整体覆盖已有文件。"
-                "HOW→consult(long_form_landing)。"
-            ),
+            description="把内容写入文件：创建（含上级目录）或整体覆盖已有文件。",
             parameters={
                 "type": "object",
                 "properties": {
@@ -443,7 +443,7 @@ class FileWriteTool:
                 },
                 "required": ["path", "content"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.GRANTABLE,
         )
 
@@ -599,17 +599,15 @@ class StrReplaceTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
+        workspace_io=True,
     )
 
     @property
     def schema(self) -> ToolSchema:
-        # Schema layer: 这是什么 + HOW。落盘姿势在 consult(long_form_landing)。
+        # Schema layer: 这是什么。
         return ToolSchema(
             name="str_replace",
-            description=(
-                "精确替换已有文件中【完全匹配】的文本片段。"
-                "HOW→consult(long_form_landing)。"
-            ),
+            description="精确替换已有文件中【完全匹配】的文本片段。",
             parameters={
                 "type": "object",
                 "properties": {
@@ -641,7 +639,7 @@ class StrReplaceTool:
                 },
                 "required": ["path", "old_string", "new_string"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.GRANTABLE,
         )
 
@@ -708,7 +706,9 @@ class StrReplaceTool:
         except PathNotFound:
             if coordinator is not None and release_on_fail:
                 coordinator.release(rel_path, context.run_id)
-            return _path_missing_error(f"文件不存在：{rel_path}", start)
+            return _path_missing_error(
+                f"文件不存在：{rel_path}", start, path=rel_path
+            )
         except NotAFile:
             if coordinator is not None and release_on_fail:
                 coordinator.release(rel_path, context.run_id)
@@ -724,7 +724,11 @@ class StrReplaceTool:
             receipt = await _assemble_str_replace_fail_receipt(
                 context, rel_path, old_string, kind="no_match"
             )
-            return _error(receipt, start)
+            return _error(
+                receipt,
+                start,
+                product_face=STR_REPLACE_NO_MATCH_USER_FACE,
+            )
         except AmbiguousMatch as e:
             if coordinator is not None and release_on_fail:
                 coordinator.release(rel_path, context.run_id)
@@ -735,7 +739,11 @@ class StrReplaceTool:
                 kind="ambiguous",
                 match_count=e.count,
             )
-            return _error(receipt, start)
+            return _error(
+                receipt,
+                start,
+                product_face=STR_REPLACE_AMBIGUOUS_USER_FACE,
+            )
         except WorkspaceError as e:
             if coordinator is not None and release_on_fail:
                 coordinator.release(rel_path, context.run_id)

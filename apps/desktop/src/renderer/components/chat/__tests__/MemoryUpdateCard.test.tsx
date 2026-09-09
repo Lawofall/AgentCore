@@ -243,4 +243,80 @@ describe("MemoryUpdateCard", () => {
       },
     });
   });
+
+  it("sends viewers to the recent-updates feed in toolbox prompts", () => {
+    render(
+      <MemoryRouter>
+        <MemoryUpdateCard
+          update={{
+            id: "s-no-target",
+            createdAt: "2026-07-19T12:00:00Z",
+            kind: "semantic",
+            items: [
+              {
+                action: "add",
+                file: "画像",
+                section: "关于用户的事实",
+                scope: "global",
+                content: "倾向使用 bun",
+                target: "",
+              },
+            ],
+          }}
+        />
+      </MemoryRouter>,
+    );
+    const link = screen.getByRole("link", { name: /去看最近更新/ });
+    expect(link.getAttribute("href")).toBe("/toolbox/mine/skills?updates=1");
+    expect(screen.queryByText("全局设定")).toBeNull();
+  });
+
+  it("opens account-layer rows in toolbox 我的, folder rows on the files page", () => {
+    render(
+      <MemoryRouter>
+        <MemoryUpdateCard
+          update={{
+            id: "s-split",
+            createdAt: "2026-07-19T12:00:00Z",
+            kind: "semantic",
+            items: [
+              {
+                action: "add",
+                file: "画像",
+                section: "关于用户的事实",
+                scope: "global",
+                content: "倾向使用 bun",
+                target: "global/profile",
+              },
+              {
+                action: "add",
+                file: "画像",
+                section: "技术栈与工具",
+                scope: "project",
+                content: "本项目用 Vite",
+                target: "project/F99/profile",
+                projectId: "F99",
+              },
+            ],
+          }}
+        />
+      </MemoryRouter>,
+    );
+    const rows = screen.getAllByTitle("在设定中打开画像");
+    fireEvent.click(rows[0] as HTMLElement);
+    expect(navigate).toHaveBeenCalledWith("/toolbox/mine/skills", {
+      state: { openMineLeaf: "global/profile" },
+    });
+    fireEvent.click(rows[1] as HTMLElement);
+    expect(navigate).toHaveBeenCalledWith("/files", {
+      state: {
+        openMemoryLeaf: {
+          path: "project/F99/profile",
+          name: "画像.md",
+          projectId: "F99",
+        },
+        focusWsId: "folder:F99",
+      },
+    });
+  });
 });

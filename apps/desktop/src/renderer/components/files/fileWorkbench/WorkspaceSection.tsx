@@ -91,7 +91,7 @@ import {
  * folder-scope entries inside the tree's ``.agentcore`` row (`renderWorkroomLead`).
  *
  * - `folder:<id>` 文件夹：右键可重命名 / 「删除文件夹」（与侧栏 {@link WorkspaceGroupHeader}
- *   同构）。文件中枢不列 `conv:` scratch（裸聊写盘进自动建桌）。
+ *   同构）。本机 `conv:` 有用户可见文件时进「本机文件夹」（改名=对话标题，删除=删对话）；云端 `conv:` 不列。
  */
 export function WorkspaceSection({
   ws,

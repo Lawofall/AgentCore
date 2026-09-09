@@ -1,3 +1,4 @@
+import { CanvasShell } from "@/components/layout/CanvasShell";
 import { Button, IconButton } from "@/components/ui";
 import { notifyInfo } from "@/lib/toast";
 import {
@@ -24,7 +25,7 @@ import {
   parseScene,
   serializeScene,
 } from "@/whiteboard";
-import { ArrowLeft, Loader2, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -287,47 +288,42 @@ export function WhiteboardCanvasPage() {
   }
 
   return (
-    <div className="absolute inset-0 flex flex-col">
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-background px-3">
-        <IconButton
-          aria-label="返回白板列表"
-          onClick={() => navigate("/whiteboard")}
-        >
-          <ArrowLeft size={16} />
-        </IconButton>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => void commitTitle()}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") e.currentTarget.blur();
-          }}
-          placeholder="未命名白板"
-          aria-label="白板标题"
-          className="min-w-0 max-w-xs flex-1 rounded-lg bg-transparent px-2 py-1 text-sm font-medium text-foreground outline-none hover:bg-accent focus:bg-accent"
-        />
-        <span className="ml-auto text-xs text-muted-foreground">
-          {STATUS_TEXT[status]}
-        </span>
-      </header>
-
-      {conflict ? (
-        <div className="flex shrink-0 items-center gap-3 border-b border-primary/30 bg-primary/10 px-3 py-2">
-          <span className="text-xs text-foreground">
-            此白板已在别处更新，为避免覆盖已暂停自动保存。
-          </span>
-          <Button
-            variant="primary"
-            size="sm"
-            className="ml-auto"
-            onClick={fetchBoard}
-          >
-            重新加载
-          </Button>
-        </div>
-      ) : null}
-
-      <div className="relative flex-1">
+    <>
+      <CanvasShell
+        backAriaLabel="返回白板列表"
+        onBack={() => navigate("/whiteboard")}
+        title={
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => void commitTitle()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+            placeholder="未命名白板"
+            aria-label="白板标题"
+            className="min-w-0 max-w-xs flex-1 rounded-lg bg-transparent px-2 py-1 text-sm font-medium text-foreground outline-none hover:bg-accent focus:bg-accent"
+          />
+        }
+        status={STATUS_TEXT[status]}
+        banner={
+          conflict ? (
+            <div className="flex shrink-0 items-center gap-3 border-b border-primary/30 bg-primary/10 px-3 py-2">
+              <span className="text-xs text-foreground">
+                此白板已在别处更新，为避免覆盖已暂停自动保存。
+              </span>
+              <Button
+                variant="primary"
+                size="sm"
+                className="ml-auto"
+                onClick={fetchBoard}
+              >
+                重新加载
+              </Button>
+            </div>
+          ) : null
+        }
+      >
         {board && initialData ? (
           <WhiteboardCanvas
             key={board.id}
@@ -342,7 +338,7 @@ export function WhiteboardCanvasPage() {
             <Loader2 className="animate-spin text-muted-foreground" size={24} />
           </div>
         )}
-      </div>
+      </CanvasShell>
 
       {textExpand ? (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm">
@@ -361,6 +357,6 @@ export function WhiteboardCanvasPage() {
           </div>
         </div>
       ) : null}
-    </div>
+    </>
   );
 }

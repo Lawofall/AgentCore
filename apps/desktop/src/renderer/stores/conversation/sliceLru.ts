@@ -1,9 +1,11 @@
 /**
  * In-memory conversation-slice LRU for warm reopen after switch.
- * Busy slices (generating / pending interaction) are never evicted.
+ * Busy slices (generating / still-writing turnPhase / pending interaction)
+ * are never evicted.
  */
 import { useInteractionStore } from "@/stores/interactions";
 import { DRAFT_KEY } from "./runtime";
+import { isWritingTurnPhase } from "./turnPhase";
 import type { ConversationRuntime } from "./types";
 
 /** Max idle non-active conversation slices retained after switch. */
@@ -14,7 +16,7 @@ export function isConversationSliceBusy(
   slice: ConversationRuntime | undefined,
 ): boolean {
   if (!slice) return false;
-  if (slice.isGenerating) return true;
+  if (slice.isGenerating || isWritingTurnPhase(slice.turnPhase)) return true;
   const pending = useInteractionStore.getState().listPending(key);
   return pending.length > 0;
 }

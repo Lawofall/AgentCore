@@ -14,8 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.db.models import Board
 
-from ._base import _UNSET
-
 
 class BoardRepository:
     def __init__(self, session: AsyncSession):
@@ -26,9 +24,8 @@ class BoardRepository:
         *,
         user_id: str,
         title: str,
-        folder_id: str | None = None,
     ) -> Board:
-        board = Board(user_id=user_id, title=title, folder_id=folder_id, scene={}, version=1)
+        board = Board(user_id=user_id, title=title, scene={}, version=1)
         self._session.add(board)
         await self._session.commit()
         await self._session.refresh(board)
@@ -78,20 +75,13 @@ class BoardRepository:
         *,
         user_id: str,
         title: str | None = None,
-        folder_id: str | None | object = _UNSET,
     ) -> Board | None:
-        """Rename a board and/or move it between folders (scene untouched).
-
-        ``folder_id`` uses the _UNSET sentinel so an omitted field is left alone while
-        an explicit None moves the board to ungrouped (top-level list).
-        """
+        """Rename a board (scene untouched)."""
         board = await self.get_by_id(board_id, user_id=user_id)
         if not board:
             return None
         if title is not None:
             board.title = title
-        if folder_id is not _UNSET:
-            board.folder_id = folder_id  # type: ignore[assignment]
         await self._session.commit()
         await self._session.refresh(board)
         return board

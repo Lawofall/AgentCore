@@ -4,7 +4,6 @@ import {
   workerProgress,
   workersAreTerminal,
 } from "@/components/chat/teamSynthesisPhase";
-import { failureDetailSentence } from "@/components/graph/agentNode/shared";
 import {
   deriveCaptainStatus,
   hasActiveRunningWorkers,
@@ -12,16 +11,8 @@ import {
 } from "@/components/graph/helpers";
 import { Badge, Button, IconButton as UiIconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { copyText } from "@/lib/clipboard";
 import { formatDuration, formatDurationSec } from "@/lib/format";
 import { runningElapsedSec } from "@/lib/runningElapsed";
-import {
-  buildSupportDiagnosticPack,
-  formatSupportDiagnosticText,
-  precedingUserMessageId,
-  supportDiagnosticExtrasFromError,
-} from "@/lib/supportDiagnostics";
-import { notifySuccess } from "@/lib/toast";
 import {
   PARTIAL_STATUS_LABEL,
   arbitrateTurnOutcome,
@@ -31,7 +22,6 @@ import {
 } from "@/lib/turnOutcome";
 import { continuePausedTurn } from "@/services/turns/continuePaused";
 import {
-  getActiveRuntime,
   isTerminalPhase,
   useActiveError,
   useActiveTurnPhase,
@@ -48,9 +38,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
-  ChevronRight,
   ChevronUp,
-  Copy,
   Loader2,
   Maximize2,
   MessagesSquare,
@@ -95,6 +83,9 @@ function canPaintTeamCompleted(execution: Execution): boolean {
  * User-stop is not an error; rate-limit / partial must not paint「已停止」.
  * Empty interrupt (`send_next`) is idle chrome — verdict lives on the composer.
  * Partial + rate-limit keeps this scoreboard; why + 排查包 follow `showComposerHint`.
+ * Team fail / partial 排查包 hangs on bubble「更多」, not this strip.
+ * Failure face is the same thin scoreboard (失败 + n/m + duration);
+ * task brief / failure sentence live on the node and dock.
  * stopping：可见「停止中」、冻住用时。工人全终态且图已
  * cancelled、仲裁未判 partial/error/限流 → 已停止，不等气泡 finishReason。
  *
@@ -163,9 +154,8 @@ export function StatusStrip(props: StatusStripProps) {
     credentialSource:
       scopedAssistant?.error?.context?.credential_source ?? null,
   });
-  const showSupportPack = turnOutcome.supportPackHost === "strip";
   if (turnOutcome.kind === "partial") {
-    return <PartialStrip {...props} showSupportPack={showSupportPack} />;
+    return <PartialStrip {...props} />;
   }
   if (turnOutcome.kind === "paused") {
     if (hasActiveRunningRuns(props.execution)) {
@@ -192,14 +182,7 @@ export function StatusStrip(props: StatusStripProps) {
     );
   }
   if (turnOutcome.showStripFailure) {
-    return (
-      <FailureStrip
-        {...props}
-        verdictMessage={turnOutcome.message}
-        sessionError={sessionError}
-        showSupportPack={showSupportPack}
-      />
-    );
+    return <FailureStrip {...props} />;
   }
   if (turnOutcome.showStripStopped) {
     return <CompletedStrip {...props} stopped />;
@@ -473,54 +456,6 @@ function PausedStrip({
   );
 }
 
-function StripSupportPack() {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
-  const scopeId = useExecutionScope();
-  const scopedAssistant = useConversationStore((s) => {
-    const cid = s.currentConversationId;
-    if (!cid || !scopeId) return null;
-    const messages = s.byId?.[cid]?.messages;
-    if (!messages) return null;
-    return (
-      messages.find(
-        (m) =>
-          m.role === "assistant" &&
-          (m.id === scopeId || m.serverMessageId === scopeId),
-      ) ?? null
-    );
-  });
-  const ids = {
-    conversationId,
-    messageId: scopeId ?? scopedAssistant?.id,
-    userMessageId: scopedAssistant
-      ? precedingUserMessageId(getActiveRuntime().messages, scopedAssistant.id)
-      : null,
-    traceId: scopedAssistant?.traceId,
-    executionId: scopedAssistant?.executionId,
-    ...supportDiagnosticExtrasFromError(scopedAssistant?.error),
-  };
-  const diagnosticText = formatSupportDiagnosticText(ids);
-  if (!diagnosticText) return null;
-  return (
-    <Button
-      variant="ghost"
-      className="shrink-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-      icon={<Copy size={13} />}
-      data-testid="status-strip-support-pack"
-      onClick={() => {
-        void buildSupportDiagnosticPack(ids).then((text) => {
-          if (!text) return;
-          void copyText(text).then((ok) => {
-            if (ok) notifySuccess("已复制排查包");
-          });
-        });
-      }}
-    >
-      复制排查包
-    </Button>
-  );
-}
-
 /**
  * Empty interrupt (`send_next`): n/m chrome only. Verdict lives on the composer.
  * No spinner, no「已停止」, no failure strip.
@@ -609,10 +544,7 @@ function PartialStrip({
   expanded,
   onToggle,
   onMaximize,
-  showSupportPack,
-}: StatusStripProps & {
-  showSupportPack: boolean;
-}) {
+}: StatusStripProps) {
   const frames = useActiveExecField((rt) => rt.frames);
   const { completed, total } = execution.progress;
   const ms = elapsedMs(frames);
@@ -630,7 +562,6 @@ function PartialStrip({
             {`${completed}/${total}${duration ? ` · 用时 ${duration}` : ""}`}
           </span>
         </span>
-        {showSupportPack ? <StripSupportPack /> : null}
         <StripControls
           execution={execution}
           expanded={expanded}
@@ -647,138 +578,42 @@ function FailureStrip({
   expanded,
   onToggle,
   onMaximize,
-  verdictMessage,
-  sessionError,
-  showSupportPack,
-}: StatusStripProps & {
-  verdictMessage: string | null;
-  sessionError: string | null;
-  showSupportPack: boolean;
-}) {
+}: StatusStripProps) {
   const detached = useActiveExecField((rt) => rt.executionDetached);
-  // Long task briefs must not explode the strip —
-  // default clamp; click to expand.
-  const [detailOpen, setDetailOpen] = useState(false);
-
-  const failedRun = execution.runs.find((s) => s.status === "failed") ?? null;
-  const failedAgent = failedRun
-    ? (execution.agents.find((a) => a.id === failedRun.agentId) ?? null)
-    : null;
-
-  // Prefer the failed run, curated by failureKind — `run.error` is model-facing
-  // (`str(exception)` / engine gate names) and reading it as advice sends users hunting
-  // for material they never owed. Else the arbitrator verdict (same sentence as the
-  // bubble / session banner). `run.error` is never the user face.
-  const errorDetail = failedRun
-    ? failureDetailSentence(failedRun.failureKind, failedRun.productLanded)
-    : verdictMessage?.trim() ||
-      sessionError?.trim() ||
-      "未获取到具体错误信息。";
-
-  const taskText = failedRun?.task?.trim() ?? "";
-  const canToggleDetail =
-    taskText.length > 72 ||
-    errorDetail.length > 96 ||
-    errorDetail.includes("\n");
+  const frames = useActiveExecField((rt) => rt.frames);
+  const { completed, total } = execution.progress;
+  const ms = elapsedMs(frames);
+  const duration = ms > 0 ? formatDuration(ms) : "";
 
   return (
     <div className="px-3 py-1.5" data-testid="status-strip-failed">
-      {detached ? (
-        <div
-          className="mb-1.5 flex items-center gap-2 text-xs text-foreground"
-          data-testid="status-strip-failed-detached"
-        >
-          <Pause size={13} className="shrink-0 text-primary" aria-hidden />
-          <Badge tone="primary" pill className="font-medium">
-            后台
-          </Badge>
-          <span className="text-muted-foreground">
-            {execution.progress.completed}/{execution.progress.total}
-          </span>
-        </div>
-      ) : null}
       <div className="flex items-center gap-2">
         <LifeIcon label="失败">
           <AlertTriangle size={14} className="text-destructive" />
         </LifeIcon>
-        <span className="flex-1 text-sm text-foreground">
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm text-foreground">
           <span className="font-medium">失败</span>
+          {detached ? (
+            <Badge
+              tone="primary"
+              pill
+              className="font-medium"
+              data-testid="status-strip-failed-detached"
+            >
+              后台
+            </Badge>
+          ) : null}
+          {isDebate(execution) && <DebateTag />}
+          <span className="text-muted-foreground">
+            {`${completed}/${total}${duration ? ` · 用时 ${duration}` : ""}`}
+          </span>
         </span>
-        {showSupportPack ? <StripSupportPack /> : null}
         <StripControls
           execution={execution}
           expanded={expanded}
           onToggle={onToggle}
           onMaximize={onMaximize}
         />
-      </div>
-
-      <div className="mt-1.5 rounded-lg bg-muted/40 px-3 py-2 text-sm">
-        {canToggleDetail ? (
-          <button
-            type="button"
-            onClick={() => setDetailOpen((v) => !v)}
-            aria-expanded={detailOpen}
-            aria-label={detailOpen ? "收起失败详情" : "展开失败详情"}
-            data-testid="status-strip-failed-detail-toggle"
-            className="flex w-full items-start gap-1.5 text-left"
-          >
-            <div className="min-w-0 flex-1">
-              {failedAgent || failedRun ? (
-                <p
-                  className={
-                    detailOpen
-                      ? "whitespace-pre-wrap break-words text-foreground"
-                      : "line-clamp-2 text-foreground"
-                  }
-                >
-                  {failedAgent && (
-                    <span className="font-medium">{failedAgent.role}</span>
-                  )}
-                  {taskText ? (
-                    <span className="text-muted-foreground"> · {taskText}</span>
-                  ) : null}
-                </p>
-              ) : (
-                <p className="text-foreground">执行过程中出现错误</p>
-              )}
-              <p
-                className={
-                  detailOpen
-                    ? "mt-1 whitespace-pre-wrap break-words text-xs text-destructive"
-                    : "mt-1 line-clamp-2 break-words text-xs text-destructive"
-                }
-              >
-                {errorDetail}
-              </p>
-            </div>
-            <ChevronRight
-              size={14}
-              className={`mt-0.5 shrink-0 text-muted-foreground transition-transform ${
-                detailOpen ? "rotate-90" : ""
-              }`}
-              aria-hidden
-            />
-          </button>
-        ) : (
-          <>
-            {failedAgent || failedRun ? (
-              <p className="text-foreground">
-                {failedAgent && (
-                  <span className="font-medium">{failedAgent.role}</span>
-                )}
-                {taskText ? (
-                  <span className="text-muted-foreground"> · {taskText}</span>
-                ) : null}
-              </p>
-            ) : (
-              <p className="text-foreground">执行过程中出现错误</p>
-            )}
-            <p className="mt-1 whitespace-pre-wrap break-words text-xs text-destructive">
-              {errorDetail}
-            </p>
-          </>
-        )}
       </div>
     </div>
   );

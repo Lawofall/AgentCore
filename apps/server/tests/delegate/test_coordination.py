@@ -1674,7 +1674,7 @@ def test_all_completed_inject_write_form_without_files_is_not_delivery():
                 run_id="w1",
                 role="工程师",
                 task="做图标",
-                deliverable=Deliverable(form="workspace", artifacts=["build/icon.ico"]),
+                deliverable=Deliverable(artifacts=["build/icon.ico"]),
             )
         ]
     )
@@ -1730,7 +1730,6 @@ def test_all_completed_inject_skips_audit_nudge_for_brief_and_writing():
                 task="摸底",
                 role="方向专员",
                 deliverable=Deliverable(
-                    form="files",
                     artifacts=["AgentCore/文档/research/甲方向笔记.md"],
                 ),
             ),
@@ -1739,7 +1738,6 @@ def test_all_completed_inject_skips_audit_nudge_for_brief_and_writing():
                 task="摸底",
                 role="方向专员",
                 deliverable=Deliverable(
-                    form="files",
                     artifacts=["AgentCore/文档/research/乙方向笔记.md"],
                 ),
             ),
@@ -1764,7 +1762,6 @@ def test_all_completed_inject_skips_audit_nudge_for_brief_and_writing():
                 task="成文",
                 role="撰稿人",
                 deliverable=Deliverable(
-                    form="files",
                     artifacts=["AgentCore/文档/research/报告.md"],
                 ),
             )
@@ -1795,7 +1792,6 @@ def test_all_completed_inject_omits_audit_nudge_even_for_audit_wave():
                 task="审计",
                 role="代码审计员",
                 deliverable=Deliverable(
-                    form="files",
                     artifacts=["AgentCore/文档/reviews/code-audit.md"],
                 ),
             )

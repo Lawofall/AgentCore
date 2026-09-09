@@ -43,6 +43,20 @@ describe("buildReceivedContextCatalog", () => {
     expect(groups.find((g) => g.id === "standing")).toBeUndefined();
   });
 
+  it("buckets 本回合工具 with request under 本回合", () => {
+    const groups = buildReceivedContextCatalog(
+      [
+        block({ channel: "system", body: "核" }),
+        block({ channel: "tools", body: "**web_search**" }),
+        block({ channel: "request", body: "目标" }),
+      ],
+      { includeSystem: true },
+    );
+    const turn = groups.find((g) => g.id === "turn");
+    expect(turn?.items.map((i) => i.channel)).toEqual(["tools", "request"]);
+    expect(turn?.items[0]?.label).toBe("本回合工具");
+  });
+
   it("labels material rows with source role", () => {
     const groups = buildReceivedContextCatalog(
       [
@@ -130,6 +144,36 @@ describe("defaultCatalogItemId", () => {
     expect(item?.channel).toBe("request");
   });
 
+  it("lists 常驻指令 first and selects it over 本回合工具", () => {
+    const groups = buildReceivedContextCatalog(
+      [
+        block({ channel: "system", body: "核" }),
+        block({ channel: "tools", body: "**web_search**" }),
+        block({ channel: "request", body: "目标" }),
+      ],
+      { includeSystem: true },
+    );
+    expect(groups.map((g) => g.id)).toEqual(["standing", "turn"]);
+    expect(flattenCatalog(groups)[0]?.channel).toBe("system");
+    const id = defaultCatalogItemId(groups);
+    const item = flattenCatalog(groups).find((i) => i.id === id);
+    expect(item?.channel).toBe("system");
+    expect(item?.label).toBe("常驻指令");
+  });
+
+  it("prefers 常驻指令 over request when no tools row", () => {
+    const groups = buildReceivedContextCatalog(
+      [
+        block({ channel: "system", body: "核" }),
+        block({ channel: "request", body: "目标" }),
+      ],
+      { includeSystem: true },
+    );
+    const id = defaultCatalogItemId(groups);
+    const item = flattenCatalog(groups).find((i) => i.id === id);
+    expect(item?.channel).toBe("system");
+  });
+
   it("falls back to the first TOC row when there is no request", () => {
     const groups = buildReceivedContextCatalog(
       [
@@ -147,6 +191,23 @@ describe("defaultCatalogItemId", () => {
     const groups = buildReceivedContextCatalog(
       [
         block({ channel: "request", body: "目标" }),
+        block({
+          channel: "dependency",
+          source_role: "调研员",
+          body: "上游",
+        }),
+      ],
+      { includeSystem: true },
+    );
+    const id = defaultCatalogItemId(groups, { preferMaterial: true });
+    const item = flattenCatalog(groups).find((i) => i.id === id);
+    expect(item?.channel).toBe("dependency");
+  });
+
+  it("preferMaterial still wins over 本回合工具", () => {
+    const groups = buildReceivedContextCatalog(
+      [
+        block({ channel: "tools", body: "**web_search**" }),
         block({
           channel: "dependency",
           source_role: "调研员",

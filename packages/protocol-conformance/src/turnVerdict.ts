@@ -13,7 +13,7 @@ import { GATE_INTERACTION_KINDS } from "./projectedTurn";
 export type TurnSupportPackHost =
   | "none"
   | "bubble"
-  | "strip"
+  | "more"
   | "composer"
   | "session";
 
@@ -29,7 +29,7 @@ export type ProjectedTurnVerdict = {
 
 /**
  * Hand-filled golden can invent combos the arbitrator never emits.
- * `bubble` requires no team strip; `strip` requires one.
+ * `bubble` requires no team strip; `more` requires one.
  */
 export function turnVerdictHostContradiction(
   verdict: Pick<ProjectedTurnVerdict, "hasTeamStrip" | "supportPackHost">,
@@ -37,8 +37,8 @@ export function turnVerdictHostContradiction(
   if (verdict.hasTeamStrip === true && verdict.supportPackHost === "bubble") {
     return 'hasTeamStrip=true 与 supportPackHost="bubble" 互斥（bubble 仅在无团队条时成立）';
   }
-  if (verdict.hasTeamStrip === false && verdict.supportPackHost === "strip") {
-    return 'hasTeamStrip=false 与 supportPackHost="strip" 互斥（strip 仅在有团队条时成立）';
+  if (verdict.hasTeamStrip === false && verdict.supportPackHost === "more") {
+    return 'hasTeamStrip=false 与 supportPackHost="more" 互斥（more 仅在有团队条时成立）';
   }
   return null;
 }

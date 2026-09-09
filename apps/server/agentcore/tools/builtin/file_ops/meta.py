@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.file_products import file_product
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -43,6 +43,7 @@ class FileDeleteTool:
         audience=AUDIENCE_BOTH,
         # 删除只会让台账里的 path 消失，不产生新产物。
         file_products=FileProductsContract.NO_PRODUCT,
+        workspace_io=True,
     )
 
     @property
@@ -70,7 +71,7 @@ class FileDeleteTool:
                 },
                 "required": ["path"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.GRANTABLE,
         )
 
@@ -121,7 +122,9 @@ class FileDeleteTool:
         except PathNotFound:
             if coordinator is not None and release_on_fail:
                 coordinator.release(rel_path, context.run_id)
-            return _path_missing_error(f"路径不存在：{rel_path}", start)
+            return _path_missing_error(
+                f"路径不存在：{rel_path}", start, path=rel_path
+            )
         except WorkspaceError as e:
             if coordinator is not None and release_on_fail:
                 coordinator.release(rel_path, context.run_id)
@@ -154,6 +157,9 @@ class FileMoveTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
+        workspace_io=True,
+        resident=False,
+        catalog_summary="工作区移动文件或目录",
     )
 
     @property
@@ -177,7 +183,7 @@ class FileMoveTool:
                 },
                 "required": ["source", "destination"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.GRANTABLE,
         )
 
@@ -259,7 +265,9 @@ class FileMoveTool:
                     coordinator.release(source, context.run_id)
                 if release_dst:
                     coordinator.release(destination, context.run_id)
-            return _path_missing_error(f"源路径不存在：{source}", start)
+            return _path_missing_error(
+                f"源路径不存在：{source}", start, path=source
+            )
         except AlreadyExists:
             if coordinator is not None:
                 if release_src:
@@ -305,6 +313,9 @@ class FileCopyTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
+        workspace_io=True,
+        resident=False,
+        catalog_summary="工作区复制文件或目录",
     )
 
     @property
@@ -333,7 +344,7 @@ class FileCopyTool:
                 },
                 "required": ["source", "destination"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.GRANTABLE,
         )
 
@@ -388,7 +399,9 @@ class FileCopyTool:
                 str(e), start, location=context.backend.location, reason=str(e)
             )
         except PathNotFound:
-            return _path_missing_error(f"源路径不存在：{source}", start)
+            return _path_missing_error(
+                f"源路径不存在：{source}", start, path=source
+            )
         except AlreadyExists:
             return _error(
                 f"目标已存在：{destination}。请换一个不存在的路径，或先删除它。",
@@ -420,6 +433,7 @@ class MkdirTool:
         audience=AUDIENCE_BOTH,
         # 只建目录：台账记的是文件产物，空目录不是交付物。
         file_products=FileProductsContract.NO_PRODUCT,
+        workspace_io=True,
     )
 
     @property
@@ -442,7 +456,7 @@ class MkdirTool:
                 },
                 "required": ["path"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.GRANTABLE,
         )
 

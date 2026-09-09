@@ -9,6 +9,7 @@ from agentcore.conversation.common import preview
 from agentcore.conversation.turn_persistence import (
     close_user_stop_turn,
     create_assistant_placeholder,
+    persist_placeholder_abort,
     persist_turn_result,
     salvage_incomplete_turn,
 )
@@ -81,8 +82,10 @@ async def run_and_persist(
     """Run the pipeline, then persist the assistant reply (+ derived title / stage_card).
 
     Returns the pipeline result dict (including ``message_id`` for this turn) on a
-    normal completion; ``None`` only if the turn never produced a result (cancel /
-    early abort paths that raise instead).
+    normal completion, or a failed result when the presence gate aborts after the
+    placeholder exists (row is stamped ``failed`` so hydrate does not keep spinning).
+    ``None`` only if the turn never produced a result (cancel / early abort paths
+    that raise instead).
 
     ``continue_message_id`` runs this turn ON an existing assistant row instead of a
     freshly minted one (崩溃重驱恢复收口 · D5 归属原回合): the placeholder insert is
@@ -153,9 +156,27 @@ async def run_and_persist(
                 reset_prepare_local_io_deadline,
             )
 
-            raise_if_local_workspace_fulfiller_absent(
-                user_id=user_id, backend=backend
-            )
+            try:
+                raise_if_local_workspace_fulfiller_absent(
+                    user_id=user_id, backend=backend
+                )
+            except Exception as e:
+                # Placeholder already exists. Persist failed so a later open /
+                # follow does not treat the row as still running.
+                return await persist_placeholder_abort(
+                    exc=e,
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    folder_id=folder_id,
+                    backend=backend,
+                    sink=sink,
+                    user_message=user_message,
+                    llm_credentials=llm_credentials,
+                    trace_id=trace_id,
+                    turn_id=attempt_id,
+                    message_id=message_id,
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                )
             # One prepare-phase local IO wall clock shared by the baseline below and
             # prepare's channel probes. Only the spans that opt in are capped — the
             # pipeline's execution phase (tools, cross-desk delegate re-probes on a
@@ -478,9 +499,25 @@ async def run_mechanism_direct_and_persist(
                 reset_prepare_local_io_deadline,
             )
 
-            raise_if_local_workspace_fulfiller_absent(
-                user_id=user_id, backend=backend
-            )
+            try:
+                raise_if_local_workspace_fulfiller_absent(
+                    user_id=user_id, backend=backend
+                )
+            except Exception as e:
+                return await persist_placeholder_abort(
+                    exc=e,
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    folder_id=folder_id,
+                    backend=backend,
+                    sink=sink,
+                    user_message=user_message,
+                    llm_credentials=llm_credentials,
+                    trace_id=trace_id,
+                    turn_id=attempt_id,
+                    message_id=message_id,
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                )
             # Same posture as the chat turn: one prepare clock, in force only inside
             # the baseline span below and in prepare — never over workflow execution.
             budget_token = None

@@ -1,9 +1,10 @@
 """On-demand tool roster — listed in ``<按需目录>``, omitted from the
 opening OpenAI tool table until ``consult(name)`` (or a family sibling) promotes them.
 
-Not an intent classifier: the builtin split is a fixed name set, identical for
-every task. Discovered MCP tools (``mcp_*``) join the same gate by prefix so
-their schemas stay off the opening table; the catalog still lists them.
+Not an intent classifier: the builtin split is ``ToolRegistration.resident``
+(False = defer), identical for every task. Discovered MCP tools (``mcp_*``)
+join the same gate by prefix so their schemas stay off the opening table;
+the catalog still lists them.
 Tools stay registered (catalog / execute / skill gates / capability lines); only
 ``ToolRegistry.get_openai_definitions`` withholds them until offered.
 """
@@ -12,66 +13,61 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-
-# ---------------------------------------------------------------------------
-# Roster (single source for builtins). Adding a name here is what moves a
-# builtin off the always-offered table. Keep the tool class, schema, and
-# execute path intact. Dynamic MCP names are not listed here — ``is_on_demand_tool``
-# recognizes the ``mcp_`` prefix produced by ``sanitize_mcp_tool_name``.
-#
-# Defer = optional capability face (consult first is an extra round, not a
-# missing channel). Do NOT defer a mode primitive the runtime already
-# always-grants when assembled: escalate/handoff
-# (already resident). If registered ⇔ the mode is on, opening offer must include it.
-# ---------------------------------------------------------------------------
-
-ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
-    {
-        # Host face — single ``host`` (action policy table).
-        "host",
-        # Browser face — single ``browser`` (action policy table).
-        "browser",
-        # run is always-on (coding main path). Do not defer.
-        # Export / fetch / unpack (not the daily write loop).
-        "md_to_docx",
-        "md_to_pdf",
-        "archive_extract",
-        "archive_create",
-        "download_url",
-        # Rare CEO folder admin (list/resolve/peek stay resident).
-        "create_folder",
-        "delete_folder",
-    }
-)
-
-ON_DEMAND_SUMMARIES: dict[str, str] = {
-    "host": "本机排查 / 修理 / 查看这台电脑",
-    "browser": "右坞真实浏览器",
-    "md_to_docx": "导出 Word",
-    "md_to_pdf": "导出 PDF",
-    "archive_extract": "工作区 zip 解压到指定目录",
-    "archive_create": "工作区文件/目录打成 zip",
-    "download_url": "HTTP(S) URL 落盘到工作区相对路径",
-    "create_folder": "新建云文件夹",
-    "delete_folder": "软删文件夹",
-}
+from functools import lru_cache
 
 # Consulting any member offers every assembled sibling in the same family.
 _FAMILIES: tuple[frozenset[str], ...] = (
     frozenset({"md_to_docx", "md_to_pdf"}),
     frozenset({"archive_extract", "archive_create"}),
     frozenset({"create_folder", "delete_folder"}),
+    frozenset({"file_move", "file_copy", "file_batch"}),
+    frozenset({"board_ops", "board_read"}),
 )
 
 _FAMILY_LABELS: dict[frozenset[str], str] = {
     frozenset({"md_to_docx", "md_to_pdf"}): "导出 Word/PDF",
     frozenset({"archive_extract", "archive_create"}): "压缩包",
     frozenset({"create_folder", "delete_folder"}): "文件夹增删",
+    frozenset({"file_move", "file_copy", "file_batch"}): "搬移/批量",
+    frozenset({"board_ops", "board_read"}): "白板",
 }
 
 _CONSULT_TOOL_NAMES = frozenset(
     {"consult", "consult_memory", "consult_skill", "consult_rule"}
 )
+
+
+@lru_cache(maxsize=1)
+def _declared_on_demand() -> tuple[frozenset[str], dict[str, str], dict[str, str]]:
+    """Builtin names / summaries / faces where ``resident`` is False."""
+    from agentcore.tools.registration import (
+        declared_tool_name,
+        declared_tool_schema,
+        declared_tools,
+        tool_registration,
+    )
+
+    names: set[str] = set()
+    summaries: dict[str, str] = {}
+    faces: dict[str, str] = {}
+    for cls in declared_tools():
+        reg = tool_registration(cls)
+        if reg.resident:
+            continue
+        name = declared_tool_name(cls)
+        names.add(name)
+        summaries[name] = reg.catalog_summary
+        faces[name] = declared_tool_schema(cls).face.value
+    return frozenset(names), summaries, faces
+
+
+def on_demand_builtin_names() -> frozenset[str]:
+    return _declared_on_demand()[0]
+
+
+def on_demand_face(name: str) -> str:
+    """``ToolFace`` value for a builtin on-demand name; empty if unknown / MCP."""
+    return _declared_on_demand()[2].get(name, "")
 
 
 def is_mcp_tool_name(name: str) -> bool:
@@ -80,7 +76,7 @@ def is_mcp_tool_name(name: str) -> bool:
 
 
 def is_on_demand_tool(name: str) -> bool:
-    return name in ON_DEMAND_TOOL_NAMES or is_mcp_tool_name(name)
+    return name in on_demand_builtin_names() or is_mcp_tool_name(name)
 
 
 def family_of(name: str, *, registry: object | None = None) -> frozenset[str]:
@@ -220,8 +216,8 @@ def _consult_name_arg(arguments: str) -> str:
 
 
 def on_demand_summary(name: str, *, description: str = "") -> str:
-    """One-line catalog text. Builtins use the static table; MCP uses live schema."""
-    static = ON_DEMAND_SUMMARIES.get(name)
+    """One-line catalog text. Builtins use registration; MCP uses live schema."""
+    static = _declared_on_demand()[1].get(name)
     if static:
         return static
     if is_mcp_tool_name(name):
@@ -264,3 +260,12 @@ def _ceo_how_for(name: str) -> str:
     from agentcore.runtime.resolve.prompt.ceo_core import capability_how_suffix
 
     return capability_how_suffix({name})
+
+
+def __getattr__(name: str) -> object:
+    """Derived roster aliases for tests (``ON_DEMAND_TOOL_NAMES`` / summaries)."""
+    if name == "ON_DEMAND_TOOL_NAMES":
+        return on_demand_builtin_names()
+    if name == "ON_DEMAND_SUMMARIES":
+        return dict(_declared_on_demand()[1])
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

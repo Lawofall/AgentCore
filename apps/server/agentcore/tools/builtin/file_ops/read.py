@@ -6,7 +6,7 @@ import json
 import time
 from typing import Any
 
-from agentcore.core.types import PermissionAxes, ToolApproval, ToolCategory
+from agentcore.core.types import PermissionAxes, ToolApproval, ToolFace
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
     AUDIENCE_BOTH,
@@ -173,7 +173,7 @@ def _spreadsheet_skip_error(path: str, *, code_execute_assembled: bool) -> str:
     return (
         f"`{path}` 是表格/分隔数据文件，file_read 不自动抽文本。"
         "本回合没有按单元格解析表格的执行工具；"
-        "请用已给的结构面写原件结构报告并落盘待跑变换脚本，不要手抄数据冒充已整理的表。"
+        "请用已给的列名、类型和样例写原件结构报告并落盘待跑变换脚本，不要手抄数据冒充已整理的表。"
     )
 
 
@@ -371,6 +371,7 @@ async def _file_not_found_error(
     return _path_missing_error(
         await enrich_missing_path_message(context, rel_path, base=base),
         start,
+        path=rel_path,
     )
 
 
@@ -440,6 +441,7 @@ class FileReadTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.READ_ONLY,
+        workspace_io=True,
     )
 
     @property
@@ -491,7 +493,7 @@ class FileReadTool:
                 },
                 "required": ["path"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.NEVER,
         )
 
@@ -895,6 +897,7 @@ class FileListTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.READ_ONLY,
+        workspace_io=True,
     )
 
     @property
@@ -924,7 +927,7 @@ class FileListTool:
                 },
                 "required": [],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.NEVER,
         )
 

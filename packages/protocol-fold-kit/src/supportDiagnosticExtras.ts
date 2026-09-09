@@ -20,7 +20,7 @@ export type SupportErrorContext = {
   upstream_body_preview?: string | null;
 };
 
-/** Ids + optional extras for a paste-ready「排查包」(bubble / composer / strip). */
+/** Ids + optional extras for a paste-ready「排查包」(bubble / composer / more). */
 export type SupportDiagnosticIds = {
   conversationId?: string | null;
   /** Prefer preceding user bubble when copying from an assistant error/regenerate face. */

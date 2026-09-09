@@ -62,7 +62,7 @@ def test_map_fanout_fans_out_notes_without_write_pipeline():
     }
     for t in tasks:
         d = t["deliverable"]
-        assert d["form"] == "files"
+        assert "form" not in d
         assert d["artifacts"][0] in expected
         assert "方向笔记" in t["task"]
         assert "终稿" in t["task"]
@@ -125,7 +125,7 @@ def test_available_playbooks_lists_map_fanout_before_cite_write_review_semantics
     assert "点名审校" in listing or "可提交" in listing
     assert "正式长文" in listing or "可提交" in listing
     assert "勿默认学术审校" in listing
-    assert "consult(team_delivery_env)" in listing
+    assert "consult(delivery)" in listing
     assert "reportlab" not in listing
 
 
@@ -148,7 +148,7 @@ def test_cite_write_review_fans_out_one_researcher_per_angle_then_outline_then_w
     assert by_id["review"]["role"] == "学术审校员"
     # 审校落盘契约写死在 playbook（form=files + reviews/），不靠运行时扫角色名抬契约。
     review_d = by_id["review"]["deliverable"]
-    assert review_d["form"] == "files"
+    assert "form" not in review_d
     assert "requires_files" not in review_d
     assert "name" not in review_d
     assert "min_length" not in review_d
@@ -160,7 +160,7 @@ def test_cite_write_review_fans_out_one_researcher_per_angle_then_outline_then_w
     assert by_id["outline"]["checkpoint_after"] is True
     assert "requires_files" not in by_id["write"]["deliverable"]
     assert "name" not in by_id["write"]["deliverable"]
-    assert by_id["write"]["deliverable"]["form"] == "files"
+    assert "form" not in by_id["write"]["deliverable"]
     assert by_id["write"]["deliverable"]["artifacts"] == ["AgentCore/文档/research/报告.md"]
     assert "单主文件" in by_id["write"]["task"]
     assert "AgentCore/文档/research/报告.md" in by_id["write"]["task"]
@@ -179,7 +179,7 @@ def test_cite_write_review_fans_out_one_researcher_per_angle_then_outline_then_w
     }
     for rid in research_ids:
         d = by_id[rid]["deliverable"]
-        assert d["form"] == "files"
+        assert "form" not in d
         assert d["artifacts"] and d["artifacts"][0] in expected_research_artifacts
         assert d["artifacts"][0] in by_id[rid]["task"]
         assert "file_write" in by_id[rid]["task"]
@@ -187,7 +187,7 @@ def test_cite_write_review_fans_out_one_researcher_per_angle_then_outline_then_w
         assert "截断" not in by_id[rid]["task"]
         assert "规范化" not in by_id[rid]["task"]
     outline_d = by_id["outline"]["deliverable"]
-    assert outline_d["form"] == "files"
+    assert "form" not in outline_d
     assert outline_d["artifacts"] == ["AgentCore/文档/research/提纲.md"]
     assert "AgentCore/文档/research/提纲.md" in by_id["outline"]["task"]
     # Artifact-first writer brief：主路径一次完整 write；截断则更短完整 write 或 str_replace。
@@ -250,7 +250,7 @@ def test_cite_write_review_without_angles_uses_single_researcher():
     assert "学术检索" in by_id["research_0"]["task"]
     # 无 angles 时默认约定文档路径（仍落 RESEARCH_DIR，不用角色名）。
     d = by_id["research_0"]["deliverable"]
-    assert d["form"] == "files"
+    assert "form" not in d
     assert d["artifacts"] == ["AgentCore/文档/research/调研要点.md"]
     assert by_id["outline"]["deliverable"]["artifacts"] == ["AgentCore/文档/research/提纲.md"]
 

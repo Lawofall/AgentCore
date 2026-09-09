@@ -6,6 +6,7 @@ export const CONTEXT_CHANNEL_META: Record<
   { label: string; hint: string }
 > = {
   system: { label: "系统提示", hint: "本回合实际遵循的系统指令" },
+  tools: { label: "本回合工具", hint: "开场实际发给模型的工具表" },
   history: { label: "对话历史", hint: "本回合之前的往来" },
   request: { label: "原始请求", hint: "老板交给整个团队的目标" },
   team_position: { label: "团队位置", hint: "队友与产出去向" },
@@ -67,15 +68,16 @@ export interface CatalogGroup {
 }
 
 const GROUP_META: { id: CatalogGroupId; label: string }[] = [
+  { id: "standing", label: "常驻指令" },
   { id: "turn", label: "本回合" },
   { id: "history", label: "此前对话" },
   { id: "material", label: "材料" },
   { id: "environment", label: "环境" },
-  { id: "standing", label: "常驻指令" },
   { id: "other", label: "其他" },
 ];
 
 const TURN_CHANNELS = new Set([
+  "tools",
   "request",
   "task",
   "continuation",
@@ -189,7 +191,7 @@ export function flattenCatalog(groups: readonly CatalogGroup[]): CatalogItem[] {
   return groups.flatMap((g) => g.items);
 }
 
-/** Prefer `channel=request`; with `preferMaterial`, first 材料 row wins (worker dock). */
+/** CEO: 常驻指令 → 本回合工具 → 原始请求. Worker dock: first 材料 row wins. */
 export function defaultCatalogItemId(
   groups: readonly CatalogGroup[],
   opts?: { preferMaterial?: boolean },
@@ -199,5 +201,11 @@ export function defaultCatalogItemId(
     const material = items.find((i) => i.group === "material");
     if (material) return material.id;
   }
-  return items.find((i) => i.channel === "request")?.id ?? items[0]?.id ?? null;
+  return (
+    items.find((i) => i.channel === "system")?.id ??
+    items.find((i) => i.channel === "tools")?.id ??
+    items.find((i) => i.channel === "request")?.id ??
+    items[0]?.id ??
+    null
+  );
 }

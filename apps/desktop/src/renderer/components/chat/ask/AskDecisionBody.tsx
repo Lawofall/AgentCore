@@ -1,10 +1,12 @@
 /**
  * 生产通用澄清卡 —— AskCardShell + 行式选项（{@link AskRowGroup}）。
  * 无开场仪式主 CTA。打开不预选 `default`；AI 倾向写在选项 label 原文。`default` 走行右灰字「默认」。
+ * 当前题干画在卡头（无题则 `message`）；可见面不画「需要你拍板」和图标。
  * `questions.length ≥ 2`：体内一次一题，头右侧 {@link AskQuestionPager} 可点切换各题
  * （没写补充也能切）；非末题主 CTA「下一题」（只推进），末题才「提交」才 resume。
  * 单选首次勾选约 200ms 后自动切下一题；回看改选停在本题；末题不自动交。
  * 不是问卷 Wizard。提交仍须每题有勾选或人话。
+ * choice 人话接在选项组末行（铅笔、不编号），不是选项下另开带框输入。
  */
 import { ASK_INTENT_META } from "@/components/chat/decision";
 import {
@@ -38,6 +40,7 @@ import {
   shouldAutoAdvanceAskQuestion,
 } from "./AskQuestionPager";
 import {
+  ASK_NOTE_PLACEHOLDER,
   type AskUserContent,
   hasExplicitAskReply,
   questionHasExplicitReply,
@@ -47,6 +50,17 @@ import {
 import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
 
 const META = ASK_INTENT_META.decision;
+
+function askStem(
+  content: AskUserContent,
+  question: AskQuestion | undefined,
+): string {
+  if (!question) return content.question;
+  if (content.questions.length === 1 && !question.prompt.trim()) {
+    return content.question;
+  }
+  return question.prompt;
+}
 
 function AskTextInput({
   value,
@@ -86,7 +100,6 @@ export function AskDecisionBody({
   answer,
   busy,
   submitting,
-  caption,
   onContinue,
   onStop,
   conversationId,
@@ -96,7 +109,6 @@ export function AskDecisionBody({
   answer: ReturnType<typeof useAskAnswer>;
   busy: boolean;
   submitting: CheckpointUserDecision | null;
-  caption?: string;
   onContinue: () => void;
   onStop: () => void;
   conversationId?: string | null;
@@ -298,11 +310,7 @@ export function AskDecisionBody({
     }, ASK_AUTO_ADVANCE_MS);
   };
 
-  const shellCaption = caption ?? META.activeCaption;
-  const shellIcon = META.icon;
   const hasQuestions = content.questions.length > 0;
-  /** 无题：message 当唯一题干进壳标题。有题：不画总标题，题干在体内。 */
-  const shellTitle = hasQuestions ? undefined : content.question;
   const paged = content.questions.length >= 2;
   const safeStep = paged ? Math.min(step, content.questions.length - 1) : 0;
   const visibleQuestions = paged
@@ -319,6 +327,11 @@ export function AskDecisionBody({
   const currentQuestion = hasQuestions
     ? content.questions[paged ? safeStep : 0]
     : undefined;
+  const shellTitle = askStem(content, currentQuestion);
+  const multiHint =
+    currentQuestion?.kind === "choice" &&
+    currentQuestion.multiple &&
+    currentQuestion.options.length > 0;
   const currentHasInput =
     !hasQuestions ||
     (currentQuestion != null &&
@@ -411,9 +424,14 @@ export function AskDecisionBody({
   return (
     <AskCardShell
       variant="decision"
-      icon={shellIcon}
-      caption={shellCaption}
       title={shellTitle}
+      titleAddon={
+        multiHint ? (
+          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+            可多选
+          </span>
+        ) : undefined
+      }
       extra={
         paged ? (
           <AskQuestionPager
@@ -441,48 +459,32 @@ export function AskDecisionBody({
         className="space-y-3"
         data-ask-question-step={paged ? safeStep : undefined}
       >
-        {visibleQuestions.map((q) => {
-          const stem =
-            content.questions.length === 1 && !q.prompt.trim()
-              ? content.question
-              : q.prompt;
-          return (
-            <div key={q.id} data-ask-question-id={q.id}>
-              <p className="px-2 whitespace-pre-wrap text-sm font-semibold leading-snug text-foreground">
-                {stem}
-                {q.kind === "choice" && q.multiple && q.options.length > 0 && (
-                  <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                    可多选
-                  </span>
-                )}
-              </p>
-              {questionPresentsAsText(q) ? (
+        {visibleQuestions.map((q) => (
+          <div key={q.id} data-ask-question-id={q.id}>
+            {questionPresentsAsText(q) ? (
+              <div className="px-2">
                 <AskTextInput
                   value={(answer.answers[q.id] ?? [])[0] ?? ""}
                   onChange={(next) => answer.setText(q, next)}
                   disabled={busy}
                   placeholder={q.default || "填写你的答案"}
                 />
-              ) : (
-                <>
-                  <AskRowGroup
-                    className="mt-1"
-                    rows={questionRows(q)}
-                    multiple={q.multiple}
-                  />
-                  <div className="mt-2 px-2">
-                    <CommenceNote
-                      answer={answer}
-                      questionId={q.id}
-                      disabled={busy}
-                      compact
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
+              </div>
+            ) : (
+              <AskRowGroup
+                className="mt-1"
+                rows={questionRows(q)}
+                multiple={q.multiple}
+                note={{
+                  value: answer.notes[q.id] ?? "",
+                  onChange: (next) => answer.setQuestionNote(q.id, next),
+                  disabled: busy,
+                  placeholder: ASK_NOTE_PLACEHOLDER,
+                }}
+              />
+            )}
+          </div>
+        ))}
 
         {pickerFailure && (
           <div className="px-2">

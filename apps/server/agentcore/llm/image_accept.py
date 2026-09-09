@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import threading
 
+from agentcore.llm.profiles import DEEPSEEK_V41_FLASH
+
 # Same separator set as display family matching, so ``gpt-4o`` cannot claim
 # ``gpt-4omni`` / ``mystery-4o-clone``.
 _FAMILY_BOUNDARY = frozenset({"-", "_", "."})
@@ -17,6 +19,7 @@ _FAMILY_BOUNDARY = frozenset({"-", "_", "."})
 _EXACT_ACCEPT = frozenset(
     {
         "deepseek-v4-flash-vision-exp",
+        DEEPSEEK_V41_FLASH,
         "kimi-k2.5",
         "kimi-k2.6",
         "kimi-k3",

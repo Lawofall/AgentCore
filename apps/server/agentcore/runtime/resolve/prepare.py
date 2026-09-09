@@ -7,7 +7,7 @@ Attachment rendering lives beside this facade:
 
 - ``attachment_conversation`` — conversation deep-read
 - ``attachment_images`` — native multimodal / eye→text
-- ``attachment_context`` — structure preview + capability-aware prompt block
+- ``attachment_context`` — column/type/sample preview + capability-aware prompt block
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def _wire_conversation_log_tools(
     Product-always-on (跨会话对话日志访问定案 A); opening-table resident.
     """
     tools.register(SearchConversationsTool(folder_id=folder_id))
-    tools.register(ReadConversationTool())
+    tools.register(ReadConversationTool(folder_id=folder_id))
 
 
 def _build_agent_mention_context(

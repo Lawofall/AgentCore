@@ -242,13 +242,13 @@ async def preflight_resolved_llm_credentials(
     byok_missing_message: str,
     selection: ModelSelection,
 ) -> LLMCredentials | None:
-    """Gate + resolve credentials for standing_tasks / workflows (same shape).
+    """Gate + resolve credentials for workflows (same shape as compaction).
 
     Runs :func:`preflight_llm_credentials` by ``selection.origin``, then for
     platform origin replaces the gate's ``None`` with
     ``platform_llm_credentials(model=selection.model)``.
 
-    **Callers**: ``standing_tasks.runner``, ``workflows.runner``, and
+    **Callers**: ``workflows.runner`` and
     ``resolve_and_gate_compaction``. Handoff must keep its thin
     ``resolve_user_llm_credentials`` path — do **not** route handoff through
     this helper (would thicken dispatch into preflight).

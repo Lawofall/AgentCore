@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
 from agentcore.runtime.coordination.session import (
     CoordinationSession,
@@ -61,7 +61,7 @@ class _StubTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
@@ -252,6 +252,59 @@ def test_single_op_timeout_does_not_seed_disabled_family():
         cb = c.tool_circuit_breaker()
         assert "file_read" in cb.disabled
         assert "file_write" not in cb.disabled
+    finally:
+        clear_active_coordination()
+
+
+def test_hang_latch_not_revived_by_presence():
+    """Hang-dead is per-run: live hub must not restore this worker's pens."""
+    from agentcore.runtime.engine.governance import apply_workspace_channel_dead_retire
+
+    clear_active_coordination()
+    session = CoordinationSession(
+        execution_id="exec-hang-keep",
+        total_workers=1,
+        conversation_id="conv-hang-keep",
+    )
+    set_active_coordination(session)
+    try:
+        c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
+        hang = {"liveness_timeout": True, "timeout_layer": "channel_op"}
+        c.record(
+            [
+                ToolAttempt(
+                    "h1",
+                    "file_write",
+                    success=False,
+                    error_summary="活性挂起",
+                    meta=hang,
+                )
+            ]
+        )
+        c.record(
+            [
+                ToolAttempt(
+                    "h2",
+                    "file_read",
+                    success=False,
+                    error_summary="活性挂起",
+                    meta=hang,
+                )
+            ]
+        )
+        disabled: set[str] = set()
+        assert (
+            apply_workspace_channel_dead_retire(
+                disabled_tools=disabled,
+                controller=c,
+                tool_context=_server_ctx(),
+            )
+            is True
+        )
+        assert "file_write" in disabled
+        assert "file_list" in disabled
+        assert c._channel_hang_dead is True  # noqa: SLF001
+        assert session.workspace_channel_dead is False
     finally:
         clear_active_coordination()
 

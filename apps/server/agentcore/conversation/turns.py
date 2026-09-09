@@ -457,7 +457,6 @@ async def resume_chat(
                 sink.emit(message_end(FinishReason.ERROR))
                 return
             folder_id = conv.folder_id
-            conversation_mode = conv.mode
             auto_desk_raw = getattr(conv, "auto_desk_folder_id", None)
             ws_folder_id, _auto_desk_folder_id = resolve_turn_file_workspace(
                 birth_folder_id=folder_id,
@@ -656,26 +655,6 @@ async def resume_chat(
                     duration_ms=duration_ms,
                     kind="resume",
                 )
-                # Standing inbox: truth source follows the resumed turn outcome
-                # (awaiting_user → succeeded / failed / still awaiting).
-                if conversation_mode == "standing":
-                    try:
-                        from agentcore.standing_tasks.inbox import settle_after_turn
-
-                        await settle_after_turn(
-                            conversation_id=conversation_id,
-                            finish_reason=finish,
-                            content=result.get("content") if isinstance(result, dict) else None,
-                            error=result.get("error") if isinstance(result, dict) else None,
-                            message_id=suspension.message_id,
-                        )
-                    except Exception as settle_err:  # noqa: BLE001 — resume must not fail
-                        logger.error(
-                            "standing_task.inbox_settle_failed",
-                            conversation_id=conversation_id,
-                            error=str(settle_err),
-                            exc_info=True,
-                        )
             finally:
                 if lease_stop is not None:
                     lease_stop.set()
@@ -770,7 +749,6 @@ async def continue_chat(
                 sink.emit(message_end(FinishReason.ERROR))
                 return
             folder_id = conv.folder_id
-            conversation_mode = conv.mode
             auto_desk_raw = getattr(conv, "auto_desk_folder_id", None)
             ws_folder_id, _auto_desk_folder_id = resolve_turn_file_workspace(
                 birth_folder_id=folder_id,
@@ -940,24 +918,6 @@ async def continue_chat(
                     kind="resume",
                 )
                 restore_lock = False
-                if conversation_mode == "standing":
-                    try:
-                        from agentcore.standing_tasks.inbox import settle_after_turn
-
-                        await settle_after_turn(
-                            conversation_id=conversation_id,
-                            finish_reason=finish,
-                            content=result.get("content") if isinstance(result, dict) else None,
-                            error=result.get("error") if isinstance(result, dict) else None,
-                            message_id=message_id,
-                        )
-                    except Exception as settle_err:  # noqa: BLE001
-                        logger.error(
-                            "standing_task.inbox_settle_failed",
-                            conversation_id=conversation_id,
-                            error=str(settle_err),
-                            exc_info=True,
-                        )
             finally:
                 if lease_stop is not None:
                     lease_stop.set()

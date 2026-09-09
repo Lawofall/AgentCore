@@ -59,7 +59,7 @@ import { WorkspaceModeBar } from "./WorkspaceModeBar";
  * hint until the first turn persists it.
  *
  * 绑定 `folderId` 时把条目挂进文件树 ``.agentcore`` 行（与文件页同款）；裸聊 /
- * 仅 auto-desk / 无绑定不挂条目，亦不挂「全局设定」。点条目开顶栏 File tab。
+ * 仅 auto-desk / 无绑定不挂条目，亦不挂账号级提示词轨。点条目开顶栏 File tab。
  */
 export function WorkspaceMode() {
   const conversationId = useConversationStore((s) => s.currentConversationId);
@@ -102,7 +102,6 @@ export function WorkspaceMode() {
         inline
         icon={<FolderOpen size={26} className="text-muted-foreground/40" />}
         title={localDraft ? "本地对话" : "云端对话"}
-        hint="发送第一条消息后，这次对话产生的文件会出现在这里。"
       />
     );
   }
@@ -117,9 +116,7 @@ export function WorkspaceMode() {
     }
   };
 
-  const emptyTreeHint = fsAvailable
-    ? "工作区暂无文件。AI 产物会出现在这里；需要时可用工具栏「导出」或工作区菜单「合回到本机」。"
-    : "工作区暂无文件。AI 产物会出现在这里；需要时可导出 ZIP。";
+  const emptyTreeHint = "工作区暂无文件。";
 
   const isCloudWorkspace = ws?.location === "cloud";
   const localRootId = ws?.location === "local" ? ws.rootId : null;

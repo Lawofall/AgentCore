@@ -55,7 +55,12 @@ from agentcore.runtime.runs.serialize import (
     landing_write_failure_kind,
 )
 from agentcore.runtime.runs.session import RunSession
-from agentcore.runtime.runs.types import ContextBlock, RunPhase, RunState
+from agentcore.runtime.runs.types import (
+    ContextBlock,
+    RunPhase,
+    RunState,
+    deliverable_expects_landing,
+)
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registry import ToolRegistry
 
@@ -385,8 +390,9 @@ async def _continue_run_scoped(
                 tool_failure_sink=tool_failures,
                 turn_evidence_ledger=_turn_ledger_var.get(),
                 ledger_registrant=f"worker:{agent_id}",
-                form_prose=(
-                    spec.deliverable is not None and spec.deliverable.form == "prose"
+                expects_landing=(
+                    spec.deliverable is not None
+                    and deliverable_expects_landing(spec.deliverable)
                 ),
             )
         duration_ms = int((time.monotonic() - start) * 1000)

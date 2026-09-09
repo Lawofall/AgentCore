@@ -280,7 +280,7 @@ export function BoundaryTable({
 
 const DEFAULT_SETTINGS_ROWS: { label: string; desc: string; to: string }[] = [
   {
-    label: "模型",
+    label: "模型组合",
     desc: "账号默认组合与组合管理",
     to: APP_PATHS.more.model,
   },
@@ -290,9 +290,9 @@ const DEFAULT_SETTINGS_ROWS: { label: string; desc: string; to: string }[] = [
     to: APP_PATHS.more.providers,
   },
   {
-    label: "全局设定",
-    desc: "在文件页查看、编辑画像、偏好与规则",
-    to: APP_PATHS.files,
+    label: "提示词",
+    desc: "所有对话共用的提示词，在工具箱查看与调整",
+    to: APP_PATHS.toolbox.guidelines,
   },
   { label: "用量", desc: "查看花费与额度", to: APP_PATHS.more.usage },
   {
@@ -305,12 +305,7 @@ const DEFAULT_SETTINGS_ROWS: { label: string; desc: string; to: string }[] = [
     desc: "常用操作的键盘快捷键",
     to: APP_PATHS.more.shortcuts,
   },
-  {
-    label: "反馈",
-    desc: "提 Bug、功能建议或体验改进",
-    to: APP_PATHS.more.feedback,
-  },
-  { label: "关于", desc: "版本与产品信息", to: APP_PATHS.more.about },
+  { label: "关于", desc: "版本、产品手册与法律信息", to: APP_PATHS.more.about },
 ];
 
 /** 设置速查行——内容源可传入 rows；旧章 SettingsTable 仍用默认列表。 */

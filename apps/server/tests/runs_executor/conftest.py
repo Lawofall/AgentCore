@@ -3,7 +3,7 @@
 import tempfile
 from pathlib import Path
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.llm.profiles import PLATFORM_MODEL_FLASH, TurnProfiles
 from agentcore.llm.provider.protocol import LLMChunk, TokenUsage, ToolCallDelta
 from agentcore.runtime.approvals import ApprovalGate
@@ -159,7 +159,7 @@ class _FileWriteTool:
                 "type": "object",
                 "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
             },
-            category=ToolCategory.EXECUTION,
+            face=ToolFace.EXECUTION,
             approval=ToolApproval.NEVER,
         )
 
@@ -214,7 +214,7 @@ class _GrantableTool:
             name=self._name,
             description="stub grantable",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.EXECUTION,
+            face=ToolFace.EXECUTION,
             approval=ToolApproval.GRANTABLE,
         )
 
@@ -269,7 +269,7 @@ class _ResearchTool:
             name=self._name,
             description="stub search",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001

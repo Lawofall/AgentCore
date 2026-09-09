@@ -9,7 +9,7 @@
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { type ExecutionPlan, useExecutionStore } from "@/stores/execution";
 import type { ProcessStep } from "@/types/events";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/stores/sidePanel", () => ({
@@ -19,6 +19,18 @@ vi.mock("@/stores/sidePanel", () => ({
     { getState: () => ({ showBrowser: () => {} }) },
   ),
 }));
+
+const navigate = vi.fn();
+vi.mock("react-router-dom", async () => {
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
+  return {
+    ...actual,
+    useNavigate: () => navigate,
+  };
+});
 
 import { ToolLine } from "../ToolLine";
 
@@ -64,6 +76,7 @@ function renderLine(s: ToolStep, turnKey: string | undefined = MID) {
 beforeEach(() => {
   useExecutionStore.setState({ byId: {} });
   useExecutionStore.getState().startExecution(plan, MID);
+  navigate.mockReset();
 });
 
 afterEach(cleanup);
@@ -142,5 +155,24 @@ describe("工具行标题 · CEO 处置动作指的是谁", () => {
     );
     expect(screen.getByText(/上次那场定价讨论/)).toBeTruthy();
     expect(screen.queryByText(/c-8f31ab02/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "打开" }));
+    expect(navigate).toHaveBeenCalledWith("/conversations/c-8f31ab02-77de");
+  });
+
+  it("查阅历史对话：查找词不进标题", () => {
+    renderLine(
+      step({
+        tool_name: "read_conversation",
+        arguments: { conversation_id: "c-8f31ab02-77de", query: "适配" },
+        display: {
+          conversation_id: "c-8f31ab02-77de",
+          title: "上次那场定价讨论",
+          truncated: false,
+        },
+      }),
+    );
+    expect(screen.getByText(/上次那场定价讨论/)).toBeTruthy();
+    expect(screen.queryByText("适配")).toBeNull();
+    expect(screen.getByRole("button", { name: "打开" })).toBeTruthy();
   });
 });

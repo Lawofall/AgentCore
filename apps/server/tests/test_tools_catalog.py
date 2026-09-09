@@ -7,7 +7,7 @@ governance flags the UI renders, and guard that the CEO-only ``delegate``
 primitive never leaks into the general catalog.
 """
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.builtin import (
     build_builtin_registry,
     build_ceo_tool_registry,
@@ -135,7 +135,7 @@ def test_write_and_exec_tools_are_grantable():
 
 
 def test_file_mutation_class_is_grantable_filesystem_without_code_execute():
-    # The「本轮内允许所有文件改动」class = GRANTABLE ∩ FILESYSTEM, so it covers the
+    # The「本轮内允许所有文件改动」class = GRANTABLE ∩ FILE, so it covers the
     # file-edit tools but NOT code_execute (EXECUTION, higher-risk → its own gate).
     # Pinned so a future tool can't silently widen or narrow what one click grants.
     names = file_mutation_tool_names()
@@ -316,7 +316,7 @@ def test_every_tool_exposes_catalog_fields():
     for schema in build_builtin_registry().list_all():
         assert schema.name and isinstance(schema.name, str)
         assert schema.description and isinstance(schema.description, str)
-        assert isinstance(schema.category, ToolCategory)
+        assert isinstance(schema.face, ToolFace)
         assert isinstance(schema.approval, ToolApproval)
         assert isinstance(schema.parameters, dict)
 

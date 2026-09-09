@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui";
 import { resolvedCheckpointTone } from "@/components/ui/tone-presets";
 import { usePersistentDisclosure } from "@/stores/disclosure";
 import { ChevronDown, ChevronRight, type LucideIcon } from "lucide-react";
@@ -5,11 +6,8 @@ import type { ReactNode } from "react";
 import type { ResolvedToneKey } from "./meta";
 
 /**
- * Shared settled-record shell for ask_user.
- *
- * Timeline metadata light card (ghost) — not the white DecisionCard box used by
- * live collaboration / pending decisions. Callers pick toneStub vs
- * neutralCollapsible; meta labels / icons come from {@link ./meta}.
+ * Settled ask / escalation as a process row.
+ * Short copy hugs (Thought); long copy truncates at the row. Tool rows keep their own tail.
  */
 export function ResolvedDecisionRecord(
   props:
@@ -37,6 +35,25 @@ export function ResolvedDecisionRecord(
   return <NeutralCollapsibleRecord {...props} />;
 }
 
+const ROW =
+  "h-auto w-auto max-w-full min-w-0 justify-start gap-2 overflow-hidden px-0 py-0 text-sm font-normal text-muted-foreground hover:bg-transparent hover:text-foreground";
+
+function ProcessRowIcon({ icon: Icon }: { icon: LucideIcon }) {
+  return (
+    <span className="flex h-5 shrink-0 items-center justify-center text-muted-foreground">
+      <Icon size={14} />
+    </span>
+  );
+}
+
+function ProcessRowChevron({ open }: { open: boolean }) {
+  return open ? (
+    <ChevronDown size={14} className="shrink-0" />
+  ) : (
+    <ChevronRight size={14} className="shrink-0" />
+  );
+}
+
 function ToneStubRecord({
   disclosureKey,
   tone: toneKey,
@@ -57,42 +74,36 @@ function ToneStubRecord({
 }) {
   const tone = resolvedCheckpointTone[toneKey];
   const [open, setOpen] = usePersistentDisclosure(disclosureKey, false);
+  const title = label.trim();
+  const summary =
+    !open && collapsedSummary != null && collapsedSummary !== ""
+      ? collapsedSummary
+      : "";
 
   return (
     <div
-      className={`mt-2 animate-task-card-enter motion-reduce:animate-none${tone.wrap ? ` ${tone.wrap}` : ""}`}
+      className={`min-w-0 max-w-full${tone.wrap ? ` ${tone.wrap}` : ""}`}
       data-ask-intent={askIntent}
       data-ask-status="resolved"
     >
-      <button
-        type="button"
+      <Button
+        variant="ghost"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label={
-          label.trim() || collapsedSummary?.trim() ? undefined : "拍板记录"
-        }
-        className="flex w-full items-center gap-2 py-1.5 text-left"
+        aria-label={title || summary ? undefined : "拍板记录"}
+        className={ROW}
       >
-        <span
-          className={`flex size-5 shrink-0 items-center justify-center rounded-full ${tone.badge}`}
-        >
-          <DecisionIcon size={14} />
+        <ProcessRowIcon icon={DecisionIcon} />
+        <span className="flex h-5 min-w-0 items-center gap-1.5 overflow-hidden text-left">
+          {title !== "" ? (
+            <span className={`shrink-0 text-sm ${tone.label}`}>{title}</span>
+          ) : null}
+          {summary !== "" ? (
+            <span className="min-w-0 truncate text-sm">{summary}</span>
+          ) : null}
         </span>
-        {label.trim() !== "" ? (
-          <span className={`shrink-0 text-xs font-medium ${tone.label}`}>
-            {label}
-          </span>
-        ) : null}
-        {!open && collapsedSummary != null && collapsedSummary !== "" && (
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-            {collapsedSummary}
-          </span>
-        )}
-        <ChevronRight
-          size={14}
-          className={`ml-auto shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
-        />
-      </button>
+        <ProcessRowChevron open={open} />
+      </Button>
       {open && children}
     </div>
   );
@@ -113,36 +124,20 @@ function NeutralCollapsibleRecord({
   const [open, setOpen] = usePersistentDisclosure(disclosureKey, false);
 
   return (
-    <div className="mt-2 animate-task-card-enter">
-      <div className="flex items-start gap-2">
-        <span className="mt-0.5 shrink-0 text-muted-foreground">
-          <Icon size={14} />
+    <div className="min-w-0 max-w-full">
+      <Button
+        variant="ghost"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={ROW}
+      >
+        <ProcessRowIcon icon={Icon} />
+        <span className="h-5 min-w-0 truncate text-left text-sm leading-5">
+          {summary}
         </span>
-        <div className="min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-            className="flex w-full items-start gap-1.5 text-left"
-          >
-            <span className="min-w-0 flex-1 text-xs font-medium text-muted-foreground">
-              {summary}
-            </span>
-            {open ? (
-              <ChevronDown
-                size={14}
-                className="mt-0.5 shrink-0 text-muted-foreground"
-              />
-            ) : (
-              <ChevronRight
-                size={14}
-                className="mt-0.5 shrink-0 text-muted-foreground"
-              />
-            )}
-          </button>
-          {open && children}
-        </div>
-      </div>
+        <ProcessRowChevron open={open} />
+      </Button>
+      {open && children}
     </div>
   );
 }

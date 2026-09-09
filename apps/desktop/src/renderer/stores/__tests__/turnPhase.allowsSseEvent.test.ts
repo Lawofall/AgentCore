@@ -1,6 +1,7 @@
 import {
   type TurnPhase,
   allowsSseEvent,
+  isWritingTurnPhase,
 } from "@/stores/conversation/turnPhase";
 import { INTERACTION_KIND_WIRE } from "@agentcore/contract-types";
 import { describe, expect, it } from "vitest";
@@ -11,6 +12,18 @@ const TERMINAL_OR_STOPPING: TurnPhase[] = [
   "completed",
   "failed",
 ];
+
+describe("isWritingTurnPhase", () => {
+  it("covers preflight / streaming / stopping, not idle or terminal", () => {
+    expect(isWritingTurnPhase("preflight")).toBe(true);
+    expect(isWritingTurnPhase("streaming")).toBe(true);
+    expect(isWritingTurnPhase("stopping")).toBe(true);
+    expect(isWritingTurnPhase("idle")).toBe(false);
+    expect(isWritingTurnPhase("completed")).toBe(false);
+    expect(isWritingTurnPhase("stopped")).toBe(false);
+    expect(isWritingTurnPhase("failed")).toBe(false);
+  });
+});
 
 describe("allowsSseEvent — interaction *_required on stopping/terminal", () => {
   it.each(TERMINAL_OR_STOPPING)(

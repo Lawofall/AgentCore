@@ -221,7 +221,7 @@ async def test_gate_platform_available_via_override_key(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_preflight_resolved_platform_returns_per_model_creds(monkeypatch):
-    """standing/workflows helper: platform origin → per-model platform credentials."""
+    """workflows helper: platform origin → per-model platform credentials."""
     monkeypatch.setattr(settings, "platform_api_key", "")
     monkeypatch.setattr(settings, "platform_model_credentials", _OVERRIDE)
     monkeypatch.setattr(settings, "billing_mode", "platform")
@@ -240,7 +240,7 @@ async def test_preflight_resolved_platform_returns_per_model_creds(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_preflight_resolved_byok_returns_gate_creds(monkeypatch):
-    """standing/workflows helper: byok origin → gate credentials unchanged."""
+    """workflows helper: byok origin → gate credentials unchanged."""
     byok = LLMCredentials(
         api_key="sk-user",
         base_url="https://example/v1",

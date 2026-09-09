@@ -560,7 +560,9 @@ export class SidecarManager {
         attachments: req.replaceMaterials ? (req.attachments ?? []) : undefined,
       });
       if (!occupied) {
-        throw new Error("云端占位失败，本地回合未启动");
+        // Token survives Electron IPC unwrap. Renderer must not treat this as
+        // engine-unhealthy（报到失败 ≠ 探活失败）.
+        throw new Error("OCCUPY_FAILED: 云端占位失败，本地回合未启动");
       }
       this.turns.set(req.turnId, {
         wc,

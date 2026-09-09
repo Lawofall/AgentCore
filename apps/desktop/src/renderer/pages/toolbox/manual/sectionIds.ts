@@ -4,7 +4,7 @@
  * 信息架构：
  * - intro: what / mindset / quickstart
  * - collaboration: briefing / progress / checkpoint / autonomy / debate /
- *   control / memory / workflow / automation
+ *   control / memory / workflow
  * - mechanism: live / legend / panorama / scenarios
  * - reference: tools / workspace / settings / faq / troubleshooting /
  *   privacy / glossary
@@ -29,10 +29,8 @@ export const MANUAL_SECTION_IDS = {
     /** 中途插手（含带现场续派） */
     control: "control",
     memory: "memory",
-    /** 把一轮协作存成工作流，之后微调 / 复跑 */
+    /** 把一轮协作存成工作流，之后微调 / 复跑 / 设为定时 */
     workflow: "workflow",
-    /** 给任务配定时 / Webhook，到点自动开一轮 */
-    automation: "automation",
   },
   mechanism: {
     live: "live",
@@ -62,6 +60,7 @@ export const MANUAL_SECTION_ALIASES: Record<string, string> = {
   continuation: MANUAL_SECTION_IDS.collaboration.control,
   turnflow: MANUAL_SECTION_IDS.mechanism.panorama,
   chat: MANUAL_SECTION_IDS.reference.faq,
+  automation: MANUAL_SECTION_IDS.collaboration.workflow,
 };
 
 export type IntroSectionId =

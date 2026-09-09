@@ -66,7 +66,7 @@ _EMPTY_FACE_EXPECTED: dict[str, tuple[str, str, str, str]] = {
         "paused",
     ),
     "empty_face_channel_dead": (
-        "STREAM_ERROR",
+        "LOCAL_CHANNEL_DEAD",
         CHANNEL_DEAD_PREPARE_ABORT,
         "error",
         "failed",
@@ -519,7 +519,7 @@ def test_turn_verdict_probes_are_enumerated():
 
 
 def test_turn_verdict_team_host_has_a_team_error_face(projected):
-    """Hand-derived: run_plan + run_failed + attested outcome=error → strip host."""
+    """Hand-derived: run_plan + run_failed + attested outcome=error → more host."""
     p = projected["turn_verdict_team_host"]
     assert p["runs"], "team graph must exist so the strip can own the verdict"
     assert p["outcome"] == "error"
@@ -538,5 +538,5 @@ def test_turn_verdict_sidecar_is_exported():
     assert team["turnVerdict"] == project_turn_verdict("turn_verdict_team_host", team["projected"])
     assert team["turnVerdict"] == {
         "hasTeamStrip": True,
-        "supportPackHost": "strip",
+        "supportPackHost": "more",
     }

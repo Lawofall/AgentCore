@@ -492,7 +492,7 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     }
   });
 
-  it("partial without rate-limit still hosts 排查包 on the strip", () => {
+  it("partial without rate-limit still hosts 排查包 in bubble more", () => {
     const o = arbitrateTurnOutcome({
       content: "",
       attestedKind: "partial",
@@ -503,7 +503,7 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     });
     expect(o.kind).toBe("partial");
     expect(o.showComposerHint).toBe(false);
-    expect(o.supportPackHost).toBe("strip");
+    expect(o.supportPackHost).toBe("more");
     expect(o.message).toBe("已交付 1 个文件；1 项未完成");
   });
 
@@ -523,7 +523,7 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     expect(o.showBubbleBanner).toBe(false);
     expect(o.showSessionBanner).toBe(false);
     expect(o.showComposerHint).toBe(false);
-    expect(o.supportPackHost).toBe("strip");
+    expect(o.supportPackHost).toBe("more");
     expect(o.recovery.kind).toBe("wait_then_retry");
     expect(o.showFooter).toBe(false);
   });
@@ -676,7 +676,7 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     });
     const v = toConformanceTurnVerdict({ outcome: o, hasTeamStrip: true });
     expect(v.hasTeamStrip).toBe(true);
-    expect(v.supportPackHost).toBe("strip");
+    expect(v.supportPackHost).toBe("more");
     expect(v).not.toHaveProperty("surface");
   });
 
@@ -690,7 +690,7 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     expect(
       turnVerdictHostContradiction({
         hasTeamStrip: false,
-        supportPackHost: "strip",
+        supportPackHost: "more",
       }),
     ).toMatch(/互斥/);
     expect(

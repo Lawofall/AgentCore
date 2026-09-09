@@ -29,7 +29,8 @@ export function Toaster() {
       style={tokenVars}
       toastOptions={{
         classNames: {
-          description: "text-muted-foreground!",
+          title: "line-clamp-2 break-words",
+          description: "line-clamp-2 break-words text-muted-foreground!",
           actionButton:
             "bg-primary! text-primary-foreground! rounded-lg! font-medium!",
         },

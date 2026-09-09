@@ -16,9 +16,11 @@ from agentcore.attention.scope import (
 )
 from agentcore.attention.signal import (
     ATTENTION_EVENT_TYPE,
+    PUSH_FALLBACK_BODY,
     TITLE_MAX_CHARS,
     AttentionKind,
     attention_kind_of,
+    attention_push_copy,
     attention_title,
     schedule_attention,
     signal_attention_required,
@@ -29,10 +31,12 @@ from agentcore.attention.signal import (
 
 __all__ = [
     "ATTENTION_EVENT_TYPE",
+    "PUSH_FALLBACK_BODY",
     "TITLE_MAX_CHARS",
     "AttentionKind",
     "AttentionScope",
     "attention_kind_of",
+    "attention_push_copy",
     "attention_title",
     "bind_attention_scope",
     "current_attention_scope",

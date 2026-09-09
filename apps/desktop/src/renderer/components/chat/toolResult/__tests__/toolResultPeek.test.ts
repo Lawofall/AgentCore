@@ -50,7 +50,7 @@ describe("toolResultPeek", () => {
     ).toBe("深圳天气 · weather.example.com");
   });
 
-  it("shows the exit code for a failed code_execute", () => {
+  it("does not peek the exit code — it lives on the title tail", () => {
     expect(
       toolResultPeek(
         data({
@@ -58,7 +58,7 @@ describe("toolResultPeek", () => {
           display: { stdout: "", stderr: "boom", exit_code: 1 },
         }),
       ),
-    ).toBe("退出码 1");
+    ).toBe("");
   });
 
   it("does not peek stdout on successful code_execute", () => {
@@ -258,7 +258,7 @@ describe("toolResultPeek", () => {
     ).toBe("3 场对话");
   });
 
-  it("names the title for a read_conversation (with truncated mark)", () => {
+  it("names the title for a read_conversation (with leftover 截断 mark)", () => {
     expect(
       toolResultPeek(
         data({
@@ -271,7 +271,7 @@ describe("toolResultPeek", () => {
           result: "### User\n…",
         }),
       ),
-    ).toBe("上周方案 · 已截断");
+    ).toBe("上周方案 · 截断");
   });
 
   it("successful handoff peeks arguments.summary, never the protocol receipt", () => {
@@ -474,6 +474,22 @@ describe("hasToolResultBody", () => {
     ).toBe(true);
   });
 
+  it("is true for a file_read miss so the row can expand", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "file_read",
+          status: "error",
+          result: "文件不存在：missing.md",
+          failure: {
+            message: "没找到 missing.md，我会换个方式继续。",
+            code: "not_found",
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it("is false for the generic failure fallback with an empty result", () => {
     expect(
       hasToolResultBody(
@@ -533,6 +549,38 @@ describe("hasToolResultBody", () => {
           toolName: "consult",
           display: { name: "部署流程" },
           result: "笔记正文",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("read_conversation with only metadata is not expandable（打开在标题行）", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "read_conversation",
+          display: {
+            title: "上周方案",
+            conversation_id: "c1",
+            truncated: true,
+          },
+          result: "",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("read_conversation with a transcript is expandable", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "read_conversation",
+          display: {
+            title: "上周方案",
+            conversation_id: "c1",
+            truncated: true,
+          },
+          result: "### User\n上次结论",
         }),
       ),
     ).toBe(true);

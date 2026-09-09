@@ -26,13 +26,13 @@ skip_if:
 |---|---|
 | 形态 | desktop 路由 `/whiteboard`；工具箱入口，**不**进侧栏主导航 |
 | 引擎 | **自研**原生引擎；`agentNode`/`artifactCard` 一等形状 |
-| 归属 | board ∈ folder；独立 `boards` 表 + scene blob（<256KB JSONB，否则 S3）+ CAS version |
+| 归属 | 账号级独立，不挂文件夹；专用 AI 对话为裸聊。独立 `boards` 表 + scene blob（<256KB JSONB，否则 S3）+ CAS version。列 `folder_id` 残留不读。实现到工作区 ⏳ 当场选桌 |
 | AI 写 | 结构化 `board_ops`（catalog 工具），非裸 REST、非整图生成 |
 | 读图 | 选区混合：结构→JSON，手绘/截图→栅格化→`VisionReader` |
 | 团队 | 复用 `sendBoardTurn` + CEO `delegate`/`debate`；**零新编排/fold** |
 | 前台闸 ⏳ | AI 入口暂关（命令栏 + 选区 AI）；画布与后端能力保留 |
 
-**否决**：独立 web app；stock Excalidraw（美学+非原生节点）；tldraw（授权）；Fork Excalidraw（merge 税）；侧栏直达；`briefRegion` 原生形状（brief=选区/`frame`）。
+**否决**：独立 web app；stock Excalidraw（美学+非原生节点）；tldraw（授权）；Fork Excalidraw（merge 税）；侧栏直达；`briefRegion` 原生形状（brief=选区/`frame`）；创建时挂文件夹（board ∈ folder）。
 
 ## 引擎不变量
 

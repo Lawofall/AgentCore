@@ -44,23 +44,6 @@ describe("statusFaceLabel", () => {
     expect(statusFaceLabel("skipped", null).text).toBe("未执行");
   });
 
-  it("surfaces productLanded failed face as 产出已落盘", () => {
-    expect(
-      statusFaceLabel(
-        "failed",
-        null,
-        undefined,
-        null,
-        false,
-        "上游模型服务暂时不可用（503），请稍后再试",
-        null,
-        null,
-        "call",
-        true,
-      ).text,
-    ).toBe("产出已落盘");
-  });
-
   it("prefers failureKind over error text for the failed face", () => {
     expect(
       statusFaceLabel(
@@ -434,7 +417,7 @@ describe("buildAgentNodePresentation revision face", () => {
     expect(p.peekActivity?.text).not.toContain("结论");
   });
 
-  it("peek keeps the saved-files fact when the run landed products", () => {
+  it("peek keeps the saved-files fact; node face stays the failure kind", () => {
     const p = buildAgentNodePresentation(
       baseNode({
         status: "failed",
@@ -444,6 +427,8 @@ describe("buildAgentNodePresentation revision face", () => {
         outputPreview: "",
       }),
     );
+    expect(p.statusFace.text).toBe("调用失败");
+    expect(p.statusFace.cls).toContain("destructive");
     expect(p.peekActivity?.text).toBe(failureDetailSentence("call", true));
     expect(p.peekActivity?.text).not.toContain("ConnectError");
   });

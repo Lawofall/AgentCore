@@ -197,20 +197,17 @@ export const interactiveCheckpointTone = {
 /** Settled ask_user record shells (timeline metadata light cards). */
 export const resolvedCheckpointTone = {
   success: {
-    // Ghost row — no thick border/card fill; continue vs stop still differs by icon + label.
+    // Ghost process row — no chip / card fill; continue vs stop differs by label.
     wrap: "",
-    badge: "bg-muted text-muted-foreground",
     label: "text-muted-foreground",
   },
   destructive: {
     // Weak warning chrome only; still not a white DecisionCard box.
     wrap: "border border-destructive/25 bg-destructive/5 px-3",
-    badge: "bg-destructive/10 text-destructive",
     label: "text-destructive",
   },
   muted: {
     wrap: "",
-    badge: "bg-muted text-muted-foreground",
     label: "text-muted-foreground",
   },
 } as const;

@@ -187,6 +187,36 @@ def test_format_soft_only_dogfood_9628a2f7_unverified_note_shape():
     assert "完整交付" in block
 
 
+def test_format_closed_gaps_block_points_at_delegate_not_replan():
+    """批次已收口：缺口段只指路 delegate 点名，不再写优先 replan。"""
+    gaps = [
+        (
+            "验收工程师",
+            [{"description": "声明了走查记录但未落盘", "reason": "files_not_landed"}],
+        )
+    ]
+    block = format_worker_gaps_block(gaps, plan_open=False)
+    assert "replan" not in block
+    assert "再调 delegate" in block
+    assert "continue_from_run_id" in block
+    assert "replaces_run_id" in block
+    assert "别假装收工" in block
+
+
+def test_format_open_gaps_block_still_names_replan():
+    """波边界 / 部分失败计划还开着：缺口段仍可点名 replan(add)。"""
+    gaps = [
+        (
+            "验收工程师",
+            [{"description": "缺一份走查记录", "reason": "files_not_landed"}],
+        )
+    ]
+    block = format_worker_gaps_block(gaps, plan_open=True)
+    assert "`replan(add)`" in block
+    assert "continue_from_run_id" in block
+    assert "再调 delegate" not in block
+
+
 def test_format_hard_gap_keeps_partial_delivery_wording():
     """有硬缺口：收口指令与原先逐字一致。"""
     gaps = [

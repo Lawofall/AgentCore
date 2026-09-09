@@ -350,7 +350,7 @@ async def _react_and_capture(
     report_delivery: bool = False,
     short_write_posture: bool = False,
     tighten_verify_exec_thrash: bool = False,
-    form_prose: bool = False,
+    expects_landing: bool = False,
     product_landing_artifacts: list[str] | tuple[str, ...] | None = None,
 ) -> tuple[str, str, TokenUsage, int]:
     """Run one ReAct pass over ``messages`` (mutated in place — the loop appends
@@ -447,7 +447,7 @@ async def _react_and_capture(
         report_delivery=report_delivery,
         short_write_posture=short_write_posture,
         tighten_verify_exec_thrash=tighten_verify_exec_thrash,
-        form_prose=form_prose,
+        expects_landing=expects_landing,
         product_landing_artifacts=product_landing_artifacts,
     )
     messages.append(LLMMessage(role="assistant", content=content))

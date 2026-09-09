@@ -124,7 +124,7 @@ async def apply_loop_directive(
     content_before_round: str,
     finish_guard_reworks: int,
     files_expected: bool = False,
-    form_prose: bool = False,
+    expects_landing: bool = False,
 ) -> DirectiveApplyResult:
     """Dispatch Return / Finalize / Rework / Continue for one round."""
     match directive:
@@ -228,7 +228,7 @@ async def apply_loop_directive(
                 on_reset=emit_reset,
                 outstanding_tool_failures=controller.outstanding_tool_failures(),
                 files_expected=files_expected,
-                form_prose=form_prose,
+                expects_landing=expects_landing,
                 workspace_channel_dead=controller.workspace_channel_dead,
             )
             if coordination is not None and coordination.kind == "coordination_tools":

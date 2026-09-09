@@ -1,4 +1,4 @@
-import { PageContainer } from "@/components/layout/PageContainer";
+import { CanvasShell } from "@/components/layout/CanvasShell";
 import { Button, Input } from "@/components/ui";
 import { notifySuccess } from "@/lib/toast";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
@@ -13,9 +13,9 @@ import {
   getWorkflow,
   patchWorkflow,
 } from "@/services/workflows";
-import { ChevronLeft, Loader2, MessageSquare, Play, Save } from "lucide-react";
+import { Loader2, MessageSquare, Play, Save } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { RunWorkflowDialog } from "./RunWorkflowDialog";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import { WorkflowNodeInspector } from "./WorkflowNodeInspector";
@@ -23,6 +23,30 @@ import { WorkflowSlotsPanel } from "./WorkflowSlotsPanel";
 
 function errMsg(e: unknown, fallback: string): string {
   return e instanceof ApiError ? (e.serverMessage ?? fallback) : fallback;
+}
+
+const TITLE_FIELD_CLASS =
+  "min-w-0 max-w-xs flex-1 rounded-lg bg-transparent px-2 py-1 text-sm font-medium text-foreground outline-none hover:bg-accent focus:bg-accent";
+
+/** P2 预留：从白板进来时 `?from=board&boardId=` 回到那张板。 */
+function editorBack(search: URLSearchParams): {
+  to: string;
+  ariaLabel: string;
+} {
+  const from = search.get("from");
+  const boardId = search.get("boardId");
+  if (
+    from === "board" &&
+    boardId &&
+    !boardId.includes("/") &&
+    !boardId.includes("\\")
+  ) {
+    return { to: `/whiteboard/${boardId}`, ariaLabel: "返回白板" };
+  }
+  return {
+    to: APP_PATHS.toolbox.workflows.root,
+    ariaLabel: "返回工作流列表",
+  };
 }
 
 /**
@@ -33,7 +57,9 @@ function errMsg(e: unknown, fallback: string): string {
  */
 export function WorkflowEditorPage() {
   const { workflowId = "" } = useParams();
+  const [search] = useSearchParams();
   const navigate = useNavigate();
+  const back = editorBack(search);
   const [workflow, setWorkflow] = useState<UserWorkflow | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -58,6 +84,7 @@ export function WorkflowEditorPage() {
     setLoading(true);
     setSaving(false);
     setError(null);
+    setSelectedId(null);
     try {
       const w = await getWorkflow(requestedId);
       if (gen !== loadGenRef.current) return;
@@ -137,145 +164,148 @@ export function WorkflowEditorPage() {
     setWorkflow(next);
   }, []);
 
+  const goBack = () => navigate(back.to);
+
   if (loading) {
     return (
-      <PageContainer width="canvas">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <CanvasShell backAriaLabel={back.ariaLabel} onBack={goBack} title={null}>
+        <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
           <Loader2 size={16} className="animate-spin" />
           加载中…
         </div>
-      </PageContainer>
+      </CanvasShell>
     );
   }
 
   if (!workflow || !definition) {
     return (
-      <PageContainer width="canvas">
-        <Button
-          variant="ghost"
-          onClick={() => navigate(APP_PATHS.toolbox.workflows.root)}
-          className="mb-4 h-auto gap-1 px-0 py-0 text-sm text-muted-foreground hover:text-foreground"
-          icon={<ChevronLeft size={16} />}
-        >
-          工作流
-        </Button>
-        <p className="text-sm text-muted-foreground">
-          {error ?? "工作流不存在"}
-        </p>
-      </PageContainer>
+      <CanvasShell backAriaLabel={back.ariaLabel} onBack={goBack} title={null}>
+        <div className="flex h-full items-center justify-center px-6">
+          <p className="text-sm text-muted-foreground">
+            {error ?? "工作流不存在"}
+          </p>
+        </div>
+      </CanvasShell>
     );
   }
 
   // 固化来源带着原对话与消息：给一条回去看「它是从哪一轮存下来的」的路。
   const turnPath = workflowTurnPath(workflow.source);
+  const selectedNode =
+    definition.nodes.find((n) => n.id === selectedId) ?? null;
+  const banner =
+    issues.length > 0 || error ? (
+      <div className="shrink-0 space-y-1 border-b border-border px-3 py-2">
+        {issues.length > 0 ? (
+          <ul className="space-y-1 text-xs text-warning">
+            {issues.slice(0, 4).map((issue) => (
+              <li key={`${issue.code}-${issue.nodeId ?? ""}`}>
+                {issue.message}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {error ? (
+          <p className="text-xs text-muted-foreground">{error}</p>
+        ) : null}
+      </div>
+    ) : null;
 
   return (
-    <PageContainer width="canvas" className="flex min-h-0 flex-col pb-4">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Button
-          variant="ghost"
-          onClick={() => navigate(APP_PATHS.toolbox.workflows.root)}
-          className="h-auto gap-1 px-0 py-0 text-sm text-muted-foreground hover:text-foreground"
-          icon={<ChevronLeft size={16} />}
-        >
-          工作流
-        </Button>
-        {turnPath && (
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<MessageSquare size={14} />}
-            title="这个工作流是从一轮协作存下来的，回去看看那一轮"
-            onClick={() => navigate(turnPath)}
-          >
-            回到原对话
-          </Button>
-        )}
-        <div className="ml-auto flex flex-wrap gap-2">
-          <Button
-            variant="neutral"
-            size="md"
-            icon={<Play size={14} />}
-            onClick={() => setRunOpen(true)}
-          >
-            跑一次
-          </Button>
-          <Button
-            size="md"
-            disabled={saving}
-            icon={
-              saving ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Save size={14} />
-              )
-            }
-            onClick={() => void save()}
-          >
-            保存
-          </Button>
-        </div>
-      </div>
-
-      <div className="mb-3 grid gap-3 sm:grid-cols-[1fr_1.2fr]">
-        <label className="block" htmlFor="wf-name">
-          <span className="mb-1 block text-xs text-muted-foreground">名称</span>
-          <Input
-            id="wf-name"
-            className="w-full"
+    <>
+      <CanvasShell
+        backAriaLabel={back.ariaLabel}
+        onBack={goBack}
+        title={
+          <input
             value={name}
             maxLength={120}
             onChange={(e) => setName(e.target.value)}
+            aria-label="工作流标题"
+            className={TITLE_FIELD_CLASS}
           />
-        </label>
-        <label className="block" htmlFor="wf-desc">
-          <span className="mb-1 block text-xs text-muted-foreground">
-            说明（可选）
-          </span>
-          <Input
-            id="wf-desc"
-            className="w-full"
-            value={description}
-            maxLength={400}
-            placeholder="可保存的团队拆法"
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </label>
-      </div>
-
-      <div className="grid min-h-[520px] flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="overflow-hidden rounded-xl border border-border bg-background">
+        }
+        status={`v${workflow.version}`}
+        actions={
+          <>
+            {turnPath ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<MessageSquare size={14} />}
+                title="这个工作流是从一轮协作存下来的，回去看看那一轮"
+                onClick={() => navigate(turnPath)}
+              >
+                回到原对话
+              </Button>
+            ) : null}
+            <Button
+              variant="neutral"
+              size="md"
+              icon={<Play size={14} />}
+              onClick={() => setRunOpen(true)}
+            >
+              跑一次
+            </Button>
+            <Button
+              size="md"
+              disabled={saving}
+              icon={
+                saving ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Save size={14} />
+                )
+              }
+              onClick={() => void save()}
+            >
+              保存
+            </Button>
+          </>
+        }
+        banner={banner}
+      >
+        <div className="absolute inset-0">
           <WorkflowCanvas
             definition={definition}
             selectedId={selectedId}
             onChange={setDefinition}
             onSelect={setSelectedId}
-            className="h-[520px] lg:h-full"
+            className="h-full min-h-0"
           />
         </div>
-        <div className="divide-y divide-border overflow-y-auto rounded-xl border border-border bg-background">
-          <WorkflowSlotsPanel
-            definition={definition}
-            onChange={setDefinition}
-          />
-          <WorkflowNodeInspector
-            definition={definition}
-            selectedId={selectedId}
-            onChange={setDefinition}
-          />
-        </div>
-      </div>
-
-      {issues.length > 0 && (
-        <ul className="mt-3 space-y-1 text-xs text-warning">
-          {issues.slice(0, 4).map((issue) => (
-            <li key={`${issue.code}-${issue.nodeId ?? ""}`}>{issue.message}</li>
-          ))}
-        </ul>
-      )}
-      {error && <p className="mt-2 text-xs text-muted-foreground">{error}</p>}
-      <p className="mt-2 text-xs text-muted-foreground">v{workflow.version}</p>
-
+        {selectedNode ? (
+          <aside
+            aria-label="工作流属性"
+            className="absolute inset-y-3 right-3 z-10 flex w-[280px] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg"
+          >
+            <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+              <label className="block p-4" htmlFor="wf-desc">
+                <span className="mb-1 block text-xs text-muted-foreground">
+                  说明（可选）
+                </span>
+                <Input
+                  id="wf-desc"
+                  className="w-full"
+                  value={description}
+                  maxLength={400}
+                  placeholder="可保存的团队拆法"
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </label>
+              <WorkflowSlotsPanel
+                definition={definition}
+                onChange={setDefinition}
+              />
+              <WorkflowNodeInspector
+                definition={definition}
+                selectedId={selectedNode.id}
+                onChange={setDefinition}
+              />
+            </div>
+          </aside>
+        ) : null}
+      </CanvasShell>
       {/* 传已保存的那份：开跑跑的是服务端的 definition，画布上未保存的改动不算。 */}
       <RunWorkflowDialog
         open={runOpen}
@@ -286,6 +316,6 @@ export function WorkflowEditorPage() {
         onSlotsSuggested={adoptSuggestedSlots}
         onClose={() => setRunOpen(false)}
       />
-    </PageContainer>
+    </>
   );
 }

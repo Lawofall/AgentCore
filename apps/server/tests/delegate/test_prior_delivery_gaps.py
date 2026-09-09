@@ -26,7 +26,7 @@ def test_ceo_turn_prompt_has_no_prior_delivery_gaps_section():
 
 
 def test_ask_user_kickoff_does_not_force_gap_continue():
-    skill = build_system_skill_registry().get("asking_the_user")
+    skill = build_system_skill_registry().get("ask_kickoff")
     assert skill is not None
     body = skill.body
     assert "短确认·只补缺口" not in body

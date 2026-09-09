@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, TokenUsage
 from agentcore.runtime.delegate.continuation import (
     ContinuationRejectedError,
@@ -26,7 +27,7 @@ from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunPhase, RunSpec, RunState
 from agentcore.runtime.sessions import SessionStore
 from agentcore.tools.builtin.delegate import DelegateTool
-from agentcore.tools.protocol import ToolCategory, ToolContext, ToolResult, ToolSchema
+from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
@@ -40,7 +41,7 @@ class _NamedStub:
             name=name,
             description=name,
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments, context):  # noqa: ARG002

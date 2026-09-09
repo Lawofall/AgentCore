@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.coordination.session import resolve_coordination_session
 from agentcore.runtime.coordination.vacate import vacate_never_started_seat
 from agentcore.runtime.events import team_synthesis_preview
@@ -57,7 +57,7 @@ class WaitTool:
                 },
                 "required": [],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 
@@ -139,7 +139,7 @@ class UpdateSynthesisTool:
                 },
                 "required": ["draft"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 
@@ -233,7 +233,7 @@ class CancelWorkerTool:
                 },
                 "required": ["run_id"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 
@@ -424,7 +424,7 @@ class ResolveEscalationTool:
                 },
                 "required": ["run_id", "answer"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 
@@ -575,7 +575,7 @@ class QueueUserMessageTool:
                 },
                 "required": ["interjection_id"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 

@@ -15,8 +15,12 @@ import {
   codeDiagnosticsPeek,
   extractCodeDiagnostics,
 } from "@/components/chat/toolResult/codeDiagnostics";
+import {
+  toolGroupFaultLabel,
+  toolRowFaultLabel,
+} from "@/components/chat/toolResult/toolFaultFace";
 import { isVerifyBudgetExceeded } from "@/components/chat/toolResult/verifyBudget";
-import { Badge, Button } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { isBrowserTool } from "@/lib/browserActivity";
 import {
   channelRedirectFace,
@@ -40,9 +44,9 @@ import {
   ChevronRight,
   ExternalLink,
   Radio,
-  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BrowserActivityCard,
   browserResultTail,
@@ -64,12 +68,6 @@ import {
   toolMeta,
   toolPhaseText,
 } from "./message-bubble/constants";
-
-function isToolFaultError(
-  step: Extract<ProcessStep, { kind: "tool" }>,
-): boolean {
-  return step.status === "error" && !isVerifyBudgetExceeded(step.display);
-}
 
 /** Tools whose collapsed title already names the target (path / topic / skill / action)
  * and whose peek would only repeat an ack line or leak result body. Skip the peek —
@@ -284,9 +282,8 @@ function ToolLineStat({ stat }: { stat: ToolLineTitleStat }) {
   );
 }
 
-/** 行尾指示（顶层工具行对齐「Read page · N sources」）：进行中用已运行秒数（取代脉冲点，
- *  折叠保持一行）；否则失败打红✗，验证未完成走 warning 三角（非故障红）；顶层可展开
- *  行补折叠 chevron。成功完成不再挂绿✓——标题本身已表明做完。 */
+/** 行尾指示：进行中用已运行秒数；没做成挂灰色短词；验证未完成走 warning 三角；
+ *  顶层可展开行补 chevron。成功不挂标记。 */
 function ToolRowTail({
   status,
   nested,
@@ -294,15 +291,18 @@ function ToolRowTail({
   open,
   verifyBudgetExceeded = false,
   elapsedSec = 0,
+  faultLabel = null,
 }: {
   status: "running" | "success" | "error" | "redirect";
   nested: boolean;
   hasBody: boolean;
   open: boolean;
-  /** Verify budget exceeded — warning affordance, not fault red ✗. */
+  /** Verify budget exceeded — warning affordance, not a fault word. */
   verifyBudgetExceeded?: boolean;
   /** Live seconds while `status === "running"`; shown from 1s so the first tick isn't `0s`. */
   elapsedSec?: number;
+  /** 未通过 / 未找到 / 未完成 — uncolored, replaces the fault X. */
+  faultLabel?: string | null;
 }) {
   if (status === "running") {
     if (elapsedSec < 1) return null;
@@ -312,18 +312,19 @@ function ToolRowTail({
       </span>
     );
   }
-  // The verdict icon mounts fresh on the running→done edge, so a one-shot pop marks the
-  // state change (设计 §3); reduced-motion skips it. 行尾只留需要动作的符号：失败红✗ /
-  // 验证未完成 warning 三角 / 顶层可展开 chevron。成功完成不再挂绿✓。
-  const faultIcon = verifyBudgetExceeded ? (
+  const faultMeta =
+    !verifyBudgetExceeded && faultLabel ? (
+      <span
+        data-testid="tool-fault-label"
+        className="text-xs text-muted-foreground/70"
+      >
+        {faultLabel}
+      </span>
+    ) : null;
+  const warningIcon = verifyBudgetExceeded ? (
     <AlertTriangle
       size={14}
       className="animate-status-pop text-warning motion-reduce:animate-none"
-    />
-  ) : status === "error" ? (
-    <X
-      size={14}
-      className="animate-status-pop text-destructive motion-reduce:animate-none"
     />
   ) : null;
   const chevron =
@@ -334,10 +335,11 @@ function ToolRowTail({
         <ChevronRight size={14} className="text-muted-foreground" />
       )
     ) : null;
-  if (!faultIcon && !chevron) return null;
+  if (!faultMeta && !warningIcon && !chevron) return null;
   return (
     <span className="ml-1 inline-flex items-center gap-1 align-middle">
-      {faultIcon}
+      {faultMeta}
+      {warningIcon}
       {chevron}
     </span>
   );
@@ -404,6 +406,32 @@ function CloudPreviewButtons({
   );
 }
 
+function readConversationOpenId(
+  step: Extract<ProcessStep, { kind: "tool" }>,
+): string | null {
+  if (step.tool_name !== "read_conversation") return null;
+  const d = step.display;
+  if (!d || typeof d !== "object") return null;
+  const id = (d as { conversation_id?: unknown }).conversation_id;
+  return typeof id === "string" && id.trim() ? id.trim() : null;
+}
+
+/** Sibling of the expand title — does not toggle the transcript. */
+function OpenConversationButton({
+  conversationId,
+}: { conversationId: string }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(`/conversations/${conversationId}`)}
+      className="shrink-0 text-xs text-muted-foreground hover:text-foreground hover:underline"
+    >
+      打开
+    </button>
+  );
+}
+
 /** Single tool invocation row in the process timeline. */
 export function ToolLine({
   step,
@@ -464,8 +492,9 @@ export function ToolLine({
   const running = status === "running";
   const verifyBudgetExceeded =
     step.status === "error" && isVerifyBudgetExceeded(step.display);
+  const faultLabel = toolRowFaultLabel(step);
   const isWebSearch = step.tool_name === "web_search";
-  // Collapsed error rows stay one line (title + red ✗ / warning 三角).
+  // Collapsed error rows stay one line (title + 未通过/未找到 / warning 三角).
   // 验证未完成（idle/灾难顶）与其它失败态 inlineMeta 并进标题。
   const suppressesPeek =
     status === "redirect" ||
@@ -542,19 +571,22 @@ export function ToolLine({
     );
   }
   const preview = runCloudPreview(step, conversationId);
+  const openConversationId = readConversationOpenId(step);
   const titleBtn = (
     <Button
       variant="ghost"
       onClick={() => hasBody && setOpen((v) => !v)}
-      className={`h-auto min-w-0 w-full justify-start gap-2 overflow-hidden px-0 py-0 hover:bg-transparent ${
+      className={`h-auto min-w-0 w-full justify-start gap-2 overflow-hidden px-0 py-0 font-normal hover:bg-transparent ${
         hasBody ? "cursor-pointer" : "cursor-default"
       }`}
     >
       <span className="flex min-w-0 w-full items-start gap-2 overflow-hidden text-left">
-        <Icon size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
+        <span className="flex h-5 shrink-0 items-center justify-center text-muted-foreground">
+          <Icon size={14} />
+        </span>
         <span className="min-w-0 flex-1 overflow-hidden">
           <span
-            className={`flex min-w-0 items-center overflow-hidden ${
+            className={`flex h-5 min-w-0 items-center overflow-hidden ${
               nested
                 ? "text-sm text-foreground"
                 : "text-sm text-muted-foreground"
@@ -592,6 +624,7 @@ export function ToolLine({
               open={open}
               verifyBudgetExceeded={verifyBudgetExceeded}
               elapsedSec={elapsed}
+              faultLabel={faultLabel}
             />
           </span>
           {hasBody && !open && !inlineMeta && !suppressesPeek && (
@@ -605,14 +638,19 @@ export function ToolLine({
   );
   return (
     <div className="min-w-0 max-w-full">
-      {preview ? (
+      {preview || openConversationId ? (
         <div className="flex min-w-0 items-center gap-1.5">
           <div className="min-w-0 flex-1 overflow-hidden">{titleBtn}</div>
-          <CloudPreviewButtons
-            conversationId={preview.conversationId}
-            processId={preview.processId}
-            ports={preview.ports}
-          />
+          {preview ? (
+            <CloudPreviewButtons
+              conversationId={preview.conversationId}
+              processId={preview.processId}
+              ports={preview.ports}
+            />
+          ) : null}
+          {openConversationId ? (
+            <OpenConversationButton conversationId={openConversationId} />
+          ) : null}
         </div>
       ) : (
         titleBtn
@@ -721,11 +759,7 @@ function DefaultToolLineGroup({
   const showBrowser = useSidePanelStore((s) => s.showBrowser);
 
   const summary = toolGroupSummary(tools);
-  // 验证未完成不是故障，不进组头「N failed」红徽章。
-  const errorCount = tools.reduce(
-    (n, t) => n + (isToolFaultError(t) ? 1 : 0),
-    0,
-  );
+  const groupFault = !expanded ? toolGroupFaultLabel(tools) : null;
   const running = tools.some((t) => t.status === "running");
   // 混杂组（含 browser_* + 他工具）走默认壳，无活动卡 CTA——组头挂同款「打开浏览器」/
   // 「查看直播」，勿在子 ToolLine 再刷。纯 browser ≥2 已由 BrowserActivityCard 接管。
@@ -738,15 +772,18 @@ function DefaultToolLineGroup({
         <Button
           variant="ghost"
           onClick={toggleExpanded}
-          className="h-auto min-w-0 flex-1 justify-start gap-2 overflow-hidden px-0 py-0 text-sm text-muted-foreground hover:bg-transparent hover:text-foreground"
+          className="h-auto min-w-0 flex-1 justify-start gap-2 overflow-hidden px-0 py-0 text-sm font-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
         >
           <span className="flex min-w-0 items-center gap-2 overflow-hidden">
             {running && <ThinkingDots />}
             <span className="min-w-0 truncate text-left">{summary}</span>
-            {errorCount > 0 && (
-              <Badge tone="destructive" className="shrink-0 font-normal">
-                {errorCount} failed
-              </Badge>
+            {groupFault && (
+              <span
+                data-testid="tool-group-fault"
+                className="shrink-0 text-xs text-muted-foreground/70"
+              >
+                {groupFault}
+              </span>
             )}
             {!running &&
               (expanded ? (

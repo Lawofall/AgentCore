@@ -2,7 +2,7 @@
 
 Auto-skips (via the shared ``client`` fixture) when no PostgreSQL is reachable.
 Covers create modes, birth-time membership, soft-delete archives (no ungroup),
-最近删除 list + restore, permanent wipe (conversations + cloud space), absence of
+最近删除 list + restore + 彻底删除, permanent wipe (conversations + cloud space), absence of
 PATCH …/folder, and IDOR isolation.
 """
 
@@ -541,11 +541,16 @@ async def test_trash_is_access_session_only(client, new_client):
         headers = {"Authorization": f"Bearer {token}"}
         # 同一张票读得动名册……
         assert (await sidecar.get("/v1/folders", headers=headers)).status_code == 200
-        # ……但看不到回收站，也恢复不了。
+        # ……但看不到回收站，也恢复不了、彻底删不了。
         assert (await sidecar.get("/v1/folders/trash", headers=headers)).status_code == 401
         assert (
             await sidecar.post(
                 f"/v1/folders/trash/{folder_id}/restore", headers=headers
+            )
+        ).status_code == 401
+        assert (
+            await sidecar.delete(
+                f"/v1/folders/trash/{folder_id}", headers=headers
             )
         ).status_code == 401
 
@@ -560,6 +565,9 @@ async def test_trash_is_isolated_between_users(client, new_client):
         assert (await other.get("/v1/folders/trash")).json()["data"] == []
         assert (
             await other.post(f"/v1/folders/trash/{folder_id}/restore")
+        ).status_code == 404
+        assert (
+            await other.delete(f"/v1/folders/trash/{folder_id}")
         ).status_code == 404
 
     assert (await client.post(f"/v1/folders/trash/{folder_id}/restore")).status_code == 200
@@ -743,6 +751,58 @@ async def test_permanent_delete_local_folder_keeps_os_sentinel(
     assert (await client.get("/v1/folders")).json() == []
     assert os_sentinel.exists()
     assert (os_sentinel / "important.txt").read_text(encoding="utf-8") == "do-not-touch"
+
+
+async def test_trash_purge_folder_wipes_members_and_spares_live_slot(
+    client, session_factory, monkeypatch, _fs_data_dir
+):
+    """最近删除里彻底删除：成员对话清掉，不误删已经占走原名的活文件夹。"""
+    monkeypatch.setattr(permanent_delete_mod, "async_session_factory", session_factory)
+    user_id = await register_and_login(client, "foldertrashp")
+    folder_id = await _create_cloud_folder(client, "Gone")
+    conv = (
+        await client.post(
+            "/v1/conversations", json={"title": "wipe me", "folder_id": folder_id}
+        )
+    ).json()["id"]
+    await _seed_message(session_factory, conv)
+    ws = f"folder:{folder_id}"
+    assert (
+        await client.put(f"/v1/workspaces/{ws}/files/docs/a.txt", content=b"payload")
+    ).status_code == 200
+
+    assert (await client.delete(f"/v1/folders/{folder_id}")).status_code == 200
+    sibling = await _create_cloud_folder(client, "Gone")
+    assert (
+        await client.put(
+            f"/v1/workspaces/folder:{sibling}/files/keep.txt", content=b"keep"
+        )
+    ).status_code == 200
+
+    r = await client.delete(f"/v1/folders/trash/{folder_id}")
+    assert r.status_code == 200, r.text
+
+    assert (await client.get("/v1/folders/trash")).json()["data"] == []
+    assert (await client.get(f"/v1/conversations/{conv}")).status_code == 404
+    got = await client.get(f"/v1/workspaces/folder:{sibling}/files/keep.txt")
+    assert got.status_code == 200 and got.content == b"keep"
+    assert workspace_root_path(
+        user_id=user_id, folder_rel_path="Gone", conversation_id=""
+    ).exists()
+
+
+async def test_trash_purge_conversation_removes_the_row(client):
+    await register_and_login(client, "convtrashp")
+    conv = (await client.post("/v1/conversations", json={"title": "gone"})).json()[
+        "id"
+    ]
+    assert (await client.delete(f"/v1/conversations/{conv}")).status_code == 200
+    assert (await client.get("/v1/conversations/trash")).json()["total"] == 1
+
+    r = await client.delete(f"/v1/conversations/trash/{conv}")
+    assert r.status_code == 200, r.text
+    assert (await client.get("/v1/conversations/trash")).json()["data"] == []
+    assert (await client.get(f"/v1/conversations/{conv}")).status_code == 404
 
 
 async def test_folder_isolation_between_users(client, new_client):

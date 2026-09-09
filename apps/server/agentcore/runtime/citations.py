@@ -40,7 +40,7 @@ def _citation_key(citation: dict[str, Any]) -> str:
 
 
 def ledger_entry_to_citation(entry: dict[str, Any]) -> dict[str, Any]:
-    """台账条目 → ``citations_event`` 来源卡形状（含 tier / id，供弱源徽标）。"""
+    """台账条目 → ``citations_event`` 来源卡形状（含 tier / id / deep_read）。"""
     return {
         "url": str(entry.get("url") or ""),
         "title": str(entry.get("title") or ""),

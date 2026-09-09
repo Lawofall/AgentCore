@@ -11,8 +11,8 @@ from agentcore.core.types import (
     DEFAULT_PERMISSION_AXES,
     PermissionAxes,
     ToolApproval,
-    ToolCategory,
     ToolEffect,
+    ToolFace,
     new_id,
 )
 from agentcore.llm.profiles import TurnProfiles as ProfileSet
@@ -199,7 +199,7 @@ class DebateTool:
             name="debate",
             description=DEBATE_DESCRIPTION,
             parameters=DEBATE_PARAMETERS,
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 

@@ -11,6 +11,20 @@ AUDIENCE_CEO_ONLY: tuple[str, ...] = (AUDIENCE_CEO,)
 AUDIENCE_WORKER_ONLY: tuple[str, ...] = (AUDIENCE_WORKER,)
 AUDIENCE_BOTH: tuple[str, ...] = (AUDIENCE_CEO, AUDIENCE_WORKER)
 
+# Catalog subtitles under 能力指引. Empty groups are omitted at render.
+GROUP_ORCHESTRATION = "编排"
+GROUP_WORKSPACE = "工作区"
+GROUP_DELIVERY = "交付"
+GROUP_PRODUCT = "产品"
+GROUP_TOOLS = "工具"
+SKILL_GROUP_ORDER: tuple[str, ...] = (
+    GROUP_ORCHESTRATION,
+    GROUP_WORKSPACE,
+    GROUP_DELIVERY,
+    GROUP_PRODUCT,
+    GROUP_TOOLS,
+)
+
 
 @dataclass(frozen=True)
 class SystemSkill:
@@ -20,9 +34,10 @@ class SystemSkill:
     (tells the model WHEN to pull it); ``body`` is the full HOW guidance, returned
     only when ``consult(name)`` is called. ``requires_tools`` gates the
     catalog entry: the skill appears only when every named tool is wired this turn
-    (e.g. ``asking_the_user`` needs the ``ask_user`` tool, which is live-user
-    only), so the prompt never advertises a capability the CEO cannot act on.
-    ``audience`` is who may *see* the entry (CEO vs worker). Default both.
+    (e.g. ``ask_kickoff`` / ``ask_midtask`` need the ``ask_user`` tool, which is
+    live-user only), so the prompt never advertises a capability the CEO cannot
+    act on. ``audience`` is who may *see* the entry (CEO vs worker). Default both.
+    ``group`` is the Chinese 能力指引 subtitle (编排 / 工作区 / 交付 / 产品 / 工具).
     Directory listing and ``consult`` fetch share this filter — do not advertise
     a name the same source cannot fetch. Not a task-intent classifier.
     """
@@ -32,6 +47,7 @@ class SystemSkill:
     body: str
     requires_tools: tuple[str, ...] = ()
     audience: tuple[str, ...] = AUDIENCE_BOTH
+    group: str = ""
 
 
 class SkillRegistry:

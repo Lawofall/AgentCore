@@ -12,7 +12,7 @@ from typing import Any
 
 from agentcore.config import settings
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.memory.explore_profile import (
     MAX_EXPLORE_TOPICS,
     compute_workspace_explore_fingerprint,
@@ -130,7 +130,7 @@ class UpdateFolderProfileTool:
                 },
                 "required": ["content"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.FOLDER,
             approval=ToolApproval.NEVER,
         )
 
@@ -200,7 +200,7 @@ class UpdateFolderProfileTool:
             )
 
         # Profile landed → clear explore-pending so same-turn delivery delegates
-        # regain structured form=files → files_written inference + full write_scope.
+        # regain pinned-path landing → files_written inference + full write_scope.
         context.cold_start_explore_pending = False
         context.write_scope = "project"
 

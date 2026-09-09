@@ -60,11 +60,7 @@ export function GeneralSettings() {
       <PageHeader title="通用" />
 
       <SettingsStack>
-        <SettingsSection
-          title="主题"
-          description="也可在命令面板（Ctrl/Cmd+K）中快速切换。"
-          contentClassName="space-y-2"
-        >
+        <SettingsSection title="主题" contentClassName="space-y-2">
           {THEME_OPTIONS.map((option) => (
             <ThemeRow
               key={option.value}
@@ -138,16 +134,11 @@ function AdvancedSection() {
   };
 
   return (
-    <SettingsSection
-      title="进阶"
-      description="本机文件夹是否走同侧引擎（不是离线）。"
-      divider
-      contentClassName="space-y-2"
-    >
+    <SettingsSection title="进阶" divider contentClassName="space-y-2">
       <SettingRow
         align="start"
         label="允许本机执行"
-        description="关闭后全部走云端过桥；开启则本机文件夹默认同侧引擎（与盘同侧）。启动失败会自动改走云。「我的文件」始终走云。这不是离线模式：AI 推理仍在云端，断网时只能浏览缓存与本机文件（只读），不能发送。"
+        description="开启后本机文件夹走同侧引擎，不是离线。关闭则全部过桥；「我的文件」始终走云。"
         control={
           <Switch
             checked={localEngineAllowed}

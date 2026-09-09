@@ -294,7 +294,10 @@ def test_sibling_summary_lists_pinned_artifacts_ignores_deleted_name():
     )
     assert "y" * 300 not in b.sibling_summary
     assert plan.nodes[0].deliverable is not None
-    assert plan.nodes[0].deliverable.form == "files"
+    assert plan.nodes[0].deliverable.artifacts == [
+        "src/engine/rules.ts",
+        "src/data/tables.ts",
+    ]
 
 
 def test_sibling_summary_indents_multiline_task():
@@ -574,51 +577,52 @@ def test_deliverable_parsed_onto_policy():
     assert not hasattr(c, "must_contain_soft")
 
 
-def test_no_deliverable_defaults_to_files_without_drafts_dir():
+def test_no_deliverable_does_not_expect_landing():
     plan, _ = build_run_plan([{"role": "A", "task": "a"}], id_prefix="t")
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.form == "files"
+    assert d.artifacts == []
     assert d.artifact_dir == ""
+    assert "form" not in d.__dataclass_fields__
 
 
-def test_empty_deliverable_object_defaults_to_files():
+def test_empty_deliverable_object_does_not_expect_landing():
     plan, _ = build_run_plan(
         [{"role": "A", "task": "a", "deliverable": {}}], id_prefix="t"
     )
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.form == "files"
+    assert d.artifacts == []
     assert d.artifact_dir == ""
 
 
-def test_deliverable_block_with_internal_knob_still_files():
+def test_deliverable_block_with_internal_knob_does_not_expect_landing():
     plan, _ = build_run_plan(
         [{"role": "A", "task": "a", "deliverable": {"strict": True}}], id_prefix="t"
     )
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.form == "files"
     assert d.strict is True
+    assert d.artifacts == []
 
 
-def test_requires_files_alone_defaults_to_files():
-    # Deleted requires_files key is not consumed; omitted form still files.
+def test_requires_files_alone_does_not_expect_landing():
+    # Deleted requires_files key is not consumed; leftover does not pin landing.
     plan, _ = build_run_plan(
         [{"role": "A", "task": "a", "deliverable": {"requires_files": True}}], id_prefix="t"
     )
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.form == "files"
+    assert d.artifacts == []
 
 
-def test_requires_files_false_alone_defaults_to_files():
+def test_requires_files_false_alone_does_not_expect_landing():
     plan, _ = build_run_plan(
         [{"role": "A", "task": "a", "deliverable": {"requires_files": False}}], id_prefix="t"
     )
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.form == "files"
+    assert d.artifacts == []
 
 
 def test_artifacts_parsed_without_requires_files_backfill():
@@ -645,9 +649,10 @@ def test_dag_step_deliverable_parsed_independently():
     ]
     plan, errs = build_run_plan(tasks, id_prefix="t")
     assert errs == []
-    assert plan.by_id("t_s1").deliverable.form == "prose"
-    assert plan.by_id("t_s2").deliverable is not None
-    assert plan.by_id("t_s2").deliverable.form == "files"
+    s1 = plan.by_id("t_s1").deliverable
+    s2 = plan.by_id("t_s2").deliverable
+    assert s1 is not None and s1.artifacts == []
+    assert s2 is not None and s2.artifacts == []
 
 
 def test_prose_with_downstream_keeps_form():
@@ -673,7 +678,7 @@ def test_prose_with_downstream_keeps_form():
     assert errs == []
     d = plan.by_id("t_diagnose").deliverable
     assert d is not None
-    assert d.form == "prose"
+    assert d.artifacts == []
     assert not hasattr(d, "min_length")
 
 

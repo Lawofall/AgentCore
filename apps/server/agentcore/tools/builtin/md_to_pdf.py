@@ -10,7 +10,7 @@ import time
 from typing import Any
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.docs_export.layout import (
     DOC_LAYOUTS,
     LAYOUT_INVALID_MESSAGE,
@@ -41,6 +41,9 @@ class MdToPdfTool:
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.SELF_REPORT,
         produces_formats=(".pdf",),
+        workspace_io=True,
+        resident=False,
+        catalog_summary="导出 PDF",
     )
 
     @property
@@ -69,7 +72,7 @@ class MdToPdfTool:
                 },
                 "required": ["path"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.GRANTABLE,
         )
 

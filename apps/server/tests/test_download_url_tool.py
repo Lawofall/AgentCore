@@ -22,14 +22,14 @@ class _StubTool:
 
     @property
     def schema(self):  # noqa: ANN201 — minimal stub for registry
-        from agentcore.core.types import ToolApproval, ToolCategory
+        from agentcore.core.types import ToolApproval, ToolFace
         from agentcore.tools.protocol import ToolSchema
 
         return ToolSchema(
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.RESEARCH,
+            face=ToolFace.WEB,
             approval=ToolApproval.NEVER,
         )
 

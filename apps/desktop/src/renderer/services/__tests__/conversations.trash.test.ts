@@ -5,16 +5,19 @@ vi.mock("@/services/api", () => ({
 import { api } from "@/services/api";
 import {
   listConversationTrash,
+  purgeTrashedConversation,
   restoreConversation,
 } from "@/services/conversations";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
+const del = vi.mocked(api.delete);
 
 beforeEach(() => {
   get.mockReset();
   post.mockReset();
+  del.mockReset();
 });
 
 describe("最近删除 (conversation trash)", () => {
@@ -96,5 +99,11 @@ describe("最近删除 (conversation trash)", () => {
     // The pre-delete activity time survives, which is what puts the chat back in its
     // recency group instead of at the top under「今天」.
     expect(conv.updatedAt).toBe("2026-08-09T12:00:00Z");
+  });
+
+  it("purge hits the trash item", async () => {
+    del.mockResolvedValue(undefined);
+    await purgeTrashedConversation("c1");
+    expect(del).toHaveBeenCalledWith("/v1/conversations/trash/c1");
   });
 });

@@ -28,7 +28,7 @@ import { useState } from "react";
 
 /**
  * 服务商 (/more/providers) — BYOK 列表 / 表单 / 测连 + 安全说明。
- * 页头只留标题；准入走空态，选用组合在「设置 · 模型」。
+ * 页头只留标题；准入走空态，选用组合在「设置 · 模型组合」。
  */
 export function ProviderSettings() {
   const { data: response, isLoading, isError, error } = useLlmProviders();

@@ -26,8 +26,9 @@ describe("MorePage narrow", () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole("link", { name: "账户设置" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "模型" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "模型组合" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "消息隐私" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "关于" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "快捷键" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Git 凭据" })).toBeNull();
     expect(screen.queryByRole("link", { name: "通用" })).toBeNull();

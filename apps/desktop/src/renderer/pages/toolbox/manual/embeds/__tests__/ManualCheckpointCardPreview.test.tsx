@@ -17,9 +17,8 @@ function renderPreview() {
 describe("ManualCheckpointCardPreview", () => {
   it("renders without crashing", () => {
     renderPreview();
-    expect(screen.getByText("需要你拍板")).toBeTruthy();
-    expect(screen.queryByText(/试点范围定多大？/)).toBeNull();
     expect(screen.getByText("第一批放行范围")).toBeTruthy();
+    expect(screen.queryByText(/试点范围定多大？/)).toBeNull();
     expect(screen.getByText("先做一个试点（推荐）")).toBeTruthy();
     expect(screen.getByText("提交")).toBeTruthy();
     expect(screen.getByText("取消")).toBeTruthy();
@@ -37,7 +36,7 @@ describe("ManualCheckpointCardPreview", () => {
     expect(screen.getByText("演示，不会发给团队")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "再试一次" }));
-    expect(screen.getByText("需要你拍板")).toBeTruthy();
+    expect(screen.getByText("第一批放行范围")).toBeTruthy();
     expect(screen.getByRole("button", { name: "提交" })).toBeTruthy();
   });
 
@@ -49,6 +48,6 @@ describe("ManualCheckpointCardPreview", () => {
     expect(screen.queryByRole("button", { name: "提交" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "再试一次" }));
-    expect(screen.getByText("需要你拍板")).toBeTruthy();
+    expect(screen.getByText("第一批放行范围")).toBeTruthy();
   });
 });

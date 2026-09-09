@@ -259,7 +259,6 @@ async def test_materialise_turn_token_budget_skips():
             task="qa",
             agent_id="qa",
             deliverable=Deliverable(
-                form="files",
                 artifacts=["site/QA.md"],
             ),
         )
@@ -303,7 +302,6 @@ async def test_skip_qa_delivery_status_partial_with_honesty_gaps():
             agent_id="qa",
             depends_on=["s0"],
             deliverable=Deliverable(
-                form="files",
                 artifacts=["site/QA.md"],
             ),
         )

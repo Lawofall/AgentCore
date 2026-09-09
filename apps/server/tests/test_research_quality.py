@@ -43,24 +43,24 @@ def test_deliverable_is_report_delivery_structured_or():
     from agentcore.workspace.stage_dirs import DEBATE_DIR, RESEARCH_DIR, REVIEWS_DIR
 
     assert deliverable_is_report_delivery(
-        Deliverable(citation_mode="two_phase", form="files", artifacts=["a.md"])
+        Deliverable(citation_mode="two_phase",  artifacts=["a.md"])
     )
     assert deliverable_is_report_delivery(
-        Deliverable(form="files", artifacts=[f"{REVIEWS_DIR}/审校.md"])
+        Deliverable( artifacts=[f"{REVIEWS_DIR}/审校.md"])
     )
     assert deliverable_is_report_delivery(
-        Deliverable(form="files", artifacts=[f"{RESEARCH_DIR}/报告.md"])
+        Deliverable( artifacts=[f"{RESEARCH_DIR}/报告.md"])
     )
     assert deliverable_is_report_delivery(
-        Deliverable(form="files", artifacts=[f"{DEBATE_DIR}/纪要.md"])
+        Deliverable( artifacts=[f"{DEBATE_DIR}/纪要.md"])
     )
     # Bare repair/build files — not a report post.
     assert not deliverable_is_report_delivery(
-        Deliverable(form="files", artifacts=["src/foo.py"])
+        Deliverable( artifacts=["src/foo.py"])
     )
     assert not deliverable_is_report_delivery(None)
     assert not deliverable_is_report_delivery(
-        Deliverable(form="prose")
+        Deliverable()
     )
 
 
@@ -227,11 +227,9 @@ def test_upstream_body_floor_predicate():
 
 
 def test_brief_may_satisfy_body_floor():
-    """有下游 prose 交接地板禁止 summary 升格；其它 form / 未声明仍可。"""
-    assert not brief_may_satisfy_body_floor(deliverable_form="prose")
-    assert brief_may_satisfy_body_floor(deliverable_form="files")
-    assert brief_may_satisfy_body_floor(deliverable_form=None)
-    assert brief_may_satisfy_body_floor(deliverable_form="")
+    """钉路径才允许便条升格正文地板；省略不催写。"""
+    assert not brief_may_satisfy_body_floor(expects_landing=False)
+    assert brief_may_satisfy_body_floor(expects_landing=True)
 
 
 def test_promote_brief_to_deliverable():
@@ -256,7 +254,7 @@ async def test_handoff_execute_ignores_arguments_and_does_not_promote(tmp_path: 
         tmp_path,
         handoff_requires_body=True,
         handoff_min_body_chars=0,
-        handoff_deliverable_form=None,
+        handoff_expects_landing=False,
         round_content_chars=0)
     result = await HandoffTool().execute(
         {"summary": "Greeter 问好", "key_points": ["已完成打招呼"]},
@@ -275,7 +273,7 @@ async def test_handoff_allows_brief_for_prose_with_dependents(tmp_path: Path):
         tmp_path,
         handoff_requires_body=True,
         handoff_min_body_chars=MIN_UPSTREAM_BODY_CHARS,
-        handoff_deliverable_form="prose",
+        handoff_expects_landing=False,
         round_content_chars=0)
     result = await HandoffTool().execute({"summary": summary}, ctx)
     assert result.success is True
@@ -289,7 +287,7 @@ async def test_handoff_promotes_short_brief_when_below_floor(tmp_path: Path):
         tmp_path,
         handoff_requires_body=True,
         handoff_min_body_chars=MIN_UPSTREAM_BODY_CHARS,
-        handoff_deliverable_form=None,
+        handoff_expects_landing=False,
         round_content_chars=0)
     result = await HandoffTool().execute({"summary": "太短"}, ctx)
     assert result.success is True
@@ -305,7 +303,7 @@ async def test_handoff_promotes_brief_when_meets_floor_non_prose(tmp_path: Path)
         tmp_path,
         handoff_requires_body=True,
         handoff_min_body_chars=MIN_UPSTREAM_BODY_CHARS,
-        handoff_deliverable_form="files",
+        handoff_expects_landing=True,
         round_content_chars=0)
     result = await HandoffTool().execute({"summary": summary}, ctx)
     assert result.success is True
@@ -319,7 +317,7 @@ async def test_handoff_prose_allows_when_real_body_meets_floor(tmp_path: Path):
         tmp_path,
         handoff_requires_body=True,
         handoff_min_body_chars=MIN_UPSTREAM_BODY_CHARS,
-        handoff_deliverable_form="prose",
+        handoff_expects_landing=False,
         round_content_chars=MIN_UPSTREAM_BODY_CHARS + 5)
     result = await HandoffTool().execute({"summary": "诊断已写入正文"}, ctx)
     assert result.success is True
@@ -389,7 +387,7 @@ async def test_handoff_allows_empty_body_when_prose_landed(tmp_path: Path):
         tmp_path,
         handoff_requires_body=True,
         handoff_min_body_chars=MIN_UPSTREAM_BODY_CHARS,
-        handoff_deliverable_form="prose",
+        handoff_expects_landing=False,
         round_content_chars=0,
         landed_artifact_kinds={"notes.md": "prose"})
     result = await HandoffTool().execute({"summary": "已落盘调研"}, ctx)
@@ -533,10 +531,10 @@ def test_research_report_write_task_has_chapter_discipline():
     assert len(research) == 2
     for t, angle in zip(research, ["甲", "乙"], strict=True):
         d = t["deliverable"]
-        assert d["form"] == "files"
+        assert "form" not in d
         assert d["artifacts"] == [f"{RESEARCH_DIR}/{angle}调研报告.md"]
     outline = next(t for t in tasks if t["id"] == "outline")
-    assert outline["deliverable"]["form"] == "files"
+    assert "form" not in outline["deliverable"]
     assert outline["deliverable"]["artifacts"] == [f"{RESEARCH_DIR}/提纲.md"]
 
 
@@ -617,7 +615,6 @@ def test_collect_evidence_deficit_gaps_combinable_triggers():
             role="撰稿人",
             task="写",
             deliverable=Deliverable(
-                form="files",
                 artifacts=[f"{RESEARCH_PREFIX}报告.md"],
                 citation_mode="two_phase")),
         RunSpec(
@@ -625,7 +622,6 @@ def test_collect_evidence_deficit_gaps_combinable_triggers():
             role="学术审校员",
             task="审",
             deliverable=Deliverable(
-                form="files",
                 artifacts=[f"{REVIEWS_PREFIX}审校报告.md"])),
     ]
     # Adequate → no gap
@@ -738,7 +734,6 @@ def test_transcript_web_search_evidence_gap_triggers_deficit():
             role="撰稿人",
             task="写",
             deliverable=Deliverable(
-                form="files",
                 artifacts=[f"{RESEARCH_PREFIX}报告.md"],
                 citation_mode="two_phase")),
         RunSpec(
@@ -746,7 +741,6 @@ def test_transcript_web_search_evidence_gap_triggers_deficit():
             role="学术审校员",
             task="审",
             deliverable=Deliverable(
-                form="files",
                 artifacts=[f"{REVIEWS_PREFIX}审校报告.md"])),
     ]
     transcript = [
@@ -831,13 +825,13 @@ def test_named_review_without_files_not_elevated_playbook_review_lands():
     review = by_role["独立复核员"]
     # 漏填=files；不因角色名钉审校 artifacts / 纪律段。
     assert review.deliverable is not None
-    assert review.deliverable.form == "files"
-    assert not review.deliverable.artifacts
+    assert review.deliverable.artifacts == []
+    assert "form" not in review.deliverable.__dataclass_fields__
     assert INDEPENDENT_REVIEW_REPORT_DISCIPLINE not in (review.task or "")
 
     verify = by_role["验证员"]
     assert verify.deliverable is not None
-    assert verify.deliverable.form == "prose"
+    assert verify.deliverable.artifacts == []
 
     # playbook 审校默认落盘仍成立
     tasks, pb_errs = expand_playbook(
@@ -846,7 +840,7 @@ def test_named_review_without_files_not_elevated_playbook_review_lands():
     assert not pb_errs
     pb_review = next(t for t in tasks if t["id"] == "review")
     d = pb_review["deliverable"]
-    assert d["form"] == "files"
+    assert "form" not in d
     assert "requires_files" not in d
     assert "min_length" not in d
     assert "name" not in d

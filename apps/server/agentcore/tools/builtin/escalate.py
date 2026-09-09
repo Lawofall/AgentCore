@@ -44,7 +44,7 @@ from typing import Any
 
 from agentcore.core.logging import get_logger
 from agentcore.core.text import clip_preview
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.runs.constants import ESCALATE_TOOL_NAME
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -77,7 +77,7 @@ class EscalateTool:
         return ToolSchema(
             name=ESCALATE_TOOL_NAME,
             description=(
-                "向上通道：必须由上级/用户拍板或职责偏离才报（权威稿冲突、扩范围）。"
+                "向上通道：必须由上级/用户拍板或职责偏离才报（设计稿冲突、扩范围）。"
                 "小事勿升级。勿自己改、勿只标假设。"
                 "报一声继续（默认）；猜错作废才原地等。"
             ),
@@ -174,7 +174,7 @@ class EscalateTool:
                 },
                 "required": ["question"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 

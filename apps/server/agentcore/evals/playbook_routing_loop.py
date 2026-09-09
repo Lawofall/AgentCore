@@ -252,20 +252,13 @@ def _pack_sample(
     dsum = result.delegate_summary or {}
     playbook = named_playbook(dsum.get("playbook") if isinstance(dsum, dict) else None)
     intensity = None
-    forms: list[str] = []
     max_workers = None
     if isinstance(dsum, dict):
         intensity = dsum.get("intensity")
         if not intensity and isinstance(dsum.get("playbook_args"), dict):
             intensity = named_playbook(dsum["playbook_args"].get("intensity"))
-        forms = list(dsum.get("forms") or [])
         max_workers = dsum.get("max_workers")
     task_count = int((dsum or {}).get("task_count") or 0) if isinstance(dsum, dict) else 0
-    form = None
-    if isinstance(dsum, dict):
-        form = dsum.get("form")
-        if not form and len(set(forms)) == 1:
-            form = forms[0]
     action = result.action
     outcome = classify_landing(
         action=action,
@@ -273,12 +266,10 @@ def _pack_sample(
         expect=sc.expect_playbook,
         offered=bool(surface.get("offered")),
         task_count=task_count,
-        form=form if isinstance(form, str) else None,
         max_workers=max_workers if isinstance(max_workers, int) else None,
         expect_action=sc.expect_action or None,
         expect_max_workers=sc.expect_max_workers,
         expect_min_workers=sc.expect_min_workers,
-        expect_form=sc.expect_form,
         recon_rounds=int(result.recon_rounds or 0),
         expect_max_recon_rounds=sc.expect_max_recon_rounds,
     )
@@ -305,8 +296,6 @@ def _pack_sample(
         "playbook": playbook,
         "intensity": intensity,
         "task_count": task_count,
-        "form": form,
-        "forms": forms,
         "max_workers": max_workers,
         "delegate_summary": dsum,
         "outcome": outcome,
@@ -510,7 +499,6 @@ async def run_playbook_routing(
                 "category": sc.category,
                 "expect_playbook": sc.expect_playbook,
                 "expect_action": sc.expect_action or None,
-                "expect_form": sc.expect_form,
                 "expect_max_workers": sc.expect_max_workers,
                 "expect_min_workers": sc.expect_min_workers,
                 "expect_max_recon_rounds": sc.expect_max_recon_rounds,

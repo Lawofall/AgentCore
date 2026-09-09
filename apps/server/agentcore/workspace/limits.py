@@ -121,7 +121,7 @@ CHANNEL_DEAD_USER_VISIBLE = (
 )
 
 # CEO coordination inject: same fact as CHANNEL_DEAD_USER_VISIBLE, plus a
-# dispatch nail. The write-desk hard gate already rejects form=files; this
+# dispatch nail. The write-desk hard gate already rejects pinned landing; this
 # only names the constraint so the captain does not pretend files can still
 # be edited.
 CHANNEL_DEAD_CEO_INJECT = (
@@ -130,7 +130,7 @@ CHANNEL_DEAD_CEO_INJECT = (
 )
 
 # CEO coordination inject when the local exec env is sticky-dead. Soft steer
-# only — no new delegate hard gate (no form=files-shaped predicate for
+# only — no new delegate hard gate (no pinned-landing-shaped predicate for
 # "this task needs run").
 EXEC_ENV_DEAD_CEO_INJECT = (
     "这台电脑此刻跑不了命令，基于已有材料收口；"
@@ -199,8 +199,7 @@ CHANNEL_DEAD_PREPARE_ABORT = (
 LOCAL_ROOT_NOT_HELD = (
     "桌面已在线，但未声明持有本会话的本地目录"
     "（授权可能已移除，或已换用其他电脑）。"
-    "请在桌面重新授权该文件夹后，点「重新生成」"
-    "（不要再次发送）。"
+    "请在这台电脑上重新授权该文件夹后再试。"
 )
 
 WORKSPACE_CHANNEL_DEAD_RETIRE_STEER = (

@@ -181,7 +181,9 @@ describe("AskDecisionBody question stems", () => {
       ],
     };
     render(<Harness content={content} />);
-    expect(screen.getByText("需要你拍板")).toBeTruthy();
+    expect(screen.getByText("需要你拍板").classList.contains("sr-only")).toBe(
+      true,
+    );
     expect(screen.queryByText("总标题不要画")).toBeNull();
     expect(screen.getByText("这一题")).toBeTruthy();
   });
@@ -195,7 +197,9 @@ describe("AskDecisionBody question stems", () => {
         }}
       />,
     );
-    expect(screen.getByText("需要你拍板")).toBeTruthy();
+    expect(screen.getByText("需要你拍板").classList.contains("sr-only")).toBe(
+      true,
+    );
     expect(screen.getByText("选 A 还是 B？")).toBeTruthy();
     expect(screen.getAllByText("选 A 还是 B？")).toHaveLength(1);
   });

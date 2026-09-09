@@ -16,6 +16,7 @@ import {
   listFolderTrash,
   mergeAccessibleFolders,
   permanentDeleteFolder,
+  purgeTrashedFolder,
   restoreFolder,
   updateFolder,
 } from "@/services/folders";
@@ -218,6 +219,26 @@ export function useRestoreFolder() {
           description: `原名已被占用，已恢复为「${folder.name}」`,
         });
       }
+    },
+  });
+}
+
+/** 彻底删除一个「最近删除」里的项目。409（过期 / 已被清理 / 正忙）走 hook 级 toast。 */
+export function usePurgeTrashedFolder() {
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => purgeTrashedFolder(id),
+    onError: (err) => notifyError(err, "彻底删除失败"),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: conversationKeys.grouped,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: conversationKeys.archived,
+      });
+      void queryClient.invalidateQueries({ queryKey: conversationKeys.trash });
+      void queryClient.invalidateQueries({ queryKey: folderKeys.trash });
+      void queryClient.invalidateQueries({ queryKey: workspaceKeys.list });
+      scheduleAccountRulesMemoryRefresh();
     },
   });
 }

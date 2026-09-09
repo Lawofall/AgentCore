@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildPaletteCommands, commandMatches } from "../paletteCommands";
 
 vi.mock("@/services/demoTape", () => ({
@@ -132,6 +132,31 @@ describe("paletteCommands · 前往发现性", () => {
           (c.keywords ?? []).some((k) => k.includes("explore")),
       ),
     ).toBe(false);
+  });
+
+  it("前往标题是提示词，搜技能仍命中同一页", () => {
+    const cmds = buildPaletteCommands(baseCtx);
+    const guidelines = cmds.find((c) => c.id === "nav-guidelines");
+    expect(guidelines).toBeTruthy();
+    expect(guidelines?.title).toBe("提示词");
+    expect(guidelines?.category).toBe("前往");
+    if (!guidelines) return;
+    expect(commandMatches(guidelines, "提示词")).toBe(true);
+    expect(commandMatches(guidelines, "技能")).toBe(true);
+    expect(commandMatches(guidelines, "jineng")).toBe(true);
+
+    guidelines.run();
+    expect(baseCtx.navigate).toHaveBeenCalledWith("/toolbox/mine/skills");
+  });
+
+  it("不再有自动化 / 收件箱命令", () => {
+    const cmds = buildPaletteCommands(baseCtx);
+    expect(cmds.find((c) => c.id === "nav-automations")).toBeUndefined();
+    expect(cmds.find((c) => c.id === "nav-automations-inbox")).toBeUndefined();
+    const workflows = cmds.find((c) => c.id === "nav-workflows");
+    expect(workflows).toBeTruthy();
+    workflows?.run();
+    expect(baseCtx.navigate).toHaveBeenCalledWith("/toolbox/mine/workflows");
   });
 });
 

@@ -1,6 +1,4 @@
-// Screenshot harness for 工具箱 (#/toolbox + the 能力 sub-pages) — one PNG per
-// page so AI can read back hub-and-spoke headers (back + page title, no sibling
-// segment bar).
+// Screenshot harness for 工具箱五 tab 壳 (#/toolbox → 提示词).
 //
 // Usage:
 //   node scripts/shoot-toolbox.mjs
@@ -12,16 +10,16 @@
 //   • webapp 壳 (vite.webapp.config.ts → index.webapp.html) with the REAL AuthGate,
 //     satisfied by a stubbed `/v1/auth/me`. The offline preview entry (index.web.html)
 //     sets `__WEB_PREVIEW__`, which makes AppShell skip its pollers — 自动化磁贴 /
-//     收件箱 tab 的未读角标就出不来。
+//     收件箱的未读角标就出不来。
 //   • Playwright `page.route` REST stubs with per-endpoint fixtures, so every page
 //     renders POPULATED rather than empty/loading. No product code is touched.
 //   • `VITE_API_URL` pinned to "" ⇒ same-origin API, no CORS on `route.fulfill`.
 //
-// One thing settings does not need: 连接器 / 工具页 MCP 并陈 talk to `window.mcpApi`
+// One thing settings does not need: 连接器 / 工具页并陈 talk to `window.mcpApi`
 // (an Electron preload bridge), which a browser never has — 连接器 would honestly
-// degrade to「本机 MCP 仅桌面端可用」, and 工具 would omit the MCP section. An
+// degrade to「本机 MCP 仅桌面端可用」, and 工具 would omit already-plugged tools. An
 // `addInitScript` installs a stub bridge so the populated server list (and
-// `list_tools` cards on 工具) render; that is browser-side test scaffolding, not a
+// connector-named cards on 工具) render; that is browser-side test scaffolding, not a
 // product change.
 //
 // Known gaps vs the real Electron app (screenshots differ, product is fine):
@@ -59,71 +57,88 @@ const MAX_HEIGHT = Number(process.env.SHOOT_MAX_HEIGHT ?? 4000);
 const filter = (process.argv[2] ?? "").toLowerCase();
 
 /**
- * 工具箱首页 + 能力子页（自动化 twice, once per inner tab）。
- *
- * `heading` is the `<h1>` (index and spokes both own one). Spokes also carry a
- * back link to `/toolbox`; the index does not. `ready` is a text marker that
- * only exists once the page's data arrived, so we never shoot an empty or
- * loading state. `tab` is the automations underline tab.
+ * 五 tab 壳：可见顶栏是种类 tab（右槽市场）；sr-only h1 是当前种类或「市场」。
+ * `ready` waits until populated fixtures landed.
  */
 const PAGES = [
-  { id: "01-toolbox-home", hash: "/toolbox", heading: "工具箱", ready: "产品手册" },
+  {
+    id: "01-toolbox-home",
+    hash: "/toolbox",
+    heading: "提示词",
+    ready: "全员共享准则",
+    expectKindNav: true,
+  },
   {
     id: "02-tools",
-    hash: "/toolbox/tools",
+    hash: "/toolbox/mine/tools",
     heading: "工具",
-    ready: "调用参数",
-    overlayReady: "本机连接器",
+    ready: "web_search",
+    overlayReady: "Filesystem",
+    expectKindNav: true,
   },
   {
     id: "03-guidelines",
-    hash: "/toolbox/guidelines",
-    heading: "AI 提示词",
+    hash: "/toolbox/mine/skills",
+    heading: "提示词",
     ready: "全员共享准则",
     overlayReady: "提问卡",
     click: "辩论与交叉审查",
-    afterClick: "已藏起",
+    afterClick: "对话目录",
+    expectKindNav: true,
   },
   {
     id: "04-store",
-    hash: "/toolbox/store",
-    heading: "商店",
+    hash: "/toolbox/market",
+    heading: "市场",
     ready: "审合同时用",
     click: "合同审查",
     afterClick: "展开正文",
+    expectKindNav: true,
   },
   {
-    id: "05-automations-tasks",
-    hash: "/toolbox/automations",
-    heading: "自动化",
-    tab: "任务",
-    ready: "立即触发",
-  },
-  {
-    id: "06-automations-inbox",
-    hash: "/toolbox/automations/inbox",
-    heading: "自动化",
-    tab: "收件箱",
-    ready: "待拍板",
+    id: "06-creation",
+    hash: "/toolbox/mine/creation",
+    heading: "创作",
+    ready: "尚未开放",
+    expectKindNav: true,
   },
   {
     id: "07-workflows",
-    hash: "/toolbox/workflows",
+    hash: "/toolbox/mine/workflows",
     heading: "工作流",
-    ready: "跑一次",
+    ready: "竞品调研五步",
+    expectKindNav: true,
   },
   {
     id: "08-connectors",
-    hash: "/toolbox/connectors",
-    heading: "连接器",
-    ready: "测试握手",
+    hash: "/toolbox/mine/tools",
+    heading: "工具",
+    ready: "添加连接器",
+    click: "添加连接器",
+    afterClick: "新建连接器",
+    expectKindNav: true,
+  },
+  {
+    id: "09-workflows-empty",
+    hash: "/toolbox/mine/workflows",
+    heading: "工作流",
+    ready: "还没有工作流",
+    emptyPaths: ["/v1/workflows"],
+    expectKindNav: true,
+  },
+  {
+    id: "11-market-empty",
+    hash: "/toolbox/market",
+    heading: "市场",
+    ready: "还没有可安装的内容",
+    emptyPaths: ["/v1/skill-store", "/v1/workflow-playbook-templates"],
+    expectKindNav: true,
   },
 ];
 
 // ---------------------------------------------------------------------------
 // REST fixtures — shapes follow the OpenAPI DTOs in packages/contract-rest-types
-// (CapabilitiesResponse / StandingTaskSummary / StandingTaskRunListResponse /
-// FolderSummary / UserResponse …) and the hand-written wire types the workflow
+// (CapabilitiesResponse / FolderSummary / UserResponse …) and the hand-written wire types the workflow
 // client declares (services/workflows.ts). Values are synthetic demo data,
 // deliberately non-empty so every page shows its populated state.
 // ---------------------------------------------------------------------------
@@ -149,10 +164,21 @@ const obj = (properties, required = []) => ({
   required,
 });
 
+const FACE_FROM_CATEGORY = {
+  research: "web",
+  search: "search",
+  filesystem: "file",
+  execution: "execution",
+  orchestration: "orchestration",
+  interaction: "orchestration",
+};
+
 /** `CapabilityTool` — approval ∈ {never, grantable}, available_to ⊆ {ceo, worker}. */
 const tool = (name, category, description, parameters, opts = {}) => ({
   name,
-  category,
+  face: opts.face ?? FACE_FROM_CATEGORY[category] ?? "web",
+  resident: opts.resident ?? true,
+  summary: opts.summary ?? description.split(/[：。]/)[0],
   description,
   parameters,
   approval: opts.approval ?? "never",
@@ -371,21 +397,8 @@ const CAPABILITY_TOOLS = [
     "interaction",
     "读取用户本机基本信息（操作系统、架构、主机名）；结果为不可信本机报告。",
     obj({}),
-    { approval: "grantable" },
+    { approval: "grantable", face: "host_browser" },
   ),
-];
-
-const PACK_SKILLS = [
-  {
-    name: "contract_review",
-    summary: "合同审查：按条款清单逐条比对，标出偏离与缺失。",
-    body: "## 合同审查\n\n1. 先抽取双方主体、期限、金额、违约与终止条款。\n2. 逐条对照标准清单，标出偏离项与缺失项。\n3. 输出「风险等级 + 建议改法 + 原文引用」三列表格。\n",
-  },
-  {
-    name: "compliance_checklist",
-    summary: "合规自查：按行业清单逐项确认，缺证据的项不许打勾。",
-    body: "## 合规自查\n\n- 每一项必须有可引用的证据来源，拿不到证据就标「未确认」。\n- 禁止用「一般来说」替代具体条款编号。\n",
-  },
 ];
 
 const THIN_SKILLS = [
@@ -408,15 +421,7 @@ const THIN_SKILLS = [
 
 const CAPABILITIES = {
   tools: CAPABILITY_TOOLS,
-  skills: [...THIN_SKILLS, ...PACK_SKILLS],
-  packs: [
-    {
-      id: "pack_legal",
-      name: "法务合规包",
-      summary: "合同与合规场景的领域能力：审查清单、风险分级、证据引用规范。",
-      skills: PACK_SKILLS,
-    },
-  ],
+  skills: THIN_SKILLS,
   guidelines: {
     shared_base:
       "# 全员共享准则\n\n## 身份\n\n你是 AgentCore 团队中的一员，与人类用户协作完成真实工作。\n\n## 表达\n\n- 先给结论，再给依据。\n- 不确定就说不确定，禁止编造出处。\n\n## 工具使用\n\n- 能用确定性工具拿到的事实，不要靠推测。\n- 写盘前先确认落点，破坏性操作一律先问。\n",
@@ -425,7 +430,7 @@ const CAPABILITIES = {
     worker_captain:
       "<身份>\n你是 AgentCore 的队员，只负责划定好的这一件任务（所需上下文已给你）。够不到用户。你可以再向下委派一层子团队（只能再嵌套这一层，你的子成员不能再向下委派），看到产出后由你整合。\n</身份>\n\n【落盘文件】（form=files）成品写入工作区；正文只报路径、怎么用、关键取舍。\n\n【纯文字】（form=prose）成品就是正文。不要落盘。\n\n【改工程】（form=workspace）就地改用户工程，不要写入 `AgentCore/文档/`。正文只报路径、怎么跑、关键取舍。\n",
     ceo_addon:
-      "<身份>\n你是 AgentCore 的 CEO：用户是老板，只跟你说话；你带队执行，对整段对话负责到底。默认交给团队，自己做只限短答和单点。\n</身份>\n\n<按需目录>\n- team_orchestration_advanced：团队拆法\n- lead_subteam：子队拆法\n</按需目录>\n",
+      "<身份>\n你是 AgentCore 的 CEO：用户是老板，只跟你说话；你带队执行，对整段对话负责到底。默认交给团队，自己做只限短答和单点。\n</身份>\n\n<按需目录>\n- staffing：团队拆法\n- lead_subteam：子队拆法\n</按需目录>\n",
     ceo: "# CEO 完整提示词\n\n（全员共享准则 + 主 Agent 身份，由同一套 compose 逻辑拼装，与线上回合逐字一致。）\n",
   },
 };
@@ -454,181 +459,6 @@ const FOLDERS = [
     updated_at: ISO,
   },
 ];
-
-const AXES = {
-  file_write: "session",
-  command: "auto",
-  team_kickoff: "rules",
-  host: "session",
-};
-
-const STANDING_TASKS = [
-  {
-    id: "task_brief",
-    name: "每周一竞品简报",
-    trigger_kind: "schedule",
-    schedule_preset: "weekly_mon",
-    cron: null,
-    folder_id: "folder_research",
-    goal: "汇总上周竞品动态与定价变化，输出一页简报并落盘到「市场研究」。",
-    permission_axes: AXES,
-    enabled: true,
-    next_run_at: minutesAhead(60 * 26),
-    conversation_id: null,
-    last_run_at: minutesAgo(60 * 142),
-    webhook_id: null,
-    webhook_url: null,
-    webhook_secret: null,
-    template_key: null,
-    template_config: null,
-    workflow_id: "wf_research",
-    workflow_name: "竞品调研五步",
-    created_at: ISO,
-    updated_at: ISO,
-  },
-  {
-    id: "task_daily",
-    name: "每日运营日报",
-    trigger_kind: "schedule",
-    schedule_preset: "daily",
-    cron: null,
-    folder_id: "folder_ops",
-    goal: "拉取昨日核心指标，标出异常波动并给出下一步建议。",
-    permission_axes: AXES,
-    enabled: true,
-    next_run_at: minutesAhead(60 * 9),
-    conversation_id: null,
-    last_run_at: minutesAgo(60 * 15),
-    webhook_id: null,
-    webhook_url: null,
-    webhook_secret: null,
-    template_key: null,
-    template_config: null,
-    workflow_id: null,
-    workflow_name: null,
-    created_at: ISO,
-    updated_at: ISO,
-  },
-  {
-    id: "task_webhook",
-    name: "线上告警接入",
-    trigger_kind: "webhook",
-    schedule_preset: null,
-    cron: null,
-    folder_id: "folder_ops",
-    goal: "收到告警后拉日志定位，给出影响面判断与临时缓解方案。",
-    permission_axes: AXES,
-    enabled: false,
-    next_run_at: null,
-    conversation_id: null,
-    last_run_at: minutesAgo(60 * 72),
-    webhook_id: "wh_alerts",
-    webhook_url: "/v1/webhooks/wh_alerts",
-    webhook_secret: null,
-    template_key: null,
-    template_config: null,
-    workflow_id: null,
-    workflow_name: null,
-    created_at: ISO,
-    updated_at: ISO,
-  },
-];
-
-/** Catalog of system templates — not installed, so the 系统任务 card shows. */
-const STANDING_TASK_TEMPLATES = [
-  {
-    key: "daily_conversation_review",
-    title: "每日复盘",
-    description: "每天自动复盘近期对话，确认后才落盘记忆与文档。",
-    default_name: "每日复盘",
-    default_cron: "0 1 * * *",
-    installed_task_id: null,
-    enabled: null,
-  },
-];
-
-/** badge = unacked awaiting_user + unacked failed = 3 (kept consistent with items). */
-const STANDING_TASK_RUNS = {
-  badge: 3,
-  items: [
-    {
-      id: "run_await_1",
-      standing_task_id: "task_brief",
-      task_name: "每周一竞品简报",
-      status: "awaiting_user",
-      conversation_id: "conv_brief",
-      user_message_id: null,
-      summary: "竞品 B 的定价页改版，是否把对比表一起更新？需要你拍板后继续。",
-      error: null,
-      acked_at: null,
-      trigger_source: "schedule",
-      created_at: minutesAgo(95),
-      started_at: minutesAgo(95),
-      finished_at: minutesAgo(88),
-    },
-    {
-      id: "run_failed_1",
-      standing_task_id: "task_webhook",
-      task_name: "线上告警接入",
-      status: "failed",
-      conversation_id: "conv_alert",
-      user_message_id: null,
-      summary: null,
-      error: "拉取日志超时：上游服务 30s 未响应（已重试 2 次）。",
-      acked_at: null,
-      trigger_source: "webhook",
-      created_at: minutesAgo(210),
-      started_at: minutesAgo(210),
-      finished_at: minutesAgo(209),
-    },
-    {
-      id: "run_await_2",
-      standing_task_id: "task_daily",
-      task_name: "每日运营日报",
-      status: "awaiting_user",
-      conversation_id: "conv_daily",
-      user_message_id: null,
-      summary: "日报里要写的三条异常已定位，写盘到「运营」需要你授权。",
-      error: null,
-      acked_at: null,
-      trigger_source: "schedule",
-      created_at: minutesAgo(400),
-      started_at: minutesAgo(400),
-      finished_at: minutesAgo(392),
-    },
-    {
-      id: "run_ok_1",
-      standing_task_id: "task_daily",
-      task_name: "每日运营日报",
-      status: "succeeded",
-      conversation_id: "conv_daily_prev",
-      user_message_id: null,
-      summary:
-        "昨日活跃 12.4k（+3.1%），付费转化 2.8%（持平）；异常：华东节点 P95 延迟涨到 820ms，已附排查建议。",
-      error: null,
-      acked_at: null,
-      trigger_source: "schedule",
-      created_at: minutesAgo(1_440),
-      started_at: minutesAgo(1_440),
-      finished_at: minutesAgo(1_432),
-    },
-    {
-      id: "run_ok_2",
-      standing_task_id: "task_brief",
-      task_name: "每周一竞品简报",
-      status: "succeeded",
-      conversation_id: "conv_brief_prev",
-      user_message_id: null,
-      summary: "上周竞品动态 6 条，其中 2 条涉及定价；简报已落盘到「市场研究/简报」。",
-      error: null,
-      acked_at: minutesAgo(2_800),
-      trigger_source: "manual",
-      created_at: minutesAgo(2_880),
-      started_at: minutesAgo(2_880),
-      finished_at: minutesAgo(2_871),
-    },
-  ],
-};
 
 const step = (id, role, task) => ({ id, kind: "agent_step", role, task });
 const gate = (id, label) => ({ id, kind: "human_gate", label });
@@ -688,12 +518,21 @@ const USER_WORKFLOWS = [
     },
     source: null,
     version: 7,
+    trigger: {
+      kind: "schedule",
+      enabled: true,
+      folder_id: "folder_research",
+      cron: "0 9 * * 1",
+      schedule_preset: "weekly_mon",
+      next_run_at: minutesAhead(60 * 26),
+      last_run_at: minutesAgo(60 * 142),
+      last_error: null,
+    },
     created_at: ISO,
     updated_at: minutesAgo(60 * 74),
   },
 ];
 
-/** ids must match OfficialTemplateGuide's PICK_WHEN keys for the guide box to render. */
 const WORKFLOW_TEMPLATES = [
   {
     id: "map_fanout",
@@ -712,6 +551,24 @@ const WORKFLOW_TEMPLATES = [
     slots: [
       { key: "topic", label: "研究主题", required: true, hint: null },
       { key: "audience", label: "读者", required: false, hint: "写给谁看" },
+    ],
+  },
+  {
+    id: "ops_weekly",
+    title: "运营周复盘",
+    summary: "把数据、客诉、动作收成一页给下周用。",
+    primary_slots: "topic",
+    slots: [
+      { key: "topic", label: "本周焦点", required: true, hint: null },
+    ],
+  },
+  {
+    id: "launch_checklist",
+    title: "上线检查",
+    summary: "发布前把风险、回滚、通知过一遍。",
+    primary_slots: "feature",
+    slots: [
+      { key: "feature", label: "要上线的能力", required: true, hint: null },
     ],
   },
 ];
@@ -762,25 +619,6 @@ const FIXTURES = new Map([
         ...THIN_SKILLS.map((skill) => ({
           name: skill.name,
           summary: skill.summary,
-          replaced_by:
-            skill.name === "ask_user_card"
-              ? {
-                  document_id: "mine_1",
-                  name: "提问卡",
-                  description: "问用户时用这份",
-                }
-              : null,
-          muted: skill.name === "debate_and_review",
-          replaced_layer: skill.name === "ask_user_card" ? "here" : null,
-          muted_layer: skill.name === "debate_and_review" ? "here" : null,
-        })),
-        ...PACK_SKILLS.map((skill) => ({
-          name: skill.name,
-          summary: skill.summary,
-          replaced_by: null,
-          muted: false,
-          replaced_layer: null,
-          muted_layer: null,
         })),
       ],
       mine: [
@@ -791,7 +629,6 @@ const FIXTURES = new Map([
           content:
             "---\napply: on_demand\ndescription: 问用户时用这份\n---\n一次只问挡住推进的那件事。\n",
           version: "v1",
-          occupies: ["ask_user_card"],
         },
       ],
       folder_id: null,
@@ -833,11 +670,6 @@ const FIXTURES = new Map([
     },
   ],
 
-  // 自动化 · 任务 / 收件箱 (+ the shell poller that feeds the home-tile / inbox-tab badge).
-  ["/v1/standing-tasks", STANDING_TASKS],
-  ["/v1/standing-task-templates", STANDING_TASK_TEMPLATES],
-  ["/v1/standing-task-runs", STANDING_TASK_RUNS],
-
   // 工作流.
   ["/v1/workflows", USER_WORKFLOWS],
   ["/v1/workflow-playbook-templates", WORKFLOW_TEMPLATES],
@@ -869,10 +701,76 @@ const FIXTURES = new Map([
           status: "published",
           source_document_id: "doc_brief",
         },
+        {
+          id: "listing_legal_brief",
+          name: "legal_answer_brief",
+          description: "民事答辩状",
+          author: "官方",
+          version_n: 1,
+          installed: true,
+          has_update: false,
+          status: "published",
+          source_document_id: null,
+        },
+        {
+          id: "listing_legal_case",
+          name: "legal_case_analysis",
+          description: "接案评估",
+          author: "官方",
+          version_n: 1,
+          installed: true,
+          has_update: false,
+          status: "published",
+          source_document_id: null,
+        },
+        {
+          id: "listing_weekly",
+          name: "周报助手",
+          description: "把本周材料收成一页",
+          author: "丙",
+          version_n: 1,
+          installed: false,
+          has_update: false,
+          status: "published",
+          source_document_id: "doc_weekly",
+        },
+        {
+          id: "listing_minutes",
+          name: "会议纪要",
+          description: "录音或笔记整理成待办",
+          author: "丁",
+          version_n: 1,
+          installed: false,
+          has_update: false,
+          status: "published",
+          source_document_id: "doc_minutes",
+        },
+        {
+          id: "listing_claim",
+          name: "报销核对",
+          description: "对照发票查缺漏项",
+          author: "戊",
+          version_n: 3,
+          installed: false,
+          has_update: false,
+          status: "published",
+          source_document_id: "doc_claim",
+        },
+        {
+          id: "listing_onboard",
+          name: "入职清单",
+          description: "新同事第一周要办的事",
+          author: "己",
+          version_n: 1,
+          installed: false,
+          has_update: false,
+          status: "published",
+          source_document_id: "doc_onboard",
+        },
       ],
       page: 1,
       page_size: 24,
-      total: 2,
+      total: 8,
     },
   ],
   [
@@ -925,6 +823,8 @@ const FIXTURES = new Map([
 /** Endpoints that speak SSE — answer with an immediately-closed stream so the
  *  shell's firehoses back off instead of hammering a JSON 200. */
 const SSE_PATHS = new Set(["/v1/realtime", "/v1/fulfill"]);
+/** Per-page override so empty-state shots do not reuse the populated fixtures. */
+let emptyPaths = new Set();
 
 async function fulfillApi(route) {
   const { pathname } = new URL(route.request().url());
@@ -934,6 +834,19 @@ async function fulfillApi(route) {
       status: 200,
       contentType: "text/event-stream; charset=utf-8",
       body: ": shoot-toolbox stub\n\n",
+    });
+    return;
+  }
+
+  if (emptyPaths.has(pathname)) {
+    const fixture = FIXTURES.get(pathname);
+    const body = Array.isArray(fixture)
+      ? []
+      : { data: [], items: [], total: 0, page: 1, page_size: 24 };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(body),
     });
     return;
   }
@@ -1006,90 +919,113 @@ async function auditPage(page) {
     const main = document.querySelector("main");
     if (!main) return null;
     const nav = main.querySelector('nav[aria-label="工具箱能力"]');
-    const header = main.querySelector("header");
-    const h1El = main.querySelector("h1");
-    const headerBorder = header
-      ? Number.parseFloat(getComputedStyle(header).borderBottomWidth) || 0
-      : 0;
-    const headerOverflow = header
-      ? Math.max(header.scrollWidth - header.clientWidth, 0)
+    const kindNav = main.querySelector('nav[aria-label="工具箱种类"]');
+    const marketChips = main.querySelector('[aria-label="货架种类"]');
+    const autoTabs = main.querySelector('nav[aria-label="自动化分区"]');
+    const hasPageHeader = [...main.querySelectorAll("header h1")].some(
+      (h) => !h.classList.contains("sr-only"),
+    );
+    const chromeOverflow = kindNav
+      ? Math.max(kindNav.scrollWidth - kindNav.clientWidth, 0)
       : 0;
     const backs = [...main.querySelectorAll("a")].filter(
       (a) =>
         (a.getAttribute("href") ?? "").replace(/^#/, "") === "/toolbox" &&
         (a.textContent ?? "").includes("工具箱"),
     );
-    const midOf = (el) => {
-      const r = el.getBoundingClientRect();
-      return (r.top + r.bottom) / 2;
-    };
-    const backToTitleGap =
-      h1El && backs.length === 1
-        ? Math.round(Math.abs(midOf(backs[0]) - midOf(h1El)))
-        : null;
-    const innerTabs = [
-      ...(main.querySelector('nav[aria-label="自动化分区"]')?.querySelectorAll("a") ??
-        []),
-    ].map((a) => ({
-      label: (a.textContent ?? "").replace(/\d+\+?$/, "").trim(),
-      active: a.getAttribute("aria-current") === "page",
-    }));
-    const automationsTile = [...main.querySelectorAll("button")].find((b) =>
-      (b.textContent ?? "").includes("自动化"),
+    const chromeLinks = [...(kindNav?.querySelectorAll("a") ?? [])].map((a) =>
+      (a.textContent ?? "").replace(/\d+\+?$/, "").trim(),
     );
-    const homeAutomationsBadge = automationsTile
+    const chromeActions = new Set(["市场"]);
+    const kindTabs = chromeLinks.filter((label) => !chromeActions.has(label));
+    const selectedCapsules = [...(kindNav?.querySelectorAll("a") ?? [])]
+      .filter((a) => a.className.split(/\s+/).includes("bg-accent"))
+      .map((a) => (a.textContent ?? "").replace(/\d+\+?$/, "").trim());
+    const kindIconCount = [...(kindNav?.querySelectorAll("a") ?? [])].filter(
+      (a) => {
+        const label = (a.textContent ?? "").replace(/\d+\+?$/, "").trim();
+        return !chromeActions.has(label) && a.querySelector("svg");
+      },
+    ).length;
+    const homeAutomationsBadge = kindNav
       ?.querySelector("[aria-label$='条待处理']")
       ?.textContent?.trim();
 
     return {
       hasSegmentNav: !!nav,
+      hasKindNav: !!kindNav,
+      hasMarketChips: !!marketChips,
+      hasAutoTabs: !!autoTabs,
       h1: [...main.querySelectorAll("h1")].map((h) => (h.textContent ?? "").trim()),
       backLinks: backs.length,
-      backToTitleGap,
-      headerBorder,
-      headerOverflow,
-      innerTabs,
+      hasPageHeader,
+      chromeOverflow,
+      kindTabs,
+      selectedCapsules,
+      kindIconCount,
+      hasMarketLink: chromeLinks.includes("市场"),
+      hasManualLink: chromeLinks.includes("手册"),
       homeAutomationsBadge: homeAutomationsBadge ?? null,
     };
   });
 }
 
+const EXPECTED_KIND_TABS = ["提示词", "工具", "创作", "工作流"];
+
 /** Turn the audit into human-readable complaints; empty array = clean. */
 function auditProblems(audit, spec) {
   if (!audit) return ["audit failed: no <main>"];
   const out = [];
-  const isSpoke = spec.hash !== "/toolbox";
   if (spec.heading && !audit.h1.includes(spec.heading)) {
     out.push(
       `标题应为「${spec.heading}」，实际「${audit.h1.join(" / ") || "无"}」`,
     );
   }
   if (audit.hasSegmentNav) out.push("不该再有能力分段条");
-  if (isSpoke) {
-    if (audit.backLinks !== 1) {
-      out.push(`返回链接应恰好 1 个，实际 ${audit.backLinks}`);
-    }
-    if (audit.backToTitleGap === null || audit.backToTitleGap > 4) {
+  if (audit.hasAutoTabs) out.push("不该再有自动化分区 tab");
+  if (audit.backLinks !== 0) {
+    out.push(`壳内不应有返回工具箱链接，实际 ${audit.backLinks}`);
+  }
+  if (audit.chromeOverflow > 0) {
+    out.push(`顶栏这一行被撑破 ${audit.chromeOverflow}px`);
+  }
+  if (spec.expectKindNav) {
+    if (!audit.hasKindNav) out.push("应有种类 tab");
+    if (audit.kindTabs.join("|") !== EXPECTED_KIND_TABS.join("|")) {
       out.push(
-        `返回链接没和标题并排（中心差 ${audit.backToTitleGap ?? "?"}px）`,
+        `种类 tab 应为 ${EXPECTED_KIND_TABS.join(" / ")}，实际 ${audit.kindTabs.join(" / ") || "无"}`,
       );
     }
-    if (audit.headerOverflow > 0) {
-      out.push(`页头这一行被撑破 ${audit.headerOverflow}px`);
+    if (!audit.hasMarketLink) out.push("顶栏右槽应有市场");
+    if (audit.hasManualLink) out.push("顶栏右槽不应再有手册");
+    if (audit.kindIconCount !== EXPECTED_KIND_TABS.length) {
+      out.push(
+        `种类 tab 应各有图标，实际 ${audit.kindIconCount}/${EXPECTED_KIND_TABS.length}`,
+      );
     }
-    if (spec.tab) {
-      if (audit.headerBorder > 0) out.push("页头下边框与页内 tab 基线叠成两条横线");
-    } else if (audit.headerBorder <= 0) {
-      out.push("页头与内容之间没有分隔线");
+    if (audit.hasPageHeader) out.push("壳内不应再有 PageHeader，横线留给种类 tab");
+    if (spec.hash === "/toolbox/market") {
+      if (audit.selectedCapsules.length) {
+        out.push(
+          `市场页不应有选中胶囊，实际「${audit.selectedCapsules.join(" / ")}」`,
+        );
+      }
+    } else if (
+      spec.heading &&
+      audit.selectedCapsules.join("|") !== spec.heading
+    ) {
+      out.push(
+        `选中胶囊应为「${spec.heading}」，实际「${audit.selectedCapsules.join(" / ") || "无"}」`,
+      );
     }
-  } else if (!audit.homeAutomationsBadge) {
-    out.push("自动化磁贴没有徽章");
+  } else if (audit.hasKindNav) {
+    out.push("此页不该有种类 tab");
   }
-  if (spec.tab) {
-    const active = audit.innerTabs.filter((t) => t.active).map((t) => t.label);
-    if (active.join("|") !== spec.tab) {
-      out.push(`内层 tab 高亮应为「${spec.tab}」，实际「${active.join(" / ") || "无"}」`);
-    }
+  if (spec.hash === "/toolbox/market" && !audit.hasMarketChips) {
+    out.push("市场页应有货架种类 chip");
+  }
+  if (spec.hash === "/toolbox" && audit.homeAutomationsBadge) {
+    out.push("种类 tab 不应再有待处理徽章");
   }
   return out;
 }
@@ -1286,7 +1222,9 @@ async function main() {
     const warm = new URL("index.webapp.html", base);
     warm.hash = PAGES[0].hash;
     await page.goto(warm.href, { waitUntil: "load", timeout: 60_000 });
-    await page.locator("main h1").first().waitFor({ timeout: 30_000 });
+    await page
+      .locator('main nav[aria-label="工具箱种类"]')
+      .waitFor({ timeout: 30_000 });
     await page.waitForTimeout(SETTLE_MS);
   } catch {
     /* best-effort warm-up — the per-page loop reports real failures */
@@ -1302,6 +1240,7 @@ async function main() {
     pageErrors.length = 0;
     let failure = null;
     const notes = [];
+    emptyPaths = new Set(spec.emptyPaths ?? []);
     await page.setViewportSize(VIEWPORT).catch(() => {});
     try {
       const url = new URL("index.webapp.html", base);
@@ -1310,11 +1249,14 @@ async function main() {
       await page.goto(url.href, { waitUntil: "load", timeout: 30_000 });
 
       // AuthGate resolves (stubbed /v1/auth/me) → AppShell → the page.
+      await page
+        .locator('main nav[aria-label="工具箱种类"]')
+        .waitFor({ state: "visible", timeout: 20_000 });
       if (spec.heading) {
         await page
           .locator("main h1", { hasText: spec.heading })
           .first()
-          .waitFor({ state: "visible", timeout: 20_000 });
+          .waitFor({ state: "attached", timeout: 20_000 });
       }
       if (spec.hash === "/toolbox") {
         // The badge rides a shell-level poller, not the page's own query.

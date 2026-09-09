@@ -1,3 +1,4 @@
+import { QuestionMark } from "@/components/chat/decision/QuestionMark";
 import {
   channelRedirectFace,
   resolveToolWireStatus,
@@ -19,7 +20,6 @@ import {
   GitBranch,
   Globe,
   HardDrive,
-  HelpCircle,
   Inbox,
   Keyboard,
   LayoutGrid,
@@ -90,7 +90,7 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   // CEO 编排原语（组队辩论）：气泡侧只在参数组装心跳时露出，
   // 图标与开工卡的 debate 形态一致（Scale）。
   debate: { Icon: Scale, label: "Debate" },
-  ask_user: { Icon: HelpCircle, label: "Ask you" },
+  ask_user: { Icon: QuestionMark, label: "Ask you" },
   consult_skill: { Icon: BookOpen, label: "Consult skill" },
   consult_memory: { Icon: Brain, label: "Consult memory" },
   consult_rule: { Icon: BookOpen, label: "Consult rule" },
@@ -266,7 +266,7 @@ export function toolPhaseText(phase: string | undefined): string | null {
  * 内部标识（run_id / conversation_id / interjection_id）不在此列，且**不要再加回来**：
  * 用户在协作图上认的是角色名，`Cancel worker r-a3f2e1c8-…` 让他无从判断 CEO 撤的是谁、
  * 处置得对不对。撤队员 / 裁决求助的标题改挂角色名（{@link RUN_TARGET_ARG_TOOLS}），
- * 查阅历史对话改挂对话标题（结果 peek）。
+ * 查阅历史对话改挂对话标题（结果 peek）；`query` 是定位用的内部词，不进标题。
  * `summary` 故意不在此列：handoff 摘要走 `HandoffBriefCard`，不经 toolDetail
  * 再塞一遍（否则和卡片折叠行重复）。
  * `source` / `destination` 也不单列：file_move / file_copy 没有 `path`，须成对
@@ -286,11 +286,15 @@ const TOOL_DETAIL_KEYS = [
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function skipTitleChip(key: string, raw: string): boolean {
+function skipTitleChip(key: string, raw: string, toolName?: string): boolean {
   const v = raw.trim();
   if (!v || v === ".") return true;
   if (key === "folder_id" || key.endsWith("_id")) return true;
   if (UUID_RE.test(v)) return true;
+  // Seek word for paging a past chat — the row already names the conversation.
+  if (toolName === "read_conversation" && (key === "query" || key === "q")) {
+    return true;
+  }
   return false;
 }
 
@@ -442,7 +446,7 @@ export function toolDetail(
   if (transfer) return transfer;
   for (const k of TOOL_DETAIL_KEYS) {
     const v = args[k];
-    if (typeof v === "string" && v.trim() && !skipTitleChip(k, v)) {
+    if (typeof v === "string" && v.trim() && !skipTitleChip(k, v, toolName)) {
       return asTitleDetail(v);
     }
   }

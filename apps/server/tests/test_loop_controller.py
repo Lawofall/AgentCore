@@ -535,6 +535,66 @@ def test_single_op_channel_timeout_does_not_sticky_or_notice():
         clear_active_coordination()
 
 
+def test_two_channel_op_timeouts_latch_hang_dead_without_session_sticky():
+    """Consecutive channel_op hangs stop this run's pens; session stays live."""
+    from agentcore.runtime.coordination.session import (
+        CoordinationSession,
+        clear_active_coordination,
+        set_active_coordination,
+    )
+    from agentcore.workspace.limits import WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS
+
+    clear_active_coordination()
+    session = CoordinationSession(
+        execution_id="exec-hang-latch",
+        total_workers=2,
+        conversation_id="conv-hang-latch",
+    )
+    set_active_coordination(session)
+    try:
+        c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
+        hang = {
+            "liveness_timeout": True,
+            "timeout_layer": "channel_op",
+        }
+        c.record(
+            [
+                ToolAttempt(
+                    "h1",
+                    "file_write",
+                    success=False,
+                    error_summary="活性挂起",
+                    meta=hang,
+                )
+            ]
+        )
+        assert c._channel_hang_dead is False  # noqa: SLF001
+        assert session.workspace_channel_dead is False
+        c.record(
+            [
+                ToolAttempt(
+                    "h2",
+                    "file_read",
+                    success=False,
+                    error_summary="活性挂起",
+                    meta=hang,
+                )
+            ]
+        )
+        assert c._channel_hang_dead is True  # noqa: SLF001
+        assert c.workspace_channel_dead is True
+        assert session.workspace_channel_dead is False
+        assert session.channel_dead_user_notice_emitted is False
+        for name in WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS:
+            assert name in c._tool_force_retire  # noqa: SLF001
+        cb = c.tool_circuit_breaker()
+        assert "file_write" in cb.disabled
+        assert "file_read" in cb.disabled
+        assert "file_list" in cb.disabled
+    finally:
+        clear_active_coordination()
+
+
 def test_workspace_channel_dead_emits_user_notice_once():
     """A2: sticky-dead stamps session + emits short content_delta on host sink once."""
     from agentcore.runtime.coordination.session import (

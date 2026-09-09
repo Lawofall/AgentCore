@@ -232,7 +232,7 @@ async def test_bare_chat_write_no_target_auto_provisions_cloud_desk(
                 {
                     "role": "工",
                     "task": "写 README",
-                    "deliverable": {"form": "files"},
+                    "deliverable": {"artifacts": ["README.md"]},
                 }
             ]
         },
@@ -397,12 +397,12 @@ async def test_bare_chat_multi_hint_still_blocked() -> None:
                 {
                     "role": "甲",
                     "task": "在 A 写",
-                    "deliverable": {"form": "files"},
+                    "deliverable": {"artifacts": ["a.md"]},
                 },
                 {
                     "role": "乙",
                     "task": "在 B 写",
-                    "deliverable": {"form": "files"},
+                    "deliverable": {"artifacts": ["b.md"]},
                 },
             ]
         },

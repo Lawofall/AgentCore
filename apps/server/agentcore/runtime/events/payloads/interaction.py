@@ -43,8 +43,7 @@ class AskOption(WirePayload):
     网页/手机无本机盘；``create_folder`` 仍只建云）。
     Structured ``op`` / ``source`` / ``destination`` / ``path`` fields carry
     organize_plan items for plan-bound ``file_batch``. ``review_kind`` / ``body`` /
-    ``slug`` / ``section`` carry daily_review proposals for server-side apply on
-    confirm."""
+    ``slug`` / ``section`` remain on the wire for historical events."""
 
     label: str
     detail: str | None = absent()

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /**
- * 全局设定标题。「新建条目」与标题同一行；点新建不折叠；折叠时也能建。
+ * AgentCoreSection 只服务文件夹层：``.agentcore`` 标题 +「新建条目」。
+ * 账号提示词不在文件页；折叠时也能建。
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -19,18 +20,11 @@ vi.mock("@/components/files/fileWorkbench/createScopeEntry", () => ({
 
 import { AgentCoreSection } from "../AgentCoreSection";
 
-function renderSection(
-  scope: "global" | "folder",
-  onOpenEntry: () => void = () => undefined,
-) {
+function renderSection(onOpenEntry: () => void = () => undefined) {
   return render(
     <TooltipProvider>
       <AgentCoreSection
-        scope={
-          scope === "global"
-            ? { kind: "global" }
-            : { kind: "folder", folderId: "F1" }
-        }
+        scope={{ kind: "folder", folderId: "F1" }}
         memoryActivePath={null}
         documentActivePath={null}
         onOpenEntry={onOpenEntry}
@@ -48,26 +42,21 @@ beforeEach(() => {
 });
 
 describe("AgentCoreSection 标题", () => {
-  it("全局显示「全局设定」；文件夹标题是 .agentcore，不再叫记忆", () => {
-    const { unmount } = renderSection("global");
-    expect(screen.getByText("全局设定")).toBeTruthy();
-    expect(screen.queryByText(".agentcore")).toBeNull();
-    expect(screen.queryByText("记忆")).toBeNull();
-    expect(screen.queryByText("本文件夹设定")).toBeNull();
-    unmount();
-
-    renderSection("folder");
+  it("文件夹标题是 .agentcore，不挂账号提示词入口", () => {
+    renderSection();
     expect(screen.getByText(".agentcore")).toBeTruthy();
     expect(screen.queryByText("全局设定")).toBeNull();
     expect(screen.queryByText("记忆")).toBeNull();
     expect(screen.queryByText("本文件夹设定")).toBeNull();
+    expect(screen.queryByText("最近更新")).toBeNull();
+    expect(screen.queryByText("所有对话共用的提示词在工具箱")).toBeNull();
   });
 });
 
 describe("AgentCoreSection 新建条目", () => {
-  it("「新建条目」与「全局设定」同一 header 行，始终可见", () => {
-    renderSection("global");
-    const title = screen.getByText("全局设定");
+  it("「新建条目」与「.agentcore」同一 header 行，始终可见", () => {
+    renderSection();
+    const title = screen.getByText(".agentcore");
     const create = screen.getByRole("button", { name: "新建条目" });
     expect(title.closest("button")?.contains(create)).toBe(false);
     expect(create.parentElement?.contains(title)).toBe(true);
@@ -75,14 +64,15 @@ describe("AgentCoreSection 新建条目", () => {
   });
 
   it("点新建不折叠已展开的标题", async () => {
-    renderSection("global");
+    renderSection();
+    fireEvent.click(screen.getByText(".agentcore"));
     expect(screen.getByTestId("entries")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "新建条目" }));
     await waitFor(() => expect(createAndOpenScopeEntry).toHaveBeenCalled());
     expect(screen.getByTestId("entries")).toBeTruthy();
     expect(
       screen
-        .getByText("全局设定")
+        .getByText(".agentcore")
         .closest("button")
         ?.getAttribute("aria-expanded"),
     ).toBe("true");
@@ -90,15 +80,14 @@ describe("AgentCoreSection 新建条目", () => {
 
   it("折叠时新建仍可见；建完展开列表", async () => {
     const onOpen = vi.fn();
-    renderSection("global", onOpen);
-    fireEvent.click(screen.getByText("全局设定"));
+    renderSection(onOpen);
     expect(screen.queryByTestId("entries")).toBeNull();
     expect(screen.getByRole("button", { name: "新建条目" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "新建条目" }));
     await waitFor(() => expect(createAndOpenScopeEntry).toHaveBeenCalled());
     expect(createAndOpenScopeEntry).toHaveBeenCalledWith(
-      { kind: "global" },
+      { kind: "folder", folderId: "F1" },
       onOpen,
     );
     expect(screen.getByTestId("entries")).toBeTruthy();
@@ -106,8 +95,7 @@ describe("AgentCoreSection 新建条目", () => {
 
   it("新建失败时保持折叠", async () => {
     createAndOpenScopeEntry.mockResolvedValueOnce(false);
-    renderSection("global");
-    fireEvent.click(screen.getByText("全局设定"));
+    renderSection();
     expect(screen.queryByTestId("entries")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "新建条目" }));
     await waitFor(() => expect(createAndOpenScopeEntry).toHaveBeenCalled());

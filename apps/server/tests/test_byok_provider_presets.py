@@ -21,6 +21,7 @@ def test_deepseek_preset_includes_vision_exp():
     assert preset.default_model == "deepseek-v4-flash"
     assert preset.models == (
         "deepseek-v4-flash",
+        "deepseek-v4.1-flash-expires-on-0910",
         "deepseek-v4-pro",
         "deepseek-v4-flash-vision-exp",
     )

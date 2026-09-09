@@ -29,8 +29,9 @@ const titleToneClass: Record<SettingsSectionTone, string> = {
 };
 
 export interface SettingsSectionProps {
-  title: ReactNode;
-  /** One muted line under the heading — what this block controls. */
+  /** Omit when the page header already names the block (action-only toolbar). */
+  title?: ReactNode;
+  /** Optional. Default omit. Only a constraint that changes the next click. */
   description?: ReactNode;
   /** Top-right slot: a section-level action (新建 / 退出其他所有设备 / 刷新). */
   action?: ReactNode;
@@ -38,7 +39,7 @@ export interface SettingsSectionProps {
   /** `danger` tints the heading for irreversible blocks (危险区域). */
   tone?: SettingsSectionTone;
   /** Hairline above the section — for trailing blocks that are visually split
-   *  off from the page body (关于 · 软件更新 / 法律与合规, 反馈 · 历史反馈).
+   *  off from the page body (关于 · 软件更新 / 法律与合规).
    *  Replaces hand-written `border-t border-border pt-6`. */
   divider?: boolean;
   /** Extra classes on the content wrapper (e.g. `space-y-2`, `mt-4`). */
@@ -48,8 +49,9 @@ export interface SettingsSectionProps {
 }
 
 /**
- * One titled block of a settings subpage: heading (+ description, + top-right
- * action) over a content slot, with the heading→content gap owned here.
+ * One titled block of a settings subpage: heading (+ optional constraint
+ * description, + top-right action) over a content slot. Description defaults
+ * to omitted — only a sentence that changes the next click.
  *
  * Every subpage used to spell this out itself, which is how four different
  * heading recipes (`text-sm font-semibold` / `text-sm font-medium` /
@@ -68,23 +70,35 @@ export function SettingsSection({
   className,
   children,
 }: SettingsSectionProps) {
+  const hasTitle = title != null && title !== "";
+  const hasHeader = hasTitle || Boolean(description) || Boolean(action);
   return (
     <section
       className={cn(divider && "border-t border-border pt-6", className)}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className={cn(titleSizeClass[titleSize], titleToneClass[tone])}>
-            {title}
-          </h2>
-          {description && (
-            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-          )}
+      {hasHeader ? (
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            {hasTitle ? (
+              <h2
+                className={cn(titleSizeClass[titleSize], titleToneClass[tone])}
+              >
+                {title}
+              </h2>
+            ) : null}
+            {description && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {description}
+              </p>
+            )}
+          </div>
+          {action && <div className="shrink-0">{action}</div>}
         </div>
-        {action && <div className="shrink-0">{action}</div>}
-      </div>
+      ) : null}
       {children && (
-        <div className={cn("mt-3", contentClassName)}>{children}</div>
+        <div className={cn(hasHeader && "mt-3", contentClassName)}>
+          {children}
+        </div>
       )}
     </section>
   );

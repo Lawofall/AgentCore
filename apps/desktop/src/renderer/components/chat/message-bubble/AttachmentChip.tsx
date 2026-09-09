@@ -54,7 +54,7 @@ export function AttachmentChip({
           att.kind === "conversation"
             ? "引用对话"
             : att.kind === "document"
-              ? "本句点名设定"
+              ? "本句点名提示词"
               : att.path
         }
       >

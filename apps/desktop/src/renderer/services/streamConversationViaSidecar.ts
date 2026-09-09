@@ -40,6 +40,7 @@ import {
   flushPendingContent,
   flushPendingFrames,
 } from "@/services/streamConversation";
+import { SIDECAR_OCCUPY_FAILED_CODE } from "@/services/streamPathReason";
 import {
   beginLocalConversationStream,
   claimPrimaryStream,
@@ -208,6 +209,12 @@ function unwrapSidecarRejectMessage(err: unknown): string | null {
 function isSidecarTurnAlreadyRunning(err: unknown): boolean {
   const msg = unwrapSidecarRejectMessage(err) ?? "";
   return /turn already running/i.test(msg);
+}
+
+/** 云端占位（报到）失败——引擎没跑，也不是环境坏了。 */
+function isSidecarOccupyFailed(err: unknown): boolean {
+  const msg = unwrapSidecarRejectMessage(err) ?? "";
+  return /\bOCCUPY_FAILED\b/.test(msg) || msg.includes("云端占位失败");
 }
 
 function describeSidecarTurnError(err: unknown): string | null {
@@ -577,8 +584,8 @@ async function runSidecarTurn({
   setActiveSidecarTurn(conversationId, rootId, subpath, turnId);
 
   // 经单例泵 claim 本 turn 的唯一 sink（禁止再直接 onEvent——可叠 listener → 叠字）。
-  // 本回合是否派发过任何 sidecar 事件——一个都没有 = 引擎没跑起来（启动期失败，无输出 /
-  // 副作用），失败时据此标 `recoverable` 让 turns.sendTurn 安全降级回云端（阶段二）。
+  // 本回合是否派发过任何 sidecar 事件——一个都没有 = 启动期失败（无输出 / 副作用）。
+  // 失败时标 `recoverable`：云端占位失败可改走云 POST；引擎没起来则 sendTurn 报错不降级。
   let sawAnyEvent = false;
   const claim = claimSidecarTurnSink(conversationId, turnId, (push) => {
     sawAnyEvent = true;
@@ -688,6 +695,15 @@ async function runSidecarTurn({
         saw_any_event: sawAnyEvent,
       });
     }
+    // 报到失败：引擎没启动。勿套「本地引擎出错」、勿被陈旧 spawn 诊断盖住。
+    const occupyFailed = isSidecarOccupyFailed(err);
+    if (occupyFailed) {
+      throw new StreamError("sidecar", undefined, {
+        code: SIDECAR_OCCUPY_FAILED_CODE,
+        serverMessage: "云端占位失败，本地回合未启动",
+        recoverable: !sawAnyEvent,
+      });
+    }
     // 非忙槽：失败**来自本地引擎**（拉不起 / 初始化失败 / 引擎异常 / 进程退出），从不是
     // 真正的「网络」。优先用 onStatus 记下的生命周期诊断（uv/venv 找不到、退出码…）换出针对性
     // 横幅；没有（如回合中途引擎报错，进程仍健康）则退回从该次拒绝里提取真因，最后兜底。
@@ -697,8 +713,8 @@ async function runSidecarTurn({
       : (takeRecentSidecarFailure(rootId) ??
         describeSidecarTurnError(err) ??
         failMessage);
-    // 启动期失败（一个事件都没派发）= 无任何输出 / 副作用，可安全改道云端重跑（阶段二降级）；
-    // 中途失败（已开始流式 / 已调工具）则否。忙槽互斥不是引擎故障，也不降级云端。
+    // 启动期失败（一个事件都没派发）标 recoverable：占位失败可改走云 POST；引擎没起来则
+    // 调用方报错。中途失败不标。忙槽互斥不是引擎故障，也不降级云端。
     throw new StreamError("sidecar", undefined, {
       serverMessage: detail,
       // 忙槽不是引擎故障：不降级云端（sendTurn 看 recoverable）。

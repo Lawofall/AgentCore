@@ -133,13 +133,13 @@ async def test_requires_files_satisfied_by_code_execute_landing(tmp_path):
 
 
 async def test_files_form_soft_completes_on_pure_prose_no_landing():
-    """甲⁺：无 run / file_write，仅散文；strict+form=files 仍 soft-complete。"""
+    """甲⁺：无 run / file_write，仅散文；钉路径仍 soft-complete（form 已废，认 artifacts）。"""
     plan, _ = build_run_plan(
         [
             {
                 "role": "分析",
                 "task": "生成报告并落盘",
-                "deliverable": {"form": "files", "strict": True},
+                "deliverable": {"artifacts": ["report.md"], "strict": True},
             }
         ],
         id_prefix="t",

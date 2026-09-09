@@ -24,7 +24,13 @@ from agentcore.conversation.store import (
 )
 from agentcore.core.logging import get_logger
 from agentcore.llm.resolve import LLMCredentials
-from agentcore.runtime.events import EventSink, content_delta, message_end
+from agentcore.runtime.events import (
+    EventSink,
+    FinishReason,
+    content_delta,
+    error_event,
+    message_end,
+)
 from agentcore.runtime.facts import current_fact_log, pre_pause_from_journal
 from agentcore.runtime.turn.interrupt import (
     TurnInterruptReason,
@@ -47,6 +53,7 @@ __all__ = [
     "create_assistant_placeholder",
     "has_open_durable_pause",
     "persist_incomplete_turn",
+    "persist_placeholder_abort",
     "persist_turn_result",
     "salvage_incomplete_turn",
 ]
@@ -118,6 +125,65 @@ async def persist_turn_result(
         duration_ms=duration_ms,
         kind=kind,
     )
+
+
+async def persist_placeholder_abort(
+    *,
+    exc: BaseException,
+    conversation_id: str,
+    user_id: str,
+    folder_id: str | None,
+    backend: WorkspaceBackend,
+    sink: EventSink,
+    user_message: str,
+    llm_credentials: LLMCredentials | None,
+    trace_id: str,
+    turn_id: str,
+    message_id: str,
+    duration_ms: int,
+    kind: str = "turn",
+) -> dict:
+    """Stamp a running placeholder failed when the turn dies before the pipeline.
+
+    Presence-gate / prepare abort used to emit SSE error and leave the row
+    ``running`` — a later open / follow then kept the composer spinning. Product
+    face via ``error_fields_for`` (dedicated local-workspace codes, not
+    STREAM_ERROR).
+    """
+    from agentcore.core.error_codes import ErrorCode
+    from agentcore.core.errors import error_fields_for
+
+    code, message, err_ctx = error_fields_for(
+        exc,
+        fallback_code=ErrorCode.STREAM_ERROR,
+        fallback_message="服务出错了，请稍后重试。",
+    )
+    if not sink._closed:
+        sink.emit(error_event(code, message, context=err_ctx))
+        sink.emit(message_end(FinishReason.ERROR, outcome="error"))
+    result = {
+        "message_id": message_id,
+        "content": "",
+        "error": message,
+        "error_code": code,
+        "finish_reason": FinishReason.ERROR,
+        "outcome": "error",
+    }
+    await persist_turn_result(
+        result=result,
+        conversation_id=conversation_id,
+        user_id=user_id,
+        folder_id=folder_id,
+        backend=backend,
+        sink=sink,
+        user_message=user_message,
+        llm_credentials=llm_credentials,
+        trace_id=trace_id,
+        turn_id=turn_id,
+        duration_ms=duration_ms,
+        kind=kind,
+    )
+    return result
 
 
 async def persist_incomplete_turn(

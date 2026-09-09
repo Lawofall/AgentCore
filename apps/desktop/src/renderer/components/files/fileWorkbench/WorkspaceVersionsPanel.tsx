@@ -54,7 +54,6 @@ export function WorkspaceVersionsPanel({
             inline
             icon={<History size={26} className="text-muted-foreground/40" />}
             title="暂无版本"
-            hint="可为当前工作区留一个版本，之后随时回到这里。"
           />
         ) : (
           entries.map((entry) => (

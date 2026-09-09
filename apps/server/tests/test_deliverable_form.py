@@ -1,541 +1,131 @@
-"""Unit tests for deliverable.form (prose | files) on the delegate contract path."""
+"""Landing predicate: pinned artifacts / artifact_dir only. No form enum."""
 
 from __future__ import annotations
 
 from agentcore.runtime.runs.builder import build_run_plan
-from agentcore.runtime.runs.contract import describe_deliverable
-from agentcore.runtime.runs.executor.identities import build_worker_identity
-from agentcore.runtime.runs.types import Deliverable
+from agentcore.runtime.runs.contract import describe_deliverable, is_file_deliverable
+from agentcore.runtime.runs.types import (
+    Deliverable,
+    deliverable_expects_landing,
+    raw_deliverable_expects_landing,
+)
 from agentcore.tools.builtin.delegate.schema import (
     DELEGATE_DESCRIPTION,
-    DELEGATE_PARAMETERS,
     TASK_DELIVERABLE_SCHEMA,
 )
-from agentcore.workspace.stage_dirs import DRAFTS_DIR
 
 
-def test_form_parsed_onto_deliverable():
+def test_deliverable_default_does_not_expect_landing():
+    d = Deliverable()
+    assert deliverable_expects_landing(d) is False
+    assert deliverable_expects_landing(None) is False
+    assert is_file_deliverable(d) is False
+
+
+def test_nonempty_artifacts_expect_landing():
+    d = Deliverable(artifacts=["report.md"])
+    assert deliverable_expects_landing(d) is True
+    assert is_file_deliverable(d) is True
+
+
+def test_nonempty_artifact_dir_expects_landing():
+    d = Deliverable(artifact_dir="AgentCore/文档/research")
+    assert deliverable_expects_landing(d) is True
+
+
+def test_raw_omitted_empty_does_not_expect_landing():
+    assert raw_deliverable_expects_landing(None) is False
+    assert raw_deliverable_expects_landing({}) is False
+    assert raw_deliverable_expects_landing("x") is False
+    assert raw_deliverable_expects_landing({"form": "files"}) is False
+    assert raw_deliverable_expects_landing({"form": "prose"}) is False
+    assert raw_deliverable_expects_landing({"form": "workspace"}) is False
+    assert raw_deliverable_expects_landing({"workspace_native": True}) is False
+    assert raw_deliverable_expects_landing({"artifacts": ["a.md"]}) is True
+    assert raw_deliverable_expects_landing({"artifact_dir": "docs"}) is True
+    assert raw_deliverable_expects_landing({"artifacts": ["  "]}) is False
+
+
+def test_leftover_form_key_is_discarded_not_translated():
     plan, errs = build_run_plan(
         [{"role": "A", "task": "打招呼", "deliverable": {"form": "prose"}}],
-        id_prefix="t",
     )
     assert errs == []
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.form == "prose"
+    assert not hasattr(d, "form") or not getattr(d, "form", None)
+    assert deliverable_expects_landing(d) is False
 
 
-def test_placeholder_exempt_keys_not_parsed_onto_deliverable():
-    plan, errs = build_run_plan(
-        [
-            {
-                "role": "A",
-                "task": "写页",
-                "deliverable": {
-                    "form": "files",
-                    "placeholder_hard_exempt": True,
-                    "placeholder_hard_exempt_artifacts": ["index.html"],
-                },
-            }
-        ],
-        id_prefix="t",
-    )
-    assert errs == []
-    d = plan.nodes[0].deliverable
-    assert d is not None
-    assert not hasattr(d, "placeholder_hard_exempt")
-    assert not hasattr(d, "placeholder_hard_exempt_artifacts")
-
-
-def test_form_files_is_write_disk():
+def test_leftover_form_files_without_artifacts_does_not_expect_landing():
     plan, errs = build_run_plan(
         [{"role": "A", "task": "建站", "deliverable": {"form": "files"}}],
-        id_prefix="t",
     )
     assert errs == []
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.form == "files"
+    assert deliverable_expects_landing(d) is False
 
 
-def test_form_workspace_parsed():
+def test_artifacts_survive_leftover_form_key():
     plan, errs = build_run_plan(
-        [{"role": "A", "task": "改登录", "deliverable": {"form": "workspace"}}],
-        id_prefix="t",
+        [
+            {
+                "role": "A",
+                "task": "写报告",
+                "deliverable": {"form": "prose", "artifacts": ["note.md"]},
+            }
+        ],
     )
     assert errs == []
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.form == "workspace"
-    assert d.workspace_native is True
-    assert d.artifact_dir == ""
+    assert d.artifacts == ["AgentCore/文档/工作稿/note.md"]
+    assert deliverable_expects_landing(d) is True
 
 
-def test_form_alone_is_enough_content():
-    plan, errs = build_run_plan(
-        [{"role": "A", "task": "a", "deliverable": {"form": "prose"}}],
-        id_prefix="t",
-    )
-    assert errs == []
-    assert plan.nodes[0].deliverable is not None
-
-def test_form_prose_rejects_artifacts():
-    """D1: raw form=prose ∩ non-empty artifacts must hard-reject (gate before clear)."""
+def test_unknown_json_keys_do_not_fail_build():
     plan, errs = build_run_plan(
         [
             {
                 "role": "A",
                 "task": "a",
                 "deliverable": {
-                    "form": "prose",
-                    "artifacts": ["hello.md"],
+                    "form": "slides",
+                    "name": "x",
+                    "workspace_native": True,
                 },
             }
         ],
-        id_prefix="t",
-    )
-    assert errs
-    assert any("form=prose" in e and "artifacts" in e for e in errs)
-    assert plan.nodes == [] or not plan.nodes
-
-
-def test_form_prose_ignores_legacy_requires_files_key():
-    """Unknown requires_files is not consumed; prose alone still builds."""
-    plan, errs = build_run_plan(
-        [
-            {
-                "role": "A",
-                "task": "a",
-                "deliverable": {
-                    "form": "prose",
-                    "requires_files": True,
-                },
-            }
-        ],
-        id_prefix="t",
     )
     assert errs == []
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.form == "prose"
-    assert d.artifacts == []
-def test_form_prose_alone_still_builds():
-    plan, errs = build_run_plan(
-        [
-            {
-                "role": "A",
-                "task": "a",
-                "deliverable": {"form": "prose"},
-            }
-        ],
-        id_prefix="t",
-    )
-    assert errs == []
-    d = plan.nodes[0].deliverable
-    assert d is not None
-    assert d.form == "prose"
-    assert d.artifacts == []
-
-def test_invalid_form_defaults_to_files():
-    plan, _ = build_run_plan(
-        [{"role": "A", "task": "a", "deliverable": {"form": "slides", "name": "x"}}],
-        id_prefix="t",
-    )
-    d = plan.nodes[0].deliverable
-    assert d is not None
-    assert d.form == "files"
+    assert deliverable_expects_landing(d) is False
 
 
-def test_deliverable_form_how_has_no_file_write_guidance():
-    prose = describe_deliverable(Deliverable(form="prose"))
-    files = describe_deliverable(Deliverable(form="files"))
-    omitted = describe_deliverable(Deliverable())
-    workspace = describe_deliverable(Deliverable(form="workspace"))
-
-    assert "form=prose" in prose
-    assert "file_write" not in prose
-    assert "纯文字" in prose
-    assert "不要落盘" in prose
-
-    assert "form=files" in files
-    assert "成品写入工作区" in files
-    assert "file_write" not in files
-    assert "必须" not in files
-    assert "artifact manifest" not in files
-    assert "落盘与修订" not in files
-    assert "consult(long_form_landing)" not in files
-    assert "consult(long_form_landing)" not in omitted
-    assert "consult(long_form_landing)" not in prose
-    assert "consult(data_file_landing)" not in files
-    assert "consult(data_file_landing)" not in omitted
-    assert "consult(data_file_landing)" not in prose
-    assert "consult(verify_and_fix)" not in files
-    assert "consult(verify_and_fix)" not in omitted
-    assert "consult(verify_and_fix)" not in workspace
-
-    # omit = files（无双向自判）
-    assert "form=files" in omitted
-    assert "可独立阅读的文字" not in omitted
-    assert "成品写入工作区" in omitted
-    assert "artifact manifest" not in omitted
-    assert "Artifact-first" not in omitted
-    assert "落盘与修订" not in omitted
-
-    assert "form=workspace" in workspace
-    assert "改工程" in workspace
-    assert "AgentCore/文档" in workspace
-    assert "file_write" not in workspace
-    assert "consult(long_form_landing)" not in workspace
-    assert "consult(verify_and_fix)" not in workspace
+def test_describe_deliverable_empty_without_instance_facts():
+    assert describe_deliverable(None) == ""
+    assert describe_deliverable(Deliverable()) == ""
+    assert "form=" not in describe_deliverable(Deliverable(artifacts=["a.md"]))
+    assert "【" not in describe_deliverable(Deliverable())
+    desc = describe_deliverable(Deliverable(artifacts=["report.md"]))
+    assert "report.md" in desc
+    assert "交付路径" in desc
 
 
-def test_artifacts_select_files_form_how():
-    """非空 artifacts 且 form 省略 ⇒ files 形态提示（Deliverable 默认 form=files）。"""
-    by_artifacts = describe_deliverable(Deliverable(artifacts=["report.md"]))
-    assert "form=files" in by_artifacts
-    assert "落盘文件" in by_artifacts
-    assert "report.md" in by_artifacts
-
-    by_omit = describe_deliverable(Deliverable())
-    assert "form=files" in by_omit
-
-    prose_wins = describe_deliverable(Deliverable(form="prose", artifacts=["x.md"]))
-    assert "form=prose" in prose_wins
-    assert "form=files" not in prose_wins
+def test_describe_deliverable_renders_sections():
+    desc = describe_deliverable(Deliverable(required_sections=["结论"]))
+    assert "结论" in desc
+    assert "form=" not in desc
 
 
-def test_identity_omits_form_how_and_handoff_topology():
-    up = build_worker_identity(has_dependents=True)
-    leaf = build_worker_identity(has_dependents=False)
-    assert up == leaf
-    assert "form=prose" not in up
-    assert "form=files" not in leaf
-    assert "成品就是正文" not in up
-    assert "必须调用 handoff" not in up
-    assert "默认不调用" not in leaf
-    assert "结论与根因写在正文" not in up
-    assert "不算正文" not in up
-    assert "非空即可" not in up
-    assert "min_length" not in up
-
-def test_describe_deliverable_form_split():
-    prose = describe_deliverable(Deliverable(form="prose"))
-    assert "form=prose" in prose
-    assert "file_write" not in prose
-
-    files = describe_deliverable(Deliverable(form="files"))
-    assert "form=files" in files
-
-    workspace = describe_deliverable(Deliverable(form="workspace"))
-    assert "form=workspace" in workspace
-    assert DRAFTS_DIR not in workspace
-
-def test_schema_exposes_form_enum():
+def test_ceo_schema_deliverable_is_artifacts_only():
     props = TASK_DELIVERABLE_SCHEMA["properties"]
-    assert "form" in props
-    assert props["form"]["enum"] == ["prose", "files", "workspace"]
-    assert "workspace" in props["form"]["description"]
-    assert "prose" in props["form"]["description"]
-    assert "【看】" in props["form"]["description"]
+    assert set(props) == {"artifacts"}
+    assert "form" not in props
     assert "【看】" not in DELEGATE_DESCRIPTION
     assert "【存文档】" not in DELEGATE_DESCRIPTION
     assert "【改工程】" not in DELEGATE_DESCRIPTION
-    assert "才用本工具" not in DELEGATE_DESCRIPTION
-    # 何时用写在 description（行业：when-to-use 在工具面）；编制闭集不进按钮。
-    assert "默认用本工具" in DELEGATE_DESCRIPTION
-    assert "一份注意力" not in DELEGATE_DESCRIPTION
-    assert "探路够了" not in DELEGATE_DESCRIPTION
-    assert "成篇落盘" in DELEGATE_DESCRIPTION
-    assert "可运行应用" in DELEGATE_DESCRIPTION
-    assert "成规模查证" in DELEGATE_DESCRIPTION
-    assert "有写权" in DELEGATE_DESCRIPTION
-    assert "闲聊" in DELEGATE_DESCRIPTION
-    assert "用：" not in DELEGATE_DESCRIPTION
-    assert "不用：" not in DELEGATE_DESCRIPTION
-    assert "跨模块" not in DELEGATE_DESCRIPTION
-    assert "点名对比" not in DELEGATE_DESCRIPTION
-    assert "编制自选" not in DELEGATE_DESCRIPTION
-    assert "结局分层" not in DELEGATE_DESCRIPTION
-    assert "playbook_args.app" not in DELEGATE_DESCRIPTION
-    assert "build_app" not in DELEGATE_DESCRIPTION
-    assert "建站→build_website" not in DELEGATE_DESCRIPTION
-    assert "建站→build_website" not in DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
-    assert "二选一" not in DELEGATE_DESCRIPTION
-    playbook_desc = DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
-    assert "二选一" in playbook_desc
-    assert "不要传 tasks" in playbook_desc
-    assert "既填 code_audit 又传 tasks" not in DELEGATE_DESCRIPTION
-    assert "HOW→consult(team_orchestration_advanced)" in DELEGATE_DESCRIPTION
-    # 图语义在 schema；skill 不复述协调立即返回 / 一张图标题。
-    from agentcore.runtime.skills import build_system_skill_registry
-
-    orch = build_system_skill_registry().get("team_orchestration_advanced")
-    assert orch is not None
-    orch_body = orch.body
-    assert "立即返回" not in orch_body
-    assert "立即返回" not in DELEGATE_DESCRIPTION
-    assert "非终结" in DELEGATE_DESCRIPTION
-    assert "一回合一张协作图" not in orch_body
-    assert "一张图" not in DELEGATE_DESCRIPTION
-    # 弱模型空失败可抄：顶层非空 tasks 三件套骨架（与 empty 拒收同源）只留参数面。
-    from agentcore.runtime.delegate.playbook_declaration import HANDWRITTEN_TASKS_SKELETON
-
-    assert HANDWRITTEN_TASKS_SKELETON not in DELEGATE_DESCRIPTION
-    assert "默认" in DELEGATE_DESCRIPTION
-    assert "手写顶层 tasks" in DELEGATE_DESCRIPTION or "默认手写" in DELEGATE_DESCRIPTION
-    assert "快捷进阶" not in DELEGATE_DESCRIPTION
-    assert "快捷进阶" in playbook_desc or "固化流水线" in playbook_desc
-    tasks_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["description"]
-    assert HANDWRITTEN_TASKS_SKELETON in tasks_desc
-    assert "摸底抄骨架" in tasks_desc
+    assert "form=prose" not in (TASK_DELIVERABLE_SCHEMA.get("description") or "")
     assert "摸底抄骨架" not in DELEGATE_DESCRIPTION
-    assert "默认主路" in tasks_desc
-    assert "互斥" not in tasks_desc
-    assert "不要传 tasks" in playbook_desc
-    assert "非默认" in playbook_desc or "进阶" in playbook_desc or "快捷" in playbook_desc
-    assert "build_app" not in playbook_desc
-    assert "playbook_id" not in DELEGATE_PARAMETERS["properties"]
-    assert "parallelism" not in DELEGATE_PARAMETERS["properties"]
-    pa = DELEGATE_PARAMETERS["properties"]["playbook_args"]["description"]
-    assert "build_app" not in pa
-    assert "绿场必填 app" not in pa
-    assert "build_app→app" not in pa
-    assert "建站→build_website" not in pa
-    assert "快捷" in pa or "手写" in pa
-    # playbook_args 只列现行本必填槽；废名不进工具面
-    assert "code_audit" not in pa
-    assert "modules" not in pa
-    deps = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["depends_on"][
-        "description"
-    ]
-    assert "本批 id" in deps or "同回合" in deps
-    assert ("角色名" in deps or "role" in deps) and "del_*" in deps
-    props_task = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]
-    assert "require_upstream" not in props_task
-    assert "retrieval_budget" not in props_task  # CEO 不可配置；额度走结构化默认
-    # 已确认约束钉在 task；team_brief 只填共享口径，可省略。
-    assert "已确认约束" in props_task["task"]["description"]
-    assert "同一行" in props_task["task"]["description"]
-    assert "已确认约束" not in str(TASK_DELIVERABLE_SCHEMA.get("description") or "")
-    brief = DELEGATE_PARAMETERS["properties"]["team_brief"]["description"]
-    assert "共享口径" in brief
-    assert "省略" in brief
-    assert "便签墙" not in brief
-    assert "换行" not in brief
-
-    assert "coordinate" not in DELEGATE_PARAMETERS["properties"]
-    assert "coordination" not in DELEGATE_PARAMETERS["properties"]
-    assert "complexity_hint" not in DELEGATE_PARAMETERS["properties"]
-    assert "checkpoint_after" not in props_task
-    assert "bind_after_deps" not in props_task
-    assert "result_handling" not in props_task
-    cf = props_task["continue_from_run_id"]["description"]
-    assert "同人" in cf or "续派" in cf
-    assert "调查" in cf or "改稿" in cf
-    # 真纯丙：CEO schema 不再提供 tools 白名单开关。
-    assert "tools" not in props_task
-    # 假辩论通道关死：CEO 不可经 delegate.tasks 写 stance/group/round。
-    assert "stance" not in props_task
-    assert "group" not in props_task
-    assert "round" not in props_task
-    # 已删 A+B+C 字段：schema 不再暴露。
-    assert "must_contain" not in props
-    assert "min_length" not in props
-    assert "requires_files" not in props
-    assert "name" not in props
-    assert "objective" not in props_task
-    assert "playbook_none_reason" not in DELEGATE_PARAMETERS["properties"]
-    for banned in (
-        "required_sections",
-        "output_format",
-        "strict",
-        "citation_mode",
-        "workspace_native",
-        "artifact_dir",
-        "web_quality_scan",
-        "placeholder_hard_exempt",
-        "code_audit_gate",
-    ):
-        assert banned not in props
-
-def test_schema_depends_on_teaches_when_to_declare_dependency():
-    # 工具面：【何时填】短指针在参数；skill 不再复述 DAG 手册。
-    deps = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["depends_on"][
-        "description"
-    ]
-    assert "本批 id" in deps and "del_*" in deps
-    assert "角色名" in deps or "role" in deps
-    assert "生产者→消费者" in deps
-    assert "新开一队" in deps
-    assert "append_to_execution_id" not in deps
-    from agentcore.runtime.skills import build_system_skill_registry
-
-    orch = build_system_skill_registry().get("team_orchestration_advanced")
-    assert orch is not None
-    orch_body = orch.body
-    assert "生产者→消费者" not in orch_body
-    assert "新开一队、接续上一张图" not in orch_body
-    assert "生产者→消费者" not in DELEGATE_DESCRIPTION
-    assert "平铺并行" not in DELEGATE_DESCRIPTION
-    assert "新开一队、接续上一张图" not in DELEGATE_DESCRIPTION
-    append = DELEGATE_PARAMETERS["properties"]["append_to_execution_id"]["description"]
-    assert "latest" in append and "一张图" in append
-
-async def test_prose_worker_still_offered_write_tools():
-    """真纯丙·H2：form=prose 仍装配写盘工具；交付物规格仍提示正文交付。"""
-    from agentcore.runtime.events import EventSink
-    from agentcore.runtime.runs.executor import build_agent_executor
-    from agentcore.runtime.runs.types import RunPhase
-    from agentcore.runtime.runs.wave import WaveScheduler
-    from agentcore.tools.registry import ToolRegistry
-    from tests.runs_executor.conftest import (
-        _ContentProvider,
-        _ctx,
-        _GrantableTool,
-        _OfferRecorder,
-    )
-
-    tasks = [{"role": "A", "task": "打招呼", "deliverable": {"form": "prose"}}]
-    plan, _ = build_run_plan(tasks, id_prefix="t")
-    reg = ToolRegistry()
-    for name in ("file_write", "str_replace", "file_read", "code_execute"):
-        reg.register(_GrantableTool(name))
-    provider = _OfferRecorder()
-    executor = build_agent_executor(
-        plan=plan,
-        llm=provider,
-        tools=reg,
-        sink=EventSink(),
-        base_tool_context=_ctx(),
-        system_prompt="SYS",
-        user_message="让每个 AI 打招呼",
-        execution_id="e",
-        approval_gate=None,
-    )
-    res = await WaveScheduler().run(plan, executor)
-    assert res["t_1"].phase is RunPhase.COMPLETED
-    offered = set(provider.offered[0])
-    assert "file_write" in offered
-    assert "file_append" not in offered
-    assert "str_replace" in offered
-    assert "file_read" in offered
-    assert "code_execute" in offered
-
-    plan2, _ = build_run_plan(tasks, id_prefix="u")
-    id_provider = _ContentProvider(["HI"])
-    id_exec = build_agent_executor(
-        plan=plan2,
-        llm=id_provider,
-        tools=reg,
-        sink=EventSink(),
-        base_tool_context=_ctx(),
-        system_prompt="SYS",
-        user_message="让每个 AI 打招呼",
-        execution_id="e2",
-        approval_gate=None,
-    )
-    await WaveScheduler().run(plan2, id_exec)
-    assert "form=prose" not in id_provider.system_messages[0]
-    assert "file_write" not in id_provider.system_messages[0]
-    assert "交付物规格" in id_provider.user_messages[0]
-    assert "form=prose" in id_provider.user_messages[0]
-
-async def test_files_worker_keeps_write_tools_and_identity():
-    from agentcore.llm.provider.protocol import LLMChunk, ToolCallDelta
-    from agentcore.runtime.events import EventSink
-    from agentcore.runtime.runs.executor import build_agent_executor
-    from agentcore.runtime.runs.types import RunPhase
-    from agentcore.runtime.runs.wave import WaveScheduler
-    from agentcore.tools.registry import ToolRegistry
-    from tests.runs_executor.conftest import (
-        _ctx,
-        _FileWriteTool,
-        _ScriptedRounds,
-    )
-
-    plan, _ = build_run_plan(
-        [{"role": "A", "task": "建页面", "deliverable": {"form": "files"}}],
-        id_prefix="t",
-    )
-    reg = ToolRegistry()
-    reg.register(_FileWriteTool())
-    # form=files：须真实落盘才能 COMPLETED（交付真相）。
-    rounds = [
-        [
-            LLMChunk(
-                delta_tool_calls=[
-                    ToolCallDelta(
-                        index=0,
-                        id="c1",
-                        function_name="file_write",
-                        arguments_delta='{"path": "index.html", "content": "<html></html>"}',
-                    )
-                ]
-            )
-        ],
-        [LLMChunk(delta_content="已写入")],
-    ]
-    provider = _ScriptedRounds(rounds)
-    executor = build_agent_executor(
-        plan=plan,
-        llm=provider,
-        tools=reg,
-        sink=EventSink(),
-        base_tool_context=_ctx(),
-        system_prompt="SYS",
-        user_message="做一个网页",
-        execution_id="e",
-        approval_gate=None,
-    )
-    res = await WaveScheduler().run(plan, executor)
-    assert res["t_1"].phase is RunPhase.COMPLETED
-    assert "form=files" not in provider.system_messages[0]
-    assert "file_write" not in provider.system_messages[0]
-    assert "交付物规格" in provider.user_messages[0]
-    assert "form=files" in provider.user_messages[0]
-    assert "成品写入工作区" in provider.user_messages[0]
-
-async def test_cold_start_pending_allows_single_worker_delegate():
-    """pending ∧ 1 worker：不再因节点数拒（组队靠提示词）。"""
-    from tests.delegate.conftest import Provider, ctx, tool
-
-    t = tool(Provider(["结构笔记"]))
-    t._base_tool_context.cold_start_explore_pending = True
-    result = await t.execute(
-        {
-            "tasks": [
-                {
-                    "role": "调研",
-                    "task": "摸清项目结构",
-                    "deliverable": {"form": "prose"},
-                }
-            ],
-            "coordinate": False,
-        },
-        ctx(),
-    )
-    assert result.success is True
-    assert result.contract_failure is not True
-    err = result.error or ""
-    assert "≥2" not in err
-    assert "包办" not in err
-    assert "至少两" not in err
-
-def test_cold_start_allows_artifacts():
-    """裸 artifacts 文件名仍迁入工作稿（与节点数闸无关）。"""
-    plan, errs = build_run_plan(
-        [
-            {
-                "role": "调研",
-                "task": "摸清项目",
-                "deliverable": {"artifacts": ["brief.md"]},
-            },
-            {"role": "B", "task": "读 README", "deliverable": {"form": "prose"}},
-        ],
-        id_prefix="t",
-    )
-    assert errs == []
-    assert plan.nodes[0].deliverable is not None
-    # 裸文件名迁入工作稿（无路径 → 工作稿/）。
-    assert plan.nodes[0].deliverable.artifacts == ["AgentCore/文档/工作稿/brief.md"]
-

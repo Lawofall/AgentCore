@@ -46,7 +46,7 @@ declare global {
     processApi?: ProcessApi;
     /** 用户交互 shell（终端 tab · M3）；纯浏览器 / 单测环境可能缺失。 */
     ptyApi?: PtyApi;
-    /** OS 原生通知（窗口失焦时跨对话提醒）；纯浏览器 / 单测环境可能缺失。 */
+    /** OS 原生通知（失焦时跨对话提醒，与 toast 互斥）；纯浏览器 / 单测环境可能缺失。 */
     notificationApi?: NotificationApi;
     /** 本机 Host 能力（host_* ClientTool 回填）；纯浏览器 / 单测环境可能缺失。 */
     hostApi?: HostApi;

@@ -23,7 +23,6 @@ from agentcore.api.routes import (
     devices,
     documents,
     favicon,
-    feedback,
     files,
     folders,
     fulfill,
@@ -41,10 +40,10 @@ from agentcore.api.routes import (
     sharing,
     skill_catalog,
     skill_store,
-    standing_tasks,
     system,
     usage,
     users,
+    workflow_store,
     workflows,
     workspaces,
 )
@@ -68,11 +67,11 @@ from agentcore.runtime.session_retention import session_retention_loop
 from agentcore.runtime.stream_state_retention import stream_state_retention_loop
 from agentcore.runtime.suspension.retention import paused_turn_retention_loop
 from agentcore.security.keys import KeyEncryptor
-from agentcore.standing_tasks.scheduler import standing_task_scheduler_loop
 from agentcore.tools.builtin.web.search_backend import (
     aclose_search_backend,
     probe_search_at_startup,
 )
+from agentcore.workflows.scheduler import workflow_trigger_scheduler_loop
 from agentcore.workspace.retention import retention_loop
 
 logger = logging.getLogger(__name__)
@@ -391,10 +390,12 @@ async def lifespan(app: FastAPI):
     # path; this only catches the disconnected remainder. days<=0 disables.
     stream_state_retention_task = asyncio.create_task(stream_state_retention_loop())
 
-    # Standing tasks / 定时自动化 L1: poll next_run_at + lease, spawn cloud runs.
-    standing_task_scheduler_task: asyncio.Task | None = None
-    if settings.standing_task_scheduler_enabled:
-        standing_task_scheduler_task = asyncio.create_task(standing_task_scheduler_loop())
+    # Workflow clock / webhook: poll trigger_next_run_at + lease, spawn cloud runs.
+    workflow_trigger_scheduler_task: asyncio.Task | None = None
+    if settings.workflow_trigger_scheduler_enabled:
+        workflow_trigger_scheduler_task = asyncio.create_task(
+            workflow_trigger_scheduler_loop()
+        )
 
     # Durable RUNNING lease sweeper (crash recover): claim heartbeat-expired leases and
     # redrive unfinished DAG via recover_turn. Boot pass runs inside the loop.
@@ -506,10 +507,10 @@ async def lifespan(app: FastAPI):
             pool_refresh_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await pool_refresh_task
-            if standing_task_scheduler_task is not None:
-                standing_task_scheduler_task.cancel()
+            if workflow_trigger_scheduler_task is not None:
+                workflow_trigger_scheduler_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
-                    await standing_task_scheduler_task
+                    await workflow_trigger_scheduler_task
             event_loop_lag_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await event_loop_lag_task
@@ -626,7 +627,6 @@ app.include_router(demo_tape.router, prefix="/v1")
 app.include_router(devices.router, prefix="/v1")
 app.include_router(documents.router, prefix="/v1")
 app.include_router(favicon.router, prefix="/v1")
-app.include_router(feedback.router, prefix="/v1")
 app.include_router(files.router, prefix="/v1")
 app.include_router(folders.router, prefix="/v1")
 app.include_router(fulfill.router, prefix="/v1")
@@ -643,13 +643,13 @@ app.include_router(realtime.router, prefix="/v1")
 app.include_router(search.router, prefix="/v1")
 app.include_router(skill_catalog.router, prefix="/v1")
 app.include_router(skill_store.router, prefix="/v1")
+app.include_router(workflow_store.router, prefix="/v1")
 # Conversation sharing (分享对话): owner-only manage under /v1, plus the public
 # read-only page at the root (/shared/{token}, no /v1, no auth).
 app.include_router(sharing.router, prefix="/v1")
 app.include_router(sharing.public_router)
-app.include_router(standing_tasks.router, prefix="/v1")
-app.include_router(standing_tasks.hooks_router, prefix="/v1")
 app.include_router(workflows.router, prefix="/v1")
+app.include_router(workflows.hooks_router, prefix="/v1")
 app.include_router(usage.router, prefix="/v1")
 app.include_router(users.router, prefix="/v1")
 app.include_router(workspaces.router, prefix="/v1")

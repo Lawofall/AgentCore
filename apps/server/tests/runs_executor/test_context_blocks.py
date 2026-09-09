@@ -8,6 +8,7 @@ from agentcore.runtime.runs.executor.context import (
     _build_context_blocks,
     _build_messages,
     _context_block_payloads,
+    _offered_tools_block,
 )
 from agentcore.runtime.runs.types import ContextBlock, Deliverable, RunPhase, RunSpec, RunState
 from tests.runs_executor.conftest import _plan
@@ -179,20 +180,18 @@ async def test_context_blocks_channel_sequence_and_single_source():
     assert blocks[-2].body == "把关要点文"
     deliverable = next(b for b in blocks if b.channel == "deliverable")
     assert "结论" in deliverable.body
-    assert "form=files" in deliverable.body
+    assert "form=" not in deliverable.body
     assert "建议正文骨架" not in deliverable.body
     assert "检索预算" not in deliverable.body
     assert "交付形态" not in deliverable.body
 
 
-async def test_context_blocks_include_form_how_without_instance_facts():
+async def test_context_blocks_omit_deliverable_without_instance_facts():
     plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
     spec = plan.by_id("t_1")
     blocks = _build_context_blocks(plan, spec, {}, "原始请求", None)
-    assert [b.channel for b in blocks] == ["request", "task", "deliverable"]
-    deliverable = next(b for b in blocks if b.channel == "deliverable")
-    assert "form=files" in deliverable.body
-    assert "成品写入工作区" in deliverable.body
+    assert [b.channel for b in blocks] == ["request", "task"]
+    assert all(b.channel != "deliverable" for b in blocks)
 
 
 async def test_context_blocks_dependency_carries_provenance():
@@ -344,6 +343,113 @@ def test_captain_context_blocks_first_turn_omits_history():
     # A fresh conversation (no prior turns) → only system + request, no empty history block.
     blocks = _build_captain_context_blocks("你是 CEO。", [], "第一条消息")
     assert [b.channel for b in blocks] == ["system", "request"]
+
+
+def test_offered_tools_block_mirrors_openai_defs():
+    defs = [
+        {
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": "搜索互联网\n第二行不进目录摘要",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "搜索词，精简到核心词",
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "结果数上限",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "web_fetch",
+                "description": "抓网页正文",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"url": {"type": "string"}},
+                    "required": ["url"],
+                },
+            },
+        },
+    ]
+    block = _offered_tools_block(defs)
+    assert block is not None
+    assert block.channel == "tools"
+    assert "**web_search**" in block.body
+    assert "搜索互联网" in block.body
+    assert "第二行不进目录摘要" not in block.body
+    assert "`query`: string（必填）" in block.body
+    assert "`max_results`: integer（可选）" in block.body
+    assert block.body.index("web_search") < block.body.index("web_fetch")
+    assert _offered_tools_block(None) is None
+    assert _offered_tools_block([]) is None
+
+
+def test_captain_context_blocks_inserts_opening_tools():
+    defs = [
+        {
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": "搜索",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }
+    ]
+    blocks = _build_captain_context_blocks(
+        "你是 CEO。",
+        [{"role": "user", "content": "你好"}],
+        "发下参数",
+        tool_defs=defs,
+    )
+    assert [b.channel for b in blocks] == ["system", "tools", "history", "request"]
+    assert "**web_search**" in blocks[1].body
+    assert blocks[-1].body == "发下参数"
+
+
+def test_worker_run_context_mirrors_tools_without_joining_user():
+    spec = RunSpec(run_id="x", agent_id="x", role="调研员", task="调研竞品")
+    defs = [
+        {
+            "type": "function",
+            "function": {
+                "name": "file_read",
+                "description": "读文件",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                    "required": ["path"],
+                },
+            },
+        }
+    ]
+    sink: list[ContextBlock] = []
+    msgs = _build_messages(
+        _plan(spec),
+        spec,
+        {},
+        "SYS",
+        "原始请求",
+        blocks_sink=sink,
+        tool_defs=defs,
+    )
+    assert sink[0].channel == "system"
+    assert sink[1].channel == "tools"
+    assert "**file_read**" in sink[1].body
+    user = msgs[1].content or ""
+    assert "**file_read**" not in user
+    assert "## 本回合工具" not in user
+    material = _build_context_blocks(_plan(spec), spec, {}, "原始请求", None)
+    assert [b.channel for b in sink[2:]] == [b.channel for b in material]
 
 
 def test_worker_turn_observe_covers_identity(monkeypatch):

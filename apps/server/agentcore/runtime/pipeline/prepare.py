@@ -376,9 +376,7 @@ async def prepare_fresh_turn(
     # Workers hold no CEO hints; their base is the shared base + the same
     # ``<按需目录>`` (name＋摘要) + workspace facts (after the directory, same
     # SectionOrder as the CEO) + the same attachment block at the end.
-    from agentcore.runtime.capability_packs import enabled_packs
-
-    skill_registry = build_system_skill_registry(enabled_packs=enabled_packs())
+    skill_registry = build_system_skill_registry()
     register_mcp_tools(worker_tools, mcp_discover)
     await _wire_worker_consult_tools(
         worker_tools,
@@ -401,7 +399,6 @@ async def prepare_fresh_turn(
         workspace_context=workspace_facts,
     )
     # System skills back the unified consult tool + ``<按需目录>`` (CEO wires later).
-    # Capability packs (e.g. legal) layer in for every user when the deployment gate is on.
     # 真·多模型辩手：回合 llm = DeepSeek 默认（``build_provider``，保留可测试打桩的 seam）
     # 外包一层 ProviderRouter。无前缀模型（CEO / 委派 / 主持人）照走默认，仅辩论辩手 side
     # 带 ``provider/model`` 前缀的调用路由到对应厂商。无厂商 key 时只是空包一层，零行为变化。

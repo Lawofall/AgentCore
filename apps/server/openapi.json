@@ -591,7 +591,7 @@
         "type": "object"
       },
       "AccountRulesListResponse": {
-        "description": "Always rules for ``<设定>`` plus on_demand bodies for 规则目录 / ``consult``.\n\n``ancestor_*`` carry the enclosing folders' layers, outermost-first, and\n``folder_chain`` is that same chain by id with the current folder last: the engine may\nbe a desktop sidecar with no folders table, so the cloud is the only place that can\nresolve「谁在谁里面」(双模式工作区 §5.4 沿树继承).\n\n``skill_replacements`` / ``skill_mutes`` are the merged overlay for this\n``folder_id`` (account farthest, then the desk-owner folder chain, near wins).\nBound documents are omitted from on_demand lists so the model does not see the\nsame HOW twice. Muted official slots ride ``skill_mutes`` so sidecar consult\nlisting matches the cloud overlay.",
+        "description": "Always rules for ``<设定>`` plus on_demand bodies for 规则目录 / ``consult``.\n\n``ancestor_*`` carry the enclosing folders' layers, outermost-first, and\n``folder_chain`` is that same chain by id with the current folder last: the engine may\nbe a desktop sidecar with no folders table, so the cloud is the only place that can\nresolve「谁在谁里面」(双模式工作区 §5.4 沿树继承).",
         "properties": {
           "ancestor_on_demand_rules": {
             "items": {
@@ -640,20 +640,6 @@
               "$ref": "#/components/schemas/AccountRuleDoc"
             },
             "title": "Project Rules",
-            "type": "array"
-          },
-          "skill_mutes": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Skill Mutes",
-            "type": "array"
-          },
-          "skill_replacements": {
-            "items": {
-              "$ref": "#/components/schemas/AccountSkillReplacement"
-            },
-            "title": "Skill Replacements",
             "type": "array"
           }
         },
@@ -761,40 +747,6 @@
           }
         },
         "title": "AccountScopeStateSaveRequest",
-        "type": "object"
-      },
-      "AccountSkillReplacement": {
-        "description": "One account-level 换用: official slot → user on-demand body for consult.",
-        "properties": {
-          "content": {
-            "default": "",
-            "title": "Content",
-            "type": "string"
-          },
-          "description": {
-            "default": "",
-            "title": "Description",
-            "type": "string"
-          },
-          "document_id": {
-            "title": "Document Id",
-            "type": "string"
-          },
-          "document_name": {
-            "title": "Document Name",
-            "type": "string"
-          },
-          "slot": {
-            "title": "Slot",
-            "type": "string"
-          }
-        },
-        "required": [
-          "slot",
-          "document_id",
-          "document_name"
-        ],
-        "title": "AccountSkillReplacement",
         "type": "object"
       },
       "AccountTokenResponse": {
@@ -2781,6 +2733,221 @@
         "title": "AdminUserResponse",
         "type": "object"
       },
+      "AdminWorkflowStoreListingDetail": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_user_id": {
+            "title": "Author User Id",
+            "type": "string"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "title": "Definition",
+            "type": "object"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version_n": {
+            "title": "Version N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "author",
+          "author_user_id",
+          "version_n",
+          "status",
+          "updated_at",
+          "definition"
+        ],
+        "title": "AdminWorkflowStoreListingDetail",
+        "type": "object"
+      },
+      "AdminWorkflowStoreListingList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AdminWorkflowStoreListingRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "AdminWorkflowStoreListingList",
+        "type": "object"
+      },
+      "AdminWorkflowStoreListingRow": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_user_id": {
+            "title": "Author User Id",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version_n": {
+            "title": "Version N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "author",
+          "author_user_id",
+          "version_n",
+          "status",
+          "updated_at"
+        ],
+        "title": "AdminWorkflowStoreListingRow",
+        "type": "object"
+      },
+      "AdminWorkflowStoreReportList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AdminWorkflowStoreReportRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "AdminWorkflowStoreReportList",
+        "type": "object"
+      },
+      "AdminWorkflowStoreReportRow": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "listing_id": {
+            "title": "Listing Id",
+            "type": "string"
+          },
+          "listing_name": {
+            "title": "Listing Name",
+            "type": "string"
+          },
+          "listing_status": {
+            "title": "Listing Status",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "reporter": {
+            "title": "Reporter",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing_id",
+          "listing_name",
+          "listing_status",
+          "user_id",
+          "reporter",
+          "reason",
+          "created_at"
+        ],
+        "title": "AdminWorkflowStoreReportRow",
+        "type": "object"
+      },
       "AgentAuditEventLine": {
         "properties": {
           "action": {
@@ -3530,17 +3697,6 @@
             "title": "Created At",
             "type": "string"
           },
-          "folder_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Folder Id"
-          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -3617,17 +3773,6 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
-          },
-          "folder_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Folder Id"
           },
           "id": {
             "title": "Id",
@@ -4019,18 +4164,10 @@
         "type": "object"
       },
       "CapabilitiesResponse": {
-        "description": "The complete capability picture for the 能力图鉴 page (single fetch).\n\n``skills`` = runtime repertoire (platform + deployment-enabled packs; same for all users).\n``packs`` = deployment-listed packs as a display catalog (empty when none listed).",
+        "description": "The complete capability picture for the 能力图鉴 page (single fetch).\n\n``skills`` = runtime repertoire (platform system Skills; same for all users).\nDomain SOPs are store SKUs, not this blueprint.",
         "properties": {
           "guidelines": {
             "$ref": "#/components/schemas/CapabilityGuidelines"
-          },
-          "packs": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/CapabilityPack"
-            },
-            "title": "Packs",
-            "type": "array"
           },
           "skills": {
             "items": {
@@ -4089,43 +4226,16 @@
         "title": "CapabilityGuidelines",
         "type": "object"
       },
-      "CapabilityPack": {
-        "description": "A deployment-listed capability pack (catalog display only).\n\n``skills`` are the pack's domain skills. When the pack is listed, those skills are\nalso registered for every user (see top-level ``skills`` = runtime repertoire).",
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "skills": {
-            "items": {
-              "$ref": "#/components/schemas/CapabilitySkill"
-            },
-            "title": "Skills",
-            "type": "array"
-          },
-          "summary": {
-            "title": "Summary",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "summary",
-          "skills"
-        ],
-        "title": "CapabilityPack",
-        "type": "object"
-      },
       "CapabilitySkill": {
-        "description": "A system Skill in the catalog (渐进披露): its catalog ``summary`` (the always-on\none-line trigger) plus the full ``body`` guidance the CEO pulls via consult.",
+        "description": "A system Skill in the catalog (渐进披露): its catalog ``summary`` (the always-on\none-line trigger) plus the full ``body`` guidance the CEO pulls via consult.\n``group`` is the Chinese 能力指引 subtitle (编排 / 工作区 / 交付 / 产品 / 工具).",
         "properties": {
           "body": {
             "title": "Body",
+            "type": "string"
+          },
+          "group": {
+            "default": "",
+            "title": "Group",
             "type": "string"
           },
           "name": {
@@ -4158,12 +4268,12 @@
             "title": "Available To",
             "type": "array"
           },
-          "category": {
-            "$ref": "#/components/schemas/ToolCategory"
-          },
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "face": {
+            "$ref": "#/components/schemas/ToolFace"
           },
           "name": {
             "title": "Name",
@@ -4173,12 +4283,22 @@
             "additionalProperties": true,
             "title": "Parameters",
             "type": "object"
+          },
+          "resident": {
+            "title": "Resident",
+            "type": "boolean"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
           }
         },
         "required": [
           "name",
           "description",
-          "category",
+          "face",
+          "resident",
+          "summary",
           "approval",
           "parameters",
           "available_to"
@@ -5337,7 +5457,7 @@
             "type": "boolean"
           },
           "include_archived": {
-            "default": false,
+            "default": true,
             "title": "Include Archived",
             "type": "boolean"
           },
@@ -5758,17 +5878,6 @@
       },
       "CreateBoardRequest": {
         "properties": {
-          "folder_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Folder Id"
-          },
           "title": {
             "anyOf": [
               {
@@ -5890,51 +5999,6 @@
           "path"
         ],
         "title": "CreateDirRequest",
-        "type": "object"
-      },
-      "CreateFeedbackRequest": {
-        "properties": {
-          "category": {
-            "enum": [
-              "bug",
-              "feature",
-              "improvement",
-              "other"
-            ],
-            "title": "Category",
-            "type": "string"
-          },
-          "description": {
-            "maxLength": 5000,
-            "minLength": 1,
-            "title": "Description",
-            "type": "string"
-          },
-          "page_context": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Page Context"
-          },
-          "title": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "category",
-          "title",
-          "description"
-        ],
-        "title": "CreateFeedbackRequest",
         "type": "object"
       },
       "CreateFolderRequest": {
@@ -6365,89 +6429,6 @@
           }
         },
         "title": "CreateSnapshotRequest",
-        "type": "object"
-      },
-      "CreateStandingTaskRequest": {
-        "properties": {
-          "cron": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cron"
-          },
-          "enabled": {
-            "default": true,
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "folder_id": {
-            "title": "Folder Id",
-            "type": "string"
-          },
-          "goal": {
-            "default": "",
-            "minLength": 0,
-            "title": "Goal",
-            "type": "string"
-          },
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "permission_axes": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PermissionAxesModel"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "schedule_preset": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Schedule Preset"
-          },
-          "trigger_kind": {
-            "default": "schedule",
-            "enum": [
-              "schedule",
-              "webhook"
-            ],
-            "title": "Trigger Kind",
-            "type": "string"
-          },
-          "workflow_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Workflow Id"
-          }
-        },
-        "required": [
-          "name",
-          "folder_id"
-        ],
-        "title": "CreateStandingTaskRequest",
         "type": "object"
       },
       "CreateWorkflowRequest": {
@@ -7829,67 +7810,6 @@
         "title": "EmailSendCodeRequest",
         "type": "object"
       },
-      "EnsureStandingTaskTemplateRequest": {
-        "description": "Install (or return) a system template row. Default ``enabled=false`` = 引导开.",
-        "properties": {
-          "cron": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cron"
-          },
-          "enabled": {
-            "default": false,
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "folder_id": {
-            "title": "Folder Id",
-            "type": "string"
-          },
-          "permission_axes": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PermissionAxesModel"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "schedule_preset": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Schedule Preset"
-          },
-          "template_config": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/StandingTaskTemplateConfig"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "folder_id"
-        ],
-        "title": "EnsureStandingTaskTemplateRequest",
-        "type": "object"
-      },
       "EvidenceLedgerEntryRest": {
         "description": "回合调研台账条目（REST / 落库；与 SSE ``TurnEvidenceLedgerEntry`` 同形）。",
         "properties": {
@@ -8124,96 +8044,6 @@
         "title": "ExternalGrantResponse",
         "type": "object"
       },
-      "FeedbackListResponse": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/FeedbackSummary"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "data",
-          "total"
-        ],
-        "title": "FeedbackListResponse",
-        "type": "object"
-      },
-      "FeedbackSummary": {
-        "properties": {
-          "admin_reply": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Admin Reply"
-          },
-          "category": {
-            "title": "Category",
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "description": {
-            "title": "Description",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "page_context": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Page Context"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "category",
-          "title",
-          "description",
-          "page_context",
-          "status",
-          "admin_reply",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "FeedbackSummary",
-        "type": "object"
-      },
       "FileWriteAxis": {
         "description": "Whether reversible file mutations need per-call approval.",
         "enum": [
@@ -8222,6 +8052,19 @@
         ],
         "title": "FileWriteAxis",
         "type": "string"
+      },
+      "FireWorkflowWebhookResponse": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id"
+        ],
+        "title": "FireWorkflowWebhookResponse",
+        "type": "object"
       },
       "FolderGroup": {
         "description": "A project plus the conversations it holds (grouped sidebar payload).",
@@ -11192,13 +11035,6 @@
             "title": "Name",
             "type": "string"
           },
-          "occupies": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Occupies",
-            "type": "array"
-          },
           "version": {
             "title": "Version",
             "type": "string"
@@ -11895,8 +11731,7 @@
               {
                 "enum": [
                   "decision",
-                  "organize_plan",
-                  "daily_review"
+                  "organize_plan"
                 ],
                 "type": "string"
               },
@@ -12355,6 +12190,70 @@
           "document_id"
         ],
         "title": "PublishSkillRequest",
+        "type": "object"
+      },
+      "PublishWorkflowRequest": {
+        "properties": {
+          "workflow_id": {
+            "minLength": 1,
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow_id"
+        ],
+        "title": "PublishWorkflowRequest",
+        "type": "object"
+      },
+      "PutWorkflowTriggerRequest": {
+        "description": "Full replace of the workflow clock.",
+        "properties": {
+          "cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "folder_id": {
+            "title": "Folder Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "schedule",
+              "webhook"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "schedule_preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Preset"
+          }
+        },
+        "required": [
+          "kind",
+          "folder_id"
+        ],
+        "title": "PutWorkflowTriggerRequest",
         "type": "object"
       },
       "QueuedTurnItem": {
@@ -12859,20 +12758,6 @@
           "code"
         ],
         "title": "RegisterVerifyRequest",
-        "type": "object"
-      },
-      "ReplaceSkillRequest": {
-        "properties": {
-          "document_id": {
-            "minLength": 1,
-            "title": "Document Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "document_id"
-        ],
-        "title": "ReplaceSkillRequest",
         "type": "object"
       },
       "ReplayConversation": {
@@ -13415,6 +13300,20 @@
         "title": "ReportSkillRequest",
         "type": "object"
       },
+      "ReportWorkflowRequest": {
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "ReportWorkflowRequest",
+        "type": "object"
+      },
       "ResolveApprovalInteraction": {
         "description": "Settle a paused GRANTABLE tool call (``approval`` interaction).\n\n``decision`` is one of ``approve`` (allow this one call), ``approve_always``\n(allow this tool for the rest of the turn), or ``deny`` (refuse).",
         "properties": {
@@ -13622,7 +13521,7 @@
         "title": "RewriteResponse",
         "type": "object"
       },
-      "RotateWebhookSecretResponse": {
+      "RotateWorkflowTriggerResponse": {
         "properties": {
           "webhook_id": {
             "title": "Webhook Id",
@@ -13642,7 +13541,7 @@
           "webhook_url",
           "webhook_secret"
         ],
-        "title": "RotateWebhookSecretResponse",
+        "title": "RotateWorkflowTriggerResponse",
         "type": "object"
       },
       "RunError": {
@@ -14359,79 +14258,11 @@
         "title": "SkillCatalogView",
         "type": "object"
       },
-      "SkillReplacedBy": {
-        "properties": {
-          "description": {
-            "default": "",
-            "title": "Description",
-            "type": "string"
-          },
-          "document_id": {
-            "title": "Document Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "document_id",
-          "name"
-        ],
-        "title": "SkillReplacedBy",
-        "type": "object"
-      },
       "SkillSlotView": {
         "properties": {
-          "muted": {
-            "default": false,
-            "title": "Muted",
-            "type": "boolean"
-          },
-          "muted_layer": {
-            "anyOf": [
-              {
-                "enum": [
-                  "here",
-                  "inherited"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Muted Layer"
-          },
           "name": {
             "title": "Name",
             "type": "string"
-          },
-          "replaced_by": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/SkillReplacedBy"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "replaced_layer": {
-            "anyOf": [
-              {
-                "enum": [
-                  "here",
-                  "inherited"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Replaced Layer"
           },
           "summary": {
             "title": "Summary",
@@ -14767,431 +14598,6 @@
           "size_bytes"
         ],
         "title": "SnapshotSummary",
-        "type": "object"
-      },
-      "StandingTaskRunListResponse": {
-        "properties": {
-          "badge": {
-            "default": 0,
-            "title": "Badge",
-            "type": "integer"
-          },
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/StandingTaskRunSummary"
-            },
-            "title": "Items",
-            "type": "array"
-          }
-        },
-        "required": [
-          "items"
-        ],
-        "title": "StandingTaskRunListResponse",
-        "type": "object"
-      },
-      "StandingTaskRunSummary": {
-        "properties": {
-          "acked_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Acked At"
-          },
-          "conversation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conversation Id"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "finished_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finished At"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "standing_task_id": {
-            "title": "Standing Task Id",
-            "type": "string"
-          },
-          "started_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Started At"
-          },
-          "status": {
-            "enum": [
-              "running",
-              "succeeded",
-              "failed",
-              "awaiting_user"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Summary"
-          },
-          "task_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Task Name"
-          },
-          "trigger_source": {
-            "default": "schedule",
-            "enum": [
-              "schedule",
-              "webhook",
-              "manual"
-            ],
-            "title": "Trigger Source",
-            "type": "string"
-          },
-          "user_message_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Message Id"
-          }
-        },
-        "required": [
-          "id",
-          "standing_task_id",
-          "status",
-          "created_at"
-        ],
-        "title": "StandingTaskRunSummary",
-        "type": "object"
-      },
-      "StandingTaskSummary": {
-        "properties": {
-          "conversation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conversation Id"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "cron": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cron"
-          },
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "folder_id": {
-            "title": "Folder Id",
-            "type": "string"
-          },
-          "goal": {
-            "title": "Goal",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "last_run_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Run At"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "next_run_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Run At"
-          },
-          "permission_axes": {
-            "$ref": "#/components/schemas/PermissionAxesModel"
-          },
-          "schedule_preset": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Schedule Preset"
-          },
-          "template_config": {
-            "additionalProperties": true,
-            "title": "Template Config",
-            "type": "object"
-          },
-          "template_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Template Key"
-          },
-          "trigger_kind": {
-            "default": "schedule",
-            "enum": [
-              "schedule",
-              "webhook"
-            ],
-            "title": "Trigger Kind",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "webhook_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Webhook Id"
-          },
-          "webhook_secret": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Webhook Secret"
-          },
-          "webhook_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Webhook Url"
-          },
-          "workflow_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Workflow Id"
-          },
-          "workflow_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Workflow Name"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "goal",
-          "folder_id",
-          "permission_axes",
-          "enabled",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "StandingTaskSummary",
-        "type": "object"
-      },
-      "StandingTaskTemplateConfig": {
-        "description": "Knobs for system templates (daily review scope).",
-        "properties": {
-          "folder_ids": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Folder Ids",
-            "type": "array"
-          },
-          "include_global": {
-            "default": true,
-            "title": "Include Global",
-            "type": "boolean"
-          },
-          "lookback_hours": {
-            "default": 24,
-            "maximum": 168.0,
-            "minimum": 1.0,
-            "title": "Lookback Hours",
-            "type": "integer"
-          }
-        },
-        "title": "StandingTaskTemplateConfig",
-        "type": "object"
-      },
-      "StandingTaskTemplateSummary": {
-        "properties": {
-          "default_cron": {
-            "title": "Default Cron",
-            "type": "string"
-          },
-          "default_name": {
-            "title": "Default Name",
-            "type": "string"
-          },
-          "description": {
-            "title": "Description",
-            "type": "string"
-          },
-          "enabled": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Enabled"
-          },
-          "installed_task_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Installed Task Id"
-          },
-          "key": {
-            "const": "daily_conversation_review",
-            "title": "Key",
-            "type": "string"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "key",
-          "title",
-          "description",
-          "default_name",
-          "default_cron"
-        ],
-        "title": "StandingTaskTemplateSummary",
         "type": "object"
       },
       "StartDmRequest": {
@@ -15711,17 +15117,19 @@
         "title": "ToolApproval",
         "type": "string"
       },
-      "ToolCategory": {
+      "ToolFace": {
+        "description": "Capability face for the shared tool catalog (human 图鉴 + AI 按需目录).\n\nGrouping only — the engine acts on ToolResult / explicit name sets, not on face.\nDisplay face ≠ registration surface: ``ceo_orchestration`` is how CEO tools\nare wired, not a dumpster for this enum.",
         "enum": [
-          "filesystem",
+          "file",
+          "folder",
           "search",
+          "web",
           "execution",
-          "research",
-          "orchestration",
-          "interaction",
-          "skill"
+          "host_browser",
+          "board",
+          "orchestration"
         ],
-        "title": "ToolCategory",
+        "title": "ToolFace",
         "type": "string"
       },
       "ToolSurfaceLimits": {
@@ -15828,19 +15236,6 @@
           "retention_days"
         ],
         "title": "TrashListResponse",
-        "type": "object"
-      },
-      "TriggerStandingTaskResponse": {
-        "properties": {
-          "run_id": {
-            "title": "Run Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "run_id"
-        ],
-        "title": "TriggerStandingTaskResponse",
         "type": "object"
       },
       "TurnCollabMetrics": {
@@ -16300,19 +15695,8 @@
         "type": "object"
       },
       "UpdateBoardRequest": {
-        "description": "Rename / move a board (scene is written via the dedicated scene endpoint).\n\nBoth fields optional — the route reads ``model_fields_set`` so an omitted field is\nleft untouched while an explicit ``folder_id: null`` moves the board to ungrouped.",
+        "description": "Rename a board (scene is written via the dedicated scene endpoint).",
         "properties": {
-          "folder_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Folder Id"
-          },
           "title": {
             "anyOf": [
               {
@@ -16435,37 +15819,6 @@
           }
         },
         "title": "UpdateDirectorySettingsRequest",
-        "type": "object"
-      },
-      "UpdateFeedbackStatusRequest": {
-        "properties": {
-          "admin_reply": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Admin Reply"
-          },
-          "status": {
-            "enum": [
-              "open",
-              "acknowledged",
-              "resolved",
-              "closed"
-            ],
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "title": "UpdateFeedbackStatusRequest",
         "type": "object"
       },
       "UpdateFolderMemberRequest": {
@@ -16945,132 +16298,6 @@
           }
         },
         "title": "UpdateProfileRequest",
-        "type": "object"
-      },
-      "UpdateStandingTaskRequest": {
-        "properties": {
-          "clear_workflow": {
-            "default": false,
-            "title": "Clear Workflow",
-            "type": "boolean"
-          },
-          "cron": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cron"
-          },
-          "enabled": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Enabled"
-          },
-          "folder_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Folder Id"
-          },
-          "goal": {
-            "anyOf": [
-              {
-                "minLength": 0,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Goal"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "permission_axes": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PermissionAxesModel"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "schedule_preset": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Schedule Preset"
-          },
-          "template_config": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/StandingTaskTemplateConfig"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "trigger_kind": {
-            "anyOf": [
-              {
-                "enum": [
-                  "schedule",
-                  "webhook"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Trigger Kind"
-          },
-          "workflow_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Workflow Id"
-          }
-        },
-        "title": "UpdateStandingTaskRequest",
         "type": "object"
       },
       "UpdateWorkflowRequest": {
@@ -17643,6 +16870,273 @@
         "title": "WorkflowSourceModel",
         "type": "object"
       },
+      "WorkflowStoreInstalledItem": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "has_update": {
+            "title": "Has Update",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_workflow_id": {
+            "title": "Source Workflow Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version_n": {
+            "title": "Version N",
+            "type": "integer"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "author",
+          "version_n",
+          "installed",
+          "has_update",
+          "status",
+          "source_workflow_id",
+          "workflow_id"
+        ],
+        "title": "WorkflowStoreInstalledItem",
+        "type": "object"
+      },
+      "WorkflowStoreInstalledResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStoreInstalledItem"
+            },
+            "title": "Data",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "WorkflowStoreInstalledResponse",
+        "type": "object"
+      },
+      "WorkflowStoreListResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStoreListingRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "WorkflowStoreListResponse",
+        "type": "object"
+      },
+      "WorkflowStoreListingDetail": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "title": "Definition",
+            "type": "object"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "has_update": {
+            "title": "Has Update",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_workflow_id": {
+            "title": "Source Workflow Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version_n": {
+            "title": "Version N",
+            "type": "integer"
+          },
+          "workflow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Id"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "author",
+          "version_n",
+          "installed",
+          "has_update",
+          "status",
+          "source_workflow_id",
+          "definition"
+        ],
+        "title": "WorkflowStoreListingDetail",
+        "type": "object"
+      },
+      "WorkflowStoreListingRow": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "has_update": {
+            "title": "Has Update",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_workflow_id": {
+            "title": "Source Workflow Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version_n": {
+            "title": "Version N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "author",
+          "version_n",
+          "installed",
+          "has_update",
+          "status",
+          "source_workflow_id"
+        ],
+        "title": "WorkflowStoreListingRow",
+        "type": "object"
+      },
+      "WorkflowStoreMineResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStoreListingRow"
+            },
+            "title": "Data",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "WorkflowStoreMineResponse",
+        "type": "object"
+      },
+      "WorkflowStoreReportView": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "listing_id": {
+            "title": "Listing Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing_id",
+          "reason"
+        ],
+        "title": "WorkflowStoreReportView",
+        "type": "object"
+      },
       "WorkflowSummary": {
         "properties": {
           "created_at": {
@@ -17684,6 +17178,16 @@
               }
             ]
           },
+          "trigger": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowTriggerModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -17703,6 +17207,124 @@
           "updated_at"
         ],
         "title": "WorkflowSummary",
+        "type": "object"
+      },
+      "WorkflowTriggerModel": {
+        "description": "One clock on a workflow: schedule XOR webhook.",
+        "properties": {
+          "cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "folder_id": {
+            "title": "Folder Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "schedule",
+              "webhook"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          },
+          "schedule_preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Preset"
+          },
+          "webhook_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Id"
+          },
+          "webhook_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Secret"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Url"
+          }
+        },
+        "required": [
+          "kind",
+          "enabled",
+          "folder_id"
+        ],
+        "title": "WorkflowTriggerModel",
         "type": "object"
       },
       "WorkspaceBindingResponse": {
@@ -18059,7 +17681,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.17"
+    "version": "0.7.18"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -20292,209 +19914,6 @@
         "summary": "List Conversation Turns",
         "tags": [
           "admin",
-          "admin"
-        ]
-      }
-    },
-    "/v1/admin/feedback": {
-      "get": {
-        "description": "Admin: list all user feedback, optionally filtered.",
-        "operationId": "list_all_feedback_v1_admin_feedback_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "status",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Status"
-            }
-          },
-          {
-            "in": "query",
-            "name": "category",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Category"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FeedbackListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List All Feedback",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/v1/admin/feedback/{feedback_id}/status": {
-      "patch": {
-        "description": "Admin: update a feedback item's status and optionally reply.",
-        "operationId": "update_feedback_status_v1_admin_feedback__feedback_id__status_patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "feedback_id",
-            "required": true,
-            "schema": {
-              "title": "Feedback Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateFeedbackStatusRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FeedbackSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Update Feedback Status",
-        "tags": [
           "admin"
         ]
       }
@@ -22774,6 +22193,362 @@
         ]
       }
     },
+    "/v1/admin/workflow-store/listings": {
+      "get": {
+        "operationId": "admin_list_listings_v1_admin_workflow_store_listings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWorkflowStoreListingList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admin List Listings",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/workflow-store/listings/{listing_id}": {
+      "get": {
+        "operationId": "admin_get_listing_v1_admin_workflow_store_listings__listing_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWorkflowStoreListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admin Get Listing",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/workflow-store/listings/{listing_id}/takedown": {
+      "post": {
+        "operationId": "admin_takedown_listing_v1_admin_workflow_store_listings__listing_id__takedown_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWorkflowStoreListingRow"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admin Takedown Listing",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/workflow-store/reports": {
+      "get": {
+        "operationId": "admin_list_reports_v1_admin_workflow_store_reports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWorkflowStoreReportList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admin List Reports",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/auth/change-password": {
       "post": {
         "description": "Change the signed-in user's password (修改密码). All other devices are logged out\n(their refresh families are revoked); this session is handed fresh cookies so the\nactive device stays signed in.\n\nThe replacement pair inherits this session's audience and MFA proof: the same\nendpoint serves the product clients and the admin console, so hardcoding either\naudience would strand the other side.",
@@ -24582,7 +24357,7 @@
     },
     "/v1/boards/{board_id}/conversation": {
       "post": {
-        "description": "Get (or lazily mint) the board's dedicated AI conversation (AI协作白板.md §三 A / M2).\n\nIdempotent: returns the existing ``conversation_id`` if the board already has one;\notherwise creates a chat conversation (titled + filed like the board) and binds it.\nBoth repos share one session so the create + link commit together. The canvas calls\nthis before its first AI turn, then runs the turn on the returned conversation.",
+        "description": "Get (or lazily mint) the board's dedicated AI conversation (AI协作白板.md §三 A / M2).\n\nIdempotent: returns the existing ``conversation_id`` if the board already has one;\notherwise creates a bare chat (titled like the board, no folder) and binds it.\nBoth repos share one session so the create + link commit together. The canvas calls\nthis before its first AI turn, then runs the turn on the returned conversation.",
         "operationId": "ensure_board_conversation_v1_boards__board_id__conversation_post",
         "parameters": [
           {
@@ -25034,7 +24809,7 @@
     },
     "/v1/capabilities": {
       "get": {
-        "description": "The complete capability picture: tools, runtime skills, listed packs,\nand the CEO / worker system-prompt templates — the data behind 工具箱 → 能力图鉴.",
+        "description": "The complete capability picture: tools, runtime skills,\nand the CEO / worker system-prompt templates — the data behind 工具箱 → 能力图鉴.",
         "operationId": "get_capabilities_v1_capabilities_get",
         "parameters": [
           {
@@ -25399,6 +25174,81 @@
           }
         },
         "summary": "List Deleted Conversations",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/trash/{conversation_id}": {
+      "delete": {
+        "description": "从「最近删除」彻底删除一条对话：清盘裸聊 scratch，再物理删行。\n\nClaim is a conditional hard-delete (still soft-deleted, still in window)\nso a restore that lands first is 409, never a wipe of a live transcript.\nDisk follows the claim: a 裸聊 whose restore won keeps its files.",
+        "operationId": "purge_deleted_conversation_v1_conversations_trash__conversation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Purge Deleted Conversation",
         "tags": [
           "conversations"
         ]
@@ -33760,166 +33610,6 @@
         ]
       }
     },
-    "/v1/feedback": {
-      "get": {
-        "description": "List the current user's feedback (newest-first).",
-        "operationId": "list_my_feedback_v1_feedback_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FeedbackListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List My Feedback",
-        "tags": [
-          "feedback"
-        ]
-      },
-      "post": {
-        "description": "Submit a feedback entry (bug, feature request, etc.).",
-        "operationId": "submit_feedback_v1_feedback_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateFeedbackRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FeedbackSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Submit Feedback",
-        "tags": [
-          "feedback"
-        ]
-      }
-    },
     "/v1/files/assist/rewrite": {
       "post": {
         "description": "按自由指令改写文档中的一段选区。\n\n无状态、无路径：入参携带选区与前后文文本，返回改写后的选区，交前端用 merge view\n逐块评审。全程不落库。",
@@ -34405,6 +34095,81 @@
           }
         },
         "summary": "List Deleted Folders",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/v1/folders/trash/{folder_id}": {
+      "delete": {
+        "description": "从「最近删除」彻底删除一个项目：成员对话 + 云端文件 + 这张桌的设定。\n\nSame member-chat semantics as ``DELETE /{folder_id}/permanent`` (弹窗勾选).\nDisk is the tombstone path — never the live ``rel_path`` (that slot was\nreleased at soft-delete and may already host a new folder). Restore that\nwins the race is 409; a busy workspace is the same 409 restore already uses.",
+        "operationId": "purge_deleted_folder_v1_folders_trash__folder_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder_id",
+            "required": true,
+            "schema": {
+              "title": "Folder Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Purge Deleted Folder",
         "tags": [
           "folders"
         ]
@@ -35480,10 +35245,10 @@
         ]
       }
     },
-    "/v1/hooks/standing/{webhook_id}": {
+    "/v1/hooks/workflows/{webhook_id}": {
       "post": {
         "description": "Public webhook fire — no user JWT; auth via shared secret header.",
-        "operationId": "fire_standing_webhook_v1_hooks_standing__webhook_id__post",
+        "operationId": "fire_workflow_webhook_v1_hooks_workflows__webhook_id__post",
         "parameters": [
           {
             "in": "path",
@@ -35548,7 +35313,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TriggerStandingTaskResponse"
+                  "$ref": "#/components/schemas/FireWorkflowWebhookResponse"
                 }
               }
             },
@@ -35565,9 +35330,9 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Fire Standing Webhook",
+        "summary": "Fire Workflow Webhook",
         "tags": [
-          "standing-hooks"
+          "workflow-hooks"
         ]
       }
     },
@@ -38561,7 +38326,7 @@
     },
     "/v1/skill-catalog": {
       "get": {
-        "description": "Official slots + this account's global on-demand skills (换用 / 藏起 overlay).",
+        "description": "Official slot roster + this account's global on-demand skills.",
         "operationId": "get_skill_catalog_v1_skill_catalog_get",
         "parameters": [
           {
@@ -38636,376 +38401,6 @@
           }
         },
         "summary": "Get Skill Catalog",
-        "tags": [
-          "skill-catalog"
-        ]
-      }
-    },
-    "/v1/skill-catalog/mutes/{slot}": {
-      "delete": {
-        "description": "Clear 藏起 at this layer (inherit outer mute if any).",
-        "operationId": "delete_skill_mute_v1_skill_catalog_mutes__slot__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slot",
-            "required": true,
-            "schema": {
-              "title": "Slot",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "folder_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Folder Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SkillCatalogView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Skill Mute",
-        "tags": [
-          "skill-catalog"
-        ]
-      },
-      "put": {
-        "description": "Hide this official slot from the model's on-demand catalog at this layer.",
-        "operationId": "put_skill_mute_v1_skill_catalog_mutes__slot__put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slot",
-            "required": true,
-            "schema": {
-              "title": "Slot",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "folder_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Folder Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SkillCatalogView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Put Skill Mute",
-        "tags": [
-          "skill-catalog"
-        ]
-      }
-    },
-    "/v1/skill-catalog/replacements/{slot}": {
-      "delete": {
-        "description": "Clear 换用 at this layer (inherit outer / factory).",
-        "operationId": "delete_skill_replacement_v1_skill_catalog_replacements__slot__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slot",
-            "required": true,
-            "schema": {
-              "title": "Slot",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "folder_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Folder Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SkillCatalogView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Skill Replacement",
-        "tags": [
-          "skill-catalog"
-        ]
-      },
-      "put": {
-        "description": "Bind a global on-demand document onto an official skill slot at this layer.",
-        "operationId": "put_skill_replacement_v1_skill_catalog_replacements__slot__put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slot",
-            "required": true,
-            "schema": {
-              "title": "Slot",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "folder_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Folder Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReplaceSkillRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SkillCatalogView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Put Skill Replacement",
         "tags": [
           "skill-catalog"
         ]
@@ -39693,862 +39088,6 @@
         "summary": "Publish New Version",
         "tags": [
           "skill-store"
-        ]
-      }
-    },
-    "/v1/standing-task-runs": {
-      "get": {
-        "operationId": "list_standing_task_runs_v1_standing_task_runs_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "status",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "running",
-                    "succeeded",
-                    "failed",
-                    "awaiting_user"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Status"
-            }
-          },
-          {
-            "in": "query",
-            "name": "unacked",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Unacked",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StandingTaskRunListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Standing Task Runs",
-        "tags": [
-          "standing-tasks"
-        ]
-      }
-    },
-    "/v1/standing-task-runs/{run_id}/ack": {
-      "post": {
-        "operationId": "ack_standing_task_run_v1_standing_task_runs__run_id__ack_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "title": "Run Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StandingTaskRunSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ack Standing Task Run",
-        "tags": [
-          "standing-tasks"
-        ]
-      }
-    },
-    "/v1/standing-task-templates": {
-      "get": {
-        "operationId": "list_standing_task_templates_v1_standing_task_templates_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/StandingTaskTemplateSummary"
-                  },
-                  "title": "Response List Standing Task Templates V1 Standing Task Templates Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Standing Task Templates",
-        "tags": [
-          "standing-tasks"
-        ]
-      }
-    },
-    "/v1/standing-task-templates/{template_key}/ensure": {
-      "post": {
-        "description": "Idempotent install of a system template. Default enabled=false (引导开).",
-        "operationId": "ensure_standing_task_template_v1_standing_task_templates__template_key__ensure_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "template_key",
-            "required": true,
-            "schema": {
-              "title": "Template Key",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EnsureStandingTaskTemplateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StandingTaskSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ensure Standing Task Template",
-        "tags": [
-          "standing-tasks"
-        ]
-      }
-    },
-    "/v1/standing-tasks": {
-      "get": {
-        "operationId": "list_standing_tasks_v1_standing_tasks_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/StandingTaskSummary"
-                  },
-                  "title": "Response List Standing Tasks V1 Standing Tasks Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Standing Tasks",
-        "tags": [
-          "standing-tasks"
-        ]
-      },
-      "post": {
-        "operationId": "create_standing_task_v1_standing_tasks_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateStandingTaskRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StandingTaskSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Standing Task",
-        "tags": [
-          "standing-tasks"
-        ]
-      }
-    },
-    "/v1/standing-tasks/{task_id}": {
-      "delete": {
-        "operationId": "delete_standing_task_v1_standing_tasks__task_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "title": "Task Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Standing Task",
-        "tags": [
-          "standing-tasks"
-        ]
-      },
-      "get": {
-        "operationId": "get_standing_task_v1_standing_tasks__task_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "title": "Task Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StandingTaskSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Standing Task",
-        "tags": [
-          "standing-tasks"
-        ]
-      },
-      "patch": {
-        "operationId": "update_standing_task_v1_standing_tasks__task_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "title": "Task Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateStandingTaskRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StandingTaskSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Update Standing Task",
-        "tags": [
-          "standing-tasks"
-        ]
-      }
-    },
-    "/v1/standing-tasks/{task_id}/rotate-webhook-secret": {
-      "post": {
-        "operationId": "rotate_webhook_secret_v1_standing_tasks__task_id__rotate_webhook_secret_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "title": "Task Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RotateWebhookSecretResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Rotate Webhook Secret",
-        "tags": [
-          "standing-tasks"
-        ]
-      }
-    },
-    "/v1/standing-tasks/{task_id}/run": {
-      "post": {
-        "description": "立即跑一次（验收 / 收件箱重跑）。不推进 cron 时钟。",
-        "operationId": "trigger_standing_task_v1_standing_tasks__task_id__run_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "title": "Task Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TriggerStandingTaskResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Trigger Standing Task",
-        "tags": [
-          "standing-tasks"
         ]
       }
     },
@@ -43197,6 +41736,691 @@
         ]
       }
     },
+    "/v1/workflow-store": {
+      "get": {
+        "operationId": "list_workflow_store_v1_workflow_store_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStoreListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Workflow Store",
+        "tags": [
+          "workflow-store"
+        ]
+      },
+      "post": {
+        "operationId": "publish_workflow_v1_workflow_store_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStoreListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Workflow",
+        "tags": [
+          "workflow-store"
+        ]
+      }
+    },
+    "/v1/workflow-store/installed": {
+      "get": {
+        "operationId": "list_installed_v1_workflow_store_installed_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStoreInstalledResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Installed",
+        "tags": [
+          "workflow-store"
+        ]
+      }
+    },
+    "/v1/workflow-store/mine": {
+      "get": {
+        "operationId": "list_mine_listings_v1_workflow_store_mine_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStoreMineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Mine Listings",
+        "tags": [
+          "workflow-store"
+        ]
+      }
+    },
+    "/v1/workflow-store/{listing_id}": {
+      "delete": {
+        "operationId": "unpublish_listing_v1_workflow_store__listing_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStoreListingRow"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unpublish Listing",
+        "tags": [
+          "workflow-store"
+        ]
+      },
+      "get": {
+        "operationId": "get_listing_v1_workflow_store__listing_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStoreListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Listing",
+        "tags": [
+          "workflow-store"
+        ]
+      }
+    },
+    "/v1/workflow-store/{listing_id}/install": {
+      "post": {
+        "operationId": "install_listing_v1_workflow_store__listing_id__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStoreInstalledItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Listing",
+        "tags": [
+          "workflow-store"
+        ]
+      }
+    },
+    "/v1/workflow-store/{listing_id}/reports": {
+      "post": {
+        "operationId": "report_listing_v1_workflow_store__listing_id__reports_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStoreReportView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Listing",
+        "tags": [
+          "workflow-store"
+        ]
+      }
+    },
+    "/v1/workflow-store/{listing_id}/versions": {
+      "post": {
+        "operationId": "publish_new_version_v1_workflow_store__listing_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStoreListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish New Version",
+        "tags": [
+          "workflow-store"
+        ]
+      }
+    },
     "/v1/workflows": {
       "get": {
         "operationId": "list_workflows_v1_workflows_get",
@@ -43797,6 +43021,236 @@
           }
         },
         "summary": "Suggest Workflow Slots",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/v1/workflows/{workflow_id}/trigger": {
+      "delete": {
+        "operationId": "delete_workflow_trigger_v1_workflows__workflow_id__trigger_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Workflow Trigger",
+        "tags": [
+          "workflows"
+        ]
+      },
+      "put": {
+        "operationId": "put_workflow_trigger_v1_workflows__workflow_id__trigger_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutWorkflowTriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Workflow Trigger",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/v1/workflows/{workflow_id}/trigger/rotate-secret": {
+      "post": {
+        "operationId": "rotate_workflow_trigger_secret_v1_workflows__workflow_id__trigger_rotate_secret_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RotateWorkflowTriggerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rotate Workflow Trigger Secret",
         "tags": [
           "workflows"
         ]

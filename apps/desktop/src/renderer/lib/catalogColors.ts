@@ -1,4 +1,4 @@
-import type { ToolCategory } from "@/services/capabilities";
+import type { ToolFace } from "@/services/capabilities";
 import type { CSSProperties } from "react";
 
 /** Stable toolbox / creation-tool identity keys → `--artifact-*` tokens. */
@@ -8,7 +8,6 @@ export type ArtifactKind =
   | "table"
   | "canvas"
   | "slides"
-  | "app"
   | "connectors"
   | "workflow"
   | "tools"
@@ -24,9 +23,9 @@ export function artifactColorVar(kind: ArtifactKind): string {
   return `var(--artifact-${kind})`;
 }
 
-/** CSS `var(...)` for an AI capability catalog tool category. */
-export function catalogCategoryColorVar(category: ToolCategory): string {
-  return `var(--catalog-${category})`;
+/** CSS `var(...)` for an AI capability catalog tool face. */
+export function catalogCategoryColorVar(face: ToolFace): string {
+  return `var(--catalog-${face})`;
 }
 
 /** Tinted icon shell (inline only — tokens are not mapped to Tailwind classes). */

@@ -3,7 +3,6 @@ import {
   extractLedgerId,
   ledgerBadgeLabel,
   ledgerDateLabel,
-  ledgerTierLabel,
   mergeEvidenceLedger,
 } from "@/lib/evidenceLedger";
 import type { EvidenceLedgerEntry } from "@/types/events";
@@ -56,11 +55,7 @@ describe("ledger display helpers", () => {
     expect(ledgerBadgeLabel(entry({ id: "#e1" }))).toBe("#e1");
   });
 
-  it("maps tier and empty date", () => {
-    expect(ledgerTierLabel("official")).toBe("官方来源");
-    expect(ledgerTierLabel("media")).toBe("权威媒体");
-    expect(ledgerTierLabel("weak")).toBe("自媒体");
-    expect(ledgerTierLabel("unknown")).toBe("来源待评");
+  it("maps empty date", () => {
     expect(ledgerDateLabel("")).toBe("日期未知");
     expect(ledgerDateLabel("2024-01-01")).toBe("2024-01-01");
   });

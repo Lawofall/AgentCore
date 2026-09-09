@@ -939,20 +939,27 @@ def error_fields_for(
             error_context_from(exc),
         )
     # Local workspace sticky-dead / presence-gate during prepare / turn gate:
-    # surface the honest WorkspaceIOError text (not the generic STREAM_ERROR
-    # fallback) so the UI can clear isStreaming with a clear channel-down reason.
+    # dedicated codes so empty fails can roll back like other Class B empty
+    # fails — never STREAM_ERROR (that catch-all must not enter the bounce list).
     from agentcore.runtime.pipeline.errors import (
         LOCAL_CHANNEL_DEAD,
         is_prepare_local_abort_message,
+        prepare_local_abort_error_code,
     )
     from agentcore.workspace.limits import is_channel_dead_detail
     from agentcore.workspace.protocol import WorkspaceIOError
 
     if isinstance(exc, WorkspaceIOError):
         detail = str(exc).strip()
-        if is_prepare_local_abort_message(detail) or is_channel_dead_detail(detail):
+        if is_prepare_local_abort_message(detail):
             return (
-                ErrorCode.STREAM_ERROR,
+                prepare_local_abort_error_code(detail) or ErrorCode.LOCAL_CHANNEL_DEAD,
+                detail or LOCAL_CHANNEL_DEAD,
+                None,
+            )
+        if is_channel_dead_detail(detail):
+            return (
+                ErrorCode.LOCAL_CHANNEL_DEAD,
                 detail or LOCAL_CHANNEL_DEAD,
                 None,
             )

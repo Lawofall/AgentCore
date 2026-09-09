@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agentcore.runtime.checkpoints import CheckpointDecision, CheckpointResponse
-from agentcore.tools.protocol import ToolEffect, ToolResult
+from agentcore.tools.protocol import ToolResult
 
 
 def _option_path(opt: Any) -> str:
@@ -170,29 +170,4 @@ def ask_user_organize_plan_result(
         tool_call_id="",
         success=True,
         output=(base.output or "") + suffix,
-    )
-
-
-def ask_user_daily_review_result(
-    response: CheckpointResponse,
-    *,
-    applied: int,
-    skipped: int,
-    errors: tuple[str, ...] = (),
-) -> ToolResult:
-    """CONTINUE/STOP result after server-side daily_review apply."""
-    if response.decision is not CheckpointDecision.CONTINUE:
-        return ask_user_tool_result(response)
-    err_bit = f"；问题：{'；'.join(errors)}" if errors else ""
-    output = (
-        f"用户已确认复盘提案。服务端已落盘 {applied} 项"
-        f"（跳过 {skipped}）{err_bit}。"
-        "请用白话写一段短收尾说明落了什么；"
-        "禁止再调用 remember / file_write / update_folder_profile 重复写入。"
-    )
-    return ToolResult(
-        tool_call_id="",
-        success=True,
-        output=output,
-        effect=ToolEffect.CONTINUE,
     )

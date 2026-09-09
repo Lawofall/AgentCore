@@ -15,7 +15,7 @@ no Python/JS walk fallback.
 import time
 from typing import Any
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.facts import CROSS_TURN_RETRY_KEY, CrossTurnRetry
 from agentcore.tools.builtin.file_ops.errors import _outside_workspace_msg
 from agentcore.tools.builtin.file_ops.path_hints import enrich_missing_path_message
@@ -56,6 +56,7 @@ class GrepTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.READ_ONLY,
+        workspace_io=True,
     )
 
     @property
@@ -115,7 +116,7 @@ class GrepTool:
                 },
                 "required": ["pattern"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.SEARCH,
             approval=ToolApproval.NEVER,
         )
 

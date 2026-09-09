@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Any
 
 from agentcore.memory import assemble_turn_rules, default_memory_store
-from agentcore.runtime.capability_packs import enabled_packs
 from agentcore.runtime.context import (
     build_workspace_context,
     collect_outlet_inventory,
@@ -60,7 +59,7 @@ async def rebuild_fresh_worker_base_prompt(
     system_prompt = assemble_system_prompt(
         rules_markdown=rules_markdown,
     )
-    skill_registry = build_system_skill_registry(enabled_packs=enabled_packs())
+    skill_registry = build_system_skill_registry()
     provisional_tools = build_worker_registry(
         backend=backend,
         permission_axes=permission_axes,

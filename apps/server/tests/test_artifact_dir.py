@@ -13,136 +13,77 @@ from agentcore.workspace.stage_dirs import DRAFTS_DIR, RESEARCH_DIR, REVIEWS_DIR
 
 
 def test_resolve_empty_artifacts_does_not_pin_drafts():
-    d = Deliverable(form="files")
+    d = Deliverable()
     assert resolve_artifact_dir(d) == ""
 
 
 def test_resolve_bare_filename_pins_drafts():
-    d = Deliverable(form="files", artifacts=["GDD.md"])
+    d = Deliverable(artifacts=["GDD.md"])
     assert resolve_artifact_dir(d) == DRAFTS_DIR
 
 
-def test_resolve_workspace_native_has_no_dossier_landing():
-    """盖上「工作区原生」→ 无落点；不盖的空 artifacts 也不钉工作稿。"""
-    native = Deliverable(form="files", workspace_native=True)
-    assert resolve_artifact_dir(native) == ""
-    assert resolve_artifact_dir(Deliverable(form="files")) == ""
-
-
-def test_workspace_native_outranks_declared_dossier_paths():
-    """优先级最高：artifacts / artifact_dir 里的工作间路径也压不过它。"""
-    d = Deliverable(
-        form="files",
-        artifact_dir=RESEARCH_DIR,
-        artifacts=[f"{DRAFTS_DIR}/patch.py"],
-        workspace_native=True,
-    )
+def test_business_src_path_is_not_twisted_into_docs():
+    d = Deliverable(artifacts=["src/main.py"])
     assert resolve_artifact_dir(d) == ""
-
-
-def test_apply_workspace_native_leaves_paths_untouched():
-    """无落点 → 不填 artifact_dir、不把裸文件名搬进工作稿（worker 自己定位）。"""
-    d = Deliverable(form="files", artifacts=["app.py"], workspace_native=True)
     apply_artifact_dir_defaults(d)
     assert d.artifact_dir == ""
-    assert d.artifacts == ["app.py"]
+    assert d.artifacts == ["src/main.py"]
 
 
-def test_apply_workspace_native_clears_leftover_dir_when_paths_already_located():
-    """已定位路径 + leftover 目录：native 赢，清 leftover，路径不动。"""
-    located = [f"{DRAFTS_DIR}/patch.py"]
-    d = Deliverable(
-        form="files",
-        artifact_dir=RESEARCH_DIR,
-        artifacts=located,
-        workspace_native=True,
-    )
+def test_leftover_artifact_dir_still_pins_without_native_short_circuit():
+    """No workspace short-circuit: explicit artifact_dir still pins."""
+    d = Deliverable(artifact_dir=RESEARCH_DIR, artifacts=["app.py"])
     apply_artifact_dir_defaults(d)
-    assert d.workspace_native is True
-    assert d.artifact_dir == ""
-    assert d.artifacts == located
+    assert d.artifact_dir == RESEARCH_DIR
+    assert d.artifacts == [f"{RESEARCH_DIR}/app.py"]
 
 
-def test_apply_workspace_native_empty_artifacts_clears_leftover_dir():
-    """写码节点误带 artifact_dir、无文件名合同 → leftover 清掉，不套默认工作稿。"""
-    d = Deliverable(form="files", artifact_dir=RESEARCH_DIR, workspace_native=True)
+def test_describe_empty_without_instance_facts():
+    d = Deliverable()
     apply_artifact_dir_defaults(d)
-    assert d.workspace_native is True
-    assert d.artifact_dir == ""
-    assert d.artifacts == []
-
-
-def test_apply_workspace_does_not_join_leftover_artifact_dir():
-    """workspace / native leftover 目录不得把裸名拧进约定文档路径。"""
-    name = "前端刷新审计-对话页面.md"
-    d = Deliverable(
-        form="files",
-        artifacts=[name],
-        artifact_dir=REVIEWS_DIR,
-        workspace_native=True,
-    )
-    apply_artifact_dir_defaults(d)
-    assert d.form == "workspace"
-    assert d.workspace_native is True
-    assert d.artifact_dir == ""
-    assert d.artifacts == [name]
-    desc = describe_deliverable(d)
-    assert name in desc
-    assert "不要落进 `AgentCore/文档/`" not in desc
-    assert f"建议约定文档落盘目录：`{REVIEWS_DIR}/`" not in desc
-    assert f"落点目录：`{REVIEWS_DIR}/`" not in desc
-
-
-def test_describe_workspace_native_omits_drafts_hint():
-    """写码节点的任务书不得再出现「建议落工作稿/」这类误导。"""
-    d = Deliverable(form="files", workspace_native=True)
-    apply_artifact_dir_defaults(d)
-    desc = describe_deliverable(d)
-    assert DRAFTS_DIR not in desc
-    assert "form=workspace" in desc
+    assert describe_deliverable(d) == ""
 
 
 def test_resolve_skips_business_artifacts():
-    d = Deliverable(form="files", artifacts=["site/index.html"])
+    d = Deliverable(artifacts=["site/index.html"])
     assert resolve_artifact_dir(d) == ""
 
 
 def test_resolve_derives_from_existing_stage_artifact():
     d = Deliverable(
-        form="files",
         artifacts=[f"{RESEARCH_DIR}/法律透镜报告.md"],
     )
     assert resolve_artifact_dir(d) == RESEARCH_DIR
 
 
 def test_resolve_honors_explicit_artifact_dir():
-    d = Deliverable(form="files", artifact_dir=RESEARCH_DIR)
+    d = Deliverable( artifact_dir=RESEARCH_DIR)
     assert resolve_artifact_dir(d) == RESEARCH_DIR
 
 
 def test_apply_fills_dir_prefix_and_relocates_bare_filename():
-    d = Deliverable(form="files", artifacts=["miro-research.md"])
+    d = Deliverable( artifacts=["miro-research.md"])
     apply_artifact_dir_defaults(d)
     assert d.artifact_dir == DRAFTS_DIR
     assert d.artifacts == [f"{DRAFTS_DIR}/miro-research.md"]
 
 
 def test_apply_flattens_nested_drafts_artifact_name():
-    d = Deliverable(form="files", artifacts=[f"{DRAFTS_DIR}/主题/01.md"])
+    d = Deliverable( artifacts=[f"{DRAFTS_DIR}/主题/01.md"])
     apply_artifact_dir_defaults(d)
     assert d.artifacts == [f"{DRAFTS_DIR}/主题_01.md"]
 
 
 def test_apply_empty_artifacts_keeps_shared_dir_without_fake_artifact():
     """空 artifacts 不钉目录、不注入 artifacts 冒充归属键。"""
-    d = Deliverable(form="files")
+    d = Deliverable()
     apply_artifact_dir_defaults(d)
     assert d.artifact_dir == ""
     assert d.artifacts == []
 
 
 def test_describe_mentions_artifact_dir_filename_only():
-    d = Deliverable(form="files", artifact_dir=RESEARCH_DIR, artifacts=[])
+    d = Deliverable( artifact_dir=RESEARCH_DIR, artifacts=[])
     desc = describe_deliverable(d)
     assert f"落点目录：`{RESEARCH_DIR}/`" in desc
     assert "只定文件名" not in desc
@@ -151,7 +92,7 @@ def test_describe_mentions_artifact_dir_filename_only():
 
 def test_contract_landed_outside_artifact_dir_is_silent():
     """有落盘即过：仅 artifact_dir 未命中不发约定目录软提醒、不催搬。"""
-    d = Deliverable(form="files", artifact_dir=RESEARCH_DIR, artifacts=[])
+    d = Deliverable( artifact_dir=RESEARCH_DIR, artifacts=[])
     root = check_contract(
         "已写",
         d,
@@ -183,7 +124,7 @@ def test_artifact_dir_mismatch_is_delivered_without_todo():
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import RunPhase, RunSpec, RunState
 
-    d = Deliverable(form="files", artifact_dir=RESEARCH_DIR, artifacts=[])
+    d = Deliverable( artifact_dir=RESEARCH_DIR, artifacts=[])
     verdict = check_contract(
         "已写",
         d,
@@ -241,12 +182,11 @@ def test_build_run_plan_empty_files_does_not_inject_drafts_dir():
     assert d.artifact_dir == ""
     assert d.artifacts == []
     desc = describe_deliverable(d)
-    assert "form=files" in desc
+    assert desc == ""
     assert DRAFTS_DIR not in desc
 
 
-def test_build_run_plan_workspace_native_skips_default_drafts_dir():
-    """派单两态对照：盖上 → 无落点；同一批不盖的空 artifacts 也不钉工作稿。"""
+def test_build_run_plan_leftover_form_without_artifacts_does_not_pin():
     plan, errors = build_run_plan(
         [
             {
@@ -264,41 +204,38 @@ def test_build_run_plan_workspace_native_skips_default_drafts_dir():
     assert errors == []
     coder, researcher = (n.deliverable for n in plan.nodes)
     assert coder is not None and researcher is not None
-    assert coder.form == "workspace"
-    assert coder.workspace_native is True
     assert coder.artifact_dir == ""
     assert researcher.artifact_dir == ""
 
 
-def test_build_run_plan_omit_form_is_files_without_drafts_dir():
+def test_build_run_plan_omit_deliverable_does_not_pin_drafts():
     plan, errors = build_run_plan([{"role": "写手", "task": "写笔记"}])
     assert errors == []
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.form == "files"
     assert d.artifact_dir == ""
 
 
-def test_build_run_plan_workspace_form_skips_default_drafts_dir():
+def test_build_run_plan_src_artifact_not_twisted_into_docs():
+    name = "src/login.py"
     plan, errors = build_run_plan(
         [
             {
                 "role": "后端工程师",
                 "task": "实现登录接口",
-                "deliverable": {"form": "workspace"},
+                "deliverable": {"artifacts": [name]},
             }
         ]
     )
     assert errors == []
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.form == "workspace"
     assert d.artifact_dir == ""
-    assert d.workspace_native is True
+    assert d.artifacts == [name]
 
 
-def test_build_run_plan_workspace_does_not_join_leftover_review_dir():
-    """生产组合经 builder：裸名 + leftover reviews 目录 + native → 目录清掉，裸名保留。"""
+def test_build_run_plan_leftover_native_key_does_not_clear_artifact_dir():
+    """无短路：leftover native 键丢掉后 leftover artifact_dir 仍钉。"""
     name = "前端刷新审计-对话页面.md"
     plan, errors = build_run_plan(
         [
@@ -317,20 +254,18 @@ def test_build_run_plan_workspace_does_not_join_leftover_review_dir():
     assert errors == []
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.form == "workspace"
-    assert d.workspace_native is True
-    assert d.artifact_dir == ""
-    assert d.artifacts == [name]
+    assert d.artifact_dir == REVIEWS_DIR
+    assert d.artifacts == [f"{REVIEWS_DIR}/{name}"]
 
 
-def test_ceo_schema_exposes_three_tier_form_only():
-    """CEO 填参面只有三档 form + artifacts；内部旋钮不进 schema。"""
+def test_ceo_schema_exposes_artifacts_only():
+    """CEO 填参面只有 artifacts；内部旋钮不进 schema。"""
     from agentcore.tools.builtin.delegate.schema import TASK_DELIVERABLE_SCHEMA
 
     props = TASK_DELIVERABLE_SCHEMA["properties"]
-    assert props["form"]["enum"] == ["prose", "files", "workspace"]
-    assert set(props) == {"form", "artifacts"}
+    assert set(props) == {"artifacts"}
     for banned in (
+        "form",
         "required_sections",
         "output_format",
         "strict",
@@ -433,7 +368,6 @@ def test_landing_never_reads_role_or_task_free_text():
 
 def test_resolve_keeps_explicit_dossier_artifacts():
     d = Deliverable(
-        form="files",
         artifacts=[f"{RESEARCH_DIR}/调研笔记.md"],
     )
     assert resolve_artifact_dir(d) == RESEARCH_DIR
@@ -472,7 +406,7 @@ def test_resolve_derives_custom_docs_subtree_from_artifacts():
         f"{_AI_DEV_DIR}/01-仓库地图.md",
         f"{_AI_DEV_DIR}/04-开发约定与禁忌.md",
     ]
-    d = Deliverable(form="files", artifacts=artifacts)
+    d = Deliverable( artifacts=artifacts)
     assert resolve_artifact_dir(d) == _AI_DEV_DIR
 
 
@@ -483,7 +417,6 @@ def test_apply_overrides_mismatched_research_artifact_dir():
         f"{_AI_DEV_DIR}/03-架构与数据流.md",
     ]
     d = Deliverable(
-        form="files",
         artifact_dir=RESEARCH_DIR,
         artifacts=artifacts,
     )
@@ -501,7 +434,6 @@ def test_writer_ai_dev_no_false_path_hint_while_notes_stay_research():
         f"{_AI_DEV_DIR}/01-仓库地图.md",
     ]
     writer = Deliverable(
-        form="files",
         artifact_dir=RESEARCH_DIR,  # 复现钉错
         artifacts=writer_artifacts,
     )
@@ -522,7 +454,6 @@ def test_writer_ai_dev_no_false_path_hint_while_notes_stay_research():
     )
 
     note = Deliverable(
-        form="files",
         artifacts=[f"{RESEARCH_DIR}/ai-dev-docs-文档侧笔记.md"],
     )
     apply_artifact_dir_defaults(note)

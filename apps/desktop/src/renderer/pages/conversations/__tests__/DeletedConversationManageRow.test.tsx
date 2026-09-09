@@ -7,10 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DeletedConversationManageRow } from "../DeletedConversationManageRow";
 
 const restore = vi.fn();
+const purge = vi.fn();
 let folders: FolderMeta[] = [];
 
 vi.mock("@/hooks/useConversations", () => ({
   useRestoreConversation: () => ({ mutate: restore, isPending: false }),
+  usePurgeTrashedConversation: () => ({ mutate: purge, isPending: false }),
 }));
 vi.mock("@/hooks/useFolders", () => ({
   useFolders: () => folders,
@@ -42,6 +44,7 @@ function renderRow(overrides: Partial<DeletedConversationMeta> = {}) {
 
 beforeEach(() => {
   restore.mockReset();
+  purge.mockReset();
   folders = [
     {
       id: "f1",
@@ -89,5 +92,16 @@ describe("DeletedConversationManageRow", () => {
 
     expect(screen.queryByText("原文件夹也已删除")).toBeNull();
     expect(screen.queryByText("商标案")).toBeNull();
+  });
+
+  it("asks before permanently deleting", () => {
+    renderRow();
+
+    fireEvent.click(screen.getByLabelText("彻底删除对话 定价讨论"));
+    expect(purge).not.toHaveBeenCalled();
+    expect(screen.getByText("彻底删除「定价讨论」？")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "彻底删除" }));
+    expect(purge).toHaveBeenCalledWith("c1", expect.any(Object));
   });
 });

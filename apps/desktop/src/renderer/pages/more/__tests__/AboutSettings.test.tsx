@@ -1,12 +1,27 @@
 // @vitest-environment jsdom
 /**
- * Tests for 设置·关于 — 品牌区 / 版本溯源 / 法律入口。软件更新分支见
+ * Tests for 设置·关于 — 品牌区 / 产品手册入口 / 版本溯源 / 法律入口。软件更新分支见
  * AboutSettings.update.test.tsx。
  */
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/narrowLayout", () => ({
+  useNarrowLayoutState: vi.fn(() => ({
+    isNarrow: false,
+    hideChrome: false,
+    conversationDrawerOpen: false,
+    setConversationDrawerOpen: () => undefined,
+  })),
+}));
 vi.mock("@/lib/capabilities", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/capabilities")>()),
   hasAutoUpdater: vi.fn(() => true),
@@ -34,13 +49,22 @@ import { AboutSettings } from "../AboutSettings";
 function renderPage() {
   return render(
     <MemoryRouter>
-      <AboutSettings />
+      <Routes>
+        <Route path="/" element={<AboutSettings />} />
+        <Route path="/toolbox/manual" element={<p>手册页</p>} />
+      </Routes>
     </MemoryRouter>,
   );
 }
 
 afterEach(() => {
   cleanup();
+  vi.mocked(useNarrowLayoutState).mockReturnValue({
+    isNarrow: false,
+    hideChrome: false,
+    conversationDrawerOpen: false,
+    setConversationDrawerOpen: () => undefined,
+  });
 });
 
 describe("AboutSettings", () => {
@@ -83,6 +107,35 @@ describe("AboutSettings", () => {
     expect(
       screen.getByRole("link", { name: "隐私政策" }).getAttribute("href"),
     ).toBe("/more/legal/privacy");
+  });
+
+  it("points discussion to the messages beta group and complaints to the site", () => {
+    renderPage();
+    expect(
+      screen.getByRole("link", { name: "消息页内测群" }).getAttribute("href"),
+    ).toBe("/messages");
+    expect(
+      screen
+        .getByRole("link", { name: "https://fashitianxia.xyz" })
+        .getAttribute("href"),
+    ).toBe("https://fashitianxia.xyz");
+  });
+
+  it("opens the product manual from a quiet about-page row", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "产品手册" }));
+    expect(screen.getByText("手册页")).toBeTruthy();
+  });
+
+  it("does not offer the product manual on a narrow screen", () => {
+    vi.mocked(useNarrowLayoutState).mockReturnValue({
+      isNarrow: true,
+      hideChrome: false,
+      conversationDrawerOpen: false,
+      setConversationDrawerOpen: () => undefined,
+    });
+    renderPage();
+    expect(screen.queryByRole("button", { name: "产品手册" })).toBeNull();
   });
 
   it("does not host 允许本机执行 (that switch lives under 设置·通用·进阶)", () => {

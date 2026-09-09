@@ -6,7 +6,7 @@ import time
 from typing import Any
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.file_products import FileProduct, file_product
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -56,6 +56,9 @@ class FileBatchTool:
         audience=AUDIENCE_BOTH,
         # 一次调用可产多件（move / copy 逐件自报；mkdir / delete 没有产物）。
         file_products=FileProductsContract.SELF_REPORT,
+        workspace_io=True,
+        resident=False,
+        catalog_summary="一次多条移动/复制/删除/建目录",
     )
 
     @property
@@ -124,7 +127,7 @@ class FileBatchTool:
                 },
                 "required": [],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.GRANTABLE,
         )
 

@@ -49,6 +49,9 @@ EXEC_ENV_TIMEOUT_FAMILY = frozenset({"run"})
 # 旧 journal / 内部核仍可能写出这些名；与 ``run`` 一样不卸。
 EXEC_RUN_TOOL_NAMES = frozenset({"run", "test_run", "code_execute", "terminal"})
 DEFAULT_EXEC_ENV_TIMEOUT_RETIRE = 2
+# Consecutive channel_op (活性挂起) hangs on one run → stop this worker's pens.
+# Single hang still fails that op only (does not stamp session / infer desktop gone).
+DEFAULT_CHANNEL_OP_HANG_LATCH = 2
 # 历史文案：连续干等曾卸 ``run``。现只保留常量供旧测试 / journal 对照，生产不再注入。
 EXEC_ENV_TIMEOUT_RETIRE_STEER = (
     "本机执行环境连续超时（`run`），本回合起停用该项——"

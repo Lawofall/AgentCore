@@ -1,6 +1,6 @@
 [project]
 name = "agentcore"
-version = "0.7.17"
+version = "0.7.18"
 description = "AgentCore - Multi-Agent AI Workspace Backend"
 requires-python = ">=3.12"
 dependencies = [
@@ -277,7 +277,6 @@ module = [
     "agentcore.evals.comparison",
     "agentcore.evals.debate_converge",
     "agentcore.evals.debate_speech_format",
-    "agentcore.evals.deliverable_form",
     "agentcore.evals.harness",
     "agentcore.evals.judge",
     "agentcore.evals.seed_lint",

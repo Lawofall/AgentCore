@@ -1,6 +1,10 @@
 import { WaveLanes } from "@/components/graph/WaveLanes";
-import { RF_PRO_OPTIONS } from "@/components/graph/constants";
 import { type WaveBand, computeWaves } from "@/components/graph/scene";
+import {
+  XYFLOW_PRO_OPTIONS,
+  XyflowHost,
+  xyflowCameraKey,
+} from "@/components/xyflow/host";
 import {
   EMBED_MIN_HEIGHT,
   type LayoutResult,
@@ -77,21 +81,29 @@ export function EmbeddedGraphCanvas({
     };
   }, [nodes, edges, layoutKind]);
 
-  const fit =
-    layout && colWidth > 0
-      ? fitWidthBox(layout.width, layout.height, colWidth)
-      : null;
+  const fit = useMemo(
+    () =>
+      layout && colWidth > 0
+        ? fitWidthBox(layout.width, layout.height, colWidth)
+        : null,
+    [layout, colWidth],
+  );
+  const cameraKey = xyflowCameraKey(
+    layout ? { width: layout.width, height: layout.height } : null,
+    colWidth,
+  );
 
   // 与 GraphView 内嵌一致：只缩不放（宽/高均受限），居中。
+  // Camera writes keyed by bbox × column identity — not a new `fit` object.
   useEffect(() => {
-    if (!inst || !layout || !fit) return;
+    if (!inst || !layout || !fit || !cameraKey) return;
     const x = Math.max(0, (colWidth - fit.renderedWidth) / 2);
     const y =
       fit.renderedHeight <= fit.height
         ? (fit.height - fit.renderedHeight) / 2
         : 0;
     inst.setViewport({ x, y, zoom: fit.zoom });
-  }, [inst, layout, fit, colWidth]);
+  }, [inst, cameraKey, layout, fit, colWidth]);
 
   const flowNodes = useMemo<Node[]>(() => {
     if (!layout) return [];
@@ -168,39 +180,41 @@ export function EmbeddedGraphCanvas({
   const elkReady = Boolean(layout && colWidth > 0);
 
   return (
-    <div
-      ref={containerRef}
-      className="relative overflow-hidden rounded-xl border border-border bg-card"
-      style={{ height: fit?.height ?? EMBED_MIN_HEIGHT }}
-      data-elk-ready={elkReady ? "true" : "false"}
-    >
-      {elkReady && (
-        <ReactFlow
-          nodes={flowNodes}
-          edges={flowEdges}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          onInit={setInst}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          nodesFocusable={false}
-          zoomOnScroll={false}
-          zoomOnPinch={false}
-          zoomOnDoubleClick={false}
-          panOnDrag={false}
-          preventScrolling={false}
-          minZoom={0.05}
-          proOptions={RF_PRO_OPTIONS}
-        >
-          <Background gap={20} size={1} />
-          <WaveLanes waves={waves} />
-        </ReactFlow>
-      )}
-      {/* 与 GraphView 内嵌一致：超过高度上限(520)时顶对齐 + 底部渐隐示意「还有更多」。 */}
-      {fit?.overflowing && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent" />
-      )}
-    </div>
+    <XyflowHost>
+      <div
+        ref={containerRef}
+        className="relative overflow-hidden rounded-xl border border-border bg-card"
+        style={{ height: fit?.height ?? EMBED_MIN_HEIGHT }}
+        data-elk-ready={elkReady ? "true" : "false"}
+      >
+        {elkReady && (
+          <ReactFlow
+            nodes={flowNodes}
+            edges={flowEdges}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            onInit={setInst}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            nodesFocusable={false}
+            zoomOnScroll={false}
+            zoomOnPinch={false}
+            zoomOnDoubleClick={false}
+            panOnDrag={false}
+            preventScrolling={false}
+            minZoom={0.05}
+            proOptions={XYFLOW_PRO_OPTIONS}
+          >
+            <Background gap={20} size={1} />
+            <WaveLanes waves={waves} />
+          </ReactFlow>
+        )}
+        {/* 与 GraphView 内嵌一致：超过高度上限(520)时顶对齐 + 底部渐隐示意「还有更多」。 */}
+        {fit?.overflowing && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent" />
+        )}
+      </div>
+    </XyflowHost>
   );
 }
 

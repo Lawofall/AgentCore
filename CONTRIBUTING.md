@@ -56,4 +56,4 @@ cd apps/server && uv sync
 
 ## 许可证
 
-提交即表示你同意贡献内容按 [MIT License](./LICENSE) 授权。
+提交即表示你同意贡献内容按 [FSL-1.1-ALv2](./LICENSE) 授权。

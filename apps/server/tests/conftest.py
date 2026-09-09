@@ -169,20 +169,6 @@ def _pin_smtp_unconfigured(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _pin_legal_vertical_gate_to_defaults(monkeypatch):
-    """Pin ``legal_vertical_enabled`` to its production default (off) for every test.
-
-    Local ``apps/server/.env`` may turn the legal pack on for war-room probing; the
-    suite must assert the default empty ``packs[]`` / no legal skills posture unless a
-    test opts in via ``monkeypatch.setattr(settings, "legal_vertical_enabled", True)``.
-    """
-    from agentcore.config import settings
-
-    monkeypatch.setattr(settings, "legal_vertical_enabled", False)
-    yield
-
-
-@pytest.fixture(autouse=True)
 def _reset_cloud_sandbox_health():
     """Clear the boot-probe cache so a failed/ok injection cannot leak across tests."""
     from agentcore.tools.sandbox.cloud_health import reset_cloud_sandbox_health_for_tests

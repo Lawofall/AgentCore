@@ -109,7 +109,7 @@ function AvatarSection() {
   };
 
   return (
-    <SettingsSection title="头像" description="上传清晰的正方形图片效果最佳。">
+    <SettingsSection title="头像">
       <Card className="flex items-center gap-4 p-4">
         <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xl font-medium text-muted-foreground">
           {user?.avatarUrl ? (
@@ -223,14 +223,12 @@ function ProfileSection() {
   };
 
   return (
-    <SettingsSection
-      title="个人资料"
-      description="昵称会展示给团队成员。用户名是找人码，别人可用它搜到你。邮箱用于找回密码；未验证不影响登录。更改邮箱后需重新验证，不会自动发送验证码。"
-    >
+    <SettingsSection title="个人资料">
       <Card className="space-y-3 p-4">
         <SettingField
           label="昵称"
           htmlFor="account-profile-display-name"
+          hint="会展示给团队成员。"
           error={nicknameErr}
         >
           <Input
@@ -264,6 +262,7 @@ function ProfileSection() {
         <SettingField
           label="邮箱"
           htmlFor="account-profile-email"
+          hint="用于找回密码；未验证不影响登录。更改后需重新验证，不会自动发送验证码。"
           action={<Badge tone={status.tone}>{status.label}</Badge>}
         >
           <Input
@@ -431,10 +430,7 @@ function PasswordSection() {
   };
 
   return (
-    <SettingsSection
-      title="修改密码"
-      description="修改后，除当前设备外的所有登录都会失效。"
-    >
+    <SettingsSection title="修改密码">
       <Card className="space-y-3 p-4">
         <SettingField label="当前密码" htmlFor="account-password-current">
           <Input
@@ -461,6 +457,7 @@ function PasswordSection() {
         <SettingField
           label="确认新密码"
           htmlFor="account-password-confirm"
+          hint="更新后，其他设备需要重新登录。"
           error={mismatch ? "两次输入的新密码不一致" : null}
         >
           <Input
@@ -496,11 +493,7 @@ function DangerSection() {
   const [open, setOpen] = useState(false);
 
   return (
-    <SettingsSection
-      title="危险区域"
-      tone="danger"
-      description="注销后账户将被停用并匿名化，且无法恢复。"
-    >
+    <SettingsSection title="危险区域" tone="danger">
       <SettingRow
         className="border-destructive/40 bg-destructive/5"
         label="注销账户"

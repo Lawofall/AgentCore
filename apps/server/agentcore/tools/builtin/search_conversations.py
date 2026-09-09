@@ -10,12 +10,13 @@ the local ConversationRepository (大众桌面无本机 PG).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from agentcore.conversation.log_export import search_hit_from_messages
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import ConversationRepository, MessageRepository
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
@@ -46,9 +47,17 @@ def _format_search_output(
     *,
     scope: str,
     soft_note: str | None,
+    lead: str | None = None,
 ) -> ToolResult:
     if not rows:
-        text = soft_note + "\n" + _SOFT_MISS if soft_note else _SOFT_MISS
+        if lead and soft_note:
+            text = f"{lead}\n{soft_note}\n{_SOFT_MISS}"
+        elif lead:
+            text = f"{lead}\n{_SOFT_MISS}"
+        elif soft_note:
+            text = f"{soft_note}\n{_SOFT_MISS}"
+        else:
+            text = _SOFT_MISS
         return ToolResult(
             tool_call_id="",
             success=True,
@@ -57,6 +66,9 @@ def _format_search_output(
         )
 
     lines: list[str] = []
+    if lead:
+        lines.append(lead)
+        lines.append("")
     if soft_note:
         lines.append(soft_note)
         lines.append("")
@@ -179,6 +191,155 @@ async def _search_via_db(
     return rows, False
 
 
+@dataclass(frozen=True)
+class ConversationSearchRun:
+    rows: list[dict[str, Any]]
+    folder_miss: bool
+    soft_note: str | None
+    scope: str
+    error: ToolResult | None = None
+
+
+async def run_conversation_search(
+    *,
+    folder_id: str | None,
+    arguments: dict[str, Any],
+    context: ToolContext,
+) -> ConversationSearchRun:
+    """Shared search used by ``search_conversations`` and ``read_conversation`` locators."""
+    query = str(arguments.get("query") or "").strip()
+    scope = str(arguments.get("scope") or "folder").strip() or "folder"
+    if scope not in {"all", "folder", "global_chats"}:
+        return ConversationSearchRun(
+            rows=[],
+            folder_miss=False,
+            soft_note=None,
+            scope=scope,
+            error=ToolResult(
+                tool_call_id="",
+                success=False,
+                output="scope 须为 all / folder / global_chats。",
+                error="invalid scope",
+            ),
+        )
+    raw_archived = arguments.get("include_archived")
+    include_archived = True if raw_archived is None else bool(raw_archived)
+    try:
+        limit = int(arguments.get("limit") or _DEFAULT_LIMIT)
+    except (TypeError, ValueError):
+        limit = _DEFAULT_LIMIT
+    limit = max(1, min(limit, _SEARCH_HARD_CAP))
+
+    updated_after: datetime | None = None
+    updated_within_hours: int | None = None
+    raw_hours = arguments.get("updated_within_hours")
+    if raw_hours is not None and raw_hours != "":
+        try:
+            hours = int(raw_hours)
+        except (TypeError, ValueError):
+            return ConversationSearchRun(
+                rows=[],
+                folder_miss=False,
+                soft_note=None,
+                scope=scope,
+                error=ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output="updated_within_hours 须为正整数。",
+                    error="invalid updated_within_hours",
+                ),
+            )
+        hours = max(1, min(hours, _MAX_LOOKBACK_HOURS))
+        updated_within_hours = hours
+        updated_after = datetime.now(UTC) - timedelta(hours=hours)
+
+    explicit_folder = str(arguments.get("folder_id") or "").strip() or None
+    resolved_folder: str | None = None
+    global_chats_only = False
+    soft_note: str | None = None
+    if explicit_folder:
+        resolved_folder = explicit_folder
+    elif scope == "folder":
+        if not folder_id:
+            soft_note = (
+                "当前是裸聊（无文件夹）；已按 all 范围检索。"
+                "请改用 scope=all 或 global_chats。"
+            )
+        else:
+            resolved_folder = folder_id
+    elif scope == "global_chats":
+        global_chats_only = True
+
+    host_id = context.conversation_id
+
+    from agentcore.account.credentials import get_account_credentials
+
+    try:
+        if get_account_credentials() is not None:
+            rows, folder_miss = await _search_via_cloud(
+                query=query,
+                folder_id=resolved_folder,
+                include_archived=include_archived,
+                global_chats_only=global_chats_only,
+                exclude_conversation_id=host_id or None,
+                limit=limit,
+                updated_within_hours=updated_within_hours,
+                check_folder_owned=bool(explicit_folder),
+            )
+        else:
+            rows, folder_miss = await _search_via_db(
+                user_id=context.user_id,
+                query=query,
+                folder_id=resolved_folder,
+                include_archived=include_archived,
+                global_chats_only=global_chats_only,
+                exclude_conversation_id=host_id or None,
+                limit=limit,
+                updated_after=updated_after,
+                explicit_folder=explicit_folder,
+            )
+    except Exception as e:  # noqa: BLE001 — tool failure must not crash the turn
+        cloud_fail = _is_account_cloud_failure(e)
+        logger.warning(
+            "conversation_log.search_failed",
+            user_id=context.user_id,
+            error=str(e),
+            account_cloud_failed=cloud_fail,
+        )
+        if cloud_fail:
+            return ConversationSearchRun(
+                rows=[],
+                folder_miss=False,
+                soft_note=None,
+                scope=scope,
+                error=ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output=f"检索历史对话失败。{e}",
+                    error=getattr(e, "code", "account_cloud_failed"),
+                ),
+            )
+        return ConversationSearchRun(
+            rows=[],
+            folder_miss=False,
+            soft_note=None,
+            scope=scope,
+            error=ToolResult(
+                tool_call_id="",
+                success=False,
+                output="检索历史对话失败，请稍后再试。",
+                error=str(e),
+            ),
+        )
+
+    return ConversationSearchRun(
+        rows=rows,
+        folder_miss=folder_miss,
+        soft_note=soft_note,
+        scope=scope,
+    )
+
+
 class SearchConversationsTool:
     """List / search the owner's conversations for on-demand log recall."""
 
@@ -200,9 +361,8 @@ class SearchConversationsTool:
             name="search_conversations",
             description=(
                 "检索本账号历史对话目录（标题或对话正文子串；空 query 按最近更新列出）。"
-                "同文件夹续做、用户提到以前、或判断可能依赖旧场时用："
-                "先搜到 conversation_id，再 read_conversation"
-                "（有 query 时带同一 query，从命中处读）。"
+                "同文件夹续做、用户提到以前、或判断可能依赖旧场时用。"
+                "打开某一场用 read_conversation（可带同一 query 从命中处读）。"
                 "默认当前文件夹（裸聊无文件夹则按 all）。不含本场宿主。"
                 "偏好与巩固事实走记忆主题，不是本工具。"
             ),
@@ -228,7 +388,7 @@ class SearchConversationsTool:
                     },
                     "include_archived": {
                         "type": "boolean",
-                        "description": "是否包含已归档对话（默认 false）。",
+                        "description": "默认含已归档。只要未归档时 false。",
                     },
                     "limit": {
                         "type": "integer",
@@ -240,118 +400,25 @@ class SearchConversationsTool:
                         "type": "integer",
                         "description": (
                             "可选；只返回近 N 小时内有更新的对话"
-                            f"（1–{_MAX_LOOKBACK_HOURS}）。日复盘等周期任务应设置。"
+                            f"（1–{_MAX_LOOKBACK_HOURS}）。只查近况时设置。"
                         ),
                     },
                 },
                 "required": [],
             },
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
             approval=ToolApproval.NEVER,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
-        query = str(arguments.get("query") or "").strip()
-        scope = str(arguments.get("scope") or "folder").strip() or "folder"
-        if scope not in {"all", "folder", "global_chats"}:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="scope 须为 all / folder / global_chats。",
-                error="invalid scope",
-            )
-        include_archived = bool(arguments.get("include_archived") or False)
-        try:
-            limit = int(arguments.get("limit") or _DEFAULT_LIMIT)
-        except (TypeError, ValueError):
-            limit = _DEFAULT_LIMIT
-        limit = max(1, min(limit, _SEARCH_HARD_CAP))
-
-        updated_after: datetime | None = None
-        updated_within_hours: int | None = None
-        raw_hours = arguments.get("updated_within_hours")
-        if raw_hours is not None and raw_hours != "":
-            try:
-                hours = int(raw_hours)
-            except (TypeError, ValueError):
-                return ToolResult(
-                    tool_call_id="",
-                    success=False,
-                    output="updated_within_hours 须为正整数。",
-                    error="invalid updated_within_hours",
-                )
-            hours = max(1, min(hours, _MAX_LOOKBACK_HOURS))
-            updated_within_hours = hours
-            updated_after = datetime.now(UTC) - timedelta(hours=hours)
-
-        explicit_folder = str(arguments.get("folder_id") or "").strip() or None
-        folder_id: str | None = None
-        global_chats_only = False
-        soft_note: str | None = None
-        if explicit_folder:
-            folder_id = explicit_folder
-        elif scope == "folder":
-            if not self.folder_id:
-                soft_note = (
-                    "当前是裸聊（无文件夹）；已按 all 范围检索。"
-                    "请改用 scope=all 或 global_chats。"
-                )
-            else:
-                folder_id = self.folder_id
-        elif scope == "global_chats":
-            global_chats_only = True
-
-        host_id = context.conversation_id
-
-        from agentcore.account.credentials import get_account_credentials
-
-        try:
-            if get_account_credentials() is not None:
-                rows, folder_miss = await _search_via_cloud(
-                    query=query,
-                    folder_id=folder_id,
-                    include_archived=include_archived,
-                    global_chats_only=global_chats_only,
-                    exclude_conversation_id=host_id or None,
-                    limit=limit,
-                    updated_within_hours=updated_within_hours,
-                    check_folder_owned=bool(explicit_folder),
-                )
-            else:
-                rows, folder_miss = await _search_via_db(
-                    user_id=context.user_id,
-                    query=query,
-                    folder_id=folder_id,
-                    include_archived=include_archived,
-                    global_chats_only=global_chats_only,
-                    exclude_conversation_id=host_id or None,
-                    limit=limit,
-                    updated_after=updated_after,
-                    explicit_folder=explicit_folder,
-                )
-        except Exception as e:  # noqa: BLE001 — tool failure must not crash the turn
-            cloud_fail = _is_account_cloud_failure(e)
-            logger.warning(
-                "conversation_log.search_failed",
-                user_id=context.user_id,
-                error=str(e),
-                account_cloud_failed=cloud_fail,
-            )
-            if cloud_fail:
-                return ToolResult(
-                    tool_call_id="",
-                    success=False,
-                    output=f"检索历史对话失败。{e}",
-                    error=getattr(e, "code", "account_cloud_failed"),
-                )
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="检索历史对话失败，请稍后再试。",
-                error=str(e),
-            )
-
-        if folder_miss:
+        run = await run_conversation_search(
+            folder_id=self.folder_id,
+            arguments=arguments,
+            context=context,
+        )
+        if run.error is not None:
+            return run.error
+        if run.folder_miss:
             logger.info(
                 "conversation_log.search",
                 result="folder_miss",
@@ -361,15 +428,17 @@ class SearchConversationsTool:
                 tool_call_id="",
                 success=True,
                 output=_SOFT_MISS,
-                display={"result_count": 0, "scope": scope},
+                display={"result_count": 0, "scope": run.scope},
             )
 
         logger.info(
             "conversation_log.search",
             result="ok",
             user_id=context.user_id,
-            count=len(rows),
-            scope=scope,
+            count=len(run.rows),
+            scope=run.scope,
             run_id=context.run_id,
         )
-        return _format_search_output(rows, scope=scope, soft_note=soft_note)
+        return _format_search_output(
+            run.rows, scope=run.scope, soft_note=run.soft_note
+        )

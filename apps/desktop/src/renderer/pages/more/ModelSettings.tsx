@@ -128,7 +128,7 @@ function NoAvailableModelsGuide({
 }
 
 /**
- * 模型 (/more/model) — 账号默认组合 + 组合 CRUD。
+ * 模型组合 (/more/model) — 账号默认组合 + 组合 CRUD。
  *
  * 组合 = `{ main, worker?, background?, vision? }`；账号默认组合与会话引用见
  * `/v1/users/me/llm-model-profiles`。凭据与测连见 `/more/providers`。
@@ -188,7 +188,7 @@ export function ModelSettings() {
 
   return (
     <div>
-      <PageHeader title="模型" />
+      <PageHeader title="模型组合" />
 
       <SettingsStack>
         <SettingsAsync loading={isLoading} error={loadError}>
@@ -447,8 +447,6 @@ function ModelProfilesSection({
 
   return (
     <SettingsSection
-      title="模型组合"
-      description="主模型必填，其余槽位可留空；改动下一回合生效。"
       action={
         <Button
           variant="neutral"
@@ -849,7 +847,7 @@ function ProfileEditor({
         <SettingField
           label="主模型"
           htmlFor="profile-main"
-          hint="必填"
+          hint="必填，下一回合生效"
           hintPlacement="label"
         >
           <ProfileModelSelect

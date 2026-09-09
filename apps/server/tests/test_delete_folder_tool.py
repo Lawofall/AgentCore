@@ -2,7 +2,7 @@
 
 钉四条人定死的约束：
   * **只软删**——走 ``soft_delete_folder_tree`` / ``DELETE /folders/{id}``；
-    ``permanent_delete_folder`` 永不被调用（彻底删只由用户在桌面弹窗勾选）。
+    ``permanent_delete_folder`` 永不被调用（彻底删只由用户确认）。
   * **只按 folder_id**——嵌套之后同一个末段名可以合法地出现在两层
     （``设计/图标`` 与 ``归档/图标``），按名删必然误删：名字形状的参数一律拒绝，
     且拒绝时不查名册、不删任何东西。
@@ -27,7 +27,7 @@ from agentcore.core.types import (
     AutonomyPolicy,
     PermissionAxes,
     ToolApproval,
-    ToolCategory,
+    ToolFace,
     recipe_to_axes,
 )
 from agentcore.folders.credentials import FoldersCredentials, folders_credentials_scope
@@ -181,7 +181,7 @@ def test_delete_folder_schema_is_single_id_only():
     tool = DeleteFolderTool()
     schema = tool.schema
     assert schema.name == "delete_folder"
-    assert schema.category is ToolCategory.ORCHESTRATION
+    assert schema.face is ToolFace.FOLDER
     # 每次删除都要人点确认卡。
     assert schema.approval is ToolApproval.GRANTABLE
 

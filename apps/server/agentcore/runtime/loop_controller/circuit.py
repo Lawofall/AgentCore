@@ -28,13 +28,9 @@ class ToolCircuitBreakerMixin:
     _tool_succeeded_after_fail: dict[str, bool]
     _tool_liveness_last: dict[str, bool]
     _workspace_channel_dead: bool
+    _channel_hang_dead: bool
     _tool_warned: set[str]
     _tool_force_retire: set[str]
-
-    @property
-    def workspace_channel_dead(self) -> bool:
-        """Presence latch: local desk fulfiller gone this run (landing retired)."""
-        return self._workspace_channel_dead
     _tool_disabled: set[str]
     _tool_segmented_forced: set[str]
     _tool_parse_kept: set[str]
@@ -44,6 +40,11 @@ class ToolCircuitBreakerMixin:
     _pending_validation_stop: str | None
     _pending_validation_hard_stop: bool
     _validation_thrash_latched: bool
+
+    @property
+    def workspace_channel_dead(self) -> bool:
+        """Presence latch or consecutive channel_op hang: pens retired this run."""
+        return self._workspace_channel_dead or self._channel_hang_dead
 
     def tool_circuit_breaker(self) -> CircuitBreak:
         """Tools whose cumulative failures crossed a threshold (call after ``record``).
@@ -85,12 +86,12 @@ class ToolCircuitBreakerMixin:
                     self._tool_failures[name] > 0
                     and self._tool_parse_failures.get(name, 0) == self._tool_failures[name]
                 )
-                if name in LANDING_TOOLS and not self._workspace_channel_dead:
+                if name in LANDING_TOOLS and not self.workspace_channel_dead:
                     self._tool_segmented_forced.add(name)
                     self._tool_warned.discard(name)
                     newly_force_segmented.append(name)
                     continue
-                if name in LANDING_TOOLS and self._workspace_channel_dead:
+                if name in LANDING_TOOLS and self.workspace_channel_dead:
                     # Channel dead: writing cannot succeed — disable pens with family.
                     self._tool_disabled.add(name)
                     self._tool_warned.discard(name)

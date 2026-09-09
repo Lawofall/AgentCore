@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from agentcore.config import settings
-from agentcore.core.types import AutonomyPolicy, ToolApproval, ToolCategory, recipe_to_axes
+from agentcore.core.types import AutonomyPolicy, ToolApproval, ToolFace, recipe_to_axes
 from agentcore.runtime.browser.desktop_bridge import (
     reset_desktop_bridge_health_for_tests,
     set_desktop_bridge_health_for_tests,
@@ -82,7 +82,7 @@ def test_navigate_is_builtin_both():
     assert reg.execution_class is True
     assert reg.browser_class is True
     assert schema.approval is ToolApproval.GRANTABLE
-    assert schema.category is ToolCategory.EXECUTION
+    assert schema.face is ToolFace.HOST_BROWSER
     assert frozenset({"browser"}) == BROWSER_TOOL_NAMES
 
 

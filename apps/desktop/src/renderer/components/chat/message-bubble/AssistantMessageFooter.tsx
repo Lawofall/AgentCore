@@ -162,7 +162,7 @@ function messagePermalink(conversationId: string, messageId: string): string {
   return `${base}#/conversations/${conversationId}?msg=${messageId}`;
 }
 
-function MessageMoreMenu({
+export function MessageMoreMenu({
   message,
   captainContext,
 }: {
@@ -201,7 +201,11 @@ function MessageMoreMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <IconButton size="sm" aria-label="更多">
+          <IconButton
+            size="sm"
+            aria-label="更多"
+            data-testid="assistant-more-menu"
+          >
             <MoreHorizontal size={14} />
           </IconButton>
         </DropdownMenuTrigger>
@@ -347,6 +351,7 @@ export function AssistantMessageFooter({
   costText,
   onRegenerate,
   displayError,
+  pinSupportPack = false,
 }: {
   message: Message;
   captainContext: ContextBlockWire[];
@@ -354,6 +359,8 @@ export function AssistantMessageFooter({
   onRegenerate: () => void;
   /** Settled empty-failure card (message.error or synthetic); feeds copy via visibleMessageText. */
   displayError?: { code: string; message: string } | null;
+  /** Team-strip fail/partial: keep「更多」visible (not hover-reveal) as the pack host. */
+  pinSupportPack?: boolean;
 }) {
   const hasProcess = (message.process?.length ?? 0) > 0;
   // Prefer displayError so synthesizable empty failures (no error payload) still copy.
@@ -377,51 +384,59 @@ export function AssistantMessageFooter({
       exportError,
     ),
   );
+  const more = (
+    <MessageMoreMenu message={message} captainContext={captainContext} />
+  );
   return (
     <div className="mt-1 flex items-center justify-between gap-2">
-      <div
-        className={cn(
-          "flex min-w-0 items-center gap-0.5",
-          MESSAGE_ACTION_REVEAL_CLASS,
-        )}
-      >
-        {hasProcess ? (
-          <DropdownMenu>
-            <SimpleTooltip label={copied || copiedProcess ? "已复制" : "复制"}>
-              <DropdownMenuTrigger asChild>
-                <IconButton size="sm" aria-label="复制">
-                  {copied || copiedProcess ? (
-                    <Check size={14} />
-                  ) : (
-                    <Copy size={14} />
-                  )}
-                </IconButton>
-              </DropdownMenuTrigger>
+      <div className="flex min-w-0 items-center gap-0.5">
+        <div
+          className={cn(
+            "flex min-w-0 items-center gap-0.5",
+            MESSAGE_ACTION_REVEAL_CLASS,
+          )}
+        >
+          {hasProcess ? (
+            <DropdownMenu>
+              <SimpleTooltip
+                label={copied || copiedProcess ? "已复制" : "复制"}
+              >
+                <DropdownMenuTrigger asChild>
+                  <IconButton size="sm" aria-label="复制">
+                    {copied || copiedProcess ? (
+                      <Check size={14} />
+                    ) : (
+                      <Copy size={14} />
+                    )}
+                  </IconButton>
+                </DropdownMenuTrigger>
+              </SimpleTooltip>
+              <DropdownMenuContent align="start" className="min-w-40">
+                <DropdownMenuItem onSelect={() => void onCopy()}>
+                  仅交付
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void onCopyProcess()}>
+                  含过程
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <SimpleTooltip label={copied ? "已复制" : "复制"}>
+              <IconButton
+                size="sm"
+                aria-label="复制"
+                onClick={() => void onCopy()}
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+              </IconButton>
             </SimpleTooltip>
-            <DropdownMenuContent align="start" className="min-w-40">
-              <DropdownMenuItem onSelect={() => void onCopy()}>
-                仅交付
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void onCopyProcess()}>
-                含过程
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <SimpleTooltip label={copied ? "已复制" : "复制"}>
-            <IconButton
-              size="sm"
-              aria-label="复制"
-              onClick={() => void onCopy()}
-            >
-              {copied ? <Check size={14} /> : <Copy size={14} />}
-            </IconButton>
-          </SimpleTooltip>
-        )}
-        <FeedbackButtons message={message} />
-        <BookmarkButton message={message} />
-        <RegenerateMessageAction onRegenerate={onRegenerate} />
-        <MessageMoreMenu message={message} captainContext={captainContext} />
+          )}
+          <FeedbackButtons message={message} />
+          <BookmarkButton message={message} />
+          <RegenerateMessageAction onRegenerate={onRegenerate} />
+          {!pinSupportPack ? more : null}
+        </div>
+        {pinSupportPack ? more : null}
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <AssistantMessageMetaSummary

@@ -1,8 +1,8 @@
 """CEO-only folder roster tools: list / resolve / create / delete (cloud).
 
 用户面只有一种容器——**文件夹**（双模式工作区 §5.4）。``Folder`` 实体仍在，但降级为
-内部稳定引用：它记住「这个文件夹当前在树里的哪个位置」，所以改名 / 移动不断站立任务、
-记忆与白板归属。对 AI 暴露的一律是文件夹口径，名册与 ``GET /folders`` 同形
+内部稳定引用：它记住「这个文件夹当前在树里的哪个位置」，所以改名 / 移动不断工作流触发、
+记忆。对 AI 暴露的一律是文件夹口径，名册与 ``GET /folders`` 同形
 （``FolderSummary`` 字段，含 ``rel_path``；无 OS 绝对路径）。
 
 **嵌套是真的**：云文件夹落在 ``workspaces/<user>/tree/<rel_path>/``，父子关系由
@@ -13,7 +13,7 @@
 ``delete_folder``（软删，等价 ``DELETE /v1/folders/{id}``）只按 ``folder_id`` 删——
 名字只在同层唯一，跨层同名合法（``设计/图标`` 与 ``归档/图标``），按名删必然误删。
 每次调用逐个弹审批卡（恒确认，见 ``runtime.always_confirm``），没有「一卡放行 N 个」
-的批量形态。彻底删（``/permanent``）**不**暴露给 AI：只能用户在桌面弹窗里勾选确认。
+的批量形态。彻底删（``/permanent`` 与回收站清盘）**不**暴露给 AI：只能用户自己确认。
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from typing import Any, Literal
 
 from agentcore.api.schemas.conversations import FolderSummary
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.db.base import async_session_factory
 from agentcore.db.errors import (
     DATABASE_UNAVAILABLE_CODE,
@@ -81,7 +81,7 @@ _DELETE_DONE_HINT = (
     "目录移出用户树到墓碑区，所以同层这个名字立刻可以再用；"
     "云端工作区文件与快照由保留期清理任务在保留期后自动回收；"
     "本机目录（本机文件夹背后那个真实目录）分毫未动。"
-    "【彻底删除】不在 AI 能力内——只能用户自己在桌面弹窗里勾选确认。"
+    "【彻底删除】不在 AI 能力内——只能用户自己确认（弹窗勾选或最近删除）。"
     "一次只删一个：还要删别的请再发一次 delete_folder（各自弹各自的审批卡）。"
 )
 
@@ -96,8 +96,10 @@ _NOT_FOUND_HINT = (
     "零命中：请向用户确认文件夹名 / 路径，或用 list_folders 核对后再 ask_user；"
     "嵌套账号注意先确认层级（`设计/图标` ≠ 顶层 `图标`）。"
     "【勿】为过写盘闸而 create_folder / ask_user 建夹——"
-    "裸聊写盘：云会话由运行时自动建云文件夹；桌面本地对话已在本机 scratch，勿再导入到云当默认。"
-    "仅当用户明确要求新建云文件夹（可带名）或显式多线先建时，才用 create_folder"
+    "裸聊写盘：云会话由运行时自动建云文件夹；"
+    "桌面本地对话已在本机 scratch（本次对话），勿再导入到云当默认。"
+    "仅当用户明确要求新建云文件夹（可带名）或显式多线先建时，"
+    "才用 create_folder"
     "（同指挥面登记，不改本会话归属、不新开会话）；"
     "用户点名本机目录：Composer「直接改这个文件夹」或 open_local_project / "
     "register_local_project / bind_local_folder（≠离线）；换设备才「导入到云」。"
@@ -107,17 +109,16 @@ _EMPTY_LIST_HINT = (
     "当前账号下还没有文件夹。"
     "【勿】为过写盘闸而 create_folder / ask_user 建夹——"
     "裸聊写盘：云会话由运行时自动建云文件夹；桌面本地对话已在本机 scratch。"
-    "仅当用户明确要求新建云文件夹（可带名）或显式多线先建时，才用 create_folder"
+    "仅当用户明确要求新建云文件夹（可带名）或显式多线先建时，"
+    "才用 create_folder"
     "（同指挥面）；"
     "用户点名本机目录走 Composer「直接改这个文件夹」；换设备才「导入到云」。"
     "勿默认催 open_local_project / register_local_project（≠离线）。"
-    "HOW→consult(team_cross_folder)。"
 )
 _RESOLVED_TIP = (
     "空/近空先 ask_user 钉目标，勿连续 file_list 确认空；"
     "裸聊同回合仅此唯一目标时可省略 target（运行时继承）；"
-    "队员坐该文件夹时读写范围 = 该层**及其子文件夹**；"
-    "HOW→consult(team_cross_folder)。"
+    "队员坐该文件夹时读写范围 = 该层**及其子文件夹**。"
 )
 
 
@@ -404,10 +405,10 @@ class ListFoldersTool:
             name=LIST_FOLDERS_TOOL_NAME,
             description=(
                 "文件夹名册（rel_path）。名册不常驻，跨桌先列；当前桌→file_list。"
-                "按路径定位→resolve_folder。HOW→consult(team_cross_folder)。"
+                "按路径定位→resolve_folder。"
             ),
             parameters={"type": "object", "properties": {}, "required": []},
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.FOLDER,
             approval=ToolApproval.NEVER,
         )
 
@@ -480,7 +481,6 @@ class ResolveFolderTool:
             name=RESOLVE_FOLDER_TOOL_NAME,
             description=(
                 "按路径解析已有文件夹为 id。嵌套同名须传完整路径。"
-                "HOW→consult(team_cross_folder)。"
             ),
             parameters={
                 "type": "object",
@@ -498,7 +498,7 @@ class ResolveFolderTool:
                 },
                 "required": ["path"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.FOLDER,
             approval=ToolApproval.NEVER,
         )
 
@@ -625,6 +625,8 @@ class CreateFolderTool:
         surface=ToolSurface.CEO_ORCHESTRATION,
         audience=AUDIENCE_CEO_ONLY,
         ceo_wire=CeoWire.ALWAYS,
+        resident=False,
+        catalog_summary="新建云文件夹",
     )
 
     @property
@@ -634,7 +636,6 @@ class CreateFolderTool:
             description=(
                 "仅用户明确新建云文件夹或显式多线先建时用；mode=cloud 可派工容器≠mkdir。"
                 "≠open_local_project（会新会话）。"
-                "HOW→consult(team_cross_folder)。"
             ),
             parameters={
                 "type": "object",
@@ -657,7 +658,7 @@ class CreateFolderTool:
                 },
                 "required": ["name"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.FOLDER,
             approval=ToolApproval.NEVER,
         )
 
@@ -854,8 +855,8 @@ class DeleteFolderTool:
 
     Equivalent to ``DELETE /v1/folders/{folder_id}`` (软删；嵌套子文件夹跟着走). Three
     shapes are deliberately absent: 按名 / 按路径删 (跨层同名合法 ⇒ 必然误删), 批量删
-    (one card must never authorise N deletions), and 彻底删 (``/permanent`` stays a
-    user-only desktop dialog). ``GRANTABLE`` + 恒确认 (``runtime.always_confirm``) so no
+    (one card must never authorise N deletions), and 彻底删 (``/permanent`` and
+    trash purge stay user-only). ``GRANTABLE`` + 恒确认 (``runtime.always_confirm``) so no
     turn / kickoff / session grant can swallow the card — several deletions in one
     round each prompt.
     """
@@ -864,6 +865,8 @@ class DeleteFolderTool:
         surface=ToolSurface.CEO_ORCHESTRATION,
         audience=AUDIENCE_CEO_ONLY,
         ceo_wire=CeoWire.ALWAYS,
+        resident=False,
+        catalog_summary="软删文件夹",
     )
 
     @property
@@ -873,7 +876,6 @@ class DeleteFolderTool:
             description=(
                 "只按 folder_id 软删一个已有云文件夹（连子文件夹一起；不动本机目录）。"
                 "一次一个。彻底删除做不到。"
-                "HOW→consult(team_cross_folder)。"
             ),
             parameters={
                 "type": "object",
@@ -888,7 +890,7 @@ class DeleteFolderTool:
                 },
                 "required": ["folder_id"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.FOLDER,
             approval=ToolApproval.GRANTABLE,
         )
 

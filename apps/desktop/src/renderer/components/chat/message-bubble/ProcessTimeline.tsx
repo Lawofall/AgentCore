@@ -8,7 +8,6 @@ import {
 } from "@/components/chat/ToolLine";
 import { teamGraphVisible } from "@/components/chat/debatePreviewPlacement";
 import { absorbHandoffBriefContent } from "@/components/chat/handoffBrief";
-import { ProcessTimelineScrollContext } from "@/components/chat/message-bubble/processTimelineScroll";
 import { executionGraphCapabilities } from "@/components/graph/planCapabilities";
 import {
   type TimelineNode,
@@ -29,28 +28,12 @@ import type {
   RunDebrief,
   TurnEvidenceLedgerEntry,
 } from "@/types/events";
-import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { Fragment, memo, useContext } from "react";
+import { Fragment, memo } from "react";
 import { ThinkingDots, ThinkingHeader } from "./Thinking";
 
 /** Thought 折叠覆盖面：推理/工具/非末段正文 + 弱式决策痕迹（批准/委派授权/推进卡）
  * + 已答复 ask / 已结算开工复核。末段正文、待拍板、协作图、插话仍外置可见。 */
-
-function estimateTimelineNodeSize(node: TimelineNode | undefined): number {
-  if (!node) return 36;
-  switch (node.kind) {
-    case "content":
-      return 72;
-    case "reasoning":
-      return 36;
-    case "tool":
-    case "tool-group":
-      return 32;
-    default:
-      return 40;
-  }
-}
 
 function countProcessStats(nodes: TimelineNode[]) {
   let reasoningCount = 0;
@@ -175,6 +158,109 @@ const ProcessRow = memo(function ProcessRow({
   return null;
 });
 
+export function TimelineNodeView({
+  node,
+  nodeKey,
+  live,
+  citations,
+  citationToDisplay,
+  knownLedgerIds = null,
+  evidenceLedger = null,
+  messageId,
+  journal,
+  conversationId,
+  checkpoints,
+  planReviews,
+  onOpenWorkspacePath,
+  isStreaming,
+}: {
+  node: TimelineNode;
+  nodeKey: string;
+  live: boolean;
+  citations: Citation[];
+  citationToDisplay?: ReadonlyMap<number, number>;
+  knownLedgerIds?: ReadonlySet<string> | null;
+  evidenceLedger?: readonly TurnEvidenceLedgerEntry[] | null;
+  messageId?: string;
+  journal?: ExecutionJournal;
+  conversationId: string | null;
+  checkpoints: CheckpointDisplay[];
+  planReviews: PlanReviewDisplay[];
+  onOpenWorkspacePath?: (path: string) => void;
+  isStreaming: boolean;
+}) {
+  if (node.kind === "team") {
+    return messageId ? (
+      <InlineTeamGraph
+        messageId={messageId}
+        executionId={node.execution_id}
+        journal={journal}
+      />
+    ) : null;
+  }
+  if (node.kind === "graph_append") {
+    // 旧 journal 槽位标记：思考尾仍认它；产品聊天不画回链铬条。
+    return null;
+  }
+  if (node.kind === "user_interjection") {
+    return messageId ? (
+      <InterjectionTimeline
+        messageId={messageId}
+        interjectionId={node.interjection_id}
+      />
+    ) : null;
+  }
+  if (
+    node.kind === "checkpoint" ||
+    node.kind === "plan_review" ||
+    node.kind === "escalation" ||
+    node.kind === "approval" ||
+    node.kind === "stage_card"
+  ) {
+    const card = renderTimelineInteractionCard(
+      node.kind,
+      node,
+      {
+        checkpoints,
+        planReviews,
+      },
+      {
+        messageId: messageId ?? "",
+        conversationId,
+        interactive: isStreaming,
+      },
+    );
+    if (!card) return null;
+    return <div>{card}</div>;
+  }
+  if (node.kind === "tool-group") {
+    return (
+      <ToolLineGroup
+        tools={node.tools}
+        isStreaming={live}
+        turnKey={messageId}
+        groupKey={nodeKey}
+        conversationId={conversationId}
+      />
+    );
+  }
+  const step: ProcessStep = node.kind === "tool" ? node.step : node;
+  return (
+    <ProcessRow
+      step={step}
+      streaming={live}
+      citations={citations}
+      citationToDisplay={citationToDisplay}
+      knownLedgerIds={knownLedgerIds}
+      evidenceLedger={evidenceLedger}
+      turnKey={messageId}
+      rowKey={nodeKey}
+      conversationId={conversationId}
+      onOpenWorkspacePath={onOpenWorkspacePath}
+    />
+  );
+}
+
 /**
  * In-stream fallback: generic Thinking… when the tail has no live node.
  * Live chrome = running/wait tool, streaming reasoning/content,
@@ -212,6 +298,56 @@ export function shouldShowThinkingTail(args: {
   return true;
 }
 
+/** Composing-tool + Thinking… tail — bubble and run-detail foot share this. */
+export function ProcessEndChrome({
+  process,
+  isStreaming,
+  composingTool,
+  messageId,
+  checkpoints,
+  planReviews,
+}: {
+  process: ProcessStep[];
+  isStreaming: boolean;
+  composingTool: { toolName: string; chars: number } | null;
+  messageId?: string;
+  checkpoints: CheckpointDisplay[];
+  planReviews: PlanReviewDisplay[];
+}) {
+  const execution = useMessageExecution(messageId ?? null);
+  const last = process[process.length - 1];
+  const graphVisibleAtTail = (() => {
+    const slotExecutionId = graphSlotExecutionId(last);
+    if (!slotExecutionId) return false;
+    if (!execution || execution.id !== slotExecutionId) return false;
+    if (!executionGraphCapabilities(execution).showsTeamGraph) return false;
+    return teamGraphVisible(execution.runs);
+  })();
+  const pendingUserGate =
+    checkpoints.some((c) => c.status === "pending") ||
+    planReviews.some((p) => p.status === "pending");
+  const showThinkingTail = shouldShowThinkingTail({
+    isStreaming,
+    composingTool: Boolean(composingTool),
+    last,
+    graphVisibleAtTail,
+    pendingUserGate,
+  });
+  return (
+    <>
+      {isStreaming && composingTool && (
+        <ComposingToolLine tool={composingTool} />
+      )}
+      {showThinkingTail && (
+        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <ThinkingDots />
+          Thinking…
+        </span>
+      )}
+    </>
+  );
+}
+
 export function ProcessTimeline({
   process,
   isStreaming,
@@ -227,7 +363,7 @@ export function ProcessTimeline({
   checkpoints,
   planReviews,
   onOpenWorkspacePath,
-  /** When false, never collapse reasoning/tool rows into a summary (run-detail panel).
+  /** When false, never collapse reasoning/tool rows into a summary.
    * Default true keeps CEO bubble chrome. */
   collapseProcessSteps = true,
   handoffDebrief = null,
@@ -250,28 +386,7 @@ export function ProcessTimeline({
   /** Harvested `run.debrief` — fills an empty successful handoff row. */
   handoffDebrief?: RunDebrief | null;
 }) {
-  const execution = useMessageExecution(messageId ?? null);
-  const last = process[process.length - 1];
   const hasContentStep = process.some((s) => s.kind === "content");
-  const graphVisibleAtTail = (() => {
-    const slotExecutionId = graphSlotExecutionId(last);
-    if (!slotExecutionId) return false;
-    if (!execution || execution.id !== slotExecutionId) return false;
-    if (!executionGraphCapabilities(execution).showsTeamGraph) return false;
-    return teamGraphVisible(execution.runs);
-  })();
-  const pendingUserGate =
-    checkpoints.some((c) => c.status === "pending") ||
-    planReviews.some((p) => p.status === "pending");
-  // wait 结束后不刷 Thinking 尾迹（S4）；下一轮有真实动作再出现。wait / wait-idle
-  // reasoning 行本身仍展示（CEO 气泡与 run 详情同源 process）。
-  const showThinkingTail = shouldShowThinkingTail({
-    isStreaming,
-    composingTool: Boolean(composingTool),
-    last,
-    graphVisibleAtTail,
-    pendingUserGate,
-  });
 
   // 摘要步数与可见行同源，避免「Thought 10」展开只剩 3 行。
   // collapseProcessSteps 只控制折叠 chrome，不再 omit wait。
@@ -311,38 +426,6 @@ export function ProcessTimeline({
   const showFallbackAfter =
     !hasContentStep && Boolean(fallbackContent) && fallbackBeforeTeamIdx < 0;
 
-  const scrollParent = useContext(ProcessTimelineScrollContext);
-  const windowed =
-    scrollParent != null && !shouldCollapseProcess && nodes.length > 0;
-  const virtualizer = useVirtualizer({
-    count: windowed ? nodes.length : 0,
-    getScrollElement: () => scrollParent,
-    estimateSize: (index) => estimateTimelineNodeSize(nodes[index]),
-    overscan: 6,
-    enabled: windowed,
-    getItemKey: (index) => nodeKeys[index] ?? String(index),
-    observeElementRect: (_instance, cb) => {
-      if (!scrollParent) return;
-      const notify = () => {
-        cb({
-          width: Math.max(scrollParent.clientWidth, 1),
-          height: Math.max(scrollParent.clientHeight, 1),
-        });
-      };
-      notify();
-      if (typeof ResizeObserver === "undefined") return;
-      const ro = new ResizeObserver(notify);
-      ro.observe(scrollParent);
-      return () => ro.disconnect();
-    },
-    rangeExtractor: (range) => {
-      const base = defaultRangeExtractor(range);
-      if (!isStreaming || nodes.length === 0) return base;
-      const last = nodes.length - 1;
-      return base.includes(last) ? base : [...base, last];
-    },
-  });
-
   const renderFallback = (key: string) => (
     <div
       key={key}
@@ -361,138 +444,40 @@ export function ProcessTimeline({
     </div>
   );
 
-  const renderNode = (node: TimelineNode, i: number) => {
-    const live = isStreaming && i === nodes.length - 1;
-    const nodeKey = nodeKeys[i];
-    if (node.kind === "team") {
-      return messageId ? (
-        <InlineTeamGraph
-          key={nodeKey}
-          messageId={messageId}
-          executionId={node.execution_id}
-          journal={journal}
-        />
-      ) : null;
-    }
-    if (node.kind === "graph_append") {
-      // 旧 journal 槽位标记：思考尾仍认它；产品聊天不画回链铬条。
-      return null;
-    }
-    if (node.kind === "user_interjection") {
-      return messageId ? (
-        <InterjectionTimeline
-          key={nodeKey}
-          messageId={messageId}
-          interjectionId={node.interjection_id}
-        />
-      ) : null;
-    }
-    if (
-      node.kind === "checkpoint" ||
-      node.kind === "plan_review" ||
-      node.kind === "escalation" ||
-      node.kind === "approval" ||
-      node.kind === "stage_card"
-    ) {
-      const card = renderTimelineInteractionCard(
-        node.kind,
-        node,
-        {
-          checkpoints,
-          planReviews,
-        },
-        {
-          messageId: messageId ?? "",
-          conversationId,
-          interactive: isStreaming,
-        },
-      );
-      if (!card) return null;
-      return <div key={nodeKey}>{card}</div>;
-    }
-    if (node.kind === "tool-group") {
-      return (
-        <ToolLineGroup
-          key={nodeKey}
-          tools={node.tools}
-          isStreaming={live}
-          turnKey={messageId}
-          groupKey={nodeKey}
-          conversationId={conversationId}
-        />
-      );
-    }
-    const step: ProcessStep = node.kind === "tool" ? node.step : node;
-    return (
-      <ProcessRow
-        key={nodeKey}
-        step={step}
-        streaming={live}
-        citations={citations}
-        citationToDisplay={citationToDisplay}
-        knownLedgerIds={knownLedgerIds}
-        evidenceLedger={evidenceLedger}
-        turnKey={messageId}
-        rowKey={nodeKey}
-        conversationId={conversationId}
-        onOpenWorkspacePath={onOpenWorkspacePath}
-      />
-    );
-  };
+  const renderNode = (node: TimelineNode, i: number) => (
+    <TimelineNodeView
+      node={node}
+      nodeKey={nodeKeys[i] ?? String(i)}
+      live={isStreaming && i === nodes.length - 1}
+      citations={citations}
+      citationToDisplay={citationToDisplay}
+      knownLedgerIds={knownLedgerIds}
+      evidenceLedger={evidenceLedger}
+      messageId={messageId}
+      journal={journal}
+      conversationId={conversationId}
+      checkpoints={checkpoints}
+      planReviews={planReviews}
+      onOpenWorkspacePath={onOpenWorkspacePath}
+      isStreaming={isStreaming}
+    />
+  );
 
   return (
     <div className="min-w-0 max-w-full space-y-2">
-      {windowed ? (
-        <div
-          className="relative w-full"
-          style={{ height: virtualizer.getTotalSize() }}
-        >
-          {virtualizer.getVirtualItems().map((vi) => {
-            const node = nodes[vi.index];
-            if (!node) return null;
-            return (
-              <div
-                key={vi.key}
-                data-index={vi.index}
-                data-timeline-node=""
-                ref={virtualizer.measureElement}
-                className="absolute top-0 left-0 w-full pb-2"
-                style={{ transform: `translateY(${vi.start}px)` }}
-              >
-                {renderNode(node, vi.index)}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        nodes.map((node, i) => {
-          const prefix =
-            i === fallbackBeforeTeamIdx
-              ? renderFallback("fallback-before-team")
-              : null;
-          if (shouldCollapseProcess) {
-            const isFirstProcess = i === firstFoldIndex;
+      {nodes.map((node, i) => {
+        const prefix =
+          i === fallbackBeforeTeamIdx
+            ? renderFallback("fallback-before-team")
+            : null;
+        if (shouldCollapseProcess) {
+          const isFirstProcess = i === firstFoldIndex;
 
-            if (!processExpanded) {
-              if (foldMask[i]) {
-                if (!isFirstProcess) return null;
-                return (
-                  <Fragment key={`sum-${nodeKeys[i]}`}>
-                    {prefix}
-                    <button
-                      type="button"
-                      onClick={toggleProcess}
-                      className="inline-flex items-center gap-1 text-sm text-muted-foreground"
-                    >
-                      {processSummary}
-                      <ChevronRight className="size-4 shrink-0" aria-hidden />
-                    </button>
-                  </Fragment>
-                );
-              }
-            } else if (isFirstProcess) {
+          if (!processExpanded) {
+            if (foldMask[i]) {
+              if (!isFirstProcess) return null;
               return (
-                <Fragment key="process-expanded">
+                <Fragment key={`sum-${nodeKeys[i]}`}>
                   {prefix}
                   <button
                     type="button"
@@ -500,36 +485,49 @@ export function ProcessTimeline({
                     className="inline-flex items-center gap-1 text-sm text-muted-foreground"
                   >
                     {processSummary}
-                    <ChevronDown className="size-4 shrink-0" aria-hidden />
+                    <ChevronRight className="size-4 shrink-0" aria-hidden />
                   </button>
-                  {renderNode(node, i)}
                 </Fragment>
               );
             }
-          }
-          if (prefix) {
+          } else if (isFirstProcess) {
             return (
-              <Fragment key={`wrap-${nodeKeys[i]}`}>
+              <Fragment key="process-expanded">
                 {prefix}
+                <button
+                  type="button"
+                  onClick={toggleProcess}
+                  className="inline-flex items-center gap-1 text-sm text-muted-foreground"
+                >
+                  {processSummary}
+                  <ChevronDown className="size-4 shrink-0" aria-hidden />
+                </button>
                 {renderNode(node, i)}
               </Fragment>
             );
           }
-          return renderNode(node, i);
-        })
-      )}
+        }
+        if (prefix) {
+          return (
+            <Fragment key={`wrap-${nodeKeys[i]}`}>
+              {prefix}
+              {renderNode(node, i)}
+            </Fragment>
+          );
+        }
+        return <Fragment key={nodeKeys[i]}>{renderNode(node, i)}</Fragment>;
+      })}
       {/* 无 team 标记的图兜底已移除（时间线一期）：多 Agent 回合必有 `team` 标记
           （live 盖章 + reload journal 补齐），图只在标记槽渲染。 */}
       {showFallbackAfter && renderFallback("fallback-after")}
-      {isStreaming && composingTool && (
-        <ComposingToolLine tool={composingTool} />
-      )}
-      {showThinkingTail && (
-        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <ThinkingDots />
-          Thinking…
-        </span>
-      )}
+      <ProcessEndChrome
+        process={process}
+        isStreaming={isStreaming}
+        composingTool={composingTool}
+        messageId={messageId}
+        checkpoints={checkpoints}
+        planReviews={planReviews}
+      />
     </div>
   );
 }

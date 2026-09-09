@@ -14,9 +14,9 @@ alwaysApply: false
 
 | 层 | 语义 | 色 |
 |---|---|---|
-| A 用户面提示 | 横幅 / Toast / 表单失败行 | 蓝 `primary` = 需要你（去配置 / 拍板）；灰 `noticeChipNeutral` = 可恢复中断（限流 / 请稍候 / 发送失败）；红 `destructive` = 危险操作（删除 / 覆盖 / 拒绝）。停止生成（输入区主控件）走 `IconButton` `inverse`（前景实心底），不占用红 |
+| A 用户面提示 | 横幅 / Toast / 表单失败行 | 蓝 `primary` = 需要你（去配置 / 拍板）；灰 `noticeChipNeutral` = 可恢复中断（限流 / 请稍候 / 发送失败）；红 `destructive` = 危险操作（删除 / 覆盖 / 拒绝）。停止生成（输入区主控件）走 `IconButton` `inverse`（前景实心底），不占用红。**认路选中**走 accent 浅底，不走 inverse → [`UI-Pattern索引.md` · 认路选中](/docs/04-前端/UI-Pattern索引.md) |
 | B 执行态 | run / 工具 / 节点 | pending→muted、running→primary、completed→success、**failed→destructive 红点**。整卡用户提示走 A，禁因 failed 把横幅刷红 |
-| C 分类 | git 字母、风险高中低、截断、弱源、录音中、diff 删行 | 可用 `--warning` / 红当分类色，≠ 状态。**禁把 `--warning` token 改成灰** |
+| C 分类 | git 字母、风险高中低、截断、录音中、diff 删行 | 可用 `--warning` / 红当分类色，≠ 状态。**禁把 `--warning` token 改成灰** |
 
 同形发送/回合提示：有配置 action → primary，否则 `noticeChipNeutral`。加载失败 / 表单 alert / 无 action 的 Toast：行内 muted（手机 `.error` 用 `--fg`），Toast 图标 muted。需要你（额度将尽 / 冲突说明条 / 公告 critical / 去配去建）：primary；覆盖/用云端选中态仍 destructive。`StatusTone` 不恢复 warning。分类色（git 删行、风险「致命」、录音）与执行态红点不收进用户面档。
 

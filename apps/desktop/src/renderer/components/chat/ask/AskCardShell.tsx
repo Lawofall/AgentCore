@@ -1,6 +1,7 @@
 /**
- * 统一 ask 卡壳 —— decision 与清单确认（organize_plan / daily_review）共用三段结构，
- * 差异只剩「体」里的插槽。铬条 caption 一律「需要你拍板」。
+ * 统一 ask 卡壳 —— decision 与清单确认（organize_plan）共用三段结构，
+ * 差异只剩「体」里的插槽。头一行是内容标题（普通澄清=当前题干；清单=批次 message），
+ * 右侧 extra（多题编号）。可见面不画「需要你拍板」和图标；套话仅 sr-only。
  *
  * 相对旧开场仪式刻意砍掉的三处硬分区：头部不再铺 `bg-muted/10`、不再压 `border-b`（标题与
  * 首行之间靠留白分段），底栏不再 `backdrop-blur`。卡内不出现品牌色，唯一的彩色出口是底栏主 CTA。
@@ -9,27 +10,26 @@
  * 与标题左对齐，而行的 hover 灰底比文字宽出 8px（参考卡的观感）。体里**非行式**的块（小节标题、
  * 输入框）需自带 `px-2` 才能对齐。
  */
+import { ASK_INTENT_META } from "@/components/chat/decision";
 import { Button } from "@/components/ui";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import { Loader2, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 export function AskCardShell({
-  icon: Icon,
-  caption,
   title,
+  titleAddon,
   subtitle,
   extra,
   footer,
   variant,
   children,
 }: {
-  icon: LucideIcon;
-  /** intent 标识行（{@link ASK_INTENT_META} 的 activeCaption），与图标同排。 */
-  caption: string;
-  /** 可选总标题；空则不画标题节点（通用澄清卡有题时把题干放在体内）。 */
+  /** 卡头主标题；空则只留 extra / 副标题。 */
   title?: string;
-  /** 可选副标题（organize/daily_review 的本地总览等）。 */
+  /** 标题行内附注（如「可多选」）。 */
+  titleAddon?: ReactNode;
+  /** 可选副标题（organize_plan 的本地总览等）。 */
   subtitle?: string;
   /** 头部右上角插槽（通用澄清多题时挂编号跳转）。 */
   extra?: ReactNode;
@@ -38,27 +38,33 @@ export function AskCardShell({
   variant: string;
   children: ReactNode;
 }) {
+  const titleText = title?.trim() ?? "";
+  const hasTitleRow = Boolean(titleText || titleAddon || extra);
+
   return (
     <div
       data-ask-card={variant}
       className="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
-      {/* 图标只在 caption 行，标题因此与体内文字同起于 16px（头 px-4 = 体 px-2 + 行 px-2）。 */}
       <div className="shrink-0 px-4 pb-2 pt-3">
-        <div className="flex items-center gap-1.5">
-          <Icon size={13} className="shrink-0 text-muted-foreground" />
-          <p className="min-w-0 flex-1 text-xs font-medium text-muted-foreground">
-            {caption}
-          </p>
-          {extra}
-        </div>
-        {title ? (
-          <p className="mt-1.5 whitespace-pre-wrap text-sm font-semibold leading-snug text-foreground">
-            {title}
-          </p>
+        <p className="sr-only">{ASK_INTENT_META.decision.activeCaption}</p>
+        {hasTitleRow ? (
+          <div className="flex items-start gap-2">
+            {titleText || titleAddon ? (
+              <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm font-semibold leading-snug text-foreground">
+                {titleText}
+                {titleAddon}
+              </p>
+            ) : (
+              <div className="min-w-0 flex-1" />
+            )}
+            {extra}
+          </div>
         ) : null}
         {subtitle && (
-          <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+          <p
+            className={`whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground ${hasTitleRow ? "mt-1" : ""}`}
+          >
             {subtitle}
           </p>
         )}

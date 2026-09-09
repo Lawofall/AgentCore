@@ -1,6 +1,8 @@
 /** Fit-to-width viewport, resize observers, and zoom helpers for GraphView.
- * Host contract (Provider / fit / overflow) → `graphHost.tsx`. */
+ * RF StoreUpdater contract → `components/xyflow/host.tsx`.
+ * Collaboration embed (width/view) → `graphHost.tsx`. */
 
+import { XYFLOW_FIT_PADDING, xyflowCameraKey } from "@/components/xyflow/host";
 import { fitWidthBox } from "@/lib/elk-layout";
 import { isGraphTraceEnabled, traceGraphViewport } from "@/services/graphTrace";
 import type { ReactFlowInstance } from "@xyflow/react";
@@ -35,10 +37,7 @@ export function useGraphViewport({
   const [overflowing, setOverflowing] = useState(false);
   const viewportSettledRef = useRef(false);
 
-  const bboxKey =
-    bbox && layoutReady
-      ? `${bbox.width.toFixed(2)}x${bbox.height.toFixed(2)}`
-      : "";
+  const bboxKey = bbox && layoutReady ? xyflowCameraKey(bbox, 0) : "";
 
   useEffect(() => {
     if (!layoutReady) {
@@ -52,7 +51,7 @@ export function useGraphViewport({
   }, []);
 
   const fitView = useCallback(() => {
-    rfRef.current?.fitView({ padding: 0.2, duration: 300 });
+    rfRef.current?.fitView({ padding: XYFLOW_FIT_PADDING, duration: 300 });
   }, []);
 
   const centerNode = useCallback((id: string) => {
@@ -72,7 +71,7 @@ export function useGraphViewport({
     if (fitMode !== "view" || !rfInstance || !layoutReady || !bboxKey) return;
     const animate = viewportSettledRef.current && !prefersReducedMotion();
     rfInstance.fitView({
-      padding: 0.2,
+      padding: XYFLOW_FIT_PADDING,
       duration: animate ? 300 : 0,
     });
     viewportSettledRef.current = true;

@@ -27,6 +27,10 @@ ZERO_OUTPUT_SEND_REFUSAL_CODES: frozenset[str] = frozenset(
         ErrorCode.LLM_RATE_LIMIT,
         ErrorCode.LLM_KEY_INVALID,
         ErrorCode.LLM_INSUFFICIENT_BALANCE,
+        ErrorCode.LOCAL_DESKTOP_OFFLINE,
+        ErrorCode.LOCAL_ROOT_NOT_HELD,
+        ErrorCode.LOCAL_ORIGIN_DEVICE_OFFLINE,
+        ErrorCode.LOCAL_CHANNEL_DEAD,
     }
 )
 

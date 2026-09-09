@@ -48,7 +48,7 @@ export type ToolWireStatus = "running" | "success" | "error" | "redirect";
 /** Live `redirect` plus journal compat (`error` + redirect code). */
 export function resolveToolWireStatus(
   status: string | undefined,
-  failure?: { code?: string } | null,
+  failure?: { code?: string | null } | null,
 ): ToolWireStatus {
   if (status === "running") return "running";
   if (status === "redirect") return "redirect";
@@ -62,7 +62,7 @@ export function resolveToolWireStatus(
 /** `tool_use_end` never stays running. */
 export function resolveToolEndStatus(
   status: string | undefined,
-  failure?: { code?: string } | null,
+  failure?: { code?: string | null } | null,
 ): "success" | "error" | "redirect" {
   const wire = resolveToolWireStatus(status, failure);
   return wire === "running" ? "success" : wire;

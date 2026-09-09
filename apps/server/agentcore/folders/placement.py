@@ -25,8 +25,8 @@ from agentcore.workspace.locate import workspace_internal_root, workspace_root_p
 class FolderPlacement:
     """一个文件夹的两个坐标：稳定 id + 当前物理落点。
 
-    ``folder_id`` 回答「是哪个文件夹」——锁键、快照前缀、隐藏 zone、站立任务 / 记忆 /
-    白板 / 写权台账的外部引用都挂它，改名移动都不动。``rel_path`` 回答「它现在在哪」
+    ``folder_id`` 回答「是哪个文件夹」——锁键、快照前缀、隐藏 zone、工作流触发 / 记忆 /
+    写权台账的外部引用都挂它，改名移动都不动。``rel_path`` 回答「它现在在哪」
     ——只有它决定盘上目录，改名移动会重写它（连同整棵子树）。
 
     ``rel_path is None`` = 这个 id 没有云端目录（文件夹已被硬删，或行不存在）；调用

@@ -334,7 +334,7 @@ def _brief_user_prompt(*, background: str = "", research_dossier_index: str = ""
 
 
 def test_judge_prompt_grades_evidence_by_source_tier():
-    """裁判 evidence 记分按来源等级挂钩：司法文书/官方原文 > 权威媒体 > 自媒体/百科/转述。"""
+    """裁判 evidence 记分按来源等级挂钩：司法文书/官方原文 > 权威媒体 > 转述/百科。"""
     llm = _CaptureLLM()
     mod = Moderator(provider=llm, model="m")
     asyncio.run(mod._judge_and_summarize(_config(), "成本是否可控", _turns(), []))
@@ -342,13 +342,14 @@ def test_judge_prompt_grades_evidence_by_source_tier():
     assert "来源等级" in user
     assert "司法文书" in user and "官方原文" in user
     assert "权威媒体" in user
-    assert "自媒体" in user and "百科" in user and "转述" in user
+    assert "转述" in user and "百科" in user
     assert "封顶打低" in user
-    # 【已核实】挂弱源须在 note/penalties 点名。
-    assert "弱源" in user and ("note" in user or "penalties" in user)
-    # M2：优先读台账 tier，勿臆造等级。
+    assert "未深读" in user and ("note" in user or "penalties" in user)
     assert "优先读条目 tier" in user or "本轮引用证据台账" in user
-    assert "unknown" in user and "弱源实锤" in user
+    assert "unknown" in user and "未分级" in user
+    assert "弱源" not in user
+    assert "弱源实锤" not in user
+    assert "来源待评" not in user
 
 
 def test_assess_system_carries_source_tier():
@@ -356,8 +357,9 @@ def test_assess_system_carries_source_tier():
     assert "来源等级" in _ASSESS_SYSTEM
     assert "司法文书" in _ASSESS_SYSTEM and "官方原文" in _ASSESS_SYSTEM
     assert "权威媒体" in _ASSESS_SYSTEM
-    assert "自媒体" in _ASSESS_SYSTEM and "百科" in _ASSESS_SYSTEM
-    assert "弱源" in _ASSESS_SYSTEM
+    assert "转述" in _ASSESS_SYSTEM and "百科" in _ASSESS_SYSTEM
+    assert "深读" in _ASSESS_SYSTEM
+    assert "弱源" not in _ASSESS_SYSTEM
     assert "本轮引用证据台账" in _ASSESS_SYSTEM
     assert "勿臆造等级" in _ASSESS_SYSTEM
     # 裁判身份 + JSON 合同，不是编号庭审菜单
@@ -409,12 +411,14 @@ def test_judge_prompt_injects_ledger_tiers():
     assert f"{eid_off} · tier=official" in user
     assert f"{eid_weak} · tier=weak" in user
     assert "官方原文" in user
-    assert "弱源/自媒体" in user
+    assert "转述/百科" in user
+    assert "深读=" in user
+    assert "弱源/自媒体" not in user
     assert "勿臆造等级" in user
 
 
 def test_brief_prompt_injects_ledger_tiers():
-    """M2：简报 user prompt 携带本场台账 tier，并约束不得抹平弱源/待核实。"""
+    """M2：简报 user prompt 携带本场台账 tier / 深读，并约束不得抹平待核实。"""
     from agentcore.runtime.debate.evidence_ledger import EvidenceLedger
 
     led = EvidenceLedger()
@@ -462,18 +466,18 @@ def _assert_ceo_short_tail(out: str) -> None:
 
 
 def test_ceo_output_preserves_weak_tier_status():
-    """简报里的弱源 / tier=weak 原样出现在 CEO 折算文本；短尾不贴铁律全文。"""
+    """简报里的二手 / 未深读状态原样出现在 CEO 折算文本；短尾不贴铁律全文。"""
     result = DebateResult(
         config=_config(),
         rounds=[_last_round()],
         brief=DebateBrief(
             crux="成本可控性",
-            strongest_points={"pro": "多家媒体称成本可控【弱源·tier=weak】"},
+            strongest_points={"pro": "多家媒体称成本可控【二手来源·未深读】"},
         ),
     )
     out = result.to_ceo_output()
-    assert "弱源" in out
-    assert "tier=weak" in out
+    assert "二手来源" in out
+    assert "未深读" in out
     _assert_ceo_short_tail(out)
 
 
@@ -483,6 +487,8 @@ def test_brief_prompt_inherits_evidence_status_into_conclusion():
     assert "继承到结论" in user
     assert "需一手核实" in user
     assert "二手来源" in user  # 单一二手来源不当既定事实
+    assert "未深读" in user
+    assert "弱源" not in user
     # 要么显式降级、要么移进交接清单（factual_disputes / open_questions；别在收尾抹平）。
     assert "factual_disputes" in user and "open_questions" in user
     assert "交接清单" in user or "value_disputes" in user
@@ -600,6 +606,8 @@ def test_brief_system_carries_grounding_principle():
     """简报系统提示带上『二手/待核实的决定性事实须保留证据状态、不抹成既定事实』。"""
     assert "既定事实" in _BRIEF_SYSTEM
     assert "二手来源" in _BRIEF_SYSTEM or "待核实" in _BRIEF_SYSTEM
+    assert "弱源" not in _BRIEF_SYSTEM
+    assert "弱源实锤" not in _BRIEF_SYSTEM
 
 
 def test_ceo_output_preserves_unverified_reservations():
@@ -636,7 +644,7 @@ def test_ceo_output_requires_verbatim_verdict_conveyance():
 
 
 def test_ceo_output_bans_off_brief_quantification():
-    """短尾不贴【不引入场外量化】铁律全文（正文留在 skill）。"""
+    """短尾不贴场外量化铁律（技能也不再抄基座诚实）。"""
     result = DebateResult(
         config=_config(),
         rounds=[_last_round()],
@@ -730,8 +738,10 @@ def test_background_schema_requires_source_date_and_bans_inference_as_fact():
     body = skill.body
     assert "二审" not in body
     assert "被告表示将上诉" not in body
-    assert "来源" in body and "日期" in body
-    assert "未决" in body or "推断" in body
+    assert "纯价值观" in body
+    assert "不必传" in body
+    assert "每条带来源" not in body
+    assert "未决" not in body
 
 
 def test_background_block_prompt_bans_rewriting_pending_as_fact():

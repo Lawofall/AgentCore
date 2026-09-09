@@ -2,6 +2,7 @@ import { api } from "@/services/api";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   installSkill,
+  listInstalledSkills,
   listSkillStore,
   publishSkill,
   reportSkill,
@@ -61,6 +62,7 @@ describe("skillStore", () => {
     expect(page.items[0]?.installed).toBe(true);
     expect(page.items[0]?.version).toBe("1");
     expect(page.items[0]?.documentId).toBe("d1");
+    expect(page.items[0]?.installDocumentId).toBeNull();
     expect(page.items[0]).not.toHaveProperty("content");
   });
 
@@ -82,6 +84,28 @@ describe("skillStore", () => {
     await installSkill("l1");
     expect(apiPost).toHaveBeenCalledWith("/v1/skill-store/l1/install");
     expect(scheduleAccountRulesMemoryRefresh).toHaveBeenCalled();
+  });
+
+  it("已安装列表用 document_id 当本机副本", async () => {
+    apiGet.mockResolvedValue({
+      data: [
+        {
+          id: "l1",
+          name: "合同审查",
+          description: "审合同时用",
+          author: "官方",
+          version_n: 1,
+          installed: true,
+          has_update: false,
+          source_document_id: "src",
+          document_id: "copy-1",
+        },
+      ],
+    });
+    const rows = await listInstalledSkills();
+    expect(apiGet).toHaveBeenCalledWith("/v1/skill-store/installed");
+    expect(rows[0]?.documentId).toBe("src");
+    expect(rows[0]?.installDocumentId).toBe("copy-1");
   });
 
   it("上架与举报不走换槽路径", async () => {

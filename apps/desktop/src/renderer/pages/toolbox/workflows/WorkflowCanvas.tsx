@@ -4,6 +4,11 @@
  */
 
 import { Button } from "@/components/ui";
+import {
+  XYFLOW_FIT_PADDING,
+  XYFLOW_PRO_OPTIONS,
+  XyflowHost,
+} from "@/components/xyflow/host";
 import { cn } from "@/lib/utils";
 import {
   type WorkflowDefNode,
@@ -18,18 +23,20 @@ import {
   type Edge,
   MarkerType,
   type Node,
+  type OnInit,
   type OnSelectionChangeParams,
   ReactFlow,
-  ReactFlowProvider,
   addEdge,
   useEdgesState,
   useNodesState,
 } from "@xyflow/react";
 import { Hand, UserRound } from "lucide-react";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   defToFlow,
   flowToDef,
+  mergeFlowEdges,
+  mergeFlowNodes,
   nodeSubtitle,
   nodeTitle,
 } from "./workflowCanvasModel";
@@ -38,8 +45,7 @@ import {
   workflowNodeTypes,
 } from "./workflowNodes";
 
-const FIT_VIEW_OPTIONS = { padding: 0.2 } as const;
-const RF_PRO_OPTIONS = { hideAttribution: true } as const;
+const WORKFLOW_DELETE_KEYS = ["Backspace", "Delete"];
 
 function WorkflowCanvasInner({
   definition,
@@ -54,34 +60,42 @@ function WorkflowCanvasInner({
   onSelect: (id: string | null) => void;
   className?: string;
 }) {
-  const defMap = useMemo(() => {
-    const m = new Map<string, WorkflowDefNode>();
-    for (const n of definition.nodes) m.set(n.id, n);
-    return m;
-  }, [definition.nodes]);
+  const definitionRef = useRef(definition);
+  definitionRef.current = definition;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
 
   const initial = useMemo(() => defToFlow(definition), [definition]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  const edgesRef = useRef(edges);
+  edgesRef.current = edges;
 
   // Re-hydrate when parent definition identity changes (load / reset / inspector),
-  // preserving drag positions for nodes that still exist.
+  // preserving drag positions and RF measured size so StoreUpdater can skip.
   useEffect(() => {
     const next = defToFlow(definition);
-    setNodes((prev) => {
-      const pos = new Map(prev.map((n) => [n.id, n.position]));
-      return next.nodes.map((n) => ({
-        ...n,
-        position: pos.get(n.id) ?? n.position,
-      }));
-    });
-    setEdges(next.edges);
+    setNodes((prev) => mergeFlowNodes(prev, next.nodes));
+    setEdges((prev) => mergeFlowEdges(prev, next.edges));
   }, [definition, setEdges, setNodes]);
 
   useEffect(() => {
-    setNodes((prev) =>
-      prev.map((n) => ({ ...n, selected: n.id === selectedId })),
-    );
+    setNodes((prev) => {
+      let changed = false;
+      const out = prev.map((n) => {
+        const selected = n.id === selectedId;
+        if (Boolean(n.selected) === selected) return n;
+        changed = true;
+        return { ...n, selected };
+      });
+      return changed ? out : prev;
+    });
   }, [selectedId, setNodes]);
 
   const emit = useCallback(
@@ -90,34 +104,31 @@ function WorkflowCanvasInner({
       nextEdges: Edge[],
       map: Map<string, WorkflowDefNode>,
     ) => {
-      onChange(flowToDef(definition, nextNodes, nextEdges, map));
+      onChangeRef.current(
+        flowToDef(definitionRef.current, nextNodes, nextEdges, map),
+      );
     },
-    [definition, onChange],
+    [],
   );
 
-  const isValidConnection = useCallback(
-    (connection: Connection | Edge) => {
-      const from = connection.source;
-      const to = connection.target;
-      if (!from || !to) return false;
-      return isWorkflowConnectionAllowed(definition, from, to);
-    },
-    [definition],
-  );
+  const isValidConnection = useCallback((connection: Connection | Edge) => {
+    const from = connection.source;
+    const to = connection.target;
+    if (!from || !to) return false;
+    return isWorkflowConnectionAllowed(definitionRef.current, from, to);
+  }, []);
 
   const onConnect = useCallback(
     (connection: Connection) => {
+      const def = definitionRef.current;
       if (
         !connection.source ||
         !connection.target ||
-        !isWorkflowConnectionAllowed(
-          definition,
-          connection.source,
-          connection.target,
-        )
+        !isWorkflowConnectionAllowed(def, connection.source, connection.target)
       ) {
         return;
       }
+      const defMap = new Map(def.nodes.map((n) => [n.id, n]));
       setEdges((eds) => {
         const next = addEdge(
           {
@@ -137,15 +148,18 @@ function WorkflowCanvasInner({
         return next;
       });
     },
-    [defMap, definition, emit, setEdges, setNodes],
+    [emit, setEdges, setNodes],
   );
 
   const addNode = (kind: "agent_step" | "human_gate") => {
+    const def = definitionRef.current;
+    const defMap = new Map(def.nodes.map((n) => [n.id, n]));
     const defNode =
       kind === "human_gate" ? createHumanGateNode() : createAgentStepNode();
+    const current = nodesRef.current;
     const pos = {
-      x: 40 + nodes.length * 24,
-      y: 40 + nodes.length * 24,
+      x: 40 + current.length * 24,
+      y: 40 + current.length * 24,
     };
     const flowNode: Node<WorkflowCanvasNodeData> = {
       id: defNode.id,
@@ -159,46 +173,58 @@ function WorkflowCanvasInner({
     };
     const nextDefs = new Map(defMap);
     nextDefs.set(defNode.id, defNode);
-    const nextNodes = [...nodes, flowNode];
+    const nextNodes = [...current, flowNode];
     setNodes(nextNodes);
-    emit(nextNodes, edges, nextDefs);
+    emit(nextNodes, edgesRef.current, nextDefs);
     onSelect(defNode.id);
   };
 
   const onNodesDelete = useCallback(
     (deleted: Node[]) => {
       const ids = new Set(deleted.map((n) => n.id));
-      const nextNodes = nodes.filter((n) => !ids.has(n.id));
-      const nextEdges = edges.filter(
+      const nextNodes = nodesRef.current.filter((n) => !ids.has(n.id));
+      const nextEdges = edgesRef.current.filter(
         (e) => !ids.has(e.source) && !ids.has(e.target),
       );
       setNodes(nextNodes);
       setEdges(nextEdges);
-      const nextDefs = new Map(defMap);
+      const def = definitionRef.current;
+      const nextDefs = new Map(def.nodes.map((n) => [n.id, n]));
       for (const id of ids) nextDefs.delete(id);
       emit(nextNodes, nextEdges, nextDefs);
-      if (selectedId && ids.has(selectedId)) onSelect(null);
+      if (selectedIdRef.current && ids.has(selectedIdRef.current)) {
+        onSelectRef.current(null);
+      }
     },
-    [defMap, edges, emit, nodes, onSelect, selectedId, setEdges, setNodes],
+    [emit, setEdges, setNodes],
   );
 
   const onEdgesDelete = useCallback(
     (deleted: Edge[]) => {
       const ids = new Set(deleted.map((e) => e.id));
-      const nextEdges = edges.filter((e) => !ids.has(e.id));
+      const nextEdges = edgesRef.current.filter((e) => !ids.has(e.id));
       setEdges(nextEdges);
-      emit(nodes, nextEdges, defMap);
+      const def = definitionRef.current;
+      emit(
+        nodesRef.current,
+        nextEdges,
+        new Map(def.nodes.map((n) => [n.id, n])),
+      );
     },
-    [defMap, edges, emit, nodes, setEdges],
+    [emit, setEdges],
   );
 
   const onSelectionChange = useCallback(
     ({ nodes: sel }: OnSelectionChangeParams) => {
       const id = sel[0]?.id ?? null;
-      if (id !== selectedId) onSelect(id);
+      if (id !== selectedIdRef.current) onSelectRef.current(id);
     },
-    [onSelect, selectedId],
+    [],
   );
+
+  const onInit = useCallback<OnInit<Node<WorkflowCanvasNodeData>>>((inst) => {
+    inst.fitView({ padding: XYFLOW_FIT_PADDING, duration: 0 });
+  }, []);
 
   return (
     <div className={cn("flex h-full min-h-[420px] flex-col", className)}>
@@ -228,6 +254,7 @@ function WorkflowCanvasInner({
           nodes={nodes}
           edges={edges}
           nodeTypes={workflowNodeTypes}
+          onInit={onInit}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
@@ -235,10 +262,8 @@ function WorkflowCanvasInner({
           onNodesDelete={onNodesDelete}
           onEdgesDelete={onEdgesDelete}
           onSelectionChange={onSelectionChange}
-          fitView
-          fitViewOptions={FIT_VIEW_OPTIONS}
-          deleteKeyCode={["Backspace", "Delete"]}
-          proOptions={RF_PRO_OPTIONS}
+          deleteKeyCode={WORKFLOW_DELETE_KEYS}
+          proOptions={XYFLOW_PRO_OPTIONS}
         >
           <Background gap={16} size={1} />
         </ReactFlow>
@@ -255,8 +280,8 @@ export function WorkflowCanvas(props: {
   className?: string;
 }) {
   return (
-    <ReactFlowProvider>
+    <XyflowHost>
       <WorkflowCanvasInner {...props} />
-    </ReactFlowProvider>
+    </XyflowHost>
   );
 }

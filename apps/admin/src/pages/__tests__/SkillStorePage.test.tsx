@@ -20,6 +20,10 @@ import {
   takedownSkillStoreListing,
 } from "@/services/adminSkillStore";
 import {
+  listWorkflowStoreListings,
+  listWorkflowStoreReports,
+} from "@/services/adminWorkflowStore";
+import {
   cleanup,
   fireEvent,
   render,
@@ -39,6 +43,17 @@ vi.mock("@/services/adminSkillStore", async (importOriginal) => {
     listSkillStoreReports: vi.fn(),
     getSkillStoreListing: vi.fn(),
     takedownSkillStoreListing: vi.fn(),
+  };
+});
+vi.mock("@/services/adminWorkflowStore", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/services/adminWorkflowStore")>();
+  return {
+    ...actual,
+    listWorkflowStoreListings: vi.fn(),
+    listWorkflowStoreReports: vi.fn(),
+    getWorkflowStoreListing: vi.fn(),
+    takedownWorkflowStoreListing: vi.fn(),
   };
 });
 vi.mock("sonner", () => ({
@@ -306,5 +321,48 @@ describe("SkillStorePage", () => {
     fireEvent.click(await screen.findByRole("button", { name: /看正文/ }));
     expect(await screen.findByText("怎么审合同")).toBeTruthy();
     expect(vi.mocked(getSkillStoreListing)).toHaveBeenCalledWith("lst-1");
+  });
+
+  it("提示词 | 工作流切换在本页，不另开侧栏", async () => {
+    mockRoster(
+      [listing({ id: "lst-1", name: "合同审查" })],
+      [],
+    );
+    vi.mocked(listWorkflowStoreListings).mockResolvedValue({
+      data: [
+        {
+          id: "wf-1",
+          name: "周报流水线",
+          description: "每周写周报",
+          author: "作者甲",
+          author_user_id: "u-author",
+          version_n: 1,
+          status: "published",
+          updated_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+    });
+    vi.mocked(listWorkflowStoreReports).mockResolvedValue({
+      data: [],
+      total: 0,
+      page: 1,
+      page_size: 50,
+    });
+
+    renderStore();
+    expect(await screen.findByText("合同审查")).toBeTruthy();
+    const group = screen.getByRole("group", { name: "货架种类" });
+    expect(within(group).getByRole("button", { name: "提示词" })).toBeTruthy();
+    expect(within(group).getByRole("button", { name: "工作流" })).toBeTruthy();
+
+    fireEvent.click(within(group).getByRole("button", { name: "工作流" }));
+    expect(await screen.findByText("周报流水线")).toBeTruthy();
+    await waitFor(() =>
+      expect(vi.mocked(listWorkflowStoreListings)).toHaveBeenCalled(),
+    );
+    expect(search()).toContain("kind=workflows");
   });
 });

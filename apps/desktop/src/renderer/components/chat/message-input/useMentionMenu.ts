@@ -348,12 +348,11 @@ export function useMentionMenu({
     ) {
       out.push({
         id: "setting",
-        label: "设定",
+        label: MENTION_CATEGORY_LABEL.setting,
         items: settingItems,
         truncated:
           settingItems.length > 0 && settingItems.length < settingCount,
-        emptyHint:
-          settingItems.length === 0 ? "没有可点名的按需设定" : undefined,
+        emptyHint: settingItems.length === 0 ? "没有可点名的提示词" : undefined,
       });
     }
 
@@ -701,7 +700,7 @@ export function useMentionMenu({
           id: crypto.randomUUID(),
           key,
           name: entry.name,
-          path: "设定",
+          path: "提示词",
           text: "",
           truncated: false,
           kind: "document",

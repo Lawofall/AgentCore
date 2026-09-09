@@ -41,8 +41,13 @@ async def test_capabilities_returns_full_catalog(client):
     for name in ("web_search",):
         assert name in tools
         assert set(tools[name]["available_to"]) == {"ceo", "worker"}
-    # Each tool carries its call JSON Schema (用法教学).
+    # Each tool carries its call JSON Schema (用法教学) plus catalog face/resident/summary.
     assert tools["web_search"]["parameters"]["type"] == "object"
+    sample = tools["web_search"]
+    assert "category" not in sample
+    assert sample["face"]
+    assert isinstance(sample["resident"], bool)
+    assert "summary" in sample
 
 
 async def test_capabilities_lists_system_skills_with_body(client):
@@ -50,18 +55,28 @@ async def test_capabilities_lists_system_skills_with_body(client):
 
     body = (await client.get("/v1/capabilities")).json()
     skills = {s["name"]: s for s in body["skills"]}
-    assert "team_orchestration_advanced" in skills
+    assert "staffing" in skills
     assert "lead_subteam" in skills
     assert skills["lead_subteam"]["summary"] == "子队拆法"
-    assert "asking_the_user" in skills
+    assert skills["staffing"]["group"] == "编排"
+    assert "ask_kickoff" in skills
+    assert "ask_midtask" in skills
+    assert "page_ui" in skills
+    assert skills["page_ui"]["summary"] == "页面观感"
+    assert skills["page_ui"]["group"] == "交付"
+    assert "asking_the_user" not in skills
     assert "ask_user_kickoff" not in skills
     assert "verify_and_fix" not in skills
-    assert "long_form_landing" in skills
+    assert "long_form_landing" not in skills
     for skill in skills.values():
         assert skill["summary"]
         assert skill["body"]  # the full guidance, not just the catalog one-liner
-    # New packs[] field: additive; gate-off default ⇒ empty (desktop ignores unknown fields).
-    assert body["packs"] == []
+    # Skills are the system repertoire; domain SOPs are store SKUs, not this blueprint.
+    from agentcore.runtime.legal_skills import LEGAL_SKILLS
+
+    capability_names = {s["name"] for s in body["skills"]}
+    assert {s.name for s in LEGAL_SKILLS}.isdisjoint(capability_names)
+    assert "packs" not in body
 
 
 async def test_capabilities_exposes_prompt_template(client):

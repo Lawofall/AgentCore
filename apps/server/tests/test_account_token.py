@@ -278,6 +278,7 @@ async def test_search_uses_cloud_when_creds_bound(
     async def _fake_search(creds: AccountCredentials, *, payload: dict[str, Any]):
         assert creds.api_key == "account-jwt"
         assert payload["exclude_conversation_id"] == "host-1"
+        assert payload["include_archived"] is True
         return {
             "rows": [
                 {
@@ -400,25 +401,31 @@ async def test_read_cloud_soft_miss(monkeypatch: pytest.MonkeyPatch, account_cre
     assert "无法打开" in result.output
 
 
-async def test_read_invalid_id_is_soft_miss_without_cloud(
+async def test_read_non_uuid_locator_searches_cloud_not_read(
     monkeypatch: pytest.MonkeyPatch, account_creds
 ):
-    async def _boom(creds: AccountCredentials, *, payload: dict[str, Any]):
+    async def _fake_search(creds: AccountCredentials, *, payload: dict[str, Any]):
         del creds, payload
-        raise AssertionError("non-UUID must not call cloud")
+        return {"rows": [], "folder_miss": False}
+
+    async def _boom_read(creds: AccountCredentials, *, payload: dict[str, Any]):
+        del creds, payload
+        raise AssertionError("non-UUID locator must not call cloud read")
 
     monkeypatch.setattr(
+        "agentcore.account.credentials.cloud_search_conversations",
+        _fake_search,
+    )
+    monkeypatch.setattr(
         "agentcore.account.credentials.cloud_read_conversation",
-        _boom,
+        _boom_read,
     )
     with account_credentials_scope(account_creds):
-        for cid in ("x", "nonexistent"):
-            result = await ReadConversationTool().execute(
-                {"conversation_id": cid}, _ctx()
-            )
-            assert result.success is True
-            assert "无法打开" in result.output
-            assert result.display["conversation_id"] == cid
+        result = await ReadConversationTool().execute(
+            {"conversation_id": "旧项目"}, _ctx()
+        )
+    assert result.success is True
+    assert "未找到" in result.output
 
 
 async def test_read_cloud_failure_is_hard_fail(

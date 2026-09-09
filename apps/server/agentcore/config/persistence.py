@@ -96,15 +96,15 @@ class PersistenceSettings(BaseModel):
     # Docker stop window for a wedged LLM call.
     compaction_shutdown_seconds: float = 2.0
 
-    # Standing tasks / 定时自动化 L1: in-process DB poll of next_run_at + lease.
-    standing_task_scheduler_enabled: bool = True
-    standing_task_poll_interval_seconds: int = 30
-    standing_task_poll_batch_limit: int = 10
-    standing_task_lease_seconds: int = 30 * 60
-    # L2a webhook: per-task sliding window + optional idempotency key TTL.
-    standing_task_webhook_rate_limit_max: int = 30
-    standing_task_webhook_rate_limit_window_seconds: int = 60
-    standing_task_webhook_idempotency_ttl_seconds: int = 3600
+    # Workflow clock / webhook: in-process DB poll of trigger_next_run_at + lease.
+    workflow_trigger_scheduler_enabled: bool = True
+    workflow_trigger_poll_interval_seconds: int = 30
+    workflow_trigger_poll_batch_limit: int = 10
+    workflow_trigger_lease_seconds: int = 30 * 60
+    # Webhook: per-workflow sliding window + optional idempotency key TTL.
+    workflow_trigger_webhook_rate_limit_max: int = 30
+    workflow_trigger_webhook_rate_limit_window_seconds: int = 60
+    workflow_trigger_webhook_idempotency_ttl_seconds: int = 3600
 
     # Assembled system-prompt budget (项目审计-成本性能专项 COST-004). Observe-only today:
     # ``cost.prompt_assembled`` logs per-section chars, ``assembly_hash``, and whether the

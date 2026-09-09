@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import (
     LLMChunk,
     LLMMessage,
@@ -50,7 +50,7 @@ def _spec(
     budget: int | None = None,
     tools: list[str] | None = None,
 ) -> RunSpec:
-    deliverable = Deliverable(form=form) if form else None  # type: ignore[arg-type]
+    deliverable = Deliverable(artifacts=["out.md"]) if form else None
     return RunSpec(
         run_id="n1",
         task="t",
@@ -210,7 +210,7 @@ class _SearchStub:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:

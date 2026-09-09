@@ -62,10 +62,10 @@ def test_is_hard_failure_never_fails_the_node():
 
 def test_is_hard_failure_files_form_zero_disk_is_soft():
     """甲⁺：form=files ∧ files_touched==0 不再硬失败（有正文即可 soft-complete）。"""
-    d = Deliverable(form="files", strict=False)
+    d = Deliverable( strict=False)
     assert _is_hard_failure("有正文但未落盘", d, files_touched=0) is False
     assert _is_hard_failure("有正文且已落盘", d, files_touched=1) is False
-    assert _is_hard_failure("有正文但未落盘", Deliverable(form="files", strict=True), files_touched=0) is False
+    assert _is_hard_failure("有正文但未落盘", Deliverable( strict=True), files_touched=0) is False
 
 
 def test_hard_gap_blocks_completion_never_fails_empty_or_unlanded():
@@ -80,7 +80,7 @@ def test_hard_gap_blocks_completion_never_fails_empty_or_unlanded():
         _hard_gap_blocks_completion(
             gaps,
             {"summary": "薄", "degraded": True},
-            Deliverable(strict=True, form="files"),
+            Deliverable(strict=True),
             files_touched=0,
         )
         is None
@@ -99,6 +99,6 @@ def test_hard_gap_blocks_completion_soft_warning_alone_ok():
     """Anti-slop soft warnings alone must not trip hard-gap fail."""
     gaps = [{"description": "anti-slop：渐变过多"}]
     assert (
-        _hard_gap_blocks_completion(gaps, None, Deliverable(strict=True, form="files"))
+        _hard_gap_blocks_completion(gaps, None, Deliverable(strict=True))
         is None
     )

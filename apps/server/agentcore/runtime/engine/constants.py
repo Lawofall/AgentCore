@@ -1,6 +1,6 @@
 """Shared constants for the ReAct engine."""
 
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 
 MAX_PARALLEL_TOOLS = 5
 
@@ -40,7 +40,7 @@ FINALIZE_INSTRUCTION_FILES = (
 FINALIZE_COORDINATION_TOOLS = frozenset({"delegate", "consult", "ask_user"})
 
 # Persist tools kept on finalize when the worker's tool surface still offers
-# file_write (form=files / artifacts / wind_down) — mirrors wind_down intent.
+# file_write (pinned landing / artifacts / wind_down) — mirrors wind_down intent.
 FINALIZE_PERSIST_TOOLS = frozenset({"file_write", "handoff"})
 
 # Investigation + execution tools blocked during finalize (by name, explicit list).
@@ -58,9 +58,10 @@ FINALIZE_FORBIDDEN_TOOLS = frozenset(
     }
 )
 
-# Tool categories whose calls are NOT bounded by the engine timeout backstop (B1):
+# Tool faces whose calls are NOT bounded by the engine timeout backstop (B1):
 # they legitimately block for minutes on a sub-run or the user, and are bounded by
 # their own lifecycle instead — delegate/revise drive sub-DAGs (each constituent
 # tool call is itself bounded), ask_user waits on the user behind its own checkpoint
 # timeout. A flat ceiling here would wrongly kill a legitimate long wait.
-TIMEOUT_EXEMPT_CATEGORIES = frozenset({ToolCategory.ORCHESTRATION, ToolCategory.INTERACTION})
+# FOLDER / BOARD are display groups, not this exemption.
+TIMEOUT_EXEMPT_FACES = frozenset({ToolFace.ORCHESTRATION})

@@ -191,6 +191,7 @@ async def test_catalog_discovery_failed_keeps_vendor_presets(monkeypatch):
     cat = await resolve_model_catalog(None, "u1")
     byok_ids = {m.id for m in cat.models if m.origin == "byok" and m.provider_id == "prov-ds"}
     assert "deepseek-v4-flash" in byok_ids
+    assert "deepseek-v4.1-flash-expires-on-0910" in byok_ids
     assert "deepseek-v4-pro" in byok_ids
     assert len(byok_ids) >= 2
 
@@ -218,6 +219,7 @@ async def test_catalog_discovery_unions_with_vendor_presets(monkeypatch):
     byok_ids = {m.id for m in cat.models if m.origin == "byok" and m.provider_id == "prov-ds"}
     assert "deepseek-v4-flash" in byok_ids
     assert "deepseek-v4-pro" in byok_ids  # from preset, not discovery
+    assert "deepseek-v4.1-flash-expires-on-0910" in byok_ids
     assert "endpoint-only-model" in byok_ids
 
 

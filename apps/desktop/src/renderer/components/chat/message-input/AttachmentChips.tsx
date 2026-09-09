@@ -94,7 +94,7 @@ export function AttachmentChips({
                   : a.kind === "conversation"
                     ? "引用对话"
                     : a.kind === "document"
-                      ? "本句点名设定"
+                      ? "本句点名提示词"
                       : a.path
               }
             >

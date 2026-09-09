@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.builtin.long_running import long_running_command_match
 from agentcore.tools.builtin.package_install import (
     command_payload_argvs,
@@ -183,7 +183,7 @@ class RunTool:
                     },
                 },
             },
-            category=ToolCategory.EXECUTION,
+            face=ToolFace.EXECUTION,
             approval=ToolApproval.GRANTABLE,
             timeout_seconds=None,
         )

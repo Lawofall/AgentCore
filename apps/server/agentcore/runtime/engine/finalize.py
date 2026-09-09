@@ -103,7 +103,7 @@ async def run_finalize_round(
     prior_deliverable: str = "",
     outstanding_tool_failures: list | None = None,
     files_expected: bool = False,
-    form_prose: bool = False,
+    expects_landing: bool = False,
     ceiling_reason: str = "",
     workspace_channel_dead: bool = False,
 ) -> FinalizeRoundResult:
@@ -112,7 +112,7 @@ async def run_finalize_round(
         tools,
         allowed_tool_names,
         files_expected=files_expected,
-        form_prose=form_prose,
+        expects_landing=expects_landing,
         workspace_channel_dead=workspace_channel_dead,
     )
     if inject_instruction:
@@ -139,7 +139,7 @@ async def run_finalize_round(
             allowed_tool_names,
             disabled_tools,
             files_expected=files_expected,
-            form_prose=form_prose,
+            expects_landing=expects_landing,
             workspace_channel_dead=workspace_channel_dead,
         )
         tool_choice = "auto" if tool_defs else "none"
@@ -240,7 +240,7 @@ async def force_finalize(
     on_reset: Callable[[str], None] | None = None,
     outstanding_tool_failures: list | None = None,
     files_expected: bool = False,
-    form_prose: bool = False,
+    expects_landing: bool = False,
     workspace_channel_dead: bool = False,
 ) -> tuple[str, str, TokenUsage, int, FinalizeRoundResult | None]:
     """Attempt a coordination-tool finalize round, then fall back to tool-free.
@@ -300,7 +300,7 @@ async def force_finalize(
             prior_deliverable=final_content,
             outstanding_tool_failures=outstanding_tool_failures,
             files_expected=files_expected,
-            form_prose=form_prose,
+            expects_landing=expects_landing,
             ceiling_reason=reason,
             workspace_channel_dead=workspace_channel_dead,
         )
@@ -339,7 +339,7 @@ async def force_finalize(
             inject_instruction=False,
             on_reset=on_reset,
             files_expected=files_expected,
-            form_prose=form_prose,
+            expects_landing=expects_landing,
             ceiling_reason=reason,
             workspace_channel_dead=workspace_channel_dead,
         )

@@ -1,11 +1,8 @@
 // @vitest-environment jsdom
 /**
- * FailureStrip error detail (91eb)：execution=failed 但无 failedRun 时，
- * 回退会话级 error（与底栏 RetryBanner 同源），禁止仍写「未获取到具体错误信息。」
- *
- * 有 failedRun 时改按 failureKind 出人话——`run.error` 是模型面（基础设施路径上就是
- * `str(exception)`，契约路径上是「缺少必备章节：…」这类引擎词），照抄给用户会让他以为是自己
- * 少放了材料。
+ * FailureStrip is the same thin scoreboard as completed (失败 + n/m).
+ * Task brief / curated failure sentence / engine jargon stay off the strip —
+ * they live on the node face and dock. No expand/collapse residual.
  */
 import { failureDetailSentence } from "@/components/graph/agentNode/shared";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,7 +14,7 @@ import {
   projectExecution,
 } from "@/stores/execution";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StatusStrip } from "../StatusStrip";
 
@@ -140,8 +137,32 @@ afterEach(() => {
   cleanup();
 });
 
-describe("StatusStrip · FailureStrip error detail", () => {
-  it("no failedRun.error + session interrupt → show session copy, not 未获取到", () => {
+describe("StatusStrip · FailureStrip scoreboard", () => {
+  it("failed run → 失败 + n/m, not the task brief or curated sentence", () => {
+    sessionError = INTERRUPT_COPY;
+    const exec = projectExecution(plan, failedWithErrorFrames, "failed");
+    const failed = exec.runs.find((r) => r.status === "failed");
+    expect(failed?.error).toBe("工具超时：web_search");
+
+    renderStrip(exec);
+
+    expect(screen.getByTestId("status-strip-failed")).toBeTruthy();
+    expect(screen.getByText("失败")).toBeTruthy();
+    expect(
+      screen.getByText(`${exec.progress.completed}/${exec.progress.total}`),
+    ).toBeTruthy();
+    expect(screen.queryByText("工具超时：web_search")).toBeNull();
+    expect(screen.queryByText("CEO 汇总")).toBeNull();
+    expect(screen.queryByText(failureDetailSentence(null, null))).toBeNull();
+    expect(screen.queryByText(INTERRUPT_COPY)).toBeNull();
+    expect(screen.queryByText("未获取到具体错误信息。")).toBeNull();
+    expect(
+      screen.queryByTestId("status-strip-failed-detail-toggle"),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "复制排查包" })).toBeNull();
+  });
+
+  it("session interrupt copy and empty fallback stay off the strip", () => {
     sessionError = INTERRUPT_COPY;
     const exec = projectExecution(plan, completedOnlyFrames, "failed");
     expect(exec.status).toBe("failed");
@@ -150,27 +171,13 @@ describe("StatusStrip · FailureStrip error detail", () => {
     renderStrip(exec);
 
     expect(screen.getByTestId("status-strip-failed")).toBeTruthy();
-    expect(screen.getByText(INTERRUPT_COPY)).toBeTruthy();
-    expect(screen.queryByText("未获取到具体错误信息。")).toBeNull();
-    expect(screen.getByRole("button", { name: "复制排查包" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "复制排查包" })).toBeTruthy();
-  });
-
-  it("failed run → curated sentence, never the raw run.error", () => {
-    sessionError = INTERRUPT_COPY;
-    const exec = projectExecution(plan, failedWithErrorFrames, "failed");
-    const failed = exec.runs.find((r) => r.status === "failed");
-    expect(failed?.error).toBe("工具超时：web_search");
-
-    renderStrip(exec);
-
-    expect(screen.queryByText("工具超时：web_search")).toBeNull();
-    expect(screen.getByText(failureDetailSentence(null, null))).toBeTruthy();
+    expect(screen.getByText("失败")).toBeTruthy();
     expect(screen.queryByText(INTERRUPT_COPY)).toBeNull();
     expect(screen.queryByText("未获取到具体错误信息。")).toBeNull();
+    expect(screen.queryByRole("button", { name: "复制排查包" })).toBeNull();
   });
 
-  it("contract gate error never reaches the user as engine jargon", () => {
+  it("contract gate error never reaches the strip as engine jargon", () => {
     const frames: RunFrame[] = [
       {
         t: 1,
@@ -193,13 +200,12 @@ describe("StatusStrip · FailureStrip error detail", () => {
     const exec = projectExecution(plan, frames, "failed");
     const { container } = renderStrip(exec);
 
-    // The user must not read engine chapter-gate jargon / an artifact path and conclude they forgot to
-    // hand something in — that reason is ours to act on, not theirs.
+    expect(screen.getByTestId("status-strip-failed")).toBeTruthy();
     expect(container.textContent).not.toContain("缺少必备章节");
     expect(container.textContent).not.toContain(".audit.json");
     expect(
-      screen.getByText(failureDetailSentence("format", null)),
-    ).toBeTruthy();
+      screen.queryByText(failureDetailSentence("format", null)),
+    ).toBeNull();
   });
 
   it("files already saved before the failure paint 部分完成, not 失败", () => {
@@ -230,19 +236,10 @@ describe("StatusStrip · FailureStrip error detail", () => {
     expect(screen.getByTestId("status-strip-partial")).toBeTruthy();
     expect(screen.getByText("部分完成")).toBeTruthy();
     expect(screen.queryByTestId("status-strip-failed")).toBeNull();
-    expect(screen.getByRole("button", { name: "复制排查包" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "复制排查包" })).toBeNull();
   });
 
-  it("no run error and no session error → keep 未获取到 fallback", () => {
-    sessionError = null;
-    const exec = projectExecution(plan, completedOnlyFrames, "failed");
-
-    renderStrip(exec);
-
-    expect(screen.getByText("未获取到具体错误信息。")).toBeTruthy();
-  });
-
-  it("long failed task brief defaults to clamped toggle (does not dump full brief)", async () => {
+  it("long failed task brief is not dumped onto the strip", () => {
     const longTask = `${"对范围【AgentCore AI 功能全链审计】做只读代码审计。".repeat(8)}报告写到 AgentCore/文档/reviews/code-audit-1-server_conversation.md`;
     const longPlan: ExecutionPlan = {
       ...plan,
@@ -275,19 +272,14 @@ describe("StatusStrip · FailureStrip error detail", () => {
       },
     ];
     const exec = projectExecution(longPlan, frames, "failed");
-    renderStrip(exec);
+    const { container } = renderStrip(exec);
 
-    const toggle = screen.getByTestId("status-strip-failed-detail-toggle");
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    // Collapsed: clamp classes present; full brief not forced open.
-    const taskLine = toggle.querySelector("p");
-    expect(taskLine?.className).toContain("line-clamp-2");
-    expect(taskLine?.className).not.toContain("whitespace-pre-wrap");
-
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(toggle.querySelector("p")?.className).toContain(
-      "whitespace-pre-wrap",
-    );
+    expect(screen.getByTestId("status-strip-failed")).toBeTruthy();
+    expect(screen.getByText("失败")).toBeTruthy();
+    expect(container.textContent).not.toContain("只读代码审计");
+    expect(container.textContent).not.toContain("代码审计员");
+    expect(
+      screen.queryByTestId("status-strip-failed-detail-toggle"),
+    ).toBeNull();
   });
 });

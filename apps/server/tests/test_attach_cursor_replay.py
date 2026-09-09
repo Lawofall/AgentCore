@@ -1059,7 +1059,7 @@ _CEO_LEAD_IN_JOURNAL = [
         2,
         call_id="c1",
         name="consult",
-        arguments={"name": "team_orchestration_advanced"},
+        arguments={"name": "staffing"},
     ),
     {
         "seq": 5,

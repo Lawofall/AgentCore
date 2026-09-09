@@ -1,5 +1,6 @@
 import {
   type AskUserContent,
+  collapsedAskGlance,
   composeAnswer,
   displayAskReply,
   hasExplicitAskReply,
@@ -160,6 +161,50 @@ describe("displayAskReply", () => {
     expect(displayAskReply("工作区：继续用云端 · 补充：再加一句")).toBe(
       "工作区：继续用云端 · 补充：再加一句",
     );
+  });
+});
+
+describe("collapsedAskGlance", () => {
+  it("prefers selected labels over the compose dump", () => {
+    expect(
+      collapsedAskGlance({
+        selected: ["接案前评估", "先小范围"],
+        note: "本次是哪种作业？：接案前评估\n案情材料：请把争议各方…",
+        prompts: ["本次是哪种作业？", "案情材料"],
+      }),
+    ).toBe("接案前评估 · 先小范围");
+  });
+
+  it("strips 题干： from note when there are no selected", () => {
+    expect(
+      collapsedAskGlance({
+        selected: [],
+        note: "本次是哪种作业？：接案前评估\n案情材料：各方诉求写在这里",
+        prompts: ["本次是哪种作业？", "案情材料"],
+      }),
+    ).toBe("接案前评估 · 各方诉求写在这里");
+  });
+
+  it("keeps bare free text; drops empty RHS headings in legacy dumps", () => {
+    expect(
+      collapsedAskGlance({
+        selected: [],
+        note: "就按这个方案开做：\n· 定位？：综述型\n· 读者？：公开发表",
+      }),
+    ).toBe("综述型 · 公开发表");
+    expect(
+      collapsedAskGlance({
+        selected: [],
+        note: "就按这个方案开做：\n· 定位？：综述型\n· 读者？：公开发表",
+        prompts: ["定位？", "读者？"],
+      }),
+    ).toBe("综述型 · 公开发表");
+    expect(
+      collapsedAskGlance({
+        selected: [],
+        note: "先按这个做",
+      }),
+    ).toBe("先按这个做");
   });
 });
 

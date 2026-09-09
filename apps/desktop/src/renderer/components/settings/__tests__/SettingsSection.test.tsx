@@ -55,6 +55,17 @@ describe("SettingsSection", () => {
     const { container } = render(<SettingsSection title="法律与合规" />);
     expect(container.querySelectorAll("section > div")).toHaveLength(1);
   });
+
+  it("keeps the action when the page header already names the block", () => {
+    render(
+      <SettingsSection action={<button type="button">新建</button>}>
+        列表
+      </SettingsSection>,
+    );
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(screen.getByRole("button", { name: "新建" })).toBeTruthy();
+    expect(screen.getByText("列表")).toBeTruthy();
+  });
 });
 
 describe("SettingsStack", () => {

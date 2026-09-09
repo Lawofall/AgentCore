@@ -35,7 +35,7 @@ class StuckInterventionMixin:
     _convergence_finalize_rounds: int
     _convergence_spin_rounds: int
     _same_target_investigation_streak: int
-    _form_prose: bool
+    _expects_landing: bool
     _landing_succeeded: bool
     _delivery_idle_nudge_rounds: int
     _delivery_idle_narrow_rounds: int
@@ -119,9 +119,9 @@ class StuckInterventionMixin:
         return self._investigation_rounds
 
     @property
-    def form_prose(self) -> bool:
-        """True when deliverable.form=prose (reflection must not urge write tools)."""
-        return self._form_prose
+    def expects_landing(self) -> bool:
+        """True when this run expects on-disk landing (do not urge writes otherwise)."""
+        return self._expects_landing
 
     @property
     def landing_succeeded(self) -> bool:

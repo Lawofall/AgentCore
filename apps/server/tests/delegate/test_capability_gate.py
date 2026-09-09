@@ -17,7 +17,7 @@ class _CloudBackend:
 
 def _plan(task: str = "写文件", *, artifacts: list[str] | None = None) -> RunPlan:
     deliverable = (
-        Deliverable(form="files", artifacts=list(artifacts)) if artifacts else None
+        Deliverable(artifacts=list(artifacts)) if artifacts else None
     )
     return RunPlan(
         nodes=[RunSpec(run_id="a", role="dev", task=task, deliverable=deliverable)]

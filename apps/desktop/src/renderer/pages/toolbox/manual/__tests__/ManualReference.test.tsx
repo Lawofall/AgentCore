@@ -59,13 +59,13 @@ describe("ManualReference", () => {
     expect(screen.queryByText(/推送远端请你在本地终端手动完成/)).toBeNull();
   });
 
-  it("renders feedback FAQ and privacy context", () => {
+  it("points product feedback to the beta group and official site", () => {
     renderReference();
     expect(screen.getByText("怎么给产品提意见？")).toBeTruthy();
-    expect(
-      screen.getAllByText(/不含文件夹里的文件内容/).length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByText("反馈附带的上下文")).toBeTruthy();
+    expect(screen.getByText(/消息页内测群/)).toBeTruthy();
+    expect(screen.getByText(/fashitianxia\.xyz/)).toBeTruthy();
+    expect(screen.queryByText("设置 · 反馈")).toBeNull();
+    expect(screen.queryByText("反馈附带的上下文")).toBeNull();
   });
 
   it("exposes preview markers for section deep links", () => {
@@ -82,7 +82,7 @@ describe("ManualReference", () => {
     renderReference();
     expect(screen.getByText(/MCP（本机连接器）/)).toBeTruthy();
     expect(screen.getByText(/A2A（规划中）/)).toBeTruthy();
-    expect(screen.getByText(/其他创作工具（即将上线）/)).toBeTruthy();
+    expect(screen.getByText(/其他创作工具（尚未开放）/)).toBeTruthy();
     expect(screen.getByText(/白板（画布可用）/)).toBeTruthy();
     expect(screen.getByText("用的什么模型？")).toBeTruthy();
     expect(screen.getByText(/平台代付，开箱即可对话/)).toBeTruthy();
@@ -104,16 +104,18 @@ describe("ManualReference", () => {
 
   it("renders settings rows including memory", () => {
     renderReference();
-    expect(screen.getByText("全局设定")).toBeTruthy();
+    expect(screen.getByText("提示词")).toBeTruthy();
+    expect(screen.queryByText("全局设定")).toBeNull();
     expect(screen.queryByText("设置 · 自主度")).toBeNull();
   });
 
-  it("answers how workflows and automations relate", () => {
+  it("answers how to schedule a workflow", () => {
     renderReference();
-    expect(screen.getByText("工作流和自动化有什么区别？")).toBeTruthy();
+    expect(screen.getByText("工作流怎么定时跑？")).toBeTruthy();
     expect(screen.getByText("电脑关着，定时任务还会跑吗？")).toBeTruthy();
-    expect(screen.getByText(/去工具箱新建或套官方模板/)).toBeTruthy();
-    expect(screen.getAllByText(/自动化 · 收件箱/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/去工具箱新建或套官方模板/)).toBeNull();
+    expect(screen.queryByText(/自动化 · 收件箱/)).toBeNull();
+    expect(screen.queryByText("工作流和自动化有什么区别？")).toBeNull();
   });
 
   it("renders glossary terms aligned with product glossary", () => {
@@ -129,7 +131,7 @@ describe("ManualReference", () => {
     expect(screen.getAllByText("白板").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("自主度").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("工作流").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("系统任务")).toBeTruthy();
-    expect(screen.getAllByText("收件箱").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("系统任务")).toBeNull();
+    expect(screen.queryByText("收件箱")).toBeNull();
   });
 });

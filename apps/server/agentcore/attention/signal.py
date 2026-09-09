@@ -11,9 +11,9 @@ up, a card came down — and two transports:
 
 - **firehose** (``/v1/realtime``): a thin ``ai_attention`` event to every live
   connection of that user. It carries only *which* conversation needs them plus a
-  ≤120-char headline; the card body is re-pulled over REST. Sending the payload
-  here would make an account-wide notify channel carry conversation content
-  (设计 §2.2「只送信号不送内容」).
+  kind 短句 (never the card's question / tool name); the card body is re-pulled
+  over REST. Sending the payload here would make an account-wide notify channel
+  carry conversation content (设计 §2.2「只送信号不送内容」).
 - **fulfill** (``GET /v1/fulfill``): the same incremental ``ai_attention`` plus a
   connect-time ``ai_attention_snapshot`` replace. Realtime may still carry the
   incremental during the transition; clients replace only from the fulfill
@@ -49,9 +49,8 @@ logger = get_logger(__name__)
 # (消息IM.md §四「新事件类型无需新通道」).
 ATTENTION_EVENT_TYPE = "ai_attention"
 
-# Headline budget. Long enough for a real question, short enough to stay a
-# notification rather than a copy of the card.
-TITLE_MAX_CHARS = 120
+# Hard cap on the kind 短句. Not a budget for pasting the card question.
+TITLE_MAX_CHARS = 40
 
 # ``attention.signalled.push_outcome`` — why the phone did or did not buzz. The
 # ``pushed`` boolean alone cannot separate the three ways a push does not happen, and
@@ -85,8 +84,8 @@ if frozenset(k.value for k in AttentionKind) != ATTENTION_KINDS:
     )
 
 
-# Per-kind headline used when the card carries no question of its own. Also the
-# push notification's title line (the computed headline becomes its body).
+# OS / FCM title, and the firehose ``title`` field. In-app toast maps kind
+# separately (no "AI" prefix — the user is already in the product).
 _KIND_HEADLINE: Mapping[AttentionKind, str] = {
     AttentionKind.APPROVAL: "AI 需要你的授权",
     AttentionKind.ESCALATION: "AI 需要你的决定",
@@ -94,7 +93,7 @@ _KIND_HEADLINE: Mapping[AttentionKind, str] = {
     AttentionKind.PLAN_REVIEW: "AI 计划待你确认",
 }
 
-_PUSH_FALLBACK_BODY = "AI 已停下来等你处理。"
+PUSH_FALLBACK_BODY = "AI 已停下来等你处理。"
 
 
 def attention_kind_of(raw: str) -> AttentionKind | None:
@@ -113,21 +112,18 @@ def attention_kind_of(raw: str) -> AttentionKind | None:
         return None
 
 
-def attention_title(kind: AttentionKind, payload: Mapping[str, Any] | None = None) -> str:
-    """A ≤120-char headline for the badge / notification line.
+def attention_title(kind: AttentionKind) -> str:
+    """Kind 短句 for the firehose ``title`` / OS notification line.
 
-    Prefers what the card actually asks (the escalation / ask_user question, the
-    approval's tool name) and falls back to the kind's generic line. Never the
-    card body — that is re-pulled over REST.
+    Never the card's question, options, or tool name — those stay on the card
+    and are re-pulled over REST (设计 §2.2「只送信号不送内容」).
     """
-    fields = payload or {}
-    if kind is AttentionKind.APPROVAL:
-        tool_name = str(fields.get("tool_name") or "").strip()
-        title = f"需要授权：{tool_name}" if tool_name else ""
-    else:
-        title = str(fields.get("question") or "").strip()
-    title = " ".join(title.split()) or _KIND_HEADLINE[kind]
-    return title[:TITLE_MAX_CHARS]
+    return _KIND_HEADLINE[kind][:TITLE_MAX_CHARS]
+
+
+def attention_push_copy(kind: AttentionKind) -> tuple[str, str]:
+    """OS / FCM pair: kind 短句 as title, fixed body. Never card copy."""
+    return attention_title(kind), PUSH_FALLBACK_BODY
 
 
 def _mobile_firehose_online(user_id: str) -> bool:
@@ -187,7 +183,6 @@ async def _push(
     turn_id: str,
     interaction_id: str,
     kind: AttentionKind,
-    title: str,
 ) -> bool:
     """Fan a native notification out; True iff at least one device took it.
 
@@ -197,13 +192,12 @@ async def _push(
     """
     from agentcore.push import PushNotification, notify_user
 
-    headline = _KIND_HEADLINE[kind]
-    fallback = _PUSH_FALLBACK_BODY
+    headline, body = attention_push_copy(kind)
     delivered = await notify_user(
         user_id,
         PushNotification(
             title=headline,
-            body=title if title != headline else fallback,
+            body=body,
             data={
                 "conversation_id": conversation_id,
                 # ``message_id`` keeps the deep-link key the mobile client already
@@ -268,7 +262,6 @@ async def signal_attention_required(
                     turn_id=turn_id,
                     interaction_id=interaction_id,
                     kind=kind,
-                    title=title,
                 )
                 outcome = PUSH_DELIVERED if pushed else PUSH_UNDELIVERED
     except Exception as e:  # noqa: BLE001 — a signal must never break the turn
@@ -310,7 +303,7 @@ async def signal_attention_resolved(
     if not user_id:
         return
     try:
-        resolved_title = title or _KIND_HEADLINE[kind]
+        resolved_title = title or attention_title(kind)
         event = _attention_event(
             state="resolved",
             conversation_id=conversation_id,
@@ -379,7 +372,6 @@ def signal_hot_card_required(
     interaction_id: str,
     kind: AttentionKind,
     conversation_id: str,
-    payload: Mapping[str, Any] | None = None,
 ) -> None:
     """Fire-and-forget「card up」for an in-process (hot) blocking card.
 
@@ -399,7 +391,7 @@ def signal_hot_card_required(
             turn_id=scope.turn_id,
             interaction_id=interaction_id,
             kind=kind,
-            title=attention_title(kind, payload),
+            title=attention_title(kind),
             push=True,
         )
     )
@@ -410,7 +402,6 @@ def signal_hot_card_resolved(
     interaction_id: str,
     kind: AttentionKind,
     conversation_id: str,
-    payload: Mapping[str, Any] | None = None,
 ) -> None:
     """Fire-and-forget「card down」for an in-process (hot) blocking card."""
     scope = current_attention_scope.get()
@@ -423,6 +414,6 @@ def signal_hot_card_resolved(
             turn_id=scope.turn_id,
             interaction_id=interaction_id,
             kind=kind,
-            title=attention_title(kind, payload),
+            title=attention_title(kind),
         )
     )

@@ -3,10 +3,10 @@
 from typing import Any, Literal
 
 from agentcore.config import settings
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.tools.protocol import ToolSchema
 
-from .constants import TIMEOUT_EXEMPT_CATEGORIES
+from .constants import TIMEOUT_EXEMPT_FACES
 
 
 def resolve_tool_timeout(
@@ -20,12 +20,12 @@ def resolve_tool_timeout(
     ``None`` ⇒ no engine backstop (the tool manages its own lifecycle). Precedence:
     ``terminal`` / ``git`` / ``host`` derive a dynamic ceiling from arguments (must outlive
     per-op deadlines + kill slack); else an explicit ``schema.timeout_seconds``
-    wins; else the tool's category decides — ORCHESTRATION / INTERACTION are
-    exempt (``None``), EXECUTION gets the higher execution ceiling (it runs code),
-    everything else the default. This is a coarse safety net layered above each
-    tool's own finer timeout, never a replacement (B1).
+    wins; else the tool's face decides — ORCHESTRATION is exempt (``None``;
+    FOLDER / BOARD are not), EXECUTION / HOST_BROWSER get the higher execution
+    ceiling, everything else the default. This is a coarse safety net layered
+    above each tool's own finer timeout, never a replacement (B1).
 
-    For FILESYSTEM / Local workspace ops this value is the **liveness budget
+    For FILE-face / Local workspace ops this value is the **liveness budget
     owner**: ``tool_exec`` binds it on a ContextVar and ``WorkspaceChannel``
     derives its transport deadline from it (minus settle slack). Capacity
     ceilings (bytes / extract) fail via ``contract_failure`` before this matters.
@@ -44,9 +44,11 @@ def resolve_tool_timeout(
         return host_tool_timeout_seconds(arguments)
     if schema.timeout_seconds is not None:
         return schema.timeout_seconds
-    if schema.category in TIMEOUT_EXEMPT_CATEGORIES:
+    # Only true orchestration primitives are exempt (delegate sub-DAG / ask_user
+    # round-trip). FOLDER / BOARD share the default — display grouping ≠ timeout.
+    if schema.face in TIMEOUT_EXEMPT_FACES:
         return None
-    if schema.category is ToolCategory.EXECUTION:
+    if schema.face in (ToolFace.EXECUTION, ToolFace.HOST_BROWSER):
         return settings.tool_execution_timeout_seconds
     return settings.tool_default_timeout_seconds
 

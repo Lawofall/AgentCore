@@ -77,7 +77,7 @@ export type StructuredErr = {
 export type TurnSupportPackHost =
   | "none"
   | "bubble"
-  | "strip"
+  | "more"
   | "composer"
   | "session";
 
@@ -184,7 +184,8 @@ export type TurnOutcome = {
   showTurnWarning: boolean;
   /**
    * 「复制排查包」host. Follows the unique verdict: empty interrupt and
-   * partial+rate-limit → composer; hard fail → bubble/strip; paused → none.
+   * partial+rate-limit → composer; hard fail without a team strip → bubble;
+   * team-strip fail / partial → bubble「更多」; paused → none.
    */
   supportPackHost: TurnSupportPackHost;
 };
@@ -615,7 +616,7 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
   if (showBubbleBanner) supportPackHost = "bubble";
   else if (showComposerHint) supportPackHost = "composer";
   else if (showStripFailure || (kind === "partial" && hasTeamStrip)) {
-    supportPackHost = "strip";
+    supportPackHost = "more";
   } else if (showSessionBanner) supportPackHost = "session";
 
   let message: string | null = null;

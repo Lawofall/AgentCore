@@ -1,5 +1,4 @@
 import { FileTree } from "@/components/files/FileTree";
-import { AgentCoreSection } from "@/components/files/fileWorkbench/AgentCoreSection";
 import { EntriesSection } from "@/components/files/fileWorkbench/EntriesSection";
 import { createAndOpenScopeEntry } from "@/components/files/fileWorkbench/createScopeEntry";
 import { queryClient } from "@/lib/queryClient";
@@ -18,7 +17,6 @@ const PROJECT_FOLDER_ID = FILES_PREVIEW_PROJECT_FOLDER_ID;
 
 function seedFilesPreviewCaches(sceneId: FilesPreviewSceneId) {
   const entries = entriesForScene(sceneId);
-  queryClient.setQueryData(["scope-entries", "global"], entries.global);
   queryClient.setQueryData(
     ["scope-entries", PROJECT_FOLDER_ID],
     entries.project,
@@ -26,7 +24,7 @@ function seedFilesPreviewCaches(sceneId: FilesPreviewSceneId) {
 }
 
 /**
- * Offline UI preview for the AgentCore flat entries rail (`#/preview/files`).
+ * Offline UI preview for the AgentCore folder entries rail (`#/preview/files`).
  * Seeds React Query caches — no backend. Deep-link: `#/preview/files?s=files-entries`.
  */
 export function FilesPreviewPage() {
@@ -86,21 +84,10 @@ export function FilesPreviewPage() {
           className="mx-auto h-full w-72 overflow-y-auto rounded-xl border border-border bg-card p-2 shadow-sm"
           data-files-rail
         >
-          <AgentCoreSection
-            scope={{ kind: "global" }}
-            memoryActivePath={null}
-            documentActivePath={selected === "files-empty" ? null : "g-rule"}
-            onOpenEntry={() => undefined}
-            onEntryDeleted={() => undefined}
-            onEntryRenamed={() => undefined}
-            onOpenUpdates={() => undefined}
-            forceOpen
-          />
-          <div className="my-3 border-t border-border" />
           <div className="px-2 pb-1 text-xs font-medium text-muted-foreground">
             示例文件夹
           </div>
-          {/* 与生产同一挂法：全局设定钉顶；文件夹条目进树的 ``.agentcore`` 抽屉。 */}
+          {/* 与生产同一挂法：左栏只有文件夹树；条目进 ``.agentcore``。账号提示词在工具箱。 */}
           <FileTree
             source={filesPreviewSource}
             chrome={false}

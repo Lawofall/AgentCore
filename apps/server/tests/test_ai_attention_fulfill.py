@@ -108,7 +108,7 @@ def test_entry_from_paused_row_maps_blocking_kind_and_skips_progress():
         "turn_id": "turn-1",
         "interaction_id": "ck-1",
         "kind": "ask_user",
-        "title": "用哪套方案？",
+        "title": "AI 需要你的回应",
     }
     assert entry_from_paused_row(_row(kind="client_tool", checkpoint_id="op-1")) is None
     assert attention_entry(conversation_id="", turn_id="t", interaction_id="i", kind="x", title="") is None
@@ -136,7 +136,7 @@ def test_merge_paused_then_registry_dedupes_by_interaction_id(monkeypatch):
     )
     merged = merge_attention_entries([_row()], user_id="u1")
     assert [e["interaction_id"] for e in merged] == ["ck-1", "hot-2"]
-    assert merged[0]["title"] == "用哪套方案？"
+    assert merged[0]["title"] == "AI 需要你的回应"
 
 
 async def test_registry_hot_cards_only_for_this_users_live_runs(monkeypatch):
@@ -179,7 +179,7 @@ async def test_registry_hot_cards_only_for_this_users_live_runs(monkeypatch):
     )
     entries = entries_from_registry_hot_cards("u1")
     assert [e["interaction_id"] for e in entries] == ["appr-mine"]
-    assert entries[0]["title"] == "需要授权：file_write"
+    assert entries[0]["title"] == "AI 需要你的授权"
     assert entries[0]["turn_id"] == "turn-mine"
 
 
@@ -296,7 +296,7 @@ async def test_seed_ids_read_paused_turns_not_recovery(monkeypatch):
             "turn_id": "turn-1",
             "interaction_id": "ck-1",
             "kind": "ask_user",
-            "title": "用哪套方案？",
+            "title": "AI 需要你的回应",
         }
     ]
 

@@ -104,8 +104,7 @@ def bind_round_budget_on_begin(
 def _files_expected(deliverable: Any) -> bool:
     """True when this run's contract expects workspace landing.
 
-    Only ``form=files`` / ``form=workspace`` / non-empty ``artifacts``.
-    Parsed omit is files. Legacy flags alone do not.
+    Non-empty ``artifacts`` or non-empty ``artifact_dir`` only.
     """
     from agentcore.runtime.runs.types import deliverable_expects_landing
 

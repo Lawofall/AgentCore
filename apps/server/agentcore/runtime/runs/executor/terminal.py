@@ -169,21 +169,23 @@ def build_terminal_run_state(
     # 成篇质量：有下游 + 相对合同未满足且无成篇 prose 落盘 → 失败（与 handoff 同口径）。
     # 认 tool_ctx.landed_artifact_kinds（跨 replace 存活）；勿用 has_landed_files /
     # 泛 files_touched（骨架落盘会误豁免）。地板固定非空（不跟合同字数字段）。
-    # 非 prose：正文空但 debrief.summary 在 → 先升格再验地板。
-    # prose + 有下游：便条不算交付正文，禁止升格顶地板。
+    # 非落盘：正文空但 debrief.summary 在 → 不升格（便条不算交付正文）。
+    # 钉路径：允许升格服务其它场景。
     from agentcore.runtime.runs.research_quality import (
         brief_may_satisfy_body_floor,
         promote_brief_to_deliverable,
         upstream_body_floor_satisfied,
     )
+    from agentcore.runtime.runs.types import deliverable_expects_landing
 
     body_chars = len((content or "").strip())
     floor = 0
-    form = deliverable.form if deliverable is not None else None
     if (
         body_chars == 0
         and debrief
-        and brief_may_satisfy_body_floor(deliverable_form=form)
+        and brief_may_satisfy_body_floor(
+            expects_landing=deliverable_expects_landing(deliverable)
+        )
         and not spec.research_then_draft
     ):
         brief_summary = str((debrief or {}).get("summary") or "").strip()

@@ -5,7 +5,7 @@ Layers (see docs/03-AI核心/Agent记忆与知识系统.md; two-layer long-term 
 - episodic long-term: per-session ≤200-char digests in ``memory_episodes``
   (consolidation input only)
 - semantic long-term: 偏好/画像/主题 files, maintained by remember / explore /
-  daily review / the file page (idle session digests do not rewrite always-files)
+  the file page (idle session digests do not rewrite always-files)
 
 Plus auto conversation titles (a sidebar UX feature, not a memory layer).
 """

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
 from agentcore.runtime.engine.tool_exec import execute_tools
 from agentcore.runtime.engine.tool_protocol_sanitize import (
@@ -156,7 +156,7 @@ async def test_execute_tools_sanitizes_name_and_runs():
                 name="web_search",
                 description="stub",
                 parameters={"type": "object", "properties": {"query": {"type": "string"}}},
-                category=ToolCategory.SEARCH,
+                face=ToolFace.SEARCH,
             )
 
         async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:

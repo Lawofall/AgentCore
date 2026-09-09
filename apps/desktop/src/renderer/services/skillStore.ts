@@ -18,8 +18,10 @@ export interface SkillStoreListing {
   version: string;
   installed: boolean;
   hasUpdate: boolean;
-  /** Author source document id — used to match「我的技能」上架/下架. */
+  /** Author's source document — match 上架/下架 on「我的」. */
   documentId: string | null;
+  /** Local copy after install — match 市场徽标 on the prompt tree. */
+  installDocumentId: string | null;
   status: SkillStoreListingStatus;
 }
 
@@ -78,6 +80,7 @@ function toListing(w: ListingWire): SkillStoreListing {
     installed: Boolean(w.installed),
     hasUpdate: Boolean(w.has_update),
     documentId: w.source_document_id ?? null,
+    installDocumentId: w.document_id ?? null,
     status: asListingStatus(w.status),
   };
 }

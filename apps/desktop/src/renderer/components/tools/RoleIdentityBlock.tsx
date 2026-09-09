@@ -1,29 +1,14 @@
 import { PromptDocument } from "@/components/prompt/PromptDocument";
 import { SegmentedControl } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import { useState } from "react";
 
 type RoleId = "ceo" | "nested" | "leaf";
 
-const ROLES: readonly {
-  id: RoleId;
-  label: string;
-  caption: string;
-}[] = [
-  {
-    id: "ceo",
-    label: "主 Agent",
-    caption: "用户只跟你说话，对整段对话负责。",
-  },
-  {
-    id: "nested",
-    label: "可再委派的队员",
-    caption: "对节点交差，还可再带一层子队。",
-  },
-  {
-    id: "leaf",
-    label: "叶子队员",
-    caption: "对节点交差，不能再向下委派。",
-  },
+const ROLES: readonly { id: RoleId; label: string }[] = [
+  { id: "ceo", label: "主 Agent" },
+  { id: "nested", label: "可再委派的队员" },
+  { id: "leaf", label: "叶子队员" },
 ];
 
 /** Mutually exclusive role `<身份>` switcher — one tab at a time, never stacked. */
@@ -31,13 +16,14 @@ export function RoleIdentityBlock({
   ceoIdentity,
   nestedIdentity,
   leafIdentity,
+  className,
 }: {
   ceoIdentity: string;
   nestedIdentity: string;
   leafIdentity: string;
+  className?: string;
 }) {
   const [role, setRole] = useState<RoleId>("ceo");
-  const selected = ROLES.find((item) => item.id === role) ?? ROLES[0];
   const text =
     role === "ceo"
       ? ceoIdentity
@@ -46,11 +32,12 @@ export function RoleIdentityBlock({
         : leafIdentity;
 
   return (
-    <div>
+    <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
       <SegmentedControl
         aria-label="角色身份"
         value={role}
         onChange={setRole}
+        className="shrink-0"
         items={ROLES.map((item) => ({
           value: item.id,
           label: item.label,
@@ -58,17 +45,17 @@ export function RoleIdentityBlock({
           "aria-controls": "role-identity-panel",
         }))}
       />
-      <p className="mt-2 text-muted-foreground text-xs">{selected.caption}</p>
       <div
         id="role-identity-panel"
         role="tabpanel"
         aria-labelledby={`role-tab-${role}`}
-        className="mt-3"
+        className="mt-3 min-h-0 flex-1 overflow-auto"
       >
         {text ? (
           <PromptDocument
             text={text}
             compact={false}
+            framed={false}
             maxHeightClass="max-h-none"
           />
         ) : (

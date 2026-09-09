@@ -42,8 +42,7 @@ export function PreviewPage({
     <Page>
       <PageHeader
         title="离线复盘预览"
-        description="向量终态投影 · 与 protocol-conformance golden 同形。不回放中间帧。"
-        note="隐藏路由，不进侧栏。现有会话复盘仍走 conversation-replay/。点协作图节点可打开队员过程坞。"
+        note="不回放中间帧。隐藏路由，不进侧栏。"
         filters={
           <Select
             aria-label="场景"

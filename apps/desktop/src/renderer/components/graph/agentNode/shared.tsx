@@ -172,10 +172,7 @@ export function statusLabel(status: RunStatus): string {
 export function failureFaceLabel(
   error: string | null | undefined,
   failureKind?: import("@/types/events").RunFailureKind | null,
-  productLanded?: boolean | null,
 ): string {
-  // Files already on disk before the terminal failure — don't imply empty failure.
-  if (productLanded) return "产出已落盘";
   if (failureKind === "quality") return "未达标";
   if (failureKind === "format") return "格式未过";
   if (failureKind === "model") return "模型中断";
@@ -254,8 +251,6 @@ export function statusFaceLabel(
   phaseTool?: string | null,
   /** `run_failed.failure_kind` — preferred over error-text heuristics. */
   failureKind?: import("@/types/events").RunFailureKind | null,
-  /** `run_failed.product_landed` — files already on disk before failure. */
-  productLanded?: boolean | null,
 ): { text: string; cls: string; tickElapsed: boolean } {
   if (debateRoundPhase && status === "running") {
     return {
@@ -303,8 +298,8 @@ export function statusFaceLabel(
     }
     case "failed":
       return {
-        text: failureFaceLabel(error, failureKind, productLanded),
-        cls: productLanded ? "text-warning" : "text-destructive",
+        text: failureFaceLabel(error, failureKind),
+        cls: "text-destructive",
         tickElapsed: false,
       };
     case "cancelled":

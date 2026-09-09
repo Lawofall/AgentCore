@@ -27,6 +27,7 @@ from sqlalchemy.dialects import postgresql
 
 from agentcore.api.routes.conversations.crud import (
     list_deleted_conversations,
+    purge_deleted_conversation,
     restore_deleted_conversation,
     router,
 )
@@ -293,11 +294,15 @@ async def test_restore_rereads_with_populate_existing():
 
 
 class _StubRepo:
-    def __init__(self, *, deleted: Any = None, restored: Any = None) -> None:
+    def __init__(
+        self, *, deleted: Any = None, restored: Any = None, purged: bool = True
+    ) -> None:
         self._deleted = deleted
         self._restored = restored
+        self._purged = purged
         self.listed: list[dict[str, Any]] = []
         self.restores: list[dict[str, Any]] = []
+        self.purges: list[dict[str, Any]] = []
 
     async def get_deleted_by_id(self, conversation_id: str, *, user_id: str) -> Any:
         del conversation_id, user_id
@@ -310,6 +315,12 @@ class _StubRepo:
     async def restore(self, conversation_id: str, **kwargs: Any) -> Any:
         self.restores.append({"conversation_id": conversation_id, **kwargs})
         return self._restored
+
+    async def hard_delete_if_soft_deleted(
+        self, conversation_id: str, **kwargs: Any
+    ) -> bool:
+        self.purges.append({"conversation_id": conversation_id, **kwargs})
+        return self._purged
 
 
 class _StubMessageRepo:
@@ -426,9 +437,11 @@ async def test_trash_list_computes_purge_moment_server_side(
 def test_trash_routes_are_registered_before_the_conversation_id_matcher():
     """FastAPI 按注册顺序匹配：``/trash`` 晚于 ``/{conversation_id}`` 就会被当成对话 id。"""
     paths = [getattr(r, "path", "") for r in router.routes]
-    assert paths.index("/conversations/trash") < paths.index(
-        "/conversations/{conversation_id}"
-    )
+    trash = paths.index("/conversations/trash")
+    trash_item = paths.index("/conversations/trash/{conversation_id}")
+    conv = paths.index("/conversations/{conversation_id}")
+    assert trash < conv
+    assert trash_item < conv
 
 
 # --- 硬删：先清 per-user prefs ------------------------------------------------------
@@ -446,3 +459,100 @@ async def test_hard_delete_clears_conversation_preferences_first():
     sql = _sql(deletes[0])
     assert f"conversation_preferences.conversation_id = '{CONV_ID}'" in sql
     assert session.commits == 1
+
+
+async def test_hard_delete_if_soft_deleted_is_a_no_op_when_already_gone():
+    session = _RecordingSession([_Result(scalar=None)])
+
+    wiped = await ConversationRepository(session).hard_delete_if_soft_deleted(
+        CONV_ID, user_id=USER_ID, not_before=datetime(2026, 1, 1, tzinfo=UTC)
+    )
+
+    assert wiped is False
+    assert not [s for s in session.statements if isinstance(s, Delete)]
+    assert session.commits == 0
+    sql = _sql(session.statements[0])
+    assert "FOR UPDATE" in sql
+    assert "conversations.deleted_at > <ts:2026-01-01" in sql
+    assert f"conversations.id = '{CONV_ID}'" in sql
+
+
+# --- 彻底删除：过期 409、竞态 409、未知 404 -----------------------------------------
+
+
+async def _noop_space(*_args: Any, **_kwargs: Any) -> None:
+    return None
+
+
+async def test_purge_past_retention_is_409_not_silent_success(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "workspace_retention_days", 30)
+    monkeypatch.setattr(
+        "agentcore.api.routes.conversations.crud._purge_conversation_space",
+        _noop_space,
+    )
+    expired = _fake_conversation(deleted_at=datetime.now(UTC) - timedelta(days=31))
+    repo = _StubRepo(deleted=expired)
+
+    with pytest.raises(ConflictError) as exc:
+        await purge_deleted_conversation(CONV_ID, _user(), repo=repo)
+
+    assert exc.value.status_code == 409
+    assert "30 天" in str(exc.value)
+    assert repo.purges == []
+
+
+async def test_purge_race_with_restore_surfaces_as_409(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "workspace_retention_days", 30)
+    monkeypatch.setattr(
+        "agentcore.api.routes.conversations.crud._purge_conversation_space",
+        _noop_space,
+    )
+    repo = _StubRepo(
+        deleted=_fake_conversation(deleted_at=datetime.now(UTC) - timedelta(days=1)),
+        purged=False,
+    )
+
+    with pytest.raises(ConflictError) as exc:
+        await purge_deleted_conversation(CONV_ID, _user(), repo=repo)
+
+    assert exc.value.status_code == 409
+    assert "已被清理" in str(exc.value)
+    assert repo.purges[0]["not_before"] < datetime.now(UTC)
+
+
+async def test_purge_unknown_conversation_is_404():
+    repo = _StubRepo(deleted=None)
+
+    with pytest.raises(NotFoundError):
+        await purge_deleted_conversation(CONV_ID, _user(), repo=repo)
+
+    assert repo.purges == []
+
+
+async def test_purge_claims_then_clears_scratch(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "workspace_retention_days", 30)
+    space_calls: list[dict[str, Any]] = []
+
+    async def _space(**kwargs: Any) -> None:
+        space_calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "agentcore.api.routes.conversations.crud._purge_conversation_space",
+        _space,
+    )
+    repo = _StubRepo(
+        deleted=_fake_conversation(deleted_at=datetime.now(UTC) - timedelta(days=1)),
+        purged=True,
+    )
+
+    body = await purge_deleted_conversation(CONV_ID, _user(), repo=repo)
+
+    assert body.status == "ok"
+    assert repo.purges[0]["conversation_id"] == CONV_ID
+    assert space_calls == [
+        {"user_id": USER_ID, "conversation_id": CONV_ID, "folder_id": FOLDER_ID}
+    ]

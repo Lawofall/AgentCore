@@ -11,7 +11,7 @@ function msOrZero(iso: string): number {
 /** Best-effort「最近活跃」: max conversation `updatedAt` in that folder. */
 export function folderActivityMs(
   folderId: string,
-  conversations: { folderId?: string | null; updatedAt: string }[],
+  conversations: readonly { folderId?: string | null; updatedAt: string }[],
 ): number {
   let max = 0;
   for (const c of conversations) {
@@ -24,7 +24,7 @@ export function folderActivityMs(
 /** Recent-first; name asc as tie-break for stable order. */
 export function sortFoldersByRecentActivity(
   folders: FolderMeta[],
-  conversations: { folderId?: string | null; updatedAt: string }[],
+  conversations: readonly { folderId?: string | null; updatedAt: string }[],
 ): FolderMeta[] {
   return [...folders].sort((a, b) => {
     const d =

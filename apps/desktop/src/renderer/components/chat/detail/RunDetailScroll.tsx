@@ -1,5 +1,4 @@
 import { RunDetailBody } from "@/components/chat/detail/RunDetailBody";
-import { ProcessTimelineScrollContext } from "@/components/chat/message-bubble/processTimelineScroll";
 import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useStickToBottom } from "@/lib/useStickToBottom";
@@ -62,13 +61,12 @@ export function RunDetailScroll({
       >
         <div ref={contentRef}>
           {scrollEl ? (
-            <ProcessTimelineScrollContext.Provider value={scrollEl}>
-              <RunDetailBody
-                key={`${messageId}:${runId}`}
-                messageId={messageId}
-                runId={runId}
-              />
-            </ProcessTimelineScrollContext.Provider>
+            <RunDetailBody
+              key={`${messageId}:${runId}`}
+              messageId={messageId}
+              runId={runId}
+              scrollParent={scrollEl}
+            />
           ) : null}
         </div>
       </div>

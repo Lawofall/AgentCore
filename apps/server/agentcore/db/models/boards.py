@@ -1,11 +1,10 @@
 """AI 协作白板 (collaborative whiteboard) model.
 
-A board is a spatial-JSON canvas (self-built engine scene) owned by a user and optionally
-filed under a folder workspace (AI协作白板.md §三 G3 / §七). ``folder_id`` is
-nullable — NULL = an ungrouped board surfaced in the top-level「白板」list, mirroring
-the conversation pattern — so creating a board needs no folder up front.
+A board is a spatial-JSON canvas (self-built engine scene) owned by a user.
+Boards are account-scoped — they do not file under a folder (否决 board ∈ folder).
+The leftover ``folder_id`` column is unread and not written.
 
-The scene is the canonical model (空间 JSON 为真相, §七): a single ``scene`` JSONB blob
+The scene is the canonical model (空间 JSON 为真相): a single ``scene`` JSONB blob
 holds elements / positions / arrows / groups / freehand. S3 offload + image-file
 externalization (scene_blob_ref) is DEFERRED for v1 — scenes stay inline in Postgres
 (text/shape scenes are small; TOAST covers occasional large ones). ``version``
@@ -30,9 +29,8 @@ class Board(Base):
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
-    # Folder this board lives in; NULL = ungrouped (top-level「白板」list). App-level FK
-    # (no DB constraint, per repo convention), cleared back to NULL if the folder is
-    # deleted so a board is never lost when its folder goes away.
+    # Leftover unread column (once optional filing). Not written, not returned, not
+    # cleared on folder delete. Kept to avoid a migration; do not resume writing it.
     folder_id: Mapped[str | None] = mapped_column(
         PG_UUID(as_uuid=False), index=True, nullable=True
     )

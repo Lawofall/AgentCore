@@ -36,4 +36,36 @@ describe("PromptDocument", () => {
       screen.getByRole("heading", { name: "输出风格" }).className,
     ).toContain("text-sm");
   });
+
+  it("omits a section heading that already names the reader", () => {
+    render(
+      <PromptDocument
+        compact={false}
+        hideHeading="跨文件夹"
+        text={`<跨文件夹>
+派前认桌。
+</跨文件夹>`}
+      />,
+    );
+    expect(screen.queryByRole("heading", { name: "跨文件夹" })).toBeNull();
+    expect(screen.getByText("派前认桌。")).toBeTruthy();
+  });
+
+  it("labels constitution tags in Chinese", () => {
+    render(
+      <PromptDocument
+        compact={false}
+        text={`<身份>
+你是 CEO。
+</身份>
+
+<按需目录>
+web_search — 搜索互联网
+</按需目录>`}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: "身份" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "按需目录" })).toBeTruthy();
+    expect(screen.getByText("你是 CEO。")).toBeTruthy();
+  });
 });

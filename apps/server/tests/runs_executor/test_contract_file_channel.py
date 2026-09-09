@@ -10,7 +10,7 @@ executor's load-then-check path against a real workspace backend.
 
 import json
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, ToolCallDelta
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.runs.builder import build_run_plan
@@ -44,7 +44,7 @@ class _RealFileWriteTool:
                     "content": {"type": "string"},
                 },
             },
-            category=ToolCategory.EXECUTION,
+            face=ToolFace.EXECUTION,
             approval=ToolApproval.NEVER,
         )
 

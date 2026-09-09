@@ -14,25 +14,17 @@ from pydantic import BaseModel
 class CreateBoardRequest(BaseModel):
     # None → defaulted server-side to「未命名白板」; the canvas can rename later.
     title: str | None = None
-    # File the board under a folder at creation; None = ungrouped (top-level list).
-    folder_id: str | None = None
 
 
 class UpdateBoardRequest(BaseModel):
-    """Rename / move a board (scene is written via the dedicated scene endpoint).
-
-    Both fields optional — the route reads ``model_fields_set`` so an omitted field is
-    left untouched while an explicit ``folder_id: null`` moves the board to ungrouped.
-    """
+    """Rename a board (scene is written via the dedicated scene endpoint)."""
 
     title: str | None = None
-    folder_id: str | None = None
 
 
 class BoardSummary(BaseModel):
     id: str
     title: str
-    folder_id: str | None = None
     # The board's dedicated AI conversation, or None until first AI use (AI协作白板.md §三 A).
     # The canvas reads it to know whether an AI thread already exists; it calls the bind
     # endpoint to mint one on demand.

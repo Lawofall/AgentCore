@@ -1,17 +1,23 @@
 vi.mock("@/services/api", () => ({
-  api: { get: vi.fn(), post: vi.fn() },
+  api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
 }));
 
 import { api } from "@/services/api";
-import { listFolderTrash, restoreFolder } from "@/services/folders";
+import {
+  listFolderTrash,
+  purgeTrashedFolder,
+  restoreFolder,
+} from "@/services/folders";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
+const del = vi.mocked(api.delete);
 
 beforeEach(() => {
   get.mockReset();
   post.mockReset();
+  del.mockReset();
 });
 
 describe("最近删除 (folder trash)", () => {
@@ -74,5 +80,11 @@ describe("最近删除 (folder trash)", () => {
       ownerUserId: null,
       collaboratorCount: 0,
     });
+  });
+
+  it("purge hits the trash item, not the live permanent path", async () => {
+    del.mockResolvedValue(undefined);
+    await purgeTrashedFolder("f1");
+    expect(del).toHaveBeenCalledWith("/v1/folders/trash/f1");
   });
 });

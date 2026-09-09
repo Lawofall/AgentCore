@@ -17,7 +17,7 @@ export const MENTION_CATEGORY_LABEL: Record<MentionSectionId, string> = {
   conversation: "对话",
   folder: "文件夹",
   file: "文件",
-  setting: "设定",
+  setting: "提示词",
 };
 
 /** 一级目录行：顶行「附件」+ 四类。附件不是 MentionSectionId，禁止 drill。 */

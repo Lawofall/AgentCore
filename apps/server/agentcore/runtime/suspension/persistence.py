@@ -32,7 +32,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from agentcore.attention import (
+    PUSH_FALLBACK_BODY,
     attention_kind_of,
+    attention_push_copy,
     attention_title,
     signal_attention_required,
     signal_attention_resolved,
@@ -51,7 +53,6 @@ from agentcore.runtime.kickoff.retired import (
 )
 from agentcore.runtime.settlement import align_cold_resume_resolved_to_winner
 from agentcore.runtime.suspension import (
-    SuspensionKind,
     TurnSuspension,
     suspension_from_json,
 )
@@ -128,9 +129,7 @@ def _pause_attention_fields(suspension: TurnSuspension) -> dict[str, Any] | None
         "turn_id": suspension.message_id,
         "interaction_id": suspension.checkpoint_id,
         "kind": kind,
-        "title": attention_title(
-            kind, {"question": getattr(suspension, "question", "")}
-        ),
+        "title": attention_title(kind),
     }
 
 
@@ -155,13 +154,11 @@ async def _notify_pause(suspension: TurnSuspension) -> None:
     deep-links on tap (conversation + the paused turn). ``notify_user`` itself swallows
     all errors, so this never affects the pause.
     """
-    if suspension.kind == SuspensionKind.PLAN_REVIEW:
-        title = "AI 计划待确认"
-        body = "团队已产出阶段成果，待你确认是否继续。"
+    kind = attention_kind_of(suspension.kind.value)
+    if kind is None:
+        title, body = "AI 需要你的回应", PUSH_FALLBACK_BODY
     else:
-        title = "AI 需要你的回应"
-        question = (getattr(suspension, "question", "") or "").strip()
-        body = question[:120] if question else "AI 正在等待你的回应以继续任务。"
+        title, body = attention_push_copy(kind)
     await notify_user(
         suspension.user_id,
         PushNotification(

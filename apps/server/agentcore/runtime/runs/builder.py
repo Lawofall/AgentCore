@@ -37,7 +37,6 @@ from agentcore.runtime.runs.types import (
     RunOrigin,
     RunPolicy,
     RunSpec,
-    normalize_deliverable_form,
 )
 
 # Debate/review opposition markers (前端UX设计.md §四): a display-only side tag the
@@ -458,10 +457,6 @@ def build_added_nodes(
         if not (isinstance(task, str) and task.strip()):
             errors.append(f"add[{i}]: 缺少 task")
             continue
-        prose_err = prose_form_conflict_error(item)
-        if prose_err:
-            errors.append(f"add[{i}]: {prose_err}")
-            continue
         resolved_deps: list[str] = []
         dep_ok = True
         for dep in item.get("depends_on") or []:
@@ -559,9 +554,6 @@ def _flat_plan(
         ):
             errors.append(f"tasks[{i}]: 'role' 和 'task' 字段必填")
             continue
-        prose_err = prose_form_conflict_error(item)
-        if prose_err:
-            errors.append(f"tasks[{i}]: {prose_err}")
         raw_id = str(item.get("id", "")).strip()
         if raw_id:
             if raw_id in seen_declared:
@@ -693,10 +685,6 @@ def _dag_plan(
             continue
         if not task:
             errors.append(f"Run '{raw_id}': missing task")
-            continue
-        prose_err = prose_form_conflict_error(item)
-        if prose_err:
-            errors.append(f"tasks[{i}]（{role or raw_id}）: {prose_err}")
             continue
         resolved_deps: list[str] = []
         dep_ok = True
@@ -1002,9 +990,9 @@ def _dag_policy(item: dict[str, Any]) -> RunPolicy:
 def _parse_deliverable(item: dict[str, Any]) -> Deliverable:
     """Parse a task's ``deliverable`` into a :class:`Deliverable`.
 
-    Nodes always carry a Deliverable. Missing object / empty object / omitted
-    or invalid ``form`` → ``files``. Playbook-internal knobs still parse; unknown
-    keys are ignored.
+    Nodes always carry a Deliverable. Missing object / empty object → defaults
+    (no landing expectation). Playbook-internal knobs still parse; unknown keys
+    (including leftover ``form``) are ignored, not translated.
     """
     raw = item.get("deliverable")
     if not isinstance(raw, dict):
@@ -1012,59 +1000,24 @@ def _parse_deliverable(item: dict[str, Any]) -> Deliverable:
     return _deliverable_from_dict(raw)
 
 
-def prose_form_conflict_error(item: dict[str, Any]) -> str | None:
-    """Reject raw ``form=prose`` ∩ non-empty ``artifacts``.
-
-    Must run on the CEO's raw task dict **before** :func:`_deliverable_from_dict`
-    clears artifacts for prose — otherwise the gate never fires.
-    """
-    raw = item.get("deliverable")
-    if not isinstance(raw, dict):
-        return None
-    if raw.get("form") != "prose":
-        return None
-    arts = raw.get("artifacts")
-    has_artifacts = isinstance(arts, list) and any(
-        isinstance(a, str) and a.strip() for a in arts
-    )
-    if not has_artifacts:
-        return None
-    return (
-        "契约矛盾：deliverable.form=prose 不能同时声明 artifacts。"
-        "纯文字交付请去掉 artifacts；若需落盘/钉路径请改 form=files 或 form=workspace。"
-    )
-
-
 def _deliverable_from_dict(raw: dict[str, Any]) -> Deliverable:
     required_sections = _str_list(raw.get("required_sections"))
     artifacts = _str_list(raw.get("artifacts"))
     fmt = raw.get("output_format")
     output_format = fmt if fmt in _VALID_OUTPUT_FORMATS else "text"
-    native_in = bool(raw.get("workspace_native", False))
-    form = normalize_deliverable_form(raw.get("form"), workspace_native=native_in)
-    # form=prose ∩ artifacts is rejected upstream (:func:`prose_form_conflict_error`);
-    # do not silently coerce that combo away.
-    if form == "prose":
-        artifacts = []  # path reconciliation meaningless for prose delivery
-        artifact_dir = ""
-        workspace_native = False  # 纯文字交付无落点可言
-    else:
-        artifact_dir_raw = raw.get("artifact_dir", "")
-        artifact_dir = (
-            artifact_dir_raw.replace("\\", "/").strip().rstrip("/")
-            if isinstance(artifact_dir_raw, str)
-            else ""
-        )
-        workspace_native = form == "workspace"
+    artifact_dir_raw = raw.get("artifact_dir", "")
+    artifact_dir = (
+        artifact_dir_raw.replace("\\", "/").strip().rstrip("/")
+        if isinstance(artifact_dir_raw, str)
+        else ""
+    )
     citation_mode_raw = raw.get("citation_mode")
     citation_mode = citation_mode_raw if citation_mode_raw == "two_phase" else None
     return Deliverable(
         output_format=output_format,
         required_sections=required_sections,
-        form=form,
         artifacts=artifacts,
         artifact_dir=artifact_dir,
-        workspace_native=workspace_native,
         strict=bool(raw.get("strict", False)),
         citation_mode=citation_mode,  # type: ignore[arg-type]
     )

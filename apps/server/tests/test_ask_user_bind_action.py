@@ -471,7 +471,7 @@ def test_ask_user_schema_points_at_recommendation_in_label():
     assert "放第一" in props["label"]["description"]
     assert "禁止" not in props["label"]["description"]
     assert "organize_plan" in props["detail"]["description"]
-    assert "daily_review" in props["detail"]["description"]
+    assert "daily_review" not in props["detail"]["description"]
     assert "普通" in props["detail"]["description"]
 
 
@@ -510,7 +510,7 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     assert "grant_readonly_folder" not in advertised.schema.description
     assert "grant_organize_folder" not in advertised.schema.description
     assert "external_mount_readonly" not in advertised.schema.description
-    assert "HOW→consult(asking_the_user)" in advertised.schema.description
+    assert "HOW→consult(ask_kickoff)、consult(ask_midtask)。" in advertised.schema.description
     assert "HOW→consult(external_mount_readonly)" not in advertised.schema.description
     assert "grant_attach_folder" not in advertised.schema.description
     assert "只读用" not in advertised.schema.description
@@ -521,6 +521,7 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     assert "2～3" not in advertised.schema.description
     assert "2-3" not in advertised.schema.description
     action_desc = props2["action"]["description"]
+    assert "整题接到工作区" in action_desc
     assert "open/register/bind_local_*" in action_desc
     assert "grant_organize_folder" not in action_desc
     assert "grant_organize_folder=整理" not in action_desc
@@ -572,7 +573,7 @@ def test_ask_user_local_schema_omits_grant_and_open_bind():
     assert "well_known" not in props
     assert "open_local_project" not in tool.schema.description
     assert "grant_attach_folder" not in tool.schema.description
-    assert "HOW→consult(asking_the_user)" in tool.schema.description
+    assert "HOW→consult(ask_kickoff)、consult(ask_midtask)。" in tool.schema.description
 
 
 def test_ask_user_organize_how_lives_in_skill():
@@ -580,9 +581,11 @@ def test_ask_user_organize_how_lives_in_skill():
     from agentcore.runtime.skills import build_system_skill_registry
 
     registry = build_system_skill_registry()
-    ask = registry.get("asking_the_user")
-    desk = registry.get("team_local_desk")
-    assert ask is not None
+    kickoff = registry.get("ask_kickoff")
+    midtask = registry.get("ask_midtask")
+    desk = registry.get("local_desk")
+    assert kickoff is not None
+    assert midtask is not None
     assert desk is not None
     from agentcore.runtime.resolve.prompt import capability_how_suffix
 
@@ -591,8 +594,13 @@ def test_ask_user_organize_how_lives_in_skill():
     assert "口头同意" in desk.body
     assert "grant_organize_folder" not in desk.body
     assert "consult(external_mount_readonly)" not in desk.body
-    assert "consult(external_mount_readonly)" not in ask.body
-    assert "consult(team_local_desk)" in ask.body
-    assert "整题进桌" in ask.body
+    assert "consult(external_mount_readonly)" not in kickoff.body
+    assert "consult(external_mount_readonly)" not in midtask.body
+    assert "consult(local_desk)" not in kickoff.body
+    assert "consult(local_desk)" not in midtask.body
+    assert "consult(team_local_desk)" not in kickoff.body
+    assert "consult(team_local_desk)" not in midtask.body
+    assert "整题要把本机文件夹接到工作区" not in midtask.body
+    assert "工作区以外的目录授权" not in midtask.body
     assert "旁根" in desk.body
     assert "可写授权" in desk.body

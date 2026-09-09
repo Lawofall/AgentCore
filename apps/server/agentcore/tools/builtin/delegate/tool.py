@@ -10,8 +10,8 @@ from agentcore.core.types import (
     DEFAULT_PERMISSION_AXES,
     PermissionAxes,
     ToolApproval,
-    ToolCategory,
     ToolEffect,
+    ToolFace,
     new_id,
 )
 from agentcore.llm.profiles import TurnProfiles as ProfileSet
@@ -288,7 +288,7 @@ class DelegateTool:
                 NESTED_DELEGATE_DESCRIPTION if depth >= 1 else DELEGATE_DESCRIPTION
             ),
             parameters=DELEGATE_PARAMETERS,
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 
@@ -324,8 +324,10 @@ class DelegateTool:
         # §4.2b·2b / 改法④A：无出生且写盘缺目标 → 先静默建云桌，再闸。
         # 裸聊同回合唯一 create/resolve / auto 可经 turn_target_desk 继承缺省目标。
         from agentcore.runtime.delegate.target_desktop import (
+            bare_chat_local_scratch_write_ok,
             ensure_bare_chat_auto_cloud_desk,
             gate_bare_chat_requires_target,
+            gate_conversation_id_is_not_folder,
         )
 
         tasks_for_gate = tasks_raw if isinstance(tasks_raw, list) else []
@@ -343,10 +345,18 @@ class DelegateTool:
             sink=self._sink,
         )
         default_target = self.effective_default_target_folder_id()
+        allow_scratch = bare_chat_local_scratch_write_ok(
+            session_folder_id=self._folder_id,
+            backend=getattr(self._base_tool_context, "backend", None),
+            turn_target_desk=getattr(
+                self._base_tool_context, "turn_target_desk", None
+            ),
+        )
         bare_gate = gate_bare_chat_requires_target(
             session_folder_id=self._folder_id,
             tasks_raw=tasks_for_gate,
             default_target_folder_id=default_target,
+            allow_local_scratch_write=allow_scratch,
         )
         if bare_gate:
             logger.info(
@@ -358,6 +368,24 @@ class DelegateTool:
                 success=False,
                 output="",
                 error=bare_gate,
+                contract_failure=True,
+            )
+        conv_gate = gate_conversation_id_is_not_folder(
+            conversation_id=self._conversation_id
+            or getattr(self._base_tool_context, "conversation_id", None),
+            tasks_raw=tasks_for_gate,
+            default_target_folder_id=default_target,
+        )
+        if conv_gate:
+            logger.info(
+                "delegate.conversation_id_as_folder_rejected",
+                conversation_id=self._conversation_id,
+            )
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="",
+                error=conv_gate,
                 contract_failure=True,
             )
         if (

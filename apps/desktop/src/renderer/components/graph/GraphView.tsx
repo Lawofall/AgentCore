@@ -47,6 +47,7 @@ import {
   GRAPH_UNIT_EXPAND_TOUCHED,
   resolveGraphExpandedUnits,
 } from "./graphUnitExpand";
+import { resolveCaptainSinkId } from "./helpers";
 import type { GraphPendingDecision } from "./pendingDecisions";
 import { executionGraphCapabilities } from "./planCapabilities";
 import { projectInjectGapEdges } from "./projectFlowGraph";
@@ -398,6 +399,10 @@ export const GraphView = memo(function GraphView({
     const ex = executionRef.current;
     const sc = sceneRef.current;
     if (!ex || !sc || !documentFingerprint) return null;
+    const captainId = resolveCaptainSinkId(ex.runs);
+    const captainRunNow = captainId
+      ? (ex.runs.find((r) => r.id === captainId) ?? null)
+      : null;
     return projectTurnGraph({
       execution: ex,
       scene: sc,
@@ -410,7 +415,7 @@ export const GraphView = memo(function GraphView({
       handleDirection,
       litRunId: null,
       litEndpointMessageId: null,
-      captainRun,
+      captainRun: captainRunNow,
       captainStatus: null,
       finalAnswer: null,
       captainSynthesisPreview: "",
@@ -424,20 +429,7 @@ export const GraphView = memo(function GraphView({
       onFocusAct: () => undefined,
       documentShell: true,
     });
-  }, [
-    documentFingerprint,
-    shellSnapshotKey,
-    positions,
-    nodeSizes,
-    groups,
-    bbox,
-    actCards,
-    edges,
-    handleDirection,
-    captainRun,
-    expandedUnits,
-    effectiveLayoutKind,
-  ]);
+  }, [documentFingerprint, shellSnapshotKey]);
 
   const graphActions = useMemo<GraphActionsValue>(
     () => ({
@@ -520,9 +512,6 @@ export const GraphView = memo(function GraphView({
       <div className="flex h-full w-full items-center justify-center">
         <div className="text-center">
           <p className="text-sm text-muted-foreground">暂无执行任务</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            发送多 Agent 任务后，协作图将在此显示
-          </p>
         </div>
       </div>
     );

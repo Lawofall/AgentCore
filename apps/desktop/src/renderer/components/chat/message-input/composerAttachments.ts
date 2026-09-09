@@ -134,7 +134,7 @@ export function detectMention(
 }
 
 /**
- * `@` 类型前缀：以「团队/对话/文件/文件夹/设定」或英文 agent/file/dir/folder/conv/setting 开头时
+ * `@` 类型前缀：以「团队/对话/文件/文件夹/提示词/设定」或英文 agent/file/dir/folder/conv/setting 开头时
  * 只保留对应分区；前缀后的剩余串作过滤词。
  */
 export function parseMentionFilter(rawQuery: string): {
@@ -147,7 +147,7 @@ export function parseMentionFilter(rawQuery: string): {
     { re: /^(文件夹|folder|dir)\s*/i, section: "folder" },
     { re: /^(文件|file)\s*/i, section: "file" },
     { re: /^(对话|conv(?:ersation)?)\s*/i, section: "conversation" },
-    { re: /^(设定|setting|笔记|note)\s*/i, section: "setting" },
+    { re: /^(提示词|设定|setting|笔记|note)\s*/i, section: "setting" },
     { re: /^(团队|agent)\s*/i, section: "team" },
   ];
   for (const { re, section } of rules) {
@@ -210,10 +210,10 @@ export function pickOnDemandSettings(
   }
   return rows.slice(0, limit).map((e) => ({
     sourceId: "setting",
-    sourceLabel: "设定",
+    sourceLabel: "提示词",
     relPath: e.id,
     name: e.name,
-    display: e.description || "设定",
+    display: e.description || "提示词",
     kind: "document" as const,
   }));
 }

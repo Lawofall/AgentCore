@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Footer 门控：按本条 isStreaming，不按会话 isGenerating。
+ * Footer 门控：按本条 isStreaming，外加「末条助手 + 本轮还在写」。
  * 回归：长生成时已 settle 的旧气泡仍应露出重新生成/费用等操作区。
  */
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -10,6 +10,19 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const genMock = vi.hoisted(() => ({ value: true }));
+const convSlice = vi.hoisted(() => ({
+  currentConversationId: "conv-1" as string | null,
+  byId: undefined as
+    | Record<
+        string,
+        {
+          isGenerating: boolean;
+          turnPhase: string;
+          messages: { id: string; role: string }[];
+        }
+      >
+    | undefined,
+}));
 const execById = vi.hoisted(() => ({
   value: {} as Record<string, { deliveryStatus: null; plan?: unknown }>,
 }));
@@ -25,8 +38,15 @@ vi.mock("@/stores/conversation", async (importOriginal) => {
     // 若误把门控写回全局 isGenerating，本 mock 恒 true 会藏 footer → 测失败。
     useActiveGenerating: () => genMock.value,
     useConversationStore: (
-      sel: (s: { currentConversationId: string | null }) => unknown,
-    ) => sel({ currentConversationId: "conv-1" }),
+      sel: (s: {
+        currentConversationId: string | null;
+        byId?: typeof convSlice.byId;
+      }) => unknown,
+    ) =>
+      sel({
+        currentConversationId: convSlice.currentConversationId,
+        byId: convSlice.byId,
+      }),
     getActiveRuntime: () => ({ messages: [] }),
     assistantProjectionId: (m: { id: string }) => m.id,
   };
@@ -75,6 +95,12 @@ vi.mock("@/services/turns/continuePaused", () => ({
 
 vi.mock("../AssistantMessageFooter", () => ({
   AssistantMessageFooter: () => <div data-testid="assistant-footer" />,
+  AssistantMessageMetaSummary: () => null,
+  MessageMoreMenu: () => (
+    <button type="button" aria-label="更多">
+      更多
+    </button>
+  ),
 }));
 
 vi.mock("@/components/chat/Markdown", () => ({
@@ -108,6 +134,8 @@ function renderBubble(message: Message) {
 afterEach(() => {
   cleanup();
   genMock.value = true;
+  convSlice.currentConversationId = "conv-1";
+  convSlice.byId = undefined;
   execById.value = {};
   interactionCards.checkpoints = [];
   interactionCards.planReviews = [];
@@ -128,6 +156,35 @@ describe("AssistantMessage footer gate", () => {
     expect(screen.queryByRole("button", { name: "有帮助" })).toBeNull();
     expect(screen.queryByRole("button", { name: "重新生成" })).toBeNull();
     expect(screen.queryByRole("button", { name: "更多" })).toBeNull();
+  });
+
+  it("末条助手气泡已标 settle，但本轮 turnPhase 仍在写：不显示 footer", () => {
+    convSlice.byId = {
+      "conv-1": {
+        isGenerating: false,
+        turnPhase: "streaming",
+        messages: [{ id: "asst-1", role: "assistant" }],
+      },
+    };
+    renderBubble(settledMessage({ content: "团队 4/4 收工，我接着核一下…" }));
+    expect(screen.queryByTestId("assistant-footer")).toBeNull();
+    expect(screen.queryByRole("button", { name: "复制" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "有帮助" })).toBeNull();
+  });
+
+  it("更早的已 settle 气泡在本轮仍写时照样露出 footer", () => {
+    convSlice.byId = {
+      "conv-1": {
+        isGenerating: false,
+        turnPhase: "streaming",
+        messages: [
+          { id: "asst-old", role: "assistant" },
+          { id: "asst-1", role: "assistant" },
+        ],
+      },
+    };
+    renderBubble(settledMessage({ id: "asst-old", content: "上一句已经说完" }));
+    expect(screen.getByTestId("assistant-footer")).toBeTruthy();
   });
 
   it("空正文且非失败时不显示 footer", () => {

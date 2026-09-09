@@ -158,6 +158,68 @@ def test_promote_on_coordination_adds_full_surface():
         current_execution_id.reset(token)
 
 
+def test_harvest_close_drops_replan_and_wait_suite():
+    """批次收口后会话关掉、无受监督计划 → 菜单摘掉 replan / wait 套件。"""
+    eid = "exec-harvest-demote"
+    token = current_execution_id.set(eid)
+    try:
+        _activate_coordination(eid)
+        reg = ToolRegistry()
+        delegate = _fake_delegate()
+        reg.register(delegate)
+        assert promote_coordination_surface_if_needed(reg) is True
+        assert "replan" in reg.names
+        assert "wait" in reg.names
+
+        clear_active_coordination()
+        assert promote_coordination_surface_if_needed(reg) is True
+        names = set(reg.names)
+        assert "delegate" in names
+        assert names.isdisjoint(COORDINATION_GATED_TOOLS)
+        assert promote_coordination_surface_if_needed(reg) is False
+    finally:
+        clear_active_coordination()
+        current_execution_id.reset(token)
+
+
+def test_partial_failure_keeps_replan_drops_wait_suite():
+    """部分失败 stash：计划还开着 → 留 replan；会话已关 → 摘 wait 套件。"""
+    eid = "exec-partial-stash"
+    token = current_execution_id.set(eid)
+    try:
+        _activate_coordination(eid)
+        reg = ToolRegistry()
+        delegate = _fake_delegate()
+        reg.register(delegate)
+        assert promote_coordination_surface_if_needed(reg) is True
+        assert "wait" in reg.names
+
+        delegate._supervised = object()
+        clear_active_coordination()
+        assert promote_coordination_surface_if_needed(reg) is True
+        assert "replan" in reg.names
+        assert "wait" not in reg.names
+        assert "cancel_worker" not in reg.names
+    finally:
+        clear_active_coordination()
+        current_execution_id.reset(token)
+
+
+def test_register_include_false_drops_gated_tools():
+    """装配入口 include=False 须真正摘下，不能留下上次挂上的 replan。"""
+    reg = ToolRegistry()
+    delegate = _fake_delegate()
+    reg.register(delegate)
+    register_coordination_surface(
+        reg, delegate_tool=delegate, sink=MagicMock(), include=True
+    )
+    assert "replan" in reg.names
+    register_coordination_surface(
+        reg, delegate_tool=delegate, sink=MagicMock(), include=False
+    )
+    assert set(reg.names).isdisjoint(COORDINATION_GATED_TOOLS)
+
+
 def test_ensure_before_llm_installs_wait_when_coordination_live():
     """验收钉：协调已活 → 进入 LLM 前 wait 已在工具面（prepare / mid-turn 对齐）。"""
     from agentcore.runtime.resolve.ceo_surface import ensure_coordination_surface_before_llm

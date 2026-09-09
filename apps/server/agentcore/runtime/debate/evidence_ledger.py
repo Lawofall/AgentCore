@@ -138,6 +138,15 @@ class EvidenceLedger:
             return None
         return _to_debate_wire(raw)
 
+    def prompt_entry(self, entry_id: str) -> dict[str, Any] | None:
+        """裁判 / 简报当场注入：wire 字段 + ``deep_read``。不上 SSE。"""
+        raw = self._core.get(entry_id)
+        if raw is None:
+            return None
+        snap = _to_debate_wire(raw)
+        snap["deep_read"] = bool(raw.get("deep_read"))
+        return snap
+
     def all_entries(self) -> list[dict[str, Any]]:
         """全量**已提交**台账（权威快照，供 ``debate_result``；wire 形状）。"""
         return [
@@ -227,12 +236,12 @@ class EvidenceLedger:
         return frozenset(newly)
 
 
-# 裁判 / 简报可见的 tier 人话（与 O3 阶梯对齐；unknown ≠ 弱源实锤）。
+# 裁判 / 简报当场注入的 tier 人话（不上用户面；unknown 不单独惩罚）。
 _TIER_PROMPT_LABEL: dict[str, str] = {
-    "official": "官方原文",
+    "official": "一手/官方原文",
     "media": "权威媒体",
-    "weak": "弱源/自媒体",
-    "unknown": "来源待评（非弱源实锤）",
+    "weak": "转述/百科",
+    "unknown": "未分级",
     "blocked": "硬拦",
 }
 
@@ -250,7 +259,8 @@ def _format_ledger_entry_line(entry: dict[str, Any]) -> str:
     site = (entry.get("site") or "").strip()
     url = (entry.get("url") or "").strip()
     tail = url or site or "底料预登记"
-    return f"- {eid} · tier={tier}（{tier_prompt_label(str(tier))}）· {title} · {tail}"
+    deep = "是" if entry.get("deep_read") else "否"
+    return f"- {eid} · tier={tier}（{tier_prompt_label(str(tier))}）· 深读={deep} · {title} · {tail}"
 
 
 def format_evidence_ledger_for_judge(
@@ -259,9 +269,9 @@ def format_evidence_ledger_for_judge(
     *,
     cross_exam: Sequence[Any] = (),
 ) -> str:
-    """本轮发言 / 质询作答里实际引用的 ``#eN`` → 带 tier 的结构化块（M2 记分锚定）。
+    """本轮发言 / 质询作答里实际引用的 ``#eN`` → 带 tier / 深读的结构化块（M2 记分锚定）。
 
-    无台账或无引用 → 空串（裁判退化为旧软约束）。unknown 不单独惩罚——教法写进块尾。
+    无台账或无引用 → 空串（裁判退化为旧软约束）。未分级不单独惩罚——教法写进块尾。
     """
     if ledger is None:
         return ""
@@ -275,18 +285,16 @@ def format_evidence_ledger_for_judge(
         return ""
     entries: list[dict[str, Any]] = []
     for eid in sorted(ids, key=lambda x: int(x[2:]) if x[2:].isdigit() else 0):
-        raw = ledger.get(eid)
+        raw = ledger.prompt_entry(eid)
         if raw is not None:
             entries.append(raw)
     if not entries:
         return ""
     body = "\n".join(_format_ledger_entry_line(e) for e in entries)
     return (
-        "【本轮引用证据台账·evidence 记分须按下列 tier 锚定，勿臆造等级】\n"
+        "【本轮引用证据台账·evidence 记分须按下列 tier / 深读锚定，勿臆造等级】\n"
         f"{body}\n"
-        "【教法】official=强可给满；media=决定性事实无交叉印证则中等封顶；"
-        "weak=弱、evidence 封顶打低且须在 note/penalties 点名；"
-        "unknown【不是】弱源实锤——不单独惩罚，但「决定性事实仅靠单一 unknown/weak」仍封顶打低。\n\n"
+        "【教法】按下方 scores 口径锚定；决定性事实仅靠单一来源或未深读 → evidence 封顶打低。\n\n"
     )
 
 
@@ -305,23 +313,27 @@ def format_evidence_ledger_for_brief(
             for ex in getattr(cx, "exchanges", ()) or ():
                 ids |= extract_ledger_ids(getattr(ex, "answer", "") or "")
     if not ids:
-        # 无正文引用时仍给已提交全量（底料预登记等），便于抽查弱源。
-        entries = list(ledger.all_entries())
+        # 无正文引用时仍给已提交全量（底料预登记等），便于抽查未深读 / 单一来源。
+        entries = [
+            snap
+            for e in ledger.all_entries()
+            if (snap := ledger.prompt_entry(str(e.get("id") or ""))) is not None
+        ]
     else:
         entries = []
         for eid in sorted(ids, key=lambda x: int(x[2:]) if x[2:].isdigit() else 0):
-            raw = ledger.get(eid)
+            raw = ledger.prompt_entry(eid)
             if raw is not None:
                 entries.append(raw)
     if not entries:
         return ""
     body = "\n".join(_format_ledger_entry_line(e) for e in entries)
     return (
-        "【本场证据台账·结论引用须保留 tier / 待核实状态，不得抹平】\n"
+        "【本场证据台账·结论引用须保留待核实 / 二手 / 深读状态，不得抹平】\n"
         f"{body}\n"
-        "decisive / leaning 若依赖 tier=weak 或【待核实】事实：须在 confidence 降级并标"
-        "【需一手核实】，或移进交接清单；unknown 不单独当弱源实锤，但单一 unknown 撑决定性"
-        "事实同样不得写成既定。\n\n"
+        "decisive / leaning 若依赖【待核实】、单一二手或未深读：须降置信并标"
+        "【需一手核实】，或移进交接清单；未分级不单独当缺陷，但单一来源撑决定性"
+        "事实不得写成既定。\n\n"
     )
 
 

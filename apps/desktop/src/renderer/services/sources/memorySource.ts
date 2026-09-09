@@ -32,9 +32,9 @@ import {
  * underneath surfaces as a conflict, never a silent clobber.
  */
 
-/** Synthetic tab path for the cross-conversation「记忆动态 / 最近更新」feed view — NOT a
- * memory leaf (the workbench renders {@link MemoryUpdatesView} for it instead of the file
- * editor). Kept distinct from the `global/…` · `project/…` leaf scheme so it never parses
+/** Synthetic tab path for the cross-conversation feed (流水账). Files page no
+ * longer opens this; toolbox `/toolbox/mine/skills?updates=1` is the surface.
+ * Kept distinct from the `global/…` · `project/…` leaf scheme so it never parses
  * as a leaf. */
 export const MEMORY_UPDATES_PATH = "__memory_updates__";
 
@@ -107,6 +107,31 @@ export function parseProjectMemoryFolderId(path: string): string | null {
   if (navigation) return navigation[1];
   const topic = PROJECT_TOPIC_RE.exec(path);
   return topic ? topic[1] : null;
+}
+
+/** Account-layer leaf (偏好/画像/主题, no folder) stays in toolbox「我的」; folder-layer still opens on the files page. */
+export function isAccountMemoryTarget(
+  target: string,
+  projectId?: string | null,
+): boolean {
+  if (projectId) return false;
+  return parseProjectMemoryFolderId(target) == null;
+}
+
+/** Location state for `/files` when a folder-scoped memory leaf should open in the workbench. */
+export function filesMemoryLeafNavState(
+  target: string,
+  projectId?: string | null,
+) {
+  const folderId = parseProjectMemoryFolderId(target) ?? projectId ?? null;
+  return {
+    openMemoryLeaf: {
+      path: target,
+      name: memoryLeafTabName(target),
+      ...(projectId ? { projectId } : {}),
+    },
+    ...(folderId ? { focusWsId: `folder:${folderId}` as const } : {}),
+  };
 }
 
 /** True when `path` is an on-demand 主题 leaf (`…/topics/<slug>`), global or project. */

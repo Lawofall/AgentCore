@@ -314,7 +314,6 @@ class InteractionRegistry:
                 interaction_id=request_id,
                 kind=card_kind,
                 conversation_id=conversation_id,
-                payload=payload,
             )
         try:
             if timeout is None:
@@ -329,7 +328,6 @@ class InteractionRegistry:
                     interaction_id=request_id,
                     kind=card_kind,
                     conversation_id=conversation_id,
-                    payload=payload,
                 )
 
     def get(self, request_id: str) -> InteractionRequest | None:

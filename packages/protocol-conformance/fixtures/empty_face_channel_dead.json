@@ -1,6 +1,6 @@
 {
   "name": "empty_face_channel_dead",
-  "description": "空脸：channel_dead / STREAM_ERROR → 非空脸",
+  "description": "空脸：channel_dead / LOCAL_CHANNEL_DEAD → 非空脸",
   "events": [
     {
       "type": "message_start",
@@ -13,7 +13,7 @@
     {
       "type": "error",
       "payload": {
-        "code": "STREAM_ERROR",
+        "code": "LOCAL_CHANNEL_DEAD",
         "message": "本机工作区通道无响应（已挂起 / channel dead）。请检查桌面连接后重试。"
       },
       "timestamp": "2026-01-01T00:00:00.002Z"
@@ -47,7 +47,7 @@
     "finishReason": "error",
     "outcome": "error",
     "error": {
-      "code": "STREAM_ERROR",
+      "code": "LOCAL_CHANNEL_DEAD",
       "message": "本机工作区通道无响应（已挂起 / channel dead）。请检查桌面连接后重试。"
     },
     "content": "",

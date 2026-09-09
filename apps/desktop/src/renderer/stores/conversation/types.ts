@@ -291,8 +291,8 @@ export interface ConversationRuntime {
   toolStartedMs: Record<string, number>;
   /**
    * 桌面：本会话最近一回合的执行路径（绑本机工作区时有意义）。
-   * `sidecar` = 本地引擎；`cloud_bridge` = 云端过桥（含探活失败 / 显式强制关）；
-   * `null` = 纯云会话或尚未判定。不落盘；驱动最新助手泡脚注（非引擎切换器）。
+   * `sidecar` = 本地引擎；`cloud_bridge` = 显式强制关后走云（脚注对 `off` 隐藏）；
+   * `null` = 纯云会话或尚未判定。不落盘。引擎探活 / 启动失败不再写过桥。
    */
   executionVia: "sidecar" | "cloud_bridge" | null;
   /**

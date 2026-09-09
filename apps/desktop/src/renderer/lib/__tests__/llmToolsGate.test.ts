@@ -17,6 +17,7 @@ describe("llmToolsGate", () => {
     expect(TOOL_CALLING_TOOL_NAMES.has("delegate")).toBe(true);
     expect(TOOL_CALLING_TOOL_NAMES.has("debate")).toBe(true);
     expect(TOOL_CALLING_TOOL_NAMES.has("debate_and_review")).toBe(false);
+    expect(TOOL_CALLING_TOOL_NAMES.has("staffing")).toBe(false);
     expect(TOOL_CALLING_TOOL_NAMES.has("team_orchestration_advanced")).toBe(
       false,
     );

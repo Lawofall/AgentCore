@@ -24,7 +24,7 @@ def test_apply_preserves_pre_set_token_ceiling_and_timeout():
         run_id="x",
         task="t",
         role="r",
-        deliverable=Deliverable(form="files"),
+        deliverable=Deliverable(artifacts=["out.md"]),
         token_ceiling=50_000,
         policy=RunPolicy(timeout_s=90),
     )
@@ -125,11 +125,10 @@ def test_retired_default_worker_wall_clock_stays_gone():
 
 
 def test_deep_deliverable_signals():
-    assert is_deep_deliverable(Deliverable(form="files"))
-    assert is_deep_deliverable(Deliverable(form="workspace"))
+    assert is_deep_deliverable(Deliverable(artifacts=["out.md"]))
+    assert is_deep_deliverable(Deliverable(artifacts=["src/x.py"]))
     assert is_deep_deliverable(Deliverable(artifacts=["report.md"]))
-    assert not is_deep_deliverable(Deliverable(form="prose"))
-    assert is_deep_deliverable(Deliverable())
+    assert not is_deep_deliverable(Deliverable())
     assert not is_deep_deliverable(None)
 
 
@@ -171,7 +170,7 @@ def test_factory_closes_files_and_recon_delivery_idle():
         frozenset({"file_read"}),
         files_expected=True,
         short_write_posture=True,
-        form_prose=True,
+        expects_landing=False,
     )
     assert prose.delivery_idle_nudge_rounds == 0
     assert prose.delivery_idle_narrow_rounds == 0
@@ -188,7 +187,7 @@ def test_factory_closes_files_and_recon_delivery_idle():
     prose_no_files = create_loop_controller(
         frozenset({"file_read"}),
         files_expected=False,
-        form_prose=True,
+        expects_landing=False,
     )
     assert prose_no_files.delivery_idle_nudge_rounds == 0
     assert prose_no_files.delivery_idle_narrow_rounds == 0
@@ -346,7 +345,7 @@ def test_factory_delivery_idle_not_finalize():
 
 def test_narrow_for_light_repair_keeps_local_inspect_strips_retrieval():
     """Light repair 留 grep/run/file_list；只卸 billed retrieval；无名单不补写。"""
-    from agentcore.core.types import ToolCategory
+    from agentcore.core.types import ToolFace
     from agentcore.runtime.runs.executor.node import _narrow_for_light_repair
     from agentcore.tools.protocol import ToolResult, ToolSchema
     from agentcore.tools.registry import ToolRegistry
@@ -361,7 +360,7 @@ def test_narrow_for_light_repair_keeps_local_inspect_strips_retrieval():
                 name=self._name,
                 description="t",
                 parameters={"type": "object", "properties": {}},
-                category=ToolCategory.FILESYSTEM,
+                face=ToolFace.FILE,
             )
 
         async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001

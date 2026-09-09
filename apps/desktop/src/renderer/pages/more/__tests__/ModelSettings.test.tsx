@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Tests for 设置·模型 (model combinations / account default profile).
+ * Tests for 设置·模型组合 (model combinations / account default profile).
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -219,8 +219,9 @@ describe("ModelSettings (profiles)", () => {
   it("renders model combinations without provider key cards", () => {
     mockProviders(providersResponse());
     renderPage();
-    expect(screen.getByText("模型组合")).toBeTruthy();
-    expect(screen.getByText(/主模型必填，其余槽位可留空/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "模型组合" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "新建" }));
+    expect(screen.getByText("必填，下一回合生效")).toBeTruthy();
     expect(screen.queryByText(/多人协作（委派）对工具调用要求较高/)).toBeNull();
     expect(screen.getByText("GLM-5.2")).toBeTruthy();
     expect(screen.getByText("办公")).toBeTruthy();
@@ -336,7 +337,7 @@ describe("ModelSettings (profiles)", () => {
     fireEvent.click(screen.getByRole("button", { name: "新建" }));
     expect(screen.getByText("新建组合", { selector: "p" })).toBeTruthy();
     expect(screen.getByText("主模型")).toBeTruthy();
-    expect(screen.getByText("必填")).toBeTruthy();
+    expect(screen.getByText("必填，下一回合生效")).toBeTruthy();
     expect(screen.getByText("高级 · 其他模型")).toBeTruthy();
     expect(
       screen.getByText("组队/后台：跟随主模型 · 识图：不配置"),
@@ -578,7 +579,7 @@ describe("ModelSettings (profiles)", () => {
       }),
     );
     renderPage();
-    expect(screen.getByText("模型组合")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "模型组合" })).toBeTruthy();
     expect(screen.getByText("GLM-5.2")).toBeTruthy();
   });
 
@@ -591,10 +592,11 @@ describe("ModelSettings (profiles)", () => {
       }),
     );
     renderPage();
+    expect(screen.getByRole("heading", { name: "模型组合" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "接入服务商" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "接入服务商" })).toBeTruthy();
     expect(screen.queryByText(/需自行接入服务商后才能对话/)).toBeNull();
-    expect(screen.queryByText("模型组合")).toBeNull();
+    expect(screen.queryByRole("button", { name: "新建" })).toBeNull();
   });
 
   it("on 新建 with BYOK but empty catalog opens editor with custom entry", () => {

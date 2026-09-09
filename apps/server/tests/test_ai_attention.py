@@ -18,9 +18,11 @@ import pytest
 
 from agentcore.attention import (
     ATTENTION_EVENT_TYPE,
+    PUSH_FALLBACK_BODY,
     TITLE_MAX_CHARS,
     AttentionKind,
     attention_kind_of,
+    attention_push_copy,
     attention_title,
     bind_attention_scope,
     reset_attention_scope,
@@ -109,24 +111,15 @@ def test_attention_kinds_stay_aligned_with_the_interaction_wire():
         assert attention_kind_of(durable.value) is not None
 
 
-def test_title_prefers_what_the_card_asks():
-    assert (
-        attention_title(AttentionKind.APPROVAL, {"tool_name": "file_write"})
-        == "需要授权：file_write"
-    )
-    assert (
-        attention_title(AttentionKind.ESCALATION, {"question": "用 A 方案还是 B 方案？"})
-        == "用 A 方案还是 B 方案？"
-    )
-
-
-def test_title_falls_back_per_kind_and_stays_bounded():
-    assert attention_title(AttentionKind.PLAN_REVIEW, {}) == "AI 计划待你确认"
-    assert attention_title(AttentionKind.APPROVAL, None) == "AI 需要你的授权"
-
-    long_question = "问" * 500
-    title = attention_title(AttentionKind.ASK_USER, {"question": long_question})
-    assert len(title) == TITLE_MAX_CHARS
+def test_title_is_the_kind_headline_not_the_card():
+    assert attention_title(AttentionKind.APPROVAL) == "AI 需要你的授权"
+    assert attention_title(AttentionKind.ESCALATION) == "AI 需要你的决定"
+    assert attention_title(AttentionKind.ASK_USER) == "AI 需要你的回应"
+    assert attention_title(AttentionKind.PLAN_REVIEW) == "AI 计划待你确认"
+    headline, body = attention_push_copy(AttentionKind.APPROVAL)
+    assert headline == "AI 需要你的授权"
+    assert body == PUSH_FALLBACK_BODY
+    assert len(headline) <= TITLE_MAX_CHARS
 
 
 # --- firehose body -----------------------------------------------------------
@@ -141,7 +134,7 @@ async def test_required_publishes_signal_without_card_content(hub: ChatHub, push
         turn_id="turn-1",
         interaction_id="appr-1",
         kind=AttentionKind.APPROVAL,
-        title="需要授权：file_write",
+        title="AI 需要你的授权",
         push=False,
     )
 
@@ -153,7 +146,7 @@ async def test_required_publishes_signal_without_card_content(hub: ChatHub, push
             "turn_id": "turn-1",
             "interaction_id": "appr-1",
             "kind": "approval",
-            "title": "需要授权：file_write",
+            "title": "AI 需要你的授权",
         }
     ]
 
@@ -221,14 +214,14 @@ async def test_push_fires_when_nothing_is_listening(hub: ChatHub, pushes):
         turn_id="turn-1",
         interaction_id="appr-1",
         kind=AttentionKind.APPROVAL,
-        title="需要授权：file_write",
+        title="AI 需要你的授权",
         push=True,
     )
 
     (user_id, notification) = pushes[0]
     assert user_id == "u1"
     assert notification.title == "AI 需要你的授权"
-    assert notification.body == "需要授权：file_write"
+    assert notification.body == PUSH_FALLBACK_BODY
     assert notification.data == {
         "conversation_id": "conv-1",
         "message_id": "turn-1",
@@ -255,7 +248,7 @@ async def test_open_desktop_does_not_swallow_the_push(hub: ChatHub, pushes):
         turn_id="turn-1",
         interaction_id="appr-1",
         kind=AttentionKind.APPROVAL,
-        title="需要授权：file_write",
+        title="AI 需要你的授权",
         push=True,
     )
 
@@ -275,7 +268,7 @@ async def test_live_mobile_firehose_suppresses_the_push(
         turn_id="turn-1",
         interaction_id="appr-1",
         kind=AttentionKind.APPROVAL,
-        title="需要授权：file_write",
+        title="AI 需要你的授权",
         push=True,
     )
 
@@ -334,7 +327,7 @@ async def _required(**over: Any) -> None:
         "turn_id": "turn-1",
         "interaction_id": "appr-1",
         "kind": AttentionKind.APPROVAL,
-        "title": "需要授权：file_write",
+        "title": "AI 需要你的授权",
         "push": True,
     }
     kwargs.update(over)
@@ -468,7 +461,7 @@ async def test_hot_approval_signals_required_then_resolved(hub: ChatHub, pushes,
         "turn_id": "turn-1",
         "interaction_id": "appr-1",
         "kind": "approval",
-        "title": "需要授权：file_write",
+        "title": "AI 需要你的授权",
     }
     assert resolved["state"] == "resolved"
     assert resolved["interaction_id"] == "appr-1"
@@ -538,7 +531,7 @@ async def test_ceo_arbitrated_escalation_signals_nothing(hub: ChatHub, pushes, s
     assert pushes == []
 
 
-async def test_user_facing_escalation_signals_with_its_question(hub: ChatHub, pushes, scope):
+async def test_user_facing_escalation_signals_kind_headline(hub: ChatHub, pushes, scope):
     sub = hub.subscribe("u1", device_id="desk-1", platform="desktop")
     registry = InteractionRegistry()
 
@@ -557,7 +550,7 @@ async def test_user_facing_escalation_signals_with_its_question(hub: ChatHub, pu
 
     required, resolved = _drain(sub)
     assert required["kind"] == "escalation"
-    assert required["title"] == "线上库要不要直接改？"
+    assert required["title"] == "AI 需要你的决定"
     assert resolved["state"] == "resolved"
 
 
@@ -617,7 +610,7 @@ async def test_cold_pause_signals_required_from_the_frame(hub: ChatHub, pushes):
             "turn_id": "turn-cold",
             "interaction_id": "cp-1",
             "kind": "ask_user",
-            "title": "要按项目分还是按时间分？",
+            "title": "AI 需要你的回应",
         }
     ]
     # The durable pause runs its own push (notify_user) — this signal adds none.

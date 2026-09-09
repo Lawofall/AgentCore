@@ -27,7 +27,6 @@ import {
 import { stopAllConversationFollows } from "@/services/turns/conversationFollow";
 import { useProductNoticesStore } from "@/stores/productNotices";
 import { useSidePanelStore } from "@/stores/sidePanel";
-import { useStandingInboxStore } from "@/stores/standingInbox";
 import { startUpdates } from "@/stores/updates";
 import { useUsageStore } from "@/stores/usage";
 import { useEffect, useRef } from "react";
@@ -109,13 +108,6 @@ function AppShellFrame() {
       stopFulfillStream();
       stopAllConversationFollows();
     };
-  }, []);
-
-  // Standing-task inbox badge (awaiting_user + unacked failed) — soft-poll so
-  // Automations → 收件箱 stays live even when the user is elsewhere.
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.__WEB_PREVIEW__) return;
-    return useStandingInboxStore.getState().startPolling();
   }, []);
 
   // Product notices (全局公告 banner + modal + inbox) — soft-poll; skip offline preview.

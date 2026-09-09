@@ -9,8 +9,8 @@ List / create / get-by-id / soft-delete accept either an access session or a
 folders narrow ticket (sidecar cloud roster) — the sidecar-hosted CEO owns the
 same roster verbs the sidebar does (``delete_folder`` 软删经此路)。
 Permanent delete / rename / timeline / 最近删除 remain access-session only: 彻底删
-只由用户在桌面弹窗里勾选确认，恢复是用户的补救面，AI 永远够不到（这一轮 AI 只能
-删不能恢复）。
+只由用户确认（删除弹窗勾选，或「最近删除」里再确认），恢复是用户的补救面，AI
+永远够不到（这一轮 AI 只能软删不能恢复、不能彻底删）。
 """
 
 from collections.abc import Sequence
@@ -57,7 +57,10 @@ from agentcore.folders.collaboration_timeline import (
     list_folder_collaboration_timeline,
 )
 from agentcore.folders.desk import resolve_desk_access
-from agentcore.folders.permanent_delete import permanent_delete_folder
+from agentcore.folders.permanent_delete import (
+    permanent_delete_folder,
+    purge_trashed_folder,
+)
 from agentcore.folders.service import FolderDeskService, FolderDeskView, FolderMemberView
 from agentcore.folders.tree_ops import (
     FolderTreeError,
@@ -290,6 +293,41 @@ async def restore_deleted_folder(
         user_id=user.user_id,
     )
     return await _summary_from_owned(desk, restored)
+
+
+@router.delete("/trash/{folder_id}", response_model=StatusResponse)
+async def purge_deleted_folder(
+    folder_id: str,
+    user: AuthUser,
+    repo: FolderRepository = Depends(get_folder_repo),
+):
+    """从「最近删除」彻底删除一个项目：成员对话 + 云端文件 + 这张桌的设定。
+
+    Same member-chat semantics as ``DELETE /{folder_id}/permanent`` (弹窗勾选).
+    Disk is the tombstone path — never the live ``rel_path`` (that slot was
+    released at soft-delete and may already host a new folder). Restore that
+    wins the race is 409; a busy workspace is the same 409 restore already uses.
+    """
+    folder = await repo.get_deleted_by_id(folder_id, user_id=user.user_id)
+    if not folder:
+        raise NotFoundError("项目不存在或不在最近删除中")
+    if folder.deleted_at <= retention_cutoff():
+        raise ConflictError(
+            f"该项目已超过 {settings.workspace_retention_days} 天保留期，无法彻底删除"
+        )
+
+    try:
+        wiped = await purge_trashed_folder(folder_id=folder_id, user_id=user.user_id)
+    except WorkspaceBusyError as e:
+        raise ConflictError("工作区正忙（有回合在跑），请稍后再彻底删除") from e
+    if not wiped:
+        raise ConflictError("该项目已被清理，无法彻底删除")
+    logger.info(
+        "folders.trash_purged",
+        folder_id=folder_id,
+        user_id=user.user_id,
+    )
+    return StatusResponse()
 
 
 @router.get("/shared-with-me", response_model=list[FolderSummary])

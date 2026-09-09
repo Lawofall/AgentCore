@@ -62,7 +62,6 @@ _COLLOQUIAL_BAN = frozenset(
 _INTENSITIES = frozenset({"lean", "full", "solo", "standard"})
 _NONE_PLAYBOOK = frozenset({"", "none"})
 _ACTIONS = frozenset({"ASK", "DELEGATE", "DEBATE", "DIRECT"})
-_FORMS = frozenset({"prose", "files", "workspace"})
 _HISTORY_ROLES = frozenset({"user", "assistant"})
 
 _STRONG_PLAYBOOK = re.compile(
@@ -102,7 +101,6 @@ class RoutingScenario:
     expect_action: str = ""  # ASK|DELEGATE|DEBATE|DIRECT，可用 | 表示可接受集合
     expect_max_workers: int | None = None
     expect_min_workers: int | None = None
-    expect_form: str | None = None  # prose | files | workspace
     expect_max_recon_rounds: int | None = None
     prior_turns: tuple[RoutingTurn, ...] = ()
 
@@ -126,7 +124,6 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         category="code_audit",
         expect_playbook="",
         expect_action="DELEGATE",
-        expect_form="files",
         user_message="请对当前工作区做一次代码审计，找出 bug，并把审计报告落盘。",
         workspace="codebase",
     ),
@@ -168,7 +165,6 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         category="code_audit",
         expect_playbook="",
         expect_action="DELEGATE",
-        expect_form="files",
         user_message=(
             "帮我把这个项目好好检查一遍，看看有没有明显的 bug，"
             "最后写一份检查报告存成文件给我。"
@@ -181,7 +177,6 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         category="code_audit",
         expect_playbook="",
         expect_action="DELEGATE",
-        expect_form="files",
         user_message=(
             "这堆代码我不太放心，你帮忙找找问题，"
             "整理成文档放到工作区里，我之后还要看。"
@@ -260,9 +255,8 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         workspace="empty",
         expect_action="DELEGATE",
         expect_max_workers=1,
-        expect_form="files",
     ),
-    # 绑大仓「讨论+盘点/对照行业」：必须派（一人算过）；摸底 form=prose；禁老板多轮自搜。
+    # 绑大仓「讨论+盘点/对照行业」：必须派（一人算过）；摸底只报告；禁老板多轮自搜。
     # 空桌许可证对照见 discuss_license_*（DELEGATE|ASK）；身份闲聊才允许 DIRECT。
     RoutingScenario(
         key="discuss_worker_params_industry",
@@ -275,7 +269,29 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         workspace="codebase",
         expect_action="DELEGATE",
         expect_min_workers=1,
-        expect_form="prose",
+        expect_max_recon_rounds=1,
+    ),
+    # 绑仓未点名入口：须派；禁老板连搜摸底。勿用「先了解」点名硬幕短语。
+    RoutingScenario(
+        key="survey_codebase_layout",
+        phrasing="colloquial",
+        category="research_brief",
+        expect_playbook="",
+        user_message="帮我看看这个项目是怎么组织的，有哪些主要部分、从哪改起。",
+        workspace="codebase",
+        expect_action="DELEGATE",
+        expect_min_workers=1,
+        expect_max_recon_rounds=1,
+    ),
+    # 已点名路径：自己读即可，不必组队。
+    RoutingScenario(
+        key="explain_named_readme",
+        phrasing="colloquial",
+        category="chat",
+        expect_playbook="",
+        user_message="打开 README，解释一下开头在说什么。",
+        workspace="codebase",
+        expect_action="DIRECT",
         expect_max_recon_rounds=1,
     ),
     # 同一讨论的多个切面 ≠ N 个对比对象；先不成文仍派，人数跟缝走（不钉死恰好 1 人）。
@@ -293,7 +309,6 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         expect_action="DELEGATE|ASK",
         expect_min_workers=1,
         expect_max_workers=2,
-        expect_form="prose",
     ),
     RoutingScenario(
         key="identity_who_are_you",
@@ -348,29 +363,6 @@ def _optional_int(value: object) -> int | None:
     return None
 
 
-def _task_form(task: dict[str, Any]) -> str | None:
-    deliverable = task.get("deliverable")
-    if isinstance(deliverable, dict):
-        form = deliverable.get("form")
-        if isinstance(form, str) and form.strip():
-            return form.strip().lower()
-    form = task.get("form")
-    if isinstance(form, str) and form.strip():
-        return form.strip().lower()
-    return None
-
-
-def _unanimous_form(forms: Sequence[str]) -> str | None:
-    unique = {f for f in forms if f}
-    if len(unique) == 1:
-        return next(iter(unique))
-    return None
-
-
-def _effective_form(form: str | None) -> str:
-    return (form or "files").lower()
-
-
 def observable_workers(*, task_count: int, max_workers: int | None) -> int:
     if task_count >= 1:
         return task_count
@@ -388,8 +380,6 @@ def parse_delegate_rich(args_json: str) -> dict[str, Any]:
             "playbook": None,
             "playbook_args": None,
             "intensity": None,
-            "forms": [],
-            "form": None,
             "max_workers": None,
             "tasks_preview": None,
             "parse_error": True,
@@ -401,8 +391,6 @@ def parse_delegate_rich(args_json: str) -> dict[str, Any]:
             "playbook": None,
             "playbook_args": None,
             "intensity": None,
-            "forms": [],
-            "form": None,
             "max_workers": None,
             "tasks_preview": None,
             "parse_error": True,
@@ -418,19 +406,13 @@ def parse_delegate_rich(args_json: str) -> dict[str, Any]:
         tasks = []
     roles: list[str] = []
     preview: list[dict[str, Any]] = []
-    forms: list[str] = []
     for t in tasks[:12]:
         if not isinstance(t, dict):
             continue
         role = str(t.get("role") or "").strip()
         if role:
             roles.append(role)
-        form = _task_form(t)
-        if form:
-            forms.append(form)
         item = {k: t.get(k) for k in ("role", "task", "title") if t.get(k) not in (None, "")}
-        if form:
-            item["form"] = form
         preview.append(item)
     playbook = named_playbook(raw.get("playbook"))
     args = raw.get("playbook_args")
@@ -447,8 +429,6 @@ def parse_delegate_rich(args_json: str) -> dict[str, Any]:
         "playbook_field": raw.get("playbook"),
         "playbook_args": args if isinstance(args, dict) else args,
         "intensity": intensity,
-        "forms": forms,
-        "form": _unanimous_form(forms),
         "max_workers": max_workers,
         "tasks_preview": preview,
         "parse_error": False,
@@ -471,32 +451,20 @@ def classify_landing(
     expect: str,
     offered: bool,
     task_count: int,
-    form: str | None = None,
     max_workers: int | None = None,
     expect_action: str | None = None,
     expect_max_workers: int | None = None,
     expect_min_workers: int | None = None,
-    expect_form: str | None = None,
     recon_rounds: int = 0,
     expect_max_recon_rounds: int | None = None,
 ) -> dict[str, Any]:
     """终向落点分类（观测标签，不是 pass/fail 门禁）。
 
-    未声明 ``expect_action`` / ``expect_form`` / ``expect_max_workers`` /
+    未声明 ``expect_action`` / ``expect_max_workers`` /
     ``expect_min_workers`` / ``expect_max_recon_rounds`` 时保持原口径
-    （具名 playbook 场景指纹不变）。扩字段后才启用直答允许集、手写人数、form、探路轮次观测。
+    （具名 playbook 场景指纹不变）。扩字段后才启用直答允许集、手写人数、探路轮次观测。
     """
-    extended = bool(
-        expect_action
-        or expect_form
-        or expect_max_workers is not None
-        or expect_min_workers is not None
-        or expect_max_recon_rounds is not None
-    )
     workers = observable_workers(task_count=task_count, max_workers=max_workers)
-    effective_form = _effective_form(form)
-    files_like = effective_form == "files"
-    files_duo = action == "DELEGATE" and not playbook and task_count >= 2 and files_like
     allowed_actions = split_expect_action(expect_action or "")
 
     if not offered:
@@ -509,8 +477,6 @@ def classify_landing(
             "recon_over",
             f"探路 {recon_rounds} 轮，超过 expect_max_recon_rounds={expect_max_recon_rounds}",
         )
-    elif extended and files_duo:
-        landing, note = "files_duo", f"手写 {task_count} 人 form=files 成文产线"
     elif action != "DELEGATE":
         if allowed_actions and action in allowed_actions:
             landing, note = "allowed_action", f"终向是 {action}（允许 {expect_action}）"
@@ -532,19 +498,10 @@ def classify_landing(
                 "workers_over",
                 f"手写 {workers} 人，超过 expect_max_workers={expect_max_workers}",
             )
-        elif expect_form and effective_form != expect_form:
-            landing, note = (
-                "form_mismatch",
-                f"form={effective_form!r}（期望 {expect_form}）",
-            )
-        elif (
-            expect_form
-            or expect_max_workers is not None
-            or expect_min_workers is not None
-        ):
+        elif expect_max_workers is not None or expect_min_workers is not None:
             landing, note = (
                 "handwritten_expected",
-                f"手写 tasks n={task_count} form={effective_form}",
+                f"手写 tasks n={task_count}",
             )
         else:
             landing, note = (
@@ -553,13 +510,13 @@ def classify_landing(
             )
     else:
         landing, note = "empty_delegate", "发出了 delegate，但既无具名 playbook 也无 tasks"
+
     return {
         "playbook_offered": offered,
         "playbook": playbook,
         "landing": landing,
         "note": note,
-        "files_duo": files_duo,
-        "form": form,
+        "files_duo": False,
         "workers": workers,
     }
 
@@ -754,8 +711,8 @@ def lint_scenarios(scenarios: Sequence[RoutingScenario] = SCENARIOS) -> None:
         raise EvalConfigError("至少要有一档 workspace=codebase（真实代码量，避免空仓假象）")
     if not any(s.prior_turns for s in scenarios):
         raise EvalConfigError("至少一条场景须带 prior_turns（第二轮短答）")
-    if not any(s.expect_form == "files" and s.expect_max_workers == 1 for s in scenarios):
-        raise EvalConfigError("至少一条场景须 expect_form=files 且 expect_max_workers=1")
+    if not any(s.expect_max_workers == 1 for s in scenarios):
+        raise EvalConfigError("至少一条场景须 expect_max_workers=1")
     if not any("DIRECT" in split_expect_action(s.expect_action) for s in scenarios):
         raise EvalConfigError("至少一条场景须允许 DIRECT（身份闲聊 / 窗口短答）")
     if not any(s.expect_max_recon_rounds is not None for s in scenarios):
@@ -770,8 +727,6 @@ def lint_scenarios(scenarios: Sequence[RoutingScenario] = SCENARIOS) -> None:
             parts = split_expect_action(s.expect_action)
             if not parts or any(p not in _ACTIONS for p in parts):
                 raise EvalConfigError(f"{s.key}: expect_action 非法 {s.expect_action!r}")
-        if s.expect_form is not None and s.expect_form not in _FORMS:
-            raise EvalConfigError(f"{s.key}: expect_form 非法 {s.expect_form!r}")
         if s.expect_max_workers is not None and s.expect_max_workers < 1:
             raise EvalConfigError(f"{s.key}: expect_max_workers 须 >= 1")
         if s.expect_min_workers is not None and s.expect_min_workers < 1:

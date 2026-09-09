@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from agentcore.config.approval import ApprovalSettings
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
 from agentcore.runtime.approvals import (
     ApprovalDecision,
@@ -422,7 +422,7 @@ def test_run_is_governed_by_the_approval_gate():
 
     schema = RunTool().schema
     assert schema.approval is ToolApproval.GRANTABLE
-    assert schema.category is ToolCategory.EXECUTION
+    assert schema.face is ToolFace.EXECUTION
     assert tool_call_requires_approval(
         "run", schema.approval, {"command": "pnpm test"}
     ) is True
@@ -535,7 +535,7 @@ class _GrantableTool:
             name=self._name,
             description="stub grantable",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.GRANTABLE,
         )
 
@@ -557,7 +557,7 @@ class _NeverGatedTool:
             name=self._name,
             description="stub search",
             parameters={"type": "object", "properties": {}},
-            category=ToolCategory.SEARCH,
+            face=ToolFace.SEARCH,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001

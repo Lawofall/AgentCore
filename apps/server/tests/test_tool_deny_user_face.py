@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from agentcore.core.error_codes import ErrorCode
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.llm.provider.protocol import ToolCall, ToolCallFunction
 from agentcore.runtime.approvals import ApprovalDecision
 from agentcore.runtime.engine.tool_exec import execute_tools
@@ -78,13 +78,13 @@ class _Stub:
         self,
         name: str,
         *,
-        category: ToolCategory = ToolCategory.SEARCH,
+        face: ToolFace = ToolFace.SEARCH,
         approval: ToolApproval = ToolApproval.NEVER,
         timeout_seconds: float | None = None,
         sleep: float | None = None,
     ) -> None:
         self._name = name
-        self._category = category
+        self._face = face
         self._approval = approval
         self._timeout_seconds = timeout_seconds
         self._sleep = sleep
@@ -96,7 +96,7 @@ class _Stub:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=self._category,
+            face=self._face,
             approval=self._approval,
             timeout_seconds=self._timeout_seconds,
         )
@@ -227,7 +227,7 @@ async def test_safety_breaker_deny_keeps_steer_off_the_user_face():
     assert hit is not None
 
     sink = EventSink()
-    tool = _Stub("git", category=ToolCategory.EXECUTION)
+    tool = _Stub("git", face=ToolFace.EXECUTION)
     await execute_tools(
         [_call("c1", "git", args)],
         _registry(tool),
@@ -251,7 +251,7 @@ async def test_safety_breaker_without_gate_keeps_steer_off_the_user_face():
     assert hit is not None
 
     sink = EventSink()
-    tool = _Stub("run", category=ToolCategory.EXECUTION)
+    tool = _Stub("run", face=ToolFace.EXECUTION)
     await execute_tools(
         [_call("c1", "run", args)],
         _registry(tool),
@@ -272,11 +272,11 @@ async def test_safety_breaker_without_gate_keeps_steer_off_the_user_face():
 
 async def test_run_allowlist_deny_keeps_engine_words_off_the_user_face():
     """Landing tool outside the run allow-list: 「本 run 的允许列表」is ours, not theirs."""
-    tool = _Stub("file_write", category=ToolCategory.FILESYSTEM)
+    tool = _Stub("file_write", face=ToolFace.FILE)
     sink = EventSink()
     await execute_tools(
         [_call("c1", "file_write", '{"path":"a.md","content":"x"}')],
-        _registry(tool, _Stub("file_read", category=ToolCategory.FILESYSTEM)),
+        _registry(tool, _Stub("file_read", face=ToolFace.FILE)),
         _ctx(),
         sink,
         approval_gate=None,
@@ -320,7 +320,7 @@ async def test_unknown_tool_name_keeps_the_did_you_mean_steer_off_the_user_face(
     sink = EventSink()
     await execute_tools(
         [_call("c1", "quux_tool")],
-        _registry(_Stub("grep", category=ToolCategory.FILESYSTEM)),
+        _registry(_Stub("grep", face=ToolFace.FILE)),
         _ctx(),
         sink,
         approval_gate=None,
@@ -347,7 +347,7 @@ async def test_tool_off_this_surface_keeps_role_steer_off_the_user_face():
     sink = EventSink()
     await execute_tools(
         [_call("c1", "run")],
-        _registry(_Stub("grep", category=ToolCategory.FILESYSTEM)),
+        _registry(_Stub("grep", face=ToolFace.FILE)),
         _ctx(),
         sink,
         approval_gate=None,
@@ -367,7 +367,7 @@ async def test_landed_status_bait_keeps_the_rewrite_recipe_off_the_user_face():
     sink = EventSink()
     await execute_tools(
         [_call("c1", "_write_landed", '{"path":"a.md","status":"landed"}')],
-        _registry(_Stub("grep", category=ToolCategory.FILESYSTEM)),
+        _registry(_Stub("grep", face=ToolFace.FILE)),
         _ctx(),
         sink,
         approval_gate=None,
@@ -391,7 +391,7 @@ async def test_write_args_parse_failure_is_the_one_legitimate_authored_face():
     """
     from agentcore.runtime.engine.tool_exec_args import _USER_WRITE_PARSE_MSG
 
-    tool = _Stub("file_write", category=ToolCategory.FILESYSTEM)
+    tool = _Stub("file_write", face=ToolFace.FILE)
     sink = EventSink()
     await execute_tools(
         [_call("c1", "file_write", '{"path": "a.md", "content": "abc')],
@@ -415,7 +415,7 @@ async def test_write_args_parse_failure_is_the_one_legitimate_authored_face():
 
 async def test_liveness_timeout_keeps_retry_ban_off_the_user_face():
     """A wedged tool: 「活性挂起…禁止原样重试」is steer, not something to show a person."""
-    tool = _Stub("grep", category=ToolCategory.FILESYSTEM, timeout_seconds=0.01, sleep=5)
+    tool = _Stub("grep", face=ToolFace.FILE, timeout_seconds=0.01, sleep=5)
     sink = EventSink()
     await execute_tools(
         [_call("c1", "grep", '{"pattern":"x"}')],

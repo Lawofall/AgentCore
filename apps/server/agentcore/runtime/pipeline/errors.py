@@ -1,6 +1,7 @@
 """Honest prepare / turn-start aborts for local workspace presence.
 
-Three user-visible presence cases (message already persisted → guide regenerate, not resend):
+Three user-visible presence cases (empty fail → send-as-if-never-happened,
+same Class B as quota/key empty fails):
 
 1. No desktop fulfillment session at all (desktop offline / not connected).
 2. Desktop online for ``workspace`` but does not declare this ``root_id``.
@@ -15,8 +16,11 @@ in force only inside a :func:`prepare_local_io_span`; execution-phase tool IO �
 including a delegate re-probing a *target* desk — never sees it bound
 (双模式工作区.md §7.7).
 
-Mid-turn settle timeouts fail that op only. File-family retire follows fulfiller
-presence (``workspace.presence``), not timeout counts.
+A single mid-turn settle timeout fails that op only. Session file-family retire
+follows fulfiller presence (``workspace.presence``), not timeout counts.
+Consecutive channel_op hangs on the same run latch hang-dead (stop persist /
+retire this worker's pens) without stamping the session or inferring the
+desktop is gone.
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ from contextvars import ContextVar, Token
 from typing import NoReturn
 
 from agentcore.config import settings
+from agentcore.core.error_codes import ErrorCode
 from agentcore.core.logging import get_logger
 from agentcore.fulfill.origin import ORIGIN_DEVICE_OFFLINE, current_origin_device
 from agentcore.workspace.limits import (
@@ -45,8 +50,7 @@ logger = get_logger(__name__)
 # Case 1 — no workspace fulfiller online for this user.
 LOCAL_DESKTOP_OFFLINE = (
     "本机桌面未连接，无法访问本地工作区。"
-    "请打开桌面客户端并登录后，点「重新生成」"
-    "（不要再次发送，以免出现两条用户消息）。"
+    "请打开桌面客户端并登录后再试。"
 )
 
 # Case 2 — ``LOCAL_ROOT_NOT_HELD``, imported from ``workspace/limits.py``: mid-turn
@@ -61,7 +65,6 @@ LOCAL_CHANNEL_DEAD = CHANNEL_DEAD_PREPARE_ABORT
 LOCAL_ORIGIN_DEVICE_OFFLINE = (
     f"{ORIGIN_DEVICE_OFFLINE}"
     "（本地工作区操作不会转投其他电脑。）"
-    "回到那台电脑后，点「重新生成」（不要再次发送）。"
 )
 
 PREPARE_LOCAL_ABORT_MESSAGES: frozenset[str] = frozenset(
@@ -72,6 +75,19 @@ PREPARE_LOCAL_ABORT_MESSAGES: frozenset[str] = frozenset(
         LOCAL_ORIGIN_DEVICE_OFFLINE,
     }
 )
+
+PREPARE_LOCAL_ABORT_CODES: dict[str, str] = {
+    LOCAL_DESKTOP_OFFLINE: ErrorCode.LOCAL_DESKTOP_OFFLINE,
+    LOCAL_ROOT_NOT_HELD: ErrorCode.LOCAL_ROOT_NOT_HELD,
+    LOCAL_CHANNEL_DEAD: ErrorCode.LOCAL_CHANNEL_DEAD,
+    LOCAL_ORIGIN_DEVICE_OFFLINE: ErrorCode.LOCAL_ORIGIN_DEVICE_OFFLINE,
+}
+
+
+def prepare_local_abort_error_code(detail: str) -> str | None:
+    """Dedicated code for an exact prepare/presence abort sentence, or None."""
+    return PREPARE_LOCAL_ABORT_CODES.get((detail or "").strip())
+
 
 # Monotonic deadline shared by every prepare span of one turn (turn_runner's
 # baseline → prepare's probe/exists), so the phase runs on ONE clock instead of

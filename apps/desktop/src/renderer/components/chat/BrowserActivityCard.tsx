@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ThinkingDots } from "./message-bubble/Thinking";
 import { toolMeta } from "./message-bubble/constants";
+import { toolGroupFaultLabel } from "./toolResult/toolFaultFace";
 
 type ToolStep = Extract<ProcessStep, { kind: "tool" }>;
 
@@ -378,10 +379,7 @@ export function BrowserActivityCard({
 
   const steps = browserStepsFromTools(tools);
   const running = tools.some((t) => t.status === "running");
-  const errorCount = tools.reduce(
-    (n, t) => n + (t.status === "error" ? 1 : 0),
-    0,
-  );
+  const groupFault = !expanded ? toolGroupFaultLabel(tools) : null;
   const count = steps.length;
   const title = `浏览器 · ${count} 步`;
 
@@ -407,9 +405,12 @@ export function BrowserActivityCard({
             <Monitor size={14} className="shrink-0" />
           )}
           <span className="min-w-0 truncate text-left">{title}</span>
-          {errorCount > 0 && (
-            <span className="shrink-0 rounded-full bg-destructive/10 px-1.5 text-xs font-normal text-destructive">
-              {errorCount} failed
+          {groupFault && (
+            <span
+              data-testid="tool-group-fault"
+              className="shrink-0 text-xs text-muted-foreground/70"
+            >
+              {groupFault}
             </span>
           )}
           {expanded ? (

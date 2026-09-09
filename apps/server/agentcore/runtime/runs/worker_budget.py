@@ -37,8 +37,8 @@ VERIFY_POLICY_OUTER = "outer"
 def is_deep_deliverable(deliverable: Deliverable | None) -> bool:
     """True when dispatch-time deliverable signals a write-desk / file report.
 
-    Write-disk recognition: ``form=files`` / ``form=workspace`` / non-empty
-    ``artifacts``. Omitted form on a parsed Deliverable is ``files``.
+    Write-disk recognition: non-empty ``artifacts`` or ``artifact_dir``.
+    Omitted / empty deliverable does not expect landing.
     """
     from agentcore.runtime.runs.types import deliverable_expects_landing
 

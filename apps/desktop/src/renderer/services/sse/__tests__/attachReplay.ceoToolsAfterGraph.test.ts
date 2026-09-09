@@ -42,7 +42,7 @@ function liveLeadIn(): SSEEvent[] {
     ev("tool_use_start", {
       tool_call_id: "c1",
       tool_name: "consult",
-      arguments: { name: "team_orchestration_advanced" },
+      arguments: { name: "staffing" },
     }),
     ev("tool_use_end", {
       tool_call_id: "c1",
@@ -143,7 +143,7 @@ describe("attachReplay · 协作图下 CEO 工具重复", () => {
       ev("tool_use_start", {
         tool_call_id: "c1",
         tool_name: "consult",
-        arguments: { name: "team_orchestration_advanced" },
+        arguments: { name: "staffing" },
       }),
       ev("tool_use_start", {
         tool_call_id: "c2",
@@ -182,7 +182,7 @@ describe("attachReplay · 协作图下 CEO 工具重复", () => {
           kind: "tool",
           id: "c1",
           tool_name: "consult",
-          arguments: { name: "team_orchestration_advanced" },
+          arguments: { name: "staffing" },
           result: "ok",
           status: "success",
         },
@@ -214,7 +214,7 @@ describe("attachReplay · 协作图下 CEO 工具重复", () => {
       ev("tool_use_start", {
         tool_call_id: "c1",
         tool_name: "consult",
-        arguments: { name: "team_orchestration_advanced" },
+        arguments: { name: "staffing" },
       }),
       ev("tool_use_start", {
         tool_call_id: "c2",

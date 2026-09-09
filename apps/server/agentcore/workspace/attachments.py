@@ -13,8 +13,8 @@ dropped before the exists check.
 
 Text-like binaries (docx/pdf/pptx/txt …) are **pre-parsed** after residency
 (``attachment_parse``): a readable ``*.md`` copy is written beside the original
-when extraction succeeds. Spreadsheets (xlsx/csv/tsv) get a **structure preview**
-only (columns / row count / types / sample rows) — the full table stays on disk
+when extraction succeeds. Spreadsheets (xlsx/csv/tsv) get **column names, types,
+and sample rows** only — the full table stays on disk
 and is never inlined. Parse failures never break the turn — path-hint fallback
 remains.
 
@@ -127,7 +127,7 @@ def _is_copied_attachment_rel(rel: str) -> bool:
 
 
 def _apply_table_preview(item: dict, result: TablePreviewResult) -> None:
-    """Attach a structure preview and drop any inline table body from the item."""
+    """Attach a column/type/sample preview and drop any inline table body from the item."""
     item["parse_status"] = result.status.value
     if result.preview is not None:
         item["table_preview"] = result.preview.to_dict()

@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 from agentcore.config import settings
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCall, ToolCallFunction
 from agentcore.runtime.engine import react_loop
 from agentcore.runtime.engine.round import build_request_window
@@ -267,7 +267,7 @@ def test_empty_clearable_is_noop():
 
 
 class _FakeReadTool:
-    """A read-only NEVER-approval FILESYSTEM tool so the loop classifies it as an
+    """A read-only NEVER-approval FILE tool so the loop classifies it as an
     investigation tool (clearable). Never executed by these tests (the window is
     pre-seeded and the provider finishes round 0)."""
 
@@ -277,7 +277,7 @@ class _FakeReadTool:
             name="file_read",
             description="read a file",
             parameters={"type": "object", "properties": {"path": {"type": "string"}}},
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.NEVER,
         )
 

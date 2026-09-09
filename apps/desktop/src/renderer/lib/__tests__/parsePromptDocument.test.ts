@@ -45,7 +45,7 @@ describe("parsePromptDocument", () => {
 
   it("handles Chinese tag names", () => {
     const text = `<能力目录>
-- team_orchestration_advanced：进阶用法
+- staffing：进阶用法
 </能力目录>`;
 
     const sections = parsePromptDocument(text);
@@ -53,7 +53,7 @@ describe("parsePromptDocument", () => {
     expect(sections[0]).toMatchObject({
       tag: "能力目录",
       title: "能力目录",
-      body: "- team_orchestration_advanced：进阶用法",
+      body: "- staffing：进阶用法",
     });
   });
 

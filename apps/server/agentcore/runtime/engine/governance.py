@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from agentcore.config import settings
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall
 from agentcore.runtime.events import FinishReason
 from agentcore.runtime.facts import NoteFact, record_turn_fact
@@ -206,10 +206,11 @@ def classify_investigation_tools(
         schema = schema_by_name.get(name)
         if schema is None:
             continue
-        if schema.approval is ToolApproval.NEVER and schema.category in (
-            ToolCategory.FILESYSTEM,
-            ToolCategory.SEARCH,
-            ToolCategory.RESEARCH,
+        if schema.approval is ToolApproval.NEVER and schema.face in (
+            ToolFace.FILE,
+            ToolFace.SEARCH,
+            ToolFace.WEB,
+            ToolFace.EXECUTION,
         ):
             investigation_tools.add(name)
     return frozenset(investigation_tools)
@@ -224,7 +225,7 @@ def create_loop_controller(
     short_write_posture: bool = False,
     tighten_verify_exec_thrash: bool = False,
     max_rounds: int | None = None,
-    form_prose: bool = False,
+    expects_landing: bool = False,
     product_landing_artifacts: list[str] | tuple[str, ...] | None = None,
 ) -> LoopController:
     """Build per-run convergence controller from engine settings.
@@ -282,7 +283,7 @@ def create_loop_controller(
         # Retired: ignore settings.engine_convergence_finalize_rounds even if env > 0.
         convergence_finalize_rounds=0,
         convergence_spin_rounds=settings.engine_convergence_spin_rounds,
-        form_prose=form_prose,
+        expects_landing=expects_landing,
         delivery_idle_nudge_rounds=delivery_idle_nudge,
         delivery_idle_narrow_rounds=delivery_idle_narrow,
         delivery_idle_recon=delivery_idle_recon,
@@ -316,13 +317,13 @@ def finalize_allows_persist(
     allowed_tool_names: list[str] | None,
     *,
     files_expected: bool = False,
-    form_prose: bool = False,
+    expects_landing: bool = False,
     workspace_channel_dead: bool = False,
 ) -> bool:
-    """True when finalize should keep file_write+handoff (files-form / wind_down).
+    """True when finalize should keep file_write+handoff (pinned landing / wind_down).
 
-    ``form_prose`` or writes absent from registry → coordination only (finalize
-   不催 prose 队员落盘). ``files_expected`` → offer persist when ``file_write``
+    Not-landing or writes absent from registry → coordination only (finalize
+    does not urge writes). ``files_expected`` → offer persist when ``file_write``
     is registered. 真纯丙后执行层默认 unrestricted，不再依赖「名单缺写盘补写」。
 
     ``workspace_channel_dead`` / sticky session·channel dead → never retain persist
@@ -330,7 +331,7 @@ def finalize_allows_persist(
     """
     if workspace_channel_dead or is_workspace_channel_sticky_dead():
         return False
-    if form_prose or "file_write" not in tools.names:
+    if not expects_landing or "file_write" not in tools.names:
         return False
     if files_expected:
         return True
@@ -352,14 +353,14 @@ def resolve_finalize_coordination_tools(
     disabled_tools: set[str],
     *,
     files_expected: bool = False,
-    form_prose: bool = False,
+    expects_landing: bool = False,
     workspace_channel_dead: bool = False,
 ) -> list[dict[str, Any]] | None:
     """OpenAI tool defs for a forced-finalize round.
 
     Default = coordination only. When the worker surface still offers ``file_write``
-    (form=files / artifacts / wind_down), also keep ``file_write`` + ``handoff``
-    so landing is possible — never strip persist tools then claim a prose-only wrap.
+    (pinned landing / wind_down), also keep ``file_write`` + ``handoff``
+    so landing is possible — never strip persist tools then claim a report-only wrap.
     """
     if allowed_tool_names is None:
         candidates = list(tools.names) if tools.count > 0 else []
@@ -369,7 +370,7 @@ def resolve_finalize_coordination_tools(
         tools,
         allowed_tool_names,
         files_expected=files_expected,
-        form_prose=form_prose,
+        expects_landing=expects_landing,
         workspace_channel_dead=workspace_channel_dead,
     )
     allow = finalize_tool_allowlist(persist=persist)
@@ -486,6 +487,12 @@ def apply_workspace_channel_dead_retire(
     be refreshed.
     """
     from agentcore.workspace.limits import WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS
+
+    hang = controller is not None and bool(getattr(controller, "_channel_hang_dead", False))
+    if hang:
+        before = len(disabled_tools)
+        disabled_tools.update(WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS)
+        return len(disabled_tools) > before
 
     if not is_workspace_channel_sticky_dead(tool_context):
         return _revive_workspace_file_family(

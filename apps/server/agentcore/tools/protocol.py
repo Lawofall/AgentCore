@@ -18,7 +18,7 @@ TOOL_AUDIENCE_USER: ToolAudience = "user"
 TOOL_AUDIENCE_CEO: ToolAudience = "ceo"
 
 from agentcore.core.text import truncate_head_tail
-from agentcore.core.types import ToolApproval, ToolCategory, ToolEffect
+from agentcore.core.types import ToolApproval, ToolEffect, ToolFace
 from agentcore.tools.file_products import FileProduct
 
 if TYPE_CHECKING:
@@ -157,15 +157,15 @@ class ToolSchema:
     name: str
     description: str
     parameters: dict[str, Any]  # JSON Schema format
-    category: ToolCategory
+    face: ToolFace
     approval: ToolApproval = ToolApproval.NEVER
     # Engine-level hard ceiling (seconds) for ONE call of this tool — a B1 backstop
     # so a wedged tool can't stall a whole turn. ``None`` ⇒ the engine applies a
-    # per-category default (``runtime.engine.resolve_tool_timeout``); ORCHESTRATION
-    # / INTERACTION tools are exempt (they legitimately wait minutes on sub-runs or
-    # the user). Set explicitly only for a non-default ceiling. This is a coarse
-    # safety net layered ABOVE a tool's own finer timeout (e.g. ``code_execute``
-    # caps its sandbox itself), never a replacement for it.
+    # per-face default (``runtime.engine.resolve_tool_timeout``); ORCHESTRATION
+    # tools are exempt (they legitimately wait minutes on sub-runs or the user).
+    # Set explicitly only for a non-default ceiling. This is a coarse safety net
+    # layered ABOVE a tool's own finer timeout (e.g. ``run`` caps its sandbox
+    # itself), never a replacement for it.
     timeout_seconds: float | None = None
 
 
@@ -475,9 +475,9 @@ class ToolContext:
     handoff_requires_body: bool = False
     # 有下游时正文地板字数；生产恒为 0（仅要求非空）。禁止从已删字段回填或发明地板。
     handoff_min_body_chars: int = 0
-    # ``deliverable.form``（``prose`` / ``files`` / None）。有下游 + prose 时禁止
-    # 用 summary 升格冒充交接地板正文；其它 form 仍可升格。
-    handoff_deliverable_form: str | None = None
+    # True when this node expects on-disk landing (pinned artifacts / artifact_dir).
+    # Not-landing + 有下游：禁止用 summary 升格冒充交接地板正文。
+    handoff_expects_landing: bool = False
     # True when this run already landed at least one file (file_write /
     # str_replace) on the *current* ToolContext object. Best-effort same-ctx
     # signal only — ``dataclasses.replace`` drops this bool. Handoff / executor

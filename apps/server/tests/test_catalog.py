@@ -8,7 +8,10 @@ endpoint silently serving half-built metadata. Also pins the CEO/worker reach an
 and the single-source prompt composer's 按需目录 gating.
 """
 
+from agentcore.core.types import ToolFace
+from agentcore.runtime.context.consultable import ConsultDirectoryEntry
 from agentcore.runtime.resolve.prompt import assemble_system_prompt, compose_ceo_chat_prompt
+from agentcore.runtime.resolve.prompt.compose import render_on_demand_directory
 from agentcore.runtime.skills import build_system_skill_registry
 from agentcore.tools.catalog import (
     AVAILABLE_TO_CEO,
@@ -63,6 +66,9 @@ def test_every_catalog_tool_has_usable_metadata():
         assert schema.description and isinstance(schema.description, str)
         assert isinstance(schema.parameters, dict)
         assert schema.parameters.get("type") == "object"
+        assert isinstance(schema.face, ToolFace)
+        assert isinstance(entry.resident, bool)
+        assert isinstance(entry.summary, str)
         assert entry.available_to, f"{schema.name} must declare available_to"
         assert set(entry.available_to) <= {AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER}
 
@@ -137,7 +143,7 @@ def test_mutation_and_execution_are_shared_with_ceo():
 
 def test_ceo_prompt_lists_skill_directory_when_ask_user_wired():
     """compose_ceo_chat_prompt is the single source for runtime + 能力图鉴; its 按需目录
-    must gate asking_the_user on ask_user being wired (the live-user invariant)."""
+    must gate ask_kickoff / ask_midtask on ask_user being wired (the live-user invariant)."""
     registry = build_system_skill_registry()
     base = assemble_system_prompt()
 
@@ -149,16 +155,88 @@ def test_ceo_prompt_lists_skill_directory_when_ask_user_wired():
         ceo_tool_names={"delegate", "consult", "ask_user"},
     )
     assert "按需目录" in with_ask
-    assert "- asking_the_user：" in with_ask
-    assert "- team_orchestration_advanced：" in with_ask
+    assert "编排：" in with_ask
+    assert "- ask_kickoff：" in with_ask
+    assert "- ask_midtask：" in with_ask
+    assert "- staffing：" in with_ask
+    assert "- asking_the_user：" not in with_ask
 
     without_ask = compose_ceo_chat_prompt(
         base,
         skill_registry=registry,
         ceo_tool_names={"delegate", "consult"},
     )
-    # asking_the_user requires the ask_user tool — its directory line is gated out…
+    # ask books require the ask_user tool — directory lines gated out…
+    assert "- ask_kickoff：" not in without_ask
+    assert "- ask_midtask：" not in without_ask
     assert "- asking_the_user：" not in without_ask
     assert "- ask_user_kickoff：" not in without_ask
     # …but the un-gated advanced skills still list.
-    assert "- team_orchestration_advanced：" in without_ask
+    assert "- staffing：" in without_ask
+
+
+# Display face ≠ ceo_orchestration surface. Pin so Folder / board / remember
+# cannot slide back into the orchestration dumpster.
+_CATALOG_FACE: dict[str, ToolFace] = {
+    "delegate": ToolFace.ORCHESTRATION,
+    "replan": ToolFace.ORCHESTRATION,
+    "debate": ToolFace.ORCHESTRATION,
+    "consult": ToolFace.ORCHESTRATION,
+    "ask_user": ToolFace.ORCHESTRATION,
+    "escalate": ToolFace.ORCHESTRATION,
+    "handoff": ToolFace.ORCHESTRATION,
+    "list_folders": ToolFace.FOLDER,
+    "resolve_folder": ToolFace.FOLDER,
+    "create_folder": ToolFace.FOLDER,
+    "delete_folder": ToolFace.FOLDER,
+    "list_folder_dir": ToolFace.FOLDER,
+    "read_folder_file": ToolFace.FOLDER,
+    "remember": ToolFace.FOLDER,
+    "update_folder_profile": ToolFace.FOLDER,
+    "read_image": ToolFace.BOARD,
+    "board_ops": ToolFace.BOARD,
+    "board_read": ToolFace.BOARD,
+}
+
+
+def test_catalog_faces_are_not_an_orchestration_dumpster():
+    by_name = {e.schema.name: e.schema.face for e in build_capability_catalog()}
+    for name, face in _CATALOG_FACE.items():
+        assert by_name[name] is face, name
+    orchestration = {n for n, f in by_name.items() if f is ToolFace.ORCHESTRATION}
+    folder = {n for n, f in by_name.items() if f is ToolFace.FOLDER}
+    board = {n for n, f in by_name.items() if f is ToolFace.BOARD}
+    assert orchestration == {n for n, f in _CATALOG_FACE.items() if f is ToolFace.ORCHESTRATION}
+    assert folder == {n for n, f in _CATALOG_FACE.items() if f is ToolFace.FOLDER}
+    assert board == {n for n, f in _CATALOG_FACE.items() if f is ToolFace.BOARD}
+
+
+def test_on_demand_directory_splits_folder_and_board_off_orchestration():
+    out = render_on_demand_directory(
+        [
+            ConsultDirectoryEntry(
+                name="create_folder",
+                summary="新建云文件夹",
+                section="tool",
+                face=ToolFace.FOLDER.value,
+            ),
+            ConsultDirectoryEntry(
+                name="board_ops",
+                summary="白板上作画",
+                section="tool",
+                face=ToolFace.BOARD.value,
+            ),
+            ConsultDirectoryEntry(
+                name="delegate",
+                summary="派活",
+                section="tool",
+                face=ToolFace.ORCHESTRATION.value,
+            ),
+        ]
+    )
+    assert "文件夹：" in out
+    assert "白板：" in out
+    assert "编排：" in out
+    assert out.index("文件夹：") < out.index("- create_folder：新建云文件夹") < out.index("白板：")
+    assert out.index("白板：") < out.index("- board_ops：白板上作画") < out.index("编排：")
+    assert out.index("编排：") < out.index("- delegate：派活")

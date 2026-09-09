@@ -16,7 +16,7 @@ from pathlib import PurePosixPath
 from typing import Any, cast
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.llm.pricing import CredentialSource
 from agentcore.runtime.costing import vision_run_cost
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
@@ -54,6 +54,8 @@ class ReadImageTool:
         surface=ToolSurface.CEO_ORCHESTRATION,
         audience=AUDIENCE_CEO_ONLY,
         ceo_wire=CeoWire.ALWAYS,
+        resident=False,
+        catalog_summary="读工作区图片",
     )
 
     @property
@@ -85,7 +87,7 @@ class ReadImageTool:
                 },
                 "required": ["path", "prompt"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.BOARD,
             approval=ToolApproval.NEVER,
         )
 

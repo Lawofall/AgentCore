@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 from agentcore.core.citation_tier import citation_tier_for_url, stamp_citation_tier
 from agentcore.core.logging import get_logger
 from agentcore.core.net import describe_net_error, site_of
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.builtin.web.cloud_fallback import (
     CLOUD_FALLBACK_NOTE,
     try_cloud_web_search_fallback,
@@ -580,7 +580,7 @@ class WebSearchTool:
                 },
                 "required": ["query"],
             },
-            category=ToolCategory.RESEARCH,
+            face=ToolFace.WEB,
             approval=ToolApproval.NEVER,
         )
 
@@ -905,7 +905,7 @@ class WebSearchTool:
         （``weak``）默认仍回模型；``search_policy=debate_evidence`` 下 weak 与
         商城/词典/医院百科硬剔（可进 dropped）。``search_policy=academic_literature``
         偏论文/DOI、降权百科词典门户，并在 junk/空结果时戳 ``evidence_gap``。
-        可被 ``#rN`` 显式引用并带弱源徽标（P2）。
+        可被 ``#rN`` 显式引用；来源卡不打档位徽标，``deep_read`` 标「已读」。
         """
         kept, blocked_hosts = _split_blocked(results)
 

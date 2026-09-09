@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.builtin.folders import (
     CreateFolderTool,
     ListFoldersTool,
@@ -32,9 +32,9 @@ from agentcore.tools.registration import (
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
-_FOLDER_HOW_CONSULT = "HOW→consult(team_cross_folder)"
+_FOLDER_HOW_CONSULT = "HOW→consult(desks)"
 # schema 短触发；禁猜最近 / 过闸催建在回执与 target_folder_id；百科不进按钮。
-# 对照句存在性见 test_skills.test_team_cross_folder_skill_teaches_parallel_command。
+# 换桌对照句在 delegate target_folder_id / 认桌工具 description。
 _SCHEMA_ENCYCLOPEDIA_FORBIDDEN = (
     "先建后派",
     "导入到云",
@@ -45,9 +45,9 @@ _SCHEMA_ENCYCLOPEDIA_FORBIDDEN = (
 
 
 def _assert_short_trigger(description: str) -> None:
-    assert _FOLDER_HOW_CONSULT in description
+    assert _FOLDER_HOW_CONSULT not in description
     for phrase in _SCHEMA_ENCYCLOPEDIA_FORBIDDEN:
-        assert phrase not in description, f"schema 勿抄 skill 百科：{phrase}"
+        assert phrase not in description, f"schema 勿抄百科：{phrase}"
 
 
 def _ctx(user_id: str = "u1", *, conversation_id: str = "") -> ToolContext:
@@ -203,7 +203,7 @@ def test_resolve_blank_path_is_not_found():
 def test_list_folders_schema_and_registration():
     tool = ListFoldersTool()
     assert tool.schema.name == "list_folders"
-    assert tool.schema.category is ToolCategory.ORCHESTRATION
+    assert tool.schema.face is ToolFace.FOLDER
     assert tool.schema.approval is ToolApproval.NEVER
     desc = tool.schema.description
     _assert_short_trigger(desc)
@@ -257,7 +257,7 @@ def test_create_folder_schema_and_registration():
     # Nesting: the model must be able to say WHERE the new folder hangs.
     assert "parent_path" in props
     assert tool.schema.parameters["required"] == ["name"]
-    assert tool.schema.category is ToolCategory.ORCHESTRATION
+    assert tool.schema.face is ToolFace.FOLDER
     assert tool.schema.approval is ToolApproval.NEVER
     # Cloud-only surface: no local_root_id / mode param (local = 桶 D).
     assert "local_root_id" not in props
@@ -437,7 +437,7 @@ async def test_list_folders_empty(monkeypatch: pytest.MonkeyPatch):
     assert "过写盘闸" in result.output or "勿" in result.output
     # Empty roster must not default-nudge open_local_project as the create path.
     assert "勿默认催 open_local_project" in result.output or "导入到云" in result.output
-    assert _FOLDER_HOW_CONSULT in result.output
+    assert _FOLDER_HOW_CONSULT not in result.output
     assert "开发双仓" not in result.output
 
 
@@ -457,7 +457,7 @@ async def test_resolve_unique(monkeypatch: pytest.MonkeyPatch):
     assert "唯一命中" in result.output
     # Tip encourages early ask on empty/near-empty; not a hard ask_user gate.
     assert "file_list" in result.output
-    assert _FOLDER_HOW_CONSULT in result.output
+    assert _FOLDER_HOW_CONSULT not in result.output
     assert "开发双仓" not in result.output
 
 

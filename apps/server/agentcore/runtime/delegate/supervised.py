@@ -136,8 +136,10 @@ async def apply_replan(
 
     if adds_list:
         from agentcore.runtime.delegate.target_desktop import (
+            bare_chat_local_scratch_write_ok,
             ensure_bare_chat_auto_cloud_desk,
             gate_bare_chat_requires_target,
+            gate_conversation_id_is_not_folder,
         )
 
         ctx = getattr(tool, "_base_tool_context", None)
@@ -152,13 +154,31 @@ async def apply_replan(
             tool_context=ctx,
             sink=getattr(tool, "_sink", None),
         )
+        allow_scratch = bare_chat_local_scratch_write_ok(
+            session_folder_id=getattr(tool, "_folder_id", None),
+            backend=getattr(ctx, "backend", None) if ctx else None,
+            turn_target_desk=getattr(ctx, "turn_target_desk", None) if ctx else None,
+        )
         bare_gate = gate_bare_chat_requires_target(
             session_folder_id=getattr(tool, "_folder_id", None),
             tasks_raw=adds_list,
             default_target_folder_id=tool.effective_default_target_folder_id(),
+            allow_local_scratch_write=allow_scratch,
         )
         if bare_gate:
             return [bare_gate]
+        conv_gate = gate_conversation_id_is_not_folder(
+            conversation_id=getattr(tool, "_conversation_id", None)
+            or (getattr(ctx, "conversation_id", None) if ctx else None),
+            tasks_raw=adds_list,
+            default_target_folder_id=tool.effective_default_target_folder_id(),
+        )
+        if conv_gate:
+            logger.info(
+                "delegate.conversation_id_as_folder_rejected",
+                conversation_id=getattr(tool, "_conversation_id", None),
+            )
+            return [conv_gate]
 
         # Bypass drive cold-open: replan adds resume via seed_completed and would
         # skip post_close-style gates; reject write-desk adds when channel is dead.

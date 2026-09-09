@@ -124,6 +124,7 @@ class RunStartedPayload(WirePayload):
 
 ContextChannel = Literal[
     "system",
+    "tools",
     "history",
     "request",
     "team_position",
@@ -609,7 +610,7 @@ class RunFailedPayload(WirePayload):
     failure_kind: RunFailureKind | None = absent()
     debrief: RunDebrief | None = absent()
     execution_id: str | None = absent()
-    # Additive：失败前已有产物落盘（文件写成功后上游再挂）→ 脸「产出已落盘」。
+    # Additive：失败前已有产物落盘（文件写成功后上游再挂）→ 条「部分完成」；节点脸仍走失败分类。
     product_landed: bool | None = absent()
     # Additive：与 ``AgentCoreError.code`` / ``retryable`` / ``retry_after`` 同语义，
     # 让客户端区分瞬时限流与真终态。缺省 = 旧 journal / 契约硬失败未分类。

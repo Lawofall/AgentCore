@@ -703,14 +703,16 @@ async def test_table_structure_preview_hides_full_body():
         available_tools=frozenset(),
     )
     assert out is not None
-    assert "[表格 / 结构面]" in out
+    assert "[表格 / 列名与样例]" in out
+    assert "[表格 / 结构面]" not in out
     assert "rows: 20" in out
     assert "date:date" in out
     assert "amount:float" in out or "amount:int" in out
     assert secret not in out
     assert "includes run" not in out
     assert "with run" not in out
-    assert "structure preview only" in out
+    assert "column names, types, and sample rows only" in out
+    assert "structure preview only" not in out
 
 
 @pytest.mark.asyncio

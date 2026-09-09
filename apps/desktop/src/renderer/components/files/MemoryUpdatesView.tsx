@@ -16,25 +16,21 @@ import { Brain, History, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 /**
- * 记忆动态 — files-page「最近更新」view (记忆更新对话内可见, §1.6,
- * hybrid 方向 B 的家).
+ * 记忆动态 — cross-conversation「最近更新」feed (记忆更新对话内可见, §1.6).
  *
  * The in-conversation card ({@link MemoryUpdateCard}) answers「这次对话 AI 记了什么」;
- * this view answers「AI 最近都学了什么」— the write side of memory is per-user long-term
- * data, so its natural home is ONE chronological stream cutting across every conversation.
- * Each entry is one offline-consolidation pass: a time + the applied changes (reusing the
- * same {@link MemoryUpdateItemRow} as the card, so a change reads identically in both) with
- * per-leaf deep-links, plus a jump back to the source conversation.
- *
- * Opened as a synthetic tab in the {@link FileWorkbench} (`MEMORY_UPDATES_PATH`); leaf
- * deep-links open a tab in the SAME workbench (no navigation) via {@link onOpenLeaf}.
+ * this view answers「AI 最近都学了什么」— one chronological stream across conversations.
+ * Hosted in the toolbox prompt catalog (`?updates=1`); the files page no longer
+ * opens this as a tab. Leaf clicks are the caller's job via {@link onOpenLeaf}.
  */
 export function MemoryUpdatesView({
   onOpenLeaf,
+  embedded = false,
 }: {
-  /** Open a memory leaf as a tab in this workbench (synthetic leaf path + display name +
-   * optional projectId fallback when path does not encode a folder id). */
+  /** Open a memory leaf (synthetic path + display name + optional projectId fallback). */
   onOpenLeaf: (path: string, name: string, projectId?: string | null) => void;
+  /** Hide the standalone「记忆动态」page header when hosted beside the prompt catalog. */
+  embedded?: boolean;
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -46,14 +42,16 @@ export function MemoryUpdatesView({
   const entries = updates.data ?? [];
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-6">
-        <History size={16} className="shrink-0 text-muted-foreground" />
-        <span className="text-sm font-medium text-foreground">记忆动态</span>
-        <span className="text-xs text-muted-foreground">
-          AI 最近从各处对话里记下的内容
-        </span>
-      </header>
+    <div className="flex h-full flex-col" data-testid="memory-updates-view">
+      {embedded ? null : (
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-6">
+          <History size={16} className="shrink-0 text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground">记忆动态</span>
+          <span className="text-xs text-muted-foreground">
+            AI 最近从各处对话里记下的内容
+          </span>
+        </header>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* Outside the empty branch below: a user may have rejected lines without ever
@@ -76,7 +74,6 @@ export function MemoryUpdatesView({
             inline
             icon={<Brain size={26} className="text-muted-foreground/40" />}
             title="还没有记忆更新"
-            hint="AI 会在对话后台整理长期记忆；记下新内容时，这里会按时间列出。"
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-3 px-6 py-4">

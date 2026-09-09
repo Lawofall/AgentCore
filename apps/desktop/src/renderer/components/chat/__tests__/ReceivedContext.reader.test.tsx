@@ -219,7 +219,33 @@ describe("ReceivedContextSection reader", () => {
 });
 
 describe("ReceivedContextDialog reader", () => {
-  it("defaults to request in the shared reader shell", () => {
+  it("defaults to 常驻指令 even when 本回合工具 is present", () => {
+    render(
+      <ReceivedContextDialog
+        open
+        onOpenChange={() => undefined}
+        blocks={[
+          block({ channel: "system", body: "你是 CEO。" }),
+          block({
+            channel: "tools",
+            body: "**web_search**\n\n- `query`: string（必填）",
+          }),
+          block({ channel: "request", body: "发下参数" }),
+        ]}
+      />,
+    );
+    const standingBtn = screen.getByRole("button", { name: /常驻指令/ });
+    expect(standingBtn.getAttribute("aria-current")).toBe("true");
+    const nav = screen.getByRole("navigation", { name: "上下文目录" });
+    expect(nav.textContent?.indexOf("常驻指令")).toBeLessThan(
+      nav.textContent?.indexOf("本回合工具") ?? -1,
+    );
+    expect(screen.getByTestId("received-context-body").textContent).toBe(
+      "你是 CEO。",
+    );
+  });
+
+  it("defaults to 常驻指令 when there is no 本回合工具 row", () => {
     render(
       <ReceivedContextDialog
         open
@@ -232,14 +258,38 @@ describe("ReceivedContextDialog reader", () => {
     );
 
     expect(screen.getByRole("dialog", { name: "收到的上下文" })).toBeTruthy();
-    const requestBtn = screen.getByRole("button", { name: /原始请求/ });
-    expect(requestBtn.getAttribute("aria-current")).toBe("true");
-    expect(requestBtn.className).toContain("text-sm");
-    expect(requestBtn.querySelector("span.tabular-nums")?.className).toContain(
+    const standingBtn = screen.getByRole("button", { name: /常驻指令/ });
+    expect(standingBtn.getAttribute("aria-current")).toBe("true");
+    expect(standingBtn.className).toContain("text-sm");
+    expect(standingBtn.querySelector("span.tabular-nums")?.className).toContain(
       "text-xs",
     );
     expect(screen.getByTestId("received-context-body").textContent).toBe(
-      "调研竞品定价并给建议。",
+      "你是 CEO。",
+    );
+  });
+
+  it("defaults to 本回合工具 and keeps it on a narrow layout", () => {
+    isNarrow = true;
+    render(
+      <ReceivedContextDialog
+        open
+        onOpenChange={() => undefined}
+        blocks={[
+          block({ channel: "system", body: "你是 CEO。" }),
+          block({
+            channel: "tools",
+            body: "**web_search**\n\n- `query`: string（必填）",
+          }),
+          block({ channel: "request", body: "发下参数" }),
+        ]}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /常驻指令/ })).toBeNull();
+    const toolsBtn = screen.getByRole("button", { name: /本回合工具/ });
+    expect(toolsBtn.getAttribute("aria-current")).toBe("true");
+    expect(screen.getByTestId("received-context-body").textContent).toContain(
+      "`query`: string（必填）",
     );
   });
 

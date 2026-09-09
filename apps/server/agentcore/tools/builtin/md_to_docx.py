@@ -10,7 +10,7 @@ import time
 from typing import Any
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.docs_export.layout import (
     DOC_LAYOUTS,
     LAYOUT_INVALID_MESSAGE,
@@ -42,6 +42,9 @@ class MdToDocxTool:
         # 漏账事故的原点：它从注册那天起就没进过任何一份工具名白名单。
         file_products=FileProductsContract.SELF_REPORT,
         produces_formats=(".docx",),
+        workspace_io=True,
+        resident=False,
+        catalog_summary="导出 Word",
     )
 
     @property
@@ -70,7 +73,7 @@ class MdToDocxTool:
                 },
                 "required": ["path"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.FILE,
             approval=ToolApproval.GRANTABLE,
         )
 

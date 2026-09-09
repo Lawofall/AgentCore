@@ -13,6 +13,8 @@ export function PromptDocument({
   className,
   maxHeightClass = "max-h-[32rem]",
   compact = true,
+  framed = true,
+  hideHeading,
 }: {
   text: string;
   className?: string;
@@ -20,6 +22,10 @@ export function PromptDocument({
   maxHeightClass?: string;
   /** Catalog / skill cards stay compact (`xs`). Reading surfaces pass `false` (`sm`). */
   compact?: boolean;
+  /** Muted inset card (catalog / consult). Page readers pass `false`. */
+  framed?: boolean;
+  /** Skip a section heading that already names the surrounding reader. */
+  hideHeading?: string;
 }) {
   const sections = useMemo(() => parsePromptDocument(text), [text]);
   const structured = hasTaggedSections(sections);
@@ -38,7 +44,8 @@ export function PromptDocument({
       {structured ? (
         <div
           className={cn(
-            "space-y-3 overflow-auto rounded-lg bg-muted/50 px-3 py-2",
+            "space-y-3 overflow-auto",
+            framed && "rounded-lg bg-muted/50 px-3 py-2",
             maxHeightClass,
           )}
         >
@@ -47,7 +54,7 @@ export function PromptDocument({
               key={`${section.tag ?? "preamble"}-${i}`}
               className="space-y-1"
             >
-              {section.title ? (
+              {section.title && section.title !== hideHeading ? (
                 <h3 className={titleClass}>{section.title}</h3>
               ) : null}
               <div className={bodyClass}>
@@ -59,7 +66,8 @@ export function PromptDocument({
       ) : (
         <div
           className={cn(
-            "overflow-auto rounded-lg bg-muted/50 px-3 py-2",
+            "overflow-auto",
+            framed && "rounded-lg bg-muted/50 px-3 py-2",
             bodyClass,
             maxHeightClass,
           )}

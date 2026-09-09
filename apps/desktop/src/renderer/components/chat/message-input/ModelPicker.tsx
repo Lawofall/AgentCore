@@ -253,7 +253,7 @@ export function ModelPicker({ disabled }: { disabled?: boolean }) {
                   onClick={dismiss}
                   className="text-primary underline-offset-2 hover:underline"
                 >
-                  设置 · 模型
+                  设置 · 模型组合
                 </Link>{" "}
                 检查配置。
               </p>

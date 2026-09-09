@@ -200,7 +200,7 @@ describe("BetaGroupPage", () => {
     renderPage();
 
     expect(await screen.findByText("还没有内测群管理员")).toBeTruthy();
-    expect(screen.getByText(/平台 admin 本身已有群治理权/)).toBeTruthy();
+    expect(screen.getByText("只列群内管理员；平台 admin 不必任命。")).toBeTruthy();
     expect(screen.queryByRole("table")).toBeNull();
     // 读到了、确实是 0：这时候「共 0 人」才是事实，不该退化成「—」。
     expect(screen.getByText(/共 0 人/)).toBeTruthy();

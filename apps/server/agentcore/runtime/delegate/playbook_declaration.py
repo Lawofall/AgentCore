@@ -47,7 +47,7 @@ HANDWRITTEN_PLAYBOOK_ARGS_MSG = (
 
 # 弱模型可抄的顶层 tasks 三件套（role/task + 可选 deliverable）；schema 与 empty 拒收共用。
 HANDWRITTEN_TASKS_SKELETON = (
-    '{"tasks":[{"role":"角色","task":"目标+边界+验收","deliverable":{"form":"prose"}}]}'
+    '{"tasks":[{"role":"角色","task":"目标+边界+验收"}]}'
 )
 
 _EMPTY_DELEGATE_MSG = (

@@ -37,8 +37,10 @@ export const BYOK_PROVIDER_PRESETS: readonly ByokProviderPreset[] = [
     baseUrl: "https://api.deepseek.com",
     baseUrlAliases: ["https://api.deepseek.com/v1"],
     defaultModel: "deepseek-v4-flash",
+    // V4.1 Flash preview is DeepSeek official API only (not OpenCode Go).
     models: [
       "deepseek-v4-flash",
+      "deepseek-v4.1-flash-expires-on-0910",
       "deepseek-v4-pro",
       "deepseek-v4-flash-vision-exp",
     ],

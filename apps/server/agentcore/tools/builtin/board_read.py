@@ -22,7 +22,7 @@ from typing import Any
 
 from agentcore.board.channel import BoardReadError
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.costing import vision_run_cost
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -52,6 +52,8 @@ class BoardReadTool:
         surface=ToolSurface.CEO_ORCHESTRATION,
         audience=AUDIENCE_CEO_ONLY,
         ceo_wire=CeoWire.BOARD,
+        resident=False,
+        catalog_summary="读白板手绘/截图",
     )
 
     @property
@@ -77,7 +79,7 @@ class BoardReadTool:
                 },
                 "required": ["ids"],
             },
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.BOARD,
             approval=ToolApproval.NEVER,
         )
 

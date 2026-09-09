@@ -29,9 +29,10 @@ export function Page({
 }
 
 /**
- * Page title block. `filters` is a separate row on purpose: cramming七个筛选控件
- * into the title row is what pushed the 用户 page header onto three lines at
- * narrow widths.
+ * Page title block. `description` / `note` are meta only (count, time window,
+ * filter summary, UTC 口径) — not a job description. `filters` is a separate
+ * row on purpose: cramming 七个筛选控件 into the title row is what pushed the
+ * 用户 page header onto three lines at narrow widths.
  */
 export function PageHeader({
   title,
@@ -42,7 +43,7 @@ export function PageHeader({
 }: {
   title: ReactNode;
   description?: ReactNode;
-  /** Small print under the description — caveats like the UTC window口径. */
+  /** Small print under the description — caveats like the UTC window 口径. */
   note?: ReactNode;
   actions?: ReactNode;
   filters?: ReactNode;

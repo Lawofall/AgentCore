@@ -116,7 +116,7 @@ async def ceiling_finalize(
     gate_escalation_sink: list[dict[str, Any]] | None,
     cutoff_reason_sink: list[str] | None = None,
     files_expected: bool = False,
-    form_prose: bool = False,
+    expects_landing: bool = False,
 ) -> tuple[str, str, TokenUsage, int]:
     """Force-finalize after the round loop exits on a hard ceiling.
 
@@ -200,7 +200,7 @@ async def ceiling_finalize(
         on_reset=emit_reset,
         outstanding_tool_failures=controller.outstanding_tool_failures(),
         files_expected=files_expected,
-        form_prose=form_prose,
+        expects_landing=expects_landing,
         workspace_channel_dead=controller.workspace_channel_dead,
     )
     # CEO / captain：硬顶强制收口不得无条件姿势 A（finish_guard 被绕过）。
@@ -227,7 +227,7 @@ async def ceiling_finalize(
 
     # force_finalize contract: when soft round returns tools, caller must execute.
     # Files workers may call file_write/handoff here — discarding would leave
-    # form=files / artifacts unmet after we explicitly kept those tools on the surface.
+    # pinned landing / artifacts unmet after we explicitly kept those tools on the surface.
     if coordination is not None and coordination.kind == "coordination_tools":
         if coordination.content:
             final_content = join_segments(final_content, coordination.content)

@@ -1,10 +1,19 @@
 import { __resetCapabilitiesCacheForTests } from "@/components/tools/useCapabilities";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 import type { Capabilities } from "@/services/capabilities";
-import { useStandingInboxStore } from "@/stores/standingInbox";
-import type { McpApi, McpOpResult } from "@shared/mcp-contract";
+import type {
+  McpApi,
+  McpConfigResult,
+  McpServerListItem,
+} from "@shared/mcp-contract";
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToolsPage } from "../ToolsPage";
@@ -37,20 +46,24 @@ const catalog: Capabilities = {
   tools: [
     {
       name: "web_search",
-      category: "research",
+      face: "web",
+      resident: true,
+      summary: "联网检索",
       description: "联网检索",
       parameters: { type: "object", properties: {} },
       approval: "never",
       available_to: ["ceo", "worker"],
     },
   ],
-  packs: [],
 };
 
-function stubMcpApi(runOp: McpApi["runOp"]): McpApi {
+function stubMcpApi(servers: McpServerListItem[] = []): McpApi {
+  const listServers = vi.fn(
+    async (): Promise<McpConfigResult> => ({ ok: true, servers }),
+  );
   const api = {
-    runOp,
-    listServers: vi.fn(),
+    runOp: vi.fn(),
+    listServers,
     upsertServer: vi.fn(),
     removeServer: vi.fn(),
     setServerEnabled: vi.fn(),
@@ -60,9 +73,9 @@ function stubMcpApi(runOp: McpApi["runOp"]): McpApi {
   return api;
 }
 
-function renderPage() {
+function renderPage(entry = APP_PATHS.toolbox.tools) {
   return render(
-    <MemoryRouter initialEntries={[APP_PATHS.toolbox.tools]}>
+    <MemoryRouter initialEntries={[entry]}>
       <ToolsPage />
     </MemoryRouter>,
   );
@@ -70,7 +83,6 @@ function renderPage() {
 
 beforeEach(() => {
   __resetCapabilitiesCacheForTests();
-  useStandingInboxStore.setState({ badge: 0 });
   vi.mocked(getCapabilities).mockReset();
   vi.mocked(getCapabilities).mockResolvedValue(catalog);
 });
@@ -80,82 +92,69 @@ afterEach(() => {
   cleanup();
 });
 
-describe("工具页 · MCP 并陈", () => {
-  it("无 mcpApi 时只列内置，不假装有本机连接器", async () => {
+describe("工具页 · 插头卡", () => {
+  it("无 mcpApi 时只列内置，不出现添加卡", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText("web_search")).toBeTruthy());
-    expect(screen.queryByText("本机连接器")).toBeNull();
-    expect(screen.queryByText(/去连接器增删启停/)).toBeNull();
+    expect(screen.getByRole("heading", { name: /网络/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "添加连接器" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "连接器" })).toBeNull();
+    expect(screen.queryByText("MCP")).toBeNull();
   });
 
-  it("已启用 MCP 与内置同页并陈；失败 Server 不列假工具", async () => {
-    stubMcpApi(
-      vi.fn(
-        async (): Promise<McpOpResult> => ({
-          ok: true,
-          value: {
-            servers: [
-              {
-                id: "fs",
-                name: "Filesystem",
-                status: "ready",
-                tools: [
-                  {
-                    name: "read_file",
-                    description: "Read a file",
-                    inputSchema: {
-                      type: "object",
-                      properties: {
-                        path: { type: "string", description: "Path" },
-                      },
-                      required: ["path"],
-                    },
-                  },
-                ],
-              },
-              {
-                id: "gh",
-                name: "GitHub",
-                status: "failed",
-                error: "GITHUB_TOKEN 未配置",
-                tools: [{ name: "create_issue" }],
-              },
-            ],
-          },
-        }),
-      ),
-    );
+  it("插头与出厂工具同款卡；不把插头报出的动作再铺一层", async () => {
+    stubMcpApi([
+      {
+        id: "fs",
+        name: "Filesystem",
+        enabled: true,
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-filesystem"],
+        runtimeStatus: "ready",
+      },
+      {
+        id: "gh",
+        name: "GitHub",
+        enabled: true,
+        command: "npx",
+        args: [],
+        runtimeStatus: "failed",
+        runtimeError: "GITHUB_TOKEN 未配置",
+      },
+    ]);
     renderPage();
 
     await waitFor(() => expect(screen.getByText("web_search")).toBeTruthy());
-    expect(await screen.findByText("mcp_fs_read_file")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /本机连接器/ })).toBeTruthy();
     expect(
-      screen
-        .getByRole("link", { name: "去连接器增删启停" })
-        .getAttribute("href"),
-    ).toBe(APP_PATHS.toolbox.connectors);
-    expect(screen.getByText("MCP")).toBeTruthy();
-    expect(screen.getByText("Filesystem")).toBeTruthy();
-    expect(screen.getByText("GitHub")).toBeTruthy();
-    expect(screen.getByText("未列出")).toBeTruthy();
+      await screen.findByRole("button", { name: "Filesystem" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "GitHub" })).toBeTruthy();
+    expect(screen.getByText("已握手")).toBeTruthy();
+    expect(screen.getByText("失败")).toBeTruthy();
     expect(screen.getByText("GITHUB_TOKEN 未配置")).toBeTruthy();
-    expect(screen.queryByText("mcp_gh_create_issue")).toBeNull();
-    expect(screen.queryByText("create_issue")).toBeNull();
+    expect(screen.getByRole("button", { name: "添加连接器" })).toBeTruthy();
+    expect(screen.queryByText("mcp_fs_read_file")).toBeNull();
+    expect(screen.queryByRole("heading", { name: /本机连接器/ })).toBeNull();
   });
 
-  it("list_tools 失败时诚实说明，不拆内置目录", async () => {
-    stubMcpApi(
-      vi.fn(
-        async (): Promise<McpOpResult> => ({
-          ok: false,
-          error: { kind: "io", detail: "读配置失败" },
-        }),
-      ),
-    );
+  it("listServers 失败时诚实说明，不拆内置目录", async () => {
+    const api = stubMcpApi();
+    vi.mocked(api.listServers).mockResolvedValue({
+      ok: false,
+      error: { kind: "io", detail: "读配置失败" },
+    });
     renderPage();
     await waitFor(() => expect(screen.getByText("web_search")).toBeTruthy());
     expect(await screen.findByText("读配置失败")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "重试" })).toBeTruthy();
+    expect(screen.getByText("web_search")).toBeTruthy();
+  });
+
+  it("点添加连接器打开配置对话框，图鉴仍在", async () => {
+    stubMcpApi();
+    renderPage();
+    await waitFor(() => expect(screen.getByText("web_search")).toBeTruthy());
+    fireEvent.click(await screen.findByRole("button", { name: "添加连接器" }));
+    expect(screen.getByRole("heading", { name: "新建连接器" })).toBeTruthy();
+    expect(screen.getByText("web_search")).toBeTruthy();
   });
 });

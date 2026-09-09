@@ -1,48 +1,13 @@
-import { Input, Select, Textarea } from "@/components/ui";
+import { Input, Textarea } from "@/components/ui";
 import {
   type WorkflowDefNode,
   type WorkflowDefinition,
-  type WorkflowDeliverable,
   renderSlotText,
   slotKeysInText,
   slotPlaceholder,
   workflowSlotDefaults,
   workflowSlots,
 } from "@/services/workflowDefinition";
-
-const DELIVERABLE_FORMS = [
-  { value: "prose", label: "纯文字" },
-  { value: "files", label: "文档" },
-  { value: "workspace", label: "改工程" },
-] as const;
-
-type DeliverableForm = (typeof DELIVERABLE_FORMS)[number]["value"];
-
-function isDeliverableForm(value: string): value is DeliverableForm {
-  return value === "prose" || value === "files" || value === "workspace";
-}
-
-/** 缺省或旧自由文都按文档档展示，不在渲染时改写 definition。 */
-function shownDeliverableForm(form: string | undefined): DeliverableForm {
-  return form !== undefined && isDeliverableForm(form) ? form : "files";
-}
-
-/**
- * 只改 `form`，其余交付契约（artifacts / required_sections / strict …）逐字保留：
- * 画布把整份 definition 原样 PATCH 回去，这里换成 `{ form }` 就等于用户改一次
- * 交付形式便抹掉契约。
- */
-function withDeliverableForm(
-  current: WorkflowDeliverable | undefined,
-  form: DeliverableForm,
-): WorkflowDeliverable {
-  const next: WorkflowDeliverable = {};
-  for (const [key, value] of Object.entries(current ?? {})) {
-    if (key !== "form") next[key] = value;
-  }
-  next.form = form;
-  return next;
-}
 
 /**
  * 任务文本里的 `{{key}}` 解释给用户看：列出引用到的参数 + 按默认值的成文预览。
@@ -173,29 +138,6 @@ export function WorkflowNodeInspector({
         />
       </label>
       <TaskSlotHints definition={definition} task={node.task} />
-      <label className="block" htmlFor="wf-deliverable">
-        <span className="mb-1 block text-xs text-muted-foreground">
-          交付形式
-        </span>
-        <Select
-          id="wf-deliverable"
-          value={shownDeliverableForm(node.deliverable?.form)}
-          onChange={(e) => {
-            const form = e.target.value;
-            if (!isDeliverableForm(form)) return;
-            patch({
-              ...node,
-              deliverable: withDeliverableForm(node.deliverable, form),
-            });
-          }}
-        >
-          {DELIVERABLE_FORMS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </Select>
-      </label>
     </div>
   );
 }

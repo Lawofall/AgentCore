@@ -1,14 +1,22 @@
 import { Markdown } from "@/components/chat/Markdown";
 import { ReceivedContextSection } from "@/components/chat/ReceivedContext";
 import { CollapsibleSpeech } from "@/components/chat/debate/CollapsibleSpeech";
-import { processHasSuccessfulHandoff } from "@/components/chat/handoffBrief";
-import { ProcessTimeline } from "@/components/chat/message-bubble/ProcessTimeline";
+import { RunDetailList } from "@/components/chat/detail/RunDetailList";
+import {
+  absorbHandoffBriefContent,
+  processHasSuccessfulHandoff,
+} from "@/components/chat/handoffBrief";
+import {
+  ProcessEndChrome,
+  TimelineNodeView,
+} from "@/components/chat/message-bubble/ProcessTimeline";
 import { RunInterveneControls } from "@/components/graph/RunInterveneControls";
 import { runActCapabilities } from "@/components/graph/planCapabilities";
 import { Badge, Button, IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useTurnAudit } from "@/hooks/useTurnAudit";
 import { openWorkspaceDeliverable } from "@/lib/openWorkspaceDeliverable";
+import { groupToolRuns, timelineNodeKeys } from "@/lib/processTimeline";
 import type { AgentAuditEvent } from "@/services/audit";
 import { permissionAxesShortLabel } from "@/services/permissionAxes";
 import { activeRuntime, useConversationStore } from "@/stores/conversation";
@@ -62,9 +70,11 @@ function turnPresetSnapshot(
 /**
  * Single-run detail content — hybrid layout aligned with the CEO bubble timeline:
  * header anchors (role / 接手 chip / 上下文 / 打开辩论室 / task / revision /
- * escalation / context) → interleaved ProcessTimeline body → footer (debrief /
+ * escalation / context) → interleaved process rows → footer (debrief /
  * resources). Topology (depends / parent / children) lives on the
- * collab graph, not this inspector.
+ * collab graph, not this inspector. The docked inspector is one virtual
+ * list (chrome + each process row + foot) so the task scrolls away with
+ * the log; CEO bubbles stay fully mapped.
  *
  * Bound to a specific message's execution slot (§9.3) via `messageId`, so the
  * conversation's right-side detail panel can pin a run from any turn (live or
@@ -75,9 +85,12 @@ function turnPresetSnapshot(
 export function RunDetailBody({
   messageId,
   runId,
+  scrollParent = null,
 }: {
   messageId: string;
   runId: string;
+  /** Panel overflow from {@link RunDetailScroll}; null keeps an in-flow layout (tests). */
+  scrollParent?: HTMLElement | null;
 }) {
   const viewed = useMessageRun(messageId, runId);
   const showRunDetail = useSidePanelStore((s) => s.showRunDetail);
@@ -148,6 +161,17 @@ export function RunDetailBody({
     (agent.toolProgress != null && agent.status === "working") ||
     (agent.status === "working" && !isModerator);
 
+  const showDebrief =
+    Boolean(run.debrief) && !processHasSuccessfulHandoff(process);
+  const showConclusion = Boolean(run.outputSummary) && !run.debrief;
+  const showResources = Boolean(run.usage || run.cost);
+  const nodes = showTimeline
+    ? groupToolRuns(absorbHandoffBriefContent(process, run.debrief))
+    : [];
+  const nodeKeys = timelineNodeKeys(nodes);
+  const timelineKey = `${messageId}:${runId}`;
+  const live = agent.status === "working";
+
   const headerStart = (
     <>
       <span className="flex-1 truncate text-sm font-medium text-foreground">
@@ -190,8 +214,8 @@ export function RunDetailBody({
     </>
   );
 
-  return (
-    <div className="p-4">
+  const head = (
+    <>
       {memberIntervene ? (
         <RunInterveneControls
           conversationId={conversationId}
@@ -272,46 +296,64 @@ export function RunDetailBody({
             runId={runId}
           />
         )}
+    </>
+  );
 
-      {showTimeline && (
-        <div className="mb-4">
-          <ProcessTimeline
+  const foot =
+    showTimeline || showDebrief || showConclusion || showResources ? (
+      <>
+        {showTimeline && (
+          <ProcessEndChrome
             process={process}
-            isStreaming={agent.status === "working"}
-            citations={[]}
-            composingTool={
-              agent.status === "working" ? agent.toolProgress : null
-            }
-            fallbackContent=""
-            messageId={`${messageId}:${runId}`}
-            conversationId={conversationId}
+            isStreaming={live}
+            composingTool={live ? agent.toolProgress : null}
+            messageId={timelineKey}
             checkpoints={[]}
             planReviews={[]}
-            collapseProcessSteps={false}
-            handoffDebrief={run.debrief}
-            onOpenWorkspacePath={(path) =>
-              openWorkspaceDeliverable(conversationId, path)
-            }
           />
-        </div>
-      )}
+        )}
+        {showDebrief && run.debrief ? (
+          <DebriefSection debrief={run.debrief} />
+        ) : showConclusion && run.outputSummary ? (
+          <Section title="结论">
+            <Markdown
+              content={run.outputSummary}
+              onOpenWorkspacePath={(path) =>
+                openWorkspaceDeliverable(conversationId, path)
+              }
+            />
+          </Section>
+        ) : null}
+        {showResources && (
+          <ResourceSection run={run} agent={agent} keyBase={`run:${runId}`} />
+        )}
+      </>
+    ) : null;
 
-      {run.debrief && !processHasSuccessfulHandoff(process) ? (
-        <DebriefSection debrief={run.debrief} />
-      ) : run.outputSummary && !run.debrief ? (
-        <Section title="结论">
-          <Markdown
-            content={run.outputSummary}
-            onOpenWorkspacePath={(path) =>
-              openWorkspaceDeliverable(conversationId, path)
-            }
-          />
-        </Section>
-      ) : null}
-
-      {(run.usage || run.cost) && (
-        <ResourceSection run={run} agent={agent} keyBase={`run:${runId}`} />
+  return (
+    <RunDetailList
+      scrollParent={scrollParent}
+      head={head}
+      foot={foot}
+      nodes={nodes}
+      nodeKeys={nodeKeys}
+      isStreaming={live}
+      renderNode={(node, i) => (
+        <TimelineNodeView
+          node={node}
+          nodeKey={nodeKeys[i] ?? String(i)}
+          live={live && i === nodes.length - 1}
+          citations={[]}
+          messageId={timelineKey}
+          conversationId={conversationId}
+          checkpoints={[]}
+          planReviews={[]}
+          isStreaming={live}
+          onOpenWorkspacePath={(path) =>
+            openWorkspaceDeliverable(conversationId, path)
+          }
+        />
       )}
-    </div>
+    />
   );
 }

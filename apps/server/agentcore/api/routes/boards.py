@@ -39,7 +39,6 @@ async def create_board(
     board = await repo.create(
         user_id=user.user_id,
         title=body.title or _DEFAULT_TITLE,
-        folder_id=body.folder_id,
     )
     return BoardSummary.model_validate(board)
 
@@ -72,15 +71,9 @@ async def update_board(
     user: AuthUser,
     repo: BoardRepository = Depends(get_board_repo),
 ):
-    # Send only the fields the client set, so an omitted folder_id is left untouched
-    # while an explicit null moves the board to ungrouped.
-    fields = body.model_fields_set
-    kwargs: dict = {}
-    if "title" in fields:
-        kwargs["title"] = body.title
-    if "folder_id" in fields:
-        kwargs["folder_id"] = body.folder_id
-    board = await repo.update_meta(board_id, user_id=user.user_id, **kwargs)
+    board = await repo.update_meta(
+        board_id, user_id=user.user_id, title=body.title
+    )
     if not board:
         raise NotFoundError("白板不存在")
     return BoardSummary.model_validate(board)
@@ -120,7 +113,7 @@ async def ensure_board_conversation(
     """Get (or lazily mint) the board's dedicated AI conversation (AI协作白板.md §三 A / M2).
 
     Idempotent: returns the existing ``conversation_id`` if the board already has one;
-    otherwise creates a chat conversation (titled + filed like the board) and binds it.
+    otherwise creates a bare chat (titled like the board, no folder) and binds it.
     Both repos share one session so the create + link commit together. The canvas calls
     this before its first AI turn, then runs the turn on the returned conversation.
     """
@@ -131,10 +124,12 @@ async def ensure_board_conversation(
     if board.conversation_id:
         return BoardConversationResponse(conversation_id=board.conversation_id)
     conversations = ConversationRepository(session)
+    # Board AI sits on a bare chat (scratch). Leftover ``Board.folder_id`` is unread;
+    # 「实现到工作区」picks a desk at that moment, not at board creation.
     conv = await conversations.create(
         user_id=user.user_id,
         title=board.title or _DEFAULT_TITLE,
-        folder_id=board.folder_id,
+        folder_id=None,
     )
     await boards.attach_conversation(
         board_id, user_id=user.user_id, conversation_id=conv.id

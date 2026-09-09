@@ -317,7 +317,7 @@ describe("ModelPicker", () => {
     expect(screen.getByText("暂无可用组合")).toBeTruthy();
     expect(screen.getByText(/请稍后重试/)).toBeTruthy();
     const settingsLink = screen.getByRole("link", {
-      name: "设置 · 模型",
+      name: "设置 · 模型组合",
     });
     expect(settingsLink.getAttribute("href")).toBe("/more/model");
     expect(screen.getByText("管理组合…")).toBeTruthy();

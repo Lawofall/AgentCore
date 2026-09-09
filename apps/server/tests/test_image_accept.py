@@ -20,9 +20,12 @@ def _clear_rejected():
 def test_deepseek_only_exact_vision_exp():
     assert model_accepts_images("deepseek-v4-flash-vision-exp") is True
     assert model_accepts_images("deepseek/deepseek-v4-flash-vision-exp") is True
+    assert model_accepts_images("deepseek-v4.1-flash-expires-on-0910") is True
+    assert model_accepts_images("deepseek/deepseek-v4.1-flash-expires-on-0910") is True
     assert model_accepts_images("deepseek-v4-flash") is False
     assert model_accepts_images("deepseek-v4-pro") is False
     assert model_accepts_images("deepseek-v4-flash-free") is False
+    assert model_accepts_images("deepseek-v4.1-flash") is False
 
 
 def test_negative_example_overrides_table():

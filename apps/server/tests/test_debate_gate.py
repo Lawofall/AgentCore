@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agentcore.core.types import ToolCategory, ToolEffect
+from agentcore.core.types import ToolEffect, ToolFace
 from agentcore.llm.provider.protocol import (
     LLMChunk,
     LLMMessage,
@@ -60,11 +60,11 @@ class _StubTool:
         self,
         name: str,
         *,
-        category: ToolCategory = ToolCategory.ORCHESTRATION,
+        face: ToolFace = ToolFace.ORCHESTRATION,
         meta: dict | None = None,
     ) -> None:
         self._name = name
-        self._category = category
+        self._face = face
         self._meta = meta or {"batch_nodes": 3, "batch_has_deps": True}
         self.calls = 0
 
@@ -74,7 +74,7 @@ class _StubTool:
             name=self._name,
             description="stub",
             parameters={"type": "object", "properties": {}},
-            category=self._category,
+            face=self._face,
         )
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001

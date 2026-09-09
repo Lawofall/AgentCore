@@ -3,6 +3,7 @@ import { queryClient } from "@/lib/queryClient";
 import { workspaceKeys } from "@/lib/queryKeys";
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/hooks/useConversations", () => ({
@@ -66,6 +67,28 @@ describe("FileWorkbench mount", () => {
     expect(screen.queryByText("挂载共享")).toBeNull();
     expect(screen.queryByText("还没有共享空间")).toBeNull();
     expect(screen.queryByLabelText("新建共享空间")).toBeNull();
-    expect(screen.getByText(/与我共享/)).toBeTruthy();
+  });
+
+  it("does not pin account prompts or 最近更新 on the files rail", () => {
+    render(
+      <MemoryRouter>
+        <FileWorkbench
+          workspaces={[]}
+          isLoading={false}
+          isError={false}
+          onRetry={() => {}}
+          fsAvailable={false}
+          showMemory
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText("全局设定")).toBeNull();
+    expect(screen.queryByText("最近更新")).toBeNull();
+    expect(
+      screen.queryByRole("link", {
+        name: "所有对话共用的提示词在工具箱",
+      }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "新建条目" })).toBeNull();
   });
 });

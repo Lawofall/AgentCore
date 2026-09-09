@@ -66,8 +66,8 @@ skip_if:
 
 | 项 | 约束 |
 |---|---|
-| 模型名 | `deepseek-v4-pro` / `deepseek-v4-flash`；旧名 `deepseek-chat` / `deepseek-reasoner` 已停用 |
-| 识图 | 仅官方 id `deepseek-v4-flash-vision-exp` 收图；Flash / Pro 文本 id 不收 |
+| 模型名 | `deepseek-v4-pro` / `deepseek-v4-flash` / 预览 `deepseek-v4.1-flash-expires-on-0910`（官方 API；**不在** OpenCode Go / 平台 allowlist）；旧名 `deepseek-chat` / `deepseek-reasoner` 已停用 |
+| 识图 | 官方 id `deepseek-v4-flash-vision-exp` 与预览 `deepseek-v4.1-flash-expires-on-0910` 收图；Flash / Pro 文本 id 不收 |
 | 上下文 | 官方 **1M**（input+output 合计）；max output 384K。目录 `context_length` 与近顶压缩跟这条，不跟过期的 128K 记忆 |
 | base_url | `https://api.deepseek.com`（兼容 `/v1`） |
 | 思考开关 | `extra_body.thinking.type=enabled/disabled`。官方省略 = 默认 enabled；**AgentCore 聊天/CEO/worker 显式发 enabled**，DeepSeek V4 同时发官方默认档 `reasoning_effort=high`（不暴露强度 UI）。OpenCode Go 省略 `thinking` 时思考 token=0；只发 `thinking.enabled` 仍可能不回 CoT |

@@ -25,7 +25,10 @@ import {
   streamConversation,
 } from "@/services/streamConversation";
 import { streamConversationViaSidecar } from "@/services/streamConversationViaSidecar";
-import type { CloudStreamPathReason } from "@/services/streamPathReason";
+import {
+  type CloudStreamPathReason,
+  SIDECAR_OCCUPY_FAILED_CODE,
+} from "@/services/streamPathReason";
 import { traceTurnEnd, traceTurnMilestone } from "@/services/turnTrace";
 import { restoreComposerDraft } from "@/stores/composer";
 import { getRuntime, useConversationStore } from "@/stores/conversation";
@@ -72,16 +75,9 @@ function setExecutionVia(
 /** 云端分支原因——写入 turnTrace + desktop.jsonl + 云 POST 头，对照服务端 via=cloud。 */
 type CloudPathReason = CloudStreamPathReason;
 
-function resolveCloudPathReason(args: {
-  hadSidecarTarget: boolean;
-  probeHealthy: boolean | null;
-  probeProbed: boolean | null;
-}): CloudPathReason {
+function resolveCloudPathReason(): CloudPathReason {
   if (!hasLocalEngine()) return "no_local_engine";
   if (!isSidecarEnabled()) return "switch_off";
-  if (args.hadSidecarTarget && args.probeHealthy === false) {
-    return args.probeProbed ? "probe_unhealthy" : "probe_cache_bad";
-  }
   return "no_local_target";
 }
 
@@ -220,8 +216,8 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
     // 路由（双模式工作区 §7.2）：本机传统默认同侧 sidecar =
     //   有本地引擎 + 未显式强制关（sidecarPreference!=="off"；unset 不挡）+ 会话绑本机根。
     // 贴文件不改场地：区内引用 / 区外复制进 attachments/ 都跟绑定走。
-    // 云链路：纯云会话 / 显式强制关 / 探活失败。点名是 prompt 软提示，不挡本机。
-    // 勿把 unset→SIDECAR_DEFAULT_ENABLED 误读成「整段过桥」。resolveSidecarRoot 早退不 probe；
+    // 云链路：纯云会话 / 显式强制关。探活失败与启动期失败出诊断横幅，不自动过桥。
+    // 点名是 prompt 软提示，不挡本机。resolveSidecarRoot 早退不 probe；
     // 健康由下方 probe 仅在有 target 时收敛。
     const sidecarTarget = await resolveSidecarRoot(conversationId);
     throwIfCannotOpenStream(conversationId, ac.signal);
@@ -230,15 +226,24 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
         ? { rootId: sidecarTarget.rootId, subpath: sidecarTarget.subpath }
         : null,
     });
-    // 首次真正走 sidecar 前探活一次（探活增强）：拉起进程 + 握手验证本机环境能起得来。环境起
-    // 不来则本轮落到下方云分支；`probeSidecar` 已按根记下 `bad`（带 TTL）。命中缓存时
-    // probed:false——仍走云，但须可感知（节流 toast + executionVia），禁止整会话完全静默。
+    // 首次真正走 sidecar 前探活一次：拉起进程 + 握手。环境起不来则本轮报错；
+    // `probeSidecar` 已按根记下 `bad`（带 TTL），命中缓存时 probed:false——同样报错，不走云。
     const probe = sidecarTarget ? await probeSidecar(sidecarTarget) : null;
     throwIfCannotOpenStream(conversationId, ac.signal);
     if (probe) {
       traceTurnMilestone(conversationId, "sidecar_probe", {
         healthy: probe.healthy,
         probed: probe.probed,
+      });
+    }
+    if (sidecarTarget && probe && !probe.healthy) {
+      const reason = probe.probed ? "probe_unhealthy" : "probe_cache_bad";
+      logStreamPath(conversationId, "sidecar", reason, {
+        root_id: sidecarTarget.rootId,
+        probe_detail: probe.detail,
+      });
+      throw new StreamError("sidecar", undefined, {
+        serverMessage: probe.detail?.trim() || "本地引擎未能启动",
       });
     }
     if (sidecarTarget && probe?.healthy) {
@@ -262,11 +267,9 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
           turnCommit,
         });
       } catch (sidecarErr) {
-        // 探活已过、但回合「启动期」仍失败的边缘（拉不起 / 握手失败，一个事件都没派发 →
-        // recoverable）：本轮还没产生任何输出 / 副作用，故安全改走云链路重跑。同时标记
-        // 该根坏 → 后续回合在 TTL 内命中 bad 缓存走云（与探活共用同一「记坏」出口）。
-        // 中途失败（已流式 / 已调工具）与用户停止不在此列——照常抛给下方通用处理走
-        // 「本地引擎出错」横幅 + 重试，绝不重复已发生的副作用。
+        // 启动期 recoverable：引擎没起来 → 记坏 + 横幅（不降级云）。
+        // 云端占位失败不是引擎坏了 → 改走云 POST，不记坏、不写过桥脚注。
+        // 中途失败与用户停止不在此列。
         if (
           !(sidecarErr instanceof StreamError) ||
           sidecarErr.kind !== "sidecar" ||
@@ -276,40 +279,43 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
         }
         const fallbackDetail =
           sidecarErr.serverMessage?.trim() || "本地引擎未能启动";
-        markSidecarUnhealthy(sidecarTarget, fallbackDetail);
-        setExecutionVia(conversationId, "cloud_bridge");
-        store.truncateAfter(optimisticUserId, conversationId);
-        store.createAssistantMessage(conversationId);
-        beginTurnPreflight(conversationId);
-        throwIfCannotOpenStream(conversationId, ac.signal);
-        logStreamPath(conversationId, "cloud", "sidecar_fallback", {
-          root_id: sidecarTarget.rootId,
-          detail: fallbackDetail,
-        });
-        enterTurnStreaming(conversationId);
-        await streamConversation({
-          conversationId,
-          content,
-          attachments,
-          agentMentions,
-          delivery,
-          signal: ac.signal,
-          turnCommit,
-          streamPathReason: "sidecar_fallback",
-        });
+        if (sidecarErr.code === SIDECAR_OCCUPY_FAILED_CODE) {
+          setExecutionVia(conversationId, null);
+          store.truncateAfter(optimisticUserId, conversationId);
+          store.createAssistantMessage(conversationId);
+          beginTurnPreflight(conversationId);
+          throwIfCannotOpenStream(conversationId, ac.signal);
+          logStreamPath(conversationId, "cloud", "occupy_failed", {
+            root_id: sidecarTarget.rootId,
+            detail: fallbackDetail,
+          });
+          enterTurnStreaming(conversationId);
+          await streamConversation({
+            conversationId,
+            content,
+            attachments,
+            agentMentions,
+            delivery,
+            signal: ac.signal,
+            turnCommit,
+            streamPathReason: "occupy_failed",
+          });
+        } else {
+          markSidecarUnhealthy(sidecarTarget, fallbackDetail);
+          logStreamPath(conversationId, "sidecar", "start_failed", {
+            root_id: sidecarTarget.rootId,
+            detail: fallbackDetail,
+          });
+          throw sidecarErr;
+        }
       }
     } else {
-      // 云链路：探活失败 / bad 缓存 / 显式强制关 / 纯云会话。
-      // 绑本机工作区却走云 = 云端过桥 → 写 executionVia（CloudBridgeHint 助手泡脚注）。
+      // 云链路：显式强制关 / 无本机引擎 / 纯云会话。
       const bridging =
         sidecarTarget !== null ||
         (await resolveConversationLocalTarget(conversationId)) !== null;
       setExecutionVia(conversationId, bridging ? "cloud_bridge" : null);
-      const reason = resolveCloudPathReason({
-        hadSidecarTarget: sidecarTarget !== null,
-        probeHealthy: probe ? probe.healthy : null,
-        probeProbed: probe ? probe.probed : null,
-      });
+      const reason = resolveCloudPathReason();
       logStreamPath(conversationId, "cloud", reason, {
         bridging,
         root_id: sidecarTarget?.rootId ?? null,
@@ -355,10 +361,7 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
     }
     // A mid-stream drop no longer means the turn died (1a: it runs detached) —
     // rejoin it live (1b) rather than resending, which would duplicate the turn.
-    // (A sidecar engine failure is kind "sidecar", not "network", so a local turn
-    // skips this and keeps its resend banner. A *startup* sidecar failure was
-    // already rerouted to cloud upstream (阶段二), so one reaching here is
-    // necessarily mid-run — never auto-rerouted, to avoid repeating side effects.)
+    // Sidecar 失败（探活 / 启动期 / 中途）kind 是 "sidecar" 不是 "network"，不走 rejoin。
     if (isTransportDrop(err) && (await rejoinLiveTurn(conversationId))) {
       traceTurnEnd(conversationId, "ok");
       return { unstartedRefusal: false };

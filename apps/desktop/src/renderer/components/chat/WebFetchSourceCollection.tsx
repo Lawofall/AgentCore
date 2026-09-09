@@ -1,10 +1,11 @@
-import { Badge, Button } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { cleanSourceTitle } from "@/lib/citations";
 import { useStreamAwareDisclosure } from "@/stores/disclosure";
 import type { Citation, ProcessStep, WebFetchDisplay } from "@/types/events";
 import { ChevronDown, ChevronRight, Globe } from "lucide-react";
 import { Favicon } from "./Favicon";
 import { ThinkingDots } from "./message-bubble/Thinking";
+import { toolGroupFaultLabel } from "./toolResult/toolFaultFace";
 
 type ToolStep = Extract<ProcessStep, { kind: "tool" }>;
 
@@ -60,10 +61,7 @@ export function WebFetchSourceCollection({
   );
 
   const citations = sourcesFromTools(tools);
-  const errorCount = tools.reduce(
-    (n, t) => n + (t.status === "error" ? 1 : 0),
-    0,
-  );
+  const groupFault = !expanded ? toolGroupFaultLabel(tools) : null;
   const running = tools.some((t) => t.status === "running");
   const count = tools.length;
   const title = `Read page · ${count} source${count === 1 ? "" : "s"}`;
@@ -83,10 +81,13 @@ export function WebFetchSourceCollection({
             <Globe size={14} className="shrink-0" />
           )}
           <span className="min-w-0 truncate text-left">{title}</span>
-          {errorCount > 0 && (
-            <Badge tone="destructive" className="shrink-0 font-normal">
-              {errorCount} failed
-            </Badge>
+          {groupFault && (
+            <span
+              data-testid="tool-group-fault"
+              className="shrink-0 text-xs text-muted-foreground/70"
+            >
+              {groupFault}
+            </span>
           )}
           {expanded ? (
             <ChevronDown size={14} className="shrink-0" />

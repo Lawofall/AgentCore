@@ -249,10 +249,63 @@ describe("SourceCards display numbers", () => {
     expect(links[2].textContent).toMatch(/^3/);
   });
 
-  it("renders credibility tier badges on source pills", () => {
+  it("does not render domain-tier badges on source pills", () => {
     renderWithTooltip(<SourceCards citations={CITATIONS} />);
-    expect(screen.getByText("官方")).toBeTruthy();
-    expect(screen.getByText("媒体")).toBeTruthy();
-    expect(screen.getByText("待评")).toBeTruthy();
+    expect(screen.queryByText("官方")).toBeNull();
+    expect(screen.queryByText("媒体")).toBeNull();
+    expect(screen.queryByText("待评")).toBeNull();
+    expect(screen.queryByText("弱源")).toBeNull();
+    expect(screen.queryByText("已读")).toBeNull();
+  });
+
+  it("marks 已读 when the citation was fetched", () => {
+    renderWithTooltip(
+      <SourceCards
+        citations={[{ ...CITATIONS[0], deep_read: true, id: "#r1" }]}
+      />,
+    );
+    expect(screen.getByText("已读")).toBeTruthy();
+    expect(screen.queryByText("待评")).toBeNull();
+  });
+
+  it("marks 已读 from the evidence ledger when the citation omits deep_read", () => {
+    renderWithTooltip(
+      <SourceCards
+        citations={[{ ...CITATIONS[0], id: "#r1" }]}
+        evidenceLedger={[
+          {
+            id: "#r1",
+            url: "https://a.example/one",
+            title: "Source A",
+            site: "a.example",
+            deep_read: true,
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText("已读")).toBeTruthy();
+  });
+
+  it("omits tier labels from the source ledger popover", () => {
+    const cites: Citation[] = [
+      { ...CITATIONS[0], id: "#r1", tier: "unknown" },
+      { ...CITATIONS[1], id: "#r2" },
+      { ...CITATIONS[2], id: "#r3" },
+      {
+        url: "https://d.example/four",
+        title: "Source D",
+        snippet: "snip D",
+        site: "d.example",
+        id: "#r4",
+        tier: "weak",
+      },
+    ];
+    renderWithTooltip(<SourceCards citations={cites} />);
+    fireEvent.click(screen.getByRole("button", { name: /来源 4/ }));
+    fireEvent.click(screen.getByRole("button", { name: "查看来源台账 #r1" }));
+    expect(screen.queryByText("来源待评")).toBeNull();
+    expect(screen.queryByText("自媒体")).toBeNull();
+    expect(screen.queryByText("弱源")).toBeNull();
+    expect(screen.queryByText("官方")).toBeNull();
   });
 });

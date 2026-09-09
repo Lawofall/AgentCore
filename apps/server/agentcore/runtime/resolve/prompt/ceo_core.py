@@ -36,7 +36,7 @@ _CEO_CORE_HINT_TEMPLATE = _CEO_CORE_HINT
 _HOST_HOW = """
 三分日志：OS 事件 → `host(action=os_log)`（Win=Get-WinEvent / Linux=journalctl，勿用 shell 倾倒）；\
 沙箱/构建 stdout → `run`；对话 → `search_conversations`。\
-查/修这台电脑 → 开场表有 `host` 则直调 `host(action=status)` / `host(action=os_log)` / `host(action=shell)`\
+查/修这台电脑 → 本回合工具表有 `host` 则直调 `host(action=status)` / `host(action=os_log)` / `host(action=shell)`\
  / `host(action=open_settings)` / `host(action=set_audio)` / `host(action=restart_service)`\
  / `host(action=install_package)`；通识 FAQ ≠ 已查本机。\
 装包 ≠ `shell` → `install_package`；长驻 ≠ `shell` → `run`。\

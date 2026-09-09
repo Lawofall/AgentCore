@@ -4,9 +4,9 @@
 执行、桌、系统、Git、客户端、缺口（只报未装配）、非空挂载、非空约定文档出口。
 空状态不写。沙箱探测失败另起一行。禁止按能力复写成「装包事实 / 执行事实」散文。
 「该怎么做 / 禁止什么 / 怎么装上」的 HOW：
-按需面归 consult；本机进桌 / 通道归 ``team_local_desk``；空桌 when-to-use 归
+按需面归 consult；本机进桌 / 通道归 ``local_desk``；空桌 when-to-use 归
 ``mkdir`` description；产物出口 UI 归 ``product_help``；
-跨文件夹对照句归 ``team_cross_folder``；git 无仓政策归 git 工具描述；其余归共享基座。
+跨文件夹对照句归 ``delegate`` ``target_folder_id`` / 认桌工具 description；git 无仓政策归 git 工具描述；其余归共享基座。
 因此这里的用例成对写：事实留在 ``out``，HOW 断言指向 consult / skill / 基座/核。
 """
 
@@ -27,9 +27,8 @@ from agentcore.runtime.resolve.prompt import (
     compose_worker_base_prompt,
 )
 from agentcore.runtime.skills import (
-    _TEAM_CROSS_FOLDER,
-    _TEAM_DELIVERY_ENV,
-    _TEAM_LOCAL_DESK,
+    _DELIVERY,
+    _LOCAL_DESK,
     build_system_skill_registry,
 )
 from agentcore.tools.builtin import build_ceo_tool_registry
@@ -55,7 +54,7 @@ def _assert_no_capability_restatements(ctx: str) -> None:
 
 
 def _desk_how() -> str:
-    skill = build_system_skill_registry().get("team_local_desk")
+    skill = build_system_skill_registry().get("local_desk")
     assert skill is not None
     return skill.body
 
@@ -226,9 +225,9 @@ def test_cloud_scratch_facts():
     assert "合法非默认" not in mid
     assert "桌面默认本地对话" in mid
     assert "勿把云沙箱当桌面默认新建" in mid
-    assert "本机传统" in mid
+    assert "本机传统" not in mid
     assert "改导" not in out  # skill/context 不得写 Ask 改导导入
-    # 跨文件夹：事实层只留「默认坐哪张桌」；整条 HOW 归 team_cross_folder（核不常驻钩）
+    # 跨文件夹：事实层只留「默认坐哪张桌」；对照 HOW 在 delegate / 认桌工具（核不常驻钩）
     assert "出生桌" not in out
     assert "跨文件夹指挥" not in out
     assert "target_folder_id" not in out
@@ -240,22 +239,30 @@ def test_cloud_scratch_facts():
     assert "team_cross_folder" not in hint
     assert "list_folder_dir" not in hint
     assert "禁猜最近" not in hint
-    delivery = _TEAM_DELIVERY_ENV
+    delivery = _DELIVERY
     assert "【空桌落盘】" not in hint
     assert "【空桌勿套工程壳】" not in delivery
     assert "工程壳" not in delivery
     assert "create_folder" not in delivery
-    assert "create_folder" in _TEAM_LOCAL_DESK and "桌内工程根" in _TEAM_LOCAL_DESK
+    assert "create_folder" in _LOCAL_DESK and "工程根" in _LOCAL_DESK
+    assert "桌内工程根" not in _LOCAL_DESK
     assert "要不要再套一层" not in delivery
-    cross = _TEAM_CROSS_FOLDER
-    assert "target_folder_id" in cross
-    assert "认桌" in cross and "摸底" in cross
-    assert "consult(team_local_desk)" in cross
-    assert "拒后禁塌缩" not in cross
-    assert "文件：空" not in cross
-    assert "先建后派" not in cross
-    assert "list_folder_dir" in cross and "read_folder_file" in cross
-    assert "云端草稿" in cross and "读不到" in cross
+    from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
+    from agentcore.tools.builtin.folder_fs import ListFolderDirTool, ReadFolderFileTool
+
+    target = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"][
+        "target_folder_id"
+    ]["description"]
+    peek = ListFolderDirTool().schema.description + ReadFolderFileTool().schema.description
+    assert "target_folder_id" in target or "已解析文件夹 id" in target
+    assert "认桌" in peek and "摸底" in peek
+    assert "consult(local_desk)" not in target
+    assert "consult(team_local_desk)" not in target
+    assert "拒后禁塌缩" not in target
+    assert "文件：空" not in target
+    assert "先建后派" not in target
+    assert "list_folder_dir" not in target
+    assert "云端草稿" in target and "读不到" in target
     # 区外授权：事实层只报可授权；工具名与姿势归 consult / team_local_desk
     assert "external_mount_readonly" not in out
     assert "grant_organize_folder" not in out
@@ -352,12 +359,12 @@ def test_cloud_scratch_facts():
     assert "约定文档边界" not in out
     assert "讨论/调研/审查类交付写此树" not in out
     assert "用户工程源码仍写业务路径" not in out
-    assert "用户工程源码仍写业务路径" in _TEAM_DELIVERY_ENV
-    assert "约定文档出口" in _TEAM_DELIVERY_ENV
+    assert "用户工程源码仍写业务路径" in _DELIVERY
+    assert "约定文档出口" in _DELIVERY
     # 「报路径须完整前缀、禁缩短成裸 reviews/」是 HOW，编排 skill【产物路径】持有
     assert "完整前缀" not in out
-    assert "**完整**路径" in _TEAM_DELIVERY_ENV
-    assert "裸 `reviews/…`" in _TEAM_DELIVERY_ENV
+    assert "**完整**路径" in _DELIVERY
+    assert "裸 `reviews/…`" in _DELIVERY
     # FakeBackend has no root → probe unknown；建仓 / 无仓政策在 git schema，不进事实行。
     assert "init_baseline" not in out
     assert "不挡派工" not in out
@@ -422,12 +429,13 @@ def test_cloud_folder_desk_identity_is_not_scratch():
     assert "桌：本会话草稿" not in out
     assert "工程壳" not in out
     hint = _CEO_CORE_HINT
-    delivery = _TEAM_DELIVERY_ENV
+    delivery = _DELIVERY
     assert "【空桌落盘】" not in hint
     assert "【空桌勿套工程壳】" not in delivery
     assert "工程壳" not in delivery
     assert "create_folder" not in delivery
-    assert "create_folder" in _TEAM_LOCAL_DESK and "桌内工程根" in _TEAM_LOCAL_DESK
+    assert "create_folder" in _LOCAL_DESK and "工程根" in _LOCAL_DESK
+    assert "桌内工程根" not in _LOCAL_DESK
 
 
 def test_cloud_conv_root_stays_scratch_identity():
@@ -1047,7 +1055,7 @@ def test_workspace_omits_artifact_format_catalog():
     assert ".xlsx=" not in out
     assert "md_to_docx" not in out
     assert "run" in _gaps(out)
-    delivery = _TEAM_DELIVERY_ENV
+    delivery = _DELIVERY
     assert "md_to_docx" in delivery and "md_to_pdf" in delivery
     assert "与执行正交" in delivery
 
@@ -1103,9 +1111,9 @@ def test_no_exec_opaque_source_stays_out_of_facts():
     assert "源数据文件下一步" not in out
     assert "稍后重试" not in out
     data = build_system_skill_registry().get("data_file_landing").body
-    assert "稍后再试" in data or "稍后重试" in _TEAM_LOCAL_DESK
-    assert "源数据文件下一步" not in _TEAM_DELIVERY_ENV
-    assert "export_to_local" in _TEAM_DELIVERY_ENV
+    assert "稍后再试" in data or "稍后重试" in _LOCAL_DESK
+    assert "源数据文件下一步" not in _DELIVERY
+    assert "export_to_local" in _DELIVERY
 
 
 def test_no_exec_engineering_keeps_local_remediation():
@@ -1122,7 +1130,7 @@ def test_no_exec_engineering_keeps_local_remediation():
     assert "本机传统" not in fact
     assert "bind_local" not in out
     assert "export_to_local" not in _CEO_CORE_HINT
-    assert "export_to_local" in _TEAM_DELIVERY_ENV
+    assert "export_to_local" in _DELIVERY
 
 
 def test_opaque_source_does_not_read_backend_materials_into_facts():

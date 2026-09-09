@@ -74,7 +74,6 @@ export function SystemPage() {
     <Page>
       <PageHeader
         title="系统状态"
-        description="部署快照 · 数据库健康、版本、账号规模"
         actions={
           <Button
             variant="outline"

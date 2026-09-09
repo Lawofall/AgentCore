@@ -31,7 +31,7 @@ from __future__ import annotations
 from typing import Any
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory, ToolEffect
+from agentcore.core.types import ToolApproval, ToolEffect, ToolFace
 from agentcore.runtime.runs.constants import HANDOFF_TOOL_NAME
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -69,7 +69,7 @@ class HandoffTool:
                 "先写完交付再调用。"
             ),
             parameters={"type": "object", "properties": {}, "required": []},
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 

@@ -552,3 +552,52 @@ export function composeAnswer(
 export function displayAskReply(text: string): string {
   return text.replace(/^我的答复：\s*/, "").replace(/^· /gm, "");
 }
+
+const COMPOSE_COLON = "：";
+const COMPOSE_SUPPLEMENT = " · 补充：";
+
+/**
+ * Glance line for a settled ask — conclusion only, never the CEO compose dump.
+ * Picks beat note; note lines drop known `题干：` prefixes. Full text stays on expand.
+ */
+export function collapsedAskGlance(input: {
+  selected: readonly string[];
+  note: string;
+  prompts?: readonly string[];
+}): string {
+  const picks = input.selected.map((s) => s.trim()).filter(Boolean);
+  if (picks.length > 0) return picks.join(" · ");
+
+  const cleaned = displayAskReply(input.note.trim());
+  if (!cleaned) return "";
+
+  const lines = cleaned
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const prompts = (input.prompts ?? []).map((p) => p.trim()).filter(Boolean);
+
+  const dropSupplement = (value: string) =>
+    value.replaceAll(COMPOSE_SUPPLEMENT, " · ").trim();
+
+  const afterKnownPrompt = (line: string): string | null => {
+    for (const prompt of prompts) {
+      const prefix = `${prompt}${COMPOSE_COLON}`;
+      if (line.startsWith(prefix)) {
+        return dropSupplement(line.slice(prefix.length));
+      }
+    }
+    return null;
+  };
+
+  return lines
+    .map((line) => {
+      const known = afterKnownPrompt(line);
+      if (known !== null) return known;
+      const at = line.indexOf(COMPOSE_COLON);
+      if (at === -1) return line;
+      return dropSupplement(line.slice(at + COMPOSE_COLON.length));
+    })
+    .filter(Boolean)
+    .join(" · ");
+}

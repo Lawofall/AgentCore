@@ -7,10 +7,13 @@
  * the import block so organizeImports keeps it file-leading.
  */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ToolResultData, ToolResultView } from "../ToolResultView";
-import { GENERIC_TOOL_FAILURE_MESSAGE } from "../productFailureFace";
+import {
+  GENERIC_TOOL_FAILURE_MESSAGE,
+  STR_REPLACE_NO_MATCH_USER_FACE,
+} from "../productFailureFace";
 
 const navigate = vi.fn();
 
@@ -203,10 +206,10 @@ describe("ToolResultView · search_conversations / read_conversation", () => {
     expect(screen.queryByText("检索对话")).toBeNull();
     expect(screen.queryByText(/2 场/)).toBeNull();
     expect(screen.getByText(/上周方案/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "打开对话" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "打开" })).toBeNull();
   });
 
-  it("renders a read body with id + open, without repeating the title", () => {
+  it("renders a read body without id chrome or open, without repeating the title", () => {
     render(
       <ToolResultView
         data={data({
@@ -223,29 +226,10 @@ describe("ToolResultView · search_conversations / read_conversation", () => {
     );
     expect(screen.queryByText("查阅对话：")).toBeNull();
     expect(screen.queryByText("上周方案复盘")).toBeNull();
-    expect(screen.queryByText("已截断")).toBeNull();
-    expect(screen.getByText("conv_abc123")).toBeTruthy();
+    expect(screen.queryByText("截断")).toBeNull();
+    expect(screen.queryByText("conv_abc123")).toBeNull();
+    expect(screen.queryByRole("button", { name: "打开" })).toBeNull();
     expect(screen.getByText(/采用方案 B/)).toBeTruthy();
-  });
-
-  it("deep-links「打开对话」to /conversations/:id when conversation_id is present", () => {
-    render(
-      <ToolResultView
-        data={data({
-          toolName: "read_conversation",
-          display: {
-            title: "旧案",
-            conversation_id: "conv_deeplink",
-            truncated: false,
-            depth: "dialogue",
-          },
-          result: "### User\nhi",
-        })}
-      />,
-    );
-    const btn = screen.getByRole("button", { name: "打开对话" });
-    fireEvent.click(btn);
-    expect(navigate).toHaveBeenCalledWith("/conversations/conv_deeplink");
   });
 
   it("clips a huge transcript preview while keeping the truncated footer", () => {
@@ -297,22 +281,70 @@ describe("ToolResultView · web_fetch", () => {
 });
 
 describe("ToolResultView · error / redirect faces", () => {
-  it("keeps real file_read errors destructive", () => {
+  it("expands a file_read miss to the receipt, without the redundant sentence", () => {
     const { container } = render(
       <ToolResultView
         data={data({
           toolName: "file_read",
-          result: "读取文件失败：文件不存在",
           status: "error",
+          result:
+            "文件不存在：web/CONVENTIONS.md（父目录 web/ 存在）\n可换 glob/grep 更宽查找后再读。勿对同一路径反复重试。",
+          failure: {
+            message: "没找到 web/CONVENTIONS.md，我会换个方式继续。",
+            code: "not_found",
+          },
         })}
       />,
     );
-    expect(container.querySelector("pre")?.className).toContain(
-      "text-destructive",
-    );
+    expect(container.textContent).not.toContain("我会换个方式继续");
+    expect(container.textContent).toContain("文件不存在：web/CONVENTIONS.md");
+    expect(container.textContent).toContain("反复重试");
+    expect(screen.queryByTestId("tool-product-failure")).toBeNull();
+    expect(screen.queryByTestId("tool-error-detail-toggle")).toBeNull();
+    expect(container.querySelector(".text-destructive")).toBeNull();
   });
 
-  it("expanded view keeps model-facing result and hides the generic fallback", () => {
+  it("expands a leaked historical file_read receipt without a fallback sentence", () => {
+    const { container } = render(
+      <ToolResultView
+        data={data({
+          toolName: "file_read",
+          status: "error",
+          result: "文件不存在：web/CONVENTIONS.md\n勿对同一路径反复重试。",
+          failure: {
+            message:
+              "文件不存在：web/CONVENTIONS.md（父目录 web/ 存在）\n可换 glob/grep 更宽查找后再读。勿对同一路径反复重试。",
+            code: "not_found",
+          },
+        })}
+      />,
+    );
+    expect(container.textContent).toContain("反复重试");
+    expect(screen.queryByTestId("tool-product-failure")).toBeNull();
+    expect(screen.queryByTestId("tool-error-detail-toggle")).toBeNull();
+  });
+
+  it("expands a str_replace miss to the receipt, without a second sentence", () => {
+    const { container } = render(
+      <ToolResultView
+        data={data({
+          toolName: "str_replace",
+          status: "error",
+          result:
+            "在 web/src/trial/trialStore.ts 中找不到 old_string；请对照写回执重写精确锚。",
+          failure: {
+            message: STR_REPLACE_NO_MATCH_USER_FACE,
+            code: "TOOL_ERROR",
+          },
+        })}
+      />,
+    );
+    expect(container.textContent).not.toContain("对不上");
+    expect(container.textContent).toContain("old_string");
+    expect(screen.queryByTestId("tool-error-detail-toggle")).toBeNull();
+  });
+
+  it("shows the technical result on expand and hides the generic fallback", () => {
     const { container } = render(
       <ToolResultView
         data={data({
@@ -327,14 +359,15 @@ describe("ToolResultView · error / redirect faces", () => {
         })}
       />,
     );
-    expect(container.textContent).toContain("searxng.internal:8080");
     expect(container.textContent).not.toContain(GENERIC_TOOL_FAILURE_MESSAGE);
+    expect(container.textContent).toContain("searxng.internal:8080");
     expect(
       container.querySelector("[data-testid=tool-product-failure]"),
     ).toBeNull();
+    expect(screen.queryByTestId("tool-error-detail-toggle")).toBeNull();
   });
 
-  it("expanded view shows a specific product failure above the technical result", () => {
+  it("shows a specific product failure and the technical result together", () => {
     const { container } = render(
       <ToolResultView
         data={data({
@@ -351,6 +384,7 @@ describe("ToolResultView · error / redirect faces", () => {
       container.querySelector("[data-testid=tool-product-failure]")
         ?.textContent,
     ).toBe("未找到元素 e13。");
+    expect(screen.queryByTestId("tool-error-detail-toggle")).toBeNull();
   });
 
   it("redirect shows only the user face, not the model steer", () => {
@@ -665,7 +699,7 @@ describe("ToolResultView · host", () => {
       />,
     );
     expect(screen.getByText("listed logs")).toBeTruthy();
-    expect(screen.getByText(/退出码 0/)).toBeTruthy();
+    expect(screen.queryByText(/退出码 0/)).toBeNull();
     expect(screen.queryByText(/不可信内容/)).toBeNull();
   });
 

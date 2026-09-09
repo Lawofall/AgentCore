@@ -188,7 +188,7 @@ function dateToUntil(isoDate: string): string {
  * button off-screen. The filter row wraps.
  */
 interface PanelShell {
-  description: string;
+  description?: string;
   note?: ReactNode;
   actions: ReactNode;
   jump: ReactNode;
@@ -339,10 +339,6 @@ export function ConversationsPage() {
   }
 
   const shell: PanelShell = {
-    description:
-      segment === "conversations"
-        ? "全站 AI 会话索引 · 按用户 / 标题 / 多 Agent 筛选 · 点击行进入复盘"
-        : "全站回合流水 · 按状态 / 多 Agent 筛选 · 方便排障与优化",
     note: userIdFilter ? (
       <>
         仅看用户{" "}

@@ -119,6 +119,7 @@ describe("getByokProviderPreset", () => {
     expect(preset.defaultModel).toBe("deepseek-v4-flash");
     expect(preset.models).toEqual([
       "deepseek-v4-flash",
+      "deepseek-v4.1-flash-expires-on-0910",
       "deepseek-v4-pro",
       "deepseek-v4-flash-vision-exp",
     ]);

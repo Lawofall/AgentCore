@@ -99,7 +99,6 @@ def map_fanout(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
                 f"{fold_hint}"
             ),
             "deliverable": {
-                "form": "files",
                 "artifacts": [artifact],
             },
         }
@@ -115,7 +114,7 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
     仅用户明示成文且需正式长文/可提交（或已确认要审校满编）时用；讨论/形态未定勿首派；
     普通构想勿默认学术审校。一起弄懂/多路摸清/仅提论文开源当资料默认 ``map_fanout``。
 
-    中间环（各路调研 + 提纲）与终稿同走约定文档契约：``form=files`` + 钉死
+    中间环（各路调研 + 提纲）与终稿同走约定文档契约：钉死
     ``AgentCore/文档/research/`` 下路径（角度名入文件名；提纲钉 ``提纲.md``）。
     成篇验收钉死单一主文件（``output_path`` / 默认 ``报告.md``）；
     主交付 `.md`；用户要 PDF/Word/可分享时 brief 钉 ``md → md_to_pdf | md_to_docx → handoff``
@@ -171,7 +170,6 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
                     f"{fold_hint}"
                 ),
                 "deliverable": {
-                    "form": "files",
                     "artifacts": [artifact],
                     "citation_mode": "two_phase",
                 },
@@ -197,7 +195,6 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
                     f"{RESEARCHER_ACADEMIC_SEARCH_DISCIPLINE}"
                 ),
                 "deliverable": {
-                    "form": "files",
                     "artifacts": [artifact],
                     "citation_mode": "two_phase",
                 },
@@ -219,7 +216,6 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
             ),
             "depends_on": research_ids,
             "deliverable": {
-                "form": "files",
                 "artifacts": [outline_path],
                 "citation_mode": "two_phase",
             },
@@ -251,7 +247,6 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
             ),
             "depends_on": ["outline"],
             "deliverable": {
-                "form": "files",
                 "artifacts": [main_path],
                 "citation_mode": "two_phase",
             },
@@ -270,7 +265,6 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
             ),
             "depends_on": ["write"],
             "deliverable": {
-                "form": "files",
                 "artifacts": [_RESEARCH_REPORT_REVIEW_ARTIFACT],
             },
             # 审校为依赖写作的收尾节点：通读长稿 + 核对出处。墙钟显式 300s（优先于统一

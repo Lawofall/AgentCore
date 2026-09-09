@@ -11,13 +11,12 @@ export type WorkflowNodeKind = "agent_step" | "human_gate";
 /**
  * 交付契约快照 — 服务端 `Deliverable` 的整体承载。
  *
- * 画布只直接编辑 `form`，但同一份 definition 会被 PATCH 原样写回，所以
- * `artifacts` / `required_sections` / `strict` / `citation_mode` 等其余字段
- * 必须逐字保留：解析时丢字段 = 用户在画布上点一次保存就抹掉交付契约。
- * 故此处不枚举字段，未知键一律透传（后端加字段也不会被前端吃掉）。
+ * 画布不把 `form` 当一等字段（旧三档已撤，解析时丢掉该键、不做兼容翻译）。
+ * 同一份 definition 会被 PATCH 原样写回，所以 `artifacts` / `required_sections` /
+ * `strict` / `citation_mode` 等其余字段必须逐字保留：解析时丢字段 = 用户在画布上
+ * 点一次保存就抹掉交付契约。故此处不枚举字段，未知键一律透传。
  */
 export interface WorkflowDeliverable {
-  form?: string;
   [key: string]: unknown;
 }
 
@@ -365,17 +364,15 @@ export function validateWorkflowDefinition(
 }
 
 /**
- * Normalize a node's `deliverable`, preserving every field verbatim.
- * Only `form` is normalized (the canvas renders it as text); a non-string
- * `form` is treated as undeclared rather than shown as `[object Object]`.
+ * Normalize a node's `deliverable`, dropping legacy `form` and passing every
+ * other key through verbatim (canvas PATCH must not wipe artifacts / strict …).
  */
 function parseDeliverable(raw: unknown): WorkflowDeliverable | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
-  const { form, ...rest } = raw as Record<string, unknown>;
-  const out: WorkflowDeliverable = {};
-  Object.assign(out, rest);
-  if (typeof form === "string") out.form = form;
-  return out;
+  const rest = { ...(raw as Record<string, unknown>) };
+  const { form: _legacyForm, ...withoutForm } = rest;
+  void _legacyForm;
+  return withoutForm;
 }
 
 /**

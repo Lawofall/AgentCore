@@ -3,7 +3,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { RouteError } from "@/components/layout/RouteError";
 import { NarrowBlockedPage } from "@/lib/narrowLayout";
 import { AskCommencePreviewPage } from "@/pages/AskCommencePreviewPage";
-import { CapabilityPacksPreviewPage } from "@/pages/CapabilityPacksPreviewPage";
 import { ConversationsPage } from "@/pages/ConversationsPage";
 import { ConversationsPreviewPage } from "@/pages/ConversationsPreviewPage";
 import { FilesPage } from "@/pages/FilesPage";
@@ -13,7 +12,6 @@ import { MessagesPage } from "@/pages/MessagesPage";
 import { MorePage } from "@/pages/MorePage";
 import { OnboardingPreviewPage } from "@/pages/OnboardingPreviewPage";
 import { PreviewPage } from "@/pages/PreviewPage";
-import { ToolboxPage } from "@/pages/ToolboxPage";
 import { TurnDetailPage } from "@/pages/TurnDetailPage";
 import { WhiteboardCanvasPage } from "@/pages/WhiteboardCanvasPage";
 import { WhiteboardPage } from "@/pages/WhiteboardPage";
@@ -21,7 +19,6 @@ import { WhiteboardPreviewPage } from "@/pages/WhiteboardPreviewPage";
 import { LegalSettingsPage } from "@/pages/legal/LegalSettingsPage";
 import { AboutSettings } from "@/pages/more/AboutSettings";
 import { AccountSettings } from "@/pages/more/AccountSettings";
-import { FeedbackSettings } from "@/pages/more/FeedbackSettings";
 import { GeneralSettings } from "@/pages/more/GeneralSettings";
 import { GitCredentialSettings } from "@/pages/more/GitCredentialSettings";
 import { ImPrivacySettings } from "@/pages/more/ImPrivacySettings";
@@ -31,15 +28,10 @@ import { ProviderSettings } from "@/pages/more/ProviderSettings";
 import { RedirectToOfficialChat } from "@/pages/more/RedirectToOfficialChat";
 import { ShortcutsSettings } from "@/pages/more/ShortcutsSettings";
 import { UsageSettings } from "@/pages/more/UsageSettings";
-import { ConnectorsPage } from "@/pages/toolbox/ConnectorsPage";
+import { CreationPage } from "@/pages/toolbox/CreationPage";
 import { GuidelinesPage } from "@/pages/toolbox/GuidelinesPage";
-import { StorePage } from "@/pages/toolbox/StorePage";
+import { ToolboxShell } from "@/pages/toolbox/ToolboxShell";
 import { ToolsPage } from "@/pages/toolbox/ToolsPage";
-import {
-  AutomationsPage,
-  InboxPanel,
-  StandingTasksPanel,
-} from "@/pages/toolbox/automations";
 import {
   ManualCollaboration,
   ManualIntro,
@@ -48,6 +40,7 @@ import {
   ManualShell,
 } from "@/pages/toolbox/manual";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
+import { MarketPage } from "@/pages/toolbox/market/MarketPage";
 import { WorkflowEditorPage, WorkflowsPage } from "@/pages/toolbox/workflows";
 import { Navigate, createHashRouter } from "react-router-dom";
 
@@ -111,61 +104,53 @@ export const router = createHashRouter([
         path: "toolbox",
         element: (
           <NarrowBlockedPage>
-            <ToolboxPage />
-          </NarrowBlockedPage>
-        ),
-      },
-      {
-        path: "toolbox/tools",
-        element: (
-          <NarrowBlockedPage>
-            <ToolsPage />
-          </NarrowBlockedPage>
-        ),
-      },
-      {
-        path: "toolbox/guidelines",
-        element: (
-          <NarrowBlockedPage>
-            <GuidelinesPage />
-          </NarrowBlockedPage>
-        ),
-      },
-      {
-        path: "toolbox/store",
-        element: (
-          <NarrowBlockedPage>
-            <StorePage />
-          </NarrowBlockedPage>
-        ),
-      },
-      {
-        path: "toolbox/connectors",
-        element: (
-          <NarrowBlockedPage>
-            <ConnectorsPage />
-          </NarrowBlockedPage>
-        ),
-      },
-      {
-        path: "toolbox/automations",
-        element: (
-          <NarrowBlockedPage>
-            <AutomationsPage />
+            <ToolboxShell />
           </NarrowBlockedPage>
         ),
         children: [
-          { index: true, element: <StandingTasksPanel /> },
-          { path: "inbox", element: <InboxPanel /> },
+          { index: true, element: <Navigate to="mine/skills" replace /> },
+          { path: "mine/skills", element: <GuidelinesPage /> },
+          { path: "mine/tools", element: <ToolsPage /> },
+          { path: "mine/creation", element: <CreationPage /> },
+          {
+            path: "mine/mcp",
+            element: <Navigate to={APP_PATHS.toolbox.connectors} replace />,
+          },
+          {
+            path: "mine/automations",
+            element: <Navigate to={APP_PATHS.toolbox.workflows.root} replace />,
+          },
+          { path: "mine/workflows", element: <WorkflowsPage /> },
+          { path: "market", element: <MarketPage /> },
         ],
       },
       {
+        path: "toolbox/tools",
+        element: <Navigate to={APP_PATHS.toolbox.mine.tools} replace />,
+      },
+      {
+        path: "toolbox/guidelines",
+        element: <Navigate to={APP_PATHS.toolbox.mine.skills} replace />,
+      },
+      {
+        path: "toolbox/store",
+        element: <Navigate to={APP_PATHS.toolbox.market} replace />,
+      },
+      {
+        path: "toolbox/connectors",
+        element: <Navigate to={APP_PATHS.toolbox.connectors} replace />,
+      },
+      {
+        path: "toolbox/automations",
+        element: <Navigate to={APP_PATHS.toolbox.workflows.root} replace />,
+      },
+      {
+        path: "toolbox/automations/inbox",
+        element: <Navigate to={APP_PATHS.toolbox.workflows.root} replace />,
+      },
+      {
         path: "toolbox/workflows",
-        element: (
-          <NarrowBlockedPage>
-            <WorkflowsPage />
-          </NarrowBlockedPage>
-        ),
+        element: <Navigate to={APP_PATHS.toolbox.workflows.root} replace />,
       },
       {
         path: "toolbox/workflows/:workflowId",
@@ -191,15 +176,18 @@ export const router = createHashRouter([
         ],
       },
       // Day2 公共市场未落地：旧书签 #/explore 收向工具箱，避免「即将上线」空壳。
-      { path: "explore", element: <Navigate to="/toolbox" replace /> },
-      // 设置侧「自动化」已迁到工具箱；旧书签深链重定向。
+      {
+        path: "explore",
+        element: <Navigate to={APP_PATHS.toolbox.mine.skills} replace />,
+      },
+      // 旧自动化 / 收件箱书签全部收向工作流列表。
       {
         path: "more/automations",
-        element: <Navigate to={APP_PATHS.toolbox.automations.root} replace />,
+        element: <Navigate to={APP_PATHS.toolbox.workflows.root} replace />,
       },
       {
         path: "more/inbox",
-        element: <Navigate to={APP_PATHS.toolbox.automations.inbox} replace />,
+        element: <Navigate to={APP_PATHS.toolbox.workflows.root} replace />,
       },
       // 产品公告 inbox 已迁 IM 官方号；旧书签 / 手册路径收向消息页。
       { path: "more/notices", element: <RedirectToOfficialChat /> },
@@ -218,11 +206,6 @@ export const router = createHashRouter([
       { path: "preview/conversations", element: <ConversationsPreviewPage /> },
       // Preview 文件页 AgentCore 扁平条目轨（常驻用量 · 徽章 · description）.
       { path: "preview/files", element: <FilesPreviewPage /> },
-      // Preview 能力包两态（工具箱 AI 提示词 · mock 数据离线自检）.
-      {
-        path: "preview/capability-packs",
-        element: <CapabilityPacksPreviewPage />,
-      },
       {
         path: "more",
         element: <MorePage />,
@@ -268,13 +251,11 @@ export const router = createHashRouter([
               </NarrowBlockedPage>
             ),
           },
+          // 「反馈」工单页已撤；旧书签收向关于（联系说明在该页）。不要
+          // NarrowBlocked：窄屏也要落到关于，而不是设置列表。
           {
             path: "feedback",
-            element: (
-              <NarrowBlockedPage>
-                <FeedbackSettings />
-              </NarrowBlockedPage>
-            ),
+            element: <Navigate to={APP_PATHS.more.about} replace />,
           },
           { path: "about", element: <AboutSettings /> },
           { path: "legal/:docId", element: <LegalSettingsPage /> },

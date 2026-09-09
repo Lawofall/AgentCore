@@ -1030,6 +1030,12 @@ HISTORICAL_COMPAT: dict[str, str] = {
     "engine.retrieval_budget_critical": (
         "历史兼容：曾在检索预算临界注入提示；提示已撤，不再发此事件"
     ),
+    "consult.skill_replacements_load_failed": (
+        "历史兼容：换用 overlay 已撤，不再 emit"
+    ),
+    "consult.skill_replacements_snapshot_failed": (
+        "历史兼容：换用 overlay 已撤，不再 emit"
+    ),
 }
 
 KEY_DESC: dict[str, str] = {

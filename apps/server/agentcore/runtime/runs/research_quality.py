@@ -8,7 +8,7 @@
 
 成篇硬审计**只认** ``playbook=="cite_write_review"``（入口另判）。不扫 task/角色自由文猜意图；
 不认已删字数字段腿。``map_fanout`` / 普通多角摸底**不**因多人而进硬门。审校落盘**不**靠角色名
-抬 files——只认 playbook / 已声明的 ``form=files``·``reviews/`` artifacts。
+抬落盘——只认 playbook / 已声明的 ``reviews/`` artifacts。
 
 调研两阶段引用（块 2）：**只认** ``citation_mode=="two_phase"``（playbook / CEO 盖戳）
 → A 检索草案不跑成稿引用闸 → 同 worker 自动升级 B 后再验；未声明退出；
@@ -22,7 +22,7 @@ draft 不进 ``file_acceptance`` / artifacts 主清单。路径入口（声明�
 ``map_fanout``。消费学术搜索块真源 ``evidence_gap``（见接缝常量；
 ``evidence_deficit`` 仍兼容）。
 
-已声明复核落盘对账（案 thin-review A′）：``form=files`` + ``reviews/`` artifacts
+已声明复核落盘对账（案 thin-review A′）：钉 ``reviews/`` artifacts
 未 accepted / 拒收 / 空壳 → ``reason=thin_review`` blocking；不扫角色名；有合格
 accepted 报告则短 handoff 豁免。``requires_draft_ack`` 与 evidence_deficit /
 verify_failed 同闩。
@@ -71,7 +71,7 @@ DEFAULT_RESEARCH_REPORT_ARTIFACT = f"{RESEARCH_DIR}/报告.md"
 # 成篇硬门不扫自由文分叉；选型靠提示词，硬门只认结构字段。
 
 # 独立复核短报告：案 20260803-longfix-thin-review-claim-pass B——须 files_written，禁薄 handoff。
-# 纪律文案由 playbook / 已声明 form=files·artifacts 的 task 自带；运行时不再扫角色名抬契约。
+# 纪律文案由 playbook / 已声明 artifacts 的 task 自带；运行时不再扫角色名抬契约。
 INDEPENDENT_REVIEW_REPORT_DISCIPLINE = (
     "【复核落盘】须将带行号的短复核报告 file_write 到约定文档 reviews/；"
     "逐条写清结论与证据指针（文件:行号）；"
@@ -84,17 +84,24 @@ MIN_UPSTREAM_BODY_CHARS = 80
 
 
 def _deliverable_files_shaped(deliverable: Any) -> bool:
-    """True when deliverable already declares a files/artifacts contract."""
+    """True when deliverable already declares a pinned-path landing contract."""
+    from agentcore.runtime.runs.types import (
+        Deliverable,
+        deliverable_expects_landing,
+        raw_deliverable_expects_landing,
+    )
+
     if deliverable is None:
         return False
     if isinstance(deliverable, dict):
-        return bool(
-            deliverable.get("form") == "files"
-            or bool(deliverable.get("artifacts"))
+        return raw_deliverable_expects_landing(deliverable)
+    if isinstance(deliverable, Deliverable):
+        return deliverable_expects_landing(deliverable)
+    return deliverable_expects_landing(
+        Deliverable(
+            artifacts=list(getattr(deliverable, "artifacts", None) or []),
+            artifact_dir=str(getattr(deliverable, "artifact_dir", "") or ""),
         )
-    return bool(
-        getattr(deliverable, "form", None) == "files"
-        or bool(getattr(deliverable, "artifacts", None))
     )
 
 
@@ -158,7 +165,7 @@ def deliverable_is_report_delivery(deliverable: Any) -> bool:
     """Structured report-landing stamp (compat; factory no longer drives idle).
 
     OR of structured stamps / path declarations only — no role-name regex, no bare
-    ``files_expected`` / ``form=files`` (those would mis-classify repair/build).
+    ``files_expected`` / omitted empty deliverable (those would mis-classify repair/build).
     Callers may still pass the result as ``report_delivery``; factory ignores it
     for delivery_idle.
     """
@@ -222,13 +229,13 @@ def upstream_body_floor_satisfied(
     return n >= floor
 
 
-def brief_may_satisfy_body_floor(*, deliverable_form: str | None) -> bool:
+def brief_may_satisfy_body_floor(*, expects_landing: bool) -> bool:
     """Whether ``promote_brief_to_deliverable`` may count toward the upstream floor.
 
-    ``form=prose`` + 有下游交接地板：只认 ``round_content_chars`` / 已落盘 prose，
-    便条不算交付正文。非 prose / 未声明 form 仍允许升格服务其它场景。
+    Not-landing + 有下游交接地板：只认 ``round_content_chars`` / 已落盘 prose，
+    便条不算交付正文。Pinned landing still allows the brief to stand in.
     """
-    return (deliverable_form or "") != "prose"
+    return expects_landing
 
 
 def promote_brief_to_deliverable(
@@ -696,7 +703,7 @@ def collect_evidence_deficit_gaps(
 
 
 # ── 已声明复核落盘对账（案 thin-review-claim-pass A′）────────────────────
-# 只认 deliverable form=files + reviews/ artifacts（或 artifact_dir）；不扫角色名。
+# 只认钉路径 + reviews/ artifacts（或 artifact_dir）；不扫角色名。
 # 声明路径未 accepted / 拒收 / 空壳信号 → blocking thin_review → partial + draft-ack。
 # 有合格 accepted 报告时短 handoff 不硬降档（厚度仅作缺口文案备注）。
 # 不推翻刀1：有落盘时 degraded_handoff 仍可 soft。

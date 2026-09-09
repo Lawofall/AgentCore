@@ -1,6 +1,6 @@
 import { hasNativeNotification } from "@/lib/capabilities";
 
-/** 窗口失焦或标签页隐藏时，应用内 toast 不可见，改走 OS 通知栏。 */
+/** 窗口失焦或标签页隐藏时走 OS 通知栏；与应用内 toast 互斥（见 teamActivityNotifications）。 */
 export function shouldUseNativeNotification(): boolean {
   if (typeof document === "undefined") return false;
   return document.hidden || !document.hasFocus();

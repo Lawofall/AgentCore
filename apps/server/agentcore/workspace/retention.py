@@ -58,6 +58,43 @@ def retention_cutoff() -> datetime:
     return datetime.now(UTC) - timedelta(days=settings.workspace_retention_days)
 
 
+async def purge_folder_space_unlocked(
+    *, user_id: str, folder_id: str, folder_rel_path: str | None
+) -> None:
+    """Disk half of :func:`purge_folder_space` — caller already holds the workspace lock.
+
+    Used by「最近删除」彻底删除, which serializes with restore via
+    ``workspace_lock_nowait`` on the same key. Nesting ``workspace_lock`` here
+    would deadlock (the lock is not reentrant).
+    """
+    index_dir = internal_zone_path(
+        INDEX_ZONE_NAME,
+        root=Path(),
+        internal_root=workspace_internal_root(
+            user_id=user_id, folder_id=folder_id, conversation_id=""
+        ),
+    )
+    # Release the BM25 handle first — Windows refuses to rmtree an open SQLite file.
+    await drop_index_registry(index_dir)
+    targets = [
+        folder_tombstone_path(user_id=user_id, folder_id=folder_id),
+        workspace_internal_root(
+            user_id=user_id, folder_id=folder_id, conversation_id=""
+        ),
+    ]
+    if folder_rel_path:
+        targets.append(
+            workspace_root_path(
+                user_id=user_id,
+                folder_rel_path=folder_rel_path,
+                conversation_id="",
+            )
+        )
+    for target in targets:
+        shutil.rmtree(target, ignore_errors=True)
+    await purge_snapshots(user_id=user_id, folder_id=folder_id, conversation_id="")
+
+
 async def purge_folder_space(
     *, user_id: str, folder_id: str, folder_rel_path: str | None
 ) -> None:
@@ -70,33 +107,10 @@ async def purge_folder_space(
     folder by now.
     """
     key = workspace_storage_key(user_id=user_id, folder_id=folder_id, conversation_id="")
-    index_dir = internal_zone_path(
-        INDEX_ZONE_NAME,
-        root=Path(),
-        internal_root=workspace_internal_root(
-            user_id=user_id, folder_id=folder_id, conversation_id=""
-        ),
-    )
     async with workspace_lock(key):
-        # Release the BM25 handle first — Windows refuses to rmtree an open SQLite file.
-        await drop_index_registry(index_dir)
-        targets = [
-            folder_tombstone_path(user_id=user_id, folder_id=folder_id),
-            workspace_internal_root(
-                user_id=user_id, folder_id=folder_id, conversation_id=""
-            ),
-        ]
-        if folder_rel_path:
-            targets.append(
-                workspace_root_path(
-                    user_id=user_id,
-                    folder_rel_path=folder_rel_path,
-                    conversation_id="",
-                )
-            )
-        for target in targets:
-            shutil.rmtree(target, ignore_errors=True)
-        await purge_snapshots(user_id=user_id, folder_id=folder_id, conversation_id="")
+        await purge_folder_space_unlocked(
+            user_id=user_id, folder_id=folder_id, folder_rel_path=folder_rel_path
+        )
 
 
 async def _purge_conversation_space(

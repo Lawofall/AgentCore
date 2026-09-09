@@ -21,11 +21,11 @@ from agentcore.db.models import Board, Conversation
 #
 # Adding a new folder-pointer column on Conversation or Board? Register it here
 # (and it will be cleared automatically). Affiliation-only columns go in
-# :data:`FOLDER_AFFILIATION_COLUMNS` instead — the exhaustiveness test will fail
-# if a new ``*folder_id`` column is omitted from both sets.
+# :data:`FOLDER_AFFILIATION_COLUMNS` instead; leftover unread columns go in
+# :data:`FOLDER_UNREAD_COLUMNS`. The exhaustiveness test will fail if a new
+# ``*folder_id`` column is omitted from all three sets.
 FOLDER_NULL_ON_DELETE_POINTERS: Sequence[tuple[type[Any], str]] = (
     (Conversation, "auto_desk_folder_id"),
-    (Board, "folder_id"),
 )
 
 # Conversation/Board columns that reference folders but are **not** cleared by
@@ -33,6 +33,14 @@ FOLDER_NULL_ON_DELETE_POINTERS: Sequence[tuple[type[Any], str]] = (
 FOLDER_AFFILIATION_COLUMNS: frozenset[tuple[type[Any], str]] = frozenset(
     {
         (Conversation, "folder_id"),
+    }
+)
+
+# Leftover columns still on the table, unread, not written, not cleared on delete.
+# ``Board.folder_id``: 否决 board ∈ folder; column kept to avoid a migration.
+FOLDER_UNREAD_COLUMNS: frozenset[tuple[type[Any], str]] = frozenset(
+    {
+        (Board, "folder_id"),
     }
 )
 

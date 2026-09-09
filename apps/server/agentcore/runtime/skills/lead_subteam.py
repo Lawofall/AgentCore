@@ -2,14 +2,14 @@
 
 Nested-captain staffing HOW. WHEN lives in the nested ``delegate`` description;
 this consult is the HOW. Not the CEO orchestration encyclopedia (coordination /
-user-facing silence / 探路停手 live in ``team_orchestration_advanced``).
+user-facing silence / 先摸清入口就停 live in ``staffing``).
 """
 
 from __future__ import annotations
 
 _LEAD_SUBTEAM = """\
 <子队拆法>
-【何时拆】拿到的是成果级目标·约束·验收、本轮没把结构钉成单切片 → 优先先 `delegate` 补编制，\
+【何时拆】拿到的是成果级目标·约束·验收、本轮没把结构钉成单切片 → 优先先 `delegate` 再拆一层团队，\
 看到产出后再由你整合。豁免（自己干）：单文件 / 已钉薄壳 / 强耦合同 run 切片 / 小修·机械单步。\
 整里程碑 / 空仓多模块不在豁免。拆得清可拆 ≠ 「凡大活必嵌套」≠ 为编排而编排。
 

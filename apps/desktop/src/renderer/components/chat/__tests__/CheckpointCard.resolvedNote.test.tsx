@@ -23,21 +23,29 @@ const resolvedDecision: CheckpointDisplay = {
 };
 
 describe("ResolvedCheckpoint 单行折叠", () => {
-  it("默认收起单行：普通澄清确认不画套话，答复摘要常驻；点击展开见全文", () => {
+  it("默认收起单行：折叠面只露选项结论，展开见题干与全文", () => {
     render(<CheckpointCard checkpoint={resolvedDecision} />);
 
     expect(screen.queryByText("已按你的决定继续")).toBeNull();
-    // 收起摘要是 note（截断展示），不是 CEO 问题。
-    expect(document.body.textContent).toContain("就按这个方案开做：");
+    expect(screen.getByText("综述型 · 公开发表 · 精简干货")).toBeTruthy();
     expect(document.body.textContent).not.toContain(resolvedDecision.question);
+    expect(document.body.textContent).not.toContain("就按这个方案开做：");
+    const collapsed = screen.getByText("综述型 · 公开发表 · 精简干货");
+    expect(collapsed.className).toContain("text-sm");
+    expect(collapsed.className).not.toContain("text-xs");
+    expect(collapsed.className).not.toContain("font-medium");
+    const row = collapsed.closest("button")?.className.split(/\s+/) ?? [];
+    expect(row).toContain("w-auto");
+    expect(row).toContain("max-w-full");
+    expect(row).not.toContain("w-full");
 
-    fireEvent.click(screen.getByText(/就按这个方案开做/));
+    fireEvent.click(collapsed);
     expect(document.body.textContent).toContain(resolvedDecision.question);
     expect(document.body.textContent).toContain("定位？：综述型");
     expect(document.body.textContent).toContain("篇幅？：精简干货");
   });
 
-  it("收起摘要不展示已退役的「我的答复：」和行首 ·", () => {
+  it("无 selected 时从 compose note 去掉题干前缀", () => {
     render(
       <CheckpointCard
         checkpoint={{
@@ -49,11 +57,9 @@ describe("ResolvedCheckpoint 单行折叠", () => {
     );
     expect(document.body.textContent).not.toContain("我的答复：");
     expect(document.body.textContent).not.toContain(
-      "· 你心里的「Agent 生态」更接近哪种？",
-    );
-    expect(document.body.textContent).toContain(
       "你心里的「Agent 生态」更接近哪种？",
     );
+    expect(screen.getByText("都不太对")).toBeTruthy();
   });
 
   it("无 note 时折叠摘要用 selected；无答复则只留拍板存根", () => {
@@ -114,7 +120,14 @@ describe("ResolvedCheckpoint 单行折叠", () => {
           }}
         />,
       );
-      expect(screen.getByText("已取消本回合")).toBeTruthy();
+      const label = screen.getByText("已取消本回合");
+      expect(label).toBeTruthy();
+      expect(label.className).toContain("text-sm");
+      expect(label.className).not.toContain("text-xs");
+      expect(label.className).not.toContain("font-medium");
+      const row = label.closest("button")?.className.split(/\s+/) ?? [];
+      expect(row).toContain("w-auto");
+      expect(row).not.toContain("w-full");
       expect(document.body.textContent).not.toContain(
         resolvedDecision.question,
       );

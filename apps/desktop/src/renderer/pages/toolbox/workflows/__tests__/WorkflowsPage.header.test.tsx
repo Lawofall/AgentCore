@@ -5,14 +5,33 @@ import type { UserWorkflow } from "@/services/workflows";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/services/workflows", () => ({
-  listWorkflows: vi.fn(),
-  listWorkflowTemplates: vi.fn(async () => []),
-  createWorkflow: vi.fn(),
-  deleteWorkflow: vi.fn(),
-  createWorkflowFromPlaybook: vi.fn(),
-  runWorkflow: vi.fn(),
-}));
+vi.mock("@/services/workflows", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/workflows")>();
+  return {
+    ...actual,
+    listWorkflows: vi.fn(),
+    createWorkflow: vi.fn(),
+    deleteWorkflow: vi.fn(),
+    createWorkflowFromPlaybook: vi.fn(),
+    runWorkflow: vi.fn(),
+    putWorkflowTrigger: vi.fn(),
+    deleteWorkflowTrigger: vi.fn(),
+    rotateWorkflowTriggerSecret: vi.fn(),
+  };
+});
+
+vi.mock("@/services/workflowStore", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/services/workflowStore")>();
+  return {
+    ...actual,
+    listMyWorkflowListings: vi.fn(async () => []),
+    listInstalledWorkflows: vi.fn(async () => []),
+    publishWorkflow: vi.fn(),
+    publishWorkflowVersion: vi.fn(),
+    unpublishWorkflow: vi.fn(),
+  };
+});
 
 vi.mock("@/services/folders", () => ({ listFolders: vi.fn(async () => []) }));
 
@@ -22,12 +41,11 @@ vi.mock("@/lib/toast", () => ({
 }));
 
 import { ApiError } from "@/services/api";
-import { listWorkflowTemplates, listWorkflows } from "@/services/workflows";
+import { listWorkflows } from "@/services/workflows";
 import { MemoryRouter } from "react-router-dom";
 import { WorkflowsPage } from "../WorkflowsPage";
 
 const workflows = vi.mocked(listWorkflows);
-const templates = vi.mocked(listWorkflowTemplates);
 
 const WORKFLOW: UserWorkflow = {
   id: "wf-1",
@@ -51,26 +69,20 @@ function renderPage() {
 beforeEach(() => {
   workflows.mockReset();
   workflows.mockResolvedValue([WORKFLOW]);
-  templates.mockReset();
-  templates.mockResolvedValue([]);
 });
 
 afterEach(cleanup);
 
-describe("工作流列表 · 统一页头", () => {
-  it("主 CTA 进页头动作位，返回工具箱并挂本页标题", async () => {
-    const { container } = renderPage();
+describe("工作流列表 · 嵌入我的", () => {
+  it("主 CTA 在内容区，不再自带页头", async () => {
+    renderPage();
     await screen.findByText("周报流水线");
 
-    const header = container.querySelector("header");
-    expect(screen.getAllByRole("link", { name: "工具箱" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "新建工作流" })).toBeTruthy();
     expect(
-      screen.getByRole("heading", { level: 1, name: "工作流" }),
-    ).toBeTruthy();
-    expect(screen.queryByRole("navigation", { name: "工具箱能力" })).toBeNull();
-    expect(
-      header?.contains(screen.getByRole("button", { name: "新建工作流" })),
-    ).toBe(true);
+      screen.queryByRole("heading", { level: 1, name: "工作流" }),
+    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "工具箱" })).toBeNull();
   });
 
   it("页头与内容区都无说明书", async () => {
@@ -88,20 +100,6 @@ describe("工作流列表 · 可恢复失败", () => {
     renderPage();
 
     const err = await screen.findByText("列表开小差");
-    expect(err.className).toContain("text-muted-foreground");
-    expect(err.className).not.toContain("destructive");
-  });
-
-  it("官方模板加载失败走 muted 行内文案", async () => {
-    templates.mockRejectedValue(
-      new ApiError(
-        500,
-        JSON.stringify({ error: { message: "官方模板开小差" } }),
-      ),
-    );
-    renderPage();
-
-    const err = await screen.findByText("官方模板开小差");
     expect(err.className).toContain("text-muted-foreground");
     expect(err.className).not.toContain("destructive");
   });

@@ -534,19 +534,26 @@ def test_debate_kickoff_summary_includes_moderator_and_side_models():
 
 def test_skill_teaches_catalog_ref_not_mvp_empty():
     from agentcore.runtime.skills import build_system_skill_registry
+    from agentcore.tools.builtin.debate.schema import DEBATE_PARAMETERS
 
     body = build_system_skill_registry().get("debate_and_review").body
     assert "MVP 未启用" not in body
     assert "请留空" not in body
-    assert "cross_model" in body
-    assert "禁止" in body and "元问题" in body
-    assert "平台 glm-5.2" in body or "DeepSeek" in body
-    assert "PLATFORM_MODELS" in body or "跨模型" in body
+    assert "元问题" in body
+    assert "消歧" in body
+    assert "cross_model" not in body
+    assert "【多模型】" not in body
+    assert "platform/xxx" not in body
+    assert "PLATFORM_MODELS" not in body
     assert "中立槽" not in body
-    assert "moderator_model" in body
-    assert "可与辩手同模" in body
-    assert "@platform" in body or "@byok" in body
-    assert "platform/xxx" in body or "路由键" in body
+    model_desc = DEBATE_PARAMETERS["properties"]["sides"]["items"]["properties"]["model"][
+        "description"
+    ]
+    assert "@platform" in model_desc or "@byok" in model_desc
+    assert "路由键" in model_desc
+    assert "cross_model" in DEBATE_PARAMETERS["properties"]
+    assert "moderator_model" in DEBATE_PARAMETERS["properties"]
+    assert "可与辩手同模" in DEBATE_PARAMETERS["properties"]["moderator_model"]["description"]
 
 
 def test_schema_exposes_moderator_model():

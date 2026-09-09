@@ -1,7 +1,7 @@
 """User workflow API schemas."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -9,6 +9,8 @@ from agentcore.workflows.definition import (
     client_owned_definition,
     validate_workflow_definition,
 )
+from agentcore.workflows.paths import webhook_path
+from agentcore.workflows.schedule import infer_schedule_preset
 from agentcore.workflows.slots import (
     MAX_SLOT_DEFAULT_CHARS,
     MAX_SLOT_LABEL_CHARS,
@@ -96,6 +98,57 @@ class UpdateWorkflowRequest(BaseModel):
     clear_description: bool = False
 
 
+class WorkflowTriggerModel(BaseModel):
+    """One clock on a workflow: schedule XOR webhook."""
+
+    kind: Literal["schedule", "webhook"]
+    enabled: bool
+    folder_id: str
+    cron: str | None = None
+    schedule_preset: str | None = None
+    webhook_id: str | None = None
+    webhook_url: str | None = None
+    webhook_secret: str | None = None
+    next_run_at: datetime | None = None
+    last_run_at: datetime | None = None
+    last_error: str | None = None
+
+
+class PutWorkflowTriggerRequest(BaseModel):
+    """Full replace of the workflow clock."""
+
+    kind: Literal["schedule", "webhook"]
+    folder_id: str
+    enabled: bool = True
+    cron: str | None = None
+    schedule_preset: str | None = None
+
+    @model_validator(mode="after")
+    def _xor(self) -> "PutWorkflowTriggerRequest":
+        preset = self.schedule_preset
+        if self.kind == "webhook":
+            if self.cron or preset:
+                raise ValueError("kind=webhook 时不要传 schedule_preset / cron")
+            return self
+        if not self.cron and not preset:
+            raise ValueError("须提供 schedule_preset 或 cron")
+        if preset and preset.strip().lower() != "custom" and self.cron:
+            raise ValueError("命名 schedule_preset 时不要同时传 cron")
+        if preset and preset.strip().lower() == "custom" and not self.cron:
+            raise ValueError("schedule_preset=custom 时须提供 cron")
+        return self
+
+
+class RotateWorkflowTriggerResponse(BaseModel):
+    webhook_id: str
+    webhook_url: str
+    webhook_secret: str
+
+
+class FireWorkflowWebhookResponse(BaseModel):
+    conversation_id: str
+
+
 class WorkflowSummary(BaseModel):
     id: str
     name: str
@@ -103,6 +156,7 @@ class WorkflowSummary(BaseModel):
     definition: dict[str, Any]
     # 与 definition 平级：客户端整份覆盖画布也带不走它。
     source: WorkflowSourceModel | None = None
+    trigger: WorkflowTriggerModel | None = None
     version: int
     created_at: datetime
     updated_at: datetime
@@ -110,7 +164,7 @@ class WorkflowSummary(BaseModel):
     model_config = {"from_attributes": True}
 
     @classmethod
-    def from_row(cls, row) -> "WorkflowSummary":
+    def from_row(cls, row, *, webhook_secret: str | None = None) -> "WorkflowSummary":
         source = normalize_source(row.source)
         return cls(
             id=row.id,
@@ -118,10 +172,36 @@ class WorkflowSummary(BaseModel):
             description=row.description,
             definition=dict(row.definition or {}),
             source=WorkflowSourceModel.model_validate(source) if source else None,
+            trigger=trigger_from_row(row, webhook_secret=webhook_secret),
             version=int(row.version or 1),
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
+
+
+def trigger_from_row(row, *, webhook_secret: str | None = None) -> WorkflowTriggerModel | None:
+    kind = getattr(row, "trigger_kind", None)
+    if kind not in ("schedule", "webhook"):
+        return None
+    folder_id = getattr(row, "trigger_folder_id", None)
+    if not folder_id:
+        return None
+    cron = getattr(row, "trigger_cron", None)
+    webhook_id = getattr(row, "trigger_webhook_id", None)
+    last_error = getattr(row, "last_trigger_error", None)
+    return WorkflowTriggerModel(
+        kind=kind,
+        enabled=bool(getattr(row, "trigger_enabled", False)),
+        folder_id=folder_id,
+        cron=cron,
+        schedule_preset=infer_schedule_preset(cron) if cron else None,
+        webhook_id=webhook_id if kind == "webhook" else None,
+        webhook_url=webhook_path(webhook_id) if webhook_id and kind == "webhook" else None,
+        webhook_secret=webhook_secret,
+        next_run_at=getattr(row, "trigger_next_run_at", None),
+        last_run_at=getattr(row, "trigger_last_run_at", None),
+        last_error=(last_error or None),
+    )
 
 
 class RunWorkflowRequest(BaseModel):

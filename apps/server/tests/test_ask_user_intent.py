@@ -31,15 +31,14 @@ def test_checkpoint_intent_and_card_literals():
     assert set(get_args(AskCheckpointIntent)) == {
         "decision",
         "organize_plan",
-        "daily_review",
     }
-    assert set(get_args(AskUserCard)) == {"organize_plan", "daily_review"}
+    assert set(get_args(AskUserCard)) == {"organize_plan"}
 
 
 def test_coerce_unknown_intent_is_decision():
     assert coerce_ask_checkpoint_intent("decision") == "decision"
     assert coerce_ask_checkpoint_intent("organize_plan") == "organize_plan"
-    assert coerce_ask_checkpoint_intent("daily_review") == "daily_review"
+    assert coerce_ask_checkpoint_intent("daily_review") == "decision"
     assert coerce_ask_checkpoint_intent(None) == "decision"
     assert coerce_ask_checkpoint_intent("") == "decision"
     assert coerce_ask_checkpoint_intent("not_a_known_intent") == "decision"
@@ -51,7 +50,7 @@ def test_coerce_unknown_intent_is_decision():
 def test_opening_turn_without_execution_is_decision():
     transcript = [
         LLMMessage(role="user", content="做个网站"),
-        _assistant_tool("consult", {"name": "asking_the_user"}, call_id="cs"),
+        _assistant_tool("consult", {"name": "ask_kickoff"}, call_id="cs"),
         LLMMessage(role="tool", content="skill body", tool_call_id="cs"),
         _assistant_tool("ask_user", {"message": "短澄清"}, call_id="ask"),
     ]
@@ -61,7 +60,7 @@ def test_opening_turn_without_execution_is_decision():
 def test_midtask_skill_consult_is_decision():
     transcript = [
         LLMMessage(role="user", content="继续"),
-        _assistant_tool("consult", {"name": "asking_the_user"}, call_id="cs"),
+        _assistant_tool("consult", {"name": "ask_kickoff"}, call_id="cs"),
         LLMMessage(role="tool", content="skill body", tool_call_id="cs"),
         _assistant_tool("ask_user", {"message": "选 A 还是 B"}, call_id="ask"),
     ]

@@ -2,10 +2,10 @@
 
 One aggregate endpoint over the platform's agent capabilities — every tool (CEO +
 worker, annotated with who may call it), the system Skills registered at runtime
-(platform + deployment-enabled packs; identical for every user), deployment-listed
-capability packs as a display catalog, the CEO system-prompt template, and worker
-identity templates. Skills / packs are derived from the SAME sources the runtime
-wires so the 图鉴 never drifts from the live turn.
+(identical for every user), the CEO system-prompt template, and worker identity
+templates. Skills are derived from the SAME registry the runtime wires so the
+图鉴 never drifts from the live turn. Domain SOPs (法律等) live on the Skill
+store shelf, not here.
 """
 
 from fastapi import APIRouter
@@ -14,11 +14,9 @@ from agentcore.api.dependencies import AuthUser
 from agentcore.api.schemas import (
     CapabilitiesResponse,
     CapabilityGuidelines,
-    CapabilityPack,
     CapabilitySkill,
     CapabilityTool,
 )
-from agentcore.runtime.capability_packs import enabled_packs, listed_packs
 from agentcore.runtime.resolve.prompt import (
     assemble_system_prompt,
     compose_ceo_chat_prompt,
@@ -35,14 +33,16 @@ router = APIRouter(prefix="/capabilities", tags=["capabilities"])
 
 @router.get("", response_model=CapabilitiesResponse)
 async def get_capabilities(_user: AuthUser) -> CapabilitiesResponse:
-    """The complete capability picture: tools, runtime skills, listed packs,
+    """The complete capability picture: tools, runtime skills,
     and the CEO / worker system-prompt templates — the data behind 工具箱 → 能力图鉴."""
     catalog = build_capability_catalog()
     tools = [
         CapabilityTool(
             name=entry.schema.name,
             description=entry.schema.description,
-            category=entry.schema.category,
+            face=entry.schema.face,
+            resident=entry.resident,
+            summary=entry.summary,
             approval=entry.schema.approval,
             parameters=entry.schema.parameters,
             available_to=list(entry.available_to),
@@ -50,24 +50,15 @@ async def get_capabilities(_user: AuthUser) -> CapabilitiesResponse:
         for entry in catalog
     ]
 
-    packs_on = enabled_packs()
-    skill_registry = build_system_skill_registry(enabled_packs=packs_on)
+    skill_registry = build_system_skill_registry()
     skills = [
-        CapabilitySkill(name=skill.name, summary=skill.summary, body=skill.body)
-        for skill in skill_registry.list_all()
-    ]
-
-    packs = [
-        CapabilityPack(
-            id=pack.id,
-            name=pack.name,
-            summary=pack.summary,
-            skills=[
-                CapabilitySkill(name=s.name, summary=s.summary, body=s.body)
-                for s in pack.skills()
-            ],
+        CapabilitySkill(
+            name=skill.name,
+            summary=skill.summary,
+            body=skill.body,
+            group=skill.group,
         )
-        for pack in listed_packs()
+        for skill in skill_registry.list_all()
     ]
 
     # Templates, not per-turn prompts: CEO compose uses the catalog's CEO tool names
@@ -92,5 +83,5 @@ async def get_capabilities(_user: AuthUser) -> CapabilitiesResponse:
     )
 
     return CapabilitiesResponse(
-        tools=tools, skills=skills, packs=packs, guidelines=guidelines
+        tools=tools, skills=skills, guidelines=guidelines
     )

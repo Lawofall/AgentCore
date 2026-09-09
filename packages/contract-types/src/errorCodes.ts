@@ -31,6 +31,10 @@ export const NON_RETRIABLE_ERROR_CODES: readonly ErrorCode[] = [
   "KEY_STORAGE_UNAVAILABLE",
   "PLATFORM_BILLING_UNAVAILABLE",
   "CONTEXT_OVERFLOW",
+  "LOCAL_DESKTOP_OFFLINE",
+  "LOCAL_ROOT_NOT_HELD",
+  "LOCAL_ORIGIN_DEVICE_OFFLINE",
+  "LOCAL_CHANNEL_DEAD",
 ];
 
 /** Type guard: whether `code` is a code the clients recognize (typed against the
@@ -85,6 +89,10 @@ export const ZERO_OUTPUT_SEND_REFUSAL_CODES: readonly ErrorCode[] = [
   "LLM_RATE_LIMIT",
   "LLM_KEY_INVALID",
   "LLM_INSUFFICIENT_BALANCE",
+  "LOCAL_DESKTOP_OFFLINE",
+  "LOCAL_ROOT_NOT_HELD",
+  "LOCAL_ORIGIN_DEVICE_OFFLINE",
+  "LOCAL_CHANNEL_DEAD",
 ];
 
 export function isZeroOutputSendRefusalCode(

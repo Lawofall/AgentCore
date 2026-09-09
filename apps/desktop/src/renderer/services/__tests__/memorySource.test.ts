@@ -28,6 +28,7 @@ import {
   GLOBAL_PREFERENCES_PATH,
   GLOBAL_PROFILE_PATH,
   createMemorySource,
+  isAccountMemoryTarget,
   isMemoryTopicPath,
   memoryLeafTabName,
   memoryProjectNavigationPath,
@@ -131,6 +132,16 @@ describe("parseProjectMemoryFolderId", () => {
     expect(parseProjectMemoryFolderId(GLOBAL_PREFERENCES_PATH)).toBeNull();
     expect(parseProjectMemoryFolderId(GLOBAL_PROFILE_PATH)).toBeNull();
     expect(parseProjectMemoryFolderId(memoryTopicPath(null, "x"))).toBeNull();
+  });
+});
+
+describe("isAccountMemoryTarget", () => {
+  it("treats global leaves as account-layer, folder leaves as files-page", () => {
+    expect(isAccountMemoryTarget(GLOBAL_PREFERENCES_PATH)).toBe(true);
+    expect(isAccountMemoryTarget(GLOBAL_PROFILE_PATH, null)).toBe(true);
+    expect(isAccountMemoryTarget(memoryTopicPath(null, "x"))).toBe(true);
+    expect(isAccountMemoryTarget(memoryProjectProfilePath("F1"))).toBe(false);
+    expect(isAccountMemoryTarget("broken-target", "F99")).toBe(false);
   });
 });
 

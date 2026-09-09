@@ -180,8 +180,9 @@ describe("StatusStrip · user stop cancelled", () => {
 
     expect(screen.queryByText("已停止")).toBeNull();
     expect(screen.getByTestId("status-strip-failed")).toBeTruthy();
-    expect(screen.getByText(LLM_RATE_LIMIT_MESSAGE)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "复制排查包" })).toBeTruthy();
+    expect(screen.getByText("失败")).toBeTruthy();
+    expect(screen.queryByText(LLM_RATE_LIMIT_MESSAGE)).toBeNull();
+    expect(screen.queryByRole("button", { name: "复制排查包" })).toBeNull();
   });
 
   it("cancelled status + productLanded 限流 → 部分完成, 不画已停止", () => {

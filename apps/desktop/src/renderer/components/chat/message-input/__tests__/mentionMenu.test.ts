@@ -41,6 +41,10 @@ describe("parseMentionFilter", () => {
       section: "setting",
       filter: "简短",
     });
+    expect(parseMentionFilter("提示词 简短")).toEqual({
+      section: "setting",
+      filter: "简短",
+    });
   });
 
   it("strips English prefixes case-insensitively", () => {
@@ -178,7 +182,7 @@ describe("buildMentionCategoryRows", () => {
     expect(rows[4]).toMatchObject({ id: "team", count: 2, disabled: false });
   });
 
-  it("有按需设定时插在对话和团队之间", () => {
+  it("有提示词时插在对话和团队之间", () => {
     const rows = buildMentionCategoryRows({
       counts: { team: 1, conversation: 1, folder: 0, file: 0, setting: 2 },
     });
@@ -190,6 +194,10 @@ describe("buildMentionCategoryRows", () => {
       "setting",
       "team",
     ]);
+    expect(rows.find((r) => r.id === "setting")).toMatchObject({
+      label: "提示词",
+      count: 2,
+    });
   });
 
   it("marks file/folder loading when index is still empty", () => {

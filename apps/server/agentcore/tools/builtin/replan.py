@@ -36,7 +36,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.runtime.delegate.task_models import TASK_MODEL_SCHEMA_PROPS
 from agentcore.tools.builtin.delegate.schema import TASK_DELIVERABLE_SCHEMA
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
@@ -52,14 +52,14 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Schema layer (工具面瘦身): short trigger. HOW → team_orchestration_advanced（晚绑定段）。
+# Schema layer (工具面瘦身): short trigger. HOW → staffing（晚绑定段）。
 _REPLAN_DESCRIPTION = (
     "在 delegate 让出『计划已让出』后续跑同一计划（非终结）。"
     "binds=定稿让出简报里的待定稿步；手写未定下游用 add；steers=操舵未跑步；"
     "add=追加新步；stop=true 收口。"
     "协调中追加全新角色/任务队员请再调 delegate（自动并入当前图），勿等本工具；"
     "本工具 add=… 留给波边界让出之后。"
-    "细节见 consult(team_orchestration_advanced)。"
+    "细节见 consult(staffing)。"
 )
 
 _REPLAN_PARAMETERS = {
@@ -172,7 +172,7 @@ class ReplanTool:
             name="replan",
             description=_REPLAN_DESCRIPTION,
             parameters=_REPLAN_PARAMETERS,
-            category=ToolCategory.ORCHESTRATION,
+            face=ToolFace.ORCHESTRATION,
             approval=ToolApproval.NEVER,
         )
 

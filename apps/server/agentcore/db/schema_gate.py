@@ -43,11 +43,23 @@ _EXTRA_SOURCE_NEEDLES: tuple[str, ...] = (
     "InviteRepository",
     "generate_invite_code",
     "CreateInviteRequest",
+    # In-app ticket product retired (table ``feedback`` is ambiguous vs
+    # ``messages.feedback`` 点赞/点踩 and runtime "feedback" identifiers).
+    "FeedbackRow",
+    "FeedbackRepository",
+    "get_feedback_repo",
+    "CreateFeedbackRequest",
+    # Official HOW overlay retired (tables ``skill_slot_replacements`` /
+    # ``skill_slot_homes`` dropped).
+    "SkillSlotHome",
+    "SkillSlotReplacement",
+    "SkillSlotRepository",
 )
 
 # Dropped table names that collide with unrelated identifiers (e.g. shared-space
-# invite helpers). Still enforced via ORM metadata; skipped in source scan.
-_AMBIGUOUS_TOMBSTONE_TABLES: frozenset[str] = frozenset({"invites"})
+# invite helpers; ``feedback`` vs message rating / runtime feedback). Still
+# enforced via ORM metadata; skipped in source scan.
+_AMBIGUOUS_TOMBSTONE_TABLES: frozenset[str] = frozenset({"invites", "feedback"})
 
 _AGENTCORE_ROOT = Path(_db_pkg.__file__).resolve().parent.parent
 _MIGRATIONS_DIR = Path(_db_pkg.__file__).resolve().parent / "migrations"

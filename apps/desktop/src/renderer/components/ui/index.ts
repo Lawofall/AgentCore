@@ -4,6 +4,7 @@ export {
   type CatalogIconShellProps,
 } from "./catalog-icon-shell";
 export {
+  CATALOG_GRID_CLASS,
   CatalogTile,
   type CatalogTileProps,
 } from "./catalog-tile";
@@ -92,6 +93,7 @@ export { EmptyHint, type EmptyHintProps } from "./empty-hint";
 export { SectionLabel } from "./section-label";
 export {
   SurfaceRow,
+  SurfaceRowActions,
   SurfaceRowButton,
   SurfaceNavLink,
   surfaceRowIndent,

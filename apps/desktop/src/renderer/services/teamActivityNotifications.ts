@@ -1,5 +1,8 @@
 import { getConversations } from "@/hooks/useConversations";
-import { showNativeNotification } from "@/lib/nativeNotification";
+import {
+  shouldUseNativeNotification,
+  showNativeNotification,
+} from "@/lib/nativeNotification";
 import { queryClient } from "@/lib/queryClient";
 import { conversationKeys } from "@/lib/queryKeys";
 import {
@@ -7,7 +10,7 @@ import {
   isTransientRoute,
   runtimeHasError,
 } from "@/lib/teamActivity";
-import { notifyInfo } from "@/lib/toast";
+import { notifyError, notifyInfo, notifySuccess } from "@/lib/toast";
 import {
   type AiAttentionEntry,
   useAiAttentionStore,
@@ -27,7 +30,8 @@ import { usePausedTurnStore } from "@/stores/pausedTurns";
 
 /**
  * 跨对话完成通知 (前端UX设计.md §一 全局协作感知)：只读订阅对话生成态 + 交互态 + 挂起态，当用户**不在**某对话
- * 页面时，该对话的关键事件（回合完成 / 失败 / 等你拍板 / 挂起等确认）弹一条带「跳转」action 的 notifyInfo。
+ * 页面时，该对话的关键事件（回合完成 / 失败 / 等你拍板 / 挂起等确认）提醒一次。前台走带「跳转」
+ * action 的 toast，失焦 / 不可见改走系统通知——同一事件只出一条，不叠右下角。
  * 纯前端感知层——不碰 SSE 契约 / 协议 fold，不新增事件；接线一次于 AppShell（与 realtime /
  * updates 同处），随会话常驻。
  *
@@ -67,59 +71,102 @@ function shouldNotify(conversationId: string): boolean {
   return conversationIdFromHash(hash) !== conversationId;
 }
 
+function jumpAction(
+  conversationId: string,
+  label: string,
+): { label: string; onClick: () => void } {
+  return { label, onClick: () => jumpTo(conversationId) };
+}
+
+function toastLine(conversationTitle: string | null, headline: string): string {
+  return conversationTitle ? `「${conversationTitle}」${headline}` : headline;
+}
+
+/**
+ * In-app 一句。OS / firehose 用带「AI」前缀的 kind 短句；产品里已经在 AgentCore，不再重复。
+ * 禁止把卡上的 question / 工具名贴进来——正文在对话卡里。
+ */
+const ATTENTION_TOAST_HEADLINE: Record<string, string> = {
+  approval: "需要审批",
+  escalation: "需要你的决定",
+  ask_user: "需要你的回应",
+  plan_review: "计划待你确认",
+};
+
+function attentionHeadline(kind: string): string {
+  return ATTENTION_TOAST_HEADLINE[kind] ?? "需要你处理";
+}
+
+/**
+ * 前台 toast / 后台系统通知互斥。失焦时不往看不见的窗口塞 toast，避免回来一条过期提示。
+ */
+function notifyAmbient(
+  conversationId: string,
+  message: string,
+  kind: "success" | "error" | "info",
+  action: { label: string; onClick: () => void },
+): void {
+  if (shouldUseNativeNotification()) {
+    void showNativeNotification("AgentCore", message, { conversationId });
+    return;
+  }
+  if (kind === "error") {
+    notifyError(message, undefined, { action });
+    return;
+  }
+  if (kind === "success") {
+    notifySuccess(message, { action });
+    return;
+  }
+  notifyInfo(message, { action });
+}
+
 function notifyTurnEnd(conversationId: string, failed: boolean): void {
   if (!shouldNotify(conversationId)) return;
   const title = titleOf(conversationId);
   if (!title) return;
   const message = failed ? `「${title}」执行失败` : `「${title}」已完成`;
-  notifyInfo(message, {
-    action: { label: "查看", onClick: () => jumpTo(conversationId) },
-  });
-  void showNativeNotification("AgentCore", message, { conversationId });
+  notifyAmbient(
+    conversationId,
+    message,
+    failed ? "error" : "success",
+    jumpAction(conversationId, "查看"),
+  );
 }
 
-/**
- * 热阻塞卡的一句话文案。三类都把回合钉在用户身上，措辞跟服务端 `attention_title`
- * 的 per-kind headline 对齐（`agentcore/attention/signal.py`），免得同一张卡在
- * firehose 与本端两路提醒里说法不一。
- */
-const HOT_BLOCKING_HEADLINE: Partial<Record<InteractionEntry["kind"], string>> =
-  {
-    approval: "需要审批",
-    escalation: "需要你的决定",
-  };
-
 function notifyHotBlocking(entry: InteractionEntry): void {
-  const headline = HOT_BLOCKING_HEADLINE[entry.kind];
+  const headline = ATTENTION_TOAST_HEADLINE[entry.kind];
   if (!headline) return;
   const conversationId = entry.conversationId;
   if (!shouldNotify(conversationId)) return;
   const title = titleOf(conversationId);
   if (!title) return;
-  const message = `「${title}」${headline}`;
-  notifyInfo(message, {
-    action: { label: "去处理", onClick: () => jumpTo(conversationId) },
-  });
-  void showNativeNotification("AgentCore", message, { conversationId });
+  notifyAmbient(
+    conversationId,
+    toastLine(title, headline),
+    "info",
+    jumpAction(conversationId, "去处理"),
+  );
 }
 
-/** ask_user / plan_review 挂起：文案区分「开工」vs「拍板」。 */
-function notifyAwaitingDecision(conversationId: string): void {
+/** ask_user / plan_review 挂起：按 kind 一句，不解释流程。 */
+function notifyAwaitingDecision(conversationId: string, kind: string): void {
   if (!shouldNotify(conversationId)) return;
   const title = titleOf(conversationId);
   if (!title) return;
-  const message = `「${title}」等待你确认后才会继续`;
-  notifyInfo(message, {
-    action: { label: "去处理", onClick: () => jumpTo(conversationId) },
-  });
-  void showNativeNotification("AgentCore", message, { conversationId });
+  notifyAmbient(
+    conversationId,
+    toastLine(title, attentionHeadline(kind)),
+    "info",
+    jumpAction(conversationId, "去处理"),
+  );
 }
 
 /**
  * firehose「某个对话在等你」：卡在另一端起的回合上，本端可能连这个对话都没加载过。
  *
  * 与上面几条不同，**标题缺失不静默**——「找得到人」正是这条信号的全部意义；缺标题只说明
- * 会话列表还没刷到这条（例如手机上刚建的对话），此时用信号自带的一行标题顶上，并顺手让
+ * 会话列表还没刷到这条（例如手机上刚建的对话），此时用 kind 短句顶上，并顺手让
  * 列表失效，侧栏拿到行之后「等你」灯才有地方亮。
  */
 function notifyAttention(entry: AiAttentionEntry): void {
@@ -128,17 +175,12 @@ function notifyAttention(entry: AiAttentionEntry): void {
   if (!title) {
     void queryClient.invalidateQueries({ queryKey: conversationKeys.grouped });
   }
-  const headline = entry.title.trim() || "AI 停下来等你处理";
-  const message = title ? `「${title}」· ${headline}` : headline;
-  notifyInfo(message, {
-    action: {
-      label: "去处理",
-      onClick: () => jumpTo(entry.conversationId),
-    },
-  });
-  void showNativeNotification("AgentCore", message, {
-    conversationId: entry.conversationId,
-  });
+  notifyAmbient(
+    entry.conversationId,
+    toastLine(title, attentionHeadline(entry.kind)),
+    "info",
+    jumpAction(entry.conversationId, "去处理"),
+  );
 }
 
 /**
@@ -262,7 +304,7 @@ export function startTeamActivityNotifications(): () => void {
     for (const p of state.pending) {
       if (!isColdResumeKind(p.kind)) continue;
       if (!claim(p.checkpointId)) continue;
-      notifyAwaitingDecision(p.conversationId);
+      notifyAwaitingDecision(p.conversationId, p.kind);
     }
     prune();
   });

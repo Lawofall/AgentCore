@@ -1,38 +1,37 @@
-"""Legal vertical (法律垂直) domain Skills — v0「答辩状作战室」.
+"""Legal domain Skill templates — first-party store SKUs, not system Skills.
 
-This is the first DOMAIN capability pack, separate from the platform-mechanism
-system skills in :mod:`agentcore.runtime.skills` (different reason-to-change: legal
-domain content evolves on its own axis). It registers into the SAME
-:class:`~agentcore.runtime.skills.SkillRegistry` as the system skills — surfaced in
-the CEO's 按需目录 and pulled via ``consult`` — but ONLY when the deployment
-gate ``settings.legal_vertical_enabled`` is on, so generic deployments never see
-legal content in the catalog.
+Author source for the lawyer-job SOPs (答辩状 / 起诉状作战室 · 三方案情研判 ·
+合同审查). Runtime does **not** register them into
+:class:`~agentcore.runtime.skills.SkillRegistry`; they appear on the capability
+store shelf and enter ``<按需目录>`` only after the user installs a snapshot
+into 我的技能.
 
-Design (公开权威 → docs/03-AI核心/工具与能力系统.md · 法律垂直；详细提案不在公开仓): v0 builds NO new infra. The
-「对方律师作战室」hero rides existing primitives — ``delegate`` (起草 / 原告红队审校岗 / 核验 / 格式)
-+ ``checkpoint_after`` / ``ask_user`` (人审闸门) + web 检索 (法条接地). This Skill is the
-only NEW thing: the domain HOW-guidance the CEO consults to orchestrate that team and
-the anti-hallucination constraints it must enforce. Stopgap home is the system-skill
-registry; it graduates to a per-agent market Skill once that infra lands.
+Design (公开权威 → docs/03-AI核心/工具与能力系统.md · 法律垂直): no new infra.
+Hero rides existing ``delegate`` / ``debate`` / ``ask_user`` / web 检索. HOW and
+anti-hallucination live in the template body; consult origin after install is user.
 """
 
 from __future__ import annotations
 
-from agentcore.runtime.skills import SystemSkill
+from dataclasses import dataclass
 
-# Shared anti-hallucination core for both legal skills (答辩状 + 案情研判).
+# Shared anti-hallucination core for official legal SKUs.
 # Each skill appends its own domain-specific constraints after this.
 _LEGAL_ANTI_HALLUCINATION_CORE = """\
 - 未经检索核验，【不得】写出任何具体法条 / 司法解释条号与内容——宁可标「[待核验：拟引《X 法》第 Y 条]」交核验 worker，也不可凭记忆直接写定。
 - 每条法律引用须标注出处与法域（默认【中国大陆法】）；引用现行有效版本。"""
+
+_LEGAL_RETRIEVAL_BOUNDS = """\
+【检索有界】逐条核验、每条至多 1～2 次检索：命中权威摘要即停、拿不到即标『[待核验]』转人审，\
+勿为凑全反复换词重搜。【检索现实】优先 `web_search`；`flk.npc.gov.cn` 等政务站常 SSL / 超时，\
+`web_fetch` 打不开就退摘要或换权威源（全国人大网 / 最高法），勿对同一站点反复重试。"""
 
 _LEGAL_ANSWER_BRIEF = """\
 <答辩状>
 写 / 打磨民事【答辩状】时，别让单个写手闷头出稿——按「对方律师作战室」组队：你方起草 →【原告红队\
 先把你打一遍】→ 逐条核验法条 → 格式查缺 → 人审收口。红队预演对方如何反击，是单写手给不了的核心价值。\
 编排是【先红队对抗再核验收口】。\
-【除外】公共品牌 / 舆论 / 商标等需多维取证的议题 → 按结构组队（异质透镜并行 + 汇总），\
-`consult(team_orchestration_advanced)`，不走本条。
+【除外】公共品牌 / 舆论 / 商标等需多维取证的议题 → 按结构组队（异质透镜并行 + 汇总），不走本条。
 
 【一、先解析对方起诉状（答辩的地基）】
 从用户提供的起诉状 + 我方事实里抽清：① 诉讼请求（逐项）；② 事实与理由；③ 证据清单；④ 所依法条；\
@@ -92,7 +91,7 @@ _LEGAL_CASE_ANALYSIS = """\
 【分流·除外：公共终局对抗不走本 skill】
 用户点名模拟法庭 / 庭审对抗 / 对簿公堂，且命题是公共品牌 / 舆论 / 商标等需法律·商业·舆论·文化多维取证的议题\
 （用户不是带着约定文档来做律师接案评估）时：【停止】按本 skill 编排，立即改按结构组队\
-（异质透镜并行 + 汇总）→ `consult(team_orchestration_advanced)` 并手写 tasks。本 skill 只服务律师作业的接案评估 /\
+（异质透镜并行 + 汇总）并手写 tasks。本 skill 只服务律师作业的接案评估 /\
 诉讼策略——商标舆情类「要开庭」≠ 律师接案。
 
 【零、先分流：接案评估 还是 诉讼策略】
@@ -154,23 +153,157 @@ deadline）/ 判决预期 vs 和解锚 / 诉讼成本与周期预估（喂『打
 </案情研判>"""
 
 
-# The legal vertical's v0 skill set. Registered into the shared SkillRegistry only
-# when pack ``legal`` is deployment-listed and user-bound
-# (see runtime/capability_packs + build_system_skill_registry).
-LEGAL_SKILLS: tuple[SystemSkill, ...] = (
-    SystemSkill(
+_LEGAL_COMPLAINT = """\
+<起诉状>
+写 / 打磨民事【起诉状】时，别让单个写手闷头出稿——按「对方律师作战室」组队：你方起草 →【被告红队\
+先把你打一遍】→ 逐条核验法条 → 格式查缺 → 人审收口。红队预演被告如何反击，是单写手给不了的核心价值。\
+编排是【先红队对抗再核验收口】。\
+【除外】公共品牌 / 舆论 / 商标等需多维取证的议题 → 按结构组队（异质透镜并行 + 汇总），不走本条。
+
+【一、先解析我方材料（起诉的地基）】
+从用户提供的事实、证据、目标诉请里抽清：① 当事人与主体资格；② 诉讼请求（逐项、可执行）；③ 事实与时间线；\
+④ 证据清单（谁手里有什么、能证明什么）；⑤ 请求权基础与拟依法条；⑥ 管辖。起诉必须【请求权基础对齐构成要件】，\
+不可只讲故事不扣要件。
+
+【二、起诉状的要素结构（交给起草 worker 的需求，不是替它写骨架）】
+- 首部：受诉法院、原被告及诉讼代理人身份。
+- 诉讼请求：逐项、可执行（给付金额 / 行为 / 确认之诉 / 诉讼费用负担），避免空泛「依法处理」。
+- 事实与理由：按请求权构成要件组织事实，不是流水账。
+- 证据：每项请求 / 每个要件对应证据；缺证显式标缺口。
+- 法律依据：每个请求权基础对应的法条 / 司法解释（【必须经核验】，见末「反幻觉硬约束」）。
+- 尾部：落款、日期、证据目录与副本份数。
+
+【三、作战室编排（用现有工具，别造新流程）】
+1. 起草：`delegate` 一个「起诉状起草」worker 出初稿（把上面要素结构作为需求交给它，结构与论证脉络留给它设计）。\
+【缺关键事实 / 证据时】起诉的地基是请求权要件对应的事实与证据——优先用 `ask_user` 把决定能否立住的关键事实\
+和证据要齐再起草；若用户要直接开工，则以已给材料可推定的请求权起草，并把缺口【显式标为假设】交红队压测——\
+两种都【绝不编造】我方事实或证据。
+2. 【被告红队（hero 核心）】：拿到初稿后 `delegate` 一个「被告红队」审校岗，站对方代理人立场逐条挑漏洞\
+（管辖 / 主体 / 时效 / 受案范围、请求权基础是否齐、构成要件缺哪块、事实有无证据、诉请是否可执行或超额、\
+法条是否准确/被修订）。任务书写清：压力测试我方起诉状——被告会如何反击、有哪些漏洞、哪项请求权站不住；\
+攻击面见下「对抗剧本」。审校岗只攻、不代写终稿；站不住的点交起草 worker 修补。
+3. 核验：`delegate` 一个「法条核验」worker，对起诉状里【实际引用】的每一条法条 / 司法解释做检索接地核对——\
+条号、现行有效性（是否被修订 / 废止）、内容是否吻合、时效起算。""" + _LEGAL_RETRIEVAL_BOUNDS + """
+4. 格式查缺：`delegate` 一个「格式完备」worker 对照民事起诉状规范查缺（首部当事人信息、受诉法院、诉讼请求\
+可执行性、落款日期、证据目录、副本份数等）。
+5. 收口（终稿走你的收口正文 + 文件留存）：若有活跃用户，终稿前用 `checkpoint_after`（多步流水线里）或 \
+`ask_user` 设【人审闸门】，把红队攻防结论 + 核验结果摊给用户/律师拍板；通过后由【你（CEO）】在收口回复正文里\
+【完整输出】打磨后的起诉状终稿（这是交付物，按起诉状要素结构整篇给出，而非简短概览——领域终稿在此覆盖「只写\
+简短概览」的通用收尾指引），起草 / 修订 worker 落在工作区的《起诉状初稿.md》（及其修订稿）即作为可下载留存附件。\
+多步可在【同一次 delegate】用 `depends_on` 串：起草 → 红队审校 → 核验/格式（并行）→ 收口。
+【法条引用带台账 id #rN】核验 worker 检索到的法条权威来源会登记进本回合证据台账，并随核验结果以\
+『[已登记来源] #rN=url』给到你；你在终稿正文里引用每条【已核验】法条时，用对应的 `#rN` 标注，读者可\
+溯源到该条目。仍标『[待核验]』、未取到权威来源的法条【不要】编引用——宁可\
+不带 #rN，也绝不可指向未登记的 id（未登记号不会变成可点来源卡）。
+
+【四、被告红队对抗剧本（喂给审校岗 worker 的攻击清单）】
+逐条质问：管辖 / 主体适格 / 诉讼时效 / 受案范围法院会不会驳？这项请求权基础的构成要件齐不齐、缺的要件有没有\
+用故事盖住？每个事实主张有证据吗、举证责任在谁？诉请是否可执行、是否超额或把数项请求揉成一句空话？引的法条\
+是否准确、是否已被修订或不适用本案？
+
+【五、反幻觉硬约束（真交付律师档位的底线，不可省）】
+""" + _LEGAL_ANTI_HALLUCINATION_CORE + """
+- 终稿附免责声明：「本文为 AI 辅助起草，须执业律师复核后使用，不构成法律意见。」
+- 涉及具体诉请、关键请求权或不可逆提交前，必过【人审闸门】（见编排第 5 步）。
+</起诉状>"""
+
+
+_LEGAL_CONTRACT_REVIEW = """\
+<合同审查>
+对已有或待签的【合同】做条款审查（签不签、哪条是坑、谈判改哪些）时，用「我方 / 对方 / 风险官」三方\
+把合同真正读开——单写手会顺着委托人的期望把条款读成「没问题」。核心价值：用【独立的对方解读】+\
+【中立的效力与缺口审查】，对抗「我方立场盲区」。少了对方=自我安慰，少了风险官=各执一词没有\
+「这条款能不能用」的结论——这正是单写手给不了的。
+
+【除外】用户点名模拟法庭 / 庭审对抗，且命题是公共品牌 / 舆论 / 商标等需多维取证的议题\
+（用户不是带着合同文本来做条款审查）时：【停止】按本 skill 编排，立即改按结构组队\
+（异质透镜并行 + 汇总）并手写 tasks。本 skill 只服务合同文本的条款审查。
+
+【零、先分流：审对方来稿 还是 审我方待签】
+两个场景共用同一套三方引擎，但风险官的作用不同：
+- 审对方来稿：风险官 =【找坑 / 列改点】——服务谈判：必须改 / 可谈 / 可接受。
+- 审我方待签：风险官 =【查保护 / 查自伤】——服务内签：我方救济够不够、有没有把对方惯用坑写进来。
+分流靠用户明说；说不清就先用 `ask_user` 问一句「这是【对方来稿】，还是【我方待签稿】？」——别在用户只说\
+「帮我看看这合同」时猜错走偏。
+
+【一、先把合同拆清（审查的地基）】
+从用户给的合同文本 + 站边信息抽清：① 合同类型与交易结构；② 各方与我方站哪边；③ 准据法 / 管辖 / 争议解决；\
+④ 【合同载明的条款】与【用户口述的背景 / 口头承诺】分开标记——载明才进审查权重，口述只是主张；\
+⑤ 用户要守住的商业目标（价款、期限、知识产权、退出、责任上限等）。
+【缺合同文本】优先用 `ask_user` 要合同全文或拟审章节；没有文本【绝不编造条款】。若用户要直接开工，只审已给\
+片段，并把未见到的部分【显式标为未审范围】交三方压测。
+
+【二、先对抗后出意见（用现有工具，别造新流程）】
+1. 【我方⟷对方条款对抗】：用 `debate` 工具、`form="debate"`，两方对称攻防，让对方视角【真正独立】地把最狠读法\
+打出来。典型 sides：
+   - `{key:"our_side", name:"我方解读", stance:"站我方立场，主张对委托人最有利且可执行的条款解读与救济路径，指出对方应承担的义务与违约后果"}`
+   - `{key:"counterparty", name:"对方解读", stance:"站对方立场，用该合同最狠地整我方：单方解释权、漏洞、免责、程序门槛、责任转嫁"}`
+   - motion 写成「就本合同，我方最有利的可执行解读是什么、对方最狠的整法是什么、争议条款何在、各自最薄处在哪」。\
+轮数交主持人自调，你不设。
+   - 【中立纪律】这一步【不把「没问题」当默认】。我方待签场景里稿子虽是我方出的，仍必须让对方视角【独立地】把最狠的招打出来。
+2. 【风险官（核心）】：debate 收场后，`delegate` 一个「风险官」worker，以【中立第三方】立场读双方交锋 → 按条款效力与缺口出审查：
+   - 红灯：效力瑕疵（无效 / 可撤销 / 格式条款不利解释）、管辖或争议解决陷阱、无限责任、单方任意解除 / 自动续期、\
+知识产权或数据归属一边倒、竞业或保密过宽；
+   - 黄灯：救济不足、举证责任倒置、违约金畸高或过低、履行不能、定义含混；
+   - 可接受：与商业目标匹配、双方风险大致对等；
+   - 未审范围（文本没给到的章节）。
+   风险官主张某条【无效 / 可撤销 / 强制规定】时，所引法条必须核验（见末「反幻觉硬约束」）。
+3. 【法条核验】：`delegate` 一个「法条核验」worker，对审查意见里【实际主张效力瑕疵 / 法定强制】所引的每条法条 /\
+司法解释检索接地核对（条号、现行有效性、内容是否吻合）。""" + _LEGAL_RETRIEVAL_BOUNDS + """
+4. 【收口】：若有活跃用户，终稿前用 `checkpoint_after`（多步流水线里）或 `ask_user` 设【人审闸门】，把三方\
+交锋 + 风险官审查 + 核验结果摊给律师拍板；再按场景装配产物落盘。多步可在【同一次 delegate】用 `depends_on` 串：\
+风险官 → 法条核验 → 收口。默认出【审查意见 + 谈判改点】，不擅自重写整份合同；用户明确要求出修订稿时，才另 \
+`delegate` 起草修订对照，且修订不得把未审章节当成已审。
+
+【三、产物（落盘成工作区文件）】
+《合同审查意见.md》：一句话倾向（改后签 / 不签 / 有条件签 + 成立条件，【定性为倾向性意见，非可以签署的承诺】）/\
+红灯条款 / 黄灯条款 / 可接受条款 / 谈判清单（必须改 · 可谈 · 可接受）/ 补救建议（针对红灯 / 黄灯的改法示例）/\
+未审范围 / 下一步。
+CEO 收口汇报里给【结论提要 + 指向产出文件】，别把整份意见塞进对话正文。
+
+【四、对抗 / 审查剧本（喂给各方 stance 的清单）】
+- 我方：每条对我方的权利 / 救济是否可执行？价款、期限、验收、退出、责任上限能否落地？
+- 对方：如何用该条款整我方？有无单方解释权、程序门槛、免责、责任转嫁、自动续期或竞业过宽？
+- 风险官（审查而非攻击）：撇开双方立场，哪些条款可能无效或被不利解释、缺了哪些法定 / 交易必备保护、\
+未见到的章节会怎样改变结论。
+
+【五、反幻觉硬约束（真交付律师档位的底线，不可省）】
+""" + _LEGAL_ANTI_HALLUCINATION_CORE + """
+- 合同载明的条款 ≠ 用户口述背景 ≠ 模型补全——只审文本里有的；口述与补全一律标成假设或未审，【绝不】写成合同已有条款。
+- 审查结论一律定性为【倾向性意见，非可以签署的承诺】——【绝不】写「可以签 / 没问题 / 保证有效」这类断言。
+- 终稿附免责声明：「本文为 AI 辅助审查，须执业律师独立判断后使用，不构成法律意见，亦不构成可以签署的承诺。」
+- 涉及是否签署、重大改点或不可逆动作前，必过【人审闸门】（见编排第 4 步）。
+</合同审查>"""
+
+
+@dataclass(frozen=True)
+class DomainSkillTemplate:
+    """Code-defined store SKU (name / catalog line / consult body)."""
+
+    name: str
+    summary: str
+    body: str
+
+
+LEGAL_SKILLS: tuple[DomainSkillTemplate, ...] = (
+    DomainSkillTemplate(
         name="legal_answer_brief",
         summary="民事答辩状",
         body=_LEGAL_ANSWER_BRIEF,
-        # 起草 / 原告红队审校 / 核验 / 格式靠 delegate。CEO 路径恒装配 delegate。
-        requires_tools=("delegate",),
     ),
-    SystemSkill(
+    DomainSkillTemplate(
+        name="legal_complaint",
+        summary="民事起诉状",
+        body=_LEGAL_COMPLAINT,
+    ),
+    DomainSkillTemplate(
         name="legal_case_analysis",
-        summary="接案评估",
+        summary="接案评估与诉讼策略",
         body=_LEGAL_CASE_ANALYSIS,
-        # 原被告对抗靠 debate（form=debate）；中立法官研判 + 法条核验靠 delegate。两者在 CEO
-        # 路径恒被装配——gating 仍正确声明依赖，三方对抗里 debate 必备。
-        requires_tools=("delegate", "debate"),
+    ),
+    DomainSkillTemplate(
+        name="legal_contract_review",
+        summary="合同审查",
+        body=_LEGAL_CONTRACT_REVIEW,
     ),
 )

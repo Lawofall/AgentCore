@@ -2,7 +2,7 @@
  * 「哪个对话在等你」——账号级信号 `ai_attention` / `ai_attention_snapshot`。
  *
  * 回合停在阻塞卡上时后端发 `required`，任一端放行（或超时 / 孤儿 / Stop）后发
- * `resolved`。只带对话与一行标题、不带卡的正文——正文永远由该对话自己的流 / REST
+ * `resolved`。只带对话与 kind 短句、不带卡的正文——正文永远由该对话自己的流 / REST
  * 重取（设计 §2.2「只送信号不送内容」）。
  *
  * 权威是 fulfill 播种：`ai_attention_snapshot` 整表 replace（空表也 replace，用来
@@ -35,7 +35,7 @@ export interface AiAttentionEntry {
   conversationId: string;
   turnId: string;
   kind: string;
-  /** ≤120 字的一行标题（卡自己的问题，或该 kind 的通用文案）。 */
+  /** kind 短句（服务端 `attention_title`），不是卡上的问题。 */
   title: string;
 }
 

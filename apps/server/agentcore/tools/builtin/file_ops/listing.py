@@ -431,6 +431,7 @@ async def map_listing_failure(
         return _path_missing_error(
             await enrich_missing_path_message(context, str(directory), base=base),
             start,
+            path=str(directory),
         )
     if isinstance(exc, PathNotFound):
         if looks_like_external_directory(str(directory)):
@@ -438,6 +439,7 @@ async def map_listing_failure(
                 f"区外路径不存在或未授权：{directory}。"
                 + external_directory_hint(context.backend),
                 start,
+                path=str(directory),
             )
         if is_declared_latent_dir(str(directory)):
             return ToolResult(
@@ -450,6 +452,7 @@ async def map_listing_failure(
         return _path_missing_error(
             await enrich_missing_path_message(context, str(directory), base=base),
             start,
+            path=str(directory),
         )
     if isinstance(exc, WorkspaceError):
         dead = _maybe_channel_dead_error(exc, start)

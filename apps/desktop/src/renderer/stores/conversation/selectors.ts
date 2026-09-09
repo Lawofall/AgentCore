@@ -3,6 +3,7 @@ import { precedingUserMessageId } from "@/lib/supportDiagnostics";
 import type { ProcessStep } from "@/types/events";
 import { activeRuntime, lastAssistantProjectionId, runtimeOf } from "./runtime";
 import { useConversationStore } from "./store";
+import { isWritingTurnPhase } from "./turnPhase";
 import type { ConversationRuntime, MemoryUpdate, Message } from "./types";
 
 /** Stable empty process — a fresh `[]` per call would re-render every subscriber. */
@@ -113,7 +114,7 @@ export const useActiveMemoryUpdates = (): MemoryUpdate[] =>
   useConversationStore((s) => activeRuntime(s).memoryUpdates);
 
 export const useActiveGenerating = (): boolean =>
-  useConversationStore((s) => activeRuntime(s).isGenerating);
+  useConversationStore((s) => conversationStillWriting(activeRuntime(s)));
 
 /** 桌面：最近一回合执行路径（`sidecar` / `cloud_bridge` / null）。 */
 export const useActiveExecutionVia = (): ConversationRuntime["executionVia"] =>
@@ -122,8 +123,19 @@ export const useActiveExecutionVia = (): ConversationRuntime["executionVia"] =>
 export const useActiveTurnPhase = () =>
   useConversationStore((s) => activeRuntime(s).turnPhase);
 
+/**
+ * 列表蓝点 / 输入区停止键：本轮还在写。队员齐了把图标成完成之后，
+ * ``isGenerating`` 仍可能被切走误清；回合 phase 要等这句话真正停笔。
+ * 不看协作图活体——图可以显示人齐了，聊天铬条仍跟这一轮走。
+ */
+export function conversationStillWriting(rt: ConversationRuntime): boolean {
+  return rt.isGenerating || isWritingTurnPhase(rt.turnPhase);
+}
+
 export const useConversationGenerating = (conversationId: string): boolean =>
-  useConversationStore((s) => runtimeOf(s, conversationId).isGenerating);
+  useConversationStore((s) =>
+    conversationStillWriting(runtimeOf(s, conversationId)),
+  );
 
 export const useActiveError = (): string | null =>
   useConversationStore((s) => activeRuntime(s).error);

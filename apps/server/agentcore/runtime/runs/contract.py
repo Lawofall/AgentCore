@@ -9,10 +9,10 @@ A worker's product is accepted only if it satisfies its node's delivery spec
 聊天正文是 JSON。``output_format=json`` 与
 ``required_sections``（Markdown 小标题语义）混用时跳过章节校验，避免自相矛盾的假失败。
 
-交付形态对齐：文件形态交付（:func:`is_file_deliverable` — ``form=files`` /
-``form=workspace`` / 非空 ``artifacts``）的章节检查读「正文 + 本 run 落盘
+交付形态对齐：钉了路径的交付（:func:`is_file_deliverable` — 非空 ``artifacts`` /
+非空 ``artifact_dir``）的章节检查读「正文 + 本 run 落盘
 文件」——任一通道命中即满足。产品在盘上时不再因正文只是
-简报而假失败「缺章节」；仅显式 ``prose`` 保持只看正文。
+简报而假失败「缺章节」；未钉路径保持只看正文。
 
 占位 / 自注扫描与网页静态质检已撤（质量交给模型、下一轮编辑与人看页）。已删字数/必含词
 字段不再被运行时消费。
@@ -78,12 +78,11 @@ class ContractVerdict:
 
 
 def is_file_deliverable(deliverable: Deliverable | None) -> bool:
-    """Whether the deliverable's product lands as workspace files (not chat prose).
+    """Whether the deliverable's product is expected to land as workspace files.
 
-    ``form="files"`` / ``form="workspace"`` / non-empty ``artifacts`` mean the
-    product is on disk — so content checks read landed files alongside the chat
-    body. Only explicit ``prose`` keeps body-only semantics. ``None`` (legacy
-    serialized specs) is not a landing node.
+    Non-empty ``artifacts`` or non-empty ``artifact_dir`` mean the product is
+    on disk — so content checks read landed files alongside the chat body.
+    Omitted / empty / ``None`` keep body-only semantics.
     """
     return deliverable_expects_landing(deliverable)
 
@@ -287,8 +286,8 @@ def check_contract(
 
     ``files_written`` is the count of workspace paths the run actually landed (from
     ``files_touched_from_transcript`` — the products the tools THEMSELVES reported on
-    their successful results, no tool-name whitelist). ``form=files`` /
-    non-empty ``artifacts`` with zero successful landing becomes a soft ``warnings`` tip
+    their successful results, no tool-name whitelist). A pinned-path landing
+    with zero successful writes becomes a soft ``warnings`` tip
     (甲⁺：不再契约 fail / 短写盘 pass). ``landing_failure_kind`` (optional)
     attributes the soft tip: ``channel_dead`` / ``write_failed`` vs paste framing.
     Stays a pure function (the caller derives the count / kind) so it remains
@@ -316,8 +315,8 @@ def check_contract(
     are not no-exec complete delivery. Inline data with no such source file is
     not a gap: landing csv/xlsx is the product.
 
-    交付形态对齐: for a FILE deliverable (:func:`is_file_deliverable` — ``form=files`` /
-    ``form=workspace`` / ``artifacts``) the same texts back the section
+    交付形态对齐: for a FILE deliverable (:func:`is_file_deliverable` — pinned
+    ``artifacts`` / ``artifact_dir``) the same texts back the section
     checks, which then read the run's landed files ALONGSIDE the chat body — a section
     hit in either satisfies it. The executor loads them (matching ``artifacts`` when
     declared, else this run's ``files_touched``); check_contract stays a pure function.
@@ -1037,41 +1036,22 @@ def format_soft_reminders(verdict: ContractVerdict) -> str:
 
 # Node contract: which channel is the product. Identity is only ``<身份>``.
 # HOW / handoff topology / write-tool caution live on tools, consult, or the model.
-# 聊天大段粘贴由引擎闸拦。
-_DELIVERABLE_FORM_HOW = {
-    "prose": "【纯文字】（form=prose）成品就是正文。不要落盘。",
-    "workspace": (
-        "【改工程】（form=workspace）就地改用户工程，不要写入 `AgentCore/文档/`。"
-        "正文只报路径、怎么跑、关键取舍。"
-    ),
-    "files": (
-        "【落盘文件】（form=files）成品写入工作区；正文只报路径、怎么用、关键取舍。"
-    ),
-}
-
-
-def _deliverable_form_how(form: str) -> str:
-    return _DELIVERABLE_FORM_HOW.get(form, _DELIVERABLE_FORM_HOW["files"])
-
-
 def describe_deliverable(deliverable: Deliverable | None) -> str:
-    """This node's contract for the worker opening: form HOW + instance facts.
+    """This node's contract for the worker opening: instance facts only.
 
-    Form HOW (look / land files / edit the project) is selected by
-    ``deliverable.form`` — one line per turn. Identity is only ``<身份>``.
-    Instance facts (paths / sections) follow when declared. ``None`` (legacy)
-    omits the channel. JSON / strict / retrieval budget are not rendered here.
+    Paths / sections / a non-drafts directory render when declared. No HOW
+    line for write-vs-chat — that is task acceptance + the model, not a
+    three-tier stamp. ``None`` / no instance facts → empty (omit the channel).
+    JSON / strict / retrieval budget are not rendered here.
     The process-draft drawer lives on the workspace fact line.
     """
     if deliverable is None:
         return ""
-    lines: list[str] = [_deliverable_form_how(deliverable.form)]
+    lines: list[str] = []
     if deliverable.required_sections and deliverable.output_format != "json":
         lines.append(
             "- 必须包含这些章节（用小标题）：" + "、".join(deliverable.required_sections)
         )
-    if deliverable.form == "prose":
-        return "\n".join(lines)
     dir_norm = (deliverable.artifact_dir or "").replace("\\", "/").rstrip("/")
     if dir_norm and dir_norm != DRAFTS_DIR:
         lines.append(f"- 落点目录：`{dir_norm}/`")

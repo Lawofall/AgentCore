@@ -367,11 +367,9 @@ export function ConversationsPage() {
 /**
  * 最近删除 pane — deleted conversations and deleted projects, neither of which is a
  * live `Conversation`, so no recency grouping (the server already returns each list
- * most-recently-deleted first) and no bulk bar. 彻底删除 is deliberately absent: that
- * lives behind the checkbox in the folder delete dialog, where the user asked for it.
- *
- * Each section states what its restore does *not* bring back. A recycle bin that
- * overstates its own reach is the thing this view exists to fix.
+ * most-recently-deleted first) and no bulk bar. 彻底删除 is per-row, behind a
+ * confirm — not a bulk empty-trash. Folder wipe matches the delete-dialog
+ * checkbox (chats + cloud files + desk settings), via the tombstone path.
  */
 function RecentlyDeletedPane({
   conversations,
@@ -404,9 +402,6 @@ function RecentlyDeletedPane({
       {conversations.length > 0 && (
         <div className="space-y-1">
           <SectionLabel className="px-1">对话</SectionLabel>
-          <p className="px-1 pb-1 text-xs text-muted-foreground">
-            恢复会把对话连同全部消息带回原来的位置。删除时已撤销的公开分享链接不会一起回来，需要重新分享；本机裸聊的工作目录在系统回收站里，从那里还原。
-          </p>
           {conversations.map((c) => (
             <DeletedConversationManageRow key={c.id} conversation={c} />
           ))}
@@ -415,9 +410,6 @@ function RecentlyDeletedPane({
       {folders.length > 0 && (
         <div className="space-y-1">
           <SectionLabel className="px-1">文件夹</SectionLabel>
-          <p className="px-1 pb-1 text-xs text-muted-foreground">
-            恢复会把文件夹和它一并归档的对话带回来；白板不会回到文件夹下，裸聊的自动云桌指针也不恢复（下回合自动重建）。
-          </p>
           {folders.map((f) => (
             <DeletedFolderManageRow key={f.id} folder={f} />
           ))}

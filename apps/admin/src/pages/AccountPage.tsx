@@ -39,16 +39,23 @@ function FormSection({
 
 function LabeledField({
   label,
+  hint,
   children,
 }: {
   label: string;
+  hint?: string;
   children: ReactNode;
 }) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-muted-foreground text-xs">{label}</span>
-      {children}
-    </label>
+    <div className="block">
+      <label className="block">
+        <span className="mb-1 block text-muted-foreground text-xs">{label}</span>
+        {children}
+      </label>
+      {hint && (
+        <p className="mt-1 text-muted-foreground text-xs">{hint}</p>
+      )}
+    </div>
   );
 }
 
@@ -89,7 +96,6 @@ function ProfileSection() {
   return (
     <FormSection
       title="个人资料"
-      description="显示名会展示在侧栏。邮箱用于找回密码；未验证不影响登录。更改邮箱后需重新验证。"
       onSubmit={() => {
         if (canSave) void save();
       }}
@@ -103,7 +109,7 @@ function ProfileSection() {
           className="opacity-60"
         />
       </LabeledField>
-      <LabeledField label="显示名">
+      <LabeledField label="显示名" hint="会展示在侧栏。">
         <Input
           value={displayName}
           maxLength={200}
@@ -121,6 +127,7 @@ function ProfileSection() {
               ? "邮箱 · 未验证"
               : "邮箱 · 未填写"
         }
+        hint="用于找回密码；未验证不影响登录。更改后需重新验证。"
       >
         <Input
           type="email"
@@ -187,7 +194,6 @@ function PasswordSection() {
   return (
     <FormSection
       title="修改密码"
-      description="修改后，除当前设备外的所有登录都会失效。"
       onSubmit={() => {
         if (canSave) void save();
       }}
@@ -216,7 +222,10 @@ function PasswordSection() {
           disabled={saving}
         />
       </LabeledField>
-      <LabeledField label="新密码（至少 8 位）">
+      <LabeledField
+        label="新密码（至少 8 位）"
+        hint="更新后，其他设备需要重新登录。"
+      >
         <Input
           type="password"
           value={next}

@@ -46,7 +46,13 @@ from agentcore.runtime.runs.executor.shared import (
     _registry_without,
 )
 from agentcore.runtime.runs.retrieval_budget import RETRIEVAL_TOOL_NAMES
-from agentcore.runtime.runs.types import ContextBlock, RunPhase, RunSpec, RunState
+from agentcore.runtime.runs.types import (
+    ContextBlock,
+    RunPhase,
+    RunSpec,
+    RunState,
+    deliverable_expects_landing,
+)
 from agentcore.tools.protocol import (
     RetrievalBudgetState,
     ToolContext,
@@ -95,7 +101,6 @@ class AgentNodePrepared:
     allowed_tools: list[str] | None
     lead_subteam: LeadSubteam | None
     deliverable: Any
-    deliverable_form: Any
     files_expected: bool
     report_delivery: bool
     product_landing_artifacts: list[str] | None
@@ -174,9 +179,11 @@ async def _prepare_agent_node(
         system_prompt = applied.system_prompt
         base_ctx = applied.tool_ctx
 
-    # 方案 C：无出生且无 target → 坐会话 scratch，默认禁写（冷启动 explore_memory 例外）。
+    # 无出生且无 target → 坐会话 scratch。云端默认禁写（冷启动 explore_memory 例外）；
+    # 本机裸聊 scratch 就是桌，允许写盘。
     from agentcore.runtime.delegate.target_desktop import (
         SCRATCH_NO_WRITE_IDENTITY_HINT,
+        bare_chat_local_scratch_write_ok,
         resolve_bare_chat_write_scope,
     )
 
@@ -185,6 +192,11 @@ async def _prepare_agent_node(
         session_folder_id=env.session_folder_id,
         base_write_scope=getattr(base_ctx, "write_scope", "project") or "project",
         turn_created_folder_ids=getattr(base_ctx, "turn_created_folder_ids", None),
+        allow_local_scratch_write=bare_chat_local_scratch_write_ok(
+            session_folder_id=env.session_folder_id,
+            backend=getattr(base_ctx, "backend", None),
+            turn_target_desk=getattr(base_ctx, "turn_target_desk", None),
+        ),
     )
     tool_ctx = replace(
         base_ctx,
@@ -230,9 +242,7 @@ async def _prepare_agent_node(
         # 成篇交接：空交不再硬拒；下游靠指针 / 缺席标注消费已有内容。
         handoff_requires_body=False,
         handoff_min_body_chars=0,
-        handoff_deliverable_form=(
-            deliverable.form if deliverable is not None else None
-        ),
+        handoff_expects_landing=deliverable_expects_landing(deliverable),
     )
     # 阶段2 嵌套子任务: hand this worker delegation tools when opted in.
     _trim_started = time.monotonic()
@@ -274,7 +284,10 @@ async def _prepare_agent_node(
         # lead_subteam tools now living in worker_tools.
     # Handoff must-vs-may lives on the handoff tool description, not identity.
     # Form HOW is the per-turn 交付物规格 channel (describe_deliverable).
-    from agentcore.runtime.engine.governance import registry_can_execute
+    from agentcore.runtime.engine.governance import (
+        registry_can_execute,
+        resolve_openai_tool_defs,
+    )
 
     identity = build_worker_identity(
         has_dependents=node_has_dependents(env.plan, spec.run_id),
@@ -287,7 +300,7 @@ async def _prepare_agent_node(
         spec.target_folder_id or env.session_folder_id
     ):
         identity = f"{identity.rstrip()}\n\n{SCRATCH_NO_WRITE_IDENTITY_HINT}"
-    # 真纯丙·H2：form=prose 不再硬卸写盘工具；形态靠交付物规格提示自觉守岗。
+    # 真纯丙·H2：只报告节点不再硬卸写盘工具；是否落盘靠 task 验收 + 钉路径。
     # Short-round repair posture tool strip retired.
     # CEO may still stamp max_rounds; tools stay full surface.
     files_expected = _files_expected(deliverable)
@@ -392,6 +405,7 @@ async def _prepare_agent_node(
                 blocks_sink=received_blocks,
                 team_brief=env.team_brief,
                 context_inject=context_inject or None,
+                tool_defs=resolve_openai_tool_defs(worker_tools, allowed_tools, set()),
             )
         # Worker window head (§8.3): journal the opening task-prompt so
         # ``window_from_journal(run_id=…)`` anchors on THIS run's system+user, not the
@@ -431,7 +445,6 @@ async def _prepare_agent_node(
     from agentcore.runtime.runs.executor.hooks import _two_phase_citation
 
     two_phase = _two_phase_citation(deliverable)
-    deliverable_form = deliverable.form if deliverable is not None else "files"
 
     return AgentNodePrepared(
         profile=profile,
@@ -442,7 +455,6 @@ async def _prepare_agent_node(
         allowed_tools=allowed_tools,
         lead_subteam=lead_subteam,
         deliverable=deliverable,
-        deliverable_form=deliverable_form,
         files_expected=files_expected,
         report_delivery=report_delivery,
         product_landing_artifacts=product_landing_artifacts,

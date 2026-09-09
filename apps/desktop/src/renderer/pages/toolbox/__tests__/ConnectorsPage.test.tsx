@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 import type { McpApi, McpConfigResult } from "@shared/mcp-contract";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConnectorsPage } from "../ConnectorsPage";
@@ -35,21 +41,16 @@ afterEach(() => {
   cleanup();
 });
 
-describe("连接器页 · 统一页头", () => {
-  it("主 CTA 进页头动作位，返回工具箱并挂本页标题", async () => {
+describe("连接器 · 图鉴卡", () => {
+  it("空列表是添加卡，不是空态插画或页头", async () => {
     const api = stubMcpApi();
-    const { container } = renderPage();
+    renderPage();
     await waitFor(() => expect(api.listServers).toHaveBeenCalled());
 
-    const header = container.querySelector("header");
-    expect(screen.getAllByRole("link", { name: "工具箱" })).toHaveLength(1);
-    expect(
-      screen.getByRole("heading", { level: 1, name: "连接器" }),
-    ).toBeTruthy();
-    expect(screen.queryByRole("navigation", { name: "工具箱能力" })).toBeNull();
-    expect(
-      header?.contains(screen.getByRole("button", { name: "添加 Server" })),
-    ).toBe(true);
+    expect(screen.getByRole("button", { name: "添加连接器" })).toBeTruthy();
+    expect(screen.queryByText("还没有连接器")).toBeNull();
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(screen.queryByRole("link", { name: "工具箱" })).toBeNull();
   });
 
   it("页头与内容区都无说明书", async () => {
@@ -57,20 +58,17 @@ describe("连接器页 · 统一页头", () => {
     renderPage();
     await waitFor(() => expect(api.listServers).toHaveBeenCalled());
     expect(screen.queryByText(/配置本机 stdio MCP Server/)).toBeNull();
+    expect(screen.queryByText(/stdio 命令/)).toBeNull();
   });
 
-  it("无 mcpApi 的降级分支只留页头那一份返回链接", () => {
+  it("无 mcpApi 时不渲染", () => {
     renderPage();
-
-    expect(screen.getAllByRole("link", { name: "工具箱" })).toHaveLength(1);
-    expect(
-      screen.getByRole("heading", { level: 1, name: "连接器" }),
-    ).toBeTruthy();
-    expect(screen.getByText(/本机 MCP 仅桌面端可用/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "添加连接器" })).toBeNull();
+    expect(screen.queryByText(/本机 MCP 仅桌面端可用/)).toBeNull();
   });
 });
 
-describe("连接器页 · 可恢复失败", () => {
+describe("连接器 · 可恢复失败", () => {
   it("列表失败 role=alert 走 muted，不涂 destructive", async () => {
     const api = stubMcpApi();
     vi.mocked(api.listServers).mockResolvedValue({
@@ -105,8 +103,27 @@ describe("连接器页 · 可恢复失败", () => {
 
     const badge = await screen.findByText("失败");
     expect(badge.className).toContain("destructive");
-    expect(screen.getByText("spawn failed").className).toContain(
-      "text-destructive",
-    );
+    expect(screen.getByText("spawn failed")).toBeTruthy();
+  });
+
+  it("点插头卡打开编辑对话框", async () => {
+    const api = stubMcpApi();
+    vi.mocked(api.listServers).mockResolvedValue({
+      ok: true,
+      servers: [
+        {
+          id: "s1",
+          name: "Filesystem",
+          enabled: true,
+          command: "npx",
+          args: ["-y", "fs"],
+          runtimeStatus: "ready",
+        },
+      ],
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Filesystem" }));
+    expect(screen.getByRole("heading", { name: "编辑连接器" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "测试握手" })).toBeTruthy();
   });
 });

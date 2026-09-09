@@ -66,12 +66,6 @@ export function ShortcutsSettings() {
         <SettingsSection
           title="命令面板命令"
           titleSize="base"
-          description={
-            <>
-              按 {shortcutChords(GLOBAL_SHORTCUTS[0])[0]}{" "}
-              打开命令面板后输入即可运行。
-            </>
-          }
           contentClassName="space-y-4"
         >
           {COMMAND_CATEGORY_ORDER.map((category) => {

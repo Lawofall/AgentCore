@@ -1,6 +1,6 @@
 """ToolRegistry: registration and query of available tools.
 
-Manages all registered tools and provides lookup by name or category.
+Manages all registered tools and provides lookup by name or face.
 Also converts tool schemas to LLM function calling format.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 import difflib
 
 from agentcore.core.errors import ToolNotFoundError
-from agentcore.core.types import ToolCategory
+from agentcore.core.types import ToolFace
 from agentcore.tools.protocol import Tool, ToolSchema, tool_schema_to_openai_format
 
 # Common model hallucinations → canonical tool name. Only surface when the target
@@ -126,9 +126,9 @@ class ToolRegistry:
         """Return schemas of all registered tools."""
         return [tool.schema for tool in self._tools.values()]
 
-    def list_by_category(self, category: ToolCategory) -> list[ToolSchema]:
-        """Return schemas of tools in a given category."""
-        return [tool.schema for tool in self._tools.values() if tool.schema.category == category]
+    def list_by_face(self, face: ToolFace) -> list[ToolSchema]:
+        """Return schemas of tools with a given capability face."""
+        return [tool.schema for tool in self._tools.values() if tool.schema.face == face]
 
     def get_openai_definitions(self, tool_names: list[str] | None = None) -> list[dict]:
         """Return tool definitions in OpenAI function calling format.

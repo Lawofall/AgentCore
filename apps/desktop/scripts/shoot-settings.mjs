@@ -14,9 +14,9 @@
 //     AuthGate skip bootstrap and leaves the auth store empty — 账户设置 would then
 //     render a blank profile. Settings需要登录态, so we boot the real-auth entry and
 //     satisfy it with a stubbed `/v1/auth/me`.
-//   • Playwright `page.route` REST stubs, exactly like scripts/shoot-capability-packs.mjs
-//     (same soft-stub posture, just with per-endpoint fixtures so the pages render data
-//     instead of empty/error states). No product code is touched to make this work.
+//   • Playwright `page.route` REST stubs (soft-stub posture, per-endpoint fixtures
+//     so the pages render data instead of empty/error states). No product code is
+//     touched to make this work.
 //
 // `VITE_API_URL` is pinned to "" so every request is SAME-ORIGIN against the Vite dev
 // server (the `define` trick from e2e/vite.e2e.config.ts). That keeps CORS/preflight out
@@ -61,7 +61,7 @@ const MAX_HEIGHT = Number(process.env.SHOOT_MAX_HEIGHT ?? 4000);
 const filter = (process.argv[2] ?? "").toLowerCase();
 
 /**
- * The 10 settings sub-pages, in 设置 nav order (MorePage NAV_GROUPS). `heading` is the
+ * The 9 settings sub-pages, in 设置 nav order (MorePage NAV_GROUPS). `heading` is the
  * `<h1>` SettingsHeader renders — the render marker, so no `data-*` hook is needed in
  * product code. `ready` is an optional second marker that only exists once the page's
  * data arrived, for pages whose whole body is behind a query (see waitForLoaded).
@@ -77,8 +77,7 @@ const PAGES = [
   { id: "06-messages", hash: "/more/messages", heading: "消息隐私" },
   { id: "07-general", hash: "/more/general", heading: "通用" },
   { id: "08-shortcuts", hash: "/more/shortcuts", heading: "快捷键" },
-  { id: "09-feedback", hash: "/more/feedback", heading: "反馈" },
-  { id: "10-about", hash: "/more/about", heading: "关于 AgentCore" },
+  { id: "09-about", hash: "/more/about", heading: "关于 AgentCore" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -303,34 +302,6 @@ const SESSIONS = {
   ],
 };
 
-const FEEDBACK = {
-  total: 2,
-  data: [
-    {
-      id: "fb_1",
-      category: "bug",
-      title: "侧栏折叠后项目图标错位",
-      description: "折叠侧栏再展开，项目分组的图标会偏移半格。",
-      page_context: "#/conversations",
-      status: "acknowledged",
-      admin_reply: "已复现，下个版本修复。",
-      created_at: minutesAgo(60 * 20),
-      updated_at: minutesAgo(60 * 4),
-    },
-    {
-      id: "fb_2",
-      category: "feature",
-      title: "希望支持把对话导出为 Markdown",
-      description: "现在只能复制单条消息，想一次导出整个回合。",
-      page_context: null,
-      status: "open",
-      admin_reply: null,
-      created_at: minutesAgo(60 * 24 * 3),
-      updated_at: minutesAgo(60 * 24 * 3),
-    },
-  ],
-};
-
 /** Exact-path fixtures (query string stripped). */
 const FIXTURES = new Map([
   ["/readyz", { status: "ready", database: true }],
@@ -358,7 +329,6 @@ const FIXTURES = new Map([
   ["/v1/users/me/autonomy", { policy: "less_interrupt" }],
 
   ["/v1/usage/summary", USAGE_SUMMARY],
-  ["/v1/feedback", FEEDBACK],
   [
     "/v1/messages/directory",
     { discoverable: true, who_can_dm: "anyone", who_can_friend: "group_members" },
@@ -369,8 +339,6 @@ const FIXTURES = new Map([
 
   // Ambient shell chrome (sidebar / banners / badges) — quiet, empty states.
   ["/v1/notices/active", { banner: null, modal: null, inbox: [] }],
-  ["/v1/standing-tasks", []],
-  ["/v1/standing-task-runs", { badge: 0, items: [], total: 0 }],
   ["/v1/conversations", { data: [], page: 1, page_size: 100, total: 0 }],
   ["/v1/conversations/grouped", { folders: [], ungrouped: [] }],
   ["/v1/folders", []],

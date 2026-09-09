@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
     AUDIENCE_BOTH,
@@ -49,6 +49,7 @@ class GlobTool:
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         file_products=FileProductsContract.READ_ONLY,
+        workspace_io=True,
     )
 
     @property
@@ -92,7 +93,7 @@ class GlobTool:
                 },
                 "required": ["pattern"],
             },
-            category=ToolCategory.FILESYSTEM,
+            face=ToolFace.SEARCH,
             approval=ToolApproval.NEVER,
         )
 

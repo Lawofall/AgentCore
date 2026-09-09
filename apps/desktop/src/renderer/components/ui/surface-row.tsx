@@ -103,6 +103,23 @@ export function SurfaceNavLink({ className, ...props }: NavLinkProps) {
   );
 }
 
+/** Hover / focus-within action cluster. Enters the flow on reveal — do not use
+ *  `opacity-0` (that still eats title width). Parent must be `group`. */
+export function SurfaceRowActions({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn(
+        "hidden shrink-0 items-center gap-0.5 group-hover:flex group-focus-within:flex",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 /** Indent helper for file tree depth. */
 export function surfaceRowIndent(
   depth: number,

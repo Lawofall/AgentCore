@@ -116,13 +116,13 @@ describe("searchIndex", () => {
     expect(workflow?.to).toBe("/toolbox/manual/collaboration?s=workflow");
     expect(workflow?.haystack).toContain("官方模板");
     expect(workflow?.haystack).toContain("等人关卡");
+    expect(workflow?.haystack).toMatch(/Webhook/i);
+    expect(workflow?.haystack).not.toContain("系统任务");
+    expect(workflow?.haystack).not.toContain("收件箱");
 
-    const automation = entries.find((e) => e.id === "collaboration-automation");
-    expect(automation?.label).toBe("自动化");
-    expect(automation?.to).toBe("/toolbox/manual/collaboration?s=automation");
-    expect(automation?.haystack).toContain("webhook");
-    expect(automation?.haystack).toContain("系统任务");
-    expect(automation?.haystack).toContain("收件箱");
+    expect(
+      entries.find((e) => e.id === "collaboration-automation"),
+    ).toBeUndefined();
   });
 
   it("content search entries cover all four chapters", () => {

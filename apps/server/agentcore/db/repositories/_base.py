@@ -28,9 +28,10 @@ from sqlalchemy.sql.elements import ColumnElement
 _UNSET: object = object()
 
 # Infrastructure conversations that never belong in a user-facing list: ``handoff``
-# hosts a local→云 job run (双模式 P2e/e2), ``standing`` hosts a 站立任务 pin. Every
-# user-scoped read filters them out; so must every user-triggered bulk write, or a
-# project delete would archive rows the user can neither see nor un-archive.
+# hosts a local→云 job run (双模式 P2e/e2). ``standing`` is a retired product mode
+# kept here so leftover rows stay hidden. Every user-scoped read filters them
+# out; so must every user-triggered bulk write, or a project delete would archive
+# rows the user can neither see nor un-archive.
 HIDDEN_CONVERSATION_MODES: tuple[str, ...] = ("handoff", "standing")
 
 

@@ -3,7 +3,7 @@
 from typing import Literal, cast
 
 from agentcore.config import settings
-from agentcore.core.types import PermissionAxes, ToolApproval, ToolCategory
+from agentcore.core.types import PermissionAxes
 from agentcore.tools.registration import (
     AUDIENCE_CEO,
     ToolSurface,
@@ -409,32 +409,54 @@ def approval_class_tool_names() -> frozenset[str]:
 
 
 def file_mutation_tool_names() -> frozenset[str]:
-    """The GRANTABLE file-mutation tools as one class — what a
-    「本轮内允许所有文件改动」grant covers.
+    """GRANTABLE file-mutation tools — 「本轮内允许所有文件改动」grant.
 
-    Derived from the single builtin registry as ``GRANTABLE ∩ FILESYSTEM``.
+    Explicit names (not derived from ``ToolFace``): grouping and grant class
+    are different axes.
     """
-    full = build_builtin_registry()
     return frozenset(
-        schema.name
-        for schema in full.list_all()
-        if schema.approval is ToolApproval.GRANTABLE and schema.category is ToolCategory.FILESYSTEM
+        {
+            "file_write",
+            "str_replace",
+            "file_delete",
+            "file_move",
+            "file_copy",
+            "mkdir",
+            "file_batch",
+            "md_to_docx",
+            "md_to_pdf",
+            "archive_extract",
+            "archive_create",
+            "download_url",
+        }
     )
 
 
 def file_only_tool_names() -> frozenset[str]:
-    """Tools an organize worker may hold: filesystem read + mutation (no execute/terminal)."""
-    full = build_builtin_registry()
-    names = {
-        schema.name
-        for schema in full.list_all()
-        if schema.category is ToolCategory.FILESYSTEM
-    }
-    # Grep is FILESYSTEM-adjacent but often categorized separately — include if present.
-    for extra in ("grep", "code_search", "code_diagnostics"):
-        if full.get(extra) is not None:
-            names.add(extra)
-    return frozenset(names)
+    """Tools an organize worker may hold: workspace read + mutation (no run/browser)."""
+    return frozenset(
+        {
+            "file_read",
+            "file_write",
+            "str_replace",
+            "file_list",
+            "glob",
+            "file_delete",
+            "file_move",
+            "file_copy",
+            "mkdir",
+            "file_batch",
+            "md_to_docx",
+            "md_to_pdf",
+            "archive_extract",
+            "archive_create",
+            "download_url",
+            "grep",
+            "code_search",
+            "code_diagnostics",
+            "git",
+        }
+    )
 
 
 def delegation_grantable_tool_names() -> frozenset[str]:

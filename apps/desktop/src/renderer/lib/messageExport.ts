@@ -132,11 +132,14 @@ function isInternalIdArg(key: string): boolean {
   return key === "id" || key.endsWith("_id");
 }
 
-function skipExportChip(key: string, raw: string): boolean {
+function skipExportChip(key: string, raw: string, toolName?: string): boolean {
   const v = raw.trim();
   if (!v || v === ".") return true;
   if (isInternalIdArg(key)) return true;
   if (UUID_RE.test(v)) return true;
+  if (toolName === "read_conversation" && (key === "query" || key === "q")) {
+    return true;
+  }
   return false;
 }
 
@@ -203,13 +206,13 @@ function toolDetail(args: Record<string, unknown>, toolName?: string): string {
   }
   for (const k of TOOL_DETAIL_KEYS) {
     const v = args[k];
-    if (typeof v === "string" && v.trim() && !skipExportChip(k, v)) {
+    if (typeof v === "string" && v.trim() && !skipExportChip(k, v, toolName)) {
       return v.trim();
     }
   }
   for (const [k, v] of Object.entries(args)) {
     if (typeof v !== "string" || !v.trim()) continue;
-    if (skipExportChip(k, v)) continue;
+    if (skipExportChip(k, v, toolName)) continue;
     return v.trim();
   }
   return "";

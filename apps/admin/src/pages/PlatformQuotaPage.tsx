@@ -59,7 +59,6 @@ export function PlatformQuotaPage() {
     <Page>
       <PageHeader
         title="平台额度"
-        description="号池热更 · 全局额度默认与计费模式只读"
         note={`${ENV_RESTART_HINT}每用户覆盖在「用户」；Go 三窗口用量在「分析 · 成本」。`}
         actions={
           <Button

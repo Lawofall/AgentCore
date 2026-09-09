@@ -122,9 +122,6 @@ describe("ConversationChangesPanel P0c entry", () => {
     render(<ConversationChangesPanel />);
 
     expect(screen.getByText("暂无改动")).toBeTruthy();
-    expect(
-      screen.getByText("本对话尚无 AI 文件改动，也没有可恢复的回合基线。"),
-    ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "留版本" })).toBeNull();
   });
 

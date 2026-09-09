@@ -19,6 +19,15 @@ from agentcore.db.repositories import DocumentRepository, SkillStoreRepository, 
 from agentcore.documents.frontmatter import set_entry_frontmatter, strip_entry_frontmatter
 from agentcore.memory.account_prepare_cache import drop_account_rules_memory_cache_for_user
 from agentcore.memory.rules_injection import rule_consult_name
+from agentcore.runtime.legal_skills import DomainSkillTemplate
+from agentcore.runtime.skills.platform_shelf import (
+    PLATFORM_AUTHOR,
+    get_platform_template,
+    platform_listing_id,
+    platform_matches_query,
+    platform_templates,
+    platform_version_id,
+)
 
 router = APIRouter(prefix="/skill-store", tags=["skill-store"])
 
@@ -84,6 +93,39 @@ def _docs(session: AsyncSession = Depends(get_db)) -> DocumentRepository:
 def _author_label(user: User) -> str:
     name = (user.display_name or "").strip()
     return name or user.username
+
+
+def _platform_row(
+    skill: DomainSkillTemplate,
+    install: SkillStoreInstall | None,
+) -> SkillStoreListingRow:
+    listing_id = platform_listing_id(skill.name)
+    version_id = platform_version_id(skill.name, skill.body)
+    installed = install is not None
+    has_update = install is not None and install.version_id != version_id
+    return SkillStoreListingRow(
+        id=listing_id,
+        name=skill.name,
+        description=skill.summary,
+        author=PLATFORM_AUTHOR,
+        version_n=1,
+        installed=installed,
+        has_update=has_update,
+        status="published",
+        source_document_id="",
+    )
+
+
+def _platform_detail(
+    skill: DomainSkillTemplate,
+    install: SkillStoreInstall | None,
+) -> SkillStoreListingDetail:
+    row = _platform_row(skill, install)
+    return SkillStoreListingDetail(
+        **row.model_dump(),
+        content=skill.body,
+        document_id=install.document_id if install else None,
+    )
 
 
 def _row(
@@ -178,15 +220,26 @@ async def list_skill_store(
     rows, total = await store.list_shelf(
         q=q, page=page, page_size=page_size, statuses=("published",)
     )
-    installs = await store.installs_by_listing_ids(
-        user.user_id, [listing.id for listing, _, _ in rows]
+    matched_platform = [
+        skill for skill in platform_templates() if platform_matches_query(skill, q)
+    ]
+    listing_ids = [listing.id for listing, _, _ in rows] + [
+        platform_listing_id(skill.name) for skill in matched_platform
+    ]
+    installs = await store.installs_by_listing_ids(user.user_id, listing_ids)
+    data: list[SkillStoreListingRow] = []
+    if page == 1:
+        data.extend(
+            _platform_row(skill, installs.get(platform_listing_id(skill.name)))
+            for skill in matched_platform
+        )
+    data.extend(
+        _row(listing, version, author, installs.get(listing.id))
+        for listing, version, author in rows
     )
     return SkillStoreListResponse(
-        data=[
-            _row(listing, version, author, installs.get(listing.id))
-            for listing, version, author in rows
-        ],
-        total=total,
+        data=data,
+        total=total + len(matched_platform),
         page=page,
         page_size=page_size,
     )
@@ -255,6 +308,13 @@ async def list_installed(
     users = UserRepository(session)
     items: list[SkillStoreInstalledItem] = []
     for install in installs:
+        skill = get_platform_template(install.listing_id)
+        if skill is not None:
+            row = _platform_row(skill, install)
+            items.append(
+                SkillStoreInstalledItem(**row.model_dump(), document_id=install.document_id)
+            )
+            continue
         listing = await store.get_listing(install.listing_id)
         if listing is None:
             continue
@@ -276,6 +336,10 @@ async def get_listing(
     session: AsyncSession = Depends(get_db),
     store: SkillStoreRepository = Depends(_store),
 ) -> SkillStoreListingDetail:
+    skill = get_platform_template(listing_id)
+    if skill is not None:
+        install = await store.get_install(user.user_id, listing_id)
+        return _platform_detail(skill, install)
     listing = await store.get_listing(listing_id)
     version = await store.get_current_version(listing) if listing is not None else None
     if listing is None or version is None:
@@ -301,6 +365,8 @@ async def publish_new_version(
     store: SkillStoreRepository = Depends(_store),
     docs: DocumentRepository = Depends(_docs),
 ) -> SkillStoreListingDetail:
+    if get_platform_template(listing_id) is not None:
+        raise HTTPException(status_code=403, detail={"message": "官方技能不能发版本"})
     listing = await store.get_listing(listing_id)
     if listing is None:
         raise HTTPException(status_code=404, detail={"message": "找不到这个技能"})
@@ -329,6 +395,8 @@ async def unpublish_listing(
     session: AsyncSession = Depends(get_db),
     store: SkillStoreRepository = Depends(_store),
 ) -> SkillStoreListingRow:
+    if get_platform_template(listing_id) is not None:
+        raise HTTPException(status_code=403, detail={"message": "官方技能不能下架"})
     listing = await store.get_listing(listing_id)
     if listing is None:
         raise HTTPException(status_code=404, detail={"message": "找不到这个技能"})
@@ -354,6 +422,37 @@ async def install_listing(
     store: SkillStoreRepository = Depends(_store),
     docs: DocumentRepository = Depends(_docs),
 ) -> SkillStoreInstalledItem:
+    skill = get_platform_template(listing_id)
+    if skill is not None:
+        version_id = platform_version_id(skill.name, skill.body)
+        existing = await store.get_install(user.user_id, listing_id)
+        if existing is not None and existing.version_id == version_id:
+            current = await docs.get(existing.document_id, user_id=user.user_id)
+            if current is not None:
+                row = _platform_row(skill, existing)
+                return SkillStoreInstalledItem(
+                    **row.model_dump(), document_id=existing.document_id
+                )
+        snapshot: Document | None = None
+        if existing is not None:
+            snapshot = await docs.get(existing.document_id, user_id=user.user_id)
+        copy = await _copy_snapshot(
+            docs,
+            user_id=user.user_id,
+            name=skill.name,
+            description=skill.summary,
+            content=skill.body,
+            existing=snapshot,
+        )
+        install = await store.upsert_install(
+            user_id=user.user_id,
+            listing_id=listing_id,
+            version_id=version_id,
+            document_id=copy.id,
+        )
+        drop_account_rules_memory_cache_for_user(user.user_id)
+        row = _platform_row(skill, install)
+        return SkillStoreInstalledItem(**row.model_dump(), document_id=copy.id)
     listing = await store.get_listing(listing_id)
     version = await store.get_current_version(listing) if listing is not None else None
     if listing is None or version is None or listing.status != "published":
@@ -367,7 +466,7 @@ async def install_listing(
             row = _row(listing, version, author, existing)
             return SkillStoreInstalledItem(**row.model_dump(), document_id=existing.document_id)
 
-    snapshot: Document | None = None
+    snapshot = None
     if existing is not None:
         snapshot = await docs.get(existing.document_id, user_id=user.user_id)
     copy = await _copy_snapshot(
@@ -398,6 +497,8 @@ async def report_listing(
     user: AuthUser,
     store: SkillStoreRepository = Depends(_store),
 ) -> SkillStoreReportView:
+    if get_platform_template(listing_id) is not None:
+        raise HTTPException(status_code=400, detail={"message": "官方技能不能举报"})
     listing = await store.get_listing(listing_id)
     if listing is None or listing.status != "published":
         raise HTTPException(status_code=404, detail={"message": "找不到这个技能"})

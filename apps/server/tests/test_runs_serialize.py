@@ -530,7 +530,7 @@ def test_spec_retired_deliverable_keys_are_ignored():
     }
     restored = spec_from_json(raw)
     assert restored.deliverable is not None
-    assert restored.deliverable.form == "files"
+    assert restored.deliverable.artifacts == []
     assert not hasattr(restored.deliverable, "must_contain_soft")
     assert not hasattr(restored.deliverable, "name")
 

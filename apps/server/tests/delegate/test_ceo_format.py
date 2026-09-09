@@ -75,7 +75,7 @@ def test_format_for_ceo_landed_outside_drafts_is_disk_truth():
                 run_id="w1",
                 task="写 GDD",
                 role="游戏设计主笔",
-                deliverable=Deliverable(form="files"),
+                deliverable=Deliverable(artifacts=["out.md"]),
             )
         ]
     )
@@ -586,6 +586,44 @@ def test_format_for_ceo_roster_budget_skipped_continue_hint():
     assert "下一回合" in out
     assert "续" in out
     assert "假装" in out or "禁止" in out
+
+
+def test_harvest_synthesis_gaps_point_at_delegate_not_replan():
+    """批次收口（无 _supervised）：合成包缺口段不指路已失效的 replan。"""
+    t = tool(Provider([]))
+    assert t._supervised is None
+    plan = RunPlan(nodes=[RunSpec(run_id="w1", task="落盘走查", role="验收")])
+    results = {
+        "w1": RunState(
+            phase=RunPhase.COMPLETED,
+            content="走查完成",
+            delivery_gaps=[
+                {"description": "声明了走查记录但未落盘", "reason": "files_not_landed"}
+            ],
+        )
+    }
+    out = build_ceo_synthesis(t, plan, results).text
+    assert "契约缺口" in out
+    assert "replan" not in out
+    assert "再调 delegate" in out
+    assert "continue_from_run_id" in out
+
+
+def test_supervised_synthesis_gaps_still_name_replan():
+    """计划还开着：合成包缺口段仍可点名 replan(add)。"""
+    t = tool(Provider([]))
+    t._supervised = object()
+    plan = RunPlan(nodes=[RunSpec(run_id="w1", task="落盘走查", role="验收")])
+    results = {
+        "w1": RunState(
+            phase=RunPhase.COMPLETED,
+            content="走查完成",
+            delivery_gaps=[{"description": "缺一份走查记录", "reason": "files_not_landed"}],
+        )
+    }
+    out = build_ceo_synthesis(t, plan, results).text
+    assert "`replan(add)`" in out
+    assert "再调 delegate" not in out
 
 
 def test_format_for_ceo_emits_uncapped_synthesis_metric():

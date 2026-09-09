@@ -1,5 +1,6 @@
 /** Synthetic graph bookend id and ReactFlow node/edge type maps. */
 
+import { XYFLOW_PRO_OPTIONS } from "@/components/xyflow/host";
 import type { GraphLayout } from "@/stores/graph";
 import { ListTree, MoveHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
@@ -22,7 +23,7 @@ export const nodeTypes = {
 export const edgeTypes = { step: StepEdge };
 
 /** Stable identity — never pass `{ hideAttribution: true }` inline to ReactFlow. */
-export const RF_PRO_OPTIONS = { hideAttribution: true } as const;
+export const RF_PRO_OPTIONS = XYFLOW_PRO_OPTIONS;
 
 export const LAYOUT_OPTIONS: {
   kind: GraphLayout;

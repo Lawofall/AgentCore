@@ -81,29 +81,18 @@ class Deliverable:
 
     output_format: str = "text"
     required_sections: list[str] = field(default_factory=list)
-    # Structured deliverable form (always set after parse): ``prose`` = text body
-    # only; ``files`` = land documents (bare filenames join under ``工作稿/``;
-    # empty artifacts do not pin a dir); ``workspace`` = edit the user project
-    # tree in place (swallows ``workspace_native``; no dossier landing). Missing /
-    # empty / invalid form → ``files``. Write-disk recognition = ``files`` ∪
-    # ``workspace`` ∪ non-empty ``artifacts``.
-    form: Literal["prose", "files", "workspace"] = "files"
     # Declarative artifact path list (files / dirs / globs). When non-empty, the
     # contract gate reconciles each pattern against the live workspace (existence),
     # and a batch that declares any artifacts auto-enables completion acceptance.
-    # Omit = no path enforcement.
+    # Omit = no path enforcement. The engine does not infer write-vs-chat from
+    # task text; landing expectation is pinned paths only.
     artifacts: list[str] = field(default_factory=list)
     # Dossier landing directory (workspace-relative, no trailing slash). Runtime
     # fills from explicit ``artifact_dir``, derived docs paths, or bare filenames
-    # (join under ``工作稿/``). Empty artifacts leave this empty. Acceptance:
-    # empty artifacts → no path pin; non-empty artifacts → exact / trailing-/ /
-    # glob on those paths only (this field is not a fallback).
+    # (join under ``工作稿/``). Empty artifacts leave this empty unless an
+    # explicit dir was declared. Acceptance: empty artifacts → no path pin unless
+    # this field is set; non-empty artifacts → exact / trailing-/ / glob.
     artifact_dir: str = ""
-    # Playbook-internal alias swallowed into ``form=workspace`` at parse
-    # (``form=workspace`` ⇔ no dossier landing). Leftover ``artifact_dir`` must
-    # not pull a workspace node into ``工作稿/``. Direct constructions may still
-    # set this; ``is_workspace_landing`` treats it as workspace.
-    workspace_native: bool = False
     # Parsed for old JSON. Does not FAIL the node: contract misses stay
     # COMPLETED with warnings after retries.
     strict: bool = False
@@ -114,80 +103,43 @@ class Deliverable:
     # ``delivery_status.artifacts`` / ``delivered_files``。
     citation_mode: Literal["two_phase"] | None = None
 
-    def __post_init__(self) -> None:
-        if self.form not in DELIVERABLE_FORMS:
-            self.form = "workspace" if self.workspace_native else "files"
-        if self.form == "prose":
-            self.workspace_native = False
-        elif self.form == "workspace" or self.workspace_native:
-            self.form = "workspace"
-            self.workspace_native = True
-
 
 RunContract = Deliverable
 
-DELIVERABLE_FORMS = frozenset({"prose", "files", "workspace"})
-LANDING_FORMS = frozenset({"files", "workspace"})
 
-
-def normalize_deliverable_form(
-    form: object,
-    *,
-    workspace_native: bool = False,
-) -> Literal["prose", "files", "workspace"]:
-    """Map raw form + native stamp to the three-tier form.
-
-    ``prose`` stays prose (native is cleared by the caller). Explicit
-    ``workspace`` or ``workspace_native`` (non-prose) → ``workspace``.
-    Missing / invalid → ``files``.
-    """
-    if form == "prose":
-        return "prose"
-    if form == "workspace" or workspace_native:
-        return "workspace"
-    return "files"
-
-
-def is_workspace_landing(deliverable: Deliverable | None) -> bool:
-    """True when the node has no agreed dossier landing (form=workspace / native)."""
-    if deliverable is None:
-        return False
-    return deliverable.form == "workspace" or deliverable.workspace_native
+def _nonempty_artifact_paths(artifacts: list[str] | None) -> bool:
+    return any(isinstance(a, str) and a.strip() for a in (artifacts or []))
 
 
 def deliverable_expects_landing(deliverable: Deliverable | None) -> bool:
-    """Expected on-disk landing: files ∪ workspace ∪ non-empty artifacts.
+    """Expected on-disk landing: non-empty ``artifacts`` or non-empty ``artifact_dir``.
 
-    ``None`` (legacy serialized specs) is not a landing node. Parsed plan nodes
-    always carry a Deliverable; omitted form is ``files``.
+    ``None`` / omitted / empty object do not expect landing — do not urge writes,
+    do not provision a write desk, may auto-light, ``files_not_landed`` is not
+    blocking. Does not scan ``task`` free text. Leftover JSON keys (including
+    ``form``) are ignored by the parser, not translated.
     """
     if deliverable is None:
         return False
-    if deliverable.form == "prose":
-        return False
-    return deliverable.form in LANDING_FORMS or bool(deliverable.artifacts)
+    if _nonempty_artifact_paths(deliverable.artifacts):
+        return True
+    return bool((deliverable.artifact_dir or "").strip())
 
 
 def raw_deliverable_expects_landing(raw: object) -> bool:
     """Same landing predicate on a CEO/playbook task dict (before parse).
 
-    No object / empty object / omitted form → files (must write). Only explicit
-    ``form=prose`` is exempt. Does not scan ``task`` free text.
+    No object / empty object / omitted keys → not landing. Non-empty
+    ``artifacts`` or non-empty ``artifact_dir`` only. Does not read leftover
+    ``form`` / ``workspace_native``. Does not scan ``task`` free text.
     """
     if not isinstance(raw, dict):
-        return True
-    form = raw.get("form")
-    if form == "prose":
         return False
-    if form in LANDING_FORMS:
-        return True
     arts = raw.get("artifacts")
     if isinstance(arts, list) and any(isinstance(a, str) and a.strip() for a in arts):
         return True
-    if bool(raw.get("workspace_native", False)):
-        return True
-    # 漏填 / 非法 form / 空对象 → files
-    return True
+    dir_raw = raw.get("artifact_dir")
+    return isinstance(dir_raw, str) and bool(dir_raw.strip())
 
 
 @dataclass
@@ -368,7 +320,8 @@ class ContextBlock:
     frontend shows exactly what fed the run — one assembly, two projections, no drift
     (避开补丁绊线: no second「拼给 LLM」vs「展示给用户」path to reconcile).
 
-    ``channel`` buckets the block for the UI: ``request`` (团队级原始请求) / ``team_position``
+    ``channel`` buckets the block for the UI: ``request`` (团队级原始请求) / ``tools``
+    (开场实际发给模型的 function-calling 表，镜像当时 ``tool_defs``) / ``team_position``
     (DAG 拓扑：并行队友 + 产出去向) / ``dependency`` (上游产物注入) / ``workspace`` (工作区文件
     清单) / ``task`` / ``deliverable`` / ``gate_notes`` (用户已放行的主 Agent 把关) /
     ``steer`` (用户中途操舵，最后最高优先). A ``dependency`` block additionally records its

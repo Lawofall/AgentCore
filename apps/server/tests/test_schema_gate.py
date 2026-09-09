@@ -17,6 +17,12 @@ def test_net_tombstones_include_july20_drops():
     assert ("users", "billing_preference") in columns
 
 
+def test_net_tombstones_include_dropped_skill_slot_overlay():
+    tables, _columns = sg.net_tombstones()
+    assert "skill_slot_replacements" in tables
+    assert "skill_slot_homes" in tables
+
+
 def test_simulate_stale_orm_fails():
     result = sg.run_offline_checks(simulate_stale_orm=True)
     assert not result.ok

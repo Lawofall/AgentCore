@@ -26,11 +26,16 @@ const infoIcon = <Info size={16} className="text-primary" />;
  * - An error whose code maps to a remedy (e.g. a missing key → 去配置) gets a
  *   one-click action button that navigates there.
  */
-export function notifyError(err: unknown, context?: string): void {
+export function notifyError(
+  err: unknown,
+  context?: string,
+  opts?: { action?: { label: string; onClick: () => void } },
+): void {
   if (typeof err === "string") {
     toast.error(context ?? err, {
       description: context ? err : undefined,
       icon: errorIcon,
+      action: opts?.action,
     });
     return;
   }
@@ -62,15 +67,23 @@ export function notifyError(err: unknown, context?: string): void {
   toast.error(title, {
     description,
     icon: errorIcon,
+    action: opts?.action,
   });
 }
 
 /** A success toast for a completed user action (e.g. a snapshot was created). */
 export function notifySuccess(
   message: string,
-  opts?: { description?: string },
+  opts?: {
+    description?: string;
+    action?: { label: string; onClick: () => void };
+  },
 ): void {
-  toast.success(message, { description: opts?.description, icon: successIcon });
+  toast.success(message, {
+    description: opts?.description,
+    icon: successIcon,
+    action: opts?.action,
+  });
 }
 
 /**

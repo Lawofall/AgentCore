@@ -367,7 +367,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
     body: `…（功能名）现已上线。
 
 你可以：…（1–2 句怎么用 / 入口在哪）
-如有反馈，请通过设置 → 反馈告诉我们。`,
+体验问题可到消息页内测群交流；私密联系请走官网公示渠道。`,
     severity: "normal",
     surface: "inbox",
     dismiss_policy: "once",
@@ -389,7 +389,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
         body: `${name === "…" ? "…（功能名）" : name}现已上线。
 
 你可以：${howto}
-如有反馈，请通过设置 → 反馈告诉我们。`,
+体验问题可到消息页内测群交流；私密联系请走官网公示渠道。`,
       };
     },
   },
@@ -401,7 +401,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
     body: `…（发生了什么：如「我们已为你重置密码 / 检测到异常登录」）
 
 请你：…（改密 / 核对设备 / 忽略说明）
-如非本人操作，打开消息页「AgentCore 官方」或通过设置 → 反馈联系我们。`,
+如非本人操作，请通过官网 https://fashitianxia.xyz 公示渠道联系我们。`,
     severity: "high",
     surface: "modal",
     dismiss_policy: "once",
@@ -434,7 +434,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
         body: `${what}
 
 请你：${action}
-如非本人操作，打开消息页「AgentCore 官方」或通过设置 → 反馈联系我们。`,
+如非本人操作，请通过官网 https://fashitianxia.xyz 公示渠道联系我们。`,
       };
     },
   },
@@ -447,7 +447,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
 
 参与方式：…（入口或步骤）
 时间：…（起止或「即日起」）
-欢迎把体验反馈发到设置 → 反馈。`,
+欢迎到消息页内测群交流体验。`,
     severity: "normal",
     surface: "inbox",
     dismiss_policy: "once",
@@ -479,7 +479,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
 
 参与方式：${howto}
 时间：${when}
-欢迎把体验反馈发到设置 → 反馈。`,
+欢迎到消息页内测群交流体验。`,
       };
     },
   },
@@ -491,7 +491,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
     body: `…（完整正文；用户点「阅读全文」后在应用内详情阅读）
 
 你可以：…（可选入口或下一步）
-欢迎把体验反馈发到设置 → 反馈。`,
+欢迎到消息页内测群交流体验。`,
     summary: "…（卡面摘要，两句内）",
     severity: "normal",
     surface: "inbox",
@@ -521,7 +521,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
         `…（完整正文；用户点「阅读全文」后在应用内详情阅读）
 
 你可以：…（可选入口或下一步）
-欢迎把体验反馈发到设置 → 反馈。`,
+欢迎到消息页内测群交流体验。`,
       );
       return { title, body, summary };
     },

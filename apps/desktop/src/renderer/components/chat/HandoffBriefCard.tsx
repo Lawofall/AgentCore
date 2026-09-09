@@ -15,7 +15,7 @@ const BODY_INSET = "mt-1.5 space-y-2 rounded-lg bg-muted px-2.5 py-1.5";
 /**
  * Human-facing 交接简报 — same chrome for a successful `handoff` tool row
  * and the run-detail footer (degraded / harvest-without-success-step).
- * Collapsed face is a process row (chevron +「交接简报」, no muted plate).
+ * Collapsed face is a process row (「交接简报」+ chevron, Thought hug, no muted plate).
  * Expand reveals `summary` as markdown in a muted inset,
  * then historical 要点 / 假设 / 下一步 when those fields are present.
  * Engine-synthesized (`degraded`) briefs show a notice only, already inset.
@@ -48,14 +48,14 @@ export function HandoffBriefCard({
             variant="ghost"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
-            className="h-auto w-full items-center justify-start gap-2 px-0 py-0 text-sm text-muted-foreground hover:bg-transparent hover:text-foreground"
+            className="h-auto w-auto justify-start gap-2 px-0 py-0 text-sm font-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
           >
+            交接简报
             {open ? (
               <ChevronDown size={14} className="shrink-0" />
             ) : (
               <ChevronRight size={14} className="shrink-0" />
             )}
-            交接简报
           </Button>
           {open && (
             <div className={BODY_INSET}>

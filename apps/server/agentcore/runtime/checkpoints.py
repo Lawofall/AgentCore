@@ -24,12 +24,9 @@ from typing import Literal
 AskCheckpointIntent = Literal[
     "decision",
     "organize_plan",
-    "daily_review",
 ]
 
-_ASK_CHECKPOINT_INTENTS: frozenset[str] = frozenset(
-    {"decision", "organize_plan", "daily_review"}
-)
+_ASK_CHECKPOINT_INTENTS: frozenset[str] = frozenset({"decision", "organize_plan"})
 
 
 def coerce_ask_checkpoint_intent(raw: object) -> AskCheckpointIntent:

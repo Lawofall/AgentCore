@@ -35,7 +35,6 @@ from .conversations import (
 from .devices import PushDeviceRow
 from .documents import DisputedLine, Document
 from .email_auth import EmailChallenge, PendingRegistration
-from .feedback import FeedbackRow
 from .llm_profiles import LlmModelProfile
 from .memory_pipeline import MemoryEpisode, MemoryScopeState
 from .notices import ProductNoticeDismissalRow, ProductNoticeRow
@@ -54,14 +53,12 @@ from .runs import (
     TurnMetricsRow,
     TurnStreamStateRow,
 )
-from .skill_slots import SkillSlotMute, SkillSlotReplacement
 from .skill_store import (
     SkillStoreInstall,
     SkillStoreListing,
     SkillStoreReport,
     SkillStoreVersion,
 )
-from .standing_tasks import StandingTask, StandingTaskRun
 from .user_workflows import UserWorkflow
 from .users import (
     FriendRequest,
@@ -69,6 +66,12 @@ from .users import (
     User,
     UserBlock,
     UserDirectorySettings,
+)
+from .workflow_store import (
+    WorkflowStoreInstall,
+    WorkflowStoreListing,
+    WorkflowStoreReport,
+    WorkflowStoreVersion,
 )
 
 __all__ = [
@@ -91,7 +94,6 @@ __all__ = [
     "DisputedLine",
     "Document",
     "EmailChallenge",
-    "FeedbackRow",
     "Folder",
     "HandoffJob",
     "JOURNAL_BAND_LIVE",
@@ -113,14 +115,10 @@ __all__ = [
     "PushDeviceRow",
     "RefreshToken",
     "RunSessionRow",
-    "SkillSlotMute",
-    "SkillSlotReplacement",
     "SkillStoreInstall",
     "SkillStoreListing",
     "SkillStoreReport",
     "SkillStoreVersion",
-    "StandingTask",
-    "StandingTaskRun",
     "TurnJournalRow",
     "TurnLeaseRow",
     "TurnMetricsRow",
@@ -133,5 +131,9 @@ __all__ = [
     "UserGitCredential",
     "UserLlmProvider",
     "UserWorkflow",
+    "WorkflowStoreInstall",
+    "WorkflowStoreListing",
+    "WorkflowStoreReport",
+    "WorkflowStoreVersion",
     "_new_uuid",
 ]

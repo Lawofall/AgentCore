@@ -144,24 +144,24 @@ def worker_rows(
         else None
     )
     rows: list[dict[str, Any]] = []
+    from agentcore.runtime.runs.types import deliverable_expects_landing
+
     for n in plan.nodes:
         task = (n.task or "").strip()
         if len(task) > limit:
             task = task[:limit] + "…"
-        form = getattr(n.deliverable, "form", None) if n.deliverable else None
-        # form=prose → 仅文字；files / workspace / omitted → 可改文件。
-        if form == "prose":
-            write_capability = "text_only"
-            write_capability_label = "仅文字报告"
-        else:
+        landing = deliverable_expects_landing(n.deliverable)
+        if landing:
             write_capability = "can_write_files"
             write_capability_label = "可改文件"
+        else:
+            write_capability = "text_only"
+            write_capability_label = "仅文字报告"
         row: dict[str, Any] = {
             "run_id": n.run_id,
             "role": n.role or n.agent_name or n.run_id,
             "task": task,
             "depends_on": list(n.depends_on),
-            "form": form,
             "write_capability": write_capability,
             "write_capability_label": write_capability_label,
         }

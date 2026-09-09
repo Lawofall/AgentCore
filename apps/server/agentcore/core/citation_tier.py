@@ -118,7 +118,7 @@ _BLOCKED_DOMAINS: frozenset[str] = frozenset(
     }
 )
 
-# 低质：文库 / 百家号 / 题库聚合 / 常见 UGC——可显式引用，前端强制弱源徽标。
+# 低质：文库 / 百家号 / 题库聚合 / 常见 UGC——可显式引用；辩论检索可硬剔，来源卡不打档位徽标。
 _WEAK_DOMAINS: frozenset[str] = frozenset(
     {
         "wenku.baidu.com",

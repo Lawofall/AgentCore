@@ -526,7 +526,6 @@ def test_roles_and_file_targets_detect_geo_class_overlap():
         role="骨架工程师",
         task="写 site/index.html 与 site/styles.css",
         deliverable=Deliverable(
-            form="files",
             artifacts=["site/index.html", "site/styles.css", "site/main.js"],
         ),
     )
@@ -535,7 +534,6 @@ def test_roles_and_file_targets_detect_geo_class_overlap():
         role="前端工程师",
         task="基于文案实现整站，写入 site/index.html",
         deliverable=Deliverable(
-            form="files",
             artifacts=["site/index.html"],
         ),
     )
