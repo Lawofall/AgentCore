@@ -78,7 +78,7 @@
     "@capacitor/push-notifications": "^8.1.1",
     "@capgo/capacitor-speech-recognition": "^8.1.9",
     "@codemirror/commands": "^6.10.3",
-    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/lang-markdown": "^6.5.2",
     "@codemirror/language": "^6.12.3",
     "@codemirror/merge": "^6.12.2",
     "@codemirror/state": "^6.6.0",
