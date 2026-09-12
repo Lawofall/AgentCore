@@ -53,9 +53,7 @@ class MdToDocxTool:
             name=MD_TO_DOCX_TOOL_NAME,
             description=(
                 "把工作区内的 Markdown 文件确定性导出为同目录同名 Word（.docx）。"
-                "例：`报告.md` → `报告.docx`。覆盖标题 #–####、段落、有序/无序列表、"
-                "表格、围栏代码、相对路径图片（嵌入）与链接；缺图会在回执中明确警告。"
-                "路径必须是相对于工作区的 .md / .markdown 相对路径。"
+                "覆盖标题、列表、表格、代码、相对路径图片；缺图回执警告。"
             ),
             parameters={
                 "type": "object",

@@ -22,7 +22,8 @@ Covered:
 * unpaired ``resume-*`` is not pinned as ``messages.id`` on create.
 * complete / pause / cancel write-backs land a ``turn_metrics`` row;
   ``delegated`` / ``workers`` use ``turn_worker_stats`` (journal ``message_final``);
-  tokens match the same finalize fields as ``messages.usage``.
+  tokens match the same finalize fields as ``messages.usage``;
+  failure codes land on ``error_code`` / ``error_type`` (journal when runs.error is a sentence).
 """
 
 from types import SimpleNamespace
@@ -620,8 +621,56 @@ async def test_record_local_turn_empty_error_settles_assistant(monkeypatch):
     metrics = next(e[1] for e in events if e[0] == "metrics")
     assert metrics["status"] == "error"
     assert metrics["finish_reason"] == "error"
+    assert metrics["error"] == "超时"
+    assert metrics["error_code"] == ErrorCode.LLM_TIMEOUT
     assert metrics["input_tokens"] == 0
     assert metrics["output_tokens"] == 0
+
+
+async def test_record_local_turn_metrics_codes_from_journal(monkeypatch):
+    """Degraded-with-reply: runs.error may be a sentence; codes come from journal."""
+    from agentcore.core.error_codes import ErrorCode
+
+    events: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    umbrella = "AgentCore 服务暂时不可用，请稍后重试"
+    result = await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="partial reply",
+        runs={
+            "events": [],
+            "finish_reason": "degraded",
+            "error": umbrella,
+        },
+        journal=[
+            {
+                "kind": "turn_end",
+                "payload": {
+                    "finish_reason": "degraded",
+                    "error": {
+                        "code": ErrorCode.INTERNAL_ERROR,
+                        "message": umbrella,
+                        "error_type": "OurServiceUnavailableError",
+                    },
+                },
+                "ts": None,
+            }
+        ],
+        user_message_id=_USER_MSG_ID,
+        message_id="m-degraded",
+        trace_id=_TRACE,
+        finish_reason="degraded",
+    )
+
+    assert result["noop"] is False
+    metrics = next(e[1] for e in events if e[0] == "metrics")
+    assert metrics["error"] == umbrella
+    assert metrics["error_code"] == ErrorCode.INTERNAL_ERROR
+    assert metrics["error_type"] == "OurServiceUnavailableError"
+    assert metrics["finish_reason"] == "degraded"
 
 
 async def test_record_local_turn_records_no_cost_ledger(monkeypatch):

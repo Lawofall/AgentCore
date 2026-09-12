@@ -47,8 +47,14 @@ def test_platform_shelf_exposes_all_templates():
         listing_id = platform_listing_id(skill.name)
         assert get_platform_template(listing_id) is skill
         assert platform_version_id(skill.name, skill.body)
+        assert skill.title
+        assert skill.title != skill.summary
         assert platform_matches_query(skill, None)
+        assert platform_matches_query(skill, skill.title)
         assert platform_matches_query(skill, skill.summary[:2])
+        assert skill.group == "legal"
+        assert platform_matches_query(skill, None, "legal")
+        assert not platform_matches_query(skill, None, "writing")
     assert platform_matches_query(LEGAL_SKILLS[0], PLATFORM_AUTHOR)
     assert get_platform_template("00000000-0000-0000-0000-000000000000") is None
 

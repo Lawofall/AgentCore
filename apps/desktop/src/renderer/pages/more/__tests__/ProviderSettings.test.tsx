@@ -102,9 +102,11 @@ describe("ProviderSettings", () => {
     expect(screen.getByText(/测试用模型 gpt-4o/)).toBeTruthy();
     expect(screen.queryByText(/默认模型/)).toBeNull();
     expect(screen.getByRole("button", { name: "添加服务商" })).toBeTruthy();
-    expect(screen.queryByText("模型组合")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "模型组合" })).toBeNull();
     expect(
-      screen.getByText("测连绿≠可聊天；自定义 Base URL 常需 /v1"),
+      screen.getByText(
+        "Key 已加密保存。测连绿≠可聊天；日常用「设置 · 模型组合」。",
+      ),
     ).toBeTruthy();
   });
 
@@ -152,6 +154,7 @@ describe("ProviderSettings", () => {
     renderPage();
     expect(screen.getByText("还没有接入服务商。")).toBeTruthy();
     expect(screen.getByRole("button", { name: "添加服务商" })).toBeTruthy();
+    expect(screen.queryByText(/已加密保存/)).toBeNull();
     expect(screen.queryByText(/需自行接入服务商后才能对话/)).toBeNull();
     expect(screen.queryByText(/不接入也可用平台额度/)).toBeNull();
     expect(screen.queryByText(/联系管理员/)).toBeNull();

@@ -345,8 +345,8 @@ def run_completed(
     # fixtures stay byte-identical and the client folds default it to null.
     if debrief:
         payload["debrief"] = debrief
-    # Workspace file deliverables (files_touched at run finish) — lets clients like the
-    # whiteboard crystallize a `file` artifactCard instead of text-only outputSummary.
+    # Workspace file deliverables (files_touched at run finish) — clients surface
+    # completed-run file paths (chat / 工作区), not a board-native product card.
     if output_files:
         payload["output_files"] = list(output_files)
     # First-class delivery gaps (缺章软放行 / 超时缩水) — additive; absent on clean completes

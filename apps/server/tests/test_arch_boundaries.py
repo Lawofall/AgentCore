@@ -140,6 +140,7 @@ def test_core_has_no_upward_business_deps() -> None:
         "agentcore.conversation",
         "agentcore.memory",
         "agentcore.board",
+        "agentcore.doc",
         "agentcore.evals",
         "agentcore.assist",
         "agentcore.vision",

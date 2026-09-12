@@ -52,9 +52,7 @@ class MdToPdfTool:
             name=MD_TO_PDF_TOOL_NAME,
             description=(
                 "把工作区内的 Markdown 文件确定性导出为同目录同名 PDF（.pdf）。"
-                "例：`报告.md` → `报告.pdf`。覆盖标题 #–####、段落、有序/无序列表、"
-                "表格与围栏代码；中文依赖系统/Noto CJK 字体，缺字体时回执明确警告。"
-                "路径必须是相对于工作区的 .md / .markdown 相对路径。"
+                "覆盖标题、列表、表格、代码；中文缺字体时回执警告。"
             ),
             parameters={
                 "type": "object",

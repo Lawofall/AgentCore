@@ -80,10 +80,7 @@ class GrepTool:
                     "path": {
                         "type": "string",
                         "description": (
-                            "搜索范围：相对目录或单文件（默认整仓）。不确定时省略，"
-                            "不要猜测 src/、packages/@scope。"
-                            "`.`/省略=根；本机绝对路径或 ~/Desktop|Downloads|Documents "
-                            "在桌面在线时由运行时挂载。"
+                            "搜索范围：相对目录或单文件（默认整仓）。不确定时省略。"
                             "已证实路径：目录递归；单文件只搜该文件（glob 忽略）。"
                         ),
                         "default": ".",

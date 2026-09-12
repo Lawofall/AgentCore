@@ -224,6 +224,45 @@ def test_tail_prefers_turn_metrics_and_l2_aligned() -> None:
     assert "billing=" not in text
 
 
+def test_tail_metrics_error_codes_print_on_error_line() -> None:
+    """Metrics join is SoT for codes when jsonl close has only the umbrella sentence."""
+    tid = "b" * 32
+    events = _events_delegated_ok(tid)
+    events[-1] = {
+        **events[-1],
+        "finish_reason": "degraded",
+        "error": "AgentCore 服务暂时不可用，请稍后重试",
+    }
+    metrics = {
+        "trace_id": tid,
+        "status": "ok",
+        "finish_reason": "degraded",
+        "error": "AgentCore 服务暂时不可用，请稍后重试",
+        "error_code": "INTERNAL_ERROR",
+        "error_type": "OurServiceUnavailableError",
+        "delegated": True,
+        "workers": 1,
+        "rounds": 2,
+        "duration_ms": 10000,
+        "input_tokens": 10,
+        "output_tokens": 20,
+        "boundary_yields": 0,
+        "scope_signals": 0,
+        "revises": 0,
+        "escalations": 0,
+        "kind": "turn",
+        "mode": "cloud",
+        "turn_id": "t1",
+    }
+    spine = build_decision_spine(events, turn_metrics=metrics)
+    assert spine["tail"]["source"] == "turn_metrics"
+    assert spine["tail"]["error_code"] == "INTERNAL_ERROR"
+    assert spine["tail"]["error_type"] == "OurServiceUnavailableError"
+    text = format_decision_spine(spine)
+    assert "error_code=INTERNAL_ERROR" in text
+    assert "error_type=OurServiceUnavailableError" in text
+
+
 def test_spine_cost_line_shows_byok_estimate() -> None:
     events = _events_delegated_ok()
     spine = build_decision_spine(

@@ -75,7 +75,7 @@ export function NewChatDialog({ open, onClose, onOpenProfile }: Props) {
       <DialogContent
         position="top"
         showClose={false}
-        className="max-w-md"
+        size="md"
         aria-describedby={undefined}
         onOpenAutoFocus={(e) => {
           e.preventDefault();

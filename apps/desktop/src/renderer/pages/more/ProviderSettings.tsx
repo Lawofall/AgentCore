@@ -17,18 +17,13 @@ import {
   testLlmProvider,
 } from "@/services/llmProviders";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  CheckCircle2,
-  Loader2,
-  Plus,
-  ShieldCheck,
-  XCircle,
-} from "lucide-react";
+import { CheckCircle2, Loader2, Plus, XCircle } from "lucide-react";
 import { useState } from "react";
 
 /**
- * 服务商 (/more/providers) — BYOK 列表 / 表单 / 测连 + 安全说明。
+ * 服务商 (/more/providers) — BYOK 列表 / 表单 / 测连。
  * 页头只留标题；准入走空态，选用组合在「设置 · 模型组合」。
+ * 有卡片时页脚一句：加密保存 + 测连绿≠可聊天。
  */
 export function ProviderSettings() {
   const { data: response, isLoading, isError, error } = useLlmProviders();
@@ -169,12 +164,11 @@ export function ProviderSettings() {
             </Button>
           ) : null}
 
-          <div className="space-y-2">
+          {providers.length > 0 ? (
             <p className="text-xs text-muted-foreground">
-              测连绿≠可聊天；自定义 Base URL 常需 /v1
+              Key 已加密保存。测连绿≠可聊天；日常用「设置 · 模型组合」。
             </p>
-            <InfoNote />
-          </div>
+          ) : null}
         </div>
       )}
 
@@ -235,7 +229,7 @@ function StatusBadge({
     return (
       <span className="flex items-center gap-1.5 text-xs text-success">
         <CheckCircle2 size={14} />
-        {message ?? "连接正常"}
+        连接正常
       </span>
     );
   }
@@ -336,20 +330,5 @@ function EmptyProviders({ onAdd }: { onAdd: () => void }) {
         </Button>
       }
     />
-  );
-}
-
-function InfoNote() {
-  return (
-    <p className="flex items-start gap-2 text-xs text-muted-foreground">
-      <ShieldCheck
-        size={14}
-        className="mt-0.5 shrink-0 text-muted-foreground"
-      />
-      <span>
-        Key 经 AES-256-GCM 加密存储，服务端只显示后 4 位。对话使用「设置 ·
-        模型」里的组合；平台只统计 token，不代为计价。
-      </span>
-    </p>
   );
 }

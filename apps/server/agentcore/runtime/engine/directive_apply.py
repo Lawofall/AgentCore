@@ -37,11 +37,10 @@ from .tool_exec import execute_tools
 
 def _captain_closing_honesty(
     content: str,
-    controller: LoopController,
     *,
     promotion_ledger: Any = None,
 ) -> str:
-    """CEO soft banners: softⅡ′ → write-ownership → cloud-web verify.
+    """CEO soft banners: write-ownership → cloud-web verify.
 
     Cutoff latch still arms finish_guard; ``enforce_cutoff_closing_honesty`` no
     longer prefixes 【收口说明】 into the answer.
@@ -51,7 +50,6 @@ def _captain_closing_honesty(
         return content
     from agentcore.runtime.closing_posture import (
         downgrade_verdict_for_unresolved_write_ownership,
-        enforce_ceo_mutation_honesty,
         enforce_cloud_web_verify_honesty,
         enforce_cutoff_closing_honesty,
         enforce_write_ownership_honesty,
@@ -62,10 +60,6 @@ def _captain_closing_honesty(
         promotion_ledger=promotion_ledger,
     )
     out = rewrite_stale_ask_after_dispatch(content)
-    out = enforce_ceo_mutation_honesty(
-        out,
-        landing_succeeded=controller.landing_succeeded,
-    )
     out = enforce_write_ownership_honesty(out)
     out = enforce_cutoff_closing_honesty(out)
     return enforce_cloud_web_verify_honesty(out)
@@ -158,11 +152,10 @@ async def apply_loop_directive(
             if fr is not None and finish_override_sink is not None:
                 finish_override_sink.append(fr)
             content = join_segments(final_content, extra) if extra else final_content
-            # CEO soft banners：软Ⅱ′零写盘假改 + 云端装包拒仍称验绿 → 仅加横幅，不丢稿不拒发。
+            # CEO soft banners：写盘归属 + 云端装包拒仍称验绿 → 仅加横幅，不丢稿不拒发。
             if role == "captain" and content:
                 content = _captain_closing_honesty(
                     content,
-                    controller,
                     promotion_ledger=tool_context.promotion_ledger,
                 )
             # LLM 讲不出话但已有结构化产出：把降级正文推上直播气泡（此前从未 stream）。
@@ -290,7 +283,6 @@ async def apply_loop_directive(
                         action="return",
                         content=_captain_closing_honesty(
                             join_segments(final_content, terminal.final_text or ""),
-                            controller,
                             promotion_ledger=tool_context.promotion_ledger,
                         )
                         if role == "captain"
@@ -343,7 +335,6 @@ async def apply_loop_directive(
                 content=(
                     _captain_closing_honesty(
                         final_content,
-                        controller,
                         promotion_ledger=tool_context.promotion_ledger,
                     )
                     if role == "captain"

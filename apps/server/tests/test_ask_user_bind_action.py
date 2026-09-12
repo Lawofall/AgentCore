@@ -458,6 +458,8 @@ async def test_ask_user_accepts_recommendation_in_label():
 
 
 def test_ask_user_schema_points_at_recommendation_in_label():
+    from agentcore.runtime.skills import build_system_skill_registry
+
     tool = AskUserTool(
         sink=EventSink(),
         conversation_id="c1",
@@ -467,12 +469,20 @@ def test_ask_user_schema_points_at_recommendation_in_label():
         "items"
     ]["properties"]
     assert "recommended" not in props
-    assert "（推荐）" in props["label"]["description"]
-    assert "放第一" in props["label"]["description"]
+    assert "（推荐）" not in props["label"]["description"]
+    assert "放第一" not in props["label"]["description"]
+    kickoff = build_system_skill_registry().get("ask_kickoff").body
+    assert "（推荐）" in kickoff
+    assert "放第一" in kickoff
+    assert "不预选" in kickoff
     assert "禁止" not in props["label"]["description"]
     assert "organize_plan" in props["detail"]["description"]
     assert "daily_review" not in props["detail"]["description"]
     assert "普通" in props["detail"]["description"]
+    blob = json.dumps(tool.schema.parameters, ensure_ascii=False)
+    assert "password_blocked" not in blob
+    card_desc = tool.schema.parameters["properties"]["card"]["description"]
+    assert "多问题用普通" not in card_desc
 
 
 def test_ask_user_schema_advertises_action_only_when_flagged():

@@ -78,7 +78,6 @@ class EscalateTool:
             name=ESCALATE_TOOL_NAME,
             description=(
                 "向上通道：必须由上级/用户拍板或职责偏离才报（设计稿冲突、扩范围）。"
-                "小事勿升级。勿自己改、勿只标假设。"
                 "报一声继续（默认）；猜错作废才原地等。"
             ),
             parameters={
@@ -86,14 +85,11 @@ class EscalateTool:
                 "properties": {
                     "question": {
                         "type": "string",
-                        "description": "必填。要拍板的问题，写清楚、自包含。",
+                        "description": "必填。要拍板的问题。",
                     },
                     "assumption": {
                         "type": "string",
-                        "description": (
-                            "暂定假设。blocking=true 必填；false 时也建议写，"
-                            "便于主管判断要不要返工。"
-                        ),
+                        "description": "暂定假设。blocking=true 必填。",
                     },
                     "blocking": {
                         "type": "boolean",
@@ -113,14 +109,14 @@ class EscalateTool:
                         "type": "string",
                         "enum": ["normal", "scope", "dep"],
                         "description": (
-                            "可选，默认 normal。scope=职责偏离；dep=缺还不存在的输入"
-                            "（别硬猜）。scope/dep 不停工。"
+                            "可选，默认 normal。scope=职责偏离；dep=缺还不存在的输入。"
+                            "scope/dep 不停工。"
                         ),
                     },
                     "questions": {
                         "type": "array",
                         "description": (
-                            "仅 blocking=true：干净二选一/多选时给选项（最多 5 题）；"
+                            "仅 blocking=true：二选一/多选时给选项（最多 5 题）；"
                             "开放问题省略。"
                         ),
                         "items": {
@@ -128,20 +124,17 @@ class EscalateTool:
                             "properties": {
                                 "prompt": {
                                     "type": "string",
-                                    "description": "问题本身，简洁清楚。",
+                                    "description": "问句。",
                                 },
                                 "kind": {
                                     "type": "string",
                                     "enum": ["choice", "text"],
-                                    "description": (
-                                        "choice=从 options 里选；text=让用户填一句。默认 choice。"
-                                    ),
+                                    "description": "choice 或 text，默认 choice。",
                                 },
                                 "options": {
                                     "type": "array",
                                     "description": (
-                                        "kind=choice 时的候选项（最多 6 个）。"
-                                        "权衡写进 label，一行即可。"
+                                        "kind=choice 候选项（最多 6）。权衡写进 label。"
                                     ),
                                     "items": {
                                         "type": "object",
@@ -149,8 +142,8 @@ class EscalateTool:
                                             "label": {
                                                 "type": "string",
                                                 "description": (
-                                                    "选项文字（即选它时回传的答案）。"
-                                                    "权衡写进此项。有倾向时该项放第一、名末加「（推荐）」。"
+                                                    "选项文字（回传答案）。"
+                                                    "有倾向时该项放第一、名末加「（推荐）」。"
                                                 ),
                                             },
                                         },
@@ -159,12 +152,12 @@ class EscalateTool:
                                 },
                                 "multiple": {
                                     "type": "boolean",
-                                    "description": "可选：options 是否允许多选，默认 false。",
+                                    "description": "可选：允许多选，默认 false。",
                                 },
                                 "default": {
                                     "type": "string",
                                     "description": (
-                                        "可选：暂定倾向（choice 时应是 options 中某项 label）。"
+                                        "可选：暂定倾向（choice 须是某 label）。"
                                     ),
                                 },
                             },

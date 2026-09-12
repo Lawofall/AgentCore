@@ -32,10 +32,3 @@ export function shouldShowTeamGraph(
   if (teamHasStartedRuns(list)) return true;
   return list.some((r) => isWorkerRun(r) && r.status === "pending");
 }
-
-/** Alias kept for graph consumers / fixture tests. */
-export function teamGraphVisible(
-  runs: readonly TeamGraphRun[] | null | undefined,
-): boolean {
-  return shouldShowTeamGraph(runs);
-}

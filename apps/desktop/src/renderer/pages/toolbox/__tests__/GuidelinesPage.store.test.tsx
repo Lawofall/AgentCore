@@ -1,5 +1,6 @@
 import { __resetCapabilitiesCacheForTests } from "@/components/tools/useCapabilities";
 import type { Capabilities } from "@/services/capabilities";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 // @vitest-environment jsdom
 import {
   cleanup,
@@ -7,6 +8,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -168,6 +170,7 @@ beforeEach(() => {
     documentId: "d1",
     installDocumentId: null,
     status: "published",
+    group: "writing",
   });
   vi.mocked(publishSkillVersion).mockReset();
   vi.mocked(unpublishSkill).mockReset();
@@ -179,20 +182,35 @@ beforeEach(() => {
 afterEach(cleanup);
 
 function renderPage() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <MemoryRouter>
-      <GuidelinesPage />
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <GuidelinesPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
 describe("我的提示词上架入口", () => {
+  async function openMineItem() {
+    fireEvent.click(await screen.findByText("合同审查", { exact: false }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByText("合同审查"));
+    return dialog;
+  }
+
   it("可写 mine 行有上架", async () => {
     renderPage();
-    fireEvent.click(await screen.findByText("合同审查"));
+    await openMineItem();
     fireEvent.click(await screen.findByRole("button", { name: "上架" }));
+    const dialog = await screen.findByRole("dialog", { name: "上架到市场" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "写作成稿" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "上架" }));
     await waitFor(() => {
-      expect(publishSkill).toHaveBeenCalledWith("d1");
+      expect(publishSkill).toHaveBeenCalledWith("d1", "writing");
     });
   });
 
@@ -209,10 +227,11 @@ describe("我的提示词上架入口", () => {
         documentId: "d1",
         installDocumentId: null,
         status: "published",
+        group: "writing",
       },
     ]);
     renderPage();
-    fireEvent.click(await screen.findByText("合同审查"));
+    await openMineItem();
     expect(await screen.findByText("已上架")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "下架" }));
     await waitFor(() => {
@@ -233,15 +252,18 @@ describe("我的提示词上架入口", () => {
         documentId: "d1",
         installDocumentId: null,
         status: "unpublished",
+        group: "writing",
       },
     ]);
     renderPage();
-    fireEvent.click(await screen.findByText("合同审查"));
+    await openMineItem();
     expect(screen.queryByText("已上架")).toBeNull();
     expect(screen.queryByRole("button", { name: "下架" })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "上架" }));
+    const dialog = await screen.findByRole("dialog", { name: "上架到市场" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "上架" }));
     await waitFor(() => {
-      expect(publishSkill).toHaveBeenCalledWith("d1");
+      expect(publishSkill).toHaveBeenCalledWith("d1", "writing");
     });
     expect(publishSkillVersion).not.toHaveBeenCalled();
   });

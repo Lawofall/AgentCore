@@ -66,7 +66,6 @@ from .ceo_mutation import (
     asks_whole_file_user_paste,
     claims_ceo_mutation_done,
     claims_disk_landing,
-    enforce_ceo_mutation_honesty,
     turn_has_product_write_evidence,
 )
 from .cloud_web import (
@@ -162,7 +161,6 @@ __all__ = [
     "downgrade_verdict_for_max_rounds",
     "downgrade_verdict_for_unresolved_write_ownership",
     "enforce_ceiling_closing_honesty",
-    "enforce_ceo_mutation_honesty",
     "enforce_cloud_web_verify_honesty",
     "enforce_cutoff_closing_honesty",
     "enforce_write_ownership_honesty",

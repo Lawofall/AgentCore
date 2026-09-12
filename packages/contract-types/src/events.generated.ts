@@ -104,11 +104,13 @@ export interface ToolUseStartPayload {
 export type ToolDisplay = Record<string, unknown>;
 
 /** User-facing tool face on `tool_use_end` when status is error or redirect.
- * `message` = Chinese product copy; `code` = stable code.
+ * `code` is always present. `message` is Chinese product copy; absent when
+ * the agent self-heals or the compact row title is the whole user face.
  * Model-facing technical detail stays in `result`. */
 export interface ToolFailure {
-  message: string;
   code: string;
+  /** Chinese product copy. Absent when the agent self-heals or the compact row title is the whole user face. */
+  message?: string;
 }
 
 export interface ToolUseEndPayload {
@@ -118,7 +120,7 @@ export interface ToolUseEndPayload {
   status: "success" | "error" | "redirect";
   /** A tool's OPTIONAL render-oriented payload (工具结果富渲染), distinct from the model-facing `result` text. */
   display?: ToolDisplay | null;
-  /** Present when status is error or redirect: Chinese product message + stable code. Model-facing technical text stays in result. */
+  /** Present when status is error or redirect: stable code; Chinese product message only when the user must act or a constraint still holds. Model-facing technical text stays in result. */
   failure?: ToolFailure;
   /** Worker-call tag; absent for the captain's own calls. */
   run_id?: string;

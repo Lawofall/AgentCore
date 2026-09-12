@@ -1,6 +1,7 @@
 import { Button, IconButton } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -64,7 +65,7 @@ export function MergeLandingReviewDialog({
         if (!open && session) onOpenChange(false);
       }}
     >
-      <DialogContent className="flex max-h-[85vh] max-w-xl flex-col">
+      <DialogContent size="xl" className="flex max-h-[85vh] flex-col">
         <DialogHeader>
           <DialogTitle>合回到本机</DialogTitle>
           <DialogDescription>
@@ -167,13 +168,50 @@ function MergeLandingReview({
 
   if (actionable.length === 0) {
     return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <CheckCircle2 size={14} className="text-success" />
-          {notices.length > 0
-            ? "没有可合入的文件（见下方提示）。"
-            : "云端与落点一致，无需合回。"}
+      <>
+        <DialogBody className="space-y-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <CheckCircle2 size={14} className="text-success" />
+            {notices.length > 0
+              ? "没有可合入的文件（见下方提示）。"
+              : "云端与落点一致，无需合回。"}
+          </div>
+          {notices.length > 0 && (
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              {notices.map((n) => (
+                <li key={n} className="flex items-start gap-1">
+                  <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                  {n}
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onDismiss}>
+            关闭
+          </Button>
+        </DialogFooter>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <DialogBody className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <span className="text-success">+{counts.added}</span>
+          <span className="text-primary">~{counts.modified}</span>
+          {conflicts.length > 0 ? (
+            <span className="flex items-center gap-1 text-primary">
+              <AlertTriangle size={12} />
+              {conflicts.length} 个冲突（默认保留本机）
+            </span>
+          ) : (
+            <span className="text-muted-foreground">无冲突，可全部合入</span>
+          )}
         </div>
+
         {notices.length > 0 && (
           <ul className="space-y-1 text-xs text-muted-foreground">
             {notices.map((n) => (
@@ -184,103 +222,70 @@ function MergeLandingReview({
             ))}
           </ul>
         )}
-        <DialogFooter>
-          <Button variant="neutral" onClick={onDismiss}>
-            关闭
-          </Button>
-        </DialogFooter>
-      </div>
-    );
-  }
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-        <span className="text-success">+{counts.added}</span>
-        <span className="text-primary">~{counts.modified}</span>
-        {conflicts.length > 0 ? (
-          <span className="flex items-center gap-1 text-primary">
-            <AlertTriangle size={12} />
-            {conflicts.length} 个冲突（默认保留本机）
-          </span>
-        ) : (
-          <span className="text-muted-foreground">无冲突，可全部合入</span>
+        {conflicts.length > 0 && (
+          <ul className="max-h-56 space-y-1 overflow-auto">
+            {conflicts.map((row) => {
+              const canPreview =
+                !row.change.isBinary && row.change.content !== null;
+              const open = expanded.has(row.change.path);
+              return (
+                <li
+                  key={row.change.path}
+                  className="rounded-lg border border-primary/30 bg-primary/10"
+                >
+                  <div className="flex items-center gap-1.5 px-2 py-1.5">
+                    <IconButton
+                      onClick={() => toggleExpand(row.change.path)}
+                      disabled={!canPreview}
+                      aria-label="展开预览"
+                      className="size-5 rounded disabled:opacity-30"
+                    >
+                      {open ? (
+                        <ChevronDown size={13} />
+                      ) : (
+                        <ChevronRight size={13} />
+                      )}
+                    </IconButton>
+                    <span
+                      className="min-w-0 flex-1 truncate text-xs"
+                      title={row.change.path}
+                    >
+                      {row.change.path}
+                    </span>
+                    <DecisionToggle
+                      active={row.decision === "cloud"}
+                      danger
+                      onClick={() => setDecision(row.change.path, "cloud")}
+                      label="用云端"
+                    />
+                    <DecisionToggle
+                      active={row.decision === "local"}
+                      onClick={() => setDecision(row.change.path, "local")}
+                      label="保留本机"
+                    />
+                  </div>
+                  {open && canPreview && (
+                    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words border-t border-primary/30 px-2.5 py-2 font-mono text-xs leading-relaxed text-foreground">
+                      {row.change.content}
+                    </pre>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         )}
-      </div>
 
-      {notices.length > 0 && (
-        <ul className="space-y-1 text-xs text-muted-foreground">
-          {notices.map((n) => (
-            <li key={n} className="flex items-start gap-1">
-              <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-              {n}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {conflicts.length > 0 && (
-        <ul className="max-h-56 space-y-1 overflow-auto">
-          {conflicts.map((row) => {
-            const canPreview =
-              !row.change.isBinary && row.change.content !== null;
-            const open = expanded.has(row.change.path);
-            return (
-              <li
-                key={row.change.path}
-                className="rounded-lg border border-primary/30 bg-primary/10"
-              >
-                <div className="flex items-center gap-1.5 px-2 py-1.5">
-                  <IconButton
-                    onClick={() => toggleExpand(row.change.path)}
-                    disabled={!canPreview}
-                    aria-label="展开预览"
-                    className="size-5 rounded disabled:opacity-30"
-                  >
-                    {open ? (
-                      <ChevronDown size={13} />
-                    ) : (
-                      <ChevronRight size={13} />
-                    )}
-                  </IconButton>
-                  <span
-                    className="min-w-0 flex-1 truncate text-xs"
-                    title={row.change.path}
-                  >
-                    {row.change.path}
-                  </span>
-                  <DecisionToggle
-                    active={row.decision === "cloud"}
-                    danger
-                    onClick={() => setDecision(row.change.path, "cloud")}
-                    label="用云端"
-                  />
-                  <DecisionToggle
-                    active={row.decision === "local"}
-                    onClick={() => setDecision(row.change.path, "local")}
-                    label="保留本机"
-                  />
-                </div>
-                {open && canPreview && (
-                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words border-t border-primary/30 px-2.5 py-2 font-mono text-xs leading-relaxed text-foreground">
-                    {row.change.content}
-                  </pre>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {forced > 0 && (
-        <p className="flex items-center gap-1 text-xs text-destructive">
-          <AlertTriangle size={12} />
-          将强制覆盖 {forced} 个有本机改动的文件
-        </p>
-      )}
-      {applyError && (
-        <p className="text-xs text-muted-foreground">{applyError}</p>
-      )}
+        {forced > 0 && (
+          <p className="flex items-center gap-1 text-xs text-destructive">
+            <AlertTriangle size={12} />
+            将强制覆盖 {forced} 个有本机改动的文件
+          </p>
+        )}
+        {applyError && (
+          <p className="text-xs text-muted-foreground">{applyError}</p>
+        )}
+      </DialogBody>
 
       <DialogFooter className="gap-2 sm:justify-between">
         <Button
@@ -292,11 +297,7 @@ function MergeLandingReview({
           冲突保持本机 · 其余取云端
         </Button>
         <div className="flex gap-2">
-          <Button
-            variant="neutral"
-            className="border border-border"
-            onClick={onDismiss}
-          >
+          <Button variant="outline" onClick={onDismiss}>
             取消
           </Button>
           <Button
@@ -316,7 +317,7 @@ function MergeLandingReview({
           </Button>
         </div>
       </DialogFooter>
-    </div>
+    </>
   );
 }
 

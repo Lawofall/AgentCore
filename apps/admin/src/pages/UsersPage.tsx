@@ -1,4 +1,5 @@
 import { QuotaDialog } from "@/components/QuotaDialog";
+import { UserSectionTabs } from "@/components/SectionTabs";
 import { UserDetail } from "@/components/UserDetail";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -457,19 +458,22 @@ export function UsersPage() {
   return (
     <Page>
       <PageHeader
-        title="用户管理"
+        title="用户"
         description={`共 ${fmtCount(total, loaded)} 个账号`}
         note="注册日期筛选与「注册时间」列均按 UTC 日切，可能与本地日期相差一天"
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void load()}
-            disabled={loading}
-            aria-label="刷新"
-          >
-            <RefreshCw size={14} className={cn(loading && "animate-spin")} />
-          </Button>
+          <>
+            <UserSectionTabs />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void load()}
+              disabled={loading}
+              aria-label="刷新"
+            >
+              <RefreshCw size={14} className={cn(loading && "animate-spin")} />
+            </Button>
+          </>
         }
         filters={filters}
       />

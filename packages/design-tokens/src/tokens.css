@@ -1,6 +1,6 @@
 /*
- * AgentCore semantic OKLCH tokens — single source for desktop (+ mobile mirrors
- * light values in mobile-light.css). Hue 255 = brand blue.
+ * AgentCore semantic OKLCH tokens — single source for desktop and Capacitor
+ * (same renderer; light :root only on phone). Hue 255 = brand blue.
  *
  * Dark = luminance stacking (Material 3 / Linear / GitHub Dark):
  *   near-neutral surfaces (chroma ≤0.006); brand hue 255 only on primary/status.

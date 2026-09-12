@@ -719,10 +719,13 @@ async def test_web_fetch_not_a_web_url_survives_file_redirect(monkeypatch):
 def test_web_fetch_schema_routes_workspace_paths_to_file_read():
     schema = WebFetchTool().schema
     assert "file_read" in schema.description
-    assert "不要补 https://" in schema.description
+    assert "download_url" in schema.description
+    assert "不要补 https://" not in schema.description
+    assert "百度百科" not in schema.description
+    assert "知乎" not in schema.description
     url_desc = schema.parameters["properties"]["url"]["description"]
     assert "http://" in url_desc and "https://" in url_desc
-    assert "file_read" in url_desc
+    assert "file_read" not in url_desc
 
 
 @pytest.mark.parametrize(
@@ -2661,25 +2664,28 @@ async def test_web_search_rejects_oversized_latin_query_without_backend(monkeypa
 
 
 def test_web_search_schema_documents_query_contract():
-    """契约进 schema：≤12 拉丁词 / 加权≤48 / 超限规范化·截断并明示 / 书名号·引号豁免 / 建议 2–3 词。"""
+    """契约进 schema：≤12 拉丁词 / ≤48 字 / 书名号·引号豁免。拆分策略在超限回执，不进按钮。"""
     schema = WebSearchTool().schema
     blob = schema.description + schema.parameters["properties"]["query"]["description"]
     assert str(_QUERY_LATIN_WORD_LIMIT) in blob  # 拉丁词上限 12
-    assert str(_QUERY_CJK_CHAR_LIMIT) in blob  # 加权字数上限 48
-    assert str(_QUERY_LATIN_WORD_WEIGHT) in blob  # 英文单词每词折 4 字
+    assert str(_QUERY_CJK_CHAR_LIMIT) in blob  # 字数上限 48
+    assert "加权" not in blob and "折" not in blob  # 折算权重是执行层
     assert "引号" in blob  # 引号短语豁免
     assert "书名号" in blob  # 中文专名豁免
     assert "摘要优先" in blob  # 默认摘要优先基调
     assert "搜到 ≠ 可挂来源号" not in blob
     assert "web_fetch" in blob  # 核对原文
-    assert "2–3" in blob  # 建议一次 2–3 个核心词
+    assert "2–3" not in blob  # 拆分建议在超限回执
+    assert "精简到核心词" not in blob
+    assert "下一轮再搜" not in blob
     assert "聚焦查询" in schema.description
     assert "补搜" in schema.description
-    assert "规范化" in blob or "截断" in blob
-    assert "明示" in blob
+    assert "不要一上来并行" not in schema.description
+    assert "规范化" not in blob
+    assert "截断" not in blob
+    assert "极端过长" not in blob
     assert "不会自动改写" not in blob
     assert "无法规范化才拒绝" not in blob
-    assert "极端过长" in blob  # 仅极端过长拒绝
 
 
 def test_reject_copy_states_real_ceiling_not_just_suggestion():

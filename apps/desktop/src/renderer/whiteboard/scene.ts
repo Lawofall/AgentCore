@@ -20,8 +20,6 @@ const KNOWN_TYPES: ReadonlySet<ElementType> = new Set<ElementType>([
   "arrow",
   "line",
   "frame",
-  "agentNode",
-  "artifactCard",
 ]);
 
 export function serializeScene(

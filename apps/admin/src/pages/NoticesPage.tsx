@@ -1,3 +1,4 @@
+import { OpsTabs } from "@/components/SectionTabs";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -414,10 +415,11 @@ export function NoticesPage() {
   return (
     <Page>
       <PageHeader
-        title="公告"
+        title="运营"
         note="发布与归档立即对用户生效；已投递的 IM 消息不会被撤回"
         actions={
           <>
+            <OpsTabs />
             <Button size="sm" onClick={() => openNew()}>
               <Plus size={14} />
               新建公告

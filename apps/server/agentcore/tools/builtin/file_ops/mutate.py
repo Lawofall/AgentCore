@@ -620,7 +620,6 @@ class StrReplaceTool:
                         "minLength": 1,
                         "description": (
                             "要替换的精确文本（不可为空），需带足够的上下文以在文件中唯一。"
-                            "禁止把已落盘短状态/清理占位原样当参数。"
                         ),
                     },
                     "new_string": {
@@ -628,7 +627,6 @@ class StrReplaceTool:
                         "description": (
                             "替换后的文本（必须与 old_string 不同；"
                             "单次替换建议一节为宜，不硬拒字数）。"
-                            "禁止把已落盘短状态/清理占位原样当 new_string。"
                         ),
                     },
                     "replace_all": {

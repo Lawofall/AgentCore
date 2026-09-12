@@ -2,10 +2,6 @@
 /**
  * Console shell: sidebar grouping + active-section logic, the narrow-screen drawer,
  * and the per-route error boundary that keeps one bad page from blanking the window.
- *
- * The drawer cases are deliberately picky about *where* the close control lives: the
- * header trigger is underneath the panel and the scrim once the drawer is open, so a
- * close affordance that only exists up there is a drawer you cannot shut.
  */
 
 import { AdminShell } from "@/components/AdminShell";
@@ -50,11 +46,15 @@ function renderShell(path: string, element: React.ReactNode = <div>页面内容<
         <Route element={<AdminShell />}>
           <Route path="/overview" element={element} />
           <Route path="/users" element={element} />
-          <Route path="/conversations/:segment" element={element} />
+          <Route path="/users/:id" element={element} />
+          <Route path="/conversations" element={element} />
           <Route path="/replay/:id" element={element} />
           <Route path="/quota" element={element} />
+          <Route path="/analytics/cost" element={element} />
           <Route path="/store" element={element} />
-          <Route path="/system" element={element} />
+          <Route path="/notices" element={element} />
+          <Route path="/audit" element={element} />
+          <Route path="/beta-group" element={element} />
           <Route path="/account" element={element} />
         </Route>
       </Routes>
@@ -70,7 +70,7 @@ function currentNavLabel(): string | undefined {
 describe("AdminShell navigation", () => {
   it("groups the sections instead of listing them flat", () => {
     renderShell("/overview");
-    for (const group of ["监控", "排查", "管理"]) {
+    for (const group of ["监控", "治理"]) {
       expect(screen.getByText(group)).toBeTruthy();
     }
     const nav = screen.getByRole("navigation", { name: "主导航", hidden: true });
@@ -78,33 +78,35 @@ describe("AdminShell navigation", () => {
       within(nav)
         .getAllByRole("link", { hidden: true })
         .map((a) => a.textContent?.trim()),
-    ).toEqual([
-      "概览",
-      "分析",
-      "对话",
-      "审计",
-      "用户",
-      "公告",
-      "商店",
-      "内测群",
-      "平台额度",
-      "系统",
-    ]);
+    ).toEqual(["总览", "供给", "对话", "用户", "运营"]);
   });
 
   it("marks the section matching the current route", () => {
     renderShell("/overview");
-    expect(currentNavLabel()).toBe("概览");
+    expect(currentNavLabel()).toBe("总览");
   });
 
-  it("marks 商店 on its own route", () => {
+  it("marks 运营 on the store route", () => {
     renderShell("/store");
-    expect(currentNavLabel()).toBe("商店");
+    expect(currentNavLabel()).toBe("运营");
   });
 
-  it("marks 平台额度 on its own route", () => {
+  it("marks 供给 on the quota route", () => {
     renderShell("/quota");
-    expect(currentNavLabel()).toBe("平台额度");
+    expect(currentNavLabel()).toBe("供给");
+  });
+
+  it("keeps 供给 lit on the cost room", () => {
+    renderShell("/analytics/cost");
+    expect(currentNavLabel()).toBe("供给");
+  });
+
+  it("keeps 用户 lit on audit and the beta-group room", () => {
+    const { unmount } = renderShell("/audit");
+    expect(currentNavLabel()).toBe("用户");
+    unmount();
+    renderShell("/beta-group");
+    expect(currentNavLabel()).toBe("用户");
   });
 
   it("keeps 对话 lit while drilled into a replay", () => {

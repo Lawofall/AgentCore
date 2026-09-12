@@ -48,7 +48,7 @@ def test_tool_failure_fields_passes_authored_product_message():
 def test_tool_failure_fields_curates_by_stable_code():
     face = tool_failure_fields(code="retrieval_budget_exhausted")
     assert face == {
-        "message": "本次任务的联网查资料次数已用完，这一次没有再去搜；我会基于已经查到的内容继续。",
+        "message": "本次任务的联网查资料次数已用完，这一次没有再去搜。",
         "code": "retrieval_budget_exhausted",
     }
 
@@ -105,9 +105,25 @@ def test_verify_result_has_no_user_face():
         error="验证未通过（退出码 2）",
         metadata={"code": "verify_result"},
     )
-    assert tool_failure_from_result(result) is None
+    assert tool_failure_from_result(result) == {"code": "verify_result"}
     assert "verify_result" in NO_USER_FACE_CODES
     assert "verify_result" not in _CURATED_BY_CODE
+
+
+def test_self_heal_codes_emit_code_without_message():
+    result = ToolResult(
+        tool_call_id="t1",
+        success=False,
+        output="",
+        error="no jpeg",
+        metadata={"code": "no_frame"},
+    )
+    assert tool_failure_from_result(result) == {"code": "no_frame"}
+    assert tool_failure_fields(code="source_grep_redirect") == {
+        "code": "source_grep_redirect"
+    }
+    assert "no_frame" in NO_USER_FACE_CODES
+    assert "no_frame" not in _CURATED_BY_CODE
 
 
 def test_exec_timeout_and_forced_stop_faces_are_distinct():
@@ -194,7 +210,7 @@ def test_curated_copy_stays_synced_with_tool_sources():
         assert token in face
         assert token in CHANNEL_DEAD_USER_VISIBLE
     assert "收口" in CHANNEL_DEAD_USER_VISIBLE
-    assert "已经拿到的内容继续" in face
+    assert "我会" not in face
 
 
 def test_tool_use_end_omits_failure_on_success():
@@ -234,8 +250,7 @@ def test_tool_use_end_channel_redirect_is_not_error():
         failure=tool_failure_fields(code="source_grep_redirect"),
     )
     assert ev.payload["status"] == "redirect"
-    assert ev.payload["failure"]["code"] == "source_grep_redirect"
-    assert "我会改用搜索工具" in ev.payload["failure"]["message"]
+    assert ev.payload["failure"] == {"code": "source_grep_redirect"}
     assert "禁止用" in ev.payload["result"]
 
 
@@ -788,10 +803,21 @@ def test_every_produced_failure_code_has_curated_copy():
     # them would make this gate cry wolf, and someone would delete it.
     for soft_success in ("dirty_skip", "already_repo", "no_repo"):
         assert soft_success not in produced, f"{soft_success} 挂在成功结果上，不该要求文案"
-    # Failed-but-ordinary results (red check that already has a card body).
+    # Failed-but-ordinary results (red check that already has a card body) and
+    # self-heal codes. Attribute-reached codes are not visible to the scanner;
+    # they are pinned in test_attribute_reached instead.
+    _attribute_reached_no_face = frozenset(
+        {
+            "invalid_args",
+            "session_bound_elsewhere",
+            "session_not_found",
+        }
+    )
     for code in NO_USER_FACE_CODES:
-        assert code in produced, f"{code} 仍应由工具产出，只是不配用户面旁白"
         assert code not in _CURATED_BY_CODE, f"{code} 不该再有用户面文案"
+        if code in _attribute_reached_no_face:
+            continue
+        assert code in produced, f"{code} 仍应由工具产出，只是不配用户面旁白"
 
     missing = {
         code: sorted(sites)
@@ -824,18 +850,22 @@ def test_exec_env_timeout_peek_matches_bubble_fact():
 def test_pre_registered_codes_for_incoming_paths_have_copy():
     """Codes landing with the parallel tool changes — copy ships ahead of the producer."""
     for code in (
-        "loopback_host",
-        "not_a_web_url",
-        "url_not_workspace_path",
         "bridge_unauthorized",
         "exec_env_no_interpreter",
         "exec_env_probe_timeout",
         "exec_env_spawn_denied",
         "exec_env_not_linux",
         "exec_env_sandbox_unavailable",
-        "workspace_io_error",
     ):
         assert _CURATED_BY_CODE[code].strip()
+    for code in (
+        "loopback_host",
+        "not_a_web_url",
+        "url_not_workspace_path",
+        "workspace_io_error",
+    ):
+        assert code in NO_USER_FACE_CODES
+        assert code not in _CURATED_BY_CODE
 
 
 def test_attribute_reached_codes_have_copy():
@@ -849,14 +879,10 @@ def test_attribute_reached_codes_have_copy():
         # git create_pr → ``CreatePullRequestErr.code`` (``workspace/github_pr.py``)
         "api_error",
         "auth_failed",
-        "invalid_args",
         "network_error",
         "no_default_branch",
         "not_found",
         "validation_failed",
-        # browser → ``BrowserSessionAcquireError.code`` (``runtime/browser/registry.py``)
-        "session_bound_elsewhere",
-        "session_not_found",
         # code_execute / test_run → ``ExecEnvProbeVerdict.code`` (``classify_probe_failure``)
         "exec_env_no_interpreter",
         "exec_env_not_linux",
@@ -866,6 +892,13 @@ def test_attribute_reached_codes_have_copy():
         "exec_env_spawn_denied",
     ):
         assert _CURATED_BY_CODE[code].strip()
+    for code in (
+        "invalid_args",
+        "session_bound_elsewhere",
+        "session_not_found",
+    ):
+        assert code in NO_USER_FACE_CODES
+        assert code not in _CURATED_BY_CODE
 
 
 def test_default_sentence_promises_no_retry():
@@ -877,6 +910,8 @@ def test_default_sentence_promises_no_retry():
 
 def test_deterministic_codes_never_advise_waiting():
     for code in _DETERMINISTIC_CODES:
+        if code in NO_USER_FACE_CODES:
+            continue
         sentence = _CURATED_BY_CODE[code]
         for lie in ("稍后重试", "稍后再试", "请稍后"):
             assert lie not in sentence, f"{code} 是确定性失败，不该让用户等一会儿再试：{sentence}"
@@ -888,3 +923,26 @@ def test_curated_copy_keeps_engine_vocabulary_out():
             assert word not in sentence, f"{code} 文案泄露内部概念「{word}」：{sentence}"
         for word in _MODEL_IMPERATIVES:
             assert word not in sentence, f"{code} 文案带了模型侧祈使「{word}」：{sentence}"
+
+
+def test_curated_copy_does_not_narrate_agent_next():
+    """Self-heal next-move belongs on the model result, not the user sentence.
+
+    Generic fallback / unresolved-name cousins still say「我会换个方式」and stay
+    hidden on the timeline; everything else must not narrate the next tool.
+    """
+    skip = {ErrorCode.TOOL_ERROR, ErrorCode.TOOL_NOT_FOUND, "landed_status_name"}
+    forbidden = (
+        "我会改用",
+        "我会基于",
+        "我会另开",
+        "我会重新打开",
+        "我会换个来源",
+        "我会改正",
+        "看不到实际显示效果",
+    )
+    for code, sentence in _CURATED_BY_CODE.items():
+        if code in skip:
+            continue
+        for phrase in forbidden:
+            assert phrase not in sentence, f"{code} 仍在旁白下一步：{sentence}"

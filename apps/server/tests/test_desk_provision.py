@@ -12,6 +12,7 @@ from agentcore.tools.sandbox.desk_provision import (
     desk_provision_log_fields,
     provision_server_desk,
 )
+from agentcore.tools.sandbox.exec_env import EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE
 from agentcore.tools.sandbox.sandboxd.errors import SandboxdRpcError
 from agentcore.workspace.server import ServerWorkspace
 
@@ -67,7 +68,7 @@ async def test_provision_logs_sandboxd_cause_not_user_face():
                 )
             except SandboxdRpcError as exc:
                 raise SandboxError(
-                    "云端隔离执行环境当前不可用，代码没有运行。我会换个方式继续。",
+                    EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
                     code="exec_env_sandbox_unavailable",
                 ) from exc
 
@@ -93,7 +94,7 @@ def test_desk_provision_log_fields_uses_health_hint_without_cause():
     try:
         fields = desk_provision_log_fields(
             SandboxError(
-                "云端隔离执行环境当前不可用，代码没有运行。我会换个方式继续。",
+                EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
                 code="exec_env_sandbox_unavailable",
             )
         )

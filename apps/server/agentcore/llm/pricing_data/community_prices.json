@@ -73,6 +73,11 @@
       "cache_miss": "1.00",
       "output": "5.00"
     },
+    "deepseek-flash": {
+      "cache_hit": "0.006",
+      "cache_miss": "0.30",
+      "output": "1.20"
+    },
     "deepseek-v4-flash": {
       "cache_hit": "0.0028",
       "cache_miss": "0.14",

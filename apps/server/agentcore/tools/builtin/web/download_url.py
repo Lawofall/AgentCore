@@ -148,13 +148,10 @@ class DownloadUrlTool:
         return ToolSchema(
             name=DOWNLOAD_URL_TOOL_NAME,
             description=(
-                "把 HTTP(S) URL 的原始字节下载到工作区相对路径（二进制/文件落盘主路径）。"
-                f"大小上限与用户上传对齐（约 {max_mib} MiB），勿与 file_read 的 5 MiB 读闸混淆。"
-                "内网/私有地址与危险重定向按 SSRF 策略拒绝。"
-                "安装包（.exe/.msi/.dmg 等）允许落盘并标明类型，但本工具不执行、不静默安装。"
-                "需要网页正文深读时用 web_fetch，不要用本工具；"
-                "已有工作区 zip 解压用 archive_extract。"
-                "参数：url + path（工作区相对路径，如 `uploads/data.csv`）。"
+                "把 HTTP(S) URL 的原始字节下载到工作区相对路径。"
+                f"大小上限约 {max_mib} MiB（≠ file_read 读闸）。"
+                "安装包可落盘、本工具不执行。"
+                "网页正文用 web_fetch；已有 zip 解压用 archive_extract。"
             ),
             parameters={
                 "type": "object",

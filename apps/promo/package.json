@@ -11,7 +11,8 @@
     "layout": "npx tsx scripts/precompute-layout.mts",
     "still": "remotion still PixelCheck out/pixel-check.png",
     "stills:layout": "npx tsx scripts/precompute-stills-layout.mts",
-    "stills": "node scripts/render-stills.mjs"
+    "stills": "node scripts/render-stills.mjs",
+    "deck": "python -m http.server 4173 --directory deck"
   },
   "dependencies": {
     "@agentcore/graph-layout": "file:../../packages/graph-layout",

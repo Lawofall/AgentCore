@@ -61,13 +61,10 @@ export interface paths {
         };
         /**
          * View Shared
-         * @description Public, read-only view of a shared conversation snapshot (no auth).
+         * @description Public, read-only view of a frozen share snapshot (no auth).
          *
-         *     Renders the frozen, content-only snapshot as a self-contained HTML page. A
-         *     revoked / unknown / malformed token returns a friendly 404 page (never an error
-         *     or an existence leak). The token must be a uuid — anything else can't be a valid
-         *     share id, so short-circuit to 404 before touching the DB (a non-uuid would error
-         *     the uuid-typed lookup).
+         *     Conversation and 文档 shares share the ``/shared/<id>`` URL. A revoked /
+         *     unknown / malformed token returns the same 404 page (never an existence leak).
          */
         get: operations["view_shared_shared__token__get"];
         put?: never;
@@ -3855,6 +3852,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Docs */
+        get: operations["list_docs_v1_docs_get"];
+        put?: never;
+        /** Create Doc */
+        post: operations["create_doc_v1_docs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/docs/{doc_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Doc */
+        get: operations["get_doc_v1_docs__doc_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Doc */
+        delete: operations["delete_doc_v1_docs__doc_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Doc */
+        patch: operations["update_doc_v1_docs__doc_id__patch"];
+        trace?: never;
+    };
+    "/v1/docs/{doc_id}/body": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Write Doc Body */
+        put: operations["write_doc_body_v1_docs__doc_id__body_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/docs/{doc_id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Doc Shares */
+        get: operations["list_doc_shares_v1_docs__doc_id__shares_get"];
+        put?: never;
+        /** Create Doc Share */
+        post: operations["create_doc_share_v1_docs__doc_id__shares_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/docs/{doc_id}/shares/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Doc Share */
+        delete: operations["revoke_doc_share_v1_docs__doc_id__shares__share_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/documents": {
         parameters: {
             query?: never;
@@ -7266,6 +7352,8 @@ export interface components {
             content: string;
             /** Description */
             description: string;
+            /** Group */
+            group: string;
             /** Id */
             id: string;
             /** Name */
@@ -7299,6 +7387,8 @@ export interface components {
             author_user_id: string;
             /** Description */
             description: string;
+            /** Group */
+            group: string;
             /** Id */
             id: string;
             /** Name */
@@ -9106,6 +9196,13 @@ export interface components {
             /** Path */
             path: string;
         };
+        /** CreateDocRequest */
+        CreateDocRequest: {
+            /** Folder Id */
+            folder_id: string;
+            /** Title */
+            title?: string | null;
+        };
         /**
          * CreateFolderRequest
          * @description Create a project (= workspace). ``mode`` is required and immutable after create.
@@ -9664,6 +9761,85 @@ export interface components {
         DispatchHandoffRequest: {
             /** Task */
             task: string;
+        };
+        /** DocBodyWriteRequest */
+        DocBodyWriteRequest: {
+            /** Baseline */
+            baseline?: number | null;
+            /** Body */
+            body: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * DocDetail
+         * @description A doc plus its full block body (editor load payload).
+         */
+        DocDetail: {
+            /** Body */
+            body: {
+                [key: string]: unknown;
+            };
+            /** Can Write */
+            can_write: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Folder Id */
+            folder_id: string;
+            /** Folder Name */
+            folder_name: string;
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** DocSummary */
+        DocSummary: {
+            /** Can Write */
+            can_write: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Folder Id */
+            folder_id: string;
+            /** Folder Name */
+            folder_name: string;
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** DocWriteResult */
+        DocWriteResult: {
+            /**
+             * Conflict
+             * @default false
+             */
+            conflict: boolean;
+            doc?: components["schemas"]["DocDetail"] | null;
+            /** Ok */
+            ok: boolean;
+            /** Version */
+            version: number;
         };
         /** DocumentContentRequest */
         DocumentContentRequest: {
@@ -11843,6 +12019,16 @@ export interface components {
         PublishSkillRequest: {
             /** Document Id */
             document_id: string;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "legal" | "writing" | "research" | "product" | "engineering" | "decision";
+        };
+        /** PublishVersionRequest */
+        PublishVersionRequest: {
+            /** Group */
+            group?: ("legal" | "writing" | "research" | "product" | "engineering" | "decision") | null;
         };
         /** PublishWorkflowRequest */
         PublishWorkflowRequest: {
@@ -12748,7 +12934,7 @@ export interface components {
         };
         /**
          * ShareSummary
-         * @description One public read-only conversation share (分享链接).
+         * @description One public read-only share (对话或文档).
          *
          *     ``url`` is a RELATIVE path (``/shared/<id>``) — like ``UserResponse.avatar_url``,
          *     the client prepends the API origin so the backend stays agnostic of its public
@@ -12798,6 +12984,11 @@ export interface components {
             description: string;
             /** Document Id */
             document_id: string;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "legal" | "writing" | "research" | "product" | "engineering" | "decision";
             /** Has Update */
             has_update: boolean;
             /** Id */
@@ -12822,6 +13013,10 @@ export interface components {
         SkillStoreListResponse: {
             /** Data */
             data: components["schemas"]["SkillStoreListingRow"][];
+            /** Groups */
+            groups: {
+                [key: string]: number;
+            };
             /** Page */
             page: number;
             /** Page Size */
@@ -12839,6 +13034,11 @@ export interface components {
             description: string;
             /** Document Id */
             document_id?: string | null;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "legal" | "writing" | "research" | "product" | "engineering" | "decision";
             /** Has Update */
             has_update: boolean;
             /** Id */
@@ -12860,6 +13060,11 @@ export interface components {
             author: string;
             /** Description */
             description: string;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "legal" | "writing" | "research" | "product" | "engineering" | "decision";
             /** Has Update */
             has_update: boolean;
             /** Id */
@@ -13566,6 +13771,11 @@ export interface components {
             who_can_dm?: ("anyone" | "friends") | null;
             /** Who Can Friend */
             who_can_friend?: ("anyone" | "group_members" | "nobody") | null;
+        };
+        /** UpdateDocRequest */
+        UpdateDocRequest: {
+            /** Title */
+            title?: string | null;
         };
         /** UpdateFolderMemberRequest */
         UpdateFolderMemberRequest: {
@@ -21268,6 +21478,336 @@ export interface operations {
             };
         };
     };
+    list_docs_v1_docs_get: {
+        parameters: {
+            query?: {
+                folder_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_doc_v1_docs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDocRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_doc_v1_docs__doc_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                doc_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_doc_v1_docs__doc_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                doc_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_doc_v1_docs__doc_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                doc_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDocRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_doc_body_v1_docs__doc_id__body_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                doc_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocBodyWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocWriteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_doc_shares_v1_docs__doc_id__shares_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                doc_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_doc_share_v1_docs__doc_id__shares_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                doc_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CreateShareRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_doc_share_v1_docs__doc_id__shares__share_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                doc_id: string;
+                share_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_documents_v1_documents_get: {
         parameters: {
             query?: {
@@ -23743,6 +24283,7 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string | null;
+                group?: ("legal" | "writing" | "research" | "product" | "engineering" | "decision") | null;
                 page?: number;
                 page_size?: number;
             };
@@ -24036,7 +24577,11 @@ export interface operations {
                 access_token?: string | null;
             };
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PublishVersionRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

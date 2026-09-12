@@ -81,7 +81,7 @@ describe("useGitRepoStatus", () => {
     await waitFor(() => expect(result.current.status?.branch).toBe("branch-b"));
   });
 
-  it("watches root and .git when enabled, and unwatches on cleanup", async () => {
+  it("does not subscribe to workspace file events; still polls on focus", async () => {
     const watch = vi.fn().mockResolvedValue(undefined);
     const unwatch = vi.fn().mockResolvedValue(undefined);
     const onChanged = vi.fn(() => () => {});
@@ -95,15 +95,22 @@ describe("useGitRepoStatus", () => {
 
     const { unmount } = renderHook(() => useGitRepoStatus("root-1", true));
 
-    await waitFor(() => {
-      expect(watch).toHaveBeenCalledWith("root-1", "");
-      expect(watch).toHaveBeenCalledWith("root-1", ".git");
+    await waitFor(() =>
+      expect(fetchGitRepoStatus).toHaveBeenCalledWith("root-1"),
+    );
+    expect(watch).not.toHaveBeenCalled();
+    expect(onChanged).not.toHaveBeenCalled();
+
+    fetchGitRepoStatus.mockClear();
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
     });
-    expect(onChanged).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(fetchGitRepoStatus).toHaveBeenCalledWith("root-1"),
+    );
 
     unmount();
-    expect(unwatch).toHaveBeenCalledWith("root-1", "");
-    expect(unwatch).toHaveBeenCalledWith("root-1", ".git");
+    expect(unwatch).not.toHaveBeenCalled();
   });
 
   it("no-ops safely when fsApi is missing or lacks watch", async () => {
@@ -115,7 +122,6 @@ describe("useGitRepoStatus", () => {
     );
     await waitFor(() => expect(fetchGitRepoStatus).toHaveBeenCalled());
 
-    // Missing watch / unwatch / onChanged — must not throw.
     window.fsApi = {} as unknown as typeof window.fsApi;
     rerender({ rootId: "r2", enabled: true });
     await waitFor(() => expect(fetchGitRepoStatus).toHaveBeenCalledWith("r2"));

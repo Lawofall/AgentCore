@@ -1,6 +1,7 @@
 import { Button, IconButton } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -114,7 +115,7 @@ function ShareDialogBody({ conversationId }: { conversationId: string }) {
   };
 
   return (
-    <DialogContent>
+    <DialogContent size="md">
       <DialogHeader>
         <DialogTitle>分享对话</DialogTitle>
         <DialogDescription>
@@ -123,7 +124,7 @@ function ShareDialogBody({ conversationId }: { conversationId: string }) {
         </DialogDescription>
       </DialogHeader>
 
-      <div className="px-5 pb-2">
+      <DialogBody className="pb-2">
         <p className="mb-2 text-xs text-muted-foreground">链接有效期</p>
         <div className="flex flex-wrap gap-2">
           {EXPIRY_OPTIONS.map((opt) => (
@@ -139,9 +140,9 @@ function ShareDialogBody({ conversationId }: { conversationId: string }) {
             </Button>
           ))}
         </div>
-      </div>
+      </DialogBody>
 
-      <div className="max-h-[40vh] overflow-y-auto px-5">
+      <DialogBody className="max-h-[40vh]">
         {shares === null ? (
           <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
             <Loader2 size={14} className="animate-spin" />
@@ -199,7 +200,7 @@ function ShareDialogBody({ conversationId }: { conversationId: string }) {
             ))}
           </ul>
         )}
-      </div>
+      </DialogBody>
 
       <DialogFooter>
         <Button

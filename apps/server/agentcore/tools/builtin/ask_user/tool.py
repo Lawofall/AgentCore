@@ -92,10 +92,7 @@ class AskUserTool:
         option_properties: dict[str, Any] = {
             "label": {
                 "type": "string",
-                "description": (
-                    "选项名（即用户选它时回传的答案）。"
-                    "有倾向时该项放第一、名末加「（推荐）」。"
-                ),
+                "description": "选项名（即用户选它时回传的答案）。",
             },
             "detail": {
                 "type": "string",
@@ -103,10 +100,7 @@ class AskUserTool:
             },
         }
         # Schema: short trigger. HOW → ask_kickoff / ask_midtask skills.
-        questions_desc = (
-            "可选：问句写 prompt（最多 5）。卡面不预选。"
-            "detail 仅 organize_plan。"
-        )
+        questions_desc = "问句写 prompt（最多 5）。"
         tool_desc = (
             "向用户发问（唯一问用户原语）。暂停回合等人答复。"
             "挡路才问：交付形态未钉、猜错会做错 → 先问；仅可逆低杠杆才标假设。"
@@ -133,9 +127,7 @@ class AskUserTool:
                 "properties": {
                     "message": {
                         "type": "string",
-                        "description": (
-                            "必填。普通卡不当标题（无题时当唯一题干；批次原因未必看见）。"
-                        ),
+                        "description": "必填。无题时当唯一题干。",
                     },
                     "questions": {
                         "type": "array",
@@ -175,18 +167,12 @@ class AskUserTool:
                     },
                     "browser_login": {
                         "type": "boolean",
-                        "description": (
-                            "true=请用户在右坞登录（AI 不经手密码）。"
-                            "典型：password 框硬拒（code=password_blocked）。"
-                        ),
+                        "description": "true=请用户在右坞登录（AI 不经手密码）。",
                     },
                     "card": {
                         "type": "string",
                         "enum": ["organize_plan"],
-                        "description": (
-                            "可选。整理清单 organize_plan（恰好 1 题多选）。"
-                            "多问题用普通 ask_user（questions≤5）。"
-                        ),
+                        "description": "可选。整理清单 organize_plan（恰好 1 题多选）。",
                     },
                 },
                 "required": ["message"],

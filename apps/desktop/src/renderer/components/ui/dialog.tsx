@@ -9,7 +9,9 @@ import type { ComponentProps } from "react";
  * outside-click are handled for us; we only supply tokenised chrome. Tokens and
  * radii follow `desktop-layout.mdc` / `color-tokens.mdc` (dialogs = `rounded-xl`,
  * popover surface, `bg-overlay` scrim). Compose with `Dialog` + `DialogContent`
- * (+ optional `DialogHeader` / `DialogTitle` / `DialogFooter`).
+ * (+ optional `DialogHeader` / `DialogBody` / `DialogTitle` / `DialogFooter`).
+ * Width via `size` (`md` confirm/forms, `lg` default readers, `xl` command
+ * palette, `2xl` dual-pane reader) — never a second `max-w-*` on `className`.
  */
 export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;
@@ -28,31 +30,47 @@ export function DialogOverlay({
   );
 }
 
+export type DialogSize = "md" | "lg" | "xl" | "2xl";
+
+const SIZE_CLASS: Record<DialogSize, string> = {
+  md: "max-w-md",
+  lg: "max-w-lg",
+  xl: "max-w-xl",
+  "2xl": "max-w-2xl",
+};
+
 interface DialogContentProps
   extends ComponentProps<typeof DialogPrimitive.Content> {
   /** Vertical placement: centered (default) or anchored near the top, the
    *  command-palette / quick-search style. */
   position?: "center" | "top";
+  /** Width token. Do not also pass `max-w-*` in `className` — the two fight. */
+  size?: DialogSize;
   /** Render the built-in top-right close affordance. Turn off for surfaces that
    *  own their own close control (e.g. a search header). */
   showClose?: boolean;
+  /** Extra classes for the scrim (e.g. `pointer-events-none` while dragging). */
+  overlayClassName?: string;
 }
 
 export function DialogContent({
   className,
   children,
   position = "center",
+  size = "lg",
   showClose = true,
+  overlayClassName,
   ...props
 }: DialogContentProps) {
   return (
     <DialogPortal>
       {/* 模态弹层打开 → 让内嵌预览的原生视图让位隐藏（否则会盖住本弹层，命令面板同理）。 */}
       <PreviewObstruct />
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Content
         className={cn(
-          "fixed left-1/2 z-50 w-full max-w-lg -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-modal",
+          "fixed left-1/2 z-50 w-full -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-modal",
+          SIZE_CLASS[size],
           "data-[state=open]:animate-dropdown-in",
           position === "center" ? "top-1/2 -translate-y-1/2" : "top-[15vh]",
           className,
@@ -81,6 +99,12 @@ export function DialogHeader({ className, ...props }: ComponentProps<"div">) {
       className={cn("flex flex-col gap-1 px-5 pb-3 pt-5 pr-12", className)}
       {...props}
     />
+  );
+}
+
+export function DialogBody({ className, ...props }: ComponentProps<"div">) {
+  return (
+    <div className={cn("min-h-0 overflow-y-auto px-5", className)} {...props} />
   );
 }
 

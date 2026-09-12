@@ -2,7 +2,11 @@ import {
   extractCeoIdentity,
   splitWorkerGuideline,
 } from "@/lib/splitGuidelineRoles";
-import type { Capabilities, CapabilitySkill } from "@/services/capabilities";
+import type {
+  Capabilities,
+  CapabilitySkill,
+  CapabilityTool,
+} from "@/services/capabilities";
 import {
   GLOBAL_PREFERENCES_PATH,
   GLOBAL_PROFILE_PATH,
@@ -66,7 +70,18 @@ export type PromptCatalogItem =
       memoryKind: "preferences" | "profile" | null;
       listable: boolean;
       disputed: boolean;
+      /** Chars this entry contributes to the always pool; null when not always. */
+      alwaysChars: number | null;
       parentId: string | null;
+    }
+  | {
+      id: string;
+      kind: "tool";
+      group: "factory";
+      label: string;
+      depth: 0;
+      tool: CapabilityTool;
+      parentId: null;
     };
 
 export interface PromptCatalogGroup {
@@ -77,6 +92,10 @@ export interface PromptCatalogGroup {
 }
 
 export const DEFAULT_PROMPT_CATALOG_ID = "identity";
+export const OVERVIEW_CATALOG_ID = "overview";
+export const FOLDER_KEY_OFFICIAL = "official";
+export const FOLDER_KEY_TOOLS = "tools";
+export const FOLDER_KEY_CONNECTORS = "connectors";
 
 /** Fallback 夹 for on-demand files that are not in another 夹. */
 export const OTHER_FOLDER_NAME = "其他";
@@ -84,6 +103,49 @@ export const OTHER_FOLDER_ID = "virtual:其他";
 
 export function skillCatalogId(name: string): string {
   return `skill:${name}`;
+}
+
+export function toolCatalogId(name: string): string {
+  return `tool:${name}`;
+}
+
+const TOOL_FACE_ORDER = [
+  "file",
+  "folder",
+  "search",
+  "web",
+  "execution",
+  "host_browser",
+  "board",
+  "orchestration",
+] as const;
+
+function toolFaceRank(face: string): number {
+  const i = TOOL_FACE_ORDER.indexOf(face as (typeof TOOL_FACE_ORDER)[number]);
+  return i === -1 ? TOOL_FACE_ORDER.length : i;
+}
+
+function sortTools(tools: CapabilityTool[]): CapabilityTool[] {
+  return [...tools].sort((a, b) => {
+    const rank = toolFaceRank(a.face) - toolFaceRank(b.face);
+    if (rank !== 0) return rank;
+    if (a.resident !== b.resident) return a.resident ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function toToolCatalogItem(
+  tool: CapabilityTool,
+): Extract<PromptCatalogItem, { kind: "tool" }> {
+  return {
+    id: toolCatalogId(tool.name),
+    kind: "tool",
+    group: "factory",
+    label: tool.name,
+    depth: 0,
+    tool,
+    parentId: null,
+  };
 }
 
 function skillGroupRank(group: string | undefined): number {
@@ -208,6 +270,7 @@ export interface AccountScopeEntry {
   applyMode: "always" | "on_demand";
   aiMaintained: boolean;
   disputedAt: string | null;
+  alwaysChars: number | null;
   parentId: string | null;
 }
 
@@ -222,6 +285,7 @@ export interface MineCatalogRow {
   memoryKind: "preferences" | "profile" | null;
   listable: boolean;
   disputed: boolean;
+  alwaysChars: number | null;
   parentId: string | null;
 }
 
@@ -280,6 +344,7 @@ function toMineCatalogItem(
     memoryKind: row.memoryKind,
     listable: row.listable,
     disputed: row.disputed,
+    alwaysChars: row.alwaysChars,
     parentId: row.parentId,
   };
 }
@@ -308,6 +373,7 @@ export function buildMineCatalogRows(
       memoryKind: memoryKindFor(doc.name, aiMaintained),
       listable: isListableEntry({ applyMode, aiMaintained, disputed }),
       disputed,
+      alwaysChars: doc.alwaysChars,
       parentId: doc.parentId,
     });
   }
@@ -325,6 +391,7 @@ export function buildMineCatalogRows(
       memoryKind: null,
       listable: true,
       disputed: false,
+      alwaysChars: null,
       parentId: null,
     });
   }
@@ -349,6 +416,7 @@ export function buildMineCatalogRows(
     memoryKind: leaf.memoryKind,
     listable: false,
     disputed: false,
+    alwaysChars: null,
     parentId: null,
   }));
 
@@ -389,6 +457,8 @@ export interface PromptRail {
   alwaysMine: PromptCatalogItem[];
   folders: PromptRailFolder[];
   official: PromptCatalogItem[];
+  /** Factory tools — one inventory, not split across 常驻 / 按需. */
+  tools: Extract<PromptCatalogItem, { kind: "tool" }>[];
 }
 
 export function promptRailAlways(rail: PromptRail): PromptCatalogItem[] {
@@ -413,6 +483,7 @@ export function flattenPromptRail(rail: PromptRail): PromptCatalogItem[] {
     ...promptRailAlways(rail),
     ...rail.folders.flatMap((folder) => folder.items),
     ...rail.official,
+    ...rail.tools,
   ];
 }
 
@@ -424,7 +495,7 @@ function bucketItems(map: Map<string, PromptCatalogItem[]>, key: string) {
   return next;
 }
 
-/** 常驻 = constitution + memory cores + user always; 夹 / 官方 HOW = 按需. */
+/** 常驻 = constitution + memory cores + user always; 用户夹 / 官方 HOW = 按需; 出厂工具另成一份图鉴. 概览行名由 UI 写，不拆字段. */
 export function buildPromptRail(
   data: Capabilities,
   mine: MineCatalogRow[],
@@ -434,6 +505,7 @@ export function buildPromptRail(
   const groups = buildPromptCatalog(data);
   const standing = groups.find((group) => group.id === "always")?.items ?? [];
   const skills = groups.find((group) => group.id === "on_demand")?.items ?? [];
+  const tools = sortTools(data.tools).map(toToolCatalogItem);
   const visible = mine;
   const cores = visible.filter((row) => row.memoryKind).map(toMineCatalogItem);
   const alwaysMine = visible
@@ -502,5 +574,6 @@ export function buildPromptRail(
     alwaysMine,
     folders: result,
     official,
+    tools,
   };
 }

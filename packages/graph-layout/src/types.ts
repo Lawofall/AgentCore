@@ -23,6 +23,3 @@ export interface GraphEdge {
  * algorithm rotated top-down.
  */
 export type GraphLayout = "tree" | "leftright";
-
-/** Alias kept for call sites that historically imported ElkGraphLayout. */
-export type ElkGraphLayout = GraphLayout;

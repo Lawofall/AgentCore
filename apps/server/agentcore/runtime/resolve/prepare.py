@@ -25,9 +25,6 @@ from agentcore.tools.builtin.search_conversations import SearchConversationsTool
 from agentcore.tools.ceo_toolset import (
     _assemble_ceo_toolset,  # noqa: F401 — seam
 )
-from agentcore.tools.ceo_toolset import (
-    wire_worker_consult as _wire_worker_consult_tools,  # noqa: F401 — historical name
-)
 from agentcore.tools.registry import ToolRegistry
 
 

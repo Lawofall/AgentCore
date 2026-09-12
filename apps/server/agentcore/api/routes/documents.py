@@ -21,10 +21,11 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from agentcore.api.dependencies import AuthUser, get_document_repo
+from agentcore.api.dependencies import AuthUser, get_db, get_document_repo
 from agentcore.db.models import Document
-from agentcore.db.repositories import DocumentRepository
+from agentcore.db.repositories import DocumentRepository, SkillStoreRepository
 from agentcore.documents.description import maybe_schedule_description_fill
 from agentcore.documents.frontmatter import (
     FrontmatterEditError,
@@ -466,6 +467,7 @@ async def patch_document(
 async def delete_document(
     document_id: str,
     user: AuthUser,
+    session: AsyncSession = Depends(get_db),
     repo: DocumentRepository = Depends(get_document_repo),
 ) -> DocumentWriteResult:
     """Soft-delete a node and (for a folder) its whole subtree.
@@ -486,4 +488,5 @@ async def delete_document(
     ok = await repo.soft_delete(document_id, user_id=user.user_id)
     if not ok:
         raise HTTPException(status_code=404, detail="document not found")
+    await SkillStoreRepository(session).delete_orphan_installs(user.user_id)
     return DocumentWriteResult(ok=True, version=memory_version(""))

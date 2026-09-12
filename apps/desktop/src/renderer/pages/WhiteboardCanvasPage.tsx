@@ -1,6 +1,5 @@
 import { CanvasShell } from "@/components/layout/CanvasShell";
-import { Button, IconButton } from "@/components/ui";
-import { notifyInfo } from "@/lib/toast";
+import { Button } from "@/components/ui";
 import {
   type BoardApplyResult,
   registerBoardApplier,
@@ -25,7 +24,7 @@ import {
   parseScene,
   serializeScene,
 } from "@/whiteboard";
-import { Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -38,11 +37,10 @@ const STATUS_TEXT: Record<SaveStatus, string> = {
   error: "保存失败",
 };
 
-/** One board's canvas (AI协作白板.md §六 自研引擎 / §十 M1). Loads the scene from the
+/** One board's canvas. Loads the scene from the
  * backend into the self-built {@link WhiteboardCanvas}, autosaves it back (debounced) with
  * a CAS ``baseline`` so a stale tab/device never clobbers — on conflict autosave pauses and
- * offers a reload (§七 不覆盖). The 2026-06-27 engine reversal replaced Excalidraw here; the
- * backend board_ops protocol is unchanged (§五.4), the applier now drives `applyOps`.
+ * offers a reload. The applier drives `applyOps` for `board_ops`.
  *
  * AI 入口（老板命令栏 / 选区 AI 动作）暂下线，画布不摆命令栏空壳；手动画布与
  * board_ops / board_read 注册仍保留。 */
@@ -55,13 +53,6 @@ export function WhiteboardCanvasPage() {
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [conflict, setConflict] = useState(false);
   const [title, setTitle] = useState("");
-
-  /** Text artifact body expand (crystallized `artifactCard`); file workspace preview
-   * needs a board conversation and is gated while AI entry is offline. */
-  const [textExpand, setTextExpand] = useState<{
-    title: string;
-    body: string;
-  } | null>(null);
 
   // Imperative engine handle — the AI applier reads the live scene + pushes ops through it.
   const apiRef = useRef<WhiteboardApi | null>(null);
@@ -240,18 +231,6 @@ export function WhiteboardCanvasPage() {
     return registerBoardReader(boardId, rasterize);
   }, [boardId, rasterize]);
 
-  const handleArtifactActivate = useCallback((el: SceneElement) => {
-    if (el.type !== "artifactCard") return;
-    if (el.artifactKind === "file" && el.ref) {
-      notifyInfo("白板 AI 即将上线，暂无法预览工作区文件");
-      return;
-    }
-    setTextExpand({
-      title: el.title ?? "产物",
-      body: el.text ?? "",
-    });
-  }, []);
-
   const commitTitle = useCallback(async () => {
     const next = title.trim();
     if (!board || !next || next === board.title) {
@@ -288,75 +267,54 @@ export function WhiteboardCanvasPage() {
   }
 
   return (
-    <>
-      <CanvasShell
-        backAriaLabel="返回白板列表"
-        onBack={() => navigate("/whiteboard")}
-        title={
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => void commitTitle()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-            }}
-            placeholder="未命名白板"
-            aria-label="白板标题"
-            className="min-w-0 max-w-xs flex-1 rounded-lg bg-transparent px-2 py-1 text-sm font-medium text-foreground outline-none hover:bg-accent focus:bg-accent"
-          />
-        }
-        status={STATUS_TEXT[status]}
-        banner={
-          conflict ? (
-            <div className="flex shrink-0 items-center gap-3 border-b border-primary/30 bg-primary/10 px-3 py-2">
-              <span className="text-xs text-foreground">
-                此白板已在别处更新，为避免覆盖已暂停自动保存。
-              </span>
-              <Button
-                variant="primary"
-                size="sm"
-                className="ml-auto"
-                onClick={fetchBoard}
-              >
-                重新加载
-              </Button>
-            </div>
-          ) : null
-        }
-      >
-        {board && initialData ? (
-          <WhiteboardCanvas
-            key={board.id}
-            ref={apiRef}
-            initialElements={initialData.elements}
-            initialViewport={initialData.viewport}
-            onChange={handleChange}
-            onArtifactActivate={handleArtifactActivate}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <Loader2 className="animate-spin text-muted-foreground" size={24} />
+    <CanvasShell
+      backAriaLabel="返回白板列表"
+      onBack={() => navigate("/whiteboard")}
+      title={
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => void commitTitle()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+          placeholder="未命名白板"
+          aria-label="白板标题"
+          className="min-w-0 max-w-xs flex-1 rounded-lg bg-transparent px-2 py-1 text-sm font-medium text-foreground outline-none hover:bg-accent focus:bg-accent"
+        />
+      }
+      status={STATUS_TEXT[status]}
+      banner={
+        conflict ? (
+          <div className="flex shrink-0 items-center gap-3 border-b border-primary/30 bg-primary/10 px-3 py-2">
+            <span className="text-xs text-foreground">
+              此白板已在别处更新，为避免覆盖已暂停自动保存。
+            </span>
+            <Button
+              variant="primary"
+              size="sm"
+              className="ml-auto"
+              onClick={fetchBoard}
+            >
+              重新加载
+            </Button>
           </div>
-        )}
-      </CanvasShell>
-
-      {textExpand ? (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm">
-          <div className="flex max-h-[min(80vh,640px)] w-full max-w-lg flex-col rounded-xl border border-border bg-card shadow-lg">
-            <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3">
-              <h2 className="truncate text-sm font-semibold text-foreground">
-                {textExpand.title}
-              </h2>
-              <IconButton aria-label="关闭" onClick={() => setTextExpand(null)}>
-                <X size={16} />
-              </IconButton>
-            </header>
-            <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-4 text-sm text-foreground">
-              {textExpand.body}
-            </pre>
-          </div>
+        ) : null
+      }
+    >
+      {board && initialData ? (
+        <WhiteboardCanvas
+          key={board.id}
+          ref={apiRef}
+          initialElements={initialData.elements}
+          initialViewport={initialData.viewport}
+          onChange={handleChange}
+        />
+      ) : (
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="animate-spin text-muted-foreground" size={24} />
         </div>
-      ) : null}
-    </>
+      )}
+    </CanvasShell>
   );
 }

@@ -1,5 +1,11 @@
 import { Button } from "@/components/ui";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { notifyError } from "@/lib/toast";
 import {
   type BlockedUser,
@@ -45,11 +51,11 @@ export function BlockedUsersDialog({ open, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-sm" aria-describedby={undefined}>
-        <div className="border-b border-border px-5 py-4">
+      <DialogContent size="md" aria-describedby={undefined}>
+        <DialogHeader>
           <DialogTitle>已拉黑</DialogTitle>
-        </div>
-        <div className="max-h-96 overflow-y-auto">
+        </DialogHeader>
+        <DialogBody className="max-h-96 px-0">
           {loading ? (
             <p className="px-5 py-6 text-center text-sm text-muted-foreground">
               加载中…
@@ -88,7 +94,7 @@ export function BlockedUsersDialog({ open, onClose }: Props) {
               ))}
             </ul>
           )}
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

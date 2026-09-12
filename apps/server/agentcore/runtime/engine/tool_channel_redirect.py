@@ -6,7 +6,9 @@ the model which tool to use instead. User files are untouched.
 
 Wire ``tool_use_end.status`` is ``redirect`` (not ``error``). The LLM transcript
 still carries a failed tool result so the model switches. Closed set — a new
-channel-mismatch code must be added here or it stays a user-facing fault.
+channel-mismatch code must be added here **and** in
+``apps/desktop/src/shared/channelRedirectCodes.ts`` (parity:
+``tests/test_channel_redirect_codes.py``) or it stays a user-facing fault.
 """
 
 from __future__ import annotations

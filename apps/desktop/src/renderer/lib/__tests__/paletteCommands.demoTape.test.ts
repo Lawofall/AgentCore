@@ -124,6 +124,11 @@ describe("paletteCommands · 前往发现性", () => {
     board?.run();
     expect(baseCtx.navigate).toHaveBeenCalledWith("/whiteboard");
 
+    const docs = cmds.find((c) => c.id === "nav-docs");
+    expect(docs?.title).toBe("文档");
+    docs?.run();
+    expect(baseCtx.navigate).toHaveBeenCalledWith("/docs");
+
     expect(cmds.some((c) => c.id.includes("explore"))).toBe(false);
     expect(
       cmds.some(
@@ -147,6 +152,18 @@ describe("paletteCommands · 前往发现性", () => {
 
     guidelines.run();
     expect(baseCtx.navigate).toHaveBeenCalledWith("/toolbox/mine/skills");
+  });
+
+  it("不再有独立「工具」前往；搜连接器落到提示词", () => {
+    const cmds = buildPaletteCommands(baseCtx);
+    expect(cmds.find((c) => c.id === "nav-tools")).toBeUndefined();
+    const guidelines = cmds.find((c) => c.id === "nav-guidelines");
+    expect(guidelines).toBeTruthy();
+    if (!guidelines) return;
+    expect(commandMatches(guidelines, "连接器")).toBe(true);
+    expect(commandMatches(guidelines, "开场工具")).toBe(true);
+    expect(commandMatches(guidelines, "查阅后启用")).toBe(true);
+    expect(commandMatches(guidelines, "官方")).toBe(true);
   });
 
   it("不再有自动化 / 收件箱命令", () => {

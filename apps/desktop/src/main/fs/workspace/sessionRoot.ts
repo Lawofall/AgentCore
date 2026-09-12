@@ -71,9 +71,9 @@ export const ORGANIZE_ALLOWED_OPS = new Set<WorkspaceOpName>([
 ]);
 
 const READONLY_MSG =
-  "会话授权目录为只读授权，不能改动；对该路径 `file_copy` / `file_write` 会请用户确认升级授权（交付：先写工作区再 copy）";
+  "会话授权目录为只读授权，不能改原件。对该路径 `file_copy` / `file_write` 会请用户确认升级为整理（拷入新文件、不覆盖）";
 const ORGANIZE_DENY_MSG =
-  "整理授权不允许此操作（仅 list/read/grep/stat + move/copy/mkdir + 回收站删除）";
+  "整理授权不允许此操作（仅 list/read/grep/stat + move/copy/mkdir + 回收站删除）。整理 ≠ 把该文件夹当家改原件";
 const PERMANENT_EXTERNAL_MSG =
   "区外目录禁止永久删除；请使用可逆删除（进回收站）";
 const CROSS_COPY_MSG = "不能跨会话授权目录与工作区复制文件";

@@ -39,7 +39,7 @@ skip_if:
 | EmptyHint | 列表 / 网格页空态 | `EmptyHint`；**对话草稿**仍走 `DraftEmptyState` |
 | PageHeader | 设置 / 工具箱深页 / 枢纽页 | L2 `PageHeader`；深页 `back`；窄屏设置不重复 h1 |
 | CanvasShell | 白板 / 工作流画布深页 | `layout/CanvasShell`：返回 IconButton + 标题槽 + 状态字 + 右动作 + 可选顶栏下横幅 + 铺满剩余画布。不抽引擎、不抽画布内工具条 |
-| CatalogTile | 工具箱市场货架 / 工具图鉴 / 创作套件 | L2 `CatalogTile`（身份行 / 简介 / tags / footer）。库存偏行；禁止再手写第三套磁贴 |
+| CatalogTile | 工具箱市场货架 / 创作套件 / 提示词概览 | L2 `CatalogTile`（身份行 / 简介 / tags / footer）。工作流库存偏行；禁止再手写第三套磁贴 |
 | SectionTabs | 同一页分区（工具箱种类） | L2 `SectionTabs`；选中 `bg-accent` 胶囊 + 线框图标。**不是**右坞 `TabChip`，也不是 `SegmentedControl`（灰槽抬卡），也不是 inverse |
 | SegmentedControl | 表单里就地二选一 / 三选一（登录↔注册、提示词角色身份） | L2 `SegmentedControl`；槽底抬起选中项。**不是** `SectionTabs`，也不是右坞 `TabChip` |
 
@@ -100,12 +100,12 @@ node scripts/check-ui-tokens.mjs --src apps/desktop/src/renderer
 | 不变量 | 说明 |
 |---|---|
 | 推进卡 ⊥ 裁决卡 | 禁硬并 |
-| 两套行，禁止第三套 | 导航 / 树 = `SurfaceRow`；设置内容 = `SettingRow`。后者已收设置子页四种行，不并进 SurfaceRow。工具箱工作流库存走 SurfaceRow 家（`InventoryRow`），禁止再手写 Card+按钮行。工具页插头与图鉴同走 `CatalogTile` |
+| 两套行，禁止第三套 | 导航 / 树 = `SurfaceRow`；设置内容 = `SettingRow`。后者已收设置子页四种行，不并进 SurfaceRow。工具箱工作流库存走 SurfaceRow 家（`InventoryRow`），禁止再手写 Card+按钮行。提示词概览走 `CatalogTile` 货架，点开居中 Dialog；读卡直达正文，不再在弹窗里铺夹名单 |
 | 认路选中 | 浅底 + 线框图标 `currentColor`：画布 `bg-accent text-accent-foreground`，侧栏 `bg-sidebar-accent text-sidebar-accent-foreground`。**否决**导航用 inverse（深底浅字）。inverse 只给 `IconButton` 停止生成 |
 | 页头一行 | `PageHeader`：h1 单行 + 可选同行 meta / 动作；禁副标题。设置 / 工具箱深页 / 枢纽页同一组件，用有没有 `back` 区分。工具箱壳不走 `PageHeader`；画布深页走 `CanvasShell` → [页头层级](#页头层级) |
 | 列表空态同一骨架 | 标题 + 可选一句说明 + 可选主操作 = `EmptyHint`。`DraftEmptyState` 仍是对话草稿特例 |
-| 货架卡 | 工具箱市场 / 工具图鉴 / 创作 = `CatalogTile`。禁止再手写第三套磁贴。身份行：左色板图标、右名称、可选副标题；右上 `accessory` 只放状态或唯一身份（已装 / 有更新 / 尚未开放 / 官方 / 已握手 / 失败 / 未启用）。通栏两行简介。底栏 `tags` 放分类元数据。工具图鉴点卡 = 居中 Dialog（出厂工具看说明与参数；插头卡填配置）。市场发现首页用横滑货架条包同一套磁贴，不另开卡面。我的库存偏行列表。格子宽随画布（min 240，1200 画布四列约 280） |
-| 盖层分工 | 确认 = `ConfirmDialog`；填一小段 = 居中 `Dialog`；本页详情 = 页内右侧栏（商店技能）；工具图鉴点卡 = 居中 `Dialog`；挨着按钮 = 弹出菜单；一句结果 = Toast（跨对话提醒只写「对话名 + 要你干什么」，禁止贴卡正文）。**禁止**用对话框伪装右侧抽屉。对话坞只挂在聊天页 |
+| 货架卡 | 工具箱市场 / 创作 / 提示词概览 = `CatalogTile`。禁止再手写第三套磁贴。身份行：左色板图标、右名称、可选副标题；右上 `accessory` 只放状态或唯一身份（已装 / 有更新 / 尚未开放 / 官方 / 开场即用）。通栏两行简介。底栏 `tags` 放分类元数据（市场提示词 = 场景组名；出厂工具 = 能力面）。点卡 = 居中 Dialog。市场发现首页按集合折行网格（封顶 +「查看全部」）；提示词页出厂闭集与我的同一套折行网格。不另开卡面、不用横滑条。工作流库存偏行列表。格子宽随画布（min 240，1200 画布四列约 280）。出厂工具与连接器在提示词目录，走同一套货架卡 |
+| 盖层分工 | 确认 = `ConfirmDialog`；填一小段 = 居中 `Dialog` `size=md`；读卡 / 安装 = 居中 `Dialog` `size=lg`（市场 listing；提示词读卡同档）。挨着按钮 = 弹出菜单；一句结果 = Toast（跨对话提醒只写「对话名 + 要你干什么」，禁止贴卡正文）。命令面板 = `size=xl` + `position=top`；双栏阅读（收到的上下文）= `size=2xl`。宽度只走 `DialogContent.size`，禁止再手写 `max-w-*`。铬条：`DialogHeader` + 可选 `DialogBody` + 有按钮才 `DialogFooter`（取消 `outline` → 主 `primary`）。**禁止**用对话框伪装右侧抽屉。对话坞只挂在聊天页 |
 | 分区 vs 打开的内容 | 同一页切块 = `SectionTabs`；表单里就地互斥 = `SegmentedControl`；右坞同时开着的文件/终端/浏览器 = `TabChip`。工具箱市场种类 = 筛选 chip，不是 `SectionTabs` → [前端 UX · 工具箱](/docs/04-前端/前端UX设计.md) |
 | 状态 / 角色 / 所选胶囊 | 文字标签走 `Badge`（`pill`）。计数圆点、进度条、头像圈不是徽章 |
 | 动作底栏 | Decision / Dialog 右下锚点；不扫输入框、工具条、协作图干预 |
@@ -149,4 +149,4 @@ node scripts/check-ui-tokens.mjs --src apps/desktop/src/renderer
 
 ## 布局规格（细节权威 = desktop-layout）
 
-宽度梯度、字号 4 级、圆角 3 级与禁令 → `desktop-layout.mdc`。豁免：对话/文件/设置/消息两栏壳、真全屏手册、工具箱提示词工作台（`PageContainer` `full` + `padding none`）。
+宽度梯度、字号 4 级、圆角 3 级与禁令 → `desktop-layout.mdc`。豁免：对话/文件/设置/消息两栏壳、真全屏手册。

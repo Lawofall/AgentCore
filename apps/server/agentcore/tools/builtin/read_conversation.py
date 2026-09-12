@@ -188,10 +188,7 @@ class ReadConversationTool:
             description=(
                 "读取一场历史对话。conversation_id 来自 search_conversations；"
                 "也可只传 query：唯一命中则打开，多场列出。"
-                "默认 focus=dialogue（用户/助手原文，不含工具过程）。"
-                "有编号且点到具体内容时 query 从第一条命中读起。"
-                "超长分页 truncated + next_cursor（m:下标）续读；过程稿 focus=process。"
-                "读完蒸馏结论并记下出处，不要把整场原文塞回用户。"
+                "默认 focus=dialogue（用户/助手原文）；过程稿 focus=process。"
             ),
             parameters={
                 "type": "object",

@@ -195,7 +195,11 @@ def test_cloud_scratch_facts():
         run_enabled=False,
     )
     assert out.startswith("<工作区>")
-    assert "执行：云端沙箱" in out
+    assert "执行：云端" in out
+    assert "执行：云端 · 出站：产品网络" in out
+    assert "执行：云端沙箱" not in out
+    assert "同一出站" not in out
+    assert "请人贴" not in out
     assert "桌：本会话草稿（云端）" in out
     assert "本文件夹根即工作区根" not in out
     assert "工程壳" not in out
@@ -342,7 +346,9 @@ def test_cloud_scratch_facts():
     assert "host(action=os_log)" in host_how
     assert "Get-WinEvent" in host_how
     assert "host_os_log_summary" not in hint
-    # 案 20260803-image-gen-byok-egress-boundary A：云沙箱无任意 HTTPS 出口事实行
+    # 案 20260803-image-gen-byok-egress-boundary A：出站百科 / 禁令不进事实行。
+    # 出站坐标（产品网络 / 这台电脑）在执行行；HOW 在 consult(browser)。
+    assert "出站：产品网络" in out
     assert "出站网络" not in out
     assert "包装源" not in out
     assert "allowlist" not in out
@@ -365,15 +371,16 @@ def test_cloud_scratch_facts():
     assert "完整前缀" not in out
     assert "**完整**路径" in _DELIVERY
     assert "裸 `reviews/…`" in _DELIVERY
-    # FakeBackend has no root → probe unknown；建仓 / 无仓政策在 git schema，不进事实行。
+    # FakeBackend has no root → probe unknown；建仓 / 无仓政策在 git 回执，不进事实行。
     assert "init_baseline" not in out
     assert "不挡派工" not in out
     assert "no_repo" not in out
     assert "通常无 Git" not in out
     from agentcore.tools.builtin.git_ops.tool import GitTool
 
-    assert "no_repo" in GitTool().schema.description
-    assert "init_baseline" in GitTool().schema.description
+    assert "no_repo" not in GitTool().schema.description
+    assert "init_baseline" not in GitTool().schema.description
+    assert "请确认" in GitTool().schema.description
 
 
 def test_empty_desk_adds_operational_root_fact():
@@ -503,6 +510,9 @@ def test_local_remote_channel_facts():
         browser_enabled=False,
     )
     assert "执行：用户本机" in out
+    assert "执行：用户本机 · 出站：这台电脑" in out
+    assert "同一出站" not in out
+    assert "请人贴" not in out
     assert "桌：MyProject" in out
     assert "本文件夹根即工作区根" not in out
     assert "工程壳" not in out
@@ -566,7 +576,7 @@ def test_browser_capability_override():
     )
     assert "browser" not in _gaps(out)
     assert "local_open" in _gaps(out)
-    # 事实层：装没装配。相对路径 / 完整预览 HOW 在 browser url description。
+    # 事实层：装没装配。相对路径取值约束在 browser url；桌面 vs 云端失败在 consult。
     assert "CEO 可直持" not in out
     assert "仅 worker" not in out
     assert "浏览器宿主：" not in out
@@ -587,6 +597,9 @@ def test_browser_capability_override():
     assert "escalate(browser_login=true)" not in how
     assert "自己" in how
     assert "web_fetch" in how and "已开页" in how
+    assert "同一出站" in how
+    assert "同一出站" not in out
+    assert "请人贴" not in out
     assert "跑起来" in how
 
 
@@ -742,6 +755,7 @@ def test_sidecar_local_without_channel():
         run_enabled=True,
     )
     assert "执行：用户本机" in out
+    assert "出站：这台电脑" in out
     assert "sidecar" not in out
     assert "当前目录已可写" not in out
     assert "grant_attach_folder" not in out
@@ -834,6 +848,40 @@ def test_no_mounts_forbids_claiming_grant_confirmed():
     mid = _desk_how()
     assert "区外：" in mid and "授权已确认" in mid
     assert out.count("授权已确认") == 0
+    assert "【对人说】" not in out
+    assert "先答这句" not in out
+
+
+class _FakeMount:
+    def __init__(self, mode: str) -> None:
+        self.mode = mode
+
+
+def test_mount_mode_labels_are_capability_facts_not_how():
+    """区外坐标只报授权档；对人开口 / 拷贝配方在 local_desk。"""
+    backend = _FakeBackend("server")
+    backend._mounts = {  # noqa: SLF001
+        "desk": _FakeMount("readonly"),
+        "org": _FakeMount("organize"),
+        "home": _FakeMount("attach_rw"),
+    }
+    out = build_workspace_context(backend, desktop_online=True, run_enabled=False)
+    assert "区外：" in out
+    assert "`external/desk/`（只能看）" in out
+    assert "`external/org/`（整理）" in out
+    assert "`external/home/`（可改原件）" in out
+    assert "（只读）" not in out
+    assert "（可读写）" not in out
+    assert "先写工作区" not in out
+    assert "【对人说】" not in out
+    mid = _desk_how()
+    assert "【对人说】" in mid
+    assert "执行：用户本机" in mid
+    assert "执行：云端" in mid
+    assert "同一出站" not in mid
+    assert "请人贴" not in mid
+    assert "只能看" in mid
+    assert "可改原件" in mid
 
 
 def test_cloud_desktop_online_allows_external_grant_without_bind():
@@ -843,7 +891,8 @@ def test_cloud_desktop_online_allows_external_grant_without_bind():
         desktop_online=True,
         run_enabled=False,
     )
-    assert "执行：云端沙箱" in out
+    assert "执行：云端" in out
+    assert "执行：云端沙箱" not in out
     assert "external_mount_readonly" not in out
     assert "与工作区绑定正交" not in out
     assert "本机某目录" not in out
@@ -883,7 +932,10 @@ def test_workspace_facts_follow_resident_core_for_ceo_and_worker():
     worker = compose_worker_base_prompt(base, workspace_context=facts)
     assert "<工作区>\n" in ceo
     assert "<工作区>\n" in worker
-    assert "云端沙箱" in ceo and "云端沙箱" in worker
+    assert "执行：云端" in ceo and "执行：云端" in worker
+    assert "出站：产品网络" in ceo and "出站：产品网络" in worker
+    assert "同一出站" not in ceo and "同一出站" not in worker
+    assert "执行：云端沙箱" not in ceo and "执行：云端沙箱" not in worker
     # Actual XML block (newline after the tag), not the core/base tag mention.
     assert ceo.index("<身份>") < ceo.index("<工作区>\n")
     assert worker.index("</运行时>") < worker.index("<工作区>\n")
@@ -940,8 +992,9 @@ def test_git_absent_soft_tip_visible_with_explicit_fact():
     assert "不挡派工" not in out
     from agentcore.tools.builtin.git_ops.tool import GitTool
 
-    assert "init_baseline" in GitTool().schema.description
-    assert "no_repo" in GitTool().schema.description
+    assert "init_baseline" not in GitTool().schema.description
+    assert "no_repo" not in GitTool().schema.description
+    assert "请确认" in GitTool().schema.description
 
 
 def test_git_unassembled_states_channel_without_enable_steps():

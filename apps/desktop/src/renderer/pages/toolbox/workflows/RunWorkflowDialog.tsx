@@ -1,8 +1,11 @@
 import { Button, Textarea } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { notifySuccess } from "@/lib/toast";
@@ -183,15 +186,17 @@ export function RunWorkflowDialog({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="max-w-md">
-        <DialogTitle>跑一次 · {workflowName}</DialogTitle>
-        <DialogDescription>
-          {slotList.length > 0
-            ? "参数已按上次的值预填：直接开跑就是原样重跑，改了哪个就是换那个再跑。"
-            : "选择文件夹后按保存的图直起；可选填本轮补充说明（不改图）。"}
-        </DialogDescription>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>跑一次 · {workflowName}</DialogTitle>
+          <DialogDescription>
+            {slotList.length > 0
+              ? "参数已按上次的值预填：直接开跑就是原样重跑，改了哪个就是换那个再跑。"
+              : "选择文件夹后按保存的图直起；可选填本轮补充说明（不改图）。"}
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="mt-4 space-y-3">
+        <DialogBody className="space-y-3">
           <div>
             <label className="block">
               <span className="mb-1 block text-xs text-muted-foreground">
@@ -305,10 +310,10 @@ export function RunWorkflowDialog({
           </label>
 
           {error && <p className="text-xs text-muted-foreground">{error}</p>}
-        </div>
+        </DialogBody>
 
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="neutral" size="md" onClick={onClose}>
+        <DialogFooter>
+          <Button variant="outline" size="md" onClick={onClose}>
             取消
           </Button>
           <Button
@@ -325,7 +330,7 @@ export function RunWorkflowDialog({
           >
             开跑
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

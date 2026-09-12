@@ -13,10 +13,9 @@ frames ride the same stdout as driver-INITIATED event lines (no request id):
 
     driver → host (stdout):  {"event": "live_frame", "frame_b64": <b64>, "width", "height"}\\n
 
-The gVisor screencast gate (scripts/poc_browser_gvisor/run_screencast.py) proved this path
-(~57fps @ ~14KB/frame @ q60/1280). The M0 command semantics (plus ``console``
-evidence), the ``ready`` handshake, inline ``frame_b64`` keyframe replies and the
-8MB line limit are all unchanged.
+The gVisor screencast gate measured ~57fps @ ~14KB/frame @ q60/1280. The M0
+command semantics (plus ``console`` evidence), the ``ready`` handshake, inline
+``frame_b64`` keyframe replies and the 8MB line limit are all unchanged.
 
 CRITICAL: only JSON lines go to stdout (fd 1); all Playwright/Chromium chatter goes to
 stderr so the host's reader never desyncs. Frames are emitted from the CDP callback with a

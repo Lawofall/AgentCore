@@ -82,8 +82,9 @@ def wire_model_leaf(model: str) -> str:
 _DIALECT_OVERLAYS: tuple[_DialectOverlay, ...] = (
     # DeepSeek family: tool-loop must echo reasoning_content.
     _DialectOverlay("prefix", "deepseek", echo_reasoning_content=True),
-    # DeepSeek V4 (+ Hy3 below): thinking.type enabled/disabled switch.
+    # DeepSeek V4 / V4.1 Flash (+ Hy3 below): thinking.type enabled/disabled.
     _DialectOverlay("prefix", "deepseek-v4", thinking_type_switch=True),
+    _DialectOverlay("prefix", "deepseek-flash", thinking_type_switch=True),
     # Hy3 / Hy3 Preview only — other TokenHub ``hy-*`` stay clean OpenAI.
     _DialectOverlay(
         "exact",

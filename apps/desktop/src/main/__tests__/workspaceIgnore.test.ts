@@ -122,21 +122,24 @@ describe("workspaceIgnore", () => {
     expect(shouldSkipAiListEntry("photo.png", false, "attachments")).toBe(
       false,
     );
+    expect(shouldSkipAiListEntry("photo.png", false, "src")).toBe(false);
     expect(shouldSkipAiListEntry("out.zip", false, "")).toBe(true);
     expect(shouldSkipAiListEntry("out.zip", false, "src")).toBe(true);
     // System noise never exempt under attachments/
     expect(shouldSkipAiListEntry("x.db", false, "attachments")).toBe(true);
-    // Index / grep path still hides attachment zip
+    // Index / grep path still hides attachment zip and images
     expect(shouldSkipWorkspaceEntry("pack.zip", false, "attachments")).toBe(
       true,
     );
+    expect(shouldSkipWorkspaceEntry("hero.png", false)).toBe(true);
   });
 
   it("AI list exempts reveal_paths materials outside attachments/", () => {
-    const reveal = new Set(["src/shot.png"]);
-    expect(shouldSkipAiListEntry("shot.png", false, "src", reveal)).toBe(false);
-    expect(shouldSkipAiListEntry("other.png", false, "src", reveal)).toBe(true);
-    expect(shouldSkipAiListEntry("shot.png", false, "src")).toBe(true);
+    const reveal = new Set(["src/pack.zip"]);
+    expect(shouldSkipAiListEntry("pack.zip", false, "src", reveal)).toBe(false);
+    expect(shouldSkipAiListEntry("other.zip", false, "src", reveal)).toBe(true);
+    expect(shouldSkipAiListEntry("pack.zip", false, "src")).toBe(true);
+    expect(shouldSkipAiListEntry("shot.png", false, "src")).toBe(false);
     // System noise never exempt via reveal
     expect(
       shouldSkipAiListEntry("x.db", false, "src", new Set(["src/x.db"])),
@@ -152,7 +155,7 @@ describe("workspaceIgnore", () => {
       false,
     );
     expect(shouldSkipAiListEntry("shot.png", false, "external/desk")).toBe(
-      true,
+      false,
     );
     expect(shouldSkipAiListEntry("out.zip", false, "")).toBe(true);
     expect(
@@ -170,6 +173,6 @@ describe("workspaceIgnore", () => {
         externalNs: true,
         revealArchives: true,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 });

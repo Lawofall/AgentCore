@@ -1,20 +1,29 @@
-import { MemoryUpdatesView } from "@/components/files/MemoryUpdatesView";
-import { EntryLeafRow } from "@/components/files/fileWorkbench/EntriesSection";
-import { RailSectionHeader } from "@/components/files/fileWorkbench/RailHeaders";
-import { IconButton } from "@/components/files/parts";
-import { PromptWorkbench } from "@/components/prompt/PromptWorkbench";
-import { RoleIdentityBlock } from "@/components/tools/RoleIdentityBlock";
-import { Badge, Button } from "@/components/ui";
+import { InlineInput } from "@/components/files/FileTreeInline";
+import {
+  type PromptDropDest,
+  PromptOverview,
+} from "@/components/tools/PromptOverview";
+import {
+  type ConnectorPick,
+  PromptReadDialog,
+} from "@/components/tools/PromptReadDialog";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { useLlmProviders } from "@/hooks/useLlmProviders";
+import { useModels } from "@/hooks/useModels";
+import {
+  TOOLS_GATE_HINT,
+  TOOL_CALLING_TOOL_NAMES,
+  needsToolsGateHint,
+} from "@/lib/llmToolsGate";
 import {
   type AccountScopeEntry,
-  DEFAULT_PROMPT_CATALOG_ID,
   OTHER_FOLDER_NAME,
+  OVERVIEW_CATALOG_ID,
   type PromptCatalogItem,
   type PromptCatalogLocationState,
   type PromptRailFolder,
@@ -24,6 +33,7 @@ import {
   flattenPromptRail,
   mineCatalogId,
   onDemandDropFolder,
+  toolCatalogId,
 } from "@/lib/promptCatalog";
 import {
   PROMPT_DRAG_MIME,
@@ -31,7 +41,12 @@ import {
   parsePromptDragPayload,
   promptDragPayload,
 } from "@/lib/promptCatalogDrag";
-import { cn } from "@/lib/utils";
+import {
+  ConnectorStatusBadge,
+  NEW_CONNECTOR_ID,
+  connectorCatalogId,
+  useMcpConnectors,
+} from "@/pages/toolbox/ConnectorsPage";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 import { ApiError } from "@/services/api";
 import type { Capabilities } from "@/services/capabilities";
@@ -39,7 +54,6 @@ import {
   createRuleDocument,
   createRuleFolder,
   deleteDocument,
-  getDocument,
   listAccountPromptTree,
   listScopeEntries,
   renameDocument,
@@ -47,18 +61,17 @@ import {
   setDocumentDisputed,
   writeDocument,
 } from "@/services/documents";
-import { getMemoryFile, writeMemoryFile } from "@/services/memory";
+import { defaultChatSupportsTools } from "@/services/llmProviders";
+import { writeMemoryFile } from "@/services/memory";
 import {
   EMPTY_SKILL_CATALOG,
   type SkillCatalog,
   composeOnDemandSkillContent,
   composeSkillContent,
   getSkillCatalog,
-  skillBodyFromContent,
   skillFileName,
 } from "@/services/skillCatalog";
 import {
-  type SkillStoreListing,
   listInstalledSkills,
   listMySkillListings,
   publishSkill,
@@ -69,21 +82,10 @@ import {
   filesMemoryLeafNavState,
   isAccountMemoryTarget,
 } from "@/services/sources/memorySource";
-import {
-  ChevronDown,
-  ChevronRight,
-  FilePlus,
-  FileText,
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  History,
-  Pencil,
-  Trash2,
-  Undo2,
-} from "lucide-react";
+import { Pencil, Trash2, Undo2 } from "lucide-react";
 import {
   type DragEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -107,10 +109,6 @@ function overlayErrorMessage(err: unknown): string {
   return "没保存成功";
 }
 
-type CatalogDropDest =
-  | { kind: "root" }
-  | { kind: "folder"; folder: PromptRailFolder };
-
 function hasPromptDrag(event: DragEvent): boolean {
   return isPromptDrag(Array.from(event.dataTransfer.types));
 }
@@ -123,6 +121,15 @@ function readPromptDrag(event: DragEvent) {
   return parsePromptDragPayload(event.dataTransfer.getData(PROMPT_DRAG_MIME));
 }
 
+function connectorTileDescription(server: {
+  command: string;
+  args: string[];
+  runtimeError?: string | null;
+}): string {
+  if (server.runtimeError?.trim()) return server.runtimeError;
+  return `${server.command} ${server.args.join(" ")}`.trim();
+}
+
 function toScopeEntry(
   doc: Awaited<ReturnType<typeof listScopeEntries>>[number],
 ): AccountScopeEntry {
@@ -133,11 +140,12 @@ function toScopeEntry(
     applyMode: doc.applyMode,
     aiMaintained: doc.aiMaintained,
     disputedAt: doc.disputedAt,
+    alwaysChars: doc.alwaysChars,
     parentId: doc.parentId,
   };
 }
 
-/** Left TOC + right reader for the 工具箱「提示词」page (account layer only). */
+/** Portrait overview + centered read dialog for the 工具箱「提示词」page. */
 export function PromptCatalog({ data }: { data: Capabilities }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -145,7 +153,9 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
   const updatesOpen = searchParams.get("updates") === "1";
   const [overlay, setOverlay] = useState<SkillCatalog>(EMPTY_SKILL_CATALOG);
   const [accountEntries, setAccountEntries] = useState<AccountScopeEntry[]>([]);
-  const [listings, setListings] = useState<SkillStoreListing[]>([]);
+  const [listings, setListings] = useState<
+    Awaited<ReturnType<typeof listMySkillListings>>
+  >([]);
   const [installedCopyIds, setInstalledCopyIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -158,8 +168,16 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     { id: string; name: string }[]
   >([]);
   const [createFolderId, setCreateFolderId] = useState<string | null>(null);
-  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
-  const [dropDest, setDropDest] = useState<CatalogDropDest | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [renamingMineId, setRenamingMineId] = useState<string | null>(null);
+  const [dropDest, setDropDest] = useState<PromptDropDest | null>(null);
+  const [mcpBusyId, setMcpBusyId] = useState<string | null>(null);
+  const mcp = useMcpConnectors();
+  const { data: llmProviders } = useLlmProviders();
+  const { data: modelCatalog } = useModels();
+  const showToolsHint = needsToolsGateHint(
+    defaultChatSupportsTools(llmProviders, modelCatalog?.current?.provider_id),
+  );
 
   const setUpdatesOpen = useCallback(
     (open: boolean) => {
@@ -181,15 +199,43 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
   );
   const items = useMemo(() => flattenPromptRail(rail), [rail]);
   const otherDrop = useMemo(() => onDemandDropFolder(rail), [rail]);
-  const fallbackId =
-    items.find((item) => item.id === DEFAULT_PROMPT_CATALOG_ID)?.id ??
-    items[0]?.id ??
-    null;
-  const [selectedId, setSelectedId] = useState<string | null>(fallbackId);
-  const selected =
-    items.find((item) => item.id === selectedId) ??
-    items.find((item) => item.id === fallbackId) ??
-    items[0];
+  const connectorPicks = useMemo<ConnectorPick[]>(
+    () =>
+      mcp.servers.map((server) => ({
+        kind: "connector" as const,
+        id: connectorCatalogId(server.id),
+        label: server.name,
+        server,
+      })),
+    [mcp.servers],
+  );
+
+  const [selectedId, setSelectedId] = useState<string>(() => {
+    const tool = searchParams.get("tool");
+    if (tool) return toolCatalogId(tool);
+    if (searchParams.get("connectors") === "1") return NEW_CONNECTOR_ID;
+    return OVERVIEW_CATALOG_ID;
+  });
+
+  const selectedConnector: ConnectorPick | null =
+    selectedId === NEW_CONNECTOR_ID
+      ? {
+          kind: "connector",
+          id: NEW_CONNECTOR_ID,
+          label: "添加连接器",
+          server: null,
+        }
+      : (connectorPicks.find((row) => row.id === selectedId) ?? null);
+  const selectedItem =
+    items.find((item) => item.id === selectedId) ?? selectedConnector ?? null;
+  const dialogOpen = updatesOpen || selectedItem != null;
+
+  const closeDialog = useCallback(() => {
+    setSelectedId(OVERVIEW_CATALOG_ID);
+    setCreateFolderId(null);
+    setRenamingMineId(null);
+    if (updatesOpen) setUpdatesOpen(false);
+  }, [updatesOpen, setUpdatesOpen]);
 
   const loadAccountLayer = useCallback(async (): Promise<SkillCatalog> => {
     const [catalog, entries, tree] = await Promise.all([
@@ -260,7 +306,9 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
   useEffect(() => {
     if (!pendingLeaf || !accountReady) return;
     const id = catalogIdForMemoryTarget(pendingLeaf, items);
-    if (id) setSelectedId(id);
+    if (id) {
+      setSelectedId(id);
+    }
     setPendingLeaf(null);
     if (updatesOpen) setUpdatesOpen(false);
   }, [pendingLeaf, accountReady, items, updatesOpen, setUpdatesOpen]);
@@ -309,6 +357,8 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
   }
 
   async function onCreateMine() {
+    setCreatingFolder(false);
+    setRenamingMineId(null);
     await persist(async () => {
       const parentId =
         createFolderId ?? (await ensureNamedFolder(OTHER_FOLDER_NAME));
@@ -326,13 +376,18 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     });
   }
 
-  async function onCreateFolder() {
-    const name = window.prompt("夹名称")?.trim();
-    if (!name) return;
+  function startCreateFolder() {
+    setRenamingMineId(null);
+    setCreatingFolder(true);
+  }
+
+  async function submitCreateFolder(raw: string) {
+    setCreatingFolder(false);
+    const name = raw.trim().replace(/^\/+|\/+$/g, "");
+    if (!name || name.includes("/")) return;
     await persist(async () => {
       const created = await createRuleFolder(name);
       setCreateFolderId(created.id);
-      setOpenFolders((prev) => new Set(prev).add(`folder:${created.id}`));
       return undefined;
     });
   }
@@ -365,7 +420,7 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     });
   }
 
-  function acceptPromptDrag(event: DragEvent, dest: CatalogDropDest) {
+  function acceptPromptDrag(event: DragEvent, dest: PromptDropDest) {
     const types = promptDragTypes(event);
     if (!isPromptDrag(types)) return;
     event.preventDefault();
@@ -387,11 +442,24 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     void moveMineItem(item, dest);
   }
 
-  async function renameMineItem(item: PromptCatalogItem) {
+  function rejectPromptDrag(event: DragEvent) {
+    if (!hasPromptDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "none";
+    setDropDest(null);
+  }
+
+  function startRenameMine(item: PromptCatalogItem) {
     if (item.kind !== "mine" || !item.mineId || item.aiMaintained) return;
-    const input = window.prompt("条目名称", item.label);
-    if (input == null) return;
-    const name = skillFileName(input.trim());
+    setCreatingFolder(false);
+    setRenamingMineId(item.mineId);
+  }
+
+  async function submitRenameMine(item: PromptCatalogItem, raw: string) {
+    if (item.kind !== "mine" || !item.mineId || item.aiMaintained) return;
+    setRenamingMineId(null);
+    const name = skillFileName(raw.trim());
     if (name === ".md" || name === skillFileName(item.label)) return;
     await persist(async () => {
       await renameDocument(item.mineId, name);
@@ -412,44 +480,84 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     if (!window.confirm(`确定删除「${item.label}」？此操作不可撤销。`)) return;
     await persist(async () => {
       await deleteDocument(item.mineId);
-      setSelectedId(fallbackId);
+      setSelectedId(OVERVIEW_CATALOG_ID);
       return undefined;
     });
   }
 
-  if (selected == null) return null;
-
-  const railFile = (
-    item: PromptCatalogItem,
-    paddingLeft: number,
-    folderId: string | null,
-  ) => (
-    <PromptRailFile
-      key={item.id}
-      item={item}
-      selectedId={selected.id}
-      updatesOpen={updatesOpen}
-      paddingLeft={paddingLeft}
-      onOpen={() => {
-        setSelectedId(item.id);
-        setCreateFolderId(folderId);
-        if (updatesOpen) setUpdatesOpen(false);
-      }}
-      onDragEnd={() => setDropDest(null)}
-      onRename={() => void renameMineItem(item)}
-      onRestore={() => void restoreMineItem(item)}
-      onDelete={() => void deleteMineItem(item)}
-    />
-  );
+  function wrapMineTile({
+    item,
+    children,
+  }: {
+    item: PromptCatalogItem;
+    children: ReactNode;
+  }) {
+    if (item.kind !== "mine" || !item.mineId || item.memoryKind) {
+      return children;
+    }
+    if (item.mineId === renamingMineId) {
+      return (
+        <div className="flex min-h-[7.5rem] items-center rounded-xl border border-border px-4">
+          <InlineInput
+            initial={item.label}
+            ariaLabel="条目名称"
+            onSubmit={(value) => void submitRenameMine(item, value)}
+            onCancel={() => setRenamingMineId(null)}
+          />
+        </div>
+      );
+    }
+    const disputed = item.disputed;
+    const inner = (
+      <div
+        className="h-full min-w-0"
+        draggable
+        onDragStart={(event) => {
+          event.dataTransfer.setData(
+            PROMPT_DRAG_MIME,
+            promptDragPayload({ kind: "mine", mineId: item.mineId }),
+          );
+          event.dataTransfer.effectAllowed = "move";
+        }}
+        onDragEnd={() => setDropDest(null)}
+      >
+        {children}
+      </div>
+    );
+    return (
+      <ContextMenu>
+        <ContextMenuTrigger asChild>{inner}</ContextMenuTrigger>
+        <ContextMenuContent className="min-w-36">
+          {disputed ? (
+            <ContextMenuItem onSelect={() => void restoreMineItem(item)}>
+              <Undo2 size={14} className="shrink-0" />
+              恢复使用
+            </ContextMenuItem>
+          ) : null}
+          <ContextMenuItem onSelect={() => startRenameMine(item)}>
+            <Pencil size={14} className="shrink-0" />
+            重命名
+          </ContextMenuItem>
+          <ContextMenuItem
+            variant="danger"
+            onSelect={() => void deleteMineItem(item)}
+          >
+            <Trash2 size={14} className="shrink-0" />
+            删除
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    );
+  }
 
   return (
-    <div
-      className="flex min-h-0 flex-1 overflow-hidden"
-      data-testid="prompt-catalog"
-    >
-      <nav
-        aria-label="提示词目录"
-        className="w-56 shrink-0 overflow-y-auto border-r border-border bg-muted/30 px-1 py-2"
+    <div className="w-full" data-testid="prompt-catalog">
+      {error ? (
+        <p className="mb-3 text-destructive text-xs" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div
         onDragOver={(event) => {
           if (!hasPromptDrag(event)) return;
           event.preventDefault();
@@ -460,687 +568,178 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
           setDropDest(null);
         }}
       >
-        {dropDest ? (
-          <p
-            className="pointer-events-none sticky top-0 z-10 mb-1 rounded-lg bg-accent px-2 py-1 text-xs text-foreground"
-            aria-live="polite"
-          >
-            {dropDest.kind === "root"
-              ? "将放到常驻"
-              : `将放入${dropDest.folder.name}`}
-          </p>
-        ) : null}
-        <div
-          onDragOver={(event) => {
-            if (!hasPromptDrag(event)) return;
-            event.stopPropagation();
-            event.dataTransfer.dropEffect = "none";
-            setDropDest(null);
+        <PromptOverview
+          rail={rail}
+          selectedId={selectedId === OVERVIEW_CATALOG_ID ? null : selectedId}
+          dropDest={dropDest}
+          otherFolder={otherDrop}
+          connectors={connectorPicks.map((row) => ({
+            id: row.id,
+            label: row.label,
+            description: row.server ? connectorTileDescription(row.server) : "",
+            accessory: row.server ? (
+              <ConnectorStatusBadge server={row.server} />
+            ) : undefined,
+          }))}
+          connectorError={mcp.error}
+          showConnectors={Boolean(mcp.api)}
+          creatingFolder={creatingFolder}
+          busy={busy}
+          installedCopyIds={installedCopyIds}
+          onOpenItem={(id) => {
+            setSelectedId(id);
+            if (updatesOpen) setUpdatesOpen(false);
           }}
-          onDrop={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            setDropDest(null);
+          onOpenUpdates={() => {
+            setSelectedId(OVERVIEW_CATALOG_ID);
+            setUpdatesOpen(true);
           }}
-        >
-          <EntryLeafRow
-            paddingLeft={8}
-            icon={
-              <History size={14} className="shrink-0 text-muted-foreground" />
-            }
-            label="最近更新"
-            description=""
-            frontmatterError={null}
-            active={updatesOpen}
-            onOpen={() => setUpdatesOpen(!updatesOpen)}
-          />
-        </div>
-        {/* biome-ignore lint/a11y/useSemanticElements: 自定义分组轨；fieldset 默认边框会破坏拖放目标。 */}
-        <div
-          role="group"
-          aria-label="常驻"
-          data-testid="prompt-rail-always"
-          data-prompt-drop="root"
-          onDragOver={(event) => acceptPromptDrag(event, { kind: "root" })}
-          onDrop={(event) => dropPromptFile(event, "root")}
-          className={cn(
-            dropDest?.kind === "root" &&
-              "rounded-lg ring-1 ring-inset ring-primary",
-          )}
-        >
-          <RailSectionHeader label="常驻" />
-          {rail.constitution.map((item) => railFile(item, 8, null))}
-          <div data-testid="prompt-rail-memory">
-            {rail.memory.map((item) => railFile(item, 8, null))}
-          </div>
-          {rail.alwaysMine.map((item) => railFile(item, 8, null))}
-        </div>
-        {/* biome-ignore lint/a11y/useSemanticElements: 自定义分组轨；fieldset 默认边框会破坏拖放目标。 */}
-        <div
-          role="group"
-          aria-label="按需"
-          data-testid="prompt-rail-on-demand"
-          data-prompt-drop="folder"
-          onDragOver={(event) =>
-            acceptPromptDrag(event, { kind: "folder", folder: otherDrop })
+          onCreateMine={() => void onCreateMine()}
+          onStartCreateFolder={startCreateFolder}
+          onSubmitCreateFolder={(name) => void submitCreateFolder(name)}
+          onCancelCreateFolder={() => setCreatingFolder(false)}
+          onAddConnector={
+            mcp.api
+              ? () => {
+                  setSelectedId(NEW_CONNECTOR_ID);
+                  if (updatesOpen) setUpdatesOpen(false);
+                }
+              : null
           }
-          onDrop={(event) => dropPromptFile(event, otherDrop)}
-        >
-          <RailSectionHeader
-            label="按需"
-            action={
-              <div className="flex items-center gap-0.5">
-                <IconButton
-                  title="新建条目"
-                  disabled={busy}
-                  onClick={() => void onCreateMine()}
-                >
-                  <FilePlus size={14} />
-                </IconButton>
-                <IconButton
-                  title="新建夹"
-                  disabled={busy}
-                  onClick={() => void onCreateFolder()}
-                >
-                  <FolderPlus size={14} />
-                </IconButton>
-              </div>
-            }
-          />
-          {rail.folders.map((folder) => {
-            const open = openFolders.size === 0 || openFolders.has(folder.id);
-            const highlighted =
-              dropDest?.kind === "folder" && dropDest.folder.id === folder.id;
-            return (
-              <div
-                key={folder.id}
-                data-prompt-drop="folder"
-                data-testid={
-                  folder.items.some((row) => row.kind === "mine")
-                    ? "my-skills"
-                    : undefined
-                }
-                onDragOver={(event) =>
-                  acceptPromptDrag(event, { kind: "folder", folder })
-                }
-                onDrop={(event) => dropPromptFile(event, folder)}
-                className={cn(
-                  highlighted && "rounded-lg ring-1 ring-inset ring-primary",
-                )}
-              >
-                <button
-                  type="button"
-                  aria-expanded={open}
-                  aria-label={highlighted ? `将放入${folder.name}` : undefined}
-                  onClick={() => {
-                    setCreateFolderId(folder.documentId);
-                    setOpenFolders((prev) => {
-                      const next = new Set(prev);
-                      if (prev.size === 0) {
-                        for (const row of rail.folders) next.add(row.id);
-                      }
-                      if (next.has(folder.id)) next.delete(folder.id);
-                      else next.add(folder.id);
-                      return next;
-                    });
-                  }}
-                  style={{ paddingLeft: 8 }}
-                  className="flex h-7 w-full items-center gap-1.5 rounded-lg pr-1 text-left text-sm text-foreground hover:bg-accent/60"
-                >
-                  {open ? (
-                    <ChevronDown
-                      size={14}
-                      className="shrink-0 text-muted-foreground"
-                    />
-                  ) : (
-                    <ChevronRight
-                      size={14}
-                      className="shrink-0 text-muted-foreground"
-                    />
-                  )}
-                  {open ? (
-                    <FolderOpen
-                      size={14}
-                      className="shrink-0 text-muted-foreground"
-                    />
-                  ) : (
-                    <Folder
-                      size={14}
-                      className="shrink-0 text-muted-foreground"
-                    />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">{folder.name}</span>
-                </button>
-                {open
-                  ? folder.items.map((item) =>
-                      railFile(item, 20, folder.documentId),
-                    )
-                  : null}
-              </div>
-            );
-          })}
-          <div
-            onDragOver={(event) => {
-              if (!hasPromptDrag(event)) return;
-              event.stopPropagation();
-              event.dataTransfer.dropEffect = "none";
-              setDropDest(null);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setDropDest(null);
-            }}
-          >
-            {rail.official.map((item) => railFile(item, 8, null))}
-          </div>
-        </div>
-      </nav>
-
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {error ? (
-          <p
-            className="shrink-0 border-b border-border px-3 py-1.5 text-destructive text-xs"
-            role="alert"
-          >
-            {error}
-          </p>
-        ) : null}
-        {updatesOpen ? (
-          <div className="min-h-0 flex-1">
-            <MemoryUpdatesView
-              embedded
-              onOpenLeaf={(path, _name, projectId) => {
-                if (isAccountMemoryTarget(path, projectId)) {
-                  setPendingLeaf(path);
-                  setUpdatesOpen(false);
-                  return;
-                }
-                navigate(APP_PATHS.files, {
-                  state: filesMemoryLeafNavState(path, projectId),
-                });
-              }}
-            />
-          </div>
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <CatalogDetail
-              item={selected}
-              overlay={overlay}
-              listings={listings}
-              installedCopyIds={installedCopyIds}
-              busy={busy}
-              onSaveMine={(item, draft) =>
-                persist(
-                  async () => {
-                    const fileName = skillFileName(draft.name);
-                    if (fileName !== skillFileName(item.label)) {
-                      await renameDocument(item.mineId, fileName);
-                    }
-                    const written = await writeDocument(
-                      item.mineId,
-                      composeSkillContent(
-                        item.applyMode,
-                        draft.description,
-                        draft.body,
-                      ),
-                      item.version,
-                    );
-                    if (written.conflict) {
-                      throw new Error("刚有更新，刷新后再保存");
-                    }
-                    if (!written.ok) {
-                      throw new Error("没保存成功");
-                    }
-                    return undefined;
-                  },
-                  { lock: false },
-                )
-              }
-              onSaveAccount={(item, draft) =>
-                persist(
-                  async () => {
-                    if (item.memoryKind) {
-                      const written = await writeMemoryFile(
-                        item.memoryKind,
-                        draft.body,
-                        draft.version,
-                      );
-                      if (written.conflict) {
-                        throw new Error("刚有更新，刷新后再保存");
-                      }
-                      if (!written.ok) {
-                        throw new Error("没保存成功");
-                      }
-                      return undefined;
-                    }
-                    const fileName = skillFileName(draft.name);
-                    if (item.mineId && fileName !== skillFileName(item.label)) {
-                      await renameDocument(item.mineId, fileName);
-                    }
-                    const written = await writeDocument(
-                      item.mineId,
-                      draft.body,
-                      draft.version,
-                    );
-                    if (written.conflict) {
-                      throw new Error("刚有更新，刷新后再保存");
-                    }
-                    if (!written.ok) {
-                      throw new Error("没保存成功");
-                    }
-                    return undefined;
-                  },
-                  { lock: false },
-                )
-              }
-              onPublishMine={(item) =>
-                persist(async () => {
-                  const existing = listings.find(
-                    (row) => row.documentId === item.mineId,
-                  );
-                  if (existing?.status === "taken_down") return undefined;
-                  if (existing?.status === "published") {
-                    await publishSkillVersion(existing.id, item.mineId);
-                  } else {
-                    await publishSkill(item.mineId);
-                  }
-                  setListings(await listMySkillListings());
-                  return undefined;
-                })
-              }
-              onUnpublishMine={(item) =>
-                persist(async () => {
-                  const existing = listings.find(
-                    (row) => row.documentId === item.mineId,
-                  );
-                  if (!existing) return undefined;
-                  await unpublishSkill(existing.id);
-                  setListings(await listMySkillListings());
-                  return undefined;
-                })
-              }
-            />
-          </div>
-        )}
+          onAcceptAlwaysDrag={(event) =>
+            acceptPromptDrag(event, { kind: "root" })
+          }
+          onDropAlways={(event) => dropPromptFile(event, "root")}
+          onAcceptFolderDrag={(event, folder) =>
+            acceptPromptDrag(event, { kind: "folder", folder })
+          }
+          onDropFolder={(event, folder) => dropPromptFile(event, folder)}
+          onRejectDrag={rejectPromptDrag}
+          renderMineTile={wrapMineTile}
+        />
       </div>
-    </div>
-  );
-}
-
-function CatalogDetail({
-  item,
-  overlay,
-  listings,
-  installedCopyIds,
-  busy,
-  onSaveMine,
-  onSaveAccount,
-  onPublishMine,
-  onUnpublishMine,
-}: {
-  item: PromptCatalogItem;
-  overlay: SkillCatalog;
-  listings: SkillStoreListing[];
-  installedCopyIds: Set<string>;
-  busy: boolean;
-  onSaveMine: (
-    item: Extract<PromptCatalogItem, { kind: "mine" }>,
-    draft: { name: string; description: string; body: string },
-  ) => Promise<boolean>;
-  onSaveAccount: (
-    item: Extract<PromptCatalogItem, { kind: "mine" }>,
-    draft: { name: string; body: string; version: string },
-  ) => Promise<boolean>;
-  onPublishMine: (item: Extract<PromptCatalogItem, { kind: "mine" }>) => void;
-  onUnpublishMine: (item: Extract<PromptCatalogItem, { kind: "mine" }>) => void;
-}) {
-  if (item.kind === "identity") {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border px-3">
-          <h2 className="font-medium text-foreground text-sm">{item.label}</h2>
-          <Badge tone="muted">官方</Badge>
-          <Badge tone="muted">三选一</Badge>
-        </header>
-        <div className="min-h-0 flex-1 overflow-hidden px-3 py-3">
-          <RoleIdentityBlock
-            ceoIdentity={item.ceoIdentity}
-            nestedIdentity={item.nestedIdentity}
-            leafIdentity={item.leafIdentity}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  if (item.kind === "shared") {
-    return (
-      <PromptWorkbench
-        title={item.label}
-        badges={<Badge tone="muted">官方</Badge>}
-        initialBody={item.text}
-        readOnly
-        hideHeading={item.label}
-      />
-    );
-  }
-
-  if (item.kind === "skill") {
-    return (
-      <PromptWorkbench
-        testId="factory-skill-editor"
-        title={item.label}
-        badges={<Badge tone="muted">官方</Badge>}
-        initialBody={item.skill.body}
-        readOnly
-        hideHeading={item.label}
-      />
-    );
-  }
-
-  if (item.kind === "mine" && item.memoryKind) {
-    return (
-      <AccountEntryEditor key={item.id} item={item} onSave={onSaveAccount} />
-    );
-  }
-
-  if (item.kind === "mine") {
-    const fromMarket = Boolean(
-      item.mineId && installedCopyIds.has(item.mineId),
-    );
-    return (
-      <MineSkillEditor
-        key={item.id}
-        item={item}
-        listing={listings.find((row) => row.documentId === item.mineId) ?? null}
-        fromMarket={fromMarket}
-        writable={overlay.writable}
+      <PromptReadDialog
+        open={dialogOpen}
+        updatesOpen={updatesOpen}
+        item={selectedItem}
+        overlay={overlay}
+        listings={listings}
+        installedCopyIds={installedCopyIds}
         busy={busy}
-        onSave={onSaveMine}
-        onPublish={onPublishMine}
-        onUnpublish={onUnpublishMine}
-      />
-    );
-  }
-
-  return null;
-}
-
-function MineSkillEditor({
-  item,
-  listing,
-  fromMarket,
-  writable,
-  busy,
-  onSave,
-  onPublish,
-  onUnpublish,
-}: {
-  item: Extract<PromptCatalogItem, { kind: "mine" }>;
-  listing: SkillStoreListing | null;
-  fromMarket: boolean;
-  writable: boolean;
-  busy: boolean;
-  onSave: (
-    item: Extract<PromptCatalogItem, { kind: "mine" }>,
-    draft: { name: string; description: string; body: string },
-  ) => Promise<boolean>;
-  onPublish: (item: Extract<PromptCatalogItem, { kind: "mine" }>) => void;
-  onUnpublish: (item: Extract<PromptCatalogItem, { kind: "mine" }>) => void;
-}) {
-  const [body, setBody] = useState(() => skillBodyFromContent(item.content));
-  const [version, setVersion] = useState(item.version);
-  const [loading, setLoading] = useState(Boolean(item.mineId) && !item.content);
-  const canPublish =
-    writable &&
-    !fromMarket &&
-    item.applyMode === "on_demand" &&
-    listing?.status !== "taken_down";
-  const canUnpublish =
-    writable && !fromMarket && listing?.status === "published";
-
-  useEffect(() => {
-    if (!item.mineId || item.content) {
-      setBody(skillBodyFromContent(item.content));
-      setVersion(item.version);
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    void getDocument(item.mineId)
-      .then((doc) => {
-        if (cancelled) return;
-        setBody(skillBodyFromContent(doc.content));
-        setVersion(doc.version);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [item.mineId, item.content, item.version]);
-
-  return (
-    <PromptWorkbench
-      key={loading ? `${item.id}-loading` : item.id}
-      testId="mine-skill-editor"
-      title={item.label}
-      titleEditable
-      badges={
-        <>
-          <Badge tone="muted">{fromMarket ? "市场" : "我的"}</Badge>
-          {item.aiMaintained ? <Badge tone="muted">AI 可能改</Badge> : null}
-          {listing?.status === "published" ? (
-            <Badge tone="muted">已上架</Badge>
-          ) : null}
-          {listing?.status === "taken_down" ? (
-            <Badge tone="muted">平台已下架</Badge>
-          ) : null}
-        </>
-      }
-      initialTrigger={item.description}
-      triggerEnabled={item.applyMode === "on_demand"}
-      initialBody={body}
-      bodyLoading={loading}
-      readOnly={!writable}
-      extraActions={
-        <>
-          {canPublish ? (
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy || loading}
-              onClick={() => onPublish(item)}
-            >
-              上架
-            </Button>
-          ) : null}
-          {canUnpublish ? (
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy || loading}
-              onClick={() => onUnpublish(item)}
-            >
-              下架
-            </Button>
-          ) : null}
-        </>
-      }
-      onSave={
-        writable
-          ? (draft) =>
-              onSave(
-                { ...item, version },
-                {
-                  name: draft.title,
-                  description: draft.trigger,
-                  body: draft.body,
-                },
-              )
-          : undefined
-      }
-    />
-  );
-}
-
-function AccountEntryEditor({
-  item,
-  onSave,
-}: {
-  item: Extract<PromptCatalogItem, { kind: "mine" }>;
-  onSave: (
-    item: Extract<PromptCatalogItem, { kind: "mine" }>,
-    draft: { name: string; body: string; version: string },
-  ) => Promise<boolean>;
-}) {
-  const [body, setBody] = useState(item.content);
-  const [version, setVersion] = useState(item.version);
-  const [loading, setLoading] = useState(!item.content);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        if (item.memoryKind) {
-          const file = await getMemoryFile(item.memoryKind);
-          if (cancelled) return;
-          setBody(file.content);
-          setVersion(file.version);
-          setLoading(false);
-          return;
-        }
-        if (!item.mineId) {
-          setLoading(false);
-          return;
-        }
-        const doc = await getDocument(item.mineId);
-        if (cancelled) return;
-        setBody(doc.content);
-        setVersion(doc.version);
-        setLoading(false);
-      } catch {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [item.memoryKind, item.mineId]);
-
-  const renameable = !item.memoryKind && Boolean(item.mineId);
-
-  return (
-    <PromptWorkbench
-      key={loading ? `${item.id}-loading` : item.id}
-      testId="account-entry-editor"
-      title={item.label}
-      titleEditable={renameable}
-      badges={
-        <>
-          <Badge tone="muted">我的</Badge>
-          {item.aiMaintained ? <Badge tone="muted">AI 可能改</Badge> : null}
-        </>
-      }
-      hint={
-        item.aiMaintained
-          ? "AI 可能改这份。对话里学到的内容会写进来，不能当商店货上架。"
-          : undefined
-      }
-      initialBody={body}
-      bodyLoading={loading}
-      onSave={(draft) =>
-        onSave(item, { name: draft.title, body: draft.body, version })
-      }
-    />
-  );
-}
-
-function PromptRailFile({
-  item,
-  selectedId,
-  updatesOpen,
-  paddingLeft,
-  onOpen,
-  onDragEnd,
-  onRename,
-  onRestore,
-  onDelete,
-}: {
-  item: PromptCatalogItem;
-  selectedId: string;
-  updatesOpen: boolean;
-  paddingLeft: number;
-  onOpen: () => void;
-  onDragEnd: () => void;
-  onRename: () => void;
-  onRestore: () => void;
-  onDelete: () => void;
-}) {
-  const active = !updatesOpen && item.id === selectedId;
-  const dimmed = item.kind === "mine" && item.disputed;
-  const description =
-    item.kind === "mine" && item.description.trim() !== item.label
-      ? item.description
-      : "";
-  const canMove =
-    item.kind === "mine" && Boolean(item.mineId) && !item.memoryKind;
-  const hasMenu =
-    item.kind === "mine" && Boolean(item.mineId) && !item.memoryKind;
-  const row = (
-    <EntryLeafRow
-      paddingLeft={paddingLeft}
-      icon={<FileText size={14} className="shrink-0 text-muted-foreground" />}
-      label={item.label}
-      description={description}
-      frontmatterError={null}
-      disputed={item.kind === "mine" && item.disputed}
-      active={active}
-      onOpen={onOpen}
-      dimmed={dimmed}
-      draggable={canMove}
-      onDragStart={
-        canMove
-          ? (event) => {
-              if (item.kind === "mine") {
-                event.dataTransfer.setData(
-                  PROMPT_DRAG_MIME,
-                  promptDragPayload({ kind: "mine", mineId: item.mineId }),
-                );
+        showToolsHint={showToolsHint}
+        toolsHint={TOOLS_GATE_HINT}
+        toolCallingNames={TOOL_CALLING_TOOL_NAMES}
+        mcpApi={mcp.api}
+        mcpBusyId={mcpBusyId}
+        onOpenChange={(open) => {
+          if (!open) closeDialog();
+        }}
+        onOpenUpdatesLeaf={(path, _name, projectId) => {
+          if (isAccountMemoryTarget(path, projectId)) {
+            setPendingLeaf(path);
+            setUpdatesOpen(false);
+            return;
+          }
+          navigate(APP_PATHS.files, {
+            state: filesMemoryLeafNavState(path, projectId),
+          });
+        }}
+        onMcpBusy={setMcpBusyId}
+        onMcpSaved={mcp.reload}
+        onCloseNewConnector={() => {
+          setSelectedId(OVERVIEW_CATALOG_ID);
+        }}
+        onSaveMine={(item, draft) =>
+          persist(
+            async () => {
+              const fileName = skillFileName(draft.name);
+              if (fileName !== skillFileName(item.label)) {
+                await renameDocument(item.mineId, fileName);
               }
-              event.dataTransfer.effectAllowed = "move";
+              const written = await writeDocument(
+                item.mineId,
+                composeSkillContent(
+                  item.applyMode,
+                  draft.description,
+                  draft.body,
+                ),
+                item.version,
+              );
+              if (written.conflict) {
+                throw new Error("刚有更新，刷新后再保存");
+              }
+              if (!written.ok) {
+                throw new Error("没保存成功");
+              }
+              return undefined;
+            },
+            { lock: false },
+          )
+        }
+        onSaveAccount={(item, draft) =>
+          persist(
+            async () => {
+              if (item.memoryKind) {
+                const written = await writeMemoryFile(
+                  item.memoryKind,
+                  draft.body,
+                  draft.version,
+                );
+                if (written.conflict) {
+                  throw new Error("刚有更新，刷新后再保存");
+                }
+                if (!written.ok) {
+                  throw new Error("没保存成功");
+                }
+                return undefined;
+              }
+              const fileName = skillFileName(draft.name);
+              if (item.mineId && fileName !== skillFileName(item.label)) {
+                await renameDocument(item.mineId, fileName);
+              }
+              const written = await writeDocument(
+                item.mineId,
+                draft.body,
+                item.version,
+              );
+              if (written.conflict) {
+                throw new Error("刚有更新，刷新后再保存");
+              }
+              if (!written.ok) {
+                throw new Error("没保存成功");
+              }
+              return undefined;
+            },
+            { lock: false },
+          )
+        }
+        onPublishMine={(item, group) =>
+          void persist(async () => {
+            const existing = listings.find(
+              (row) => row.documentId === item.mineId,
+            );
+            if (existing?.status === "taken_down") return undefined;
+            if (existing?.status === "published") {
+              await publishSkillVersion(existing.id, item.mineId, group);
+            } else {
+              await publishSkill(item.mineId, group);
             }
-          : undefined
-      }
-      onDragEnd={onDragEnd}
-    />
-  );
-  if (!hasMenu) return row;
-  const disputed = item.kind === "mine" && item.disputed;
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
-      <ContextMenuContent className="min-w-36">
-        {disputed ? (
-          <ContextMenuItem onSelect={onRestore}>
-            <Undo2 size={14} className="shrink-0" />
-            恢复使用
-          </ContextMenuItem>
-        ) : null}
-        <ContextMenuItem onSelect={onRename}>
-          <Pencil size={14} className="shrink-0" />
-          重命名
-        </ContextMenuItem>
-        <ContextMenuItem variant="danger" onSelect={onDelete}>
-          <Trash2 size={14} className="shrink-0" />
-          删除
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+            setListings(await listMySkillListings());
+            return undefined;
+          })
+        }
+        onUnpublishMine={(item) =>
+          void persist(async () => {
+            const existing = listings.find(
+              (row) => row.documentId === item.mineId,
+            );
+            if (!existing) return undefined;
+            await unpublishSkill(existing.id);
+            setListings(await listMySkillListings());
+            return undefined;
+          })
+        }
+      />
+    </div>
   );
 }

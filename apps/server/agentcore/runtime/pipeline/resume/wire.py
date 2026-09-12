@@ -34,7 +34,7 @@ from agentcore.tools.builtin import (
     delegation_grantable_tool_names,
     per_call_tool_names,
 )
-from agentcore.tools.ceo_toolset import wire_worker_consult as _wire_worker_consult_tools
+from agentcore.tools.ceo_toolset import wire_worker_consult
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registration import host_class_tool_names, register_board_ceo_tools
 from agentcore.tools.registry import ToolRegistry
@@ -167,7 +167,7 @@ async def _wire_continuation_toolset(
         desktop_online=desktop_online,
     )
     register_mcp_tools(worker_tools, mcp_discover)
-    await _wire_worker_consult_tools(
+    await wire_worker_consult(
         worker_tools,
         skill_registry=skill_registry,
         folder_id=folder_id,

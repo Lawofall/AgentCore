@@ -1,6 +1,7 @@
 import { Button, Input } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -178,14 +179,14 @@ export function BorrowToCloudDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>云上做完再写入</DialogTitle>
           <DialogDescription>
             把选中的本机文件夹复制到云上做这一单。电脑上的原件先不动；做完再决定写不写回。这不是打开本机文件夹直接改。
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 px-5 py-2">
+        <DialogBody className="space-y-3 py-2">
           <div className="space-y-1.5">
             <label className="text-xs font-medium" htmlFor="borrow-folder">
               本机文件夹
@@ -221,9 +222,9 @@ export function BorrowToCloudDialog({
               {error}
             </p>
           ) : null}
-        </div>
+        </DialogBody>
         <DialogFooter>
-          <Button variant="neutral" onClick={() => requestClose()}>
+          <Button variant="outline" onClick={() => requestClose()}>
             取消
           </Button>
           <Button disabled={!root} onClick={() => submit()}>

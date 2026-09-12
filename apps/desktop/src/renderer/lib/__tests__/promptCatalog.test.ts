@@ -13,6 +13,7 @@ import {
   onDemandDropFolder,
   placeholderCatalogId,
   skillCatalogId,
+  toolCatalogId,
 } from "@/lib/promptCatalog";
 import type { Capabilities } from "@/services/capabilities";
 import { describe, expect, it } from "vitest";
@@ -112,7 +113,7 @@ describe("buildPromptCatalog", () => {
 });
 
 describe("buildPromptRail", () => {
-  it("准则身份在常驻，核在记忆带，官方 HOW 在按需平铺", () => {
+  it("准则身份在常驻，核在记忆带，官方 HOW 在按需轨", () => {
     const rail = buildPromptRail(base, buildMineCatalogRows([], []), [], null);
     expect(rail.constitution.map((row) => row.id)).toEqual([
       "shared",
@@ -134,6 +135,50 @@ describe("buildPromptRail", () => {
       documentId: null,
       items: [],
     });
+    expect(rail.tools).toEqual([]);
+  });
+
+  it("出厂工具合成一份，按能力面再开场即用排序", () => {
+    const rail = buildPromptRail(
+      {
+        ...base,
+        tools: [
+          {
+            name: "host",
+            face: "host_browser",
+            resident: false,
+            summary: "本机",
+            description: "本机",
+            parameters: {},
+            approval: "grantable",
+            available_to: ["worker"],
+          },
+          {
+            name: "file_read",
+            face: "file",
+            resident: true,
+            summary: "读文件",
+            description: "读文件",
+            parameters: {},
+            approval: "never",
+            available_to: ["ceo", "worker"],
+          },
+        ],
+      },
+      buildMineCatalogRows([], []),
+      [],
+      null,
+    );
+    expect(rail.tools.map((row) => row.id)).toEqual([
+      toolCatalogId("file_read"),
+      toolCatalogId("host"),
+    ]);
+    expect(rail.tools.map((row) => row.tool.resident)).toEqual([true, false]);
+    expect(
+      flattenPromptRail(rail)
+        .filter((row) => row.kind === "tool")
+        .map((row) => row.id),
+    ).toEqual([toolCatalogId("file_read"), toolCatalogId("host")]);
   });
 
   it("偏好画像进根，按需自建进其他", () => {
@@ -205,6 +250,7 @@ describe("buildPromptRail", () => {
             applyMode: "always",
             aiMaintained: false,
             disputedAt: null,
+            alwaysChars: 800,
             parentId: null,
           },
         ],
@@ -218,7 +264,7 @@ describe("buildPromptRail", () => {
     ).not.toContain("短约束");
   });
 
-  it("用户按需文件进自己的夹，官方 HOW 平铺在下", () => {
+  it("用户按需文件进自己的夹，官方 HOW 不进用户夹", () => {
     const rail = buildPromptRail(
       {
         ...base,
@@ -241,6 +287,7 @@ describe("buildPromptRail", () => {
             applyMode: "on_demand",
             aiMaintained: false,
             disputedAt: null,
+            alwaysChars: null,
             parentId: "f-orch",
           },
         ],
@@ -290,6 +337,7 @@ describe("buildMineCatalogRows", () => {
           applyMode: "always",
           aiMaintained: true,
           disputedAt: null,
+          alwaysChars: 1200,
           parentId: null,
         },
       ],
@@ -367,6 +415,7 @@ describe("buildMineCatalogRows", () => {
               applyMode: "always",
               aiMaintained: true,
               disputedAt: null,
+              alwaysChars: 1200,
               parentId: null,
             },
           ],

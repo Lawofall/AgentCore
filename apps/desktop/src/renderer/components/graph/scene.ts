@@ -22,8 +22,6 @@
  * golden snapshot can pin the structure.
  */
 
-import { NODE_HEIGHT, NODE_WIDTH } from "@/lib/graphMetrics";
-import { type LayoutHints, computeLayoutHints } from "@/lib/layoutHints";
 import type {
   ActAuthorizedBy,
   ActKind,
@@ -32,6 +30,12 @@ import type {
   RunNode,
 } from "@/stores/execution";
 import type { GraphEdge, GraphLayout } from "@/stores/graph";
+import {
+  type LayoutHints,
+  NODE_HEIGHT,
+  NODE_WIDTH,
+  computeLayoutHints,
+} from "@agentcore/graph-layout";
 import { formatActBandLabel } from "./actAuthLabels";
 import {
   type GraphFoldInfo,

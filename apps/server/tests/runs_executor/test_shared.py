@@ -5,7 +5,6 @@ from agentcore.runtime.runs.cutoff import (
 )
 from agentcore.runtime.runs.executor.shared import (
     _hard_gap_blocks_completion,
-    _is_hard_failure,
     _priced_failure,
 )
 from agentcore.runtime.runs.types import Deliverable, RunPhase
@@ -48,24 +47,6 @@ def test_priced_failure_without_products_leaves_ledger_empty():
     )
     assert state.files_touched == []
     assert state.file_acceptance == []
-
-
-def test_is_hard_failure_never_fails_the_node():
-    """Contract misses stay COMPLETED; ``strict`` does not flip acceptance."""
-    assert _is_hard_failure("   ", None) is False
-    assert _is_hard_failure("", Deliverable(strict=False)) is False
-    assert _is_hard_failure("", Deliverable(strict=True)) is False
-    assert _is_hard_failure("x", None) is False
-    assert _is_hard_failure("x", Deliverable(strict=False)) is False
-    assert _is_hard_failure("x", Deliverable(strict=True)) is False
-
-
-def test_is_hard_failure_files_form_zero_disk_is_soft():
-    """甲⁺：form=files ∧ files_touched==0 不再硬失败（有正文即可 soft-complete）。"""
-    d = Deliverable( strict=False)
-    assert _is_hard_failure("有正文但未落盘", d, files_touched=0) is False
-    assert _is_hard_failure("有正文且已落盘", d, files_touched=1) is False
-    assert _is_hard_failure("有正文但未落盘", Deliverable( strict=True), files_touched=0) is False
 
 
 def test_hard_gap_blocks_completion_never_fails_empty_or_unlanded():

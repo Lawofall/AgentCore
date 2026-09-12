@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agentcore.db.models.user_workflows import UserWorkflow
 from agentcore.db.models.users import User
 from agentcore.db.models.workflow_store import (
     WorkflowStoreInstall,
@@ -218,6 +219,28 @@ class WorkflowStoreRepository:
         await commit_or_flush(self._session, commit=commit)
         await self._session.refresh(row)
         return row
+
+    async def delete_installs_for_workflows(
+        self, workflow_ids: Sequence[str], *, commit: bool = True
+    ) -> None:
+        ids = [item for item in workflow_ids if item]
+        if not ids:
+            return
+        await self._session.execute(
+            delete(WorkflowStoreInstall).where(WorkflowStoreInstall.workflow_id.in_(ids))
+        )
+        await commit_or_flush(self._session, commit=commit)
+
+    async def delete_orphan_installs(self, user_id: str, *, commit: bool = True) -> None:
+        """Drop install rows whose local copy is gone (deleted copy = uninstall)."""
+        live = select(UserWorkflow.id).where(UserWorkflow.user_id == user_id)
+        await self._session.execute(
+            delete(WorkflowStoreInstall).where(
+                WorkflowStoreInstall.user_id == user_id,
+                WorkflowStoreInstall.workflow_id.not_in(live),
+            )
+        )
+        await commit_or_flush(self._session, commit=commit)
 
     async def get_report(self, user_id: str, listing_id: str) -> WorkflowStoreReport | None:
         result = await self._session.execute(

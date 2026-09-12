@@ -14,8 +14,8 @@ import { BarChart3 } from "lucide-react";
 import type { ReactNode } from "react";
 
 /**
- * Shared 7-day trend bars for the admin console (分析 / 用户详情 / 概览 all show the
- * same cost sparkline; 分析·健康 / 概览 share the turn one). Kept presentational and
+ * Shared 7-day trend bars for the admin console (供给·成本 / 用户详情 show the
+ * cost sparkline; 总览 shows the turn one). Kept presentational and
  * dependency-light so every surface renders an identical chart instead of drifting.
  *
  * Three rules the reading of these bars depends on:

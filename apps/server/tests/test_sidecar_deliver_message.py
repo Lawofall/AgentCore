@@ -254,6 +254,7 @@ async def test_sidecar_fifo_starter_asks_desktop_start_turn(tmp_path, monkeypatc
                     "userMessageId": item.user_message_id,
                     "messageId": item.message_id,
                     "traceId": item.trace_id,
+                    "folderId": None,
                 },
             )
         )
@@ -503,6 +504,7 @@ async def test_sidecar_queue_id_emits_started_with_content(tmp_path, monkeypatch
                 "userMessageId": "11111111-1111-4111-8111-111111111111",
                 "messageId": "22222222-2222-4222-8222-222222222222",
                 "traceId": "a" * 32,
+                "folderId": None,
             },
         )
     )

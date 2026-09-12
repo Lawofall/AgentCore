@@ -1,6 +1,6 @@
 /**
- * 工具箱提示词右栏：与文件页同一套文档工作台（源码编辑 / 预览 / 停敲自动存）。
- * 顶栏只放动作。名字 + 目录那一句是封面，始终可见；编辑 / 预览只切换正文。
+ * 工具箱提示词源码工作台（CodeMirror；可写停敲自动存）。
+ * 顶栏只放动作。封面只在有可编字段时出现（名称 / 一句话介绍）。
  */
 
 import {
@@ -8,10 +8,9 @@ import {
   type MarkdownSourceEditorHandle,
 } from "@/components/markdown/MarkdownSourceEditor";
 import { SourceToolbar } from "@/components/markdown/sourceToolbar";
-import { PromptDocument } from "@/components/prompt/PromptDocument";
 import { Button, Input, SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { Eye, Loader2, PencilLine, Save } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import {
   type ReactNode,
   useCallback,
@@ -23,19 +22,19 @@ import {
 
 export type PromptSaveState = "idle" | "saving" | "saved" | "error";
 export type PromptApplyMode = "always" | "on_demand";
-type ViewMode = "edit" | "preview";
 
 const APPLY_MODE_ITEMS = [
   { value: "always", label: "常驻" },
   { value: "on_demand", label: "按需" },
 ] as const;
 
+const TITLE_LABEL = "名称";
 const CATALOG_LINE_LABEL = "一句话介绍";
 const CATALOG_LINE_PLACEHOLDER = "用一句话说这是什么";
 const AUTOSAVE_DEBOUNCE_MS = 1500;
 
 const TITLE_FIELD_CLASS =
-  "h-auto min-h-8 w-full border-0 bg-transparent px-0 font-medium text-foreground text-xl leading-snug focus:border-transparent focus-visible:ring-0";
+  "h-auto min-h-8 w-full border-0 bg-transparent px-0 text-foreground focus:border-transparent focus-visible:ring-0";
 const CATALOG_FIELD_CLASS =
   "h-auto min-h-8 w-full border-0 bg-transparent px-0 text-muted-foreground focus:border-transparent focus-visible:ring-0";
 
@@ -49,7 +48,6 @@ export function PromptWorkbench({
   title,
   titleEditable = false,
   badges,
-  hint,
   applyMode,
   onApplyModeChange,
   initialTrigger,
@@ -57,7 +55,6 @@ export function PromptWorkbench({
   initialBody,
   bodyLoading = false,
   readOnly = false,
-  hideHeading,
   extraActions,
   testId,
   onSave,
@@ -65,7 +62,6 @@ export function PromptWorkbench({
   title: string;
   titleEditable?: boolean;
   badges?: ReactNode;
-  hint?: ReactNode;
   /** `undefined` hides the 常驻 | 按需 switch. */
   applyMode?: PromptApplyMode;
   onApplyModeChange?: (mode: PromptApplyMode) => void;
@@ -75,13 +71,12 @@ export function PromptWorkbench({
   initialBody: string;
   bodyLoading?: boolean;
   readOnly?: boolean;
-  hideHeading?: string;
   extraActions?: ReactNode;
   testId?: string;
   onSave?: (draft: PromptWorkbenchDraft) => Promise<boolean>;
 }) {
+  const titleId = useId();
   const catalogLineId = useId();
-  const [mode, setMode] = useState<ViewMode>("preview");
   const [titleValue, setTitleValue] = useState(title);
   const [trigger, setTrigger] = useState(initialTrigger ?? "");
   const [body, setBody] = useState(initialBody);
@@ -182,59 +177,59 @@ export function PromptWorkbench({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
-  const switchMode = (next: ViewMode) => {
-    setMode((prev) => {
-      if (prev === next) return prev;
-      if (prev === "edit") {
-        const md = editorRef.current?.getValue() ?? latestRef.current.body;
-        latestRef.current = { ...latestRef.current, body: md };
-        setBody(md);
-      }
-      return next;
-    });
-  };
-
   const showCatalogLine =
     applyMode === "always"
       ? false
       : triggerEnabled || initialTrigger !== undefined;
+  const showTitleRow = titleEditable || applyMode !== undefined;
+  const showCover = showTitleRow || showCatalogLine;
   const triggerText = trigger.trim();
-  const hasBody = body.trim().length > 0;
-  const editingBody = mode === "edit" && !readOnly;
 
-  const cover = (
+  const cover = showCover ? (
     <div className="mx-auto w-full max-w-3xl px-6 pt-5 pb-4">
-      <div className="flex flex-wrap items-start gap-3">
-        {titleEditable ? (
-          <Input
-            aria-label="名称"
-            value={titleValue}
-            onChange={(event) => {
-              const next = event.target.value;
-              setTitleValue(next);
-              markDirty({ title: next });
-            }}
-            disabled={readOnly}
-            className={cn(TITLE_FIELD_CLASS, "min-w-0 flex-1")}
-          />
-        ) : (
-          <h2 className="min-w-0 flex-1 font-medium text-foreground text-xl leading-snug">
-            {titleValue}
-          </h2>
-        )}
-        {applyMode !== undefined ? (
-          <SegmentedControl
-            aria-label="加载方式"
-            value={applyMode}
-            onChange={(next) => onApplyModeChange?.(next)}
-            items={APPLY_MODE_ITEMS}
-            className="w-auto shrink-0"
-          />
-        ) : null}
-      </div>
+      {showTitleRow ? (
+        <div className="flex flex-wrap items-start gap-3">
+          {titleEditable ? (
+            <label
+              htmlFor={titleId}
+              className="flex min-w-0 flex-1 items-baseline gap-2"
+            >
+              <span className="shrink-0 text-muted-foreground text-xs">
+                {TITLE_LABEL}
+              </span>
+              <Input
+                id={titleId}
+                aria-label={TITLE_LABEL}
+                value={titleValue}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setTitleValue(next);
+                  markDirty({ title: next });
+                }}
+                disabled={readOnly}
+                className={cn(TITLE_FIELD_CLASS, "min-w-0 flex-1")}
+              />
+            </label>
+          ) : null}
+          {applyMode !== undefined ? (
+            <SegmentedControl
+              aria-label="加载方式"
+              value={applyMode}
+              onChange={(next) => onApplyModeChange?.(next)}
+              items={APPLY_MODE_ITEMS}
+              className="w-auto shrink-0"
+            />
+          ) : null}
+        </div>
+      ) : null}
       {showCatalogLine ? (
         readOnly ? (
-          <div className="mt-2 flex min-w-0 items-baseline gap-2">
+          <div
+            className={cn(
+              showTitleRow && "mt-2",
+              "flex min-w-0 items-baseline gap-2",
+            )}
+          >
             <span className="shrink-0 text-muted-foreground text-xs">
               {CATALOG_LINE_LABEL}
             </span>
@@ -245,7 +240,10 @@ export function PromptWorkbench({
         ) : (
           <label
             htmlFor={catalogLineId}
-            className="mt-2 flex min-w-0 items-baseline gap-2"
+            className={cn(
+              showTitleRow && "mt-2",
+              "flex min-w-0 items-baseline gap-2",
+            )}
           >
             <span className="shrink-0 text-muted-foreground text-xs">
               {CATALOG_LINE_LABEL}
@@ -266,7 +264,7 @@ export function PromptWorkbench({
         )
       ) : null}
     </div>
-  );
+  ) : null;
 
   return (
     <div
@@ -302,56 +300,29 @@ export function PromptWorkbench({
               保存
             </Button>
           ) : null}
-          {!readOnly ? (
-            <div className="flex shrink-0 items-center overflow-hidden rounded-lg border border-border">
-              {(
-                [
-                  { key: "edit", label: "编辑", Icon: PencilLine },
-                  { key: "preview", label: "预览", Icon: Eye },
-                ] as const
-              ).map(({ key, label, Icon }) => (
-                <Button
-                  key={key}
-                  variant="ghost"
-                  onClick={() => switchMode(key)}
-                  className={cn(
-                    "h-7 rounded-none px-2",
-                    mode === key
-                      ? "bg-accent text-foreground"
-                      : "text-muted-foreground hover:bg-accent/60",
-                  )}
-                  icon={<Icon size={13} />}
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
-          ) : null}
         </div>
       </div>
 
-      {hint ? (
-        <p className="shrink-0 border-b border-border px-3 py-1.5 text-muted-foreground text-xs">
-          {hint}
-        </p>
-      ) : null}
-
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="shrink-0 border-b border-border">{cover}</div>
+        {cover ? (
+          <div className="shrink-0 border-b border-border">{cover}</div>
+        ) : null}
         {bodyLoading ? (
           <div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground text-sm">
             加载中…
           </div>
-        ) : editingBody ? (
+        ) : (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <SourceToolbar
-              getView={() => editorRef.current?.getView() ?? null}
-            />
+            {!readOnly ? (
+              <SourceToolbar
+                getView={() => editorRef.current?.getView() ?? null}
+              />
+            ) : null}
             <div className="min-h-0 flex-1 overflow-hidden">
               <MarkdownSourceEditor
                 ref={editorRef}
                 initialDoc={body}
-                editable
+                editable={!readOnly}
                 onChange={(value) => {
                   setBody(value);
                   markDirty({ body: value });
@@ -360,24 +331,6 @@ export function PromptWorkbench({
                 className="h-full w-full"
               />
             </div>
-          </div>
-        ) : hasBody ? (
-          <div className="min-h-0 flex-1 overflow-auto">
-            <div className="mx-auto max-w-3xl px-6 py-6">
-              <PromptDocument
-                text={body}
-                compact={false}
-                framed={false}
-                maxHeightClass="max-h-none"
-                hideHeading={hideHeading}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="flex min-h-0 flex-1 items-center justify-center px-6">
-            <p className="text-center text-muted-foreground text-sm">
-              还没有正文
-            </p>
           </div>
         )}
       </div>

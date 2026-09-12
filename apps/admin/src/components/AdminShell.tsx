@@ -5,19 +5,14 @@ import { errorMessage } from "@/services/api";
 import { logout } from "@/services/auth";
 import { useAuthStore } from "@/stores/auth";
 import {
-  BarChart3,
   LayoutDashboard,
   LogOut,
   type LucideIcon,
   Megaphone,
   MessageSquare,
   Menu,
-  ScrollText,
-  Server,
   ShieldCheck,
-  Store,
   Users,
-  UsersRound,
   Wallet,
   X,
 } from "lucide-react";
@@ -29,20 +24,15 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
 /**
- * The console's sections: 概览 / 用户 / 对话 / 分析 / 审计 / 公告 / 商店 / 内测群 / 平台额度 / 系统.
- * URL-routed via react-router for bookmarkable deep links.
+ * Five operator doors: 总览 / 供给 / 对话 / 用户 / 运营.
+ * Inner rooms (额度|成本, 名册|审计|内测群, 公告|商店) are page tabs, not sidebar rows.
  */
 export type AdminTab =
   | "overview"
-  | "users"
+  | "supply"
   | "conversations"
-  | "analytics"
-  | "audit"
-  | "notices"
-  | "store"
-  | "beta-group"
-  | "quota"
-  | "system";
+  | "users"
+  | "ops";
 
 interface NavItem {
   id: AdminTab;
@@ -54,40 +44,46 @@ interface NavItem {
 }
 
 /**
- * A flat list of entries reads as one undifferentiated list. Grouping them by what the
- * operator is doing — watching the platform, investigating a case, administering it —
- * gives the sidebar a shape you can scan instead of read.
+ * Two groups, five doors. Watching the platform vs governing people and content.
  */
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "监控",
     items: [
-      { id: "overview", label: "概览", icon: LayoutDashboard, path: "/overview" },
-      { id: "analytics", label: "分析", icon: BarChart3, path: "/analytics/cost", match: ["/analytics"] },
-    ],
-  },
-  {
-    label: "排查",
-    items: [
+      { id: "overview", label: "总览", icon: LayoutDashboard, path: "/overview" },
+      {
+        id: "supply",
+        label: "供给",
+        icon: Wallet,
+        path: "/quota",
+        match: ["/quota", "/analytics"],
+      },
       {
         id: "conversations",
         label: "对话",
         icon: MessageSquare,
-        path: "/conversations/conversations",
+        path: "/conversations",
         match: ["/conversations", "/replay"],
       },
-      { id: "audit", label: "审计", icon: ScrollText, path: "/audit" },
     ],
   },
   {
-    label: "管理",
+    label: "治理",
     items: [
-      { id: "users", label: "用户", icon: Users, path: "/users", match: ["/users"] },
-      { id: "notices", label: "公告", icon: Megaphone, path: "/notices" },
-      { id: "store", label: "商店", icon: Store, path: "/store" },
-      { id: "beta-group", label: "内测群", icon: UsersRound, path: "/beta-group" },
-      { id: "quota", label: "平台额度", icon: Wallet, path: "/quota" },
-      { id: "system", label: "系统", icon: Server, path: "/system" },
+      {
+        id: "users",
+        label: "用户",
+        icon: Users,
+        path: "/users",
+        match: ["/users", "/audit", "/beta-group"],
+      },
+      {
+        id: "ops",
+        label: "运营",
+        icon: Megaphone,
+        path: "/notices",
+        match: ["/notices", "/store"],
+      },
     ],
   },
 ];

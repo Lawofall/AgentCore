@@ -4,7 +4,8 @@ Hard-deletes every member conversation (cascade messages / runs / journal / …)
 purges the shared cloud ``folder:<id>`` workspace directory + server snapshots,
 unbinds bare-chat ``auto_desk_folder_id`` soft-pointers (via
 :func:`clear_folder_session_pointers`), physically removes documents in those
-injection scopes, then removes the folder rows.
+injection scopes and creation-tool docs hung on the desks, then removes the
+folder rows.
 
 Two entry points, same member-chat semantics (弹窗勾选 = 最近删除里再确认):
 
@@ -32,6 +33,8 @@ from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import (
     ConversationRepository,
     ConversationShareRepository,
+    DocRepository,
+    DocShareRepository,
     DocumentRepository,
     FolderRepository,
 )
@@ -79,6 +82,10 @@ async def _finish_folder_rows(*, user_id: str, subtree_ids: list[str]) -> None:
         await DocumentRepository(session).hard_delete_for_folders(
             user_id, subtree_ids, commit=False
         )
+        await DocShareRepository(session).revoke_all_for_folder_ids(
+            subtree_ids, commit=False
+        )
+        await DocRepository(session).hard_delete_for_folders(subtree_ids, commit=False)
         await FolderRepository(session).hard_delete_many(subtree_ids)
     from agentcore.memory.account_prepare_cache import hibernate_folder_injection_cache
 

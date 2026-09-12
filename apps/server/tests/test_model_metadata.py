@@ -86,21 +86,31 @@ def test_deepseek_v4_windows_follow_sku_not_family():
     assert model_metadata_for("deepseek-v4-flash-free").context_length == 200_000
     assert model_metadata_for("deepseek-v4-flash-0731").context_length == 1_000_000
     assert model_metadata_for("deepseek-v4-flash-free-0731").context_length == 200_000
+    assert model_metadata_for("deepseek-flash").context_length == 1_000_000
     assert model_metadata_for("deepseek-v4.1-flash-expires-on-0910").context_length == (
         1_000_000
     )
     # Window is SKU-keyed: paying Flash on Go (no ``-free`` catalog) stays 1M.
 
 
-def test_deepseek_v41_preview_exact_display_not_humanized_id():
-    """Preview wire id must keep the branded label (not 'expires on 0910')."""
-    meta = model_metadata_for("deepseek-v4.1-flash-expires-on-0910")
+def test_deepseek_v41_flash_exact_display():
+    meta = model_metadata_for("deepseek-flash")
     assert meta.display_name == "DeepSeek V4.1 Flash"
     assert meta.vendor == "DeepSeek"
     assert meta.badge is None
     assert CAPABILITY_VISION in meta.capabilities
     assert CAPABILITY_TOOLS in meta.capabilities
     assert CAPABILITY_REASONING in meta.capabilities
+    assert meta.display_name != model_metadata_for("deepseek-v4-flash").display_name
+
+
+def test_deepseek_v41_preview_exact_display_not_humanized_id():
+    """Retired preview id keeps the branded label (not 'expires on 0910')."""
+    meta = model_metadata_for("deepseek-v4.1-flash-expires-on-0910")
+    assert meta.display_name == "DeepSeek V4.1 Flash"
+    assert meta.vendor == "DeepSeek"
+    assert meta.badge == "已下线"
+    assert CAPABILITY_VISION in meta.capabilities
     # Must not collapse onto V4 Flash via family prefix (the `.1` is not a `-`).
     assert meta.display_name != model_metadata_for("deepseek-v4-flash").display_name
 
@@ -154,6 +164,7 @@ def test_catalog_vision_follows_vendor_contract_not_keywords_or_family():
     vision_exp = model_metadata_for("deepseek-v4-flash-vision-exp")
     assert vision_exp.display_name == "DeepSeek V4 Flash Vision"
     assert CAPABILITY_VISION in vision_exp.capabilities
+    assert CAPABILITY_VISION in model_metadata_for("deepseek-flash").capabilities
     assert CAPABILITY_VISION in model_metadata_for(
         "deepseek-v4.1-flash-expires-on-0910"
     ).capabilities

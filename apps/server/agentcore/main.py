@@ -21,6 +21,7 @@ from agentcore.api.routes import (
     conversations,
     demo_tape,
     devices,
+    docs,
     documents,
     favicon,
     files,
@@ -625,6 +626,7 @@ app.include_router(capabilities.router, prefix="/v1")
 app.include_router(conversations.router, prefix="/v1")
 app.include_router(demo_tape.router, prefix="/v1")
 app.include_router(devices.router, prefix="/v1")
+app.include_router(docs.router, prefix="/v1")
 app.include_router(documents.router, prefix="/v1")
 app.include_router(favicon.router, prefix="/v1")
 app.include_router(files.router, prefix="/v1")
@@ -644,8 +646,8 @@ app.include_router(search.router, prefix="/v1")
 app.include_router(skill_catalog.router, prefix="/v1")
 app.include_router(skill_store.router, prefix="/v1")
 app.include_router(workflow_store.router, prefix="/v1")
-# Conversation sharing (分享对话): owner-only manage under /v1, plus the public
-# read-only page at the root (/shared/{token}, no /v1, no auth).
+# Public shares: conversation manage under /v1, plus /shared/{token} (no auth)
+# which also serves frozen 文档 snapshots minted at /v1/docs/{id}/shares.
 app.include_router(sharing.router, prefix="/v1")
 app.include_router(sharing.public_router)
 app.include_router(workflows.router, prefix="/v1")

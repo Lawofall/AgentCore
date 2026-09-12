@@ -266,7 +266,7 @@ describe("MemoryUpdateCard", () => {
         />
       </MemoryRouter>,
     );
-    const link = screen.getByRole("link", { name: /去看最近更新/ });
+    const link = screen.getByRole("link", { name: /去看最近学到/ });
     expect(link.getAttribute("href")).toBe("/toolbox/mine/skills?updates=1");
     expect(screen.queryByText("全局设定")).toBeNull();
   });

@@ -442,7 +442,7 @@ function ConversationsTable({
           size="sm"
           className="gap-1.5"
           onClick={() =>
-            navigate(`/conversations/conversations?user_id=${encodeURIComponent(userId)}`)
+            navigate(`/conversations?user_id=${encodeURIComponent(userId)}`)
           }
         >
           <ExternalLink size={14} />
@@ -514,7 +514,7 @@ function RecentTurnsTable({
           className="gap-1.5"
           onClick={() =>
             navigate(
-              `/conversations/turns?user_id=${encodeURIComponent(userId)}`,
+              `/conversations?user_id=${encodeURIComponent(userId)}`,
             )
           }
         >

@@ -1,6 +1,5 @@
 import { statusPillSoft } from "@/components/ui/tone-presets";
 import { formatDuration, formatDurationSec } from "@/lib/format";
-import { NODE_HEIGHT } from "@/lib/graphMetrics";
 import type {
   DebateBeat,
   PlanRevisionKind,
@@ -16,6 +15,7 @@ import {
   toolLabel,
 } from "@/stores/execution";
 import type { WorkerRunPhase } from "@/stores/execution";
+import { NODE_HEIGHT } from "@agentcore/graph-layout";
 import { Check, Loader2, X } from "lucide-react";
 import type { DebateGraphIdentity } from "./debateIdentity";
 import type { FaceBadgeKey } from "./faceBudget";

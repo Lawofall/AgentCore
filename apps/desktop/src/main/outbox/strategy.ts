@@ -12,6 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { CHANNEL_REDIRECT_CODES } from "@shared/channelRedirectCodes";
 import { app } from "electron";
 
 export const PHASE_READY = "ready";
@@ -319,16 +320,6 @@ const LOCAL_TURN_TOOL_FAILURE_CODES = new Set([
   "outside_workspace",
   "other",
   "too_large",
-]);
-
-const CHANNEL_REDIRECT_CODES = new Set([
-  "source_grep_redirect",
-  "source_dump_redirect",
-  "project_verify_redirect",
-  "long_running_redirect",
-  "not_a_web_url",
-  "url_not_workspace_path",
-  "loopback_host",
 ]);
 
 function remapPathOrVerifyFailure(raw: string): string | null {

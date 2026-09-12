@@ -1,4 +1,5 @@
-import { CostTrendBars, TurnTrendBars } from "@/components/charts";
+import { DeploySnapshot } from "@/components/DeploySnapshot";
+import { TurnTrendBars } from "@/components/charts";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, Page, PageHeader, SectionHeader } from "@/components/ui/Page";
@@ -38,15 +39,12 @@ function fmtPct(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
 }
 
-/** Recent errors preview shows only the freshest few — the full feed lives in 分析·健康. */
+/** Recent errors preview shows only the freshest few — the full feed lives on 对话（仅有错误）. */
 const ERROR_PREVIEW_LIMIT = 5;
 
 /**
- * 概览: the console's landing hub. It surfaces today's pulse as summary tiles +
- * a deployment-health strip + the two 7-day trends + a short recent-errors preview,
- * each one a *link* into the single page that owns the detail
- * （分析 / 用户 / 系统 / 平台额度）.
- * It deliberately does not re-render the full tables those pages own.
+ * 总览: today's pulse + deploy snapshot + the 7-day turn trend + recent errors.
+ * Cost trend and credential pool live on 供给; conversation index on 对话.
  */
 export function OverviewPage() {
   const navigate = useNavigate();
@@ -54,6 +52,7 @@ export function OverviewPage() {
   const [data, setData] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deployReloadKey, setDeployReloadKey] = useState(0);
 
   const openReplay = (conversationId: string) => {
     navigate(`/replay/${conversationId}`, { state: { from: location.pathname } });
@@ -71,6 +70,11 @@ export function OverviewPage() {
     }
   }, []);
 
+  const refresh = useCallback(() => {
+    setDeployReloadKey((k) => k + 1);
+    void load();
+  }, [load]);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -87,13 +91,13 @@ export function OverviewPage() {
   return (
     <Page>
       <PageHeader
-        title="概览"
+        title="总览"
         note={UTC_WINDOW_HINT}
         actions={
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void load()}
+            onClick={refresh}
             disabled={loading}
             aria-label="刷新"
           >
@@ -130,12 +134,18 @@ export function OverviewPage() {
                     错误 {fmtInt(today.errors)} · {fmtPct(today.error_rate)}
                   </Badge>
                 }
-                onClick={() => navigate("/analytics/health")}
+                onClick={() =>
+                  navigate(
+                    today.errors > 0
+                      ? "/conversations?has_errors=yes"
+                      : "/conversations",
+                  )
+                }
               />
               <MetricCard
                 label="今日成本"
                 value={fmtMoney(data.cost_today.cny_total, data.cost_today.currency)}
-                sub={byok ? "BYOK 记账恒为 0，估算见分析·成本" : undefined}
+                sub={byok ? "BYOK 记账恒为 0，估算见供给·成本" : undefined}
                 onClick={() => navigate("/analytics/cost")}
               />
               <MetricCard
@@ -148,25 +158,10 @@ export function OverviewPage() {
                 label="P95 延迟"
                 value={fmtMs(today.p95_duration_ms)}
                 sub={`平均 ${today.avg_rounds.toFixed(1)} 轮 · 委派 ${fmtPct(today.delegated_rate)}`}
-                onClick={() => navigate("/analytics/health")}
               />
             </div>
 
             <div className="flex flex-wrap items-center gap-x-1 gap-y-1 rounded-xl border border-border bg-card px-3 py-2 text-sm">
-              <button
-                type="button"
-                onClick={() => navigate("/system")}
-                className="flex items-center gap-2 rounded-lg px-2 py-2 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <span className="text-muted-foreground">数据库</span>
-                <Badge tone={data.database_ok ? "success" : "destructive"}>
-                  {data.database_ok ? "正常" : "不可达"}
-                </Badge>
-                <span className="inline-flex items-center gap-0.5 text-muted-foreground text-xs">
-                  系统
-                  <ChevronRight size={14} />
-                </span>
-              </button>
               <button
                 type="button"
                 onClick={() => navigate("/quota")}
@@ -175,52 +170,28 @@ export function OverviewPage() {
                 <span className="text-muted-foreground">计费模式</span>
                 <Badge tone="primary">{byok ? "BYOK · 自带 Key" : "平台付费"}</Badge>
                 <span className="inline-flex items-center gap-0.5 text-muted-foreground text-xs">
-                  平台额度
+                  供给 · 额度
                   <ChevronRight size={14} />
                 </span>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <Card>
-                <SectionHeader
-                  title="近 7 日成本趋势"
-                  description="每日记账成本（UTC 日切）"
-                  action={
-                    <DetailLink
-                      label="成本详情"
-                      onClick={() => navigate("/analytics/cost")}
-                    />
-                  }
-                />
-                <div className="p-5">
-                  <CostTrendBars
-                    data={data.recent_daily_cost}
-                    currency={data.cost_today.currency}
-                  />
-                </div>
-              </Card>
-              <Card>
-                <SectionHeader
-                  title="近 7 日回合趋势"
-                  description="每日回合数与其中的错误（UTC 日切）"
-                  action={
-                    <DetailLink
-                      label="健康详情"
-                      onClick={() => navigate("/analytics/health")}
-                    />
-                  }
-                />
-                <div className="p-5">
-                  <TurnTrendBars data={data.recent_daily_turns} />
-                </div>
-              </Card>
-            </div>
+            <DeploySnapshot reloadKey={deployReloadKey} />
+
+            <Card>
+              <SectionHeader
+                title="近 7 日回合趋势"
+                description="每日回合数与其中的错误（UTC 日切）"
+              />
+              <div className="p-5">
+                <TurnTrendBars data={data.recent_daily_turns} />
+              </div>
+            </Card>
 
             <ErrorsPreview
               rows={data.recent_errors}
               onOpen={openReplay}
-              onViewAll={() => navigate("/analytics/health")}
+              onViewAll={() => navigate("/conversations?has_errors=yes")}
             />
           </Refreshing>
         </div>
@@ -229,7 +200,7 @@ export function OverviewPage() {
   );
 }
 
-/** First paint keeps the page's shape (tiles → strip → trends → table) instead of a spinner. */
+/** First paint keeps the page's shape (tiles → deploy → trend → errors) instead of a spinner. */
 function OverviewSkeleton() {
   return (
     <div className="flex flex-col gap-5">
@@ -239,10 +210,8 @@ function OverviewSkeleton() {
         ))}
       </div>
       <TableSkeleton rows={1} columns={3} />
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <TableSkeleton rows={5} columns={3} />
-        <TableSkeleton rows={5} columns={3} />
-      </div>
+      <TableSkeleton rows={5} columns={3} />
+      <TableSkeleton rows={5} columns={3} />
       <TableSkeleton rows={5} columns={4} />
     </div>
   );
@@ -276,14 +245,10 @@ function MetricCard({
   value: string;
   sub?: string;
   badge?: ReactNode;
-  onClick: () => void;
+  onClick?: () => void;
 }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-xl border border-border bg-card p-5 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
-    >
+  const inner = (
+    <>
       <div className="flex items-center justify-between gap-2">
         <span className="text-muted-foreground text-sm">{label}</span>
         {badge}
@@ -292,8 +257,25 @@ function MetricCard({
         {value}
       </div>
       {sub && <div className="mt-2 text-muted-foreground text-xs">{sub}</div>}
-    </button>
+    </>
   );
+  const className =
+    "rounded-xl border border-border bg-card p-5 text-left outline-none";
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          className,
+          "transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring",
+        )}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return <div className={className}>{inner}</div>;
 }
 
 function ErrorsPreview({

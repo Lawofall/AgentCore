@@ -22,8 +22,9 @@ DEEPSEEK_V4_FLASH = PLATFORM_MODEL_FLASH
 DEEPSEEK_V4_PRO = PLATFORM_MODEL_PRO
 # OpenCode Zen free SKU (upstream ¥0); product still meters at Flash nominal via pricing.
 DEEPSEEK_V4_FLASH_FREE = "deepseek-v4-flash-free"
-# Official DeepSeek preview wire id (BYOK seed). Not on OpenCode Go / platform allowlist.
-DEEPSEEK_V41_FLASH = "deepseek-v4.1-flash-expires-on-0910"
+# Official V4.1 Flash (BYOK DeepSeek API). Not on platform / OpenCode Go allowlist:
+# Go bills V4.1 Flash against a tighter monthly cap than V4 Flash.
+DEEPSEEK_V41_FLASH = "deepseek-flash"
 
 # Router / ``agent_provider_id`` sentinel when a worker override runs on platform credentials
 # (main turn may be BYOK). ``route_model_for("agent")`` prefixes ``platform/{model}``;

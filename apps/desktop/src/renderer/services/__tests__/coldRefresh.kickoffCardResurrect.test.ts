@@ -4,13 +4,13 @@
  * 生产冷开序（ConversationPage）：硬刷新清 notedSettled / IX / execution →
  * adoptMessageWindow(磁盘 cache，不跑 toMessage) → GET messages 的 toMessage
  * 水合 IX（窗口被 isMessageWindowStrictlyRicher 拒写也不回滚）→ ResumePrompt
- * 走 selectVisibleColdResumes（leftover team_preview 不画可点开工壳）→ 图走 teamGraphVisible
+ * 走 selectVisibleColdResumes（leftover team_preview 不画可点开工壳）→ 图走 shouldShowTeamGraph
  * （只看 IX 原始 status + execution.runs，不复用 settled 判据）。
  *
  * 事件字段抄自 conformance `gates._team_preview_finalized` / `team_preview_resolved`
  * （checkpoint_id=tp1, execution_id=exec1, tools/workers 原文）。
  */
-import { teamGraphVisible } from "@/components/chat/debatePreviewPlacement";
+import { shouldShowTeamGraph } from "@/components/chat/debatePreviewPlacement";
 import {
   type Message,
   getRuntime,
@@ -187,7 +187,7 @@ function paint() {
     execRuntime(useExecutionStore.getState(), MID),
   );
   const runs = projected?.runs ?? [];
-  const graph = teamGraphVisible(runs);
+  const graph = shouldShowTeamGraph(runs);
   const settled = isColdCheckpointSettled({
     checkpointId: TP,
     entry,

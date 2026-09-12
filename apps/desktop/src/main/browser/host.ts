@@ -1231,15 +1231,6 @@ export async function bridgeDispatchLocalBrowser(
   }
 }
 
-/** @deprecated 用 {@link bridgeDispatchLocalBrowser}；保留给旧调用方。 */
-export function bridgeNavigateLocalBrowser(
-  pageId: string,
-  url: string,
-  conversationId: string,
-): BrowserResult {
-  return navigateLocalBrowserPage(pageId, url, conversationId);
-}
-
 /** 测试接缝：重置升级清场标记。 */
 export function resetLegacyBrowserClearForTests(): void {
   legacyPagesCleared = false;

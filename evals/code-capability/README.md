@@ -88,7 +88,7 @@
 | R3 Collab | [`suites/r3/`](suites/r3/)（V01·V07 · 4 卡；复用 R1a Fix seed；题面强制 `delegate`）· [`manifest.json`](suites/r3/manifest.json)；硬=测绿；软=`collab_diagnostics`（`run_plan` / `worker_files`，不进 hard_accept） |
 | 无 LLM 对照 | [`r0_control.py`](r0_control.py) · [`r1_control.py`](r1_control.py) `--suite all --mode matrix` · [`r2_control.py`](r2_control.py) `--mode matrix` · [`r3_control.py`](r3_control.py) `--mode matrix` |
 | 基线报告 | Find/Fix：[`reports/r1_baseline_latest.json`](reports/r1_baseline_latest.json)；**Extend**：[`reports/r2_baseline_latest.json`](reports/r2_baseline_latest.json)；**Collab**：[`reports/r3_baseline_latest.json`](reports/r3_baseline_latest.json) |
-| LLM 烟感（D·sidecar） | 脚本 [`r_llm_smoke.py`](r_llm_smoke.py)（复用 [`probe_sidecar_turn.py`](probe_sidecar_turn.py)）；报告 [`reports/llm_smoke_latest.json`](reports/llm_smoke_latest.json)；**首波结果见下「LLM 烟感」节**（不进 PR / nightly 强制） |
+| LLM 烟感（D·sidecar） | 脚本 [`r_llm_smoke.py`](r_llm_smoke.py)（复用 [`probe_sidecar_turn.py`](probe_sidecar_turn.py)）；报告本地写出 `reports/llm_smoke_latest.json`（**不入仓**）；**首波结果见下「LLM 烟感」节**（不进 PR / nightly 强制） |
 | R4 冻结基线 | [`reports/baselines/`](reports/baselines/)（`r1.json`·`r2.json`·`r3.json` + [`manifest.json`](reports/baselines/manifest.json)）；棘轮脚本 [`r4_regress.py`](r4_regress.py) |
 | Vendor 复现 | [`vendor/README.md`](vendor/README.md) · `_fetch_r0b.py`（维护者本地；禁 CI 现拉 main） |
 | 门禁 | **不进** PR 硬门禁；R4 为本地/可选 nightly 挂载点（默认不烧 LLM）；勿与 S1–S7 Pass 口径混谈 |
@@ -164,7 +164,7 @@ uv run python ../../evals/code-capability/r_llm_smoke.py --no-prefix --max-resum
 
 | 项 | 说明 |
 |----|------|
-| 状态 | **甲乙后难仓复测（2026-07-29 · 仅 V05/V06）** → 快照 [`reports/llm_smoke_ab_retest_20260729.json`](reports/llm_smoke_ab_retest_20260729.json)：**2/2 pass** · 经典 hang=0 · 墙钟 timeout=0（V05 近墙钟 898s 仍 `end_turn`）· 硬 Check 全绿。相对 e-idle（测红）：**双绿修通**。历史：e-idle [`reports/llm_smoke_e_idle_20260728.json`](reports/llm_smoke_e_idle_20260728.json) 0/3；W5 [`reports/llm_smoke_baseline_w5_20260728.json`](reports/llm_smoke_baseline_w5_20260728.json) 3/5；优化前 [`reports/llm_smoke_baseline_20260728.json`](reports/llm_smoke_baseline_20260728.json) 1/5。写码完整化本段 **已收口**（大烧冻结） |
+| 状态 | **甲乙后难仓复测（2026-07-29 · 仅 V05/V06）**：**2/2 pass** · 经典 hang=0 · 墙钟 timeout=0（V05 近墙钟 898s 仍 `end_turn`）· 硬 Check 全绿。相对 e-idle（测红）：**双绿修通**。历史：e-idle 0/3；W5 3/5；优化前 1/5。写码完整化本段 **已收口**（大烧冻结） |
 | 本轮卡（甲乙后） | V05 `v05_fix_has`（**pass** · end_turn@898s · tools=71 · 硬测双绿 · `str_replace` 上盘）· V06 `v06_fix_dump`（**pass** · end_turn@450s · tools=57 · 硬测双绿 · `str_replace`/`file_write` 上盘）。e-idle 三卡结果见历史快照 |
 | 硬测 | turn 有 `finish_reason` 后跑 `TestExitCode` + `TestsUnchanged`；墙钟超时则 `checks_pass=null` |
 | 已知限制 | auth / mint inference / sidecar `initialize` OK。**经典接缝 hang** = `turn_started`+timeout+几乎无 tool（仅 `message_start`/`run_*`）→ `fail_class=接缝`。**大量 tool 后墙钟 timeout**（空转烧预算，如反复 `code_execute`/`terminal`/`delegate`）→ `fail_class=模型弱`（notes 标 `wall_clock`），**勿再记为接缝死锁**。**产品路径 = CEO→delegate**（卡声明 `path=team`/`toolset=ceo`）；EvalCase 字段**不**透传 `startTurn`，烟感**不**平行造 worker 直装。长跑建议把 stdout **重定向到文件**（Cursor terminal 背压可在 timeout 后卡死 print） |

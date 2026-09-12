@@ -10,6 +10,7 @@ describe("isNarrowBlockedPath", () => {
     expect(isNarrowBlockedPath("/toolbox")).toBe(true);
     expect(isNarrowBlockedPath("/toolbox/manual/intro")).toBe(true);
     expect(isNarrowBlockedPath("/whiteboard/abc")).toBe(true);
+    expect(isNarrowBlockedPath("/docs/abc")).toBe(true);
     expect(isNarrowBlockedPath("/conversations")).toBe(true);
     expect(isNarrowBlockedPath("/more/shortcuts")).toBe(true);
   });

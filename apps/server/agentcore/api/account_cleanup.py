@@ -12,6 +12,8 @@ from drifting apart (one place to add a resource when the data model grows).
 from agentcore.db.repositories import (
     ConversationRepository,
     ConversationShareRepository,
+    DocRepository,
+    DocShareRepository,
     LlmModelProfileRepository,
     SkillStoreRepository,
     UserLlmProviderRepository,
@@ -40,7 +42,9 @@ async def cleanup_account_resources(
     outlives the account), drops all BYOK providers + model profiles + Git PAT,
     removes the avatar object, cascades collaboration-desk membership
     (owner folders stay for retention; member → drop membership rows + pending invites),
-    and drops skill-store and workflow-store listings/installs/reports.
+    hides creation-tool docs on folders this user owns, revokes public 文档
+    shares on those desks plus any 文档 links this user minted, and drops skill-store and
+    workflow-store listings/installs/reports.
     Installed skill document copies and installed workflow copies stay.
     ``avatar_key`` must be captured by the caller *before* the user row is anonymized
     (soft-delete nulls it). Each step is independently idempotent, so re-running on
@@ -48,6 +52,9 @@ async def cleanup_account_resources(
     intentionally untouched.
     """
     await conversations.soft_delete_all_for_user(user_id)
+    await DocRepository(conversations._session).soft_delete_on_owned_folders(user_id)
+    await DocShareRepository(conversations._session).revoke_all_on_owned_folders(user_id)
+    await DocShareRepository(conversations._session).revoke_all_for_user(user_id)
     await shares.revoke_all_for_user(user_id)
     await llm_providers.delete_all_for_user(user_id)
     if llm_profiles is not None:

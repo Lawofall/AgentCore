@@ -6,14 +6,34 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /** Subset of Electron Cookie fields used by production `readAuthCookies`. */
 type MockCookie = { name: string; value: string; path?: string };
 
+const ORIGIN = "http://localhost:8000";
+
 const h = vi.hoisted(() => {
-  const cookies = new Map<string, string>();
+  const jar: MockCookie[] = [];
+  const upsert = (name: string, value: string, path?: string) => {
+    const p = path ?? "";
+    const i = jar.findIndex((c) => c.name === name && (c.path ?? "") === p);
+    const rec: MockCookie = { name, value };
+    if (path != null) rec.path = path;
+    if (i >= 0) jar[i] = rec;
+    else jar.push(rec);
+  };
   return {
-    cookies,
+    jar,
+    cookies: {
+      clear: () => {
+        jar.length = 0;
+      },
+      set: (name: string, value: string, path?: string) =>
+        upsert(name, value, path),
+      get: (name: string) => jar.find((c) => c.name === name)?.value,
+    },
     fetchMock: vi.fn(),
     cookieGet: vi.fn(
-      async (): Promise<MockCookie[]> =>
-        [...cookies.entries()].map(([name, value]) => ({ name, value })),
+      async (filter?: { name?: string }): Promise<MockCookie[]> =>
+        jar
+          .filter((c) => !filter?.name || c.name === filter.name)
+          .map((c) => ({ ...c })),
     ),
     cookieSet: vi.fn(
       async (details: {
@@ -24,9 +44,21 @@ const h = vi.hoisted(() => {
         secure?: boolean;
         expirationDate?: number;
       }) => {
-        cookies.set(details.name, details.value);
+        upsert(details.name, details.value, details.path);
       },
     ),
+    cookieRemove: vi.fn(async (url: string, name: string) => {
+      const path = url.startsWith(ORIGIN) ? url.slice(ORIGIN.length) : "";
+      for (let i = jar.length - 1; i >= 0; i--) {
+        if (jar[i].name !== name) continue;
+        const cookiePath = jar[i].path ?? "";
+        const same =
+          cookiePath === path ||
+          (path === "/" && cookiePath === "") ||
+          (path === "" && cookiePath === "");
+        if (same) jar.splice(i, 1);
+      }
+    }),
     cookieFlush: vi.fn(async () => {}),
     appOn: vi.fn(),
     appQuit: vi.fn(),
@@ -42,6 +74,7 @@ vi.mock("electron", () => ({
       cookies: {
         get: h.cookieGet,
         set: h.cookieSet,
+        remove: h.cookieRemove,
         flushStore: h.cookieFlush,
       },
     },
@@ -69,6 +102,7 @@ beforeEach(() => {
   h.fetchMock.mockReset();
   h.cookieGet.mockClear();
   h.cookieSet.mockClear();
+  h.cookieRemove.mockClear();
   h.cookieFlush.mockClear();
   vi.mocked(logDesktop).mockClear();
   resetAuthClientForTests();
@@ -216,12 +250,9 @@ describe("refreshAccessToken (Bearer body refresh)", () => {
     );
   });
 
-  it("prefers refresh cookie whose path matches the API prefix", async () => {
-    // Stale path first — naive find() would rotate the wrong tip.
-    h.cookieGet.mockResolvedValueOnce([
-      { name: "refresh_token", value: "stale", path: "/api/v1/auth" },
-      { name: "refresh_token", value: "fresh", path: "/v1/auth" },
-    ]);
+  it("uses the refresh cookie at the current API prefix path and drops others on write", async () => {
+    h.cookies.set("refresh_token", "stale", "/api/v1/auth");
+    h.cookies.set("refresh_token", "fresh", "/v1/auth");
     h.fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -236,15 +267,20 @@ describe("refreshAccessToken (Bearer body refresh)", () => {
     expect(JSON.parse(h.fetchMock.mock.calls[0][1].body)).toEqual({
       refresh_token: "fresh",
     });
-    expect(logDesktop).toHaveBeenCalledWith(
+    expect(logDesktop).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        event: "auth.refresh",
         fields: expect.objectContaining({
           result: "ambiguous_refresh_cookies",
-          prefer: "/v1/auth",
         }),
       }),
     );
+    expect(h.cookieRemove).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/auth",
+      "refresh_token",
+    );
+    expect(
+      h.jar.filter((c) => c.name === "refresh_token").map((c) => c.path),
+    ).toEqual(["/v1/auth"]);
   });
 
   it("returns auth_dead on 401/403", async () => {
@@ -354,6 +390,26 @@ describe("bearerPostJson", () => {
       { headers: Record<string, string> },
     ];
     expect(retryPost[1].headers.Authorization).toBe("Bearer fresh");
+  });
+
+  it("reuses the in-memory access token so journal posts do not rescan the jar", async () => {
+    h.cookies.set("access_token", "cached");
+    h.fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    });
+    await bearerPostJson("/v1/conversations/c1/local-turns/journal", {
+      message_id: "m1",
+      entries: [],
+    });
+    h.cookieGet.mockClear();
+    await bearerPostJson("/v1/conversations/c1/local-turns/journal", {
+      message_id: "m1",
+      entries: [],
+    });
+    expect(h.cookieGet).not.toHaveBeenCalled();
+    expect(h.fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 

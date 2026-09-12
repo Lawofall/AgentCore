@@ -1,4 +1,4 @@
-// Screenshot harness for 工具箱五 tab 壳 (#/toolbox → 提示词).
+// Screenshot harness for 工具箱三 tab 壳 (#/toolbox → 提示词).
 //
 // Usage:
 //   node scripts/shoot-toolbox.mjs
@@ -15,12 +15,11 @@
 //     renders POPULATED rather than empty/loading. No product code is touched.
 //   • `VITE_API_URL` pinned to "" ⇒ same-origin API, no CORS on `route.fulfill`.
 //
-// One thing settings does not need: 连接器 / 工具页并陈 talk to `window.mcpApi`
-// (an Electron preload bridge), which a browser never has — 连接器 would honestly
-// degrade to「本机 MCP 仅桌面端可用」, and 工具 would omit already-plugged tools. An
-// `addInitScript` installs a stub bridge so the populated server list (and
-// connector-named cards on 工具) render; that is browser-side test scaffolding, not a
-// product change.
+// One thing settings does not need: 连接器 talk to `window.mcpApi`
+// (an Electron preload bridge), which a browser never has — the 连接器 group
+// would honestly stay hidden. An `addInitScript` installs a stub bridge so the
+// populated server list renders on 提示词; that is browser-side test scaffolding,
+// not a product change.
 //
 // Known gaps vs the real Electron app (screenshots differ, product is fine):
 //   • Overlay scrollbars: headless Chromium's scrollbars take no width, so bugs where a
@@ -57,7 +56,7 @@ const MAX_HEIGHT = Number(process.env.SHOOT_MAX_HEIGHT ?? 4000);
 const filter = (process.argv[2] ?? "").toLowerCase();
 
 /**
- * 五 tab 壳：可见顶栏是种类 tab（右槽市场）；sr-only h1 是当前种类或「市场」。
+ * 三 tab 壳：可见顶栏是种类 tab（右槽市场）；sr-only h1 是当前种类或「市场」。
  * `ready` waits until populated fixtures landed.
  */
 const PAGES = [
@@ -70,10 +69,12 @@ const PAGES = [
   },
   {
     id: "02-tools",
-    hash: "/toolbox/mine/tools",
-    heading: "工具",
-    ready: "web_search",
-    overlayReady: "Filesystem",
+    hash: "/toolbox/mine/skills",
+    heading: "提示词",
+    ready: "全员共享准则",
+    click: "web_search",
+    clickWithin: "prompt-rail-tools",
+    afterClick: "要填",
     expectKindNav: true,
   },
   {
@@ -92,7 +93,7 @@ const PAGES = [
     heading: "市场",
     ready: "审合同时用",
     click: "合同审查",
-    afterClick: "展开正文",
+    afterClick: "先列争议条款",
     expectKindNav: true,
   },
   {
@@ -111,11 +112,9 @@ const PAGES = [
   },
   {
     id: "08-connectors",
-    hash: "/toolbox/mine/tools",
-    heading: "工具",
-    ready: "添加连接器",
-    click: "添加连接器",
-    afterClick: "新建连接器",
+    hash: "/toolbox/mine/skills?connectors=1",
+    heading: "提示词",
+    ready: "新建连接器",
     expectKindNav: true,
   },
   {
@@ -177,7 +176,7 @@ const FACE_FROM_CATEGORY = {
 const tool = (name, category, description, parameters, opts = {}) => ({
   name,
   face: opts.face ?? FACE_FROM_CATEGORY[category] ?? "web",
-  resident: opts.resident ?? true,
+  resident: opts.resident ?? false,
   summary: opts.summary ?? description.split(/[：。]/)[0],
   description,
   parameters,
@@ -239,6 +238,7 @@ const CAPABILITY_TOOLS = [
       },
       ["path"],
     ),
+    { resident: true },
   ),
   tool(
     "file_list",
@@ -349,7 +349,7 @@ const CAPABILITY_TOOLS = [
     "orchestration",
     "按需取回某条能力指引的完整正文（渐进披露：平时只挂一行触发说明）。",
     obj({ name: { type: "string", description: "指引名。" } }, ["name"]),
-    { availableTo: ["ceo"] },
+    { availableTo: ["ceo"], resident: true },
   ),
   tool(
     "replan",
@@ -369,6 +369,7 @@ const CAPABILITY_TOOLS = [
       },
       ["content"],
     ),
+    { resident: true },
   ),
   tool(
     "escalate",
@@ -635,7 +636,7 @@ const FIXTURES = new Map([
       writable: true,
     },
   ],
-  // 工具页 additionally probes the chat model so it can decide whether to hang the
+  // 提示词 additionally probes the chat model so it can decide whether to hang the
   // tools-gate hint on delegate/debate — a platform model with tools keeps it off.
   [
     "/v1/users/me/llm-providers",
@@ -970,7 +971,7 @@ async function auditPage(page) {
   });
 }
 
-const EXPECTED_KIND_TABS = ["提示词", "工具", "创作", "工作流"];
+const EXPECTED_KIND_TABS = ["提示词", "创作", "工作流"];
 
 /** Turn the audit into human-readable complaints; empty array = clean. */
 function auditProblems(audit, spec) {
@@ -1143,8 +1144,8 @@ async function main() {
     }
   }, THEME);
 
-  // 连接器 reads the Electron preload bridge; a browser has none, so the page would
-  // honestly degrade to「本机 MCP 仅桌面端可用」. Install a read-only stub bridge.
+  // 连接器 reads the Electron preload bridge; a browser has none, so the group
+  // would stay hidden. Install a read-only stub bridge.
   await page.addInitScript((servers) => {
     const list = async () => ({ ok: true, servers });
     window.mcpApi = {
@@ -1279,7 +1280,10 @@ async function main() {
           .catch(() => notes.push(`没等到 overlay「${spec.overlayReady}」`));
       }
       if (spec.click) {
-        await page.getByRole("button", { name: spec.click }).click();
+        const scope = spec.clickWithin
+          ? page.getByTestId(spec.clickWithin)
+          : page;
+        await scope.getByRole("button", { name: spec.click }).click();
         if (spec.afterClick) {
           await page
             .getByText(spec.afterClick)

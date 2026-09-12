@@ -1,4 +1,4 @@
-import { NODE_HEIGHT } from "@/lib/graphMetrics";
+import { NODE_HEIGHT } from "@agentcore/graph-layout";
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";

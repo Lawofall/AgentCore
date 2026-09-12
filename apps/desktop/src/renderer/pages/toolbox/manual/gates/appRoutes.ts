@@ -11,7 +11,8 @@ import { APP_PATHS } from "../paths";
 export const APP_STATIC_ROUTES: readonly string[] = [
   "/",
   "/conversations",
-  APP_PATHS.files,
+  "/files",
+  "/docs",
   "/whiteboard",
   "/messages",
   APP_PATHS.toolbox.root,
@@ -67,6 +68,7 @@ export function isKnownAppRoute(pathname: string): boolean {
   if (/^\/conversations\/[^/]+$/.test(pathname)) return true;
   if (/^\/conversations\/[^/]+\/turn\/[^/]+$/.test(pathname)) return true;
   if (/^\/whiteboard\/[^/]+$/.test(pathname)) return true;
+  if (/^\/docs\/[^/]+$/.test(pathname)) return true;
   if (/^\/messages\/[^/]+$/.test(pathname)) return true;
   if (/^\/more\/legal\/[^/]+$/.test(pathname)) return true;
   if (/^\/toolbox\/workflows\/[^/]+$/.test(pathname)) return true;

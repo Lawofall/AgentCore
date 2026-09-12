@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Native shell chrome: mobile-light bg (pure white). -->
+    <!-- Native shell chrome: tokens.css :root --background (pure white). -->
     <color name="shellBackground">#FFFFFF</color>
     <color name="colorPrimary">#FFFFFF</color>
     <color name="colorPrimaryDark">#FFFFFF</color>
-    <!-- Approximate mobile-light accent for residual AppCompat chrome, and the FCM
+    <!-- Approximate tokens.css --primary for residual AppCompat chrome, and the FCM
          default_notification_color tint (see AndroidManifest) — keep it a real brand accent. -->
     <color name="colorAccent">#2F6FED</color>
 </resources>

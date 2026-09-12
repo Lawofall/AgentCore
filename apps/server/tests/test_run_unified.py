@@ -11,6 +11,7 @@ from agentcore.tools.builtin.run import (
     _is_verify_command,
     _wants_background,
     run_description,
+    run_op_timeout_seconds,
 )
 from agentcore.tools.builtin.run_verify import _is_pnpm_filter_verify_argv
 from agentcore.tools.builtin.test_parsers import parse_vitest_output
@@ -97,8 +98,10 @@ class _FakeShortBackend:
 
     def __init__(self) -> None:
         self.last_code: str | None = None
+        self.requests: list[ExecutionRequest] = []
 
     async def execute(self, request: ExecutionRequest) -> ExecutionResult:
+        self.requests.append(request)
         self.last_code = request.code
         return ExecutionResult(
             success=True, stdout="1\n", stderr="", exit_code=0, duration_ms=1
@@ -157,11 +160,12 @@ async def test_run_mixed_verify_chain_uses_verify_budget(monkeypatch):
 
 
 async def test_ceo_short_command_runs_like_worker():
+    backend = _FakeShortBackend()
     ctx = ToolContext.create(
         execution_id="e",
         run_id="s",
         agent_id="ceo",
-        backend=_FakeShortBackend(),  # type: ignore[arg-type]
+        backend=backend,  # type: ignore[arg-type]
         user_id="u",
     )
     assert ctx.write_coordinator is None
@@ -170,6 +174,30 @@ async def test_ceo_short_command_runs_like_worker():
     assert result.success is True
     assert "1" in (result.output or "")
     assert (result.metadata or {}).get("code") != "ceo_run_scope"
+    from agentcore.tools.sandbox.exec_env import EXEC_DISASTER_TIMEOUT_S
+
+    assert backend.requests[0].timeout_seconds == EXEC_DISASTER_TIMEOUT_S
+    assert backend.requests[0].idle_timeout_seconds is None
+
+
+async def test_unshaped_generate_script_uses_disaster_wall():
+    """``python generate.py`` is not verify-shaped; it still gets the same clock."""
+    from agentcore.tools.sandbox.exec_env import EXEC_DISASTER_TIMEOUT_S
+
+    backend = _FakeShortBackend()
+    ctx = ToolContext.create(
+        execution_id="e",
+        run_id="s",
+        agent_id="worker",
+        backend=backend,  # type: ignore[arg-type]
+        user_id="u",
+    )
+    command = "python generate.py"
+    assert not _is_verify_command(command)
+    result = await RunTool().execute({"command": command}, ctx)
+    assert result.success is True
+    assert backend.requests[0].timeout_seconds == EXEC_DISASTER_TIMEOUT_S
+    assert backend.requests[0].idle_timeout_seconds is None
 
 
 async def test_foreground_wait_timeout_is_ignored():
@@ -220,3 +248,30 @@ async def test_cd_dotdot_from_root_is_contract_failure():
     assert result.success is False
     assert result.contract_failure is True
     assert "工作区" in (result.error or "")
+
+
+def test_foreground_run_engine_wall_ignores_command_shape():
+    from agentcore.core.types import ToolFace
+    from agentcore.runtime.engine.timeout import resolve_tool_timeout
+    from agentcore.tools.builtin.run_verify import _VERIFY_DISASTER_SECONDS
+    from agentcore.tools.protocol import ToolSchema
+    from agentcore.tools.sandbox.exec_env import _ENGINE_TIMEOUT_SLACK_SECONDS
+
+    expected = float(_VERIFY_DISASTER_SECONDS + _ENGINE_TIMEOUT_SLACK_SECONDS)
+    echo = {"command": "echo 1"}
+    generate = {"command": "python generate.py"}
+    verify = {"command": "pnpm test"}
+    assert run_op_timeout_seconds(echo) == expected
+    assert run_op_timeout_seconds(generate) == expected
+    assert run_op_timeout_seconds(verify) == expected
+    assert run_op_timeout_seconds(echo, location="local") == run_op_timeout_seconds(
+        echo, location="server"
+    )
+    schema = ToolSchema(
+        name="run",
+        description="d",
+        parameters={"type": "object", "properties": {}},
+        face=ToolFace.EXECUTION,
+    )
+    assert resolve_tool_timeout(schema, echo, location="server") == expected
+    assert resolve_tool_timeout(schema, verify, location="local") == expected

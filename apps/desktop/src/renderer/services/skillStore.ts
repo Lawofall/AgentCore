@@ -4,11 +4,47 @@ import { scheduleAccountRulesMemoryRefresh } from "@/services/refreshAccountRule
 /** Cross-account Skill shelf. Orthogonal to overlay replace/mute. */
 
 export const SKILL_STORE_PAGE_SIZE = 24;
+export const SKILL_STORE_DISCOVER_PAGE_SIZE = 100;
 
 export type SkillStoreListingStatus =
   | "published"
   | "unpublished"
   | "taken_down";
+
+export type SkillStoreGroup =
+  | "legal"
+  | "writing"
+  | "research"
+  | "product"
+  | "engineering"
+  | "decision";
+
+const SKILL_STORE_GROUP_IDS: readonly SkillStoreGroup[] = [
+  "legal",
+  "writing",
+  "research",
+  "product",
+  "engineering",
+  "decision",
+];
+
+export const EMPTY_SKILL_STORE_GROUPS: Record<SkillStoreGroup, number> = {
+  legal: 0,
+  writing: 0,
+  research: 0,
+  product: 0,
+  engineering: 0,
+  decision: 0,
+};
+
+export function isSkillStoreGroup(
+  value: string | null,
+): value is SkillStoreGroup {
+  return (
+    value != null &&
+    (SKILL_STORE_GROUP_IDS as readonly string[]).includes(value)
+  );
+}
 
 export interface SkillStoreListing {
   id: string;
@@ -16,6 +52,7 @@ export interface SkillStoreListing {
   description: string;
   author: string;
   version: string;
+  group: SkillStoreGroup;
   installed: boolean;
   hasUpdate: boolean;
   /** Author's source document — match 上架/下架 on「我的」. */
@@ -34,6 +71,7 @@ export interface SkillStorePage {
   page: number;
   pageSize: number;
   total: number;
+  groups: Record<SkillStoreGroup, number>;
 }
 
 interface ListingWire {
@@ -49,6 +87,7 @@ interface ListingWire {
   document_id?: string | null;
   content?: string;
   status?: string;
+  group?: string;
 }
 
 interface PageWire {
@@ -57,12 +96,31 @@ interface PageWire {
   page?: number;
   page_size?: number;
   total?: number;
+  groups?: Record<string, number>;
 }
 
 export interface ListSkillStoreQuery {
   q?: string;
+  group?: SkillStoreGroup;
   page?: number;
   pageSize?: number;
+}
+
+function asGroup(raw: string | undefined): SkillStoreGroup {
+  const value = raw ?? null;
+  return isSkillStoreGroup(value) ? value : "writing";
+}
+
+function asGroupCounts(
+  raw: Record<string, number> | undefined,
+): Record<SkillStoreGroup, number> {
+  const next = { ...EMPTY_SKILL_STORE_GROUPS };
+  if (!raw) return next;
+  for (const id of SKILL_STORE_GROUP_IDS) {
+    const n = raw[id];
+    if (typeof n === "number" && n > 0) next[id] = n;
+  }
+  return next;
 }
 
 function asListingStatus(raw: string | undefined): SkillStoreListingStatus {
@@ -77,6 +135,7 @@ function toListing(w: ListingWire): SkillStoreListing {
     description: w.description,
     author: w.author ?? "",
     version: w.version_n != null ? String(w.version_n) : (w.version ?? ""),
+    group: asGroup(w.group),
     installed: Boolean(w.installed),
     hasUpdate: Boolean(w.has_update),
     documentId: w.source_document_id ?? null,
@@ -103,6 +162,7 @@ function toPage(raw: PageWire, fallback: ListSkillStoreQuery): SkillStorePage {
     page,
     pageSize,
     total: raw.total ?? items.length,
+    groups: asGroupCounts(raw.groups),
   };
 }
 
@@ -110,6 +170,7 @@ export function skillStoreListQuery(opts: ListSkillStoreQuery = {}): string {
   const params = new URLSearchParams();
   const q = opts.q?.trim();
   if (q) params.set("q", q);
+  if (opts.group) params.set("group", opts.group);
   params.set("page", String(opts.page ?? 1));
   params.set("page_size", String(opts.pageSize ?? SKILL_STORE_PAGE_SIZE));
   return `?${params.toString()}`;
@@ -131,20 +192,27 @@ export function getSkillStoreListing(
     .then(toDetail);
 }
 
-export function publishSkill(documentId: string): Promise<SkillStoreListing> {
+export function publishSkill(
+  documentId: string,
+  group: SkillStoreGroup,
+): Promise<SkillStoreListing> {
   return api
-    .post<ListingWire>("/v1/skill-store", { document_id: documentId })
+    .post<ListingWire>("/v1/skill-store", {
+      document_id: documentId,
+      group,
+    })
     .then(toListing);
 }
 
 export function publishSkillVersion(
   listingId: string,
   documentId: string,
+  group?: SkillStoreGroup,
 ): Promise<SkillStoreListing> {
   return api
     .post<ListingWire>(
       `/v1/skill-store/${encodeURIComponent(listingId)}/versions`,
-      { document_id: documentId },
+      { document_id: documentId, group },
     )
     .then(toListing);
 }

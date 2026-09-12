@@ -80,11 +80,6 @@ export function registerWorkspaceProtocolFor(conversationId: string): void {
   });
 }
 
-/** @deprecated 首期按 cid 注册；无 cid 时 no-op（勿挂全局 partition）。 */
-export function registerWorkspaceProtocol(): void {
-  /* intentionally empty — callers must use registerWorkspaceProtocolFor(cid) */
-}
-
 /** 测试接缝：重置注册标记。 */
 export function resetWorkspaceProtocolForTests(): void {
   registeredPartitions.clear();

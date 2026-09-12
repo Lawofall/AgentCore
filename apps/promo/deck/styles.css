@@ -1,0 +1,818 @@
+/* AgentCore 口播预览稿 — 视觉对齐官网靛青体系，不引入第二套色。 */
+
+:root {
+  --background: oklch(0.155 0.018 265);
+  --foreground: oklch(0.97 0.005 260);
+  --ink-deep: oklch(0.13 0.028 268);
+  --card: oklch(0.215 0.02 265);
+  --panel: oklch(0.19 0.02 265);
+  --primary: oklch(0.75 0.13 235);
+  --brand-2: oklch(0.78 0.09 210);
+  --on-brand: oklch(0.14 0.03 265);
+  --dim: oklch(0.75 0.015 255);
+  --faint: oklch(0.6 0.015 255);
+  --ghost: oklch(0.48 0.015 258);
+  --border: oklch(1 0 0 / 0.1);
+  --border-soft: oklch(1 0 0 / 0.06);
+  --success: oklch(0.8 0.11 175);
+  --grad-1: oklch(0.65 0.15 270);
+  --grad-2: oklch(0.72 0.14 250);
+  --grad-3: oklch(0.8 0.12 225);
+  --grad-4: oklch(0.86 0.1 205);
+  --glow-1: oklch(0.6 0.16 270 / 0.14);
+  --glow-2: oklch(0.72 0.14 240 / 0.12);
+  --glow-3: oklch(0.8 0.12 210 / 0.1);
+  --brand-gradient: linear-gradient(
+    90deg,
+    oklch(0.62 0.16 272) 0%,
+    oklch(0.72 0.14 248) 40%,
+    oklch(0.8 0.12 226) 70%,
+    oklch(0.88 0.1 202) 100%
+  );
+  --head-gradient: linear-gradient(
+    100deg,
+    oklch(0.88 0.1 205) 0%,
+    oklch(0.74 0.14 245) 50%,
+    oklch(0.66 0.16 270) 100%
+  );
+  --font-display: "Outfit", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    system-ui, sans-serif;
+  --font-serif: "Newsreader", "Songti SC", "Source Han Serif SC",
+    "Noto Serif CJK SC", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--ink-deep);
+  color: var(--foreground);
+  font-family: var(--font-display);
+  font-synthesis: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ── 预览壳（不属于幻灯片） ── */
+
+.preview-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  padding: 0.7rem 1.25rem;
+  background: color-mix(in oklab, var(--ink-deep), black 20%);
+  border-bottom: 1px solid var(--border);
+}
+
+.preview-bar p {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.preview-bar strong {
+  color: var(--dim);
+  font-weight: 600;
+}
+
+.toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.toc a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.toc a:hover,
+.toc a:focus-visible {
+  color: var(--foreground);
+  border-color: var(--primary);
+}
+
+.deck {
+  display: flex;
+  flex-direction: column;
+  gap: 2.25rem;
+  padding: 1.75rem 1.25rem 4rem;
+  max-width: 76rem;
+  margin: 0 auto;
+}
+
+.slide-block {
+  scroll-margin-top: 4.5rem;
+}
+
+.slide {
+  container-type: size;
+  container-name: slide;
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--background);
+  box-shadow: 0 30px 80px -40px rgb(0 0 0 / 0.85);
+}
+
+.slide-inner {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  padding: 5.2cqh 5.4cqw 4.6cqh;
+  display: flex;
+  flex-direction: column;
+}
+
+.slide--hero .slide-inner,
+.slide--close .slide-inner {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.n {
+  font-family: var(--font-mono);
+  font-size: 1.15cqw;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7em;
+  margin: 0 0 1.6cqh;
+  font-family: var(--font-mono);
+  font-size: 1.2cqw;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.split--text .kicker {
+  margin-bottom: 2.2cqh;
+}
+
+.kicker::before {
+  content: "";
+  width: 1.6em;
+  height: 1px;
+  background: var(--brand-gradient);
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.22;
+  text-wrap: balance;
+}
+
+.display {
+  font-size: 4.6cqw;
+}
+
+.display-sm {
+  font-size: 3.15cqw;
+}
+
+.lead {
+  margin: 1.8cqh 0 0;
+  max-width: 46em;
+  font-size: 1.55cqw;
+  line-height: 1.7;
+  color: var(--dim);
+  text-wrap: pretty;
+}
+
+.accent {
+  display: inline-block;
+  padding-block: 0.08em;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  background: var(--head-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.starfield,
+.aurora {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.starfield {
+  opacity: 0.8;
+  background-image:
+    radial-gradient(1.4px 1.4px at 18% 26%, rgb(255 255 255 / 0.55), transparent 50%),
+    radial-gradient(1px 1px at 62% 12%, rgb(255 255 255 / 0.4), transparent 50%),
+    radial-gradient(1.2px 1.2px at 84% 62%, rgb(255 255 255 / 0.45), transparent 50%),
+    radial-gradient(1px 1px at 34% 78%, rgb(255 255 255 / 0.3), transparent 50%),
+    radial-gradient(1.6px 1.6px at 8% 58%, rgb(255 255 255 / 0.35), transparent 50%);
+  background-size: 340px 300px, 210px 260px, 430px 380px, 280px 220px, 520px 460px;
+}
+
+.aurora {
+  background:
+    radial-gradient(60% 46% at 22% 62%, var(--glow-2), transparent 68%),
+    radial-gradient(52% 40% at 74% 40%, var(--glow-3), transparent 66%),
+    radial-gradient(44% 38% at 50% 92%, var(--glow-1), transparent 70%);
+  filter: blur(14px);
+}
+
+.glyph {
+  width: 7.2cqw;
+  height: 7.2cqw;
+  margin-bottom: 2.4cqh;
+}
+
+.wordmark {
+  margin: 0 0 1.5cqh;
+  font-size: 1.7cqw;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.hero-sub {
+  margin: 2.2cqh 0 0;
+  font-size: 1.35cqw;
+  letter-spacing: 0.12em;
+  color: var(--faint);
+}
+
+.note {
+  margin: 0.7rem 0.35rem 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--ghost);
+}
+
+.note b {
+  color: var(--faint);
+  font-weight: 600;
+}
+
+/* ── 两栏 ── */
+
+.split {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 4.2cqw;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.split--text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+/* ── 聊天示意 ── */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.15cqh;
+  padding: 2.2cqh 2cqw;
+  border: 1px solid var(--border);
+  border-radius: 1.2cqw;
+  background: var(--panel);
+}
+
+.bubble {
+  max-width: 88%;
+  padding: 1.15cqh 1.3cqw;
+  border-radius: 0.9cqw;
+  font-size: 1.22cqw;
+  line-height: 1.45;
+}
+
+.bubble small {
+  display: block;
+  margin-bottom: 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.bubble--you {
+  align-self: flex-end;
+  background: color-mix(in oklab, var(--primary), transparent 82%);
+  border: 1px solid color-mix(in oklab, var(--primary), transparent 55%);
+}
+
+.bubble--bot {
+  align-self: flex-start;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--dim);
+}
+
+.chat-tag {
+  margin-top: 0.4cqh;
+  font-size: 1.15cqw;
+  color: var(--faint);
+}
+
+/* ── 三张痛点 ── */
+
+.pains {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: min-content;
+  align-content: center;
+  gap: 1.6cqw;
+  margin-top: 2.2cqh;
+  min-height: 0;
+}
+
+.pain {
+  padding: 2.6cqh 1.8cqw 2.2cqh;
+  border: 1px solid var(--border);
+  border-radius: 1.1cqw;
+  background: var(--panel);
+}
+
+.pain .idx {
+  display: block;
+  margin-bottom: 1.6cqh;
+  font-family: var(--font-mono);
+  font-size: 1.15cqw;
+  color: var(--primary);
+}
+
+.pain h3 {
+  margin: 0 0 1cqh;
+  font-size: 1.7cqw;
+  font-weight: 650;
+}
+
+.pain p {
+  margin: 0;
+  font-size: 1.28cqw;
+  line-height: 1.6;
+  color: var(--dim);
+}
+
+/* ── 角色三拍 ── */
+
+.beats {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.4cqh;
+  height: 100%;
+}
+
+.beat {
+  display: grid;
+  grid-template-columns: 3.2cqw 1fr;
+  gap: 1.2cqw;
+  align-items: start;
+  padding: 1.6cqh 1.6cqw;
+  border: 1px solid var(--border);
+  border-radius: 1cqw;
+  background: var(--panel);
+}
+
+.beat i {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 1.2cqw;
+  color: var(--primary);
+}
+
+.beat strong {
+  display: block;
+  font-size: 1.45cqw;
+  font-weight: 650;
+}
+
+.beat span {
+  display: block;
+  margin-top: 0.25em;
+  font-size: 1.2cqw;
+  line-height: 1.5;
+  color: var(--dim);
+}
+
+/* ── 点名三列 ── */
+
+.compare {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5cqw;
+  margin-top: 2.6cqh;
+  min-height: 0;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  padding: 2.2cqh 1.7cqw 2cqh;
+  border: 1px solid var(--border);
+  border-radius: 1.1cqw;
+  background: var(--panel);
+}
+
+.col--us {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    var(--brand-gradient) border-box;
+  box-shadow: 0 18px 40px -24px color-mix(in oklab, var(--grad-2), transparent 30%);
+}
+
+.col .who {
+  font-size: 1.7cqw;
+  font-weight: 700;
+}
+
+.col .what {
+  margin: 0.5cqh 0 1.8cqh;
+  font-size: 1.15cqw;
+  color: var(--faint);
+}
+
+.col .do,
+.col .miss {
+  margin: 0;
+  font-size: 1.28cqw;
+  line-height: 1.55;
+}
+
+.col .do {
+  color: var(--foreground);
+}
+
+.col .miss {
+  margin-top: auto;
+  padding-top: 1.6cqh;
+  border-top: 1px solid var(--border-soft);
+  color: var(--dim);
+}
+
+.col .miss em {
+  font-style: normal;
+  color: var(--faint);
+}
+
+.col--us .miss {
+  color: var(--foreground);
+}
+
+/* ── 四步 ── */
+
+.steps {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: min-content;
+  align-content: center;
+  gap: 1.3cqw;
+  margin-top: 2.2cqh;
+}
+
+.step {
+  padding: 2.2cqh 1.5cqw 2cqh;
+  border-top: 2px solid var(--grad-2);
+  background: var(--panel);
+  border-radius: 0 0 1cqw 1cqw;
+}
+
+.step:nth-child(1) {
+  border-top-color: var(--grad-1);
+}
+.step:nth-child(2) {
+  border-top-color: var(--grad-2);
+}
+.step:nth-child(3) {
+  border-top-color: var(--grad-3);
+}
+.step:nth-child(4) {
+  border-top-color: var(--grad-4);
+}
+
+.step .idx {
+  font-family: var(--font-mono);
+  font-size: 1.2cqw;
+  color: var(--faint);
+}
+
+.step h3 {
+  margin: 1.4cqh 0 0.9cqh;
+  font-size: 1.65cqw;
+}
+
+.step p {
+  margin: 0;
+  font-size: 1.22cqw;
+  line-height: 1.55;
+  color: var(--dim);
+}
+
+/* ── 协作图 ── */
+
+.graph {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.15cqh;
+  min-width: 0;
+  height: 100%;
+}
+
+.graph-task,
+.graph-ceo,
+.node {
+  border: 1px solid var(--border);
+  border-radius: 0.85cqw;
+  background: var(--card);
+}
+
+.graph-task {
+  padding: 1.1cqh 1.3cqw;
+  font-size: 1.2cqw;
+  color: var(--dim);
+}
+
+.graph-task b {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.graph-ceo {
+  align-self: center;
+  padding: 0.9cqh 1.6cqw;
+  font-size: 1.2cqw;
+  font-weight: 650;
+  border-color: color-mix(in oklab, var(--primary), transparent 45%);
+  background: color-mix(in oklab, var(--primary), transparent 88%);
+}
+
+.wave {
+  display: grid;
+  grid-template-columns: 6.6cqw 1fr;
+  gap: 0.9cqw;
+  align-items: center;
+}
+
+.wave-n {
+  font-family: var(--font-mono);
+  font-size: 1cqw;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
+
+.nodes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8cqw;
+}
+
+.nodes--one {
+  grid-template-columns: 1fr;
+  max-width: 55%;
+}
+
+.node {
+  padding: 1cqh 1.1cqw;
+  font-size: 1.18cqw;
+}
+
+.node small {
+  display: block;
+  margin-top: 0.25em;
+  font-size: 0.88em;
+  color: var(--faint);
+}
+
+.node--run {
+  border-color: color-mix(in oklab, var(--primary), transparent 40%);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary), transparent 70%);
+}
+
+.node--done small {
+  color: var(--success);
+}
+
+.node--wait {
+  opacity: 0.72;
+}
+
+.node--review {
+  border-color: color-mix(in oklab, var(--brand-2), transparent 40%);
+}
+
+/* ── 辩论 ── */
+
+.debate {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2cqw;
+  align-content: center;
+  height: 100%;
+}
+
+.side {
+  padding: 2cqh 1.6cqw;
+  border: 1px solid var(--border);
+  border-radius: 1cqw;
+  background: var(--panel);
+}
+
+.side h3 {
+  margin: 0 0 1cqh;
+  font-size: 1.35cqw;
+}
+
+.side p {
+  margin: 0;
+  font-size: 1.22cqw;
+  line-height: 1.55;
+  color: var(--dim);
+}
+
+.verdict {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1cqw;
+  padding: 1.3cqh 1.6cqw;
+  border-radius: 1cqw;
+  background: color-mix(in oklab, var(--grad-1), transparent 82%);
+  border: 1px solid var(--border);
+  font-size: 1.25cqw;
+}
+
+.verdict strong {
+  font-weight: 650;
+}
+
+/* ── 信任两列 ── */
+
+.trust {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: min-content;
+  align-content: center;
+  gap: 1.7cqw;
+  margin-top: 2.2cqh;
+}
+
+.trust article {
+  padding: 2.6cqh 2cqw;
+  border: 1px solid var(--border);
+  border-radius: 1.1cqw;
+  background: var(--panel);
+}
+
+.trust h3 {
+  margin: 0 0 1.2cqh;
+  font-size: 1.85cqw;
+}
+
+.trust p {
+  margin: 0;
+  font-size: 1.35cqw;
+  line-height: 1.65;
+  color: var(--dim);
+}
+
+/* ── CTA ── */
+
+.btn-grad {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55em;
+  margin-top: 3.2cqh;
+  overflow: hidden;
+  padding: 1.5cqh 2.4cqw;
+  border-radius: 0.9cqw;
+  font-size: 1.45cqw;
+  font-weight: 600;
+  color: var(--on-brand);
+  background: var(--brand-gradient);
+  box-shadow: 0 10px 30px -12px color-mix(in oklab, var(--grad-2), transparent 40%);
+}
+
+.btn-grad::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.25), transparent);
+}
+
+.btn-grad > span {
+  position: relative;
+}
+
+.close-note {
+  margin: 2cqh 0 0;
+  font-size: 1.2cqw;
+  color: var(--faint);
+}
+
+.close-note a {
+  color: var(--dim);
+  border-bottom: 1px solid var(--border);
+}
+
+.close-note a:hover {
+  color: var(--foreground);
+}
+
+@media (max-width: 820px) {
+  .deck {
+    padding: 1rem 0.7rem 3rem;
+  }
+
+  .slide {
+    aspect-ratio: auto;
+    min-height: 28rem;
+    container-type: inline-size;
+  }
+
+  .slide-inner {
+    padding: 1.4rem 1.2rem 1.3rem;
+  }
+
+  .display {
+    font-size: 1.7rem;
+  }
+
+  .display-sm {
+    font-size: 1.35rem;
+  }
+
+  .lead,
+  .pain p,
+  .step p,
+  .col .do,
+  .col .miss,
+  .trust p,
+  .side p,
+  .bubble {
+    font-size: 0.9rem;
+  }
+
+  .split,
+  .pains,
+  .compare,
+  .steps,
+  .trust,
+  .debate {
+    grid-template-columns: 1fr;
+  }
+
+  .split {
+    gap: 1.2rem;
+  }
+}

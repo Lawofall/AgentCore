@@ -1,6 +1,6 @@
 """L3 团队浏览器 M0+M1+M2 —— 真机 gVisor 产品模块端到端冒烟。
 
-与 ``scripts/poc_browser_gvisor``（探路用的同形副本）不同，本脚本直接驱动**产品模块**：
+本脚本直接驱动**产品模块**：
 
     tools/builtin/browser.py（单一 browser + action）
       → runtime/browser/registry.py（BrowserSessionRegistry.acquire）

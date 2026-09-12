@@ -13,7 +13,7 @@ from agentcore.core.errors import (
     LLMRateLimitError,
     LLMUpstreamError,
 )
-from agentcore.llm.profiles import DEEPSEEK_V4_FLASH
+from agentcore.llm.profiles import DEEPSEEK_V4_FLASH, DEEPSEEK_V41_FLASH
 from agentcore.llm.provider.openai_compatible import (
     OpenAICompatibleProvider,
     _reasoning_text,
@@ -1203,13 +1203,14 @@ def test_build_payload_clean_openai_for_non_deepseek_tool_turns():
     assert assistant["tool_calls"][0]["id"] == "tooluse_abc"
 
 
-def test_build_payload_disables_thinking_for_deepseek_v4_background():
+@pytest.mark.parametrize("model", (DEEPSEEK_V4_FLASH, DEEPSEEK_V41_FLASH))
+def test_build_payload_disables_thinking_for_deepseek_v4_background(model: str):
     """Title/memory one-shots must send thinking.disabled — otherwise V4's default
     thinking eats a tight max_tokens budget and the sidebar falls back to raw input."""
     provider = OpenAICompatibleProvider(name="test", api_key="k", base_url="http://x/v1")
     req = LLMRequest(
         messages=[LLMMessage(role="user", content="hi")],
-        model=DEEPSEEK_V4_FLASH,
+        model=model,
         max_tokens=64,
         thinking=False,
         scenario="title",
@@ -1230,7 +1231,7 @@ def test_build_payload_disables_thinking_for_deepseek_v4_background():
     # None = explicit enabled (do not omit: OpenCode Go treats omit as off).
     default = LLMRequest(
         messages=[LLMMessage(role="user", content="hi")],
-        model=DEEPSEEK_V4_FLASH,
+        model=model,
     )
     default_payload = provider._build_payload(default, stream=False)
     assert default_payload["thinking"] == {"type": "enabled"}
@@ -1245,12 +1246,15 @@ def test_build_payload_disables_thinking_for_deepseek_v4_background():
         "https://opencode.ai/zen/v1",
     ),
 )
-def test_build_payload_sends_thinking_enabled_on_v4_chat_across_gateways(base_url: str):
+@pytest.mark.parametrize("model", (DEEPSEEK_V4_FLASH, DEEPSEEK_V41_FLASH))
+def test_build_payload_sends_thinking_enabled_on_v4_chat_across_gateways(
+    base_url: str, model: str
+):
     """Chat/CEO path must write thinking.enabled — OpenCode Go omit = off."""
     provider = OpenAICompatibleProvider(name="test", api_key="k", base_url=base_url)
     chat = LLMRequest(
         messages=[LLMMessage(role="user", content="hi")],
-        model=DEEPSEEK_V4_FLASH,
+        model=model,
         thinking=True,
         scenario="chat",
     )
@@ -1259,7 +1263,7 @@ def test_build_payload_sends_thinking_enabled_on_v4_chat_across_gateways(base_ur
     assert chat_payload["reasoning_effort"] == "high"
     omitted = LLMRequest(
         messages=[LLMMessage(role="user", content="hi")],
-        model=DEEPSEEK_V4_FLASH,
+        model=model,
     )
     omitted_payload = provider._build_payload(omitted, stream=True)
     assert omitted_payload["thinking"] == {"type": "enabled"}

@@ -181,7 +181,9 @@ def test_grep_schema_teaches_omit_path_when_unsure():
     assert "file_list" not in schema.description
     path = schema.parameters["properties"]["path"]["description"]
     assert "不确定时省略" in path
-    assert "@scope" in path or "src/" in path
+    assert "不要猜测" not in path
+    assert "禁止猜测" not in path
+    assert "Desktop" not in path
 
 
 async def test_grep_rejects_path_outside_workspace(tmp_path: Path):

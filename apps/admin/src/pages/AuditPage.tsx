@@ -1,4 +1,5 @@
 import { CopyableId } from "@/components/CopyableId";
+import { UserSectionTabs } from "@/components/SectionTabs";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -228,18 +229,21 @@ export function AuditPage() {
   return (
     <Page>
       <PageHeader
-        title="操作审计"
+        title="用户"
         note="时间为本机时区，格式 MM-DD HH:mm"
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void load()}
-            disabled={loading}
-            aria-label="刷新"
-          >
-            <RefreshCw size={14} className={cn(loading && "animate-spin")} />
-          </Button>
+          <>
+            <UserSectionTabs />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void load()}
+              disabled={loading}
+              aria-label="刷新"
+            >
+              <RefreshCw size={14} className={cn(loading && "animate-spin")} />
+            </Button>
+          </>
         }
         filters={
           <>

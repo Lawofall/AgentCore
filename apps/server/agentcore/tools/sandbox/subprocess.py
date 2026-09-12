@@ -57,17 +57,19 @@ logger = get_logger(__name__)
 
 _IS_WINDOWS = sys.platform == "win32"
 
-_LANGUAGE_COMMANDS: dict[str, list[str]] = {
-    "python": ["python", "-u"],
-    "javascript": ["node"],
-    "bash": ["bash"],
-}
+# Language ids the sandbox accepts. Python argv is resolved (not this table).
+_SUPPORTED_LANGUAGES = frozenset({"python", "javascript", "bash"})
 
 _FILE_EXTENSIONS: dict[str, str] = {
     "python": ".py",
     "javascript": ".js",
     "bash": ".sh",
 }
+
+# Byte-equal with desktop ``PYTHON_LAUNCHER_MISSING`` (classifier keys on 找不到命令).
+PYTHON_LAUNCHER_MISSING = (
+    "代码执行环境启动失败：找不到命令。这台电脑上没有可用的 Python 3。"
+)
 
 # NUL density at/above this → treat the chunk as UTF-16LE (ASCII-range text).
 # WSL / some Win32 tools emit UTF-16LE; naive UTF-8 yields ``w\0s\0l\0…``.
@@ -132,6 +134,32 @@ def _which_all(cmd: str) -> list[str]:
     return found
 
 
+def resolve_python_launcher() -> list[str] | None:
+    """Host argv prefix for Python 3, or ``None``.
+
+    Language id stays ``python``. POSIX: ``python3`` then ``python`` (PEP 394).
+    Windows: ``py -3``, then ``python``, then ``python3`` (PEP 397).
+    Bare names so PATHEXT / ``.cmd`` shims still resolve via ``CreateProcess``.
+    Guest cloud desks do not use this — they exec the image ``python3``.
+    Mirrors desktop ``resolvePythonLauncher``.
+    """
+    if _IS_WINDOWS:
+        candidates: tuple[tuple[str, tuple[str, ...]], ...] = (
+            ("py", ("py", "-3")),
+            ("python", ("python",)),
+            ("python3", ("python3",)),
+        )
+    else:
+        candidates = (
+            ("python3", ("python3",)),
+            ("python", ("python",)),
+        )
+    for name, argv in candidates:
+        if shutil.which(name):
+            return list(argv)
+    return None
+
+
 def resolve_bash_launcher() -> str | None:
     """Resolve a usable bash binary.
 
@@ -161,15 +189,21 @@ def _resolve_language_cmd(language: str) -> list[str] | None:
     Bash is absolutized (skip WSL trampoline). python/node keep bare names so
     Windows PATHEXT / ``.cmd`` shims still resolve via ``CreateProcess``.
     """
-    base = list(_LANGUAGE_COMMANDS[language])
     if language == "bash":
         bash = resolve_bash_launcher()
         if bash is None:
             return None
         return [bash]
-    if shutil.which(base[0]) is None:
-        return None
-    return base
+    if language == "python":
+        py = resolve_python_launcher()
+        if py is None:
+            return None
+        return [*py, "-u"]
+    if language == "javascript":
+        if shutil.which("node") is None:
+            return None
+        return ["node"]
+    return None
 
 
 def probe_available_languages() -> tuple[str, ...]:
@@ -185,19 +219,23 @@ def probe_available_languages() -> tuple[str, ...]:
     )
 
 
-def _launcher_missing_stderr(language: str, launcher: str) -> str:
+def _launcher_missing_stderr(language: str, launcher: str | None = None) -> str:
+    if language == "python":
+        return PYTHON_LAUNCHER_MISSING
     if language == "bash":
+        name = launcher or "bash"
         return (
-            f"代码执行环境启动失败：找不到可用的命令 {launcher!r}。 "
+            f"代码执行环境启动失败：找不到可用的命令 {name!r}。 "
             f"{_BASH_UNAVAILABLE_HINT}"
         )
-    if language == "python":
-        hint = " 请确认 PATH 上有 python 可执行文件。"
-    elif language == "javascript":
-        hint = " 请确认 PATH 上有 node 可执行文件。"
-    else:
-        hint = ""
-    return f"代码执行环境启动失败：找不到命令 {launcher!r}。{hint}"
+    if language == "javascript":
+        name = launcher or "node"
+        return (
+            f"代码执行环境启动失败：找不到命令 {name!r}。 "
+            "请确认 PATH 上有 node 可执行文件。"
+        )
+    name = launcher or language
+    return f"代码执行环境启动失败：找不到命令 {name!r}。"
 
 
 class _CancelledError(Exception):
@@ -453,7 +491,7 @@ class SubprocessSandbox:
 
     async def execute(self, request: ExecutionRequest) -> ExecutionResult:
         """Execute code in a temporary directory with timeout."""
-        if request.language not in _LANGUAGE_COMMANDS:
+        if request.language not in _SUPPORTED_LANGUAGES:
             return ExecutionResult(
                 success=False,
                 stdout="",
@@ -464,11 +502,10 @@ class SubprocessSandbox:
 
         cmd_prefix = _resolve_language_cmd(request.language)
         if cmd_prefix is None:
-            launcher = _LANGUAGE_COMMANDS[request.language][0]
             return ExecutionResult(
                 success=False,
                 stdout="",
-                stderr=_launcher_missing_stderr(request.language, launcher),
+                stderr=_launcher_missing_stderr(request.language),
                 exit_code=127,
                 duration_ms=0,
             )

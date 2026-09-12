@@ -419,16 +419,21 @@ function ToolCard({
     "failure" in step && step.failure && typeof step.failure === "object"
       ? step.failure
       : null;
+  const isRedirect = status === "redirect";
   const failMessage =
-    failure && "message" in failure && typeof failure.message === "string"
+    !isRedirect &&
+    failure &&
+    "message" in failure &&
+    typeof failure.message === "string" &&
+    failure.message.trim()
       ? failure.message
       : null;
-  const isRedirect = status === "redirect";
-  const hasBody =
-    args != null ||
-    result != null ||
-    display != null ||
-    (isRedirect && Boolean(failMessage));
+  const hasBody = isRedirect
+    ? false
+    : args != null ||
+      result != null ||
+      display != null ||
+      Boolean(failMessage);
 
   return (
     <div className="min-w-0">

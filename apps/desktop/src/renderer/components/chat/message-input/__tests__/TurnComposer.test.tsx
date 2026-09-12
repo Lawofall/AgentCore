@@ -225,7 +225,6 @@ vi.mock("@/components/chat/message-input/useMentionMenu", () => ({
     menuMode: null,
     sections: [],
     flatItems: [],
-    items: [],
     activeIndex: 0,
     indexLoading: false,
     menuError: null,

@@ -290,7 +290,7 @@ function BrowserFrameLightbox({
   );
 }
 
-/** One step row inside the activity card: key-frame thumbnail + action / detail / url. */
+/** One step row inside the activity card: key-frame thumbnail + action + one subline. */
 function BrowserStepRow({
   step,
   index,
@@ -304,6 +304,7 @@ function BrowserStepRow({
 }) {
   const { Icon, label } = browserActionMeta(step.action);
   const alt = frameAlt(step);
+  const subline = browserSubline(step.detail, step.url);
   return (
     <div className="flex items-start gap-3 rounded-lg px-2 py-2">
       {step.frame ? (
@@ -328,16 +329,11 @@ function BrowserStepRow({
             <X size={13} className="shrink-0 text-destructive" />
           )}
         </div>
-        {step.detail && (
-          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-            {step.detail}
+        {subline ? (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {subline}
           </p>
-        )}
-        {step.url && (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
-            {step.url}
-          </p>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -346,7 +342,7 @@ function BrowserStepRow({
 /**
  * Merged view for a tool-group of ≥2 consecutive `browser_*` steps — the browser activity
  * card. Collapses to a bare「浏览器 · N 步」header (aligned with the web_fetch source
- * collection / tool-group chrome); expands into a step list (action / detail / url) with
+ * collection / tool-group chrome); expands into a step list (action + one subline) with
  * lazy key-frame thumbnails, each opening the full frame in a lightbox.
  * Card data comes ONLY from each step's durable `display`, so it rebuilds on journal replay.
  * Reuses WebFetchSourceCollection's `${turnKey}:tgrp:${groupKey}` disclosure key.
@@ -459,7 +455,7 @@ export function BrowserActivityCard({
 
 /**
  * Single browser step's rich result (the ToolResultView branch for one `browser_*` call):
- * an action / detail / url header + the full key-frame (lazy-loaded, click → lightbox).
+ * an action + one subline header + the full key-frame (lazy-loaded, click → lightbox).
  * The aggregated form for ≥2 consecutive steps is {@link BrowserActivityCard}.
  */
 export function BrowserResult({
@@ -475,6 +471,7 @@ export function BrowserResult({
   const showBrowser = useSidePanelStore((s) => s.showBrowser);
   const { Icon, label } = browserActionMeta(display.action);
   const alt = frameAlt(display);
+  const subline = browserSubline(display.detail, display.url);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -494,16 +491,11 @@ export function BrowserResult({
               </span>
             )}
           </div>
-          {display.detail && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {display.detail}
+          {subline ? (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {subline}
             </p>
-          )}
-          {display.url && (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
-              {display.url}
-            </p>
-          )}
+          ) : null}
         </div>
         {/* 单步富卡也挂入口：≥2 步活动卡已有 CTA，单步此前无路开浏览器 tab。
             无可靠 running 信号 → 固定「打开浏览器」（与活动卡 turn 结束后文案一致）。 */}
@@ -541,6 +533,16 @@ export function BrowserResult({
       )}
     </div>
   );
+}
+
+/** Expanded-card subline: one row. If detail already contains url (navigate「打开 {url}」),
+ * keep detail only; otherwise join distinct facts as「detail · url」. */
+export function browserSubline(detail?: string, url?: string): string {
+  const d = detail?.trim() ?? "";
+  const u = url?.trim() ?? "";
+  if (d && u && d.includes(u)) return d;
+  if (d && u) return `${d} · ${u}`;
+  return d || u;
 }
 
 /** Collapsed ToolLine chip for one browser step — human detail, else page title, else url. */

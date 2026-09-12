@@ -69,7 +69,6 @@ class ArchiveCreateTool:
             description=(
                 "把工作区内的文件或目录打成 zip 落到指定相对路径。"
                 "大包持久打包请用本工具。"
-                "HOW→consult(archive_create)。"
             ),
             parameters={
                 "type": "object",

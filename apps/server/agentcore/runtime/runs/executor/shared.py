@@ -268,21 +268,6 @@ def _priced_failure(
     )
 
 
-def _is_hard_failure(
-    content: str,
-    deliverable: Deliverable | None,
-    *,
-    files_touched: int = 0,
-) -> bool:
-    """Retired: contract misses never FAIL the node (COMPLETED + warnings).
-
-    ``strict`` is still parsed on old JSON; it does not flip acceptance.
-    Zero landing is already a warning. ``files_touched`` kept for call-site compatibility.
-    """
-    _ = (content, deliverable, files_touched)
-    return False
-
-
 def _apply_finish_interrupt(
     finish_override: list[FinishReason],
     *,

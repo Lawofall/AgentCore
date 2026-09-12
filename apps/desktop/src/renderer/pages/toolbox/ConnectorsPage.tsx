@@ -1,22 +1,14 @@
-import {
-  Badge,
-  Button,
-  CATALOG_GRID_CLASS,
-  CatalogTile,
-  Input,
-} from "@/components/ui";
+import { Badge, Button, Input } from "@/components/ui";
 import { Switch } from "@/components/ui/Switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { artifactColorVar } from "@/lib/catalogColors";
 import type { McpServerConfig, McpServerListItem } from "@shared/mcp-contract";
-import { Plug, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+
+export const NEW_CONNECTOR_ID = "connector:new";
+
+export function connectorCatalogId(id: string): string {
+  return `connector:${id}`;
+}
 
 function emptyDraft(): McpServerConfig {
   return {
@@ -29,7 +21,16 @@ function emptyDraft(): McpServerConfig {
   };
 }
 
-function statusBadge(server: McpServerListItem) {
+export function connectorStatusLabel(server: McpServerListItem): string {
+  if (!server.enabled) return "未启用";
+  if (server.runtimeStatus === "ready") return "已握手";
+  if (server.runtimeStatus === "failed") return "失败";
+  return "";
+}
+
+export function ConnectorStatusBadge({
+  server,
+}: { server: McpServerListItem }) {
   if (!server.enabled) {
     return (
       <Badge tone="muted" pill>
@@ -54,18 +55,10 @@ function statusBadge(server: McpServerListItem) {
   return null;
 }
 
-/**
- * 本机插头：与出厂工具同一套图鉴卡。点卡打开配置 Dialog。
- * 仅 Electron（window.mcpApi）；Web 不渲染。
- */
-export function ConnectorsPage() {
+export function useMcpConnectors() {
   const api = typeof window !== "undefined" ? window.mcpApi : undefined;
   const [servers, setServers] = useState<McpServerListItem[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState<McpServerConfig | null>(null);
-  const [argsText, setArgsText] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [testNote, setTestNote] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(!api?.listServers);
 
   const reload = useCallback(async () => {
@@ -85,31 +78,63 @@ export function ConnectorsPage() {
     void reload();
   }, [reload]);
 
-  if (!api) return null;
+  return { api, servers, error, loaded, reload, setError };
+}
 
-  const openNew = () => {
-    setDraft(emptyDraft());
-    setArgsText("");
-    setTestNote(null);
-  };
+/**
+ * 本机插头配置：提示词目录读卡。仅 Electron（window.mcpApi）。
+ */
+export function ConnectorInspector({
+  server,
+  api,
+  busyId,
+  onBusy,
+  onCloseNew,
+  onSaved,
+  hideChrome = false,
+}: {
+  server: McpServerListItem | null;
+  api: NonNullable<Window["mcpApi"]>;
+  busyId: string | null;
+  onBusy: (id: string | null) => void;
+  onCloseNew?: () => void;
+  onSaved: () => Promise<void>;
+  hideChrome?: boolean;
+}) {
+  const editing = Boolean(server?.id);
+  const [draft, setDraft] = useState<McpServerConfig>(() =>
+    server
+      ? {
+          ...server,
+          args: [...server.args],
+          env: server.env ? { ...server.env } : undefined,
+        }
+      : emptyDraft(),
+  );
+  const [argsText, setArgsText] = useState(() =>
+    server ? server.args.join(" ") : "",
+  );
+  const [testNote, setTestNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const openEdit = (s: McpServerListItem) => {
-    setDraft({
-      ...s,
-      args: [...s.args],
-      env: s.env ? { ...s.env } : undefined,
-    });
-    setArgsText(s.args.join(" "));
+  useEffect(() => {
+    if (server) {
+      setDraft({
+        ...server,
+        args: [...server.args],
+        env: server.env ? { ...server.env } : undefined,
+      });
+      setArgsText(server.args.join(" "));
+    } else {
+      setDraft(emptyDraft());
+      setArgsText("");
+    }
     setTestNote(null);
-  };
-
-  const closeDraft = () => {
-    setDraft(null);
-    setTestNote(null);
-  };
+    setError(null);
+  }, [server]);
 
   const saveDraft = async () => {
-    if (!draft || !api.upsertServer) return;
+    if (!api.upsertServer) return;
     const args = argsText.trim().split(/\s+/).filter(Boolean);
     const payload: McpServerConfig = {
       ...draft,
@@ -121,40 +146,40 @@ export function ConnectorsPage() {
       setError(res.error.detail);
       return;
     }
-    closeDraft();
-    await reload();
+    await onSaved();
+    if (!editing) onCloseNew?.();
   };
 
-  const toggleEnabled = async (s: McpServerConfig) => {
-    if (!s.id || !api.setServerEnabled) return;
-    setBusyId(s.id);
+  const toggleEnabled = async () => {
+    if (!draft.id || !api.setServerEnabled) return;
+    onBusy(draft.id);
     try {
-      await api.setServerEnabled(s.id, !s.enabled);
-      setDraft({ ...s, enabled: !s.enabled });
-      await reload();
+      await api.setServerEnabled(draft.id, !draft.enabled);
+      setDraft({ ...draft, enabled: !draft.enabled });
+      await onSaved();
     } finally {
-      setBusyId(null);
+      onBusy(null);
     }
   };
 
-  const remove = async (id: string) => {
-    if (!api.removeServer) return;
-    setBusyId(id);
+  const remove = async () => {
+    if (!draft.id || !api.removeServer) return;
+    onBusy(draft.id);
     try {
-      await api.removeServer(id);
-      closeDraft();
-      await reload();
+      await api.removeServer(draft.id);
+      await onSaved();
+      onCloseNew?.();
     } finally {
-      setBusyId(null);
+      onBusy(null);
     }
   };
 
-  const test = async (id: string) => {
-    if (!api.testServer) return;
-    setBusyId(id);
+  const test = async () => {
+    if (!draft.id || !api.testServer) return;
+    onBusy(draft.id);
     setTestNote(null);
     try {
-      const res = await api.testServer(id);
+      const res = await api.testServer(draft.id);
       if (!res.ok) {
         setTestNote(res.error.detail);
         return;
@@ -168,140 +193,106 @@ export function ConnectorsPage() {
       } else {
         setTestNote(`握手失败：${res.error || "unknown"}`);
       }
-      await reload();
+      await onSaved();
     } finally {
-      setBusyId(null);
+      onBusy(null);
     }
   };
 
-  const colorVar = artifactColorVar("connectors");
-  const editing = Boolean(draft?.id);
-
   return (
-    <div className="space-y-3">
-      {error ? (
-        <p className="text-sm text-muted-foreground" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {loaded ? (
-        <div className={CATALOG_GRID_CLASS}>
-          {servers.map((s) => (
-            <CatalogTile
-              key={s.id}
-              icon={<Plug size={18} />}
-              colorVar={colorVar}
-              title={s.name}
-              subtitle={`${s.command} ${s.args.join(" ")}`.trim() || undefined}
-              description={s.runtimeError || undefined}
-              muted={!s.enabled}
-              accessory={statusBadge(s)}
-              onClick={() => openEdit(s)}
-            />
-          ))}
-          <CatalogTile
-            icon={<Plus size={18} />}
-            colorVar={colorVar}
-            title="添加连接器"
-            onClick={openNew}
-          />
-        </div>
-      ) : null}
-
-      <Dialog
-        open={draft !== null}
-        onOpenChange={(open) => !open && closeDraft()}
-      >
-        <DialogContent className="flex max-h-[min(80vh,36rem)] flex-col">
-          <DialogHeader>
-            <DialogTitle>{editing ? "编辑连接器" : "新建连接器"}</DialogTitle>
-          </DialogHeader>
-          {draft ? (
-            <div className="min-h-0 space-y-3 overflow-y-auto px-5">
-              {editing ? (
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={draft.enabled}
-                    disabled={busyId === draft.id}
-                    onCheckedChange={() => void toggleEnabled(draft)}
-                    label="启用"
-                  />
-                  <span className="text-xs text-muted-foreground">启用</span>
-                </div>
-              ) : null}
-              <label
-                className="flex flex-col gap-1 text-xs text-muted-foreground"
-                htmlFor="mcp-draft-name"
-              >
-                显示名
-                <Input
-                  id="mcp-draft-name"
-                  value={draft.name}
-                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  placeholder="例如：Filesystem"
-                />
-              </label>
-              <label
-                className="flex flex-col gap-1 text-xs text-muted-foreground"
-                htmlFor="mcp-draft-command"
-              >
-                命令
-                <Input
-                  id="mcp-draft-command"
-                  value={draft.command}
-                  onChange={(e) =>
-                    setDraft({ ...draft, command: e.target.value })
-                  }
-                  placeholder="例如：npx"
-                />
-              </label>
-              <label
-                className="flex flex-col gap-1 text-xs text-muted-foreground"
-                htmlFor="mcp-draft-args"
-              >
-                参数（空格分隔）
-                <Input
-                  id="mcp-draft-args"
-                  value={argsText}
-                  onChange={(e) => setArgsText(e.target.value)}
-                  placeholder="例如：-y @modelcontextprotocol/server-everything"
-                />
-              </label>
-              {testNote ? (
-                <p className="text-xs text-muted-foreground">{testNote}</p>
-              ) : null}
-              {editing ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="neutral"
-                    size="sm"
-                    disabled={busyId === draft.id}
-                    icon={<RefreshCw size={14} />}
-                    onClick={() => void test(draft.id)}
-                  >
-                    测试握手
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    disabled={busyId === draft.id}
-                    icon={<Trash2 size={14} />}
-                    onClick={() => void remove(draft.id)}
-                  >
-                    删除
-                  </Button>
-                </div>
-              ) : null}
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      {hideChrome ? null : (
+        <header className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border px-3">
+          <h2 className="font-medium text-foreground text-sm">
+            {editing ? "编辑连接器" : "新建连接器"}
+          </h2>
+          {server ? <ConnectorStatusBadge server={server} /> : null}
+        </header>
+      )}
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        <div className="space-y-3">
+          {error ? (
+            <p className="text-sm text-muted-foreground" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {editing ? (
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={draft.enabled}
+                disabled={busyId === draft.id}
+                onCheckedChange={() => void toggleEnabled()}
+                label="启用"
+              />
+              <span className="text-xs text-muted-foreground">启用</span>
             </div>
           ) : null}
-          <DialogFooter>
-            <Button variant="ghost" onClick={closeDraft}>
-              取消
-            </Button>
+          <label
+            className="flex flex-col gap-1 text-xs text-muted-foreground"
+            htmlFor="mcp-draft-name"
+          >
+            显示名
+            <Input
+              id="mcp-draft-name"
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              placeholder="例如：Filesystem"
+            />
+          </label>
+          <label
+            className="flex flex-col gap-1 text-xs text-muted-foreground"
+            htmlFor="mcp-draft-command"
+          >
+            命令
+            <Input
+              id="mcp-draft-command"
+              value={draft.command}
+              onChange={(e) => setDraft({ ...draft, command: e.target.value })}
+              placeholder="例如：npx"
+            />
+          </label>
+          <label
+            className="flex flex-col gap-1 text-xs text-muted-foreground"
+            htmlFor="mcp-draft-args"
+          >
+            参数（空格分隔）
+            <Input
+              id="mcp-draft-args"
+              value={argsText}
+              onChange={(e) => setArgsText(e.target.value)}
+              placeholder="例如：-y @modelcontextprotocol/server-everything"
+            />
+          </label>
+          {testNote ? (
+            <p className="text-xs text-muted-foreground">{testNote}</p>
+          ) : null}
+          {editing ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="neutral"
+                size="sm"
+                disabled={busyId === draft.id}
+                icon={<RefreshCw size={14} />}
+                onClick={() => void test()}
+              >
+                测试握手
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={busyId === draft.id}
+                icon={<Trash2 size={14} />}
+                onClick={() => void remove()}
+              >
+                删除
+              </Button>
+            </div>
+          ) : null}
+          <div className="flex justify-end gap-2">
             <Button onClick={() => void saveDraft()}>保存</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

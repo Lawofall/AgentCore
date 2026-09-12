@@ -1,6 +1,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  type ExecutionPlan,
+  type RunFrame,
+  execRuntime,
+  useExecutionStore,
+} from "@/stores/execution";
+import { projectRuntime } from "@/stores/execution/hooks";
 /**
  * 协作图流式热路径压测（真实 store fold + Document 门控投影 + Live face×N）。
  * 模拟多 worker 并行 token 洪水：每 tick ≈ 一次 rAF flush。
@@ -9,16 +16,12 @@ import { fileURLToPath } from "node:url";
  *
  * 跑：pnpm -C apps/desktop exec vitest run src/renderer/components/graph/__tests__/graphHotPath.stress.test.ts
  */
-import { computeLayout, nodeSpacingForFitMode } from "@/lib/elk-layout";
-import type { ElkGraphLayout } from "@/lib/graph-layout-utils";
-import { computeLayoutHints } from "@/lib/layoutHints";
 import {
-  type ExecutionPlan,
-  type RunFrame,
-  execRuntime,
-  useExecutionStore,
-} from "@/stores/execution";
-import { projectRuntime } from "@/stores/execution/hooks";
+  type GraphLayout,
+  computeLayout,
+  computeLayoutHints,
+  nodeSpacingForFitMode,
+} from "@agentcore/graph-layout";
 import { beforeEach, describe, expect, it } from "vitest";
 import { INPUT_ID } from "../constants";
 import { graphDocumentFingerprint } from "../graphDocument";
@@ -151,7 +154,7 @@ describe("graph hot path stress (dense stream)", () => {
       const layout = await computeLayout(
         nodeIds,
         rawEdges,
-        "leftright" as ElkGraphLayout,
+        "leftright" as GraphLayout,
         { source: INPUT_ID, sink: "captain" },
         subTeams,
         nodeSpacingForFitMode("width"),

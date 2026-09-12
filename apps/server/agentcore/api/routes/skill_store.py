@@ -6,7 +6,7 @@ on-demand documents. This route is the cross-user shelf.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,10 @@ from agentcore.db.models import Document
 from agentcore.db.models.skill_store import SkillStoreInstall, SkillStoreListing, SkillStoreVersion
 from agentcore.db.models.users import User
 from agentcore.db.repositories import DocumentRepository, SkillStoreRepository, UserRepository
+from agentcore.db.skill_store_groups import (
+    SkillStoreGroupName,
+    empty_group_counts,
+)
 from agentcore.documents.frontmatter import set_entry_frontmatter, strip_entry_frontmatter
 from agentcore.memory.account_prepare_cache import drop_account_rules_memory_cache_for_user
 from agentcore.memory.rules_injection import rule_consult_name
@@ -42,6 +46,7 @@ class SkillStoreListingRow(BaseModel):
     has_update: bool
     status: str
     source_document_id: str
+    group: SkillStoreGroupName
 
 
 class SkillStoreListingDetail(SkillStoreListingRow):
@@ -54,6 +59,7 @@ class SkillStoreListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    groups: dict[str, int]
 
 
 class SkillStoreMineResponse(BaseModel):
@@ -70,6 +76,11 @@ class SkillStoreInstalledResponse(BaseModel):
 
 class PublishSkillRequest(BaseModel):
     document_id: str = Field(..., min_length=1)
+    group: SkillStoreGroupName
+
+
+class PublishVersionRequest(BaseModel):
+    group: SkillStoreGroupName | None = None
 
 
 class ReportSkillRequest(BaseModel):
@@ -105,7 +116,7 @@ def _platform_row(
     has_update = install is not None and install.version_id != version_id
     return SkillStoreListingRow(
         id=listing_id,
-        name=skill.name,
+        name=skill.title,
         description=skill.summary,
         author=PLATFORM_AUTHOR,
         version_n=1,
@@ -113,6 +124,7 @@ def _platform_row(
         has_update=has_update,
         status="published",
         source_document_id="",
+        group=skill.group,
     )
 
 
@@ -150,7 +162,37 @@ def _row(
         has_update=has_update,
         status=listing.status,
         source_document_id=listing.source_document_id,
+        group=listing.shelf_group,  # type: ignore[arg-type]
     )
+
+
+async def _resolve_installs(
+    user_id: str,
+    installs: dict[str, SkillStoreInstall],
+    docs: DocumentRepository,
+    store: SkillStoreRepository,
+) -> dict[str, SkillStoreInstall]:
+    if not installs:
+        return {}
+    live = await docs.live_ids(user_id, [row.document_id for row in installs.values()])
+    dead = [row.document_id for row in installs.values() if row.document_id not in live]
+    if dead:
+        await store.delete_installs_for_documents(dead)
+    return {lid: row for lid, row in installs.items() if row.document_id in live}
+
+
+async def _resolve_install(
+    user_id: str,
+    install: SkillStoreInstall | None,
+    docs: DocumentRepository,
+    store: SkillStoreRepository,
+) -> SkillStoreInstall | None:
+    if install is None:
+        return None
+    resolved = await _resolve_installs(
+        user_id, {install.listing_id: install}, docs, store
+    )
+    return resolved.get(install.listing_id)
 
 
 async def _require_source_doc(
@@ -213,20 +255,33 @@ async def _copy_snapshot(
 async def list_skill_store(
     user: AuthUser,
     q: str | None = Query(default=None),
+    group: SkillStoreGroupName | None = Query(default=None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     store: SkillStoreRepository = Depends(_store),
+    docs: DocumentRepository = Depends(_docs),
 ) -> SkillStoreListResponse:
     rows, total = await store.list_shelf(
-        q=q, page=page, page_size=page_size, statuses=("published",)
+        q=q,
+        page=page,
+        page_size=page_size,
+        statuses=("published",),
+        shelf_group=group,
     )
     matched_platform = [
-        skill for skill in platform_templates() if platform_matches_query(skill, q)
+        skill
+        for skill in platform_templates()
+        if platform_matches_query(skill, q, group)
     ]
     listing_ids = [listing.id for listing, _, _ in rows] + [
         platform_listing_id(skill.name) for skill in matched_platform
     ]
-    installs = await store.installs_by_listing_ids(user.user_id, listing_ids)
+    installs = await _resolve_installs(
+        user.user_id,
+        await store.installs_by_listing_ids(user.user_id, listing_ids),
+        docs,
+        store,
+    )
     data: list[SkillStoreListingRow] = []
     if page == 1:
         data.extend(
@@ -237,11 +292,19 @@ async def list_skill_store(
         _row(listing, version, author, installs.get(listing.id))
         for listing, version, author in rows
     )
+    counts = empty_group_counts()
+    for name, n in (await store.group_counts(q=q, statuses=("published",))).items():
+        if name in counts:
+            counts[name] = n
+    for skill in platform_templates():
+        if platform_matches_query(skill, q):
+            counts[skill.group] = counts.get(skill.group, 0) + 1
     return SkillStoreListResponse(
         data=data,
         total=total + len(matched_platform),
         page=page,
         page_size=page_size,
+        groups=counts,
     )
 
 
@@ -258,18 +321,24 @@ async def publish_skill(
     listing = await store.get_listing_by_source(doc.id)
     if listing is None:
         listing = await store.create_listing(
-            author_user_id=user.user_id, source_document_id=doc.id, commit=False
+            author_user_id=user.user_id,
+            source_document_id=doc.id,
+            shelf_group=body.group,
+            commit=False,
         )
     elif listing.author_user_id != user.user_id:
         raise HTTPException(status_code=403, detail={"message": "不能上架别人的技能"})
     elif listing.status == "taken_down":
         raise HTTPException(status_code=403, detail={"message": "该技能已被下架，不能再发版本"})
     listing.status = "published"
+    listing.shelf_group = body.group
     name, description, content = _snapshot(doc)
     version = await store.add_version(
         listing=listing, name=name, description=description, content=content
     )
-    install = await store.get_install(user.user_id, listing.id)
+    install = await _resolve_install(
+        user.user_id, await store.get_install(user.user_id, listing.id), docs, store
+    )
     return SkillStoreListingDetail(
         **_row(listing, version, user, install).model_dump(),
         content=version.content,
@@ -281,12 +350,18 @@ async def publish_skill(
 async def list_mine_listings(
     user: AuthUser,
     store: SkillStoreRepository = Depends(_store),
+    docs: DocumentRepository = Depends(_docs),
 ) -> SkillStoreMineResponse:
     rows, _total = await store.list_shelf(
         author_user_id=user.user_id, page=1, page_size=100, statuses=None
     )
-    installs = await store.installs_by_listing_ids(
-        user.user_id, [listing.id for listing, _, _ in rows]
+    installs = await _resolve_installs(
+        user.user_id,
+        await store.installs_by_listing_ids(
+            user.user_id, [listing.id for listing, _, _ in rows]
+        ),
+        docs,
+        store,
     )
     return SkillStoreMineResponse(
         data=[
@@ -301,13 +376,19 @@ async def list_installed(
     user: AuthUser,
     session: AsyncSession = Depends(get_db),
     store: SkillStoreRepository = Depends(_store),
+    docs: DocumentRepository = Depends(_docs),
 ) -> SkillStoreInstalledResponse:
-    installs = await store.list_installs_for_user(user.user_id)
-    if not installs:
+    raw = await store.list_installs_for_user(user.user_id)
+    if not raw:
         return SkillStoreInstalledResponse(data=[])
+    live = await _resolve_installs(
+        user.user_id, {row.listing_id: row for row in raw}, docs, store
+    )
     users = UserRepository(session)
     items: list[SkillStoreInstalledItem] = []
-    for install in installs:
+    for install in raw:
+        if install.listing_id not in live:
+            continue
         skill = get_platform_template(install.listing_id)
         if skill is not None:
             row = _platform_row(skill, install)
@@ -335,10 +416,13 @@ async def get_listing(
     user: AuthUser,
     session: AsyncSession = Depends(get_db),
     store: SkillStoreRepository = Depends(_store),
+    docs: DocumentRepository = Depends(_docs),
 ) -> SkillStoreListingDetail:
     skill = get_platform_template(listing_id)
     if skill is not None:
-        install = await store.get_install(user.user_id, listing_id)
+        install = await _resolve_install(
+            user.user_id, await store.get_install(user.user_id, listing_id), docs, store
+        )
         return _platform_detail(skill, install)
     listing = await store.get_listing(listing_id)
     version = await store.get_current_version(listing) if listing is not None else None
@@ -350,7 +434,9 @@ async def get_listing(
     author = await UserRepository(session).get_by_id(listing.author_user_id)
     if author is None:
         raise HTTPException(status_code=404, detail={"message": "找不到这个技能"})
-    install = await store.get_install(user.user_id, listing.id)
+    install = await _resolve_install(
+        user.user_id, await store.get_install(user.user_id, listing.id), docs, store
+    )
     return SkillStoreListingDetail(
         **_row(listing, version, author, install).model_dump(),
         content=version.content,
@@ -362,6 +448,7 @@ async def get_listing(
 async def publish_new_version(
     listing_id: str,
     user: AuthUser,
+    body: PublishVersionRequest | None = Body(default=None),
     store: SkillStoreRepository = Depends(_store),
     docs: DocumentRepository = Depends(_docs),
 ) -> SkillStoreListingDetail:
@@ -375,12 +462,16 @@ async def publish_new_version(
     if listing.status == "taken_down":
         raise HTTPException(status_code=403, detail={"message": "该技能已被下架，不能再发版本"})
     listing.status = "published"
+    if body is not None and body.group is not None:
+        listing.shelf_group = body.group
     doc = await _require_source_doc(docs, user.user_id, listing.source_document_id)
     name, description, content = _snapshot(doc)
     version = await store.add_version(
         listing=listing, name=name, description=description, content=content
     )
-    install = await store.get_install(user.user_id, listing.id)
+    install = await _resolve_install(
+        user.user_id, await store.get_install(user.user_id, listing.id), docs, store
+    )
     return SkillStoreListingDetail(
         **_row(listing, version, user, install).model_dump(),
         content=version.content,
@@ -394,6 +485,7 @@ async def unpublish_listing(
     user: AuthUser,
     session: AsyncSession = Depends(get_db),
     store: SkillStoreRepository = Depends(_store),
+    docs: DocumentRepository = Depends(_docs),
 ) -> SkillStoreListingRow:
     if get_platform_template(listing_id) is not None:
         raise HTTPException(status_code=403, detail={"message": "官方技能不能下架"})
@@ -410,7 +502,9 @@ async def unpublish_listing(
         raise HTTPException(status_code=404, detail={"message": "找不到这个技能"})
     author = await UserRepository(session).get_by_id(listing.author_user_id)
     assert author is not None
-    install = await store.get_install(user.user_id, listing.id)
+    install = await _resolve_install(
+        user.user_id, await store.get_install(user.user_id, listing.id), docs, store
+    )
     return _row(listing, version, author, install)
 
 
@@ -439,7 +533,7 @@ async def install_listing(
         copy = await _copy_snapshot(
             docs,
             user_id=user.user_id,
-            name=skill.name,
+            name=skill.title,
             description=skill.summary,
             content=skill.body,
             existing=snapshot,

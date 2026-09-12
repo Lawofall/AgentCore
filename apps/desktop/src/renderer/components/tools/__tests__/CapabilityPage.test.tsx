@@ -42,7 +42,7 @@ afterEach(cleanup);
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={[APP_PATHS.toolbox.tools]}>
+    <MemoryRouter initialEntries={[APP_PATHS.toolbox.mine.skills]}>
       <CapabilityPage>{() => <div>目录正文</div>}</CapabilityPage>
     </MemoryRouter>,
   );

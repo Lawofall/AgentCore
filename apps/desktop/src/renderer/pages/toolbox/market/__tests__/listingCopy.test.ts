@@ -12,6 +12,21 @@ describe("listingCopy", () => {
     });
   });
 
+  it("keeps the catalog line when official SKUs already send a human title", () => {
+    expect(
+      listingCopy({
+        name: "民事答辩状",
+        description:
+          "写/打磨答辩状时按对方律师作战室组队：起草 → 原告红队 → 核验 → 人审。",
+      }),
+    ).toEqual({
+      title: "民事答辩状",
+      subtitle:
+        "写/打磨答辩状时按对方律师作战室组队：起草 → 原告红队 → 核验 → 人审。",
+      ident: null,
+    });
+  });
+
   it("promotes the catalog line when the name is a consult id", () => {
     expect(
       listingCopy({

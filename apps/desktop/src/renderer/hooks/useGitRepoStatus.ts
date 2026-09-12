@@ -7,12 +7,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const POLL_MS = 15_000;
 
 /**
- * U1/U2：本地有 root 时轮询 / 监听工作区变更，刷新分支+dirty+变更列表。
+ * U1/U2：本地有 root 时拉 Git 摘要（分支 / dirty / 变更列表）。
  * 云端 / 无 root / 无仓 → ``null``（调用方不渲染）。
  *
- * 自建 ``watch(root, "")`` + ``watch(root, ".git")``（非递归 watch 下根目录
- * 看不到 HEAD/index），并保留 onChanged / focus / 15s 轮询。
- * refresh 带 generation：过期请求不得 setStatus。
+ * Chip 给人看：focus + 15s 轮询。不订工作区 ``onChanged``——Agent 写盘会把
+ * ``git status`` 打进主进程 IPC，和本机回合的 workspace op 抢同一条热路径。
+ * 用户刚 stage/commit 可走返回的 ``refresh``。
  */
 export function useGitRepoStatus(
   rootId: string | null | undefined,
@@ -47,20 +47,10 @@ export function useGitRepoStatus(
 
   useEffect(() => {
     if (!enabled || !rootId) return;
-    const fsApi = typeof window !== "undefined" ? window.fsApi : undefined;
-    // 无 fsApi / web 桩缺 watch → 可选链 no-op。
-    void fsApi?.watch?.(rootId, "");
-    void fsApi?.watch?.(rootId, ".git");
-    const unwatchChanged = fsApi?.onChanged?.((ev) => {
-      if (ev.rootId === rootId) void refresh();
-    });
     const onFocus = () => void refresh();
     window.addEventListener("focus", onFocus);
     const timer = window.setInterval(() => void refresh(), POLL_MS);
     return () => {
-      void fsApi?.unwatch?.(rootId, "");
-      void fsApi?.unwatch?.(rootId, ".git");
-      unwatchChanged?.();
       window.removeEventListener("focus", onFocus);
       window.clearInterval(timer);
     };

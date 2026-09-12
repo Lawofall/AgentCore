@@ -54,6 +54,8 @@ _TURN_METRICS_KEYS = (
     "status",
     "finish_reason",
     "error",
+    "error_code",
+    "error_type",
     "rounds",
     "duration_ms",
     "delegated",

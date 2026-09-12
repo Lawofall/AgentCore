@@ -4,6 +4,7 @@ from agentcore.llm.byok_provider_presets import (
     BYOK_OFF_PROTOCOL_MODELS,
     BYOK_PROVIDER_PRESETS,
     chat_completions_seed,
+    hide_from_picker_ids,
     is_opencode_byok_endpoint,
     is_opencode_go_base_url,
     is_opencode_zen_base_url,
@@ -14,17 +15,17 @@ from agentcore.llm.byok_provider_presets import (
 )
 
 
-def test_deepseek_preset_includes_vision_exp():
+def test_deepseek_preset_is_v41_flash_only():
     preset = match_byok_provider_preset("https://api.deepseek.com")
     assert preset is not None
     assert preset.id == "deepseek"
-    assert preset.default_model == "deepseek-v4-flash"
-    assert preset.models == (
-        "deepseek-v4-flash",
-        "deepseek-v4.1-flash-expires-on-0910",
-        "deepseek-v4-pro",
-        "deepseek-v4-flash-vision-exp",
-    )
+    assert preset.default_model == "deepseek-flash"
+    assert preset.models == ("deepseek-flash",)
+    assert "deepseek-v4-flash" in preset.hide_from_picker
+    assert "deepseek-v4-pro" in preset.hide_from_picker
+    assert "deepseek-v4-flash" in hide_from_picker_ids("https://api.deepseek.com")
+    assert hide_from_picker_ids("https://opencode.ai/zen/go/v1") == frozenset()
+    assert hide_from_picker_ids("https://my-proxy.example/v1") == frozenset()
 
 
 def test_moonshot_preset_defaults_to_kimi_k26():
@@ -173,3 +174,17 @@ def test_chat_completions_seed_is_the_opencode_exclusion_source():
     assert match_byok_provider_preset(custom) is None
     assert is_opencode_byok_endpoint(custom) is False
     assert preset_models_for_base_url(custom) == ()
+
+
+def test_preset_table_loads_from_json_next_to_module():
+    import json
+    from pathlib import Path
+
+    from agentcore.llm import byok_provider_presets as mod
+
+    path = Path(mod.__file__).with_name("byok_provider_presets.json")
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    assert [row["id"] for row in raw["presets"]] == [p.id for p in BYOK_PROVIDER_PRESETS]
+    assert raw["offProtocolModels"] == dict(BYOK_OFF_PROTOCOL_MODELS)
+    # UI-only; server catalog does not need it.
+    assert all("keyHelpUrl" in row for row in raw["presets"])

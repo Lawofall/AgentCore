@@ -113,17 +113,15 @@ describe("resolveByokProviderFromConfig", () => {
 });
 
 describe("getByokProviderPreset", () => {
-  it("returns DeepSeek flash-first metadata", () => {
+  it("returns DeepSeek V4.1 Flash as the only official seed", () => {
     const preset = getByokProviderPreset("deepseek");
     expect(preset.baseUrl).toBe("https://api.deepseek.com");
-    expect(preset.defaultModel).toBe("deepseek-v4-flash");
-    expect(preset.models).toEqual([
-      "deepseek-v4-flash",
-      "deepseek-v4.1-flash-expires-on-0910",
-      "deepseek-v4-pro",
-      "deepseek-v4-flash-vision-exp",
-    ]);
+    expect(preset.defaultModel).toBe("deepseek-flash");
+    expect(preset.models).toEqual(["deepseek-flash"]);
+    expect(preset.hideFromPicker).toContain("deepseek-v4-flash");
+    expect(preset.hideFromPicker).toContain("deepseek-v4-pro");
     expect(preset.models).not.toContain("deepseek-chat");
+    expect(preset.models).not.toContain("deepseek-v4-flash");
   });
 
   it("lists DeepSeek first among vendor presets", () => {

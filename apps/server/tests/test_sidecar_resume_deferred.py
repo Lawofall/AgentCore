@@ -22,17 +22,6 @@ def _reset_conversation_store():
     reset_conversation_store_for_tests()
 
 
-@pytest.fixture(autouse=True)
-def _stub_conversation_folder_id(monkeypatch: pytest.MonkeyPatch):
-    async def _none(_conversation_id: str) -> None:
-        return None
-
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        _none,
-    )
-
-
 def _suspension(message_id: str, conversation_id: str) -> AskUserSuspension:
     susp = AskUserSuspension(
         message_id=message_id,

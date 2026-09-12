@@ -4,7 +4,7 @@ import {
 } from "@/components/chat/ConversationHydrateOverlay";
 import { TurnCompare } from "@/components/chat/compare/TurnCompare";
 import { DebateArena } from "@/components/chat/debate/arena/DebateArena";
-import { teamGraphVisible } from "@/components/chat/debatePreviewPlacement";
+import { shouldShowTeamGraph } from "@/components/chat/debatePreviewPlacement";
 import { GraphView } from "@/components/graph/GraphView";
 import {
   journalHydrateIdentity,
@@ -31,7 +31,7 @@ import {
 } from "@/stores/conversation";
 import {
   ExecutionScopeContext,
-  hasRevisions,
+  hasContinuations,
   isDebate,
   useExecutionStore,
   useMessageExecution,
@@ -274,7 +274,7 @@ export function TurnDetailPage() {
   ]);
 
   const execution = useMessageExecution(scopeKey);
-  const showTeamGraph = teamGraphVisible(execution?.runs);
+  const showTeamGraph = shouldShowTeamGraph(execution?.runs);
   // Scoped to the turn being viewed — not "conversation is generating somewhere".
   const liveViewedTurn =
     messages.find(
@@ -286,7 +286,7 @@ export function TurnDetailPage() {
   const debate = !!execution && isDebate(execution);
   // 对比 tab：按「是否存在可修订 run」判断，不按整图是否含辩论
   // （混合图幕 1 热修 + 幕 2 辩论时仍需对比入口）。
-  const showCompare = !!execution && hasRevisions(execution);
+  const showCompare = !!execution && hasContinuations(execution);
 
   const hasJournalToProject = !!(
     turnMessage?.executionId &&

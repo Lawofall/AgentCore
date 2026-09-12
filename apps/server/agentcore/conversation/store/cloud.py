@@ -325,6 +325,55 @@ def _local_metrics_error(run_error: object) -> str | None:
     return None
 
 
+def _metrics_error_codes(
+    *,
+    run_error: object = None,
+    result: dict[str, Any] | None = None,
+    durable: list[dict[str, Any]] | None = None,
+) -> tuple[str | None, str | None]:
+    """``(error_code, error_type)`` for ``turn_metrics``; investigation only.
+
+    Never invent a code. Prefer structured ``run_error``, then settle
+    ``result``, then last ``turn_end.error`` on the journal.
+    """
+
+    def _code(raw: object) -> str | None:
+        if raw is None:
+            return None
+        text = str(raw).strip()
+        return text[:64] if text else None
+
+    def _type(raw: object) -> str | None:
+        if not isinstance(raw, str):
+            return None
+        text = raw.strip()
+        return text[:128] if text else None
+
+    code: str | None = None
+    error_type: str | None = None
+    if isinstance(run_error, dict):
+        code = _code(run_error.get("code"))
+        error_type = _type(run_error.get("error_type"))
+    if result is not None:
+        if not code:
+            code = _code(result.get("error_code"))
+        if not error_type:
+            error_type = _type(result.get("error_type"))
+        nested = result.get("error")
+        if isinstance(nested, dict):
+            if not code:
+                code = _code(nested.get("code"))
+            if not error_type:
+                error_type = _type(nested.get("error_type"))
+    if durable is not None and (not code or not error_type):
+        jcode, jet = _turn_end_error_fields(durable)
+        if not code:
+            code = _code(jcode)
+        if not error_type:
+            error_type = _type(jet)
+    return code, error_type
+
+
 def _local_metrics_duration_ms(runs: dict | None) -> int:
     """Wall-clock if the write-back already carried it; otherwise 0 (no invented clock)."""
     if not isinstance(runs, dict):
@@ -354,6 +403,7 @@ async def _record_local_turn_metrics(
     durable: list[dict[str, Any]] | None,
     input_tokens: int = 0,
     output_tokens: int = 0,
+    run_error: object = None,
 ) -> None:
     """Best-effort sidecar ``turn_metrics`` row.
 
@@ -366,6 +416,9 @@ async def _record_local_turn_metrics(
     """
     from agentcore.conversation.prompt_tokens import max_prompt_tokens_from_journal
 
+    error_code, error_type = _metrics_error_codes(
+        run_error=run_error, durable=durable
+    )
     delegated, workers = turn_worker_stats({"journal_entries": durable or []})
     try:
         await TurnMetricsRepository(session).record(  # type: ignore[arg-type]
@@ -379,6 +432,8 @@ async def _record_local_turn_metrics(
             status=status,
             finish_reason=finish_reason,
             error=error,
+            error_code=error_code,
+            error_type=error_type,
             rounds=int(rounds or 0),
             duration_ms=duration_ms,
             delegated=delegated,
@@ -873,6 +928,14 @@ class CloudStore:
 
             delegated, workers = turn_worker_stats(result)
             collab = result.get("collab") or {}
+            metrics_error = _local_metrics_error(
+                run_error if run_error is not None else turn_error
+            )
+            metrics_code, metrics_type = _metrics_error_codes(
+                run_error=run_error,
+                result=result,
+                durable=durable_entries,
+            )
             try:
                 await TurnMetricsRepository(session).record(
                     turn_id=turn_id,
@@ -884,7 +947,9 @@ class CloudStore:
                     mode="cloud",
                     status=outcome,
                     finish_reason=finish_value,
-                    error=str(turn_error)[:1000] if turn_error else None,
+                    error=metrics_error,
+                    error_code=metrics_code,
+                    error_type=metrics_type,
                     rounds=int(result.get("rounds", 0) or 0),
                     duration_ms=duration_ms,
                     delegated=delegated,
@@ -1012,6 +1077,11 @@ class CloudStore:
                     )
                 delegated, workers = turn_worker_stats(result)
                 collab = result.get("collab") or {}
+                pause_code, pause_type = _metrics_error_codes(
+                    run_error=turn_error if isinstance(turn_error, dict) else None,
+                    result=result,
+                    durable=journal_entries,
+                )
                 try:
                     await TurnMetricsRepository(session).record(
                         turn_id=turn_id,
@@ -1023,7 +1093,9 @@ class CloudStore:
                         mode="cloud",
                         status="paused",
                         finish_reason=finish_value,
-                        error=str(turn_error)[:1000] if turn_error else None,
+                        error=_local_metrics_error(turn_error),
+                        error_code=pause_code,
+                        error_type=pause_type,
                         rounds=int(result.get("rounds", 0) or 0),
                         duration_ms=duration_ms,
                         delegated=delegated,
@@ -1465,6 +1537,7 @@ class CloudStore:
                     durable=durable,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
+                    run_error=run_error,
                 )
             # 时序不变量: local terminal/pause snapshot landed → drop segments.
             with contextlib.suppress(Exception):

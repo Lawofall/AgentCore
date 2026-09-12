@@ -38,6 +38,52 @@ class _NoopMetricsRepo:
         return None
 
 
+def test_metrics_error_codes_prefer_run_error_code_journal_type() -> None:
+    from agentcore.conversation.store.cloud import _metrics_error_codes
+    from agentcore.core.error_codes import ErrorCode
+
+    code, error_type = _metrics_error_codes(
+        run_error={"code": ErrorCode.LLM_TIMEOUT, "message": "超时"},
+        durable=[
+            {
+                "kind": "turn_end",
+                "payload": {
+                    "error": {
+                        "code": ErrorCode.INTERNAL_ERROR,
+                        "error_type": "OurServiceUnavailableError",
+                    }
+                },
+            }
+        ],
+    )
+    assert code == ErrorCode.LLM_TIMEOUT
+    assert error_type == "OurServiceUnavailableError"
+
+
+def test_metrics_error_codes_from_sentence_plus_journal() -> None:
+    from agentcore.conversation.store.cloud import _metrics_error_codes
+    from agentcore.core.error_codes import ErrorCode
+
+    umbrella = "AgentCore 服务暂时不可用，请稍后重试"
+    code, error_type = _metrics_error_codes(
+        run_error=umbrella,
+        durable=[
+            {
+                "kind": "turn_end",
+                "payload": {
+                    "error": {
+                        "code": ErrorCode.INTERNAL_ERROR,
+                        "message": umbrella,
+                        "error_type": "OurServiceUnavailableError",
+                    }
+                },
+            }
+        ],
+    )
+    assert code == ErrorCode.INTERNAL_ERROR
+    assert error_type == "OurServiceUnavailableError"
+
+
 # --- D7 pure helpers ---
 
 
@@ -472,6 +518,8 @@ async def test_finalize_cloud_settles_empty_error_with_error_code(monkeypatch):
     assert metrics["delegated"] is False
     assert metrics["workers"] == 0
     assert metrics["mode"] == "cloud"
+    assert metrics["error"] == "连接超时"
+    assert metrics["error_code"] == ErrorCode.LLM_TIMEOUT
     assert metrics["input_tokens"] == 11
     assert metrics["output_tokens"] == 5
     assert metrics["duration_ms"] == 10

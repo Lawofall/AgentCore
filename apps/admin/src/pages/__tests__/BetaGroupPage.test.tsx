@@ -31,6 +31,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 
@@ -82,7 +83,11 @@ function usersResp(data: AdminUserListItem[]): AdminUserListResponse {
 }
 
 function renderPage() {
-  return render(<BetaGroupPage />);
+  return render(
+    <MemoryRouter>
+      <BetaGroupPage />
+    </MemoryRouter>,
+  );
 }
 
 describe("BetaGroupPage", () => {

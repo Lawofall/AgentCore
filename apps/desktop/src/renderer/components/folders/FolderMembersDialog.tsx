@@ -3,6 +3,7 @@ import { avatarInitial } from "@/components/messages/chatDisplay";
 import { Badge, Button, SearchField } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -212,17 +213,13 @@ export function FolderMembersDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent
-        position="top"
-        className="max-w-md"
-        aria-describedby={undefined}
-      >
+      <DialogContent position="top" size="md" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>成员 · {folderName}</DialogTitle>
         </DialogHeader>
 
         {isOwner && (
-          <div className="space-y-2 border-b border-border px-5 pb-3">
+          <DialogBody className="space-y-2 border-b border-border pb-3">
             <div className="flex items-center gap-2">
               <UserPlus size={14} className="shrink-0 text-muted-foreground" />
               <span className="text-xs font-medium text-muted-foreground">
@@ -387,10 +384,10 @@ export function FolderMembersDialog({
                 })}
               </ul>
             )}
-          </div>
+          </DialogBody>
         )}
 
-        <div className="max-h-[50vh] min-h-[8rem] overflow-y-auto px-5 pb-5">
+        <DialogBody className="max-h-[50vh] min-h-[8rem] pb-5">
           {isLoading ? (
             <div className="flex items-center justify-center py-10">
               <Loader2
@@ -532,7 +529,7 @@ export function FolderMembersDialog({
               })}
             </ul>
           )}
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

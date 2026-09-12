@@ -33,6 +33,7 @@ const CREATION_TOOLS: CreationTool[] = [
     title: "文档",
     description: "可反复编辑的长文。",
     icon: FileText,
+    href: "/docs",
   },
   {
     kind: "mindmap",
@@ -54,7 +55,7 @@ const CREATION_TOOLS: CreationTool[] = [
   },
 ];
 
-/** 工具箱 · 创作。白板可点进列表；未开工四项 muted，不可点。 */
+/** 工具箱 · 创作。白板、文档可点进列表；未开工三项 muted，不可点。 */
 export function CreationPage() {
   const navigate = useNavigate();
   return (

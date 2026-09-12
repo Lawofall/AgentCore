@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { NODE_HEIGHT, NODE_WIDTH } from "@/lib/graphMetrics";
+import { NODE_HEIGHT, NODE_WIDTH } from "@agentcore/graph-layout";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { EndpointNodeFace, endpointBodyText } from "../EndpointNode";

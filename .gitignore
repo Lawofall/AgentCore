@@ -189,6 +189,13 @@ data/
 # Eval fixture workspaces may grow AgentCore/ trash when a probe mutates them
 apps/server/agentcore/evals/fixtures/**/.agentcore/
 
+# Code-capability LLM smoke / timestamped matrix dumps (regenerated locally).
+# Ratchet stays: reports/baselines/ + reports/*_baseline_latest.json
+evals/code-capability/reports/llm_smoke_*
+evals/code-capability/reports/*_baseline_2*.json
+evals/code-capability/reports/_ab_retest_stdout.txt
+evals/code-capability/reports/w5_cards45_run.log
+
 # Accidental nested clone / probe drop of this repo at the workspace root
 # (may contain code_search.db ~90MB+). Leading slash = repo root only; do not
 # match docs/ or other paths named AgentCore.

@@ -1,5 +1,5 @@
-import { NODE_HEIGHT, NODE_WIDTH } from "@/lib/graphMetrics";
 import type { RunStatus } from "@/stores/execution";
+import { NODE_HEIGHT, NODE_WIDTH } from "@agentcore/graph-layout";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import {
   CheckCircle2,

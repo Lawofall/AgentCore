@@ -82,12 +82,8 @@ class ArchiveExtractTool:
         return ToolSchema(
             name=ARCHIVE_EXTRACT_TOOL_NAME,
             description=(
-                "把工作区内的 zip 解压到指定目录（相对路径）。"
-                "写出路径经 sanitize；拒绝 zip-slip（`..` / 绝对路径成员）。"
+                "把工作区内的 zip 解压到指定目录。"
                 "大 zip 持久落盘请用本工具。"
-                "沙箱临时产物不等于 canonical 工作区树。"
-                "回执含写出文件数；超限额 / 缺文件 / 坏 zip / zip-slip 会明确失败原因。"
-                "``archive`` 须为工作区内已有 `.zip`；``dest`` 为解压目标目录（可 `.`）。"
             ),
             parameters={
                 "type": "object",

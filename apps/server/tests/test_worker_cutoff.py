@@ -833,7 +833,7 @@ async def test_single_round_jump_past_soft_still_gets_wind_down(monkeypatch):
     from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
     from agentcore.runtime.engine import react_loop
     from agentcore.runtime.events import EventSink
-    from agentcore.runtime.runs.cutoff import WIND_DOWN_INSTRUCTION_TOKEN
+    from agentcore.runtime.runs.cutoff import wind_down_instruction_token
     from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
     from agentcore.tools.registry import ToolRegistry
     from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -923,7 +923,7 @@ async def test_single_round_jump_past_soft_still_gets_wind_down(monkeypatch):
 
     assert usage.total_tokens >= 80_000
     assert any(
-        (m.content or "").startswith(WIND_DOWN_INSTRUCTION_TOKEN[:12])
+        (m.content or "").startswith(wind_down_instruction_token()[:12])
         or "收尾窗口" in (m.content or "")
         for m in messages
     )

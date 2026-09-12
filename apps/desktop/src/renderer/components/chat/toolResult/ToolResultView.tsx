@@ -187,7 +187,8 @@ function isConversationLogDisplay(d: unknown): d is ConversationLogDisplay {
 export function hasToolResultBody(d: ToolResultData): boolean {
   if (d.status === "running") return false;
   if (d.status === "redirect") {
-    return Boolean(d.failure?.message?.trim());
+    // Compact title ("改用搜索") is the whole user face; do not expand a paragraph.
+    return false;
   }
   // Successful handoff: expandable only when the brief has details (not summary-only).
   // The protocol receipt is never a body.
@@ -679,16 +680,7 @@ function TextResult({
  */
 export function ToolResultView({ data }: { data: ToolResultData }) {
   if (data.status === "redirect") {
-    const message = data.failure?.message?.trim();
-    if (!message) return null;
-    return (
-      <p
-        className="mt-1 text-xs text-muted-foreground"
-        data-testid="tool-channel-redirect"
-      >
-        {message}
-      </p>
-    );
+    return null;
   }
   const rich = renderRichToolResult(data);
   if (data.status === "error" && !rich) {

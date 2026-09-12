@@ -213,7 +213,7 @@ async def resolve_folder_workspace_key(
         return build_workspace_key(folder_id=folder_id, binding=binding)
 
     # Memory-scope strings (F1 / test_birth / …) are legal folder_id values for
-    # consult_memory but are not folders PKs — never send them through ::UUID.
+    # consult but are not folders PKs — never send them through ::UUID.
     if not _looks_like_folder_uuid(folder_id):
         return build_workspace_key(folder_id=folder_id, binding=None)
 

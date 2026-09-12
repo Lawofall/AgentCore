@@ -387,7 +387,7 @@ describe("ToolResultView · error / redirect faces", () => {
     expect(screen.queryByTestId("tool-error-detail-toggle")).toBeNull();
   });
 
-  it("redirect shows only the user face, not the model steer", () => {
+  it("redirect stays title-only — no expanded user paragraph", () => {
     const { container } = render(
       <ToolResultView
         data={data({
@@ -403,10 +403,9 @@ describe("ToolResultView · error / redirect faces", () => {
         })}
       />,
     );
-    expect(container.textContent).toContain("我会改用搜索工具定位后再读文件");
-    expect(container.textContent).not.toContain("禁止用 code_execute");
+    expect(container.textContent).toBe("");
+    expect(screen.queryByTestId("tool-channel-redirect")).toBeNull();
     expect(container.querySelector("pre")).toBeNull();
-    expect(container.querySelector(".text-destructive")).toBeNull();
   });
 });
 

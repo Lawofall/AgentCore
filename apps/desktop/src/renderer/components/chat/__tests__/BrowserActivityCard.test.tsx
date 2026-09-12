@@ -2,7 +2,7 @@
 /**
  * L3「团队浏览器」M0 活动卡的渲染 + fold 单测：
  * - 聚合判定：≥2 连续 browser_* 步聚合成一卡，混入他工具 / 单步不聚合。
- * - 卡渲染：折叠态只留「浏览器 · N 步」标题，展开态出步骤列表（action/detail/url）。
+ * - 卡渲染：折叠态只留「浏览器 · N 步」标题，展开态出步骤列表（action + 一行副文）。
  * - 含 frame 的回放重建：卡数据只来自随 tool_use_end 落 journal 的 display —— 给定重建后的
  *   process（display 带 frame），展开即按 conversationId + frame 懒拉原图、点击开 lightbox。
  * 块注释隔开 @vitest-environment 指令，让 organizeImports 保持它在文件首行。
@@ -53,6 +53,7 @@ import {
   BrowserResult,
   browserResultPeek,
   browserResultTail,
+  browserSubline,
   isBrowserActivityGroup,
   isBrowserDisplay,
 } from "../BrowserActivityCard";
@@ -172,6 +173,34 @@ describe("browser 聚合判定", () => {
   });
 });
 
+describe("browserSubline · 展开卡一行副文", () => {
+  it("keeps navigate detail when it already contains the url", () => {
+    expect(
+      browserSubline("打开 http://localhost:5174/", "http://localhost:5174/"),
+    ).toBe("打开 http://localhost:5174/");
+  });
+
+  it("keeps HTTP status on the navigate line", () => {
+    expect(
+      browserSubline("打开 https://ex.com（HTTP 200）", "https://ex.com"),
+    ).toBe("打开 https://ex.com（HTTP 200）");
+  });
+
+  it("joins distinct click detail and url", () => {
+    expect(browserSubline("点击元素 e13", "https://example.com/login")).toBe(
+      "点击元素 e13 · https://example.com/login",
+    );
+  });
+
+  it("falls back to whichever side is present", () => {
+    expect(browserSubline("", "https://example.com")).toBe(
+      "https://example.com",
+    );
+    expect(browserSubline("截取当前页面", "")).toBe("截取当前页面");
+    expect(browserSubline(undefined, undefined)).toBe("");
+  });
+});
+
 describe("browserResultPeek · 单步折叠一行", () => {
   it("tail prefers detail over title/url", () => {
     expect(
@@ -232,7 +261,7 @@ describe("BrowserActivityCard · 卡渲染", () => {
     expect(screen.queryByText("点击登录按钮")).toBeNull();
   });
 
-  it("expands into a step list with action / detail / url", () => {
+  it("expands into a step list with action + one subline", () => {
     render(
       <BrowserActivityCard
         tools={tools}
@@ -243,9 +272,11 @@ describe("BrowserActivityCard · 卡渲染", () => {
     fireEvent.click(screen.getByText("浏览器 · 2 步"));
     expect(screen.getByText("Navigate")).toBeTruthy();
     expect(screen.getByText("Click")).toBeTruthy();
-    expect(screen.getByText("打开示例站")).toBeTruthy();
-    expect(screen.getByText("点击登录按钮")).toBeTruthy();
-    expect(screen.getByText("https://example.com/login")).toBeTruthy();
+    expect(screen.getByText("打开示例站 · https://example.com")).toBeTruthy();
+    expect(
+      screen.getByText("点击登录按钮 · https://example.com/login"),
+    ).toBeTruthy();
+    expect(screen.queryByText("https://example.com/login")).toBeNull();
   });
 
   it("keeps a running (no-display) step's slot from the call args", () => {
@@ -373,10 +404,28 @@ describe("BrowserResult · 单步富卡", () => {
       />,
     );
     expect(screen.getByText("Navigate")).toBeTruthy();
-    expect(screen.getByText("打开示例站")).toBeTruthy();
+    expect(screen.getByText("打开示例站 · https://example.com")).toBeTruthy();
     await waitFor(() =>
       expect(mockFetch).toHaveBeenCalledWith("conv-1", "browser/step-0001.jpg"),
     );
+  });
+
+  it("does not repeat url under navigate detail that already contains it", () => {
+    render(
+      <BrowserResult
+        display={{
+          kind: "browser",
+          action: "navigate",
+          url: "http://localhost:5174/",
+          title: "白板",
+          detail: "打开 http://localhost:5174/",
+        }}
+        conversationId="conv-1"
+      />,
+    );
+    expect(screen.getByText(/白板/)).toBeTruthy();
+    expect(screen.getByText("打开 http://localhost:5174/")).toBeTruthy();
+    expect(screen.queryByText("http://localhost:5174/")).toBeNull();
   });
 
   it("shows 打开浏览器 CTA and reveals the browser tab on click", () => {

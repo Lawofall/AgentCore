@@ -8,7 +8,7 @@
  */
 
 import { cloneElement } from "./clone";
-import { elementBox } from "./geometry";
+import { elementBox, isLinear } from "./geometry";
 import type { SceneElement, StrokeStyle, TextAlign } from "./types";
 
 /** Deep-clone `el` translated by (dx, dy). Arrow points are absolute world coords, so they
@@ -89,6 +89,40 @@ export function applyStyle(
     if (setStyle) copy.strokeStyle = patch.strokeStyle ?? undefined;
     if (setAlign) copy.textAlign = patch.textAlign ?? undefined;
     if (setOpacity) copy.opacity = patch.opacity ?? undefined;
+    return copy;
+  });
+}
+
+/** Position / size / rotation of a single selected element. Multi-selection is a no-op
+ * (align / distribute cover that). Rotation is ignored on linear / freedraw. */
+export interface BoxPatch {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  rotation?: number;
+}
+
+export function patchBox(
+  elements: readonly SceneElement[],
+  selected: ReadonlySet<string>,
+  patch: BoxPatch,
+): SceneElement[] {
+  if (selected.size !== 1) return elements as SceneElement[];
+  return elements.map((e) => {
+    if (!selected.has(e.id)) return e;
+    const copy = cloneElement(e);
+    if (patch.x !== undefined) copy.x = patch.x;
+    if (patch.y !== undefined) copy.y = patch.y;
+    if (patch.width !== undefined) copy.width = Math.max(1, patch.width);
+    if (patch.height !== undefined) copy.height = Math.max(1, patch.height);
+    if (
+      patch.rotation !== undefined &&
+      !isLinear(e.type) &&
+      e.type !== "freedraw"
+    ) {
+      copy.rotation = patch.rotation;
+    }
     return copy;
   });
 }

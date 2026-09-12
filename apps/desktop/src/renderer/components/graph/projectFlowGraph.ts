@@ -3,8 +3,6 @@
   debateFacePrimaryFromContext,
 } from "@/components/chat/debate/debateFaceCopy";
 import type { InjectGraphOverlay } from "@/lib/causalInject";
-import { NODE_HEIGHT, NODE_WIDTH } from "@/lib/elk-layout";
-import type { GroupLayout } from "@/lib/elk-layout";
 import {
   estimateTokens,
   formatCostCaption,
@@ -19,6 +17,11 @@ import {
 import type { Execution, RunNode, RunStatus } from "@/stores/execution";
 import { debateBeatFromContext } from "@/stores/execution";
 import type { GraphEdge } from "@/stores/graph";
+import {
+  type GroupLayout,
+  NODE_HEIGHT,
+  NODE_WIDTH,
+} from "@agentcore/graph-layout";
 import type { Edge, Node } from "@xyflow/react";
 import { type ActCardLayout, actCardDataFromScene } from "./actLod";
 import {

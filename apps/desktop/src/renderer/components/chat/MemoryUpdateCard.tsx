@@ -58,7 +58,7 @@ export function MemoryUpdateCard({ update }: { update: MemoryUpdate }) {
     });
   };
 
-  // This card is the main way in to「这条不对」, but what shows the result — 记忆动态 and its
+  // This card is the main way in to「这条不对」, but what shows the result — 最近学到 and its
   // 已移走的记忆 list — lives in another route with its own cache. Without this the user
   // rejects a line here, goes looking for it there, and finds nothing.
   const memoryChanged = () => {
@@ -134,7 +134,7 @@ export function MemoryUpdateCard({ update }: { update: MemoryUpdate }) {
               to={APP_PATHS.toolbox.guidelinesUpdates}
               className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
             >
-              去看最近更新
+              去看最近学到
               <ChevronRight size={13} />
             </Link>
           </div>

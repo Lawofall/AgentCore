@@ -68,29 +68,6 @@ export function coordinationWaitWorkerRows(
     }));
 }
 
-/**
- * Live ``coordination_wait`` copy for StatusStrip (long form).
- * Global only — member names stay on graph worker nodes / captain short caption.
- * ``waitingRoles`` kept in opts for call-site compat; Strip no longer embeds them.
- * No elapsed suffix: strip already shows turn 用时; wait-segment clocks were wrong.
- */
-export function coordinationWaitLabel(
-  wait: Pick<CoordinationWaitPayload, "completed" | "total"> | null | undefined,
-  opts?: {
-    /** @deprecated Strip uses global copy only; ignored. */
-    waitingRoles?: string[];
-  },
-): string | null {
-  void opts;
-  if (!wait) return null;
-  const total = Math.max(0, wait.total);
-  const completed = Math.max(
-    0,
-    Math.min(wait.completed, total || wait.completed),
-  );
-  return `等待团队成员完成 (${completed}/${total})…`;
-}
-
 /** Short captain-node caption: 等谁 (n/m). No 已等秒数 — duplicates strip 用时. */
 export function coordinationWaitCaptainCaption(
   wait: Pick<CoordinationWaitPayload, "completed" | "total"> | null | undefined,

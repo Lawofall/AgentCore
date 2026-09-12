@@ -105,6 +105,7 @@ _CLIENT_TURN_IDS = {
     "userMessageId": "11111111-1111-4111-8111-111111111111",
     "messageId": "22222222-2222-4222-8222-222222222222",
     "traceId": "a" * 32,
+    "folderId": None,
 }
 
 
@@ -114,34 +115,6 @@ def _response(sent: list[dict[str, Any]], request_id: Any) -> dict[str, Any]:
 
 def _events(sent: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [m["params"]["event"] for m in sent if m.get("method") == "turn/event"]
-
-
-@pytest.fixture(autouse=True)
-def _stub_conversation_folder_id(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
-    """Unit tests without Postgres: bare folder_id=None unless the dedicated DB-mock test."""
-    if request.node.name in {
-        "test_sidecar_start_turn_passes_conversation_folder_id",
-        "test_load_conversation_folder_id_normalizes_blank",
-        "test_load_conversation_folder_id_connection_refused",
-        "test_sidecar_start_turn_db_unavailable_seals_outbox",
-        "test_sidecar_start_turn_folder_id_param_skips_db",
-        "test_sidecar_start_turn_local_binding_reaches_pipeline",
-        "test_sidecar_start_turn_explicit_null_folder_id_skips_db",
-        "test_sidecar_start_turn_absent_folder_id_still_loads_db",
-        "test_sidecar_start_turn_ticketed_absent_folder_id_skips_db",
-        "test_resolve_start_turn_folder_id_key_present",
-        "test_resolve_rpc_folder_binding_key_presence",
-        "test_apply_rpc_folder_binding_overlays_folder_id",
-    }:
-        return
-
-    async def _none(_conversation_id: str) -> None:
-        return None
-
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        _none,
-    )
 
 
 def test_initialize_rejects_missing_root(tmp_path):
@@ -461,133 +434,27 @@ def test_sidecar_binds_local_backend_with_approvals(tmp_path, monkeypatch):
     assert captured["approvals_enabled"] is True
 
 
-def test_sidecar_start_turn_passes_conversation_folder_id(tmp_path, monkeypatch):
-    """startTurn loads conversation.folder_id from DB (cloud-shaped) into the pipeline.
-
-    Hardcoding folder_id=None broke project memory scope + suspension.folder_id on
-    local turns. Mock the unscoped repo lookup; assert run_chat_pipeline gets it.
-    Absent ``folderId`` key (old desktop) still uses this path.
-    """
-    captured: dict[str, Any] = {}
-
-    class _Conv:
-        folder_id = "folder-from-db"
-
-    class _Repo:
-        def __init__(self, _session: Any) -> None:
-            pass
-
-        async def get_by_id_unscoped(self, conversation_id: str) -> _Conv:
-            assert conversation_id == "c1"
-            return _Conv()
-
-    class _SessionCtx:
-        async def __aenter__(self) -> object:
-            return object()
-
-        async def __aexit__(self, *args: Any) -> None:
-            return None
-
-    async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
-        captured["folder_id"] = kwargs.get("folder_id")
-        kwargs["sink"].close()
-        return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
-
-    async def fake_baseline(**kwargs: Any) -> None:
-        captured["baseline_folder_id"] = kwargs.get("folder_id")
-
-    monkeypatch.setattr("agentcore.sidecar.server.run_chat_pipeline", fake_pipeline)
-    monkeypatch.setattr(
-        "agentcore.workspace.turn_baseline.maybe_capture_turn_baseline",
-        fake_baseline,
-    )
-    monkeypatch.setattr(
-        "agentcore.db.base.async_session_factory",
-        lambda: _SessionCtx(),
-    )
-    monkeypatch.setattr(
-        "agentcore.db.repositories.ConversationRepository",
-        _Repo,
-    )
-
-    sent, write_line = _recorder()
-    server = SidecarServer(write_line)
-
-    async def drive() -> None:
-        await server.handle_line(
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "initialize",
-                    "params": {
-                        "userId": "u",
-                        "workspaceRoot": str(tmp_path),
-                        "approvalsEnabled": True,
-                        "inference": _FAKE_INFERENCE,
-                    },
-                }
-            )
-        )
-        await server.handle_line(
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "startTurn",
-                    "params": {
-                        **_CLIENT_TURN_IDS,
-                        "turnId": "t1",
-                        "conversationId": "c1",
-                        "userMessage": "项目里查记忆",
-                    },
-                }
-            )
-        )
-        await asyncio.gather(*list(server._turns.values()))
-
-    asyncio.run(drive())
-    assert captured["folder_id"] == "folder-from-db"
-    assert captured["baseline_folder_id"] == "folder-from-db"
-
-
-@pytest.mark.asyncio
-async def test_resolve_start_turn_folder_id_key_present(monkeypatch):
-    """``folderId`` key present → normalize, never call DB loader (PG may be down)."""
+def test_resolve_start_turn_folder_id_key_present():
+    """``folderId`` key present → normalize (null/blank = bare)."""
     from agentcore.sidecar.server_pkg.turns import resolve_start_turn_folder_id
 
-    called = {"db": False}
+    assert resolve_start_turn_folder_id({"folderId": "  proj-1  "}) == "proj-1"
+    assert resolve_start_turn_folder_id({"folderId": None}) is None
+    assert resolve_start_turn_folder_id({"folderId": ""}) is None
+    assert resolve_start_turn_folder_id({"folderId": "  "}) is None
 
-    async def boom(_conversation_id: str) -> str | None:
-        called["db"] = True
-        raise AssertionError("DB loader must not run when folderId key is present")
 
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        boom,
+def test_resolve_start_turn_folder_id_key_absent():
+    """Missing ``folderId`` key is not a lookup — old desktop must upgrade."""
+    from agentcore.core.errors import ClientTooOldError
+    from agentcore.sidecar.server_pkg.turns import (
+        FolderIdRequiredError,
+        resolve_start_turn_folder_id,
     )
-    assert await resolve_start_turn_folder_id({"folderId": "  proj-1  "}, "c1") == "proj-1"
-    assert await resolve_start_turn_folder_id({"folderId": None}, "c1") is None
-    assert await resolve_start_turn_folder_id({"folderId": ""}, "c1") is None
-    assert await resolve_start_turn_folder_id({"folderId": "  "}, "c1") is None
-    assert called["db"] is False
 
-
-@pytest.mark.asyncio
-async def test_resolve_start_turn_folder_id_skip_local_db(monkeypatch):
-    """Ticketed sidecar with no folderId key must not load conv.folder_id from PG."""
-    from agentcore.sidecar.server_pkg.turns import resolve_start_turn_folder_id
-
-    async def boom(_conversation_id: str) -> str | None:
-        raise AssertionError("DB loader must not run when skip_local_db")
-
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        boom,
-    )
-    assert (
-        await resolve_start_turn_folder_id({}, "c1", skip_local_db=True)
-    ) is None
+    with pytest.raises(FolderIdRequiredError) as ei:
+        resolve_start_turn_folder_id({})
+    assert str(ei.value) == ClientTooOldError().message
 
 
 def test_resolve_rpc_folder_binding_key_presence():
@@ -669,17 +536,10 @@ def test_sidecar_start_turn_local_binding_reaches_pipeline(tmp_path, monkeypatch
     async def fake_baseline(**kwargs: Any) -> None:
         return None
 
-    async def boom_db(_conversation_id: str) -> str | None:
-        raise AssertionError("load_conversation_folder_id must not run")
-
     monkeypatch.setattr("agentcore.sidecar.server.run_chat_pipeline", fake_pipeline)
     monkeypatch.setattr(
         "agentcore.workspace.turn_baseline.maybe_capture_turn_baseline",
         fake_baseline,
-    )
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        boom_db,
     )
 
     sent, write_line = _recorder()
@@ -801,9 +661,8 @@ def test_sidecar_start_turn_forwards_agent_mentions(tmp_path, monkeypatch):
 
 
 def test_sidecar_start_turn_folder_id_param_skips_db(tmp_path, monkeypatch):
-    """Injected folderId reaches pipeline without opening local PG."""
+    """Injected folderId reaches pipeline."""
     captured: dict[str, Any] = {}
-    db_calls = {"n": 0}
 
     async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
         captured["folder_id"] = kwargs.get("folder_id")
@@ -813,18 +672,10 @@ def test_sidecar_start_turn_folder_id_param_skips_db(tmp_path, monkeypatch):
     async def fake_baseline(**kwargs: Any) -> None:
         captured["baseline_folder_id"] = kwargs.get("folder_id")
 
-    async def boom_db(_conversation_id: str) -> str | None:
-        db_calls["n"] += 1
-        raise AssertionError("load_conversation_folder_id must not run")
-
     monkeypatch.setattr("agentcore.sidecar.server.run_chat_pipeline", fake_pipeline)
     monkeypatch.setattr(
         "agentcore.workspace.turn_baseline.maybe_capture_turn_baseline",
         fake_baseline,
-    )
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        boom_db,
     )
 
     sent, write_line = _recorder()
@@ -865,16 +716,13 @@ def test_sidecar_start_turn_folder_id_param_skips_db(tmp_path, monkeypatch):
         await asyncio.gather(*list(server._turns.values()))
 
     asyncio.run(drive())
-    assert db_calls["n"] == 0
     assert captured["folder_id"] == "folder-from-rpc"
     assert captured["baseline_folder_id"] == "folder-from-rpc"
     assert "error" not in _response(sent, 2)
 
 
 def test_sidecar_start_turn_explicit_null_folder_id_skips_db(tmp_path, monkeypatch):
-    """Explicit null folderId = bare chat; must not query PG (PG down still OK)."""
-    from agentcore.db.errors import DATABASE_UNAVAILABLE_MESSAGE, DatabaseUnavailableError
-
+    """Explicit null folderId = bare chat."""
     captured: dict[str, Any] = {}
 
     async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
@@ -882,14 +730,7 @@ def test_sidecar_start_turn_explicit_null_folder_id_skips_db(tmp_path, monkeypat
         kwargs["sink"].close()
         return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
 
-    async def boom_db(_conversation_id: str) -> str | None:
-        raise DatabaseUnavailableError(DATABASE_UNAVAILABLE_MESSAGE)
-
     monkeypatch.setattr("agentcore.sidecar.server.run_chat_pipeline", fake_pipeline)
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        boom_db,
-    )
 
     sent, write_line = _recorder()
     server = SidecarServer(write_line)
@@ -933,203 +774,10 @@ def test_sidecar_start_turn_explicit_null_folder_id_skips_db(tmp_path, monkeypat
     assert "error" not in _response(sent, 2)
 
 
-def test_sidecar_start_turn_absent_folder_id_still_loads_db(tmp_path, monkeypatch):
-    """Old desktop (no folderId key) still falls back to DB loader."""
-    captured: dict[str, Any] = {}
-    db_calls = {"n": 0}
-
-    async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
-        captured["folder_id"] = kwargs.get("folder_id")
-        kwargs["sink"].close()
-        return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
-
-    async def fake_db(_conversation_id: str) -> str | None:
-        db_calls["n"] += 1
-        return "from-legacy-db"
-
-    monkeypatch.setattr("agentcore.sidecar.server.run_chat_pipeline", fake_pipeline)
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        fake_db,
-    )
-
-    sent, write_line = _recorder()
-    server = SidecarServer(write_line)
-
-    async def drive() -> None:
-        await server.handle_line(
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "initialize",
-                    "params": {
-                        "userId": "u",
-                        "workspaceRoot": str(tmp_path),
-                        "approvalsEnabled": True,
-                        "inference": _FAKE_INFERENCE,
-                    },
-                }
-            )
-        )
-        await server.handle_line(
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "startTurn",
-                    "params": {
-                        **_CLIENT_TURN_IDS,
-                        "turnId": "t1",
-                        "conversationId": "c1",
-                        "userMessage": "旧桌面无 folderId",
-                    },
-                }
-            )
-        )
-        await asyncio.gather(*list(server._turns.values()))
-
-    asyncio.run(drive())
-    assert db_calls["n"] == 1
-    assert captured["folder_id"] == "from-legacy-db"
-
-
-def test_sidecar_start_turn_ticketed_absent_folder_id_skips_db(tmp_path, monkeypatch):
-    """Old desktop shape + folders/account ticket must not load conv.folder_id from PG."""
-    captured: dict[str, Any] = {}
-    db_calls = {"n": 0}
-
-    async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
-        captured["folder_id"] = kwargs.get("folder_id")
-        kwargs["sink"].close()
-        return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
-
-    async def boom_db(_conversation_id: str) -> str | None:
-        db_calls["n"] += 1
-        raise AssertionError("ticketed sidecar must not load folder_id from local PG")
-
-    monkeypatch.setattr("agentcore.sidecar.server.run_chat_pipeline", fake_pipeline)
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        boom_db,
-    )
-
-    sent, write_line = _recorder()
-    server = SidecarServer(write_line)
-
-    async def drive() -> None:
-        await server.handle_line(
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "initialize",
-                    "params": {
-                        "userId": "u",
-                        "workspaceRoot": str(tmp_path),
-                        "approvalsEnabled": True,
-                        "inference": _FAKE_INFERENCE,
-                    },
-                }
-            )
-        )
-        await server.handle_line(
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "startTurn",
-                    "params": {
-                        **_CLIENT_TURN_IDS,
-                        "turnId": "t1",
-                        "conversationId": "c1",
-                        "userMessage": "有票旧桌面无 folderId",
-                        "foldersAuth": {
-                            "baseUrl": "https://api.example.com/v1/folders",
-                            "apiKey": "folders-tok",
-                        },
-                    },
-                }
-            )
-        )
-        await asyncio.gather(*list(server._turns.values()))
-
-    asyncio.run(drive())
-    assert db_calls["n"] == 0
-    assert captured["folder_id"] is None
-    assert "error" not in _response(sent, 2)
-
-
-@pytest.mark.asyncio
-async def test_load_conversation_folder_id_normalizes_blank(monkeypatch):
-    """DB blank / whitespace folder_id → None (bare), never empty str."""
-    from agentcore.sidecar.server_pkg.turns import load_conversation_folder_id
-
-    class _Conv:
-        folder_id = "  "
-
-    class _Repo:
-        def __init__(self, _session: object) -> None:
-            pass
-
-        async def get_by_id_unscoped(self, _conversation_id: str) -> _Conv:
-            return _Conv()
-
-    class _SessionCtx:
-        async def __aenter__(self) -> object:
-            return object()
-
-        async def __aexit__(self, *args: object) -> None:
-            return None
-
-    monkeypatch.setattr(
-        "agentcore.db.base.async_session_factory",
-        lambda: _SessionCtx(),
-    )
-    monkeypatch.setattr(
-        "agentcore.db.repositories.ConversationRepository",
-        _Repo,
-    )
-    assert await load_conversation_folder_id("c-blank") is None
-
-
-@pytest.mark.asyncio
-async def test_load_conversation_folder_id_connection_refused(monkeypatch):
-    """PG connection refuse → DatabaseUnavailableError, not raw WinError narrative."""
-    from sqlalchemy.exc import OperationalError
-
-    from agentcore.db.errors import DATABASE_UNAVAILABLE_MESSAGE, DatabaseUnavailableError
-    from agentcore.sidecar.server_pkg.turns import load_conversation_folder_id
-
-    class _FailSession:
-        async def __aenter__(self) -> object:
-            raise OperationalError(
-                "SELECT 1",
-                {},
-                ConnectionRefusedError("connection refused"),
-            )
-
-        async def __aexit__(self, *args: object) -> None:
-            return None
-
-    monkeypatch.setattr(
-        "agentcore.db.base.async_session_factory",
-        lambda: _FailSession(),
-    )
-
-    with pytest.raises(DatabaseUnavailableError) as ei:
-        await load_conversation_folder_id("c1")
-    assert str(ei.value) == DATABASE_UNAVAILABLE_MESSAGE
-    assert "1225" not in str(ei.value)
-
-
-def test_sidecar_start_turn_db_unavailable_seals_outbox(tmp_path, monkeypatch):
-    """After begin_turn, folder_id connect refuse must not leave outbox permanently open.
-
-    方案一 · 诚实失败：回合干净失败，错误可识别为数据库问题；禁止静默当裸聊继续。
-    """
-    from agentcore.conversation.store.outbox import PHASE_OPEN, PHASE_READY, list_outbox_records
-    from agentcore.db.errors import DATABASE_UNAVAILABLE_MESSAGE, DatabaseUnavailableError
+def test_sidecar_start_turn_absent_folder_id_is_too_old(tmp_path, monkeypatch):
+    """Old desktop omitted ``folderId``: INVALID_PARAMS, no pipeline, no outbox."""
+    from agentcore.conversation.store.outbox import list_outbox_records
+    from agentcore.core.errors import ClientTooOldError
 
     pipeline_ran = {"value": False}
 
@@ -1138,18 +786,16 @@ def test_sidecar_start_turn_db_unavailable_seals_outbox(tmp_path, monkeypatch):
         kwargs["sink"].close()
         return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
 
-    async def boom_folder(_conversation_id: str) -> str | None:
-        raise DatabaseUnavailableError(DATABASE_UNAVAILABLE_MESSAGE)
-
     monkeypatch.setattr("agentcore.sidecar.server.run_chat_pipeline", fake_pipeline)
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        boom_folder,
-    )
 
     data_dir = tmp_path / "data"
     sent, write_line = _recorder()
     server = SidecarServer(write_line)
+    ids = {
+        "userMessageId": _CLIENT_TURN_IDS["userMessageId"],
+        "messageId": _CLIENT_TURN_IDS["messageId"],
+        "traceId": _CLIENT_TURN_IDS["traceId"],
+    }
 
     async def drive() -> None:
         await server.handle_line(
@@ -1175,12 +821,10 @@ def test_sidecar_start_turn_db_unavailable_seals_outbox(tmp_path, monkeypatch):
                     "id": 2,
                     "method": "startTurn",
                     "params": {
-                        **_CLIENT_TURN_IDS,
+                        **ids,
                         "turnId": "t1",
                         "conversationId": "c1",
-                        "userMessage": "查项目记忆",
-                        "userMessageId": "um-db-down",
-                        "traceId": "a" * 32,
+                        "userMessage": "旧桌面无 folderId",
                     },
                 }
             )
@@ -1191,15 +835,76 @@ def test_sidecar_start_turn_db_unavailable_seals_outbox(tmp_path, monkeypatch):
 
     assert pipeline_ran["value"] is False
     err = _response(sent, 2)["error"]
-    assert err["code"] == protocol.INTERNAL_ERROR
-    assert DATABASE_UNAVAILABLE_MESSAGE in err["message"]
-    assert "1225" not in err["message"]
+    assert err["code"] == protocol.INVALID_PARAMS
+    assert err["message"] == ClientTooOldError().message
+    assert not list_outbox_records(data_dir / "outbox")
+    assert not server._turns
 
-    records = list_outbox_records(data_dir / "outbox")
-    assert records, "begin_turn must have created an outbox record"
-    assert all(r.get("phase") != PHASE_OPEN for r in records)
-    assert all(r.get("phase") == PHASE_READY for r in records)
-    assert any("salvage" in (r.get("ops") or []) for r in records)
+
+def test_sidecar_start_turn_ticketed_absent_folder_id_is_too_old(tmp_path, monkeypatch):
+    """Tickets do not turn a missing folderId key into bare chat."""
+    from agentcore.core.errors import ClientTooOldError
+
+    captured: dict[str, Any] = {}
+
+    async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
+        captured["folder_id"] = kwargs.get("folder_id")
+        kwargs["sink"].close()
+        return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
+
+    monkeypatch.setattr("agentcore.sidecar.server.run_chat_pipeline", fake_pipeline)
+
+    sent, write_line = _recorder()
+    server = SidecarServer(write_line)
+    ids = {
+        "userMessageId": _CLIENT_TURN_IDS["userMessageId"],
+        "messageId": _CLIENT_TURN_IDS["messageId"],
+        "traceId": _CLIENT_TURN_IDS["traceId"],
+    }
+
+    async def drive() -> None:
+        await server.handle_line(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "userId": "u",
+                        "workspaceRoot": str(tmp_path),
+                        "approvalsEnabled": True,
+                        "inference": _FAKE_INFERENCE,
+                        "foldersAuth": {
+                            "baseUrl": "https://api.example.com/v1/folders",
+                            "apiKey": "folders-tok",
+                        },
+                    },
+                }
+            )
+        )
+        await server.handle_line(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "startTurn",
+                    "params": {
+                        **ids,
+                        "turnId": "t1",
+                        "conversationId": "c1",
+                        "userMessage": "有票旧桌面无 folderId",
+                    },
+                }
+            )
+        )
+        await asyncio.gather(*list(server._turns.values()))
+
+    asyncio.run(drive())
+    assert "folder_id" not in captured
+    err = _response(sent, 2)["error"]
+    assert err["code"] == protocol.INVALID_PARAMS
+    assert err["message"] == ClientTooOldError().message
+    assert not server._turns
 
 
 def test_sidecar_start_turn_passes_desktop_client_platform(tmp_path, monkeypatch):

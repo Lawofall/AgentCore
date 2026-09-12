@@ -16,7 +16,7 @@ import { Brain, History, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 /**
- * 记忆动态 — cross-conversation「最近更新」feed (记忆更新对话内可见, §1.6).
+ * 最近学到 — cross-conversation memory feed (记忆更新对话内可见, §1.6).
  *
  * The in-conversation card ({@link MemoryUpdateCard}) answers「这次对话 AI 记了什么」;
  * this view answers「AI 最近都学了什么」— one chronological stream across conversations.
@@ -25,12 +25,9 @@ import { useNavigate } from "react-router-dom";
  */
 export function MemoryUpdatesView({
   onOpenLeaf,
-  embedded = false,
 }: {
   /** Open a memory leaf (synthetic path + display name + optional projectId fallback). */
   onOpenLeaf: (path: string, name: string, projectId?: string | null) => void;
-  /** Hide the standalone「记忆动态」page header when hosted beside the prompt catalog. */
-  embedded?: boolean;
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -43,15 +40,10 @@ export function MemoryUpdatesView({
 
   return (
     <div className="flex h-full flex-col" data-testid="memory-updates-view">
-      {embedded ? null : (
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-6">
-          <History size={16} className="shrink-0 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">记忆动态</span>
-          <span className="text-xs text-muted-foreground">
-            AI 最近从各处对话里记下的内容
-          </span>
-        </header>
-      )}
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-6">
+        <History size={16} className="shrink-0 text-muted-foreground" />
+        <span className="text-sm font-medium text-foreground">最近学到</span>
+      </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* Outside the empty branch below: a user may have rejected lines without ever
@@ -73,7 +65,7 @@ export function MemoryUpdatesView({
           <EmptyHint
             inline
             icon={<Brain size={26} className="text-muted-foreground/40" />}
-            title="还没有记忆更新"
+            title="还没有学到的内容"
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-3 px-6 py-4">

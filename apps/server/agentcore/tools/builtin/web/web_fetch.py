@@ -512,29 +512,19 @@ class WebFetchTool:
         return ToolSchema(
             name="web_fetch",
             description=(
-                "仅 http/https 公网网页正文。工作区相对路径、file://、盘符路径用 file_read，"
-                "不要把路径传给本工具，也不要补 https:// 冒充网页。"
-                "获取指定网页的正文文本（比 web_search 摘要更完整，但长页面会按 "
-                "max_chars 截断），用于在 web_search 摘要不足、确需深读某条结果时。"
-                "默认摘要优先：多数问题先用 web_search 摘要作答；"
-                "任务要求核对原文或需要正文细节时再调用本工具深读。"
-                "要把 URL 的原始文件/二进制写入工作区时用 download_url，不要用本工具。"
-                "注意：部分大型站点（如百度百科、知乎等）有反爬保护，可能返回 403/失败——"
-                "此时改用 web_search 摘要或换其他来源，不要对同一被拒站点反复重试。"
+                "公网 http(s) 网页正文（web_search 摘要不够或须核对原文时再深读）。"
+                "工作区路径用 file_read；落盘用 download_url。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "url": {
                         "type": "string",
-                        "description": (
-                            "必须是 http:// 或 https:// 开头的公网网页地址。"
-                            "工作区文件用 file_read。"
-                        ),
+                        "description": "http:// 或 https:// 公网地址。",
                     },
                     "max_chars": {
                         "type": "integer",
-                        "description": "返回的最大字符数，默认 8000",
+                        "description": "返回最大字符数，默认 8000；超则截断。",
                     },
                 },
                 "required": ["url"],

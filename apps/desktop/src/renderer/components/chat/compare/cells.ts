@@ -1,4 +1,4 @@
-import type { Execution, RevisionChain, RunNode } from "@/stores/execution";
+import type { ContinuationChain, Execution, RunNode } from "@/stores/execution";
 
 /**
  * 「对比」透镜的可选取单元（{@link import("./TurnCompare").TurnCompare}）——把定向唤回修订的
@@ -68,12 +68,12 @@ export function looksLikeEdit(a: string, b: string): boolean {
 
 /**
  * 版本链形态的可选取单元：每条链（被改 worker）的 v1 原始 + 每次续写 vN，按版本序展开成一排格子。
- * 供 {@link import("./RevisionOverview").RevisionOverview} 渲染与 {@link import("./TurnCompare").TurnCompare}
+ * 供 {@link import("./ContinuationOverview").ContinuationOverview} 渲染与 {@link import("./TurnCompare").TurnCompare}
  * 的 pair 解析共用同一份顺序（display order），A/B 定序即按此数组下标。
  */
-export function revisionCells(
+export function continuationCells(
   execution: Execution,
-  chains: RevisionChain[],
+  chains: ContinuationChain[],
 ): ResolvedCell[] {
   const out: ResolvedCell[] = [];
   for (const chain of chains) {

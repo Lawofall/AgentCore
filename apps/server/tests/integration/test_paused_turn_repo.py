@@ -615,12 +615,11 @@ async def test_retention_sweep_clears_orphan_turn_journal(session_factory, monke
 async def test_stamp_settled_without_paused_row_classifies_as_settled(
     session_factory, monkeypatch
 ):
-    """Sidecar never writes ``paused_turns``; stamping the conclusion is enough.
+    """An outcome row without a leftover ``paused_turns`` frame classifies as settled.
 
-    Cloud ``claim`` writes the outcome while deleting the frame. Local settlement
-    has no PG frame to delete, but a later cloud POST resume still reads
-    ``classify_resume_miss`` — which must see ``settled`` with the winner's
-    card identity, not ``regenerated``.
+    Cloud ``claim`` writes the outcome while deleting the frame. This helper is
+    the no-frame path of the same table; ticketed sidecar settlement does not
+    call it.
     """
     from agentcore.runtime.suspension import consumed as consumed_mod
     from agentcore.runtime.suspension.consumed import classify_resume_miss

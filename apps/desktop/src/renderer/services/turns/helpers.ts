@@ -135,12 +135,6 @@ export const RECONNECT_INTERRUPTED_BANNER =
   "连接中断，本回合未能完成。可重新发送继续。";
 
 /**
- * @deprecated Prefer {@link RECONNECT_LIVE_BANNER}. Kept as the same string so
- * existing equality checks / reopen settle stay aligned.
- */
-export const RECONNECT_BANNER = RECONNECT_LIVE_BANNER;
-
-/**
  * zh banner when recovery could not confirm cloud live/idle (``!cloudKnown``).
  * Not a transport drop — do not reuse live/finished/interrupted copy. Never ghost,
  * never resend; reopen / later settle may refresh facts (no one-click banner action).

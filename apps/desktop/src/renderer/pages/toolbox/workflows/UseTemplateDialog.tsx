@@ -1,8 +1,11 @@
 import { Button, Input, Textarea } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
@@ -149,13 +152,15 @@ export function UseTemplateDialog({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="max-w-md">
-        <DialogTitle>使用 · {template.title}</DialogTitle>
-        <DialogDescription>
-          填写主参数后复制为我的工作流，可再在画布里改。
-        </DialogDescription>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>使用 · {template.title}</DialogTitle>
+          <DialogDescription>
+            填写主参数后复制为我的工作流，可再在画布里改。
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="mt-4 space-y-3">
+        <DialogBody className="space-y-3">
           <label className="block" htmlFor="wf-tpl-name">
             <span className="mb-1 block text-xs text-muted-foreground">
               工作流名称
@@ -186,10 +191,10 @@ export function UseTemplateDialog({
             </p>
           )}
           {error && <p className="text-xs text-muted-foreground">{error}</p>}
-        </div>
+        </DialogBody>
 
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="neutral" size="md" onClick={onClose}>
+        <DialogFooter>
+          <Button variant="outline" size="md" onClick={onClose}>
             取消
           </Button>
           <Button
@@ -206,7 +211,7 @@ export function UseTemplateDialog({
           >
             复制为我的
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

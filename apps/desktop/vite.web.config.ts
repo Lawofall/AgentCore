@@ -16,6 +16,9 @@ export default defineConfig({
     alias: {
       "@": resolve("src/renderer"),
       "@shared": resolve("src/shared"),
+      "@byok-presets": resolve(
+        "../server/agentcore/llm/byok_provider_presets.json",
+      ),
     },
   },
   server: {

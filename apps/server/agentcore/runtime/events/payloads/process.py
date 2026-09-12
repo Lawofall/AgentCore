@@ -38,7 +38,7 @@ class ProcessToolStep(WirePayload):
     )
     failure: dict[str, Any] | None = absent(
         "User-facing copy from tool_use_end (status=error or redirect). "
-        "Shape mirrors ToolFailure: {message, code}.",
+        "Shape mirrors ToolFailure: {code, optional message}.",
         ts_type="ToolFailure",
     )
     phase: str | None = absent(

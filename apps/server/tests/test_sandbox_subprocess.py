@@ -19,7 +19,7 @@ from agentcore.tools.sandbox.exec_env import (
     exec_env_probe_failure_code,
 )
 from agentcore.tools.sandbox.protocol import ExecutionRequest
-from agentcore.tools.sandbox.subprocess import SubprocessSandbox
+from agentcore.tools.sandbox.subprocess import PYTHON_LAUNCHER_MISSING, SubprocessSandbox
 
 
 def _make_selector_loop() -> asyncio.AbstractEventLoop:
@@ -134,6 +134,83 @@ def test_probe_available_languages_omits_bash_without_launcher(monkeypatch):
     )
     assert "bash" not in sp.probe_available_languages()
     assert "python" in sp.probe_available_languages()
+
+
+def test_resolve_python_prefers_python3_on_posix(monkeypatch):
+    import agentcore.tools.sandbox.subprocess as sp
+
+    monkeypatch.setattr(sp, "_IS_WINDOWS", False)
+
+    def fake_which(name: str) -> str | None:
+        return {"python3": "/usr/bin/python3", "python": "/usr/bin/python"}.get(name)
+
+    monkeypatch.setattr(sp.shutil, "which", fake_which)
+    assert sp.resolve_python_launcher() == ["python3"]
+    assert sp._resolve_language_cmd("python") == ["python3", "-u"]
+    assert "python" in sp.probe_available_languages()
+
+
+def test_resolve_python_falls_back_to_unversioned_python(monkeypatch):
+    import agentcore.tools.sandbox.subprocess as sp
+
+    monkeypatch.setattr(sp, "_IS_WINDOWS", False)
+    monkeypatch.setattr(
+        sp.shutil,
+        "which",
+        lambda name: "/usr/bin/python" if name == "python" else None,
+    )
+    assert sp.resolve_python_launcher() == ["python"]
+    assert "python" in sp.probe_available_languages()
+
+
+def test_resolve_python_prefers_py_launcher_on_windows(monkeypatch):
+    import agentcore.tools.sandbox.subprocess as sp
+
+    monkeypatch.setattr(sp, "_IS_WINDOWS", True)
+
+    def fake_which(name: str) -> str | None:
+        return {
+            "py": r"C:\Windows\py.exe",
+            "python": r"C:\Python\python.exe",
+        }.get(name)
+
+    monkeypatch.setattr(sp.shutil, "which", fake_which)
+    assert sp.resolve_python_launcher() == ["py", "-3"]
+    assert sp._resolve_language_cmd("python") == ["py", "-3", "-u"]
+
+
+def test_python_missing_stderr_is_python3_not_path_hint(monkeypatch):
+    import agentcore.tools.sandbox.subprocess as sp
+
+    monkeypatch.setattr(sp, "resolve_python_launcher", lambda: None)
+    assert "python" not in sp.probe_available_languages()
+
+    async def _run() -> None:
+        result = await SubprocessSandbox().execute(
+            ExecutionRequest(code="print(1)", language="python", timeout_seconds=5)
+        )
+        assert result.success is False
+        assert result.exit_code == 127
+        assert result.stderr == PYTHON_LAUNCHER_MISSING
+        assert "Python 3" in result.stderr
+        assert "请确认 PATH 上有 python" not in result.stderr
+
+    asyncio.run(_run())
+
+
+def test_python_missing_copy_matches_desktop():
+    from pathlib import Path
+
+    src = (
+        Path(__file__).resolve().parents[2]
+        / "desktop"
+        / "src"
+        / "main"
+        / "fs"
+        / "workspace"
+        / "execCodec.ts"
+    )
+    assert PYTHON_LAUNCHER_MISSING in src.read_text(encoding="utf-8")
 
 
 def test_decode_pipe_bytes_utf16le_nul_dense():

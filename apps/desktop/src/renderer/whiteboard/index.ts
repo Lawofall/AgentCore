@@ -9,7 +9,6 @@ export { SCENE_SCHEMA_VERSION } from "./types";
 export type {
   BoardScenePayload,
   ElementType,
-  RunVisualStatus,
   SceneElement,
   Tool,
   Viewport,

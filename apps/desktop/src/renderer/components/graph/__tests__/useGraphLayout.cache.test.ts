@@ -9,8 +9,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const computeLayout = vi.fn();
 
-vi.mock("@/lib/elk-layout", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/elk-layout")>();
+vi.mock("@agentcore/graph-layout", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@agentcore/graph-layout")>();
   return {
     ...actual,
     computeLayout: (...args: unknown[]) => computeLayout(...args),

@@ -20,7 +20,7 @@ import { groupToolRuns, timelineNodeKeys } from "@/lib/processTimeline";
 import type { AgentAuditEvent } from "@/services/audit";
 import { permissionAxesShortLabel } from "@/services/permissionAxes";
 import { activeRuntime, useConversationStore } from "@/stores/conversation";
-import { revisionChains, useMessageRun } from "@/stores/execution";
+import { continuationChains, useMessageRun } from "@/stores/execution";
 import { useSidePanelStore } from "@/stores/sidePanel";
 import { turnDetailPath } from "@/stores/ui";
 import { isLiveRunStatus } from "@agentcore/protocol-fold-kit";
@@ -31,14 +31,14 @@ import {
   isThinkingLivePlaceholder,
 } from "./debateModerator";
 import { receivedContextForList, selectRunTaskSection } from "./runTaskSection";
+import {
+  ContinuationChainSection,
+  continuationComparePair,
+} from "./sections/RunContinuationChain";
 import { DebriefSection } from "./sections/RunDebrief";
 import { EscalationSection } from "./sections/RunEscalations";
 import { RunOutcomeAcceptSection } from "./sections/RunOutcomeAccept";
 import { ResourceSection } from "./sections/RunResources";
-import {
-  RevisionChainSection,
-  revisionComparePair,
-} from "./sections/RunRevisionChain";
 import { Section } from "./sections/shared";
 
 /**
@@ -69,7 +69,7 @@ function turnPresetSnapshot(
 
 /**
  * Single-run detail content — hybrid layout aligned with the CEO bubble timeline:
- * header anchors (role / 接手 chip / 上下文 / 打开辩论室 / task / revision /
+ * header anchors (role / 接手 chip / 上下文 / 打开辩论室 / task / continuation /
  * escalation / context) → interleaved process rows → footer (debrief /
  * resources). Topology (depends / parent / children) lives on the
  * collab graph, not this inspector. The docked inspector is one virtual
@@ -141,7 +141,7 @@ export function RunDetailBody({
 
   const isModerator = isDebateModeratorRun(execution, run.id);
   const chain =
-    revisionChains(execution).find((c) =>
+    continuationChains(execution).find((c) =>
       c.versions.some((v) => v.run.id === run.id),
     ) ?? null;
   const taskSection = selectRunTaskSection(run);
@@ -244,7 +244,7 @@ export function RunDetailBody({
       </Section>
 
       {chain && (
-        <RevisionChainSection
+        <ContinuationChainSection
           chain={chain}
           currentRunId={run.id}
           agents={execution.agents}
@@ -258,7 +258,7 @@ export function RunDetailBody({
                       conversationId,
                       messageId,
                       "compare",
-                      revisionComparePair(chain, run.id),
+                      continuationComparePair(chain, run.id),
                     ),
                   );
                 }

@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agentcore.db.models.documents import Document
 from agentcore.db.models.skill_store import (
     SkillStoreInstall,
     SkillStoreListing,
@@ -59,11 +60,13 @@ class SkillStoreRepository:
         *,
         author_user_id: str,
         source_document_id: str,
+        shelf_group: str,
         commit: bool = True,
     ) -> SkillStoreListing:
         row = SkillStoreListing(
             author_user_id=author_user_id,
             source_document_id=source_document_id,
+            shelf_group=shelf_group,
             status="published",
         )
         self._session.add(row)
@@ -112,6 +115,7 @@ class SkillStoreRepository:
         page_size: int = 20,
         author_user_id: str | None = None,
         statuses: Sequence[str] | None = None,
+        shelf_group: str | None = None,
     ) -> tuple[list[tuple[SkillStoreListing, SkillStoreVersion, User]], int]:
         """Paginated listings joined to current version + author."""
         stmt = (
@@ -137,6 +141,9 @@ class SkillStoreRepository:
         if author_user_id is not None:
             stmt = stmt.where(SkillStoreListing.author_user_id == author_user_id)
             count_stmt = count_stmt.where(SkillStoreListing.author_user_id == author_user_id)
+        if shelf_group is not None:
+            stmt = stmt.where(SkillStoreListing.shelf_group == shelf_group)
+            count_stmt = count_stmt.where(SkillStoreListing.shelf_group == shelf_group)
         needle = (q or "").strip()
         if needle:
             pattern = _ilike_pattern(needle)
@@ -156,6 +163,39 @@ class SkillStoreRepository:
         )
         rows = [(listing, version, author) for listing, version, author in result.all()]
         return rows, total
+
+    async def group_counts(
+        self,
+        *,
+        q: str | None = None,
+        statuses: Sequence[str] | None = None,
+    ) -> dict[str, int]:
+        """Published (or filtered) listing counts keyed by ``shelf_group``."""
+        stmt = (
+            select(SkillStoreListing.shelf_group, func.count())
+            .select_from(SkillStoreListing)
+            .join(
+                SkillStoreVersion,
+                SkillStoreVersion.id == SkillStoreListing.current_version_id,
+            )
+            .join(User, User.user_id == SkillStoreListing.author_user_id)
+            .group_by(SkillStoreListing.shelf_group)
+        )
+        if statuses is not None:
+            stmt = stmt.where(SkillStoreListing.status.in_(list(statuses)))
+        needle = (q or "").strip()
+        if needle:
+            pattern = _ilike_pattern(needle)
+            stmt = stmt.where(
+                or_(
+                    SkillStoreVersion.name.ilike(pattern),
+                    SkillStoreVersion.description.ilike(pattern),
+                    User.display_name.ilike(pattern),
+                    User.username.ilike(pattern),
+                )
+            )
+        result = await self._session.execute(stmt)
+        return {str(name): int(n) for name, n in result.all() if name}
 
     async def get_install(self, user_id: str, listing_id: str) -> SkillStoreInstall | None:
         result = await self._session.execute(
@@ -211,6 +251,31 @@ class SkillStoreRepository:
         await commit_or_flush(self._session, commit=commit)
         await self._session.refresh(row)
         return row
+
+    async def delete_installs_for_documents(
+        self, document_ids: Sequence[str], *, commit: bool = True
+    ) -> None:
+        ids = [item for item in document_ids if item]
+        if not ids:
+            return
+        await self._session.execute(
+            delete(SkillStoreInstall).where(SkillStoreInstall.document_id.in_(ids))
+        )
+        await commit_or_flush(self._session, commit=commit)
+
+    async def delete_orphan_installs(self, user_id: str, *, commit: bool = True) -> None:
+        """Drop install rows whose local copy is gone (deleted copy = uninstall)."""
+        live = select(Document.id).where(
+            Document.user_id == user_id,
+            Document.deleted_at.is_(None),
+        )
+        await self._session.execute(
+            delete(SkillStoreInstall).where(
+                SkillStoreInstall.user_id == user_id,
+                SkillStoreInstall.document_id.not_in(live),
+            )
+        )
+        await commit_or_flush(self._session, commit=commit)
 
     async def get_report(self, user_id: str, listing_id: str) -> SkillStoreReport | None:
         result = await self._session.execute(

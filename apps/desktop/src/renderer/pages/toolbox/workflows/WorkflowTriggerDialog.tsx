@@ -2,8 +2,11 @@ import { Button, Input } from "@/components/ui";
 import { Switch } from "@/components/ui/Switch";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -279,7 +282,7 @@ export function WorkflowTriggerDialog({
       }}
     >
       <DialogContent
-        className="max-w-md"
+        size="md"
         onPointerDownOutside={(e) => {
           if (pendingDismiss) e.preventDefault();
         }}
@@ -287,13 +290,15 @@ export function WorkflowTriggerDialog({
           if (pendingDismiss) e.preventDefault();
         }}
       >
-        <DialogTitle>设为定时 · {workflow.name}</DialogTitle>
-        <DialogDescription>
-          定时与 Webhook
-          互斥。只绑云端文件夹；到点按这张图跑，不必再手点「跑一次」。
-        </DialogDescription>
+        <DialogHeader>
+          <DialogTitle>设为定时 · {workflow.name}</DialogTitle>
+          <DialogDescription>
+            定时与 Webhook
+            互斥。只绑云端文件夹；到点按这张图跑，不必再手点「跑一次」。
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="mt-4 space-y-3">
+        <DialogBody className="space-y-3">
           {foldersError ? (
             <p className="text-xs text-muted-foreground">
               读不到文件夹列表（{foldersError}
@@ -429,9 +434,9 @@ export function WorkflowTriggerDialog({
           </div>
 
           {error && <p className="text-xs text-muted-foreground">{error}</p>}
-        </div>
+        </DialogBody>
 
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <DialogFooter>
           {pendingDismiss ? (
             <Button
               size="md"
@@ -456,7 +461,7 @@ export function WorkflowTriggerDialog({
                   {clearing ? "清除中…" : "清除"}
                 </Button>
               )}
-              <Button variant="neutral" size="md" onClick={onClose}>
+              <Button variant="outline" size="md" onClick={onClose}>
                 取消
               </Button>
               <Button
@@ -473,7 +478,7 @@ export function WorkflowTriggerDialog({
               </Button>
             </>
           )}
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

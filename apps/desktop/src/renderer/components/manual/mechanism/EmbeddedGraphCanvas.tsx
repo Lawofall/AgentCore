@@ -5,15 +5,15 @@ import {
   XyflowHost,
   xyflowCameraKey,
 } from "@/components/xyflow/host";
+import type { Execution, RunStatus } from "@/stores/execution";
+import type { GraphEdge } from "@/stores/graph";
 import {
   EMBED_MIN_HEIGHT,
+  type GraphLayout,
   type LayoutResult,
   computeLayout,
   fitWidthBox,
-} from "@/lib/elk-layout";
-import type { ElkGraphLayout } from "@/lib/graph-layout-utils";
-import type { Execution, RunStatus } from "@/stores/execution";
-import type { GraphEdge } from "@/stores/graph";
+} from "@agentcore/graph-layout";
 import {
   Background,
   type Edge,
@@ -39,7 +39,7 @@ export function EmbeddedGraphCanvas({
 }: {
   nodes: PreviewNode[];
   edges: GraphEdge[];
-  layoutKind: ElkGraphLayout;
+  layoutKind: GraphLayout;
   statuses: Record<string, RunStatus>;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);

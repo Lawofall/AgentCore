@@ -1,6 +1,7 @@
 import { Button, ConfirmDialog } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -125,18 +126,18 @@ export function FileTreeBatchDialogs({
           if (!open) onCloseFailure();
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle>{failure?.title}</DialogTitle>
             <DialogDescription>
               以下项目没有完成，其余项已生效。
             </DialogDescription>
           </DialogHeader>
-          <div className="px-5">
+          <DialogBody>
             {failure && <FailureList failures={failure.failures} />}
-          </div>
+          </DialogBody>
           <DialogFooter>
-            <Button variant="neutral" size="md" onClick={onCloseFailure}>
+            <Button variant="outline" size="md" onClick={onCloseFailure}>
               知道了
             </Button>
           </DialogFooter>

@@ -40,6 +40,8 @@ from .chat import ChatRepository
 from .conversation_shares import ConversationShareRepository
 from .conversations import ConversationRepository
 from .devices import PushDeviceRepository
+from .doc_shares import DocShareRepository
+from .docs import DocRepository
 from .documents import DocumentRepository
 from .email_auth import EmailChallengeRepository, PendingRegistrationRepository
 from .external_grants import ExternalGrantRepository
@@ -81,6 +83,8 @@ __all__ = [
     "ConversationRepository",
     "ConversationShareRepository",
     "CostEventRepository",
+    "DocRepository",
+    "DocShareRepository",
     "DocumentRepository",
     "EmailChallengeRepository",
     "CredentialsRepository",

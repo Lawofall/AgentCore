@@ -1,21 +1,13 @@
 // @vitest-environment jsdom
 /**
- * Render tests for the admin 分析 page (AUD-012 测试覆盖补强 · admin 半).
+ * Render tests for the admin 供给·成本 page.
  *
- * AnalyticsPage fuses two lenses behind one segmented control: 成本 (fetchUsageSummary) and
- * 健康 (fetchObservabilitySummary), plus a 会话复盘 drill-in. These pin the per-lens render,
- * the BYOK cost framing, the lens switch (which triggers a fresh fetch), and both replay
- * entry points (error-row click + the ID form) with the services + trend charts mocked. The
- * leading block comment keeps the @vitest-environment directive file-leading.
+ * AnalyticsPage is the cost room of 供给: fetchUsageSummary + Go windows + 会话复盘
+ * drill-in. Health pulse lives on 总览. These pin the cost render, BYOK framing,
+ * and replay / user drill-ins with services + trend charts mocked.
  */
 
 import { AnalyticsPage } from "@/pages/AnalyticsPage";
-import {
-  type AdminObservabilitySummary,
-  type TurnHealthWindow,
-  type TurnMetricLine,
-  fetchObservabilitySummary,
-} from "@/services/adminObservability";
 import {
   type AdminGoWindows,
   type AdminUsageSummary,
@@ -31,18 +23,9 @@ vi.mock("@/services/adminUsage", () => ({
   fetchUsageSummary: vi.fn(),
   fetchGoWindows: vi.fn(),
 }));
-vi.mock("@/services/adminObservability", () => ({
-  fetchObservabilitySummary: vi.fn(),
-}));
-// AuditSummaryWidget fires an unmocked fetch whose rejection lands after teardown
-// (window is gone) — pin it to a never-resolving promise to kill the unhandled error.
-vi.mock("@/services/adminAgentAudit", () => ({
-  fetchAgentAuditSummary: vi.fn(() => new Promise(() => {})),
-}));
 // Trend charts are not under test — stub them to keep the test on the page's own layout.
 vi.mock("@/components/charts", () => ({
   CostTrendBars: () => <div data-testid="cost-trend" />,
-  TurnTrendBars: () => <div data-testid="turn-trend" />,
 }));
 
 afterEach(() => {
@@ -121,58 +104,6 @@ function usageSummary(p?: Partial<AdminUsageSummary>): AdminUsageSummary {
   };
 }
 
-function healthWindow(p?: Partial<TurnHealthWindow>): TurnHealthWindow {
-  return {
-    avg_duration_ms: 0,
-    avg_rounds: 1,
-    delegated_rate: 0,
-    delegated_turns: 0,
-    error_rate: 0,
-    errors: 0,
-    escalations: 0,
-    first_plan_survival_rate: 0,
-    input_tokens: 0,
-    output_tokens: 0,
-    p95_duration_ms: 0,
-    revises: 0,
-    scope_signals: 0,
-    turns: 0,
-    ...p,
-  };
-}
-
-function obsSummary(p?: Partial<AdminObservabilitySummary>): AdminObservabilitySummary {
-  return {
-    today: healthWindow(),
-    week: healthWindow(),
-    recent_daily: [],
-    recent_errors: [],
-    ...p,
-  };
-}
-
-function errLine(
-  p: Partial<TurnMetricLine> & { turn_id: string; conversation_id: string },
-): TurnMetricLine {
-  return {
-    agent_id: null,
-    created_at: "2026-06-30T10:00:00Z",
-    delegated: false,
-    duration_ms: 1200,
-    error: "boom",
-    finish_reason: "error",
-    input_tokens: 0,
-    kind: "chat",
-    output_tokens: 0,
-    rounds: 1,
-    status: "error",
-    trace_id: "trace123",
-    user_id: "u1",
-    workers: 0,
-    ...p,
-  };
-}
-
 /** Probe route so a navigate("/replay/:id") drill-in is asserted by rendered text. */
 function ReplayProbe() {
   const { id } = useParams<{ id: string }>();
@@ -189,7 +120,8 @@ function renderAnalytics(initial = "/analytics/cost") {
   return render(
     <MemoryRouter initialEntries={[initial]}>
       <Routes>
-        <Route path="/analytics/:segment" element={<AnalyticsPage />} />
+        <Route path="/analytics/cost" element={<AnalyticsPage />} />
+        <Route path="/quota" element={<div>额度页</div>} />
         <Route path="/replay/:id" element={<ReplayProbe />} />
         <Route path="/users/:userId" element={<UserProbe />} />
       </Routes>
@@ -233,29 +165,13 @@ describe("AnalyticsPage", () => {
     expect(await screen.findByText(/BYOK/)).toBeTruthy();
   });
 
-  it("switches to the 健康 lens and loads observability on demand", async () => {
+  it("offers the 额度 room as a supply tab", async () => {
     vi.mocked(fetchUsageSummary).mockResolvedValue(usageSummary());
-    vi.mocked(fetchObservabilitySummary).mockResolvedValue(
-      obsSummary({ today: healthWindow({ turns: 20, errors: 1, error_rate: 0.05 }) }),
-    );
     renderAnalytics("/analytics/cost");
-    await screen.findByText(/今日总成本/); // cost lens loaded first
-    expect(fetchObservabilitySummary).not.toHaveBeenCalled(); // only the active lens fetches
-    fireEvent.click(screen.getByRole("button", { name: "健康" }));
-    expect(await screen.findByText(/今日回合数/)).toBeTruthy();
-    expect(screen.getByTestId("turn-trend")).toBeTruthy();
-    expect(fetchObservabilitySummary).toHaveBeenCalledTimes(1);
-  });
-
-  it("drills from an error row into 会话复盘", async () => {
-    vi.mocked(fetchObservabilitySummary).mockResolvedValue(
-      obsSummary({
-        recent_errors: [errLine({ turn_id: "t1", conversation_id: "conv-9", error: "炸了" })],
-      }),
+    await screen.findByText(/今日总成本/);
+    expect(screen.getByRole("link", { name: "额度" }).getAttribute("href")).toBe(
+      "/quota",
     );
-    renderAnalytics("/analytics/health");
-    fireEvent.click(await screen.findByText("炸了"));
-    expect(await screen.findByText(/复盘页 conv-9/)).toBeTruthy();
   });
 
   it("opens 复盘 from the 会话 ID form", async () => {

@@ -156,7 +156,7 @@ class TurnSuspension:
     base_system_prompt: str
     user_message: str
     # The cloud project (= workspace folder) scope this turn ran in, captured so the resumed
-    # CEO toolset re-wires consult_memory to the SAME project scope (project 主题 first, then
+    # CEO toolset re-wires consult to the SAME project scope (project 主题 first, then
     # global) instead of degrading to global-only — Agent记忆与知识系统 §二. ``None`` for a
     # 裸聊 / local turn with no cloud folder. Serialized into the frame (resume control state).
     folder_id: str | None = None
@@ -197,7 +197,7 @@ class TurnSuspension:
     # is NOT serialized into new ``paused_turns.frame`` rows; legacy frames may still carry
     # ``frame.citations``, which resume reads as fallback when the fact omits citations.
     citations: list[dict[str, Any]] = field(default_factory=list)
-    # Kickoff 段已 consult_memory 的主题正文；resume 复用，避免同 key 再拉一遍。
+    # Kickoff 段已 consult 的主题正文；resume 复用，避免同 key 再拉一遍。
     consulted_memory: dict[str, str] = field(default_factory=dict)
     trace_id: str | None = None
 

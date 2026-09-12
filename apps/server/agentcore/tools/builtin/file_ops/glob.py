@@ -74,11 +74,8 @@ class GlobTool:
                     "path": {
                         "type": "string",
                         "description": (
-                            "搜索根，工作区相对 POSIX 目录（默认 `.`=整仓）。"
-                            "`directory` 与 path 同义。不存在时从根按目录名/同一 pattern 续找。"
-                            "`/<根标签>/…` 与裸 `/`、`\\` 视为根；区外已挂载用 "
-                            "`external/<别名>/`，禁止裸 `external`；本机绝对路径或 "
-                            "~/Desktop|Downloads|Documents 在桌面在线时由运行时挂载。"
+                            "搜索根（默认 `.`=整仓）。`directory` 与 path 同义。"
+                            "不存在时从根按目录名/同一 pattern 续找。"
                         ),
                     },
                     "max_entries": {

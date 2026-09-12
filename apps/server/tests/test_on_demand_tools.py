@@ -473,8 +473,8 @@ def test_stuffed_worker_opening_table_omits_on_demand_tools():
     chars = sum(
         len(json.dumps(d, ensure_ascii=False)) for d in registry.get_openai_definitions()
     )
-    # 2026-08-27 第 6 步后实测 22967（git clone 入常驻 git 描述）。锁回实测整十。
-    assert chars <= 22970, f"队员开场工具表变胖：{chars}"
+    # 2026-09-10 开场去重后实测 11170；波 2 参数收口后 11032。锁回实测整十。
+    assert chars <= 11040, f"队员开场工具表变胖：{chars}"
     deferred = set(registry.deferred_names)
     assert deferred <= ON_DEMAND_TOOL_NAMES
     assert "browser" in deferred

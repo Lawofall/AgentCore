@@ -410,24 +410,20 @@ def test_bare_pass_without_review_prefix_not_posture_a():
 
 
 def test_ceo_mutation_honesty_banner_withdrawn():
-    """2026-08-04：只删【落盘说明】横幅；enforce 恒等；检测器仍可用。"""
+    """2026-08-04：只删【落盘说明】横幅；检测器仍可用。热路径不再经过空壳 enforce。"""
     from agentcore.runtime.closing_posture import (
         asks_whole_file_user_paste,
         claims_ceo_mutation_done,
-        enforce_ceo_mutation_honesty,
     )
 
     claim = "标题已修改，计时逻辑已修正，请自行替换整文件。"
     assert claims_ceo_mutation_done(claim)
     assert asks_whole_file_user_paste(claim)
-    assert enforce_ceo_mutation_honesty(claim, landing_succeeded=False) == claim
-    assert "【落盘说明】" not in enforce_ceo_mutation_honesty(claim)
+    assert "【落盘说明】" not in claim
 
     check = "我对了一下工作区，文件里已经是新版本，不是我本轮又改了。"
     assert not claims_ceo_mutation_done(check)
-    assert enforce_ceo_mutation_honesty(check, landing_succeeded=False) == check
     assert not claims_ceo_mutation_done("已处理你的疑问，下面解释原因。")
-    assert enforce_ceo_mutation_honesty(claim, landing_succeeded=True) == claim
 
 
 def test_cloud_web_verify_honesty_banner_soft_only():
@@ -786,17 +782,14 @@ def test_b1_zero_write_landing_hard_rework_withdrawn():
         claims_disk_landing,
         clear_b1_closing_latches,
         closing_honesty_rework,
-        enforce_ceo_mutation_honesty,
     )
-    from agentcore.runtime.closing_posture.ceo_mutation import _zero_write_landing_rework
 
     clear_b1_closing_latches()
     claim = "评审报告已落盘 `AgentCore/文档/reviews/v3.md`，验证通过。"
     assert claims_disk_landing(claim)
-    assert _zero_write_landing_rework(claim) is None
     # 无对账卡：不再因落盘词硬回炉（亦非 A∪C）。
     assert closing_honesty_rework(claim) is None
-    assert "【落盘说明】" not in enforce_ceo_mutation_honesty(claim)
+    assert "【落盘说明】" not in claim
     # 解释规则时的禁语举例不得再清气泡。
     meta = "时序诚实：没落盘成功之前，不宣称「已改好」。"
     assert closing_honesty_rework(meta) is None

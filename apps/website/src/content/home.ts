@@ -222,7 +222,8 @@ export const THESIS = {
  *   1. apps/server/agentcore/llm/pricing_data/community_prices.json —— 价卡目录，
  *      43 个模型，是模型 ID 的权威全集（as_of 2026-07-15）；
  *   2. apps/server/agentcore/llm/factory.py::_VENDOR_PROVIDERS —— 前缀路由厂商；
- *   3. apps/desktop/src/renderer/lib/byokProviderPresets.ts —— 桌面端 BYOK 预设。
+ *   3. apps/server/agentcore/llm/byok_provider_presets.json —— BYOK 厂商预设
+ *      （桌面表单与服务端目录种子同读这一份）。
  *
  * docs/05-平台与运维/平台LLM接入.md 定了一条铁律：**缺 curated 价卡的 id 不上架**。
  * 所以往 top 里加厂商前，先确认价卡目录里有它——否则这一屏就是一句没兑现的承诺。
@@ -275,12 +276,12 @@ export const MARQUEE = {
 
 /*
  * 已核对过的模型 ID（来源：apps/server/agentcore/llm/pricing_data/community_prices.json
- * 与 apps/desktop/.../byokProviderPresets.ts）。
+ * 与 apps/server/agentcore/llm/byok_provider_presets.json）。
  * 首页 logo 墙按 amphora 的形态只放厂商标识，这些 ID 留给下载页 / 文档使用——
  * 别删，重新核一遍是有成本的。
  */
 export const VERIFIED_MODEL_IDS = [
-  "deepseek-v4-pro",
+  "deepseek-flash",
   "gpt-4o",
   "o3-mini",
   "claude-sonnet-4-5-20250929",

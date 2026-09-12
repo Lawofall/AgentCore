@@ -20,6 +20,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agentcore.db.base import Base
+from agentcore.db.skill_store_groups import SKILL_STORE_GROUP_SQL
 
 from ._helpers import _new_uuid
 
@@ -35,9 +36,14 @@ class SkillStoreListing(Base):
             "status in ('published', 'unpublished', 'taken_down')",
             name="ck_skill_store_listings_status",
         ),
+        CheckConstraint(
+            SKILL_STORE_GROUP_SQL,
+            name="ck_skill_store_listings_shelf_group",
+        ),
         UniqueConstraint("source_document_id", name="uq_skill_store_listings_source_document"),
         Index("ix_skill_store_listings_author", "author_user_id"),
         Index("ix_skill_store_listings_status_created", "status", "created_at"),
+        Index("ix_skill_store_listings_status_group", "status", "shelf_group"),
     )
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
@@ -47,6 +53,7 @@ class SkillStoreListing(Base):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default=text("'published'")
     )
+    shelf_group: Mapped[str] = mapped_column(String(32), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )

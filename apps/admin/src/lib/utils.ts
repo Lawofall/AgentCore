@@ -24,7 +24,7 @@ export function currencySymbol(currency?: string | null): string {
 
 /**
  * 金额分位：与 {@link fmtInt} 同一套 zh-CN 分组，两分位定长。控制台的金额和计数常
- * 同屏（概览首屏「今日成本」紧挨「今日活跃用户」），只有计数带千分位时「¥1234567.89」
+ * 同屏（总览首屏「今日成本」紧挨「今日活跃用户」），只有计数带千分位时「¥1234567.89」
  * 会被看错量级。桌面 `renderer/lib/format.ts::formatCost` 是逐回合的几分几元，不分组；
  * 除分组外（符号来源、两位小数、<0.01 下限）两边仍同口径。
  */

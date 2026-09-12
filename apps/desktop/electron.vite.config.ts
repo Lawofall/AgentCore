@@ -78,6 +78,10 @@ export default defineConfig(({ mode, command }) => {
         alias: {
           "@": resolve(packageDir, "src/renderer"),
           "@shared": resolve(packageDir, "src/shared"),
+          "@byok-presets": resolve(
+            packageDir,
+            "../server/agentcore/llm/byok_provider_presets.json",
+          ),
         },
       },
       // Allow serving the monorepo root so the 前端预览 route (#/preview) can glob the

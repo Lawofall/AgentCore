@@ -26,18 +26,22 @@ export const referenceChapter: ManualChapterContent = {
             },
             {
               title: "白板（画布可用）",
-              desc: "工具箱里可自由摆元素；AI 指挥白板即将上线。",
+              desc: "工具箱里可自由摆元素；AI 指挥尚未开放。",
+            },
+            {
+              title: "文档",
+              desc: "工具箱里可反复打开的长文，挂在云文件夹上。",
             },
             {
               title: "其他创作工具（尚未开放）",
-              desc: "文档 / 思维导图 / 表格 / 幻灯片——尚未开放。",
+              desc: "思维导图 / 表格 / 幻灯片——尚未开放。",
             },
             {
               title: "MCP（本机连接器）",
               desc: [
                 "在工具箱 ",
                 {
-                  text: "工具 · 连接器",
+                  text: "提示词 · 连接器",
                   link: { kind: "go", to: APP_PATHS.toolbox.connectors },
                 },
                 " 配置本机 stdio MCP Server；启用后 worker 可调用其工具（一律需审批）。仅桌面端；Web / 手机无本地 MCP。",
@@ -55,8 +59,8 @@ export const referenceChapter: ManualChapterContent = {
           text: [
             "完整清单在 ",
             {
-              text: "工具箱 · 能力图鉴",
-              link: { kind: "go", to: APP_PATHS.toolbox.tools },
+              text: "工具箱 · 提示词",
+              link: { kind: "go", to: APP_PATHS.toolbox.mine.skills },
             },
             "——每个工具能做什么、谁可用，一目了然。",
           ],
@@ -303,7 +307,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "画布是对话里的跨回合空间视图——把多轮协作图画在一张可平移的空间上；白板是工具箱里的独立创作工具，画布可自由摆元素，AI 指挥白板即将上线。",
+                  text: "画布是对话里的跨回合空间视图——把多轮协作图画在一张可平移的空间上；白板是工具箱里的独立创作工具，画布可自由摆元素，AI 指挥尚未开放。",
                 },
               ],
             },
@@ -622,7 +626,16 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "工具箱里的独立创作工具——画布可用，自由摆元素；AI 指挥白板即将上线。≠ 画布。",
+                  text: "工具箱里的独立创作工具——画布可用，自由摆元素；AI 指挥尚未开放。≠ 画布。",
+                },
+              ],
+            },
+            {
+              q: "文档",
+              a: [
+                {
+                  type: "text",
+                  text: "工具箱里可反复打开的长文，挂在云文件夹上。≠ 记忆 / 规则树。",
                 },
               ],
             },

@@ -3,7 +3,6 @@
  * Shared by desktop renderer and promo precompute scripts (no @/ aliases).
  */
 export type {
-  ElkGraphLayout,
   GraphEdge,
   GraphLayout,
 } from "./types";

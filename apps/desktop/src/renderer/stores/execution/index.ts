@@ -7,7 +7,7 @@ export * from "./frames";
 export * from "./plan";
 export * from "./project";
 export * from "./debate";
-export * from "./revision";
+export * from "./continuation";
 export * from "./statusLabels";
 export * from "./userInterjection";
 export * from "./store";

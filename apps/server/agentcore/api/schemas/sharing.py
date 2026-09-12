@@ -20,7 +20,7 @@ class CreateShareRequest(BaseModel):
 
 
 class ShareSummary(BaseModel):
-    """One public read-only conversation share (分享链接).
+    """One public read-only share (对话或文档).
 
     ``url`` is a RELATIVE path (``/shared/<id>``) — like ``UserResponse.avatar_url``,
     the client prepends the API origin so the backend stays agnostic of its public

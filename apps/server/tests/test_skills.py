@@ -772,15 +772,18 @@ def test_team_orchestration_skill_teaches_opening_and_writing_without_lettered_t
 
 
 def test_work_discipline_skill_is_gone():
-    """仓内贡献纪律不是产品 AI skill；.bat HOW 在 run；已确认约束在 task 参数。"""
+    """仓内贡献纪律不是产品 AI skill；.bat HOW 在 run；已确认约束在 staffing。"""
+    from agentcore.runtime.skills import _LEAD_SUBTEAM, _STAFFING
     from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
 
     assert build_system_skill_registry().get("work_discipline") is None
     task_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["task"][
         "description"
     ]
-    assert "已确认约束" in task_desc
-    assert "自拟默认" in task_desc or "自拟" in task_desc
+    assert "已确认约束" not in task_desc
+    assert "已确认约束" in _STAFFING
+    assert "已确认约束" in _LEAD_SUBTEAM
+    assert "未拍板的标假设" in _STAFFING
 
 
 def test_product_help_skill_teaches_short_answers_and_manual_deeplinks():
@@ -824,6 +827,17 @@ def test_product_help_skill_teaches_short_answers_and_manual_deeplinks():
     assert "我的 → 模型组合" in help_body
     assert "我的 → 用量" in help_body
     assert "窄屏不上工具箱" in help_body
+    assert "能力图鉴" not in help_body
+    assert "工具箱 · 工作流" in help_body
+    assert "collaboration?s=workflow" in help_body
+    assert "collaboration?s=autonomy" in help_body
+    assert "全放行" in help_body
+    assert "与我共享" in help_body
+    assert "合回到本机" in help_body
+    assert "导出 ZIP" in help_body
+    assert "分享…" in help_body
+    assert "顶栏右槽「市场」" in help_body
+    assert "提示词目录「连接器」" in help_body
     assert "?s=workspace" in help_body or "workspace" in help_body
     # .md 阅读预览（文件面板）≠ HTML「完整预览」（右坞）
     assert "阅读预览" in help_body
@@ -1179,7 +1193,7 @@ def test_orchestration_skill_teaches_cloud_install_boundary():
 
 
 def test_dispatch_writing_how_lives_in_skill_not_core():
-    """交需求不代写骨架：skill 留认知分工；已确认约束在 task 参数；核不复述百科。"""
+    """交需求不代写骨架：skill 留认知分工与填约束 HOW；核不复述百科。"""
     from agentcore.runtime.resolve.prompt import _CEO_CORE_HINT
     from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
 
@@ -1196,7 +1210,8 @@ def test_dispatch_writing_how_lives_in_skill_not_core():
     assert "required_sections" not in orch
     assert "读全局规则" not in orch
     assert "读全局规则" not in hint
-    assert "已确认约束" in task_desc
+    assert "已确认约束" in orch
+    assert "已确认约束" not in task_desc
     assert "同一套原文" in orch
 
     for token in (
@@ -1392,7 +1407,7 @@ def test_team_orchestration_skill_teaches_sections_not_deleted_deliverable_keys(
         TASK_DELIVERABLE_SCHEMA,
     )
 
-    art_desc = TASK_DELIVERABLE_SCHEMA["properties"]["artifacts"]["description"]
+    art_desc = TASK_DELIVERABLE_SCHEMA["description"]
     assert "用户点名" in art_desc or "流水线" in art_desc
     assert "只报告、不落盘" in body
     assert "【看】" not in body
@@ -1462,8 +1477,9 @@ def test_team_orchestration_skill_teaches_team_brief():
         "require_upstream",
     ):
         assert token not in body, token
-    assert "已确认约束" in task_desc
-    assert "自拟默认" in task_desc or "自拟" in task_desc
+    assert "已确认约束" in body
+    assert "未拍板的标假设" in body
+    assert "已确认约束" not in task_desc
 
 
 def test_team_orchestration_skill_teaches_coordination_wall_vs_none():
@@ -1742,6 +1758,8 @@ def test_ask_user_skills_ordinary_choice_is_one_line():
     assert "权衡写进选项名" in ask or "权衡写进 `label`" in ask
     assert "勿填 `detail`" not in ask
     assert "问句写" in ask and "prompt" in ask
+    assert "（推荐）" in ask
+    assert "不预选" in ask
     assert "配一行 `detail`" not in ask
     mid = _body("ask_midtask")
     assert "发散挑选" in mid
@@ -1882,6 +1900,23 @@ def test_ask_user_skill_teaches_fork_and_annotate():
     assert "open_local_project" not in ask_body
     assert "授权在哪里" not in ask_body
     assert "https://fashitianxia.xyz/download" not in ask_body
+
+
+def test_local_desk_teaches_originals_vs_organize_when_user_asks():
+    """云上整理拷贝 ≠ 能改用户电脑原件；对人开口只在本条。"""
+    desk = _body("local_desk")
+    assert "【对人说】" in desk
+    assert "执行：用户本机" in desk
+    assert "执行：云端" in desk
+    assert "只能看" in desk
+    assert "可改原件" in desk
+    assert "已经改了原件" in desk
+    assert "先答这句" in desk
+    assert "禁止说能改" not in desk
+    assert "同一出站" not in desk
+    assert "请人贴" not in desk
+    help_body = _body("product_help")
+    assert "【对人说】" not in help_body
 
 
 def test_orchestration_skill_teaches_wave_boundary_pause():

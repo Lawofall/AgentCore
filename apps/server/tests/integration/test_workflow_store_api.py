@@ -281,3 +281,65 @@ async def test_workflow_store_install_does_not_write_turn_source(client):
     copy = (await client.get(f"/v1/workflows/{installed.json()['workflow_id']}")).json()
     assert copy["source"] is None
     assert (copy.get("source") or {}).get("kind") != "turn"
+
+
+async def test_delete_installed_workflow_copy_clears_shelf_and_allows_reinstall(client):
+    await register_and_login(client, "wfdelauthor")
+    wf = await _create_workflow(client, "周报流水线", "每周写周报")
+    lid = (await client.post("/v1/workflow-store", json={"workflow_id": wf["id"]})).json()[
+        "id"
+    ]
+
+    await register_and_login(client, "wfdelbuyer")
+    installed = await client.post(f"/v1/workflow-store/{lid}/install")
+    assert installed.status_code == 200, installed.text
+    copy_id = installed.json()["workflow_id"]
+
+    await _login(client, "wfdelauthor")
+    patched = await client.patch(
+        f"/v1/workflows/{wf['id']}",
+        json={
+            "name": "周报流水线 v2",
+            "description": "每周写周报",
+            "definition": {
+                "nodes": [
+                    {
+                        "id": "write",
+                        "kind": "agent_step",
+                        "role": "写手",
+                        "task": "写新版周报",
+                    }
+                ],
+                "edges": [],
+            },
+        },
+    )
+    assert patched.status_code == 200, patched.text
+    v2 = await client.post("/v1/workflow-store", json={"workflow_id": wf["id"]})
+    assert v2.status_code == 200, v2.text
+    assert v2.json()["version_n"] == 2
+
+    await _login(client, "wfdelbuyer")
+    stale = await client.get("/v1/workflow-store")
+    row = next(r for r in stale.json()["data"] if r["id"] == lid)
+    assert row["installed"] is True
+    assert row["has_update"] is True
+
+    gone = await client.delete(f"/v1/workflows/{copy_id}")
+    assert gone.status_code == 200, gone.text
+
+    shelf = await client.get("/v1/workflow-store")
+    row = next(r for r in shelf.json()["data"] if r["id"] == lid)
+    assert row["installed"] is False
+    assert row["has_update"] is False
+    detail = await client.get(f"/v1/workflow-store/{lid}")
+    assert detail.json()["installed"] is False
+    assert detail.json()["has_update"] is False
+    installed_list = await client.get("/v1/workflow-store/installed")
+    assert all(r["id"] != lid for r in installed_list.json()["data"])
+
+    again = await client.post(f"/v1/workflow-store/{lid}/install")
+    assert again.status_code == 200, again.text
+    assert again.json()["installed"] is True
+    assert again.json()["has_update"] is False
+    assert again.json()["workflow_id"] != copy_id

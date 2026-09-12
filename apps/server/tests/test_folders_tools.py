@@ -33,7 +33,7 @@ from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
 _FOLDER_HOW_CONSULT = "HOW→consult(desks)"
-# schema 短触发；禁猜最近 / 过闸催建在回执与 target_folder_id；百科不进按钮。
+# schema 短触发；禁猜最近 / 过闸催建在回执；百科不进按钮。
 # 换桌对照句在 delegate target_folder_id / 认桌工具 description。
 _SCHEMA_ENCYCLOPEDIA_FORBIDDEN = (
     "先建后派",
@@ -269,7 +269,7 @@ def test_create_folder_schema_and_registration():
     # Must not read as "make a subdirectory" — that is mkdir.
     assert "mkdir" in desc
     assert "用户明确" in desc or "明确要求" in desc
-    # 过闸/裸聊写盘禁令在 target_folder_id description 与回执；create_folder 不复述。
+    # 过闸/裸聊写盘禁令在回执；create_folder 不复述。
     assert "禁止为过写盘闸" not in desc
     assert "自动建云文件夹" not in desc
     parent_desc = props["parent_path"]["description"]

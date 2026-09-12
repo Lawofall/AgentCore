@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from agentcore.db.skill_store_groups import SkillStoreGroupName
+
 # Shared anti-hallucination core for official legal SKUs.
 # Each skill appends its own domain-specific constraints after this.
 _LEGAL_ANTI_HALLUCINATION_CORE = """\
@@ -278,32 +280,38 @@ CEO 收口汇报里给【结论提要 + 指向产出文件】，别把整份意�
 
 @dataclass(frozen=True)
 class DomainSkillTemplate:
-    """Code-defined store SKU (name / catalog line / consult body)."""
+    """Code-defined store SKU (consult id / storefront title / catalog line / body)."""
 
     name: str
+    title: str
     summary: str
     body: str
+    group: SkillStoreGroupName = "legal"
 
 
 LEGAL_SKILLS: tuple[DomainSkillTemplate, ...] = (
     DomainSkillTemplate(
         name="legal_answer_brief",
-        summary="民事答辩状",
+        title="民事答辩状",
+        summary="写/打磨答辩状时按对方律师作战室组队：起草 → 原告红队 → 核验 → 人审。",
         body=_LEGAL_ANSWER_BRIEF,
     ),
     DomainSkillTemplate(
         name="legal_complaint",
-        summary="民事起诉状",
+        title="民事起诉状",
+        summary="写/打磨起诉状时先起草、再让被告红队预演反击，核验法条后收口。",
         body=_LEGAL_COMPLAINT,
     ),
     DomainSkillTemplate(
         name="legal_case_analysis",
-        summary="接案评估与诉讼策略",
+        title="接案评估与诉讼策略",
+        summary="用原告 / 被告 / 法官三方视角做接案评估或诉讼策略，对抗一面之词。",
         body=_LEGAL_CASE_ANALYSIS,
     ),
     DomainSkillTemplate(
         name="legal_contract_review",
-        summary="合同审查",
+        title="合同审查",
+        summary="审合同时按争议点拆条款、对风险定性，结论只给倾向性意见、不代替签署判断。",
         body=_LEGAL_CONTRACT_REVIEW,
     ),
 )

@@ -3,15 +3,15 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   type ExecutionPlan,
   type RunFrame,
+  continuationChains,
   debateGroups,
   debateLiveRounds,
   debateSides,
   execRuntime,
-  hasRevisions,
+  hasContinuations,
   isDebate,
   planFromRunPlan,
   projectExecution,
-  revisionChains,
 } from "../../execution";
 import {
   MID,
@@ -522,8 +522,8 @@ describe("定向唤回 版本链 (乙 热修 P4)", () => {
         (r) => r.continuesRunId === null && r.continuationIndex === 0,
       ),
     ).toBe(true);
-    expect(hasRevisions(exec)).toBe(false);
-    expect(revisionChains(exec)).toEqual([]);
+    expect(hasContinuations(exec)).toBe(false);
+    expect(continuationChains(exec)).toEqual([]);
   });
 
   it("synthesizes a 接续 node + agent from a continues_run_id run_started (not in plan)", () => {
@@ -572,7 +572,7 @@ describe("定向唤回 版本链 (乙 热修 P4)", () => {
     expect(exec.runs).toHaveLength(3); // only the plan's own runs
   });
 
-  it("revisionChains builds 现场根 + 续写 in event/continuationIndex order", () => {
+  it("continuationChains builds 现场根 + 续写 in event/continuationIndex order", () => {
     // Wire 已无 revision 序号；链序由事件序（continuationIndex）保证。
     // 先到的续写是 续×1，后到的是 续×2。
     const frames: RunFrame[] = [
@@ -585,8 +585,8 @@ describe("定向唤回 版本链 (乙 热修 P4)", () => {
     ];
     const exec = projectExecution(plan, frames, "completed");
 
-    expect(hasRevisions(exec)).toBe(true);
-    const chains = revisionChains(exec);
+    expect(hasContinuations(exec)).toBe(true);
+    const chains = continuationChains(exec);
     expect(chains).toHaveLength(1);
     expect(chains[0].originalId).toBe("run-1");
     expect(chains[0].versions.map((v) => v.version)).toEqual([1, 2, 3]);
@@ -597,7 +597,7 @@ describe("定向唤回 版本链 (乙 热修 P4)", () => {
     ]);
   });
 
-  it("revisionChains yields one chain per revised worker, in graph order", () => {
+  it("continuationChains yields one chain per revised worker, in graph order", () => {
     const frames: RunFrame[] = [
       started("agent-1", "run-1"),
       completed("run-1", "agent-1", 2),
@@ -610,7 +610,7 @@ describe("定向唤回 版本链 (乙 热修 P4)", () => {
       completed("run-1_rev1", "run-1_rev1", 7),
     ];
     const exec = projectExecution(plan, frames, "completed");
-    const chains = revisionChains(exec);
+    const chains = continuationChains(exec);
     expect(chains.map((c) => c.originalId)).toEqual(["run-1", "run-2"]);
   });
 
@@ -623,10 +623,10 @@ describe("定向唤回 版本链 (乙 热修 P4)", () => {
     ];
     // playhead before the revision frame → no revision node yet.
     const before = projectExecution(plan, frames.slice(0, 2), "running");
-    expect(hasRevisions(before)).toBe(false);
+    expect(hasContinuations(before)).toBe(false);
     // full stream → the revision is present.
     const after = projectExecution(plan, frames, "completed");
-    expect(hasRevisions(after)).toBe(true);
+    expect(hasContinuations(after)).toBe(true);
   });
 });
 

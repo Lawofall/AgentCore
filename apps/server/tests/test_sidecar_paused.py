@@ -29,6 +29,7 @@ _CLIENT_TURN_IDS = {
     "userMessageId": "11111111-1111-4111-8111-111111111111",
     "messageId": "22222222-2222-4222-8222-222222222222",
     "traceId": "a" * 32,
+    "folderId": None,
 }
 
 
@@ -37,19 +38,6 @@ def _reset_conversation_store():
     """Sidecar initialize swaps the process-wide store; restore CloudStore default after."""
     yield
     reset_conversation_store_for_tests()
-
-
-@pytest.fixture(autouse=True)
-def _stub_conversation_folder_id(monkeypatch: pytest.MonkeyPatch):
-    """Unit tests without Postgres: bare folder_id=None on startTurn."""
-
-    async def _none(_conversation_id: str) -> None:
-        return None
-
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        _none,
-    )
 
 
 def _suspension(
@@ -202,75 +190,26 @@ def test_store_confirm_claim_drops_frame(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_sidecar_settlement_stamps_outcome_classify_resume_miss_settled(
-    tmp_path, monkeypatch
-):
-    """本机结算留下结论行后，云端扑空判据是 settled（不是 regenerated 404）。"""
-    import contextlib
-    from datetime import UTC, datetime
-    from types import SimpleNamespace
-    from uuid import uuid4
-
+async def test_sidecar_settlement_does_not_open_local_db(tmp_path, monkeypatch):
+    """本机结算只写本机暂停文件 + outbox，不打开库盖章。"""
     from agentcore.conversation.store.outbox import OutboxStore
-    from agentcore.db.models import PAUSED_TURN_SETTLED
-    from agentcore.runtime.suspension import consumed as consumed_mod
-    from agentcore.runtime.suspension.consumed import classify_resume_miss
-    from agentcore.sidecar.settlement_prewrite import prewrite_sidecar_resume_settlement
-
-    mid, cid = str(uuid4()), str(uuid4())
-    outcomes: dict[tuple[str, str], SimpleNamespace] = {}
-
-    @contextlib.asynccontextmanager
-    async def _session():
-        yield None
-
-    class _Paused:
-        def __init__(self, _db) -> None:  # noqa: ANN001
-            pass
-
-        async def stamp_settled(
-            self,
-            *,
-            message_id: str,
-            conversation_id: str,
-            frame: dict,
-            decision: str,
-            settled_by: str = "",
-        ) -> None:
-            data = frame if isinstance(frame, dict) else {}
-            outcomes[(message_id, conversation_id)] = SimpleNamespace(
-                outcome=PAUSED_TURN_SETTLED,
-                card_kind=str(data.get("kind") or ""),
-                checkpoint_id=str(data.get("checkpoint_id") or ""),
-                decision=decision,
-                settled_by=settled_by,
-                decided_at=datetime(2026, 8, 19, 3, 0, tzinfo=UTC),
-            )
-
-        async def get_outcome(self, message_id: str, *, conversation_id: str):
-            return outcomes.get((message_id, conversation_id))
-
-    class _Messages:
-        def __init__(self, _db) -> None:  # noqa: ANN001
-            pass
-
-        async def get_by_id(self, _message_id: str, *, conversation_id: str):  # noqa: ANN001
-            return None
-
-    monkeypatch.setattr("agentcore.db.base.async_session_factory", _session)
-    monkeypatch.setattr("agentcore.db.repositories.PausedTurnRepository", _Paused)
-    monkeypatch.setattr(
-        "agentcore.fulfill.origin.current_origin_device", lambda: "dev-sidecar"
+    from agentcore.sidecar.settlement_prewrite import (
+        outbox_has_settlement_for_frame,
+        prewrite_sidecar_resume_settlement,
     )
-    monkeypatch.setattr(consumed_mod, "async_session_factory", _session)
-    monkeypatch.setattr(consumed_mod, "PausedTurnRepository", _Paused)
-    monkeypatch.setattr(consumed_mod, "MessageRepository", _Messages)
 
+    def _boom(*_a: object, **_k: object) -> None:
+        raise AssertionError(
+            "async_session_factory must not run during sidecar settlement"
+        )
+
+    monkeypatch.setattr("agentcore.db.base.async_session_factory", _boom)
+
+    mid, cid = "m1", "c1"
     data = tmp_path / "data"
     store = LocalPausedTurnStore(data / "paused", outbox_base=data / "outbox")
     outbox = OutboxStore(data / "outbox")
-    susp = _suspension(mid, cid)
-    await store.save(susp)
+    await store.save(_suspension(mid, cid))
     claimed = await store.claim(mid, conversation_id=cid)
     assert claimed is not None
     outbox.bind_turn(
@@ -288,17 +227,15 @@ async def test_sidecar_settlement_stamps_outcome_classify_resume_miss_settled(
         user_message_id="u1",
         trace_id="a" * 32,
     )
-    # Settlement prewrite itself stamps (deferred path has no confirm yet).
-    assert (mid, cid) in outcomes
     await store.confirm_claim(mid)
 
-    miss = await classify_resume_miss(conversation_id=cid, message_id=mid)
-    assert miss.kind == "settled"
-    assert miss.card_kind == "ask_user"
-    assert miss.checkpoint_id == f"cp-{mid}"
-    assert miss.decision == "continue"
-    assert miss.settled_by == "dev-sidecar"
     assert await store.list_pending(cid) == []
+    assert outbox_has_settlement_for_frame(
+        data / "outbox",
+        message_id=mid,
+        checkpoint_id=f"cp-{mid}",
+        suspension_kind="ask_user",
+    )
 
 
 def test_store_save_raises_on_write_failure(tmp_path, monkeypatch):

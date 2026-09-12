@@ -67,10 +67,7 @@ class FileBatchTool:
             name="file_batch",
             description=(
                 "一次提交多条工作区文件操作（move / copy / delete / mkdir）。"
-                f"最多 {_BATCH_MAX_OPS} 项。逐项执行：单项失败不中断整批，回执如实"
-                "列出成功 / 跳过 / 失败。目标同名冲突 = 跳过并入报告。"
-                "整理方案确认后传入 organize_plan_id：仅允许方案内条目，且跳过二次审批。"
-                "删除默认可逆；区外 permanent=true 一律拒绝。"
+                f"最多 {_BATCH_MAX_OPS} 项。逐项执行：单项失败不中断整批。"
             ),
             parameters={
                 "type": "object",

@@ -349,6 +349,7 @@ def test_capability_how_gated_on_ceo_tool_names():
     assert "set_audio" in host and "restart_service" in host
     assert "host(action=open_settings)" in host
     assert "Get-WinEvent" in host
+    assert "PowerShell" in host
     assert "delegate" not in host
     assert "打开系统面板" not in host
     assert "host_info" not in host
@@ -360,6 +361,9 @@ def test_capability_how_gated_on_ceo_tool_names():
     assert "ask_user(browser_login=true)" in browser
     assert "永不代填密码" in browser
     assert "web_fetch" in browser and "已开页" in browser
+    assert "同一出站" in browser
+    assert "请人贴" in browser
+    assert "Google" not in browser and "google.com" not in browser
     assert "wait_for" not in browser
     assert "验收 / 截图" not in browser
     assert "队员 `screenshot`" not in browser
@@ -391,6 +395,7 @@ def test_capability_how_gated_on_ceo_tool_names():
         assert "wait_for" not in prompt
         assert "通识 FAQ" not in prompt
         assert "ask_user(browser_login=true)" not in prompt
+        assert "同一出站" not in prompt
         assert assemble_ceo_core(names) == spine
 
 
@@ -475,7 +480,7 @@ def test_core_teaches_split_criterion_over_count():
     d_desc = ask_schema.parameters["properties"]["questions"]["items"]["properties"]["default"][
         "description"
     ]
-    assert "不预选" in q_desc
+    assert "不预选" not in q_desc
     assert "空 continue" in q_desc or "空 continue" in d_desc
     kickoff = build_system_skill_registry().get("ask_kickoff").body
     assert "【决策】" in kickoff
@@ -495,9 +500,11 @@ def test_core_teaches_split_criterion_over_count():
     label_desc = ask_schema.parameters["properties"]["questions"]["items"]["properties"][
         "options"
     ]["items"]["properties"]["label"]["description"]
-    assert "（推荐）" in label_desc
-    assert "放第一" in label_desc
-    assert "不预选" in q_desc
+    assert "（推荐）" not in label_desc
+    assert "放第一" not in label_desc
+    assert "（推荐）" in kickoff
+    assert "放第一" in kickoff
+    assert "不预选" in kickoff
     assert "【决策/澄清·default】" not in kickoff
     assert "【继续·承接确认项】" not in kickoff
     assert "缺主体" not in kickoff
@@ -510,7 +517,7 @@ def test_core_teaches_split_criterion_over_count():
     assert "先问你" not in hint
     from agentcore.tools.builtin.delegate.schema import TASK_DELIVERABLE_SCHEMA
 
-    form_desc = TASK_DELIVERABLE_SCHEMA["properties"]["artifacts"]["description"]
+    form_desc = TASK_DELIVERABLE_SCHEMA["description"]
     assert "用户点名" in form_desc or "流水线" in form_desc
     help_map = build_system_skill_registry().get("product_help").body
     assert "产物出口" in help_map
@@ -666,6 +673,31 @@ def test_ask_user_description_owns_when_to_ask():
     assert "拒 delegate" not in hint
 
 
+def test_how_consult_pointer_has_handbook_body():
+    """HOW→consult(name) 必须能拉到手册：系统 Skill，或 capability_how_suffix 有正文。"""
+    import json
+
+    from agentcore.tools.builtin.delegate.schema import NESTED_DELEGATE_DESCRIPTION
+    from agentcore.tools.registration import declared_tool_schema, declared_tools
+
+    skills = {s.name for s in build_system_skill_registry().list_all()}
+    blobs: list[tuple[str, str]] = [("delegate.nested", NESTED_DELEGATE_DESCRIPTION)]
+    for cls in declared_tools():
+        schema = declared_tool_schema(cls)
+        blob = schema.description + json.dumps(schema.parameters, ensure_ascii=False)
+        blobs.append((schema.name, blob))
+    empty: list[str] = []
+    for tool_name, blob in blobs:
+        targets = re.findall(r"HOW→consult\((\w+)\)", blob)
+        if targets:
+            targets.extend(re.findall(r"、consult\((\w+)\)", blob))
+        for target in targets:
+            if target in skills or capability_how_suffix({target}).strip():
+                continue
+            empty.append(f"{tool_name}→{target}")
+    assert not empty, f"HOW→consult 指向没有手册的键：{empty}"
+
+
 def test_consult_hook_lives_only_in_the_core():
     """consult 钩在按需目录 / consult description；场面 HOW 在 skill 正文；目录只写这是什么。"""
     from agentcore.runtime.skills import render_skill_directory
@@ -753,6 +785,9 @@ def test_core_teaches_delegate_graph_and_coordinate_invariants():
     assert "非终结" in DELEGATE_DESCRIPTION
     append = DELEGATE_PARAMETERS["properties"]["append_to_execution_id"]["description"]
     assert "latest" in append
+    playbook = DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
+    assert "二选一" in playbook
+    assert "填了就不要传" not in playbook
     assert "二选一" in skill
     assert "单 lead" in skill
 
@@ -771,6 +806,7 @@ def test_core_teaches_dependency_judgment_before_delegating():
     assert "生产者→消费者" in deps
     assert "空=同波并行" in deps
     assert "≠ task 里写先后" in deps
+    assert "勿手抄" not in deps
     assert "depends_on" not in skill
     assert "正例·串行" not in skill and "反例·勿串" not in skill
     assert "生产者→消费者" not in DELEGATE_DESCRIPTION
@@ -899,35 +935,41 @@ def test_core_reminds_pass_hidden_context_to_worker():
 
 
 def test_delegate_task_names_workspace_relative_paths():
-    """派工点名路径与工具 path 同形；核不复述、不写禁盘符补集。"""
+    """派工点名路径与工具 path 同形；填法在 staffing / lead_subteam；核不复述。"""
+    from agentcore.runtime.skills import _LEAD_SUBTEAM
     from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
 
     task_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["task"][
         "description"
     ]
-    assert "相对 POSIX" in task_desc
+    assert "相对 POSIX" in _STAFFING
+    assert "相对 POSIX" in _LEAD_SUBTEAM
+    assert "相对 POSIX" not in task_desc
     assert "相对 POSIX" not in _CEO_CORE_HINT
     assert "C:\\" not in task_desc
     assert "盘符" not in task_desc
+    assert "C:\\" not in _STAFFING
+    assert "盘符" not in _STAFFING
 
 
 def test_core_teaches_confirmed_constraints_block_on_delegate():
-    """已确认约束填法在 delegate task 参数；编排 skill 只留诚实边界；核不复述。"""
+    """已确认约束填法在 staffing / lead_subteam；task 参数只留自包含对比；核不复述。"""
     hint = _CEO_CORE_HINT
     assert "【已确认约束】" not in hint
     assert "派工须带已确认约束块" not in hint
+    from agentcore.runtime.skills import _LEAD_SUBTEAM
     from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS, TASK_DELIVERABLE_SCHEMA
 
     deliverable_desc = TASK_DELIVERABLE_SCHEMA["description"]
     task_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["task"][
         "description"
     ]
-    assert "已确认约束" in task_desc
-    assert "同一行" in task_desc
-    assert "（无）" in task_desc
+    assert "已确认约束" not in task_desc
+    assert "已确认约束" in _STAFFING
+    assert "同一行" in _STAFFING
+    assert "（无）" in _STAFFING
+    assert "已确认约束" in _LEAD_SUBTEAM
     assert "已确认约束" not in deliverable_desc
-    skill = _STAFFING
-    assert "已确认约束" not in skill
 
 
 def test_core_teaches_assumption_is_not_user_confirmation():
@@ -997,11 +1039,12 @@ def test_skill_teaches_constraint_vs_solution_boundary():
     task_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["task"][
         "description"
     ]
-    assert "已确认约束" in task_desc
+    assert "已确认约束" in _STAFFING
+    assert "已确认约束" not in task_desc
 
 
 def test_task_schema_contrasts_brief_vs_howto():
-    """自包含 ≠ HOW：对比边界只在 task 参数；核不抄；skill 只留认知分工。"""
+    """自包含 ≠ HOW：对比边界只在 task 参数；填法 HOW 在 consult；核不抄。"""
     from agentcore.runtime.skills import _LEAD_SUBTEAM
     from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
 
@@ -1010,9 +1053,11 @@ def test_task_schema_contrasts_brief_vs_howto():
     ]
     assert "逐步改法" in task_desc
     assert "章节骨架" in task_desc
-    assert "入口" in task_desc
-    assert "成品路径" in task_desc
-    assert "改法现状" in task_desc
+    assert "入口" in _STAFFING
+    assert "成品路径" in _STAFFING
+    assert "改法与现状" in _STAFFING
+    assert "入口" in _LEAD_SUBTEAM
+    assert "成品路径" in _LEAD_SUBTEAM
     assert "逐步改法" not in _CEO_CORE_HINT
     assert "章节骨架" not in _CEO_CORE_HINT
     assert "逐步改法" not in _STAFFING
@@ -1061,6 +1106,10 @@ def test_core_teaches_execution_and_recall_routing():
     assert "wait_for" in run_skill
     br_how = capability_how_suffix({"browser"})
     assert "右坞打开" in br_how or "用浏览器打开" in br_how or "开页" in br_how
+    assert "同一出站" in br_how
+    assert "同一出站" not in hint
+    assert "请人贴" not in hint
+    assert "出站：产品网络" not in hint
     assert "验收 / 截图" not in br_how
     assert "队员 `screenshot`" not in br_how
     assert "delegate" not in hint
@@ -1220,7 +1269,7 @@ def test_core_teaches_dispatch_landing_not_promote_ritual():
     assert "【派单落点】" not in hint
     from agentcore.tools.builtin.delegate.schema import TASK_DELIVERABLE_SCHEMA
 
-    pin = TASK_DELIVERABLE_SCHEMA["properties"]["artifacts"]["description"]
+    pin = TASK_DELIVERABLE_SCHEMA["description"]
     orch = _STAFFING
     assert "用户点名" in pin or "流水线" in pin
     assert "只报告、不落盘" in orch
@@ -1292,6 +1341,7 @@ def test_core_teaches_delivery_path_by_workspace_type():
     assert "自己" in how
     assert "web_fetch" in how
     assert "ask_user(browser_login=true)" in how
+    assert "同一出站" in how
 
 
 def test_shared_base_capability_honesty_does_not_share_circled_numbers():
@@ -1307,7 +1357,7 @@ def test_shared_base_capability_honesty_does_not_share_circled_numbers():
 
 
 def test_shared_base_teaches_unassembled_capability_honesty():
-    """未装配不许假装用过：双条件在共享基座；未装配 ≠ 写进 task 在 delegate 参数。"""
+    """未装配不许假装用过：双条件在共享基座；未装配 ≠ 写进 task 在 staffing / lead_subteam。"""
     base = assemble_system_prompt()
     worker = compose_worker_base_prompt(base)
     assert "未装配" in worker and "不得声称" in worker
@@ -1317,12 +1367,15 @@ def test_shared_base_teaches_unassembled_capability_honesty():
     assert "【能力未装配·统一姿势】" not in _CEO_CORE_HINT
     assert "未装配能力" not in _CEO_CORE_HINT
     assert "用户面前空白" not in _CEO_CORE_HINT
+    from agentcore.runtime.skills import _LEAD_SUBTEAM
     from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
 
     task_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["task"][
         "description"
     ]
-    assert "未装配能力 ≠" in task_desc
+    assert "未装配能力 ≠" not in task_desc
+    assert "未装配能力 ≠" in _STAFFING
+    assert "未装配能力 ≠" in _LEAD_SUBTEAM
     ceo = compose_ceo_chat_prompt(
         base,
         skill_registry=build_system_skill_registry(),
@@ -1823,6 +1876,12 @@ def test_core_guides_out_of_workspace_absolute_paths():
     assert "file_copy" in desk
     assert "先写工作区" in desk
     assert "口头同意" in desk
+    assert "【对人说】" in desk
+    assert "能改你电脑上的原件" in desk
+    assert "【对人说】" not in hint
+    assert "能改你电脑上的原件" not in hint
+    assert "【对人说】" not in _DEFAULT_SYSTEM_PROMPT
+    assert "能改你电脑上的原件" not in _DEFAULT_SYSTEM_PROMPT
     assert "grant_organize_folder" not in desk
     assert "grant_attach_folder" not in desk
     assert "external_mount_readonly" not in desk

@@ -6,6 +6,8 @@
  * Byte-equal to the matching live strings in
  * `apps/server/agentcore/runtime/engine/tool_failure_face.py`.
  * ``RETIRED_VERIFY_RESULT_MESSAGE`` is historical only (backend no longer emits it).
+ * ``NO_USER_FACE_CODES`` is a twin of the server set: new events omit ``message``;
+ * this hides historical journals that still carry a self-heal aside.
  *
  * Path-missing / str_replace user sentences are byte-equal to
  * `apps/server/agentcore/tools/builtin/file_ops/errors.py`.
@@ -25,6 +27,34 @@ export const MISSING_PATH_USER_FACE = "没找到这个路径，我会换个方�
 /** str_replace did not match disk — generic fallback for leaked receipts. */
 export const STR_REPLACE_NO_MATCH_USER_FACE =
   "这段内容和文件对不上，我会换个方式改。";
+
+/** Twin of server ``NO_USER_FACE_CODES``. */
+export const NO_USER_FACE_CODES = new Set([
+  "verify_result",
+  "no_frame",
+  "postcondition_failed",
+  "session_not_found",
+  "session_bound_elsewhere",
+  "source_dump_redirect",
+  "source_grep_redirect",
+  "long_running_redirect",
+  "not_a_web_url",
+  "url_not_workspace_path",
+  "loopback_host",
+  "verify_contract",
+  "run_contract",
+  "http_status_error",
+  "site_unreachable",
+  "read_timeout",
+  "too_many_redirects",
+  "workspace_io_error",
+  "too_large",
+  "sandbox_network_unsupported",
+  "language_unavailable",
+  "launcher_unavailable",
+  "cloud_desk_required",
+  "invalid_args",
+]);
 
 const HIDDEN_TOOL_FAILURE_MESSAGES = new Set([
   GENERIC_TOOL_FAILURE_MESSAGE,
@@ -61,9 +91,11 @@ export function isCompactUserFace(message: string): boolean {
 
 export function specificToolFailureMessage(data: {
   status: string;
-  failure?: { message?: string | null } | null;
+  failure?: { message?: string | null; code?: string | null } | null;
 }): string | null {
   if (data.status !== "error") return null;
+  const code = data.failure?.code?.trim() ?? "";
+  if (code && NO_USER_FACE_CODES.has(code)) return null;
   const message = data.failure?.message?.trim() ?? "";
   if (!message) return null;
   if (HIDDEN_TOOL_FAILURE_MESSAGES.has(message)) return null;

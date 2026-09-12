@@ -19,11 +19,11 @@ export const APP_PATHS = {
     /** Canonical aliases — 旧名仍可用，指向现行壳。 */
     tools: "/toolbox/mine/tools",
     guidelines: "/toolbox/mine/skills",
-    /** Prompt catalog right pane = cross-conversation「最近更新」feed. */
+    /** Prompt catalog right pane = cross-conversation「最近学到」feed. */
     guidelinesUpdates: "/toolbox/mine/skills?updates=1",
     store: "/toolbox/market",
-    /** 工具页图鉴（插头卡在同一网格；旧 `#/toolbox/connectors` / `mine/mcp` 收向这里）。 */
-    connectors: "/toolbox/mine/tools",
+    /** 提示词目录（出厂工具 / 官方 HOW / 连接器都在这本）。旧 `#/toolbox/connectors` / `mine/mcp` / `mine/tools` 收向这里。 */
+    connectors: "/toolbox/mine/skills?connectors=1",
     /** 旧书签，路由收向工作流列表。 */
     automations: {
       root: "/toolbox/mine/automations",

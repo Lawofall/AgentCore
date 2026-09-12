@@ -3,8 +3,8 @@
  * Integration tests for {@link WhiteboardEngine} — the stateful canvas controller
  * (AI协作白板.md §六). Its pure sub-modules (ops / scene / clone / layout / snap /
  * selectionOps / transform) are unit-tested separately; this exercises the engine class
- * itself: scene loading, history (undo/redo), selection + reconciliation, the M3 overlay
- * vs. persistent-append distinction (进度贴源 / 产物回贴), clipboard, and one pointer-drag
+ * itself: scene loading, history (undo/redo), selection + reconciliation, the overlay
+ * vs. persistent-append distinction, clipboard, and one pointer-drag
  * create flow.
  *
  * `requestAnimationFrame` is neutered so render() (canvas painting, which jsdom has no
@@ -25,22 +25,27 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
-function makeEngine() {
+function makeEngine(opts?: { flushEdit?: () => string | null }) {
   const canvas = document.createElement("canvas");
   // jsdom has no 2D backend; render() is neutered via rAF, so a stub ctx suffices.
   const ctx = {
     measureText: () => ({ width: 0 }),
+    save: () => {},
+    restore: () => {},
+    setTransform: () => {},
+    font: "",
   } as unknown as CanvasRenderingContext2D;
   Object.defineProperty(canvas, "getContext", { value: () => ctx });
-  const container = document.createElement("div");
   const cb = {
     onChange: vi.fn(),
     onSelectionChange: vi.fn(),
     onToolChange: vi.fn(),
     onViewportChange: vi.fn(),
     onContextMenu: vi.fn(),
+    onEditingChange: vi.fn(),
+    flushEdit: opts?.flushEdit ?? vi.fn(() => null),
   };
-  const engine = new WhiteboardEngine(canvas, container, cb);
+  const engine = new WhiteboardEngine(canvas, cb);
   return { engine, cb, canvas };
 }
 
@@ -124,7 +129,7 @@ describe("WhiteboardEngine — applyOps + history", () => {
   });
 });
 
-describe("WhiteboardEngine — M3 overlay vs. persistent append", () => {
+describe("WhiteboardEngine — overlay vs. persistent append", () => {
   it("setOverlay draws transiently: scene + history + onChange untouched", () => {
     const { engine, cb } = makeEngine();
     engine.loadScene([rect("a")]);
@@ -169,7 +174,7 @@ describe("WhiteboardEngine — selection + delete", () => {
     expect(engine.getScene().map((e) => e.id)).toEqual(["b"]);
   });
 
-  it("exposes selection bounds + type for the M3 迭代 affordance", () => {
+  it("exposes selection bounds and selected type", () => {
     const { engine } = makeEngine();
     engine.loadScene([rect("a", 10, 20, 100, 40)]);
     engine.selectAll();
@@ -413,5 +418,118 @@ describe("WhiteboardEngine — multi-select scale", () => {
     const after = Object.fromEntries(engine.getScene().map((e) => [e.id, e]));
     expect(after.a).toMatchObject({ x: 0, width: 100 });
     expect(after.b).toMatchObject({ x: 200, width: 100 });
+  });
+});
+
+describe("WhiteboardEngine — text editing", () => {
+  it("creates a text element from flushEdit", () => {
+    const { engine, cb } = makeEngine({ flushEdit: () => "  hi  " });
+    engine.startEdit(null, [5, 6]);
+    expect(cb.onEditingChange).toHaveBeenCalledWith({
+      id: null,
+      world: [5, 6],
+    });
+    engine.commitEditing();
+    expect(engine.getScene()[0]).toMatchObject({
+      type: "text",
+      text: "hi",
+      x: 5,
+      y: 6,
+    });
+    expect(engine.getEditing()).toBeNull();
+    expect(cb.onEditingChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it("does not wipe existing text when the overlay never attached", () => {
+    const { engine } = makeEngine();
+    engine.loadScene([
+      {
+        id: "t",
+        type: "text",
+        x: 0,
+        y: 0,
+        width: 40,
+        height: 24,
+        text: "keep",
+        fontSize: 18,
+        schemaVersion: 1,
+      },
+    ]);
+    engine.startEdit(engine.getScene()[0]);
+    engine.commitEditing();
+    expect(engine.getScene()[0].text).toBe("keep");
+  });
+
+  it("updates a sticky label", () => {
+    const { engine } = makeEngine({ flushEdit: () => "note" });
+    engine.loadScene([
+      {
+        id: "s",
+        type: "sticky",
+        x: 0,
+        y: 0,
+        width: 140,
+        height: 84,
+        text: "old",
+        schemaVersion: 1,
+      },
+    ]);
+    engine.startEdit(engine.getScene()[0]);
+    engine.commitEditing();
+    expect(engine.getScene()[0].text).toBe("note");
+  });
+
+  it("deletes an emptied text element", () => {
+    const { engine } = makeEngine({ flushEdit: () => "  " });
+    engine.loadScene([
+      {
+        id: "t",
+        type: "text",
+        x: 0,
+        y: 0,
+        width: 40,
+        height: 24,
+        text: "x",
+        fontSize: 18,
+        schemaVersion: 1,
+      },
+    ]);
+    engine.startEdit(engine.getScene()[0]);
+    engine.commitEditing();
+    expect(engine.getScene()).toHaveLength(0);
+  });
+
+  it("text tool on a sticky edits it instead of creating a new text", () => {
+    const { engine, canvas } = makeEngine();
+    engine.loadScene([
+      {
+        id: "s",
+        type: "sticky",
+        x: 0,
+        y: 0,
+        width: 140,
+        height: 84,
+        text: "old",
+        schemaVersion: 1,
+      },
+    ]);
+    engine.setTool("text");
+    pointer(canvas, "pointerdown", { clientX: 10, clientY: 10 });
+    expect(engine.getEditing()?.id).toBe("s");
+  });
+
+  it("double-click empty canvas starts a new text", () => {
+    const { engine, canvas } = makeEngine();
+    canvas.dispatchEvent(
+      new MouseEvent("dblclick", { clientX: 12, clientY: 34, bubbles: true }),
+    );
+    expect(engine.getEditing()).toEqual({ id: null, world: [12, 34] });
+  });
+
+  it("empty new text is a no-op", () => {
+    const { engine } = makeEngine({ flushEdit: () => "  " });
+    engine.startEdit(null, [0, 0]);
+    engine.commitEditing();
+    expect(engine.getScene()).toEqual([]);
   });
 });

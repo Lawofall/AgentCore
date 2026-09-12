@@ -1,6 +1,6 @@
 [project]
 name = "agentcore"
-version = "0.7.18"
+version = "0.7.19"
 description = "AgentCore - Multi-Agent AI Workspace Backend"
 requires-python = ">=3.12"
 dependencies = [
@@ -17,7 +17,6 @@ dependencies = [
     "httpx>=0.28",
     "structlog>=24.4",
     "python-jose[cryptography]>=3.3",
-    "passlib[bcrypt]>=1.7",
     "sse-starlette>=2.2",
     "pwdlib[argon2]>=0.3.0",
     "boto3>=1.43.29",
@@ -36,7 +35,7 @@ dependencies = [
 [project.optional-dependencies]
 # 内置 Python 打包（方案 B）sidecar 运行时子集。来源 = ``agentcore.sidecar.server`` 静态
 # import 闭包 + **与云对齐的 Office 文档能力**（附件 markitdown 预解析 + 确定性 md→docx/pdf）。
-# 仍剔除：FastAPI/uvicorn、迁移、Redis、S3、JWT/密码学（jose/cryptography/pwdlib/passlib）
+# 仍剔除：FastAPI/uvicorn、迁移、Redis、S3、JWT/密码学（jose/cryptography/pwdlib）
 # ——密码哈希与签票属于云 API，不在 sidecar 回合路径。``security`` 包懒导出、``git_ops``
 # 能力探测不拉 PAT 加密，由 ``bundle:sidecar`` 回合导入冒烟守住；禁止为「缺模块」把
 # pwdlib/jose 加回本组。``scripts/bundle-sidecar.mjs`` 以 ``--no-deps`` 装
@@ -77,10 +76,12 @@ agentcore = "agentcore.__main__:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# Wheel otherwise drops non-.py package data; the sandbox list must ship so
-# ``code_execute`` descriptions can read it from a non-editable install.
+# Wheel otherwise drops non-.py package data; these must ship so non-editable
+# installs can still read them (sandbox list for ``code_execute`` descriptions;
+# BYOK vendor table for catalog seed).
 [tool.hatch.build.targets.wheel.force-include]
 "agentcore/tools/sandbox/cloud_python.txt" = "agentcore/tools/sandbox/cloud_python.txt"
+"agentcore/llm/byok_provider_presets.json" = "agentcore/llm/byok_provider_presets.json"
 
 [tool.ruff]
 target-version = "py312"

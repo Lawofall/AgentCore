@@ -1,6 +1,5 @@
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { useTurnAudit } from "@/hooks/useTurnAudit";
-import { resolveEffectiveGraphLayout } from "@/lib/graph-layout-utils";
 import "@/services/graphStress";
 import {
   isTerminalPhase,
@@ -111,7 +110,6 @@ export const GraphView = memo(function GraphView({
   const setShowAuditInjectFlow = useGraphStore((s) => s.setShowAuditInjectFlow);
   const layoutKind = useGraphStore((s) => s.layoutKind);
   const setLayoutKind = useGraphStore((s) => s.setLayoutKind);
-  const effectiveLayoutKind = resolveEffectiveGraphLayout(layoutKind);
   // 内嵌模式：expandedUnits 按对话持久化（与画布 graph-fold 独立）。
   // 默认展开有子队的 unit（对齐画布 / 协作图 UX「默认展开」）；用户点过收起后才记覆盖。
   // 交互/全屏 GraphView 仍用会话内存态；画布多回合折叠走 graph store。
@@ -221,7 +219,7 @@ export const GraphView = memo(function GraphView({
     actCards,
   } = useGraphLayout(
     execution,
-    effectiveLayoutKind,
+    layoutKind,
     fitMode,
     expandedUnits,
     focusedActId,
@@ -234,7 +232,7 @@ export const GraphView = memo(function GraphView({
       onMeasure,
     });
   const handleDirection =
-    effectiveLayoutKind === "leftright"
+    layoutKind === "leftright"
       ? ("horizontal" as const)
       : ("vertical" as const);
 
@@ -425,7 +423,7 @@ export const GraphView = memo(function GraphView({
       expandedUnits,
       onToggleUnitExpand: undefined,
       injectOverlay: null,
-      layoutKind: effectiveLayoutKind,
+      layoutKind: layoutKind,
       onFocusAct: () => undefined,
       documentShell: true,
     });

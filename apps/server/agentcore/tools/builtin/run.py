@@ -65,12 +65,10 @@ def run_op_timeout_seconds(
     *,
     location: Literal["server", "local"] | None = None,
 ) -> float:
-    """Engine wall: process manage / start follow terminal; verify uses disaster cap.
+    """Engine wall: process manage / start follow terminal; foreground uses disaster cap.
 
-    Cloud desk boot lives in prepare / resume, not inside this ``run`` call.
-    Engine wait_for is the op ceiling on both local and cloud.
-    ``location`` remains on the signature for engine call sites; it no longer
-    extends the wall for guest boot.
+    Command-shape classification does not pick this clock. Cloud desk boot lives
+    in prepare / resume, not inside this ``run`` call.
     """
     del location
     args = arguments or {}
@@ -83,10 +81,7 @@ def run_op_timeout_seconds(
                 "wait_timeout_seconds": args.get("wait_timeout_seconds"),
             }
         )
-    command = str(args.get("command") or "")
-    if _is_verify_command(command):
-        return float(_VERIFY_DISASTER_SECONDS + _ENGINE_TIMEOUT_SLACK_SECONDS)
-    return 90.0
+    return float(_VERIFY_DISASTER_SECONDS + _ENGINE_TIMEOUT_SLACK_SECONDS)
 
 
 def _wants_background(arguments: dict[str, Any]) -> bool:
@@ -100,7 +95,7 @@ def _is_verify_command(command: str) -> bool:
     """True when any payload looks like install / test / typecheck / build.
 
     Companion segments (echo, rebuild, …) ride the same human command into the
-    verify kernel. Classification picks timeout policy, not a second model tool.
+    verify kernel. Classification picks kernel (parse / pin registry), not the clock.
     """
     payloads = command_payload_argvs(command)
     if not payloads:
@@ -136,11 +131,7 @@ class RunTool:
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": (
-                            "要跑的命令，按人在终端里的写法。"
-                            "如 `pnpm --filter @whiteboard/core test`、`pnpm typecheck`、"
-                            "`python -c \"print(1)\"`、`pnpm dev`。"
-                        ),
+                        "description": "要跑的命令，按人在终端里的写法。",
                     },
                     "cwd": {
                         "type": "string",
@@ -298,6 +289,7 @@ class RunTool:
         short_args: dict[str, Any] = {
             "code": _shell_command_runner(command, chdir=cwd),
             "language": "python",
+            "timeout_seconds": _VERIFY_DISASTER_SECONDS,
             "purpose": arguments.get("purpose"),
         }
         if install_payloads:

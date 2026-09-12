@@ -100,25 +100,6 @@ function roundRectPath(
   }
 }
 
-/** Accent color for an `agentNode` / `artifactCard`. A run-tracking card (M3 进度贴源) maps its
- * `runStatus` onto execution status tokens (running→primary, completed→success, failed→
- * destructive, pending/cancelled→muted); otherwise it honors an explicit `stroke`, else primary. */
-function agentNodeAccent(el: SceneElement, palette: Palette): string {
-  switch (el.runStatus) {
-    case "running":
-      return palette.primary;
-    case "completed":
-      return palette.success;
-    case "failed":
-      return palette.destructive;
-    case "pending":
-    case "cancelled":
-      return palette.mutedForeground;
-    default:
-      return el.stroke ?? palette.primary;
-  }
-}
-
 function drawElement(
   ctx: CanvasRenderingContext2D,
   el: SceneElement,
@@ -182,48 +163,6 @@ function drawElement(
       ctx.stroke();
       ctx.globalAlpha = opacity;
       drawLabel(ctx, el, b, palette, editingId);
-      break;
-    }
-    case "agentNode": {
-      const accent = agentNodeAccent(el, palette);
-      ctx.save();
-      ctx.globalAlpha = 0.1 * opacity;
-      ctx.fillStyle = accent;
-      roundRectPath(ctx, b, 10);
-      ctx.fill();
-      ctx.restore();
-      ctx.strokeStyle = accent;
-      roundRectPath(ctx, b, 10);
-      ctx.stroke();
-      // M3 进度贴源: a small status dot (top-left) when the card tracks a run — pending dims it
-      // so a not-yet-started worker reads as queued. Drawn solid (the shape's dash never leaks).
-      if (el.runStatus) {
-        ctx.save();
-        ctx.setLineDash([]);
-        ctx.fillStyle = accent;
-        ctx.globalAlpha = (el.runStatus === "pending" ? 0.45 : 1) * opacity;
-        ctx.beginPath();
-        ctx.arc(b.x + 12, b.y + 12, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-      drawLabel(ctx, el, b, palette, editingId);
-      break;
-    }
-    case "artifactCard": {
-      // M3 产物回贴 (Slice 3): a product card — accent-bordered, a bold title + a wrapped,
-      // clamped body (the worker's output summary). Distinct from the centered `agentNode` label.
-      const accent = agentNodeAccent(el, palette);
-      ctx.save();
-      ctx.globalAlpha = 0.06 * opacity;
-      ctx.fillStyle = accent;
-      roundRectPath(ctx, b, 10);
-      ctx.fill();
-      ctx.restore();
-      ctx.strokeStyle = accent;
-      roundRectPath(ctx, b, 10);
-      ctx.stroke();
-      drawArtifactCard(ctx, el, b, palette, editingId);
       break;
     }
     case "ellipse": {
@@ -348,83 +287,6 @@ function drawLabel(
     ctx.fillText(line, b.x + b.width / 2, startY + i * lineH),
   );
   ctx.restore();
-}
-
-/** Draw a crystallized `artifactCard`'s contents (M3 产物回贴): a bold title at the top-left and
- * the product body below it — left-aligned, muted, word-wrapped and clamped to the card height
- * with a trailing ellipsis when it overflows. A `file` product's `ref` shows as a「↗ path」hint
- * on the last line (reserved; text products carry none). Skipped while the body is being edited. */
-function drawArtifactCard(
-  ctx: CanvasRenderingContext2D,
-  el: SceneElement,
-  b: Box,
-  palette: Palette,
-  editingId: string | null,
-): void {
-  if (el.id === editingId) return;
-  const pad = 12;
-  const innerW = b.width - pad * 2;
-  if (innerW <= 4) return;
-
-  ctx.save();
-  ctx.setLineDash([]);
-  ctx.textBaseline = "top";
-  ctx.textAlign = "left";
-
-  const titleSize = 14;
-  ctx.fillStyle = palette.foreground;
-  ctx.font = `600 ${titleSize}px ui-sans-serif, system-ui, sans-serif`;
-  ctx.fillText(
-    clampLine(ctx, el.title ?? "产物", innerW),
-    b.x + pad,
-    b.y + pad,
-  );
-
-  const bodySize = 12;
-  const lineH = bodySize * 1.35;
-  ctx.fillStyle = palette.mutedForeground;
-  ctx.font = `${bodySize}px ui-sans-serif, system-ui, sans-serif`;
-  const refLine = el.ref ? lineH : 0;
-  const bodyTop = b.y + pad + titleSize * 1.5;
-  const bodyBottom = b.y + b.height - pad - refLine;
-  const maxLines = Math.max(1, Math.floor((bodyBottom - bodyTop) / lineH));
-  const lines = wrapText(ctx, el.text ?? "", innerW);
-  const shown = lines.slice(0, maxLines);
-  if (lines.length > maxLines && shown.length > 0) {
-    shown[shown.length - 1] = clampLine(
-      ctx,
-      `${shown[shown.length - 1]}…`,
-      innerW,
-    );
-  }
-  shown.forEach((line, i) =>
-    ctx.fillText(line, b.x + pad, bodyTop + i * lineH),
-  );
-
-  if (el.ref) {
-    ctx.fillStyle = palette.primary;
-    ctx.fillText(
-      clampLine(ctx, `↗ ${el.ref}`, innerW),
-      b.x + pad,
-      b.y + b.height - pad - bodySize,
-    );
-  }
-  ctx.restore();
-}
-
-/** Truncate `text` to a single line that fits `maxWidth` (current font), adding an ellipsis. */
-function clampLine(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-): string {
-  if (maxWidth <= 0) return "";
-  if (ctx.measureText(text).width <= maxWidth) return text;
-  let s = text;
-  while (s.length > 1 && ctx.measureText(`${s}…`).width > maxWidth) {
-    s = s.slice(0, -1);
-  }
-  return `${s}…`;
 }
 
 function wrapText(

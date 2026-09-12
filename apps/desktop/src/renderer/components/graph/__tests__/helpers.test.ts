@@ -1,6 +1,6 @@
-import { NODE_WIDTH } from "@/lib/elk-layout";
 import type { Execution } from "@/stores/execution";
 import { debateBeatLabel } from "@/stores/execution";
+import { NODE_WIDTH } from "@agentcore/graph-layout";
 import { describe, expect, it } from "vitest";
 import {
   type GraphRunLike,

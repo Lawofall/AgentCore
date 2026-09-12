@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import type { KeyboardEvent, ReactNode } from "react";
 
 /**
- * 工具箱库存行（工作流 / 连接器）。SurfaceRow 家，不是第三套行：
+ * 工具箱库存行（工作流）。SurfaceRow 家，不是第三套行：
  * 标题区点击进入编辑；启停等状态控件常显；其余动作悬停 / 焦点才进流。
  */
 export function InventoryRow({

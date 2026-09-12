@@ -1,5 +1,9 @@
+import {
+  NODE_HEIGHT,
+  NODE_WIDTH,
+  buildNodeSizeMap,
+} from "@agentcore/graph-layout";
 import { describe, expect, it } from "vitest";
-import { NODE_HEIGHT, NODE_WIDTH, buildNodeSizeMap } from "../graphMetrics";
 
 describe("graphMetrics · fixed layout footprint", () => {
   it("buildNodeSizeMap always uses NODE_WIDTH × NODE_HEIGHT", () => {

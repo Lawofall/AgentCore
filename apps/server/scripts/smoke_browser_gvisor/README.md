@@ -1,10 +1,9 @@
 # Smoke: L3 团队浏览器 M0+M1+M2 —— 真机 gVisor **产品模块**端到端冒烟
 
-> 与 `scripts/poc_browser_gvisor`（探路用的**同形副本**）不同：本目录直接驱动 **产品模块**
-> （`agentcore/tools/sandbox/browser/*`、`runtime/browser/*`、`tools/builtin/browser.py`），
-> 在真 `runsc` + 真产品镜像上验证整条服务端浏览器栈。这是内置浏览器 / Agent 浏览器能力
-> 落地后此前唯一未验证的环节——产品宿主侧编排从未在 gVisor 里跑过，`Dockerfile` 的
-> `INSTALL_BROWSER=1` 层也从未构建过。
+> 本目录直接驱动 **产品模块**（`agentcore/tools/sandbox/browser/*`、`runtime/browser/*`、
+> `tools/builtin/browser.py`），在真 `runsc` + 真产品镜像上验证整条服务端浏览器栈。
+> 这是内置浏览器 / Agent 浏览器能力落地后此前唯一未验证的环节——产品宿主侧编排从未
+> 在 gVisor 里跑过，`Dockerfile` 的 `INSTALL_BROWSER=1` 层也从未构建过。
 >
 > 宿主 Windows + Docker Desktop（linux engine）。所有步骤需 `--privileged` 容器。
 
@@ -71,8 +70,8 @@ docker run --rm --privileged --user root `
 
 - 根因：`netns.py` 在**宿主侧** shell 调用 `ip netns/link` 建每会话 netns+veth（D10 出口隔离），
   但 base `python:3.12-slim` + `playwright install --with-deps chromium` 的 apt 依赖都不含 `ip`。
-  该层从未构建过，故这条依赖此前无人发现；PoC 镜像自己装了 `iproute2`（`poc_browser_gvisor/Dockerfile`
-  第 32 行）才跑通。不修则 `acquire` 在 `ip netns add` 处 `FileNotFoundError`，断言 2–7 全挂。
+  该层从未构建过，故这条依赖此前无人发现；探路镜像曾自行装 `iproute2` 才跑通。
+  不修则 `acquire` 在 `ip netns add` 处 `FileNotFoundError`，断言 2–7 全挂。
 - 改动：`INSTALL_BROWSER=1` 分支内 `apt-get install -y --no-install-recommends iproute2`（语义中性，
   仅补运行时缺失的 OS 依赖，不改任何产品代码）。已装 `iproute2 6.15.0-1`，断言 2 起真 netns/veth 建立成功。
 

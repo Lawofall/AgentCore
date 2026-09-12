@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -31,24 +32,25 @@ export function ProductNoticeModal() {
     >
       {modal ? (
         <DialogContent
-          className="flex max-h-[min(80vh,32rem)] max-w-md flex-col gap-0 p-0"
+          size="md"
+          className="flex max-h-[min(80vh,32rem)] flex-col gap-0 p-0"
           showClose
         >
           <DialogHeader className="pr-10">
             <DialogTitle>{modal.title}</DialogTitle>
           </DialogHeader>
 
-          <DialogDescription asChild>
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-2">
+          <DialogBody className="flex-1 pb-2">
+            <DialogDescription asChild>
               <p className="whitespace-pre-wrap text-sm text-muted-foreground">
                 {modal.body}
               </p>
-            </div>
-          </DialogDescription>
+            </DialogDescription>
+          </DialogBody>
 
           <DialogFooter>
             <Button
-              variant="neutral"
+              variant="outline"
               size="md"
               onClick={() => void dismiss(modal.id)}
             >

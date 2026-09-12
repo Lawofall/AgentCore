@@ -1,4 +1,4 @@
-import { NODE_HEIGHT } from "@/lib/graphMetrics";
+import { NODE_HEIGHT } from "@agentcore/graph-layout";
 import { describe, expect, it } from "vitest";
 import { FACE_CARD_HEIGHT } from "../shared";
 

@@ -1,7 +1,6 @@
 import {
   describeSelection,
   implementSelectionPrompt,
-  iterateArtifactPrompt,
   organizeSelectionPrompt,
   partitionSelection,
   selectionHasImplementBrief,
@@ -151,6 +150,7 @@ describe("implementSelectionPrompt", () => {
     expect(prompt).toContain("需求要点");
     // no visual ids → no board_read instruction
     expect(prompt).not.toContain("board_read");
+    expect(prompt).toContain("工作区");
   });
 
   it("mixed: tells the CEO to board_read the visual ids before acting, keeps structured", () => {
@@ -164,54 +164,5 @@ describe("implementSelectionPrompt", () => {
     const prompt = implementSelectionPrompt(mixedScene, ["d", "img"]);
     expect(prompt).toContain("board_read");
     expect(prompt).not.toContain("需求要点");
-  });
-});
-
-const artifactScene: SceneElement[] = [
-  el({
-    id: "art1",
-    type: "artifactCard",
-    x: 0,
-    y: 0,
-    title: "工程师 · 产物",
-    text: "v1 内容",
-  }),
-  el({ id: "note", type: "text", x: 300, y: 0, text: "把标题改大" }),
-  el({ id: "draw", type: "freedraw", x: 0, y: 0 }),
-];
-
-describe("iterateArtifactPrompt", () => {
-  it("feeds the previous product back and asks for a new version, not an overwrite", () => {
-    const prompt = iterateArtifactPrompt(artifactScene, ["art1"]);
-    expect(prompt).toContain("上一版产物");
-    expect(prompt).toContain("工程师 · 产物");
-    expect(prompt).toContain("v1 内容");
-    expect(prompt).toContain("别覆盖旧版");
-    // artifactCard alone → no annotations → the self-judge fallback line
-    expect(prompt).toContain("没给额外批注");
-  });
-
-  it("includes structured annotations as the change request", () => {
-    const prompt = iterateArtifactPrompt(artifactScene, ["art1", "note"]);
-    expect(prompt).toContain("修改意见");
-    expect(prompt).toContain("- [note] text @(300,0)：“把标题改大”");
-    expect(prompt).not.toContain("没给额外批注");
-  });
-
-  it("routes hand-drawn annotations through board_read", () => {
-    const prompt = iterateArtifactPrompt(artifactScene, ["art1", "draw"]);
-    expect(prompt).toContain("board_read");
-    expect(prompt).toContain("draw");
-    expect(prompt).not.toContain("没给额外批注");
-  });
-
-  it("feeds back multiple previous products", () => {
-    const scene2: SceneElement[] = [
-      el({ id: "art1", type: "artifactCard", title: "A", text: "x" }),
-      el({ id: "art2", type: "artifactCard", title: "B", text: "y" }),
-    ];
-    const prompt = iterateArtifactPrompt(scene2, ["art1", "art2"]);
-    expect(prompt).toContain("【A】");
-    expect(prompt).toContain("【B】");
   });
 });

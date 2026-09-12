@@ -8,7 +8,7 @@ const config: CapacitorConfig = {
   // 产品页是桌面 renderer 的 dist-web（`pnpm build` → prepare-cap-web）。
   webDir: "../desktop/dist-web",
   // WebView + DecorView fill under transparent system bars (Cap 8 edge-to-edge).
-  // Keep in sync with android `shellBackground` / mobile-light `--panel`.
+  // Keep in sync with android `shellBackground` / tokens.css :root --background.
   backgroundColor: "#ffffff",
   plugins: {
     // Dark icons on the light shell (Cap LIGHT = light appearance / dark glyphs; not the legacy StatusBar plugin).

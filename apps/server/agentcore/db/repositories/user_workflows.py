@@ -79,6 +79,17 @@ class UserWorkflowRepository:
         result = await self._session.execute(select(UserWorkflow).where(*conditions))
         return result.scalar_one_or_none()
 
+    async def live_ids(self, user_id: str, workflow_ids: Sequence[str]) -> set[str]:
+        if not workflow_ids:
+            return set()
+        result = await self._session.execute(
+            select(UserWorkflow.id).where(
+                UserWorkflow.user_id == user_id,
+                UserWorkflow.id.in_(list(workflow_ids)),
+            )
+        )
+        return set(result.scalars().all())
+
     async def list_by_user(self, user_id: str) -> Sequence[UserWorkflow]:
         result = await self._session.execute(
             select(UserWorkflow)

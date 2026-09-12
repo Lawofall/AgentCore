@@ -6,13 +6,13 @@ import {
   CatalogIconShell,
   CatalogTile,
   EmptyHint,
-  IconButton,
   SearchField,
   SectionLabel,
   Textarea,
 } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -21,27 +21,34 @@ import {
 } from "@/components/ui/dialog";
 import { artifactColorVar } from "@/lib/catalogColors";
 import { notifyError, notifySuccess } from "@/lib/toast";
-import { cn } from "@/lib/utils";
 import {
   MARKET_KINDS,
   type MarketKind,
   TOOLBOX_KIND_LABEL,
   isMarketKind,
 } from "@/pages/toolbox/kinds";
-import { SHELF_TILE_CLASS, ShelfRail } from "@/pages/toolbox/market/ShelfRail";
+import { ShelfRail } from "@/pages/toolbox/market/ShelfRail";
 import { StoreListingCard } from "@/pages/toolbox/market/StoreListingCard";
 import {
   isOfficialAuthor,
   listingCopy,
 } from "@/pages/toolbox/market/listingCopy";
+import {
+  SKILL_STORE_GROUPS,
+  skillStoreGroupLabel,
+} from "@/pages/toolbox/market/skillStoreGroups";
 import { UseTemplateDialog } from "@/pages/toolbox/workflows/UseTemplateDialog";
 import { ApiError } from "@/services/api";
 import {
+  EMPTY_SKILL_STORE_GROUPS,
+  SKILL_STORE_DISCOVER_PAGE_SIZE,
   SKILL_STORE_PAGE_SIZE,
+  type SkillStoreGroup,
   type SkillStoreListing,
   type SkillStoreListingDetail,
   getSkillStoreListing,
   installSkill,
+  isSkillStoreGroup,
   listSkillStore,
   reportSkill,
 } from "@/services/skillStore";
@@ -58,11 +65,11 @@ import {
   type WorkflowTemplate,
   listWorkflowTemplates,
 } from "@/services/workflows";
-import { Loader2, Sparkles, Store, Workflow, X } from "lucide-react";
+import { Loader2, Sparkles, Store, Workflow } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-const RAIL_CAP = 12;
+const SHELF_CAP = 12;
 const SKILL_GRID_CLASS = `mt-3 ${CATALOG_GRID_CLASS}`;
 
 function errMsg(err: unknown, fallback: string): string {
@@ -102,19 +109,27 @@ function searchLabel(kind: MarketKind | null): string {
 }
 
 /**
- * 工具箱 · 市场：总货架。发现首页是 App Store 式横滑货架条；
- * 种类 chip / 查看全部才进网格；搜索切到结果面。
+ * 工具箱 · 市场：总货架。发现首页按集合折行网格（封顶 + 查看全部）；
+ * 种类 chip / 查看全部进种类或分组网格；搜索切到结果面。
  */
 export function MarketPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const kindParam = searchParams.get("kind");
   const kind = isMarketKind(kindParam) ? kindParam : null;
+  const groupParam = searchParams.get("group");
+  const skillGroup =
+    kind === "workflows"
+      ? null
+      : isSkillStoreGroup(groupParam)
+        ? groupParam
+        : null;
 
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [items, setItems] = useState<SkillStoreListing[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [groups, setGroups] = useState(EMPTY_SKILL_STORE_GROUPS);
   const [wfItems, setWfItems] = useState<WorkflowStoreListing[]>([]);
   const [wfPage, setWfPage] = useState(1);
   const [wfTotal, setWfTotal] = useState(0);
@@ -141,26 +156,36 @@ export function MarketPage() {
     return () => window.clearTimeout(timer);
   }, [q]);
 
-  const load = useCallback(async (nextPage: number, query: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await listSkillStore({
-        q: query || undefined,
-        page: nextPage,
-        pageSize: SKILL_STORE_PAGE_SIZE,
-      });
-      setItems((prev) =>
-        nextPage === 1 ? result.items : [...prev, ...result.items],
-      );
-      setPage(result.page);
-      setTotal(result.total);
-    } catch (err) {
-      setError(errMsg(err, "货架加载失败"));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const skillPageSize =
+    Boolean(debouncedQ) || skillGroup != null
+      ? SKILL_STORE_PAGE_SIZE
+      : SKILL_STORE_DISCOVER_PAGE_SIZE;
+
+  const load = useCallback(
+    async (nextPage: number, query: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await listSkillStore({
+          q: query || undefined,
+          page: nextPage,
+          pageSize: skillPageSize,
+          group: query ? undefined : (skillGroup ?? undefined),
+        });
+        setItems((prev) =>
+          nextPage === 1 ? result.items : [...prev, ...result.items],
+        );
+        setPage(result.page);
+        setTotal(result.total);
+        setGroups(result.groups);
+      } catch (err) {
+        setError(errMsg(err, "货架加载失败"));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [skillGroup, skillPageSize],
+  );
 
   const loadWorkflows = useCallback(async (nextPage: number, query: string) => {
     setWfLoading(true);
@@ -329,33 +354,53 @@ export function MarketPage() {
     const params = new URLSearchParams(searchParams);
     if (next) params.set("kind", next);
     else params.delete("kind");
+    if (next !== "skills") params.delete("group");
+    const search = params.toString();
+    setSearchParams(search ? params : {}, { replace: true });
+  };
+
+  const setGroup = (next: SkillStoreGroup | null) => {
+    const params = new URLSearchParams(searchParams);
+    if (next) {
+      params.set("kind", "skills");
+      params.set("group", next);
+    } else {
+      params.delete("group");
+    }
     const search = params.toString();
     setSearchParams(search ? params : {}, { replace: true });
   };
 
   const searching = Boolean(debouncedQ);
-  const discover = !searching && kind == null;
+  const discover = !searching && kind == null && skillGroup == null;
   const showSkills = kind !== "workflows";
   const showWorkflows = kind !== "skills";
   const featured = useMemo(
     () => items.filter((row) => isOfficialAuthor(row.author)),
     [items],
   );
-  const restSkills =
-    featured.length > 0
-      ? items.filter((row) => !isOfficialAuthor(row.author))
-      : items;
+  const groupRails = useMemo(
+    () =>
+      SKILL_STORE_GROUPS.map((g) => ({
+        ...g,
+        rows: items.filter(
+          (row) =>
+            row.group === g.id && !(discover && isOfficialAuthor(row.author)),
+        ),
+      })).filter((g) => g.rows.length > 0),
+    [items, discover],
+  );
+  const visibleGroupChips = SKILL_STORE_GROUPS.filter((g) => groups[g.id] > 0);
   const visibleTemplates = useMemo(() => {
     const list = templates ?? [];
     if (!debouncedQ) return list;
     return list.filter((tpl) => templateMatches(tpl, debouncedQ));
   }, [templates, debouncedQ]);
   const workflowRail = discover
-    ? visibleTemplates.slice(0, RAIL_CAP)
+    ? visibleTemplates.slice(0, SHELF_CAP)
     : visibleTemplates;
-  const workflowListingRail = discover ? wfItems.slice(0, RAIL_CAP) : wfItems;
-  const featuredRail = discover ? featured.slice(0, RAIL_CAP) : [];
-  const skillRail = discover ? restSkills.slice(0, RAIL_CAP) : items;
+  const workflowListingRail = discover ? wfItems.slice(0, SHELF_CAP) : wfItems;
+  const featuredRail = discover ? featured.slice(0, SHELF_CAP) : [];
   const cta = selected ? installCta(selected) : null;
   const selectedCopy = selected ? listingCopy(selected) : null;
   const description =
@@ -364,7 +409,11 @@ export function MarketPage() {
     "";
   const showDescription =
     Boolean(description) && selectedCopy?.title !== description;
-  const hasMore = items.length < total && !loading && !discover;
+  const hasMore =
+    (searching || skillGroup != null) &&
+    items.length < total &&
+    !loading &&
+    !discover;
   const wfHasMore = wfItems.length < wfTotal && !wfLoading && !discover;
   const queryLabel = searchLabel(kind);
   const seeAll = (next: MarketKind) => ({
@@ -401,12 +450,8 @@ export function MarketPage() {
           value={q}
           onValueChange={setQ}
         />
-        {/* biome-ignore lint/a11y/useSemanticElements: 筛选芯片组；fieldset 默认边框不适合货架工具条。 */}
-        <div
-          role="group"
-          aria-label="货架种类"
-          className="flex flex-wrap gap-1.5"
-        >
+        <fieldset className="m-0 flex flex-wrap gap-1.5 border-0 p-0">
+          <legend className="sr-only">货架种类</legend>
           {MARKET_KINDS.map((id) => {
             const pressed = kind === id;
             return (
@@ -423,7 +468,28 @@ export function MarketPage() {
               </Badge>
             );
           })}
-        </div>
+        </fieldset>
+        {showSkills && !searching && visibleGroupChips.length > 0 ? (
+          <fieldset className="m-0 flex flex-wrap gap-1.5 border-0 p-0">
+            <legend className="sr-only">提示词分组</legend>
+            {visibleGroupChips.map((g) => {
+              const pressed = skillGroup === g.id;
+              return (
+                <Badge
+                  key={g.id}
+                  as="button"
+                  type="button"
+                  pill
+                  tone={pressed ? "primary" : "muted"}
+                  aria-pressed={pressed}
+                  onClick={() => setGroup(pressed ? null : g.id)}
+                >
+                  {g.label}
+                </Badge>
+              );
+            })}
+          </fieldset>
+        ) : null}
       </div>
 
       {shelfError ? (
@@ -432,171 +498,176 @@ export function MarketPage() {
         </p>
       ) : null}
 
-      <div className="mt-6 flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto pr-1">
-          {showWorkflows &&
-          (kind === "workflows" || templatesHint || workflowRail.length > 0) ? (
-            discover ? (
-              workflowRail.length > 0 ? (
-                <ShelfRail title="工作流 · 官方" action={seeAll("workflows")}>
+      <div className="mt-6 min-h-0 flex-1 overflow-y-auto">
+        {showWorkflows &&
+        (kind === "workflows" || templatesHint || workflowRail.length > 0) ? (
+          discover ? (
+            workflowRail.length > 0 ? (
+              <ShelfRail title="工作流 · 官方" action={seeAll("workflows")}>
+                {workflowRail.map((tpl) => (
+                  <WorkflowTile
+                    key={tpl.id}
+                    tpl={tpl}
+                    onOpen={() => setUseTarget(tpl)}
+                  />
+                ))}
+              </ShelfRail>
+            ) : templatesHint ? (
+              <p className="mb-8 text-xs text-muted-foreground">
+                {templatesHint}
+              </p>
+            ) : null
+          ) : (
+            <section className="mb-8 space-y-3">
+              <SectionLabel>
+                {searching ? "工作流" : "工作流 · 官方"}
+              </SectionLabel>
+              {templatesHint ? (
+                <p className="text-xs text-muted-foreground">{templatesHint}</p>
+              ) : null}
+              {workflowRail.length > 0 ? (
+                <div className={SKILL_GRID_CLASS}>
                   {workflowRail.map((tpl) => (
-                    <div key={tpl.id} className={SHELF_TILE_CLASS}>
-                      <WorkflowTile
-                        tpl={tpl}
-                        onOpen={() => setUseTarget(tpl)}
-                      />
-                    </div>
+                    <WorkflowTile
+                      key={tpl.id}
+                      tpl={tpl}
+                      onOpen={() => setUseTarget(tpl)}
+                    />
                   ))}
-                </ShelfRail>
-              ) : templatesHint ? (
-                <p className="mb-8 text-xs text-muted-foreground">
-                  {templatesHint}
-                </p>
-              ) : null
-            ) : (
-              <section className="mb-8 space-y-3">
-                <SectionLabel>
-                  {searching ? "工作流" : "工作流 · 官方"}
-                </SectionLabel>
-                {templatesHint ? (
-                  <p className="text-xs text-muted-foreground">
-                    {templatesHint}
-                  </p>
-                ) : null}
-                {workflowRail.length > 0 ? (
-                  <div className={SKILL_GRID_CLASS}>
-                    {workflowRail.map((tpl) => (
-                      <WorkflowTile
-                        key={tpl.id}
-                        tpl={tpl}
-                        onOpen={() => setUseTarget(tpl)}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-              </section>
-            )
-          ) : null}
+                </div>
+              ) : null}
+            </section>
+          )
+        ) : null}
 
-          {showWorkflows &&
-          (kind === "workflows" ||
-            workflowListingRail.length > 0 ||
-            (wfLoading && kind === "workflows")) ? (
-            discover ? (
-              workflowListingRail.length > 0 ? (
-                <ShelfRail
-                  title={TOOLBOX_KIND_LABEL.workflows}
-                  action={seeAll("workflows")}
-                >
-                  {workflowListingRail.map((row) => (
-                    <div key={row.id} className={SHELF_TILE_CLASS}>
+        {showWorkflows &&
+        (kind === "workflows" ||
+          workflowListingRail.length > 0 ||
+          (wfLoading && kind === "workflows")) ? (
+          discover ? (
+            workflowListingRail.length > 0 ? (
+              <ShelfRail
+                title={TOOLBOX_KIND_LABEL.workflows}
+                action={seeAll("workflows")}
+              >
+                {workflowListingRail.map((row) => (
+                  <StoreListingCard
+                    key={row.id}
+                    row={row}
+                    colorVar={artifactColorVar("workflow")}
+                    icon={Workflow}
+                    onOpen={() => setOpen({ kind: "workflow", id: row.id })}
+                  />
+                ))}
+              </ShelfRail>
+            ) : null
+          ) : (
+            <section
+              className="mb-8 space-y-3"
+              data-testid="workflow-store-shelf"
+            >
+              <SectionLabel>
+                {searching ? "市场上架" : TOOLBOX_KIND_LABEL.workflows}
+              </SectionLabel>
+              {wfLoading && wfItems.length === 0 ? (
+                <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground text-sm">
+                  <Loader2 size={16} className="animate-spin" />
+                  加载中…
+                </div>
+              ) : null}
+              {wfItems.length > 0 ? (
+                <>
+                  <div className={SKILL_GRID_CLASS}>
+                    {wfItems.map((row) => (
                       <StoreListingCard
+                        key={row.id}
                         row={row}
                         colorVar={artifactColorVar("workflow")}
                         icon={Workflow}
                         onOpen={() => setOpen({ kind: "workflow", id: row.id })}
                       />
+                    ))}
+                  </div>
+                  {wfHasMore ? (
+                    <div className="mt-4 flex justify-center">
+                      <Button
+                        variant="neutral"
+                        disabled={wfLoading}
+                        onClick={() =>
+                          void loadWorkflows(wfPage + 1, debouncedQ)
+                        }
+                      >
+                        更多
+                      </Button>
                     </div>
-                  ))}
-                </ShelfRail>
-              ) : null
-            ) : (
-              <section
-                className="mb-8 space-y-3"
-                data-testid="workflow-store-shelf"
-              >
-                <SectionLabel>
-                  {searching ? "市场上架" : TOOLBOX_KIND_LABEL.workflows}
-                </SectionLabel>
-                {wfLoading && wfItems.length === 0 ? (
+                  ) : null}
+                </>
+              ) : !wfLoading &&
+                kind === "workflows" &&
+                !searching &&
+                visibleTemplates.length === 0 ? (
+                <EmptyHint className="py-10" title="还没有可安装的工作流" />
+              ) : null}
+            </section>
+          )
+        ) : null}
+
+        {showSkills ? (
+          <div data-testid="skill-store-shelf">
+            {discover && featuredRail.length > 0 ? (
+              <ShelfRail title="官方精选" action={seeAll("skills")}>
+                {featuredRail.map((row) => (
+                  <StoreListingCard
+                    key={row.id}
+                    row={row}
+                    onOpen={() => setOpen({ kind: "skill", id: row.id })}
+                  />
+                ))}
+              </ShelfRail>
+            ) : null}
+
+            {discover
+              ? groupRails.map((g) => (
+                  <ShelfRail
+                    key={g.id}
+                    title={g.label}
+                    action={{
+                      label: "查看全部",
+                      onClick: () => setGroup(g.id),
+                    }}
+                  >
+                    {g.rows.slice(0, SHELF_CAP).map((row) => (
+                      <StoreListingCard
+                        key={row.id}
+                        row={row}
+                        onOpen={() => setOpen({ kind: "skill", id: row.id })}
+                      />
+                    ))}
+                  </ShelfRail>
+                ))
+              : null}
+
+            {!discover &&
+            showSkills &&
+            (items.length > 0 ||
+              loading ||
+              kind === "skills" ||
+              skillGroup != null) ? (
+              <>
+                {loading && items.length === 0 ? (
                   <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground text-sm">
                     <Loader2 size={16} className="animate-spin" />
                     加载中…
                   </div>
                 ) : null}
-                {wfItems.length > 0 ? (
-                  <>
-                    <div className={SKILL_GRID_CLASS}>
-                      {wfItems.map((row) => (
-                        <StoreListingCard
-                          key={row.id}
-                          row={row}
-                          colorVar={artifactColorVar("workflow")}
-                          icon={Workflow}
-                          onOpen={() =>
-                            setOpen({ kind: "workflow", id: row.id })
-                          }
-                        />
-                      ))}
-                    </div>
-                    {wfHasMore ? (
-                      <div className="mt-4 flex justify-center">
-                        <Button
-                          variant="neutral"
-                          disabled={wfLoading}
-                          onClick={() =>
-                            void loadWorkflows(wfPage + 1, debouncedQ)
-                          }
-                        >
-                          更多
-                        </Button>
-                      </div>
-                    ) : null}
-                  </>
-                ) : !wfLoading &&
-                  kind === "workflows" &&
-                  !searching &&
-                  visibleTemplates.length === 0 ? (
-                  <EmptyHint className="py-10" title="还没有可安装的工作流" />
-                ) : null}
-              </section>
-            )
-          ) : null}
-
-          {showSkills ? (
-            <div data-testid="skill-store-shelf">
-              {discover && featuredRail.length > 0 ? (
-                <ShelfRail title="官方精选" action={seeAll("skills")}>
-                  {featuredRail.map((row) => (
-                    <div key={row.id} className={SHELF_TILE_CLASS}>
-                      <StoreListingCard
-                        row={row}
-                        onOpen={() => setOpen({ kind: "skill", id: row.id })}
-                      />
-                    </div>
-                  ))}
-                </ShelfRail>
-              ) : null}
-
-              {discover && skillRail.length > 0 ? (
-                <ShelfRail
-                  title={TOOLBOX_KIND_LABEL.skills}
-                  action={seeAll("skills")}
-                >
-                  {skillRail.map((row) => (
-                    <div key={row.id} className={SHELF_TILE_CLASS}>
-                      <StoreListingCard
-                        row={row}
-                        onOpen={() => setOpen({ kind: "skill", id: row.id })}
-                      />
-                    </div>
-                  ))}
-                </ShelfRail>
-              ) : null}
-
-              {!discover &&
-              showSkills &&
-              (items.length > 0 || loading || kind === "skills") ? (
-                <>
-                  <SectionLabel>{TOOLBOX_KIND_LABEL.skills}</SectionLabel>
-                  {loading && items.length === 0 ? (
-                    <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground text-sm">
-                      <Loader2 size={16} className="animate-spin" />
-                      加载中…
-                    </div>
-                  ) : null}
-                  {items.length > 0 ? (
+                {searching || skillGroup != null ? (
+                  items.length > 0 ? (
                     <>
+                      <SectionLabel>
+                        {skillGroup
+                          ? skillStoreGroupLabel(skillGroup)
+                          : TOOLBOX_KIND_LABEL.skills}
+                      </SectionLabel>
                       <div className={SKILL_GRID_CLASS}>
                         {items.map((row) => (
                           <StoreListingCard
@@ -620,66 +691,101 @@ export function MarketPage() {
                         </div>
                       ) : null}
                     </>
-                  ) : null}
-                </>
-              ) : null}
+                  ) : null
+                ) : (
+                  groupRails.map((g) => (
+                    <section key={g.id} className="mb-8">
+                      <SectionLabel>{g.label}</SectionLabel>
+                      <div className={SKILL_GRID_CLASS}>
+                        {g.rows.map((row) => (
+                          <StoreListingCard
+                            key={row.id}
+                            row={row}
+                            onOpen={() =>
+                              setOpen({ kind: "skill", id: row.id })
+                            }
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ))
+                )}
+              </>
+            ) : null}
 
-              {discover && loading && items.length === 0 ? (
-                <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground text-sm">
-                  <Loader2 size={16} className="animate-spin" />
-                  加载中…
-                </div>
-              ) : null}
+            {discover && loading && items.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground text-sm">
+                <Loader2 size={16} className="animate-spin" />
+                加载中…
+              </div>
+            ) : null}
 
-              {skillsEmpty && !searching && kind === "skills" ? (
-                <EmptyHint
-                  className="mt-10"
-                  title={`还没有${TOOLBOX_KIND_LABEL.skills}`}
-                />
-              ) : null}
-            </div>
-          ) : null}
+            {skillsEmpty &&
+            !searching &&
+            (kind === "skills" || skillGroup != null) ? (
+              <EmptyHint
+                className="mt-10"
+                title={`还没有${TOOLBOX_KIND_LABEL.skills}`}
+              />
+            ) : null}
+          </div>
+        ) : null}
 
-          {discoverEmpty ? (
-            <EmptyHint className="mt-10" title="还没有可安装的内容" />
-          ) : null}
+        {discoverEmpty ? (
+          <EmptyHint className="mt-10" title="还没有可安装的内容" />
+        ) : null}
 
-          {searchMiss ? (
-            <EmptyHint
-              className="mt-10"
-              title="没有匹配的结果"
-              hint="换个关键词试试。"
-            />
-          ) : null}
-        </div>
+        {searchMiss ? (
+          <EmptyHint
+            className="mt-10"
+            title="没有匹配的结果"
+            hint="换个关键词试试。"
+          />
+        ) : null}
+      </div>
 
-        {open ? (
-          <aside
-            className={cn(
-              "flex w-full max-w-lg shrink-0 flex-col border-l border-border bg-background",
-              "max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-10 max-md:shadow-lg",
-            )}
-          >
-            <div className="flex items-start gap-3 border-b border-border px-5 py-4">
+      <Dialog
+        open={open !== null}
+        onOpenChange={(next) => {
+          if (!next && !reportOpen) setOpen(null);
+        }}
+      >
+        <DialogContent
+          size="lg"
+          className="flex max-h-[min(80vh,36rem)] flex-col"
+          data-testid={
+            open?.kind === "workflow"
+              ? "workflow-store-dialog"
+              : "skill-store-dialog"
+          }
+          onPointerDownOutside={(event) => {
+            if (reportOpen) event.preventDefault();
+          }}
+          onFocusOutside={(event) => {
+            if (reportOpen) event.preventDefault();
+          }}
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-3">
               <CatalogIconShell
                 colorVar={artifactColorVar(
-                  open.kind === "workflow" ? "workflow" : "guidelines",
+                  open?.kind === "workflow" ? "workflow" : "guidelines",
                 )}
                 size="lg"
               >
-                {open.kind === "workflow" ? (
+                {open?.kind === "workflow" ? (
                   <Workflow size={20} />
                 ) : (
                   <Store size={20} />
                 )}
               </CatalogIconShell>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-base font-semibold text-foreground">
+              <div className="min-w-0">
+                <DialogTitle>
                   {selectedCopy?.title ??
                     TOOLBOX_KIND_LABEL[
-                      open.kind === "workflow" ? "workflows" : "skills"
+                      open?.kind === "workflow" ? "workflows" : "skills"
                     ]}
-                </h2>
+                </DialogTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {[
                     selected?.author,
@@ -690,94 +796,66 @@ export function MarketPage() {
                     .join(" · ")}
                 </p>
               </div>
-              {cta ? (
-                <Button
-                  className="shrink-0"
-                  disabled={busy || cta.disabled}
-                  onClick={() => {
-                    if (selectedSkill) void onInstallSkill(selectedSkill);
-                    else if (selectedWorkflow)
-                      void onInstallWorkflow(selectedWorkflow);
-                  }}
-                >
-                  {cta.label}
-                </Button>
-              ) : null}
-              <IconButton
-                size="sm"
-                aria-label="关闭"
-                onClick={() => setOpen(null)}
-              >
-                <X size={16} />
-              </IconButton>
             </div>
-
-            <div
-              className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4"
-              data-testid={
-                open.kind === "workflow"
-                  ? "workflow-store-drawer"
-                  : "skill-store-drawer"
-              }
-            >
-              {detailError ? (
-                <p className="text-sm text-muted-foreground" role="alert">
-                  {detailError}
-                </p>
-              ) : null}
-              {showDescription ? (
-                <p className="text-sm text-foreground">{description}</p>
-              ) : null}
-              {detail?.content ? (
-                <div>
-                  <Button
-                    variant="ghost"
-                    onClick={() => setBodyOpen((prev) => !prev)}
-                  >
-                    {bodyOpen ? "收起正文" : "展开正文"}
-                  </Button>
-                  {bodyOpen ? (
-                    <PromptDocument
-                      className="mt-2"
-                      text={detail.content}
-                      compact={false}
-                      maxHeightClass="max-h-64"
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-              {wfDetail?.definition ? (
-                <div>
-                  <Button
-                    variant="ghost"
-                    onClick={() => setBodyOpen((prev) => !prev)}
-                  >
-                    {bodyOpen ? "收起定义" : "展开定义"}
-                  </Button>
-                  {bodyOpen ? (
-                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs text-foreground">
-                      {JSON.stringify(wfDetail.definition, null, 2)}
-                    </pre>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <div className="mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+          </DialogHeader>
+          <DialogBody className="flex min-h-0 flex-1 flex-col gap-4">
+            {detailError ? (
+              <p className="text-sm text-muted-foreground" role="alert">
+                {detailError}
+              </p>
+            ) : null}
+            {showDescription ? (
+              <p className="text-sm text-foreground">{description}</p>
+            ) : null}
+            {detail?.content ? (
+              <PromptDocument
+                text={detail.content}
+                compact={false}
+                maxHeightClass="max-h-none"
+              />
+            ) : null}
+            {wfDetail?.definition ? (
+              <div>
                 <Button
                   variant="ghost"
-                  disabled={busy || !open}
-                  onClick={() => setReportOpen(true)}
+                  onClick={() => setBodyOpen((prev) => !prev)}
                 >
-                  举报
+                  {bodyOpen ? "收起定义" : "展开定义"}
                 </Button>
+                {bodyOpen ? (
+                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs text-foreground">
+                    {JSON.stringify(wfDetail.definition, null, 2)}
+                  </pre>
+                ) : null}
               </div>
-            </div>
-          </aside>
-        ) : null}
-      </div>
+            ) : null}
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={busy || !open}
+              onClick={() => setReportOpen(true)}
+            >
+              举报
+            </Button>
+            {cta ? (
+              <Button
+                disabled={busy || cta.disabled}
+                onClick={() => {
+                  if (selectedSkill) void onInstallSkill(selectedSkill);
+                  else if (selectedWorkflow)
+                    void onInstallWorkflow(selectedWorkflow);
+                }}
+              >
+                {cta.label}
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
-        <DialogContent>
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle>
               举报
@@ -787,7 +865,7 @@ export function MarketPage() {
             </DialogTitle>
             <DialogDescription>说明原因，我们会人工查看。</DialogDescription>
           </DialogHeader>
-          <div className="block space-y-1 px-5">
+          <DialogBody className="space-y-1">
             <span className="text-muted-foreground text-xs">举报原因</span>
             <Textarea
               aria-label="举报原因"
@@ -796,10 +874,16 @@ export function MarketPage() {
               onChange={(event) => setReportReason(event.target.value)}
               disabled={busy}
             />
-          </div>
+          </DialogBody>
           <DialogFooter>
             <Button
-              variant="neutral"
+              variant="outline"
+              disabled={busy}
+              onClick={() => setReportOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
               disabled={busy || !reportReason.trim()}
               onClick={() => void onReport()}
             >

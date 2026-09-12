@@ -22,8 +22,7 @@ import type { ElementType, SceneElement } from "@/whiteboard";
 export interface BoardTurnOptions {
   signal?: AbortSignal;
   /** Called with the board's conversation id the instant it resolves — BEFORE the stream
-   * starts — so the host can subscribe the live run tree (M3 进度贴源) to this id while the
-   * turn runs, not only after it finishes. */
+   * starts — so the host can bind any live UI to this id while the turn runs. */
   onConversation?: (conversationId: string) => void;
 }
 
@@ -166,15 +165,14 @@ export const EMPTY_IMPLEMENT_BRIEF_HINT =
   "选区没有文字需求：请先写便签 / 选有文字的元素后再照这实现（手绘/截图可不写字）";
 
 /**
- * Compose the「让团队照这实现」turn prompt (AI协作白板.md §十 M3 发起入口).
+ * Compose the「让团队照这实现」turn prompt.
  *
- * The board counterpart of a chat brief that kicks off a TEAM run: it hands the selection /
- * `frame` to the CEO as the requirement brief and asks it to assemble the team and IMPLEMENT
- * — leaving the delegate / debate / 单干 call to the CEO (M3 §二 提案 A: reuse `sendBoardTurn`
- * + CEO autonomy, zero new orchestration). Mixes structured + visual payloads exactly like
- * {@link organizeSelectionPrompt} (§九): structured elements go as text the CEO targets by real
- * id; hand-drawn / screenshot ids are flagged for `board_read`. The CEO's progress + products
- * land back on the board (live overlay → crystallized `agentNode` / `artifactCard`).
+ * Hands the selection / `frame` to the CEO as the requirement brief and asks it to
+ * assemble the team and implement. Orchestration stays the CEO's call (`delegate` /
+ * debate / 单干). Mixes structured + visual payloads like {@link organizeSelectionPrompt}:
+ * structured elements go as text the CEO targets by real id; hand-drawn / screenshot ids
+ * are flagged for `board_read`. Finished work lands in the workspace; the board is only
+ * for drawing structure via `board_ops`.
  *
  * Callers must gate with {@link selectionHasImplementBrief} first — this composer still
  * accepts empty structured selections for unit isolation, but the canvas must not send them.
@@ -197,80 +195,12 @@ export function implementSelectionPrompt(
     );
   }
   out.push(
-    "实现过程中若要在白板上落结构或记录产物，用 board_ops；对已存在的元素请用它们的真实 id 操作。",
+    "成品交到工作区。若要在白板上落结构，用 board_ops；对已存在的元素请用它们的真实 id 操作。",
   );
 
   const structuredDesc = describeSelection(elements, structuredIds);
   if (structuredDesc) {
     out.push("", "选区中的结构化元素（即需求要点）：", structuredDesc);
   }
-  return out.join("\n");
-}
-
-/**
- * Compose the「在产物上迭代」turn prompt (AI协作白板.md §十 M3 Slice 4 贴源迭代).
- *
- * Closes the Make-Real loop: the user picks a crystallized `artifactCard` (its body may carry
- * their in-place edits) plus any annotations drawn beside it, and the CEO produces the NEXT
- * version. The previous product(s) are fed back verbatim as context (回喂上一版) and the rest of
- * the selection is the change request — structured notes as text, hand-drawn / screenshot ones
- * routed through `board_read` (§九 混合 payload), exactly like {@link implementSelectionPrompt}.
- *
- * The new version is delivered as a NEW product, never overwriting the old: the crystallizer
- * appends the next turn's run cards beside the existing ones (deduped by run id), so each round
- * leaves a visible trail (旧版留痕). Orchestration stays the CEO's call (提案 A).
- */
-export function iterateArtifactPrompt(
-  elements: readonly SceneElement[],
-  selectedIds: readonly string[],
-): string {
-  const byId = new Map(elements.map((el) => [el.id, el]));
-  const artifactIds: string[] = [];
-  const restIds: string[] = [];
-  for (const id of selectedIds) {
-    const el = byId.get(id);
-    if (!el) continue;
-    (el.type === "artifactCard" ? artifactIds : restIds).push(id);
-  }
-
-  const out: string[] = [
-    "我想在上一版产物的基础上再迭代一轮——请你带团队据此产出新版。",
-    "你作为 CEO 自行判断怎么改、要不要委派 / 辩论；新版作为新的产物交付，别覆盖旧版（旧版要留痕对比）。",
-  ];
-
-  const prev: string[] = [];
-  for (const id of artifactIds) {
-    const el = byId.get(id);
-    if (!el) continue;
-    const title = el.title?.trim() || "产物";
-    const body = el.text?.trim() ?? "";
-    prev.push(body ? `【${title}】\n${body}` : `【${title}】（空）`);
-  }
-  if (prev.length > 0) {
-    out.push(
-      "",
-      "上一版产物（供你回喂、改进；其中若有我的就地修改即为意见）：",
-      prev.join("\n\n"),
-    );
-  }
-
-  const { structuredIds, visualIds } = partitionSelection(elements, restIds);
-  if (visualIds.length > 0) {
-    out.push(
-      "",
-      `我在产物旁的批注里有手绘 / 截图（id：${visualIds.join("、")}），文字描述不了——请先 board_read 读懂再改。`,
-    );
-  }
-  const noteDesc = describeSelection(elements, structuredIds);
-  if (noteDesc) {
-    out.push("", "我的修改意见 / 批注：", noteDesc);
-  } else if (visualIds.length === 0) {
-    out.push("", "（这次没给额外批注，请你自行判断可改进点再迭代一版。）");
-  }
-
-  out.push(
-    "",
-    "落新版到白板或记录时用 board_ops；对已存在元素用真实 id 操作。",
-  );
   return out.join("\n");
 }

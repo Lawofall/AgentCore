@@ -1,6 +1,7 @@
 import { Button, Input } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -151,7 +152,7 @@ export function CloneRepoDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>
             {needsNewFolder ? "从 Git 克隆" : "克隆仓库"}
@@ -170,7 +171,7 @@ export function CloneRepoDialog({
             配置 PAT。
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 px-5 py-2">
+        <DialogBody className="space-y-3 py-2">
           <div className="space-y-1.5">
             <label className="text-xs font-medium" htmlFor="clone-url">
               仓库 URL
@@ -203,10 +204,10 @@ export function CloneRepoDialog({
               {error}
             </p>
           )}
-        </div>
+        </DialogBody>
         <DialogFooter>
           <Button
-            variant="neutral"
+            variant="outline"
             disabled={busy}
             onClick={() => onOpenChange(false)}
           >

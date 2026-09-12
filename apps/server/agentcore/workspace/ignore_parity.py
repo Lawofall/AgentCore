@@ -71,6 +71,12 @@ _SETS: tuple[tuple[str, str, str, str], ...] = (
         "AI_ARCHIVE_FILE_SUFFIXES",
         "array",
     ),
+    (
+        "ai_image_suffixes",
+        "AI_IMAGE_FILE_SUFFIXES",
+        "AI_IMAGE_FILE_SUFFIXES",
+        "array",
+    ),
 )
 
 # The renderer upload copy only mirrors the *system* tiers: AI-noise suffixes are

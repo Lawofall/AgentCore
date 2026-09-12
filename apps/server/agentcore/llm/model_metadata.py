@@ -79,13 +79,21 @@ _METADATA: dict[str, ModelMeta] = {
         capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
         context_length=1_000_000,
     ),
-    # Official preview wire id (BYOK). Exact row so the expires suffix is not
-    # humanized into the picker label; vision bit comes from image_accept.
+    # Official V4.1 Flash (BYOK). Vision bit comes from image_accept.
     DEEPSEEK_V41_FLASH: ModelMeta(
         display_name="DeepSeek V4.1 Flash",
         vendor="DeepSeek",
         capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
         context_length=1_000_000,
+    ),
+    # Retired two-day preview id — leftover chats only. Badge keeps
+    # (display_name, badge) unique vs the live V4.1 row.
+    "deepseek-v4.1-flash-expires-on-0910": ModelMeta(
+        display_name="DeepSeek V4.1 Flash",
+        vendor="DeepSeek",
+        capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
+        context_length=1_000_000,
+        badge="已下线",
     ),
     # Official DeepSeek vision SKU (exact id). Display only — vision bit is
     # overlaid from ``llm/image_accept``.

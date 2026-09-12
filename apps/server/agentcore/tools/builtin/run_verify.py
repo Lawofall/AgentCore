@@ -1,9 +1,9 @@
 """Bounded project verification kernel for the model-facing ``run`` tool.
 
-Install / test / typecheck / build / explicit command, with idle + disaster caps.
+Install / test / typecheck / build / explicit command, with a disaster-wall cap.
 Not a registered Tool — ``run`` classifies and calls :func:`execute_verify`.
 
-Idle hang → ``exec_timeout`` (exec-env family); disaster wall → ``exec_forced_stop`` /
+Silence is not a hang. Disaster wall → ``exec_forced_stop`` /
 ``contract_failure`` (verify incomplete), not circuit-breaker fuel.
 
 User ``check=command`` strings run in a real shell (``bash -lc``, or PowerShell
@@ -56,8 +56,6 @@ from agentcore.tools.protocol import ToolContext, ToolResult
 from agentcore.tools.sandbox.exec_env import (
     EXEC_DISASTER_TIMEOUT_S,
     EXEC_FORCED_STOP_CODE,
-    EXEC_IDLE_TIMEOUT_DEFAULT_S,
-    EXEC_IDLE_TIMEOUT_INSTALL_S,
     EXEC_TIMEOUT_CODE,
     TIMEOUT_LEGACY_MARKER,
     is_disaster_timeout_text,
@@ -70,16 +68,10 @@ Framework = Literal["pytest", "vitest", "jest"]
 Scope = Literal["all", "affected", "file"]
 CheckKind = Literal["test", "typecheck", "build", "install", "command"]
 
-# Outer-loop verify timeouts (定案：活性为主，灾难顶为辅；废弃「验证预算」合同):
-# - idle 60s (install 120s): no stdout/stderr → hang
-# - disaster 1200s: absolute safety net only
-# Disaster wall is the sandbox timeout; engine slack lives on the ``run`` face.
+# Outer-loop verify: disaster wall only (not a「验证预算」contract).
+# Silence does not kill. Engine slack lives on the ``run`` face.
 
 _VERIFY_DISASTER_SECONDS = EXEC_DISASTER_TIMEOUT_S
-# Back-compat aliases for tests importing old names (map to disaster ceiling).
-_VERIFY_BUDGET_STANDARD_SECONDS = _VERIFY_DISASTER_SECONDS
-_VERIFY_BUDGET_HEAVY_SECONDS = _VERIFY_DISASTER_SECONDS
-_VERIFY_BUDGET_SECONDS = _VERIFY_DISASTER_SECONDS
 _DEFAULT_TIMEOUT = _VERIFY_DISASTER_SECONDS
 
 # Heavy outer-loop shape (typecheck / build) — lengthens command= budget only.
@@ -200,22 +192,10 @@ _TIMEOUT_MARKER = TIMEOUT_LEGACY_MARKER  # legacy journals still match
 
 def resolve_verify_timeouts(
     check: CheckKind, argv: list[str] | None = None
-) -> tuple[int, int]:
-    """Return ``(disaster_wall_seconds, idle_silence_seconds)`` for outer verify.
-
-    Install idle follows argv: ``check=install`` or install-shaped command
-    (``pnpm add`` / ``pnpm install`` / ``uv sync`` via ``check=command``) uses 120s.
-    """
-    install_idle = check == "install" or (
-        argv is not None and is_install_shaped_argv(argv)
-    )
-    idle = EXEC_IDLE_TIMEOUT_INSTALL_S if install_idle else EXEC_IDLE_TIMEOUT_DEFAULT_S
-    return EXEC_DISASTER_TIMEOUT_S, idle
-
-
-def resolve_verify_budget_seconds(check: CheckKind, argv: list[str] | None = None) -> int:
-    """Deprecated alias — returns disaster ceiling only (idle is separate)."""
-    return resolve_verify_timeouts(check, argv)[0]
+) -> int:
+    """Disaster-wall seconds for outer verify. Silence does not kill."""
+    del check, argv
+    return EXEC_DISASTER_TIMEOUT_S
 
 
 def _make_output_callback(context: ToolContext):
@@ -1200,8 +1180,7 @@ async def execute_verify(arguments: dict[str, Any], context: ToolContext) -> Too
             metadata={"code": network_unavailable_code(), "check": check},
         )
     command_shell = shell_command if use_shell else _argv_to_shell(argv)
-    timeout_argv = next((p for p in payloads if is_install_shaped_argv(p)), argv)
-    budget_seconds, idle_seconds = resolve_verify_timeouts(check, timeout_argv)
+    budget_seconds = resolve_verify_timeouts(check)
     env: dict[str, str] | None = None
     cache_bucket: str | None = None
     if needs_install_net:
@@ -1225,7 +1204,7 @@ async def execute_verify(arguments: dict[str, Any], context: ToolContext) -> Too
         code=runner_code,
         language="python",
         timeout_seconds=budget_seconds,
-        idle_timeout_seconds=idle_seconds,
+        idle_timeout_seconds=None,
         on_output=_make_output_callback(context),
         network_mode="restricted" if allows_restricted else "none",
         cache_bucket=cache_bucket,
@@ -1422,7 +1401,7 @@ async def execute_verify(arguments: dict[str, Any], context: ToolContext) -> Too
         ok = (not budget_exceeded) and exec_result.exit_code == 0
         error: str | None
         if budget_exceeded and kind == "idle":
-            error = f"执行超过 {idle_seconds}s 无输出，已按挂起中止（未取得验证结果）"
+            error = "执行长时间无输出，已按挂起中止（未取得验证结果）"
         elif budget_exceeded:
             error = f"已跑满灾难顶 {budget_seconds}s，强制中止（未取得完整验证结果）"
         else:
@@ -1445,7 +1424,6 @@ async def execute_verify(arguments: dict[str, Any], context: ToolContext) -> Too
                 "check": check,
                 "code": meta_code,
                 "timeout_seconds": budget_seconds,
-                "idle_timeout_seconds": idle_seconds,
                 "exit_code": exec_result.exit_code,
                 **(
                     {"exec_env_timeout": True, "timeout_kind": kind}

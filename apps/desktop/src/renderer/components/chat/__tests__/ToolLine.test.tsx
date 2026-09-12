@@ -2109,8 +2109,7 @@ describe("ToolLine · channel redirect", () => {
     expect(container.querySelector(".text-destructive")).toBeNull();
     expect(screen.queryByText(/禁止用/)).toBeNull();
     fireEvent.click(screen.getByText("改用搜索"));
-    expect(screen.getByText(/我会改用搜索工具定位后再读文件/)).toBeTruthy();
-    expect(screen.queryByText(/禁止用 code_execute/)).toBeNull();
+    expect(screen.queryByText(/我会改用搜索工具定位后再读文件/)).toBeNull();
   });
 
   it("normalizes a legacy error + redirect code the same way", () => {

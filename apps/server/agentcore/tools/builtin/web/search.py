@@ -554,7 +554,7 @@ class WebSearchTool:
             description=(
                 "搜索互联网获取实时信息（新闻、事实、天气、公司信息、概念定义等）。"
                 "返回按相关性排序的标题、链接与内容摘要；默认摘要优先。"
-                "先一两个聚焦查询看摘要，再决定是否补搜；不要一上来并行抛一堆没看过的猜测。"
+                "先一两个聚焦查询看摘要，再决定是否补搜。"
                 "核对原文用 web_fetch。"
             ),
             parameters={
@@ -563,14 +563,10 @@ class WebSearchTool:
                     "query": {
                         "type": "string",
                         "description": (
-                            "搜索查询词。请精简到核心词"
-                            "（超限会自动规范化/截断并明示实搜词；仅极端过长拒绝）："
-                            f"纯拉丁语系≤{_QUERY_LATIN_WORD_LIMIT} 个词；"
-                            f"含中文时按加权字数≤{_QUERY_CJK_CHAR_LIMIT}"
-                            f"（中文按字计、英文单词每词折 {_QUERY_LATIN_WORD_WEIGHT} 字）；"
-                            "长专名/法规名用书名号或引号包住可豁免此上限"
-                            "（报错原文、专有名等亦同）。"
-                            "建议一次只搜 2–3 个核心词，其余概念下一轮再搜。"
+                            "搜索查询词"
+                            f"（纯拉丁语系≤{_QUERY_LATIN_WORD_LIMIT} 个词；"
+                            f"含中文时≤{_QUERY_CJK_CHAR_LIMIT} 字）；"
+                            "长专名/法规名用书名号或引号包住。"
                         ),
                     },
                     "max_results": {

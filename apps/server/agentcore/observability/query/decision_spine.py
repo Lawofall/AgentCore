@@ -99,6 +99,8 @@ _TAIL_METRIC_FIELDS = (
     "status",
     "finish_reason",
     "error",
+    "error_code",
+    "error_type",
     "rounds",
     "duration_ms",
     "delegated",
@@ -520,8 +522,12 @@ def _tail_from_close(close: dict[str, Any] | None) -> dict[str, Any]:
 def _tail_from_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     tail: dict[str, Any] = {"source": "turn_metrics"}
     for f in _TAIL_METRIC_FIELDS:
-        if f in metrics:
-            tail[f] = metrics[f]
+        if f not in metrics:
+            continue
+        val = metrics[f]
+        if val is None or val == "":
+            continue
+        tail[f] = val
     if "kind" in metrics:
         tail["kind"] = metrics["kind"]
     if "mode" in metrics:
@@ -718,7 +724,7 @@ def build_decision_spine(
                 tail["reply_preview"] = close.get("reply_preview")
             for k in ("error_type", "error_code"):
                 val = close.get(k)
-                if val and k not in tail:
+                if val and not tail.get(k):
                     tail[k] = val
     else:
         tail = _tail_from_close(close)
@@ -1020,16 +1026,16 @@ def format_decision_spine(spine: dict[str, Any]) -> str:
     lines.append("  Tail  " + " · ".join(b for b in tail_bits if b))
     if collab:
         lines.append("         collab: " + " · ".join(collab))
+    err_bits: list[str] = []
+    if tail.get("error_code"):
+        err_bits.append(f"error_code={tail['error_code']}")
+    if tail.get("error_type"):
+        err_bits.append(f"error_type={tail['error_type']}")
     if tail.get("error"):
-        extra = f"  error_type={tail['error_type']}" if tail.get("error_type") else ""
+        extra = ("  " + " ".join(err_bits)) if err_bits else ""
         lines.append(f"         error: {tail['error']}{extra}")
-    elif tail.get("error_type") or tail.get("error_code"):
-        bits = []
-        if tail.get("error_code"):
-            bits.append(f"error_code={tail['error_code']}")
-        if tail.get("error_type"):
-            bits.append(f"error_type={tail['error_type']}")
-        lines.append("         error: " + " ".join(bits))
+    elif err_bits:
+        lines.append("         error: " + " ".join(err_bits))
 
     # 两口径提示：llm 全 trace vs tail 收口折账（resume 常见差）。
     llm_in = int(llm.get("input_tokens") or 0)

@@ -1,7 +1,6 @@
 """L3 team-browser (M0) sandbox session surface — long-lived Chromium in gVisor.
 
-See ``docs/04-前端/前端技术与架构.md`` §9.12（BrowserSession）and the channel PoC
-(``apps/server/scripts/poc_browser_gvisor``). This package holds the sandbox-side
+See ``docs/04-前端/前端技术与架构.md`` §9.12（BrowserSession）. This package holds the sandbox-side
 control channel (driver + stdio RPC), the network isolation (netns + veth), the
 SSRF egress proxy, and the runsc session orchestration.
 """

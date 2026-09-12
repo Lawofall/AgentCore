@@ -120,10 +120,7 @@ _PURPOSE_PARAM = {
 
 _SESSION_ID_PARAM = {
     "type": "string",
-    "description": (
-        "可选：目标浏览器 Session id；缺省解析顺序＝"
-        "本 run 已绑定 → 对话内唯一/激活 → 新建并绑定本 run。"
-    ),
+    "description": "可选：目标浏览器 Session id。",
 }
 
 # Single face — CEO+worker for every action (including screenshot).
@@ -637,16 +634,13 @@ BROWSER_TOOL_PARAMETERS: dict[str, Any] = {
             "enum": sorted(_ALLOWED_ACTIONS),
             "description": (
                 "navigate / click / type / scroll / snapshot / console / screenshot。"
-                "打开网页先 navigate。验收 HOW→consult(browser)。"
             ),
         },
         "url": {
             "type": "string",
             "description": (
-                "navigate：公网完整 http(s) URL；"
-                "或（仅桌面 Local Bridge）本会话工作区相对 HTML 路径"
-                "（如 site/index.html），与用户「完整预览」同源。"
-                "不支持 file://；云端沙箱下相对路径会失败。"
+                "navigate：公网 http(s) 或工作区相对 HTML 路径"
+                "（与完整预览同源；禁 file://）。"
             ),
         },
         "ref": {
@@ -655,12 +649,7 @@ BROWSER_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "text": {
             "type": "string",
-            "description": (
-                "type：要填入的文本（替换该输入框已有内容）。"
-                "遇 password 角色输入框硬拒（metadata.code=password_blocked）："
-                "worker 用 escalate(blocking=true, browser_login=true)；"
-                "CEO 用 ask_user(browser_login=true)。"
-            ),
+            "description": "type：要填入的文本（替换该输入框已有内容）。密码框硬拒。",
         },
         "snapshot_version": {
             "type": "integer",
@@ -684,7 +673,6 @@ class BrowserTool(_BrowserToolBase):
             name="browser",
             description=(
                 "右坞真实 Chromium（本机 Local Bridge 或云端沙箱）。"
-                "禁编造 browser_open。"
                 "静态摘录用 web_fetch（非右坞直播）。"
                 "HOW→consult(browser)。"
             ),

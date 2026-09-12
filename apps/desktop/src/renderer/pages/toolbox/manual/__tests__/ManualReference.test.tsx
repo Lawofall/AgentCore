@@ -129,6 +129,7 @@ describe("ManualReference", () => {
     expect(screen.getByText("接续链")).toBeTruthy();
     expect(screen.getAllByText("画布").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("白板").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("文档").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("自主度").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("工作流").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("系统任务")).toBeNull();

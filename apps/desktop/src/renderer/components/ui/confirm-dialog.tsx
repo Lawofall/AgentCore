@@ -1,4 +1,3 @@
-import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button, type ButtonVariant } from "./button";
@@ -73,7 +72,8 @@ export function ConfirmDialog({
     <Dialog open={open} onOpenChange={requestClose}>
       <DialogContent
         showClose={!busy}
-        className={cn("max-w-md", className)}
+        size="md"
+        className={className}
         onEscapeKeyDown={(e) => {
           if (busy) e.preventDefault();
         }}

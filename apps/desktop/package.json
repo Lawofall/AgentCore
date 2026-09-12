@@ -1,6 +1,6 @@
 {
   "name": "agentcore-desktop",
-  "version": "0.9.25",
+  "version": "0.9.26",
   "description": "AgentCore Desktop - Multi-Agent AI Workspace",
   "author": "AgentCore",
   "main": "./out/main/index.js",
@@ -63,8 +63,7 @@
     "jszip": "^3.10.1",
     "node-pty": "^1.1.0",
     "perfect-freehand": "^1.2.3",
-    "react-material-icon-theme": "1.2.0",
-    "recharts": "^3.9.2"
+    "react-material-icon-theme": "1.2.0"
   },
   "devDependencies": {
     "@agentcore/contract-rest-types": "workspace:*",
@@ -112,7 +111,6 @@
     "electron": "^42.5.1",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
-    "elkjs": "^0.9.0",
     "jsdom": "^29.1.1",
     "katex": "^0.17.0",
     "lucide-react": "^0.400.0",

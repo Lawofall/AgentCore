@@ -620,7 +620,7 @@ export class SidecarManager {
         browserBridge: currentBrowserBridge(),
         // 会话权限轴按回合随送：中途切换后下一回合即生效。
         ...(req.permissionAxes ? { permissionAxes: req.permissionAxes } : {}),
-        // 项目归属：键始终下发（含 null=裸聊），使引擎优先用 params、旧桌面缺键才查库。
+        // 项目归属：键始终下发（含 null=裸聊）；引擎缺键诚实失败请更新桌面，不再查本机库。
         folderId: req.folderId ?? null,
         // 项目本地绑定（FolderMeta 同形）：进 RPC 供拼 workspace key；与 rootId/subpath
         // 寻址分离（后者只经 ensure，不进本 params）。

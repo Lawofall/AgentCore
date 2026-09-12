@@ -1,11 +1,9 @@
-import { SectionLabel } from "@/components/ui";
+import { CATALOG_GRID_CLASS, SectionLabel } from "@/components/ui";
 import type { ReactNode } from "react";
 
-export const SHELF_TILE_CLASS = "w-[240px] shrink-0 snap-start";
-
 /**
- * App Store-style collection row: title + optional See All, then a
- * horizontal snap scroller of fixed-width tiles.
+ * Discover collection: title + optional See All, then the shared wrapping
+ * catalog grid (same tiles as 提示词 / 创作). Not a horizontal scroller.
  */
 export function ShelfRail({
   title,
@@ -30,9 +28,7 @@ export function ShelfRail({
           </button>
         ) : null}
       </div>
-      <div className="mt-3 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 scrollbar-hidden">
-        {children}
-      </div>
+      <div className={`mt-3 ${CATALOG_GRID_CLASS}`}>{children}</div>
     </section>
   );
 }

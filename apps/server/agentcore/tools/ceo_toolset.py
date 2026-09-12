@@ -256,7 +256,3 @@ async def wire_worker_consult(
         user_id=user_id,
         skill_audience=AUDIENCE_WORKER,
     )
-
-
-# Historical name used by tests / resume imports.
-_wire_worker_consult_tools = wire_worker_consult

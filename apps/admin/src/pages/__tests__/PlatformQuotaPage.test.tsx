@@ -12,6 +12,7 @@ import {
   fetchSystemStatus,
 } from "@/services/adminSystem";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/adminSystem", () => ({ fetchSystemStatus: vi.fn() }));
@@ -45,6 +46,14 @@ function status(overrides: Partial<AdminSystemStatus> = {}): AdminSystemStatus {
   };
 }
 
+function renderQuota() {
+  return render(
+    <MemoryRouter>
+      <PlatformQuotaPage />
+    </MemoryRouter>,
+  );
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -53,7 +62,7 @@ afterEach(() => {
 describe("PlatformQuotaPage", () => {
   it("renders billing mode, global defaults, and the restart caveat", async () => {
     fetchSystemStatusMock.mockResolvedValue(status());
-    render(<PlatformQuotaPage />);
+    renderQuota();
 
     expect(await screen.findByText("计费模式")).toBeTruthy();
     expect(screen.getByText("平台付费")).toBeTruthy();
@@ -64,7 +73,7 @@ describe("PlatformQuotaPage", () => {
 
   it("shows BYOK framing when billing_mode is byok", async () => {
     fetchSystemStatusMock.mockResolvedValue(status({ billing_mode: "byok" }));
-    render(<PlatformQuotaPage />);
+    renderQuota();
 
     expect(await screen.findByText("BYOK · 自带 Key")).toBeTruthy();
     expect(screen.getByText(/配额防线休眠/)).toBeTruthy();
@@ -72,14 +81,14 @@ describe("PlatformQuotaPage", () => {
 
   it("renders the credential pool card independently of the snapshot", async () => {
     fetchSystemStatusMock.mockResolvedValue(status());
-    render(<PlatformQuotaPage />);
+    renderQuota();
 
     expect(await screen.findByText("平台额度账号")).toBeTruthy();
   });
 
   it("still shows the pool card when the snapshot request fails", async () => {
     fetchSystemStatusMock.mockRejectedValue(new Error("down"));
-    render(<PlatformQuotaPage />);
+    renderQuota();
 
     expect(await screen.findByText("发生未知错误")).toBeTruthy();
     expect(screen.queryByText("计费模式")).toBeNull();
@@ -88,7 +97,7 @@ describe("PlatformQuotaPage", () => {
 
   it("header refresh also reloads the credential pool", async () => {
     fetchSystemStatusMock.mockResolvedValue(status());
-    render(<PlatformQuotaPage />);
+    renderQuota();
     expect(await screen.findByText("平台付费")).toBeTruthy();
 
     await waitFor(() =>
@@ -108,7 +117,7 @@ describe("PlatformQuotaPage", () => {
 
   it("keeps the previous snapshot on screen while refreshing", async () => {
     fetchSystemStatusMock.mockResolvedValue(status());
-    render(<PlatformQuotaPage />);
+    renderQuota();
     await screen.findByText("平台付费");
 
     let resolve!: (v: AdminSystemStatus) => void;

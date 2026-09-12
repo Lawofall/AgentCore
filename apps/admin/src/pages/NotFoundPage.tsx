@@ -28,7 +28,7 @@ export function NotFoundPage() {
         </p>
         <div className="mt-2 flex items-center gap-2">
           <Button size="sm" onClick={() => navigate("/overview")}>
-            回到概览
+            回到总览
           </Button>
           <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
             返回上一页

@@ -10,9 +10,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.api.dependencies import (
     AuthUser,
+    get_db,
     get_folder_repo,
     get_user_workflow_repo,
 )
@@ -31,7 +33,11 @@ from agentcore.api.schemas.workflows import (
 )
 from agentcore.core.errors import NotFoundError, ValidationError
 from agentcore.core.types import new_id
-from agentcore.db.repositories import FolderRepository, UserWorkflowRepository
+from agentcore.db.repositories import (
+    FolderRepository,
+    UserWorkflowRepository,
+    WorkflowStoreRepository,
+)
 from agentcore.workflows.paths import webhook_path
 from agentcore.workflows.playbook_templates import (
     PlaybookTemplateError,
@@ -176,11 +182,13 @@ async def update_workflow(
 async def delete_workflow(
     workflow_id: str,
     user: AuthUser,
+    session: AsyncSession = Depends(get_db),
     repo: UserWorkflowRepository = Depends(get_user_workflow_repo),
 ):
     ok = await repo.delete(workflow_id, user_id=user.user_id)
     if not ok:
         raise NotFoundError("工作流不存在")
+    await WorkflowStoreRepository(session).delete_installs_for_workflows([workflow_id])
     return StatusResponse()
 
 

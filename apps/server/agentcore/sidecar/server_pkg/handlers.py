@@ -512,8 +512,7 @@ class HandlerMixin:
 
         Permission axes stay client-pushed — the desktop re-sends them on every
         startTurn / resume so a mid-session switch applies to the next turn.
-        (``folderId`` is resolved in ``_run_turn`` from params when present; DB
-        fallback only when the key is absent.)
+        (``folderId`` is required on startTurn — null = bare; missing key fails.)
         Absent / invalid ⇒ keep the current bag / initialize default.
         Per-conversation bag is stamped so harvest never reads another conv's last write.
         """

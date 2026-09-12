@@ -38,6 +38,9 @@ describe("skillStore", () => {
     expect(skillStoreListQuery({ q: "合同", page: 2 })).toBe(
       "?q=%E5%90%88%E5%90%8C&page=2&page_size=24",
     );
+    expect(skillStoreListQuery({ group: "research", page: 1 })).toBe(
+      "?group=research&page=1&page_size=24",
+    );
     apiGet.mockResolvedValue({
       data: [
         {
@@ -119,9 +122,10 @@ describe("skillStore", () => {
       has_update: false,
       source_document_id: "d1",
     });
-    await publishSkill("d1");
+    await publishSkill("d1", "writing");
     expect(apiPost).toHaveBeenCalledWith("/v1/skill-store", {
       document_id: "d1",
+      group: "writing",
     });
     apiPost.mockResolvedValue(undefined);
     await reportSkill("l1", "垃圾");

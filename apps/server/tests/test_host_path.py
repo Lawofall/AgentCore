@@ -5,6 +5,7 @@ from agentcore.workspace.host_path import (
     is_forbidden_host_root,
     mode_covers,
     split_host_parent,
+    workspace_rel_under_disk_root,
 )
 
 
@@ -81,6 +82,19 @@ def test_split_host_parent():
     p2, n2 = split_host_parent("/tmp/foo.pdf")
     assert n2 == "foo.pdf"
     assert p2 == "/tmp"
+
+
+def test_workspace_rel_under_disk_root(tmp_path):
+    child = tmp_path / "src" / "a.md"
+    child.parent.mkdir()
+    child.write_text("x", encoding="utf-8")
+    assert workspace_rel_under_disk_root(str(tmp_path), tmp_path) == "."
+    assert workspace_rel_under_disk_root(str(child), tmp_path) == "src/a.md"
+    outside = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside.mkdir()
+    assert workspace_rel_under_disk_root(str(outside), tmp_path) is None
+    assert workspace_rel_under_disk_root("docs/a.md", tmp_path) is None
+    assert workspace_rel_under_disk_root("~/Downloads", tmp_path) is None
 
 
 def test_mode_covers_rank():

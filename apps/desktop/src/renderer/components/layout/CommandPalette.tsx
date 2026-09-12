@@ -584,8 +584,8 @@ export function CommandPalette() {
     >
       <DialogContent
         position="top"
+        size="xl"
         showClose={false}
-        className="max-w-xl"
         aria-describedby={undefined}
         onOpenAutoFocus={(e) => {
           e.preventDefault();

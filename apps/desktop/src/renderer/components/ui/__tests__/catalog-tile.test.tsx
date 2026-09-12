@@ -85,6 +85,7 @@ describe("CatalogTile", () => {
 
   it("sizes shelf columns to fill the canvas", () => {
     expect(CATALOG_GRID_CLASS).toContain("1fr");
+    expect(CATALOG_GRID_CLASS).toContain("auto-fill");
   });
 
   it("muted tiles are not buttons even with onClick", () => {

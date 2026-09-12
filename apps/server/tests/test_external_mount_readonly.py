@@ -344,6 +344,16 @@ async def test_external_ns_cloud_attach_rw_does_not_upgrade():
     channel.request_external_mount.assert_not_called()
 
 
+def test_cloud_attach_rw_receipt_is_not_writable_home():
+    from agentcore.workspace.ensure_host_path import _CLOUD_ATTACH_RW
+
+    assert "加成可覆盖写根" in _CLOUD_ATTACH_RW
+    assert "原件" in _CLOUD_ATTACH_RW
+    assert "不覆盖" in _CLOUD_ATTACH_RW
+    assert "file_copy" in _CLOUD_ATTACH_RW
+    assert "已经能改" not in _CLOUD_ATTACH_RW
+
+
 def test_event_carries_root_id():
     from agentcore.runtime.events.desktop import external_mount_required
 
@@ -432,6 +442,310 @@ async def test_hot_attach_keeps_live_only_abs_mount(tmp_path):
     )
     mounts = await attach_grants_to_backend(backend, "conv-keep")
     assert "old" in mounts
+    assert mounts["extra"].abs_path == extra
+    assert backend._mounts["extra"].abs_path == extra  # noqa: SLF001
+
+
+def _folders_ticket():
+    from agentcore.folders.credentials import FoldersCredentials
+
+    return FoldersCredentials(
+        api_key="tok", base_url="https://api.example.com/v1/folders"
+    )
+
+
+def _spy_grant_store(monkeypatch):
+    add = AsyncMock(side_effect=AssertionError("grant_store.add_grant"))
+    as_dict = AsyncMock(side_effect=AssertionError("grant_store.grants_as_dict"))
+    monkeypatch.setattr(grant_store, "add_grant", add)
+    monkeypatch.setattr(grant_store, "grants_as_dict", as_dict)
+    return add, as_dict
+
+
+def _local_backend(tmp_path, *, label: str = "W"):
+    from agentcore.tools.sandbox.subprocess import SubprocessSandbox
+
+    return ServerWorkspace(
+        root=tmp_path,
+        sandbox=SubprocessSandbox(),
+        root_label=label,
+        location="local",
+    )
+
+
+def _mount_channel(value: dict):
+    channel = MagicMock()
+    channel.sink = MagicMock()
+    channel.registry = MagicMock()
+    channel.request_external_mount = AsyncMock(return_value=value)
+    return channel
+
+
+@pytest.mark.asyncio
+async def test_sidecar_workspace_root_abs_is_not_minted(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.core.is_sidecar_process", lambda: True
+    )
+    channel = MagicMock()
+    channel.request_external_mount = AsyncMock()
+    got = await prepare_tool_path(
+        str(tmp_path),
+        _ctx(
+            desktop_channel=channel,
+            backend=_local_backend(tmp_path),
+            conversation_id="conv-w",
+        ),
+        as_directory=True,
+    )
+    assert got == "."
+    channel.request_external_mount.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sidecar_workspace_child_abs_is_not_minted(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.core.is_sidecar_process", lambda: True
+    )
+    channel = MagicMock()
+    channel.request_external_mount = AsyncMock()
+    child = tmp_path / "src" / "a.md"
+    child.parent.mkdir()
+    child.write_text("x", encoding="utf-8")
+    got = await prepare_tool_path(
+        str(child),
+        _ctx(
+            desktop_channel=channel,
+            backend=_local_backend(tmp_path),
+            conversation_id="conv-w",
+        ),
+    )
+    assert got == "src/a.md"
+    channel.request_external_mount.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cloud_process_does_not_rewrite_abs_under_root(tmp_path, monkeypatch):
+    """Cloud API may report location=local; discriminator is sidecar process."""
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.core.is_sidecar_process", lambda: False
+    )
+    channel = _mount_channel(
+        {
+            "root_id": "root-1",
+            "alias": "w",
+            "label": "W",
+            "namespace": "external/w",
+        }
+    )
+    got = await prepare_tool_path(
+        str(tmp_path),
+        _ctx(
+            desktop_channel=channel,
+            backend=_local_backend(tmp_path),
+            conversation_id="conv-cloud-local",
+        ),
+        as_directory=True,
+    )
+    assert got == "external/w"
+    channel.request_external_mount.assert_awaited_once()
+    grants = await grant_store.list_grants("conv-cloud-local")
+    assert len(grants) == 1
+
+
+@pytest.mark.asyncio
+async def test_ticketed_sidecar_mint_skips_grant_store(tmp_path, monkeypatch):
+    from agentcore.folders.credentials import folders_credentials_scope
+    from agentcore.workspace.external_mounts import ExternalMount
+
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.core.is_sidecar_process", lambda: True
+    )
+    add, as_dict = _spy_grant_store(monkeypatch)
+    outside = tmp_path.parent / f"{tmp_path.name}-desk"
+    outside.mkdir()
+    abs_dir = str(outside)
+    backend = _local_backend(tmp_path)
+    backend.attach_external_mounts(
+        {
+            "desk": ExternalMount(
+                alias="desk",
+                root_id="root-1",
+                label="桌面",
+                abs_path=abs_dir,
+                mode="readonly",
+            )
+        }
+    )
+    channel = _mount_channel(
+        {
+            "root_id": "root-1",
+            "alias": "desk",
+            "label": "桌面",
+            "namespace": "external/desk",
+        }
+    )
+    with folders_credentials_scope(_folders_ticket()):
+        got = await prepare_tool_path(
+            str(outside),
+            _ctx(
+                desktop_channel=channel,
+                backend=backend,
+                conversation_id="conv-tix",
+            ),
+            as_directory=True,
+        )
+    assert got == "external/desk"
+    add.assert_not_called()
+    as_dict.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ticketed_sidecar_attach_skips_grant_store(tmp_path, monkeypatch):
+    from agentcore.folders.credentials import folders_credentials_scope
+    from agentcore.workspace.external_mounts import ExternalMount
+
+    add, as_dict = _spy_grant_store(monkeypatch)
+    abs_dir = str(tmp_path / "desk")
+    backend = _local_backend(tmp_path)
+    backend.attach_external_mounts(
+        {
+            "desk": ExternalMount(
+                alias="desk",
+                root_id="r1",
+                label="桌面",
+                abs_path=abs_dir,
+                mode="readonly",
+            )
+        }
+    )
+    with folders_credentials_scope(_folders_ticket()):
+        mounts = await attach_grants_to_backend(backend, "conv-tix-attach")
+    assert mounts["desk"].abs_path == abs_dir
+    add.assert_not_called()
+    as_dict.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_unticketed_sidecar_host_path_still_uses_grant_store(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.core.is_sidecar_process", lambda: True
+    )
+    outside = tmp_path.parent / f"{tmp_path.name}-host"
+    outside.mkdir()
+    channel = _mount_channel(
+        {
+            "root_id": "root-1",
+            "alias": "host",
+            "label": "旁路",
+            "namespace": "external/host",
+        }
+    )
+    got = await prepare_tool_path(
+        str(outside),
+        _ctx(
+            desktop_channel=channel,
+            backend=_local_backend(tmp_path),
+            conversation_id="conv-old-sidecar",
+        ),
+        as_directory=True,
+    )
+    assert got == "external/host"
+    grants = await grant_store.list_grants("conv-old-sidecar")
+    assert len(grants) == 1
+
+
+@pytest.mark.asyncio
+async def test_ticketed_sidecar_upgrade_uses_live_not_grant_store(
+    tmp_path, monkeypatch
+):
+    from agentcore.folders.credentials import folders_credentials_scope
+    from agentcore.workspace.external_mounts import ExternalMount
+
+    add, as_dict = _spy_grant_store(monkeypatch)
+    abs_dir = str(tmp_path / "desk")
+    backend = _local_backend(tmp_path)
+    backend.attach_external_mounts(
+        {
+            "desk": ExternalMount(
+                alias="desk",
+                root_id="root-1",
+                label="桌面",
+                abs_path=abs_dir,
+                mode="readonly",
+            )
+        }
+    )
+    channel = _mount_channel(
+        {
+            "root_id": "root-1",
+            "alias": "desk",
+            "label": "桌面",
+            "namespace": "external/desk",
+        }
+    )
+    with folders_credentials_scope(_folders_ticket()):
+        got = await prepare_tool_path(
+            "external/desk/out.md",
+            _ctx(
+                desktop_channel=channel,
+                backend=backend,
+                conversation_id="conv-tix-up",
+            ),
+            grant_mode="organize",
+        )
+    assert got == "external/desk/out.md"
+    channel.request_external_mount.assert_awaited_once()
+    add.assert_not_called()
+    as_dict.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ticketed_sidecar_upgrade_without_live_skips_store(monkeypatch):
+    from agentcore.folders.credentials import folders_credentials_scope
+
+    add, as_dict = _spy_grant_store(monkeypatch)
+    backend = MagicMock()
+    backend.location = "local"
+    backend.root_label = "W"
+    backend._mounts = {}
+    channel = MagicMock()
+    channel.request_external_mount = AsyncMock()
+    with folders_credentials_scope(_folders_ticket()):
+        got = await prepare_tool_path(
+            "external/desk/out.md",
+            _ctx(
+                desktop_channel=channel,
+                backend=backend,
+                conversation_id="conv-tix-miss",
+            ),
+            grant_mode="organize",
+        )
+    assert got == "external/desk/out.md"
+    channel.request_external_mount.assert_not_called()
+    add.assert_not_called()
+    as_dict.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_hot_attach_empty_store_keeps_live_abs(tmp_path):
+    from agentcore.workspace.external_mounts import ExternalMount
+
+    extra = str(tmp_path / "extra")
+    backend = _local_backend(tmp_path)
+    backend.attach_external_mounts(
+        {
+            "extra": ExternalMount(
+                alias="extra",
+                root_id="r-new",
+                label="新目录",
+                abs_path=extra,
+                mode="readonly",
+            )
+        }
+    )
+    mounts = await attach_grants_to_backend(backend, "conv-empty-store")
     assert mounts["extra"].abs_path == extra
     assert backend._mounts["extra"].abs_path == extra  # noqa: SLF001
 

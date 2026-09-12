@@ -83,6 +83,10 @@ def test_code_search_schema_is_short_trigger_not_index_cookbook():
         assert token not in desc
     query = schema.parameters["properties"]["query"]["description"]
     assert "grep" not in query
+    prefix = schema.parameters["properties"]["path_prefix"]["description"]
+    assert "不确定时省略" in prefix
+    assert "禁止猜测" not in prefix
+    assert "Desktop" not in prefix
 
 
 @pytest.mark.asyncio

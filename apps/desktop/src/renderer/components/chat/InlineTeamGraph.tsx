@@ -1,5 +1,5 @@
 import { StatusStrip } from "@/components/chat/StatusStrip";
-import { teamGraphVisible } from "@/components/chat/debatePreviewPlacement";
+import { shouldShowTeamGraph } from "@/components/chat/debatePreviewPlacement";
 import { GraphView } from "@/components/graph/GraphView";
 import { shouldMountInlineGraphHost } from "@/components/graph/graphHost";
 import {
@@ -8,12 +8,6 @@ import {
 } from "@/components/graph/journalHydrate";
 import { executionGraphCapabilities } from "@/components/graph/planCapabilities";
 import { ContextualTip } from "@/components/onboarding/ContextualTip";
-import {
-  EMBED_DEFAULT_COL_WIDTH,
-  estimateBbox,
-  fitWidthBox,
-  workerGraphShape,
-} from "@/lib/elk-layout";
 import { ensureFullMessageRuns } from "@/services/messages";
 import { useConversationStore } from "@/stores/conversation";
 import { useStreamAwareDisclosure } from "@/stores/disclosure";
@@ -28,6 +22,12 @@ import {
 import { useGraphStore } from "@/stores/graph";
 import { useSidePanelStore } from "@/stores/sidePanel";
 import { turnDetailPath } from "@/stores/ui";
+import {
+  EMBED_DEFAULT_COL_WIDTH,
+  estimateBbox,
+  fitWidthBox,
+  workerGraphShape,
+} from "@agentcore/graph-layout";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -148,7 +148,7 @@ export function InlineTeamGraph({
     !execution ||
     execution.id !== executionId ||
     !caps.showsTeamGraph ||
-    !teamGraphVisible(execution.runs)
+    !shouldShowTeamGraph(execution.runs)
   ) {
     return null;
   }

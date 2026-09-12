@@ -152,8 +152,7 @@ describe("ProcessLane", () => {
     );
     expect(screen.getByText("改道")).toBeTruthy();
     expect(screen.queryByLabelText("error")).toBeNull();
-    fireEvent.click(screen.getByText("code_execute"));
-    expect(screen.getByText(/想用脚本打开源码再搜索/)).toBeTruthy();
+    expect(screen.queryByText(/想用脚本打开源码再搜索/)).toBeNull();
     expect(screen.queryByText(/禁止用/)).toBeNull();
   });
 

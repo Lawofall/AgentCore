@@ -42,15 +42,15 @@ export const BASELINE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 天
 // 本地代码执行（P2c）：镜像服务端 SubprocessSandbox。命令/扩展名一一对齐；
 // 进程 cwd = 绑定的本地根（让代码与文件工具同目录，呼应服务端 cwd=workspace）。
 //
-// 超时分工：本通道上限须能兑现 ``test_run`` 外环验收墙钟（typecheck/build 600s +
-// engine slack）；``code_execute`` 工具自身仍在服务端把请求 clamp 到 ≤60s，不靠本帽
-// 当工具上限。install/test 仍用较短预算，由服务端按 check 分档。
+// python 启动器按主机解析（PEP 394 / PEP 397），不是命令名 ``python``；
+// ``cmd`` 是解析后追加的旗标。javascript / bash 的 ``cmd[0]`` 仍是启动器名。
 export const EXEC_LANGS: Record<string, { cmd: string[]; ext: string }> = {
-  python: { cmd: ["python", "-u"], ext: ".py" },
+  python: { cmd: ["-u"], ext: ".py" },
   javascript: { cmd: ["node"], ext: ".js" },
   bash: { cmd: ["bash"], ext: ".sh" },
 };
-/** Workspace ``execute`` 通道墙钟上限（秒）。外环验收墙钟：≥ typecheck/build 600 + 30 slack。 */
+// 通道上限须覆盖前台 ``run`` 灾难顶（20min）+ engine slack。
+/** Workspace ``execute`` 通道墙钟上限（秒）。前台 run 灾难顶：≥ 1200 + 30 slack。 */
 export const EXEC_TIMEOUT_CAP_S = 1230;
 // 单流捕获硬上限：防失控输出占内存/撑大通道回填；模型可见截断（8000）由服务端
 // ExecutionResult.__post_init__ 统一处理，故此处留足余量、不抢那层语义。

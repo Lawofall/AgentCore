@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * Render tests for the admin 概览 landing page.
+ * Render tests for the admin 总览 landing page.
  *
- * 概览 pulls one bundle (`fetchOverview`) and used to drop half of it on the floor:
+ * 总览 pulls one bundle (`fetchOverview`) and used to drop half of it on the floor:
  * both 7-day trends were fetched and never drawn, and today's token usage had no
  * tile at all. These pin the whole bundle reaching the screen (with the trend
  * numbers readable, not just drawn), the refresh state keeping the previous
@@ -28,6 +28,13 @@ import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/adminOverview", () => ({ fetchOverview: vi.fn() }));
+vi.mock("@/services/adminSystem", () => ({
+  fetchSystemStatus: vi.fn(),
+}));
+vi.mock("@/services/releaseDrift", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/releaseDrift")>()),
+  fetchReleaseDrift: vi.fn(() => Promise.resolve(null)),
+}));
 
 afterEach(() => {
   cleanup();
@@ -113,8 +120,8 @@ function renderOverview() {
       <Routes>
         <Route path="/overview" element={<OverviewPage />} />
         <Route path="/replay/:id" element={<ReplayProbe />} />
-        <Route path="/quota" element={<div>平台额度页</div>} />
-        <Route path="/system" element={<div>系统页</div>} />
+        <Route path="/quota" element={<div>供给额度页</div>} />
+        <Route path="/conversations" element={<div>对话页</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -133,19 +140,15 @@ describe("OverviewPage", () => {
     expect(screen.getByText("输入 12万 · 输出 3万")).toBeTruthy();
   });
 
-  it("draws both 7-day trends it fetches, with the numbers readable", async () => {
+  it("draws the 7-day turn trend it fetches, with the numbers readable", async () => {
     vi.mocked(fetchOverview).mockResolvedValue(overview());
     renderOverview();
 
     await screen.findByText("今日活跃用户");
-    // 曾经只拉不画：两条趋势都要落到屏幕上，且不只有柱子——数值要可读。
-    const costTable = screen.getByRole("table", { name: /每日记账成本/ });
-    expect(within(costTable).getByText("2026-06-29")).toBeTruthy();
-    expect(within(costTable).getByText("¥2.00")).toBeTruthy();
     const turnTable = screen.getByRole("table", { name: /每日回合与错误数/ });
     expect(within(turnTable).getByText("40 / 2")).toBeTruthy();
-    expect(screen.getAllByTestId("cost-bar")).toHaveLength(1);
     expect(screen.getAllByTestId("turn-bar")).toHaveLength(1);
+    expect(screen.queryByRole("table", { name: /每日记账成本/ })).toBeNull();
   });
 
   it("keeps the previous snapshot on screen while refreshing", async () => {
@@ -204,21 +207,12 @@ describe("OverviewPage", () => {
     expect(await screen.findByText("今日活跃用户")).toBeTruthy();
   });
 
-  it("sends 计费模式 to 平台额度", async () => {
+  it("sends 计费模式 to 供给·额度", async () => {
     vi.mocked(fetchOverview).mockResolvedValue(overview());
     renderOverview();
     await screen.findByText("今日活跃用户");
 
     fireEvent.click(screen.getByRole("button", { name: /计费模式/ }));
-    expect(await screen.findByText("平台额度页")).toBeTruthy();
-  });
-
-  it("sends 数据库 to 系统", async () => {
-    vi.mocked(fetchOverview).mockResolvedValue(overview());
-    renderOverview();
-    await screen.findByText("今日活跃用户");
-
-    fireEvent.click(screen.getByRole("button", { name: /数据库/ }));
-    expect(await screen.findByText("系统页")).toBeTruthy();
+    expect(await screen.findByText("供给额度页")).toBeTruthy();
   });
 });

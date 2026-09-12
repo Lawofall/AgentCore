@@ -870,8 +870,13 @@ def test_cloud_short_run_engine_timeout_matches_local():
     args = {"command": "python -c 'print(1)'"}
     local = run_op_timeout_seconds(args, location="local")
     cloud = run_op_timeout_seconds(args, location="server")
-    assert local == 90.0
+    from agentcore.tools.builtin.run_verify import _VERIFY_DISASTER_SECONDS
+    from agentcore.tools.sandbox.exec_env import _ENGINE_TIMEOUT_SLACK_SECONDS
+
+    expected = float(_VERIFY_DISASTER_SECONDS + _ENGINE_TIMEOUT_SLACK_SECONDS)
+    assert local == expected
     assert cloud == local
+    assert run_op_timeout_seconds({"command": "pnpm test"}) == expected
     assert resolve_tool_timeout(_run_schema(), args, location="server") == cloud
     assert resolve_tool_timeout(_run_schema(), args, location="local") == local
 

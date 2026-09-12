@@ -1,18 +1,18 @@
 import { Button } from "@/components/ui";
 import {
+  type ContinuationChain,
   type Execution,
-  type RevisionChain,
-  revisionChains,
+  continuationChains,
 } from "@/stores/execution";
 import { Columns2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ComparePane } from "./ComparePane";
-import { RevisionOverview } from "./RevisionOverview";
-import { type ResolvedCell, revisionCells } from "./cells";
+import { ContinuationOverview } from "./ContinuationOverview";
+import { type ResolvedCell, continuationCells } from "./cells";
 
 /**
  * 「对比」透镜（协作图与双视图UX.md §六 两个入口：聊天内嵌 ⇄ 全屏放大）—— **定向唤回修订**的版本对比：一层**版本轨纵览**
- * （{@link RevisionOverview}：每条被改 worker 链的 `v1…vN` 胶片轨 + 聚焦精读）+ 一层**内容自适应
+ * （{@link ContinuationOverview}：每条被改 worker 链的 `v1…vN` 胶片轨 + 聚焦精读）+ 一层**内容自适应
  * 精读**（点任意两格 → 同一个 {@link ComparePane}：读作编辑给真·文本 diff、否则 2-up 渲染）。二者共享
  * 格子外壳、pick-two 选择、对比面。
  *
@@ -29,11 +29,11 @@ export function TurnCompare({
    * 都落在本回合可对比单元里才采纳（并直接进对比模式）；否则退回自然默认对。 */
   initialPair?: [string, string];
 }) {
-  const chains = useMemo(() => revisionChains(execution), [execution]);
+  const chains = useMemo(() => continuationChains(execution), [execution]);
 
   // 可选取单元（display order）——供 A/B pair 解析与默认对定序共用同一顺序。
   const cells = useMemo<ResolvedCell[]>(
-    () => (chains.length > 0 ? revisionCells(execution, chains) : []),
+    () => (chains.length > 0 ? continuationCells(execution, chains) : []),
     [execution, chains],
   );
 
@@ -97,7 +97,7 @@ export function TurnCompare({
         </Button>
       </div>
 
-      <RevisionOverview
+      <ContinuationOverview
         chains={chains}
         execution={execution}
         messageId={messageId}
@@ -117,10 +117,10 @@ export function TurnCompare({
  */
 function defaultPair(
   cells: ResolvedCell[],
-  chains: RevisionChain[],
+  chains: ContinuationChain[],
 ): [string, string] {
   if (cells.length === 0) return ["", ""];
-  const latestRun = (c: RevisionChain) =>
+  const latestRun = (c: ContinuationChain) =>
     c.versions[c.versions.length - 1].run.id;
   if (chains.length >= 2) return [latestRun(chains[0]), latestRun(chains[1])];
   const c = chains[0];

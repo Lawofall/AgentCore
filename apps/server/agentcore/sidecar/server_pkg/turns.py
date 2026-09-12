@@ -9,7 +9,7 @@ from typing import Any
 
 from agentcore.conversation.common import preview
 from agentcore.conversation.zero_output_rollback import maybe_discard_zero_output_outbox
-from agentcore.core.errors import InferenceTokenExpiredError
+from agentcore.core.errors import ClientTooOldError, InferenceTokenExpiredError
 from agentcore.core.log_context import log_context
 from agentcore.core.logging import get_logger
 from agentcore.core.types import new_id
@@ -175,50 +175,15 @@ def apply_rpc_folder_binding_to_suspension(
     suspension.folder_local_subpath = subpath
 
 
-async def load_conversation_folder_id(conversation_id: str) -> str | None:
-    """Same shape as cloud ``conversation/turns.py``: ``conv.folder_id`` via unscoped get.
-
-    Missing conversation → ``None`` (bare/global). Resume inherits via
-    ``suspension.folder_id`` written on the start-turn pause path.
-
-    DB unreachable → ``DatabaseUnavailableError`` (honest fail). Never invent a
-    cached ``folder_id`` or silently continue as bare chat (wrong project scope).
-    """
-    from agentcore.db.base import async_session_factory
-    from agentcore.db.errors import reraise_as_database_unavailable
-    from agentcore.db.repositories import ConversationRepository
-
-    try:
-        async with async_session_factory() as session:
-            conv = await ConversationRepository(session).get_by_id_unscoped(conversation_id)
-            if not conv:
-                return None
-            raw = getattr(conv, "folder_id", None)
-            return normalize_folder_id_param(raw)
-    except Exception as e:
-        reraise_as_database_unavailable(e)
-        raise
+class FolderIdRequiredError(ValueError):
+    """startTurn omitted the ``folderId`` key. Not a conversation lookup."""
 
 
-async def resolve_start_turn_folder_id(
-    params: dict[str, Any], conversation_id: str, *, skip_local_db: bool = False
-) -> str | None:
-    """Prefer RPC ``params.folderId``; only hit local PG when the key is absent (old desktop).
-
-    Key present (including explicit ``null`` / ``""``) → normalize, no DB.
-    Key missing + ``skip_local_db`` (folders/account ticket on this sidecar) →
-    ``None`` (never open local PG). Key missing without tickets →
-    ``load_conversation_folder_id`` (compat); connect refuse stays honest fail.
-    """
-    if "folderId" in params:
-        return normalize_folder_id_param(params.get("folderId"))
-    if skip_local_db:
-        logger.warning(
-            "sidecar.folder_id_uninjected_ticketed",
-            conversation_id=conversation_id,
-        )
-        return None
-    return await load_conversation_folder_id(conversation_id)
+def resolve_start_turn_folder_id(params: dict[str, Any]) -> str | None:
+    """Require RPC ``folderId`` (null/blank = bare). Missing key is not a lookup."""
+    if "folderId" not in params:
+        raise FolderIdRequiredError(ClientTooOldError().message)
+    return normalize_folder_id_param(params.get("folderId"))
 
 
 def _finish_str(result: dict[str, Any]) -> str | None:
@@ -345,6 +310,16 @@ class TurnExecutionMixin:
                 self._unregister_turn(turn_id)
             return
         user_message_id, message_id, trace_id = parsed_ids
+        try:
+            folder_id = resolve_start_turn_folder_id(params)
+        except FolderIdRequiredError as exc:
+            try:
+                await self._reply_error(
+                    request_id, protocol.INVALID_PARAMS, str(exc)
+                )
+            finally:
+                self._unregister_turn(turn_id)
+            return
         self._resolve_fifo_desktop_start(message_id)
         if str(params.get("queueId") or "").strip():
             self._mark_queue_turn(
@@ -431,8 +406,8 @@ class TurnExecutionMixin:
                 conversation_id=conversation_id,
                 message_id=message_id,
             )
-        # folder_id / baseline / pipeline sit inside try so begin_turn OPEN cannot
-        # stick forever when DB is down on the legacy fallback path (方案一 · 诚实失败).
+        # baseline / pipeline sit inside try so begin_turn OPEN cannot stick
+        # when later steps fail.
         pump: asyncio.Task[None] | None = None
         result: dict[str, Any] | None = None
         try:
@@ -484,14 +459,6 @@ class TurnExecutionMixin:
                 )
                 return
 
-            # Prefer params.folderId (desktop inject); key absent → DB load (old desktop).
-            # Explicit null/"" = bare chat — do not open local PG just to learn that.
-            folder_id = await resolve_start_turn_folder_id(
-                params,
-                conversation_id,
-                skip_local_db=self._folders_creds is not None
-                or self._account_creds is not None,
-            )
             # Same for Folder local bind (explore workspace_key): desktop stamps
             # localRootId/localSubpath so assemble never HARD-fails on PG-down.
             binding_injected, folder_local_root_id, folder_local_subpath = (

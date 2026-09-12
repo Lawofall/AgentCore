@@ -5,8 +5,8 @@
  * does not re-run ELK. Cap + LRU eviction keep renderer heap bounded.
  */
 
-import type { GroupLayout, NodeSizeMap } from "@/lib/elk-layout";
 import type { GraphEdge, GraphLayout } from "@/stores/graph";
+import type { GroupLayout, NodeSizeMap } from "@agentcore/graph-layout";
 import type { ActCardLayout } from "./actLod";
 import type { GraphFitMode } from "./useGraphViewport";
 

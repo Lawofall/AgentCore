@@ -3,18 +3,18 @@ import {
   buildGraphStructure,
 } from "@/components/graph/helpers";
 import type { GraphEdge } from "@/stores/graph";
-import { describe, expect, it } from "vitest";
-import type { SubTeamInput } from "../elk-layout";
 import {
   COMPOUND_LAYER_SPACING,
   EMBED_DEFAULT_COL_WIDTH,
   EMBED_MAX_HEIGHT,
   EMBED_MIN_HEIGHT,
+  type SubTeamInput,
   computeLayout,
   estimateBbox,
   fitWidthBox,
   workerGraphShape,
-} from "../elk-layout";
+} from "@agentcore/graph-layout";
+import { describe, expect, it } from "vitest";
 
 /** Derive compound sub-teams from delegate edges (mirrors buildGraphStructure). */
 function subTeamsFromEdges(edges: GraphEdge[]): SubTeamInput[] {

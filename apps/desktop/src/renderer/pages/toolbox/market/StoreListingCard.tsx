@@ -4,6 +4,8 @@ import {
   isOfficialAuthor,
   listingCopy,
 } from "@/pages/toolbox/market/listingCopy";
+import { skillStoreGroupLabel } from "@/pages/toolbox/market/skillStoreGroups";
+import type { SkillStoreGroup } from "@/services/skillStore";
 import type { LucideIcon } from "lucide-react";
 import { Store } from "lucide-react";
 
@@ -11,6 +13,7 @@ export type StoreShelfRow = {
   name: string;
   description: string;
   author: string;
+  group?: SkillStoreGroup;
   installed: boolean;
   hasUpdate: boolean;
 };
@@ -36,6 +39,13 @@ export function StoreListingCard({
       subtitle={row.author && !official ? row.author : undefined}
       description={copy.subtitle || undefined}
       onClick={onOpen}
+      tags={
+        row.group ? (
+          <Badge tone="muted" pill>
+            {skillStoreGroupLabel(row.group)}
+          </Badge>
+        ) : undefined
+      }
       accessory={
         official || row.hasUpdate || row.installed ? (
           <>

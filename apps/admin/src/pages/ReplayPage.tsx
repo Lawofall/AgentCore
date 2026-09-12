@@ -10,15 +10,14 @@ export function ReplayPage() {
    * Drill-ins carry their origin (roster page, filters and all) in router state so
    * 返回 lands back on the exact list the operator left. A pasted or bookmarked
    * `/replay/:id` has no such state: fall back to 对话, which is the section the
-   * sidebar already lights up for this route — 概览 sent you somewhere you were
+   * sidebar already lights up for this route — 总览 sent you somewhere you were
    * demonstrably not.
    */
   const from =
-    (location.state as { from?: string } | null)?.from ??
-    "/conversations/conversations";
+    (location.state as { from?: string } | null)?.from ?? "/conversations";
 
   if (!conversationId) {
-    return <Navigate to="/conversations/conversations" replace />;
+    return <Navigate to="/conversations" replace />;
   }
 
   return (

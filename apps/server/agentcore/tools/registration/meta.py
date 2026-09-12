@@ -102,7 +102,7 @@ class ToolRegistration:
     # Catalog-gated tools: listed on the roster + capability catalog, but NOT
     # auto-registered by ``build_worker_registry``. Callers wire them after the
     # registry is built (e.g. ``_wire_conversation_log_tools``). Same
-    # pattern as ``consult_memory``.
+    # pattern as ``consult``.
     manual_wire: bool = False
     # 落盘产物自报契约（见 :class:`FileProductsContract`）。**只有开发期棘轮读它**——
     # 引擎 / 台账一律读 ``ToolResult.file_products``，绝不按这个字段（更不按工具名）判谁产了

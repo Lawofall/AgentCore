@@ -6,6 +6,7 @@ import {
   copyWithOffset,
   distribute,
   nudge,
+  patchBox,
   reorder,
   reorderStep,
   setGroup,
@@ -247,6 +248,39 @@ describe("applyStyle", () => {
     );
     expect(find(out, "a")?.strokeWidth).toBeUndefined();
     expect(find(out, "a")?.stroke).toBe("#f00");
+  });
+});
+
+describe("patchBox", () => {
+  it("moves and resizes a single selection", () => {
+    const out = patchBox(
+      [el({ id: "a", x: 0, y: 0, width: 10, height: 10 })],
+      sel("a"),
+      {
+        x: 5,
+        width: 40,
+      },
+    );
+    expect(find(out, "a")).toMatchObject({ x: 5, y: 0, width: 40, height: 10 });
+  });
+
+  it("does not rotate arrows", () => {
+    const arrow: SceneElement = {
+      id: "a",
+      type: "arrow",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      schemaVersion: 1,
+    };
+    const out = patchBox([arrow], sel("a"), { rotation: 1 });
+    expect(find(out, "a")?.rotation).toBeUndefined();
+  });
+
+  it("ignores multi-selection", () => {
+    const els = [el({ id: "a" }), el({ id: "b" })];
+    expect(patchBox(els, sel("a", "b"), { x: 9 })).toBe(els);
   });
 });
 

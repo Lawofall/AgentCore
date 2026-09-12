@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -26,7 +27,7 @@ export function UploadReportDialog({
   const { uploaded, failures, ignored, truncated } = report;
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>上传结果</DialogTitle>
           <DialogDescription asChild>
@@ -42,7 +43,7 @@ export function UploadReportDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[50vh] space-y-4 overflow-y-auto">
+        <DialogBody className="max-h-[50vh] space-y-4">
           {failures.length > 0 && (
             <section className="space-y-1">
               <h3 className="text-sm font-medium">
@@ -85,10 +86,10 @@ export function UploadReportDialog({
               </ul>
             </section>
           )}
-        </div>
+        </DialogBody>
 
         <DialogFooter>
-          <Button variant="neutral" size="md" onClick={onClose}>
+          <Button variant="outline" size="md" onClick={onClose}>
             知道了
           </Button>
         </DialogFooter>

@@ -22,7 +22,7 @@ alwaysApply: false
 
 ## 单一定义源
 
-OKLCH 语义色单源：**`packages/design-tokens/`**（`tokens.css` 桌面 / `mobile-light.css` 手机）。需要新颜色 → 先加进 `packages/design-tokens/tokens.css`，再视需要映射 Tailwind 类。
+OKLCH 语义色单源：**`packages/design-tokens/src/tokens.css`**（桌面 + Capacitor 同树；手机只用浅色 `:root`）。需要新颜色 → 先加进该文件，再视需要映射 Tailwind 类。
 
 暗色大面近中性（chroma ≤0.006），品牌蓝只走 `primary` / 状态；层叠 canvas < card < popover；侧栏深于画布。数字只改 `tokens.css` `.dark`。禁把暗色表面重新涂满 255 蓝；禁借表面调整回头推高 primary 彩度。
 
@@ -31,7 +31,7 @@ OKLCH 语义色单源：**`packages/design-tokens/`**（`tokens.css` 桌面 / `m
 - **硬编码调色板与 hex**：`bg-blue-500`、`text-red-600`、`#3B82F6`、`bg-[#...]`。唯一彩色出口是语义 token。
 - **`hsl(var(--…))` 包裹**：token 已是 OKLCH，`hsl()` 会产出非法值。
 - **拿 `accent` 当成功色**：`accent` 是中性 hover 表面。成功一律 `success`。
-- **绕过 token 新建散色变量**：先评估能否复用，必须新增则进 `packages/design-tokens/tokens.css`。
+- **绕过 token 新建散色变量**：先评估能否复用，必须新增则进 `packages/design-tokens/src/tokens.css`。
 
 ## 登记例外
 

@@ -539,7 +539,7 @@ class DocumentRepository:
     ) -> list[Document]:
         """On-demand user-rule docs of one scope (``ai_maintained=false``, not memory topics).
 
-        These ride the「规则目录」+ ``consult_rule`` — never the always ``<设定>`` budget.
+        These ride the「规则目录」+ ``consult`` — never the always ``<设定>`` budget.
         Same convention-parent filter as :meth:`list_injectable_rules` for user rules,
         and the same user-disputed exclusion (a disputed entry leaves the catalog too).
         """
@@ -704,6 +704,18 @@ class DocumentRepository:
             )
         )
         return result.scalars().first()
+
+    async def live_ids(self, user_id: str, document_ids: Sequence[str]) -> set[str]:
+        if not document_ids:
+            return set()
+        result = await self._session.execute(
+            select(Document.id).where(
+                Document.user_id == user_id,
+                Document.id.in_(list(document_ids)),
+                Document.deleted_at.is_(None),
+            )
+        )
+        return set(result.scalars().all())
 
     async def list_children(
         self, user_id: str, *, parent_id: str | None

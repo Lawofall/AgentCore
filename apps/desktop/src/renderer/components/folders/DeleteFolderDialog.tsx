@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -50,7 +51,7 @@ export function DeleteFolderDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>删除文件夹「{name}」？</DialogTitle>
           <DialogDescription asChild>
@@ -96,7 +97,7 @@ export function DeleteFolderDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-5 pb-1">
+        <DialogBody className="pb-1">
           <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-foreground">
             <input
               type="checkbox"
@@ -108,11 +109,11 @@ export function DeleteFolderDialog({
               立即永久清除全部对话、云端文件与这张桌的设定（不可恢复）
             </span>
           </label>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button
-            variant="neutral"
+            variant="outline"
             size="md"
             onClick={() => handleOpenChange(false)}
           >

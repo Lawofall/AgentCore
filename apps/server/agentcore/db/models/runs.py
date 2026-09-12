@@ -444,6 +444,9 @@ class TurnMetricsRow(Base):
     finish_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # A soft error surfaced in the turn result (truncated); NULL on success.
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Investigation codes for log_timeline join (not user-facing copy).
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     rounds: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     duration_ms: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     # Both modes: ``turn_worker_stats`` (completed member workers = cost_runs

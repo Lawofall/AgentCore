@@ -131,12 +131,17 @@ class ToolUseStartPayload(WirePayload):
 class ToolFailure(WirePayload):
     """User-facing tool face on ``tool_use_end`` when ``status`` is ``error`` or ``redirect``.
 
-    ``message`` is Chinese product copy for the process timeline; ``code`` is a stable
-    code. Model-facing technical detail stays in ``result`` (unchanged).
+    ``code`` is always present. ``message`` is Chinese product copy for the process
+    timeline; absent when the row needs no user sentence (self-heal, or a redirect
+    whose compact title already states the outcome). Model-facing technical detail
+    stays in ``result``.
     """
 
-    message: str
     code: str
+    message: str | None = absent(
+        "Chinese product copy. Absent when the agent self-heals or the compact "
+        "row title is the whole user face."
+    )
 
 
 class ToolUseEndPayload(WirePayload):
@@ -153,8 +158,9 @@ class ToolUseEndPayload(WirePayload):
         json_schema_extra={"ts_type": "ToolDisplay"},
     )
     failure: ToolFailure | None = absent(
-        "Present when status is error or redirect: Chinese product message + stable "
-        "code. Model-facing technical text stays in result."
+        "Present when status is error or redirect: stable code; Chinese product "
+        "message only when the user must act or a constraint still holds. "
+        "Model-facing technical text stays in result."
     )
     run_id: str | None = absent("Worker-call tag; absent for the captain's own calls.")
     partial_failure: bool | None = absent(

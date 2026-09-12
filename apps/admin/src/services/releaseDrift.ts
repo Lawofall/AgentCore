@@ -11,7 +11,7 @@
  *    系统页也不显示这张卡。探针读不到只算「未知」，由页面用中性视觉呈现。
  */
 
-/** External CDN / website fetch budget — avoid hanging SystemPage Promise.all forever. */
+/** External CDN / website fetch budget — avoid hanging 总览 deploy snapshot Promise.all forever. */
 export const RELEASE_DRIFT_FETCH_TIMEOUT_MS = 8_000;
 
 /** 构建期注入的发布通道地址；本文件不保留任何默认域名。 */

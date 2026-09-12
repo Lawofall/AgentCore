@@ -431,11 +431,10 @@ class PausedTurnRepository:
     ) -> None:
         """Stamp a settled conclusion without requiring a ``paused_turns`` row.
 
-        Cloud :meth:`claim` writes this row in the same transaction that deletes the
-        frame. Sidecar never inserts ``paused_turns`` (local JSON is its frame), so a
-        later cloud ``POST .../resume`` would otherwise see ``outcome is None`` and
-        report the card as regenerated. Any leftover frame is dropped here too
-        (frame ⊕ outcome never coexist).
+        Cloud :meth:`claim` writes the outcome in the same transaction that deletes
+        the frame. This helper covers the no-frame case (any leftover frame is
+        dropped here too — frame ⊕ outcome never coexist). Ticketed sidecar
+        settlement does not call this: it must not open Postgres.
         """
         await self._session.execute(
             delete(PausedTurnRow).where(
@@ -1251,6 +1250,8 @@ class TurnMetricsRepository:
         status: str,
         finish_reason: str | None,
         error: str | None,
+        error_code: str | None = None,
+        error_type: str | None = None,
         rounds: int,
         duration_ms: int,
         delegated: bool,
@@ -1288,6 +1289,8 @@ class TurnMetricsRepository:
                 status=status,
                 finish_reason=finish_reason,
                 error=error,
+                error_code=error_code,
+                error_type=error_type,
                 rounds=rounds,
                 duration_ms=duration_ms,
                 delegated=delegated,

@@ -17,7 +17,9 @@ def _clear_rejected():
     clear_images_rejected()
 
 
-def test_deepseek_only_exact_vision_exp():
+def test_deepseek_only_exact_vision_ids():
+    assert model_accepts_images("deepseek-flash") is True
+    assert model_accepts_images("deepseek/deepseek-flash") is True
     assert model_accepts_images("deepseek-v4-flash-vision-exp") is True
     assert model_accepts_images("deepseek/deepseek-v4-flash-vision-exp") is True
     assert model_accepts_images("deepseek-v4.1-flash-expires-on-0910") is True

@@ -150,7 +150,7 @@ class DelegateTool:
         self._suspension_saver = suspension_saver
         self._suspension_deleter = suspension_deleter
         # Turn-level project scope, carried purely so a durable plan_review pause captures it
-        # into the frame — the resumed toolset re-wires consult_memory to the same project
+        # into the frame — the resumed toolset re-wires consult to the same project
         # (Agent记忆与知识系统 §二). Not used by the delegate drive itself.
         self._folder_id = folder_id
         # 跨文件夹指挥 · 嵌套默认目标桌（父 worker 的 target / 出生）；tasks 省略时继承。

@@ -145,6 +145,14 @@ from .demo_tape import (
     DemoTapeSummary,
 )
 from .devices import DeviceListResponse, DeviceRegistration, DeviceSummary
+from .docs import (
+    CreateDocRequest,
+    DocBodyWriteRequest,
+    DocDetail,
+    DocSummary,
+    DocWriteResult,
+    UpdateDocRequest,
+)
 from .files import RewriteRequest, RewriteResponse
 from .git_credentials import (
     GitCredentialView,
@@ -446,6 +454,13 @@ __all__ = [
     "BoardSceneWriteRequest",
     "BoardWriteResult",
     "BoardConversationResponse",
+    # docs (creation-tool 文档)
+    "CreateDocRequest",
+    "UpdateDocRequest",
+    "DocSummary",
+    "DocDetail",
+    "DocBodyWriteRequest",
+    "DocWriteResult",
     # bookmarks (消息收藏)
     "CreateBookmarkRequest",
     "BookmarkItem",

@@ -178,8 +178,9 @@ def tool_use_end(
 
     ``output`` is the model-facing result (wire field ``result``) — technical detail
     stays intact on failure. ``failure`` is the optional user face
-    (``{message, code}``) and is attached when ``success=False`` (``error`` or
-    ``redirect``). Channel-mismatch steers are ``status=redirect``, not ``error``.
+    (``{code}`` plus ``message`` when the user should read a sentence) and is
+    attached when ``success=False`` (``error`` or ``redirect``). Channel-mismatch
+    steers are ``status=redirect``, not ``error``.
     """
     from agentcore.runtime.engine.tool_channel_redirect import tool_wire_status
 
@@ -199,8 +200,10 @@ def tool_use_end(
     if not success and failure is not None:
         msg = str(failure.get("message") or "").strip()
         code = str(failure.get("code") or "").strip()
-        if msg and code:
-            payload["failure"] = {"message": msg, "code": code}
+        if code:
+            payload["failure"] = {"code": code}
+            if msg:
+                payload["failure"]["message"] = msg
     if run_id:
         payload["run_id"] = run_id
     if partial_failure:

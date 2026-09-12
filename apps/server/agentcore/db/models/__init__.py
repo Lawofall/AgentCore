@@ -33,6 +33,7 @@ from .conversations import (
     MessageBookmark,
 )
 from .devices import PushDeviceRow
+from .docs import Doc, DocShare
 from .documents import DisputedLine, Document
 from .email_auth import EmailChallenge, PendingRegistration
 from .llm_profiles import LlmModelProfile
@@ -92,6 +93,8 @@ __all__ = [
     "CostLedgerOutbox",
     "Credentials",
     "DisputedLine",
+    "Doc",
+    "DocShare",
     "Document",
     "EmailChallenge",
     "Folder",

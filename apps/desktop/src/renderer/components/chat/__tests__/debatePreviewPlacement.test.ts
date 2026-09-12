@@ -1,6 +1,5 @@
 import {
   shouldShowTeamGraph,
-  teamGraphVisible,
   teamHasStartedRuns,
 } from "@/components/chat/debatePreviewPlacement";
 import { describe, expect, it } from "vitest";
@@ -35,6 +34,15 @@ describe("shouldShowTeamGraph", () => {
       ]),
     ).toBe(true);
   });
+
+  it("工人已开跑 → 出图", () => {
+    expect(
+      shouldShowTeamGraph([
+        { status: "running", kind: "captain" },
+        { status: "running" },
+      ]),
+    ).toBe(true);
+  });
 });
 
 describe("teamHasStartedRuns", () => {
@@ -51,32 +59,5 @@ describe("teamHasStartedRuns", () => {
         { status: "pending" },
       ]),
     ).toBe(false);
-  });
-});
-
-describe("teamGraphVisible", () => {
-  const captainRunning = [
-    { status: "running" as const, kind: "captain" as const },
-    { status: "pending" as const },
-    { status: "pending" as const },
-  ];
-
-  it("pending 编制出图（leftover IX 不挡）", () => {
-    expect(teamGraphVisible(captainRunning)).toBe(true);
-  });
-
-  it("工人已开跑 → 出图", () => {
-    expect(
-      teamGraphVisible([
-        { status: "running", kind: "captain" },
-        { status: "running" },
-      ]),
-    ).toBe(true);
-  });
-
-  it("alias shouldShowTeamGraph", () => {
-    expect(teamGraphVisible(captainRunning)).toBe(
-      shouldShowTeamGraph(captainRunning),
-    );
   });
 });

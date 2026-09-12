@@ -122,7 +122,7 @@ describe("ModelKeyForm", () => {
     ).toBeTruthy();
   });
 
-  it("shows DeepSeek preset models as Input + datalist including deepseek-v4-flash", () => {
+  it("shows DeepSeek preset models as Input + datalist including deepseek-flash", () => {
     renderForm();
 
     fireEvent.change(providerSelect(), { target: { value: "deepseek" } });

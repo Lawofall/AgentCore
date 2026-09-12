@@ -69,3 +69,23 @@ declare global {
     __NATIVE_PLATFORM__?: "android" | "ios";
   }
 }
+
+declare module "@byok-presets" {
+  const data: {
+    comment?: string;
+    offProtocolModels: Record<
+      string,
+      "openai_responses" | "anthropic_messages"
+    >;
+    presets: Array<{
+      id: string;
+      label: string;
+      baseUrl: string;
+      baseUrlAliases?: string[];
+      defaultModel: string;
+      models: string[];
+      keyHelpUrl?: string;
+    }>;
+  };
+  export default data;
+}

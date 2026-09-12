@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { ButtonHTMLAttributes } from "react";
+import { type ButtonHTMLAttributes, forwardRef } from "react";
 
 export type IconButtonSize = "sm" | "md";
 export type IconButtonTone =
@@ -33,23 +33,23 @@ export interface IconButtonProps
 }
 
 /** Square icon-only button — sm = 28px, md = 32px per desktop-layout.mdc. */
-export function IconButton({
-  size = "sm",
-  tone = "default",
-  className,
-  type = "button",
-  ...props
-}: IconButtonProps) {
-  return (
-    <button
-      type={type}
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-lg transition-colors duration-fast motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
-        sizeClass[size],
-        toneClass[tone],
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
+  function IconButton(
+    { size = "sm", tone = "default", className, type = "button", ...props },
+    ref,
+  ) {
+    return (
+      <button
+        ref={ref}
+        type={type}
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center rounded-lg transition-colors duration-fast motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
+          sizeClass[size],
+          toneClass[tone],
+          className,
+        )}
+        {...props}
+      />
+    );
+  },
+);

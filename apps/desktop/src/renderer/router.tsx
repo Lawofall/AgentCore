@@ -5,6 +5,8 @@ import { NarrowBlockedPage } from "@/lib/narrowLayout";
 import { AskCommencePreviewPage } from "@/pages/AskCommencePreviewPage";
 import { ConversationsPage } from "@/pages/ConversationsPage";
 import { ConversationsPreviewPage } from "@/pages/ConversationsPreviewPage";
+import { DocEditorPage } from "@/pages/DocEditorPage";
+import { DocsPage } from "@/pages/DocsPage";
 import { FilesPage } from "@/pages/FilesPage";
 import { FilesPreviewPage } from "@/pages/FilesPreviewPage";
 import { FloatWindowPage } from "@/pages/FloatWindowPage";
@@ -31,7 +33,6 @@ import { UsageSettings } from "@/pages/more/UsageSettings";
 import { CreationPage } from "@/pages/toolbox/CreationPage";
 import { GuidelinesPage } from "@/pages/toolbox/GuidelinesPage";
 import { ToolboxShell } from "@/pages/toolbox/ToolboxShell";
-import { ToolsPage } from "@/pages/toolbox/ToolsPage";
 import {
   ManualCollaboration,
   ManualIntro,
@@ -78,6 +79,22 @@ export const router = createHashRouter([
       },
       { path: "files", element: <FilesPage /> },
       {
+        path: "docs",
+        element: (
+          <NarrowBlockedPage>
+            <DocsPage />
+          </NarrowBlockedPage>
+        ),
+      },
+      {
+        path: "docs/:docId",
+        element: (
+          <NarrowBlockedPage>
+            <DocEditorPage />
+          </NarrowBlockedPage>
+        ),
+      },
+      {
         path: "whiteboard",
         element: (
           <NarrowBlockedPage>
@@ -110,7 +127,10 @@ export const router = createHashRouter([
         children: [
           { index: true, element: <Navigate to="mine/skills" replace /> },
           { path: "mine/skills", element: <GuidelinesPage /> },
-          { path: "mine/tools", element: <ToolsPage /> },
+          {
+            path: "mine/tools",
+            element: <Navigate to={APP_PATHS.toolbox.mine.skills} replace />,
+          },
           { path: "mine/creation", element: <CreationPage /> },
           {
             path: "mine/mcp",
@@ -126,7 +146,7 @@ export const router = createHashRouter([
       },
       {
         path: "toolbox/tools",
-        element: <Navigate to={APP_PATHS.toolbox.mine.tools} replace />,
+        element: <Navigate to={APP_PATHS.toolbox.mine.skills} replace />,
       },
       {
         path: "toolbox/guidelines",
@@ -175,7 +195,7 @@ export const router = createHashRouter([
           { path: "reference", element: <ManualReference /> },
         ],
       },
-      // Day2 公共市场未落地：旧书签 #/explore 收向工具箱，避免「即将上线」空壳。
+      // 旧书签 #/explore 收向提示词；市场在 #/toolbox/market。
       {
         path: "explore",
         element: <Navigate to={APP_PATHS.toolbox.mine.skills} replace />,

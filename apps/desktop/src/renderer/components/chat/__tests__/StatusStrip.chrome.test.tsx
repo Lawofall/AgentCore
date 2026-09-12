@@ -6,7 +6,6 @@
  * 数据字段 / formatCollabSummary / teamPreviewLead 仍保留，只是不画在这条上。
  */
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { formatCollabSummary } from "@/lib/collabSummary";
 import { conversationKeys } from "@/lib/queryKeys";
 import {
   type ExecutionPlan,
@@ -15,6 +14,7 @@ import {
   projectExecution,
   useExecutionStore,
 } from "@/stores/execution";
+import { formatCollabSummary } from "@agentcore/protocol-fold-kit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";

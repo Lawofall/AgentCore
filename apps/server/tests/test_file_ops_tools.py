@@ -831,11 +831,15 @@ def test_file_read_schema_teaches_default_full_read():
     desc = schema.description
     assert "grep" in desc or "code_search" in desc
     assert "glob" in desc
-    assert "dump" in desc
+    assert "dump" not in desc
     assert "web_fetch" in desc
     assert "file_list" in desc
-    assert "web_fetch" in schema.parameters["properties"]["path"]["description"]
-    assert "默认不抽文本" in schema.parameters["properties"]["path"]["description"]
+    assert "consult(local_desk)" in desc
+    assert "Desktop" not in desc
+    path_desc = schema.parameters["properties"]["path"]["description"]
+    assert "web_fetch" not in path_desc
+    assert "默认不抽文本" in path_desc
+    assert "Desktop" not in path_desc
     offset = schema.parameters["properties"]["offset"]
     assert "开窗" in offset["description"]
     assert "code_execute" not in desc
@@ -1174,7 +1178,8 @@ def test_write_schema_does_not_teach_completeness_gates():
     new_desc = StrReplaceTool().schema.parameters["properties"]["new_string"]["description"]
     assert "不硬拒" in new_desc
     assert "_landed_summary" not in new_desc
-    assert "已落盘短状态" in new_desc or "清理占位" in new_desc
+    assert "已落盘短状态" not in new_desc
+    assert "清理占位" not in new_desc
 
 
 def test_file_append_tool_is_absent():
@@ -1553,6 +1558,8 @@ def test_file_list_schema_is_one_layer_ls():
     assert "recursive" not in props
     assert "max_depth" not in props
     assert "glob" in schema.description
+    assert "Desktop" not in schema.description
+    assert "Desktop" not in props["directory"]["description"]
 
 
 def test_glob_schema_requires_pattern():
@@ -1565,6 +1572,9 @@ def test_glob_schema_requires_pattern():
     assert "recursive" not in props
     assert "pkg/*/name" in props["pattern"]["description"]
     assert "pkg/*/name" in schema.description
+    path_desc = props["path"]["description"]
+    assert "Desktop" not in path_desc
+    assert "external" not in path_desc
 
 
 async def test_glob_finds_nested_files_from_root(tmp_path: Path):
@@ -1925,37 +1935,30 @@ async def test_file_list_shows_attachment_zip_hides_elsewhere(tmp_path: Path):
 
 
 
-async def test_file_list_reveals_material_png(tmp_path: Path):
-    """Materials path (e.g. src/shot.png) visible; sibling AI-noise still hidden."""
+async def test_file_list_shows_png_hides_workspace_zip(tmp_path: Path):
+    """Images list by name; sibling workspace zip stays hidden until glob *.zip."""
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "shot.png").write_bytes(b"png")
-    (tmp_path / "src" / "other.png").write_bytes(b"png")
+    (tmp_path / "src" / "other.webp").write_bytes(b"webp")
     (tmp_path / "attachments").mkdir()
     (tmp_path / "attachments" / "pack.zip").write_bytes(b"PK\x03\x04")
 
-    ctx = _ctx(tmp_path)
-    ctx.material_paths = frozenset({"src/shot.png"})
-    ctx.backend.ai_list_materials = ctx.material_paths
-
-    listed = await FileListTool().execute({"directory": "src"}, ctx)
+    listed = await FileListTool().execute({"directory": "src"}, _ctx(tmp_path))
     assert listed.success is True
     assert "shot.png" in listed.output
-    assert "other.png" not in listed.output
+    assert "other.webp" in listed.output
 
-    found = await GlobTool().execute({"pattern": "*.png"}, ctx)
+    found = await GlobTool().execute({"pattern": "*.png"}, _ctx(tmp_path))
     assert found.success is True
     assert "src/shot.png" in (found.output or "")
-    assert "other.png" not in (found.output or "")
 
-    att = await FileListTool().execute({"directory": "attachments"}, ctx)
+    webp = await GlobTool().execute({"pattern": "*.webp"}, _ctx(tmp_path))
+    assert webp.success is True
+    assert "src/other.webp" in (webp.output or "")
+
+    att = await FileListTool().execute({"directory": "attachments"}, _ctx(tmp_path))
     assert att.success is True
     assert "pack.zip" in (att.output or "")
-
-    # Without materials, same png stays hidden
-    bare = await FileListTool().execute({"directory": "src"}, _ctx(tmp_path))
-    assert bare.success is True
-    assert "shot.png" not in bare.output
-    assert "空目录" in bare.output or bare.output.strip() == "" or "shot" not in bare.output
 
 
 async def test_file_list_external_mount_shows_archive_zip(tmp_path: Path):
@@ -1965,6 +1968,7 @@ async def test_file_list_external_mount_shows_archive_zip(tmp_path: Path):
     ext = tmp_path / "ext_root"
     ext.mkdir()
     (ext / "咨询.sy.zip").write_bytes(b"PK\x03\x04")
+    (ext / "cover.webp").write_bytes(b"webp")
     (ext / "note.txt").write_text("hi", encoding="utf-8")
     (tmp_path / "noise.zip").write_bytes(b"PK\x03\x04")
 
@@ -1986,6 +1990,7 @@ async def test_file_list_external_mount_shows_archive_zip(tmp_path: Path):
     )
     assert listed.success is True
     assert "咨询.sy.zip" in listed.output
+    assert "cover.webp" in listed.output
     assert "note.txt" in listed.output
 
     root = await FileListTool().execute({"directory": "."}, ctx)

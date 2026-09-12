@@ -35,7 +35,7 @@ TASK_MODEL_SCHEMA_PROPS: dict[str, dict[str, object]] = {
         "type": "string",
         "description": (
             "（可选）本节点模型：目录身份 @platform/{id} 或 @byok/{provider_id}/{id}，"
-            "或可读提及。空=跟组合 Worker 槽。勿写未加 @ 的 platform/{id} 路由键。"
+            "或可读提及。空=跟组合 Worker 槽。"
         ),
     },
 }

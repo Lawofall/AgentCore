@@ -185,14 +185,15 @@ def test_run_consult_is_how_owner_file_read_keeps_dump_steer():
     skill = build_system_skill_registry().get("run")
     assert skill is not None
     assert "命令" in skill.body
-    # dump 纠偏在 source_inspect 回执；file_read 留一句短触发
+    # dump 纠偏在 source_inspect 回执，不进 file_read 目录行
     fr = FileReadTool().schema.description
-    assert "dump" in fr
+    assert "dump" not in fr
     assert "code_execute" not in fr
     assert "test_run" not in fr
 
 
 def test_run_description_routes_long_running_to_background():
+    from agentcore.runtime.skills import build_system_skill_registry
     from agentcore.tools.builtin.run import RunTool, run_description
 
     desc = run_description("local")
@@ -206,7 +207,9 @@ def test_run_description_routes_long_running_to_background():
     assert "省略" in wait_desc
     assert "默认就绪" not in wait_desc
     assert "dev" in bg_desc.lower() or "watch" in bg_desc
-    assert "pnpm" in schema.parameters["properties"]["command"]["description"]
+    assert "终端" in schema.parameters["properties"]["command"]["description"]
+    assert "pnpm" not in schema.parameters["properties"]["command"]["description"]
+    assert "pnpm" in build_system_skill_registry().get("run").body
     assert "仅本地" not in RunTool(location="server").schema.description
 
 
@@ -238,17 +241,16 @@ def test_run_description_server_omits_local_machine_wording():
 
 
 def test_web_fetch_description_does_not_overclaim_completeness():
-    # web_fetch caps extracted text at max_chars (default 8000), so a long page is
-    # truncated — the description must disclose that and not promise the "complete"
-    # body, or the model may state it read the whole page when it saw only the head.
+    # 截断是 max_chars 取值语义，不进工具 description 冒充「完整正文」。
     schemas = {s.name: s for s in build_builtin_registry().list_all()}
     desc = schemas["web_fetch"].description
-    assert "max_chars" in desc  # truncation is disclosed
-    assert "完整正文" not in desc  # no blanket "complete body" claim
-    # 挂号纪律在基座 delivery_honesty，schema 不复述 #rN。
+    max_chars = schemas["web_fetch"].parameters["properties"]["max_chars"]["description"]
+    assert "截断" in max_chars
+    assert "完整正文" not in desc
     assert "#rN" not in desc
     assert "深读" in desc
     assert "search" in desc
+    assert "max_chars" not in desc
 
 
 def test_ceo_registry_holds_full_builtin_surface():

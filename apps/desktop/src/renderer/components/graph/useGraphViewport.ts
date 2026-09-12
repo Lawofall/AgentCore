@@ -3,8 +3,8 @@
  * Collaboration embed (width/view) → `graphHost.tsx`. */
 
 import { XYFLOW_FIT_PADDING, xyflowCameraKey } from "@/components/xyflow/host";
-import { fitWidthBox } from "@/lib/elk-layout";
 import { isGraphTraceEnabled, traceGraphViewport } from "@/services/graphTrace";
+import { fitWidthBox } from "@agentcore/graph-layout";
 import type { ReactFlowInstance } from "@xyflow/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { prefersReducedMotion } from "./constants";

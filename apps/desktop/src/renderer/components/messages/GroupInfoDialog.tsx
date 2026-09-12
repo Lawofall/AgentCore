@@ -1,5 +1,10 @@
 import { Button, Textarea } from "@/components/ui";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { notifyError, notifySuccess } from "@/lib/toast";
 import {
   type ChatParticipant,
@@ -228,15 +233,17 @@ export function GroupInfoDialog({ chatId, open, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-sm" aria-describedby={undefined}>
-        <div className="flex flex-col items-center gap-2 border-b border-border px-5 py-5">
+      <DialogContent size="md" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>{name}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col items-center gap-2 px-5 pb-4">
           <PresenceAvatar
             label={avatarInitial(name)}
             url={chatCircleAvatarUrl(chat)}
             sizeClass="size-14"
             textClass="text-xl"
           />
-          <DialogTitle className="text-center">{name}</DialogTitle>
           <span className="text-xs text-muted-foreground">
             {isOfficial ? "官方广播" : `${members.length} 名成员`}
           </span>

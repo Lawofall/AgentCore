@@ -14,12 +14,12 @@ export type CapabilityTool = Schemas["CapabilityTool"];
 export type CapabilitySkill = Schemas["CapabilitySkill"];
 /** The system-prompt template the agents follow (静态 蓝图). */
 export type CapabilityGuidelines = Schemas["CapabilityGuidelines"];
-/** Complete capability picture for 工具箱 → 能力图鉴. */
+/** Complete capability picture for 工具箱 → 提示词目录. */
 export type Capabilities = Schemas["CapabilitiesResponse"];
 
 /** Load the platform's complete capability catalog (read-only): every tool with its
  * CEO/worker reach, the system Skills, and the system-prompt templates (shared base,
- * worker identities, CEO). Single fetch backing 工具箱 → 能力图鉴. */
+ * worker identities, CEO). Single fetch backing 工具箱 → 提示词目录. */
 export async function getCapabilities(): Promise<Capabilities> {
   return api.get<Capabilities>("/v1/capabilities");
 }

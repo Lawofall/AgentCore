@@ -449,10 +449,9 @@ class FileReadTool:
         return ToolSchema(
             name="file_read",
             description=(
-                "读取工作区文件，或本机绝对路径 / ~/Desktop|Downloads|Documents"
-                "（桌面在线时运行时静默只读挂载）。"
-                "http(s) 用 web_fetch；定位用 grep / code_search / glob。"
-                "目录用 file_list。勿 dump。"
+                "读取工作区文件。http(s) 用 web_fetch；目录用 file_list；"
+                "定位用 grep / glob / code_search。"
+                "本机绝对路径可直接填（HOW→consult(local_desk)）。"
             ),
             parameters={
                 "type": "object",
@@ -460,10 +459,7 @@ class FileReadTool:
                     "path": {
                         "type": "string",
                         "description": (
-                            "工作区相对 POSIX 文件路径（`.`=根；`/<根标签>/…` 与裸 `/`、"
-                            "`\\` 视为根）。本机绝对路径或 ~/Desktop|Downloads|Documents"
-                            "在桌面在线时由运行时挂载。"
-                            "http(s) URL 请用 web_fetch。"
+                            "工作区相对 POSIX（`.`=根）或本机绝对路径。"
                             "Office/PDF 自动抽文本；表格（xlsx/csv 等）默认不抽文本。"
                         ),
                     },
@@ -905,10 +901,8 @@ class FileListTool:
         return ToolSchema(
             name="file_list",
             description=(
-                "列出一个已知目录的当前层（默认工作区根）。"
-                "按文件名在整棵树上查找请用 glob。"
-                "本机目录可直接给绝对路径或 ~/Downloads。"
-                "已挂载区外须 `external/<别名>/`（勿传裸 `external`）。"
+                "列出已知目录当前层（默认工作区根）。整树按名用 glob。"
+                "已挂载区外用 `external/<别名>/`。"
             ),
             parameters={
                 "type": "object",
@@ -916,11 +910,7 @@ class FileListTool:
                     "directory": {
                         "type": "string",
                         "description": (
-                            "工作区相对 POSIX 目录（默认 `.`=整仓根；`/<根标签>/…` 与裸 `/`、"
-                            "`\\` 视为根；区外已挂载用 `external/<别名>/`，禁止裸 `external`；"
-                            "本机绝对路径或 ~/Desktop|Downloads|Documents "
-                            "在桌面在线时由运行时挂载。）"
-                            "只填本回合已证实存在的目录。"
+                            "工作区相对 POSIX（默认 `.`）。只填已证实存在的目录。"
                         ),
                         "default": ".",
                     },

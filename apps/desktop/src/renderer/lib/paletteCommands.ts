@@ -26,6 +26,7 @@ import {
   CloudUpload,
   Cpu,
   Download,
+  FileText,
   Files,
   FlaskConical,
   FolderKey,
@@ -53,7 +54,6 @@ import {
   Upload,
   UserCog,
   Workflow,
-  Wrench,
 } from "lucide-react";
 import type { NavigateFunction } from "react-router-dom";
 
@@ -404,6 +404,14 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
       run: go("/whiteboard"),
     },
     {
+      id: "nav-docs",
+      title: "文档",
+      category: "前往",
+      icon: FileText,
+      keywords: ["docs", "document", "wendang", "报告"],
+      run: go("/docs"),
+    },
+    {
       id: "nav-messages",
       title: "消息",
       category: "前往",
@@ -420,15 +428,7 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
       run: go("/toolbox"),
     },
     {
-      id: "nav-tools",
-      title: "工具",
-      category: "前往",
-      icon: Wrench,
-      keywords: ["tools", "toolbox", "gongju", "nengli"],
-      run: go(APP_PATHS.toolbox.tools),
-    },
-    {
-      // 我的 · 提示词。搜「技能」也落到这里。
+      // 我的 · 提示词。搜「技能」/「连接器」/「开场工具」/「官方」也落到这里。
       id: "nav-guidelines",
       title: "提示词",
       category: "前往",
@@ -443,6 +443,12 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
         "jineng",
         "nengli",
         "技能",
+        "tools",
+        "connectors",
+        "连接器",
+        "开场工具",
+        "查阅后启用",
+        "官方",
       ],
       run: go(APP_PATHS.toolbox.guidelines),
     },

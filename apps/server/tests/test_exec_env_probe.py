@@ -38,6 +38,7 @@ from agentcore.tools.sandbox.exec_env import (
     spawn_denied_stderr,
 )
 from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
+from agentcore.tools.sandbox.subprocess import PYTHON_LAUNCHER_MISSING
 from agentcore.workspace.channel import WorkspaceOp
 from agentcore.workspace.limits import (
     EXEC_ENV_CLOUD_SANDBOX_DEAD_BODY_MARKER,
@@ -86,11 +87,12 @@ class _ClassifyingSandbox(_FakeSandbox):
         self.last_health_evidence = evidence
 
 
-# Launcher each language is started with, shared by the host fakes below.
 _LAUNCHERS = {"python": "python", "javascript": "node", "bash": "bash"}
 
 
 def _missing_launcher_stderr(language: str) -> str:
+    if language == "python":
+        return PYTHON_LAUNCHER_MISSING
     launcher = _LAUNCHERS[language]
     return (
         f"代码执行环境启动失败：找不到命令 '{launcher}'。"
@@ -194,9 +196,7 @@ class _HostChannel(_FakeChannel):
 
 
 # Desktop ``launcherMissingStderr`` / sandbox ``_launcher_missing_stderr`` wording.
-_LAUNCHER_MISSING = (
-    "代码执行环境启动失败：找不到命令 'python'。 请确认 PATH 上有 python 可执行文件。"
-)
+_LAUNCHER_MISSING = PYTHON_LAUNCHER_MISSING
 # User script ``open(missing)`` — same ENOENT / FileNotFoundError tokens the
 # probe taxonomy reads, but with the script's own exit 1.
 _USER_FILE_NOT_FOUND = (
@@ -396,7 +396,7 @@ def test_annotate_real_exec_failure_spawn_denied_tag_wraps():
     assert verdict.code == EXEC_ENV_SPAWN_DENIED_CODE
     assert exec_env_probe_failure_code(annotated.stderr) == EXEC_ENV_SPAWN_DENIED_CODE
     assert exec_env_probe_failure_language(annotated.stderr) == "python"
-    assert "启动 python 解释器进程时被系统拒绝" in annotated.stderr
+    assert "启动 Python 解释器进程时被系统拒绝" in annotated.stderr
     assert "CreateProcess refused" in annotated.stderr
     assert "进程启动这一步被拦下" in annotated.stderr
 
@@ -425,10 +425,11 @@ def test_probe_failure_result_carries_reason_and_evidence():
     assert result.success is False
     assert exec_env_probe_failure_code(result.stderr) == EXEC_ENV_NO_INTERPRETER_CODE
     # The model gets the cause and the facts behind it, not an opaque marker.
-    assert "找不到 python 解释器" in result.stderr
+    assert "找不到 Python 解释器" in result.stderr
+    assert "找不到 python 解释器" not in result.stderr
     assert "exit=127" in result.stderr
-    # …and the route that does still work, so it stops waiting for the sandbox.
-    assert "terminal" in result.stderr
+    assert "terminal" not in result.stderr
+    assert "静态核验" in result.stderr
     assert "与权限或安全软件无关" in result.stderr
 
 
@@ -445,11 +446,12 @@ def test_probe_retire_steer_names_the_cause_instead_of_claiming_a_timeout():
     from agentcore.runtime.loop_controller.types import EXEC_ENV_TIMEOUT_RETIRE_STEER
 
     steer = probe_failure_retire_steer(EXEC_ENV_NO_INTERPRETER_CODE, language="python")
-    assert "PATH 上没有 python 解释器" in steer
+    assert "PATH 上没有 Python 解释器" in steer
+    assert "PATH 上没有 python 解释器" not in steer
     # The idle-hang steer stays put; a missing interpreter never「连续超时」.
     assert "连续超时" not in steer
     assert steer != EXEC_ENV_TIMEOUT_RETIRE_STEER
-    assert "terminal" in steer
+    assert "terminal" not in steer
     assert "禁止再原样重试跑命令" in steer
     # Unknown / unclassified never invents a cause.
     assert "原因未判明" in probe_failure_retire_steer(EXEC_ENV_PROBE_FAIL_CODE)
@@ -578,7 +580,7 @@ async def test_local_workspace_sticky_fail_repeats_the_same_cause():
     )
     assert exec_env_probe_failure_code(first.stderr) == EXEC_ENV_SPAWN_DENIED_CODE
     assert exec_env_probe_failure_code(again.stderr) == EXEC_ENV_SPAWN_DENIED_CODE
-    assert "启动 python 解释器进程时被系统拒绝" in again.stderr
+    assert "启动 Python 解释器进程时被系统拒绝" in again.stderr
     assert "CreateProcess refused" in again.stderr
     # First real run proved the death; the repeat is fail-fast.
     assert len(channel.calls) == 1
@@ -596,7 +598,7 @@ def test_probe_failure_text_names_the_language_it_actually_ran():
     assert "不在本次判定范围内" in js
 
     py = probe_failure_result(code=EXEC_ENV_NO_INTERPRETER_CODE, language="python").stderr
-    assert "找不到 python 解释器" in py
+    assert "找不到 Python 解释器" in py
     assert "这次 python 路径没有跑成" in py
     assert "已停用" not in py
 
@@ -839,7 +841,7 @@ async def test_real_execution_exit_127_still_retires_with_honest_reason():
         ExecutionRequest(code="print(1)", language="python", timeout_seconds=30)
     )
     assert exec_env_probe_failure_code(wrapped.stderr) == EXEC_ENV_NO_INTERPRETER_CODE
-    assert "找不到 python 解释器" in wrapped.stderr
+    assert "找不到 Python 解释器" in wrapped.stderr
     assert "退出码 127" in wrapped.stderr
     assert "自检" not in wrapped.stderr
 
@@ -1096,7 +1098,7 @@ async def test_real_execution_spawn_denied_tag_still_retires():
         ExecutionRequest(code="print(1)", language="python", timeout_seconds=30)
     )
     assert exec_env_probe_failure_code(wrapped.stderr) == EXEC_ENV_SPAWN_DENIED_CODE
-    assert "启动 python 解释器进程时被系统拒绝" in wrapped.stderr
+    assert "启动 Python 解释器进程时被系统拒绝" in wrapped.stderr
     assert "进程启动这一步被拦下" in wrapped.stderr
     assert "CreateProcess refused" in wrapped.stderr
 

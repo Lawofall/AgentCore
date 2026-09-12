@@ -15,9 +15,11 @@ Parity gate (edit both sides or CI fails)::
 * **System noise** — hidden from both AI and user file UI (``.git`` /
   ``node_modules`` / caches / ``*.db`` / ``*.pyc`` …, plus path-aware
   ``AgentCore/{index,trash,baselines}`` — never bare ``index``/``trash``/``baselines``).
-* **AI noise** — media / archives / fonts / native objects excluded only from
-  AI views (``index_files`` / ``list_tree`` / ``grep`` / ``file_list``). User UI
-  ``list`` keeps them visible (AI-generated images are deliverables).
+* **AI noise** — media / archives / fonts / native objects stay out of
+  ``index_files`` / ``grep`` (content search). User UI ``list`` keeps them
+  visible. **Name listing** (``file_list`` / ``glob`` / ``list_tree``) shows
+  images; archives still need ``attachments/`` / ``external/`` /
+  ``reveal_archives``. Native objects stay hidden from listing.
 """
 
 import errno
@@ -176,6 +178,7 @@ AI_NOISE_FILE_SUFFIXES: frozenset[str] = frozenset(
         ".hdf5",
         ".pkl",
         ".pickle",
+        # Images: grep/index still skip; file_list/glob show (AI_IMAGE subset).
         ".png",
         ".jpg",
         ".jpeg",
@@ -199,6 +202,20 @@ AI_NOISE_FILE_SUFFIXES: frozenset[str] = frozenset(
         ".ttf",
         ".otf",
         ".eot",
+    }
+)
+
+# Image subset of AI noise — listed by name (file_list / glob / list_tree);
+# grep / index_files still skip. ↔ desktop ``AI_IMAGE_FILE_SUFFIXES``.
+AI_IMAGE_FILE_SUFFIXES: frozenset[str] = frozenset(
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".ico",
+        ".bmp",
     }
 )
 
@@ -341,13 +358,18 @@ def is_ai_noise_file_name(name: str) -> bool:
     return _suffix_match(name, AI_NOISE_FILE_SUFFIXES)
 
 
+def is_ai_image_file_name(name: str) -> bool:
+    """Whether a file basename is an image suffix (AI-noise subset; listable)."""
+    return _suffix_match(name, AI_IMAGE_FILE_SUFFIXES)
+
+
 def is_ai_archive_file_name(name: str) -> bool:
     """Whether a file basename is an archive suffix (AI-noise subset)."""
     return _suffix_match(name, AI_ARCHIVE_FILE_SUFFIXES)
 
 
 def is_ignored_file_name(name: str) -> bool:
-    """Whether a file basename should be omitted from AI listings / indexes."""
+    """Whether a file basename should be omitted from AI index / grep walks."""
     return _suffix_match(name, IGNORED_FILE_SUFFIXES)
 
 

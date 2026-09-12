@@ -13,6 +13,7 @@ let lastEditorProps: {
   onChange?: (value: string) => void;
   onSave?: () => void;
   initialDoc?: string;
+  editable?: boolean;
 };
 let editorValue = "";
 
@@ -24,6 +25,7 @@ vi.mock("@/components/markdown/MarkdownSourceEditor", async () => {
         onChange?: (value: string) => void;
         onSave?: () => void;
         initialDoc?: string;
+        editable?: boolean;
       },
       ref: React.Ref<unknown>,
     ) {
@@ -49,17 +51,17 @@ afterEach(() => {
 });
 
 describe("PromptWorkbench", () => {
-  it("可写默认进预览，点编辑才出源码", () => {
+  it("可写直接出源码，没有预览切换", () => {
     render(
       <PromptWorkbench title="团队拆法" initialBody="<团队拆法>\n派单。\n" />,
     );
-    expect(screen.getByRole("button", { name: "预览" })).toBeTruthy();
-    expect(screen.queryByTestId("cm-stub")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    expect(screen.queryByRole("button", { name: "预览" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "编辑" })).toBeNull();
     expect(screen.getByTestId("cm-stub")).toBeTruthy();
+    expect(lastEditorProps.editable).not.toBe(false);
   });
 
-  it("只读只预览，没有编辑切换", () => {
+  it("只读直接出源码，没有编辑切换", () => {
     render(
       <PromptWorkbench
         title="全员共享准则"
@@ -68,8 +70,12 @@ describe("PromptWorkbench", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: "编辑" })).toBeNull();
-    expect(screen.queryByTestId("cm-stub")).toBeNull();
-    expect(screen.getByText("共享准则正文")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "预览" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "全员共享准则" })).toBeNull();
+    expect(screen.queryByLabelText("名称")).toBeNull();
+    expect(screen.getByTestId("cm-stub")).toBeTruthy();
+    expect(lastEditorProps.editable).toBe(false);
+    expect(lastEditorProps.initialDoc).toBe("共享准则正文");
   });
 
   it("停敲后自动保存，手动保存取消待触发的自动存", async () => {
@@ -84,7 +90,6 @@ describe("PromptWorkbench", () => {
           onSave={onSave}
         />,
       );
-      fireEvent.click(screen.getByRole("button", { name: "编辑" }));
       editorValue = "old";
 
       editorValue = "v1";
@@ -123,56 +128,43 @@ describe("PromptWorkbench", () => {
     }
   });
 
-  it("目录句始终可见，与标题相同也不藏，预览就能改", () => {
+  it("目录句始终可见，与标题相同也不藏，源码面上就能改", () => {
     render(
       <PromptWorkbench
         title="团队拆法"
+        titleEditable
         initialBody="body"
         initialTrigger="团队拆法"
         onSave={async () => true}
       />,
     );
-    expect(screen.getByRole("heading", { name: "团队拆法" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "团队拆法" })).toBeNull();
+    expect(screen.getByLabelText("名称")).toHaveProperty("value", "团队拆法");
     expect(screen.getByText("一句话介绍")).toBeTruthy();
     const line = screen.getByLabelText("一句话介绍");
     expect(line).toHaveProperty("value", "团队拆法");
     expect(line.getAttribute("placeholder")).toBe("用一句话说这是什么");
     expect(line.parentElement?.className).toContain("flex");
     expect(line.parentElement?.className).toContain("items-baseline");
-    expect(screen.queryByTestId("cm-stub")).toBeNull();
+    expect(screen.getByTestId("cm-stub")).toBeTruthy();
   });
 
   it("目录句与标题不同时两句都在", () => {
     render(
       <PromptWorkbench
         title="团队拆法"
+        titleEditable
         initialBody="怎么派"
         initialTrigger="派子队、拆里程碑时用"
         onSave={async () => true}
       />,
     );
-    expect(screen.getByRole("heading", { name: "团队拆法" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "团队拆法" })).toBeNull();
+    expect(screen.getByLabelText("名称")).toHaveProperty("value", "团队拆法");
     expect(screen.getByLabelText("一句话介绍")).toHaveProperty(
       "value",
       "派子队、拆里程碑时用",
     );
-  });
-
-  it("编辑 / 预览只切换正文，目录句还在", () => {
-    render(
-      <PromptWorkbench
-        title="团队拆法"
-        initialBody="body"
-        initialTrigger="团队拆法"
-        onSave={async () => true}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
-    expect(screen.getByTestId("cm-stub")).toBeTruthy();
-    expect(screen.getByLabelText("一句话介绍")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "预览" }));
-    expect(screen.queryByTestId("cm-stub")).toBeNull();
-    expect(screen.getByLabelText("一句话介绍")).toBeTruthy();
   });
 
   it("常驻档出加载开关、不出目录句", () => {
@@ -186,6 +178,7 @@ describe("PromptWorkbench", () => {
         initialTrigger="短约束"
       />,
     );
+    expect(screen.queryByRole("heading", { name: "短约束" })).toBeNull();
     expect(screen.getByRole("tablist", { name: "加载方式" })).toBeTruthy();
     expect(
       screen.getByRole("tab", { name: "常驻" }).getAttribute("aria-selected"),
@@ -203,11 +196,27 @@ describe("PromptWorkbench", () => {
         initialTrigger="派单进阶"
       />,
     );
+    expect(screen.queryByRole("heading", { name: "派单进阶" })).toBeNull();
+    expect(screen.queryByLabelText("名称")).toBeNull();
     expect(screen.queryByRole("switch", { name: "按需目录" })).toBeNull();
     expect(screen.queryByRole("tablist", { name: "加载方式" })).toBeNull();
     expect(screen.getByLabelText("一句话介绍")).toHaveProperty(
       "value",
       "派单进阶",
     );
+  });
+
+  it("只读官方 HOW 不画封面大标题", () => {
+    render(
+      <PromptWorkbench
+        title="途中提问"
+        initialBody={"<途中提问>\n问。\n</途中提问>"}
+        readOnly
+      />,
+    );
+    expect(screen.queryByRole("heading", { name: "途中提问" })).toBeNull();
+    expect(screen.queryByLabelText("名称")).toBeNull();
+    expect(screen.queryByLabelText("一句话介绍")).toBeNull();
+    expect(lastEditorProps.initialDoc).toContain("<途中提问>");
   });
 });

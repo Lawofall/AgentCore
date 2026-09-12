@@ -161,7 +161,7 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
             "items": {"type": "string", "enum": list(_STATUS_FACET_ORDER)},
             "description": (
                 "status 可选投影（info/audio_devices/storage/power/network_summary/apps）；"
-                "默认全要。不含 ping、不含 os_log。"
+                "默认全要。"
             ),
         },
         "source": {
@@ -204,11 +204,7 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "command": {
             "type": "string",
-            "description": (
-                "shell 本机短时命令（非空）；cwd 由运行时设为已授权根（默认工作区根）。"
-                "Windows 写 PowerShell（$env:APPDATA、'; if；禁 %VAR%/||/&&）；"
-                "Unix 写 POSIX（$SHELL -lc）。"
-            ),
+            "description": "shell：本机短时命令（非空）。",
         },
         "timeout_seconds": {
             "type": "integer",
@@ -226,7 +222,6 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
             "type": "string",
             "description": (
                 "set_audio：设备 id（与 status 音频设备返回的 id 一致）。"
-                "须先 status 观测设备。"
             ),
         },
         "device_name": {
@@ -235,7 +230,7 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "service": {
             "type": "string",
-            "description": "restart_service：服务名（SCM name）；当前仅允许 Audiosrv。",
+            "description": "restart_service：服务名。",
             "enum": ["Audiosrv"],
         },
         "manager": {
@@ -245,10 +240,7 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "package_id": {
             "type": "string",
-            "description": (
-                "install_package：包管理器点名 id，例如 Microsoft.VisualStudioCode、"
-                "Docker.DockerDesktop、visual-studio-code、docker.io。"
-            ),
+            "description": "install_package：包管理器点名 id。",
         },
         "cask": {
             "type": "boolean",
@@ -816,9 +808,6 @@ class HostTool:
             name="host",
             description=(
                 "本机 Host（仅桌面回填通道；与 folder/bind 正交）。"
-                "schema 免批；status/os_log 运行时免批；其余走 host 轴；"
-                "install_package 恒确认（session/kickoff/turn grant 不覆盖；"
-                "不吃 kickoff/command=auto）。"
                 "HOW→consult(host)。"
             ),
             parameters=HOST_TOOL_PARAMETERS,

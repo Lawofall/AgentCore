@@ -1,14 +1,5 @@
 /** Layout a turn DAG (ELK) for GraphView hosts (inline / fullscreen). */
 
-import {
-  type GroupLayout,
-  type NodeSizeMap,
-  buildNodeSizeMap,
-  computeLayout,
-  nodeSpacingForFitMode,
-} from "@/lib/elk-layout";
-import type { ElkGraphLayout } from "@/lib/graph-layout-utils";
-import { computeLayoutHints } from "@/lib/layoutHints";
 import { isGraphPerfEnabled, markGraphPerf } from "@/services/graphPerf";
 import {
   isGraphTraceEnabled,
@@ -17,6 +8,14 @@ import {
 } from "@/services/graphTrace";
 import type { Execution } from "@/stores/execution";
 import type { GraphEdge, GraphLayout } from "@/stores/graph";
+import {
+  type GroupLayout,
+  type NodeSizeMap,
+  buildNodeSizeMap,
+  computeLayout,
+  computeLayoutHints,
+  nodeSpacingForFitMode,
+} from "@agentcore/graph-layout";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ActCardLayout, computeActLodLayout } from "./actLod";
 import { INPUT_ID } from "./constants";
@@ -317,7 +316,7 @@ export function useGraphLayout(
     } = buildGraphStructure(runs, INPUT_ID, expandedUnits);
     const hints = computeLayoutHints(layoutSubTeams, rawEdges);
     const sizeMap = sizeMapForNodes(nodeIds);
-    const elkLayout = layoutKind as ElkGraphLayout;
+    const elkLayout = layoutKind as GraphLayout;
     const nodeSpacing = nodeSpacingForFitMode(fitMode);
     const perfOn = isGraphPerfEnabled();
     const t0 = perfOn ? performance.now() : 0;

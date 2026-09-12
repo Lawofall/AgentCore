@@ -11,6 +11,8 @@
  * 回合不走此路径（宿主按 `scene.acts.length < 2` 分流到既有 computeLayout，像素级零变化）。
  */
 
+import type { Execution, ExecutionStatus } from "@/stores/execution";
+import type { GraphEdge, GraphLayout } from "@/stores/graph";
 import {
   type GroupLayout,
   NODE_HEIGHT,
@@ -18,12 +20,9 @@ import {
   type NodeSizeMap,
   buildNodeSizeMap,
   computeLayout,
+  computeLayoutHints,
   nodeSpacingForFitMode,
-} from "@/lib/elk-layout";
-import type { ElkGraphLayout } from "@/lib/graph-layout-utils";
-import { computeLayoutHints } from "@/lib/layoutHints";
-import type { Execution, ExecutionStatus } from "@/stores/execution";
-import type { GraphEdge, GraphLayout } from "@/stores/graph";
+} from "@agentcore/graph-layout";
 import { INPUT_ID, actCardId, actChainEdgeId, parseActCardId } from "./ids";
 import type { GraphScene, SceneAct } from "./scene";
 import type { GraphFitMode } from "./useGraphViewport";
@@ -183,7 +182,7 @@ export async function computeActLodLayout(
       const result = await computeLayout(
         sub.nodeIds,
         sub.edges,
-        layoutKind as ElkGraphLayout,
+        layoutKind as GraphLayout,
         {},
         sub.subTeams,
         nodeSpacingForFitMode(fitMode),

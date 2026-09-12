@@ -4,6 +4,7 @@ from pathlib import Path
 
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace._paths import (
+    AI_IMAGE_FILE_SUFFIXES,
     AI_NOISE_FILE_SUFFIXES,
     IGNORED_DIRS,
     IGNORED_FILE_SUFFIXES,
@@ -93,6 +94,8 @@ def test_system_suffixes_hide_from_ui_and_ai():
 
 def test_ai_noise_suffixes_are_media_archives_binaries():
     assert ".png" in AI_NOISE_FILE_SUFFIXES
+    assert ".png" in AI_IMAGE_FILE_SUFFIXES
+    assert AI_IMAGE_FILE_SUFFIXES <= AI_NOISE_FILE_SUFFIXES
     assert ".zip" in AI_NOISE_FILE_SUFFIXES
     assert ".pack" in AI_NOISE_FILE_SUFFIXES
     assert ".log" in AI_NOISE_FILE_SUFFIXES
@@ -168,23 +171,26 @@ def test_is_attachment_path():
 
 
 def test_attachments_exempt_ai_noise_from_list_helpers():
-    """attachments/ zip/media stay listable; same suffixes elsewhere stay hidden."""
+    """attachments/ zip stays listable; workspace-root zip stays hidden; images list."""
     assert should_hide_ai_noise_from_list("attachments/pack.zip") is False
     assert should_hide_ai_noise_from_list("attachments/photo.png") is False
     assert should_hide_ai_noise_from_list("out.zip") is True
     assert should_hide_ai_noise_from_list("src/out.zip") is True
+    assert should_hide_ai_noise_from_list("src/photo.png") is False
     assert should_hide_ai_noise_from_list("notes.md") is False
     assert should_hide_ai_noise_from_list("src/attachments/x.zip") is True  # not root attachments/
 
     assert is_ai_list_hidden_file(parent_rel="attachments", name="pack.zip") is False
     assert is_ai_list_hidden_file(parent_rel="", name="out.zip") is True
     assert is_ai_list_hidden_file(parent_rel="src", name="out.zip") is True
+    assert is_ai_list_hidden_file(parent_rel="src", name="photo.png") is False
+    assert is_ai_list_hidden_file(parent_rel="src", name="app.dll") is True
     # System noise never exempt
     assert is_ai_list_hidden_file(parent_rel="attachments", name="x.db") is True
 
 
-def test_external_ns_archives_visible_media_still_hidden():
-    """区外 external/<alias>/ 压缩包可见；同路径媒体仍按 AI 噪音隐藏。"""
+def test_external_ns_archives_visible_images_listed():
+    """区外 external/<alias>/ 压缩包可见；图片按名列出（不依赖区外豁免）。"""
     from agentcore.workspace.sparse_listing import is_external_ns_path
 
     assert is_external_ns_path("external/desk/咨询.sy.zip") is True
@@ -193,7 +199,8 @@ def test_external_ns_archives_visible_media_still_hidden():
 
     assert should_hide_ai_noise_from_list("external/desk/咨询.sy.zip") is False
     assert should_hide_ai_noise_from_list("external/desk/note.rar") is False
-    assert should_hide_ai_noise_from_list("external/desk/photo.png") is True
+    assert should_hide_ai_noise_from_list("external/desk/photo.png") is False
+    assert should_hide_ai_noise_from_list("cover.webp") is False
     assert should_hide_ai_noise_from_list("out.zip") is True  # workspace root noise
 
     assert (
@@ -201,15 +208,13 @@ def test_external_ns_archives_visible_media_still_hidden():
         is False
     )
     assert (
-        is_ai_list_hidden_file(parent_rel="external/desk", name="shot.png") is True
+        is_ai_list_hidden_file(parent_rel="external/desk", name="shot.png") is False
     )
     # pattern 豁免：工作区根压缩包在 reveal_archives 时可见
     assert (
         should_hide_ai_noise_from_list("noise.zip", reveal_archives=True) is False
     )
-    assert (
-        should_hide_ai_noise_from_list("shot.png", reveal_archives=True) is True
-    )
+    assert should_hide_ai_noise_from_list("shot.png", reveal_archives=True) is False
     assert (
         is_ai_list_hidden_file(
             parent_rel="", name="noise.zip", reveal_archives=True
@@ -219,20 +224,21 @@ def test_external_ns_archives_visible_media_still_hidden():
 
 
 def test_materials_exempt_ai_noise_outside_attachments():
-    """Turn material paths reveal AI-noise even outside attachments/."""
-    materials = frozenset({"src/shot.png"})
-    assert should_hide_ai_noise_from_list("src/shot.png", materials=materials) is False
-    assert should_hide_ai_noise_from_list("src/other.png", materials=materials) is True
-    assert should_hide_ai_noise_from_list("src/shot.png") is True  # no materials → hide
+    """Turn material paths reveal non-image AI-noise even outside attachments/."""
+    materials = frozenset({"src/pack.zip"})
+    assert should_hide_ai_noise_from_list("src/pack.zip", materials=materials) is False
+    assert should_hide_ai_noise_from_list("src/other.zip", materials=materials) is True
+    assert should_hide_ai_noise_from_list("src/pack.zip") is True
+    assert should_hide_ai_noise_from_list("src/shot.png") is False
     assert (
         is_ai_list_hidden_file(
-            parent_rel="src", name="shot.png", materials=materials
+            parent_rel="src", name="pack.zip", materials=materials
         )
         is False
     )
     assert (
         is_ai_list_hidden_file(
-            parent_rel="src", name="other.png", materials=materials
+            parent_rel="src", name="other.zip", materials=materials
         )
         is True
     )
@@ -297,19 +303,18 @@ async def test_list_tree_shows_attachment_zip_hides_elsewhere(tmp_path: Path):
     assert {e.path for e in att_tree.entries} == {"attachments/pack.zip"}
 
 
-async def test_list_tree_reveals_material_png(tmp_path: Path):
+async def test_list_tree_lists_png_without_materials(tmp_path: Path):
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "shot.png").write_bytes(b"png")
     (tmp_path / "src" / "other.png").write_bytes(b"png")
     (tmp_path / "ok.txt").write_text("x", encoding="utf-8")
 
     ws = ServerWorkspace(root=tmp_path, sandbox=SubprocessSandbox())
-    ws.ai_list_materials = frozenset({"src/shot.png"})
     tree = await ws.list_tree(".", max_depth=2)
     paths = {e.path for e in tree.entries}
     assert "ok.txt" in paths
     assert "src/shot.png" in paths
-    assert "src/other.png" not in paths
+    assert "src/other.png" in paths
 
 
 async def test_index_files_skips_internal_zone_db_and_media(tmp_path: Path):

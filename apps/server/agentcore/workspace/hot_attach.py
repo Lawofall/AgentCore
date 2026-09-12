@@ -7,6 +7,9 @@ waiting for the next resume.
 Sidecar Path-I/O needs ``abs_path``. Grant rows never store it; desktop
 hot-pushes it onto the live backend first. This helper copies live abs onto
 grant-store rows so ``_mint`` cannot wipe the snapshot.
+
+Ticketed sidecar must not open local Postgres: skip grant_store and keep the
+desktop snapshot. Discriminator is narrow tickets, not ``location=local``.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
+from agentcore.db.sidecar_tickets import sidecar_narrow_tickets_bound
 from agentcore.workspace import grant_store
 from agentcore.workspace.external_mounts import ExternalMount
 from agentcore.workspace.protocol import WorkspaceBackend
@@ -92,10 +96,14 @@ async def attach_grants_to_backend(
 
     Sidecar: grant rows have no abs. Merge copies abs from the live backend
     (desktop ``updateExternalMounts``) so this call cannot drop Path-I/O.
+
+    Ticketed sidecar: live snapshot is SoT — never ``grant_store``.
     """
-    grants = await grant_store.grants_as_dict(conversation_id)
     live = dict(getattr(backend, "_mounts", None) or {})
-    mounts = _merge_live_abs(grants, live) if grants else grants
+    if sidecar_narrow_tickets_bound():
+        return live
+    grants = await grant_store.grants_as_dict(conversation_id)
+    mounts = _merge_live_abs(grants, live)
     attach = getattr(backend, "attach_external_mounts", None)
     if mounts and callable(attach):
         attach(mounts)

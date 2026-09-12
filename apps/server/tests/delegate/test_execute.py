@@ -790,7 +790,10 @@ def test_ceo_deliverable_schema_omits_internal_qa_knobs():
     assert "form" not in props
     for banned in ("strict", "required_sections", "output_format", "citation_mode"):
         assert banned not in props
-    assert "用户点名" in props["artifacts"]["description"] or "流水线" in props["artifacts"]["description"]
+    assert (
+        "用户点名" in deliverable_props["description"]
+        or "流水线" in deliverable_props["description"]
+    )
     assert "staffing" in t.schema.description
 
 

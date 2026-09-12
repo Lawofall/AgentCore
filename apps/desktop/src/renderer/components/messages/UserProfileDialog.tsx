@@ -1,5 +1,11 @@
 import { Button, IconButton } from "@/components/ui";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { copyText } from "@/lib/clipboard";
 import { notifySuccess } from "@/lib/toast";
 import {
@@ -164,8 +170,11 @@ export function UserProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-sm" aria-describedby={undefined}>
-        <div className="flex flex-col items-center gap-2 border-b border-border px-5 py-5">
+      <DialogContent size="md" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>{name}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col items-center gap-2 px-5 pb-4">
           {loading && !profile ? (
             <Loader2
               size={28}
@@ -180,7 +189,6 @@ export function UserProfileDialog({
               online={!!profile?.online}
             />
           )}
-          <DialogTitle className="text-center">{name}</DialogTitle>
           {profile && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               @{profile.username}
@@ -224,41 +232,14 @@ export function UserProfileDialog({
           )}
 
           {profile?.relation === "none" && showRequestForm && (
-            <div className="space-y-2">
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value.slice(0, 100))}
-                placeholder="验证语（可选）"
-                rows={2}
-                className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                disabled={busy}
-              />
-              <div className="flex gap-2">
-                <Button
-                  variant="neutral"
-                  className="flex-1"
-                  disabled={busy}
-                  onClick={() => {
-                    setShowRequestForm(false);
-                    setMessage("");
-                  }}
-                >
-                  取消
-                </Button>
-                <Button
-                  className="flex-1"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      if (!profile) return;
-                      await sendFriendRequest(profile.id, message);
-                    })
-                  }
-                >
-                  发送申请
-                </Button>
-              </div>
-            </div>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value.slice(0, 100))}
+              placeholder="验证语（可选）"
+              rows={2}
+              className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              disabled={busy}
+            />
           )}
 
           {profile?.relation === "outgoing_request" && (
@@ -407,6 +388,33 @@ export function UserProfileDialog({
               </div>
             )}
         </div>
+        {profile?.relation === "none" && showRequestForm && (
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="md"
+              disabled={busy}
+              onClick={() => {
+                setShowRequestForm(false);
+                setMessage("");
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              size="md"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  if (!profile) return;
+                  await sendFriendRequest(profile.id, message);
+                })
+              }
+            >
+              发送申请
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

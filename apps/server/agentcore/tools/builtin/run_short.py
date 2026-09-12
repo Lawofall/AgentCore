@@ -24,6 +24,7 @@ from agentcore.tools.builtin.source_inspect import (
 )
 from agentcore.tools.file_products import file_product
 from agentcore.tools.protocol import ToolContext, ToolResult
+from agentcore.tools.sandbox.exec_env import EXEC_DISASTER_TIMEOUT_S
 from agentcore.tools.sandbox.exec_languages import ALL_EXEC_LANGUAGES
 from agentcore.tools.sandbox.protocol import ExecutionRequest
 
@@ -113,7 +114,13 @@ async def execute_short(
     start = time.monotonic()
     code = arguments.get("code", "")
     language = arguments.get("language", "python")
-    timeout = min(arguments.get("timeout_seconds", 30), 60)  # cap at 60s
+    timeout = max(1, int(arguments.get("timeout_seconds", EXEC_DISASTER_TIMEOUT_S)))
+    idle_raw = arguments.get("idle_timeout_seconds")
+    idle_timeout_seconds = (
+        max(1, min(int(idle_raw), timeout))
+        if idle_raw is not None and str(idle_raw).strip() != ""
+        else None
+    )
     allowed = _resolved_languages(languages)
 
     if not code.strip():
@@ -192,14 +199,11 @@ async def execute_short(
             contract_failure=True,
         )
 
-    from agentcore.tools.sandbox.exec_env import EXEC_IDLE_TIMEOUT_DEFAULT_S
-
     request = ExecutionRequest(
         code=code,
         language=language,
         timeout_seconds=timeout,
-        # Primary hang kill: silence; wall remains the short hard cap (≤60s).
-        idle_timeout_seconds=min(int(timeout), EXEC_IDLE_TIMEOUT_DEFAULT_S),
+        idle_timeout_seconds=idle_timeout_seconds,
         env=exec_env,
         on_output=_make_output_callback(context, exec_env),
         network_mode=(

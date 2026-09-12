@@ -22,6 +22,7 @@ CLIENT_TURN_IDS = {
     "userMessageId": "11111111-1111-4111-8111-111111111111",
     "messageId": "22222222-2222-4222-8222-222222222222",
     "traceId": "a" * 32,
+    "folderId": None,
 }
 
 _FAKE_INFERENCE = {
@@ -36,17 +37,6 @@ def _reset_store_and_queue():
     yield
     turn_queue.clear("c-ids")
     reset_conversation_store_for_tests()
-
-
-@pytest.fixture(autouse=True)
-def _stub_conversation_folder_id(monkeypatch: pytest.MonkeyPatch):
-    async def _none(_conversation_id: str) -> None:
-        return None
-
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        _none,
-    )
 
 
 def _recorder() -> tuple[list[dict[str, Any]], Any]:

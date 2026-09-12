@@ -170,7 +170,7 @@ async def test_catalog_with_key_mixes_byok_and_platform(monkeypatch):
 
 
 async def test_catalog_discovery_failed_keeps_vendor_presets(monkeypatch):
-    """DeepSeek-class base_url: discovery None still lists ≥2 preset model ids."""
+    """Matched preset: discovery None still lists the seed; probe default stays out."""
     reset_discovery_cache_for_tests()
     row = _prov(
         "prov-ds",
@@ -190,14 +190,11 @@ async def test_catalog_discovery_failed_keeps_vendor_presets(monkeypatch):
     )
     cat = await resolve_model_catalog(None, "u1")
     byok_ids = {m.id for m in cat.models if m.origin == "byok" and m.provider_id == "prov-ds"}
-    assert "deepseek-v4-flash" in byok_ids
-    assert "deepseek-v4.1-flash-expires-on-0910" in byok_ids
-    assert "deepseek-v4-pro" in byok_ids
-    assert len(byok_ids) >= 2
+    assert byok_ids == {"deepseek-flash"}
 
 
 async def test_catalog_discovery_unions_with_vendor_presets(monkeypatch):
-    """Discovery success ∪ presets: both preset and endpoint-only ids appear."""
+    """Discovery ∪ seed; official DeepSeek retired aliases are omitted."""
     reset_discovery_cache_for_tests()
     row = _prov(
         "prov-ds",
@@ -213,14 +210,21 @@ async def test_catalog_discovery_unions_with_vendor_presets(monkeypatch):
         selection=ModelSelection(
             model="deepseek-v4-flash", origin="byok", provider_id="prov-ds"
         ),
-        discovered={"prov-ds": ["deepseek-v4-flash", "endpoint-only-model"]},
+        discovered={
+            "prov-ds": [
+                "deepseek-v4-flash",
+                "deepseek-v4-pro",
+                "endpoint-only-model",
+            ]
+        },
     )
     cat = await resolve_model_catalog(None, "u1")
     byok_ids = {m.id for m in cat.models if m.origin == "byok" and m.provider_id == "prov-ds"}
-    assert "deepseek-v4-flash" in byok_ids
-    assert "deepseek-v4-pro" in byok_ids  # from preset, not discovery
-    assert "deepseek-v4.1-flash-expires-on-0910" in byok_ids
+    assert "deepseek-flash" in byok_ids
     assert "endpoint-only-model" in byok_ids
+    assert "deepseek-v4-flash" not in byok_ids
+    assert "deepseek-v4-pro" not in byok_ids
+    assert "deepseek-v4.1-flash-expires-on-0910" not in byok_ids
 
 
 async def test_catalog_custom_base_url_has_no_presets(monkeypatch):

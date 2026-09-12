@@ -82,7 +82,8 @@ TS_EXPORTS: tuple[TsExport, ...] = (
         chat.ToolFailure,
         doc=(
             "User-facing tool face on `tool_use_end` when status is error or redirect.\n"
-            "`message` = Chinese product copy; `code` = stable code.\n"
+            "`code` is always present. `message` is Chinese product copy; absent when\n"
+            "the agent self-heals or the compact row title is the whole user face.\n"
             "Model-facing technical detail stays in `result`."
         ),
     ),

@@ -16,7 +16,6 @@ import { BetaGroupPage } from "@/pages/BetaGroupPage";
 import { NoticesPage } from "@/pages/NoticesPage";
 import { PlatformQuotaPage } from "@/pages/PlatformQuotaPage";
 import { SkillStorePage } from "@/pages/SkillStorePage";
-import { SystemPage } from "@/pages/SystemPage";
 import { UsersPage } from "@/pages/UsersPage";
 import { setUnauthorizedHandler } from "@/services/api";
 import { logout } from "@/services/auth";
@@ -24,7 +23,14 @@ import { bootstrap } from "@/services/session";
 import { useAuthStore } from "@/stores/auth";
 import { ShieldAlert } from "lucide-react";
 import { useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useSearchParams,
+} from "react-router-dom";
 
 export function App() {
   const status = useAuthStore((s) => s.status);
@@ -97,12 +103,21 @@ export function App() {
         <Route element={<AdminShell />}>
           <Route index element={<Navigate to="/overview" replace />} />
           <Route path="overview" element={<OverviewPage />} />
+          <Route path="system" element={<Navigate to="/overview" replace />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="users/:userId" element={<UsersPage />} />
           <Route path="analytics" element={<Navigate to="/analytics/cost" replace />} />
-          <Route path="analytics/:segment" element={<AnalyticsPage />} />
-          <Route path="conversations" element={<Navigate to="/conversations/conversations" replace />} />
-          <Route path="conversations/:segment" element={<ConversationsPage />} />
+          <Route path="analytics/health" element={<Navigate to="/overview" replace />} />
+          <Route path="analytics/cost" element={<AnalyticsPage />} />
+          <Route path="conversations" element={<ConversationsPage />} />
+          <Route
+            path="conversations/conversations"
+            element={<PreserveSearch to="/conversations" />}
+          />
+          <Route
+            path="conversations/turns"
+            element={<RedirectTurnsToConversations />}
+          />
           <Route path="replay/:conversationId" element={<ReplayPage />} />
           <Route path="preview" element={<PreviewPage />} />
           <Route path="audit" element={<AuditPage />} />
@@ -110,13 +125,26 @@ export function App() {
           <Route path="store" element={<SkillStorePage />} />
           <Route path="beta-group" element={<BetaGroupPage />} />
           <Route path="quota" element={<PlatformQuotaPage />} />
-          <Route path="system" element={<SystemPage />} />
           <Route path="account" element={<AccountPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
   );
+}
+
+/** Old bookmarks keep their query string (filters) when the path itself moved. */
+function PreserveSearch({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
+}
+
+/** 回合流水页已撤：只把跨页还用得上的 `user_id` 带到会话名册。 */
+function RedirectTurnsToConversations() {
+  const [params] = useSearchParams();
+  const userId = params.get("user_id");
+  const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+  return <Navigate to={`/conversations${qs}`} replace />;
 }
 
 function CenteredCard({

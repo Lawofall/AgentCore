@@ -1,7 +1,7 @@
-"""BYOK vendor presets — server-side catalog seed aligned with desktop.
+"""BYOK vendor presets — catalog seed + off-protocol ids.
 
-Mirrors ``apps/desktop/src/renderer/lib/byokProviderPresets.ts`` (baseUrl / aliases /
-models / defaultModel). Catalog merge matches providers by normalized ``base_url``;
+Table source: ``byok_provider_presets.json`` next to this module (desktop form
+loads the same file). Catalog merge matches providers by normalized ``base_url``;
 unknown endpoints get no preset rows.
 
 Off-protocol model ids (need ``/responses`` or ``/messages``; this gateway only
@@ -13,24 +13,56 @@ call :func:`off_protocol_kind`.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
-from typing import Literal
+from typing import Any, Literal, cast
 
 OffProtocolKind = Literal["openai_responses", "anthropic_messages"]
+
+_DATA_PATH = Path(__file__).resolve().with_name("byok_provider_presets.json")
+_ALLOWED_OFF_PROTOCOL: frozenset[str] = frozenset(
+    {"openai_responses", "anthropic_messages"}
+)
+_OPENCODE_PRESET_IDS = frozenset({"opencode_go", "opencode_zen"})
+
+
+def _load_raw() -> dict[str, Any]:
+    if not _DATA_PATH.is_file():
+        raise FileNotFoundError(
+            f"BYOK preset table missing: {_DATA_PATH}. "
+            "The JSON must ship next to this module (hatch force-include)."
+        )
+    payload = json.loads(_DATA_PATH.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("byok_provider_presets.json: root must be an object")
+    return payload
+
+
+def _off_protocol_from_raw(raw: Mapping[str, Any]) -> dict[str, OffProtocolKind]:
+    models = raw.get("offProtocolModels")
+    if not isinstance(models, dict):
+        raise ValueError("byok_provider_presets.json: offProtocolModels must be an object")
+    out: dict[str, OffProtocolKind] = {}
+    for mid, kind in models.items():
+        if not isinstance(mid, str) or kind not in _ALLOWED_OFF_PROTOCOL:
+            raise ValueError(
+                f"byok_provider_presets.json: bad off-protocol entry {mid!r}={kind!r}"
+            )
+        out[mid] = cast(OffProtocolKind, kind)
+    return out
+
+
+_RAW = _load_raw()
 
 # Exact ids only — never substring / regex. Shared by BYOK (OpenCode Go/Zen
 # discovery) and platform (operator allowlist). OpenCode ``GET /models`` still
 # returns these; they stay out of chat/completions seeds and are listed-but-
 # unselectable in the catalog merge (not dropped at discovery / allowlist).
 BYOK_OFF_PROTOCOL_MODELS: Mapping[str, OffProtocolKind] = MappingProxyType(
-    {
-        "grok-4.5": "openai_responses",
-        "gpt-5.6-luna": "openai_responses",
-        "minimax-m2.7": "anthropic_messages",
-        "qwen3.7-max": "anthropic_messages",
-    }
+    _off_protocol_from_raw(_RAW)
 )
 
 
@@ -55,100 +87,54 @@ class ByokProviderPreset:
     default_model: str
     models: tuple[str, ...]
     base_url_aliases: tuple[str, ...] = ()
+    # Exact wire ids omitted from the chat picker after seed ∪ discovery.
+    # Probe ``default_model`` is not a picker source when a preset matches.
+    hide_from_picker: tuple[str, ...] = ()
 
 
-BYOK_PROVIDER_PRESETS: tuple[ByokProviderPreset, ...] = (
-    ByokProviderPreset(
-        id="deepseek",
-        label="DeepSeek",
-        base_url="https://api.deepseek.com",
-        base_url_aliases=("https://api.deepseek.com/v1",),
-        default_model="deepseek-v4-flash",
-        # V4.1 Flash preview is DeepSeek official API only (not OpenCode Go).
-        models=(
-            "deepseek-v4-flash",
-            "deepseek-v4.1-flash-expires-on-0910",
-            "deepseek-v4-pro",
-            "deepseek-v4-flash-vision-exp",
-        ),
-    ),
-    ByokProviderPreset(
-        id="openai",
-        label="OpenAI",
-        base_url="https://api.openai.com/v1",
-        default_model="gpt-4o",
-        models=("gpt-4o", "gpt-4o-mini", "o3-mini"),
-    ),
-    ByokProviderPreset(
-        id="moonshot",
-        label="Kimi (Moonshot)",
-        base_url="https://api.moonshot.cn/v1",
-        base_url_aliases=("https://api.moonshot.ai/v1",),
-        default_model="kimi-k2.6",
-        # kimi-k2 / moonshot-v1-* retired; k2.5 kept for older keys.
-        models=("kimi-k2.6", "kimi-k3", "kimi-k2.5"),
-    ),
-    ByokProviderPreset(
-        id="zhipu",
-        label="智谱 GLM",
-        base_url="https://open.bigmodel.cn/api/paas/v4",
-        default_model="glm-4-plus",
-        models=("glm-4-plus", "glm-4-flash", "glm-4-air"),
-    ),
-    ByokProviderPreset(
-        id="doubao",
-        label="豆包 (火山方舟)",
-        base_url="https://ark.cn-beijing.volces.com/api/v3",
-        default_model="doubao-seed-2-1-turbo-260628",
-        # Short seed; doubao-pro/lite-32k retired — use dated seed IDs or ep-… endpoints.
-        models=("doubao-seed-2-1-turbo-260628",),
-    ),
-    ByokProviderPreset(
-        id="hy",
-        label="腾讯 Hy (TokenHub)",
-        base_url="https://tokenhub.tencentmaas.com/v1",
-        base_url_aliases=(
-            "https://tokenhub.tencentmaas.cn/v1",
-            "https://tokenhub-intl.tencentmaas.com/v1",
-            "https://tokenhub-intl.tencentmaas.cn/v1",
-        ),
-        default_model="hy3",
-        models=("hy3", "hy3-preview"),
-    ),
-    ByokProviderPreset(
-        id="openrouter",
-        label="OpenRouter",
-        base_url="https://openrouter.ai/api/v1",
-        default_model="openrouter/auto",
-        models=(
-            "openrouter/auto",
-            "anthropic/claude-sonnet-4",
-            "google/gemini-2.5-pro",
-        ),
-    ),
-    ByokProviderPreset(
-        id="opencode_zen",
-        label="OpenCode Zen",
-        base_url="https://opencode.ai/zen/v1",
-        default_model="deepseek-v4-flash",
-        # Short seed for discovery-miss; full catalog = GET /models union.
-        # Off-protocol ids: :data:`BYOK_OFF_PROTOCOL_MODELS` (not this tuple).
-        models=chat_completions_seed("deepseek-v4-flash", "kimi-k2.6", "glm-5.2"),
-    ),
-    ByokProviderPreset(
-        id="opencode_go",
-        label="OpenCode Go",
-        # Sibling of Zen — exact match only. ``…/zen/go/v1`` must never be
-        # swallowed by a prefix/contains check on ``…/zen/v1``.
-        base_url="https://opencode.ai/zen/go/v1",
-        default_model="deepseek-v4-flash",
-        # chat/completions seed only; /responses and /messages ids stay off-seed
-        # via :func:`chat_completions_seed` / :data:`BYOK_OFF_PROTOCOL_MODELS`.
-        models=chat_completions_seed(
-            "deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2"
-        ),
-    ),
-)
+def _str_field(row: Mapping[str, Any], key: str) -> str:
+    val = row.get(key)
+    if not isinstance(val, str) or not val.strip():
+        raise ValueError(f"byok_provider_presets.json: preset missing {key}")
+    return val
+
+
+def _str_tuple(row: Mapping[str, Any], key: str) -> tuple[str, ...]:
+    val = row.get(key)
+    if val is None:
+        return ()
+    if not isinstance(val, list) or any(not isinstance(item, str) for item in val):
+        raise ValueError(f"byok_provider_presets.json: preset {key} must be a string array")
+    return tuple(val)
+
+
+def _presets_from_raw(raw: Mapping[str, Any]) -> tuple[ByokProviderPreset, ...]:
+    rows = raw.get("presets")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("byok_provider_presets.json: presets must be a non-empty array")
+    out: list[ByokProviderPreset] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("byok_provider_presets.json: each preset must be an object")
+        preset_id = _str_field(row, "id")
+        models = _str_tuple(row, "models")
+        if preset_id in _OPENCODE_PRESET_IDS:
+            models = chat_completions_seed(*models)
+        out.append(
+            ByokProviderPreset(
+                id=preset_id,
+                label=_str_field(row, "label"),
+                base_url=_str_field(row, "baseUrl"),
+                default_model=_str_field(row, "defaultModel"),
+                models=models,
+                base_url_aliases=_str_tuple(row, "baseUrlAliases"),
+                hide_from_picker=_str_tuple(row, "hideFromPicker"),
+            )
+        )
+    return tuple(out)
+
+
+BYOK_PROVIDER_PRESETS: tuple[ByokProviderPreset, ...] = _presets_from_raw(_RAW)
 
 
 def normalize_byok_base_url(url: str) -> str:
@@ -211,3 +197,11 @@ def preset_models_for_base_url(base_url: str) -> tuple[str, ...]:
     if is_opencode_byok_endpoint(base_url):
         return chat_completions_seed(*preset.models)
     return preset.models
+
+
+def hide_from_picker_ids(base_url: str) -> frozenset[str]:
+    """Exact ids a matched preset omits from new picker rows (empty if unmatched)."""
+    preset = match_byok_provider_preset(base_url)
+    if preset is None:
+        return frozenset()
+    return frozenset(preset.hide_from_picker)

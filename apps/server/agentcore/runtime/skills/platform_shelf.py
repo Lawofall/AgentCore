@@ -36,9 +36,15 @@ def get_platform_template(listing_id: str) -> DomainSkillTemplate | None:
     return None
 
 
-def platform_matches_query(skill: DomainSkillTemplate, q: str | None) -> bool:
+def platform_matches_query(
+    skill: DomainSkillTemplate,
+    q: str | None,
+    group: str | None = None,
+) -> bool:
+    if group is not None and skill.group != group:
+        return False
     needle = (q or "").strip().casefold()
     if not needle:
         return True
-    haystacks = (skill.name, skill.summary, PLATFORM_AUTHOR)
+    haystacks = (skill.name, skill.title, skill.summary, PLATFORM_AUTHOR)
     return any(needle in text.casefold() for text in haystacks)

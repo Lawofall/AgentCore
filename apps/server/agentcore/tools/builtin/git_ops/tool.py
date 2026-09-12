@@ -175,16 +175,9 @@ class GitTool:
         return ToolSchema(
             name="git",
             description=(
-                # 审批 / 无仓这两条策略只在这里写一遍——
-                # subcommand 与各参数说明只描述自己的取值语义。
+                # 无仓 / 审批 / ff-only 合同在代码与失败回执，不预写进按钮。
                 "工作区根结构化 Git（仅根 `.git`；探路优先 glob/grep）。"
-                "只读免批；写入与 stash push/pop、tag create、remote add 须审批；"
-                "无仓：只读→success+no_repo（勿当干净仓）；写硬错；"
-                "init_baseline=无仓则 init+首提交，脏仓→dirty_skip；"
-                "clone=无仓可浅克隆。"
-                "pull=--ff-only；冲突诚实停。"
-                "push/create_pr 恒确认（create_pr 仅 GitHub）。"
-                "禁项见失败回执。"
+                "写入会请确认。细节看失败回执。"
             ),
             parameters=GIT_TOOL_PARAMETERS,
             face=ToolFace.EXECUTION,

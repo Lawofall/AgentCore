@@ -39,7 +39,7 @@ from agentcore.runtime.resolve.prompt import (
 )
 from agentcore.runtime.skills import build_system_skill_registry
 from agentcore.tools.builtin import build_worker_registry
-from agentcore.tools.ceo_toolset import wire_worker_consult as _wire_worker_consult_tools
+from agentcore.tools.ceo_toolset import wire_worker_consult
 from agentcore.tools.mcp.wire import McpDiscoverResult
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registry import ToolRegistry
@@ -378,7 +378,7 @@ async def prepare_fresh_turn(
     # SectionOrder as the CEO) + the same attachment block at the end.
     skill_registry = build_system_skill_registry()
     register_mcp_tools(worker_tools, mcp_discover)
-    await _wire_worker_consult_tools(
+    await wire_worker_consult(
         worker_tools,
         skill_registry=skill_registry,
         folder_id=folder_id,

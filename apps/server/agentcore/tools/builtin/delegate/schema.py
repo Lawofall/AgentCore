@@ -3,6 +3,7 @@
 Schema layer (工具面瘦身): short trigger + 拆任务合同 + playbook/tasks 互斥.
 何时用写在本 description；根 CEO 编制 HOW →
 ``consult(staffing)``；嵌套 lead → ``consult(lead_subteam)``.
+task 参数只留自包含对比边界；填约束/路径/凭据 HOW 在上述 consult。
 """
 
 from __future__ import annotations
@@ -18,14 +19,12 @@ from agentcore.runtime.runs.playbooks import PLAYBOOKS, playbook_args_schema_des
 # Playbook-internal knobs still parse in builder; they are not on this schema.
 TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
     "type": "object",
-    "description": (
-        "可选。用户点名或流水线写死才填 artifacts；省略/空对象=不催写盘。"
-    ),
+    "description": "可选。用户点名或流水线写死才填 artifacts；省略=不催写盘。",
     "properties": {
         "artifacts": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "用户点名或流水线写死才填；否则省略。",
+            "description": "路径列表。",
         },
     },
 }
@@ -65,28 +64,22 @@ DELEGATE_PARAMETERS = {
                     "task": {
                         "type": "string",
                         "description": (
-                            "自包含=目标+边界+验收（worker 看不到完整历史）。"
+                            "自包含=目标+边界+验收（worker 看不到完整历史）"
                             "≠逐步改法、章节骨架。"
-                            "凭据写入 task 供队员填 env。"
-                            "已拍板写同一行「已确认约束：①…；②…」；无则「（无）」；"
-                            "自拟默认标假设、改法现状不进本行。"
-                            "未装配能力 ≠ 写进 task。"
-                            "点名入口或成品路径用工作区相对 POSIX（与 path 同形）。"
                         ),
                     },
                     "deliverable": TASK_DELIVERABLE_SCHEMA,
                     "id": {
                         "type": "string",
-                        "description": "节点 id（可选）。铸 run_id={prefix}_{id}；depends_on 可引用此字面值。",
+                        "description": "可选节点 id。depends_on 可引用此字面值。",
                     },
                     "depends_on": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": (
-                            "生产者→消费者：空=同波并行；"
-                            "排队只认本字段（本批 id / 角色名；勿手抄 del_*）"
-                            "≠ task 里写先后。"
-                            "跨回合是新开一队，不是 depends_on 连旧图。"
+                            "生产者→消费者：空=同波并行。"
+                            "排队只认本字段（本批 id / 角色名）≠ task 里写先后。"
+                            "跨回合是新开一队。"
                         ),
                     },
                     "replaces_run_id": {
@@ -110,7 +103,6 @@ DELEGATE_PARAMETERS = {
                             "已解析文件夹 id（该队员坐哪张桌）。"
                             "跨已登记文件夹（只读摸底与改盘通吃）须点名；"
                             "云端草稿 ≠ 读不到已有文件夹。接到工作区 / 挂载 ≠ 换桌。"
-                            "缺桌：云端建云桌；本机坐本次对话。勿为过闸 create_folder。"
                         ),
                     },
                     **TASK_MODEL_SCHEMA_PROPS,
@@ -128,9 +120,7 @@ DELEGATE_PARAMETERS = {
         "playbook": {
             "type": "string",
             "enum": sorted(PLAYBOOKS),
-            "description": (
-                "固化流水线名（非默认快捷进阶）；与 tasks 二选一，填了就不要传 tasks。"
-            ),
+            "description": "固化流水线名（非默认快捷进阶）；与 tasks 二选一。",
         },
         "playbook_args": {
             "type": "object",

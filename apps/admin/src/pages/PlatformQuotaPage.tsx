@@ -1,4 +1,5 @@
 import { PlatformCredentialsCard } from "@/components/PlatformCredentialsCard";
+import { SupplyTabs } from "@/components/SectionTabs";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, Page, PageHeader, SectionHeader } from "@/components/ui/Page";
@@ -24,9 +25,8 @@ function quotaLimit(value: string): ReactNode {
 const ENV_RESTART_HINT = "改 env 后需重启、无热更。";
 
 /**
- * 平台额度: the operator surface for the credential pool plus the deploy-time
- * billing / global-quota snapshot. Per-user overrides stay on 用户; Go window
- * usage stays on 分析·成本. This page is the only place those two facts render.
+ * 供给 · 额度: credential pool plus the deploy-time billing / global-quota snapshot.
+ * Per-user overrides stay on 用户; Go window usage stays on 供给 · 成本.
  */
 export function PlatformQuotaPage() {
   const [data, setData] = useState<AdminSystemStatus | null>(null);
@@ -58,18 +58,21 @@ export function PlatformQuotaPage() {
   return (
     <Page>
       <PageHeader
-        title="平台额度"
-        note={`${ENV_RESTART_HINT}每用户覆盖在「用户」；Go 三窗口用量在「分析 · 成本」。`}
+        title="供给"
+        note={`${ENV_RESTART_HINT}每用户覆盖在「用户」；Go 三窗口用量在「成本」。`}
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={refresh}
-            disabled={loading}
-            aria-label="刷新"
-          >
-            <RefreshCw size={14} className={cn(loading && "animate-spin")} />
-          </Button>
+          <>
+            <SupplyTabs />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refresh}
+              disabled={loading}
+              aria-label="刷新"
+            >
+              <RefreshCw size={14} className={cn(loading && "animate-spin")} />
+            </Button>
+          </>
         }
       />
 

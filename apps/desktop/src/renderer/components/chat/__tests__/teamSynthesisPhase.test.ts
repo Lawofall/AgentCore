@@ -1,7 +1,6 @@
 import {
   captainSynthesisPreviewText,
   coordinationWaitCaptainCaption,
-  coordinationWaitLabel,
   isTeamSynthesizing,
   teamSynthesisPhaseLabel,
   waitingWorkerRoles,
@@ -189,28 +188,6 @@ describe("teamSynthesisPhase", () => {
         in_progress: true,
       }),
     ).toBe("两边方向一致：优先方案 A。");
-  });
-
-  it("coordinationWaitLabel formats completed/total", () => {
-    expect(coordinationWaitLabel(null)).toBeNull();
-    expect(coordinationWaitLabel({ completed: 5, total: 8 })).toBe(
-      "等待团队成员完成 (5/8)…",
-    );
-  });
-
-  it("coordinationWaitLabel does not embed member roles", () => {
-    expect(
-      coordinationWaitLabel(
-        { completed: 1, total: 2 },
-        { waitingRoles: ["撰写员"] },
-      ),
-    ).toBe("等待团队成员完成 (1/2)…");
-    expect(
-      coordinationWaitLabel(
-        { completed: 0, total: 2 },
-        { waitingRoles: ["研究员", "撰写员"] },
-      ),
-    ).toBe("等待团队成员完成 (0/2)…");
   });
 
   it("coordinationWaitCaptainCaption stays short without elapsed", () => {

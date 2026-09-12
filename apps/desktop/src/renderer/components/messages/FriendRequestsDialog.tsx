@@ -1,5 +1,11 @@
 import { Button } from "@/components/ui";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { notifyError } from "@/lib/toast";
 import {
   acceptFriendRequest,
@@ -81,12 +87,12 @@ export function FriendRequestsDialog({ open, onClose, onOpenProfile }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-sm" aria-describedby={undefined}>
-        <div className="border-b border-border px-5 py-4">
+      <DialogContent size="md" aria-describedby={undefined}>
+        <DialogHeader>
           <DialogTitle>新的朋友</DialogTitle>
-        </div>
+        </DialogHeader>
 
-        <div className="max-h-96 overflow-y-auto">
+        <DialogBody className="max-h-96 px-0">
           <p className="px-5 pb-1 pt-3 text-xs font-medium text-muted-foreground">
             收到的申请
           </p>
@@ -183,7 +189,7 @@ export function FriendRequestsDialog({ open, onClose, onOpenProfile }: Props) {
               </ul>
             </>
           )}
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

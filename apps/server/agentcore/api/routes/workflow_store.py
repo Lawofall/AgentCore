@@ -119,6 +119,37 @@ def _row(
     )
 
 
+async def _resolve_installs(
+    user_id: str,
+    installs: dict[str, WorkflowStoreInstall],
+    workflows: UserWorkflowRepository,
+    store: WorkflowStoreRepository,
+) -> dict[str, WorkflowStoreInstall]:
+    if not installs:
+        return {}
+    live = await workflows.live_ids(
+        user_id, [row.workflow_id for row in installs.values()]
+    )
+    dead = [row.workflow_id for row in installs.values() if row.workflow_id not in live]
+    if dead:
+        await store.delete_installs_for_workflows(dead)
+    return {lid: row for lid, row in installs.items() if row.workflow_id in live}
+
+
+async def _resolve_install(
+    user_id: str,
+    install: WorkflowStoreInstall | None,
+    workflows: UserWorkflowRepository,
+    store: WorkflowStoreRepository,
+) -> WorkflowStoreInstall | None:
+    if install is None:
+        return None
+    resolved = await _resolve_installs(
+        user_id, {install.listing_id: install}, workflows, store
+    )
+    return resolved.get(install.listing_id)
+
+
 def _snapshot(row: UserWorkflow) -> tuple[str, str, dict[str, Any]]:
     definition = client_owned_definition(row.definition)
     return row.name, (row.description or "").strip(), definition
@@ -145,12 +176,18 @@ async def list_workflow_store(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     store: WorkflowStoreRepository = Depends(_store),
+    workflows: UserWorkflowRepository = Depends(get_user_workflow_repo),
 ) -> WorkflowStoreListResponse:
     rows, total = await store.list_shelf(
         q=q, page=page, page_size=page_size, statuses=("published",)
     )
     listing_ids = [listing.id for listing, _, _ in rows]
-    installs = await store.installs_by_listing_ids(user.user_id, listing_ids)
+    installs = await _resolve_installs(
+        user.user_id,
+        await store.installs_by_listing_ids(user.user_id, listing_ids),
+        workflows,
+        store,
+    )
     return WorkflowStoreListResponse(
         data=[
             _row(listing, version, author, installs.get(listing.id))
@@ -184,7 +221,9 @@ async def publish_workflow(
     version = await store.add_version(
         listing=listing, name=name, description=description, definition=definition
     )
-    install = await store.get_install(user.user_id, listing.id)
+    install = await _resolve_install(
+        user.user_id, await store.get_install(user.user_id, listing.id), workflows, store
+    )
     return WorkflowStoreListingDetail(
         **_row(listing, version, user, install).model_dump(),
         definition=version.definition,
@@ -196,12 +235,18 @@ async def publish_workflow(
 async def list_mine_listings(
     user: AuthUser,
     store: WorkflowStoreRepository = Depends(_store),
+    workflows: UserWorkflowRepository = Depends(get_user_workflow_repo),
 ) -> WorkflowStoreMineResponse:
     rows, _total = await store.list_shelf(
         author_user_id=user.user_id, page=1, page_size=100, statuses=None
     )
-    installs = await store.installs_by_listing_ids(
-        user.user_id, [listing.id for listing, _, _ in rows]
+    installs = await _resolve_installs(
+        user.user_id,
+        await store.installs_by_listing_ids(
+            user.user_id, [listing.id for listing, _, _ in rows]
+        ),
+        workflows,
+        store,
     )
     return WorkflowStoreMineResponse(
         data=[
@@ -216,13 +261,19 @@ async def list_installed(
     user: AuthUser,
     session: AsyncSession = Depends(get_db),
     store: WorkflowStoreRepository = Depends(_store),
+    workflows: UserWorkflowRepository = Depends(get_user_workflow_repo),
 ) -> WorkflowStoreInstalledResponse:
-    installs = await store.list_installs_for_user(user.user_id)
-    if not installs:
+    raw = await store.list_installs_for_user(user.user_id)
+    if not raw:
         return WorkflowStoreInstalledResponse(data=[])
+    live = await _resolve_installs(
+        user.user_id, {row.listing_id: row for row in raw}, workflows, store
+    )
     users = UserRepository(session)
     items: list[WorkflowStoreInstalledItem] = []
-    for install in installs:
+    for install in raw:
+        if install.listing_id not in live:
+            continue
         listing = await store.get_listing(install.listing_id)
         if listing is None:
             continue
@@ -245,6 +296,7 @@ async def get_listing(
     user: AuthUser,
     session: AsyncSession = Depends(get_db),
     store: WorkflowStoreRepository = Depends(_store),
+    workflows: UserWorkflowRepository = Depends(get_user_workflow_repo),
 ) -> WorkflowStoreListingDetail:
     listing = await store.get_listing(listing_id)
     version = await store.get_current_version(listing) if listing is not None else None
@@ -256,7 +308,9 @@ async def get_listing(
     author = await UserRepository(session).get_by_id(listing.author_user_id)
     if author is None:
         raise HTTPException(status_code=404, detail={"message": "找不到这个工作流"})
-    install = await store.get_install(user.user_id, listing.id)
+    install = await _resolve_install(
+        user.user_id, await store.get_install(user.user_id, listing.id), workflows, store
+    )
     return WorkflowStoreListingDetail(
         **_row(listing, version, author, install).model_dump(),
         definition=version.definition,
@@ -284,7 +338,9 @@ async def publish_new_version(
     version = await store.add_version(
         listing=listing, name=name, description=description, definition=definition
     )
-    install = await store.get_install(user.user_id, listing.id)
+    install = await _resolve_install(
+        user.user_id, await store.get_install(user.user_id, listing.id), workflows, store
+    )
     return WorkflowStoreListingDetail(
         **_row(listing, version, user, install).model_dump(),
         definition=version.definition,
@@ -298,6 +354,7 @@ async def unpublish_listing(
     user: AuthUser,
     session: AsyncSession = Depends(get_db),
     store: WorkflowStoreRepository = Depends(_store),
+    workflows: UserWorkflowRepository = Depends(get_user_workflow_repo),
 ) -> WorkflowStoreListingRow:
     listing = await store.get_listing(listing_id)
     if listing is None:
@@ -312,7 +369,9 @@ async def unpublish_listing(
         raise HTTPException(status_code=404, detail={"message": "找不到这个工作流"})
     author = await UserRepository(session).get_by_id(listing.author_user_id)
     assert author is not None
-    install = await store.get_install(user.user_id, listing.id)
+    install = await _resolve_install(
+        user.user_id, await store.get_install(user.user_id, listing.id), workflows, store
+    )
     return _row(listing, version, author, install)
 
 

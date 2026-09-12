@@ -17,11 +17,16 @@ Internally the row is still ``(id, origin, provider_id)`` — the SAME model id 
 under several providers (and once more as a platform row), because「run model X on provider
 A」vs「on provider B」vs「on platform free quota」are genuinely different options.
 
-* **byok** rows — per provider: ``default_model ∪`` vendor presets matched by
-  normalized ``base_url`` ``∪`` proxied ``GET /models`` (cached ~10min per
-  ``(provider_id, base_url)``). Discovery failure / empty still keeps preset + default
-  (never a 500); unknown/custom ``base_url`` has no preset (default + discovery only).
-  OpenCode Go/Zen ids in the shared off-protocol map
+* **byok** rows — per provider: vendor presets matched by normalized
+  ``base_url`` ``∪`` proxied ``GET /models`` (cached ~10min per
+  ``(provider_id, base_url)``). Probe ``default_model`` is **not** a picker
+  source when a preset matches (it is connection-test only). Unmatched /
+  custom ``base_url`` still uses ``default_model ∪`` discovery so a failed
+  list is not an empty dropdown. Discovery failure / empty still keeps the
+  preset seed (never a 500). After the union, exact ids in the preset's
+  ``hideFromPicker`` are omitted from new rows (retired official aliases);
+  already-pinned profile slots stay runnable. OpenCode Go/Zen ids in the
+  shared off-protocol map
   (:data:`agentcore.llm.byok_provider_presets.BYOK_OFF_PROTOCOL_MODELS`) stay
   listed (not silently dropped) but ``available=False`` with
   :class:`ModelUnavailableReason`.
@@ -33,8 +38,9 @@ A」vs「on provider B」vs「on platform free quota」are genuinely different o
 A keyless user on a deployment with no platform subsidy gets an EMPTY catalog — the UI
 shows an empty state that guides to 设置·模型配置 (no greyed-out「add a key」guide rows).
 
-BYOK id set = default ∪ base_url presets ∪ discovery; ``model_metadata`` only
-ENRICHES display fields. Catalog ``vision`` is stamped there from
+BYOK id set = (matched preset: seed ∪ discovery, minus hideFromPicker;
+unmatched: default ∪ discovery). ``model_metadata`` only ENRICHES display fields.
+Catalog ``vision`` is stamped there from
 :mod:`agentcore.llm.image_accept`. Pricing reuses the community chain
 (:func:`pricing_for_model`).
 Off-protocol OpenCode ids are kept in that set (visible, not selectable).
@@ -57,7 +63,9 @@ from agentcore.config import settings
 from agentcore.core.logging import get_logger
 from agentcore.llm.byok_provider_presets import (
     OffProtocolKind,
+    hide_from_picker_ids,
     is_opencode_byok_endpoint,
+    match_byok_provider_preset,
     off_protocol_kind,
     preset_models_for_base_url,
 )
@@ -233,11 +241,17 @@ async def _discover_provider_models(row, creds: LLMCredentials) -> list[str] | N
 def _provider_entries(
     row, creds: LLMCredentials, discovered: list[str] | None
 ) -> list[ModelCatalogEntry]:
-    """One provider's byok rows: default ∪ base_url preset ∪ discovered, tagged with provider."""
-    current = (creds.default_model or "").strip() or PLATFORM_MODEL_FLASH
+    """One provider's byok rows: seed ∪ discovery (or default ∪ discovery if unmatched)."""
     presets = preset_models_for_base_url(creds.base_url)
     discovered_ids = discovered if discovered is not None else []
-    ids = _dedupe([current, *presets, *discovered_ids])
+    if match_byok_provider_preset(creds.base_url) is not None:
+        ids = _dedupe([*presets, *discovered_ids])
+        hidden = hide_from_picker_ids(creds.base_url)
+        if hidden:
+            ids = [mid for mid in ids if mid not in hidden]
+    else:
+        current = (creds.default_model or "").strip() or PLATFORM_MODEL_FLASH
+        ids = _dedupe([current, *discovered_ids])
     label = (row.label or "").strip() or None
     entries: list[ModelCatalogEntry] = []
     for mid in ids:

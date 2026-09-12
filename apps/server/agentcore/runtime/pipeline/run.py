@@ -102,7 +102,7 @@ async def run_chat_pipeline(
 
     ``folder_id`` is the conversation's project (None for a bare/global chat): it selects
     the memory SCOPE so a project conversation also gets that project's memory layer
-    injected (global + project), and ``consult_memory`` searches both (Agent记忆与知识系统 §二).
+    injected (global + project), and ``consult`` searches both (Agent记忆与知识系统 §二).
 
     ``board_id`` marks this turn as a 白板会话 (AI协作白板.md §六 M2): when set, the CEO
     gains the ``board_ops`` tool + a :class:`BoardChannel` bound to that board, so it can

@@ -94,7 +94,7 @@ async def test_archive_create_in_schema_and_points_off_code_execute():
     assert schema.name == "archive_create"
     assert "code_execute" not in schema.description
     assert "本工具" in schema.description
-    assert "HOW→consult(archive_create)" in schema.description
+    assert "HOW→consult(archive_create)" not in schema.description
 
 
 async def test_archive_create_rejects_over_file_limit(

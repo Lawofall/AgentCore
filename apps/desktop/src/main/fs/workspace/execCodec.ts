@@ -108,6 +108,10 @@ export const BASH_UNAVAILABLE_HINT =
   "本机没有可用的 bash（Windows 上 PATH 的 bash 常是不可用的 WSL 蹦床）。" +
   "请改用 language=javascript 或 python 直接跑代码，不要用 bash 外壳包一层。";
 
+/** Byte-equal with server ``PYTHON_LAUNCHER_MISSING`` (classifier keys on 找不到命令). */
+export const PYTHON_LAUNCHER_MISSING =
+  "代码执行环境启动失败：找不到命令。这台电脑上没有可用的 Python 3。";
+
 /** Byte-equal with ``agentcore.tools.sandbox.exec_env`` spawn-site contract. */
 export const EXEC_ENV_PROBE_FAIL_MARKER = "ExecEnvProbeFailed:";
 export const EXEC_ENV_SPAWN_DENIED_CODE = "exec_env_spawn_denied";
@@ -133,11 +137,11 @@ export function launcherMissingStderr(
   launcher: string,
   language: string,
 ): string {
+  if (language === "python") {
+    return PYTHON_LAUNCHER_MISSING;
+  }
   if (language === "bash") {
     return `代码执行环境启动失败：找不到可用的命令 ${JSON.stringify(launcher)}。 ${BASH_UNAVAILABLE_HINT}`;
-  }
-  if (language === "python") {
-    return `代码执行环境启动失败：找不到命令 ${JSON.stringify(launcher)}。 请确认 PATH 上有 python 可执行文件。`;
   }
   if (language === "javascript") {
     return `代码执行环境启动失败：找不到命令 ${JSON.stringify(launcher)}。 请确认 PATH 上有 node 可执行文件。`;
@@ -145,7 +149,7 @@ export function launcherMissingStderr(
   return `代码执行环境启动失败：找不到命令 ${JSON.stringify(launcher)}。`;
 }
 
-/** First PATH hit for ``name`` (``node`` / ``python``), or ``null``. */
+/** First PATH hit for ``name`` (``node`` / ``python`` / ``python3`` / ``py``), or ``null``. */
 export function whichCommand(name: string): string | null {
   const { join, delimiter } = pathApi();
   const pathEnv = process.env.PATH ?? process.env.Path ?? "";
@@ -159,6 +163,30 @@ export function whichCommand(name: string): string | null {
       const candidate = join(dir, n);
       if (pathExists(candidate)) return candidate;
     }
+  }
+  return null;
+}
+
+/**
+ * Host argv prefix for Python 3, or ``null``.
+ * Language id stays ``python``. POSIX: ``python3`` then ``python`` (PEP 394).
+ * Windows: ``py -3``, then ``python``, then ``python3`` (PEP 397).
+ * Mirrors server ``resolve_python_launcher``.
+ */
+export function resolvePythonLauncher(): string[] | null {
+  const candidates: ReadonlyArray<readonly [string, readonly string[]]> =
+    process.platform === "win32"
+      ? [
+          ["py", ["py", "-3"]],
+          ["python", ["python"]],
+          ["python3", ["python3"]],
+        ]
+      : [
+          ["python3", ["python3"]],
+          ["python", ["python"]],
+        ];
+  for (const [name, argv] of candidates) {
+    if (whichCommand(name)) return [...argv];
   }
   return null;
 }
@@ -182,8 +210,11 @@ export function probeAvailableLanguages(): ExecLanguage[] {
       if (resolveBashLauncher()) out.push(lang);
       continue;
     }
-    const bin = lang === "javascript" ? "node" : "python";
-    if (whichCommand(bin)) out.push(lang);
+    if (lang === "python") {
+      if (resolvePythonLauncher()) out.push(lang);
+      continue;
+    }
+    if (whichCommand("node")) out.push(lang);
   }
   return out;
 }

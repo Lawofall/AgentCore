@@ -113,6 +113,14 @@ pnpm promo:lv:full
 
 ---
 
+## 四、口播预览稿 · deck（草稿）
+
+10 张 16:9 卡片叠在一页，给「只懂一点 AI 的普通人」讲产品。文案与构图讨论用，**不上官网导航**。
+
+打开：浏览器打开 [`deck/index.html`](./deck/index.html)，或在本目录 `pnpm deck`（http://127.0.0.1:4173）。方向键翻页。
+
+---
+
 ## 关联
 
 - 磁带回放（演示基础设施）：[demos/README.md](/demos/README.md)

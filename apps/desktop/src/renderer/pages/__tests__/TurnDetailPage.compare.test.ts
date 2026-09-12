@@ -1,4 +1,4 @@
-import { type Execution, hasRevisions, isDebate } from "@/stores/execution";
+import { type Execution, hasContinuations, isDebate } from "@/stores/execution";
 import { describe, expect, it } from "vitest";
 import { isDebateViewPending, resolveTurnDetailView } from "../turnDetailView";
 
@@ -7,7 +7,7 @@ import { isDebateViewPending, resolveTurnDetailView } from "../turnDetailView";
  * `revisable && !isDebate` (that hid 对比 on mixed multi_agent+debate graphs).
  */
 function showCompare(execution: Execution | null | undefined): boolean {
-  return !!execution && hasRevisions(execution);
+  return !!execution && hasContinuations(execution);
 }
 
 describe("TurnDetailPage showCompare gate", () => {
@@ -31,12 +31,12 @@ describe("TurnDetailPage showCompare gate", () => {
       ],
     } as unknown as Execution;
     expect(isDebate(withDebateAndRev)).toBe(true);
-    expect(hasRevisions(withDebateAndRev)).toBe(true);
+    expect(hasContinuations(withDebateAndRev)).toBe(true);
     expect(showCompare(withDebateAndRev)).toBe(true);
     // Old buggy gate: revisable && !debate → false
-    expect(hasRevisions(withDebateAndRev) && !isDebate(withDebateAndRev)).toBe(
-      false,
-    );
+    expect(
+      hasContinuations(withDebateAndRev) && !isDebate(withDebateAndRev),
+    ).toBe(false);
   });
 
   it("hides compare when there are no revisable runs", () => {

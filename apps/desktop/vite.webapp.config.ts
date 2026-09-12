@@ -1,6 +1,6 @@
 import { resolve } from "path";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 import { viteClientBuildDefine } from "../../scripts/client-build-info.mjs";
 import { serveHtmlAtRoot } from "./scripts/vite-serve-html-entry.mjs";
 
@@ -39,10 +39,14 @@ export default defineConfig({
     alias: {
       "@": resolve("src/renderer"),
       "@shared": resolve("src/shared"),
+      "@byok-presets": resolve(
+        "../server/agentcore/llm/byok_provider_presets.json",
+      ),
     },
   },
   server: {
     port: 5175,
+    fs: { allow: [searchForWorkspaceRoot(process.cwd())] },
   },
   // Align with electron.vite.config: dynamic import("mermaid") otherwise races
   // Vite's deps optimizer →「图表引擎加载失败」(see Diagram getMermaid).

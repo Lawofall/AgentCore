@@ -11,8 +11,9 @@ interpreter at all — gVisor smoke-runs the ``runsc`` runtime — which keeps a
 single backend-wide verdict, expressed here as ``language=None``.
 ``probe_interpreter`` stays for cloud boot / ``cloud_health`` only.
 
-Timeout redesign (定案): idle/silence is the primary kill; a high disaster
-wall is only a safety net — not a「verify budget」contract.
+Timeout: foreground ``run`` (short or verify) does not kill on silence —
+only the disaster wall, which is not a「verify budget」contract. Sandbox idle
+kill remains available when a caller passes ``idle_timeout_seconds``.
 """
 
 from __future__ import annotations
@@ -29,15 +30,11 @@ EXEC_ENV_PROBE_FAIL_MARKER = "ExecEnvProbeFailed:"
 # ``runtime.engine.tool_failure_face._CURATED_BY_CODE``).
 EXEC_ENV_PROBE_FAIL_USER_MESSAGE = (
     "本机执行环境不可用：这次没能判断出具体原因，代码没有运行。"
-    "我会换个方式继续。"
 )
 EXEC_ENV_NOT_LINUX_USER_MESSAGE = (
     "云端隔离执行只在云上的 Linux 环境可用。当前对话跑在你的电脑上，代码没有运行。"
-    "我会换个方式继续。"
 )
-EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE = (
-    "云端隔离执行环境当前不可用，代码没有运行。我会换个方式继续。"
-)
+EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE = "云端隔离执行环境当前不可用，代码没有运行。"
 EXEC_ENV_SANDBOX_UNAVAILABLE_BROWSER_MESSAGE = (
     "云端隔离浏览器当前不可用，没有打开页面。"
 )
@@ -80,12 +77,12 @@ _PROBE_SNIPPETS: dict[str, str] = {
 }
 # What every snippet prints; a probe only passes when this reaches stdout.
 PROBE_OK_TOKEN = "ok"
-# Binary each language is launched with — the thing a「找不到解释器」verdict is
-# actually about (mirrors ``subprocess._LANGUAGE_COMMANDS`` / desktop ``EXEC_LANGS``).
-_LANGUAGE_LAUNCHER: dict[str, str] = {
-    "python": "python",
-    "javascript": "node",
-    "bash": "bash",
+# Probe copy names the language, not argv[0]. Python's host launcher is resolved
+# (PEP 394/397); do not tell the model PATH is missing a file named ``python``.
+_INTERPRETER_NOUN: dict[str, str] = {
+    "python": "Python 解释器",
+    "javascript": "node 解释器",
+    "bash": "bash 解释器",
 }
 
 
@@ -94,19 +91,12 @@ def probe_snippet(language: str | None) -> str | None:
     return _PROBE_SNIPPETS.get((language or "").strip())
 
 
-def probe_launcher(language: str | None) -> str | None:
-    """Launcher binary ``language`` is started with, or ``None`` when unknown."""
-    return _LANGUAGE_LAUNCHER.get((language or "").strip())
-
-
 # Coarse local-turn / journal failure bucket (also accepted as client ``code``).
 EXEC_TIMEOUT_CODE = "exec_timeout"
 EXEC_FORCED_STOP_CODE = "exec_forced_stop"
 
-# Outer-loop verify (test_run): idle = primary; disaster = safety net only.
-EXEC_IDLE_TIMEOUT_DEFAULT_S = 60
-EXEC_IDLE_TIMEOUT_INSTALL_S = 120
-EXEC_DISASTER_TIMEOUT_S = 1200  # 20 minutes
+# Foreground run does not send an idle kill. Disaster wall is the only cap.
+EXEC_DISASTER_TIMEOUT_S = 1200  # 20 minutes; foreground run's only cap
 _ENGINE_TIMEOUT_SLACK_SECONDS = 30
 
 TIMEOUT_IDLE_MARKER = "Timeout: no output for"
@@ -174,11 +164,8 @@ _NO_INTERPRETER_MARKERS = (
 _NO_INTERPRETER_EXIT_CODE = 127
 
 # Closing advice, identical whatever the failure hit — the scope sentence in front
-# of it is what varies by language.
-_PROBE_FAIL_MODEL_ADVICE = (
-    "若本回合有 terminal 工具，它走桌面进程通道，可改用它跑命令；"
-    "否则请改静态核验，并如实说明命令未实跑。"
-)
+# of it is what varies by language. No stale tool name; retire already forbids retry.
+_PROBE_FAIL_MODEL_ADVICE = "请改静态核验，并如实说明命令未实跑。"
 
 # Model-facing head per reason: state the fact the evidence supports, and what it
 # rules out. ``{interpreter}`` / ``{snippet}`` are filled from the language the
@@ -238,13 +225,13 @@ _PROBE_FAIL_LANG_TAG = re.compile(r"\[lang:([a-z0-9_+#-]+)\]")
 
 
 def _interpreter_noun(language: str | None) -> str:
-    """``" python 解释器"`` for a known launcher, bare ``"解释器"`` otherwise.
+    """``" Python 解释器"`` for a known language, bare ``"解释器"`` otherwise.
 
     Carries its own leading space so the templates read naturally in both cases
-    (「找不到 node 解释器」 vs 「找不到解释器」).
+    (「找不到 node 解释器」 vs 「找不到解释器」). Not the host argv[0].
     """
-    launcher = probe_launcher(language)
-    return f" {launcher} 解释器" if launcher else "解释器"
+    noun = _INTERPRETER_NOUN.get((language or "").strip())
+    return f" {noun}" if noun else "解释器"
 
 
 def probe_failure_retire_tools(language: str | None) -> tuple[str, ...]:
@@ -520,7 +507,6 @@ def probe_failure_retire_steer(
     return (
         f"本机执行环境不可用（{cause}），{scope}——"
         "请改静态核验 / 读文件取证，并如实报告「执行环境不可用、验证未实跑」；"
-        "本机若有 `terminal` 工具，它走桌面进程通道，可用它跑命令；"
         "禁止再原样重试跑命令。"
     )
 

@@ -16,7 +16,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/renderer/*"],
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "@byok-presets": ["../server/agentcore/llm/byok_provider_presets.json"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

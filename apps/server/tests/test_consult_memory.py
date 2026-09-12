@@ -23,7 +23,7 @@ from agentcore.runtime.resolve.prompt import (
 from agentcore.runtime.skills import build_system_skill_registry
 from agentcore.tools.builtin import build_worker_registry
 from agentcore.tools.builtin.consult import ConsultTool
-from agentcore.tools.ceo_toolset import wire_worker_consult as _wire_worker_consult_tools
+from agentcore.tools.ceo_toolset import wire_worker_consult
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
@@ -180,7 +180,7 @@ async def test_wire_worker_consult_when_topics_exist(tmp_path, monkeypatch):
     registry = build_worker_registry(
         backend=ServerWorkspace(root=tmp_path, sandbox=SubprocessSandbox())
     )
-    await _wire_worker_consult_tools(
+    await wire_worker_consult(
         registry,
         skill_registry=build_system_skill_registry(),
         user_id="u",

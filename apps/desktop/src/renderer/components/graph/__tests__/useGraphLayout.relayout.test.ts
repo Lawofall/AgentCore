@@ -1,17 +1,18 @@
+import type { Execution } from "@/stores/execution";
 // @vitest-environment jsdom
 /**
  * 结构重算不得把 layoutReady 打回 false（否则 GraphView 卸载 ReactFlow → 整图闪烁）。
  * 白板模型：测高不得触发二次 ELK；仅结构变更重排。
  */
-import { NODE_HEIGHT } from "@/lib/elk-layout";
-import type { Execution } from "@/stores/execution";
+import { NODE_HEIGHT } from "@agentcore/graph-layout";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const computeLayout = vi.fn();
 
-vi.mock("@/lib/elk-layout", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/elk-layout")>();
+vi.mock("@agentcore/graph-layout", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@agentcore/graph-layout")>();
   return {
     ...actual,
     computeLayout: (...args: unknown[]) => computeLayout(...args),

@@ -1657,6 +1657,10 @@
             "title": "Description",
             "type": "string"
           },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1687,6 +1691,7 @@
           "author_user_id",
           "version_n",
           "status",
+          "group",
           "updated_at",
           "content"
         ],
@@ -1738,6 +1743,10 @@
             "title": "Description",
             "type": "string"
           },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1768,6 +1777,7 @@
           "author_user_id",
           "version_n",
           "status",
+          "group",
           "updated_at"
         ],
         "title": "AdminSkillStoreListingRow",
@@ -6001,6 +6011,30 @@
         "title": "CreateDirRequest",
         "type": "object"
       },
+      "CreateDocRequest": {
+        "properties": {
+          "folder_id": {
+            "title": "Folder Id",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "folder_id"
+        ],
+        "title": "CreateDocRequest",
+        "type": "object"
+      },
       "CreateFolderRequest": {
         "additionalProperties": false,
         "description": "Create a project (= workspace). ``mode`` is required and immutable after create.",
@@ -7284,6 +7318,171 @@
           "task"
         ],
         "title": "DispatchHandoffRequest",
+        "type": "object"
+      },
+      "DocBodyWriteRequest": {
+        "properties": {
+          "baseline": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline"
+          },
+          "body": {
+            "additionalProperties": true,
+            "title": "Body",
+            "type": "object"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "title": "DocBodyWriteRequest",
+        "type": "object"
+      },
+      "DocDetail": {
+        "description": "A doc plus its full block body (editor load payload).",
+        "properties": {
+          "body": {
+            "additionalProperties": true,
+            "title": "Body",
+            "type": "object"
+          },
+          "can_write": {
+            "title": "Can Write",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "folder_id": {
+            "title": "Folder Id",
+            "type": "string"
+          },
+          "folder_name": {
+            "title": "Folder Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "folder_id",
+          "folder_name",
+          "version",
+          "can_write",
+          "created_at",
+          "updated_at",
+          "body"
+        ],
+        "title": "DocDetail",
+        "type": "object"
+      },
+      "DocSummary": {
+        "properties": {
+          "can_write": {
+            "title": "Can Write",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "folder_id": {
+            "title": "Folder Id",
+            "type": "string"
+          },
+          "folder_name": {
+            "title": "Folder Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "folder_id",
+          "folder_name",
+          "version",
+          "can_write",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DocSummary",
+        "type": "object"
+      },
+      "DocWriteResult": {
+        "properties": {
+          "conflict": {
+            "default": false,
+            "title": "Conflict",
+            "type": "boolean"
+          },
+          "doc": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "version"
+        ],
+        "title": "DocWriteResult",
         "type": "object"
       },
       "DocumentContentRequest": {
@@ -12184,12 +12383,50 @@
             "minLength": 1,
             "title": "Document Id",
             "type": "string"
+          },
+          "group": {
+            "enum": [
+              "legal",
+              "writing",
+              "research",
+              "product",
+              "engineering",
+              "decision"
+            ],
+            "title": "Group",
+            "type": "string"
           }
         },
         "required": [
-          "document_id"
+          "document_id",
+          "group"
         ],
         "title": "PublishSkillRequest",
+        "type": "object"
+      },
+      "PublishVersionRequest": {
+        "properties": {
+          "group": {
+            "anyOf": [
+              {
+                "enum": [
+                  "legal",
+                  "writing",
+                  "research",
+                  "product",
+                  "engineering",
+                  "decision"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          }
+        },
+        "title": "PublishVersionRequest",
         "type": "object"
       },
       "PublishWorkflowRequest": {
@@ -14177,7 +14414,7 @@
         "type": "object"
       },
       "ShareSummary": {
-        "description": "One public read-only conversation share (分享链接).\n\n``url`` is a RELATIVE path (``/shared/<id>``) — like ``UserResponse.avatar_url``,\nthe client prepends the API origin so the backend stays agnostic of its public\nhost. ``id`` is the management handle (used to revoke); it is also the URL token.",
+        "description": "One public read-only share (对话或文档).\n\n``url`` is a RELATIVE path (``/shared/<id>``) — like ``UserResponse.avatar_url``,\nthe client prepends the API origin so the backend stays agnostic of its public\nhost. ``id`` is the management handle (used to revoke); it is also the URL token.",
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -14290,6 +14527,18 @@
             "title": "Document Id",
             "type": "string"
           },
+          "group": {
+            "enum": [
+              "legal",
+              "writing",
+              "research",
+              "product",
+              "engineering",
+              "decision"
+            ],
+            "title": "Group",
+            "type": "string"
+          },
           "has_update": {
             "title": "Has Update",
             "type": "boolean"
@@ -14329,6 +14578,7 @@
           "has_update",
           "status",
           "source_document_id",
+          "group",
           "document_id"
         ],
         "title": "SkillStoreInstalledItem",
@@ -14359,6 +14609,13 @@
             "title": "Data",
             "type": "array"
           },
+          "groups": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Groups",
+            "type": "object"
+          },
           "page": {
             "title": "Page",
             "type": "integer"
@@ -14376,7 +14633,8 @@
           "data",
           "total",
           "page",
-          "page_size"
+          "page_size",
+          "groups"
         ],
         "title": "SkillStoreListResponse",
         "type": "object"
@@ -14405,6 +14663,18 @@
               }
             ],
             "title": "Document Id"
+          },
+          "group": {
+            "enum": [
+              "legal",
+              "writing",
+              "research",
+              "product",
+              "engineering",
+              "decision"
+            ],
+            "title": "Group",
+            "type": "string"
           },
           "has_update": {
             "title": "Has Update",
@@ -14445,6 +14715,7 @@
           "has_update",
           "status",
           "source_document_id",
+          "group",
           "content"
         ],
         "title": "SkillStoreListingDetail",
@@ -14458,6 +14729,18 @@
           },
           "description": {
             "title": "Description",
+            "type": "string"
+          },
+          "group": {
+            "enum": [
+              "legal",
+              "writing",
+              "research",
+              "product",
+              "engineering",
+              "decision"
+            ],
+            "title": "Group",
             "type": "string"
           },
           "has_update": {
@@ -14498,7 +14781,8 @@
           "installed",
           "has_update",
           "status",
-          "source_document_id"
+          "source_document_id",
+          "group"
         ],
         "title": "SkillStoreListingRow",
         "type": "object"
@@ -15819,6 +16103,23 @@
           }
         },
         "title": "UpdateDirectorySettingsRequest",
+        "type": "object"
+      },
+      "UpdateDocRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "UpdateDocRequest",
         "type": "object"
       },
       "UpdateFolderMemberRequest": {
@@ -17681,7 +17982,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.18"
+    "version": "0.7.19"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -17737,7 +18038,7 @@
     },
     "/shared/{token}": {
       "get": {
-        "description": "Public, read-only view of a shared conversation snapshot (no auth).\n\nRenders the frozen, content-only snapshot as a self-contained HTML page. A\nrevoked / unknown / malformed token returns a friendly 404 page (never an error\nor an existence leak). The token must be a uuid — anything else can't be a valid\nshare id, so short-circuit to 404 before touching the DB (a non-uuid would error\nthe uuid-typed lookup).",
+        "description": "Public, read-only view of a frozen share snapshot (no auth).\n\nConversation and 文档 shares share the ``/shared/<id>`` URL. A revoked /\nunknown / malformed token returns the same 404 page (never an existence leak).",
         "operationId": "view_shared_shared__token__get",
         "parameters": [
           {
@@ -33012,6 +33313,722 @@
         ]
       }
     },
+    "/v1/docs": {
+      "get": {
+        "operationId": "list_docs_v1_docs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "folder_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Folder Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocSummary"
+                  },
+                  "title": "Response List Docs V1 Docs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Docs",
+        "tags": [
+          "docs"
+        ]
+      },
+      "post": {
+        "operationId": "create_doc_v1_docs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDocRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Doc",
+        "tags": [
+          "docs"
+        ]
+      }
+    },
+    "/v1/docs/{doc_id}": {
+      "delete": {
+        "operationId": "delete_doc_v1_docs__doc_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "title": "Doc Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Doc",
+        "tags": [
+          "docs"
+        ]
+      },
+      "get": {
+        "operationId": "get_doc_v1_docs__doc_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "title": "Doc Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Doc",
+        "tags": [
+          "docs"
+        ]
+      },
+      "patch": {
+        "operationId": "update_doc_v1_docs__doc_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "title": "Doc Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDocRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Doc",
+        "tags": [
+          "docs"
+        ]
+      }
+    },
+    "/v1/docs/{doc_id}/body": {
+      "put": {
+        "operationId": "write_doc_body_v1_docs__doc_id__body_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "title": "Doc Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocBodyWriteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocWriteResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Doc Body",
+        "tags": [
+          "docs"
+        ]
+      }
+    },
+    "/v1/docs/{doc_id}/shares": {
+      "get": {
+        "operationId": "list_doc_shares_v1_docs__doc_id__shares_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "title": "Doc Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Doc Shares",
+        "tags": [
+          "docs"
+        ]
+      },
+      "post": {
+        "operationId": "create_doc_share_v1_docs__doc_id__shares_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "title": "Doc Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateShareRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Doc Share",
+        "tags": [
+          "docs"
+        ]
+      }
+    },
+    "/v1/docs/{doc_id}/shares/{share_id}": {
+      "delete": {
+        "operationId": "revoke_doc_share_v1_docs__doc_id__shares__share_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "title": "Doc Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "title": "Share Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Doc Share",
+        "tags": [
+          "docs"
+        ]
+      }
+    },
     "/v1/documents": {
       "get": {
         "description": "List a folder's direct children (``parent_id`` omitted = the user's top-level nodes).",
@@ -38428,6 +39445,30 @@
           },
           {
             "in": "query",
+            "name": "group",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "legal",
+                    "writing",
+                    "research",
+                    "product",
+                    "engineering",
+                    "decision"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group"
+            }
+          },
+          {
+            "in": "query",
             "name": "page",
             "required": false,
             "schema": {
@@ -39063,6 +40104,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PublishVersionRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

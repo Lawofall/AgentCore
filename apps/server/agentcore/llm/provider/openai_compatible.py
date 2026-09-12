@@ -1305,7 +1305,8 @@ class OpenAICompatibleProvider:
                 # Official V4 default effort is high. Some relays honor
                 # reasoning_effort but ignore thinking.type — without it the
                 # stream has no CoT (OpenCode Go dogfood 2026-08-19).
-                if wire_model_leaf(request.model).startswith("deepseek-v4"):
+                leaf = wire_model_leaf(request.model)
+                if leaf.startswith("deepseek-v4") or leaf.startswith("deepseek-flash"):
                     payload["reasoning_effort"] = "high"
         return payload
 

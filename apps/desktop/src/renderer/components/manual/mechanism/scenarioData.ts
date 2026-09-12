@@ -1,6 +1,6 @@
-﻿import type { ElkGraphLayout } from "@/lib/graph-layout-utils";
-import type { RunStatus } from "@/stores/execution";
+﻿import type { RunStatus } from "@/stores/execution";
 import type { GraphEdge } from "@/stores/graph";
+import type { GraphLayout } from "@agentcore/graph-layout";
 export interface PreviewNode {
   id: string;
   type: "agent" | "userInput" | "captain";
@@ -11,7 +11,7 @@ export interface Scenario {
   title: string;
   desc: string;
   /** ELK 布局；缺省走左右流（与产品默认一致）。串行链用 "tree" 自上而下读。 */
-  layout?: ElkGraphLayout;
+  layout?: GraphLayout;
   /** 进阶形态：默认折进「更多形态」；常用四式（并行 / 串行 / 正反辩论 / 嵌套小队）常驻。 */
   advanced?: boolean;
   nodes: PreviewNode[];

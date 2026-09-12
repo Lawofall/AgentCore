@@ -22,6 +22,7 @@ class AdminSkillStoreListingRow(BaseModel):
     author_user_id: str
     version_n: int
     status: str
+    group: str
     updated_at: datetime
 
 
@@ -86,6 +87,7 @@ async def admin_list_listings(
                 author_user_id=listing.author_user_id,
                 version_n=version.version_n,
                 status=listing.status,
+                group=listing.shelf_group,
                 updated_at=listing.updated_at,
             )
             for listing, version, author in rows
@@ -120,6 +122,7 @@ async def admin_get_listing(
         author_user_id=listing.author_user_id,
         version_n=version.version_n,
         status=listing.status,
+        group=listing.shelf_group,
         updated_at=listing.updated_at,
         content=version.content,
     )
@@ -192,5 +195,6 @@ async def admin_takedown_listing(
         author_user_id=listing.author_user_id,
         version_n=version.version_n,
         status=listing.status,
+        group=listing.shelf_group,
         updated_at=listing.updated_at,
     )

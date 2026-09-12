@@ -57,7 +57,7 @@ logger = get_logger(__name__)
 _IS_LINUX = sys.platform == "linux"
 
 _LANGUAGE_COMMANDS: dict[str, list[str]] = {
-    "python": ["python3", "-u"],
+    "python": ["python3", "-u"],  # guest image bin — not a host PATH hunt
     "javascript": ["node"],
     "bash": ["bash"],
 }

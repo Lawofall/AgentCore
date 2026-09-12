@@ -2,9 +2,9 @@
 import type { ErrorAction } from "@/lib/errors";
 import {
   RECONNECTING_BANNER,
-  RECONNECT_BANNER,
   RECONNECT_FINISHED_BANNER,
   RECONNECT_INTERRUPTED_BANNER,
+  RECONNECT_LIVE_BANNER,
   UNKNOWN_CLOUD_BANNER,
 } from "@/services/turns/helpers";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -46,9 +46,9 @@ describe("RetryBanner", () => {
   });
 
   it("shows confirmed-live reconnect copy without a 重连 button", () => {
-    error = RECONNECT_BANNER;
+    error = RECONNECT_LIVE_BANNER;
     const { container } = render(<RetryBanner />);
-    expect(screen.getByText(RECONNECT_BANNER)).toBeTruthy();
+    expect(screen.getByText(RECONNECT_LIVE_BANNER)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "重连" })).toBeNull();
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
     expect(container.firstElementChild?.getAttribute("data-banner-tone")).toBe(

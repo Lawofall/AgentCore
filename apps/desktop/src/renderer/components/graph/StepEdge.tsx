@@ -1,5 +1,5 @@
-import { NODE_HEIGHT, NODE_WIDTH } from "@/lib/elk-layout";
 import { formatCompact } from "@/lib/format";
+import { NODE_HEIGHT, NODE_WIDTH } from "@agentcore/graph-layout";
 import {
   BaseEdge,
   type Edge,

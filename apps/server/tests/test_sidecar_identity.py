@@ -107,14 +107,7 @@ def test_start_turn_refreshes_user_id_per_turn(tmp_path, monkeypatch):
         kwargs["sink"].close()
         return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
 
-    async def _no_folder(_conversation_id: str) -> None:
-        return None
-
     monkeypatch.setattr("agentcore.sidecar.server.run_chat_pipeline", fake_pipeline)
-    monkeypatch.setattr(
-        "agentcore.sidecar.server_pkg.turns.load_conversation_folder_id",
-        _no_folder,
-    )
 
     sent, write_line = _recorder()
     server = SidecarServer(write_line)
@@ -134,6 +127,7 @@ def test_start_turn_refreshes_user_id_per_turn(tmp_path, monkeypatch):
                         "userMessageId": "11111111-1111-4111-8111-111111111111",
                         "messageId": "22222222-2222-4222-8222-222222222222",
                         "traceId": "a" * 32,
+                        "folderId": None,
                         **extra,
                     },
                 }

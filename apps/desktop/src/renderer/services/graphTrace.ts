@@ -13,7 +13,6 @@ const GRAPH_TRACE_KEY = "graphTrace";
 export type GraphTraceKind =
   | "structure"
   | "layout_ok"
-  | "height_relayout"
   | "projection"
   | "viewport"
   | "dom_clip";
@@ -104,13 +103,6 @@ export function traceGraphLayoutOk(detail: Record<string, unknown>): void {
     return;
   }
   push("layout_ok", detail);
-}
-
-/** @deprecated Whiteboard model: height-driven secondary ELK removed. */
-export function traceGraphHeightRelayout(
-  detail: Record<string, unknown>,
-): void {
-  push("height_relayout", detail);
 }
 
 /**

@@ -1,8 +1,8 @@
 import { useBrowserSessionsStore } from "../browserSessions";
 import { useConversationStore } from "../conversation";
 import {
+  continuationRootId,
   projectRuntime,
-  revisionRootId,
   useExecutionStore,
 } from "../execution";
 import { canRevealSidePanel, persistOpen } from "./chrome";
@@ -60,7 +60,7 @@ export function createFacadeActions(
       const rt = useExecutionStore.getState().byId[messageId];
       const projected = rt ? projectRuntime(rt) : null;
       const tabKeyRunId = projected
-        ? revisionRootId(runId, projected.runs)
+        ? continuationRootId(runId, projected.runs)
         : runId;
       get().openTab({
         kind: "run",

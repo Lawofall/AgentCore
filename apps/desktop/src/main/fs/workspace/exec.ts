@@ -13,6 +13,7 @@ import {
   isSpawnDeniedError,
   launcherMissingStderr,
   resolveBashLauncher,
+  resolvePythonLauncher,
   spawnDeniedStderr,
   whichCommand,
 } from "./execCodec";
@@ -104,6 +105,13 @@ function resolveLangCmd(
       return { error: launcherMissingStderr("bash", "bash") };
     }
     return { cmd: [bash] };
+  }
+  if (language === "python") {
+    const py = resolvePythonLauncher();
+    if (!py) {
+      return { error: launcherMissingStderr("python3", "python") };
+    }
+    return { cmd: [...py, "-u"] };
   }
   const binName = lang.cmd[0];
   if (!whichCommand(binName)) {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Admin 系统页「平台额度账号」卡：checklist、空池回落提示、禁用。
+ * Admin 供给·额度「平台额度账号」卡：checklist、空池回落提示、禁用。
  * The leading block comment keeps the @vitest-environment directive file-leading.
  */
 

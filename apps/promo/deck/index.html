@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentCore 口播预览 · 10 页</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,500;1,6..72,400;1,6..72,500&family=Outfit:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="preview-bar">
+      <p>
+        <strong>口播预览稿</strong>
+        · 不上官网 · 给只懂一点 AI 的人讲 · 方向键翻页
+      </p>
+      <nav class="toc" aria-label="页码">
+        <a href="#s01">01 封面</a>
+        <a href="#s02">02 ChatGPT</a>
+        <a href="#s03">03 别扭</a>
+        <a href="#s04">04 是什么</a>
+        <a href="#s05">05 点名</a>
+        <a href="#s06">06 四步</a>
+        <a href="#s07">07 看见</a>
+        <a href="#s08">08 找茬</a>
+        <a href="#s09">09 你说了算</a>
+        <a href="#s10">10 现在就试</a>
+      </nav>
+    </header>
+
+    <main class="deck">
+      <!-- 01 -->
+      <section class="slide-block" id="s01">
+        <article class="slide slide--hero">
+          <div class="starfield" aria-hidden="true"></div>
+          <div class="aurora" aria-hidden="true"></div>
+          <div class="slide-inner">
+            <svg class="glyph" viewBox="0 0 132 132" aria-hidden="true">
+              <g transform="translate(6 6)" fill="none">
+                <line x1="60" y1="60" x2="16" y2="26" stroke="var(--primary)" stroke-width="2.5" opacity="0.5" />
+                <line x1="60" y1="60" x2="108" y2="22" stroke="var(--primary)" stroke-width="2.5" opacity="0.5" />
+                <line x1="60" y1="60" x2="100" y2="104" stroke="var(--primary)" stroke-width="2.5" opacity="0.5" />
+                <line x1="16" y1="26" x2="108" y2="22" stroke="var(--primary)" stroke-width="2.5" opacity="0.45" />
+                <circle cx="60" cy="60" r="11" fill="var(--primary)" />
+                <circle cx="16" cy="26" r="7" fill="var(--primary)" opacity="0.85" />
+                <circle cx="108" cy="22" r="7" fill="var(--primary)" opacity="0.85" />
+                <circle cx="100" cy="104" r="7" fill="var(--primary)" opacity="0.85" />
+              </g>
+            </svg>
+            <p class="wordmark">AgentCore</p>
+            <h1 class="display">
+              <span class="accent">协作</span>，是更高级的智能
+            </h1>
+            <p class="hero-sub">一支你看得见的 AI 团队</p>
+          </div>
+        </article>
+        <p class="note"><b>讲：</b>停两秒。口号先立住，不解释功能。</p>
+      </section>
+
+      <!-- 02 -->
+      <section class="slide-block" id="s02">
+        <article class="slide">
+          <div class="slide-inner">
+            <div class="split">
+              <div class="split--text">
+                <p class="kicker">02 · 你已经会用</p>
+                <h2 class="display-sm">
+                  ChatGPT 很能聊。<br />难事一来，忙的还是你。
+                </h2>
+                <p class="lead">
+                  问一句、回一段，这件事它很在行。可事情一大——调研、方案、对数、改几轮——你得自己拆成好多问，自己盯有没有跑偏，自己判断哪句是编的。
+                </p>
+              </div>
+              <div class="chat" aria-hidden="true">
+                <div class="bubble bubble--you">
+                  <small>你</small>
+                  帮我做一份竞品分析。
+                </div>
+                <div class="bubble bubble--bot">
+                  <small>ChatGPT</small>
+                  好的。下面先给一个框架……
+                </div>
+                <div class="bubble bubble--you">
+                  <small>你</small>
+                  第三点展开，并把数据核对一下。
+                </div>
+                <div class="bubble bubble--bot">
+                  <small>ChatGPT</small>
+                  根据公开资料，大致是这样……
+                </div>
+                <p class="chat-tag">下一轮怎么拆，还是你来。</p>
+              </div>
+            </div>
+          </div>
+        </article>
+        <p class="note"><b>讲：</b>从他们已经会的东西讲起。点头了再往下。</p>
+      </section>
+
+      <!-- 03 -->
+      <section class="slide-block" id="s03">
+        <article class="slide">
+          <div class="slide-inner">
+            <p class="kicker">03 · 真正别扭的地方</p>
+            <h2 class="display-sm">你不想当项目经理，又不敢完全放手。</h2>
+            <div class="pains">
+              <article class="pain">
+                <span class="idx">01</span>
+                <h3>拆不动</h3>
+                <p>一件难事要问十几轮。步骤在你脑子里，AI 并不会自己变成一支队伍。</p>
+              </article>
+              <article class="pain">
+                <span class="idx">02</span>
+                <h3>看不见</h3>
+                <p>中间怎么想的是黑箱。等它交卷，错了才知道，也拦不住。</p>
+              </article>
+              <article class="pain">
+                <span class="idx">03</span>
+                <h3>不敢信</h3>
+                <p>它说得像真的。对不对、全不全，还得你自己查。</p>
+              </article>
+            </div>
+          </div>
+        </article>
+        <p class="note"><b>讲：</b>三个别扭对着「拆、看、信」。不要在这里卖功能。</p>
+      </section>
+
+      <!-- 04 -->
+      <section class="slide-block" id="s04">
+        <article class="slide">
+          <div class="slide-inner">
+            <div class="split">
+              <div class="split--text">
+                <p class="kicker">04 · 这是什么</p>
+                <h2 class="display-sm">你是老板。<br />说要什么就行。</h2>
+                <p class="lead">
+                  AgentCore 是一个 AI 团队工作台。一句话交代目标，AI 队长帮你组队，几个 AI 队员分头干活、互相检查。你看过程，在关口拍板。
+                </p>
+              </div>
+              <div class="beats">
+                <article class="beat">
+                  <i>01</i>
+                  <div>
+                    <strong>你</strong>
+                    <span>一句话说目标。不用拆步骤，不用写提示词。</span>
+                  </div>
+                </article>
+                <article class="beat">
+                  <i>02</i>
+                  <div>
+                    <strong>AI 队长</strong>
+                    <span>看任务重不重，该拉人就组队，该自己答就自己答。</span>
+                  </div>
+                </article>
+                <article class="beat">
+                  <i>03</i>
+                  <div>
+                    <strong>AI 队员</strong>
+                    <span>产品里叫 Agent。各干一块，做完再交到一起。</span>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </div>
+        </article>
+        <p class="note"><b>讲：</b>只讲角色。后面会反复用「队长 / 队员」。</p>
+      </section>
+
+      <!-- 05 -->
+      <section class="slide-block" id="s05">
+        <article class="slide">
+          <div class="slide-inner">
+            <p class="kicker">05 · 和你熟知的工具</p>
+            <h2 class="display-sm">不是更会聊的 ChatGPT。是一支你会带的团队。</h2>
+            <div class="compare">
+              <article class="col">
+                <div class="who">ChatGPT</div>
+                <p class="what">聊天机器人</p>
+                <p class="do">你问，它答。一轮一轮往下聊。</p>
+                <p class="miss"><em>缺什么</em><br />难事要你自己拆、自己盯、自己判断它有没有编。</p>
+              </article>
+              <article class="col">
+                <div class="who">Cursor</div>
+                <p class="what">写代码用的 AI 编辑器</p>
+                <p class="do">你在编辑器里，指挥一个助手改项目。</p>
+                <p class="miss"><em>缺什么</em><br />仍要你把步骤说清楚。过程也不像一支团队。</p>
+              </article>
+              <article class="col col--us">
+                <div class="who">AgentCore</div>
+                <p class="what">AI 团队工作台</p>
+                <p class="do">你当老板，说要什么。队长组队，队员分头干、互相检查。</p>
+                <p class="miss"><em>你留下什么</em><br />过程摊开，关口你拍板。</p>
+              </article>
+            </div>
+          </div>
+        </article>
+        <p class="note"><b>讲：</b>点名。Cursor 补那半句。语气是下一步，不是踩竞品。</p>
+      </section>
+
+      <!-- 06 -->
+      <section class="slide-block" id="s06">
+        <article class="slide">
+          <div class="slide-inner">
+            <p class="kicker">06 · 你怎么用</p>
+            <h2 class="display-sm">就四步。不用先学一套玩法。</h2>
+            <div class="steps">
+              <article class="step">
+                <span class="idx">01</span>
+                <h3>说要什么</h3>
+                <p>平常说话交代目标。轻问直接答，并不硬拉一队人。</p>
+              </article>
+              <article class="step">
+                <span class="idx">02</span>
+                <h3>自动组队</h3>
+                <p>事重了，队长才派人。谁干什么、谁等谁，不用你排。</p>
+              </article>
+              <article class="step">
+                <span class="idx">03</span>
+                <h3>看着他们干</h3>
+                <p>谁在检索、谁在写、谁在挑刺，摊在一张图上。</p>
+              </article>
+              <article class="step">
+                <span class="idx">04</span>
+                <h3>该你拍板才停</h3>
+                <p>开不开工、计划行不行、这个动作批不批。其余自己跑。</p>
+              </article>
+            </div>
+          </div>
+        </article>
+        <p class="note"><b>讲：</b>这四步就是待会演示的顺序。不要加第五步。</p>
+      </section>
+
+      <!-- 07 -->
+      <section class="slide-block" id="s07">
+        <article class="slide">
+          <div class="slide-inner">
+            <div class="split">
+              <div class="split--text">
+                <p class="kicker">07 · 看见</p>
+                <h2 class="display-sm">不是一个人，装成好多人。</h2>
+                <p class="lead">
+                  有的同时摸底，有的必须等前面做完再接着干，最后有人专门挑刺。你会看见谁在等谁，而不是五条一起闪的分身。
+                </p>
+              </div>
+                <div class="graph" aria-hidden="true">
+                <div class="graph-task">你的任务 · <b>做一份纸袋行业竞品分析</b></div>
+                <div class="graph-ceo">AI 队长 · 谁先干、谁后干</div>
+                <div class="wave">
+                  <span class="wave-n">① 同时</span>
+                  <div class="nodes">
+                    <div class="node node--run">资料检索<small>进行中</small></div>
+                    <div class="node node--done">数据采集<small>已完成，等同伴</small></div>
+                  </div>
+                </div>
+                <div class="wave">
+                  <span class="wave-n">② 接着</span>
+                  <div class="nodes">
+                    <div class="node node--wait">数据分析<small>等前面做完</small></div>
+                    <div class="node node--wait">趋势研判<small>等前面做完</small></div>
+                  </div>
+                </div>
+                <div class="wave">
+                  <span class="wave-n">③ 挑刺</span>
+                  <div class="nodes nodes--one">
+                    <div class="node node--review">质检复核<small>专找站不住的结论</small></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+        <p class="note"><b>讲：</b>指着「已完成，等同伴」：这就是团队，不是一个人分饰多角。</p>
+      </section>
+
+      <!-- 08 -->
+      <section class="slide-block" id="s08">
+        <article class="slide">
+          <div class="slide-inner">
+            <div class="split">
+              <div class="split--text">
+                <p class="kicker">08 · 找茬</p>
+                <h2 class="display-sm">他们还会互相找茬。</h2>
+                <p class="lead">
+                  不是把字堆得更快。是结论要经得起问：有人主张，有人反驳，站不住就打回重做。你看着这场讨论，不必自己扮演所有反对意见。
+                </p>
+              </div>
+              <div class="debate" aria-hidden="true">
+                <article class="side">
+                  <h3>方案 · 正</h3>
+                  <p>先扩产能，再谈品牌。规模上来，成本会下来。</p>
+                </article>
+                <article class="side">
+                  <h3>方案 · 反</h3>
+                  <p>限塑令时间线对不上。产能先上，库存会砸在手里。</p>
+                </article>
+                <p class="verdict">
+                  <span>质检进场 · 对 3 处结论提出反驳</span>
+                  <strong>打回重做</strong>
+                </p>
+              </div>
+            </div>
+          </div>
+        </article>
+        <p class="note"><b>讲：</b>互审是「更靠谱」，不是「更快」。点一下即可，不要讲机制名。</p>
+      </section>
+
+      <!-- 09 -->
+      <section class="slide-block" id="s09">
+        <article class="slide">
+          <div class="slide-inner">
+            <p class="kicker">09 · 留下的和你拍板的</p>
+            <h2 class="display-sm">东西在你这儿。决定也在你这儿。</h2>
+            <div class="trust">
+              <article>
+                <h3>文件会留下</h3>
+                <p>报告、代码、方案进你的工作区（就是你的文件夹），不是聊完就飘走。下一回还能接着用。</p>
+              </article>
+              <article>
+                <h3>真要决策才问你</h3>
+                <p>开不开工、计划行不行、这个动作批不批。其余时候自己跑——不用你盯每一句。</p>
+              </article>
+            </div>
+          </div>
+        </article>
+        <p class="note"><b>讲：</b>收口信任。不要在这里展开密钥、商店、即将开放。</p>
+      </section>
+
+      <!-- 10 -->
+      <section class="slide-block" id="s10">
+        <article class="slide slide--close">
+          <div class="starfield" aria-hidden="true"></div>
+          <div class="aurora" aria-hidden="true"></div>
+          <div class="slide-inner">
+            <p class="n">AgentCore</p>
+            <h2 class="display" style="margin-top: 2.2cqh">
+              把下一件难事，<br />交给一支<span class="accent">团队</span>。
+            </h2>
+            <a class="btn-grad" href="https://app.fashitianxia.xyz" target="_blank" rel="noopener noreferrer">
+              <span>免安装 · 打开网页版</span>
+              <span aria-hidden="true">↗</span>
+            </a>
+            <p class="close-note">
+              想用电脑里的文件，再
+              <a href="https://fashitianxia.xyz/download">装桌面客户端</a>
+            </p>
+          </div>
+        </article>
+        <p class="note"><b>讲：</b>请他们当场打开网页。不要在这里讲怎么装客户端。</p>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        var slides = Array.prototype.slice.call(document.querySelectorAll(".slide-block"));
+        document.addEventListener("keydown", function (e) {
+          var keys = ["ArrowDown", "ArrowUp", "PageDown", "PageUp", "ArrowRight", "ArrowLeft", "j", "k"];
+          if (keys.indexOf(e.key) === -1) return;
+          e.preventDefault();
+          var going =
+            e.key === "ArrowDown" || e.key === "PageDown" || e.key === "ArrowRight" || e.key === "j";
+          var y = window.scrollY + 90;
+          var i = 0;
+          for (var n = 0; n < slides.length; n++) {
+            if (slides[n].offsetTop + slides[n].offsetHeight > y + 20) {
+              i = n;
+              break;
+            }
+          }
+          var next = going ? Math.min(i + 1, slides.length - 1) : Math.max(i - 1, 0);
+          if (!going && slides[i].offsetTop < window.scrollY + 40) {
+            next = Math.max(i - 1, 0);
+          }
+          slides[next].scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      })();
+    </script>
+  </body>
+</html>

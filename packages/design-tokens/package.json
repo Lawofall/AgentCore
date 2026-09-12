@@ -3,11 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "AgentCore 跨端 OKLCH 语义 token 单源（desktop globals.css + mobile styles.css）",
+  "description": "AgentCore OKLCH 语义 token 单源（desktop globals.css；Capacitor 同树浅色 :root）",
   "exports": {
-    ".": "./src/index.ts",
-    "./tokens.css": "./src/tokens.css",
-    "./mobile-light.css": "./src/mobile-light.css"
-  },
-  "types": "./src/index.ts"
+    "./tokens.css": "./src/tokens.css"
+  }
 }

@@ -115,22 +115,20 @@ class WorkspaceSettings(BaseModel):
     # (single-uvicorn production ⇒ effectively per host). Sized for the 2C8G box.
     gvisor_max_concurrent_executions: int = 2
     # Bounded grace queue: how long one call may wait for a free slot before it
-    # fails fast with an explainable "busy" result. code_execute stays ≤60s at the
-    # tool layer *after* the desk is up; test_run (bounded verify) may use up to
-    # gvisor_timeout_max. Desk boot is a separate clock (see
+    # fails fast with an explainable "busy" result. Foreground ``run`` uses the
+    # disaster wall; bounded verify shares that wall.
+    # Desk boot is a separate clock (see
     # ``gvisor_desk_start_timeout_seconds``).
     gvisor_slot_wait_seconds: float = 15.0
     # Guest create (sandboxd ``start_detach``) in prepare / resume / attach.
-    # Minutes-scale, not the 60s exec cap / 90s engine EXECUTION default.
-    # Cloud ``run`` engine wait_for is the op ceiling only — not boot.
+    # Minutes-scale. Cloud ``run`` engine wait_for is the op ceiling only — not boot.
     gvisor_desk_start_timeout_seconds: float = 180.0
     # Per-execution hard resource caps enforced by the OCI spec. Authoritative for
     # cloud runs: an ExecutionRequest cannot exceed them. Memory default sized for
     # document/data workloads (pandas + matplotlib comfortably above 256MB).
     gvisor_memory_limit_mb: int = 512
-    # Ceiling for sandbox requests. code_execute still caps itself at 60s; raised
-    # so bounded project verify (test_run outer loop) is not silently truncated on
-    # cloud gVisor. Covers disaster wall (1200s) + engine slack (30s).
+    # Ceiling for sandbox requests. Foreground ``run`` (short and verify) uses
+    # the disaster wall; this cap covers 1200s + engine slack (30s).
     gvisor_timeout_max_seconds: int = 1230
     # Idle cloud-desk guest reap (kill+delete; disk stays; next prepare/attach
     # recreates in seconds). Default matches browser session idle (10min). A desk
@@ -195,9 +193,9 @@ class WorkspaceSettings(BaseModel):
     package_veth_subnet_base: str = "10.202"
 
     # ── L3 团队浏览器 M1 直播（内置浏览器与Agent浏览器提案.md · D13–D15）─────────
-    # Live screencast baseline (D14): CDP Page.startScreencast params. The gVisor gate
-    # (scripts/poc_browser_gvisor/run_screencast.py) measured ~57fps @ ~14KB/frame at
-    # q60/1280 — capability far exceeds need, so everyNthFrame throttles the base rate
+    # Live screencast baseline (D14): CDP Page.startScreencast params. A gVisor
+    # probe measured ~57fps @ ~14KB/frame at q60/1280 — capability far exceeds
+    # need, so everyNthFrame throttles the base rate
     # (2 ⇒ ~half) while frame ack backpressure + per-viewer coalescing bound the rest.
     browser_screencast_jpeg_quality: int = 60
     browser_screencast_max_width: int = 1280

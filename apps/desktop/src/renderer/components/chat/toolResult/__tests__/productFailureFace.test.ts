@@ -44,6 +44,19 @@ describe("specificToolFailureMessage", () => {
     ).toBeNull();
   });
 
+  it("hides a self-heal code even when a historical aside is still on the event", () => {
+    expect(
+      specificToolFailureMessage({
+        status: "error",
+        failure: {
+          message:
+            "这次没能截到页面画面，看不到实际显示效果。我会改用读取页面内容的方式来确认。",
+          code: "no_frame",
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("keeps a cause-specific sentence", () => {
     expect(
       specificToolFailureMessage({

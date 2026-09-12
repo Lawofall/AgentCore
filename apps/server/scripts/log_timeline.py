@@ -57,12 +57,10 @@ from agentcore.observability.query.store import open_conversation_store  # noqa:
 from agentcore.observability.query.timeline import (  # noqa: E402
     extract_conversation_id,
     load_conversation_spine_events,
+    load_log_events,
     query_conversation_timeline,
     query_recent,
     query_trace,
-)
-from agentcore.observability.query.timeline import (
-    load_log_events as _query_load_log_events,
 )
 from agentcore.observability.query.timeutil import (  # noqa: E402
     parse_since,
@@ -594,7 +592,7 @@ async def main() -> None:
                     print(f"已按 trace_id 解释（无连字符 32-hex）: {raw_trace}")
             trace_id = normalize_trace_id_arg(raw_trace)
             # Pre-load events for gap detection before query builds the spine.
-            pre_events, _ = _query_load_log_events(
+            pre_events, _ = load_log_events(
                 trace_id, field="trace_id", log_file=log_file, since=since
             )
             gap = detect_jsonl_timeline_gap(pre_events)
@@ -713,22 +711,6 @@ async def main() -> None:
         )
     finally:
         await store.aclose()
-
-
-def load_log_events(
-    value: str,
-    field: str = "conversation_id",
-    log_file: Path = LOG_FILE,
-    since: datetime | None = None,
-) -> list[dict]:
-    """Compat shim: returns projected events only (matches pre-P0 signature)."""
-    events, _stats = _query_load_log_events(
-        value,
-        field,
-        log_file=log_file,
-        since=since,
-    )
-    return events
 
 
 if __name__ == "__main__":

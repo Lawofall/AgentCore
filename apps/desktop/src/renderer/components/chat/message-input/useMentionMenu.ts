@@ -1018,8 +1018,6 @@ export function useMentionMenu({
     menuMode,
     sections,
     flatItems,
-    /** @deprecated 兼容旧调用；等同 flatItems */
-    items: flatItems,
     activeIndex,
     indexLoading,
     menuError,

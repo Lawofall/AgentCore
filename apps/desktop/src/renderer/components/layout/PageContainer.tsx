@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
  * 页面宽度档位（见 `.cursor/rules/desktop-layout.mdc`）：
  * - `content` 896px：线性阅读（设置、详情、表单）
  * - `canvas` 1200px：网格/多列（探索、列表、工具箱）
- * - `full`：不限宽（工具箱提示词工作台）
+ * - `full`：不限宽
  *
  * 对话页与文件页有各自的分栏布局，不走本组件。
  */

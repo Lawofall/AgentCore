@@ -5,9 +5,9 @@
 import { StreamError } from "@/lib/errors";
 import {
   RECONNECTING_BANNER,
-  RECONNECT_BANNER,
   RECONNECT_FINISHED_BANNER,
   RECONNECT_INTERRUPTED_BANNER,
+  RECONNECT_LIVE_BANNER,
   UNKNOWN_CLOUD_BANNER,
 } from "@/services/turns/helpers";
 import { reconnectBackoffMs } from "@/services/turns/reconnectBackoff";
@@ -118,7 +118,7 @@ describe("rejoinLiveTurn · bounded GET attach, never resend", () => {
     const done = rejoinLiveTurn(CID);
     await flush();
     await done;
-    expect(getRuntime(CID).error).toBe(RECONNECT_BANNER);
+    expect(getRuntime(CID).error).toBe(RECONNECT_LIVE_BANNER);
     expect(loadRecovery).toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(reconnectBackoffMs(0, 0));
@@ -137,7 +137,7 @@ describe("rejoinLiveTurn · bounded GET attach, never resend", () => {
     attachConversation.mockRejectedValue(new StreamError("network"));
     await expect(rejoinLiveTurn(CID)).resolves.toBe(true);
     expect(attachConversation).toHaveBeenCalledTimes(1);
-    expect(getRuntime(CID).error).toBe(RECONNECT_BANNER);
+    expect(getRuntime(CID).error).toBe(RECONNECT_LIVE_BANNER);
     expect(
       getRuntime(CID).messages.filter((m) => m.role === "user"),
     ).toHaveLength(1);
@@ -156,7 +156,7 @@ describe("rejoinLiveTurn · bounded GET attach, never resend", () => {
       await flush();
     }
     expect(attachConversation).toHaveBeenCalledTimes(1 + pastOldCap);
-    expect(getRuntime(CID).error).toBe(RECONNECT_BANNER);
+    expect(getRuntime(CID).error).toBe(RECONNECT_LIVE_BANNER);
 
     attachConversation.mockResolvedValueOnce("attached");
     await vi.advanceTimersByTimeAsync(reconnectBackoffMs(pastOldCap, 0));
@@ -300,7 +300,7 @@ describe("rejoinLiveTurn · bounded GET attach, never resend", () => {
     const done = rejoinLiveTurn(CID);
     await flush();
     await done;
-    expect(getRuntime(CID).error).toBe(RECONNECT_BANNER);
+    expect(getRuntime(CID).error).toBe(RECONNECT_LIVE_BANNER);
 
     useServerHealthStore.setState({
       status: "offline",
@@ -317,7 +317,9 @@ describe("rejoinLiveTurn · bounded GET attach, never resend", () => {
   });
 
   it("handleServerHealthRecovered kicks a fresh attach when retries already exhausted", async () => {
-    useConversationStore.getState().setError(RECONNECT_BANNER, null, CID, null);
+    useConversationStore
+      .getState()
+      .setError(RECONNECT_LIVE_BANNER, null, CID, null);
     attachConversation.mockResolvedValue("attached");
 
     handleServerHealthRecovered();

@@ -7,7 +7,9 @@ user-facing silence / 先摸清入口就停 live in ``staffing``).
 
 from __future__ import annotations
 
-_LEAD_SUBTEAM = """\
+from agentcore.runtime.skills.staffing import TASK_FILL_HOW
+
+_LEAD_SUBTEAM = f"""\
 <子队拆法>
 【何时拆】拿到的是成果级目标·约束·验收、本轮没把结构钉成单切片 → 优先先 `delegate` 再拆一层团队，\
 看到产出后再由你整合。豁免（自己干）：单文件 / 已钉薄壳 / 强耦合同 run 切片 / 小修·机械单步。\
@@ -17,7 +19,8 @@ _LEAD_SUBTEAM = """\
 派完继续自己干 ≠ 这把工具的行为。
 
 【怎么派】task = 目标 + 边界 + 验收，自洽（子队员看不到你的窗口）。\
-按活的结构组队，一块则 1 人。交了某职责 ≠ 再平铺同名角色。参数填法见本工具 schema。
+{TASK_FILL_HOW}\
+按活的结构组队，一块则 1 人。交了某职责 ≠ 再平铺同名角色。
 
 【整合】子队产出上卷后由你交差；交付形态仍以你的节点合同为准。
 </子队拆法>"""

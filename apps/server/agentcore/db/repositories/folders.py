@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agentcore.core.types import new_id
 from agentcore.db.models import Conversation, ConversationPreference, Folder, FolderMember
 from agentcore.db.repositories._desk_visibility import folder_accessible_clause
+from agentcore.db.repositories.doc_shares import DocShareRepository
 from agentcore.folders.unbind import clear_folder_session_pointers
 from agentcore.workspace.cloud_tree import (
     ancestor_chain,
@@ -449,6 +450,12 @@ class FolderRepository:
             await clear_folder_session_pointers(
                 self._session, folder_id=member_id, user_id=user_id
             )
+        # Same txn as the tombstone: a public /shared snapshot must not outlive
+        # 「最近删除」. Restore does not un-revoke (conversation shares already
+        # stay dead after the chat comes back).
+        await DocShareRepository(self._session).revoke_all_for_folder_ids(
+            subtree_ids, commit=False
+        )
         await self._session.commit()
         return True
 
@@ -522,6 +529,8 @@ class FolderRepository:
         cleared: re-pointing a bare chat
         at a resurrected desk is the ghost-workspace bug
         ``tests/integration/test_folder_unbind_auto_desk.py`` exists to prevent.
+        Public 文档 share links revoked at delete stay dead — a stale snapshot
+        must not outlive the delete, same as conversation restore.
 
         The tree slot is re-allocated rather than assumed: while the folder sat in
         the tombstone its name was free, so a live sibling may hold it now (and

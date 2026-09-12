@@ -6,7 +6,7 @@ Resident core = ``<身份>`` only（你是谁 / 对谁负责；默认交团队�
 何时用 ``delegate`` / ``ask_user`` / ``debate`` 写在各工具 description；场面 HOW 的
 唯一所有者是 skill / consult 正文（``capability_how_suffix`` 只给 consult 拼；``run`` 走 skill body）。
 ``<工作区>`` 只陈述本回合事实；``<按需目录>`` 只列这是什么。
-全员纪律（未装配不许假装用过）在 ``prompt/base.py``；未装配 ≠ 写进队员任务 在 ``delegate`` 的 task 参数。
+全员纪律（未装配不许假装用过）在 ``prompt/base.py``；未装配 ≠ 写进队员任务 在 ``consult(staffing)`` / ``consult(lead_subteam)``。
 不写编号判决树。每条纪律在装配后的提示串里只应出现一次。
 """
 
@@ -40,15 +40,19 @@ _HOST_HOW = """
  / `host(action=open_settings)` / `host(action=set_audio)` / `host(action=restart_service)`\
  / `host(action=install_package)`；通识 FAQ ≠ 已查本机。\
 装包 ≠ `shell` → `install_package`；长驻 ≠ `shell` → `run`。\
+`shell`：Windows 写 PowerShell（`$env:VAR`）；Unix 写 POSIX。勿 `%VAR%` / `||` / `&&`。\
 已知文件夹（桌面/下载）→ `file_read` / `file_list` 本机路径 ≠ `host(action=shell)` 盲探。
 """
 
 _BROWSER_HOW = """
 右坞浏览器与完整预览同一壳。已装配且用户要开页 / 右坞打开 / 直播 / 页上短操作 → 自己 `browser`；\
 `web_fetch` / `web_search` ≠ 已开页（只要摘要且未点名浏览器才用 `web_fetch`）。\
+云端 `browser` 与 `web_fetch` 同一出站；一边被挡自动抓取，换另一边同一页也不会通——请人贴，或改在「执行：用户本机」的对话做。\
 「跑起来 / 打开看一下」≠ 本条（见 run）。\
-打开网页先 `navigate`（空白页也一样）。须凭回执与页面证据验收，勿仅凭未抛错；\
+打开网页先 `navigate`（空白页也一样）。桌面 Local Bridge 可用工作区相对 HTML 作 url；\
+云端沙箱相对路径会失败。须凭回执与页面证据验收，勿仅凭未抛错；\
 click 看 clicked.was_disabled；type 看 typed.matched。缺 ref / 验收失败再 snapshot。\
+省略 session_id：本 run 已绑定 → 对话内唯一/激活 → 新建并绑定本 run。\
 登录 → `ask_user(browser_login=true)`；永不代填密码。
 """
 

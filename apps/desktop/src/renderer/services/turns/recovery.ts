@@ -529,7 +529,7 @@ export function settleOrphanEmptyAssistants(conversationId: string): void {
  *   unless the tail is already paused (cold-load latch) — then hold, never ghost
  * - !cloudKnown → unknown (request failed); never ghost — hold; keep a prior
  *   non-empty non-{@link UNKNOWN_CLOUD_BANNER} error, else set that banner
- *   (plain banner; never resend; not {@link RECONNECT_BANNER})
+ *   (plain banner; never resend; not {@link RECONNECT_LIVE_BANNER})
  */
 export async function settleCloudRunningAssistant(
   conversationId: string,

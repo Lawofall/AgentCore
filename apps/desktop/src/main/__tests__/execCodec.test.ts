@@ -6,12 +6,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   EXEC_ENV_PROBE_FAIL_MARKER,
   EXEC_ENV_SPAWN_DENIED_CODE,
+  PYTHON_LAUNCHER_MISSING,
   _setPathExistsForTests,
   decodePipeChunk,
   isSpawnDeniedError,
   isWslBashTrampoline,
+  launcherMissingStderr,
   probeAvailableLanguages,
   resolveBashLauncher,
+  resolvePythonLauncher,
   spawnDeniedStderr,
 } from "../fs/workspace/execCodec";
 
@@ -155,6 +158,87 @@ describe("probeAvailableLanguages (Windows)", () => {
       );
     });
     expect(probeAvailableLanguages()).toEqual(["python", "javascript", "bash"]);
+  });
+});
+
+describe("resolvePythonLauncher", () => {
+  const originalPlatform = process.platform;
+  const originalPath = process.env.PATH;
+  const posix = process.platform !== "win32";
+
+  afterEach(() => {
+    Object.defineProperty(process, "platform", {
+      value: originalPlatform,
+      configurable: true,
+    });
+    process.env.PATH = originalPath;
+    _setPathExistsForTests(null);
+  });
+
+  it.skipIf(!posix)("prefers python3 over python on POSIX", () => {
+    Object.defineProperty(process, "platform", {
+      value: "darwin",
+      configurable: true,
+    });
+    process.env.PATH = "/usr/bin";
+    _setPathExistsForTests((p) => {
+      const n = String(p).replace(/\\/g, "/");
+      return n === "/usr/bin/python3" || n === "/usr/bin/python";
+    });
+    expect(resolvePythonLauncher()).toEqual(["python3"]);
+    expect(probeAvailableLanguages()).toContain("python");
+  });
+
+  it.skipIf(!posix)("falls back to python when python3 is absent", () => {
+    Object.defineProperty(process, "platform", {
+      value: "darwin",
+      configurable: true,
+    });
+    process.env.PATH = "/usr/bin";
+    _setPathExistsForTests(
+      (p) => String(p).replace(/\\/g, "/") === "/usr/bin/python",
+    );
+    expect(resolvePythonLauncher()).toEqual(["python"]);
+    expect(probeAvailableLanguages()).toContain("python");
+  });
+
+  it("prefers py -3 on Windows even when python.exe exists", () => {
+    Object.defineProperty(process, "platform", {
+      value: "win32",
+      configurable: true,
+    });
+    process.env.PATH = String.raw`C:\Windows;C:\Python`;
+    _setPathExistsForTests((p) => {
+      const s = String(p).replace(/\//g, "\\").toLowerCase();
+      return (
+        s.endsWith(String.raw`\windows\py.exe`) ||
+        s.endsWith(String.raw`\python\python.exe`)
+      );
+    });
+    expect(resolvePythonLauncher()).toEqual(["py", "-3"]);
+  });
+
+  it.skipIf(!posix)(
+    "advertises python when PATH only has python3 (macOS Homebrew)",
+    () => {
+      Object.defineProperty(process, "platform", {
+        value: "darwin",
+        configurable: true,
+      });
+      process.env.PATH = "/opt/homebrew/bin";
+      _setPathExistsForTests(
+        (p) => String(p).replace(/\\/g, "/") === "/opt/homebrew/bin/python3",
+      );
+      expect(probeAvailableLanguages()).toContain("python");
+    },
+  );
+
+  it("missing-python copy names Python 3, not PATH python", () => {
+    expect(launcherMissingStderr("python3", "python")).toBe(
+      PYTHON_LAUNCHER_MISSING,
+    );
+    expect(PYTHON_LAUNCHER_MISSING).toContain("Python 3");
+    expect(PYTHON_LAUNCHER_MISSING).not.toContain("请确认 PATH 上有 python");
   });
 });
 

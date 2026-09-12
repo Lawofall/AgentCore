@@ -20,7 +20,6 @@ function renderShell(entry: string) {
       <Routes>
         <Route path="/toolbox" element={<ToolboxShell />}>
           <Route path="mine/skills" element={<div>技能内容</div>} />
-          <Route path="mine/tools" element={<div>工具内容</div>} />
           <Route path="mine/creation" element={<div>创作内容</div>} />
           <Route path="mine/mcp" element={<div>MCP内容</div>} />
           <Route path="mine/workflows" element={<div>工作流内容</div>} />
@@ -46,10 +45,9 @@ describe("工具箱壳", () => {
     expect(screen.queryByRole("tablist", { name: "工具箱" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "我的" })).toBeNull();
     const kinds = screen.getByRole("navigation", { name: "工具箱种类" });
-    const kindLinks = within(kinds).getAllByRole("link").slice(0, 4);
+    const kindLinks = within(kinds).getAllByRole("link").slice(0, 3);
     expect(kindLinks.map((el) => el.textContent)).toEqual([
       "提示词",
-      "工具",
       "创作",
       "工作流",
     ]);
@@ -63,23 +61,24 @@ describe("工具箱壳", () => {
     expect(screen.getByText("技能内容")).toBeTruthy();
   });
 
-  it("工具页也不再把连接器放进顶栏", () => {
-    renderShell(APP_PATHS.toolbox.mine.tools);
+  it("种类没有独立工具 tab", () => {
+    renderShell(APP_PATHS.toolbox.mine.skills);
+    const kinds = screen.getByRole("navigation", { name: "工具箱种类" });
+    expect(within(kinds).queryByRole("link", { name: "工具" })).toBeNull();
     expect(screen.queryByRole("link", { name: "连接器" })).toBeNull();
     expect(screen.getByRole("link", { name: "市场" })).toBeTruthy();
   });
 
-  it("提示词工作台贴边，其它种类仍走页面留白", () => {
+  it("提示词与其它种类一样走页面留白", () => {
     const skills = renderShell(APP_PATHS.toolbox.mine.skills);
     const skillsInner = skills.container.querySelector(".mx-auto");
-    expect(skillsInner?.className).not.toContain("px-6");
-    expect(skillsInner?.className).not.toContain("py-6");
+    expect(skillsInner?.className).toContain("px-6");
+    expect(skillsInner?.className).toContain("py-6");
     cleanup();
-    const tools = renderShell(APP_PATHS.toolbox.mine.tools);
-    const toolsInner = tools.container.querySelector(".mx-auto");
-    expect(toolsInner?.className).toContain("px-6");
-    expect(toolsInner?.className).toContain("py-6");
-    expect(toolsInner?.className).toContain("flex-1");
+    const creation = renderShell(APP_PATHS.toolbox.mine.creation);
+    const creationInner = creation.container.querySelector(".mx-auto");
+    expect(creationInner?.className).toContain("px-6");
+    expect(creationInner?.className).toContain("py-6");
   });
 
   it("切到市场后种类 tab 仍在，页头市场为当前页", () => {
@@ -88,7 +87,7 @@ describe("工具箱壳", () => {
     expect(screen.getByTestId("market")).toBeTruthy();
     const kinds = screen.getByRole("navigation", { name: "工具箱种类" });
     expect(kinds).toBeTruthy();
-    for (const label of ["提示词", "工具", "创作", "工作流"]) {
+    for (const label of ["提示词", "创作", "工作流"]) {
       expect(
         within(kinds)
           .getByRole("link", { name: label })

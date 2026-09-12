@@ -23,7 +23,7 @@ vi.mock("@/hooks/useFolders", () => ({
 
 const { listMemoryUpdates } = await import("@/services/memory");
 
-function renderView(embedded = false) {
+function renderView() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -33,7 +33,7 @@ function renderView(embedded = false) {
     ...render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <MemoryUpdatesView embedded={embedded} onOpenLeaf={onOpenLeaf} />
+          <MemoryUpdatesView onOpenLeaf={onOpenLeaf} />
         </MemoryRouter>
       </QueryClientProvider>,
     ),
@@ -48,21 +48,12 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("MemoryUpdatesView", () => {
-  it("standalone 有记忆动态页头", async () => {
-    renderView(false);
+  it("有最近学到页头", async () => {
+    renderView();
     await waitFor(() => {
-      expect(screen.getByText("还没有记忆更新")).toBeTruthy();
+      expect(screen.getByText("还没有学到的内容")).toBeTruthy();
     });
-    expect(screen.getByText("记忆动态")).toBeTruthy();
+    expect(screen.getByText("最近学到")).toBeTruthy();
     expect(screen.getByTestId("memory-updates-view")).toBeTruthy();
-  });
-
-  it("embedded 不再套记忆动态大页头", async () => {
-    renderView(true);
-    await waitFor(() => {
-      expect(screen.getByText("还没有记忆更新")).toBeTruthy();
-    });
-    expect(screen.queryByText("记忆动态")).toBeNull();
-    expect(screen.queryByText("AI 最近从各处对话里记下的内容")).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Shared 7-day trend bars (概览 / 分析 / 用户详情 all render these).
+ * Shared 7-day trend bars (总览 / 供给·成本 / 用户详情 all render these).
  *
  * The drawn bars are decorative: their only value carrier used to be a hover
  * `title`, which no keyboard or screen-reader user can reach. What these pin is the

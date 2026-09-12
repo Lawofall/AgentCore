@@ -185,7 +185,7 @@ async def _persist_suspension_capture_unlocked(
         paused_content=paused_content,
     )
     frame = build_frame(capture)
-    # Kickoff 已查阅记忆随帧走，resume 同 key 复用（consult_memory.reuse）。
+    # Kickoff 已查阅记忆随帧走，resume 同 key 复用（consult cache）。
     frame.consulted_memory = dict(get_consult_cache())
     try:
         await saver(frame)

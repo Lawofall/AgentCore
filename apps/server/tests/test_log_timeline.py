@@ -154,3 +154,16 @@ def test_attach_failure_pack_meta(monkeypatch) -> None:
     bare = _attach_failure_pack_meta({"mode": "trace", "meta": {"k": 1}}, tid)
     assert "failure_pack" not in bare["meta"]
     assert bare["meta"]["k"] == 1
+
+
+def test_trace_gap_preload_uses_load_log_events() -> None:
+    """``--trace`` gap detection must call ``load_log_events`` (not a missing helper)."""
+    import inspect
+
+    from agentcore.observability.query.timeline import load_log_events
+    from scripts import log_timeline as cli
+
+    assert cli.load_log_events is load_log_events
+    src = inspect.getsource(cli)
+    assert "_query_load_log_events" not in src
+    assert "load_log_events(" in src

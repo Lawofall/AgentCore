@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -88,7 +89,8 @@ export function UpdateAvailableDialog() {
     >
       {relevant ? (
         <DialogContent
-          className="flex max-h-[min(80vh,32rem)] max-w-md flex-col gap-0 p-0"
+          size="md"
+          className="flex max-h-[min(80vh,32rem)] flex-col gap-0 p-0"
           showClose={!force}
           onEscapeKeyDown={(e) => {
             if (force) e.preventDefault();
@@ -104,57 +106,59 @@ export function UpdateAvailableDialog() {
             <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
 
-          <DialogDescription asChild>
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pb-2">
-              {status.phase === "available" ? (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    当前版本 {current}
-                    {sizeBytes != null && sizeBytes > 0
-                      ? ` · 安装包约 ${formatBytes(sizeBytes)}`
-                      : null}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    将下载安装包到本机「下载」文件夹，打开后按向导完成安装。
-                  </p>
-                  <p className="whitespace-pre-wrap text-sm text-foreground">
-                    {releaseNotes}
-                  </p>
-                </>
-              ) : null}
+          <DialogBody className="flex-1 space-y-3 pb-2">
+            <DialogDescription asChild>
+              <div className="space-y-3">
+                {status.phase === "available" ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      当前版本 {current}
+                      {sizeBytes != null && sizeBytes > 0
+                        ? ` · 安装包约 ${formatBytes(sizeBytes)}`
+                        : null}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      将下载安装包到本机「下载」文件夹，打开后按向导完成安装。
+                    </p>
+                    <p className="whitespace-pre-wrap text-sm text-foreground">
+                      {releaseNotes}
+                    </p>
+                  </>
+                ) : null}
 
-              {force && status.phase === "downloading" ? (
-                <div className="space-y-2">
+                {force && status.phase === "downloading" ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      下载进度{" "}
+                      {formatDownloadProgress({
+                        percent: status.percent,
+                        transferred: status.transferred,
+                        total: status.total,
+                        bytesPerSecond: status.bytesPerSecond,
+                      })}
+                    </p>
+                    <progress
+                      className="h-2 w-full overflow-hidden rounded-full bg-muted [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary [&::-moz-progress-bar]:bg-primary"
+                      value={Math.min(100, status.percent)}
+                      max={100}
+                    />
+                  </div>
+                ) : null}
+
+                {force && status.phase === "downloaded" ? (
                   <p className="text-sm text-muted-foreground">
-                    下载进度{" "}
-                    {formatDownloadProgress({
-                      percent: status.percent,
-                      transferred: status.transferred,
-                      total: status.total,
-                      bytesPerSecond: status.bytesPerSecond,
-                    })}
+                    安装包已保存到本机「下载」文件夹，打开后按向导完成安装。
                   </p>
-                  <progress
-                    className="h-2 w-full overflow-hidden rounded-full bg-muted [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary [&::-moz-progress-bar]:bg-primary"
-                    value={Math.min(100, status.percent)}
-                    max={100}
-                  />
-                </div>
-              ) : null}
+                ) : null}
 
-              {force && status.phase === "downloaded" ? (
-                <p className="text-sm text-muted-foreground">
-                  安装包已保存到本机「下载」文件夹，打开后按向导完成安装。
-                </p>
-              ) : null}
-
-              {force && status.phase === "error" ? (
-                <p className="text-sm text-muted-foreground">
-                  {status.message}
-                </p>
-              ) : null}
-            </div>
-          </DialogDescription>
+                {force && status.phase === "error" ? (
+                  <p className="text-sm text-muted-foreground">
+                    {status.message}
+                  </p>
+                ) : null}
+              </div>
+            </DialogDescription>
+          </DialogBody>
 
           <DialogFooter>
             {status.phase === "available" ? (
@@ -162,14 +166,14 @@ export function UpdateAvailableDialog() {
                 {force ? null : (
                   <>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="md"
                       onClick={() => skipVersion()}
                     >
                       跳过此版本
                     </Button>
                     <Button
-                      variant="neutral"
+                      variant="outline"
                       size="md"
                       onClick={() => remindLater()}
                     >

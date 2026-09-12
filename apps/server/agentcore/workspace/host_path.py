@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Literal
 
 from agentcore.core.paths import is_absolute_os_path
@@ -84,6 +84,28 @@ def _split_target_remainder(rest: str) -> tuple[str | None, str]:
     if len(parts) == 1:
         return parts[0], ""
     return parts[0], "/".join(parts[1:])
+
+
+def workspace_rel_under_disk_root(raw: str, root: str | Path) -> str | None:
+    """POSIX-relative path when ``raw`` is OS-absolute and on/under ``root``.
+
+    ``None`` when not comparable (not absolute, or outside ``root``). The
+    caller must only resolve when this process sits on that disk — the cloud
+    API must not ``Path.resolve()`` a client OS path.
+    """
+    if not is_absolute_os_path(raw):
+        return None
+    try:
+        root_p = Path(root).resolve()
+        raw_p = Path(raw).resolve()
+    except OSError:
+        return None
+    try:
+        rel = raw_p.relative_to(root_p)
+    except ValueError:
+        return None
+    text = rel.as_posix()
+    return "." if text in ("", ".") else text
 
 
 def classify_tool_path(raw: str, *, root_label: str | None = None) -> ClassifiedPath:

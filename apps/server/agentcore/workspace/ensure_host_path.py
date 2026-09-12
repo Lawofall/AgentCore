@@ -7,6 +7,7 @@ tool. Server still stores only alias/root_id/mode — never abs.
 from __future__ import annotations
 
 from agentcore.core.logging import get_logger
+from agentcore.db.sidecar_tickets import sidecar_narrow_tickets_bound
 from agentcore.desktop.channel import ExternalMountError
 from agentcore.tools.protocol import ToolContext
 from agentcore.workspace import grant_store
@@ -37,7 +38,8 @@ _NO_DESKTOP = (
 )
 _CLOUD_ATTACH_RW = (
     "云对话不能把本机目录加成可覆盖写根。"
-    "请先写工作区，再 file_copy 到该本机路径（运行时会请用户确认整理授权）。"
+    "本回合不能改该文件夹原件。"
+    "拷入新文件：先写工作区，再 file_copy（须用户确认整理授权、不覆盖）。"
 )
 _FORBIDDEN_ROOT = "不能挂载整盘或系统根；请给出具体文件夹。"
 _HOME_NOT_WELL_KNOWN = (
@@ -122,6 +124,22 @@ async def _mint(
     namespace_from_desktop = str(value.get("namespace") or "").strip() or None
     if not root_id:
         raise HostPathDeniedError("桌面挂载回填缺少 root_id，无法登记授权")
+
+    if sidecar_narrow_tickets_bound():
+        # Desktop already POSTed cloud ``external-grants`` and hot-pushed abs.
+        # Tickets, not ``location=local``: cloud local-binding still uses grant_store.
+        alias = alias_hint or ""
+        if not alias:
+            raise HostPathDeniedError("桌面挂载回填缺少 alias，无法寻址挂载")
+        await attach_grants_to_backend(
+            context.backend,
+            context.conversation_id,
+            desktop_channel=channel,
+            workspace_channel=context.workspace_channel,
+        )
+        namespace = namespace_from_desktop or external_ns(alias)
+        _ = display_label
+        return _join_ns(namespace, remainder)
 
     mount = await grant_store.add_grant(
         context.conversation_id,
@@ -228,7 +246,7 @@ async def ensure_external_upgrade(
     alias, remainder = parsed
     cid = (context.conversation_id or "").strip()
     mount = _lookup_mount(context, alias)
-    if mount is None and cid:
+    if mount is None and cid and not sidecar_narrow_tickets_bound():
         mounts = await grant_store.grants_as_dict(cid)
         mount = mounts.get(alias)
     if mount is None:

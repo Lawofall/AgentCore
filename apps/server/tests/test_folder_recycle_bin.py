@@ -87,6 +87,9 @@ class _RecordingSession:
         self.statements.append(statement)
         return self._results.pop(0) if self._results else _Result()
 
+    async def flush(self) -> None:
+        return None
+
     async def commit(self) -> None:
         self.commits += 1
 
@@ -269,6 +272,21 @@ async def test_soft_delete_missing_folder_writes_nothing():
     assert not await FolderRepository(session).soft_delete(FOLDER_ID, user_id=USER_ID)
     assert not [s for s in session.statements if isinstance(s, Update)]
     assert session.commits == 0
+
+
+async def test_soft_delete_revokes_doc_shares_for_subtree():
+    """公开 /shared 不得活过回收站；本方法只撤链，恢复路径不解撤。"""
+    session = _soft_delete_session(_fake_folder())
+
+    await FolderRepository(session).soft_delete(FOLDER_ID, user_id=USER_ID)
+
+    shares = _updates(session, "doc_shares")
+    assert len(shares) == 1, [_sql(s) for s in session.statements]
+    sql = shares[0]
+    set_clause, where_clause = sql.split("WHERE", 1)
+    assert "revoked_at=" in set_clause
+    assert "doc_shares.revoked_at IS NULL" in where_clause
+    assert f"docs.folder_id IN ('{FOLDER_ID}'" in where_clause
 
 
 # --- 自动桌回收不进回收站 ---------------------------------------------------------

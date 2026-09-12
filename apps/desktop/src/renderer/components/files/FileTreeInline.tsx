@@ -61,10 +61,12 @@ export function InlineInput({
   initial,
   onSubmit,
   onCancel,
+  ariaLabel,
 }: {
   initial: string;
   onSubmit: (value: string) => void;
   onCancel: () => void;
+  ariaLabel?: string;
 }) {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLInputElement>(null);
@@ -78,6 +80,7 @@ export function InlineInput({
     <input
       ref={ref}
       value={value}
+      aria-label={ariaLabel}
       onChange={(e) => setValue(e.target.value)}
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {

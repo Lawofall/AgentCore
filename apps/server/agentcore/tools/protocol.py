@@ -716,7 +716,14 @@ class Tool(Protocol):
 
 
 def tool_schema_to_openai_format(schema: ToolSchema) -> dict:
-    """Convert a ToolSchema to the OpenAI function calling format."""
+    """Convert a ToolSchema to the OpenAI function calling format.
+
+    ``parameters`` pass through unchanged. Keep them a flat ``object`` +
+    ``properties``; do not add JSON Schema ``oneOf`` / ``anyOf`` / ``$ref`` /
+    ``if``-``then``. The platform path is OpenCode Go, which 400s
+    ``[unsupported_tool_schema] (unsupported_keyword)``. Splitting Swiss-army
+    tools into many FC names also risks ``(tool_count_limit)``.
+    """
     return {
         "type": "function",
         "function": {

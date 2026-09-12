@@ -4,9 +4,9 @@ The cloud persists a paused turn's frame to the ``paused_turns`` table + its
 journal-so-far to ``turn_journal`` (``runtime/suspension/persistence.py``), so a
 ``POST .../resume`` can rebuild the turn on a fresh process. The Sidecar has **no
 local DB** for the pause *frame* (双模式工作区 §十): one JSON file per checkpoint.
-Settlement still drops that file, and best-effort stamps cloud
-``paused_turn_outcomes`` so a later cloud ``POST .../resume`` can classify the
-card as settled (sidecar never writes ``paused_turns``).
+Settlement drops that file. It does **not** open Postgres to stamp
+``paused_turn_outcomes`` (ticketed sidecar must not open a local DB; a later
+cloud ``POST .../resume`` miss stays regenerated 404).
 
 This module is the §8.6 ``Journal`` / paused-turn port's **local implementation**:
 one JSON file per paused turn under a desktop-provided data dir, carrying the same
@@ -37,7 +37,6 @@ import os
 import time
 from pathlib import Path
 from typing import Any
-from uuid import UUID
 
 from agentcore.core.errors import GoneError
 from agentcore.core.logging import get_logger
@@ -52,58 +51,6 @@ from agentcore.runtime.suspension import (
 )
 
 logger = get_logger(__name__)
-
-
-def _is_pg_uuid(value: str) -> bool:
-    """Postgres ``paused_turn_outcomes`` keys are UUID; unit-test ids like ``m1`` are not."""
-    try:
-        UUID(value)
-    except (ValueError, TypeError, AttributeError):
-        return False
-    return True
-
-
-async def stamp_sidecar_paused_outcome(
-    *,
-    message_id: str,
-    conversation_id: str,
-    frame: dict[str, Any],
-    decision: str,
-    settled_by: str = "",
-) -> None:
-    """Write the cloud-readable settled conclusion for a sidecar-consumed pause.
-
-    Best-effort: local settlement (outbox + dropping the JSON frame) must not fail
-    because Postgres was unreachable. A miss degrades to today's
-    ``classify_resume_miss`` regenerated 404 on a later cloud POST resume.
-    """
-    data = frame if isinstance(frame, dict) else {}
-    checkpoint_id = str(data.get("checkpoint_id") or "")
-    if not decision or not checkpoint_id:
-        return
-    if not _is_pg_uuid(message_id) or not _is_pg_uuid(conversation_id):
-        return
-    try:
-        from agentcore.db.base import async_session_factory
-        from agentcore.db.repositories import PausedTurnRepository
-        from agentcore.fulfill.origin import current_origin_device
-
-        settler = settled_by or (current_origin_device() or "")
-        async with async_session_factory() as db:
-            await PausedTurnRepository(db).stamp_settled(
-                message_id=message_id,
-                conversation_id=conversation_id,
-                frame=data,
-                decision=decision,
-                settled_by=settler,
-            )
-    except Exception as e:  # noqa: BLE001 — must never break local resume
-        logger.warning(
-            "sidecar.paused_outcome_stamp_failed",
-            message_id=message_id,
-            conversation_id=conversation_id,
-            error=str(e),
-        )
 
 
 def _display_runs_for_pause(
@@ -404,64 +351,18 @@ class LocalPausedTurnStore:
         return record
 
     async def confirm_claim(self, message_id: str) -> None:
-        """Drop the ``.claimed`` file after settlement is durable (D1; best-effort).
-
-        Also stamps ``paused_turn_outcomes`` (same conclusion a cloud claim writes)
-        so a later cloud ``POST .../resume`` classifies the miss as settled.
-        """
+        """Drop the ``.claimed`` file after settlement is durable (D1; best-effort)."""
         if not _is_safe_message_id(message_id):
             return
         try:
-            record = await asyncio.to_thread(self._take_claimed_sync, message_id)
+            await asyncio.to_thread(self._drop_claimed_sync, message_id)
         except Exception as e:  # noqa: BLE001 — cleanup must never break the turn
             logger.warning(
                 "sidecar.paused_confirm_claim_failed", message_id=message_id, error=str(e)
             )
-            return
-        if record is None:
-            return
-        await self._stamp_outcome_for_claimed(record)
 
-    def _take_claimed_sync(self, message_id: str) -> dict[str, Any] | None:
-        """Read then drop the ``.claimed`` file; ``None`` if already gone / unreadable."""
-        claimed = self._claimed_path(message_id)
-        try:
-            raw = claimed.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return None
-        try:
-            record = json.loads(raw)
-        except (OSError, ValueError):
-            self._unlink_sync(claimed)
-            return None
-        self._unlink_sync(claimed)
-        return record if isinstance(record, dict) else None
-
-    async def _stamp_outcome_for_claimed(self, record: dict[str, Any]) -> None:
-        from agentcore.sidecar.settlement_prewrite import (
-            outbox_settlement_decision_for_frame,
-        )
-
-        raw_frame = record.get("frame")
-        frame: dict[str, Any] = raw_frame if isinstance(raw_frame, dict) else {}
-        message_id = str(record.get("message_id") or frame.get("message_id") or "")
-        conversation_id = str(
-            record.get("conversation_id") or frame.get("conversation_id") or ""
-        )
-        checkpoint_id = str(frame.get("checkpoint_id") or "")
-        kind = str(frame.get("kind") or "")
-        decision = outbox_settlement_decision_for_frame(
-            self._outbox_base,
-            message_id=message_id,
-            checkpoint_id=checkpoint_id,
-            suspension_kind=kind,
-        )
-        await stamp_sidecar_paused_outcome(
-            message_id=message_id,
-            conversation_id=conversation_id,
-            frame=frame,
-            decision=decision,
-        )
+    def _drop_claimed_sync(self, message_id: str) -> None:
+        self._unlink_sync(self._claimed_path(message_id))
 
     async def rollback_claim(self, message_id: str) -> None:
         """Restore frame only when settlement was NOT durable (prewrite failure).

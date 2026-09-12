@@ -124,13 +124,6 @@ export type BridgeDispatch = (
   conversationId: string,
 ) => BridgeHostResult | Promise<BridgeHostResult>;
 
-/** @deprecated 仅兼容旧 navigate 注入签名；新代码用 BridgeDispatch。 */
-export type BridgeNavigate = (
-  pageId: string,
-  url: string,
-  conversationId: string,
-) => { ok: true } | { ok: false; reason: string };
-
 function isBridgeAction(value: string): value is BridgeAction {
   return (BRIDGE_ACTIONS as readonly string[]).includes(value);
 }

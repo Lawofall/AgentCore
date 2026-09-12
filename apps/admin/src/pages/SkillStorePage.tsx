@@ -1,3 +1,4 @@
+import { OpsTabs } from "@/components/SectionTabs";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -251,10 +252,11 @@ export function SkillStorePage() {
   return (
     <Page>
       <PageHeader
-        title="商店"
+        title="运营"
         note="下架只从公开货架撤下，不会删除用户已安装的副本。"
         actions={
           <>
+            <OpsTabs />
             <KindToggle value={kind} onChange={(next) => setKind({ kind: next })} />
             <Button
               variant="outline"

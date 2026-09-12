@@ -1,5 +1,11 @@
 import { Button } from "@/components/ui";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   useIncomingFriendRequestCount,
   useMessagingStore,
@@ -40,12 +46,12 @@ export function ContactsDialog({ open, onClose, onOpenProfile }: Props) {
   return (
     <>
       <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-        <DialogContent className="max-w-sm" aria-describedby={undefined}>
-          <div className="border-b border-border px-5 py-4">
+        <DialogContent size="md" aria-describedby={undefined}>
+          <DialogHeader>
             <DialogTitle>通讯录</DialogTitle>
-          </div>
+          </DialogHeader>
 
-          <div className="max-h-96 overflow-y-auto">
+          <DialogBody className="max-h-96 px-0">
             <Button
               variant="ghost"
               onClick={() => setRequestsOpen(true)}
@@ -116,7 +122,7 @@ export function ContactsDialog({ open, onClose, onOpenProfile }: Props) {
                 </ul>
               )}
             </div>
-          </div>
+          </DialogBody>
         </DialogContent>
       </Dialog>
 

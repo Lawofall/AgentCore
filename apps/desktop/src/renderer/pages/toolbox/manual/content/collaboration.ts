@@ -405,7 +405,7 @@ export const collaborationChapter: ManualChapterContent = {
             },
             {
               title: "工具箱 · 提示词",
-              desc: "打开工具箱的提示词页，可查看或调整所有对话共用的提示词；流水账也在这一页。",
+              desc: "打开工具箱的提示词页，可查看或调整所有对话共用的提示词；「最近学到」也在这一页。",
             },
           ],
         },
@@ -418,9 +418,9 @@ export const collaborationChapter: ManualChapterContent = {
               text: "工具箱",
               link: { kind: "go", to: APP_PATHS.toolbox.guidelines },
             },
-            " · 提示词。流水账：",
+            " · 提示词 · ",
             {
-              text: "提示词流水账",
+              text: "最近学到",
               link: { kind: "go", to: APP_PATHS.toolbox.guidelinesUpdates },
             },
             "。记忆来自你的对话偏好；与数据留存、导出等关系见 ",

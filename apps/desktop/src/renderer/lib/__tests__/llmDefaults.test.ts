@@ -354,6 +354,26 @@ describe("buildDefaultProviderGroups", () => {
       true,
     );
   });
+
+  it("does not inject provider default_model when it is absent from the catalog", () => {
+    const groups = buildDefaultProviderGroups(
+      [
+        provider({
+          id: "p1",
+          label: "DeepSeek",
+          default_model: "deepseek-v4-flash",
+        }),
+      ],
+      catalog([
+        catalogItem({
+          id: "deepseek-flash",
+          provider_id: "p1",
+          display_name: "DeepSeek V4.1 Flash",
+        }),
+      ]),
+    );
+    expect(groups[0].models.map((m) => m.model)).toEqual(["deepseek-flash"]);
+  });
 });
 
 describe("unavailableReasonCopy", () => {

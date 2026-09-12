@@ -20,6 +20,8 @@ _EXACT_ACCEPT = frozenset(
     {
         "deepseek-v4-flash-vision-exp",
         DEEPSEEK_V41_FLASH,
+        # Retired preview wire id; leftover chats still carried images.
+        "deepseek-v4.1-flash-expires-on-0910",
         "kimi-k2.5",
         "kimi-k2.6",
         "kimi-k3",

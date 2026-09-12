@@ -6,7 +6,7 @@ import {
   ToolLine,
   ToolLineGroup,
 } from "@/components/chat/ToolLine";
-import { teamGraphVisible } from "@/components/chat/debatePreviewPlacement";
+import { shouldShowTeamGraph } from "@/components/chat/debatePreviewPlacement";
 import { absorbHandoffBriefContent } from "@/components/chat/handoffBrief";
 import { executionGraphCapabilities } from "@/components/graph/planCapabilities";
 import {
@@ -321,7 +321,7 @@ export function ProcessEndChrome({
     if (!slotExecutionId) return false;
     if (!execution || execution.id !== slotExecutionId) return false;
     if (!executionGraphCapabilities(execution).showsTeamGraph) return false;
-    return teamGraphVisible(execution.runs);
+    return shouldShowTeamGraph(execution.runs);
   })();
   const pendingUserGate =
     checkpoints.some((c) => c.status === "pending") ||

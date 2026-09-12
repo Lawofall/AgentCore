@@ -1,4 +1,4 @@
-import { EMBED_MIN_HEIGHT } from "@/lib/elk-layout";
+import { EMBED_MIN_HEIGHT } from "@agentcore/graph-layout";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { ScenarioGraph } from "./EmbeddedGraphCanvas";

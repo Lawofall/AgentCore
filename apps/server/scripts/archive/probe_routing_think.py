@@ -1,7 +1,7 @@
 """探针：测 CEO「是否/如何委派」的决策 + 思维链是否打转。
 
-装配路径与 ``probe_ask_gate.py`` 同构（真实 ``compose_ceo_chat_prompt`` +
-``_assemble_ceo_toolset``，``checkpoint_enabled=True``），不跑完整 ReAct worker；
+装配路径走真实 ``compose_ceo_chat_prompt`` +
+``_assemble_ceo_toolset``（``checkpoint_enabled=True``），不跑完整 ReAct worker；
 只读探路与 ``consult_skill`` 会执行续跑，直到问你 / 派人 / 开辩 / 直答。
 
 三层记账：

@@ -190,7 +190,7 @@ export function ReceivedContextSection({
 }
 
 /**
- * CEO 气泡 / 队员坞共用弹窗。宽屏双栏、固定框（max-w-2xl × min(32rem,70vh)）；
+ * CEO 气泡 / 队员坞共用弹窗。宽屏双栏、固定框（size 2xl × min(32rem,70vh)）；
  * 窄屏改单列且不展示常驻指令。
  */
 export function ReceivedContextDialog({
@@ -211,7 +211,8 @@ export function ReceivedContextDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex h-[min(32rem,70vh)] max-w-2xl flex-col"
+        size="2xl"
+        className="flex h-[min(32rem,70vh)] flex-col"
         aria-describedby={undefined}
       >
         <DialogHeader className="shrink-0">

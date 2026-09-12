@@ -489,7 +489,7 @@ async def test_remember_does_not_touch_folder_profile(tmp_path, monkeypatch):
     assert res.success
     assert res.display["kind"] == "user_rule"
     assert await store.load(uid, CORE_MEMORY_FILE, scope=folder) == ""
-    assert "文件夹画像" in tool.schema.description
+    assert "画像" in tool.schema.description
     assert "update_folder_profile" in tool.schema.description
 
 

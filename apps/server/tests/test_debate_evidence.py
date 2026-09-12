@@ -127,7 +127,7 @@ def test_evidence_rule_constant_is_the_single_source():
 def test_side_system_carries_search_query_rule():
     """辩论查询对照进系统提示：当事方/案由 vs 抽象文化词；空结果 ≠ 不存在。
 
-    词数不在辩论常驻复述（唯一所有者 = web_search schema）；个案 query / 检索轮次树不出常驻。
+    词数机械上限在 web_search schema；2–3 拆分建议在超限回执。个案 query / 检索轮次树不出常驻。
     """
     text = side_system(_config(), _two_sides()[0])
     assert SEARCH_QUERY_RULE in text
@@ -145,7 +145,7 @@ def test_side_system_carries_search_query_rule():
     assert "空结果" in text and "≠" in SEARCH_QUERY_RULE
     schema = WebSearchTool().schema
     blob = schema.description + schema.parameters["properties"]["query"]["description"]
-    assert "2–3" in blob  # 词数唯一所有者 = 工具 schema
+    assert "2–3" not in blob  # 拆分建议在超限回执；schema 只钉机械上限
 
 
 def test_red_team_brief_omits_retired_risk_severities_name():

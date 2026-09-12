@@ -262,8 +262,8 @@ GIT_TOOL_PARAMETERS: dict[str, Any] = {
                 "remote",
                 "create_pr",
             ],
-            # 审批 / 无仓策略只在工具描述里写一遍，勿在此复述。
-            "description": "子命令；审批 / 无仓策略见工具说明。",
+            # 审批 / 无仓策略在失败回执，勿在此复述。
+            "description": "子命令。",
         },
         "paths": {
             "type": "array",
@@ -334,11 +334,11 @@ GIT_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "url": {
             "type": "string",
-            "description": "remote add / clone 的仓库 URL（clone 仅 GitHub http(s)）。",
+            "description": "remote add / clone 的仓库 URL。",
         },
         "dest": {
             "type": "string",
-            "description": "clone 落点（相对工作区根，默认仓名）；非空拒绝。",
+            "description": "clone 落点（相对工作区根，默认仓名）。",
         },
         "title": {
             "type": "string",
@@ -355,7 +355,7 @@ GIT_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "head": {
             "type": "string",
-            "description": "create_pr 源分支（须已推远程）。",
+            "description": "create_pr 源分支。",
         },
     },
     "required": ["subcommand"],

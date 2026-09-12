@@ -104,12 +104,6 @@ def wind_down_deny_output(name: str) -> str:
     return f"工具 '{name}' 不在收尾窗口白名单，未执行。"
 
 
-# Backward-compat aliases.
-WIND_DOWN_INSTRUCTION_TOKEN = wind_down_instruction_token()
-WIND_DOWN_INSTRUCTION_TIMEOUT = wind_down_instruction_timeout()
-WIND_DOWN_INSTRUCTION_RETRIEVAL = wind_down_instruction_retrieval()
-
-
 def reason_for_warning(text: str) -> str | None:
     """Map a canonical cutoff warning string to its reason code, or None."""
     return WARNING_TO_REASON.get(str(text).strip())

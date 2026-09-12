@@ -17,9 +17,6 @@ from agentcore.runtime.context.workspace_profile import WorkspaceProfile
 from agentcore.tools.builtin.package_install import is_install_shaped_argv
 from agentcore.tools.builtin.run_verify import (
     _ALLOWED_PREFIXES,
-    _VERIFY_BUDGET_HEAVY_SECONDS,
-    _VERIFY_BUDGET_SECONDS,
-    _VERIFY_BUDGET_STANDARD_SECONDS,
     _base_command,
     _command_looks_like_test,
     _detect_framework,
@@ -32,7 +29,6 @@ from agentcore.tools.builtin.run_verify import (
     _shell_command_runner,
     _test_not_passed_error,
     execute_verify,
-    resolve_verify_budget_seconds,
     resolve_verify_timeouts,
     verify_coalesce_fingerprint,
 )
@@ -41,8 +37,6 @@ from agentcore.tools.sandbox.exec_env import (
     EXEC_DISASTER_TIMEOUT_S,
     EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
     EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
-    EXEC_IDLE_TIMEOUT_DEFAULT_S,
-    EXEC_IDLE_TIMEOUT_INSTALL_S,
 )
 from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
 from agentcore.workspace.protocol import PathNotFound
@@ -109,39 +103,18 @@ def _make_profile(**kwargs: Any) -> WorkspaceProfile:
 # --- approval posture lives on ``run`` (test_approvals / test_tools_catalog) ---
 
 
-def test_verify_timeouts_idle_and_disaster():
-    """活性为主、灾难顶为辅；废弃 300/600「验证预算」分档."""
-    disaster, idle = resolve_verify_timeouts("test")
-    assert disaster == EXEC_DISASTER_TIMEOUT_S == 1200
-    assert idle == EXEC_IDLE_TIMEOUT_DEFAULT_S == 60
-    disaster_i, idle_i = resolve_verify_timeouts("install")
-    assert disaster_i == EXEC_DISASTER_TIMEOUT_S
-    assert idle_i == EXEC_IDLE_TIMEOUT_INSTALL_S == 120
-    # Deprecated alias still returns disaster ceiling for all checks.
-    assert resolve_verify_budget_seconds("typecheck") == EXEC_DISASTER_TIMEOUT_S
-    assert resolve_verify_budget_seconds("build") == EXEC_DISASTER_TIMEOUT_S
-    assert resolve_verify_budget_seconds("install") == EXEC_DISASTER_TIMEOUT_S
-    assert resolve_verify_budget_seconds("test") == EXEC_DISASTER_TIMEOUT_S
-    assert (
-        resolve_verify_budget_seconds("command", ["npx", "tsc", "--noEmit"])
-        == EXEC_DISASTER_TIMEOUT_S
+def test_verify_timeouts_disaster_only():
+    """验收只留灾难顶；不因沉默中止。废弃 300/600「验证预算」分档."""
+    assert resolve_verify_timeouts("test") == EXEC_DISASTER_TIMEOUT_S == 1200
+    assert resolve_verify_timeouts("install") == EXEC_DISASTER_TIMEOUT_S
+    assert resolve_verify_timeouts("typecheck") == EXEC_DISASTER_TIMEOUT_S
+    assert resolve_verify_timeouts("build") == EXEC_DISASTER_TIMEOUT_S
+    assert resolve_verify_timeouts("command", ["npx", "tsc", "--noEmit"]) == (
+        EXEC_DISASTER_TIMEOUT_S
     )
-    assert _VERIFY_BUDGET_SECONDS == _VERIFY_BUDGET_STANDARD_SECONDS == EXEC_DISASTER_TIMEOUT_S
-    assert _VERIFY_BUDGET_HEAVY_SECONDS == EXEC_DISASTER_TIMEOUT_S
-
-
-def test_command_install_shaped_idle_is_120():
-    """``check=command`` + install-shaped argv uses install idle; ``pnpm test`` stays 60."""
-    _, idle_install = resolve_verify_timeouts("command", ["pnpm", "install"])
-    assert idle_install == EXEC_IDLE_TIMEOUT_INSTALL_S == 120
-    _, idle_add = resolve_verify_timeouts("command", ["pnpm", "add", "lodash"])
-    assert idle_add == EXEC_IDLE_TIMEOUT_INSTALL_S
-    _, idle_uv = resolve_verify_timeouts("command", ["uv", "sync"])
-    assert idle_uv == EXEC_IDLE_TIMEOUT_INSTALL_S
-    _, idle_test = resolve_verify_timeouts("command", ["pnpm", "test"])
-    assert idle_test == EXEC_IDLE_TIMEOUT_DEFAULT_S == 60
-    _, idle_bare = resolve_verify_timeouts("command")
-    assert idle_bare == EXEC_IDLE_TIMEOUT_DEFAULT_S
+    assert resolve_verify_timeouts("command", ["pnpm", "install"]) == (
+        EXEC_DISASTER_TIMEOUT_S
+    )
 
 
 # --- command whitelist ---
@@ -501,7 +474,7 @@ async def test_check_command_runs_via_shell_runner(
     assert len(backend.requests) == 1
     req = backend.requests[0]
     assert req.language == "python"
-    assert req.timeout_seconds == _VERIFY_BUDGET_HEAVY_SECONDS
+    assert req.timeout_seconds == EXEC_DISASTER_TIMEOUT_S
     assert "npx" in req.code and "tsc" in req.code
     assert "-lc" in req.code
     assert "-NoProfile" in req.code
@@ -595,22 +568,16 @@ async def test_check_build_uses_profile_build_command(
     assert result.success is True
     assert "npm" in backend.requests[0].code
     assert "build" in backend.requests[0].code
-    assert backend.requests[0].timeout_seconds == _VERIFY_BUDGET_HEAVY_SECONDS
+    assert backend.requests[0].timeout_seconds == EXEC_DISASTER_TIMEOUT_S
     assert result.metadata is not None
     assert result.metadata.get("check") == "build"
 
 
-async def test_idle_timeout_is_exec_env_not_contract_failure(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """静默挂起 → exec_timeout + exec_env_timeout；不进 contract_failure."""
+async def test_verify_does_not_idle_kill(monkeypatch: pytest.MonkeyPatch):
+    """验收命令不下发沉默掐；只带灾难顶。"""
     backend = _FakeBackend(
         result=ExecutionResult(
-            success=False,
-            stdout="",
-            stderr="Timeout: no output for 60s (execution stalled)",
-            exit_code=-1,
-            duration_ms=60_000,
+            success=True, stdout="ok\n", stderr="", exit_code=0, duration_ms=10
         )
     )
 
@@ -625,17 +592,8 @@ async def test_idle_timeout_is_exec_env_not_contract_failure(
         {"check": "command", "command": "npm run build"},
         _ctx(backend),
     )
-    assert result.success is False
-    assert result.contract_failure is False
-    assert result.metadata is not None
-    assert result.metadata.get("code") == "exec_timeout"
-    assert result.metadata.get("exec_env_timeout") is True
-    assert result.metadata.get("timeout_kind") == "idle"
-    assert "无输出" in (result.error or "") or "无响应" in (result.output or "")
-    assert "验证结果：未完成（执行无响应）" in result.output
-    assert "验证预算" not in (result.output or "")
-    assert "缩小范围" not in (result.output or "")
-    assert backend.requests[0].idle_timeout_seconds == EXEC_IDLE_TIMEOUT_DEFAULT_S
+    assert result.success is True
+    assert backend.requests[0].idle_timeout_seconds is None
     assert backend.requests[0].timeout_seconds == EXEC_DISASTER_TIMEOUT_S
 
 
@@ -647,9 +605,9 @@ async def test_disaster_timeout_is_contract_failure_not_tool_breakage(
         result=ExecutionResult(
             success=False,
             stdout="",
-            stderr=f"Timeout: forced stop after {_VERIFY_BUDGET_SECONDS}s (forced stop)",
+            stderr=f"Timeout: forced stop after {EXEC_DISASTER_TIMEOUT_S}s (forced stop)",
             exit_code=-1,
-            duration_ms=_VERIFY_BUDGET_SECONDS * 1000,
+            duration_ms=EXEC_DISASTER_TIMEOUT_S * 1000,
         )
     )
 
@@ -744,8 +702,8 @@ async def test_check_install_runs_with_restricted_network_and_registry_pin(
     req = backend.requests[0]
     assert req.network_mode == "restricted"
     assert req.cache_bucket == "u"
-    assert req.timeout_seconds == _VERIFY_BUDGET_SECONDS
-    assert req.idle_timeout_seconds == EXEC_IDLE_TIMEOUT_INSTALL_S
+    assert req.timeout_seconds == EXEC_DISASTER_TIMEOUT_S
+    assert req.idle_timeout_seconds is None
     assert req.env is not None
     assert "registry.npmjs.org" in (req.env.get("NPM_CONFIG_REGISTRY") or "")
     assert req.env.get("NPM_CONFIG_CACHE", "").startswith("/pkg-cache")
@@ -1015,18 +973,18 @@ async def test_command_cd_dotdot_from_root_refused(
 
 
 @pytest.mark.parametrize(
-    ("command", "idle"),
+    "command",
     [
-        ("pnpm install", EXEC_IDLE_TIMEOUT_INSTALL_S),
-        ("pnpm add lodash", EXEC_IDLE_TIMEOUT_INSTALL_S),
-        ("uv sync", EXEC_IDLE_TIMEOUT_INSTALL_S),
-        ("pnpm test", EXEC_IDLE_TIMEOUT_DEFAULT_S),
+        "pnpm install",
+        "pnpm add lodash",
+        "uv sync",
+        "pnpm test",
+        "npm run build",
     ],
 )
-async def test_check_command_idle_follows_install_argv(
+async def test_check_command_has_no_idle_timeout(
     monkeypatch: pytest.MonkeyPatch,
     command: str,
-    idle: int,
 ):
     backend = _FakeBackend(
         result=ExecutionResult(
@@ -1041,17 +999,13 @@ async def test_check_command_idle_follows_install_argv(
         "agentcore.tools.builtin.run_verify.detect_workspace_profile",
         _fake_profile,
     )
-    ctx = (
-        _auto_permission_ctx(backend)
-        if idle == EXEC_IDLE_TIMEOUT_INSTALL_S
-        else _ctx(backend)
-    )
     result = await execute_verify(
         {"check": "command", "command": command},
-        ctx,
+        _auto_permission_ctx(backend),
     )
     assert result.success is True
-    assert backend.requests[0].idle_timeout_seconds == idle
+    assert backend.requests[0].idle_timeout_seconds is None
+    assert backend.requests[0].timeout_seconds == EXEC_DISASTER_TIMEOUT_S
 
 
 def test_command_looks_like_test_skips_install_shaped():

@@ -2,7 +2,7 @@ import { isDebateTaggedRun } from "./debateTag";
 import { getElk } from "./elkClient";
 import { NODE_HEIGHT, NODE_WIDTH, type NodeSizeMap } from "./graphMetrics";
 import { type LayoutHints, computeLayoutHints } from "./layoutHints";
-import type { ElkGraphLayout, GraphEdge } from "./types";
+import type { GraphEdge, GraphLayout } from "./types";
 
 interface ElkGraphNode {
   id: string;
@@ -43,7 +43,7 @@ export const COMPOUND_LAYER_SPACING = 40;
  * does NOT center a lone fan bookend (用户输入 / CEO 汇聚点) — is handled by
  * {@link centerLoneEndpoints}, the single surviving cross-axis polish.
  */
-const LAYOUT_OPTIONS: Record<ElkGraphLayout, Record<string, string>> = {
+const LAYOUT_OPTIONS: Record<GraphLayout, Record<string, string>> = {
   tree: {
     "elk.algorithm": "layered",
     "elk.direction": "DOWN",
@@ -61,7 +61,7 @@ const LAYOUT_OPTIONS: Record<ElkGraphLayout, Record<string, string>> = {
 };
 
 function elkRootOptions(
-  layout: ElkGraphLayout,
+  layout: GraphLayout,
   nodeSpacing: number,
 ): Record<string, string> {
   return {
@@ -131,7 +131,7 @@ export interface LayoutBookends {
 export async function computeLayout(
   nodeIds: string[],
   edges: GraphEdge[],
-  layout: ElkGraphLayout = "tree",
+  layout: GraphLayout = "tree",
   bookends: LayoutBookends = {},
   subTeams: SubTeamInput[] = [],
   nodeSpacing: number = NODE_SPACING_EMBED,
@@ -442,7 +442,7 @@ export async function computeLayout(
 function centerLoneEndpoints(
   positions: Record<string, { x: number; y: number }>,
   edges: GraphEdge[],
-  layout: ElkGraphLayout,
+  layout: GraphLayout,
   sizeOf: (id: string) => { width: number; height: number },
 ): void {
   const ids = Object.keys(positions);
@@ -518,7 +518,7 @@ export const EMBED_DEFAULT_COL_WIDTH = 718;
 // Spacing mirrored from elkRootOptions so the size estimate matches what ELK
 // actually produces (within-layer node gap, between-layer gap, outer padding).
 // MUST stay in lockstep with LAYOUT_OPTIONS + elk.padding above.
-const LAYER_SPACING: Record<ElkGraphLayout, number> = {
+const LAYER_SPACING: Record<GraphLayout, number> = {
   tree: 64,
   leftright: 80,
 };
@@ -727,7 +727,7 @@ export function workerGraphShape(runs: ShapeRun[]): GraphShape {
  */
 export function estimateBbox(
   shape: GraphShape,
-  layout: ElkGraphLayout,
+  layout: GraphLayout,
   nodeSpacing: number = NODE_SPACING_EMBED,
 ): { width: number; height: number } {
   const { depth, parallelism, compoundLanes } = shape;

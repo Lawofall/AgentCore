@@ -78,25 +78,14 @@ async function readAuthCookies(): Promise<{
   access_token?: string;
   refresh_token?: string;
 }> {
-  const all = await session.defaultSession.cookies.get({});
-  const access = all.find((c) => c.name === ACCESS_COOKIE)?.value;
-  // Prefer the path that matches our API prefix. Same name at a stale path
-  // (e.g. `/v1/auth` left from a prior local-dev jar) can be an already-rotated
-  // tip — presenting it past the reuse grace revokes the whole family.
+  const [accessNamed, refreshNamed] = await Promise.all([
+    session.defaultSession.cookies.get({ name: ACCESS_COOKIE }),
+    session.defaultSession.cookies.get({ name: REFRESH_COOKIE }),
+  ]);
+  const access = accessNamed[0]?.value;
+  // Keep-path wins. Stale-path leftovers (e.g. `/api/v1/auth` after a local-dev
+  // jar that used `/v1/auth`) are deleted on write — see dropOtherRefreshCookies.
   const refreshPath = refreshCookiePath();
-  const refreshNamed = all.filter((c) => c.name === REFRESH_COOKIE);
-  if (refreshNamed.length > 1) {
-    logDesktop({
-      level: "warn",
-      event: "auth.refresh",
-      fields: {
-        result: "ambiguous_refresh_cookies",
-        count: refreshNamed.length,
-        paths: refreshNamed.map((c) => c.path ?? ""),
-        prefer: refreshPath,
-      },
-    });
-  }
   const refresh =
     refreshNamed.find((c) => (c.path ?? "") === refreshPath)?.value ??
     refreshNamed[0]?.value;
@@ -112,6 +101,61 @@ function refreshCookiePath(): string {
   // Mirror server `_refresh_cookie_path`: path-scoped to auth refresh endpoints.
   const prefix = apiPathPrefix();
   return `${prefix}/v1/auth`;
+}
+
+function cookieUrlWithPath(path: string): string {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${cookieUrl()}${p}`;
+}
+
+/** Write owns the refresh path: drop same-name cookies at any other path. */
+async function dropOtherRefreshCookies(keepPath: string): Promise<void> {
+  const named = await session.defaultSession.cookies.get({
+    name: REFRESH_COOKIE,
+  });
+  await Promise.all(
+    named
+      .filter((c) => (c.path ?? "") !== keepPath)
+      .map((c) => {
+        const path = c.path?.startsWith("/") ? c.path : `/${c.path ?? ""}`;
+        return session.defaultSession.cookies.remove(
+          cookieUrlWithPath(path || "/"),
+          REFRESH_COOKIE,
+        );
+      }),
+  );
+}
+
+let cachedAccessToken: string | null = null;
+
+function rememberAccess(token: string | null | undefined): void {
+  const trimmed = token?.trim();
+  cachedAccessToken = trimmed ? trimmed : null;
+}
+
+async function resolveAccessToken(): Promise<string | undefined> {
+  if (cachedAccessToken) return cachedAccessToken;
+  const fromJar = (await readAuthCookies()).access_token?.trim();
+  if (fromJar) {
+    rememberAccess(fromJar);
+    return fromJar;
+  }
+  const refreshed = await refreshAccessToken();
+  if (refreshed !== "renewed") return undefined;
+  if (cachedAccessToken) return cachedAccessToken;
+  const again = (await readAuthCookies()).access_token?.trim();
+  rememberAccess(again);
+  return again;
+}
+
+async function refreshAndReloadAccess(): Promise<string | undefined> {
+  rememberAccess(null);
+  const refreshed = await refreshAccessToken();
+  if (refreshed !== "renewed") return undefined;
+  if (cachedAccessToken) return cachedAccessToken;
+  const again = (await readAuthCookies()).access_token?.trim();
+  rememberAccess(again);
+  return again;
 }
 
 async function writeAuthCookies(tokens: {
@@ -142,16 +186,19 @@ async function writeAuthCookies(tokens: {
     sameSite,
     expirationDate: accessExpiry,
   });
+  const refreshPath = refreshCookiePath();
   await session.defaultSession.cookies.set({
     url,
     name: REFRESH_COOKIE,
     value: tokens.refresh_token,
-    path: refreshCookiePath(),
+    path: refreshPath,
     httpOnly: true,
     secure,
     sameSite,
     expirationDate: refreshExpiry,
   });
+  await dropOtherRefreshCookies(refreshPath);
+  rememberAccess(tokens.access_token);
   await flushAuthCookieStore();
 }
 
@@ -179,10 +226,12 @@ export async function flushAuthCookieStore(): Promise<void> {
  * after login (and on cold-start /me ok) is what keeps reopen logged in.
  */
 export async function persistAuthCookies(): Promise<void> {
-  const all = await session.defaultSession.cookies.get({});
-  const access = all.find((c) => c.name === ACCESS_COOKIE);
+  const [accessNamed, refreshNamed] = await Promise.all([
+    session.defaultSession.cookies.get({ name: ACCESS_COOKIE }),
+    session.defaultSession.cookies.get({ name: REFRESH_COOKIE }),
+  ]);
+  const access = accessNamed[0];
   const refreshPath = refreshCookiePath();
-  const refreshNamed = all.filter((c) => c.name === REFRESH_COOKIE);
   const refresh =
     refreshNamed.find((c) => (c.path ?? "") === refreshPath) ?? refreshNamed[0];
   const url = cookieUrl();
@@ -220,7 +269,7 @@ export async function persistAuthCookies(): Promise<void> {
         url,
         name: REFRESH_COOKIE,
         value: refresh.value,
-        path: refreshCookiePath(),
+        path: refreshPath,
         httpOnly: true,
         secure,
         sameSite,
@@ -228,8 +277,13 @@ export async function persistAuthCookies(): Promise<void> {
       }),
     );
   }
-  if (writes.length === 0) return;
+  if (writes.length === 0) {
+    rememberAccess(null);
+    return;
+  }
   await Promise.all(writes);
+  await dropOtherRefreshCookies(refreshPath);
+  rememberAccess(access?.value);
   await flushAuthCookieStore();
   logDesktop({
     level: "info",
@@ -326,6 +380,7 @@ export function refreshAccessToken(): Promise<AuthRefreshResult> {
       });
     } catch {
       // Server already rotated; local jar write failed — retry later, don't logout.
+      rememberAccess(null);
       logDesktop({
         level: "warn",
         event: "auth.refresh",
@@ -399,26 +454,15 @@ export async function bearerPostJson(
       body: JSON.stringify(body),
     });
 
-  const cookies = await readAuthCookies();
-  let access = cookies.access_token?.trim();
+  let access = await resolveAccessToken();
   if (!access) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed !== "renewed") {
-      return { ok: false, status: 401, body: { error: "missing_token" } };
-    }
-    access = (await readAuthCookies()).access_token?.trim();
-    if (!access) {
-      return { ok: false, status: 401, body: { error: "missing_token" } };
-    }
+    return { ok: false, status: 401, body: { error: "missing_token" } };
   }
 
   let res = await doFetch(access);
   if (res.status === 401) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed === "renewed") {
-      access = (await readAuthCookies()).access_token?.trim();
-      if (access) res = await doFetch(access);
-    }
+    access = await refreshAndReloadAccess();
+    if (access) res = await doFetch(access);
   }
 
   let parsed: unknown = null;
@@ -458,27 +502,19 @@ export async function bearerFetch(
       },
     });
 
-  const cookies = await readAuthCookies();
-  let access = cookies.access_token?.trim();
-  if (!access) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed !== "renewed") return new Response(null, { status: 401 });
-    access = (await readAuthCookies()).access_token?.trim();
-    if (!access) return new Response(null, { status: 401 });
-  }
+  let access = await resolveAccessToken();
+  if (!access) return new Response(null, { status: 401 });
 
   let res = await doFetch(access);
   if (res.status === 401) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed === "renewed") {
-      access = (await readAuthCookies()).access_token?.trim();
-      if (access) res = await doFetch(access);
-    }
+    access = await refreshAndReloadAccess();
+    if (access) res = await doFetch(access);
   }
   return res;
 }
 
-/** Test seam: clear in-flight refresh. */
+/** Test seam: clear in-flight refresh and the in-memory access cache. */
 export function resetAuthClientForTests(): void {
   refreshInFlight = null;
+  cachedAccessToken = null;
 }

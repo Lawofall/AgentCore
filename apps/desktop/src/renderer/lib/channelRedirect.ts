@@ -1,20 +1,14 @@
 /**
- * Wrong-tool-channel steer — byte-equal to
- * `agentcore.runtime.engine.tool_channel_redirect.CHANNEL_REDIRECT_CODES`.
+ * Wrong-tool-channel steer. Code set lives in `@shared/channelRedirectCodes`
+ * (must match Python ``CHANNEL_REDIRECT_CODES``).
  *
  * Wire `tool_use_end.status` is `redirect` (not `error`). Old journals stored
  * these as `status=error` + a redirect `failure.code`; fold normalizes them.
  */
 
-export const CHANNEL_REDIRECT_CODES = new Set([
-  "source_grep_redirect",
-  "source_dump_redirect",
-  "project_verify_redirect", // journal-only; unified `run` no longer emits
-  "long_running_redirect",
-  "not_a_web_url",
-  "url_not_workspace_path",
-  "loopback_host",
-]);
+import { CHANNEL_REDIRECT_CODES } from "@shared/channelRedirectCodes";
+
+export { CHANNEL_REDIRECT_CODES };
 
 /** Collapsed process-row title. Destination `toolName` supplies the icon. */
 export const CHANNEL_REDIRECT_FACE: Record<

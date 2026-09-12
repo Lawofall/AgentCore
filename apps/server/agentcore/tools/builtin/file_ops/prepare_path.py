@@ -15,9 +15,27 @@ from agentcore.workspace.ensure_host_path import (
     format_external_mount_error,
     format_host_path_denied,
 )
-from agentcore.workspace.host_path import GrantMode, classify_tool_path
+from agentcore.workspace.host_path import (
+    GrantMode,
+    classify_tool_path,
+    workspace_rel_under_disk_root,
+)
 
 from .errors import _error
+
+
+def _sidecar_rel_under_workspace_root(path: str, backend: Any) -> str | None:
+    """Rewrite abs-on-this-disk workspace paths. Sidecar only — not ``location=local``."""
+    from agentcore.sidecar.server_pkg.core import is_sidecar_process
+
+    if not is_sidecar_process():
+        return None
+    if getattr(backend, "location", None) != "local":
+        return None
+    root = getattr(backend, "root", None)
+    if root is None:
+        return None
+    return workspace_rel_under_disk_root(path, root)
 
 
 async def prepare_tool_path(
@@ -33,10 +51,15 @@ async def prepare_tool_path(
     Workspace-relative paths pass through. Already-``external/`` read paths
     pass through; write/organize upgrades the same mount by ``root_id``.
     Host paths mint a session grant (readonly silently; organize/attach_rw
-    confirm on the desktop) and rewrite.
+    confirm on the desktop) and rewrite. Sidecar (not cloud ``location=local``):
+    an OS-absolute path on/under ``backend.root`` becomes workspace-relative
+    and is not minted as external.
     """
     t0 = time.monotonic() if start is None else start
     path = str(raw or "").strip()
+    under_root = _sidecar_rel_under_workspace_root(path, context.backend)
+    if under_root is not None:
+        return under_root
     root_label = getattr(context.backend, "root_label", None)
     classified = classify_tool_path(path, root_label=root_label)
     if classified.kind == "workspace":

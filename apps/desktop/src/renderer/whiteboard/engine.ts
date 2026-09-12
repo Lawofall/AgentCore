@@ -1,9 +1,11 @@
 /**
  * WhiteboardEngine — the self-built canvas core (AI协作白板.md §六 自研引擎架构).
  *
- * Owns the scene, viewport, pointer/keyboard interaction, history, and a text-edit
- * overlay; renders via {@link renderScene}. Framework-agnostic — {@link WhiteboardCanvas}
- * is a thin React shell. Mutations funnel through history so undo/redo stays consistent;
+ * Owns the scene, viewport, pointer/keyboard interaction, and history; renders via
+ * {@link renderScene}. In-place text editing is a session ({@link TextEditSession}) — the
+ * host React overlay holds the draft and flushes it through {@link EngineCallbacks.flushEdit}
+ * before load / undo / pointer / other mutations. Framework-agnostic — {@link WhiteboardCanvas}
+ * is the React shell. Mutations funnel through history so undo/redo stays consistent;
  * pan/zoom do NOT fire `onChange` (so navigation never triggers autosave).
  */
 
@@ -29,7 +31,7 @@ import { applyBoardOps } from "./ops";
 import { renderScene, selectionHandlesScreen } from "./render";
 import * as selOps from "./selectionOps";
 import { computeMoveSnap as snapMove } from "./snap";
-import { type TextCommit, TextEditor } from "./textEditor";
+import { isTextEditable } from "./textEditor";
 import {
   normalizeFreedraw,
   resizeBox,
@@ -42,6 +44,8 @@ import {
   MIN_ZOOM,
   SCENE_SCHEMA_VERSION,
   type SceneElement,
+  type TextCommit,
+  type TextEditSession,
   type Tool,
   type Viewport,
 } from "./types";
@@ -54,8 +58,10 @@ export interface EngineCallbacks {
   onViewportChange: (zoom: number) => void;
   /** Right-click on the canvas (screen px, relative to the canvas) — host opens a menu. */
   onContextMenu: (x: number, y: number) => void;
-  /** Double-click a crystallized `artifactCard` — host opens file preview or expands text. */
-  onArtifactActivate?: (el: SceneElement) => void;
+  /** Host mounts/unmounts the in-place textarea. */
+  onEditingChange: (session: TextEditSession | null) => void;
+  /** Synchronous read of the overlay draft. `null` = overlay never attached; do not wipe. */
+  flushEdit: () => string | null;
 }
 
 type Pointer =
@@ -93,9 +99,8 @@ const PASTE_OFFSET = 16;
 
 export class WhiteboardEngine {
   private elements: SceneElement[] = [];
-  /** Transient AI-progress overlay (AI协作白板 M3 进度贴源): drawn ON TOP of the scene but
-   * NOT part of it — excluded from history / serialize / onChange / hit-testing. The host
-   * rebuilds it from the live run tree; {@link setOverlay} swaps it. */
+  /** Transient overlay: drawn ON TOP of the scene but not part of it — excluded from
+   * history / serialize / onChange / hit-testing. {@link setOverlay} swaps it. */
   private overlay: SceneElement[] = [];
   private viewport: Viewport = { panX: 0, panY: 0, zoom: 1 };
   private selected = new Set<string>();
@@ -117,7 +122,7 @@ export class WhiteboardEngine {
   private rafId = 0;
   private clipboard: SceneElement[] = [];
   private guides: Array<[number, number, number, number]> = [];
-  private readonly textEditor: TextEditor;
+  private editing: TextEditSession | null = null;
 
   /** Keyboard shortcut policy lives in {@link keymap}; this adapts the engine's methods to the
    * {@link KeyCommands} surface it drives (each entry is an existing method or a small hook). */
@@ -149,19 +154,12 @@ export class WhiteboardEngine {
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    private readonly container: HTMLElement,
     private readonly cb: EngineCallbacks,
   ) {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("无法获取 2D 画布上下文");
     this.ctx = ctx;
     this.palette = readPalette();
-    this.textEditor = new TextEditor({
-      container,
-      getViewport: () => this.viewport,
-      onCommitText: (c) => this.commitText(c),
-      requestRender: () => this.scheduleRender(),
-    });
     this.bind();
   }
 
@@ -194,7 +192,7 @@ export class WhiteboardEngine {
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("paste", this.onPaste);
     if (this.rafId) cancelAnimationFrame(this.rafId);
-    this.textEditor.destroy();
+    this.editing = null;
   }
 
   resize(cssW: number, cssH: number, dpr: number): void {
@@ -237,23 +235,60 @@ export class WhiteboardEngine {
     return [...this.selected];
   }
 
-  /** Whether the current selection holds at least one element of `type` — the host shows the M3
-   * 迭代 (贴源迭代) affordance only when an `artifactCard` (a crystallized product) is selected. */
+  getEditing(): TextEditSession | null {
+    return this.editing;
+  }
+
+  /** Open an in-place edit on `el`, or start a new `text` element at `world`. Commits any
+   * in-flight edit first. */
+  startEdit(el: SceneElement | null, world?: [number, number]): void {
+    this.commitEditing();
+    const box = el ? elementBox(el) : null;
+    const session: TextEditSession = {
+      id: el?.id ?? null,
+      world: box ? [box.x, box.y] : (world ?? [0, 0]),
+    };
+    this.editing = session;
+    if (el) this.setSelection([el.id]);
+    else this.setSelection([]);
+    this.cb.onEditingChange(session);
+    this.scheduleRender();
+  }
+
+  /** Flush the host overlay into the scene and clear the session. No-op when idle.
+   * `flushEdit() === null` means the overlay never attached — keep existing text. */
+  commitEditing(): void {
+    const session = this.editing;
+    if (!session) return;
+    const draft = this.cb.flushEdit();
+    this.editing = null;
+    this.cb.onEditingChange(null);
+    if (draft === null) {
+      this.scheduleRender();
+      return;
+    }
+    this.commitText({
+      id: session.id,
+      world: session.world,
+      text: draft.trim(),
+    });
+  }
+
+  /** Whether the current selection holds at least one element of `type`. */
   hasSelectedType(type: SceneElement["type"]): boolean {
     return this.elements.some(
       (e) => this.selected.has(e.id) && e.type === type,
     );
   }
 
-  /** Bounding box (world) of the current selection — the host anchors the M3 live-progress
-   * overlay beside it (进度贴源). Null when nothing is selected. */
+  /** Bounding box (world) of the current selection. Null when nothing is selected. */
   getSelectionBounds(): Box | null {
     return unionBox(this.elements.filter((e) => this.selected.has(e.id)));
   }
 
   /** Programmatically select a set of element ids (ignoring unknown ids). The app selects via
    * pointer; this is the seam the offline preview (`#/preview/whiteboard`) uses to render a
-   * selected state (rotation handle / selection bar) without a synthetic gesture. */
+   * selected state (rotation handle) without a synthetic gesture. */
   selectIds(ids: string[]): void {
     this.setSelection(
       ids.filter((id) => this.elements.some((e) => e.id === id)),
@@ -261,20 +296,20 @@ export class WhiteboardEngine {
     this.scheduleRender();
   }
 
-  /** Replace the transient AI-progress overlay layer (M3 进度贴源). These elements render on
-   * top of the scene but live entirely outside it — never serialized, never pushed to history,
-   * never hit-tested / selectable. `[]` clears the layer. */
+  /** Replace the transient overlay layer. These elements render on top of the scene but live
+   * entirely outside it — never serialized, never pushed to history, never hit-tested /
+   * selectable. `[]` clears the layer. */
   setOverlay(elements: SceneElement[]): void {
     this.overlay = elements;
     this.scheduleRender();
   }
 
-  /** Append persistent elements to the scene as one history step + change (M3 产物回贴): the
-   * crystallized team cards become real, undoable, serialized scene content (vs the transient
+  /** Append persistent elements as one history step + change (vs the transient
    * {@link setOverlay} layer). Clones the input so the caller's array never aliases the scene;
-   * leaves the selection untouched so it doesn't yank focus off what the user was doing. */
+   * leaves the selection untouched. */
   addElements(elements: SceneElement[]): void {
     if (elements.length === 0) return;
+    this.commitEditing();
     const before = this.elements;
     this.elements = [...before, ...cloneElements(elements)];
     this.history.push(before);
@@ -334,7 +369,7 @@ export class WhiteboardEngine {
   }
 
   loadScene(elements: SceneElement[], viewport?: Viewport): void {
-    this.textEditor.commit();
+    this.commitEditing();
     this.elements = cloneElements(elements);
     this.viewport = viewport ?? { panX: 0, panY: 0, zoom: 1 };
     this.selected.clear();
@@ -345,6 +380,7 @@ export class WhiteboardEngine {
   }
 
   applyOps(ops: BoardOp[]): { created: string[] } {
+    this.commitEditing();
     const before = this.elements;
     const { elements, created } = applyBoardOps(before, ops);
     this.elements = elements;
@@ -355,24 +391,25 @@ export class WhiteboardEngine {
   }
 
   undo(): void {
+    this.commitEditing();
     const restored = this.history.undo(this.elements);
     if (!restored) return;
-    this.textEditor.commit();
     this.elements = restored;
     this.reconcileSelection();
     this.emitChange();
   }
 
   redo(): void {
+    this.commitEditing();
     const restored = this.history.redo(this.elements);
     if (!restored) return;
-    this.textEditor.commit();
     this.elements = restored;
     this.reconcileSelection();
     this.emitChange();
   }
 
   deleteSelected(): void {
+    this.commitEditing();
     if (this.selected.size === 0) return;
     const before = this.elements;
     const ids = new Set(
@@ -467,20 +504,31 @@ export class WhiteboardEngine {
 
   private render(): void {
     if (this.cssW === 0 || this.cssH === 0) return;
+    if (
+      this.editing?.id &&
+      !this.elements.some((e) => e.id === this.editing?.id)
+    ) {
+      this.editing = null;
+      this.cb.onEditingChange(null);
+    }
+    const editingId = this.editing?.id ?? null;
+    const selectedIds = editingId
+      ? new Set([...this.selected].filter((id) => id !== editingId))
+      : this.selected;
     renderScene({
       ctx: this.ctx,
       width: this.cssW,
       height: this.cssH,
       dpr: this.dpr,
       viewport: this.viewport,
-      // Overlay (M3 进度贴源) draws last so it sits on top; it stays out of `this.elements`
+      // Overlay draws last so it sits on top; it stays out of `this.elements`
       // so history / serialize / onChange / hit-testing never see it.
       elements: this.overlay.length
         ? [...this.elements, ...this.overlay]
         : this.elements,
       palette: this.palette,
-      selectedIds: this.selected,
-      editingId: this.textEditor.editingId,
+      selectedIds,
+      editingId,
       marquee: this.marquee,
       images: this.images,
       guides: this.guides,
@@ -608,12 +656,14 @@ export class WhiteboardEngine {
       return;
     }
     if (e.button !== 0) return;
-    this.textEditor.commit();
+    this.commitEditing();
     const [wx, wy] = this.toWorld(e);
     const [sx, sy] = this.toScreen(e);
 
     if (this.tool === "text") {
-      this.textEditor.begin(null, [wx, wy]);
+      const hit = this.topElementAt(wx, wy);
+      if (hit && isTextEditable(hit)) this.startEdit(hit);
+      else this.startEdit(null, [wx, wy]);
       return;
     }
 
@@ -1082,6 +1132,7 @@ export class WhiteboardEngine {
    * group ids), select them, and commit one history step. Shared by paste + duplicate. */
   private addCopies(src: readonly SceneElement[]): void {
     if (src.length === 0) return;
+    this.commitEditing();
     const copies = selOps.copyWithOffset(src, PASTE_OFFSET);
     const before = this.elements;
     this.elements = [...before, ...copies];
@@ -1145,6 +1196,12 @@ export class WhiteboardEngine {
       return;
     }
     this.commit(selOps.applyStyle(this.elements, this.selected, patch));
+  }
+
+  /** Position / size / rotation of the single selected element. No-op for multi-select. */
+  patchSelected(patch: selOps.BoxPatch): void {
+    if (this.selected.size !== 1) return;
+    this.commit(selOps.patchBox(this.elements, this.selected, patch));
   }
 
   /** Style of the first selected element (drives the style panel's active swatch / preset). */
@@ -1297,6 +1354,7 @@ export class WhiteboardEngine {
     naturalH: number,
     at?: [number, number],
   ): void {
+    this.commitEditing();
     const [cx, cy] =
       at ?? screenToWorld(this.viewport, this.cssW / 2, this.cssH / 2);
     const scale = Math.min(1, IMAGE_PLACE / Math.max(naturalW, naturalH));
@@ -1357,17 +1415,12 @@ export class WhiteboardEngine {
   // --- text editing --------------------------------------------------------
 
   private onDoubleClick = (e: MouseEvent): void => {
+    // Text tool already opened an edit on pointerdown.
+    if (this.tool === "text") return;
     const [wx, wy] = this.toWorld(e);
     const hit = this.topElementAt(wx, wy);
-    if (hit?.type === "artifactCard") {
-      this.cb.onArtifactActivate?.(hit);
-      return;
-    }
-    if (hit && hit.type !== "arrow" && hit.type !== "freedraw") {
-      this.textEditor.begin(hit, [wx, wy]);
-    } else if (!hit) {
-      this.textEditor.begin(null, [wx, wy]);
-    }
+    if (hit && isTextEditable(hit)) this.startEdit(hit);
+    else if (!hit) this.startEdit(null, [wx, wy]);
   };
 
   private onContextMenu = (e: MouseEvent): void => {
@@ -1383,9 +1436,8 @@ export class WhiteboardEngine {
     this.cb.onContextMenu(sx, sy);
   };
 
-  /** Apply a committed text edit from {@link TextEditor}: update an existing element (empty
-   * text deletes a pure text node), or create a new text element. The engine owns the scene
-   * + history, so the overlay stays a dumb DOM concern. */
+  /** Apply a flushed text edit: update an existing element (empty text deletes a pure text
+   * node), or create a new text element. */
   private commitText(c: TextCommit): void {
     const before = cloneElements(this.elements);
     let changed = false;
