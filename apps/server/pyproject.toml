@@ -63,7 +63,7 @@ dev = [
     "httpx>=0.28",
     # starlette>=1.3 TestClient prefers httpx2 (plain httpx emits
     # StarletteDeprecationWarning). Test-only: production outbound stays on httpx.
-    "httpx2>=2.7",
+    "httpx2>=2.12.0",
     "pytest-timeout>=2.4.0",
     "pytest-xdist>=3.6",
     "mypy>=2.3",
