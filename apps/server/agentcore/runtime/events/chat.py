@@ -279,6 +279,14 @@ def _wire_cost(cost: dict[str, Any] | None) -> dict[str, Any] | None:
     return out
 
 
+def window_prompt(last_prompt_tokens: int) -> SSEEvent:
+    """CEO window occupancy after one model call. Ephemeral; reload uses settled usage."""
+    return SSEEvent(
+        type=EventType.WINDOW_PROMPT,
+        payload={"last_prompt_tokens": int(last_prompt_tokens)},
+    )
+
+
 def message_end(
     finish_reason: FinishReason,
     *,
@@ -295,6 +303,7 @@ def message_end(
     generation_ms: int | None = None,
     outcome: str | None = None,
     team_batch: dict[str, Any] | None = None,
+    include_usage: bool = True,
 ) -> SSEEvent:
     # 未显式传入时复用 TurnLatencyProbe（与 chat.turn_complete 同锚）；无 probe 则省略字段。
     if duration_ms is None or generation_ms is None:
@@ -308,18 +317,21 @@ def message_end(
                 generation_ms = probe.generation_ms
     payload: dict[str, Any] = {
         "finish_reason": finish_reason,
-        "usage": {
+        "cost": _wire_cost(cost),
+    }
+    # Unmetered closes (re-pause, terminal resume with no new CEO round) omit
+    # usage. A zero object overwrites the bubble footer; absence leaves it.
+    if include_usage:
+        payload["usage"] = {
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "reasoning_tokens": reasoning_tokens,
             "cache_hit_tokens": cache_hit_tokens,
             "cache_miss_tokens": cache_miss_tokens,
-        },
-        "cost": _wire_cost(cost),
-        "rounds": rounds,
-    }
-    if last_prompt_tokens > 0:
-        payload["usage"]["last_prompt_tokens"] = int(last_prompt_tokens)
+        }
+        payload["rounds"] = rounds
+        if last_prompt_tokens > 0:
+            payload["usage"]["last_prompt_tokens"] = int(last_prompt_tokens)
     if collab is not None:
         payload["collab"] = collab
     if duration_ms is not None:

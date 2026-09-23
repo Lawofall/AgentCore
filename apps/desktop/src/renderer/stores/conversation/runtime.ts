@@ -23,6 +23,7 @@ export const EMPTY_RUNTIME: ConversationRuntime = {
   executionVia: null,
   waitingForWorkspaceLock: false,
   waitingForDeskProvision: false,
+  ceoWindowTokens: null,
 };
 
 export interface ConversationStateSlice {

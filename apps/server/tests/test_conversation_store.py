@@ -161,6 +161,50 @@ def test_d7_merge_usage_keeps_paused_while_running():
     assert merged["paused"] is True
 
 
+def test_merge_usage_zero_meter_does_not_erase_positive_tokens():
+    """Unmetered re-pause / terminal resume must not hide the footer."""
+    paused = {
+        "status": MESSAGE_STATUS_RUNNING,
+        "paused": True,
+        "input_tokens": 1200,
+        "output_tokens": 40,
+        "rounds": 3,
+    }
+    zeros = {
+        "status": MESSAGE_STATUS_RUNNING,
+        "paused": True,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_hit_tokens": 0,
+        "cache_miss_tokens": 0,
+        "rounds": 0,
+    }
+    kept = merge_usage_status(paused, zeros)
+    assert kept["input_tokens"] == 1200
+    assert kept["output_tokens"] == 40
+    assert kept["rounds"] == 3
+    assert kept["paused"] is True
+
+    metered = {**zeros, "input_tokens": 1500, "output_tokens": 50, "rounds": 4}
+    refreshed = merge_usage_status(paused, metered)
+    assert refreshed["input_tokens"] == 1500
+    assert refreshed["output_tokens"] == 50
+    assert refreshed["rounds"] == 4
+
+    terminal_zeros = {
+        "status": MESSAGE_STATUS_COMPLETE,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "rounds": 0,
+    }
+    still = merge_usage_status(paused, terminal_zeros)
+    assert still["status"] == MESSAGE_STATUS_COMPLETE
+    assert "paused" not in still
+    assert still["input_tokens"] == 1200
+    assert still["rounds"] == 3
+
+
 def test_d7_merge_usage_clears_paused_on_explicit_false_while_running():
     """Resume continuation writes paused:false while still running → latch cleared."""
     paused_running = {

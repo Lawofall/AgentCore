@@ -1,7 +1,8 @@
 """Unit tests for the sidecar local-turn write-back (双模式工作区 §十).
 
 ``record_local_turn`` routes through ``CloudStore.finalize(mode="local")`` — content +
-status + journal, no cost ledger. All DB collaborators are faked (镜像 ``test_handoff_job``).
+status + journal. A paused write-back also projects ``cost_calls`` onto the message.
+All DB collaborators are faked (镜像 ``test_handoff_job``).
 
 Covered:
 
@@ -10,7 +11,8 @@ Covered:
   interrupt / process-less journal) skips persist — 「发送当没发生」;
 * paused/running assistant + empty final still settles (no ghost noop);
 * harvest / recovery placeholder / empty-um write-backs are not this-send;
-* **no cost ledger is ever written**;
+* complete / cancel write-backs do not open a second ledger; a paused write-back
+  projects already-metered ``cost_calls`` onto the message (same snapshot as stop);
 * the user row is pinned to the client-minted id;
 * a retried write-back is an idempotent D7 merge upsert (no early-return abandon);
 * ``finish_reason=paused`` upserts an assistant snapshot without title / consolidation,
@@ -280,6 +282,11 @@ def _patch_persistence(
     monkeypatch.setattr(cloud_mod, "persist_turn_journal", _fake_journal)
     monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _FakeMetricsRepo)
     monkeypatch.setattr(cloud_mod, "schedule_compaction_if_due", AsyncMock(return_value=None))
+
+    async def _pause_cost(*, message_id, conversation_id, trace_id):
+        events.append(("pause_cost", message_id, conversation_id, trace_id))
+
+    monkeypatch.setattr(cloud_mod, "_project_pause_message_cost", _pause_cost)
 
     async def _orphan_hot(**kw):
         events.append(("orphan_hot", kw.get("turn_id"), kw.get("conversation_id")))
@@ -944,6 +951,7 @@ async def test_record_local_turn_paused_skips_title_and_consolidation(monkeypatc
     assert consolidation == []
     assert result["title"] is None
     assert not any(e[0] == "orphan_hot" for e in events)
+    assert ("pause_cost", "assistant-id", "c1", _TRACE) in events
 
 
 async def test_record_local_turn_paused_persists_in_flight_journal(monkeypatch):

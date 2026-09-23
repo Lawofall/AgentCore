@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   WINDOW_FILL_WARN_RATIO,
   captainCompletedModel,
-  captainLastPrompt,
   catalogContextLength,
   positiveTokens,
+  sessionWindowPrompt,
   windowFill,
   windowFillLabel,
 } from "../windowFill";
@@ -36,39 +36,8 @@ describe("windowFill", () => {
   });
 });
 
-describe("captainLastPrompt", () => {
-  it("prefers captain run_completed last_prompt over summed-looking message usage", () => {
-    expect(
-      captainLastPrompt(
-        [
-          {
-            kind: "run_completed",
-            role: "member",
-            usage: { last_prompt: 800_000 },
-          },
-          {
-            kind: "run_completed",
-            role: "captain",
-            usage: { last_prompt: 50_000 },
-          },
-        ],
-        { last_prompt: 999_999 },
-      ),
-    ).toBe(50_000);
-  });
-
-  it("falls back to message.usage when the captain frame has no last_prompt", () => {
-    expect(
-      captainLastPrompt(
-        [{ kind: "run_completed", role: "captain", usage: { last_prompt: 0 } }],
-        { last_prompt: 12_000 },
-      ),
-    ).toBe(12_000);
-    expect(captainLastPrompt([], { last_prompt: 12_000 })).toBe(12_000);
-    expect(positiveTokens(0)).toBeNull();
-  });
-
-  it("reads the captain model id from the same completed frame", () => {
+describe("captainCompletedModel", () => {
+  it("reads the captain model id from the latest completed frame", () => {
     expect(
       captainCompletedModel([
         { kind: "run_completed", role: "captain", model: "deepseek-v4-flash" },
@@ -111,5 +80,34 @@ describe("catalogContextLength", () => {
         slot: { model: "deepseek-v4-flash", origin: "platform" },
       }),
     ).toBe(1_000_000);
+  });
+});
+
+describe("sessionWindowPrompt", () => {
+  it("uses the session waterline even when the open bubble still has an older receipt", () => {
+    expect(
+      sessionWindowPrompt(40_000, [
+        { role: "assistant", usage: { last_prompt: 90_000 } },
+      ]),
+    ).toBe(40_000);
+    expect(positiveTokens(0)).toBeNull();
+  });
+
+  it("keeps the previous receipt until this session has measured a request", () => {
+    expect(
+      sessionWindowPrompt(null, [
+        { role: "assistant", usage: { last_prompt: 80_000 } },
+        { role: "user" },
+        { role: "assistant" },
+      ]),
+    ).toBe(80_000);
+  });
+
+  it("a smaller later measurement replaces the earlier one", () => {
+    expect(
+      sessionWindowPrompt(30_000, [
+        { role: "assistant", usage: { last_prompt: 120_000 } },
+      ]),
+    ).toBe(30_000);
   });
 });

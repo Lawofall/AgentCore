@@ -2397,33 +2397,17 @@ async def test_compact_before_turn_dull_line_skips_when_nothing_foldable(monkeyp
     await compaction.compact_before_turn("c-dull-empty", model_id="m")
 
 
-def test_max_prompt_tokens_from_journal_skips_empty_and_keeps_max():
-    from agentcore.conversation.prompt_tokens import max_prompt_tokens_from_journal
-
-    assert max_prompt_tokens_from_journal([]) == 0
-    assert (
-        max_prompt_tokens_from_journal(
-            [
-                {"kind": "llm_call", "payload": {"usage": {"input": 0}}},
-                {"kind": "tool_call", "payload": {"usage": {"input": 99999}}},
-                {"kind": "llm_call", "payload": {"usage": {"input": 1200}}},
-                {"kind": "llm_call", "payload": {"usage": {"last_prompt": 800, "input": 800}}},
-            ]
-        )
-        == 1200
-    )
-
-
-def test_token_usage_add_keeps_max_last_prompt():
+def test_token_usage_add_keeps_latest_last_prompt():
     from agentcore.llm.provider.protocol import TokenUsage
 
     a = TokenUsage.from_openai_wire({"prompt_tokens": 100, "completion_tokens": 1})
     b = TokenUsage.from_openai_wire({"prompt_tokens": 40, "completion_tokens": 2})
     summed = a + b
     assert summed.input_tokens == 140
-    assert summed.last_prompt_tokens == 100
+    assert summed.last_prompt_tokens == 40
     zero = TokenUsage() + a
     assert zero.last_prompt_tokens == 100
+    assert (a + TokenUsage()).last_prompt_tokens == 100
     assert TokenUsage.from_usage_dict(a.as_dict()).last_prompt_tokens == 100
 
 

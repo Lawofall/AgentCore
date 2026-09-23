@@ -742,8 +742,8 @@ export interface ExecutionCompletedPayload {
 
 /** Token counts in the ledger short-key form. `cache_hit + cache_miss === input`.
  * 
- * ``last_prompt`` is the largest single-request prompt this run has seen (window
- * fill / fit-check). ``input`` sums every round (billing). Absent on old journals. */
+ * ``last_prompt`` is the latest single-request prompt (window fill). ``input``
+ * sums every round (billing). Absent on old journals. */
 export interface UsageBreakdown {
   input: number;
   output: number;
@@ -1152,6 +1152,14 @@ export interface MessageEndPayload {
   outcome?: "ok" | "partial" | "paused" | "error";
 }
 
+/** CEO window occupancy after one model call.
+ * 
+ * ``last_prompt_tokens`` is that call's prompt — the same waterline compaction
+ * uses. Transport-only: reload reads the settled message usage. */
+export interface WindowPromptPayload {
+  last_prompt_tokens: number;
+}
+
 export interface ErrorContext {
   upstream_status?: number;
   upstream_body_preview?: string | null;
@@ -1386,6 +1394,7 @@ export type SSEPayloadMap = {
   debate_round_started: DebateRoundStartedPayload;
   debate_round: DebateRoundPayload;
   message_end: MessageEndPayload;
+  window_prompt: WindowPromptPayload;
   error: ErrorPayload;
   title_generated: TitleGeneratedPayload;
   turn_warning: TurnWarningPayload;

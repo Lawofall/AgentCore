@@ -33,6 +33,7 @@ function emptyRuntime(
     executionVia: null,
     waitingForWorkspaceLock: false,
     waitingForDeskProvision: false,
+    ceoWindowTokens: null,
     ...over,
   };
 }

@@ -1,4 +1,4 @@
-"""Turn-end cost ledger reconcile (cloud finalize / handoff / interrupt).
+"""Turn-end cost ledger reconcile (cloud finalize / handoff / interrupt / pause).
 
 ``cost_calls`` is the billing authority for metered LLM calls; ``cost_events`` is
 the product / quota view. Cloud in-process metering already writes call details;

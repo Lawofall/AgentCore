@@ -415,12 +415,12 @@ def state_to_json(state: RunState) -> dict[str, Any]:
     """A RunState → compact JSON for a paused-turn seed (结构化挂起 durable resume).
 
     Carries exactly what a resume needs to treat a node as already-finished: its
-    ``phase`` + product (downstream reads ``content``) plus the priced
-    ``usage``/``cost``/``citations`` so the resumed turn bills the pre-pause work
-    ONCE (it was never billed — the turn paused before persistence) and folds its
-    tokens/sources into the totals. The heavy ``transcript`` is intentionally
-    dropped: a seed_completed node is never re-run or revised, downstream reads only
-    its ``content`` — so the frame stays light.
+    ``phase`` + product (downstream reads ``content``) plus priced
+    ``usage``/``cost``/``citations`` so resume can fold this node once without
+    re-running it. Calls are metered in ``cost_calls`` when they return; pause
+    persist projects that ledger onto the message. The heavy ``transcript`` is
+    intentionally dropped: a seed_completed node is never re-run or revised,
+    downstream reads only its ``content`` — so the frame stays light.
     """
     return {
         "phase": state.phase.value,

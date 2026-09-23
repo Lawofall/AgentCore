@@ -25,6 +25,7 @@ from agentcore.runtime.events.chat import (
     tool_use_start,
     turn_saved,
     turn_warning,
+    window_prompt,
 )
 from agentcore.runtime.events.conversation_hub import (
     ConversationStreamHub,
@@ -136,6 +137,7 @@ __all__ = [
     "workspace_snapshot_done",
     "workspace_snapshot_failed",
     "message_end",
+    "window_prompt",
     "error_event",
     "title_generated",
     "turn_saved",

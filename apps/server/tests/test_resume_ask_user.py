@@ -328,17 +328,30 @@ def test_finish_paused_resume_emits_paused_without_closing():
     """Re-entrant settle SUSPEND → PAUSED; keep pre_pause, no CEO closing text."""
     from agentcore.runtime.events import FinishReason
 
+    sink = EventSink()
+    captured: list = []
+    original = sink.emit
+
+    def _emit(event):
+        captured.append(event)
+        return original(event)
+
+    sink.emit = _emit  # type: ignore[method-assign]
     result = finish_paused_resume(
         message_id="m1",
         pre_pause_content="挂起前正文",
-        sink=EventSink(),
+        sink=sink,
         pre_pause_reasoning="想",
     )
     assert result["finish_reason"] is FinishReason.PAUSED
     assert result["content"] == "挂起前正文"
     assert result["reasoning_content"] == "想"
-    assert result["rounds"] == 0
-    assert result["input_tokens"] == 0
+    assert "rounds" not in result
+    assert "input_tokens" not in result
+    end = next(e for e in captured if e.type is EventType.MESSAGE_END)
+    assert "usage" not in end.payload
+    assert "rounds" not in end.payload
+    assert end.payload["finish_reason"] is FinishReason.PAUSED
 
 
 async def test_recover_window_skips_tool_result_on_suspend(monkeypatch):

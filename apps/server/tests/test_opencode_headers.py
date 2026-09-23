@@ -23,6 +23,7 @@ _GO = "https://opencode.ai/zen/go/v1"
 _ZEN = "https://opencode.ai/zen/v1"
 _DEEPSEEK = "https://api.deepseek.com"
 _CID = "c2b9f58c-e2c4-4b5f-97cc-bb6c651b9ad4"
+_UID = "a1e0c47b-91d2-4c0a-8f33-0b7e6d5c4a21"
 
 
 @pytest.fixture(autouse=True)
@@ -40,7 +41,16 @@ def test_client_headers_only_on_opencode_endpoints() -> None:
     assert OPENCODE_SESSION_HEADER not in opencode_client_headers(_GO)
 
 
-def test_session_header_uses_conversation_id() -> None:
+def test_session_header_uses_user_id_across_conversations() -> None:
+    with log_context(conversation_id=_CID, user_id=_UID, trace_id="t" * 32):
+        first = opencode_session_headers(_GO)
+    with log_context(conversation_id="conv-other", user_id=_UID):
+        second = opencode_session_headers(_ZEN)
+    assert first == {OPENCODE_SESSION_HEADER: f"user:{_UID}"}
+    assert second == first
+
+
+def test_session_header_falls_back_to_conversation_id() -> None:
     with log_context(conversation_id=_CID, trace_id="t" * 32):
         headers = opencode_session_headers(_GO)
     assert headers == {OPENCODE_SESSION_HEADER: _CID}
@@ -69,6 +79,9 @@ def test_session_header_never_empty_or_non_ascii() -> None:
         headers = opencode_session_headers(_GO)
     assert headers[OPENCODE_SESSION_HEADER].startswith("probe:")
     assert headers[OPENCODE_SESSION_HEADER].isascii()
+    with log_context(user_id="用户", conversation_id=_CID):
+        headers = opencode_session_headers(_GO)
+    assert headers == {OPENCODE_SESSION_HEADER: _CID}
 
 
 def test_session_header_absent_off_opencode() -> None:
@@ -111,11 +124,11 @@ async def test_complete_sends_session_per_request_not_cached_on_leaf() -> None:
         model=DEEPSEEK_V4_FLASH,
         scenario="chat",
     )
-    with log_context(conversation_id="conv-a"):
+    with log_context(conversation_id="conv-a", user_id=_UID):
         await provider.complete(req)
-    with log_context(conversation_id="conv-b"):
+    with log_context(conversation_id="conv-b", user_id=_UID):
         await provider.complete(req)
-    assert captured == ["conv-a", "conv-b"]
+    assert captured == [f"user:{_UID}", f"user:{_UID}"]
     assert provider._extra_headers is None
     await provider.close()
 

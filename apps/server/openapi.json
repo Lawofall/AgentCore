@@ -15388,7 +15388,7 @@
         "type": "object"
       },
       "UsageBreakdown": {
-        "description": "Token counts (cache_hit + cache_miss == input; reasoning ⊆ output).\n\n``error`` is optional: present on failed / empty turns that stored a structured\ncause on the usage column. Token fields may be zeros when only ``error`` is set.\n``last_prompt`` is the largest single-request prompt on this message/run\n(window fill). Omitted on window aggregates and old rows — not summed ``input``.",
+        "description": "Token counts (cache_hit + cache_miss == input; reasoning ⊆ output).\n\n``error`` is optional: present on failed / empty turns that stored a structured\ncause on the usage column. Token fields may be zeros when only ``error`` is set.\n``last_prompt`` is the latest single-request prompt on this message/run\n(window fill). Omitted on window aggregates and old rows — not summed ``input``.",
         "properties": {
           "cache_hit": {
             "title": "Cache Hit",

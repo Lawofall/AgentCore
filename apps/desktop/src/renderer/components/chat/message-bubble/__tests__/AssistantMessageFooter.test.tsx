@@ -150,7 +150,35 @@ describe("气泡脚不挂轮次", () => {
     expect(screen.getByText("3 轮")).toBeTruthy();
   });
 
-  it("用量弹出层展示输出速度", async () => {
+  it("用量弹出层把缓存和思考收在总数下，速度用 tokens/s", async () => {
+    render(
+      <TooltipProvider>
+        <AssistantTurnInspect
+          message={{
+            ...message,
+            generationMs: 2_000,
+            usage: {
+              input: 4_312,
+              output: 1_204,
+              reasoning: 628,
+              cache_hit: 4_127,
+              cache_miss: 185,
+            },
+          }}
+          captainContext={[]}
+        />
+      </TooltipProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "用量" }));
+    const panel = (await screen.findByText("输入")).parentElement!
+      .parentElement!;
+    expect(panel.textContent).toBe(
+      "输入4,312缓存命中4,127 · 96%缓存未命中185输出1,204思考628速度602.0 tokens/s",
+    );
+    expect(screen.queryByText("输出速度")).toBeNull();
+  });
+
+  it("上游省略缓存拆分时只留按未命中计价", async () => {
     render(
       <TooltipProvider>
         <AssistantTurnInspect
@@ -170,11 +198,15 @@ describe("气泡脚不挂轮次", () => {
       </TooltipProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "用量" }));
-    expect(await screen.findByText("输出速度")).toBeTruthy();
-    expect(screen.getByText("40/秒")).toBeTruthy();
+    expect(await screen.findByText("按未命中计价")).toBeTruthy();
+    expect(screen.getByText("速度")).toBeTruthy();
+    expect(screen.getByText("40.0 tokens/s")).toBeTruthy();
+    expect(screen.queryByText("缓存命中")).toBeNull();
+    expect(screen.queryByText("缓存未命中")).toBeNull();
+    expect(screen.queryByText("思考")).toBeNull();
   });
 
-  it("用量弹出层缺 generationMs 不编输出速度", async () => {
+  it("用量弹出层缺 generationMs 不编速度", async () => {
     render(
       <TooltipProvider>
         <AssistantTurnInspect
@@ -194,7 +226,31 @@ describe("气泡脚不挂轮次", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "用量" }));
     expect(await screen.findByText("输出")).toBeTruthy();
-    expect(screen.queryByText("输出速度")).toBeNull();
+    expect(screen.queryByText("速度")).toBeNull();
+  });
+
+  it("缓存未命中为 0 时不画那一行", async () => {
+    render(
+      <TooltipProvider>
+        <AssistantTurnInspect
+          message={{
+            ...message,
+            usage: {
+              input: 1_000,
+              output: 20,
+              reasoning: 0,
+              cache_hit: 1_000,
+              cache_miss: 0,
+            },
+          }}
+          captainContext={[]}
+        />
+      </TooltipProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "用量" }));
+    expect(await screen.findByText("缓存命中")).toBeTruthy();
+    expect(screen.getByText("1,000 · 100%")).toBeTruthy();
+    expect(screen.queryByText("缓存未命中")).toBeNull();
   });
 });
 

@@ -29,22 +29,33 @@ export function positiveTokens(n: unknown): number | null {
   return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : null;
 }
 
+export type SettledPromptMessage = {
+  role: string;
+  usage?: LastPromptUsage | null;
+};
+
 /**
- * CEO window-fill numerator: last single-request prompt, not summed `input`.
- * Prefers the latest captain `run_completed`, then the turn `message.usage`.
+ * Composer ring numerator.
+ *
+ * One session waterline: the latest CEO request that returned usage. A later
+ * call replaces it, including a smaller prompt after compact or a larger one
+ * after resume. When this session has not observed a call yet, use the newest
+ * settled receipt so a reload (and the gap before the next turn's first
+ * usage) still shows the previous request.
  */
-export function captainLastPrompt(
-  frames: readonly CaptainPromptFrame[],
-  messageUsage?: LastPromptUsage | null,
+export function sessionWindowPrompt(
+  measured: number | null | undefined,
+  messages: readonly SettledPromptMessage[],
 ): number | null {
-  for (let i = frames.length - 1; i >= 0; i--) {
-    const frame = frames[i];
-    if (frame.kind !== "run_completed" || frame.role !== "captain") continue;
-    const fromRun = positiveTokens(frame.usage?.last_prompt);
-    if (fromRun != null) return fromRun;
-    break;
+  const live = positiveTokens(measured);
+  if (live != null) return live;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== "assistant") continue;
+    const settled = positiveTokens(message.usage?.last_prompt);
+    if (settled != null) return settled;
   }
-  return positiveTokens(messageUsage?.last_prompt);
+  return null;
 }
 
 export function captainCompletedModel(

@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
 import {
   WINDOW_FILL_WARN_RATIO,
   captainCompletedModel,
-  captainLastPrompt,
   catalogContextLength,
+  sessionWindowPrompt,
   windowFill,
   windowFillLabel,
 } from "@/lib/windowFill";
@@ -80,13 +80,14 @@ function WindowFillRing({
  * 整块输入框外侧右边：当前这场 CEO「收到的上下文」。气泡底栏仍留当时快照，这里不替代。
  * 铬条尺寸与＋/语音同档 `md`，宿主用底排行盒对齐，不跟卡片边框底边对齐。
  * 第一帧 `run_context` 写进最后一条助手泡就亮，不等停笔；弹窗开着跟 blocks / process 变长。
- * 窗口环 = 最近一次请求 prompt / 目录 context_length，不用字符估、不用回合累加 input。
+ * 窗口环 = 本场一条水位 / 目录 context_length。每次 CEO 请求 usage 返回就
+ * 改写这一个数；本场还没有观测时，用最近一条已落盘的水位。
  */
 export function ComposerReceivedContextButton() {
   const conversationId = useConversationStore((s) => s.currentConversationId);
-  const message = useConversationStore((s) =>
-    lastAssistant(activeRuntime(s).messages),
-  );
+  const messages = useConversationStore((s) => activeRuntime(s).messages);
+  const measured = useConversationStore((s) => activeRuntime(s).ceoWindowTokens);
+  const message = lastAssistant(messages);
   const projectionId = message ? assistantProjectionId(message) : null;
   const frames = useExecutionStore((s) =>
     projectionId ? s.byId[projectionId]?.frames : undefined,
@@ -96,7 +97,7 @@ export function ComposerReceivedContextButton() {
   const [open, setOpen] = useState(false);
   const blocks = message?.captainContext ?? EMPTY_BLOCKS;
   const process = message?.process ?? EMPTY_PROCESS;
-  const used = captainLastPrompt(frames ?? EMPTY_FRAMES, message?.usage);
+  const used = sessionWindowPrompt(measured, messages);
   const windowTokens = catalogContextLength(catalog?.models ?? [], {
     modelId: captainCompletedModel(frames ?? EMPTY_FRAMES),
     slot: profile?.main ?? null,

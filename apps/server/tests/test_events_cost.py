@@ -74,6 +74,16 @@ def test_message_end_stamps_byok_nominal_as_estimated_slice():
     assert "credential_source" not in wired
 
 
+def test_message_end_omits_usage_when_unmetered():
+    """Re-pause / terminal resume must not publish a zero meter."""
+    ev = message_end(FinishReason.PAUSED, duration_ms=12, include_usage=False)
+    assert "usage" not in ev.payload
+    assert "rounds" not in ev.payload
+    assert ev.payload["finish_reason"] is FinishReason.PAUSED
+    assert ev.payload["cost"] is None
+    assert ev.payload["duration_ms"] == 12
+
+
 def test_message_end_cost_defaults_to_none_on_error_path():
     # The error / not-found paths emit message_end with no cost (no turn ran).
     ev = message_end(FinishReason.ERROR)

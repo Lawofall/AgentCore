@@ -45,6 +45,7 @@ import type {
   TurnQueueStartedPayload,
   TurnQueuedPayload,
   TurnWarningPayload,
+  WindowPromptPayload,
   WorkspaceLockWaitPayload,
 } from "@/types/events";
 import { resetCaptainContext } from "../captainContext";
@@ -271,6 +272,13 @@ export function handleMessageStreamEvent(
         );
       return true;
     }
+    case "window_prompt": {
+      const n = (event.payload as WindowPromptPayload).last_prompt_tokens;
+      if (typeof n === "number" && n > 0) {
+        useConversationStore.getState().noteWindowPrompt(n, conversationId);
+      }
+      return true;
+    }
     case "message_end": {
       flushPendingContent(conversationId);
       // Land any rAF-buffered worker frames before the turn finalizes so the graph's
@@ -282,6 +290,11 @@ export function handleMessageStreamEvent(
         conv.attachCostToLastMessage(payload.cost, conversationId);
       }
       const usage = payload.usage;
+      const measured =
+        typeof usage?.last_prompt_tokens === "number" &&
+        usage.last_prompt_tokens > 0
+          ? usage.last_prompt_tokens
+          : null;
       conv.attachTurnMetaToLastMessage(
         {
           usage: usage
@@ -291,10 +304,7 @@ export function handleMessageStreamEvent(
                 reasoning: usage.reasoning_tokens,
                 cache_hit: usage.cache_hit_tokens,
                 cache_miss: usage.cache_miss_tokens,
-                ...(typeof usage.last_prompt_tokens === "number" &&
-                usage.last_prompt_tokens > 0
-                  ? { last_prompt: usage.last_prompt_tokens }
-                  : {}),
+                ...(measured != null ? { last_prompt: measured } : {}),
               }
             : undefined,
           rounds: payload.rounds,
@@ -313,6 +323,7 @@ export function handleMessageStreamEvent(
         },
         conversationId,
       );
+      if (measured != null) conv.noteWindowPrompt(measured, conversationId);
       conv.finalizeLastMessage(conversationId);
       clearInteractionPrompts(conversationId);
       // 挂起即收口 (②): a turn can END at a durable checkpoint — message_end carries

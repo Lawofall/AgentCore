@@ -64,6 +64,26 @@ def test_desktop_writeback_mirrors_usage_settle_keys():
     )
 
 
+def test_usage_metadata_omits_absent_token_keys():
+    meta = _usage_metadata(
+        {"finish_reason": "paused"},
+        status="running",
+        extra={"paused": True},
+    )
+    assert meta["status"] == "running"
+    assert meta["paused"] is True
+    assert meta["finish_reason"] == "paused"
+    for key in (
+        "input_tokens",
+        "output_tokens",
+        "reasoning_tokens",
+        "cache_hit_tokens",
+        "cache_miss_tokens",
+        "rounds",
+    ):
+        assert key not in meta
+
+
 def test_usage_metadata_projects_prompt_tokens_to_last_prompt():
     meta = _usage_metadata(
         {

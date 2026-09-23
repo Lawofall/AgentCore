@@ -17,7 +17,6 @@ RulePathKind = Literal["agentcore_root", "rules_dir", "rule_file", "invalid"]
 RULES_CATALOG_ROOT = ".agentcore"
 RULES_DIR_REL = f"{RULES_CATALOG_ROOT}/{RULES_DIR_NAME}"
 _LEGACY_RULES_DIR_REL = f"{RULES_CATALOG_ROOT}/{LEGACY_RULES_DIR_NAME}"
-WORKER_RULE_WRITE_MSG = "队员不能改用户规则。请把规则改动交给协调者。"
 RULE_TREE_META_MSG = (
     "请用 write / read / file_delete / file_list 操作"
     f" {RULES_DIR_REL}/ 下的用户规则。"

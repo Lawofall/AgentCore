@@ -64,6 +64,7 @@ export type SSEEventType =
   | "turn_saved"
   | "turn_warning"
   | "user_interjection"
+  | "window_prompt"
   | "workspace_lock_wait"
   | "workspace_op_required"
   | "workspace_snapshot_done"
@@ -132,6 +133,7 @@ export const SSE_EVENT_TYPE_VALUES = [
   "turn_saved",
   "turn_warning",
   "user_interjection",
+  "window_prompt",
   "workspace_lock_wait",
   "workspace_op_required",
   "workspace_snapshot_done",

@@ -24,14 +24,6 @@ export type EntryScope =
 
 const ENTRIES_QUERY_KEY = ["scope-entries"] as const;
 
-/**
- * Rows under this print no size at all. A row's char count exists to answer
- * 「池子紧张时该删谁」; against a 24k pool a sub-千字 entry answers it with nothing,
- * and it is the common case — repeated down the whole list the number stops
- * reading as a signal and just eats the width the filename needs.
- */
-const ROW_CHARS_FLOOR = 1000;
-
 /** Ensure an entry name is markdown so it opens in the shared editor. */
 function ensureMdName(name: string): string {
   return /\.(md|markdown)$/i.test(name) ? name : `${name}.md`;
@@ -50,26 +42,6 @@ export type EntryOpenTarget = {
 /** Map a listed document onto the workbench open channel. */
 export function entryOpenTarget(doc: DocumentNode): EntryOpenTarget {
   return { channel: "document", path: doc.id, name: doc.name };
-}
-
-/**
- * Coarsen char counts for humans: 千字 / 万字 buckets, never exact ones.
- * 0 and「不足千」are distinct — empty is not "almost a thousand".
- * Exported for unit tests.
- */
-export function formatRoughChars(n: number): string {
-  const chars = Math.max(0, Math.round(n));
-  if (chars === 0) return "0 字";
-  if (chars < 1000) return "不足千字";
-  if (chars < 9500) return `约 ${Math.max(1, Math.round(chars / 1000))} 千字`;
-  const wan = Math.round(chars / 1000) / 10;
-  const label = Number.isInteger(wan) ? String(wan) : wan.toFixed(1);
-  return `约 ${label} 万字`;
-}
-
-/** Per-entry always size (same coarsening as the meter). */
-export function formatAlwaysChars(n: number): string {
-  return formatRoughChars(n);
 }
 
 /**
@@ -158,7 +130,6 @@ export function EntriesSection({
             frontmatterError={doc.frontmatterError}
             active={isActive(target)}
             onOpen={() => onOpen(target)}
-            alwaysChars={doc.alwaysChars}
           />
         </ContextMenuTrigger>
         <ContextMenuContent>
@@ -236,8 +207,6 @@ const EntryLeafRow = forwardRef<
     frontmatterError: string | null;
     active: boolean;
     onOpen: () => void;
-    /** Always-pool chars for this row; only shown when non-null and above floor. */
-    alwaysChars?: number | null;
     dimmed?: boolean;
   } & Omit<HTMLAttributes<HTMLDivElement>, "onClick">
 >(function EntryLeafRow(
@@ -249,7 +218,6 @@ const EntryLeafRow = forwardRef<
     frontmatterError,
     active,
     onOpen,
-    alwaysChars,
     dimmed = false,
     className,
     style,
@@ -258,10 +226,6 @@ const EntryLeafRow = forwardRef<
   ref,
 ) {
   const hasMeta = Boolean(description || frontmatterError);
-  const showAlwaysChars =
-    typeof alwaysChars === "number" &&
-    Number.isFinite(alwaysChars) &&
-    alwaysChars >= ROW_CHARS_FLOOR;
   return (
     <div
       ref={ref}
@@ -307,17 +271,6 @@ const EntryLeafRow = forwardRef<
           ) : null}
         </span>
       </button>
-      {showAlwaysChars ? (
-        <span
-          title="每次对话都会带上"
-          className={cn(
-            "shrink-0 text-xs text-muted-foreground",
-            hasMeta ? "mt-0.5" : "",
-          )}
-        >
-          {formatAlwaysChars(alwaysChars)}
-        </span>
-      ) : null}
     </div>
   );
 });

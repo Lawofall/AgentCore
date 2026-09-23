@@ -291,4 +291,11 @@ export interface ConversationRuntime {
    * EPHEMERAL——reload 丢失；message_start / waiting=false 清除。
    */
   waitingForDeskProvision: boolean;
+  /**
+   * 本场窗口水位：CEO 最近一次已返回 usage 的请求 prompt。
+   * `window_prompt` 与带 `last_prompt` 的 `message_end` 都写这里，后写覆盖先写。
+   * `null` = 本场还没有观测；窗口环改读最近一条已落盘的 `usage.last_prompt`。
+   * 不进消息、不进 journal。换一场对话是另一条 runtime。
+   */
+  ceoWindowTokens: number | null;
 }

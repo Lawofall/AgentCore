@@ -236,6 +236,11 @@ async def test_finalize_cloud_ceo_pause_writes_metrics_and_lock(monkeypatch):
         "agentcore.runtime.turn.ceo_continue.save_ceo_continue_lock",
         _save_lock,
     )
+    projected = AsyncMock()
+    monkeypatch.setattr(
+        "agentcore.runtime.turn.interrupt.project_settled_message_cost",
+        projected,
+    )
 
     await CloudStore().finalize(
         mode="cloud",
@@ -280,6 +285,10 @@ async def test_finalize_cloud_ceo_pause_writes_metrics_and_lock(monkeypatch):
             "trace_id": "a" * 32,
         }
     ]
+    projected.assert_awaited_once()
+    assert projected.await_args.kwargs["refresh"] is True
+    assert projected.await_args.kwargs["source"] == "pause"
+    assert projected.await_args.kwargs["message_id"] == "m-pause"
 
 
 @pytest.mark.anyio
@@ -313,6 +322,11 @@ async def test_finalize_cloud_gate_pause_does_not_save_continue_lock(monkeypatch
         "agentcore.runtime.turn.ceo_continue.save_ceo_continue_lock",
         _save_lock,
     )
+    projected = AsyncMock()
+    monkeypatch.setattr(
+        "agentcore.runtime.turn.interrupt.project_settled_message_cost",
+        projected,
+    )
 
     await CloudStore().finalize(
         mode="cloud",
@@ -333,6 +347,10 @@ async def test_finalize_cloud_gate_pause_does_not_save_continue_lock(monkeypatch
         duration_ms=10,
     )
     assert locks == []
+    projected.assert_awaited_once()
+    assert projected.await_args.kwargs["message_id"] == "m-gate"
+    assert projected.await_args.kwargs["refresh"] is True
+    assert projected.await_args.kwargs["source"] == "pause"
 
 
 @pytest.mark.anyio

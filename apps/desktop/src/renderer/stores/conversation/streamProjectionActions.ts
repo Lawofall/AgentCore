@@ -46,6 +46,7 @@ type StreamProjectionActions = Pick<
   | "stampPendingTurnWarning"
   | "attachCostToLastMessage"
   | "attachTurnMetaToLastMessage"
+  | "noteWindowPrompt"
   | "attachErrorToLastMessage"
   | "stampCheckpointMarker"
   | "stampUserInterjectionMarker"
@@ -453,6 +454,13 @@ export function createStreamProjectionActions(
           };
         }
         return { messages };
+      }),
+
+    noteWindowPrompt: (lastPrompt, conversationId) =>
+      patchConversation(conversationId, (rt) => {
+        if (!Number.isFinite(lastPrompt) || lastPrompt <= 0) return null;
+        if (rt.ceoWindowTokens === lastPrompt) return null;
+        return { ceoWindowTokens: lastPrompt };
       }),
 
     stampCheckpointMarker: (checkpointId, conversationId) =>

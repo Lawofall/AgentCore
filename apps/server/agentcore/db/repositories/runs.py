@@ -1450,7 +1450,7 @@ class TurnMetricsRepository:
     async def latest_prompt_tokens(self, conversation_id: str) -> int | None:
         """Newest positive fit-check watermark for this conversation, or ``None``.
 
-        Prefers ``prompt_tokens`` (largest single-request prompt). Empty-fail rows
+        Prefers ``prompt_tokens`` (latest single-request prompt). Empty-fail rows
         that wrote 0 are skipped so they cannot clobber the previous watermark.
         Legacy rows with ``prompt_tokens=0`` but a positive summed ``input_tokens``
         fall back to that sum. Hits ``ix_turn_metrics_conversation_created``.

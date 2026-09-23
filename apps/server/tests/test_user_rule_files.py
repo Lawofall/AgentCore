@@ -159,7 +159,8 @@ async def test_mutate_write_read_delete_list(monkeypatch: pytest.MonkeyPatch):
     )
     assert written.ok and written.changed
     assert written.name == "回复语言.md"
-    assert "已写入" in written.message
+    assert written.apply == "on_demand"
+    assert "按需" in written.message
     assert "用中文回复" in (repo.docs["回复语言.md"].content)
 
     again = await mutate_user_rule(
@@ -271,10 +272,78 @@ async def test_mutate_user_rule_ai_growth_denied(monkeypatch: pytest.MonkeyPatch
             action="write",
             name="回复语言.md",
             content="以后都用中文回复",
+            apply="always",
         )
     assert "配额" in ei.value.message
     assert ei.value.file == "回复语言.md"
     assert repo.upserted is False
+
+
+@pytest.mark.anyio
+async def test_mutate_omitted_apply_skips_always_quota(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from agentcore.memory.always_quota import AlwaysQuotaDecision, AlwaysUsage
+
+    async def _deny(*args, **kwargs):  # noqa: ARG001
+        return AlwaysQuotaDecision(
+            allowed=False,
+            usage=AlwaysUsage(used_chars=100, max_chars=50),
+            message="常驻条目配额已满",
+        )
+
+    monkeypatch.setattr("agentcore.memory.always_quota.check_always_write", _deny)
+    monkeypatch.setattr(
+        "agentcore.memory.rules_injection.maybe_schedule_description_fill",
+        lambda **kwargs: None,
+    )
+    repo = _FakeRepo()
+    written = await mutate_user_rule(
+        repo,  # type: ignore[arg-type]
+        "u1",
+        folder_id=None,
+        action="write",
+        name="回复语言.md",
+        content="以后都用中文回复",
+    )
+    assert written.ok and written.apply == "on_demand"
+    assert repo.docs["回复语言.md"].apply_mode == "on_demand"
+
+
+@pytest.mark.anyio
+async def test_mutate_rewrite_omitted_apply_keeps_existing_tier(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from agentcore.memory.always_quota import AlwaysQuotaDecision, AlwaysUsage
+
+    async def _allow(*args, **kwargs):  # noqa: ARG001
+        return AlwaysQuotaDecision(
+            allowed=True,
+            usage=AlwaysUsage(used_chars=0, max_chars=1000),
+            message="",
+        )
+
+    monkeypatch.setattr("agentcore.memory.always_quota.check_always_write", _allow)
+    monkeypatch.setattr(
+        "agentcore.memory.rules_injection.maybe_schedule_description_fill",
+        lambda **kwargs: None,
+    )
+    repo = _FakeRepo()
+    repo.docs["回复语言.md"] = _FakeDoc(
+        "回复语言.md",
+        "---\napply: always\n---\n旧正文",
+        "always",
+    )
+    rewritten = await mutate_user_rule(
+        repo,  # type: ignore[arg-type]
+        "u1",
+        folder_id=None,
+        action="write",
+        name="回复语言.md",
+        content="新正文",
+    )
+    assert rewritten.ok and rewritten.apply == "always"
+    assert "常驻" in rewritten.message
 
 
 class _FakeSession:
@@ -402,7 +471,21 @@ async def test_file_write_rule_allows_trailing_ellipsis(
 
 
 @pytest.mark.anyio
-async def test_file_write_rule_worker_denied():
+async def test_file_write_rule_worker_project_scope(monkeypatch: pytest.MonkeyPatch):
+    captured: dict[str, object] = {}
+
+    async def _fake_mutate(_repo, _uid, **kwargs):
+        captured.update(kwargs)
+        return UserRuleMutationResult(
+            action="write",
+            changed=True,
+            message="已写入规则「回复语言.md」（常驻）。",
+            name="回复语言.md",
+            apply="always",
+            content=str(kwargs.get("content") or ""),
+        )
+
+    _patch_local_rule_mutate(monkeypatch, _fake_mutate)
     result = await FileWriteTool().execute(
         {
             "file_path": f"{RULES_DIR_REL}/回复语言.md",
@@ -410,8 +493,24 @@ async def test_file_write_rule_worker_denied():
         },
         _ctx(agent_role="研究员", write_coordinator=MagicMock()),
     )
+    assert result.success is True
+    assert captured["action"] == "write"
+    assert captured["content"] == "以后都用中文回复"
+
+
+@pytest.mark.anyio
+async def test_file_write_rule_write_scope_none():
+    ctx = _ctx(agent_role="研究员", write_coordinator=MagicMock())
+    ctx.write_scope = "none"
+    result = await FileWriteTool().execute(
+        {
+            "file_path": f"{RULES_DIR_REL}/回复语言.md",
+            "content": "以后都用中文回复",
+        },
+        ctx,
+    )
     assert result.success is False
-    assert "队员不能改" in _tool_err(result)
+    assert "write_scope=none" in _tool_err(result)
 
 
 @pytest.mark.anyio
@@ -571,13 +670,15 @@ async def test_file_delete_rule_deletes(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.anyio
-async def test_file_delete_rule_worker_denied():
+async def test_file_delete_rule_write_scope_none():
+    ctx = _ctx(agent_role="研究员", write_coordinator=MagicMock())
+    ctx.write_scope = "none"
     result = await FileDeleteTool().execute(
         {"path": f"{RULES_DIR_REL}/回复语言.md"},
-        _ctx(agent_role="研究员", write_coordinator=MagicMock()),
+        ctx,
     )
     assert result.success is False
-    assert "队员不能改" in _tool_err(result)
+    assert "write_scope=none" in _tool_err(result)
 
 
 @pytest.mark.anyio

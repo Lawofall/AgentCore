@@ -16,6 +16,7 @@ import {
   formatMessageTimeOfDay,
   formatOutputSpeed,
   formatQuotaRemaining,
+  formatUsageCount,
   pickCostMoney,
   stripDurationFaceSuffix,
   sumChunkChars,
@@ -241,9 +242,19 @@ describe("formatOutputSpeed", () => {
   });
 
   it("formats decode throughput from output tokens and generation_ms", () => {
-    expect(formatOutputSpeed(80, 2_000)).toBe("40/秒");
-    expect(formatOutputSpeed(19, 2_000)).toBe("9.5/秒");
-    expect(formatOutputSpeed(10, 1_000)).toBe("10/秒");
+    expect(formatOutputSpeed(80, 2_000)).toBe("40.0 tokens/s");
+    expect(formatOutputSpeed(19, 2_000)).toBe("9.5 tokens/s");
+    expect(formatOutputSpeed(10, 1_000)).toBe("10.0 tokens/s");
+  });
+});
+
+describe("formatUsageCount", () => {
+  it("groups full integers and compacts millions", () => {
+    expect(formatUsageCount(185)).toBe("185");
+    expect(formatUsageCount(4_312)).toBe("4,312");
+    expect(formatUsageCount(999_999)).toBe("999,999");
+    expect(formatUsageCount(1_000_000)).toBe("1.0M");
+    expect(formatUsageCount(Number.NaN)).toBe("0");
   });
 });
 

@@ -554,6 +554,86 @@ async def test_reconcile_interrupted_turn_cost_skips_when_cost_stamped(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_project_settled_message_cost_refresh_rewrites_without_second_log(
+    monkeypatch,
+):
+    """A later pause refreshes the snapshot but does not emit cost.recorded again."""
+    from agentcore.runtime.turn import interrupt as interrupt_mod
+
+    ledger_rows = [
+        {
+            "run_id": "cap_1",
+            "role": ROLE_CAPTAIN,
+            "tokens": {"input": 10, "output": 2},
+            "cost_total_nano": 100,
+            "cost": {"input": 80, "cached": 0, "output": 20, "total": 100},
+        }
+    ]
+    reconcile = AsyncMock(return_value=ledger_rows)
+    recorded: list = []
+    ops: list[str] = []
+
+    class _ConvRepo:
+        def __init__(self, _session):
+            pass
+
+        async def get_by_id_unscoped(self, _cid):
+            return SimpleNamespace(user_id="u1")
+
+    class _MsgRepo:
+        def __init__(self, _session):
+            pass
+
+        async def get_by_id(self, _mid, conversation_id=None):
+            return SimpleNamespace(cost={"total": 1})
+
+        async def merge_usage(self, message_id, *, conversation_id, usage):
+            ops.append("usage")
+            assert usage["input_tokens"] == 10
+            assert usage["output_tokens"] == 2
+
+        async def set_cost(self, message_id, *, conversation_id, cost):
+            ops.append("cost")
+            assert cost["total"] == 100
+
+    class _FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+    monkeypatch.setattr(interrupt_mod, "async_session_factory", lambda: _FakeSession())
+    monkeypatch.setattr("agentcore.db.repositories.ConversationRepository", _ConvRepo)
+    monkeypatch.setattr("agentcore.db.repositories.MessageRepository", _MsgRepo)
+    monkeypatch.setattr(
+        "agentcore.billing.turn_ledger.drain_cost_ledger_before_reconcile",
+        AsyncMock(return_value=object()),
+    )
+    monkeypatch.setattr(
+        "agentcore.billing.turn_ledger.reconcile_turn_cost_ledger",
+        reconcile,
+    )
+    monkeypatch.setattr(
+        "agentcore.observability.cost_log.log_cost_recorded",
+        lambda *a, **k: recorded.append(a),
+    )
+
+    await interrupt_mod.project_settled_message_cost(
+        message_id="m1",
+        conversation_id="c1",
+        trace_id="tr",
+        refresh=True,
+        source="pause",
+    )
+
+    reconcile.assert_awaited_once()
+    assert reconcile.await_args.kwargs["cost_runs"] == []
+    assert ops == ["usage", "cost"]
+    assert recorded == []
+
+
+@pytest.mark.asyncio
 async def test_close_turn_interrupted_invokes_cost_reconcile(monkeypatch):
     """All interrupt closers funnel through close_turn_interrupted → cost reconcile."""
     from agentcore.runtime.turn import interrupt as interrupt_mod

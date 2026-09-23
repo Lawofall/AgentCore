@@ -59,6 +59,13 @@ alwaysApply: false
 - **跨文章节指针写「§编号 + 完整章节名」**：`pnpm check:doc-sections`（CI contracts + `release:gate`）只校验章节名与目标文 `## N、名` **逐字相等**的复合指针。缩写成「§五 客户端架构」（真名带「（桌面 + 手机）」）即掉出守卫范围；纯编号「§十二」完全不被守——曾有约 20 处因该文重编号整批失效且长期无人发现。**要提高覆盖就把标题写全，别去放宽检查器**（放宽即引入误报，噪一次就会被关掉）。`§9.12` 这类决策号不是章节号，本就不在守卫面内。
 - **契约变更 PR**：必须触权威 docs（本规则「同步规则」）；权威不明时先在索引/分区地图补行再改专题。
 
+## 规则文件双轨
+
+- **双轨镜像**：`.cursor/rules/*.mdc`（本仓文件、跟 git、Cursor 侧生效）与 AgentCore 侧的 `.agentcore/rules/*.md`（提示词条目，不在工作区树）并存。改一条行为规则**两边同步**。
+- **镜像只到语义与结构**：宿主工具名不同（Cursor 的 StrReplace / Read / Task ↔ AgentCore 侧 `edit` / `read` / `delegate`；`globs` + `alwaysApply` ↔ `apply:`），工具名各按宿主替换，不追求逐字相同。
+- **docs 交叉引用**以 `.cursor/rules/*.mdc` 为目标（仓内、可点击）。
+- 仍无对应物的 Cursor 机制：`.cursorignore`、`hooks.json` → 靠提示词约束兜底。
+
 ## 命名与篇幅
 
 - `docs/`：目录名、文件名统一中文；交叉引用用项目根相对路径。

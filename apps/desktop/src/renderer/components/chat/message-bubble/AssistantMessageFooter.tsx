@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/popover";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { copyText } from "@/lib/clipboard";
-import { formatCompact, formatDuration, formatOutputSpeed } from "@/lib/format";
+import { formatDuration, formatOutputSpeed, formatUsageCount } from "@/lib/format";
 import { MESSAGE_ACTION_REVEAL_CLASS } from "@/lib/messageActionReveal";
 import { formatMessageExport } from "@/lib/messageExport";
 import { completedAtIso } from "@/lib/runningElapsed";
@@ -45,7 +45,7 @@ import {
 } from "./MessageActions";
 import { useCopyAction } from "./useCopyAction";
 
-/** Signal-only summary (cost / duration) — token, 输出速度, ReAct rounds live in「用量」. */
+/** Signal-only summary (cost / duration) — token tree and ReAct rounds live in「用量」. */
 export function AssistantMessageMetaSummary({
   costText,
   durationMs,
@@ -87,6 +87,28 @@ export function AssistantMessageMetaSummary({
   );
 }
 
+function UsageRow({
+  label,
+  value,
+  nested = false,
+}: {
+  label: string;
+  value: string;
+  nested?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex justify-between gap-3 tabular-nums",
+        nested && "pl-3",
+      )}
+    >
+      <span className="shrink-0">{label}</span>
+      <span className="text-right text-foreground">{value}</span>
+    </div>
+  );
+}
+
 function UsageDetailPanel({
   usage,
   generationMs,
@@ -97,56 +119,42 @@ function UsageDetailPanel({
   const cache = cacheUsageDisplay(usage);
   const speedText =
     generationMs != null ? formatOutputSpeed(usage.output, generationMs) : null;
+  const hitText =
+    cache.hitRatePercent != null
+      ? `${formatUsageCount(cache.cacheHit)} · ${cache.hitRatePercent}%`
+      : formatUsageCount(cache.cacheHit);
   return (
     <div className="space-y-1 px-3 py-1.5 text-xs text-muted-foreground">
-      <div className="flex justify-between gap-3 tabular-nums">
-        <span>输入</span>
-        <span className="text-foreground">{formatCompact(usage.input)}</span>
-      </div>
+      <UsageRow label="输入" value={formatUsageCount(usage.input)} />
       {cache.billedAsMiss ? (
-        <div className="flex justify-between gap-3 tabular-nums">
-          <span>{CACHE_BILLED_AS_MISS_LABEL}</span>
-          <span className="text-foreground">
-            {formatCompact(cache.cacheMiss)}
-          </span>
-        </div>
+        <UsageRow
+          label={CACHE_BILLED_AS_MISS_LABEL}
+          value={formatUsageCount(cache.cacheMiss)}
+          nested
+        />
       ) : (
         <>
-          <div className="flex justify-between gap-3 tabular-nums">
-            <span>缓存命中</span>
-            <span className="text-foreground">
-              {formatCompact(cache.cacheHit)}
-              {cache.hitRatePercent != null
-                ? ` · ${cache.hitRatePercent}%`
-                : ""}
-            </span>
-          </div>
-          <div className="flex justify-between gap-3 tabular-nums">
-            <span>缓存未命中</span>
-            <span className="text-foreground">
-              {formatCompact(cache.cacheMiss)}
-            </span>
-          </div>
+          {cache.cacheHit > 0 ? (
+            <UsageRow label="缓存命中" value={hitText} nested />
+          ) : null}
+          {cache.cacheMiss > 0 ? (
+            <UsageRow
+              label="缓存未命中"
+              value={formatUsageCount(cache.cacheMiss)}
+              nested
+            />
+          ) : null}
         </>
       )}
-      <div className="flex justify-between gap-3 tabular-nums">
-        <span>输出</span>
-        <span className="text-foreground">{formatCompact(usage.output)}</span>
-      </div>
-      {speedText ? (
-        <div className="flex justify-between gap-3 tabular-nums">
-          <span>输出速度</span>
-          <span className="text-foreground">{speedText}</span>
-        </div>
+      <UsageRow label="输出" value={formatUsageCount(usage.output)} />
+      {usage.reasoning > 0 ? (
+        <UsageRow
+          label="思考"
+          value={formatUsageCount(usage.reasoning)}
+          nested
+        />
       ) : null}
-      {usage.reasoning > 0 && (
-        <div className="flex justify-between gap-3 tabular-nums">
-          <span>思考</span>
-          <span className="text-foreground">
-            {formatCompact(usage.reasoning)}
-          </span>
-        </div>
-      )}
+      {speedText ? <UsageRow label="速度" value={speedText} nested /> : null}
     </div>
   );
 }

@@ -106,7 +106,8 @@ def _resolve_write_apply(
         return parsed.apply
     if existing_apply in ("always", "on_demand", "paths"):
         return existing_apply  # type: ignore[return-value]
-    return "always"
+    # 新条目没写 apply：与解析器同一缺省（按需）。
+    return "on_demand"
 
 
 def _format_rule_catalog(docs: Sequence[object]) -> str:

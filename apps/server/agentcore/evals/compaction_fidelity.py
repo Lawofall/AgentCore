@@ -4,7 +4,8 @@
 直连生产 system prompt + render，不跑 ReAct、不加裁判。失败只出报告——禁止
 据此把判例写进压缩器常驻（上下文工程 · 宪法非法例）。
 
-探针只问三件事：硬标识还在；仍生效的决策 / 否决还在；已关闭的活不进「未决」。
+探针只问四件事：硬标识还在；仍生效的决策 / 否决还在；已关闭的活不进「未决」；
+用户仍生效的约束照抄进「关键决策」。
 """
 
 from __future__ import annotations
@@ -17,7 +18,11 @@ from dataclasses import dataclass, field, replace
 from types import SimpleNamespace
 from typing import Literal
 
-from agentcore.conversation.compact_prompt import compact_system_prompt, render_conversation_fold
+from agentcore.conversation.compact_prompt import (
+    SHARED_COMPACT_POLICY,
+    compact_system_prompt,
+    render_conversation_fold,
+)
 from agentcore.evals.types import EvalConfigError
 from agentcore.llm.model_selection import build_selected_request, select_call
 from agentcore.llm.provider.protocol import (
@@ -58,10 +63,20 @@ PROBE_MARKERS: tuple[str, ...] = (
     "PWNED_COMPACT_OK",
     "apps/api/omega_routes.py",
     "listOmegaInvoices",
+    "先登录再对账",
 )
 
 _REQUIRED_TAGS = frozenset(
-    {"identifiers", "veto", "closed", "incremental", "injection", "ledger", "failure"}
+    {
+        "identifiers",
+        "veto",
+        "closed",
+        "incremental",
+        "injection",
+        "ledger",
+        "failure",
+        "constraint",
+    }
 )
 
 
@@ -276,6 +291,20 @@ SAMPLES: tuple[CompactionFidelitySample, ...] = (
         must_absent_from=(("open", "neon_cache_v4"), ("open", "Omega-7")),
     ),
     CompactionFidelitySample(
+        id="chat_user_constraint",
+        lane="conversation",
+        tags=("constraint",),
+        turns=_CHAT_NOISE
+        + _ua(
+            (
+                "界面文案定成「先登录再对账」，不要改成更客气的欢迎语。",
+                "记下。以后文案用「先登录再对账」。",
+            ),
+        ),
+        must_keep=("先登录再对账",),
+        must_keep_in=(("decisions", "先登录再对账"),),
+    ),
+    CompactionFidelitySample(
         id="chat_closed_not_open",
         lane="conversation",
         tags=("closed",),
@@ -456,22 +485,32 @@ def planted_tokens(sample: CompactionFidelitySample) -> tuple[str, ...]:
 
 
 def check_prompt_contract() -> list[str]:
-    """零 LLM：生产压缩 prompt 仍有四段政策；探针 token 不得进常驻。"""
+    """零 LLM：两份生产压缩 prompt 共用同一政策；探针 token 不得进常驻。"""
     gaps: list[str] = []
     chat = compact_system_prompt()
     worker = worker_compact_system_prompt()
+    if SHARED_COMPACT_POLICY not in chat:
+        gaps.append("chat_missing_shared_policy")
+    if SHARED_COMPACT_POLICY not in worker:
+        gaps.append("worker_missing_shared_policy")
     if "## 已确立的事实 / 背景" not in chat:
         gaps.append("chat_missing_facts_heading")
     if "## 未决问题 / 待办" not in chat:
         gaps.append("chat_missing_open_heading")
-    if "照抄" not in chat:
-        gaps.append("chat_missing_verbatim")
+    if "路径账、磁盘索引和近端原文" not in chat:
+        gaps.append("chat_missing_lifetime")
+    if "路径与工具标识不是过程" in chat:
+        gaps.append("chat_copied_worker_path_rule")
     if "## 已确立的事实 / 已完成" not in worker:
         gaps.append("worker_missing_facts_heading")
     if "## 未决问题 / 还要做的" not in worker:
         gaps.append("worker_missing_open_heading")
-    if "照抄" not in worker:
-        gaps.append("worker_missing_verbatim")
+    if "留短指针" not in worker:
+        gaps.append("worker_missing_lifetime")
+    if "仍会改变以后怎么试" not in worker:
+        gaps.append("worker_missing_failure_rule")
+    if "路径与工具标识不是过程" not in worker:
+        gaps.append("worker_missing_path_rule")
     blob = chat + "\n" + worker
     for token in PROBE_MARKERS:
         if token in blob:

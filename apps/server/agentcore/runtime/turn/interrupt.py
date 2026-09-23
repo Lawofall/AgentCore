@@ -8,7 +8,8 @@ parenthetical suffix.
 
 After the durable incomplete write, this closer also best-effort reconciles the turn
 cost ledger (``cost.recorded`` + ``messages.cost`` + ``messages.usage`` tokens) so
-/stop does not drop payroll or the bubble token split.
+/stop does not drop payroll or the bubble token split. Pause persist calls
+:func:`project_settled_message_cost` for the same snapshot.
 """
 
 from __future__ import annotations
@@ -193,23 +194,24 @@ def _already_terminal_incomplete(meta: dict[str, Any] | None) -> bool:
     return incomplete and finish in _TERMINAL_FINISH
 
 
-async def _reconcile_interrupted_turn_cost(
+async def project_settled_message_cost(
     *,
     message_id: str,
     conversation_id: str,
     trace_id: str | None,
+    refresh: bool = False,
+    source: str = "interrupt",
 ) -> None:
-    """Best-effort turn ledger reconcile after interrupt close (stop / sweeper / kill).
+    """Project already-metered calls onto the assistant row (usage + cost).
 
-    Successful LLM calls usually already sit in ``cost_calls``; interrupt closers
-    historically skipped turn-end reconcile, so ``cost.recorded`` / ``messages.cost``
-    never landed, and ``messages.usage`` kept only incomplete chrome (no token
-    fields). Reuse the same ``reconcile_turn_cost_ledger`` + ``log_cost_recorded``
-    path as cloud finalize with empty ``cost_runs`` (no forged orphans — vision sink
-    may still be lost on cancel). Stamp ledger token totals onto ``messages.usage``
-    *before* ``messages.cost`` so a crash between the two writes retries (cost not
-    yet stamped). Skip emit when ``messages.cost`` is already stamped so a second
-    closer does not double-log ``cost.recorded``.
+    ``cost_calls`` is the meter. This stamps the bubble snapshot at a settled
+    boundary: interrupt close, and pause (``refresh=True`` so a later pause
+    picks up calls since the previous stamp). Empty ``cost_runs`` — do not
+    forge in-memory orphans; resume finalize still folds those.
+
+    Stamp tokens before ``messages.cost``. A second interrupt closer skips
+    when cost is already set (``cost.recorded`` must not double-emit). Pause
+    refresh still rewrites the snapshot and skips only the log line.
     """
     from agentcore.billing.turn_ledger import (
         drain_cost_ledger_before_reconcile,
@@ -236,9 +238,10 @@ async def _reconcile_interrupted_turn_cost(
             return
         msg_repo = MessageRepository(session)
         existing = await msg_repo.get_by_id(message_id, conversation_id=conversation_id)
-        if existing is not None and existing.cost:
-            # Already stamped (prior interrupt reconcile or a later finalize) — DB
-            # reconcile is idempotent, but cost.recorded must not double-emit.
+        already_stamped = existing is not None and bool(existing.cost)
+        if already_stamped and not refresh:
+            # Second interrupt closer: reconcile is idempotent, but cost.recorded
+            # must not double-emit.
             return
         try:
             ledger_rows = await reconcile_turn_cost_ledger(
@@ -257,12 +260,13 @@ async def _reconcile_interrupted_turn_cost(
                 conversation_id=conversation_id,
                 message_id=message_id,
                 error=str(e),
-                source="interrupt",
+                source=source,
             )
             return
         if not ledger_rows:
             return
-        log_cost_recorded(conversation_id, message_id, ledger_rows)
+        if not already_stamped:
+            log_cost_recorded(conversation_id, message_id, ledger_rows)
         try:
             # Tokens first: ``set_cost`` is the skip latch. A crash after cost but
             # before usage would leave the bubble empty on retry (early return).
@@ -283,8 +287,11 @@ async def _reconcile_interrupted_turn_cost(
                 conversation_id=conversation_id,
                 message_id=message_id,
                 error=str(e),
-                source="interrupt",
+                source=source,
             )
+
+
+_reconcile_interrupted_turn_cost = project_settled_message_cost
 
 
 async def settle_prior_running_assistants(

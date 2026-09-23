@@ -269,6 +269,24 @@ def _log_local_turn_recorded(
     logger.info("chat.local_turn_recorded", **fields)
 
 
+async def _project_pause_message_cost(
+    *,
+    message_id: str,
+    conversation_id: str,
+    trace_id: str,
+) -> None:
+    """Stamp pause footer from ``cost_calls`` (same snapshot as stop)."""
+    from agentcore.runtime.turn.interrupt import project_settled_message_cost
+
+    await project_settled_message_cost(
+        message_id=message_id,
+        conversation_id=conversation_id,
+        trace_id=trace_id,
+        refresh=True,
+        source="pause",
+    )
+
+
 def _usage_metadata(
     result: dict,
     *,
@@ -276,15 +294,19 @@ def _usage_metadata(
     extra: dict | None = None,
     duration_ms: int | None = None,
 ) -> dict:
-    meta = {
-        "status": status,
-        "input_tokens": result.get("input_tokens", 0),
-        "output_tokens": result.get("output_tokens", 0),
-        "reasoning_tokens": result.get("reasoning_tokens", 0),
-        "cache_hit_tokens": result.get("cache_hit_tokens", 0),
-        "cache_miss_tokens": result.get("cache_miss_tokens", 0),
-        "rounds": result.get("rounds", 0),
-    }
+    meta: dict[str, Any] = {"status": status}
+    # Absent keys are not a zero meter. Re-pause / terminal resume without a new
+    # CEO round omits them so a later merge cannot wipe the pause snapshot.
+    for key in (
+        "input_tokens",
+        "output_tokens",
+        "reasoning_tokens",
+        "cache_hit_tokens",
+        "cache_miss_tokens",
+        "rounds",
+    ):
+        if key in result and result[key] is not None:
+            meta[key] = int(result[key] or 0)
     finish = result.get("finish_reason")
     finish_value = getattr(finish, "value", finish)
     if finish_value is not None:
@@ -433,19 +455,19 @@ async def _record_local_turn_metrics(
     durable: list[dict[str, Any]] | None,
     input_tokens: int = 0,
     output_tokens: int = 0,
+    prompt_tokens: int = 0,
     run_error: object = None,
 ) -> None:
     """Best-effort sidecar ``turn_metrics`` row.
 
     Token fields are the same finalize values already stamped onto
-    ``messages.usage``. ``delegated`` / ``workers`` use ``turn_worker_stats`` on
-    the journal (no ``cost_runs`` on local write-back — same journal-half
-    fallback cloud uses when pause defers ledger fold). ``turn_id`` is the
-    assistant message id: local write-back has no engine ``attempt_id``.
-    ``prompt_tokens`` is the largest single ``llm_call`` prompt in the journal.
+    ``messages.usage``. ``prompt_tokens`` is the CEO's latest single-request
+    prompt (window fill), the same number the usage row stores. ``delegated`` /
+    ``workers`` use ``turn_worker_stats`` on the journal (no ``cost_runs`` on
+    local write-back — same journal-half fallback cloud uses when pause defers
+    ledger fold). ``turn_id`` is the assistant message id: local write-back has
+    no engine ``attempt_id``.
     """
-    from agentcore.conversation.prompt_tokens import max_prompt_tokens_from_journal
-
     error_code, error_type = _metrics_error_codes(
         run_error=run_error, durable=durable
     )
@@ -470,7 +492,7 @@ async def _record_local_turn_metrics(
             workers=workers,
             input_tokens=int(input_tokens or 0),
             output_tokens=int(output_tokens or 0),
-            prompt_tokens=max_prompt_tokens_from_journal(durable),
+            prompt_tokens=int(prompt_tokens or 0),
         )
     except Exception as e:
         with contextlib.suppress(Exception):
@@ -784,6 +806,11 @@ class CloudStore:
                         message_id=message_id,
                         error=str(e),
                     )
+                await _project_pause_message_cost(
+                    message_id=message_id,
+                    conversation_id=conversation_id,
+                    trace_id=trace_id,
+                )
             return
 
         turn_error = result.get("error")
@@ -1163,6 +1190,11 @@ class CloudStore:
             message_id=message_id,
             conversation_id=conversation_id,
             user_id=user_id,
+            trace_id=trace_id,
+        )
+        await _project_pause_message_cost(
+            message_id=message_id,
+            conversation_id=conversation_id,
             trace_id=trace_id,
         )
 
@@ -1596,6 +1628,7 @@ class CloudStore:
                     durable=durable,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
+                    prompt_tokens=prompt_tokens,
                     run_error=run_error,
                 )
             # 时序不变量: local terminal/pause snapshot landed → drop segments.
@@ -1613,6 +1646,12 @@ class CloudStore:
                 )
 
         if skip_derived:
+            if is_paused and assistant_message_id:
+                await _project_pause_message_cost(
+                    message_id=assistant_message_id,
+                    conversation_id=conversation_id,
+                    trace_id=trace_id,
+                )
             # Mirror cloud: ERROR/CANCELLED still arm compaction; PAUSED does not.
             if not is_paused:
                 await schedule_compaction_if_due(conversation_id, input_tokens)

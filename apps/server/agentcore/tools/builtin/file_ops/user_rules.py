@@ -14,7 +14,6 @@ from agentcore.memory.rule_files import (
     RULE_TREE_META_MSG,
     RULES_CATALOG_ROOT,
     RULES_DIR_REL,
-    WORKER_RULE_WRITE_MSG,
     classify_rule_path,
     rule_entry_relpath,
 )
@@ -33,18 +32,13 @@ from .errors import _error, _path_missing_error
 from .integrity import (
     _mark_landed_files,
     _norm_rel_path,
+    _reject_write_scope,
     classify_write_kind,
     format_artifact_manifest,
 )
 from .listing import empty_list_message, format_ls_lines
 
 logger = get_logger(__name__)
-
-
-def _is_worker(context: ToolContext) -> bool:
-    if context.write_coordinator is not None:
-        return True
-    return bool((context.agent_role or "").strip())
 
 
 def rule_folder_id(context: ToolContext) -> str | None:
@@ -240,8 +234,9 @@ async def maybe_user_rule_write(
             start,
             contract_failure=True,
         )
-    if _is_worker(context):
-        return _error(WORKER_RULE_WRITE_MSG, start, contract_failure=True)
+    scope_denied = _reject_write_scope(context, requested_path, start)
+    if scope_denied is not None:
+        return scope_denied
     body = content if isinstance(content, str) else str(content or "")
     if not body.strip():
         return _error("缺少 content。", start, contract_failure=True)
@@ -305,8 +300,9 @@ async def maybe_user_rule_str_replace(
             start,
             contract_failure=True,
         )
-    if _is_worker(context):
-        return _error(WORKER_RULE_WRITE_MSG, start, contract_failure=True)
+    scope_denied = _reject_write_scope(context, requested_path, start)
+    if scope_denied is not None:
+        return scope_denied
     rel_path = rule_entry_relpath(name)
     try:
         current = await _mutate(context, action="read", name=name)
@@ -379,8 +375,9 @@ async def maybe_user_rule_delete(
         return None
     if kind != "rule_file" or not name:
         return _error(RULE_TREE_META_MSG, start, contract_failure=True)
-    if _is_worker(context):
-        return _error(WORKER_RULE_WRITE_MSG, start, contract_failure=True)
+    scope_denied = _reject_write_scope(context, requested_path, start)
+    if scope_denied is not None:
+        return scope_denied
     rel_path = rule_entry_relpath(name)
     try:
         result = await _mutate(context, action="delete", name=name)
@@ -513,8 +510,9 @@ async def maybe_user_rule_mkdir(
         return None
     if kind not in ("agentcore_root", "rules_dir"):
         return _error(RULE_TREE_META_MSG, start, contract_failure=True)
-    if _is_worker(context):
-        return _error(WORKER_RULE_WRITE_MSG, start, contract_failure=True)
+    scope_denied = _reject_write_scope(context, requested_path, start)
+    if scope_denied is not None:
+        return scope_denied
     rel = RULES_DIR_REL if kind == "rules_dir" else RULES_CATALOG_ROOT
     return ToolResult(
         tool_call_id="",

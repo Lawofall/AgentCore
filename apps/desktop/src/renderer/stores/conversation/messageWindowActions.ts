@@ -57,10 +57,13 @@ export function createMessageWindowActions(
         });
         return;
       }
-      patchConversation(conversationId, () => ({
+      patchConversation(conversationId, (rt) => ({
         messages,
         hasMoreBefore: flags.hasMoreBefore,
         hasMoreAfter: flags.hasMoreAfter,
+        // Settled transcript replaces the live gauge. A turn still in flight
+        // keeps the gauge so a window refresh cannot rewind it to an older receipt.
+        ...(rt.isGenerating ? {} : { ceoWindowTokens: null }),
       }));
     },
 

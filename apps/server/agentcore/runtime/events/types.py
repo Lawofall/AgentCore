@@ -29,6 +29,9 @@ class EventType(StrEnum):
     TOOL_USE_PROGRESS = "tool_use_progress"
     TOOL_USE_END = "tool_use_end"
     MESSAGE_END = "message_end"
+    # CEO 窗口占用：每轮模型调用的 usage 返回后推最近一次 prompt。
+    # EPHEMERAL——reload 读落盘水位；llm_call 事实已有每轮 usage，这里不进 journal。
+    WINDOW_PROMPT = "window_prompt"
     ERROR = "error"
     TITLE_GENERATED = "title_generated"
     TURN_SAVED = "turn_saved"

@@ -40,6 +40,21 @@ _TERMINAL_STATUSES = frozenset(
     }
 )
 
+# Snapshot fields a pause close must not zero out. Calls are metered in
+# ``cost_calls``; an unmetered re-pause (no new CEO round) used to publish
+# input/output 0 and hide the bubble footer.
+_USAGE_TOKEN_KEYS = (
+    "input_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+    "cache_hit_tokens",
+    "cache_miss_tokens",
+)
+
+
+def _token_total(usage: dict[str, Any]) -> int:
+    return sum(int(usage.get(key) or 0) for key in _USAGE_TOKEN_KEYS)
+
 
 def status_rank(status: str | None) -> int:
     if not status:
@@ -67,12 +82,23 @@ def merge_usage_status(existing: dict[str, Any] | None, incoming: dict[str, Any]
     terminal, the latch is cleared here — callers must not re-implement pop/clear
     around a second ``{**existing, **incoming}`` merge (that resurrects stale
     ``paused:true`` when incoming omits the key).
+
+    An incoming snapshot with a zero token total does not erase a positive
+    existing total. Unmetered re-pause and terminal resume used to publish 0
+    and hide the footer. A real meter sends a positive total (or the ledger
+    projection does).
     """
     base = dict(existing or {})
     nxt = dict(incoming or {})
     existing_status = base.get("status")
     incoming_status = nxt.get("status")
     merged = {**base, **nxt}
+    if _token_total(nxt) == 0 and _token_total(base) > 0:
+        for key in (*_USAGE_TOKEN_KEYS, "rounds"):
+            if key in base:
+                merged[key] = base[key]
+            else:
+                merged.pop(key, None)
     if not should_advance_status(existing_status, incoming_status):
         if existing_status is not None:
             merged["status"] = existing_status

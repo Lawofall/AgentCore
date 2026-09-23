@@ -115,7 +115,7 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 | 项 | 约束 |
 |---|---|
 | 协议 | 默认仍跑 OpenAI `chat/completions`。同一份精确 id 表（`offProtocolModels`）把只走 `/responses`（GPT / Grok / Muse）或 `/messages`（Claude 家族、`union-alpha`、Qwen 3.5–3.7 plus/max）的 id **挡出种子**。目录合并层仍列出这些 id（不静默隐藏）。OpenCode Zen/Go BYOK：`/messages` 可选（云端 `POST /messages`）；`/responses` 仍标不可选。平台 allowlist 两种都灰（Claude 走用户自己的 Zen Key，不吃平台额度）。`minimax-m2.7` 现已走 `chat/completions`，不在该表。sidecar 推理代理仍只收 OpenAI 形 `chat/completions`；云端按模型分叉。`/responses` 仍未做。过滤不在 HTTP discovery：`GET /models` 原样返回。被区域闸住的 id 仍可能出现在发现结果里——目录有 ≠ 一定能跑 |
-| 会话头 | Go/Zen 出站 `POST /chat/completions` 与 `POST /messages` 必带稳定 `x-opencode-session`（值=对话 id；无对话时 `probe:{trace}`）。User-Agent=`AgentCore/1.0`。不冒充 `opencode-cli`。`GET /models` 不带 session。缺头上游 400（2026-09-06 起硬拒） |
+| 会话头 | Go/Zen 出站 `POST /chat/completions` 与 `POST /messages` 必带稳定 `x-opencode-session`（值=`user:{user_id}`，无 user 时退回对话 id；两者都没有则 `probe:{trace}`）。OpenCode 按这个头隔开磁盘缓存，同一用户的新对话因此能复用已暖前缀。平台池选钥仍按对话钉，不跟这个头。User-Agent=`AgentCore/1.0`。不冒充 `opencode-cli`。`GET /models` 不带 session。缺头上游 400（2026-09-06 起硬拒） |
 | BYOK | 用户自备**对应端点**的 key；价卡与平台同一张 curated CNY（`credential_source` 只分流列，不进平台配额）。打错端点时付费 Flash 会在 Zen 路上 `CreditsError`（扣的是 Zen 余额，Go 订阅管不到） |
 | 平台代付 | ✅ `PLATFORM_*` 可指向 Zen **或** Go；**现网钉 Go + 付费 Flash**（见 §五·附）。换上游 / 改 `quota_*` 须改生产 `.env` 并重启 api |
 | 上下文 | 按 **SKU id**：付费 `deepseek-v4-flash` / `deepseek-v4.1-flash` **1M**；仅 `deepseek-v4-flash-free` **200K**（Zen 网关 cap）。禁止按端点猜窗（Go 无 free 档也不把 Flash 当成 200K） |

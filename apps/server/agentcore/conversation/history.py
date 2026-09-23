@@ -499,13 +499,16 @@ def _summary_block(summary: str) -> dict:
 
     Assistant (not user) so it slots between the system prompt and the first real
     user turn without two consecutive user messages; framed so the model reads it as
-    a system-made recap of earlier context, not the user's words.
+    a system-made recap of earlier context, not the user's words. The lead matches
+    the worker window-compact lead (re-read by path, do not redo finished steps)
+    and adds where omitted process lives: the path ledger and the recent tail.
     """
     return {
         "role": "assistant",
         "content": (
             "（以下是本次对话早前内容的摘要，由系统自动压缩以控制上下文长度；"
-            "需要更早的精确原文时，可基于此摘要继续。）\n\n" + summary.strip()
+            "需要更早的精确原文时，按摘要中的路径再读，不要重做已完成的步骤。"
+            "摘要没写的过程，以路径账和近端原文为准。）\n\n" + summary.strip()
         ),
     }
 

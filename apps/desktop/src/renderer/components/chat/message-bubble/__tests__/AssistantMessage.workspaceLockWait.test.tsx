@@ -57,6 +57,7 @@ describe("AssistantMessage · workspace_lock_wait", () => {
           executionVia: null,
           waitingForWorkspaceLock: false,
           waitingForDeskProvision: false,
+          ceoWindowTokens: null,
         },
       },
     });

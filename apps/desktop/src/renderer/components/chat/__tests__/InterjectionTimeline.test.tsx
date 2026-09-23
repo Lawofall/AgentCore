@@ -43,6 +43,7 @@ beforeEach(() => {
         executionVia: null,
         waitingForWorkspaceLock: false,
         waitingForDeskProvision: false,
+        ceoWindowTokens: null,
       },
     },
   });

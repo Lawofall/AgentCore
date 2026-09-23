@@ -32,11 +32,7 @@ import {
   deleteDocument,
   listScopeEntries,
 } from "@/services/documents";
-import {
-  EntriesSection,
-  entryOpenTarget,
-  formatAlwaysChars,
-} from "../EntriesSection";
+import { EntriesSection, entryOpenTarget } from "../EntriesSection";
 
 const entry = (over: Partial<DocumentNode> = {}): DocumentNode => ({
   id: "e",
@@ -89,15 +85,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   localStorage.clear();
-});
-
-describe("always usage copy helpers", () => {
-  it("distinguishes 0 from under-a-thousand and coarsens to 千/万", () => {
-    expect(formatAlwaysChars(0)).toBe("0 字");
-    expect(formatAlwaysChars(450)).toBe("不足千字");
-    expect(formatAlwaysChars(4200)).toBe("约 4 千字");
-    expect(formatAlwaysChars(12000)).toBe("约 1.2 万字");
-  });
 });
 
 describe("entryOpenTarget", () => {
@@ -157,14 +144,13 @@ describe("EntriesSection (global)", () => {
     expect(screen.queryByText("记忆")).toBeNull();
     expect(screen.queryByText("规则")).toBeNull();
     expect(screen.queryByText(/^文档$/)).toBeNull();
-    expect(screen.getByText("约 1 千字")).toBeTruthy();
-    expect(screen.queryByText("不足千字")).toBeNull();
+    expect(screen.queryByText(/千字|万字/)).toBeNull();
     expect(screen.queryByText(/还剩约/)).toBeNull();
     expect(screen.queryByLabelText("新建条目")).toBeNull();
     expect(screen.queryByText("最近更新")).toBeNull();
   });
 
-  it("prints a row size only for entries that actually hold the pool", async () => {
+  it("does not print a row size, including for always entries", async () => {
     vi.mocked(listScopeEntries).mockResolvedValue([
       entry({ id: "g1", name: "语气.md", alwaysChars: 4200 }),
       entry({ id: "g2", name: "小规则.md", alwaysChars: 450 }),
@@ -177,8 +163,9 @@ describe("EntriesSection (global)", () => {
     ]);
     renderScope("global");
 
-    expect(await screen.findByText("约 4 千字")).toBeTruthy();
-    expect(screen.queryByText("不足千字")).toBeNull();
+    expect(await screen.findByText("语气.md")).toBeTruthy();
+    expect(screen.getByText("小规则.md")).toBeTruthy();
+    expect(screen.queryByText(/千字|万字/)).toBeNull();
     expect(screen.queryByText("0 字")).toBeNull();
   });
 
@@ -244,7 +231,7 @@ describe("EntriesSection (global)", () => {
     const label = await screen.findByText("过时偏好.md");
     expect(label.className).not.toContain("line-through");
     expect(screen.queryByText("已停用")).toBeNull();
-    expect(screen.queryByText("约 1 千字")).toBeNull();
+    expect(screen.queryByText(/千字|万字/)).toBeNull();
   });
 
   it("offers 删除 (not 清空) on leftover AI-maintained cores; no memory PUT", async () => {
@@ -347,6 +334,6 @@ describe("EntriesSection (project)", () => {
     expect(screen.getByText("项目路由")).toBeTruthy();
     expect(screen.queryByText("画像.md")).toBeNull();
     expect(listScopeEntries).toHaveBeenCalledWith("F1");
-    expect(screen.getByText("约 2 千字")).toBeTruthy();
+    expect(screen.queryByText(/千字|万字/)).toBeNull();
   });
 });

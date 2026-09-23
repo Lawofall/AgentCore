@@ -164,6 +164,10 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
     EventType.TURN_SAVED: (Disposition.EPHEMERAL, "落库确认控制帧——reload 本身即已保存态"),
     EventType.TOOL_PROGRESS: (Disposition.EPHEMERAL, "工具参数流式心跳——传输态，工具已完成"),
     EventType.TOOL_USE_PROGRESS: (Disposition.EPHEMERAL, "工具执行阶段心跳——传输态，工具已完成"),
+    EventType.WINDOW_PROMPT: (
+        Disposition.EPHEMERAL,
+        "CEO 窗口占用——每轮模型调用 usage 返回后的最近一次 prompt；reload 读落盘水位",
+    ),
     EventType.WORKSPACE_LOCK_WAIT: (
         Disposition.EPHEMERAL,
         "同 folder 写锁短等——传输态；waiting 进出；不得静默等锁，reload 无需重放",

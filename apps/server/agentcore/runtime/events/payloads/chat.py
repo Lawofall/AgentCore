@@ -248,6 +248,16 @@ class ErrorPayload(WirePayload):
     context: ErrorContext | None = absent()
 
 
+class WindowPromptPayload(WirePayload):
+    """CEO window occupancy after one model call.
+
+    ``last_prompt_tokens`` is that call's prompt — the same waterline compaction
+    uses. Transport-only: reload reads the settled message usage.
+    """
+
+    last_prompt_tokens: int
+
+
 class MessageEndUsage(WirePayload):
     """Turn token totals (long-key form, contrast `UsageBreakdown` short keys on runs).
 

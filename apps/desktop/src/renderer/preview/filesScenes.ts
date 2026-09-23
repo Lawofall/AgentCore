@@ -11,7 +11,7 @@ export const FILES_PREVIEW_SCENES = [
   {
     id: "files-entries",
     title: "有条目",
-    description: "行尾字数 · 不生效",
+    description: "文件夹条目",
   },
 ] as const;
 

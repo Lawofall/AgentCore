@@ -116,6 +116,7 @@ async def test_ai_over_limit_write_rejected(client, session_factory, tiny_always
                 action="write",
                 name="新规则.md",
                 content="x" * 20,
+                apply="always",
             )
 
 
@@ -163,6 +164,7 @@ async def test_quota_card_same_pending_state_only_once(
                     action="write",
                     name="新规则.md",
                     content="a" * 40,
+                    apply="always",
                 )
             with pytest.raises(AlwaysQuotaExceededError):
                 await mutate_user_rule(
@@ -172,6 +174,7 @@ async def test_quota_card_same_pending_state_only_once(
                     action="write",
                     name="新规则.md",
                     content="b" * 40,
+                    apply="always",
                 )
         finally:
             memory_write_conversation_id.reset(token)

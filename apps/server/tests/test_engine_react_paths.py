@@ -14,6 +14,7 @@ from agentcore.core.types import ToolEffect, ToolFace
 from agentcore.llm.provider.protocol import (
     LLMChunk,
     LLMMessage,
+    TokenUsage,
     ToolCall,
     ToolCallDelta,
     ToolCallFunction,
@@ -190,6 +191,90 @@ async def test_react_loop_tool_then_answer():
     assert tool.calls == 1
     assert content == "基于工具结果的答复"
     assert rounds == 2
+
+
+async def test_captain_window_prompt_follows_each_round():
+    """Composer occupancy is the latest CEO request, not the peak of the turn."""
+    tool = _StubTool(name="search", output="found-it")
+    provider = _ScriptedProvider(
+        [
+            [
+                _tool_chunk("search", '{"q":"x"}'),
+                LLMChunk(
+                    usage=TokenUsage(
+                        input_tokens=8_000,
+                        output_tokens=10,
+                        last_prompt_tokens=8_000,
+                    ),
+                    finish_reason="tool_calls",
+                ),
+            ],
+            [
+                _content_chunk("done"),
+                LLMChunk(
+                    usage=TokenUsage(
+                        input_tokens=3_000,
+                        output_tokens=4,
+                        last_prompt_tokens=3_000,
+                    ),
+                    finish_reason="stop",
+                ),
+            ],
+        ]
+    )
+    sink = EventSink()
+    content, _reasoning, usage, rounds = await react_loop(
+        messages=[LLMMessage(role="user", content="go")],
+        llm=provider,
+        tools=_registry(tool),
+        sink=sink,
+        tool_context=_context(),
+        profile=make_profile_params(max_rounds=8),
+        turn_model="primary",
+        role="captain",
+        run_id="run-1",
+        approval_gate=None,
+    )
+    prompts = [
+        e.payload["last_prompt_tokens"]
+        for e in sink.history_snapshot()
+        if e.type is EventType.WINDOW_PROMPT
+    ]
+    assert content == "done"
+    assert rounds == 2
+    assert prompts == [8_000, 3_000]
+    assert usage.last_prompt_tokens == 3_000
+    assert usage.input_tokens == 11_000
+    journal = sink.execution_journal() or []
+    assert EventType.WINDOW_PROMPT.value not in [e["type"] for e in journal]
+
+
+async def test_worker_loop_does_not_emit_window_prompt():
+    provider = _ScriptedProvider(
+        [
+            [
+                _content_chunk("worker"),
+                LLMChunk(
+                    usage=TokenUsage(input_tokens=500, last_prompt_tokens=500),
+                    finish_reason="stop",
+                ),
+            ]
+        ]
+    )
+    sink = EventSink()
+    await react_loop(
+        messages=[LLMMessage(role="user", content="go")],
+        llm=provider,
+        tools=_registry(),
+        sink=sink,
+        tool_context=_context(),
+        profile=make_profile_params(max_rounds=8),
+        turn_model="primary",
+        role="worker",
+        run_id="run-w",
+        approval_gate=None,
+    )
+    assert not any(e.type is EventType.WINDOW_PROMPT for e in sink.history_snapshot())
 
 
 async def test_react_loop_replays_unmatched_trailing_tools_before_llm():

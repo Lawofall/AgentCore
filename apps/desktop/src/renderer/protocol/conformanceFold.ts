@@ -424,6 +424,7 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
       case "mcp_op_required":
       case "tool_progress":
       case "tool_use_progress":
+      case "window_prompt":
       case "coordination_wait":
       case "workspace_lock_wait":
       case "desk_provision_wait":

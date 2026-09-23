@@ -112,9 +112,9 @@ def handle_pending_pause(
     # 挂起即收口 (②): the checkpoint boundary persisted a resume frame and YIELDed (soft
     # pause). End the turn here with a SUSPEND ToolResult — the engine maps it to
     # FinishReason.PAUSED, leaves the delegate call pending (no result), and the persist
-    # tail parks the turn (the frame is the record). The已完成 workers' usage / ledger /
-    # citations are NOT folded here: they ride the durable frame's ``completed`` and bill
-    # on the cold resume drive — matching the disconnect→resume path this collapses onto.
+    # tail parks the turn (the frame is the record). Completed workers are not folded
+    # into this delegate accumulator (resume folds the frame once). Their calls are
+    # already in ``cost_calls``; pause persist projects that ledger onto the message.
     #
     # 协调态例外：host 靠 ``_pending_pause`` / ``_pending_boundary`` 投递 BOUNDARY_YIELD。
     # 若此处清掉标志，host 永远看不到（竞态）。协调路径保留标志、不 SUSPEND、不收口回合。

@@ -133,6 +133,7 @@ async def test_quota_card_names_denied_entry_and_holders(
                     action="write",
                     name="新规则.md",
                     content="a" * 40,
+                    apply="always",
                 )
         finally:
             memory_write_conversation_id.reset(token)

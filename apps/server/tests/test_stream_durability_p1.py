@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from agentcore.conversation.store.merge import pick_longest, pick_monotonic_content
 from agentcore.conversation.store.overlay import (
@@ -459,6 +459,10 @@ async def test_cloud_clear_after_pause_snapshot(monkeypatch):
         cleared.append(turn_id)
 
     monkeypatch.setattr(store, "clear_stream_segments", _clear)
+    monkeypatch.setattr(
+        "agentcore.runtime.turn.interrupt.project_settled_message_cost",
+        AsyncMock(),
+    )
 
     await store._finalize_cloud(
         result={

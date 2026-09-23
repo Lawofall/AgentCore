@@ -185,9 +185,11 @@ class TokenUsage:
     reasoning_tokens: int = 0
     cache_hit_tokens: int = 0
     cache_miss_tokens: int = 0
-    # Largest single-request prompt this accumulator has seen. ``input_tokens``
-    # sums every round (billing); fit-check / near-ceiling compare this field
-    # to the model's window. ``__add__`` keeps the max, never sums.
+    # Latest single-request prompt. Callers add in time order
+    # (``total + this_call``); a positive right-hand prompt replaces the left.
+    # ``input_tokens`` still sums every round (billing). Window fill and the
+    # next-turn watermark read this field — a later compact must be able to
+    # shrink it.
     last_prompt_tokens: int = 0
 
     @property
@@ -220,7 +222,11 @@ class TokenUsage:
             reasoning_tokens=self.reasoning_tokens + other.reasoning_tokens,
             cache_hit_tokens=self.cache_hit_tokens + other.cache_hit_tokens,
             cache_miss_tokens=self.cache_miss_tokens + other.cache_miss_tokens,
-            last_prompt_tokens=max(self.last_prompt_tokens, other.last_prompt_tokens),
+            last_prompt_tokens=(
+                other.last_prompt_tokens
+                if other.last_prompt_tokens > 0
+                else self.last_prompt_tokens
+            ),
         )
 
     def as_dict(self) -> dict[str, int]:

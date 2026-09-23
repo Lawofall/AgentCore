@@ -1,15 +1,11 @@
 ---
-description: AI 开发工作流——新会话冷启动地图、角色分工、决策权限、设计纪律、编辑安全
+description: AI 开发工作流——新会话冷启动地图、决策权限、设计纪律、编辑安全、硬约束
 alwaysApply: true
 ---
 
 # 开发工作流
 
 项目采用「AI 全程开发、人做决策」模式，多 Agent 并行开发。
-
-## 新会话冷启动
-
-定位任务 → `docs/索引.md`「任务路由」；跑通 → `docs/02-架构/本地开发.md`；接缝 → `seam-audit.mdc`；离线预览 / 渲染冒烟配方 → `frontend-preview.mdc`；本地产品 AI / eval / probe → `local-llm-dogfood.mdc`（`dev` OpenCode Zen，禁默认踩 `PLATFORM_API_KEY`）；沉淀 → `memory.mdc`。产品介绍 → `README.md`。
 
 ## 决策权限
 
@@ -19,43 +15,22 @@ alwaysApply: true
 
 遇需人决策的节点，立即暂停并清晰描述问题和备选方案。
 
-## 设计纪律
+## 硬约束
 
-- 正向推导：**用户需求 → 产品设计 → 技术实现**；动手前答三问：**谁用 / 解决什么真实问题 / 产品上如何呈现**。为复用旧实现而裁剪需求 → 停。
-- **证据按问题选**（禁止「生产实测 > …」单一高低档；生产日志是个案观测，不是产品规格）：
+- **设计纪律**：正向推导：**用户需求 → 产品设计 → 技术实现**；动手前答三问：**谁用 / 解决什么真实问题 / 产品上如何呈现**。为复用旧实现而裁剪需求 → 停。
+- **证据按问题选**（禁止「生产实测 > …」单一高低档；生产日志是个案观测，不是产品规格）——**默认不打开生产日志**。打开后禁止用一窗推断「通常如此」，禁止用日志压过 HEAD 或已确认设计；禁止编造观测值与生产 ID；用户对话正文不进仓，只留 ID + 脱敏摘述。按问题选证据对照表 → `conversation-logs.mdc`。
+- **补丁绊线**：修复满足任一，**先停**、提根因重设计提案：1. 需新增兜底/对账/自愈/特例逻辑；2. 同一根因改 ≥2 层；3. 同一接缝第 3 次打补丁。拦截提案 → `intercept-discipline.mdc`。
+- **文件编辑安全**：禁止用脚本批量改源码；用 StrReplace 精确替换（`replace_all` 逐文件改）；改完用 **Read** 自检。
+- **并行开发 Git 约束**：`git status` / `git diff` 不代表本会话改动：1. 用 **Read** 校验自己的改动；2. git 对不上是并行噪音，接受并继续；3. 禁止排查 git 内部；4. 仅用户明确要求才跑 git，非请勿 commit。
+- **验证范围**：默认点名用例，禁止默认全量 `pnpm release:gate`；本仓库 UI 验收走点名 vitest 或桌面 e2e。细则 → `verify-scope.mdc`。
+- **规则使用**：未命中的按需规则不要翻（防上下文膨胀）；触发条件见路径约定与按需目录。
 
-| 在问什么 | 主证据 | 生产日志 |
-|---|---|---|
-| 产品该怎样 / 架构取舍 | 用户意图 + 设计文档 + 人确认 | 默认不打开 |
-| 代码现在怎么跑 | HEAD + 单测 / conformance | 不打开 |
-| 这次事故怎么发生的 | 用户点名的 cid/trace + HEAD | 只核这一次；没 ID 不 sync、不 `--recent` 猜 |
-| 线上是否还有同类 | 仅用户明说巡检 / reviews | 存在性；禁占比/趋势外推 |
-| 质量回归 | dogfood 金标 / eval | 不当金标 |
+## 新会话冷启动
 
-打开后禁止用一窗推断「通常如此」，禁止用日志压过 HEAD 或已确认设计。禁止编造观测值与生产 ID；用户对话正文不进仓，只留 ID + 脱敏摘述。查法 → `conversation-logs.mdc`。
-
-## 补丁绊线
-
-修复满足任一，**先停**、提根因重设计提案：1. 需新增兜底/对账/自愈/特例逻辑；2. 同一根因改 ≥2 层；3. 同一接缝第 3 次打补丁。拦截提案 → `intercept-discipline.mdc`。
+定位任务 → `docs/索引.md`「任务路由」；跑通 → `docs/02-架构/本地开发.md`；接缝 → `seam-audit.mdc`；离线预览 / 渲染冒烟配方 → `frontend-preview.mdc`；本地产品 AI / eval / probe → `local-llm-dogfood.mdc`（`dev` OpenCode Zen，禁默认踩 `PLATFORM_API_KEY`）；查产品 AI 日志 / 贴了 ID → `conversation-logs.mdc`；沉淀 → `memory.mdc`。产品介绍 → `README.md`。
 
 ## 开发准则
 
 生产级代码（错误处理、类型、日志）；先 Protocol/ABC/Pydantic 再实现；共享类型放 `shared/` 或 `core/types/`；核心逻辑有单测。委派跟 Cursor Task 官方说明。
-
-## 验证范围
-
-默认点名用例，禁止默认全量 `pnpm release:gate`。三档、窄化命令、门禁分段、反空转、真跑核证据 → `verify-scope.mdc`。本仓库 UI 验收走点名 vitest 或桌面 e2e；要对画面再读 `frontend-preview`。Cursor 通用「改完用浏览器把流程点一遍」不作为本仓库默认。
-
-## 文件编辑安全
-
-禁止用脚本批量改源码；用 StrReplace + `replace_all` 逐文件改；改完用 **Read** 自检。
-
-## 并行开发 Git 约束
-
-`git status` / `git diff` 不代表本会话改动：1. 用 **Read** 校验自己的改动；2. git 对不上是并行噪音，接受并继续；3. 禁止排查 git 内部；4. 仅用户明确要求才跑 git，非请勿 commit。
-
-## 产品 AI 日志查询
-
-未贴 ID、未明说查失败/巡检 → 不打开。用户给出 32 位 hex ID / UUID → 只读 `conversation-logs.mdc`，在 `apps/server` 原样跑给出的那一条 `log_timeline`（禁止加 `--pack` / `--raw` / `--help`、禁止重定向、禁止补位）。贴文 `build: dev` 且用户没说线上 → 不 sync。0 事件且像线上 → `pnpm sync:logs` + `--export-dir` 再跑同一条；仍空 → 停并报空。脊柱不够看回复 → 再跑一次 `--messages`。禁止 Write 脚本、`python -c`、`jq`、Grep jsonl、搜仓库/文件系统（含 `agent-transcripts/`）、派探子、整篇读分析指南。
 
 文档治理 → `doc-governance.mdc`。

@@ -74,7 +74,7 @@ offers_tools: host, debate  # 可选
 - **按需** → **一个**目录（名字 + `description`）+ **一个** `consult`（skill / 用户规则；低频工具另挂）。空 `description` 占住名字、不进目录。拉不到为软 miss。
 - **`@` 提及** = 一条按需条目临时当常驻；对话页 `@` 点名设定走 `kind=document`，注入 `<钉住条目>`。→ 见代码: `runtime/resolve/attachment_context.py`
 
-**谁写**：CEO `write` `.agentcore/rules/*.md`（一个主题一篇，整篇覆盖；队员不能改）与工具箱提示词 / 文件页。半截/`…` 收尾拒写入。给人看先写在对话里，确认后再写。产品能力目录、工作区路径不进用户规则 → [现行信息](/docs/01-产品/现行信息.md)。
+**谁写**：对话里 `write` `.agentcore/rules/*.md`（一个主题一篇，整篇覆盖；本批能否写跟 `write_scope`，与写工作区文件同一道）与工具箱提示词 / 文件页。半截/`…` 收尾拒写入。给人看先写在对话里，确认后再写。产品能力目录、工作区路径不进用户规则 → [现行信息](/docs/01-产品/现行信息.md)。
 
 **纠错 UI 已撤**。手写提示词用删除。存量 `disputed_at` 见代码，不当人侧入口。**严禁**扫对话原文猜「用户是否在否认某条规则」。
 
@@ -111,11 +111,11 @@ Worker / CEO 开场即持 `search_conversations` / `read_conversation`。**过�
 | 闲聊巩固 / 情景沉淀进 prompt / 探索幕写画像 | 一场任务渣进每回合；了解这张桌当场读文件，过往查旧对话 |
 | 独立 `user_memory` 表 / 记忆总闸 / 跨用户记忆包 | 与文件树重叠或难懂；编辑/清空规则与删对话已够 |
 | 用户规则 `conditional` | 没有可证明的触发。路径档只认 glob，不扫自由文 |
-| 常驻分池 / 自动淘汰 / 读侧截断 / 文件页用量条 | 引擎不替用户挤；用量条会把安全阀读成「还能再塞」 |
+| 常驻分池 / 自动淘汰 / 读侧截断 / 文件页用量条 / 条目行尾字数 | 引擎不替用户挤；用量条会把安全阀读成「还能再塞」。混排列表上的字数空白会被读成缺数据；精确字数只留工具箱「必带」 |
 | frontmatter 与 DB 列双写；解析失败猜默认值 | 两个可写副本必然分叉；失败须可见 |
 | `ai_maintained` 进 frontmatter | AI 能伪装成用户规则、绕开写侧闸 |
 | 扫自由文猜「改规则 / 否认某条」 | `intercept-discipline` 点名否决的意图分类器 |
 | 把产品能力目录写入用户规则 | 真源在产品；抄进规则会过时且挤按需目录 |
 | 向量 chunk 自动灌 prompt | 与「文件随时变」不合；agentic 自取永远新鲜 |
 
-查看/编辑：对话内 `write` `.agentcore/rules/*.md`（CEO）与工具箱提示词 + 各文件夹 `.agentcore`。→ 见代码：`fileWorkbench/AgentCoreSection.tsx` · `EntriesSection.tsx`
+查看/编辑：对话内 `write` `.agentcore/rules/*.md` 与工具箱提示词 + 各文件夹 `.agentcore`。→ 见代码：`fileWorkbench/AgentCoreSection.tsx` · `EntriesSection.tsx`

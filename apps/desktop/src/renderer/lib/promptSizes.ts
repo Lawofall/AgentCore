@@ -25,7 +25,7 @@ export function formatPromptChars(chars: number): string {
   return `${chars} 字`;
 }
 
-/** Tile subtitle: same floor as the files-page always meter — under 1k is omitted. */
+/** 必带 tile subtitle. That zone is already all always-on, so under 1k is omitted. */
 export function formatAlwaysRowChars(chars: number): string | null {
   if (chars < 1000) return null;
   return formatPromptChars(chars);

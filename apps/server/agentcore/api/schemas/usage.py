@@ -49,7 +49,7 @@ class UsageBreakdown(BaseModel):
 
     ``error`` is optional: present on failed / empty turns that stored a structured
     cause on the usage column. Token fields may be zeros when only ``error`` is set.
-    ``last_prompt`` is the largest single-request prompt on this message/run
+    ``last_prompt`` is the latest single-request prompt on this message/run
     (window fill). Omitted on window aggregates and old rows — not summed ``input``.
     """
 

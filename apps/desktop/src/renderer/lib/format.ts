@@ -79,14 +79,28 @@ export function formatCompact(n: number): string {
   return `${(n / 1_000_000).toFixed(1)}M`;
 }
 
+/** 用量详情计数：1_234 → "1,234"；≥1_000_000 仍走 {@link formatCompact}。 */
+export function formatUsageCount(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  const v = Math.round(n);
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000) {
+    const compact = formatCompact(abs);
+    return v < 0 ? `-${compact}` : compact;
+  }
+  const body = String(abs).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return v < 0 ? `-${body}` : body;
+}
+
 /** Hide thresholds for 输出速度 in「用量」— short bursts and tiny replies are noise. */
 export const OUTPUT_SPEED_MIN_TOKENS = 10;
 export const OUTPUT_SPEED_MIN_MS = 250;
 
 /**
- * 输出速度 for the assistant「用量」popover.
+ * Decode throughput for the assistant「用量」popover, nested under 输出.
  * `outputTokens / (generationMs/1000)` — decode window only, not whole-turn 用时.
- * Returns null when the number would lie or jitter (old rows, sidecar token-empty).
+ * Value is `42.0 tokens/s` (one decimal). Returns null when the number would
+ * lie or jitter (old rows, sidecar token-empty).
  */
 export function formatOutputSpeed(
   outputTokens: number,
@@ -102,9 +116,7 @@ export function formatOutputSpeed(
   }
   const tps = outputTokens / (generationMs / 1000);
   if (!Number.isFinite(tps) || tps <= 0) return null;
-  const rounded = tps >= 10 ? Math.round(tps) : Math.round(tps * 10) / 10;
-  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
-  return `${text}/秒`;
+  return `${tps.toFixed(1)} tokens/s`;
 }
 
 /** 取文本末尾若干字符并折行成单段预览（用于 worker 节点的实时输出片段：运行中

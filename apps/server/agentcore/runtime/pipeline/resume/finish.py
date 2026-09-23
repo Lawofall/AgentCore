@@ -89,10 +89,10 @@ def finish_terminal_resume(
     first stop (拒答可见). A second consecutive same-turn stop upgrades settle to
     ``INTERACT`` again and lands here. Kept for any settle that still sets
     ``terminal_text``. No CEO round
-    runs — ``closing`` is the whole reply. The pre-pause CEO round that raised the
-    checkpoint was never billed (the turn paused before persistence), and a
-    terminal finish runs nothing new, so this turn bills nothing — consistent with
-    the「paused before persist = never billed」model. The seeded journal
+    runs — ``closing`` is the whole reply. This close does not invent a zero
+    usage meter; calls already in ``cost_calls`` stay on the message via the
+    pause snapshot, and the terminal finalize refreshes ``messages.cost``.
+    The seeded journal
     (checkpoint_required) + the emitted ``checkpoint_resolved`` persist so a reload
     replays the settled card.
 
@@ -101,7 +101,7 @@ def finish_terminal_resume(
     """
     finish = FinishReason.END_TURN
     duration_ms = turn_wall_ms()
-    sink.emit(message_end(finish, rounds=0, duration_ms=duration_ms))
+    sink.emit(message_end(finish, duration_ms=duration_ms, include_usage=False))
     journal_entries = _journal_entries_for_turn(current_fact_log.get(), sink=sink, finish=finish)
     result = {
         "message_id": message_id,
@@ -109,12 +109,6 @@ def finish_terminal_resume(
             pre_pause_content, closing, ask_settled=ask_settled
         ),
         "reasoning_content": pre_pause_reasoning or None,
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "reasoning_tokens": 0,
-        "cache_hit_tokens": 0,
-        "cache_miss_tokens": 0,
-        "rounds": 0,
         "finish_reason": finish,
         "citations": [],
         "cost_runs": [],
@@ -135,24 +129,18 @@ def finish_paused_resume(
 
     Mirrors the live engine's ``ToolEffect.SUSPEND`` → ``FinishReason.PAUSED`` path:
     no CEO round, the suspended tool_call stays PENDING, and the fresh durable frame
-    (persisted inside ``resume_plan``) is the record. Worker spend from the interrupted
-    drive rides that frame's ``completed`` and bills on the next cold resume — same as
-    a live soft-pause yield.
+    (persisted inside ``resume_plan``) is the record. This close does not publish
+    a zero usage meter. Metered calls already sit on the message; pause persist
+    refreshes that snapshot from ``cost_calls``.
     """
     finish = FinishReason.PAUSED
     duration_ms = turn_wall_ms()
-    sink.emit(message_end(finish, rounds=0, duration_ms=duration_ms))
+    sink.emit(message_end(finish, duration_ms=duration_ms, include_usage=False))
     journal_entries = _journal_entries_for_turn(current_fact_log.get(), sink=sink, finish=finish)
     result = {
         "message_id": message_id,
         "content": pre_pause_content,
         "reasoning_content": pre_pause_reasoning or None,
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "reasoning_tokens": 0,
-        "cache_hit_tokens": 0,
-        "cache_miss_tokens": 0,
-        "rounds": 0,
         "finish_reason": finish,
         "citations": [],
         "cost_runs": [],

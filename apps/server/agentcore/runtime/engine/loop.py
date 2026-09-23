@@ -364,10 +364,16 @@ async def react_loop(
         nonlocal last_prompt_tokens
         if usage is None:
             return
-        if usage.last_prompt_tokens:
-            last_prompt_tokens = usage.last_prompt_tokens
-        elif usage.input_tokens:
-            last_prompt_tokens = usage.input_tokens
+        measured = int(usage.last_prompt_tokens or usage.input_tokens or 0)
+        if measured <= 0:
+            return
+        last_prompt_tokens = measured
+        # Same number the compactor will use on the next round. Workers stay
+        # off this wire: the composer ring is the CEO window.
+        if role == "captain":
+            from agentcore.runtime.events.chat import window_prompt
+
+            sink.emit(window_prompt(measured))
 
     final_content = ""
     final_reasoning = ""

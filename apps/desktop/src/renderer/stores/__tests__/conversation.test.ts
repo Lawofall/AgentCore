@@ -671,6 +671,29 @@ describe("conversation store", () => {
       expect(rt().hasMoreAfter).toBe(true);
     });
 
+    it("setMessageWindow drops the session gauge when the turn is idle", () => {
+      store().switchConversation("a");
+      store().noteWindowPrompt(40_000, "a");
+      store().setMessageWindow(
+        [mk("m1")],
+        { hasMoreBefore: false, hasMoreAfter: false },
+        "a",
+      );
+      expect(rt().ceoWindowTokens).toBeNull();
+    });
+
+    it("setMessageWindow keeps the session gauge while the turn is generating", () => {
+      store().switchConversation("a");
+      store().noteWindowPrompt(40_000, "a");
+      store().setGenerating(true, "a");
+      store().setMessageWindow(
+        [mk("m1")],
+        { hasMoreBefore: false, hasMoreAfter: false },
+        "a",
+      );
+      expect(rt().ceoWindowTokens).toBe(40_000);
+    });
+
     it("prependMessages adds older messages and updates hasMoreBefore", () => {
       store().switchConversation("a");
       store().setMessageWindow(
