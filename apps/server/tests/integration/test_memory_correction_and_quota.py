@@ -14,6 +14,7 @@ import uuid
 import pytest
 
 from agentcore.config import settings
+from agentcore.db.models import Conversation
 from agentcore.db.repositories import (
     DocumentRepository,
     MemoryUpdateRepository,
@@ -111,6 +112,8 @@ async def test_quota_card_names_denied_entry_and_holders(
         user = await UserRepository(session).get_by_username("aq_visible")
         assert user is not None
         uid = user.user_id
+        session.add(Conversation(id=conv, user_id=uid, title="quota"))
+        await session.commit()
         await DocumentRepository(session).create(
             uid,
             name="占坑规则.md",

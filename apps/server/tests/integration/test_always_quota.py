@@ -7,7 +7,13 @@ import uuid
 import pytest
 
 from agentcore.config import settings
-from agentcore.db.repositories import DocumentRepository, MemoryUpdateRepository, UserRepository
+from agentcore.db.models import Conversation
+from agentcore.db.repositories import (
+    DocumentRepository,
+    FolderRepository,
+    MemoryUpdateRepository,
+    UserRepository,
+)
 from agentcore.memory.always_quota import (
     AlwaysQuotaExceededError,
     memory_write_conversation_id,
@@ -138,6 +144,8 @@ async def test_quota_card_same_pending_state_only_once(
         user = await UserRepository(session).get_by_username("aq_card")
         assert user is not None
         uid = user.user_id
+        session.add(Conversation(id=conv, user_id=uid, title="quota"))
+        await session.commit()
         # Fill always pool.
         repo = DocumentRepository(session)
         await repo.create(
@@ -233,10 +241,13 @@ async def test_always_quota_endpoint(client, tiny_always_cap):
     assert on_demand["always_chars"] is None
 
 
-async def test_always_quota_project_split_sums_to_used(client, tiny_always_cap):
+async def test_always_quota_project_split_sums_to_used(client, session_factory, tiny_always_cap):
     """Project meter = global ∪ project; used_chars == global_chars + project_chars."""
     await register_and_login(client, "aq_split")
-    proj = str(uuid.uuid4())
+    async with session_factory() as session:
+        user = await UserRepository(session).get_by_username("aq_split")
+        assert user is not None
+        proj = (await FolderRepository(session).create(user_id=user.user_id, name="项目")).id
 
     await client.post(
         "/v1/documents",

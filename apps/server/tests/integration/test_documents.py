@@ -241,9 +241,7 @@ async def test_file_write_rule_writes_user_rule_and_dedupes(session_factory, mon
     assert (res2.metadata or {}).get("already_applied") is True
 
     async with session_factory() as session:
-        docs = await DocumentRepository(session).list_injectable_rules(
-            uid, None, ai_maintained=False
-        )
+        docs = await DocumentRepository(session).list_user_rule_docs(uid, None)
     assert any("以后都用中文" in d.content and d.ai_maintained is False for d in docs)
 
 

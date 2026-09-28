@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 
+from agentcore.db.models import Conversation
 from agentcore.runtime.audit.permission_events import record_permission_axes_change
 
 
@@ -15,6 +16,9 @@ async def test_record_permission_axes_change_persists(session_factory, monkeypat
     )
     user_id = str(uuid4())
     conversation_id = str(uuid4())
+    async with session_factory() as session:
+        session.add(Conversation(id=conversation_id, user_id=user_id, title="axes"))
+        await session.commit()
     previous = {"file_write": "session", "command": "ask", "host": "off"}
     next_axes = {"file_write": "session", "command": "auto", "host": "session"}
     await record_permission_axes_change(
