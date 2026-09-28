@@ -25,7 +25,7 @@ export interface QueuedTurnEntry {
   queueDepth: number;
   degradedFrom?: "steer";
   /**
-   * 非空 = 该项由用户插话升格进队（协调升队 / 经典 steer leftover）。
+   * 非空 = 该项由经典插话赶不上下一步升格进队。协调插话不再写入；旧行字段照旧。
    * 条上标注「来自你的插话」，仍可按项取消 / 立刻插队。
    */
   interjectionId?: string;

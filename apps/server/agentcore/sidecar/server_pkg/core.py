@@ -434,6 +434,8 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
             await self._on_start_turn(request_id, params)
         elif method == "respond":
             await self._on_respond(request_id, params)
+        elif method == "execOutput":
+            await self._on_exec_output(request_id, params)
         elif method == "resume":
             await self._on_resume(request_id, params)
         elif method == "listPaused":

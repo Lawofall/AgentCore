@@ -170,10 +170,10 @@ describe("气泡脚不挂轮次", () => {
       </TooltipProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "用量" }));
-    const panel = (await screen.findByText("输入")).parentElement!
+    const panel = (await screen.findByText("输入 token")).parentElement!
       .parentElement!;
     expect(panel.textContent).toBe(
-      "输入4,312缓存命中4,127 · 96%缓存未命中185输出1,204思考628速度602.0 tokens/s",
+      "输入 token4,312缓存命中4,127 · 96%缓存未命中185输出 token1,204思考628速度602.0 tokens/s",
     );
     expect(screen.queryByText("输出速度")).toBeNull();
   });
@@ -225,7 +225,7 @@ describe("气泡脚不挂轮次", () => {
       </TooltipProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "用量" }));
-    expect(await screen.findByText("输出")).toBeTruthy();
+    expect(await screen.findByText("输出 token")).toBeTruthy();
     expect(screen.queryByText("速度")).toBeNull();
   });
 

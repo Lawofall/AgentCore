@@ -29,13 +29,11 @@ export function resolveRgBinary(): string | null {
     // app may be unavailable in unit tests
   }
 
-  // Dev: apps/desktop/resources/rg after `--install-desktop`
+  // Dev: apps/desktop/resources/rg after `--install-desktop`.
   try {
     const appPath = app.getAppPath();
     const devDesktop = join(appPath, "resources", "rg", name);
     if (existsSync(devDesktop)) return devDesktop;
-    const serverBin = join(appPath, "..", "server", "bin", name);
-    if (existsSync(serverBin)) return serverBin;
   } catch {
     // fall through to import.meta path
   }
@@ -44,18 +42,6 @@ export function resolveRgBinary(): string | null {
   const here = dirname(fileURLToPath(import.meta.url));
   const fromSrc = join(here, "..", "..", "..", "..", "resources", "rg", name);
   if (existsSync(fromSrc)) return fromSrc;
-  const fromServer = join(
-    here,
-    "..",
-    "..",
-    "..",
-    "..",
-    "..",
-    "server",
-    "bin",
-    name,
-  );
-  if (existsSync(fromServer)) return fromServer;
 
   return null;
 }

@@ -685,6 +685,16 @@ export interface SidecarStatusPush {
   detail?: string;
 }
 
+/** 桌面 EXECUTE 的一段活输出——经 sidecar 的 `execOutput` 方法，不结算 op。 */
+export interface SidecarExecOutputRequest {
+  rootId: string;
+  subpath?: string;
+  requestId: string;
+  conversationId: string;
+  stream: "stdout" | "stderr";
+  chunk: string;
+}
+
 /** 结算一个被挂起的交互（审批 / ask_user / 本地工具）——经 sidecar 的 `respond` 方法。 */
 export interface SidecarRespondRequest {
   rootId: string;
@@ -977,6 +987,7 @@ export const SIDECAR_CHANNELS = {
   startTurn: "sidecar:startTurn",
   cancel: "sidecar:cancel",
   respond: "sidecar:respond",
+  execOutput: "sidecar:execOutput",
   runRedirect: "sidecar:runRedirect",
   runStop: "sidecar:runStop",
   debateSteer: "sidecar:debateSteer",
@@ -1017,6 +1028,7 @@ export interface SidecarApi {
   startTurn(req: SidecarStartTurnRequest): Promise<SidecarTurnResult>;
   cancel(req: SidecarCancelRequest): Promise<void>;
   respond(req: SidecarRespondRequest): Promise<{ resolved: boolean }>;
+  execOutput(req: SidecarExecOutputRequest): Promise<{ accepted: boolean }>;
   runRedirect(req: SidecarRunRedirectRequest): Promise<SidecarInterveneAck>;
   runStop(req: SidecarRunStopRequest): Promise<SidecarInterveneAck>;
   /** `accepted=false` = 引擎未收（掌舵窗口已关 / sidecar 不可达）；调用方须如实回执。 */

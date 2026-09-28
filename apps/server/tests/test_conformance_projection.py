@@ -289,7 +289,7 @@ def test_multi_agent_escalation_nonblocking_banner(projected):
             "assumption": "暂按 Postgres 推进",
             "status": "raised",
             "answer": None,
-            "kind": "scope",
+            "kind": "adjust",
         }
     ]
     assert r2["escalations"] == []

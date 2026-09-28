@@ -659,7 +659,7 @@ def _multi_agent_lead_subplan_scope_steer() -> list[SSEEvent]:
             "sa",
             question="真正要做的是 X 而非初始子计划的 Y，下游写法应随之调整。",
             assumption="暂按 X 推进",
-            kind="scope",
+            kind="adjust",
             # 固定 id 保 golden 稳定（缺省会随机 uuid，导出不幂等）。
             escalation_id="esc-scope1",
         ),

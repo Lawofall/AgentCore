@@ -708,6 +708,17 @@ export function registerFsIpc(): void {
       timeoutMs,
       conversationId,
       requestId,
+      onOutput:
+        args.op === "execute" && requestId
+          ? (stream, chunk) => {
+              if (_e.sender.isDestroyed()) return;
+              _e.sender.send(FS_CHANNELS.executeOutput, {
+                requestId,
+                stream,
+                chunk,
+              });
+            }
+          : undefined,
     });
   });
 

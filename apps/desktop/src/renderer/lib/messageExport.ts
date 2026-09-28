@@ -76,7 +76,6 @@ const TOOL_LABEL: Record<string, string> = {
   escalate: "Escalate",
   update_synthesis: "Update synthesis",
   cancel_worker: "Cancel worker",
-  resolve_escalation: "Resolve escalate",
   queue_user_message: "Queue message",
   handoff: "Handoff",
   docs_read: "Read doc",

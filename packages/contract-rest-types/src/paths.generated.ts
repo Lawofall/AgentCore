@@ -92,6 +92,7 @@ export const REST_PATH_TEMPLATES = [
   "/v1/conversations/{conversation_id}/handoff/jobs/{job_id}/diff",
   "/v1/conversations/{conversation_id}/handoff/jobs/{job_id}/discard",
   "/v1/conversations/{conversation_id}/interactions/{interaction_id}",
+  "/v1/conversations/{conversation_id}/interactions/{interaction_id}/output",
   "/v1/conversations/{conversation_id}/local-turns",
   "/v1/conversations/{conversation_id}/local-turns/abort",
   "/v1/conversations/{conversation_id}/local-turns/begin",

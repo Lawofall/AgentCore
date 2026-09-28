@@ -73,7 +73,6 @@ def require_rg_binary() -> Path:
     if rg is None:
         raise WorkspaceIOError(
             "ripgrep 二进制未找到（未设置 AGENTCORE_RG_PATH / 未内嵌 rg）。"
-            "请运行: python apps/server/scripts/fetch_ripgrep.py --install-server"
         )
     return rg
 

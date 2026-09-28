@@ -31,6 +31,7 @@ ZERO_OUTPUT_SEND_REFUSAL_CODES: frozenset[str] = frozenset(
         ErrorCode.LOCAL_ROOT_NOT_HELD,
         ErrorCode.LOCAL_ORIGIN_DEVICE_OFFLINE,
         ErrorCode.LOCAL_CHANNEL_DEAD,
+        ErrorCode.LOCAL_WORKSPACE_CLOUD_REFUSED,
     }
 )
 

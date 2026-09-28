@@ -465,8 +465,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='chat.turn_start',
         description=(
-            '回合起点（preview/chars/history）。stream_path_reason = 桌面过桥枚举（探活失败 / 强制'
-            '关 / 无本机根等），仅云 POST 携带'
+            '回合起点（preview/chars/history）。stream_path_reason 只出现在纯云端 POST。 switch_off'
+            ' / no_local_engine / no_local_target'
         ),
         fields={
             'chars': FieldType('int'),
@@ -718,11 +718,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='coordination.terminal_unsettled'),
     EventSpec(name='coordination.turn_detached'),
     EventSpec(name='coordination.unsettled_runs_cancelled'),
-    EventSpec(name='coordination.user_interjection_addressed'),
-    EventSpec(name='coordination.user_interjection_enqueue_failed'),
-    EventSpec(name='coordination.user_interjection_failed'),
-    EventSpec(name='coordination.user_interjection_promoted_on_close'),
-    EventSpec(name='coordination.user_interjection_queued'),
     EventSpec(
         name='coordination.user_stop_cancelled',
         description='显式 Stop 级联取消协调；reason 恒为 user_stop，与 drive 任务戳对齐',

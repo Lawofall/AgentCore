@@ -320,12 +320,13 @@ async function workspaceOp(req: {
   timeoutMs?: number;
   conversationId?: string;
   requestId?: string;
+  onOutput?: (stream: "stdout" | "stderr", text: string) => void;
 }): Promise<WorkspaceOpResult> {
   return runWorkspaceOpMain(req, async () => {
     await ensureReady();
     const root = getRoot(req.rootId);
     if (!root) return opErr("WorkspaceIOError", "本地目录未授权或已移除");
-    return executeWorkspaceOp(root, req.op, req.args);
+    return executeWorkspaceOp(root, req.op, req.args, req.onOutput);
   });
 }
 
@@ -545,6 +546,7 @@ export async function executeWorkspaceOp(
   root: StoredRoot,
   op: WorkspaceOpName,
   args: Record<string, unknown>,
+  onOutput?: (stream: "stdout" | "stderr", text: string) => void,
 ): Promise<WorkspaceOpResult> {
   try {
     const denied = sessionRootAccessError(root, op, args);
@@ -677,7 +679,7 @@ export async function executeWorkspaceOp(
       case "glob_files":
         return await opGlobFiles(root, args);
       case "execute":
-        return await opExecute(root, args);
+        return await opExecute(root, args, onOutput);
       case "probe_exec":
         // PATH / Git Bash probe — independent of the bound root contents.
         return opOk({ languages: probeAvailableLanguages() });

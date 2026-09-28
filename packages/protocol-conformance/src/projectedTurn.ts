@@ -136,7 +136,7 @@ export interface ProjectedRunCheckpoint {
     | null;
 }
 
-/** 升级：``escalate`` 工人向上通道。``kind`` = wait 停下等 / scope 活派偏了 / dep 缺材料。
+/** 升级：``escalate`` 工人向上通道。``kind`` = wait 停下等 / adjust 请看后面。
  * Folded onto its {@link ProjectedRun} so every end's node carries the same signal.
  *
  * `status` is the lifecycle: `raised` = 协作图标记（scope/dep 或引擎早停）；`pending` =
@@ -144,7 +144,7 @@ export interface ProjectedRunCheckpoint {
  * wall-clock miss. `assumed` and `timed_out` both leave `answer` null (worker falls
  * back to assumption) but must stay distinct — conflating them made「点了按假设继续」
  * look like system timeout. */
-export type EscalationKind = "wait" | "scope" | "dep";
+export type EscalationKind = "wait" | "adjust";
 
 export interface RunEscalation {
   question: string;
@@ -248,8 +248,8 @@ export interface ProjectedRun {
 
 /** Mid-flight user interjection into a live turn (`user_interjection`).
  * Same `interjectionId` keeps latest `status`
- * (协调: received → injected → addressed / queued / failed;
- *  经典: received → injected | queued | failed). */
+ * (协调与经典: received → injected | failed；经典另有 queued。
+ *  addressed 仅旧日记回放). */
 export interface ProjectedUserInterjectionAttachment {
   name: string;
   workspacePath?: string;

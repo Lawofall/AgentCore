@@ -121,7 +121,7 @@ export const useActiveMemoryUpdates = (): MemoryUpdate[] =>
 export const useActiveGenerating = (): boolean =>
   useConversationStore((s) => conversationStillWriting(activeRuntime(s)));
 
-/** 桌面：最近一回合执行路径（`sidecar` / `cloud_bridge` / null）。 */
+/** 桌面：最近一回合执行路径（`sidecar` / null）。 */
 export const useActiveExecutionVia = (): ConversationRuntime["executionVia"] =>
   useConversationStore((s) => activeRuntime(s).executionVia);
 

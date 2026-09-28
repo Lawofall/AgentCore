@@ -224,7 +224,7 @@ async def _prepare_agent_node(
                     _aid,
                     question=question,
                     assumption=assumption,
-                    kind=reason if reason in ("scope", "dep") else None,
+                    kind=reason if reason == "adjust" else None,
                 )
             )
         ),

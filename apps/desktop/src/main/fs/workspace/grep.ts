@@ -28,6 +28,9 @@ import { resolveRgBinary } from "./rgBinary";
 
 type IgnoreKind = "grep" | "list";
 
+const RG_MISSING =
+  "ripgrep 二进制未找到（未设置 AGENTCORE_RG_PATH / 未内嵌 rg）。";
+
 /** 单次 rg 子进程墙钟；满 N 会先杀。外层工具活性仍是 60s。 */
 export const RG_CHILD_TIMEOUT_MS = 50_000;
 
@@ -344,12 +347,7 @@ export async function opGrep(
   }
 
   const rg = resolveRgBinary();
-  if (!rg) {
-    return opErr(
-      "WorkspaceIOError",
-      "ripgrep 二进制未找到（未设置 AGENTCORE_RG_PATH / 未内嵌 rg）。请运行: python apps/server/scripts/fetch_ripgrep.py --install-desktop",
-    );
-  }
+  if (!rg) return opErr("WorkspaceIOError", RG_MISSING);
 
   const nameGlob = baseIsFile ? null : normalizeGlob(glob);
   const searchCwd = baseIsFile ? dirname(baseReal.path) : baseReal.path;
@@ -484,12 +482,7 @@ export async function opGlobFiles(
   }
 
   const rg = resolveRgBinary();
-  if (!rg) {
-    return opErr(
-      "WorkspaceIOError",
-      "ripgrep 二进制未找到（未设置 AGENTCORE_RG_PATH / 未内嵌 rg）。请运行: python apps/server/scripts/fetch_ripgrep.py --install-desktop",
-    );
-  }
+  if (!rg) return opErr("WorkspaceIOError", RG_MISSING);
 
   try {
     const ran = await runRgCapped(

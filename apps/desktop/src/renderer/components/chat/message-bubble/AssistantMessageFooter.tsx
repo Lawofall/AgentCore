@@ -125,7 +125,7 @@ function UsageDetailPanel({
       : formatUsageCount(cache.cacheHit);
   return (
     <div className="space-y-1 px-3 py-1.5 text-xs text-muted-foreground">
-      <UsageRow label="输入" value={formatUsageCount(usage.input)} />
+      <UsageRow label="输入 token" value={formatUsageCount(usage.input)} />
       {cache.billedAsMiss ? (
         <UsageRow
           label={CACHE_BILLED_AS_MISS_LABEL}
@@ -146,7 +146,7 @@ function UsageDetailPanel({
           ) : null}
         </>
       )}
-      <UsageRow label="输出" value={formatUsageCount(usage.output)} />
+      <UsageRow label="输出 token" value={formatUsageCount(usage.output)} />
       {usage.reasoning > 0 ? (
         <UsageRow
           label="思考"

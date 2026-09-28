@@ -35,7 +35,7 @@ function ownershipEsc(): RunEscalation {
     assumption: "等移交后再写",
     status: "pending",
     answer: null,
-    kind: "scope",
+    kind: "wait",
     questions: [],
     ownershipPaths: ["site/index.html"],
     lockOwnerRunId: "assemble",

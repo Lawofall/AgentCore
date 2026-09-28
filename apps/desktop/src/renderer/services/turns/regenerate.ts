@@ -23,7 +23,7 @@ import {
   getActiveSidecarTarget,
   isSidecarEnabled,
   liveSidecarTarget,
-  resolveConversationLocalTarget,
+  localBindSendBlock,
   resolveLocalBind,
   resolveNewTurnBind,
 } from "@/services/sidecarRouting";
@@ -42,6 +42,10 @@ import {
   SIDECAR_OCCUPY_FAILED_CODE,
 } from "@/services/streamPathReason";
 import {
+  workspaceRootAbsentMessage,
+  workspaceRootGoneMessage,
+} from "@shared/workspaceRootGone";
+import {
   type AgentMentionMeta,
   type MessageAttachmentMeta,
   getRuntime,
@@ -54,7 +58,6 @@ import {
 } from "@/stores/conversation/turnPhaseActions";
 import { clearInteractionPrompts } from "@/stores/interactionPrompts";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
-import { workspaceRootGoneMessage } from "@shared/workspaceRootGone";
 import {
   finalizeGeneratingIfNeeded,
   finalizeHonestStopAbort,
@@ -71,11 +74,12 @@ function shouldResumeViaSidecar(origin: "sidecar" | "server"): boolean {
 type ResumeSidecarTarget =
   | { kind: "target"; target: SidecarTarget }
   | { kind: "stale"; absPath?: string }
+  | { kind: "absent" }
   | { kind: "none" };
 
 /**
  * 续跑本机帧的寻址：跟本地事实，**忽略**显式强制关（`sidecarPreference==="off"`）。
- * 死绑定（文件夹不在盘上）先于活回合登记；否则优先活回合，再会话本地绑定
+ * 文件夹不在盘上、授权表没有这个 id，都先于活回合登记；否则优先活回合，再会话本地绑定
  * （勿用 `resolveSidecarRoot`——强制关早退会挡续跑）。
  */
 async function resolveResumeSidecarTarget(
@@ -84,6 +88,9 @@ async function resolveResumeSidecarTarget(
   const bind = await resolveLocalBind(conversationId);
   if (bind.kind === "stale") {
     return { kind: "stale", absPath: bind.absPath };
+  }
+  if (bind.kind === "absent") {
+    return { kind: "absent" };
   }
   const active = getActiveSidecarTarget(conversationId);
   if (active) {
@@ -177,8 +184,7 @@ export type RegenerateMaterials = {
  * regenerate from the banner — bubble regenerate remains).
  *
  * 本机会话与 ``sendTurn`` 同形：探活通过走 sidecar（占用时截断）；探活 /
- * 启动期失败出诊断横幅、不降级云。云端占位失败仍可改走云 regenerate。
- * 续跑帧永不降级。
+ * 启动期失败、占位失败出诊断横幅，不降级云。续跑帧永不降级。
  */
 export async function runRegenerate(
   userMessageId: string,
@@ -236,16 +242,17 @@ export async function runRegenerate(
   try {
     const bind = await resolveNewTurnBind(conversationId);
     throwIfCannotOpenStream(conversationId, ac.signal);
-    if (bind.kind === "stale") {
+    const blocked = localBindSendBlock(bind);
+    if (blocked) {
       logEvent("info", "turn.stream_path", {
         conversation_id: conversationId,
         via: "sidecar",
-        reason: "root_stale",
+        reason: blocked.reason,
         regenerate: true,
-        root_id: bind.rootId,
+        root_id: blocked.rootId,
       });
       throw new StreamError("sidecar", undefined, {
-        serverMessage: workspaceRootGoneMessage(bind.absPath),
+        serverMessage: blocked.message,
       });
     }
     const sidecarTarget = liveSidecarTarget(bind);
@@ -303,36 +310,29 @@ export async function runRegenerate(
           sidecarErr.serverMessage?.trim() || "本地引擎未能启动";
         if (sidecarErr.code === SIDECAR_OCCUPY_FAILED_CODE) {
           store.setExecutionVia(null, conversationId);
-          store.truncateAfter(userMessageId, conversationId);
-          store.createAssistantMessage(conversationId);
-          beginTurnPreflight(conversationId);
-          logEvent("info", "turn.stream_path", {
-            conversation_id: conversationId,
-            via: "cloud",
-            reason: "occupy_failed",
-            regenerate: true,
-            root_id: sidecarTarget.rootId,
-            detail: fallbackDetail,
-          });
-          await runCloud("occupy_failed");
-        } else {
-          markSidecarUnhealthy(sidecarTarget, fallbackDetail);
           logEvent("info", "turn.stream_path", {
             conversation_id: conversationId,
             via: "sidecar",
-            reason: "start_failed",
+            reason: "occupy_failed",
             regenerate: true,
             root_id: sidecarTarget.rootId,
             detail: fallbackDetail,
           });
           throw sidecarErr;
         }
+        markSidecarUnhealthy(sidecarTarget, fallbackDetail);
+        logEvent("info", "turn.stream_path", {
+          conversation_id: conversationId,
+          via: "sidecar",
+          reason: "start_failed",
+          regenerate: true,
+          root_id: sidecarTarget.rootId,
+          detail: fallbackDetail,
+        });
+        throw sidecarErr;
       }
     } else {
-      const bridging =
-        sidecarTarget !== null ||
-        (await resolveConversationLocalTarget(conversationId)) !== null;
-      store.setExecutionVia(bridging ? "cloud_bridge" : null, conversationId);
+      store.setExecutionVia(null, conversationId);
       const reason = !hasLocalEngine()
         ? "no_local_engine"
         : !isSidecarEnabled()
@@ -343,7 +343,6 @@ export async function runRegenerate(
         via: "cloud",
         reason,
         regenerate: true,
-        bridging,
         root_id: sidecarTarget?.rootId ?? null,
         probe_detail: probe?.detail ?? null,
       });
@@ -476,6 +475,10 @@ export async function runResume(
       null,
     );
     throw new Error("resume blocked: workspace root gone");
+  }
+  if (viaSidecar && resumeBind?.kind === "absent") {
+    store.setError(workspaceRootAbsentMessage(), null, conversationId, null);
+    throw new Error("resume blocked: workspace root absent");
   }
   if (viaSidecar && !sidecarTarget) {
     raiseSidecarUnavailable(null);

@@ -40,7 +40,6 @@ function resolveTestRg(): string {
   const candidates = [
     process.env.AGENTCORE_RG_PATH,
     join(here, "..", "..", "..", "resources", "rg", name),
-    join(here, "..", "..", "..", "..", "server", "bin", name),
   ].filter((p): p is string => Boolean(p?.trim()));
   for (const c of candidates) {
     if (existsSync(c)) return c;

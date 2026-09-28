@@ -73,7 +73,7 @@ describe("collectGraphPendingDecisions", () => {
               assumption: "a",
               status: "pending",
               answer: null,
-              kind: "dep",
+              kind: "wait",
               questions: [],
             },
           ],
@@ -89,7 +89,7 @@ describe("collectGraphPendingDecisions", () => {
         runId: "r1",
         actId: "act-2",
         title: "调研",
-        detail: "待你拍板（缺输入）",
+        detail: "待你拍板",
       },
     ]);
   });

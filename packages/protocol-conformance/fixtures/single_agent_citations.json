@@ -80,13 +80,6 @@
       "type": "message_end",
       "payload": {
         "finish_reason": "end_turn",
-        "usage": {
-          "input_tokens": 1800,
-          "output_tokens": 260,
-          "reasoning_tokens": 0,
-          "cache_hit_tokens": 0,
-          "cache_miss_tokens": 0
-        },
         "cost": {
           "input": 240000,
           "cached": 64000,
@@ -94,6 +87,13 @@
           "total": 360000,
           "currency": "CNY",
           "pricing_source": "curated"
+        },
+        "usage": {
+          "input_tokens": 1800,
+          "output_tokens": 260,
+          "reasoning_tokens": 0,
+          "cache_hit_tokens": 0,
+          "cache_miss_tokens": 0
         },
         "rounds": 0
       },

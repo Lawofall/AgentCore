@@ -801,23 +801,104 @@ class DelegateTool:
         )
 
     async def replan(self, arguments: dict[str, Any]) -> ToolResult:
+        from agentcore.runtime.coordination.session import resolve_coordination_session
+        from agentcore.runtime.coordination.tools import settle_waiting_worker
+        from agentcore.runtime.delegate.tell import append_steer_notes, classify_tells
+
+        tells = arguments.get("tell") or []
+        adds = arguments.get("add") or []
+        stop = bool(arguments.get("stop"))
+        if not isinstance(tells, list) or not isinstance(adds, list):
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="",
+                error="replan 的 tell / add 必须是数组。",
+            )
+
         sup = self._supervised
-        if sup is None:
+        ctx = getattr(self, "_base_tool_context", None)
+        eid = getattr(ctx, "execution_id", None) if ctx is not None else None
+        session = resolve_coordination_session(eid) if eid else None
+        plan = sup.plan if sup is not None else getattr(session, "live_plan", None)
+        completed_ids = set(sup.completed) if sup is not None else set()
+        errors, answers, steers = classify_tells(
+            tells,
+            session=session,
+            plan=plan,
+            completed_ids=completed_ids,
+        )
+        if errors:
+            msg = "replan 无效：" + "；".join(errors)
+            logger.info("replan.rejected", errors=errors)
+            return ToolResult(tool_call_id="", success=False, output="", error=msg)
+
+        needs_paused_plan = bool(adds) or stop or not tells
+        if needs_paused_plan and sup is None:
             msg = (
-                "当前没有待续跑的受监督计划。replan 仅在 delegate 让出边界（输出『计划已"
-                "让出』）或部分队员失败/跳过后可用。批次已收口后要动同一支团队，改调 "
-                "delegate 并在 tasks[] 上点名上一批的 run_id："
-                "让原作者接着干填 continue_from_run_id，补失败/跳过缺口填 replaces_run_id；"
-                "真发起新任务同样用 delegate。"
+                "当前没有已暂停的计划，没法加人、收口或原样继续。"
+                "对停着等拍板的人、或还没开始的人说一句，用 tell。"
+                "批次已收口后要动同一支团队，改调 delegate 并在 tasks[] 上点名上一批的"
+                " run_id：让原作者接着干填 continue_from_run_id，补失败/跳过缺口填"
+                " replaces_run_id；真发起新任务同样用 delegate。"
             )
             return ToolResult(tool_call_id="", success=False, output="", error=msg)
 
-        steers = arguments.get("steers") or []
-        adds = arguments.get("add") or []
-        stop = bool(arguments.get("stop"))
-        if not isinstance(steers, list) or not isinstance(adds, list):
-            msg = "replan 的 steers / add 必须是数组。"
-            return ToolResult(tool_call_id="", success=False, output="", error=msg)
+        lines: list[str] = []
+
+        def deliver_answers() -> ToolResult | None:
+            """Hand tells to people parked on wait. None when every one landed."""
+            if not answers:
+                return None
+            conv = str(getattr(self, "_conversation_id", "") or "")
+            for rid, note in answers:
+                settled = settle_waiting_worker(
+                    session,
+                    run_id=rid,
+                    answer=note,
+                    conversation_id=conv,
+                )
+                if not settled.success:
+                    return settled
+                if settled.output:
+                    lines.append(settled.output)
+            if session is not None:
+                session.user_consulted = False
+            return None
+
+        if sup is None:
+            # No paused plan: adds/stop already rejected. Tells are the whole call.
+            missed = deliver_answers()
+            if missed is not None:
+                return missed
+            if steers and plan is not None:
+                append_steer_notes(plan, steers)
+                record_plan_snapshot(plan)
+                exec_id = str(
+                    (getattr(session, "execution_id", "") if session is not None else "")
+                    or eid
+                    or ""
+                )
+                if exec_id:
+                    self._sink.emit(
+                        plan_revised(
+                            execution_id=exec_id,
+                            revisions=[
+                                {"run_id": s["run_id"], "kind": "steer"} for s in steers
+                            ],
+                        )
+                    )
+                lines.append("已交给还没开始的人。")
+            logger.info(
+                "replan.told",
+                answers=len(answers),
+                steers=len(steers),
+            )
+            return ToolResult(
+                tool_call_id="",
+                success=True,
+                output="\n".join(lines) or "已记下。",
+            )
 
         # Snapshot the pre-add node ids so we can tell which nodes apply_replan appended
         # (it mutates the plan in place) — those drive the re-emitted run_plan below.
@@ -840,6 +921,12 @@ class DelegateTool:
             msg = "replan 无效：" + "；".join(errors)
             logger.info("replan.rejected", errors=errors)
             return ToolResult(tool_call_id="", success=False, output="", error=msg)
+
+        # Adds/steers passed. Only then hand a waiting person their answer, so a
+        # rejected add leaves that person still parked.
+        missed = deliver_answers()
+        if missed is not None:
+            return missed
 
         self._supervised = None
         record_plan_snapshot(sup.plan)

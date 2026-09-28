@@ -975,7 +975,7 @@ async def test_coordination_scope_boundary_proceeds():
     state = RunState(
         phase=RunPhase.COMPLETED,
         content="ok",
-        escalations=[{"reason": "scope", "question": "范围偏了", "consumed": False}],
+        escalations=[{"reason": "adjust", "question": "范围偏了", "consumed": False}],
     )
     outcome = await hook(BoundaryReason.SCOPE, [node], {"a": state})
     assert outcome is BoundaryOutcome.PROCEED

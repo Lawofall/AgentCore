@@ -201,13 +201,6 @@
       "type": "message_end",
       "payload": {
         "finish_reason": "end_turn",
-        "usage": {
-          "input_tokens": 4000,
-          "output_tokens": 700,
-          "reasoning_tokens": 0,
-          "cache_hit_tokens": 0,
-          "cache_miss_tokens": 0
-        },
         "cost": {
           "input": 240000,
           "cached": 64000,
@@ -215,6 +208,13 @@
           "total": 360000,
           "currency": "CNY",
           "pricing_source": "curated"
+        },
+        "usage": {
+          "input_tokens": 4000,
+          "output_tokens": 700,
+          "reasoning_tokens": 0,
+          "cache_hit_tokens": 0,
+          "cache_miss_tokens": 0
         },
         "rounds": 0
       },
@@ -359,13 +359,6 @@
       "type": "message_end",
       "payload": {
         "finish_reason": "end_turn",
-        "usage": {
-          "input_tokens": 2000,
-          "output_tokens": 400,
-          "reasoning_tokens": 0,
-          "cache_hit_tokens": 0,
-          "cache_miss_tokens": 0
-        },
         "cost": {
           "input": 240000,
           "cached": 64000,
@@ -373,6 +366,13 @@
           "total": 360000,
           "currency": "CNY",
           "pricing_source": "curated"
+        },
+        "usage": {
+          "input_tokens": 2000,
+          "output_tokens": 400,
+          "reasoning_tokens": 0,
+          "cache_hit_tokens": 0,
+          "cache_miss_tokens": 0
         },
         "rounds": 0
       },

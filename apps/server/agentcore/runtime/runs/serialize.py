@@ -221,10 +221,10 @@ def escalations_from_transcript(transcript: list[LLMMessage]) -> list[dict[str, 
     """Best-effort list of a worker's escalations (``escalate`` tool calls), call order.
 
     Each item is ``{question, assumption, reason, status, answer}``. ``reason`` is
-    ``wait`` / ``scope`` / ``dep`` (缺省 / 无法识别 = ``wait``). ``scope`` / ``dep``
-    are consumed at the reactive wave boundary so the CEO re-steers / adds a
-    producer for the un-run tail. ``wait`` is a parked decision (or a wait that
-    degraded to finish-under-assumption). ``status`` defaults to ``"raised"``;
+    ``wait`` / ``adjust`` (缺省 / 无法识别 = ``wait``). ``adjust`` is consumed at
+    the reactive wave boundary so the CEO can tell a not-yet-started person or
+    add someone. ``wait`` is a parked decision (or a wait that degraded to
+    finish-under-assumption). ``status`` defaults to ``"raised"``;
     the executor overrides to ``"resolved"`` / ``"assumed"`` / ``"timed_out"``
     when wait actually suspended. Malformed args or empty ``question`` are skipped.
     """

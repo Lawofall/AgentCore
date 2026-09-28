@@ -664,7 +664,7 @@ async function runSidecarTurn({
 
   // 经单例泵 claim 本 turn 的唯一 sink（禁止再直接 onEvent——可叠 listener → 叠字）。
   // 本回合是否派发过任何 sidecar 事件——一个都没有 = 启动期失败（无输出 / 副作用）。
-  // 失败时标 `recoverable`：云端占位失败可改走云 POST；引擎没起来则 sendTurn 报错不降级。
+  // 失败时标 `recoverable`：启动期失败由 sendTurn 停发，不改走云。
   let sawAnyEvent = false;
   const claim = claimSidecarTurnSink(conversationId, turnId, (push) => {
     sawAnyEvent = true;
@@ -804,8 +804,8 @@ async function runSidecarTurn({
       : (takeRecentSidecarFailure(rootId) ??
         describeSidecarTurnError(err) ??
         failMessage);
-    // 启动期失败（一个事件都没派发）标 recoverable：占位失败可改走云 POST；引擎没起来则
-    // 调用方报错。中途失败不标。忙槽互斥不是引擎故障，也不降级云端。
+    // 启动期失败（一个事件都没派发）标 recoverable：调用方停发，不改走云。
+    // 中途失败不标。忙槽互斥不是引擎故障，也不改走云。
     throw new StreamError("sidecar", undefined, {
       serverMessage: detail,
       // 忙槽不是引擎故障：不降级云端（sendTurn 看 recoverable）。

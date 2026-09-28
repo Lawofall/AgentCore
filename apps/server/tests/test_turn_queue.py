@@ -282,7 +282,7 @@ async def test_start_queued_turn_emits_started_before_stream(monkeypatch):
 
 
 async def test_enqueue_and_ensure_drain_emits_live_turn_queued():
-    """on_live_sink=True → live sink 收到 turn_queued（协调升队多端可见）。"""
+    """on_live_sink=True → live sink 收到 turn_queued（经典收口回落多端可见）。"""
     from agentcore.runtime.events import EventType
 
     cid = "c-live-queued"

@@ -1,15 +1,14 @@
-"""escalate — worker 向上请示：等拍板、活派偏了、或缺材料。
+"""escalate — worker 向上请示：等拍板，或自己这份做完但后面要主管看。
 
 Worker-only. 不进 CEO 工具表。工人不能问用户，挡路时走这里；主管用
-``ask_user`` / ``resolve_escalation`` / ``replan`` 接。
+``ask_user`` / ``replan`` 的 tell 接。
 
-``reason`` 三选一（缺省 / 无法识别 = ``wait``，宁停不留言）：
+``reason`` 二选一（缺省 / 无法识别 = ``wait``，宁停不留言）：
 
 - ``wait``：猜错后面白干 → 原地挂起。经典路径直挂用户；协调模式等主管
-  ``resolve_escalation``。须写 ``assumption``（「按假设继续」、未武装 / 并发满
-  退化、或运维超时回落都落在这句上）。
-- ``scope``：活派偏了。自己这份做完；未跑的后续由主管改安排。
-- ``dep``：缺一块还没人做的材料。自己这份做完；主管补人补材料。
+  用 ``replan`` 的 tell 把决定说回来。须写 ``assumption``（「按假设继续」、未武装 /
+  并发满退化、或运维超时回落都落在这句上）。
+- ``adjust``：自己这份做完，但后面的安排要主管看。人不停。
 
 不认旧参数 ``blocking`` / ``kind``。留言式上报已撤：小假设写进交差。
 机制（挂起 / 并发帽 / SSE / RunState）在 ``ToolContext.escalation`` 与
@@ -52,7 +51,7 @@ class EscalateTool:
         return ToolSchema(
             name=ESCALATE_TOOL_NAME,
             description=(
-                "向上请示：必须等人定、活派偏了、或缺一块还没人做的材料。"
+                "向上请示：必须等人定，或自己这份做完但后面的安排要主管看。"
                 "小假设写进交差，不要用这工具留言。"
             ),
             parameters={
@@ -64,16 +63,16 @@ class EscalateTool:
                     },
                     "reason": {
                         "type": "string",
-                        "enum": ["wait", "scope", "dep"],
+                        "enum": ["wait", "adjust"],
                         "description": (
-                            "缺省 wait。wait=停下等；scope=活派偏了，自己这份做完；"
-                            "dep=缺材料，自己这份做完。已拒凭据不要 wait。"
+                            "缺省 wait。wait=停下等拍板。adjust=自己这份做完，"
+                            "后面的安排要主管看。已拒凭据不要 wait。"
                         ),
                     },
                     "assumption": {
                         "type": "string",
                         "description": (
-                            "wait 必填。对方按假设继续时用。scope/dep 写你打算怎么做完自己这份。"
+                            "wait 必填。对方按假设继续时用。adjust 写你打算怎么做完自己这份。"
                         ),
                     },
                     "questions": questions_array_schema(
@@ -164,7 +163,7 @@ class EscalateTool:
                     assumption,
                     arbitrated_by=awaiting,
                 )
-        if reason in ("scope", "dep") and context.on_escalate is not None:
+        if reason == "adjust" and context.on_escalate is not None:
             try:
                 context.on_escalate(question, assumption, reason)
             except Exception:  # noqa: BLE001 — liveliness only; never break the worker
@@ -183,21 +182,15 @@ class EscalateTool:
             )
         except Exception:  # noqa: BLE001
             logger.warning("worker.escalate.coordination_route_failed", run_id=context.run_id)
-        if reason == "scope":
-            note = (
-                "已记下职责偏离。请把你这份做完；后面的安排主管会改。"
-            )
-        elif reason == "dep":
-            note = (
-                "已记下缺材料。请把你这份能做的做完；主管会补人补材料，不必空等队友。"
-            )
+        if reason == "adjust":
+            note = "已记下。请把你这份做完；后面的安排主管会看。"
         else:
             note = (
                 "未能原地挂起，请按你写明的假设把这份做完。"
                 if assumption
                 else "未能原地挂起。请把假设写进交差，方便主管纠偏。"
             )
-        if assumption and reason in ("scope", "dep"):
+        if assumption and reason == "adjust":
             note += "你已写明假设，主管能据此判断要不要返工。"
         return ToolResult(tool_call_id="", success=True, output=note)
 

@@ -60,8 +60,8 @@ class EscalationSignal(BaseModel):
     def to_run_escalation_payload(self) -> dict[str, Any]:
         """Shape compatible with ``RunState.escalations`` / CEO aggregate harvest."""
         kind = self.kind.value
-        # 职责偏离只来自结构化 escalate(reason=scope)；gate_kind 不得占 wire reason。
-        reason = kind if kind in ("scope", "dep") else ""
+        # 后面要看只来自结构化 escalate(reason=adjust)；gate_kind 不得占 wire reason。
+        reason = "adjust" if kind in ("scope", "dep") else ""
         payload: dict[str, Any] = {
             "question": self.question,
             "assumption": self.assumption,

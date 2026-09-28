@@ -63,12 +63,8 @@ def escalation_block(tool: DelegateTool, plan: RunPlan, results: dict) -> str:
                 answered.append(f"- {label}：{question} → 用户已答：{answer}")
                 continue
             blocking = e.get("reason") == "wait"
-            is_dep = e.get("reason") == "dep"
-            is_scope = e.get("reason") == "scope"
-            mark = (
-                "【等拍板】"
-                if blocking
-                else ("【缺输入】" if is_dep else ("【职责偏离】" if is_scope else ""))
+            mark = "【等拍板】" if blocking else (
+                "【请看后面】" if e.get("reason") == "adjust" else ""
             )
             line = f"- {mark}{label}：{question}"
             assumption = str(e.get("assumption") or "").strip()
@@ -84,12 +80,11 @@ def escalation_block(tool: DelegateTool, plan: RunPlan, results: dict) -> str:
             "\n### ⚠️ 队员升级了待决问题（请先处理再收尾）\n"
             "以下是队员无法独自拍板、需要你定夺的关键岔路 / 缺失信息。"
             "【等拍板】的人还停着（或未能挂起、已按假设做完）；"
-            "【职责偏离】/【缺输入】的人自己这份在做完，后面的安排请你改。"
+            "【请看后面】的人自己这份在做完，后面的安排请你改。"
             "能自己答的就在概览里给出并据此判断相关产物是否需返工；"
             "确需用户拍板的就用 ask_user 问；"
-            "需要原作者据答案重做的就用 delegate 设 continue_from_run_id 带现场续派；"
-            "标【缺输入】的是队员卡在缺一个还不存在的输入——"
-            "用 delegate 补一个产出它的步骤，再设 continue_from_run_id 把结果交回原作者据此续写。\n"
+            "后面的安排用 replan 的 tell 给还没开始的人补一句，或 add 加人；"
+            "需要原作者重做的就用 delegate 设 continue_from_run_id 带现场续派。\n"
             + "\n".join(line for _, line in pending)
         )
     if answered:

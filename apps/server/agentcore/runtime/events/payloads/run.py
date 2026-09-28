@@ -12,7 +12,7 @@ from agentcore.runtime.events.payloads.shared import CostBreakdown, RunDebrief, 
 from agentcore.runtime.runs.types import RunKind
 
 Stance = Literal["pro", "con"]
-EscalationKind = Literal["wait", "scope", "dep"]
+EscalationKind = Literal["wait", "adjust"]
 PlanRevisionKind = Literal["bind", "steer"]
 # 幕类型 = 能力档取用键（首批 multi_agent / debate；single_agent 不进幕序列）。
 ActKind = Literal["multi_agent", "debate"]
@@ -391,8 +391,9 @@ class UserInterjectionPayload(WirePayload):
     """Mid-flight user interjection into a live turn (经典 steer + 协调插话共用).
 
     Lifecycle:
-    - 协调: ``received`` → ``injected`` → ``addressed`` / ``queued`` / ``failed``
-    - 经典: ``received`` → ``injected`` (终态) / ``queued`` / ``failed``（无 ``addressed``）
+    - 协调与经典: ``received`` → ``injected`` (终态) / ``failed``
+    - 经典另有赶不上下一步的 ``queued``
+    - ``addressed`` 与协调侧改排的 ``queued`` 新回合不发；旧日记回放仍合法
     ``injected`` = 内容真正写入模型上下文的那一刻。
     """
 

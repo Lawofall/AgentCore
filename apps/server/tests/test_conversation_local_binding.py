@@ -133,11 +133,11 @@ async def test_section_72_cloud_folder_binding_none_then_server_workspace(
 
 
 @pytest.mark.asyncio
-async def test_section_72_local_root_yields_local_workspace_bridge(monkeypatch):
-    """§7.2：有 local_root_id → LocalWorkspace（云端过桥语义；sidecar 另径）。"""
+async def test_cloud_turn_refuses_local_birth_desk(monkeypatch):
+    """本机文件夹回合不在云端引擎上开。过桥通道仍留给跨桌 / 区外的手，不给出生桌。"""
+    from agentcore.conversation.turn_backend import build_turn_backend
+    from agentcore.core.errors import LocalWorkspaceCloudRefusedError
     from agentcore.runtime.events import EventSink
-    from agentcore.workspace.local import LocalWorkspace
-    from agentcore.workspace.locate import build_workspace
 
     folder = _folder(local_root_id="legacy-root", local_subpath="")
     conv = _conv(folder_id=folder.id)
@@ -148,18 +148,21 @@ async def test_section_72_local_root_yields_local_workspace_bridge(monkeypatch):
         "agentcore.db.repositories.FolderRepository",
         lambda session: mock_repo,
     )
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.core.is_sidecar_process",
+        lambda: False,
+    )
 
     binding = await resolve_local_binding(MagicMock(), conv)
     assert binding is not None
     assert binding.root_id == "legacy-root"
-    ws = build_workspace(
-        user_id="u1",
-        folder_id=folder.id, folder_rel_path=folder.id,
-        conversation_id=conv.id,
-        sink=EventSink(),
-        local_binding=binding,
-    )
-    assert isinstance(ws, LocalWorkspace)
-    assert ws.location == "local"
-    # Bridge = LocalWorkspace over WorkspaceChannel（云 SSE → 桌面盘），非 sidecar spawn。
-    assert ws._channel.root_id == "legacy-root"  # noqa: SLF001
+    with pytest.raises(LocalWorkspaceCloudRefusedError) as ei:
+        await build_turn_backend(
+            user_id="u1",
+            conversation_id=conv.id,
+            folder_id=folder.id,
+            sink=EventSink(),
+            local_binding=binding,
+        )
+    assert ei.value.code == "LOCAL_WORKSPACE_CLOUD_REFUSED"
+    assert "云端不会改" in str(ei.value)

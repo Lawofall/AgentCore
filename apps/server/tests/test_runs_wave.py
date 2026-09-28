@@ -734,7 +734,7 @@ def _scope_state(run_id: str) -> RunState:
     return RunState(
         phase=RunPhase.COMPLETED,
         content=run_id,
-        escalations=[{"question": "真问题是X不是Y", "assumption": "暂按X", "reason": "scope"}],
+        escalations=[{"question": "真问题是X不是Y", "assumption": "暂按X", "reason": "adjust"}],
     )
 
 
@@ -862,7 +862,7 @@ def _dep_state(run_id: str) -> RunState:
     return RunState(
         phase=RunPhase.COMPLETED,
         content=run_id,
-        escalations=[{"question": "缺错误返回结构才能写测试", "assumption": "暂按X", "reason": "dep"}],
+        escalations=[{"question": "缺错误返回结构才能写测试", "assumption": "暂按X", "reason": "adjust"}],
     )
 
 
@@ -892,9 +892,8 @@ async def test_dep_escalation_rides_reactive_boundary_and_is_consumed():
     assert paused["a"].escalations[0]["consumed"] is True  # surfaced → consumed
 
 
-async def test_dep_escalation_not_in_scope_drift_tally():
-    # 学·度量 §2.5 漂移率 must stay scope-only: a dep (依赖缺口) is counted in the TOTAL
-    # escalation tally but NOT in scope_escalations, so it can't pollute the drift metric.
+async def test_adjust_escalation_counts_in_scope_drift_tally():
+    # scope 与 dep 已合成 adjust：这条非阻塞信号同时计入升级总数和 scope_escalations。
     plan = RunPlan()
     plan.add(_spec("a"))
     plan.add(_spec("b", ("a",)))
@@ -906,7 +905,7 @@ async def test_dep_escalation_not_in_scope_drift_tally():
     await WaveScheduler().run(plan, _dep_exec, on_boundary=hook, metrics_sink=sink)
     m = sink[0]
     assert m.scope_boundaries == 1  # the dep rode the reactive boundary
-    assert (m.escalations, m.scope_escalations) == (1, 0)  # counted in total, not in drift
+    assert (m.escalations, m.scope_escalations) == (1, 1)
 
 
 # --- 调度埋点量化 (BatchMetrics) ---

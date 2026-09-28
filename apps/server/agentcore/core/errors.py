@@ -920,6 +920,10 @@ LOCAL_ROOT_NOT_HELD = (
 LOCAL_CHANNEL_DEAD = (
     "本机工作区通道无响应（已挂起 / channel dead）。请检查桌面连接后重试。"
 )
+LOCAL_WORKSPACE_CLOUD_REFUSED = (
+    "这份对话的文件在本机，云端不会改它。"
+    "请在持有该文件夹的电脑上发送，或把对话改到云端。"
+)
 LOCAL_ORIGIN_DEVICE_OFFLINE = (
     "发起本回合的设备不在线（该操作只能在这台设备上执行，不会转投其他设备）。"
     "请在那台电脑上打开客户端并登录后重试。"
@@ -972,6 +976,21 @@ class LocalChannelDeadError(LocalWorkspaceUnavailable, AgentCoreError):
     status_code = 503
 
     def __init__(self, message: str = LOCAL_CHANNEL_DEAD, **kwargs):
+        super().__init__(message, **kwargs)
+
+
+class LocalWorkspaceCloudRefusedError(AgentCoreError):
+    """Cloud engine will not run a turn whose files live on a local folder.
+
+    The birth desk stays on the local engine. A cloud ``POST /messages`` that
+    still carries that binding is refused here, instead of opening a desktop
+    file channel keyed by the client-minted root id.
+    """
+
+    code = ErrorCode.LOCAL_WORKSPACE_CLOUD_REFUSED
+    status_code = 503
+
+    def __init__(self, message: str = LOCAL_WORKSPACE_CLOUD_REFUSED, **kwargs):
         super().__init__(message, **kwargs)
 
 

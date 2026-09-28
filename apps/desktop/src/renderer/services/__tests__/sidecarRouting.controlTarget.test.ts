@@ -34,9 +34,9 @@ describe("resolveSidecarControlTarget", () => {
 });
 
 describe("resolveSidecarControlTargetForEngine", () => {
-  it("does not fall back to the conversation local root for cloud_bridge", async () => {
+  it("does not fall back to the conversation local root unless the turn is on the sidecar", async () => {
     await expect(
-      resolveSidecarControlTargetForEngine(CID, "cloud_bridge"),
+      resolveSidecarControlTargetForEngine(CID, null),
     ).resolves.toBeNull();
   });
 

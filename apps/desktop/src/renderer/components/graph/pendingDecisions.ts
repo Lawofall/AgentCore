@@ -38,7 +38,7 @@ export interface GraphPendingDecision {
   actId: string | null;
   /** 主标题：node 级用角色名；execution 级用热闸标题（与 {@link hotGateKindTitle} 同源）。 */
   title: string;
-  /** 一行原因：待放行 / 待你拍板（缺输入）/ 放行开工 …。 */
+  /** 一行原因：待放行 / 待你拍板 / 放行开工 …。 */
   detail: string;
 }
 

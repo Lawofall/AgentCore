@@ -135,7 +135,7 @@ describe("conversationSidebarActivityStatus", () => {
       }),
     ).toBeNull();
     expect(ignoresCloudTurnActivity(null, "root-1")).toBe(true);
-    expect(ignoresCloudTurnActivity("cloud_bridge", null)).toBe(false);
+    expect(ignoresCloudTurnActivity(null, null)).toBe(false);
   });
 
   it("sidecar 上协作图仍在转时亮执行中（不靠 isGenerating / 云 running）", () => {

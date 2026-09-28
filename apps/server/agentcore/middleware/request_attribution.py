@@ -12,7 +12,8 @@ per-event kwargs — low cardinality, no extra emit sites. Missing header is
 ``-``; a present-but-empty (or whitespace-only) header is ``""`` so the two
 never collapse.
 
-Optional ``X-AgentCore-Stream-Path-Reason`` (desktop cloud-path enum) binds
+Optional ``X-AgentCore-Stream-Path-Reason`` (pure-cloud enum:
+``switch_off`` / ``no_local_engine`` / ``no_local_target``) binds
 ``stream_path_reason`` only when the value is allowlisted; unknown / absent
 headers are left unbound so GET/sidecar traffic does not stamp a dummy ``-``.
 
@@ -44,11 +45,7 @@ STREAM_PATH_REASONS = frozenset(
     {
         "switch_off",
         "no_local_engine",
-        "probe_unhealthy",
-        "probe_cache_bad",
         "no_local_target",
-        "sidecar_fallback",
-        "occupy_failed",
     }
 )
 

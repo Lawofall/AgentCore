@@ -231,7 +231,7 @@ class ConversationStreamHub:
         """Fan one conversation-scoped signal to每个 parked端. Returns how many got it.
 
         ``already_on_sink`` is the run sink the caller ALSO emitted this very event on
-        (the paths whose only观察端 may be a plain turn stream, e.g. 协调升队). A端
+        (the paths whose only观察端 may be a plain turn stream, e.g. 经典 steer 收口回落). A端
         tailing that sink receives the frame there, so it is skipped here — otherwise
         one connection would fold the same frame twice.
 

@@ -28,10 +28,8 @@ import {
 } from "@/lib/channelRedirect";
 import { notifyActionError } from "@/lib/toast";
 import { openCloudPreview } from "@/services/openCloudPreview";
-import {
-  usePersistentDisclosure,
-  useStreamAwareDisclosure,
-} from "@/stores/disclosure";
+import { useStreamAwareDisclosure } from "@/stores/disclosure";
+import { useToolOutputLiveStore } from "@/stores/toolOutputLive";
 import { useMessageExecution } from "@/stores/execution";
 import type { ProcessStep } from "@/types/events";
 import {
@@ -122,7 +120,6 @@ const PEEK_SUPPRESSED = new Set([
   "update_synthesis",
   "replan",
   "cancel_worker",
-  "resolve_escalation",
   "queue_user_message",
   // grep：标题已有 pattern；命中列表只在展开。折叠不挂计数 / 未匹配。
   "grep",
@@ -188,15 +185,31 @@ export function ComposingToolLine({
  * 见过的是「调研员」「审校」，见到 `r-a3f2e1c8-…` 只能放弃对账。这里按回合的协作图把目标
  * run 翻成角色名；翻不出来（历史回合无图 / 节点已不在）就什么都不显示，绝不退回摆 id。
  */
+function runTargetArgument(
+  step: Extract<ProcessStep, { kind: "tool" }>,
+): string {
+  if (!RUN_TARGET_ARG_TOOLS.has(step.tool_name)) return "";
+  if (typeof step.arguments.run_id === "string") {
+    return step.arguments.run_id.trim();
+  }
+  const tell = step.arguments.tell;
+  if (!Array.isArray(tell) || tell.length !== 1) return "";
+  const first = tell[0];
+  if (
+    first &&
+    typeof first === "object" &&
+    typeof (first as { run_id?: unknown }).run_id === "string"
+  ) {
+    return (first as { run_id: string }).run_id.trim();
+  }
+  return "";
+}
+
 function useRunTargetRole(
   step: Extract<ProcessStep, { kind: "tool" }>,
   turnKey: string | undefined,
 ): string {
-  const targetsRun = RUN_TARGET_ARG_TOOLS.has(step.tool_name);
-  const raw =
-    targetsRun && typeof step.arguments.run_id === "string"
-      ? step.arguments.run_id.trim()
-      : "";
+  const raw = runTargetArgument(step);
   const execution = useMessageExecution(raw ? (turnKey ?? null) : null);
   if (!raw) return "";
   const run = execution?.runs.find((r) => r.id === raw);
@@ -236,8 +249,8 @@ function ToolLineStat({ stat }: { stat: ToolLineTitleStat }) {
   );
 }
 
-/** 行尾指示：进行中不跟秒（流光即心跳）；验证没过挂灰色「未通过」；验证未完成走 warning 三角；
- *  顶层可展开行补 chevron。成功不挂标记。查找失败 / 默认失败不挂同义词。 */
+/** 行尾指示：进行中不跟秒（流光即心跳），但已有正文仍留 chevron；验证没过挂灰色「未通过」；
+ *  验证未完成走 warning 三角；顶层可展开行补 chevron。成功不挂标记。查找失败 / 默认失败不挂同义词。 */
 function ToolRowTail({
   status,
   nested,
@@ -255,8 +268,21 @@ function ToolRowTail({
   /** 未通过 — uncolored. Lookup / generic faults hang nothing. */
   faultLabel?: string | null;
 }) {
+  const chevron =
+    !nested && hasBody ? (
+      open ? (
+        <ChevronDown size={14} className="text-muted-foreground" />
+      ) : (
+        <ChevronRight size={14} className="text-muted-foreground" />
+      )
+    ) : null;
   if (status === "running") {
-    return null;
+    if (!chevron) return null;
+    return (
+      <span className="ml-1 inline-flex items-center gap-1 align-middle">
+        {chevron}
+      </span>
+    );
   }
   const faultMeta =
     !verifyBudgetExceeded && faultLabel ? (
@@ -273,14 +299,6 @@ function ToolRowTail({
       className="animate-status-pop text-warning motion-reduce:animate-none"
     />
   ) : null;
-  const chevron =
-    !nested && hasBody ? (
-      open ? (
-        <ChevronDown size={14} className="text-muted-foreground" />
-      ) : (
-        <ChevronRight size={14} className="text-muted-foreground" />
-      )
-    ) : null;
   if (!faultMeta && !warningIcon && !chevron) return null;
   return (
     <span className="ml-1 inline-flex items-center gap-1 align-middle">
@@ -396,15 +414,31 @@ export function ToolLine({
   /** 所属对话（= conversationId）：browser 关键帧懒加载；云端 run「打开预览」换票。 */
   conversationId?: string | null;
 }) {
-  const [open, setOpen] = usePersistentDisclosure(
+  const status = resolveToolWireStatus(step.status, step.failure);
+  const running = status === "running";
+  const commandArg =
+    typeof step.arguments.command === "string"
+      ? step.arguments.command.trim()
+      : "";
+  const liveTerminal =
+    running &&
+    commandArg.length > 0 &&
+    (step.tool_name === "run" ||
+      step.tool_name === "terminal" ||
+      step.tool_name === "host" ||
+      step.tool_name === "host_shell" ||
+      step.tool_name === "test_run");
+  const [open, toggleOpen] = useStreamAwareDisclosure(
     turnKey ? `${turnKey}:tool:${step.id}` : null,
-    false,
+    liveTerminal,
+  );
+  const liveOut = useToolOutputLiveStore((s) =>
+    open ? s.byId[step.id] : undefined,
   );
   const { Icon: ToolIcon, label: toolLabel } = toolMeta(
     step.tool_name,
     step.arguments,
   );
-  const status = resolveToolWireStatus(step.status, step.failure);
   const redirectFace =
     status === "redirect" ? channelRedirectFace(step.failure?.code) : null;
   const Icon = redirectFace
@@ -431,11 +465,12 @@ export function ToolLine({
     failure: step.failure,
     status,
     conversationId,
+    liveStdout: running ? liveOut?.stdout : undefined,
+    liveStderr: running ? liveOut?.stderr : undefined,
   };
   const hasBody = hasToolResultBody(data);
   const successfulHandoff = isSuccessfulHandoff(step.tool_name, status);
   const peek = toolResultPeek(data);
-  const running = status === "running";
   const verifyBudgetExceeded =
     step.status === "error" && isVerifyBudgetExceeded(step.display);
   const faultLabel = toolRowFaultLabel(step);
@@ -508,7 +543,7 @@ export function ToolLine({
   const titleBtn = (
     <Button
       variant="ghost"
-      onClick={() => hasBody && setOpen((v) => !v)}
+      onClick={() => hasBody && toggleOpen()}
       className={`h-auto min-w-0 w-full justify-start gap-2 overflow-hidden px-0 py-0 font-normal hover:bg-transparent ${
         hasBody ? "cursor-pointer" : "cursor-default"
       }`}
@@ -725,12 +760,11 @@ function DefaultToolLineGroup({
                 {groupFault}
               </span>
             )}
-            {!running &&
-              (expanded ? (
-                <ChevronDown size={14} className="shrink-0" />
-              ) : (
-                <ChevronRight size={14} className="shrink-0" />
-              ))}
+            {expanded ? (
+              <ChevronDown size={14} className="shrink-0" />
+            ) : (
+              <ChevronRight size={14} className="shrink-0" />
+            )}
           </span>
         </Button>
       </LiveFlow>

@@ -347,24 +347,24 @@ def test_escalations_from_transcript_collects_in_call_order():
     ]
 
 
-def test_escalations_from_transcript_marks_scope_and_dep_reasons():
-    # escalate(reason=scope|dep) harvested as-is; unknown / omitted reason → wait.
+def test_escalations_from_transcript_reason_is_wait_or_adjust():
+    # adjust is kept; unknown tokens (including retired scope/dep) and omissions → wait.
     transcript = [
         _assistant_call(
             "c1",
             "escalate",
-            '{"question": "真问题是X不是Y", "assumption": "暂按X", "reason": "scope"}',
+            '{"question": "真问题是X不是Y", "assumption": "暂按X", "reason": "adjust"}',
         ),
         _assistant_call(
             "c2",
             "escalate",
-            '{"question": "缺错误返回结构才能写测试", "assumption": "暂按 {code,msg}", "reason": "dep"}',
+            '{"question": "缺错误返回结构才能写测试", "assumption": "暂按 {code,msg}", "reason": "scope"}',
         ),
         _assistant_call("c3", "escalate", '{"question": "未知档", "reason": "weird"}'),
         _assistant_call("c4", "escalate", '{"question": "普通问题"}'),
     ]
     out = escalations_from_transcript(transcript)
-    assert [e["reason"] for e in out] == ["scope", "dep", "wait", "wait"]
+    assert [e["reason"] for e in out] == ["adjust", "wait", "wait", "wait"]
     assert out[0]["question"] == "真问题是X不是Y"
     assert out[1]["question"] == "缺错误返回结构才能写测试"
 

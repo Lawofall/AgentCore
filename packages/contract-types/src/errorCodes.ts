@@ -35,6 +35,7 @@ export const NON_RETRIABLE_ERROR_CODES: readonly ErrorCode[] = [
   "LOCAL_ROOT_NOT_HELD",
   "LOCAL_ORIGIN_DEVICE_OFFLINE",
   "LOCAL_CHANNEL_DEAD",
+  "LOCAL_WORKSPACE_CLOUD_REFUSED",
 ];
 
 /** Type guard: whether `code` is a code the clients recognize (typed against the
@@ -92,6 +93,7 @@ export const ZERO_OUTPUT_SEND_REFUSAL_CODES: readonly ErrorCode[] = [
   "LOCAL_ROOT_NOT_HELD",
   "LOCAL_ORIGIN_DEVICE_OFFLINE",
   "LOCAL_CHANNEL_DEAD",
+  "LOCAL_WORKSPACE_CLOUD_REFUSED",
 ];
 
 export function isZeroOutputSendRefusalCode(

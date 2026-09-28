@@ -25,11 +25,8 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 # 根 CEO 协调控制面开场即在表上；嵌套 lead 只有 replan。Idle 调用在 execute 失败。
-_ROOT_COORD_TOOLS: tuple[str, ...] = (
-    "cancel_worker",
-    "resolve_escalation",
-    "queue_user_message",
-)
+# 对停着的人说话走 replan.tell，不另立工具。
+_ROOT_COORD_TOOLS: tuple[str, ...] = ("cancel_worker",)
 
 COORDINATION_GATED_TOOLS: frozenset[str] = frozenset(("replan", *_ROOT_COORD_TOOLS))
 
@@ -149,7 +146,6 @@ def register_coordination_surface(
     chat_tools: ToolRegistry,
     *,
     delegate_tool: DelegateTool,
-    sink: Any,
     include: bool,
 ) -> None:
     """Put replan + root control tools on the opening table. ``include`` is ignored.
@@ -157,21 +153,13 @@ def register_coordination_surface(
     Idle calls fail at execute. Never unregister mid-chain (prefix cache).
     """
     del include
-    from agentcore.runtime.coordination.tools import (
-        CancelWorkerTool,
-        QueueUserMessageTool,
-        ResolveEscalationTool,
-    )
+    from agentcore.runtime.coordination.tools import CancelWorkerTool
     from agentcore.tools.builtin.replan import ReplanTool
 
     if chat_tools.get_optional("replan") is None:
         chat_tools.register(ReplanTool(delegate=delegate_tool))
     if chat_tools.get_optional("cancel_worker") is None:
         chat_tools.register(CancelWorkerTool())
-    if chat_tools.get_optional("resolve_escalation") is None:
-        chat_tools.register(ResolveEscalationTool())
-    if chat_tools.get_optional("queue_user_message") is None:
-        chat_tools.register(QueueUserMessageTool(sink=sink))
 
 
 def ensure_coordination_surface_before_llm(chat_tools: ToolRegistry) -> bool:
@@ -191,12 +179,7 @@ def promote_coordination_surface_if_needed(chat_tools: ToolRegistry) -> bool:
         return False
 
     depth = int(getattr(delegate, "_depth", 0) or 0)
-    sink = getattr(delegate, "_sink", None)
-    from agentcore.runtime.coordination.tools import (
-        CancelWorkerTool,
-        QueueUserMessageTool,
-        ResolveEscalationTool,
-    )
+    from agentcore.runtime.coordination.tools import CancelWorkerTool
     from agentcore.tools.builtin.replan import ReplanTool
 
     added: list[str] = []
@@ -209,12 +192,6 @@ def promote_coordination_surface_if_needed(chat_tools: ToolRegistry) -> bool:
         if chat_tools.get_optional("cancel_worker") is None:
             chat_tools.register(CancelWorkerTool())
             added.append("cancel_worker")
-        if chat_tools.get_optional("resolve_escalation") is None:
-            chat_tools.register(ResolveEscalationTool())
-            added.append("resolve_escalation")
-        if chat_tools.get_optional("queue_user_message") is None and sink is not None:
-            chat_tools.register(QueueUserMessageTool(sink=sink))
-            added.append("queue_user_message")
 
     if added:
         logger.info(

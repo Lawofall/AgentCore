@@ -553,7 +553,7 @@ class WaveScheduler:
                             state = completed.get(node.run_id)
                             if state is not None:
                                 for e in state.escalations:
-                                    if e.get("reason") in ("scope", "dep"):
+                                    if e.get("reason") == "adjust":
                                         e["consumed"] = True
                         if outcome is BoundaryOutcome.ABORT:
                             aborted = True
@@ -620,7 +620,7 @@ class WaveScheduler:
             # run that produced them, not this resumed slice).
             escalations = sum(len(s.escalations) for s in ran)
             scope_escalations = sum(
-                1 for s in ran for e in s.escalations if e.get("reason") == "scope"
+                1 for s in ran for e in s.escalations if e.get("reason") == "adjust"
             )
             metrics_sink.append(
                 BatchMetrics(
@@ -722,7 +722,7 @@ class WaveScheduler:
             if state is None or state.phase is not RunPhase.COMPLETED:
                 continue
             if any(
-                e.get("reason") in ("scope", "dep") and not e.get("consumed")
+                e.get("reason") == "adjust" and not e.get("consumed")
                 for e in state.escalations
             ):
                 ready.append(node)

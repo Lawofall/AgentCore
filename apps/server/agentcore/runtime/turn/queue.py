@@ -87,8 +87,9 @@ class QueuedTurn:
     # and sets ``credentials_pending`` so start resolves the current key instead.
     llm_credentials: Any = None
     llm_supports_tools: bool | None = None
-    # Set when this entry was promoted from a user interjection (协调升队 /
-    # 经典 steer leftover). Plain ``delivery=queue`` enqueues leave it None.
+    # Set when a classic steer that missed the next step was promoted onto the
+    # FIFO. Plain ``delivery=queue`` leaves it None. Coordination interjections
+    # no longer write this field; older rows may still carry it.
     interjection_id: str | None = None
     # Set by the enqueueing SSE when it opens: drain resolves with the live turn sink
     # so the waiting connection can continue on the same stream. None → no waiter
@@ -131,9 +132,9 @@ def broadcast_turn_queued(
       parked on an idle conversation, and the only one that survives「入队时宿主刚好
       收口了」(no sink to emit on at all).
     - **live turn sink** (``on_live_sink=True``) — for enqueues whose originating
-      request has NO stream of its own to say it on: 协调升队 and 经典 steer 收口 leftover
-      both happen long after that POST returned its short confirm stream, so the发起端
-      can only learn about it through the turn it is currently watching. Classic FIFO
+      request has NO stream of its own to say it on: a classic steer leftover
+      promoted at turn close happens after that POST returned its short confirm,
+      so the发起端 can only learn about it through the turn it is currently watching. Classic FIFO
       passes ``False``: its own queued POST already yields the frame, and re-emitting on
       the live sink would show it twice on the same device (that device is usually
       watching the very turn it queued behind).

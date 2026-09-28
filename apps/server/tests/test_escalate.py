@@ -45,7 +45,7 @@ async def test_worker_escalate_logs_question_and_assumption(monkeypatch):
         {
             "question": "该走方案A还是方案B?",
             "assumption": "暂按方案A继续",
-            "reason": "scope",
+            "reason": "adjust",
         },
         _ctx(),
     )
@@ -53,7 +53,7 @@ async def test_worker_escalate_logs_question_and_assumption(monkeypatch):
     assert result.success is True
     esc = spy.get("worker.escalate")
     assert esc["run_id"] == "w1"
-    assert esc["reason"] == "scope"
+    assert esc["reason"] == "adjust"
     assert "blocking" not in esc
     assert "kind" not in esc
     assert esc["has_assumption"] is True
@@ -66,7 +66,7 @@ async def test_worker_escalate_question_preview_is_capped(monkeypatch):
     monkeypatch.setattr(escalate_mod, "logger", spy)
 
     await EscalateTool().execute(
-        {"question": "为" * 500, "assumption": "暂按已有口径", "reason": "scope"},
+        {"question": "为" * 500, "assumption": "暂按已有口径", "reason": "adjust"},
         _ctx(),
     )
 
@@ -74,7 +74,7 @@ async def test_worker_escalate_question_preview_is_capped(monkeypatch):
     assert esc["question"].endswith("…")
     assert len(esc["question"]) == 201  # 200-char cap + the one ellipsis char
     assert esc["has_assumption"] is True
-    assert esc["reason"] == "scope"
+    assert esc["reason"] == "adjust"
 
 
 def test_escalation_required_carries_timeout_only_when_ops_configured_one():
@@ -113,9 +113,9 @@ def test_escalate_schema_teaches_reason_not_blocking():
     assert "猜错作废" not in desc
     assert "默认 false" not in desc
     reason = props["reason"]["description"]
-    assert "wait" in reason and "scope" in reason and "dep" in reason
+    assert "wait" in reason and "adjust" in reason
     assert "已拒凭据不要 wait" in reason
-    assert props["reason"]["enum"] == ["wait", "scope", "dep"]
+    assert props["reason"]["enum"] == ["wait", "adjust"]
     question = props["question"]["description"]
     assert "必填" not in question
     assert "要拍板" in question

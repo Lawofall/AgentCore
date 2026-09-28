@@ -24,7 +24,6 @@ from agentcore.runtime.coordination.session import (
     set_active_coordination,
 )
 from agentcore.runtime.coordination.wait import await_coordination_injection
-from agentcore.runtime.events import EventSink
 from agentcore.runtime.runs.builder import build_run_plan
 from tests.conftest import LogSpy
 
@@ -357,11 +356,8 @@ async def test_idle_timeout_bumps_backoff_and_real_event_resets(monkeypatch):
 
 def test_coordination_tool_schemas_are_short_triggers():
     """协调套件 when-to-use 留按钮；手册走回执。"""
-    from agentcore.runtime.coordination.tools import (
-        CancelWorkerTool,
-        QueueUserMessageTool,
-        ResolveEscalationTool,
-    )
+    from agentcore.runtime.coordination.tools import CancelWorkerTool
+    from agentcore.tools.builtin.replan import _REPLAN_DESCRIPTION, _REPLAN_PARAMETERS
 
     cancel = CancelWorkerTool().schema
     assert "终止" in cancel.description
@@ -371,24 +367,12 @@ def test_coordination_tool_schemas_are_short_triggers():
     assert "同时匹配" not in run_id
     assert "不会自动改目标" not in run_id
 
-    resolve = ResolveEscalationTool().schema
-    resolve_desc = resolve.description
-    assert "ask_user" in resolve_desc
-    assert "via_user" not in resolve_desc
-    assert "技术/范围" not in resolve_desc
-    via_user = resolve.parameters["properties"]["via_user"]["description"]
-    assert via_user == "true=已先经 ask_user。"
-    assert "偏好" not in via_user
-    assert "征询" not in via_user
-
-    queue = QueueUserMessageTool(sink=EventSink()).schema
-    queue_desc = queue.description
-    assert "无关" in queue_desc
-    assert "FIFO" not in queue_desc
-    assert "delegate / cancel_worker" not in queue_desc
-    reason = queue.parameters["properties"]["reason"]["description"]
-    assert "用户可见" in reason
-    assert not reason.startswith("可选")
+    assert "steers" not in _REPLAN_PARAMETERS["properties"]
+    assert "via_user" not in str(_REPLAN_PARAMETERS)
+    tell = _REPLAN_PARAMETERS["properties"]["tell"]
+    assert "ask_user" in tell["description"]
+    assert "停着等拍板" in tell["description"]
+    assert "偏好" not in _REPLAN_DESCRIPTION
 
 
 def test_inject_footer_does_not_repeat_tool_how():

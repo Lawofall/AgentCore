@@ -230,12 +230,12 @@ def escalation_raised(
     escalation_id: str | None = None,
     source: str | None = None,
 ) -> SSEEvent:
-    """Raised 升级（DURABLE）：scope/dep 协作图标记，或引擎早停。
+    """Raised 升级（DURABLE）：adjust 协作图标记，或引擎早停。
 
     ``escalation_id`` 键给 raised 轻行；生产缺省自动生成，conformance 向量传固定值。
 
     ``source`` 仅早停 / 打转收口（``validation_thrash`` / ``ceiling_backstop``）。
-    工具请示写 ``kind`` = scope|dep。wait 不走本事件。
+    工具请示写 ``kind`` = adjust。wait 不走本事件。
     """
     payload: dict[str, Any] = {
         "escalation_id": escalation_id or new_id(),
@@ -244,7 +244,7 @@ def escalation_raised(
         "question": question,
         "assumption": assumption,
     }
-    if kind in ("wait", "scope", "dep"):
+    if kind in ("wait", "adjust"):
         payload["kind"] = kind
     if source:
         payload["source"] = source
@@ -543,9 +543,9 @@ def user_interjection(
 ) -> SSEEvent:
     """运行中用户插话（经典 steer + 协调插话共用契约）。
 
-    ``status=received`` 入队确认；真正写入模型上下文 → ``injected``；
-    协调图内处置 → ``addressed``；转 FIFO / 收口升格 → ``queued``；真失败 → ``failed``
-    （同 ``interjection_id`` 保最新）。经典无 ``addressed``（``injected`` 即终态）。
+    ``status=received`` 入队确认；真正写入模型上下文 → ``injected``（协调终态）；
+    经典赶不上下一步 / 收口回落 → ``queued``；真失败 → ``failed``
+    （同 ``interjection_id`` 保最新）。``addressed`` 新回合不发，旧日记回放仍合法。
     DURABLE——落 journal，刷新可回看。``attachments`` 为名字 + 路径 + 二进制标记。
     ``agent_mentions`` 为软点名芯片（``{agent_id, role}``）；空则不上 wire。
     """

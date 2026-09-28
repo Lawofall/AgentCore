@@ -252,6 +252,11 @@ export type RunFrame =
 /** Wall-clock time of a wire event (ms), used to label timeline frames. The
  * journal stores the same ISO timestamp the live stream carried, so replay and
  * live label frames identically. Live tool 秒表也走这里，attach 回放不从「此刻」重计。 */
+function escalationKindFromWire(kind: unknown): import("./types").EscalationKind {
+  if (kind === "adjust" || kind === "scope" || kind === "dep") return "adjust";
+  return "wait";
+}
+
 export function frameTimeOf(event: Pick<SSEEvent, "timestamp">): number {
   const parsed = Date.parse(event.timestamp);
   return Number.isNaN(parsed) ? Date.now() : parsed;
@@ -466,10 +471,7 @@ export function frameFromEvent(event: SSEEvent): RunFrame | null {
         question: p.question,
         assumption: p.assumption,
         escalationId: p.escalation_id ?? "",
-        escalationKind:
-          p.kind === "scope" || p.kind === "dep" || p.kind === "wait"
-            ? p.kind
-            : "wait",
+        escalationKind: escalationKindFromWire(p.kind),
         ...(source ? { source } : {}),
       };
     }
@@ -488,10 +490,7 @@ export function frameFromEvent(event: SSEEvent): RunFrame | null {
         agentId: p.agent_id,
         question: p.question,
         assumption: p.assumption,
-        escalationKind:
-          p.kind === "scope" || p.kind === "dep" || p.kind === "wait"
-            ? p.kind
-            : "wait",
+        escalationKind: escalationKindFromWire(p.kind),
         questions: p.questions ?? [],
         awaiting: p.awaiting === "ceo" ? "ceo" : "user",
         ...(paths.length > 0 ? { ownershipPaths: paths } : {}),

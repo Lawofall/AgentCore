@@ -154,7 +154,7 @@ async def test_classic_fifo_enqueue_signals_watchers_without_touching_the_live_s
 
 
 async def test_promoted_enqueue_takes_the_live_sink_leg_without_doubling(hub):
-    """协调升队：发起端只剩 live 回合流可看 → 走 sink；跟播该 sink 的端不再收信号道副本。"""
+    """发起端只剩 live 回合流可看 → 走 sink；跟播该 sink 的端不再收信号道副本。"""
     cid = "c-promoted-queued"
     turn_queue.clear(cid)
     host_sink = EventSink()

@@ -187,7 +187,7 @@ async def handle_tool_calls_round(
     # Exception: CEO attached_inject closing round. After wait ate
     # ALL_COMPLETED the same-turn prose is the deliverable (终稿), not a
     # lead-in — even if a still-offered non-terminal tool (closed
-    # ``resolve_escalation`` returns success so as not to burn a retry)
+    # a successful coordination settle returns success so as not to burn a retry)
     # runs in that round. Workers / debaters / mid-turn CEO narration
     # still roll back: skip only when the live bubble already holds
     # post-inject visible close (same predicate as harvest skip).

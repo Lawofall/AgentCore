@@ -41,10 +41,14 @@ vi.mock("@/components/chat/Markdown", () => ({
   Markdown: ({ content }: { content: string }) => <div>{content}</div>,
 }));
 
+import { useToolOutputLiveStore } from "@/stores/toolOutputLive";
 import { ComposingToolLine, ToolLine, ToolLineGroup } from "../ToolLine";
 import { toolDetail, toolGroupSummary } from "../message-bubble/constants";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  useToolOutputLiveStore.setState({ byId: {}, selectedId: null });
+});
 
 beforeEach(() => {
   showBrowser.mockReset();
@@ -741,22 +745,26 @@ describe("ToolLine · 过程工具默认折叠", () => {
     expect(container.querySelector(".lucide-check")).toBeNull();
   });
 
-  it("chips run_id for resolve_escalation without dumping answer or ack peek", () => {
-    const ack = "已将裁决回传给 worker run_legal_1，队员将据此继续。";
+  it("chips the person replan tell addresses without dumping the note", () => {
+    const ack = "已把话传给 run_legal_1，他会按这句继续。";
     render(
       <ToolLine
         step={step({
-          tool_name: "resolve_escalation",
+          tool_name: "replan",
           arguments: {
-            run_id: "run_legal_1",
-            answer: "请按公司法 §20 继续，详细论述如下……\n第二段。",
+            tell: [
+              {
+                run_id: "run_legal_1",
+                note: "请按公司法 §20 继续，详细论述如下……\n第二段。",
+              },
+            ],
           },
           result: ack,
           status: "success",
         })}
       />,
     );
-    expect(screen.getByText("Resolve escalate")).toBeTruthy();
+    expect(screen.getByText("Replan")).toBeTruthy();
     expect(screen.getByText("run_legal_1")).toBeTruthy();
     expect(screen.queryByText(/请按公司法/)).toBeNull();
     expect(screen.queryByText(ack)).toBeNull();
@@ -921,6 +929,40 @@ describe("ToolLine · browser 单步折叠一行", () => {
     expect(collapsedSubline(container)).toBeNull();
   });
 
+  it("shows a running run's command and live output, with no empty well", () => {
+    useToolOutputLiveStore.setState({
+      byId: {
+        call_1: {
+          toolCallId: "call_1",
+          toolName: "run",
+          conversationId: "c1",
+          startedAt: "2026-01-01T00:00:00.000Z",
+          stdout: "hello from run",
+          stderr: "",
+        },
+      },
+      selectedId: null,
+    });
+    const { container } = render(
+      <ToolLine
+        step={step({
+          tool_name: "run",
+          arguments: { command: "pnpm test" },
+          status: "running",
+          result: null,
+        })}
+      />,
+    );
+    expect(screen.getByText("Run")).toBeTruthy();
+    expect(screen.getByText("pnpm test")).toBeTruthy();
+    expect(screen.getByText("hello from run")).toBeTruthy();
+    expect(container.querySelector(".lucide-chevron-down")).toBeTruthy();
+    expect(screen.queryByText("（无输出）")).toBeNull();
+    fireEvent.click(screen.getByText("Run"));
+    expect(screen.queryByText("pnpm test")).toBeNull();
+    expect(screen.queryByText("hello from run")).toBeNull();
+  });
+
   it("keeps a running click as a single title line", () => {
     const { container } = render(
       <ToolLine
@@ -1048,6 +1090,7 @@ describe("ToolLineGroup · live-flow", () => {
     );
     expect(container.querySelectorAll("[data-live-flow]")).toHaveLength(1);
     expect(screen.getByText(/foo\.ts · bar\.ts/)).toBeTruthy();
+    expect(container.querySelector(".lucide-chevron-right")).toBeTruthy();
   });
 
   it("does not show live elapsed on the collapsed header", () => {

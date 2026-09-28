@@ -1144,7 +1144,8 @@ KEY_DESC: dict[str, str] = {
     ),
     "chat.turn_start": (
         "回合起点（preview/chars/history）。"
-        "stream_path_reason = 桌面过桥枚举（探活失败 / 强制关 / 无本机根等），仅云 POST 携带"
+        "stream_path_reason 只出现在纯云端 POST。 "
+        "switch_off / no_local_engine / no_local_target"
     ),
     "chat.turn_complete": "回合收尾（含 Phase-0 延迟：prepare/assemble/ttft_*；model/credential_source）",
     "chat.resume_complete": "暂停恢复回合收尾（终态带协作计数；STOP 终结不带）",

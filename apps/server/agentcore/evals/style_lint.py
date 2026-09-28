@@ -1,8 +1,6 @@
 """输出风格的确定性 linter（方向④：anti-slop 违规可度量，先可观测）.
 
-纯文本启发式、**零额外 LLM**：检测
-[`runtime/resolve/prompt._DEFAULT_SYSTEM_PROMPT`](../runtime/resolve/prompt.py)
-的基座输出句明令禁止的几类「AI 腔」——套话开场 / 客套收尾 / 未授权 emoji。与 LLM
+纯文本启发式、**零额外 LLM**：检测套话开场 / 客套收尾。与 LLM
 裁判（语义质量）正交：那判「答得好不好」，本模块判「有没有犯这几条**确定可判**的风格戒律」，
 故可零成本单测（见 ``tests/test_evals_style.py``）。
 
@@ -16,8 +14,7 @@
 真实 pipeline（真模型回合）才有 ``outcome.content`` 可 lint——故违规率出数依赖
 真跑评测（详细提案不在公开仓；现状见后端架构 §五）。
 
-**低噪优先**：规则刻意只收**锚定**信号（开场短语锚回复首、客套短语锚回复尾、emoji 走
-Unicode 块），宁可漏报不误报——observability linter 的误报会毒化信任。过度加粗 / 滥用列表
+**低噪优先**：规则刻意只收**锚定**信号（开场短语锚回复首、客套短语锚回复尾），宁可漏报不误报——observability linter 的误报会毒化信任。过度加粗 / 滥用列表
 等**密度类**启发式噪声大、需先有真实语料校准阈值，列为 v2（见 ``docs`` 方向④）。
 """
 
@@ -30,7 +27,6 @@ from agentcore.evals.types import CaseReport
 
 RULE_OPENING = "opening_boilerplate"
 RULE_CLOSING = "closing_pleasantry"
-RULE_EMOJI = "emoji"
 
 # 套话开场：锚回复**首**（剥掉 markdown 标记后）。只收近乎必为 slop 的固定开场——光秃的
 # 「当然 / 好的」可能是合法短答，故仅在带感叹号（「当然！」式）或本身就是寒暄填充时才收。
@@ -82,19 +78,6 @@ _CLOSING_PHRASES = (
     "don't hesitate to ask",
 )
 
-# emoji：主流 emoji Unicode 块。刻意**不含**箭头（→←↑↓, U+2190–21FF）与数学符号
-# （U+2200–22FF）——它们在技术散文里合法，收进来会误报。✅🚀✨🔧 落在上述块内。
-_EMOJI_RE = re.compile(
-    "["
-    "\U0001f300-\U0001faff"  # 符号与象形文字（含补充 / 扩展-A、交通🚀、表情😀）
-    "\U00002600-\U000027bf"  # 杂项符号 + dingbats（✅✨✓✗）
-    "\U00002b00-\U00002bff"  # 杂项符号箭头区里的星标 ⭐ 等
-    "\U0001f000-\U0001f0ff"  # 麻将 / 多米诺 / 扑克
-    "\U0000fe00-\U0000fe0f"  # 变体选择符（emoji 呈现）
-    "\U0000200d"  # 零宽连接（emoji 序列）
-    "]"
-)
-
 # 剥掉回复首部的 markdown 噪声（标题井号 / 引用号 / 列表符 / 加粗星号 / 空白），
 # 好让开场短语锚定在「真正的第一句」上。
 _LEADING_MD = re.compile(r"^[\s#>*\-•\d.、)）]+")
@@ -131,15 +114,6 @@ def style_violations(text: str | None) -> list[StyleViolation]:
         if p in last_sentence:
             out.append(StyleViolation(RULE_CLOSING, p))
             break
-
-    emojis = _EMOJI_RE.findall(stripped)
-    if emojis:
-        # 去重保序，最多列 5 个，避免片段过长。
-        seen: list[str] = []
-        for e in emojis:
-            if e not in seen:
-                seen.append(e)
-        out.append(StyleViolation(RULE_EMOJI, "".join(seen[:5])))
 
     return out
 
@@ -200,7 +174,7 @@ def style_metrics_to_dict(m: StyleMetrics) -> dict:
         "clean_rate": m.clean_rate,
         "per_rule": dict(m.per_rule),
         "violation_rates": {
-            rule: m.violation_rate(rule) for rule in (RULE_OPENING, RULE_CLOSING, RULE_EMOJI)
+            rule: m.violation_rate(rule) for rule in (RULE_OPENING, RULE_CLOSING)
         },
         "offenders": [{"case_id": cid, "rules": rules} for (cid, rules) in m.offenders],
     }
@@ -218,10 +192,6 @@ def format_style_report(m: StyleMetrics) -> str:
     lines.append(
         f"  客套收尾   {m.per_rule.get(RULE_CLOSING, 0)}    "
         f"率 {_pct(m.violation_rate(RULE_CLOSING))}"
-    )
-    lines.append(
-        f"  未授权emoji {m.per_rule.get(RULE_EMOJI, 0)}    "
-        f"率 {_pct(m.violation_rate(RULE_EMOJI))}"
     )
     if m.offenders:
         lines.append("-" * 64)

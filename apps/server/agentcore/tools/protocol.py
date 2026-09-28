@@ -136,7 +136,7 @@ class EscalationChannel:
     maps the outcome to ``ToolResult``.
 
     ``awaiting`` on ``request``: ``"user"`` (经典直挂用户) or ``"ceo"`` (协调模式等主管
-    仲裁；初始不发用户可答卡，由 ``resolve_escalation`` 兑现).
+    仲裁；初始不发用户可答卡，由 ``replan`` 的 tell 兑现).
     """
 
     armed: bool
@@ -399,7 +399,7 @@ class ToolContext:
     # declare-time desk so claim and dispatch reserve the same composite key.
     ownership_desk_id: str | None = None
     agent_role: str = ""
-    # Live graph mark for ``escalate(reason=scope|dep)``: ``(question, assumption, reason)``.
+    # Live graph mark for ``escalate(reason=adjust)``: ``(question, assumption, reason)``.
     # Wait uses ``escalation`` (suspend), not this callback. ``None`` for CEO / tests.
     on_escalate: Callable[[str, str, str], None] | None = None
     # Wait-escalate suspend channel. ``None`` for CEO / tests / unarmed turns — then

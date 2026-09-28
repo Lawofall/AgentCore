@@ -13,6 +13,7 @@ import {
   type SidecarDeliverMessageRequest,
   type SidecarEditQueuedTurnAck,
   type SidecarEditQueuedTurnRequest,
+  type SidecarExecOutputRequest,
   type SidecarInference,
   type SidecarInterveneAck,
   type SidecarListBrowserSessionsRequest,
@@ -1699,6 +1700,21 @@ export class SidecarManager {
       result: req.result,
     })) as { resolved?: boolean } | null;
     return { resolved: Boolean(reply?.resolved) };
+  }
+
+  /** 把一段 EXECUTE 活输出送进尚未结算的 op。晚到的片段 accepted=false。 */
+  async execOutput(
+    req: SidecarExecOutputRequest,
+  ): Promise<{ accepted: boolean }> {
+    const entry = this.entries.get(entryKey(req.rootId, req.subpath));
+    if (!entry) return { accepted: false };
+    const reply = (await entry.client.request("execOutput", {
+      requestId: req.requestId,
+      conversationId: req.conversationId,
+      stream: req.stream,
+      chunk: req.chunk,
+    })) as { accepted?: boolean } | null;
+    return { accepted: Boolean(reply?.accepted) };
   }
 
   /** 退出时清理所有 sidecar（尽力发 shutdown 再终止进程）。 */

@@ -70,7 +70,7 @@ async def test_second_delegate_seed_omits_yielded_untouched_tail(monkeypatch):
             return RunState(
                 phase=RunPhase.COMPLETED,
                 content="AOUT",
-                escalations=[{"reason": "scope", "question": "真问题是X", "assumption": "暂按X"}],
+                escalations=[{"reason": "adjust", "question": "真问题是X", "assumption": "暂按X"}],
             )
         return RunState(phase=RunPhase.COMPLETED, content=f"{spec.role}_OUT")
 

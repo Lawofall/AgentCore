@@ -41,7 +41,7 @@ def _agents_and_plan() -> tuple[list[dict], list[dict]]:
 
 
 def _multi_agent_user_interjection_handled() -> list[SSEEvent]:
-    """插话入图处置：received → injected → CEO update_synthesis → addressed。"""
+    """插话留在本回合：received → injected。CEO 在终稿里承接，不再另发状态。"""
     agents, plan_runs = _agents_and_plan()
     return [
         message_start("m1", conversation_id=_CONV),
@@ -83,13 +83,6 @@ def _multi_agent_user_interjection_handled() -> list[SSEEvent]:
             success=True,
             output="已更新合成草稿（18 字），用户可见「进展中」预览。",
         ),
-        user_interjection(
-            interjection_id="inj1",
-            execution_id="exec1",
-            content="补充一点：结论里请点明成本对比。",
-            status="addressed",
-            note="已在合成草稿中承接",
-        ),
         run_completed(
             "r1",
             "w1",
@@ -116,8 +109,8 @@ def _multi_agent_user_interjection_handled() -> list[SSEEvent]:
     ]
 
 
-def _multi_agent_user_interjection_queued() -> list[SSEEvent]:
-    """插话转排队：received → injected → CEO queue_user_message → status=queued。"""
+def _multi_agent_user_interjection_stays() -> list[SSEEvent]:
+    """插话留在本回合：received → injected。不改排、不另开下一回合。"""
     agents, plan_runs = _agents_and_plan()
     return [
         message_start("m1", conversation_id=_CONV),
@@ -148,27 +141,6 @@ def _multi_agent_user_interjection_queued() -> list[SSEEvent]:
             content="另外帮我写一封生日贺卡，跟这个项目无关。",
             status="injected",
         ),
-        tool_use_start(
-            "q1",
-            "queue_user_message",
-            {
-                "interjection_id": "inj2",
-                "reason": "与当前团队任务无关，已排到下一回合",
-            },
-        ),
-        tool_use_end(
-            "q1",
-            "queue_user_message",
-            success=True,
-            output="已将插话转入对话级排队（位置 1/1）。",
-        ),
-        user_interjection(
-            interjection_id="inj2",
-            execution_id="exec1",
-            content="另外帮我写一封生日贺卡，跟这个项目无关。",
-            status="queued",
-            note="与当前团队任务无关，已排到下一回合",
-        ),
         run_completed(
             "r1",
             "w1",
@@ -190,7 +162,7 @@ def _multi_agent_user_interjection_queued() -> list[SSEEvent]:
             cost=_COST,
         ),
         tool_use_end("dc1", "delegate", success=True, output="团队已完成。"),
-        content_delta("当前任务已收口；你的贺卡请求已排队，下一回合处理。"),
+        content_delta("当前任务已收口。贺卡那句留在这一轮。"),
         message_end(FinishReason.END_TURN, input_tokens=2000, output_tokens=400, cost=_COST),
     ]
 
@@ -317,14 +289,6 @@ def _multi_agent_user_interjection_with_attachments() -> list[SSEEvent]:
             success=True,
             output="已更新合成草稿，用户可见「进展中」预览。",
         ),
-        user_interjection(
-            interjection_id="inj-att",
-            execution_id="exec1",
-            content="请对照附件里的成本表再核一遍。",
-            status="addressed",
-            note="已在合成草稿中承接",
-            attachments=att_meta,
-        ),
         run_completed(
             "r1",
             "w1",
@@ -396,14 +360,6 @@ def _multi_agent_user_interjection_with_mentions() -> list[SSEEvent]:
             "update_synthesis",
             success=True,
             output="已更新合成草稿，用户可见「进展中」预览。",
-        ),
-        user_interjection(
-            interjection_id="inj-mention",
-            execution_id="exec1",
-            content="请让研究员再核一遍成本。",
-            status="addressed",
-            note="已在合成草稿中承接",
-            agent_mentions=mentions,
         ),
         run_completed(
             "r1",
@@ -499,20 +455,13 @@ def _multi_agent_solo_coordinate_interjection() -> list[SSEEvent]:
             output="已请求取消队员 r1（工程师）。",
         ),
         run_cancelled("r1", "w1", reason="stop", execution_id="exec1"),
-        user_interjection(
-            interjection_id="inj-solo-stop",
-            execution_id="exec1",
-            content="把它停止",
-            status="addressed",
-            note="已在本回合停掉对应成员",
-        ),
         content_delta("已按你的要求停下。"),
         message_end(FinishReason.END_TURN, input_tokens=1800, output_tokens=320, cost=_COST),
     ]
 
 
 def _multi_agent_user_interjection_delegate_append() -> list[SSEEvent]:
-    """插话入图处置：received → injected → CEO 二次 delegate 追加队员 → addressed。"""
+    """插话留在本回合：received → injected → CEO 二次 delegate 追加队员。"""
     batch1_agents = [
         {
             "id": "w1",
@@ -595,13 +544,6 @@ def _multi_agent_user_interjection_delegate_append() -> list[SSEEvent]:
             "delegate",
             success=True,
             output="【队员已追加·协调模式】已追加 1 名队员（校对员）。",
-        ),
-        user_interjection(
-            interjection_id="inj-append",
-            execution_id="exec1",
-            content="再加一个校对员把关。",
-            status="addressed",
-            note="已在本回合据此调整团队",
         ),
         run_started("r3", "w3"),
         run_completed(

@@ -2041,6 +2041,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/interactions/{interaction_id}/output": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Feed Interaction Output
+         * @description Push one live chunk into a not-yet-settled desktop EXECUTE.
+         *
+         *     Does not settle the op. A late chunk (op already finished) is 404; the
+         *     caller ignores it. The final envelope remains the authority.
+         */
+        post: operations["feed_interaction_output_v1_conversations__conversation_id__interactions__interaction_id__output_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}/local-turns": {
         parameters: {
             query?: never;
@@ -2220,7 +2243,7 @@ export interface paths {
          *     ``delivery`` 必填（``steer`` | ``queue``；缺 → 422）：
          *
          *     - **空闲** → 开跑并流式推送整个回合（客户端仍带 ``delivery=steer``）。
-         *     - **协调活跃 + steer** → ``user_interjection``（短流确认）；CEO 可智能升格排队。
+         *     - **协调活跃 + steer** → ``user_interjection``（短流确认）；留在这一轮，不改排。
          *     - **协调活跃 + queue** → **强制** FIFO（绕过插话），立即 ``turn_queued``。
          *     - **经典 in-flight + queue** → FIFO ``turn_queued``，drain 后同连接续流。
          *     - **经典 in-flight + steer** → 队长循环还在接受时挂到进程内 pending（DURABLE
@@ -8926,6 +8949,16 @@ export interface components {
             url: string;
         };
         /**
+         * ExecOutputChunk
+         * @description One stdout/stderr piece for a desktop EXECUTE that has not settled.
+         */
+        ExecOutputChunk: {
+            /** Chunk */
+            chunk: string;
+            /** Stream */
+            stream: string;
+        };
+        /**
          * ExportDocxRequest
          * @description Export a workspace Markdown file to a sibling ``.docx`` (确定性转换器).
          */
@@ -10553,7 +10586,7 @@ export interface components {
          *     ``turn_queue_started`` early-inserts the same row on a connection that
          *     already holds that frame; it is not the entrance authority.
          *     ``interjection_id`` is set when the entry was promoted from a user interjection
-         *     (协调升队 / 经典 steer leftover); omitted / null for plain ``delivery=queue``.
+         *     (经典 steer 赶不上下一步；协调插话不再写入)；omitted / null for plain ``delivery=queue``.
          *     ``user_message_id`` is the persisted user-row id (cancel deletes it; drain
          *     reuses it). Optional additive — old clients ignore. Omitted / null when unset.
          *     ``position`` is 1-based FIFO index.
@@ -11049,9 +11082,9 @@ export interface components {
          * @description Settle a worker's blocking escalate (``escalation`` interaction, 阻塞式求决策 §4.5).
          *
          *     Raised when a delegated worker hit a「只有用户能定、且猜错就作废」fork and suspended
-         *     itself. Classic (non-coordination) path asks the user; coordination path awaits CEO
-         *     ``resolve_escalation`` (Invariant B: available iff a coordination session is active —
-         *     classic blocking has no free CEO inside ``delegate``). The user either answers
+         *     itself. Classic (non-coordination) path asks the user; coordination path awaits the CEO
+         *     telling that worker via ``replan`` tell (Invariant B: only while a coordination session
+         *     is active — classic blocking has no free CEO inside ``delegate``). The user either answers
          *     (``answer``) or chooses 按假设继续 (``use_assumption`` true → wire status ``assumed``).
          *     Write-lock conflicts may set ``transfer_ownership`` to path-handoff to the escalator.
          *     A wall-clock miss is ``timed_out``. A late resolve falls through as 404.
@@ -16436,6 +16469,46 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ResolveApprovalInteraction"] | components["schemas"]["ResolveClientToolInteraction"] | components["schemas"]["ResolveEscalationInteraction"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    feed_interaction_output_v1_conversations__conversation_id__interactions__interaction_id__output_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+                interaction_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecOutputChunk"];
             };
         };
         responses: {

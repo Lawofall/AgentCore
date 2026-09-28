@@ -579,7 +579,7 @@ async def test_attached_inject_closing_round_keeps_body_despite_successful_tool(
     """收口轮正文是交付物：同轮成功的非终端工具不得 narration 回滚。
 
     Wait 已吃 ALL_COMPLETED（session 关闭、settled_via=attached_inject）后，
-    CEO 写出终稿并调仍返回 success 的 ``resolve_escalation``。闸若仍把正文当旁白，
+    CEO 写出终稿并调一个仍返回 success 的工具。闸若仍把正文当旁白，
     persist 被裁空、harvest skip 会变成零终稿。修闸后：正文保留、harvest 跳过、
     不开第二条收口消息。
     """
@@ -595,8 +595,6 @@ async def test_attached_inject_closing_round_keeps_body_despite_successful_tool(
         finish_detached_coordination,
         set_active_coordination,
     )
-    from agentcore.runtime.coordination.tools import ResolveEscalationTool
-
     class _HarvestJournalWriter:
         def __init__(self) -> None:
             self.entries: list[dict] = []
@@ -626,15 +624,15 @@ async def test_attached_inject_closing_round_keeps_body_despite_successful_tool(
     set_active_coordination(session)
     sink = _RecordingSink()
     tools = ToolRegistry()
-    tools.register(ResolveEscalationTool())
+    tools.register(_StubTool(name="search", success=True))
     try:
         provider = _ScriptedProvider(
             [
                 [
                     _content_chunk("交付终稿：团队结论如下。"),
                     _tool_chunk(
-                        "resolve_escalation",
-                        '{"run_id": "w1", "answer": "不应覆盖终稿"}',
+                        "search",
+                        '{"q": "不应覆盖终稿"}',
                     ),
                 ]
             ]

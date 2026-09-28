@@ -14,7 +14,7 @@ from agentcore.runtime.coordination.session import (
     clear_active_coordination,
     set_active_coordination,
 )
-from agentcore.runtime.coordination.tools import ResolveEscalationTool
+from agentcore.runtime.coordination.tools import settle_waiting_worker
 from agentcore.runtime.interaction import InteractionKind, InteractionRegistry
 from agentcore.tools.builtin.escalate import EscalateTool, escalate_tool_result
 from agentcore.tools.protocol import EscalationChannel, EscalationOutcome, ToolContext
@@ -118,14 +118,11 @@ async def test_resolve_escalation_transfer_ownership_paths():
         lock_owner_run_id="backend-fix",
         escalator_is_lock_owner_nested_child=True,
     )
-    tool = ResolveEscalationTool()
-    result = await tool.execute(
-        {
-            "run_id": "storage",
-            "answer": "路径已移交给你，继续写",
-            "transfer_ownership": True,
-        },
-        _ctx(execution_id="e-own"),
+    result = settle_waiting_worker(
+        session,
+        run_id="storage",
+        answer="路径已移交给你，继续写",
+        conversation_id="c1",
     )
     assert result.success is True
     assert "路径级移交" not in result.output
@@ -316,14 +313,11 @@ async def test_nl_transfer_answer_does_not_mutate_ledger():
         ownership_paths=["site/index.html"],
         lock_owner_run_id="assemble",
     )
-    tool = ResolveEscalationTool()
-    result = await tool.execute(
-        {
-            "run_id": "skeleton",
-            "answer": "已移交写权，你继续写 site/index.html",
-            # 故意不传 transfer_ownership
-        },
-        _ctx(execution_id="e-nl"),
+    result = settle_waiting_worker(
+        session,
+        run_id="skeleton",
+        answer="已移交写权，你继续写 site/index.html",
+        conversation_id="c1",
     )
     assert result.success is True
     assert ledger.owner_of("site/index.html") == "assemble"
@@ -393,9 +387,11 @@ async def test_resolve_escalation_settles_live_bridge():
     original = tools_mod.default_interaction_registry
     tools_mod.default_interaction_registry = lambda: registry
     try:
-        result = await ResolveEscalationTool().execute(
-            {"run_id": "r1", "answer": "用 Postgres", "via_user": False},
-            _ctx(),
+        result = settle_waiting_worker(
+            session,
+            run_id="r1",
+            answer="用 Postgres",
+            conversation_id="c1",
         )
         assert result.success is True
         assert fut.done()
@@ -413,9 +409,12 @@ async def test_resolve_escalation_stashes_when_no_live_pending():
     session = CoordinationSession(execution_id="e-d1", total_workers=2)
     set_active_coordination(session)
     try:
-        result = await ResolveEscalationTool().execute(
-            {"run_id": "r1", "answer": "用 Postgres", "via_user": True},
-            _ctx(),
+        session.user_consulted = True
+        result = settle_waiting_worker(
+            session,
+            run_id="r1",
+            answer="用 Postgres",
+            conversation_id="c1",
         )
         assert result.success is True
         stashed = session.take_stashed_resolution("r1")
@@ -428,24 +427,21 @@ async def test_resolve_escalation_stashes_when_no_live_pending():
 
 
 @pytest.mark.asyncio
-async def test_resolve_escalation_soft_success_when_session_inactive():
-    """会话已收口（团队全部完成）：resolve_escalation 幂等软化为 success 提示，不硬 error。
-
-    ``session is None``（从未开团）才硬 error；``not active``（已收口）给软成功，
-    避免烧掉 CEO 一轮重试。
-    """
+async def test_settle_waiting_worker_errors_when_session_inactive():
+    """团队已收口：不再把话送回去。"""
     clear_active_coordination()
     session = CoordinationSession(execution_id="e-d1", total_workers=2)
-    session.close()  # 团队完成、会话收口
+    session.close()
     set_active_coordination(session)
     try:
-        result = await ResolveEscalationTool().execute(
-            {"run_id": "r1", "answer": "用 Postgres"},
-            _ctx(),
+        result = settle_waiting_worker(
+            session,
+            run_id="r1",
+            answer="用 Postgres",
+            conversation_id="c1",
         )
-        assert result.success is True
-        assert not result.error
-        assert "收口" in result.output
+        assert result.success is False
+        assert result.error
     finally:
         clear_active_coordination("e-d1")
         clear_active_coordination()

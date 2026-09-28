@@ -682,7 +682,7 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
                     "status": "raised",
                     "answer": None,
                 }
-                if p.get("kind") in ("wait", "scope", "dep"):
+                if p.get("kind") in ("wait", "adjust"):
                     entry["kind"] = p["kind"]
                 if p.get("source"):
                     entry["source"] = p["source"]

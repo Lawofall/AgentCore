@@ -179,6 +179,19 @@ describe("browserSessions service", () => {
     expect(result).toEqual({ sessions: [], activeSessionId: null });
   });
 
+  it("listBrowserSessions returns empty when the root id is not on this computer", async () => {
+    resolveBindMock.mockResolvedValue({
+      kind: "absent",
+      rootId: "root-1",
+      subpath: "",
+    });
+
+    const result = await listBrowserSessions("c1");
+
+    expect(getMock).not.toHaveBeenCalled();
+    expect(result).toEqual({ sessions: [], activeSessionId: null });
+  });
+
   it("createBrowserSession POSTs host_kind sandbox by default", async () => {
     postMock.mockResolvedValue({
       session_id: "s-new",

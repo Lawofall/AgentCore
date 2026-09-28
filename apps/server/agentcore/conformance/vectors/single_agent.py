@@ -105,7 +105,7 @@ def _single_agent_user_interjection_steer() -> list[SSEEvent]:
 def _single_agent_user_interjection_steer_queued() -> list[SSEEvent]:
     """经典 steer 赶不上下一工具步：received→queued + ``turn_queued.degraded_from=steer``。
 
-    散文收口不为未读插话多留一轮。双发对齐协调升队先例；queued 为经典终态之一（无 addressed）。
+    散文收口不为未读插话多留一轮。``queued`` 为经典终态之一。
     收口升队发生在回合 finally，故排在正文之后、``message_end`` 之前。
     """
     from agentcore.runtime.events import turn_queued, user_interjection

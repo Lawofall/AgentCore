@@ -47,6 +47,7 @@ def test_empty_failure_deletes_for_each_class_b_code():
         ErrorCode.LOCAL_ROOT_NOT_HELD,
         ErrorCode.LOCAL_ORIGIN_DEVICE_OFFLINE,
         ErrorCode.LOCAL_CHANNEL_DEAD,
+        ErrorCode.LOCAL_WORKSPACE_CLOUD_REFUSED,
     ):
         assert _yes(error_code=code) is True
 
@@ -119,6 +120,7 @@ def test_class_b_codes_are_the_small_set_and_disjoint_from_class_a():
             ErrorCode.LOCAL_ROOT_NOT_HELD,
             ErrorCode.LOCAL_ORIGIN_DEVICE_OFFLINE,
             ErrorCode.LOCAL_CHANNEL_DEAD,
+            ErrorCode.LOCAL_WORKSPACE_CLOUD_REFUSED,
         }
     ) == ZERO_OUTPUT_SEND_REFUSAL_CODES
     assert ZERO_OUTPUT_SEND_REFUSAL_CODES.isdisjoint(_CLASS_A_PRECHECK_CODES)

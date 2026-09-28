@@ -95,19 +95,22 @@ def test_stream_path_reason_for_log_allowlists() -> None:
     assert stream_path_reason_for_log(None) is None
     assert stream_path_reason_for_log("") is None
     assert stream_path_reason_for_log("not-a-reason") is None
-    assert stream_path_reason_for_log("probe_unhealthy") == "probe_unhealthy"
-    assert stream_path_reason_for_log("  Probe_Unhealthy  ") == "probe_unhealthy"
-    assert stream_path_reason_for_log("occupy_failed") == "occupy_failed"
+    assert stream_path_reason_for_log("probe_unhealthy") is None
+    assert stream_path_reason_for_log("sidecar_fallback") is None
+    assert stream_path_reason_for_log("occupy_failed") is None
+    assert stream_path_reason_for_log("switch_off") == "switch_off"
+    assert stream_path_reason_for_log("  No_Local_Engine  ") == "no_local_engine"
+    assert stream_path_reason_for_log("no_local_target") == "no_local_target"
 
 
 async def test_middleware_binds_stream_path_reason_when_allowlisted() -> None:
     seen = await _seen_from_request(
         **{
             "X-Client-Platform": "desktop",
-            "X-AgentCore-Stream-Path-Reason": "probe_unhealthy",
+            "X-AgentCore-Stream-Path-Reason": "no_local_target",
         }
     )
-    assert seen["ctx"]["stream_path_reason"] == "probe_unhealthy"
+    assert seen["ctx"]["stream_path_reason"] == "no_local_target"
 
 
 async def test_middleware_ignores_unknown_stream_path_reason() -> None:

@@ -241,7 +241,8 @@ from agentcore.runtime.resolve.prompt.compose import _on_demand_preamble
 # 2026-09-22 基座删「用与用户相同的语言回复」（内容闸两问都不成立；
 # 中文基座已把回复拉向中文，工人侧「用户」指称不稳）。当次实测 65。cap 降到 70。
 # 2026-09-22 基座删同轮并发事实（内容闸两问都不成立）。当次实测 46。cap 降到 50。
-_RESIDENT_CAP = 50
+# 2026-09-26 基座删「不使用 emoji」（内容闸两问都不成立）。当次实测 36。cap 降到 40。
+_RESIDENT_CAP = 40
 
 
 def _ceo_resident_chars() -> int:

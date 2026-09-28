@@ -3,8 +3,8 @@ import { SIDECAR_OCCUPY_FAILED_CODE } from "@/services/streamPathReason";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // 隔离断言 sendTurn / runRegenerate / runResume「探活 → 路由」这一段的可观察契约：
-// sendTurn——探活 ok 走 sidecar；探活失败 / 启动期失败出横幅不走云；占位失败改走云 POST；
-// 中途失败(!recoverable)不自动降级；显式强制关 / 纯云会话走云。
+// sendTurn——探活 ok 走 sidecar；探活失败 / 启动期失败 / 占位失败出横幅不走云；
+// 中途失败(!recoverable)不自动降级；本机绑定但引擎接不住则停发；纯云会话走云。
 // runRegenerate——与 sendTurn 同形。
 // runResume——探活 ok 走 sidecar 续跑、探活失败保留续跑卡 + 出横幅（无 banner retry）、
 // 404/PAUSED_TURN_NOT_FOUND 丢卡、绝不降级走云（本机帧云端没有）。
@@ -49,6 +49,42 @@ vi.mock("@/services/sidecarRouting", () => {
       bind.kind === "live" && typeof bind.rootId === "string"
         ? { rootId: bind.rootId, subpath: bind.subpath ?? "" }
         : null,
+    localBindSendBlock: (bind: {
+      kind: string;
+      rootId?: string;
+      absPath?: string;
+      reason?: string;
+    }) => {
+      if (bind.kind === "stale") {
+        const path = bind.absPath?.trim();
+        return {
+          reason: "root_stale",
+          rootId: bind.rootId ?? "",
+          message: path
+            ? `这个文件夹已经不在这台电脑上：${path}。请在工作区芯片里重新选择它所在的位置。`
+            : "这个文件夹已经不在这台电脑上。请在工作区芯片里重新选择它所在的位置。",
+        };
+      }
+      if (bind.kind === "absent") {
+        return {
+          reason: "root_absent",
+          rootId: bind.rootId ?? "",
+          message:
+            "这个文件夹不在这台电脑上。请在工作区芯片里重新选择它所在的位置。",
+        };
+      }
+      if (bind.kind === "engine_off") {
+        return {
+          reason: bind.reason === "switch_off" ? "switch_off" : "no_local_engine",
+          rootId: bind.rootId ?? "",
+          message:
+            bind.reason === "switch_off"
+              ? "本机执行已关闭，云端不会改这个文件夹。请先允许本机执行后再发，或把对话改到云端。"
+              : "这份文件在本机。请在持有该文件夹的电脑上打开客户端后再发。",
+        };
+      }
+      return null;
+    },
     getActiveSidecarTarget: vi.fn(() => null),
     setActiveSidecarTurn: vi.fn(),
     isSidecarEnabled: vi.fn(() => true),
@@ -79,7 +115,7 @@ vi.mock("@/services/streamConversationViaSidecar", () => ({
   streamConversationViaSidecar: vi.fn(),
 }));
 vi.mock("@/services/messages", () => ({ loadLatestWindow: vi.fn() }));
-// notifyError 由 stream 错误路径间接引入；引擎不可用走横幅，过桥无 toast。
+// notifyError 由 stream 错误路径间接引入；引擎不可用走横幅，不弹 toast。
 vi.mock("@/lib/toast", () => ({ notifyInfo: vi.fn(), notifyError: vi.fn() }));
 
 import { hasLocalEngine } from "@/lib/capabilities";
@@ -240,9 +276,7 @@ describe("sendTurn — 探活路由（引擎不可用报错）", () => {
     expect(streamConversationMock).not.toHaveBeenCalled();
     expect(streamViaSidecarMock).not.toHaveBeenCalled();
     expect(useConversationStore.getState().byId.c1?.messages).toHaveLength(0);
-    expect(useConversationStore.getState().byId.c1?.executionVia).not.toBe(
-      "cloud_bridge",
-    );
+    expect(useConversationStore.getState().byId.c1?.executionVia).toBeNull();
     expect(useConversationStore.getState().byId.c1?.error).toContain(
       "spawn uv ENOENT",
     );
@@ -277,8 +311,8 @@ describe("sendTurn — 探活路由（引擎不可用报错）", () => {
     expect(streamConversationMock).not.toHaveBeenCalled();
     expect(notifyInfoMock).not.toHaveBeenCalled();
     expect(useConversationStore.getState().byId.c1?.messages).toHaveLength(0);
-    expect(useConversationStore.getState().byId.c1?.executionVia).not.toBe(
-      "cloud_bridge",
+    expect(useConversationStore.getState().byId.c1?.executionVia).toBe(
+      "sidecar",
     );
     expect(useConversationStore.getState().byId.c1?.error).toContain("拉不起");
     expect(logEventMock).toHaveBeenCalledWith(
@@ -291,7 +325,7 @@ describe("sendTurn — 探活路由（引擎不可用报错）", () => {
     );
   });
 
-  it("占位失败 → 降级走云但不标坏、不写 cloud_bridge", async () => {
+  it("占位失败 → 横幅，不走云、不标坏", async () => {
     resolveSidecarRootMock.mockResolvedValue(TARGET);
     probeSidecarMock.mockResolvedValue({
       healthy: true,
@@ -306,21 +340,22 @@ describe("sendTurn — 探活路由（引擎不可用报错）", () => {
       }),
     );
 
-    await sendTurn(spec());
+    const result = await sendTurn(spec());
 
+    expect(result.unstartedRefusal).toBe(true);
     expect(markSidecarUnhealthyMock).not.toHaveBeenCalled();
-    expect(streamConversationMock).toHaveBeenCalledTimes(1);
+    expect(streamConversationMock).not.toHaveBeenCalled();
     expect(useConversationStore.getState().byId.c1?.executionVia).toBeNull();
+    expect(useConversationStore.getState().byId.c1?.error).toContain(
+      "云端占位失败",
+    );
     expect(logEventMock).toHaveBeenCalledWith(
       "info",
       "turn.stream_path",
       expect.objectContaining({
-        via: "cloud",
+        via: "sidecar",
         reason: "occupy_failed",
       }),
-    );
-    expect(streamConversationMock).toHaveBeenCalledWith(
-      expect.objectContaining({ streamPathReason: "occupy_failed" }),
     );
   });
 
@@ -397,9 +432,7 @@ describe("sendTurn — 探活路由（引擎不可用报错）", () => {
     expect(streamViaSidecarMock).not.toHaveBeenCalled();
     expect(notifyInfoMock).not.toHaveBeenCalled();
     expect(useConversationStore.getState().byId.c1?.messages).toHaveLength(0);
-    expect(useConversationStore.getState().byId.c1?.executionVia).not.toBe(
-      "cloud_bridge",
-    );
+    expect(useConversationStore.getState().byId.c1?.executionVia).toBeNull();
     expect(useConversationStore.getState().byId.c1?.error).toContain(
       "spawn uv ENOENT",
     );
@@ -427,31 +460,33 @@ describe("sendTurn — 探活路由（引擎不可用报错）", () => {
     expect(streamConversationMock).not.toHaveBeenCalled();
     expect(notifyInfoMock).not.toHaveBeenCalled();
     expect(useConversationStore.getState().byId.c1?.messages).toHaveLength(0);
-    expect(useConversationStore.getState().byId.c1?.executionVia).not.toBe(
-      "cloud_bridge",
-    );
+    expect(useConversationStore.getState().byId.c1?.executionVia).toBeNull();
     expect(useConversationStore.getState().byId.c1?.error).toContain(
       "本地引擎未能启动",
     );
   });
-  it("开关关 + 绑本机 → 云端过桥静默（无 switch_off toast），不假装 sidecar", async () => {
-    resolveSidecarRootMock.mockResolvedValue(null);
-    resolveLocalTargetMock.mockResolvedValue(TARGET);
-    isSidecarEnabledMock.mockReturnValue(false);
+  it("开关关 + 绑本机 → 停发，不走云", async () => {
+    resolveNewTurnBindMock.mockResolvedValue({
+      kind: "engine_off",
+      rootId: "r1",
+      subpath: "",
+      reason: "switch_off",
+    });
 
-    await sendTurn(spec());
+    const result = await sendTurn(spec());
 
+    expect(result.unstartedRefusal).toBe(true);
     expect(probeSidecarMock).not.toHaveBeenCalled();
     expect(streamViaSidecarMock).not.toHaveBeenCalled();
-    expect(streamConversationMock).toHaveBeenCalledTimes(1);
-    expect(useConversationStore.getState().byId.c1?.executionVia).toBe(
-      "cloud_bridge",
+    expect(streamConversationMock).not.toHaveBeenCalled();
+    expect(useConversationStore.getState().byId.c1?.executionVia).toBeNull();
+    expect(useConversationStore.getState().byId.c1?.error).toContain(
+      "本机执行已关闭",
     );
-    expect(notifyInfoMock).not.toHaveBeenCalled();
     expect(logEventMock).toHaveBeenCalledWith(
       "info",
       "turn.stream_path",
-      expect.objectContaining({ via: "cloud", reason: "switch_off" }),
+      expect.objectContaining({ via: "sidecar", reason: "switch_off" }),
     );
   });
 
@@ -568,7 +603,7 @@ describe("sendTurn — 探活路由（引擎不可用报错）", () => {
     );
   });
 
-  it("纯云会话（无本机绑定）→ executionVia 仍 null，不冒充过桥", async () => {
+  it("纯云会话（无本机绑定）→ executionVia 为 null", async () => {
     resolveSidecarRootMock.mockResolvedValue(null);
     resolveLocalTargetMock.mockResolvedValue(null);
 
@@ -593,9 +628,7 @@ describe("sendTurn — 探活路由（引擎不可用报错）", () => {
     expect(probeSidecarMock).not.toHaveBeenCalled();
     expect(streamConversationMock).not.toHaveBeenCalled();
     expect(streamViaSidecarMock).not.toHaveBeenCalled();
-    expect(useConversationStore.getState().byId.c1?.executionVia).not.toBe(
-      "cloud_bridge",
-    );
+    expect(useConversationStore.getState().byId.c1?.executionVia).toBeNull();
     expect(useConversationStore.getState().byId.c1?.error).toContain(
       "这个文件夹已经不在这台电脑上",
     );
@@ -683,9 +716,7 @@ describe("runRegenerate — 探活路由（与 sendTurn 同形）", () => {
 
     expect(streamViaSidecarMock).not.toHaveBeenCalled();
     expect(regenerateConversationMock).not.toHaveBeenCalled();
-    expect(useConversationStore.getState().byId.c1?.executionVia).not.toBe(
-      "cloud_bridge",
-    );
+    expect(useConversationStore.getState().byId.c1?.executionVia).toBeNull();
     expect(useConversationStore.getState().byId.c1?.error).toContain(
       "env down",
     );
@@ -709,15 +740,15 @@ describe("runRegenerate — 探活路由（与 sendTurn 同形）", () => {
 
     expect(markSidecarUnhealthyMock).toHaveBeenCalled();
     expect(regenerateConversationMock).not.toHaveBeenCalled();
-    expect(useConversationStore.getState().byId.c1?.executionVia).not.toBe(
-      "cloud_bridge",
+    expect(useConversationStore.getState().byId.c1?.executionVia).toBe(
+      "sidecar",
     );
     expect(useConversationStore.getState().byId.c1?.error).toContain(
       "handshake failed",
     );
   });
 
-  it("占位失败 → 降级走云 regenerate 但不标坏、不写 cloud_bridge", async () => {
+  it("占位失败 → 横幅，不走云 regenerate、不标坏", async () => {
     resolveSidecarRootMock.mockResolvedValue(TARGET);
     probeSidecarMock.mockResolvedValue({
       healthy: true,
@@ -735,10 +766,10 @@ describe("runRegenerate — 探活路由（与 sendTurn 同形）", () => {
     await runRegenerate("u1");
 
     expect(markSidecarUnhealthyMock).not.toHaveBeenCalled();
-    expect(regenerateConversationMock).toHaveBeenCalledTimes(1);
+    expect(regenerateConversationMock).not.toHaveBeenCalled();
     expect(useConversationStore.getState().byId.c1?.executionVia).toBeNull();
-    expect(regenerateConversationMock).toHaveBeenCalledWith(
-      expect.objectContaining({ streamPathReason: "occupy_failed" }),
+    expect(useConversationStore.getState().byId.c1?.error).toContain(
+      "云端占位失败",
     );
   });
 
@@ -944,6 +975,31 @@ describe("runResume — 续跑探活（不降级、本机帧只在本地）", ()
     );
     expect(useConversationStore.getState().byId.c1?.error).toContain(
       "/Users/zoo/J-",
+    );
+  });
+
+  it("授权表没有这个 id → 重新选择横幅，不 probe、不走云", async () => {
+    resolveLocalBindMock.mockResolvedValue({
+      kind: "absent",
+      rootId: "r1",
+      subpath: "",
+    });
+    getActiveSidecarTargetMock.mockReturnValue({
+      rootId: "r-active",
+      subpath: "",
+      turnId: "t1",
+    });
+
+    await expect(runResume("m1", "continue", "")).rejects.toThrow(
+      /workspace root absent/,
+    );
+
+    expect(probeSidecarMock).not.toHaveBeenCalled();
+    expect(resumeViaSidecarMock).not.toHaveBeenCalled();
+    expect(resumeConversationMock).not.toHaveBeenCalled();
+    expect(usePausedTurnStore.getState().pending).toHaveLength(1);
+    expect(useConversationStore.getState().byId.c1?.error).toContain(
+      "这个文件夹不在这台电脑上",
     );
   });
 

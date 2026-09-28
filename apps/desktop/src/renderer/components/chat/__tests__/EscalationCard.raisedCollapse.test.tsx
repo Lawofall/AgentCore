@@ -15,7 +15,7 @@ function raisedEsc(overrides: Partial<RunEscalation> = {}): RunEscalation {
     assumption: "主管将据正文内容持久化报告或于下波授予写盘工具",
     status: "raised",
     answer: null,
-    kind: "dep",
+    kind: "adjust",
     questions: [],
     ...overrides,
   };

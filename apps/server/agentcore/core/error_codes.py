@@ -80,6 +80,9 @@ class ErrorCode(StrEnum):
     LOCAL_ROOT_NOT_HELD = "LOCAL_ROOT_NOT_HELD"
     LOCAL_ORIGIN_DEVICE_OFFLINE = "LOCAL_ORIGIN_DEVICE_OFFLINE"
     LOCAL_CHANNEL_DEAD = "LOCAL_CHANNEL_DEAD"
+    # Cloud engine refused a turn whose files live on a local folder.
+    # Not a missing grant: the birth turn must run on the local engine.
+    LOCAL_WORKSPACE_CLOUD_REFUSED = "LOCAL_WORKSPACE_CLOUD_REFUSED"
 
     # ── Tools / sandbox ──────────────────────────────────────────────────
     TOOL_ERROR = "TOOL_ERROR"

@@ -175,14 +175,5 @@ class SessionQueueMixin:
         return list(drained)
 
     def close(self: CoordinationSession) -> None:
-        was_active = self.active
         self.active = False
         self.cancel_all_timeouts()
-        # 未消化插话升格对话 FIFO（或终局已答 → addressed）。仅从 active→inactive
-        # 触发一次，避免重复 close 双入队。
-        if was_active and self.pending_interjections:
-            from agentcore.runtime.coordination.interjections import (
-                promote_pending_on_close,
-            )
-
-            promote_pending_on_close(self)

@@ -258,6 +258,13 @@ export const WORKSPACE_PRESENCE_DISCONNECTED_KIND =
   "WorkspacePresenceDisconnected";
 export const WORKSPACE_RECONNECT_KIND = "WorkspaceReconnect";
 
+/** 主进程 → renderer：一次 desktop EXECUTE 的活输出。 */
+export interface ExecOutputEvent {
+  requestId: string;
+  stream: "stdout" | "stderr";
+  chunk: string;
+}
+
 /** 主进程 → renderer 的目录变更事件（watch 命中后发出）。 */
 export interface FsChangedEvent {
   rootId: string;
@@ -301,6 +308,8 @@ export const FS_CHANNELS = {
   watch: "fs:watch",
   unwatch: "fs:unwatch",
   changed: "fs:changed",
+  /** Desktop EXECUTE live stdout/stderr, keyed by the workspace op request id. */
+  executeOutput: "fs:execute-output",
   workspaceOp: "fs:workspaceOp",
   grantSessionRun: "fs:grantSessionRun",
   reveal: "fs:reveal",
@@ -628,6 +637,10 @@ export interface FsApi {
     timeoutMs?: number,
     correlation?: { conversationId?: string; requestId?: string },
   ): Promise<WorkspaceOpResult>;
+  /** Live stdout/stderr while a desktop EXECUTE op is in flight. */
+  onExecuteOutput(
+    cb: (event: ExecOutputEvent) => void,
+  ): () => void;
   /**
    * 聊天内 RunConfirm「本会话都允许」→ 主进程置 session run flag（进程重启清零）。
    * 不引入永久跨天 allowlist。

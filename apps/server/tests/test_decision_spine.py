@@ -25,7 +25,7 @@ def _events_delegated_ok(trace_id: str = "a" * 32) -> list[dict]:
             "history": 0,
             "location": "server",
             "via": "cloud",
-            "stream_path_reason": "probe_unhealthy",
+            "stream_path_reason": "no_local_target",
         },
         {
             "type": "log",
@@ -85,7 +85,7 @@ def test_build_decision_spine_covers_key_decisions() -> None:
     assert spine["conversation_id"] == "conv-1"
     assert "委派" in (spine["head"].get("preview") or "") or spine["head"]["preview"]
     assert spine["head"]["via"] == "cloud"
-    assert spine["head"]["stream_path_reason"] == "probe_unhealthy"
+    assert spine["head"]["stream_path_reason"] == "no_local_target"
     assert spine["head"]["location"] == "server"
     events = {d["event"] for d in spine["decisions"]}
     assert "delegate.started" in events
@@ -340,7 +340,7 @@ def test_format_decision_spine_readable() -> None:
     assert "historical/S3" in text
     assert "finish=stop" in text
     assert "via=cloud" in text
-    assert "path_reason=probe_unhealthy" in text
+    assert "path_reason=no_local_target" in text
 
 
 def test_token_accounting_marks_full_trace_vs_resume_settlement() -> None:

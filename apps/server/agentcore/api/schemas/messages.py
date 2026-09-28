@@ -217,9 +217,9 @@ class ResolveEscalationInteraction(BaseModel):
     """Settle a worker's blocking escalate (``escalation`` interaction, 阻塞式求决策 §4.5).
 
     Raised when a delegated worker hit a「只有用户能定、且猜错就作废」fork and suspended
-    itself. Classic (non-coordination) path asks the user; coordination path awaits CEO
-    ``resolve_escalation`` (Invariant B: available iff a coordination session is active —
-    classic blocking has no free CEO inside ``delegate``). The user either answers
+    itself. Classic (non-coordination) path asks the user; coordination path awaits the CEO
+    telling that worker via ``replan`` tell (Invariant B: only while a coordination session
+    is active — classic blocking has no free CEO inside ``delegate``). The user either answers
     (``answer``) or chooses 按假设继续 (``use_assumption`` true → wire status ``assumed``).
     Write-lock conflicts may set ``transfer_ownership`` to path-handoff to the escalator.
     A wall-clock miss is ``timed_out``. A late resolve falls through as 404.
@@ -1327,7 +1327,7 @@ class QueuedTurnItem(BaseModel):
     ``turn_queue_started`` early-inserts the same row on a connection that
     already holds that frame; it is not the entrance authority.
     ``interjection_id`` is set when the entry was promoted from a user interjection
-    (协调升队 / 经典 steer leftover); omitted / null for plain ``delivery=queue``.
+    (经典 steer 赶不上下一步；协调插话不再写入)；omitted / null for plain ``delivery=queue``.
     ``user_message_id`` is the persisted user-row id (cancel deletes it; drain
     reuses it). Optional additive — old clients ignore. Omitted / null when unset.
     ``position`` is 1-based FIFO index.

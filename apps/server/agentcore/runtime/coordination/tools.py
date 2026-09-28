@@ -1,5 +1,7 @@
-"""CEO coordination tools: cancel_worker + resolve_escalation
-+ queue_user_message.
+"""CEO coordination tool: cancel_worker.
+
+Telling a waiting worker (the old resolve path) lives on ``replan.tell`` and
+calls :func:`settle_waiting_worker`.
 """
 
 from __future__ import annotations
@@ -203,282 +205,85 @@ class CancelWorkerTool:
         return ToolResult(tool_call_id="", success=True, output=msg)
 
 
-class ResolveEscalationTool:
-    """CEO arbitration: settle a worker's blocking escalate parked for the CEO (D1)."""
+def settle_waiting_worker(
+    session: Any,
+    *,
+    run_id: str,
+    answer: str,
+    conversation_id: str = "",
+) -> ToolResult:
+    """Hand ``answer`` to a worker parked on escalate(wait) and let that run continue.
 
-    @property
-    def schema(self) -> ToolSchema:
-        return ToolSchema(
-            name="resolve_escalation",
-            description="兑现队员阻塞升级。偏好/授权/花钱先 ask_user。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "run_id": {
-                        "type": "string",
-                        "description": "挂起等待仲裁的 worker run_id。",
-                    },
-                    "answer": {
-                        "type": "string",
-                        "description": "裁决正文（worker 将据此继续，优先于其暂定假设）。",
-                    },
-                    "via_user": {
-                        "type": "boolean",
-                        "description": "true=已先经 ask_user。",
-                    },
-                },
-                "required": ["run_id", "answer"],
-            },
-            face=ToolFace.ORCHESTRATION,
-            approval=ToolApproval.NEVER,
-        )
-
-    async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
-        session = _session_for_control(context)
-        if session is None:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error="当前不在协调模式——仅在协调模式启动团队后可用（≥1 worker 默认；"
-                "显式 coordinate=false 为阻塞路径）。",
-            )
-        if not session.active:
-            # Team finished and session closed — soft tip, not error (avoids burning a
-            # CEO retry round on a now-idempotent late arbitration). Distinct from
-            # 「从未开团」(session is None above).
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output=(
-                    "团队已全部完成，协调会话已收口，升级仲裁无需再兑现。"
-                    "请直接用正文写出最终答复（content_delta）。"
-                ),
-            )
-        run_id = str(arguments.get("run_id") or "").strip()
-        answer = str(arguments.get("answer") or "").strip()
-        via_user = bool(arguments.get("via_user"))
-        if not run_id:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error="resolve_escalation 需要非空的 run_id。",
-            )
-        if not answer:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error="resolve_escalation 需要非空的 answer（你的裁决）。",
-            )
-
-        pending = session.get_arbitration(run_id)
-        transfer_note = ""
-
-        if pending is None:
-            # Worker may already have been cancelled (ask_user soft-stop); stash for
-            # the re-armed worker's next escalate(reason=wait).
-            session.stash_resolution(run_id, answer=answer, via_user=via_user)
-            from agentcore.runtime.coordination.journal import record_coordination_snapshot
-
-            record_coordination_snapshot(session)
-            logger.info(
-                "coordination.escalation_stashed",
-                execution_id=session.execution_id,
-                run_id=run_id,
-                via_user=via_user,
-            )
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output=(
-                    f"已记录对 {run_id} 的裁决"
-                    f"{'（经用户）' if via_user else ''}"
-                    f"{transfer_note}；"
-                    "该队员恢复后将收到裁决并继续。"
-                ),
-            )
-        escalation_id = str(pending.get("escalation_id") or "")
-        conversation_id = str(pending.get("conversation_id") or context.conversation_id or "")
-        registry = default_interaction_registry()
-        settled = registry.resolve(
-            escalation_id,
-            {"answer": answer, "via_user": via_user},
-            conversation_id=conversation_id,
-        )
-        if not settled:
-            # Live Future gone — stash for re-armed pickup.
-            session.stash_resolution(run_id, answer=answer, via_user=via_user)
-            stashed = session.resolved_arbitrations.get(run_id)
-            if stashed is not None and escalation_id:
-                stashed["escalation_id"] = escalation_id
-            from agentcore.runtime.coordination.journal import record_coordination_snapshot
-
-            record_coordination_snapshot(session)
-            logger.info(
-                "coordination.escalation_stashed_after_miss",
-                execution_id=session.execution_id,
-                run_id=run_id,
-                via_user=via_user,
-            )
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output=(
-                    f"已记录对 {run_id} 的裁决"
-                    f"{'（经用户）' if via_user else ''}"
-                    f"{transfer_note}；"
-                    "挂起已解除或队员正重入，裁决将在其恢复时送达。"
-                ),
-            )
-        session.clear_arbitration(run_id)
-        from agentcore.runtime.coordination.journal import record_coordination_snapshot
-
-        record_coordination_snapshot(session)
-        logger.info(
-            "coordination.escalation_resolved",
-            execution_id=session.execution_id,
-            run_id=run_id,
-            via_user=via_user,
-        )
-        return ToolResult(
-            tool_call_id="",
-            success=True,
-            output=(
-                f"已将裁决回传给 worker {run_id}"
-                f"{'（经用户征询）' if via_user else ''}"
-                f"{transfer_note}，队员将据此继续。"
-            ),
-        )
-
-
-class QueueUserMessageTool:
-    """Defer an unrelated mid-flight user interjection to the conversation turn queue."""
-
-    def __init__(self, *, sink: Any) -> None:
-        self._sink = sink
-
-    @property
-    def schema(self) -> ToolSchema:
-        return ToolSchema(
-            name="queue_user_message",
-            description=(
-                "把与当前团队无关的插话排到下一回合。相关插话图内处置。"
-            ),
-            parameters={
-                "type": "object",
-                "properties": {
-                    "interjection_id": {
-                        "type": "string",
-                        "description": "协调事件里的 interjection_id。",
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "为何转入排队（用户可见）。",
-                    },
-                },
-                "required": ["interjection_id"],
-            },
-            face=ToolFace.ORCHESTRATION,
-            approval=ToolApproval.NEVER,
-        )
-
-    async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
-        from agentcore.runtime.coordination.interjections import (
-            enqueue_interjection_to_fifo,
-            final_answer_covers,
-            mark_interjection_addressed,
-            mark_interjection_failed,
-        )
-
-        session = _session_for_control(context)
-        iid = str(arguments.get("interjection_id") or "").strip()
-        if not iid:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error="queue_user_message 需要非空的 interjection_id。",
-            )
-        if session is None:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error="找不到协调会话，无法处理该插话。请在下一条用户消息中再说一次。",
-            )
-        # Already terminal (close promote / prior queue / addressed) — idempotent OK.
-        if iid in session.dispositioned_interjections and session.get_interjection(iid) is None:
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output="该插话已转入下回合排队或已在本回合消化，无需再调。",
-            )
-        stashed = session.take_interjection(iid)
-        if stashed is None:
-            # Race: close already promoted, or bad id.
-            if iid in session.dispositioned_interjections:
-                return ToolResult(
-                    tool_call_id="",
-                    success=True,
-                    output="该插话已转入下回合排队或已在本回合消化，无需再调。",
-                )
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error=(
-                    f"找不到插话 {iid}（已转排队、已失效，或 id 有误）。"
-                    "请核对协调事件里的 interjection_id。"
-                ),
-            )
-        reason = str(arguments.get("reason") or "").strip()
-        ok, msg, status = enqueue_interjection_to_fifo(
-            session,
-            iid,
-            stashed,
-            sink=self._sink,
-            reason=reason or None,
-        )
-        from agentcore.runtime.turn.durable import flush_turn_queue_durable
-
-        await flush_turn_queue_durable()
-        if ok:
-            pos = getattr(status, "position", 1)
-            depth = getattr(status, "queue_depth", 1)
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output=(
-                    f"已将插话转入对话级排队（位置 {pos}/{depth}）。"
-                    "当前回合结束后自动起新回合处理。"
-                ),
-            )
-        # True enqueue failure: 终局已答 → addressed；否则 failed（禁止假绿）.
-        if final_answer_covers(session):
-            mark_interjection_addressed(
-                session,
-                iid,
-                stashed,
-                sink=self._sink,
-                note="排队未果，但终局已回应",
-            )
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output="排队通道异常，但终局正文已覆盖该插话，已标为已消化。",
-            )
-        mark_interjection_failed(
-            session,
-            iid,
-            stashed,
-            sink=self._sink,
-            note=msg or "未能排队，请重试或再说一次",
-        )
+    ``via_user`` is taken from the session: this stretch already received an
+    ``ask_user`` answer. The caller clears that flag after the whole tell batch.
+    """
+    if session is None or not getattr(session, "active", False):
         return ToolResult(
             tool_call_id="",
             success=False,
             output="",
-            error=msg or "转入对话级排队失败。",
+            error="当前没有进行中的团队，没法把话送给停着的人。",
         )
+    via_user = bool(getattr(session, "user_consulted", False))
+    pending = session.get_arbitration(run_id)
+    if pending is None:
+        session.stash_resolution(run_id, answer=answer, via_user=via_user)
+        from agentcore.runtime.coordination.journal import record_coordination_snapshot
+
+        record_coordination_snapshot(session)
+        logger.info(
+            "coordination.escalation_stashed",
+            execution_id=session.execution_id,
+            run_id=run_id,
+            via_user=via_user,
+        )
+        who = "（经用户）" if via_user else ""
+        return ToolResult(
+            tool_call_id="",
+            success=True,
+            output=f"已记下对 {run_id} 的话{who}；他恢复后会按这句继续。",
+        )
+    escalation_id = str(pending.get("escalation_id") or "")
+    conv = str(pending.get("conversation_id") or conversation_id or "")
+    registry = default_interaction_registry()
+    settled = registry.resolve(
+        escalation_id,
+        {"answer": answer, "via_user": via_user},
+        conversation_id=conv,
+    )
+    if not settled:
+        session.stash_resolution(run_id, answer=answer, via_user=via_user)
+        stashed = session.resolved_arbitrations.get(run_id)
+        if stashed is not None and escalation_id:
+            stashed["escalation_id"] = escalation_id
+        from agentcore.runtime.coordination.journal import record_coordination_snapshot
+
+        record_coordination_snapshot(session)
+        logger.info(
+            "coordination.escalation_stashed_after_miss",
+            execution_id=session.execution_id,
+            run_id=run_id,
+            via_user=via_user,
+        )
+        who = "（经用户）" if via_user else ""
+        return ToolResult(
+            tool_call_id="",
+            success=True,
+            output=f"已记下对 {run_id} 的话{who}；他恢复后会按这句继续。",
+        )
+    session.clear_arbitration(run_id)
+    from agentcore.runtime.coordination.journal import record_coordination_snapshot
+
+    record_coordination_snapshot(session)
+    logger.info(
+        "coordination.escalation_resolved",
+        execution_id=session.execution_id,
+        run_id=run_id,
+        via_user=via_user,
+    )
+    who = "（经用户）" if via_user else ""
+    return ToolResult(
+        tool_call_id="",
+        success=True,
+        output=f"已把话传给 {run_id}{who}，他会按这句继续。",
+    )

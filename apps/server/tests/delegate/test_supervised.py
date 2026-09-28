@@ -65,9 +65,9 @@ async def test_replan_stop_wraps_up_partial_without_running_tail():
 
 async def test_replan_without_supervised_run_errors():
     t = tool(Provider([]))
-    result = await t.replan({"steers": [{"run_id": "x", "note": "n"}]})
+    result = await t.replan({})
     assert result.success is False
-    assert "没有待续跑" in (result.error or "")
+    assert "没有已暂停的计划" in (result.error or "")
 
 
 async def test_plain_dag_runs_straight_through_without_yielding():
@@ -96,7 +96,7 @@ async def test_scope_escalation_yields_brief_then_replan_steers_resumes():
     assert first.success is True
     assert first.is_terminal is False
     assert "计划已让出" in first.output
-    assert "职责偏离" in first.output
+    assert "请看后面" in first.output
     assert "真问题是X不是Y" in first.output
     assert "BOUT" not in first.output
     # 合·验证 4b (主动版): a scope deviation likely ripples to siblings, so the brief tells the
@@ -113,7 +113,7 @@ async def test_scope_escalation_yields_brief_then_replan_steers_resumes():
     assert t.collab["scope_signals"] >= 1
     b_id = next(n.run_id for n in sup.plan.nodes if n.role == "写手")
 
-    result = await t.replan({"steers": [{"run_id": b_id, "note": "改写X方向"}]})
+    result = await t.replan({"tell": [{"run_id": b_id, "note": "改写X方向"}]})
 
     assert result.success is True
     assert t._supervised is None
@@ -139,17 +139,13 @@ async def test_dep_escalation_yields_brief_then_replan_add_resumes():
     assert first.success is True
     assert first.is_terminal is False
     assert "计划已让出" in first.output
-    # The brief distinguishes a dep gap from a scope deviation and points at replan(add).
-    assert "卡在缺输入" in first.output
-    assert "缺输入：缺错误返回结构才能写完整测试" in first.output
+    assert "缺错误返回结构才能写完整测试" in first.output
     assert "add" in first.output
     sup = t._supervised
     assert sup is not None
     assert sup.reason is BoundaryReason.SCOPE
-    # 协作质量 tally: a dep boundary is a boundary_yield (首计划存活) but NOT a drift signal
-    # (漂移率 stays scope-only) — it is still counted in the total escalation tally.
     assert t.collab["boundary_yields"] == 1
-    assert t.collab["scope_signals"] == 0
+    assert t.collab["scope_signals"] >= 1
     assert t.collab["escalations"] >= 1
 
     # The captain replan(add)s a producer for the missing input; the plan resumes to terminal.
@@ -159,6 +155,50 @@ async def test_dep_escalation_yields_brief_then_replan_add_resumes():
     assert result.success is True
     assert t._supervised is None
     assert "BOUT" in result.output
+
+
+async def test_rejected_add_leaves_a_waiting_tell_unsent():
+    """加人被拒时，同一次 replan 里对停着的人说的话还没送出。"""
+    from agentcore.runtime.coordination.session import (
+        CoordinationSession,
+        clear_active_coordination,
+        set_active_coordination,
+    )
+
+    provider = ScopeProvider()
+    t = scope_tool(provider)
+    first = await t.execute({"tasks": SCOPE_DAG, "coordinate": False}, ctx())
+    assert first.success is True
+    assert t._supervised is not None
+
+    session = CoordinationSession(execution_id="e", total_workers=1)
+    set_active_coordination(session)
+    try:
+        session.register_arbitration(
+            "w-wait",
+            escalation_id="esc-1",
+            conversation_id="c1",
+            question="用哪套？",
+        )
+        result = await t.replan(
+            {
+                "tell": [{"run_id": "w-wait", "note": "用第一套"}],
+                "add": [
+                    {
+                        "role": "补",
+                        "task": "重做",
+                        "replaces_run_id": "not-a-gap",
+                    }
+                ],
+            }
+        )
+        assert result.success is False
+        assert "补跑拒绝" in (result.error or "")
+        assert "w-wait" in session.pending_arbitrations
+        assert "w-wait" not in session.resolved_arbitrations
+        assert t._supervised is not None
+    finally:
+        clear_active_coordination()
 
 
 async def test_scope_replan_bare_resume_runs_tail_unchanged():
@@ -187,7 +227,7 @@ async def test_replan_steer_emits_plan_revised_trace():
     assert sup is not None
     c_id = next(n.run_id for n in sup.plan.nodes if n.role == "写手")
 
-    result = await t.replan({"steers": [{"run_id": c_id, "note": "强调风险"}]})
+    result = await t.replan({"tell": [{"run_id": c_id, "note": "强调风险"}]})
     assert result.success is True
 
     revised = _plan_revised(sink)
@@ -280,7 +320,7 @@ async def test_scope_yield_rejournals_consumed_for_durable_seed():
     consumed = [
         esc
         for esc in (finals[-1]["payload"].get("escalations") or [])
-        if esc.get("reason") == "scope" and esc.get("consumed")
+        if esc.get("reason") == "adjust" and esc.get("consumed")
     ]
     assert consumed, "the re-journaled run-final must carry the consumed scope escalation"
 

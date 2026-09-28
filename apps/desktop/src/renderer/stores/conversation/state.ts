@@ -240,7 +240,7 @@ export interface ConversationState {
   releaseBackgroundSlice: (conversationId: string) => void;
   setAbort: (a: AbortController | null, conversationId?: string | null) => void;
   setTurnPhase: (phase: TurnPhase, conversationId?: string | null) => void;
-  /** Desktop: last turn path — `sidecar` | `cloud_bridge` | null (see ConversationRuntime). */
+  /** Desktop: last turn path — `sidecar` | null (see ConversationRuntime). */
   setExecutionVia: (
     via: ConversationRuntime["executionVia"],
     conversationId?: string | null,

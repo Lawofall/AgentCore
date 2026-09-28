@@ -61,6 +61,7 @@ const fsApi: FsApi = {
   watch: async () => {},
   unwatch: async () => {},
   onChanged: () => noop,
+  onExecuteOutput: () => noop,
   workspaceOp: async (): Promise<WorkspaceOpResult> => ({
     ok: false,
     error: { kind: "WebPreview", detail: "unavailable in web preview" },
@@ -109,6 +110,7 @@ const sidecarApi: SidecarApi = {
   },
   cancel: async () => {},
   respond: async () => ({ resolved: false }),
+  execOutput: async () => ({ accepted: false }),
   runRedirect: async () => UNREACHABLE_INTERVENE_ACK,
   runStop: async () => UNREACHABLE_INTERVENE_ACK,
   debateSteer: async () => ({ accepted: false }),

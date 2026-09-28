@@ -2,7 +2,7 @@
 /**
  * CEO 处置动作的工具行标题：说清「撤的是谁」，不摆内部标识。
  *
- * 回归钉：`cancel_worker` / `resolve_escalation` 的参数是 run_id，标题曾直接拼成
+ * 回归钉：`cancel_worker` / `replan` tell 的参数是 run_id，标题曾直接拼成
  * `Cancel worker r-a3f2e1c8-…`——用户对不上协作图里的「研究员」，也就无从判断 CEO 这一手
  * 处置得对不对。`read_conversation` 同理：标题拼 conversation_id 不如亮出那场对话的标题。
  */
@@ -93,13 +93,17 @@ describe("工具行标题 · CEO 处置动作指的是谁", () => {
     expect(screen.queryByText(/r-a3f2e1c8/)).toBeNull();
   });
 
-  it("裁决求助标题落角色名，裁决正文不进标题", () => {
+  it("对队员说话的标题落角色名，正文不进标题", () => {
     renderLine(
       step({
-        tool_name: "resolve_escalation",
+        tool_name: "replan",
         arguments: {
-          run_id: "r-77120c9a-4d10",
-          answer: "按方案 B 继续，预算不变，先出提纲再展开细节。",
+          tell: [
+            {
+              run_id: "r-77120c9a-4d10",
+              note: "按方案 B 继续，预算不变，先出提纲再展开细节。",
+            },
+          ],
         },
       }),
     );

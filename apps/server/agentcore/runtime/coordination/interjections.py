@@ -1,24 +1,22 @@
-"""协调中用户插话生命周期（S1）：received → injected → addressed / queued / failed。
+"""协调中用户插话：received → injected（终态）。
 
-- 活跃协调：进 CEO 队列；注入模型上下文 → injected；图内处置 → addressed；无关 →
-  queue_user_message → queued。
-- 收口/已结束：未消化自动升格对话 FIFO（queued），禁止「仅协调可用」死路。
-- durable ``user_interjection`` 由调用方保证同 id 语义更新；发送方确认流勿重复落 journal。
-- ``injected`` = 内容真正写入 CEO 上下文（与经典 ReAct 步顶 drain 对齐）。
+插进当前回合的话留在这一轮。主 Agent 不把它改排到下一轮，团队收口也不自动升成排队。
+``injected`` = 内容真正写入 CEO 上下文（与经典 ReAct 步顶 drain 对齐）。
+durable ``user_interjection`` 由调用方保证同 id 语义更新；发送方确认流勿重复落 journal。
+
+``addressed`` 与协调侧把插话改排的 ``queued`` 新回合不发。旧日记里的这两态仍可回放。
+经典回合赶不上下一步的 leftover 升队不走本模块。
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from agentcore.core.logging import get_logger
 from agentcore.core.mentions import resolve_interjection_mentions
 from agentcore.runtime.events import user_interjection
 from agentcore.workspace.attachments import interjection_attachment_meta
 
-logger = get_logger(__name__)
-
-InterjectionStatus = str  # received | injected | addressed | queued | failed
+InterjectionStatus = str  # received | injected | failed（本模块只发 injected）
 
 
 def _att_meta(stashed: dict[str, Any] | None) -> list[dict[str, Any]] | None:
@@ -65,10 +63,11 @@ def emit_interjection_status(
 
 
 async def note_interjections_injected(session: Any, events: list[Any]) -> None:
-    """Emit ``injected`` and mark ids as awaiting CEO disposition (图内 or queue).
+    """Emit ``injected`` once the interjection text is in the CEO context.
 
     Does not settle replies on inject — prompt assembly in ``inject.py`` must
-    not settle (replayed every round).
+    not settle (replayed every round). ``injected`` is the terminal status for
+    a coordination interjection.
     """
     from agentcore.runtime.coordination.session import CoordinationEventKind
 
@@ -80,7 +79,6 @@ async def note_interjections_injected(session: Any, events: list[Any]) -> None:
         iid = str(payload.get("interjection_id") or "").strip()
         if not iid:
             continue
-        session.awaiting_disposition.add(iid)
         stashed = session.get_interjection(iid)
         raw_content = str(
             (stashed or {}).get("content") or payload.get("content") or ""
@@ -99,289 +97,3 @@ async def note_interjections_injected(session: Any, events: list[Any]) -> None:
             attachments=att,
             agent_mentions=_mention_meta(payload, stashed),
         )
-
-
-# 提示词已定义的图内处置工具（inject.py）；编排循环统一标 addressed，勿在各工具里逐个补。
-# 同一步多工具时 note 按此优先级取一条。
-IN_GRAPH_DISPOSITION_TOOLS: tuple[str, ...] = (
-    "cancel_worker",
-    "delegate",
-)
-IN_GRAPH_DISPOSITION_NOTES: dict[str, str] = {
-    "cancel_worker": "已在本回合停掉对应成员",
-    "delegate": "已在本回合据此调整团队",
-}
-
-
-def address_awaiting_interjections(
-    session: Any,
-    sink: Any | None = None,
-    *,
-    note: str | None = None,
-) -> list[str]:
-    """图内处置成功后：将仍 pending 且已注入 CEO 的插话标为 addressed。"""
-    addressed: list[str] = []
-    note_text = note or "已在本回合消化"
-    for iid in list(session.awaiting_disposition):
-        stashed = session.get_interjection(iid)
-        if stashed is None:
-            session.awaiting_disposition.discard(iid)
-            continue
-        content = str(stashed.get("content") or "").strip()
-        session.take_interjection(iid)
-        session.awaiting_disposition.discard(iid)
-        session.dispositioned_interjections.add(iid)
-        emit_interjection_status(
-            sink,
-            session=session,
-            interjection_id=iid,
-            content=content,
-            status="addressed",
-            note=note_text,
-            attachments=_att_meta(stashed),
-            agent_mentions=_mention_meta(stashed=stashed),
-        )
-        addressed.append(iid)
-        logger.info(
-            "coordination.user_interjection_addressed",
-            execution_id=session.execution_id,
-            interjection_id=iid,
-            via="in_graph",
-        )
-    return addressed
-
-
-def address_interjections_after_ceo_tools(
-    *,
-    role: str,
-    attempts: list[Any],
-    sink: Any | None = None,
-) -> list[str]:
-    """CEO 一步内成功调用过任一图内处置工具 → 清 awaiting pending 并标 addressed。
-
-    挂在编排工具执行汇合点（``execute_tools``），不在各工具实现里逐个补标。
-    「只发正文、不调工具」不算已处置——本函数仅看成功 tool attempts。
-    """
-    if role != "captain":
-        return []
-    used = {
-        str(getattr(a, "tool_name", "") or "")
-        for a in attempts
-        if getattr(a, "success", False)
-        and str(getattr(a, "tool_name", "") or "") in IN_GRAPH_DISPOSITION_NOTES
-    }
-    if not used:
-        return []
-    from agentcore.runtime.coordination.session import active_coordination
-
-    session = active_coordination()
-    if session is None or not getattr(session, "active", False):
-        return []
-    note = next(
-        (IN_GRAPH_DISPOSITION_NOTES[name] for name in IN_GRAPH_DISPOSITION_TOOLS if name in used),
-        "已在本回合消化",
-    )
-    return address_awaiting_interjections(session, sink, note=note)
-
-
-def enqueue_interjection_to_fifo(
-    session: Any,
-    interjection_id: str,
-    stashed: dict[str, Any],
-    *,
-    sink: Any | None = None,
-    reason: str | None = None,
-) -> tuple[bool, str, Any | None]:
-    """Move one stashed interjection onto the conversation turn FIFO.
-
-    Returns ``(ok, message, queue_status_or_none)``. On failure the caller should
-    emit ``failed`` (or ``addressed`` when终局已答).
-    """
-    content = str(stashed.get("content") or "").strip()
-    conversation_id = str(
-        stashed.get("conversation_id") or session.conversation_id or ""
-    ).strip()
-    if not content or not conversation_id:
-        return False, "插话缺少 content / conversation_id，无法转入排队。", None
-
-    from agentcore.runtime.turn.queue import (
-        new_queued_turn,
-        resolve_client_turn_ids,
-        turn_queue,
-    )
-
-    user_message_id, message_id, trace_id = resolve_client_turn_ids(
-        user_message_id=stashed.get("user_message_id"),
-        message_id=stashed.get("message_id"),
-        trace_id=stashed.get("trace_id"),
-    )
-    try:
-        status = turn_queue.enqueue_and_ensure_drain(
-            conversation_id,
-            new_queued_turn(
-                content=content,
-                user_id=str(stashed.get("user_id") or ""),
-                attachments=list(stashed.get("attachments") or []),
-                agent_mentions=list(stashed.get("agent_mentions") or []),
-                requires_tools=bool(stashed.get("requires_tools")),
-                x_client_platform=stashed.get("x_client_platform"),
-                # Absent on a journal-restored stash (not a durable snapshot key)
-                # → unpinned, i.e. selection as it was before origin pinning.
-                origin_device_id=stashed.get("origin_device_id"),
-                llm_credentials=stashed.get("llm_credentials"),
-                llm_supports_tools=stashed.get("llm_supports_tools"),
-                interjection_id=interjection_id,
-                user_message_id=user_message_id,
-                message_id=message_id,
-                trace_id=trace_id,
-            ),
-            on_live_sink=True,
-        )
-    except Exception as exc:  # noqa: BLE001 — surface as failed, never raise into CEO
-        logger.exception(
-            "coordination.user_interjection_enqueue_failed",
-            execution_id=session.execution_id,
-            interjection_id=interjection_id,
-        )
-        return False, f"转入对话级排队失败：{exc}", None
-
-    note = reason or "与当前团队任务无关，已排到下一回合"
-    session.awaiting_disposition.discard(interjection_id)
-    session.dispositioned_interjections.add(interjection_id)
-    emit_interjection_status(
-        sink,
-        session=session,
-        interjection_id=interjection_id,
-        content=content,
-        status="queued",
-        note=note,
-        attachments=_att_meta(stashed),
-        agent_mentions=_mention_meta(stashed=stashed),
-    )
-    logger.info(
-        "coordination.user_interjection_queued",
-        execution_id=session.execution_id,
-        interjection_id=interjection_id,
-        queue_id=status.queue_id,
-        position=status.position,
-    )
-    return (
-        True,
-        (
-            f"已将插话转入对话级排队（位置 {status.position}/"
-            f"{status.queue_depth}）。当前回合结束后自动起新回合处理。"
-        ),
-        status,
-    )
-
-
-def mark_interjection_failed(
-    session: Any,
-    interjection_id: str,
-    stashed: dict[str, Any] | None,
-    *,
-    sink: Any | None = None,
-    note: str,
-) -> None:
-    content = str((stashed or {}).get("content") or "").strip() or "（无正文）"
-    session.awaiting_disposition.discard(interjection_id)
-    session.dispositioned_interjections.add(interjection_id)
-    if stashed is not None:
-        session.take_interjection(interjection_id)
-    emit_interjection_status(
-        sink,
-        session=session,
-        interjection_id=interjection_id,
-        content=content,
-        status="failed",
-        note=note,
-        attachments=_att_meta(stashed),
-        agent_mentions=_mention_meta(stashed=stashed),
-    )
-    logger.info(
-        "coordination.user_interjection_failed",
-        execution_id=session.execution_id,
-        interjection_id=interjection_id,
-    )
-
-
-def mark_interjection_addressed(
-    session: Any,
-    interjection_id: str,
-    stashed: dict[str, Any] | None,
-    *,
-    sink: Any | None = None,
-    note: str | None = None,
-) -> None:
-    content = str((stashed or {}).get("content") or "").strip() or "（无正文）"
-    if stashed is not None:
-        session.take_interjection(interjection_id)
-    session.awaiting_disposition.discard(interjection_id)
-    session.dispositioned_interjections.add(interjection_id)
-    emit_interjection_status(
-        sink,
-        session=session,
-        interjection_id=interjection_id,
-        content=content,
-        status="addressed",
-        note=note or "终局已回应",
-        attachments=_att_meta(stashed),
-        agent_mentions=_mention_meta(stashed=stashed),
-    )
-    logger.info(
-        "coordination.user_interjection_addressed",
-        execution_id=session.execution_id,
-        interjection_id=interjection_id,
-        via="final",
-    )
-
-
-def final_answer_covers(session: Any) -> bool:
-    """True when CEO already produced a synthesis draft worth treating as回应."""
-    return bool(str(getattr(session, "draft", "") or "").strip())
-
-
-def promote_pending_on_close(session: Any) -> list[str]:
-    """收口：未消化插话自动升格对话 FIFO；入队失败且终局有稿 → addressed，否则 failed。"""
-    sink = getattr(session, "event_sink", None)
-    promoted: list[str] = []
-    for iid in list(session.pending_interjections.keys()):
-        stashed = session.take_interjection(iid)
-        if stashed is None:
-            continue
-        ok, msg, _status = enqueue_interjection_to_fifo(
-            session,
-            iid,
-            stashed,
-            sink=sink,
-            reason="协调已收口，已自动转入下一回合",
-        )
-        if ok:
-            promoted.append(iid)
-            continue
-        if final_answer_covers(session):
-            mark_interjection_addressed(
-                session,
-                iid,
-                stashed,
-                sink=sink,
-                note="排队未果，但终局已回应",
-            )
-            promoted.append(iid)
-        else:
-            mark_interjection_failed(
-                session,
-                iid,
-                stashed,
-                sink=sink,
-                note=msg or "未能排队，请重试或再说一次",
-            )
-    session.awaiting_disposition.clear()
-    if promoted:
-        logger.info(
-            "coordination.user_interjection_promoted_on_close",
-            execution_id=session.execution_id,
-            count=len(promoted),
-            interjection_ids=promoted,
-        )
-    return promoted

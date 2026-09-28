@@ -412,18 +412,14 @@ export function revisedBadge(kind: PlanRevisionKind): {
   return { label: "方向已校准", hint: "CEO 据中途发现调整了这一步的方向" };
 }
 
-export type EscalationDisplayKind = "wait" | "scope" | "dep" | "contradiction";
+export type EscalationDisplayKind = "wait" | "adjust" | "contradiction";
 
-/**
- * Legacy-tape display: older Gate runs mapped contradiction → wire `kind=scope`
- * with「需求矛盾」in the question. Live Gate no longer does that; keep this so
- * old recordings still label honestly instead of「职责偏离」.
- */
+/** Question text that means the worker hit a real contradiction, not a plan look. */
 export function isContradictionEscalation(e: {
   kind?: string;
   question?: string;
 }): boolean {
-  if (e.kind != null && e.kind !== "scope") return false;
+  if (e.kind === "wait") return false;
   return /需求矛盾|存在矛盾|互相矛盾|conflicting\s+requirements/i.test(
     e.question ?? "",
   );
@@ -433,14 +429,13 @@ export function escalationKindLabel(
   kind: EscalationDisplayKind | undefined,
 ): string {
   if (kind === "contradiction") return "需求矛盾";
-  if (kind === "scope") return "职责偏离";
-  if (kind === "dep") return "缺输入";
+  if (kind === "adjust") return "请看后面";
   return "";
 }
 
 /** Label for one escalation row (prefer question-side contradiction over wire scope). */
 export function escalationRowKindLabel(esc: {
-  kind?: "wait" | "scope" | "dep";
+  kind?: "wait" | "adjust";
   question?: string;
 }): string | null {
   if (isContradictionEscalation(esc)) return "需求矛盾";
@@ -448,16 +443,14 @@ export function escalationRowKindLabel(esc: {
   return escalationKindLabel(esc.kind);
 }
 
-/** Pick the most severe escalate kind on a run (true scope > contradiction > dep). */
+/** Non-blocking plan look on a run. Contradiction in the question wins the label. */
 export function pickEscalationKind(
-  escalations: { kind?: "wait" | "scope" | "dep"; question?: string }[],
+  escalations: { kind?: "wait" | "adjust"; question?: string }[],
 ): EscalationDisplayKind | null {
   if (escalations.length === 0) return null;
-  const scopeOnes = escalations.filter((e) => e.kind === "scope");
-  if (scopeOnes.some((e) => !isContradictionEscalation(e))) return "scope";
-  if (scopeOnes.some((e) => isContradictionEscalation(e)))
-    return "contradiction";
-  if (escalations.some((e) => e.kind === "dep")) return "dep";
+  const marks = escalations.filter((e) => e.kind === "adjust");
+  if (marks.some((e) => isContradictionEscalation(e))) return "contradiction";
+  if (marks.length > 0) return "adjust";
   return null;
 }
 

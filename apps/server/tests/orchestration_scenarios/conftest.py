@@ -105,7 +105,7 @@ class RoleScriptedProvider:
                     {
                         "question": ESC_QUESTION,
                         "assumption": ESC_ASSUMPTION,
-                        "reason": "scope",
+                        "reason": "adjust",
                     },
                     ensure_ascii=False,
                 ),

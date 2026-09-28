@@ -112,3 +112,36 @@ export async function resolveInteraction(
     ? "already_processed"
     : "settled";
 }
+
+/** One live stdout/stderr chunk for a desktop EXECUTE that has not settled.
+ * A late chunk (op already finished) is ignored — the final envelope is authority. */
+export async function feedExecOutput(
+  conversationId: string,
+  interactionId: string,
+  chunk: { stream: "stdout" | "stderr"; chunk: string },
+  origin: InteractionSettleOrigin,
+): Promise<void> {
+  if (!chunk.chunk) return;
+  try {
+    if (origin === "sidecar") {
+      const sidecarTarget = getActiveSidecarTarget(conversationId);
+      if (!sidecarTarget) return;
+      await window.sidecarApi.execOutput({
+        rootId: sidecarTarget.rootId,
+        subpath: sidecarTarget.subpath,
+        requestId: interactionId,
+        conversationId,
+        stream: chunk.stream,
+        chunk: chunk.chunk,
+      });
+      return;
+    }
+    await api.post(
+      `/v1/conversations/${conversationId}/interactions/${interactionId}/output`,
+      chunk,
+      INTERACTION_RESOLVE_TIMEOUT_MS,
+    );
+  } catch {
+    // Op already settled, or the transport blinked. The finished display still has the capture.
+  }
+}

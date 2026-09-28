@@ -274,11 +274,10 @@ export interface ConversationRuntime {
    * 也不进 conformance ProjectedTurn——同 {@link ProcessStep} tool 步的 `phase` 一样是仅生产流盖的短命态。 */
   toolStartedMs: Record<string, number>;
   /**
-   * 桌面：本会话最近一回合的执行路径（绑本机工作区时有意义）。
-   * `sidecar` = 本地引擎；`cloud_bridge` = 显式强制关后走云（脚注对 `off` 隐藏）；
-   * `null` = 纯云会话或尚未判定。不落盘。引擎探活 / 启动失败不再写过桥。
+   * 桌面：本会话最近一回合的执行路径。
+   * `sidecar` = 本地引擎。`null` = 纯云会话或尚未判定。不落盘。
    */
-  executionVia: "sidecar" | "cloud_bridge" | null;
+  executionVia: "sidecar" | null;
   /**
    * Live-only：写路径争用 workspace_lock（`workspace_lock_wait` SSE）。
    * true 时空 assistant 气泡显示「等待工作区…」而非 Thinking…（不得静默等锁）。

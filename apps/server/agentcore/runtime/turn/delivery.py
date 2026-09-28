@@ -360,14 +360,6 @@ async def deliver_in_flight(
                 "conversation_id": conversation_id,
                 "attachments": persisted,
                 "agent_mentions": raw_agent_mentions,
-                "requires_tools": requires_tools,
-                "x_client_platform": x_client_platform,
-                "origin_device_id": origin_device_id,
-                "llm_credentials": llm_credentials,
-                "llm_supports_tools": llm_supports_tools,
-                "user_message_id": user_message_id,
-                "message_id": message_id,
-                "trace_id": trace_id,
             },
         )
         posted = coord.post(

@@ -407,4 +407,67 @@ describe("performWorkspaceOp (本地工作区 op 回填)", () => {
       value: "x",
     });
   });
+
+  it("forwards execute stdout on the sidecar interaction and unsubscribes when the op returns", async () => {
+    const { getActiveSidecarTarget } = await import(
+      "@/services/sidecarRouting"
+    );
+    vi.mocked(getActiveSidecarTarget).mockReturnValue({
+      rootId: "root-sidecar",
+      subpath: "scratch/c1",
+      turnId: "turn-local",
+    });
+    let emit:
+      | ((event: {
+          requestId: string;
+          stream: "stdout" | "stderr";
+          chunk: string;
+        }) => void)
+      | null = null;
+    const unsub = vi.fn();
+    const onExecuteOutput = vi.fn(
+      (
+        cb: (event: {
+          requestId: string;
+          stream: "stdout" | "stderr";
+          chunk: string;
+        }) => void,
+      ) => {
+        emit = cb;
+        return unsub;
+      },
+    );
+    const execOutput = vi.fn().mockResolvedValue({ accepted: true });
+    const respond = vi.fn().mockResolvedValue({ resolved: true });
+    const workspaceOp = vi.fn().mockImplementation(async () => {
+      emit?.({ requestId: "r1", stream: "stdout", chunk: "hello" });
+      emit?.({ requestId: "other", stream: "stdout", chunk: "nope" });
+      return { ok: true, value: { stdout: "hello" } };
+    });
+    vi.stubGlobal("window", {
+      fsApi: { workspaceOp, onExecuteOutput },
+      sidecarApi: { execOutput, respond },
+    });
+
+    await performWorkspaceOp(
+      payload({
+        op: "execute",
+        args: { code: "print(1)", language: "python" },
+      }),
+      "c1",
+      "sidecar",
+    );
+
+    expect(execOutput).toHaveBeenCalledTimes(1);
+    expect(execOutput).toHaveBeenCalledWith({
+      rootId: "root-sidecar",
+      subpath: "scratch/c1",
+      requestId: "r1",
+      conversationId: "c1",
+      stream: "stdout",
+      chunk: "hello",
+    });
+    expect(unsub).toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

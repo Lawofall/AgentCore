@@ -60,7 +60,7 @@ def _multi_agent_escalation() -> list[SSEEvent]:
             "w1",
             question="数据库选 Postgres 还是 MySQL？这关系到后续所有选型。",
             assumption="暂按 Postgres 推进",
-            kind="scope",
+            kind="adjust",
             # 固定 id 保 golden 稳定（缺省会随机 uuid，导出不幂等）。
             escalation_id="esc1",
         ),
@@ -277,7 +277,7 @@ def _multi_agent_blocking_escalate_multi() -> list[SSEEvent]:
     ]
 
 def _multi_agent_ceo_arbitrate_escalate() -> list[SSEEvent]:
-    """多 Agent·协调模式 D1：worker 阻塞 escalate → CEO resolve_escalation 直裁。
+    """多 Agent·协调模式 D1：worker 阻塞 escalate → CEO 用 replan tell 把决定说回来。
 
     ``escalation_required(awaiting=ceo)`` 初始不可答；``escalation_resolved(arbitrated_by=ceo,
     via_user=false)`` 后 worker 恢复。回合不 paused。
@@ -339,7 +339,7 @@ def _multi_agent_ceo_arbitrate_escalate() -> list[SSEEvent]:
     ]
 
 def _multi_agent_ceo_arbitrate_escalate_via_user() -> list[SSEEvent]:
-    """多 Agent·协调模式 D1：CEO 经 ask_user 转交用户后再 resolve_escalation（via_user=true）。
+    """多 Agent·协调模式 D1：CEO 经 ask_user 转交用户后再用 replan tell（via_user=true）。
 
     事件序列只钉裁决可见性（arbitrated_by=ceo + via_user）；ask_user 卡本身是回合级 gate，
     不在本向量展开。

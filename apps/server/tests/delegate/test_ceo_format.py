@@ -262,7 +262,7 @@ def test_format_for_ceo_surfaces_escalations_blockers_first():
             phase=RunPhase.COMPLETED,
             content="软的备注",
             escalations=[
-                {"question": "目标受众是谁?", "assumption": "暂按大众", "reason": "scope"}
+                {"question": "目标受众是谁?", "assumption": "暂按大众", "reason": "adjust"}
             ],
         ),
         "w2": RunState(

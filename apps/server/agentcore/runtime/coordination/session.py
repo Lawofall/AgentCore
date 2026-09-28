@@ -226,14 +226,12 @@ class CoordinationSession(
     # Answers stashed when the live Future is gone (ask_user soft-stop cancelled the worker);
     # re-armed workers pick these up on the next escalate(reason=wait).
     resolved_arbitrations: dict[str, dict[str, Any]] = field(default_factory=dict)
-    # Mid-flight user interjections awaiting CEO disposition. Credentials are
-    # process-local only — journal snapshots strip ``llm_credentials``.
+    # This CEO stretch got an ask_user answer. The next replan tell to a waiting
+    # worker is marked via_user, then the flag clears. Not snapshotted.
+    user_consulted: bool = False
+    # Mid-flight interjections for CEO inject (mentions / attachments). Process-local.
+    # Does not open a later turn. Journal snapshots strip ``llm_credentials`` if present.
     pending_interjections: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
-    # Ids injected into a CEO wake and not yet addressed/queued/failed (process-local).
-    # ``injected`` SSE is emitted when ids enter this set.
-    awaiting_disposition: set[str] = field(default_factory=set, repr=False)
-    # Terminal disposition already emitted (idempotent queue_user_message after close).
-    dispositioned_interjections: set[str] = field(default_factory=set, repr=False)
     # Live SSE sink for coordination UX (``coordination_wait``). Set by host when
     # arming; not snapshotted — resume re-attaches from the live tool sink.
     event_sink: Any | None = field(default=None, repr=False)

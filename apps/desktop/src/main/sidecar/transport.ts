@@ -92,12 +92,16 @@ export function resolveSpawnConfig(): SpawnConfig {
     process.platform === "win32"
       ? join(serverDir, ".venv", "Scripts", "python.exe")
       : join(serverDir, ".venv", "bin", "python");
-  const rgDev = join(
-    serverDir,
-    "bin",
-    process.platform === "win32" ? "rg.exe" : "rg",
-  );
-  const rgEnv = existsSync(rgDev) ? { AGENTCORE_RG_PATH: rgDev } : undefined;
+  // 与打包态同一份 resources/rg。始终注入：文件不在就让 grep 显式失败，
+  // 不改落到 apps/server/bin（那只给 pytest / 本地 API）。
+  const rgEnv = {
+    AGENTCORE_RG_PATH: join(
+      app.getAppPath(),
+      "resources",
+      "rg",
+      process.platform === "win32" ? "rg.exe" : "rg",
+    ),
+  };
   if (existsSync(venvPython)) {
     return {
       cmd: venvPython,

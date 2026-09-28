@@ -12,7 +12,6 @@ import pytest
 from agentcore.evals.checks import build_check
 from agentcore.evals.style_lint import (
     RULE_CLOSING,
-    RULE_EMOJI,
     RULE_OPENING,
     StyleMetrics,
     format_style_report,
@@ -66,19 +65,9 @@ def test_closing_anchored_so_midtext_phrase_does_not_trigger() -> None:
     assert RULE_CLOSING not in _rules("希望对你有帮助这点我之前确认过。下面进入正题：配置步骤如下。")
 
 
-def test_emoji_detected() -> None:
-    assert RULE_EMOJI in _rules("搞定 ✅ 已部署 🚀")
-    assert RULE_EMOJI in _rules("亮点 ✨ 与工具 🔧")
-
-
-def test_arrows_and_math_are_not_flagged_as_emoji() -> None:
-    # 箭头与数学符号在技术散文里合法，linter 刻意不收，避免误报。
-    assert _rules("数据从 A → B → C 流动，满足 ∑ x = ∫ f。") == set()
-
-
 def test_multiple_violations_stack() -> None:
-    rules = _rules("好问题！搞定 ✅。希望对你有帮助")
-    assert {RULE_OPENING, RULE_EMOJI, RULE_CLOSING} <= rules
+    rules = _rules("好问题！步骤如上。希望对你有帮助")
+    assert {RULE_OPENING, RULE_CLOSING} <= rules
 
 
 # --- StyleClean check（经注册表构造，覆盖注册） ---
@@ -105,12 +94,10 @@ def test_style_clean_check_passes_clean() -> None:
     assert chk.run(_case(), _outcome("答案是 42。")).passed is True
 
 
-def test_style_clean_allow_whitelists_emoji() -> None:
-    # 金标故意带 emoji 时放行；常驻基座不再设用户先用的例外。
-    chk = build_check({"name": "StyleClean", "args": {"allow": ["emoji"]}})
-    assert chk.run(_case(), _outcome("搞定 ✅")).passed is True
-    # 但其他规则仍然守。
-    assert chk.run(_case(), _outcome("好问题！搞定 ✅")).passed is False
+def test_style_clean_allow_whitelists_a_rule() -> None:
+    chk = build_check({"name": "StyleClean", "args": {"allow": [RULE_OPENING]}})
+    assert chk.run(_case(), _outcome("好问题！答案是 42。")).passed is True
+    assert chk.run(_case(), _outcome("好问题！希望对你有帮助")).passed is False
 
 
 def test_style_clean_registered_in_check_names() -> None:
@@ -134,7 +121,7 @@ def test_metrics_counts_clean_and_per_rule() -> None:
     reports = [
         _report("clean", "答案是 42。"),
         _report("open", "好问题！答案是 42。"),
-        _report("emo", "搞定 ✅"),
+        _report("close", "步骤如上。希望对你有帮助！"),
         _report("boom", "好问题！", error="provider exploded"),  # errored → 跳过
         _report("blank", "   "),  # 空正文 → 跳过
     ]
@@ -142,33 +129,33 @@ def test_metrics_counts_clean_and_per_rule() -> None:
     assert m.total == 3
     assert m.clean == 1
     assert m.clean_rate == pytest.approx(1 / 3)
-    assert m.per_rule == {RULE_OPENING: 1, RULE_EMOJI: 1}
+    assert m.per_rule == {RULE_OPENING: 1, RULE_CLOSING: 1}
     assert m.violation_rate(RULE_OPENING) == pytest.approx(1 / 3)
-    assert sorted(cid for cid, _ in m.offenders) == ["emo", "open"]
+    assert sorted(cid for cid, _ in m.offenders) == ["close", "open"]
 
 
 def test_metrics_empty_rates_are_none() -> None:
     m = style_metrics([])
     assert m.total == 0
     assert m.clean_rate is None
-    assert m.violation_rate(RULE_EMOJI) is None
+    assert m.violation_rate(RULE_OPENING) is None
 
 
 def test_metrics_to_dict_shape() -> None:
-    m = style_metrics([_report("emo", "搞定 ✅")])
+    m = style_metrics([_report("open", "好问题！答案是 42。")])
     d = style_metrics_to_dict(m)
     assert d["total"] == 1
-    assert d["per_rule"] == {RULE_EMOJI: 1}
-    assert d["violation_rates"][RULE_EMOJI] == pytest.approx(1.0)
-    assert d["offenders"] == [{"case_id": "emo", "rules": [RULE_EMOJI]}]
+    assert d["per_rule"] == {RULE_OPENING: 1}
+    assert d["violation_rates"][RULE_OPENING] == pytest.approx(1.0)
+    assert d["offenders"] == [{"case_id": "open", "rules": [RULE_OPENING]}]
 
 
 def test_format_report_smoke() -> None:
-    m = style_metrics([_report("emo", "搞定 ✅"), _report("ok", "答案是 42。")])
+    m = style_metrics([_report("open", "好问题！答案是 42。"), _report("ok", "答案是 42。")])
     text = format_style_report(m)
     assert "输出风格违规" in text
-    assert "未授权emoji" in text
-    assert "emo" in text
+    assert "套话开场" in text
+    assert "open" in text
 
 
 def test_style_metrics_defaults() -> None:

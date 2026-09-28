@@ -61,6 +61,9 @@ export interface ToolResultData {
   /** Present on status=error or status=redirect when the server sent `tool_use_end.failure`. */
   failure?: ToolFailure | null;
   status: "running" | "success" | "error" | "redirect";
+  /** Live stdout/stderr while the call is still running. Absent once display is authority. */
+  liveStdout?: string;
+  liveStderr?: string;
   /** Conversation the call belongs to — only the browser result uses it, to lazy-fetch
    * its key-frame from that conversation's workspace. Absent everywhere else. */
   conversationId?: string | null;
@@ -193,10 +196,11 @@ function isConversationLogDisplay(d: unknown): d is ConversationLogDisplay {
   return false;
 }
 
-/** Whether a tool has anything to expand — a rich display, an editable diff, or a
- * non-empty text result. Drives ProcessToolRow's click-to-expand affordance. */
+/** Whether a tool has anything to expand — a rich display, an editable diff, a
+ * command already on the call, or a non-empty text result. Drives the tool
+ * row's click-to-expand affordance. A running call stays closed only when
+ * none of those exist yet; the command is known at start. */
 export function hasToolResultBody(d: ToolResultData): boolean {
-  if (d.status === "running") return false;
   if (d.status === "redirect") {
     // Compact title ("改用搜索") is the whole user face; do not expand a paragraph.
     return false;
@@ -461,9 +465,12 @@ function WebFetchResult({ display }: { display: WebFetchDisplay }) {
 function CodeExecResult({
   display,
   command,
+  pending = false,
 }: {
   display: CodeExecDisplay;
   command?: string;
+  /** Still running: skip the empty-output label. Output grows in place. */
+  pending?: boolean;
 }) {
   const incomplete = isVerifyBudgetExceeded(display);
   const stdout = (display.stdout ?? "").replace(/\n+$/, "");
@@ -478,7 +485,9 @@ function CodeExecResult({
             {cmd}
           </pre>
         )}
-        {empty && <span className="text-muted-foreground/60">（无输出）</span>}
+        {empty && !pending && (
+          <span className="text-muted-foreground/60">（无输出）</span>
+        )}
         {stdout && (
           <pre className="whitespace-pre-wrap break-words text-foreground/90">
             {stdout}
@@ -671,6 +680,19 @@ export function ToolResultView({ data }: { data: ToolResultData }) {
   if (data.status === "redirect") {
     return null;
   }
+  if (data.status === "running") {
+    const command = commandBody(data);
+    const stdout = data.liveStdout ?? "";
+    const stderr = data.liveStderr ?? "";
+    if (!command && !stdout && !stderr) return null;
+    return (
+      <CodeExecResult
+        display={{ stdout, stderr, exit_code: 0 }}
+        command={command}
+        pending
+      />
+    );
+  }
   const rich = renderRichToolResult(data);
   if (data.status === "error" && !rich) {
     return <PlainToolError data={data} />;
@@ -810,6 +832,8 @@ function ToolResultText({ data }: { data: ToolResultData }) {
     ? stripHostUntrustedFrame(raw)
     : raw;
   const command = commandBody(data);
+  const trimmed = text.trim();
+  if (!command && !trimmed) return null;
   return (
     <>
       {command ? (
@@ -817,7 +841,7 @@ function ToolResultText({ data }: { data: ToolResultData }) {
           {command}
         </pre>
       ) : null}
-      <TextResult result={text} status={data.status} />
+      {trimmed ? <TextResult result={text} status={data.status} /> : null}
     </>
   );
 }

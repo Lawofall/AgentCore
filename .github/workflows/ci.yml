@@ -141,7 +141,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter agentcore-desktop...
 
-      # Desktop opGrep tests resolve rg from resources/rg or apps/server/bin/rg.
+      # Desktop opGrep tests resolve rg from resources/rg.
       - name: Install ripgrep (desktop)
         run: python3 apps/server/scripts/fetch_ripgrep.py --install-desktop
 

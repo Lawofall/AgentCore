@@ -16,7 +16,7 @@ import { markSidecarUnhealthy, probeSidecar } from "@/services/sidecarHealth";
 import {
   isSidecarEnabled,
   liveSidecarTarget,
-  resolveConversationLocalTarget,
+  localBindSendBlock,
   resolveNewTurnBind,
   setActiveSidecarTurn,
 } from "@/services/sidecarRouting";
@@ -44,7 +44,6 @@ import {
   throwIfCannotOpenStream,
 } from "@/stores/conversation/turnPhaseActions";
 import { clearInteractionPrompts } from "@/stores/interactionPrompts";
-import { workspaceRootGoneMessage } from "@shared/workspaceRootGone";
 import { dismissRecoverableHints } from "./dismissRecovery";
 import {
   finalizeGeneratingIfNeeded,
@@ -78,7 +77,7 @@ export interface SendTurnSpec {
 
 function setExecutionVia(
   conversationId: string,
-  via: "sidecar" | "cloud_bridge" | null,
+  via: "sidecar" | null,
 ): void {
   useConversationStore.getState().setExecutionVia(via, conversationId);
 }
@@ -227,20 +226,16 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
   const turnCommit: TurnCommitReport = { committed: false };
   try {
     traceTurnMilestone(conversationId, "send_start");
-    // 路由（双模式工作区 §7.2）：本机传统默认同侧 sidecar =
-    //   有本地引擎 + 未显式强制关（sidecarPreference!=="off"；unset 不挡）+ 活本机绑定。
-    // 贴文件不改场地：区内引用 / 区外复制进 attachments/ 都跟绑定走。
-    // 云链路：纯云会话 / 显式强制关。探活失败与启动期失败出诊断横幅，不自动过桥。
-    // 死绑定：授权根在表、空子路径目录已不在盘 → 横幅，不 probe、不走云。
-    // 点名是 prompt 软提示，不挡本机。resolveNewTurnBind 早退不 probe；
-    // 健康由下方 probe 仅在有 live target 时收敛。
+    // 本机文件夹回合只走本地引擎。死绑定 / 授权表没有这个 id / 本机执行关了
+    // / 没有本地引擎 → 横幅，不 probe、不走云。纯云会话才进下面的云链路。
     const bind = await resolveNewTurnBind(conversationId);
-    if (bind.kind === "stale") {
-      logStreamPath(conversationId, "sidecar", "root_stale", {
-        root_id: bind.rootId,
+    const blocked = localBindSendBlock(bind);
+    if (blocked) {
+      logStreamPath(conversationId, "sidecar", blocked.reason, {
+        root_id: blocked.rootId,
       });
       throw new StreamError("sidecar", undefined, {
-        serverMessage: workspaceRootGoneMessage(bind.absPath),
+        serverMessage: blocked.message,
       });
     }
     const sidecarTarget = liveSidecarTarget(bind);
@@ -319,9 +314,7 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
           );
           return { unstartedRefusal: false };
         }
-        // 启动期 recoverable：引擎没起来 → 记坏 + 横幅（不降级云）。
-        // 云端占位失败不是引擎坏了 → 改走云 POST，不记坏、不写过桥脚注。
-        // 中途失败与用户停止不在此列。
+        // 启动期失败与云端占位失败都不改走云。占位失败不记坏引擎。
         if (
           !(sidecarErr instanceof StreamError) ||
           sidecarErr.kind !== "sidecar" ||
@@ -333,48 +326,27 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
           sidecarErr.serverMessage?.trim() || "本地引擎未能启动";
         if (sidecarErr.code === SIDECAR_OCCUPY_FAILED_CODE) {
           setExecutionVia(conversationId, null);
-          ensureSendAssistantPlaceholder(conversationId, optimisticUserId);
-          beginTurnPreflight(conversationId);
-          throwIfCannotOpenStream(conversationId, ac.signal);
-          logStreamPath(conversationId, "cloud", "occupy_failed", {
-            root_id: sidecarTarget.rootId,
-            detail: fallbackDetail,
-          });
-          enterTurnStreaming(conversationId);
-          await streamConversation({
-            conversationId,
-            content,
-            attachments,
-            agentMentions,
-            delivery,
-            signal: ac.signal,
-            turnCommit,
-            streamPathReason: "occupy_failed",
-          });
-        } else {
-          markSidecarUnhealthy(sidecarTarget, fallbackDetail);
-          logStreamPath(conversationId, "sidecar", "start_failed", {
+          logStreamPath(conversationId, "sidecar", "occupy_failed", {
             root_id: sidecarTarget.rootId,
             detail: fallbackDetail,
           });
           throw sidecarErr;
         }
+        markSidecarUnhealthy(sidecarTarget, fallbackDetail);
+        logStreamPath(conversationId, "sidecar", "start_failed", {
+          root_id: sidecarTarget.rootId,
+          detail: fallbackDetail,
+        });
+        throw sidecarErr;
       }
     } else {
-      // 云链路：显式强制关 / 无本机引擎 / 纯云会话。
-      const bridging =
-        sidecarTarget !== null ||
-        (await resolveConversationLocalTarget(conversationId)) !== null;
-      setExecutionVia(conversationId, bridging ? "cloud_bridge" : null);
+      // 只剩没有本机绑定的云端对话。
+      setExecutionVia(conversationId, null);
       const reason = resolveCloudPathReason();
       logStreamPath(conversationId, "cloud", reason, {
-        bridging,
         root_id: sidecarTarget?.rootId ?? null,
         probe_detail: probe?.detail ?? null,
       });
-      // 本地意向已是会话状态（Conversation.local_container_root_id，建会话时定型，
-      // 工作区对称化 D1a），服务端据此在裸聊首次产文件时懒建本地 / 云端文件夹——
-      // 回合不再携带容器根。
       throwIfCannotOpenStream(conversationId, ac.signal);
       enterTurnStreaming(conversationId);
       await streamConversation({

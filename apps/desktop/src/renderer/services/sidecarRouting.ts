@@ -4,16 +4,20 @@ import { hasLocalEngine } from "@/lib/capabilities";
 import { queryClient } from "@/lib/queryClient";
 import { workspaceKeys } from "@/lib/queryKeys";
 import { bareConversationScratchSubpath } from "@/services/bareScratchPath";
+import {
+  localEngineOffMessage,
+  workspaceRootAbsentMessage,
+  workspaceRootGoneMessage,
+} from "@shared/workspaceRootGone";
 import type { WorkspaceInfo } from "@/services/workspaces";
 import { useUIStore } from "@/stores/ui";
 
 /**
  * 会话路由判定：一个回合该走本地 sidecar，还是云端 SSE。
  *
- * 双模式工作区 §7.2：本机传统（`mode=local` + 活本机根）新开回合**默认同侧** sidecar；
- * 云协作永不 sidecar。死绑定（授权表有根、空子路径目录已不在盘上）不 probe、不降级云。
- * 过桥仅探活失败等机制兜底（见 `turns.sendTurn`），不当默认。
- * 通用·进阶「允许本机执行」显式关 = 强制走云；unset / 默认关**不**挡本机传统同侧。
+ * 双模式工作区 §7.2：本机传统（`mode=local` + 活本机根）新开回合**只走** sidecar；
+ * 云协作永不 sidecar。死绑定、授权表没有这个 id、本机执行关闭、占位失败：
+ * 这一轮不开始，不降级云。unset / 默认关**不**挡本机传统同侧。
  *
  * 续跑例外：`origin=sidecar` / 已有本机活回合须跟本地事实（{@link resolveLocalBind}
  * / {@link getActiveSidecarTarget}），忽略强制关——本机帧云端没有。
@@ -33,16 +37,25 @@ export interface SidecarTarget {
 }
 
 /**
- * 本机绑定三态：未绑 / 活 / 死。
+ * 本机绑定：未绑 / 活 / 死 / 这台电脑没有这个 id / 本地引擎不能接。
  *
- * - unbound：无本机绑定或授权表没有该 rootId → 新回合走云
+ * - unbound：没有本机绑定 → 新回合走云
  * - live：授权根在表；空子路径目录在盘上，或非空子路径可 mkdir
- * - stale：授权根在表，空子路径却不是目录 → **不 probe、不 spawn、不降级云**
+ * - stale：授权根在表，空子路径却不是目录 → 不 probe、不 spawn、不走云
+ * - absent：会话记着 root id，授权表里没有 → 不走云，请重新选择位置
+ * - engine_off：有本机绑定，但这台客户端没有本地引擎或本机执行已关 → 不走云
  */
 export type LocalBindResolution =
   | { kind: "unbound" }
   | { kind: "live"; rootId: string; subpath: string }
-  | { kind: "stale"; rootId: string; subpath: string; absPath?: string };
+  | { kind: "stale"; rootId: string; subpath: string; absPath?: string }
+  | { kind: "absent"; rootId: string; subpath: string }
+  | {
+      kind: "engine_off";
+      rootId: string;
+      subpath: string;
+      reason: "no_engine" | "switch_off";
+    };
 
 export function liveSidecarTarget(
   bind: LocalBindResolution,
@@ -128,7 +141,7 @@ export function getLastSidecarTarget(
  * 引擎仍可能在 sidecar 进程里跑。先活 map，再 last（含 turnId）。
  *
  * ``executionVia=sidecar`` 且两表都空时（例如渲染进程重载）才落到会话本地根。
- * 云过桥（``cloud_bridge``）不得走本地根，否则停令打进空 sidecar、云上队员不停。
+ * 非 sidecar 不落到本地根，避免停令打进空 sidecar。
  */
 export function resolveSidecarControlTarget(
   conversationId: string,
@@ -141,7 +154,7 @@ export function resolveSidecarControlTarget(
 
 export async function resolveSidecarControlTargetForEngine(
   conversationId: string,
-  executionVia: "sidecar" | "cloud_bridge" | null | undefined,
+  executionVia: "sidecar" | null | undefined,
 ): Promise<ActiveSidecarTurn | SidecarTarget | null> {
   const mapped = resolveSidecarControlTarget(conversationId);
   if (mapped) return mapped;
@@ -165,7 +178,7 @@ export function isSidecarForceOff(): boolean {
 
 /**
  * 桌面本地引擎能力面是否可用（有引擎 + 未强制关）。
- * 新开回合路由见 {@link resolveSidecarRoot}（另要求本机绑定）；本函数供过桥 reason 等。
+ * 新开回合路由见 {@link resolveNewTurnBind}；本函数仍给纯云会话的路径原因。
  * web 恒 false。
  */
 export function isSidecarEnabled(): boolean {
@@ -196,7 +209,7 @@ function scratchFromWorkspaceCache(
  *
  * 项目会话：继承 Folder 的 `local_root_id` + `local_subpath`。
  * 裸聊：执行环境绑定根下一律 `conversations/<id>`（空 subpath 契约路径）。
- * 根不在授权表 → unbound。空子路径且 `listRoots.missing` → stale（不走云）。
+ * 根不在授权表 → absent（不走云）。空子路径且 `listRoots.missing` → stale（不走云）。
  */
 export async function resolveLocalBind(
   conversationId: string,
@@ -211,7 +224,13 @@ export async function resolveLocalBind(
     }
     const roots = await window.fsApi.listRoots();
     const root = roots.find((r) => r.id === folder.localRootId);
-    if (!root) return { kind: "unbound" };
+    if (!root) {
+      return {
+        kind: "absent",
+        rootId: folder.localRootId,
+        subpath: folder.localSubpath ?? "",
+      };
+    }
     const subpath = folder.localSubpath ?? "";
     if (emptySubpath(subpath) && root.missing) {
       return {
@@ -235,7 +254,7 @@ export async function resolveLocalBind(
 
   const roots = await window.fsApi.listRoots();
   const root = roots.find((r) => r.id === rootId);
-  if (!root) return { kind: "unbound" };
+  if (!root) return { kind: "absent", rootId, subpath };
   if (emptySubpath(subpath) && root.missing) {
     return {
       kind: "stale",
@@ -258,21 +277,71 @@ export async function resolveConversationLocalTarget(
 }
 
 /**
- * 新开回合绑定：无引擎 / 显式强制关视为 unbound；否则 {@link resolveLocalBind}。
+ * 新开回合绑定。
+ *
+ * 没有本机绑定 → unbound（云端对话）。有本机绑定但本地引擎接不住
+ * （没有引擎 / 本机执行已关 / 授权表没有这个 id / 目录已不在盘上）
+ * → 对应的停发态，**不当成** unbound。
  */
 export async function resolveNewTurnBind(
   conversationId: string,
 ): Promise<LocalBindResolution> {
-  if (!hasLocalEngine() || isSidecarForceOff()) return { kind: "unbound" };
-  return resolveLocalBind(conversationId);
+  const bind = await resolveLocalBind(conversationId);
+  if (bind.kind === "unbound") return bind;
+  if (!hasLocalEngine()) {
+    return {
+      kind: "engine_off",
+      rootId: bind.rootId,
+      subpath: bind.subpath,
+      reason: "no_engine",
+    };
+  }
+  if (isSidecarForceOff()) {
+    return {
+      kind: "engine_off",
+      rootId: bind.rootId,
+      subpath: bind.subpath,
+      reason: "switch_off",
+    };
+  }
+  return bind;
+}
+
+/** 本机文件夹回合在发送前停住时的原因与横幅。云端对话返回 null。 */
+export function localBindSendBlock(
+  bind: LocalBindResolution,
+): { reason: string; message: string; rootId: string } | null {
+  if (bind.kind === "stale") {
+    return {
+      reason: "root_stale",
+      message: workspaceRootGoneMessage(bind.absPath),
+      rootId: bind.rootId,
+    };
+  }
+  if (bind.kind === "absent") {
+    return {
+      reason: "root_absent",
+      message: workspaceRootAbsentMessage(),
+      rootId: bind.rootId,
+    };
+  }
+  if (bind.kind === "engine_off") {
+    return {
+      reason: bind.reason === "switch_off" ? "switch_off" : "no_local_engine",
+      message: localEngineOffMessage(bind.reason),
+      rootId: bind.rootId,
+    };
+  }
+  return null;
 }
 
 /**
  * 解析**新开回合**应在其上跑 sidecar 的目标；不该走 sidecar 则 null（早退，不 probe / 不 spawn）。
  *
  * = 桌面有本地引擎、用户未显式强制关（{@link isSidecarForceOff}），**且**该会话是活本机绑定。
- * 云项目 / 无本地绑定 / 根不在授权表 / 显式强制关 → null（交回云链路）。
- * 死绑定也是 null——**sendTurn 必须先看 {@link resolveNewTurnBind} 的 stale，禁止把 null 当云**。
+ * 云项目 / 无本地绑定 → null（交回云链路）。
+ * 死绑定、授权表没有这个 id、本机执行关了，也是 null——**sendTurn 必须先看
+ * {@link localBindSendBlock}，禁止把 null 当云**。
  * **不**因 unset→`SIDECAR_DEFAULT_ENABLED=false` 早退。
  *
  * 纯「新回合路由意图」，**不掺运行时健康**（探活由 `sendTurn` 收敛）。**续跑勿用本函数**：

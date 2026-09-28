@@ -154,14 +154,14 @@ def coordination_boundary_hook(
                 role = node.role or node.run_id
                 if state is not None:
                     for e in state.escalations:
-                        if e.get("reason") in ("scope", "dep") and not e.get("consumed"):
+                        if e.get("reason") == "adjust" and not e.get("consumed"):
                             session.post(
                                 CoordinationEvent(
                                     kind=CoordinationEventKind.ESCALATION,
                                     payload={
                                         "run_id": node.run_id,
                                         "role": role,
-                                        "reason": e.get("reason") or "scope",
+                                        "reason": e.get("reason") or "adjust",
                                         "question": e.get("question") or "",
                                         "assumption": e.get("assumption") or "",
                                         "source": "scope_boundary",

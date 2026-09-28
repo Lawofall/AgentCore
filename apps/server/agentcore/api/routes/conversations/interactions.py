@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.api.dependencies import AuthUser, get_conversation_repo, get_db
@@ -26,11 +27,19 @@ from agentcore.runtime.interaction_orphan import emit_orphan_fact
 from agentcore.runtime.journal.pending_interactions import fold_pending_interactions
 from agentcore.runtime.settlement import already_settled_in_writer, prewrite_settlement
 from agentcore.runtime.turn.runs import turn_runs
+from agentcore.workspace.exec_output import feed_exec_output
 
 from ._helpers import _require_conversation_write
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+
+
+class ExecOutputChunk(BaseModel):
+    """One stdout/stderr piece for a desktop EXECUTE that has not settled."""
+
+    stream: str = Field(..., max_length=16)
+    chunk: str = Field(..., max_length=8192)
 
 
 def _settlement_event_for_resolve(
@@ -163,3 +172,29 @@ async def resolve_interaction(
             )
 
     raise NotFoundError("交互请求不存在或已处理")
+
+
+@router.post("/{conversation_id}/interactions/{interaction_id}/output")
+async def feed_interaction_output(
+    conversation_id: str,
+    interaction_id: str,
+    user: AuthUser,
+    body: ExecOutputChunk,
+    session: AsyncSession = Depends(get_db),
+):
+    """Push one live chunk into a not-yet-settled desktop EXECUTE.
+
+    Does not settle the op. A late chunk (op already finished) is 404; the
+    caller ignores it. The final envelope remains the authority.
+    """
+    await _require_conversation_write(conversation_id, user.user_id, session)
+    registry = default_interaction_registry()
+    pending = registry.get(interaction_id)
+    if (
+        pending is None
+        or pending.conversation_id != conversation_id
+        or pending.kind != InteractionKind.CLIENT_TOOL
+        or not feed_exec_output(interaction_id, body.stream, body.chunk)
+    ):
+        raise NotFoundError("交互请求不存在或已处理")
+    return StatusResponse()

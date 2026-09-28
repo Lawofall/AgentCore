@@ -415,7 +415,7 @@ async def send_message(
     ``delivery`` 必填（``steer`` | ``queue``；缺 → 422）：
 
     - **空闲** → 开跑并流式推送整个回合（客户端仍带 ``delivery=steer``）。
-    - **协调活跃 + steer** → ``user_interjection``（短流确认）；CEO 可智能升格排队。
+    - **协调活跃 + steer** → ``user_interjection``（短流确认）；留在这一轮，不改排。
     - **协调活跃 + queue** → **强制** FIFO（绕过插话），立即 ``turn_queued``。
     - **经典 in-flight + queue** → FIFO ``turn_queued``，drain 后同连接续流。
     - **经典 in-flight + steer** → 队长循环还在接受时挂到进程内 pending（DURABLE

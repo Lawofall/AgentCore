@@ -199,10 +199,9 @@ def resolve_verify_timeouts(
 
 
 def _make_output_callback(context: ToolContext):
-    # Only backends that run the sandbox in-process stream: subprocess / gVisor read
-    # ``ExecutionRequest.on_output``. The desktop channel cannot carry a callback —
-    # ``workspace/local.py::_channel_execute`` drops it and hands back the whole output
-    # once the command has exited.
+    # Sandbox backends invoke this from the in-process pipe. Desktop EXECUTE binds
+    # the same callback for the op (``workspace/exec_output.py``) and feeds chunks
+    # until the op settles; the final envelope is still the whole capture.
     on_progress = context.on_progress
     if not on_progress:
         return None

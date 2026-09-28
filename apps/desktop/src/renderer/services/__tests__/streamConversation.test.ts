@@ -296,11 +296,11 @@ describe("streamConversation (refused turn)", () => {
       conversationId: "c1",
       content: "hi",
       delivery: "steer",
-      streamPathReason: "probe_unhealthy",
+      streamPathReason: "no_local_target",
     }).catch(() => undefined);
     expect(vi.mocked(fetch).mock.calls[0]?.[1]?.headers).toEqual(
       expect.objectContaining({
-        "X-AgentCore-Stream-Path-Reason": "probe_unhealthy",
+        "X-AgentCore-Stream-Path-Reason": "no_local_target",
       }),
     );
   });

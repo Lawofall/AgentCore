@@ -56,8 +56,8 @@ export class StreamError extends Error {
   code?: string;
   serverMessage?: string;
   retryAfter?: number;
-  /** 本回合在产生任何可见输出 / 副作用之前就失败了。当前用途：sidecar 云端占位失败
-   * （引擎没跑）可改走云 POST；引擎探活 / 启动失败不再降级云。 */
+  /** 本回合在产生任何可见输出 / 副作用之前就失败了。探活、启动、占位失败都停在
+   * 这一轮，不改走云端。 */
   recoverable?: boolean;
   /** 上游额度恢复 / 平台配额重置的绝对时刻（ISO8601 UTC，原样保留）——由渲染层按用户
    * 本机时区成文（{@link withRecoveryMoment}），服务端句子里已不含时刻。 */

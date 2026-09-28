@@ -7,8 +7,8 @@ import {
 /**
  * 本地引擎（sidecar）会话级健康缓存 + 主动探活。
  *
- * 双模式工作区 §7.2 · 探活增强。本机传统新开回合**默认同侧** sidecar（`resolveSidecarRoot`：
- * unset 不挡；仅 `sidecarPreference==="off"` 强制云）。若用户机器环境起不来（杀软 / 缺组件 /
+ * 双模式工作区 §7.2 · 探活增强。本机传统新开回合只走 sidecar（`resolveSidecarRoot`：
+ * unset 不挡；`sidecarPreference==="off"` 时本机文件夹回合不开始，不改走云）。若用户机器环境起不来（杀软 / 缺组件 /
  * venv 损坏…），没有探活则每个回合都「试 startTurn → 启动失败 → 横幅」，反复 spawn。
  *
  * 本模块把「首轮失败」前移成一次**主动探活**，并按 `root + subpath` 记住结果（app 进程内、
@@ -24,7 +24,7 @@ import {
  *     命中缓存后同样报错，不走云。
  *   - {@link clearSidecarHealth}：用户在设置里重新开启本地引擎时清空，给「修好环境后重试」机会。
  *
- * 显式强制关仍走云（`executionVia=cloud_bridge`，脚注对 `off` 隐藏）。引擎不可用不出过桥脚注。
+ * 显式强制关不把本机文件夹回合改走云。引擎不可用不出过桥脚注。
  *
  * 探活成功留存的进程正好被随后的首个回合复用（主进程 `ensure` 命中缓存），故探活不浪费拉起。
  */

@@ -47,7 +47,7 @@ export interface FaceBadgeSignals {
   escalationPending: number;
   /** 已上报但非待拍板的升级数（scope/dep 才在 face 留 passive 标记 → 过程性）。 */
   escalationRaised: number;
-  escalationKind: "wait" | "scope" | "dep" | "contradiction" | null | undefined;
+  escalationKind: "wait" | "adjust" | "contradiction" | null | undefined;
   /** 检查点待放行（待拍板桶）。 */
   checkpointPending: boolean;
   /** 检查点已停止（异常桶）。 */
@@ -75,9 +75,7 @@ export function buildFaceBadgeDescriptors(
     out.push({ key: "escalation", bucket: "decision" });
   } else if (
     s.escalationRaised > 0 &&
-    (s.escalationKind === "scope" ||
-      s.escalationKind === "dep" ||
-      s.escalationKind === "contradiction")
+    (s.escalationKind === "adjust" || s.escalationKind === "contradiction")
   ) {
     out.push({ key: "escalation", bucket: "process" });
   }

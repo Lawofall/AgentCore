@@ -75,7 +75,7 @@ def _gap_fill_add_errors(
     if not gap_ids:
         return [
             "补跑拒绝：当前无失败/跳过缺口，禁止无缺口整团重开；"
-            "请 steers 改未跑步骤，或 stop=true 收口，勿用 replaces/continue 重开全队"
+            "请用 tell 给还没开始的人补一句，或 stop=true 收口，勿用 replaces/continue 重开全队"
         ]
 
     max_allowed = min(len(gap_ids), MAX_GAP_FILL_ADDS)
@@ -224,19 +224,19 @@ async def apply_replan(
     steer_ops: list[tuple[RunSpec, str]] = []
     for i, s in enumerate(steers):
         if not isinstance(s, dict):
-            errors.append(f"steers[{i}] 必须是对象")
+            errors.append(f"tell[{i}] 必须是对象")
             continue
         rid = str(s.get("run_id") or "").strip()
         note = str(s.get("note") or "").strip()
         node = plan.by_id(rid) if rid else None
         if node is None:
-            errors.append(f"steers[{i}]: run_id `{rid}` 不在当前计划")
+            errors.append(f"tell[{i}]: run_id `{rid}` 不在当前计划")
             continue
         if rid in completed:
-            errors.append(f"steers[{i}]: `{rid}` 已完成，无法操舵")
+            errors.append(f"tell[{i}]: `{rid}` 已完成，无法补话")
             continue
         if not note:
-            errors.append(f"steers[{i}]: 缺少 note")
+            errors.append(f"tell[{i}]: 缺少 note")
             continue
         steer_ops.append((node, note))
 
@@ -424,43 +424,25 @@ def format_boundary_for_ceo(
 
 
 def format_scope_boundary(plan: RunPlan, results: dict, nodes: list[RunSpec]) -> str:
-    """Reactive-arm brief — 职责偏离 (reason=scope) AND/OR 依赖缺口·卡在缺输入 (reason=dep, §2.4).
-
-    Both kinds ride the SAME reactive boundary (``BoundaryReason.SCOPE``); this brief tells the
-    captain which is which so it picks the right ``replan`` lever — ``steers`` to re-aim an
-    un-run step for a scope deviation, ``add`` to append a producer / wire a dependency edge for
-    a worker卡在缺输入."""
+    """Reactive-arm brief — a finished worker asked the CEO to look at the rest (adjust)."""
     from agentcore.runtime.runs import RunPhase
 
-    # Does any surfaced node carry a dep (依赖缺口) signal? Tailor the header / closing guidance
-    # so a pure-scope yield reads exactly as before, while a dep yield steers toward replan(add).
-    has_dep = any(
-        e.get("reason") == "dep"
-        for n in nodes
-        for e in (results.get(n.run_id).escalations if results.get(n.run_id) else [])
-    )
-    headline = (
-        "队员报告职责偏离 / 卡在缺输入" if has_dep else "队员报告职责偏离"
-    )
     lines = [
-        f"## 计划已让出（{headline}，请校准未跑步骤）",
-        "下列【已完成】步骤报告了职责偏离 (escalate reason=scope) 或缺材料"
-        "(escalate reason=dep)：前者发现真正要做的与初始计划不符，后者缺一个还不存在的输入 / 依赖"
-        "（没人产出过、计划也没安排）才能做好。请阅读它们的产出与信号说明，再用 `replan` 续跑同一"
-        "计划——偏离用 `steers` 操舵未跑步骤，缺输入用 `add` 追加一个产出它的步骤 / 接一条依赖边。",
+        "## 计划已让出（队员做完自己这份，请看后面的安排）",
+        "下列【已完成】步骤用 escalate reason=adjust 请你看后面。"
+        "请阅读产出和问题，再用 `replan` 续跑同一计划："
+        "`tell` 给还没开始的人补一句，`add` 再加一个人。",
     ]
     for node in nodes:
         state = results.get(node.run_id)
         summary = review_summary_text(state)
         esc_lines: list[str] = []
         for e in state.escalations if state else []:
-            kind = e.get("reason")
-            if kind not in ("scope", "dep"):
+            if e.get("reason") != "adjust":
                 continue
             question = str(e.get("question") or "").strip()
             assumption = str(e.get("assumption") or "").strip()
-            tag = "缺输入" if kind == "dep" else "偏离"
-            esc_lines.append(f"  - {tag}：{question or '（未写明）'}")
+            esc_lines.append(f"  - {question or '（未写明）'}")
             if assumption:
                 esc_lines.append(f"    暂定假设：{assumption}")
         lines.append(
@@ -471,13 +453,12 @@ def format_scope_boundary(plan: RunPlan, results: dict, nodes: list[RunSpec]) ->
     pending = [n.run_id for n in plan.nodes if n.run_id not in results]
     done = sum(1 for s in results.values() if s and s.phase is RunPhase.COMPLETED)
     lines.append(
-        "\n---\n请调用 `replan` 校准未跑步骤：`steers=[{run_id, note}]` 操舵尚未运行的下游"
-        "（运行前注入指令）；有队员【卡在缺输入】时用 `add=[{role, task, depends_on}]` 追加一个"
-        "产出它的步骤 / 接一条依赖边；确认无需改动可"
+        "\n---\n请调用 `replan`：`tell=[{run_id, note}]` 给还没开始的人补一句；"
+        "要再加一个人用 `add=[{role, task, depends_on}]`；确认无需改动可"
         "直接 `replan()` 续跑；确无需继续则 `replan(stop=true)`。\n"
         "校准前主动对一遍【拼图边】（语义边界对账）：这次信号很可能波及兄弟步骤——别只盯举手这块，"
         "查其它已完成步骤与它在共享点（接口 / 字段 / 数据格式）上是否还对得上，有冲突 / 缺口 / 重复"
-        "就一并用 `steers` 操舵未跑步骤、或用 `delegate`（`continue_from_run_id`）"
+        "就一并用 `tell` 给还没开始的人补一句、或用 `delegate`（`continue_from_run_id`）"
         "带现场续派已跑步骤对齐。\n"
         f"当前已完成 {done} 步；待跑：{('、'.join(f'`{p}`' for p in pending)) or '（无）'}。"
     )

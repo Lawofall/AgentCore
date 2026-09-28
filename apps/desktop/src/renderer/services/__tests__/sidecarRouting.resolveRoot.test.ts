@@ -35,6 +35,7 @@ import {
   canConversationUseSidecar,
   resolveConversationLocalTarget,
   resolveLocalBind,
+  resolveNewTurnBind,
   resolveSidecarRoot,
 } from "@/services/sidecarRouting";
 
@@ -74,12 +75,16 @@ describe("resolveSidecarRoot（新回合路由 · 本机传统默认同侧）", 
     expect(window.fsApi.listRoots).toHaveBeenCalled();
   });
 
-  it("显式 off → 强制关，早退 null，不 listRoots", async () => {
+  it("显式 off + 本机绑定 → 不是 sidecar 目标，也不当成无绑定", async () => {
     uiState.sidecarEnabled = false;
     uiState.sidecarPreference = "off";
-    const target = await resolveSidecarRoot("c1");
-    expect(target).toBeNull();
-    expect(window.fsApi.listRoots).not.toHaveBeenCalled();
+    expect(await resolveSidecarRoot("c1")).toBeNull();
+    expect(await resolveNewTurnBind("c1")).toEqual({
+      kind: "engine_off",
+      rootId: "container",
+      subpath: "conversations/c1",
+      reason: "switch_off",
+    });
   });
 
   it("显式 on → 仍解析本机绑定目标", async () => {
@@ -150,6 +155,43 @@ describe("resolveSidecarRoot（新回合路由 · 本机传统默认同侧）", 
     });
     expect(await resolveSidecarRoot("c-local")).toEqual({
       rootId: "proj-root",
+      subpath: "",
+    });
+  });
+
+  it("授权表没有会话上的 root id → absent，不走 sidecar", async () => {
+    getConvs.mockReturnValue([
+      {
+        id: "c-local",
+        title: "t",
+        folderId: "f-local",
+        localContainerRootId: null,
+      },
+    ]);
+    getFolds.mockReturnValue([
+      {
+        id: "f-local",
+        name: "LegacyLocal",
+        mode: "local",
+        localRootId: "old-root",
+        localSubpath: "",
+      },
+    ]);
+    window.fsApi = {
+      listRoots: vi
+        .fn()
+        .mockResolvedValue([{ id: "other-root", name: "Elsewhere" }]),
+    } as unknown as typeof window.fsApi;
+
+    expect(await resolveLocalBind("c-local")).toEqual({
+      kind: "absent",
+      rootId: "old-root",
+      subpath: "",
+    });
+    expect(await resolveSidecarRoot("c-local")).toBeNull();
+    expect(await resolveNewTurnBind("c-local")).toEqual({
+      kind: "absent",
+      rootId: "old-root",
       subpath: "",
     });
   });

@@ -458,7 +458,7 @@ def test_worker_identity_teaches_escalate_reason():
     assert "kind" not in props
     assert "向上请示" in desc
     assert "等人定" in desc
-    assert "活派偏了" in desc
+    assert "后面的安排要主管看" in desc
     assert "已拒凭据不要 wait" in props["reason"]["description"]
     captain = build_worker_identity(has_dependents=False, captain=True)
     assert "小问题（路径拼写" not in captain
@@ -522,7 +522,7 @@ async def test_worker_escalation_is_harvested_and_continues_on_scope():
                         function_name="escalate",
                         arguments_delta=(
                             '{"question": "用 Postgres 还是 MySQL?", '
-                            '"assumption": "暂用 Postgres", "reason": "scope"}'
+                            '"assumption": "暂用 Postgres", "reason": "adjust"}'
                         ),
                     )
                 ]
@@ -550,7 +550,7 @@ async def test_worker_escalation_is_harvested_and_continues_on_scope():
     esc = state.escalations[0]
     assert esc["question"] == "用 Postgres 还是 MySQL?"
     assert esc["assumption"] == "暂用 Postgres"
-    assert esc["reason"] == "scope"
+    assert esc["reason"] == "adjust"
     assert "blocking" not in esc
 
 
@@ -569,7 +569,7 @@ async def test_worker_escalation_emits_live_event_before_completion():
                         function_name="escalate",
                         arguments_delta=(
                             '{"question": "用 Postgres 还是 MySQL?", '
-                            '"assumption": "暂用 Postgres", "reason": "scope"}'
+                            '"assumption": "暂用 Postgres", "reason": "adjust"}'
                         ),
                     )
                 ]
@@ -598,7 +598,7 @@ async def test_worker_escalation_emits_live_event_before_completion():
     assert esc.payload["run_id"] == "t_1"
     assert esc.payload["question"] == "用 Postgres 还是 MySQL?"
     assert esc.payload["assumption"] == "暂用 Postgres"
-    assert esc.payload["kind"] == "scope"
+    assert esc.payload["kind"] == "adjust"
     assert "blocking" not in esc.payload
     # Live, not a harvest: the escalation surfaces strictly before the run finishes.
     assert types.index(EventType.RUN_ESCALATION) < types.index(EventType.RUN_COMPLETED)
@@ -615,7 +615,7 @@ async def test_escalate_tool_rejects_empty_question_and_acks_scope():
     bad = await tool.execute({"question": "  "}, _ctx())
     assert bad.success is False and "question" in (bad.error or "")
     ok = await tool.execute(
-        {"question": "Postgres 还是 MySQL?", "reason": "scope", "assumption": "暂用 PG"},
+        {"question": "Postgres 还是 MySQL?", "reason": "adjust", "assumption": "暂用 PG"},
         _ctx(),
     )
     assert ok.success is True and ok.is_terminal is False
@@ -629,9 +629,9 @@ async def test_escalate_invokes_on_escalate_callback_for_scope():
     await tool.execute({"question": "  "}, ctx)
     assert seen == []
     await tool.execute(
-        {"question": "Q?", "assumption": "暂定 A", "reason": "scope"}, ctx
+        {"question": "Q?", "assumption": "暂定 A", "reason": "adjust"}, ctx
     )
-    assert seen == [("Q?", "暂定 A", "scope")]
+    assert seen == [("Q?", "暂定 A", "adjust")]
 
 
 async def test_escalate_callback_failure_is_non_fatal():
@@ -640,19 +640,18 @@ async def test_escalate_callback_failure_is_non_fatal():
 
     ctx = replace(_ctx(), on_escalate=_boom)
     ok = await EscalateTool().execute(
-        {"question": "Q?", "reason": "scope", "assumption": "暂定 A"}, ctx
+        {"question": "Q?", "reason": "adjust", "assumption": "暂定 A"}, ctx
     )
     assert ok.success is True and ok.is_terminal is False
 
 
-async def test_escalate_dep_acks_finish_own_work():
+async def test_escalate_adjust_acks_finish_own_work():
     ok = await EscalateTool().execute(
-        {"question": "缺错误返回结构才能写测试", "reason": "dep"}, _ctx()
+        {"question": "缺错误返回结构才能写测试", "reason": "adjust"}, _ctx()
     )
     assert ok.success is True and ok.is_terminal is False
-    assert "缺材料" in ok.output
     assert "做完" in ok.output
-    assert "replan" not in ok.output
+    assert "主管会看" in ok.output
 
 
 async def test_cancel_worker_keeps_escalations_and_member_usage():
@@ -692,7 +691,7 @@ async def test_cancel_worker_keeps_escalations_and_member_usage():
                         function_name="escalate",
                         arguments_delta=(
                             f'{{"question": "Q{idx}?", '
-                            f'"assumption": "A{idx}", "reason": "scope"}}'
+                            f'"assumption": "A{idx}", "reason": "adjust"}}'
                         ),
                     )
                 ]

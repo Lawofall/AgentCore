@@ -72,7 +72,7 @@
         "agent_id": "w1",
         "question": "数据库选 Postgres 还是 MySQL？这关系到后续所有选型。",
         "assumption": "暂按 Postgres 推进",
-        "kind": "scope"
+        "kind": "adjust"
       },
       "timestamp": "2026-01-01T00:00:00.005Z"
     },
@@ -169,13 +169,6 @@
       "type": "message_end",
       "payload": {
         "finish_reason": "end_turn",
-        "usage": {
-          "input_tokens": 4200,
-          "output_tokens": 820,
-          "reasoning_tokens": 0,
-          "cache_hit_tokens": 0,
-          "cache_miss_tokens": 0
-        },
         "cost": {
           "input": 240000,
           "cached": 64000,
@@ -183,6 +176,13 @@
           "total": 360000,
           "currency": "CNY",
           "pricing_source": "curated"
+        },
+        "usage": {
+          "input_tokens": 4200,
+          "output_tokens": 820,
+          "reasoning_tokens": 0,
+          "cache_hit_tokens": 0,
+          "cache_miss_tokens": 0
         },
         "rounds": 0
       },
@@ -287,7 +287,7 @@
             "assumption": "暂按 Postgres 推进",
             "status": "raised",
             "answer": null,
-            "kind": "scope"
+            "kind": "adjust"
           }
         ],
         "process": [

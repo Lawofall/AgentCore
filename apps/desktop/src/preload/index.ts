@@ -15,6 +15,7 @@ import {
 } from "@shared/float-window-contract";
 import { HOST_CHANNELS, type HostApi } from "@shared/host-contract";
 import {
+  type ExecOutputEvent,
   FS_CHANNELS,
   type FsApi,
   type FsChangedEvent,
@@ -170,6 +171,11 @@ const fsApi: FsApi = {
     ipcRenderer.on(FS_CHANNELS.changed, listener);
     return () => ipcRenderer.removeListener(FS_CHANNELS.changed, listener);
   },
+  onExecuteOutput: (cb) => {
+    const listener = (_e: unknown, payload: ExecOutputEvent) => cb(payload);
+    ipcRenderer.on(FS_CHANNELS.executeOutput, listener);
+    return () => ipcRenderer.removeListener(FS_CHANNELS.executeOutput, listener);
+  },
   workspaceOp: (rootId, op, args, timeoutMs, correlation) =>
     ipcRenderer.invoke(FS_CHANNELS.workspaceOp, {
       rootId,
@@ -257,6 +263,7 @@ const sidecarApi: SidecarApi = {
   startTurn: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.startTurn, req),
   cancel: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.cancel, req),
   respond: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.respond, req),
+  execOutput: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.execOutput, req),
   runRedirect: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.runRedirect, req),
   runStop: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.runStop, req),
   debateSteer: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.debateSteer, req),

@@ -120,7 +120,7 @@ function ThemeRow({
 /**
  * 进阶开关——仅有本机引擎时由调用方挂载整段。
  *
- * 允许本机执行：强制关走云。展示用 `preference !== "off"`（unset 与 on 都算
+ * 允许本机执行：关掉后本机文件夹的对话先不发送。展示用 `preference !== "off"`（unset 与 on 都算
  * 允许），勿绑 `sidecarEnabled`（unset→默认 false，会显示关却仍默认同侧）。
  */
 function AdvancedSection() {
@@ -138,7 +138,7 @@ function AdvancedSection() {
       <SettingRow
         align="start"
         label="允许本机执行"
-        description="开启后本机文件夹走同侧引擎，不是离线。关闭则全部过桥；「我的文件」始终走云。"
+        description="开启后本机文件夹在这台电脑上改。不是离线。关闭后，本机文件夹的对话先不发送；「我的文件」始终走云。"
         control={
           <Switch
             checked={localEngineAllowed}

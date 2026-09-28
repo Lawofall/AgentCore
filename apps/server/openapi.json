@@ -7142,6 +7142,27 @@
         "title": "EvidenceLedgerEntryRest",
         "type": "object"
       },
+      "ExecOutputChunk": {
+        "description": "One stdout/stderr piece for a desktop EXECUTE that has not settled.",
+        "properties": {
+          "chunk": {
+            "maxLength": 8192,
+            "title": "Chunk",
+            "type": "string"
+          },
+          "stream": {
+            "maxLength": 16,
+            "title": "Stream",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stream",
+          "chunk"
+        ],
+        "title": "ExecOutputChunk",
+        "type": "object"
+      },
       "ExportDocxRequest": {
         "description": "Export a workspace Markdown file to a sibling ``.docx`` (确定性转换器).",
         "properties": {
@@ -10875,7 +10896,7 @@
         "type": "object"
       },
       "QueuedTurnItem": {
-        "description": "One FIFO queued turn (排队条权威内容源；GET / 快照).\n\n``turn_queued`` / ``turn_queue_cancelled`` remain change signals only.\nTimeline entrance is the ``message_start`` that names this user row.\n``turn_queue_started`` early-inserts the same row on a connection that\nalready holds that frame; it is not the entrance authority.\n``interjection_id`` is set when the entry was promoted from a user interjection\n(协调升队 / 经典 steer leftover); omitted / null for plain ``delivery=queue``.\n``user_message_id`` is the persisted user-row id (cancel deletes it; drain\nreuses it). Optional additive — old clients ignore. Omitted / null when unset.\n``position`` is 1-based FIFO index.\n``attachments`` / ``agent_mentions`` are the same fields drain forwards to\n``stream_chat`` (optional additive — old clients ignore).",
+        "description": "One FIFO queued turn (排队条权威内容源；GET / 快照).\n\n``turn_queued`` / ``turn_queue_cancelled`` remain change signals only.\nTimeline entrance is the ``message_start`` that names this user row.\n``turn_queue_started`` early-inserts the same row on a connection that\nalready holds that frame; it is not the entrance authority.\n``interjection_id`` is set when the entry was promoted from a user interjection\n(经典 steer 赶不上下一步；协调插话不再写入)；omitted / null for plain ``delivery=queue``.\n``user_message_id`` is the persisted user-row id (cancel deletes it; drain\nreuses it). Optional additive — old clients ignore. Omitted / null when unset.\n``position`` is 1-based FIFO index.\n``attachments`` / ``agent_mentions`` are the same fields drain forwards to\n``stream_chat`` (optional additive — old clients ignore).",
         "properties": {
           "agent_mentions": {
             "items": {
@@ -12080,7 +12101,7 @@
         "type": "object"
       },
       "ResolveEscalationInteraction": {
-        "description": "Settle a worker's blocking escalate (``escalation`` interaction, 阻塞式求决策 §4.5).\n\nRaised when a delegated worker hit a「只有用户能定、且猜错就作废」fork and suspended\nitself. Classic (non-coordination) path asks the user; coordination path awaits CEO\n``resolve_escalation`` (Invariant B: available iff a coordination session is active —\nclassic blocking has no free CEO inside ``delegate``). The user either answers\n(``answer``) or chooses 按假设继续 (``use_assumption`` true → wire status ``assumed``).\nWrite-lock conflicts may set ``transfer_ownership`` to path-handoff to the escalator.\nA wall-clock miss is ``timed_out``. A late resolve falls through as 404.",
+        "description": "Settle a worker's blocking escalate (``escalation`` interaction, 阻塞式求决策 §4.5).\n\nRaised when a delegated worker hit a「只有用户能定、且猜错就作废」fork and suspended\nitself. Classic (non-coordination) path asks the user; coordination path awaits the CEO\ntelling that worker via ``replan`` tell (Invariant B: only while a coordination session\nis active — classic blocking has no free CEO inside ``delegate``). The user either answers\n(``answer``) or chooses 按假设继续 (``use_assumption`` true → wire status ``assumed``).\nWrite-lock conflicts may set ``transfer_ownership`` to path-handoff to the escalator.\nA wall-clock miss is ``timed_out``. A late resolve falls through as 404.",
         "properties": {
           "answer": {
             "default": "",
@@ -23928,6 +23949,98 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/interactions/{interaction_id}/output": {
+      "post": {
+        "description": "Push one live chunk into a not-yet-settled desktop EXECUTE.\n\nDoes not settle the op. A late chunk (op already finished) is 404; the\ncaller ignores it. The final envelope remains the authority.",
+        "operationId": "feed_interaction_output_v1_conversations__conversation_id__interactions__interaction_id__output_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "interaction_id",
+            "required": true,
+            "schema": {
+              "title": "Interaction Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecOutputChunk"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Feed Interaction Output",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/local-turns": {
       "post": {
         "description": "Persist a turn that ran on the user's machine via the sidecar (双模式工作区 §一.1).\n\nThe local engine produced the reply on the user's box (no server SSE turn ran),\nso the desktop reports the finished turn here to land it in durable history.\nOwner-scoped (404 for a non-owner). Spend is NOT recorded here — a sidecar turn's\nLLM calls are metered authoritatively at the cloud inference proxy (``/v1/inference``,\nSlice 4a); this endpoint persists content only.\n\nUnlike ``send_message`` there is NO pre-turn billing gate — the turn already\nhappened on the user's machine; this only RECORDS its content. The write-back is\nidempotent so the desktop can safely retry a flaky POST: messages dedupe on the\nclient-minted ``user_message_id``, so a retry after a committed-but-lost response\nnever duplicates the turn. The title is generated best-effort on the user's resolved\nBYOK key (None → platform fallback).",
@@ -24575,7 +24688,7 @@
         ]
       },
       "post": {
-        "description": "Send a user message and get a streaming AI response via SSE.\n\n执行与请求解耦 (C1 · slice 1a): the pipeline runs as a *detached* task tracked in\nthe ``TurnRunRegistry`` (keyed by conversation), and the SSE stream only attaches\nto it (``detach_on_disconnect=True``). A client disconnect therefore no longer\nkills the turn (案例 1: 7-min 断连即丢交付) — it finishes + persists in the\nbackground; an explicit 停止 routes through ``POST .../stop`` instead.\n\n发送即有流 (D9): this endpoint **always** returns SSE (never 202 JSON).\n\n``delivery`` 必填（``steer`` | ``queue``；缺 → 422）：\n\n- **空闲** → 开跑并流式推送整个回合（客户端仍带 ``delivery=steer``）。\n- **协调活跃 + steer** → ``user_interjection``（短流确认）；CEO 可智能升格排队。\n- **协调活跃 + queue** → **强制** FIFO（绕过插话），立即 ``turn_queued``。\n- **经典 in-flight + queue** → FIFO ``turn_queued``，drain 后同连接续流。\n- **经典 in-flight + steer** → 队长循环还在接受时挂到进程内 pending（DURABLE\n  ``user_interjection(received)``；下一工具步顶再发 ``injected``）。散文收口\n  不为未读插话多留一轮；赶不上下一步的 leftover 升成下一回合\n  （``queued`` + ``turn_queued.degraded_from=steer``）。无 accepting 窗口 →\n  普通 FIFO，不标 ``degraded_from``。\n- **热路 pending**（approval / escalation / …）仍 409。\n\nGated before the stream starts (成本配额与计费.md §一) so a refused turn gets a\nclean error instead of a half-opened SSE: per-user rate limit first (sheds a\nflooding account before any resource DB work), then ownership, then the\nBYOK/quota billing gate (BYOK mode requires the user's own key; platform mode\nenforces quota). The resolved BYOK credentials thread through the whole turn.\n\nRequest-scoped DB session for preflight only — explicitly closed before the SSE\nstream opens so a long-lived stream never holds a pooled connection (fixes\nGC-termination warnings on abrupt teardown).",
+        "description": "Send a user message and get a streaming AI response via SSE.\n\n执行与请求解耦 (C1 · slice 1a): the pipeline runs as a *detached* task tracked in\nthe ``TurnRunRegistry`` (keyed by conversation), and the SSE stream only attaches\nto it (``detach_on_disconnect=True``). A client disconnect therefore no longer\nkills the turn (案例 1: 7-min 断连即丢交付) — it finishes + persists in the\nbackground; an explicit 停止 routes through ``POST .../stop`` instead.\n\n发送即有流 (D9): this endpoint **always** returns SSE (never 202 JSON).\n\n``delivery`` 必填（``steer`` | ``queue``；缺 → 422）：\n\n- **空闲** → 开跑并流式推送整个回合（客户端仍带 ``delivery=steer``）。\n- **协调活跃 + steer** → ``user_interjection``（短流确认）；留在这一轮，不改排。\n- **协调活跃 + queue** → **强制** FIFO（绕过插话），立即 ``turn_queued``。\n- **经典 in-flight + queue** → FIFO ``turn_queued``，drain 后同连接续流。\n- **经典 in-flight + steer** → 队长循环还在接受时挂到进程内 pending（DURABLE\n  ``user_interjection(received)``；下一工具步顶再发 ``injected``）。散文收口\n  不为未读插话多留一轮；赶不上下一步的 leftover 升成下一回合\n  （``queued`` + ``turn_queued.degraded_from=steer``）。无 accepting 窗口 →\n  普通 FIFO，不标 ``degraded_from``。\n- **热路 pending**（approval / escalation / …）仍 409。\n\nGated before the stream starts (成本配额与计费.md §一) so a refused turn gets a\nclean error instead of a half-opened SSE: per-user rate limit first (sheds a\nflooding account before any resource DB work), then ownership, then the\nBYOK/quota billing gate (BYOK mode requires the user's own key; platform mode\nenforces quota). The resolved BYOK credentials thread through the whole turn.\n\nRequest-scoped DB session for preflight only — explicitly closed before the SSE\nstream opens so a long-lived stream never holds a pooled connection (fixes\nGC-termination warnings on abrupt teardown).",
         "operationId": "send_message_v1_conversations__conversation_id__messages_post",
         "parameters": [
           {

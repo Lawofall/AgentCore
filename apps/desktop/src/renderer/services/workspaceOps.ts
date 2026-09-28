@@ -3,6 +3,7 @@ import {
   WORKSPACE_RECONNECT_DETAIL,
   fulfillClientToolOnce,
 } from "@/services/clientToolFulfill";
+import { feedExecOutput } from "@/services/interaction";
 import type { InteractionSettleOrigin } from "@/services/interaction";
 import { resolveConversationLocalTarget } from "@/services/sidecarRouting";
 import { useWorkspaceChannelStore } from "@/stores/workspaceChannel";
@@ -126,7 +127,8 @@ export async function performWorkspaceOp(
     conversationId,
     origin,
     logLabel: "workspaceOps",
-    perform: (signal) => runLocalOp(payload, conversationId, signal),
+    perform: (signal) =>
+      runLocalOp(payload, conversationId, signal, origin),
   });
 }
 
@@ -134,6 +136,7 @@ async function runLocalOp(
   payload: WorkspaceOpRequiredPayload,
   conversationId: string,
   cancelSignal: AbortSignal,
+  origin: InteractionSettleOrigin,
 ): Promise<WorkspaceOpResult> {
   const fsApi = typeof window !== "undefined" ? window.fsApi : undefined;
   if (!fsApi?.workspaceOp) {
@@ -211,6 +214,19 @@ async function runLocalOp(
     left = true;
     leaveIpcInflight(conversationId);
   };
+  const stopOutput =
+    payload.op === "execute" && window.fsApi?.onExecuteOutput
+      ? window.fsApi.onExecuteOutput((event) => {
+          if (event.requestId !== payload.request_id) return;
+          if (event.stream !== "stdout" && event.stream !== "stderr") return;
+          void feedExecOutput(
+            conversationId,
+            payload.request_id,
+            { stream: event.stream, chunk: event.chunk },
+            origin,
+          );
+        })
+      : () => {};
   const opPromise = (
     timeoutMs != null
       ? fsApi.workspaceOp(
@@ -297,6 +313,7 @@ async function runLocalOp(
     });
     return ioError(e instanceof Error ? e.message : String(e));
   } finally {
+    stopOutput();
     if (timer != null) clearTimeout(timer);
     cancelSignal.removeEventListener("abort", onCancel);
   }

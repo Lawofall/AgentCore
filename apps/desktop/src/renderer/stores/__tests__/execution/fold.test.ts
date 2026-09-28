@@ -804,7 +804,7 @@ describe("projectExecution (fold)", () => {
         question: "用 Postgres 还是 MySQL?",
         assumption: "暂用 Postgres",
         escalationId: "esc-raised-1",
-        escalationKind: "scope",
+        escalationKind: "adjust",
       },
       {
         t: 3,
@@ -827,7 +827,7 @@ describe("projectExecution (fold)", () => {
         assumption: "暂用 Postgres",
         status: "raised",
         answer: null,
-        kind: "scope",
+        kind: "adjust",
         questions: [],
       },
     ]);
@@ -1102,7 +1102,7 @@ describe("projectExecution (fold)", () => {
         agentId: "agent-1",
         question: "Q2?",
         assumption: "A2",
-        escalationKind: "dep",
+        escalationKind: "adjust",
       },
       {
         t: 5,
@@ -1135,7 +1135,7 @@ describe("projectExecution (fold)", () => {
         assumption: "A2",
         status: "timed_out",
         answer: null,
-        kind: "dep",
+        kind: "adjust",
         questions: [],
       },
     ]);

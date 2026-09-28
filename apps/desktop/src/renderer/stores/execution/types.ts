@@ -124,7 +124,6 @@ export const TOOL_LABELS: Record<string, string> = {
   // CEO 协调模式原语（波内边跑边调）。
   update_synthesis: "Update synthesis",
   cancel_worker: "Cancel worker",
-  resolve_escalation: "Resolve escalate",
   queue_user_message: "Queue message",
   // 交接 — keep in sync with TOOL_META English chrome.
   handoff: "Handoff",
@@ -245,13 +244,13 @@ export interface RunCheckpoint {
   decision: CheckpointDecision | null;
 }
 
-/** 升级：``escalate`` 工人向上通道。``kind`` = wait 停下等 / scope 活派偏了 / dep 缺材料。
- * Folded onto its {@link RunNode}. Wait → ``pending`` 请你拍板；scope/dep → 协作图标记
+/** 升级：``escalate`` 工人向上通道。``kind`` = wait 停下等 / adjust 自己这份做完、请看后面。
+ * Folded onto its {@link RunNode}. Wait → ``pending`` 请你拍板；adjust → 协作图标记
  * （工人继续干）；引擎早停走 ``source``，不是留言条。
  *
  * `status`: `raised` | `pending` | `resolved` | `assumed` | `timed_out`.
  * `assumed` = explicit 按假设继续; `timed_out` = wall-clock miss. Both leave answer null. */
-export type EscalationKind = "wait" | "scope" | "dep";
+export type EscalationKind = "wait" | "adjust";
 
 export interface RunEscalation {
   /** Interaction / raised id (`escalation_id` on wire). Wait cards POST to this id;
@@ -262,7 +261,7 @@ export interface RunEscalation {
   assumption: string;
   status: "raised" | "pending" | "resolved" | "assumed" | "timed_out";
   answer: string | null;
-  /** wait / scope / dep；早停帧可缺。 */
+  /** wait 停下等 / adjust 请看后面。早停帧可缺。 */
   kind: EscalationKind;
   /** 结构化升级: wait 卡上的 questions。raised 为 `[]`。 */
   questions: AskQuestion[];
@@ -274,7 +273,7 @@ export interface RunEscalation {
   via_user?: boolean;
   /**
    * 早停 / 打转收口标记（wire `run_escalation.source`）。
-   * `validation_thrash` / `ceiling_backstop` → 卡住早停卡；缺省 = 协作图标记（scope/dep）。
+   * `validation_thrash` / `ceiling_backstop` → 卡住早停卡；缺省 = 协作图标记（adjust）。
    * Desktop-local — 不进 conformance ProjectedTurn。
    */
   source?: string;

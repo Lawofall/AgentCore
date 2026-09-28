@@ -1,12 +1,15 @@
-"""replan: the CEO's 波边界续跑 primitive — re-steer / append and resume the SAME
+"""replan: the CEO's 波边界续跑 primitive — tell / append and resume the SAME
 delegate plan (受监督的波循环).
 
 The companion to ``delegate``. The ``WaveScheduler``
 YIELDs control back to the CEO at a *decision boundary* (instead of running a
-mis-specified tail) when a finished worker flagged a 职责/范围 deviation
-(``escalate reason=scope``) or a 依赖缺口 (``escalate reason=dep``). The CEO reads the
-signal + output and re-steers the not-yet-run tail (``steers``), appends a producer
-(``add``), resumes as-is, or wraps up (``stop``).
+mis-specified tail) when a finished worker flagged that the rest of the plan
+needs a look (``escalate reason=adjust``). The CEO reads the signal + output
+and tells a not-yet-run person (``tell``), appends someone (``add``), resumes
+as-is, or wraps up (``stop``).
+
+``tell`` also answers a worker parked on ``escalate(reason=wait)`` while the
+team is still running, without requiring a yielded plan.
 
 Non-terminal, exactly like ``delegate``: the result returns to the CEO loop (a further
 boundary brief, or the terminal team result).
@@ -17,8 +20,8 @@ the validation, the in-place steer / append, and the resume drive. Worker usage 
 citations therefore accumulate on the SAME DelegateTool instance the pipeline already
 folds into the turn totals — this tool adds no accumulator of its own.
 
-范围：steers（操舵未跑节点）+ add（追加新节点，id 生成 / 依赖接线
-见 ``build_added_nodes``）+ stop（收口）。
+范围：tell（对停着等的人说决定，或给还没开始的人补一句）+ add（追加新节点，
+id 生成 / 依赖接线见 ``build_added_nodes``）+ stop（收口）。
 
 → 见设计: docs/03-AI核心/编排器与CEO主Agent.md §一 replan 原语（续跑入口=专用 replan 工具）
 """
@@ -46,25 +49,29 @@ logger = get_logger(__name__)
 
 # Schema layer: short trigger. 字段 HOW 在让出简报与参数，不指空 consult。
 _REPLAN_DESCRIPTION = (
-    "在已派出的计划上操舵、加步或收口。"
+    "对已派出的人说一句话、加人，或让已暂停的计划继续、收口。"
 )
 
 _REPLAN_PARAMETERS = {
     "type": "object",
     "properties": {
-        "steers": {
+        "tell": {
             "type": "array",
-            "description": "给未跑步骤追加操舵说明。",
+            "description": (
+                "对这个人说的话。他正停着等拍板：这句就是决定，他接着干。"
+                "他还没开始：开工前交给他。"
+                "偏好、授权或花钱先 ask_user，再把用户的话写在这里。"
+            ),
             "items": {
                 "type": "object",
                 "properties": {
                     "run_id": {
                         "type": "string",
-                        "description": "未跑步骤 run_id。",
+                        "description": "队员的 run_id，或能唯一对应的角色名。",
                     },
                     "note": {
                         "type": "string",
-                        "description": "可执行的操舵说明。",
+                        "description": "要说的话。",
                     },
                 },
                 "required": ["run_id", "note"],

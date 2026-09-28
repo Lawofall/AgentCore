@@ -232,7 +232,7 @@ class _LeadScopeSteerProvider:
             # the lead caught the SCOPE brief → steer the un-run downstream (待跑) per the deviation
             self.lead_replan_calls += 1
             pending_id = re.search(r"待跑：.*?`([^`]+)`", last_tool).group(1)
-            args = json.dumps({"steers": [{"run_id": pending_id, "note": "按真实需求X改写法"}]})
+            args = json.dumps({"tell": [{"run_id": pending_id, "note": "按真实需求X改写法"}]})
             yield LLMChunk(
                 delta_tool_calls=[
                     ToolCallDelta(index=0, id="ls2", function_name="replan", arguments_delta=args)
@@ -244,7 +244,7 @@ class _LeadScopeSteerProvider:
             # sub-worker sa, first round: report a scope deviation (kind=scope), non-blocking
             self.sa_calls += 1
             args = json.dumps(
-                {"question": "真问题是X不是Y", "assumption": "暂按X继续", "reason": "scope"}
+                {"question": "真问题是X不是Y", "assumption": "暂按X继续", "reason": "adjust"}
             )
             yield LLMChunk(
                 delta_tool_calls=[

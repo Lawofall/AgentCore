@@ -33,7 +33,7 @@ describe("buildFaceBadgeDescriptors", () => {
   it("keeps a raised scope/dep escalation as a process notice, drops wait", () => {
     expect(
       buildFaceBadgeDescriptors(
-        signals({ escalationRaised: 1, escalationKind: "scope" }),
+        signals({ escalationRaised: 1, escalationKind: "adjust" }),
       ),
     ).toEqual([{ key: "escalation", bucket: "process" }]);
     expect(

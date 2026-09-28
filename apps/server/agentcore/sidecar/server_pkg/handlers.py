@@ -16,13 +16,14 @@ from agentcore.core.types import DEFAULT_PERMISSION_AXES, WorkspaceBoundary
 from agentcore.folders.credentials import FoldersCredentials
 from agentcore.llm.credentials import LLMCredentials
 from agentcore.llm.profiles import PLATFORM_MODEL_FLASH
-from agentcore.runtime.interaction import default_interaction_registry
+from agentcore.runtime.interaction import InteractionKind, default_interaction_registry
 from agentcore.sidecar import protocol
 from agentcore.sidecar.identity import resolve_sidecar_user_id
 from agentcore.sidecar.paused_store import LocalPausedTurnStore
 from agentcore.sidecar.run_session_store import LocalRunSessionStore
 from agentcore.sidecar.server_pkg.result import parse_decision
 from agentcore.workspace.cloud_credentials import WorkspacesCredentials
+from agentcore.workspace.exec_output import feed_exec_output
 
 logger = get_logger(__name__)
 
@@ -794,6 +795,25 @@ class HandlerMixin:
             conversation_id=conversation_id,
         )
         await self._reply(request_id, {"resolved": bool(resolved)})
+
+    async def _on_exec_output(self, request_id: Any, params: dict[str, Any]) -> None:
+        """Live stdout/stderr for a desktop EXECUTE. Does not settle the op."""
+        interaction_id = str(params.get("requestId") or "")
+        conversation_id = str(params.get("conversationId") or "")
+        stream = params.get("stream")
+        chunk = params.get("chunk")
+        if stream not in ("stdout", "stderr") or not isinstance(chunk, str) or not chunk:
+            await self._reply(request_id, {"accepted": False})
+            return
+        registry = default_interaction_registry()
+        pending = registry.get(interaction_id)
+        accepted = (
+            pending is not None
+            and pending.conversation_id == conversation_id
+            and pending.kind == InteractionKind.CLIENT_TOOL
+            and feed_exec_output(interaction_id, stream, chunk)
+        )
+        await self._reply(request_id, {"accepted": bool(accepted)})
 
     async def _on_resume(self, request_id: Any, params: dict[str, Any]) -> None:
         """Continue a durably-paused turn on a fresh process (结构化挂起 2b resume).

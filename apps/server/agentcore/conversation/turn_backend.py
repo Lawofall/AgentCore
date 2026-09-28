@@ -19,7 +19,12 @@ async def build_turn_backend(
     sink: EventSink,
     local_binding: LocalBinding | None,
 ) -> WorkspaceBackend:
-    """Pick a turn's workspace backend: local when bound, else cloud.
+    """Pick a turn's workspace backend.
+
+    A local birth desk does not run on the cloud engine. The cloud process
+    refuses that turn; the local engine builds its own on-disk backend.
+    Cloud conversations (no local binding) stay on ``ServerWorkspace``. External
+    grants still attach as a hand on that cloud desk.
 
     Project conversations pass ``folder_id`` so cloud mode shares ``folder:<id>``;
     裸聊 passes ``folder_id=None`` for per-conversation ``conv:<id>`` scratch.
@@ -27,6 +32,14 @@ async def build_turn_backend(
     Attaches W3 conversation-scoped external mounts when grants exist (skipped on
     member turns — 协作桌钉桌主盘, 成员不装配区外).
     """
+    if local_binding is not None:
+        from agentcore.sidecar.server_pkg.core import is_sidecar_process
+
+        if not is_sidecar_process():
+            from agentcore.core.errors import LocalWorkspaceCloudRefusedError
+
+            raise LocalWorkspaceCloudRefusedError()
+
     owner_id = user_id
     member_turn = False
     if folder_id:

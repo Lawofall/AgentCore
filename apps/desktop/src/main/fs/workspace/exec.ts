@@ -205,6 +205,48 @@ export function pickUserExecEnv(raw: unknown): Record<string, string> {
  */
 const KILL_GRACE_MS = 2_000;
 
+/** Same grain as the sandbox pipe read: flush a live chunk around 2KB, or sooner so a short line is not held until the process exits. */
+const OUTPUT_FLUSH_BYTES = 2048;
+const OUTPUT_FLUSH_MS = 50;
+const OUTPUT_CHUNK_MAX = 8192;
+
+export type ExecOutputTap = (stream: "stdout" | "stderr", text: string) => void;
+
+function createOutputTap(onOutput: ExecOutputTap | undefined): {
+  push: (stream: "stdout" | "stderr", text: string) => void;
+  flush: () => void;
+} {
+  if (!onOutput) return { push: () => {}, flush: () => {} };
+  const buf = { stdout: "", stderr: "" };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const emit = (stream: "stdout" | "stderr", text: string) => {
+    for (let i = 0; i < text.length; i += OUTPUT_CHUNK_MAX) {
+      try {
+        onOutput(stream, text.slice(i, i + OUTPUT_CHUNK_MAX));
+      } catch {
+        // A gone renderer must not fail the op; the final envelope still carries the capture.
+      }
+    }
+  };
+  const flush = () => {
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+    for (const stream of ["stdout", "stderr"] as const) {
+      const text = buf[stream];
+      if (!text) continue;
+      buf[stream] = "";
+      emit(stream, text);
+    }
+  };
+  const push = (stream: "stdout" | "stderr", text: string) => {
+    if (!text) return;
+    buf[stream] += text;
+    if (buf.stdout.length + buf.stderr.length >= OUTPUT_FLUSH_BYTES) flush();
+    else if (!timer) timer = setTimeout(flush, OUTPUT_FLUSH_MS);
+  };
+  return { push, flush };
+}
+
 /**
  * 在 `cwd` 下跑一个脚本文件，捕获 stdout/stderr，超时则强杀。
  *
@@ -227,6 +269,7 @@ export function runSubprocess(
   startedMs: number,
   envExtra?: Record<string, string>,
   idleTimeoutSeconds?: number | null,
+  onOutput?: ExecOutputTap,
 ): Promise<WorkspaceOpResult> {
   return new Promise((resolve) => {
     const [bin, ...preArgs] = cmd;
@@ -247,14 +290,25 @@ export function runSubprocess(
     const noteOutput = () => {
       lastOutputMs = Date.now();
     };
+    const tap = createOutputTap(onOutput);
 
     child.stdout.on("data", (chunk: Buffer) => {
       noteOutput();
-      if (stdout.length < EXEC_CAPTURE_CAP) stdout += decodePipeChunk(chunk);
+      const text = decodePipeChunk(chunk);
+      const room = EXEC_CAPTURE_CAP - stdout.length;
+      if (room <= 0) return;
+      const kept = text.slice(0, room);
+      stdout += kept;
+      tap.push("stdout", kept);
     });
     child.stderr.on("data", (chunk: Buffer) => {
       noteOutput();
-      if (stderr.length < EXEC_CAPTURE_CAP) stderr += decodePipeChunk(chunk);
+      const text = decodePipeChunk(chunk);
+      const room = EXEC_CAPTURE_CAP - stderr.length;
+      if (room <= 0) return;
+      const kept = text.slice(0, room);
+      stderr += kept;
+      tap.push("stderr", kept);
     });
     // 进程未读 stdin 即退出会让写入抛 EPIPE——吞掉，不让它变成未捕获错误。
     child.stdin.on("error", () => {});
@@ -268,6 +322,7 @@ export function runSubprocess(
       clearTimeout(disasterTimer);
       if (idleTimer) clearInterval(idleTimer);
       if (graceTimer) clearTimeout(graceTimer);
+      tap.flush();
       resolve(r);
     };
 
@@ -357,6 +412,7 @@ export function runSubprocess(
 export async function opExecute(
   root: StoredRoot,
   args: Record<string, unknown>,
+  onOutput?: ExecOutputTap,
 ): Promise<WorkspaceOpResult> {
   const startedMs = Date.now();
   const language = String(args.language ?? "python");
@@ -444,6 +500,7 @@ export async function opExecute(
       startedMs,
       Object.keys(envExtra).length > 0 ? envExtra : undefined,
       idleTimeoutSeconds,
+      onOutput,
     );
     return await withWrittenFiles(ran, {
       rootAbs: root.absPath,

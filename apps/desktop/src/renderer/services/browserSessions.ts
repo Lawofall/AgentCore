@@ -105,11 +105,13 @@ export async function listBrowserSessions(
     });
     return fromListWire(raw);
   }
-  // 本机绑定会话：云 Registry 无 Local session，GET 恒空会假清空右坞。死绑定同样禁云。
+  // 本机绑定会话：云 Registry 无 Local session，GET 恒空会假清空右坞。
+  // 目录已不在盘上、授权表没有这个 id，同样禁云。
   if ((await resolveConversationLocalTarget(conversationId)) != null) {
     return { sessions: [], activeSessionId: null };
   }
-  if ((await resolveLocalBind(conversationId)).kind === "stale") {
+  const bindKind = (await resolveLocalBind(conversationId)).kind;
+  if (bindKind === "stale" || bindKind === "absent") {
     return { sessions: [], activeSessionId: null };
   }
   const r = await api.get<BrowserSessionListWire>(sessionsPath(conversationId));

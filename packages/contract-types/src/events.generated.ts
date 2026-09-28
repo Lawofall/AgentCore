@@ -373,7 +373,7 @@ export interface RunPhasePayload {
   tool_name?: string;
 }
 
-export type EscalationKind = "wait" | "scope" | "dep";
+export type EscalationKind = "wait" | "adjust";
 
 export type RunFailureKind = "model" | "call";
 
@@ -415,7 +415,7 @@ export interface EscalationRequiredPayload {
   assumption: string;
   /** Structured forks (同 ask_user 的 questions). Absent on old journaled events (fold with `?? []`); empty for a free-text ask. */
   questions?: AskQuestion[];
-  /** wait / scope / dep。缺省按 wait。 */
+  /** wait / adjust。缺省按 wait。 */
   kind?: EscalationKind;
   /** 谁在仲裁：user=经典可答卡；ceo=协调模式等主管。旧流缺字段按 user。 */
   awaiting?: "user" | "ceo";
@@ -610,8 +610,9 @@ export interface UserInterjectionAgentMention {
 /** Mid-flight user interjection into a live turn (经典 steer + 协调插话共用).
  * 
  * Lifecycle:
- * - 协调: ``received`` → ``injected`` → ``addressed`` / ``queued`` / ``failed``
- * - 经典: ``received`` → ``injected`` (终态) / ``queued`` / ``failed``（无 ``addressed``）
+ * - 协调与经典: ``received`` → ``injected`` (终态) / ``failed``
+ * - 经典另有赶不上下一步的 ``queued``
+ * - ``addressed`` 与协调侧改排的 ``queued`` 新回合不发；旧日记回放仍合法
  * ``injected`` = 内容真正写入模型上下文的那一刻。 */
 export interface UserInterjectionPayload {
   interjection_id: string;

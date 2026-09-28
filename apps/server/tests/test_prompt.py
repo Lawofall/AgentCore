@@ -71,7 +71,6 @@ def test_derive_ceo_addon_splits_shared_prefix_from_full_ceo_prompt():
     assert "<文件夹清单>" not in ceo
     assert "<身份>" not in addon
     assert "<按需目录>" in addon
-    assert "emoji" not in addon
     assert ceo.startswith(base)
     assert addon == ceo[len(base) :].lstrip("\n")
     assert ceo == base + ceo[len(base) :]
@@ -87,12 +86,6 @@ def test_shared_base_is_untagged_paragraph():
         r"<([a-zA-Z_\u4e00-\u9fff][a-zA-Z0-9_\u4e00-\u9fff]*)>",
         _DEFAULT_SYSTEM_PROMPT,
     ) is None
-
-
-def test_output_english_affordances():
-    base = assemble_system_prompt()
-    assert "emoji" in base
-    assert "emoji" not in _CEO_CORE_HINT
 
 
 def test_web_search_not_restated_in_base_tooling():
@@ -122,7 +115,7 @@ def test_output_style_survives_memory_and_context_layers():
         rules_markdown="- 用户偏好简洁回复",
         extra_context="<附件>...</附件>",
     )
-    assert "emoji" in out
+    assert _DEFAULT_SYSTEM_PROMPT in out
     assert "用户偏好简洁回复" in out
     assert "<附件>" in out
     assert "<设定>" in out and "</设定>" in out
@@ -133,7 +126,6 @@ def test_style_precedes_ceo_only_core_when_composed():
     base = assemble_system_prompt()
     ceo = _compose_ceo({"delegate", "consult"})
     assert ceo.startswith(base)
-    assert "emoji" not in _CEO_CORE_HINT
     assert "<身份>" not in ceo
     assert "<按需目录>" in ceo
     assert "<运行时>" not in ceo

@@ -8,6 +8,7 @@ import {
   type SidecarDebateSteerRequest,
   type SidecarDeliverMessageRequest,
   type SidecarEditQueuedTurnRequest,
+  type SidecarExecOutputRequest,
   type SidecarListBrowserSessionsRequest,
   type SidecarListBrowserSessionsResult,
   type SidecarListQueuedTurnsRequest,
@@ -143,6 +144,19 @@ export function registerSidecarIpc(): void {
     );
     return manager.respond(req);
   });
+
+  ipcMain.handle(
+    SIDECAR_CHANNELS.execOutput,
+    (_e, req: SidecarExecOutputRequest) => {
+      assertSidecarShape(
+        SIDECAR_CHANNELS.execOutput,
+        req,
+        ["rootId", "requestId", "conversationId", "stream", "chunk"],
+        ["subpath"],
+      );
+      return manager.execOutput(req);
+    },
+  );
 
   ipcMain.handle(
     SIDECAR_CHANNELS.runRedirect,

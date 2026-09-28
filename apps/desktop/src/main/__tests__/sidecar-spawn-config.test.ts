@@ -7,6 +7,7 @@ const h = vi.hoisted(() => {
   return {
     resourcesPath: `${base}/sidecar-spawn-res-${Math.random().toString(36).slice(2)}`,
     isPackaged: true,
+    appPath: "",
   };
 });
 
@@ -15,7 +16,7 @@ vi.mock("electron", () => ({
     get isPackaged() {
       return h.isPackaged;
     },
-    getAppPath: () => "",
+    getAppPath: () => h.appPath,
     on: vi.fn(),
   },
   ipcMain: { handle: vi.fn() },
@@ -96,5 +97,51 @@ describe("resolveSpawnConfig packaged unix", () => {
 
     const cfg = resolveSpawnConfig();
     expect(cfg.cmd).toBe(join(bin, "python3"));
+  });
+});
+
+describe("resolveSpawnConfig dev", () => {
+  const prevServerDir = process.env.AGENTCORE_SERVER_DIR;
+  const prevOverride = process.env.AGENTCORE_SIDECAR_CMD;
+  const prevPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+
+  beforeEach(() => {
+    Reflect.deleteProperty(process.env, "AGENTCORE_SIDECAR_CMD");
+    h.isPackaged = false;
+    h.appPath = join(h.resourcesPath, "desktop");
+    process.env.AGENTCORE_SERVER_DIR = join(h.resourcesPath, "empty-server");
+    mkdirSync(process.env.AGENTCORE_SERVER_DIR, { recursive: true });
+    Object.defineProperty(process, "platform", {
+      value: "win32",
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    h.isPackaged = true;
+    h.appPath = "";
+    if (prevServerDir === undefined) {
+      Reflect.deleteProperty(process.env, "AGENTCORE_SERVER_DIR");
+    } else {
+      process.env.AGENTCORE_SERVER_DIR = prevServerDir;
+    }
+    if (prevOverride === undefined) {
+      Reflect.deleteProperty(process.env, "AGENTCORE_SIDECAR_CMD");
+    } else {
+      process.env.AGENTCORE_SIDECAR_CMD = prevOverride;
+    }
+    if (prevPlatform) {
+      Object.defineProperty(process, "platform", prevPlatform);
+    }
+    rmSync(h.resourcesPath, { recursive: true, force: true });
+  });
+
+  it("injects desktop resources/rg even when the file is absent", () => {
+    const cfg = resolveSpawnConfig();
+    const rg = join(h.appPath, "resources", "rg", "rg.exe");
+    expect(cfg.env?.AGENTCORE_RG_PATH).toBe(rg);
+    expect(cfg.env?.AGENTCORE_RG_PATH ?? "").not.toContain(
+      join("server", "bin"),
+    );
   });
 });

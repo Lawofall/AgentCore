@@ -15,7 +15,6 @@ import {
   FileText,
   Folder,
   Forward,
-  Gavel,
   GitBranch,
   Globe,
   HardDrive,
@@ -100,7 +99,6 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   // CEO 协调模式原语（波内边跑边调）：与 file/web 工具同走 ToolLine。
   update_synthesis: { Icon: NotebookPen, label: "Update synthesis" },
   cancel_worker: { Icon: UserX, label: "Cancel worker" },
-  resolve_escalation: { Icon: Gavel, label: "Resolve escalate" },
   queue_user_message: { Icon: Inbox, label: "Queue message" },
   // L3 团队浏览器（单工具 `browser`，按 action 展示；同构 host）
   browser: { Icon: Globe, label: "Browser" },
@@ -311,10 +309,7 @@ function skipTitleChip(key: string, raw: string, toolName?: string): boolean {
 }
 
 /** 拿 `run_id` 指人的 CEO 处置工具——标题上要显示的是那名队员的角色名。 */
-export const RUN_TARGET_ARG_TOOLS = new Set([
-  "cancel_worker",
-  "resolve_escalation",
-]);
+export const RUN_TARGET_ARG_TOOLS = new Set(["cancel_worker", "replan"]);
 
 /** 形似内部标识（长十六进制串 / `wave_3` 式生成 id）——绝不进用户面标题。
  *

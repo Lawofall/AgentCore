@@ -826,11 +826,9 @@ export function describeFrame(frame: RunFrame, plan: ExecutionPlan): string {
       return frame.source === "validation_thrash" ||
         frame.source === "ceiling_backstop"
         ? `${role(frame.agentId)} 卡住早停`
-        : frame.escalationKind === "scope"
-          ? `${role(frame.agentId)} 职责偏离`
-          : frame.escalationKind === "dep"
-            ? `${role(frame.agentId)} 缺材料`
-            : `${role(frame.agentId)} 已上报`;
+        : frame.escalationKind === "adjust"
+          ? `${role(frame.agentId)} 请看后面`
+          : `${role(frame.agentId)} 已上报`;
     case "escalation_required":
       return `${role(frame.agentId)} 求决策 · 待你拍板`;
     case "escalation_resolved":

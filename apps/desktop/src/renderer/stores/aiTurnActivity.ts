@@ -158,7 +158,7 @@ export function useConversationCloudRunning(conversationId: string): boolean {
 
 /**
  * 本机引擎对话不吃云 running：`executionVia=sidecar` 或本地容器对话。
- * 云过桥（`cloud_bridge`）仍认云信号。
+ * 纯云会话（`executionVia` 为空）仍认云信号。
  */
 export function ignoresCloudTurnActivity(
   executionVia: ConversationRuntime["executionVia"],

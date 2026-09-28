@@ -412,9 +412,28 @@ describe("toolResultPeek", () => {
 });
 
 describe("hasToolResultBody", () => {
-  it("is false while the tool is still running", () => {
-    expect(hasToolResultBody(data({ status: "running", result: "x" }))).toBe(
+  it("stays closed while running when nothing has arrived", () => {
+    expect(hasToolResultBody(data({ status: "running", result: null }))).toBe(
       false,
+    );
+  });
+
+  it("opens a running shell once the command is on the call", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "run",
+          status: "running",
+          args: { command: "pnpm test" },
+          result: null,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("opens while running once result text is present", () => {
+    expect(hasToolResultBody(data({ status: "running", result: "x" }))).toBe(
+      true,
     );
   });
 

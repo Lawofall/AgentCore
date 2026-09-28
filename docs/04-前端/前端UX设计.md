@@ -63,7 +63,7 @@ skip_if:
 
 **收起态（对齐 Cursor / ChatGPT）**：过程摘要是答案的 caption——一行 muted 披露，不是和正文平级的过程行。竖距走 [间距档](/docs/04-前端/UI-Pattern索引.md#间距档) 的 row；图 / 待拍板 / 插话是独立槽，走 block。聊天 Markdown 按嵌入正文：首尾子边距归零，`##` 开头的答案不另起章。**否决**把折叠栏当章节头。**否决**收起后仍给思考正文留高度。
 
-**折叠行右侧**：只挂对象身份（页面标题 / URL / 路径 / 读窗口「a–b 行」）或会改下一步的结果（验证「未通过」）。shell / run / terminal 的命令，以及 test_run 的 command 检查，进展开。**否决**动词复述（「读取页面结构」「截取当前页面」）、模型 ref / 快照版本、默认失败同义词「未完成」「未找到」（查找失败标题已有路径）。过程与产品失败句进展开。→ `ToolLine.tsx` · `message-bubble/constants.ts` · `toolFaultFace.ts` · `BrowserActivityCard.tsx`
+**折叠行右侧**：只挂对象身份（页面标题 / URL / 路径 / 读窗口「a–b 行」）或会改下一步的结果（验证「未通过」）。shell / run / terminal 的命令，以及 test_run 的 command 检查，进展开。执行中已有命令则展开盯这段输出（与工具组同一「直播展开、收场回到保存的折叠」）；输出未到不画空盒。片段不进 journal，结束后以工具结果为准。**否决**动词复述（「读取页面结构」「截取当前页面」）、模型 ref / 快照版本、默认失败同义词「未完成」「未找到」（查找失败标题已有路径）。过程与产品失败句进展开。→ `ToolLine.tsx` · `message-bubble/constants.ts` · `toolFaultFace.ts` · `BrowserActivityCard.tsx`
 
 **秒表**：过程行（空思考 / 等锁 / 开云桌 / 工具行 / 折叠组头 / 浏览器卡 / 来源集合）不出直播秒——还在动靠字形流光。工具行因此不另写 Running / Working（认不出的相位同样不写）；相位词只留能换腿的（排队、正在搜、换备用、抓页、抽正文、网络被拦、等仓库、核凭证、连远端）。协作图节点活动行仍用全表。记分牌三口：回合气泡脚（整轮墙钟）、协作图状态条（协作跨度）、节点 face（该 run 用时）。限流倒计时、升级上限、录音 `m:ss` 不走秒表。队长「已等 Ns」否决 → [协作图 UX](/docs/04-前端/协作图与双视图UX.md)。→ `hooks/useRunningElapsed.ts` · `lib/runningElapsed.ts`
 

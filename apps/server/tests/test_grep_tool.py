@@ -445,7 +445,9 @@ async def test_grep_missing_rg_binary_fails_explicitly(tmp_path: Path, monkeypat
     monkeypatch.delenv("AGENTCORE_RG_PATH", raising=False)
     result = await GrepTool().execute({"pattern": "TODO"}, _ctx(tmp_path))
     assert result.success is False
-    assert "ripgrep" in (result.error or "").lower() or "rg" in (result.error or "").lower()
+    assert "ripgrep" in (result.error or "").lower()
+    assert "fetch_ripgrep" not in (result.error or "")
+    assert "请运行" not in (result.error or "")
 
 
 # --- normalize_glob ---

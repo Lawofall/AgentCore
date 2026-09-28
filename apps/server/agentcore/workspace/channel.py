@@ -15,6 +15,8 @@ Flow (one op):
    ``timeout_seconds``).
 3. The bound desktop client runs the op against the local directory and POSTs the
    structured result to the ops resolve endpoint, which settles the Future.
+   While EXECUTE is in flight it may also POST stdout/stderr chunks; those call
+   the op's ``on_output`` and do not settle the Future.
 4. The channel returns the op's ``value`` on success, or re-raises the original
    ``WorkspaceError`` subclass on failure — so the (unchanged) tool layer maps it
    to the same user-facing message it does for ``ServerWorkspace``.
@@ -41,6 +43,7 @@ own deadline (``fulfill/grace.py``) instead of failing blind.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, NoReturn
@@ -58,6 +61,7 @@ from agentcore.runtime.events.workspace import workspace_op_required
 from agentcore.runtime.interaction import InteractionKind
 from agentcore.runtime.ports import ClientRequestBridge
 from agentcore.runtime.tool_deadline import derive_channel_timeout
+from agentcore.workspace.exec_output import bind_exec_output, unbind_exec_output
 from agentcore.workspace.limits import LOCAL_ROOT_NOT_HELD
 from agentcore.workspace.protocol import (
     AlreadyExists,
@@ -217,6 +221,7 @@ class WorkspaceChannel:
         *,
         timeout: float | None = None,
         root_id: str | None = None,
+        on_output: Callable[[str, str], None] | None = None,
     ) -> Any:
         """Emit the op, await the desktop's result, and return it (or raise).
 
@@ -293,6 +298,8 @@ class WorkspaceChannel:
                 )
 
             self._inflight.add(request_id)
+            if on_output is not None:
+                bind_exec_output(request_id, on_output)
             try:
                 try:
                     result = await self.registry.suspend(
@@ -333,6 +340,7 @@ class WorkspaceChannel:
                         f"local workspace op '{op_name}' timed out（活性挂起）"
                     ) from e
             finally:
+                unbind_exec_output(request_id)
                 self._inflight.discard(request_id)
         finally:
             sem.release()

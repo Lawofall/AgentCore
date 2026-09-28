@@ -40,7 +40,7 @@ async def test_worker_escalate_then_turn_closes(monkeypatch, tmp_path):
 
     raised = next(e for e in events if e.type is EventType.RUN_ESCALATION)
     assert raised.payload.get("question") == ESC_QUESTION
-    assert raised.payload.get("kind") == "scope"
+    assert raised.payload.get("kind") == "adjust"
     assert "blocking" not in raised.payload
 
     kinds = journal_kinds(result)

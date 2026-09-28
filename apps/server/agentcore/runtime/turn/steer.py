@@ -404,7 +404,7 @@ def promote_leftovers_to_queue(leftovers: list[PendingTurnSteer]) -> int:
     """Re-home undrained steers onto the conversation FIFO (回合收口竞态).
 
     Dual-emits ``user_interjection(queued)`` + ``turn_queued.degraded_from=steer``
-    on a live sink when present (协调升队先例). Enqueue failure → ``failed``.
+    on a live sink when present. Enqueue failure → ``failed``.
 
     Returns how many items were enqueued. Caller should only invoke after
     ``end_accepting`` so a live loop cannot race-drain the same items.

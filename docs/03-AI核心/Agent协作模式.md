@@ -35,9 +35,8 @@ Multi-Agent First：组合优于堆叠；单 Agent = 无成员的 Team（统一�
 
 worker 唯一向上通道。`reason` 三选一（缺省 / 无法识别 = `wait`，宁停不留言）：
 
-- `wait`：猜错后面白干 → 原地挂起。须写 `assumption`（「按假设继续」、未武装 / 并发满退化、或运维超时回落都落在这句上）。经典路径直挂**用户**（否决挂 CEO——会死锁）；协调模式例外：CEO 波内存活 → 等 `resolve_escalation`（单 worker 同样进协调，一并适用）。等 CEO 时该队员不算短调用 in-flight，wait 不得空等该队员。仅嵌套 lead 等阻塞路径永不走 resolve——那时 CEO 卡在 `delegate` 内，挂 CEO 必死锁。
-- `scope`：活派偏了。自己这份做完；未跑的后续由主管改安排（波边界操舵）。
-- `dep`：缺一块还没人做的材料。自己这份做完；主管补人补材料。
+- `wait`：猜错后面白干 → 原地挂起。须写 `assumption`（「按假设继续」、未武装 / 并发满退化、或运维超时回落都落在这句上）。经典路径直挂**用户**（否决挂 CEO——会死锁）；协调模式例外：CEO 波内存活 → 主管用 `replan` 的 `tell` 把决定说回来，同一次 run 继续（单 worker 同样进协调，一并适用）。等 CEO 时该队员不算短调用 in-flight，wait 不得空等该队员。仅嵌套 lead 等阻塞路径不走这条——那时主管卡在 `delegate` 内，挂主管必死锁。
+- `adjust`：自己这份做完，但后面的安排要主管看。人不停。主管用 `tell` 给还没开始的人补一句，或 `add` 加人。
 
 不认旧参数 `blocking` / `kind`。留言式上报已撤：小假设写进交差。不设用户总开关。
 
@@ -46,8 +45,7 @@ worker 唯一向上通道。`reason` 三选一（缺省 / 无法识别 = `wait`�
 | reason | 语义 |
 |---|---|
 | `wait` | 停下等拍板 |
-| `scope` | 活派偏了 → 自己这份做完，波边界操舵 |
-| `dep` | 缺尚不存在的输入 → 自己这份做完，主管 `replan(add)` |
+| `adjust` | 自己这份做完，后面的安排要主管看 |
 
 ### 交付三面（正文 / 产出 / 简报）
 
@@ -84,7 +82,7 @@ worker 唯一向上通道。`reason` 三选一（缺省 / 无法识别 = `wait`�
 
 琐碎自修 → 执行层试一轮再 escalate → 方案层立刻 escalate。与对话边界正交。
 
-Worker 工具后还有确定性 **Escalation Gate**：只把工具失败当执行层自愈，**不**扫工具输出自由文猜方案层。方案层 /「职责偏离」只走结构化 `escalate(reason=scope|dep)`（真写越界由写工具层硬拒）。同 run 同 question 只 live 上报一次。若仍产出内部 `gate_kind=contract|contradiction`，**不得**占用户面 `scope` 职责偏离——仅结构化 `scope`/`dep` 占对应 wire `kind`。→ 见代码: `runtime/routing/models.py` · `runtime/routing/gate.py`
+Worker 工具后还有确定性 **Escalation Gate**：只把工具失败当执行层自愈，**不**扫工具输出自由文猜方案层。方案层只走结构化 `escalate(reason=wait|adjust)`（真写越界由写工具层硬拒）。同 run 同 question 只 live 上报一次。Gate 内部 `SCOPE` / `DEP` 折成同一条 wire `reason=adjust`。若仍产出内部 `gate_kind=contract|contradiction`，**不得**占这条 reason。→ 见代码: `runtime/routing/models.py` · `runtime/routing/gate.py`
 
 ### 协调态与视图（写/读分工）
 

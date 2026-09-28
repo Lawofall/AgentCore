@@ -165,7 +165,6 @@ def _assemble_ceo_toolset(
     register_coordination_surface(
         chat_tools,
         delegate_tool=delegate_tool,
-        sink=sink,
         include=True,
     )
     register_always_ceo_tools(

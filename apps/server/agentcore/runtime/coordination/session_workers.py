@@ -66,6 +66,32 @@ class SessionWorkersMixin:
             )
         self.pending_arbitrations[run_id] = payload
 
+    def resolve_arbitration_target(self: CoordinationSession, raw: str) -> CancelResolution:
+        """Resolve ``raw`` to a worker parked on escalate(wait)."""
+        target = (raw or "").strip()
+        pending = self.pending_arbitrations
+        if not target or not pending:
+            return CancelResolution(run_id=None, reason="not_found")
+        if target in pending:
+            return CancelResolution(run_id=target, reason="exact")
+        suffix = f"_{target}"
+        suffix_hits = sorted(rid for rid in pending if rid.endswith(suffix))
+        if len(suffix_hits) == 1:
+            return CancelResolution(run_id=suffix_hits[0], reason="suffix")
+        role_hits = sorted(
+            rid
+            for rid, role in self._running_workers.items()
+            if role == target and rid in pending
+        )
+        if len(role_hits) == 1:
+            return CancelResolution(run_id=role_hits[0], reason="role")
+        candidates = tuple(sorted(set(suffix_hits) | set(role_hits)))
+        return CancelResolution(
+            run_id=None,
+            reason="ambiguous" if candidates else "not_found",
+            candidates=candidates,
+        )
+
     def get_arbitration(self: CoordinationSession, run_id: str) -> dict[str, Any] | None:
         return self.pending_arbitrations.get(run_id)
 
@@ -556,7 +582,7 @@ class SessionWorkersMixin:
     def stash_interjection(
         self: CoordinationSession, interjection_id: str, payload: dict[str, Any]
     ) -> None:
-        """Hold enqueue material for ``queue_user_message`` (process-local)."""
+        """Hold interjection text and mentions for CEO inject (process-local)."""
         self.pending_interjections[interjection_id] = dict(payload)
 
     def take_interjection(

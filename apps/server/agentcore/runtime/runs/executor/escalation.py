@@ -96,7 +96,7 @@ def build_escalation_channel(
             logger.info("worker.escalate.cap_degraded", run_id=run_id, parked=parked)
             return EscalationOutcome(status="degraded")
         escalation_id = new_id()
-        esc_kind = reason if reason in ("wait", "scope", "dep") else "wait"
+        esc_kind = reason if reason in ("wait", "adjust") else "wait"
 
         if awaiting_ceo:
             from agentcore.runtime.coordination.bridge import (

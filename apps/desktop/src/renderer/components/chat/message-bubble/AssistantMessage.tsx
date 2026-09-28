@@ -31,7 +31,6 @@ import {
   AssistantMessageMetaSummary,
   AssistantTurnInspect,
 } from "./AssistantMessageFooter";
-import { CloudBridgeHint } from "./CloudBridgeHint";
 import { LiveWaitLabel } from "./LiveFlow";
 import { MessageTime } from "./MessageActions";
 import { ComposingToolLine, ProcessTimeline } from "./ProcessTimeline";
@@ -325,7 +324,6 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
           <SyncStatusHint syncStatus={message.syncStatus} />
         </div>
       )}
-      <CloudBridgeHint messageId={message.id} />
       {outcome.showFooter ? (
         <AssistantMessageFooter
           message={message}

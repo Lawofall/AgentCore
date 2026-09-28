@@ -620,6 +620,7 @@ class LocalWorkspace:
         value: dict[str, Any] = await self._channel.request(
             WorkspaceOp.EXECUTE,
             args,
+            on_output=req.on_output,
             # Outlive the desktop's own execution timeout (the authoritative kill)
             # by the slack, so a long but legal run is not cut off by the flat
             # file-op deadline — only a truly gone desktop trips the transport.

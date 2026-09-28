@@ -36,6 +36,18 @@ def structured_options_summary(
     return "；".join(chunks)
 
 
+def _note_user_consulted() -> None:
+    """Remember that this coordination stretch heard the user, for the next tell."""
+    try:
+        from agentcore.runtime.coordination.session import active_coordination
+
+        session = active_coordination()
+    except Exception:  # noqa: BLE001 — asking must not fail if coordination is absent
+        return
+    if session is not None and session.active:
+        session.user_consulted = True
+
+
 def ask_user_tool_result(
     response: CheckpointResponse,
     *,
@@ -82,6 +94,7 @@ def ask_user_tool_result(
                 )
             else:
                 output = "用户确认：按你提出的方向继续。"
+        _note_user_consulted()
         return ToolResult(tool_call_id="", success=True, output=output)
     if decision is CheckpointDecision.STOP:
         # 拒答可见：回灌 CEO（对齐 OpenAI reject→resume）；非空 continue。

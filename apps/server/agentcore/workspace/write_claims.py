@@ -14,7 +14,7 @@ authority, snapshotted). **交接式写权**：
   - **Completion handoff** moves owned paths to the unique dependent that listed
     the same artifact.
   - Explicit transfer: ``replaces_run_id`` / ``continue_from_run_id`` / ``force`` /
-    ``resolve_escalation(transfer_ownership=true)`` / user structured裁决
+    用户结构化裁决 / ``replan`` tell 之后的写权移交
     (user ownership card **only** when lock owner is still ``running``;
     completed/ended holders use same-seat replaces / declare·claim handoff —
     never NL「移交写权」).
@@ -165,8 +165,7 @@ def ownership_conflict_message(
         f"写入冲突：`{display}` 已归队友 {who} 负责{kind_bit}。"
         f"{status_bit}"
         "请改写你自己职责下的文件，或等待其整合完成；"
-        "若需接手该路径：escalate 后用户卡可点「移交写权」，或由主管 "
-        "resolve_escalation(..., transfer_ownership=true, paths=[本路径])；"
+        "若需接手该路径：escalate 后等主管用 replan 的 tell 把决定告诉你；"
         "不要另起同名终稿文件名抢写。"
     )
 

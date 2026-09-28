@@ -77,11 +77,10 @@ def test_solo_worker_enters_coordination_surface():
         register_coordination_surface(
             reg,
             delegate_tool=delegate,
-            sink=MagicMock(),
             include=True,
         )
         assert "cancel_worker" in reg.names
-        assert "resolve_escalation" in reg.names
+        assert "replan" in reg.names
     finally:
         clear_active_coordination()
         current_execution_id.reset(token)
@@ -95,7 +94,6 @@ def test_idle_surface_keeps_gated_tools_on_opening_table():
     register_coordination_surface(
         reg,
         delegate_tool=delegate,
-        sink=MagicMock(),
         include=False,
     )
     names = set(reg.names)
@@ -116,7 +114,6 @@ def test_coordination_surface_includes_gated_tools():
         register_coordination_surface(
             reg,
             delegate_tool=delegate,
-            sink=MagicMock(),
             include=True,
         )
         names = set(reg.names)
@@ -210,11 +207,11 @@ def test_register_include_false_does_not_drop_gated_tools():
     delegate = _fake_delegate()
     reg.register(delegate)
     register_coordination_surface(
-        reg, delegate_tool=delegate, sink=MagicMock(), include=True
+        reg, delegate_tool=delegate, include=True
     )
     assert "replan" in reg.names
     register_coordination_surface(
-        reg, delegate_tool=delegate, sink=MagicMock(), include=False
+        reg, delegate_tool=delegate, include=False
     )
     assert set(reg.names) >= COORDINATION_GATED_TOOLS
 
@@ -247,7 +244,7 @@ def test_member_never_gets_coordination_suite_from_parent_session():
     """回归钉：队员不得因父图协调活跃而拿到 CEO 协调工具面。
 
     队员 allowed_tools=None（不限名单），注册即被 offer——depth=1 不得拿到
-    cancel_worker / resolve_escalation。
+    cancel_worker。
     """
     eid = "exec-parent-graph"
     token = current_execution_id.set(eid)
@@ -260,7 +257,6 @@ def test_member_never_gets_coordination_suite_from_parent_session():
         assert promote_coordination_surface_if_needed(reg) is True
         assert "replan" in reg.names
         assert "cancel_worker" not in reg.names
-        assert "resolve_escalation" not in reg.names
     finally:
         clear_active_coordination()
         current_execution_id.reset(token)

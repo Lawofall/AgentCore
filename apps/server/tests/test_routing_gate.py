@@ -133,26 +133,22 @@ def test_signals_wire_contradiction_does_not_occupy_scope():
     assert payloads[0]["gate_kind"] == "contradiction"
 
 
-def test_signals_wire_explicit_scope_still_scope():
-    """结构化 escalate(reason=scope) 同源语义：SCOPE 仍占 wire reason。"""
-    signal = EscalationSignal(
+def test_signals_wire_scope_and_dep_share_adjust():
+    """Gate SCOPE / DEP 都折成同一条非阻塞 wire reason。"""
+    scope = EscalationSignal(
         layer=ProblemLayer.SCHEME,
         kind=EscalationKind.SCOPE,
         question="真正该做的与初始计划不符",
         source="escalate_tool",
     )
-    payloads = signals_as_dicts([signal])
-    assert payloads[0]["reason"] == "scope"
-    assert payloads[0]["gate_kind"] == "scope"
-
-
-def test_signals_wire_dep_still_dep():
-    signal = EscalationSignal(
+    dep = EscalationSignal(
         layer=ProblemLayer.SCHEME,
         kind=EscalationKind.DEP,
         question="卡在尚不存在的输入",
         source="escalate_tool",
     )
-    payloads = signals_as_dicts([signal])
-    assert payloads[0]["reason"] == "dep"
-    assert payloads[0]["gate_kind"] == "dep"
+    payloads = signals_as_dicts([scope, dep])
+    assert payloads[0]["reason"] == "adjust"
+    assert payloads[0]["gate_kind"] == "scope"
+    assert payloads[1]["reason"] == "adjust"
+    assert payloads[1]["gate_kind"] == "dep"

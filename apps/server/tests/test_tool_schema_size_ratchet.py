@@ -298,11 +298,12 @@ _ASK_USER_WEB_CAP = 690
 # 实测 wait 200 / cancel 240 / replan 1156。cap 270→200、310→240、1250→1160。
 # 2026-09-21 artifacts 取值说明收短。实测 replan 1144。cap 1160→1150。
 # 2026-09-21 「可选」前缀出取值说明。实测 replan 1122。cap 1150→1130。
+# 2026-09-26 删 queue_user_message：协调插话留在本回合，不再改排。
+# 2026-09-26 删 resolve_escalation：对停着的人说话并进 replan.tell。
+# 实测 replan 1196。cap 1130→1196（抬顶 = tell 何时用、以及偏好先 ask_user）。
 _COORD_CAPS: dict[str, int] = {
     "cancel_worker": 240,
-    "resolve_escalation": 420,
-    "queue_user_message": 340,
-    "replan": 1130,
+    "replan": 1196,
 }
 # 2026-09-20 write：DSH file_path 硬切（path→file_path）。实测 311。cap 310→320。
 # 2026-09-20 edit.replace_all：补集出按钮。实测 497。cap 510→500。
@@ -468,19 +469,10 @@ def _measured_worker() -> dict[str, int]:
 
 
 def _measured_coord() -> dict[str, int]:
-    from agentcore.runtime.coordination.tools import (
-        CancelWorkerTool,
-        QueueUserMessageTool,
-        ResolveEscalationTool,
-    )
+    from agentcore.runtime.coordination.tools import CancelWorkerTool
 
-    sink = EventSink()
     return {
         "cancel_worker": measure_openai_tool_chars(CancelWorkerTool().schema),
-        "resolve_escalation": measure_openai_tool_chars(ResolveEscalationTool().schema),
-        "queue_user_message": measure_openai_tool_chars(
-            QueueUserMessageTool(sink=sink).schema
-        ),
         "replan": measure_openai_tool_chars(_replan_schema()),
     }
 
@@ -665,7 +657,7 @@ def test_on_demand_faces_point_how_to_consult():
     assert not add_props["items"]["properties"]["depends_on"]["description"].startswith(
         "可选"
     )
-    assert not _REPLAN_PARAMETERS["properties"]["steers"]["description"].startswith(
+    assert not _REPLAN_PARAMETERS["properties"]["tell"]["description"].startswith(
         "可选"
     )
     assert not _REPLAN_PARAMETERS["properties"]["stop"]["description"].startswith("可选")

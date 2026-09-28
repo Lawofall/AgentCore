@@ -115,9 +115,9 @@ class EventType(StrEnum):
     # 仅在有实质内容（有落盘文件或有缺口 / 行动项）时发射——纯 prose 成功批次保持无声。
     DELIVERY_STATUS = "delivery_status"
     # 运行中用户插话（经典 steer + 协调插话共用）：POST …/messages delivery=steer 时注入；
-    # status 同 interjection_id 保最新。协调：received→injected→addressed|queued|failed；
-    # 经典：received→injected（终态）|queued|failed（无 addressed）。DURABLE——落 journal，
-    # 刷新可回看；injected = 内容真正进模型上下文。
+    # status 同 interjection_id 保最新。协调与经典：received→injected（终态）|failed；
+    # 经典另有赶不上下一步的 queued。addressed 与协调侧改排的 queued 新回合不发，
+    # 旧日记回放仍读。DURABLE——落 journal，刷新可回看；injected = 内容真正进模型上下文。
     USER_INTERJECTION = "user_interjection"
     # 同对话 FIFO 排队（D9 · 发送即有流）：in-flight 时 POST …/messages 立即在响应 SSE 上
     # 发射；队列 drain 启动该回合后**同一连接**续流。EPHEMERAL——传输态排队提示，不落 journal。

@@ -108,7 +108,7 @@ class EscalationRequiredPayload(WirePayload):
         "Structured forks (同 ask_user 的 questions). Absent on old journaled events "
         "(fold with `?? []`); empty for a free-text ask."
     )
-    kind: EscalationKind | None = absent("wait / scope / dep。缺省按 wait。")
+    kind: EscalationKind | None = absent("wait / adjust。缺省按 wait。")
     awaiting: Literal["user", "ceo"] | None = absent(
         "谁在仲裁：user=经典可答卡；ceo=协调模式等主管。旧流缺字段按 user。"
     )
