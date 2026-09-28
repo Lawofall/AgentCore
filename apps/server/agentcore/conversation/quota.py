@@ -1,13 +1,12 @@
 """Quota enforcement — the「总量」防线 that refuses a new turn once a user has
 exhausted a configured usage window (成本配额与计费.md §一).
 
-Four independent dimensions, each with its own rolling window:
+Three independent dimensions, each with its own window:
 
 | 维度          | 窗口         | 阈值 (config)               |
 |---------------|--------------|-----------------------------|
 | 日 token      | 当日 0 点起  | ``quota_daily_tokens`` |
 | 月成本 (CNY)  | 当月 1 号起  | ``quota_monthly_cost_cny`` |
-| 日请求数      | 当日 0 点起  | ``quota_daily_requests`` |
 | 日成本 (CNY)  | 当日 0 点起  | ``quota_daily_cost_cny`` |
 
 A ``0`` threshold means that dimension is unlimited (fail-safe 宽松默认); when
@@ -19,8 +18,11 @@ Spend is read from the ``cost_events`` ledger (the money truth source, 不变量
 
 The window SUM is account-wide, so **account-level** spend (AI 改写 / 文档
 description — ledger rows with no conversation) counts against the token and
-cost dimensions like any turn's. It does not move 日请求数: that dimension counts
-distinct assistant turns (``message_id``), and those rows belong to none.
+cost dimensions like any turn's.
+
+Turn counts stay a usage statistic (distinct assistant ``message_id``). They are
+not a quota: one turn is neither a unit of money nor a unit of rate. Money caps
+bound spend; the sliding-window rate limiter bounds bursts.
 
 Limits resolve per user: ``QuotaLimits.for_user`` reads the override columns on
 the ``users`` row (NULL = inherit global ``quota_*``; an explicit ``0`` =
@@ -80,7 +82,6 @@ class QuotaLimits:
 
     daily_tokens: int
     monthly_cost_nano: int
-    daily_requests: int
     daily_cost_nano: int = 0
 
     @classmethod
@@ -88,7 +89,6 @@ class QuotaLimits:
         return cls(
             daily_tokens=settings.quota_daily_tokens,
             monthly_cost_nano=int(settings.quota_monthly_cost_cny * NANO_PER_CNY),
-            daily_requests=settings.quota_daily_requests,
             daily_cost_nano=int(settings.quota_daily_cost_cny * NANO_PER_CNY),
         )
 
@@ -101,7 +101,7 @@ class QuotaLimits:
         means that dimension is unlimited *for this user*.
         """
         if user.is_unlimited:
-            return cls(0, 0, 0, 0)
+            return cls(0, 0, 0)
         defaults = cls.from_settings()
         monthly_cny = (
             user.quota_monthly_cost_cny
@@ -120,11 +120,6 @@ class QuotaLimits:
                 else defaults.daily_tokens
             ),
             monthly_cost_nano=int(monthly_cny * NANO_PER_CNY),
-            daily_requests=(
-                user.quota_daily_requests
-                if user.quota_daily_requests is not None
-                else defaults.daily_requests
-            ),
             daily_cost_nano=int(daily_cny * NANO_PER_CNY),
         )
 
@@ -133,7 +128,6 @@ class QuotaLimits:
         return (
             self.daily_tokens <= 0
             and self.monthly_cost_nano <= 0
-            and self.daily_requests <= 0
             and self.daily_cost_nano <= 0
         )
 
@@ -148,7 +142,7 @@ async def enforce_quota(
     """Raise ``QuotaExceededError`` if ``user_id`` has hit any quota.
 
     No-op (and no DB read) when every dimension is unlimited. Otherwise sums the
-    user's ledger over the day window (daily tokens + requests + daily cost);
+    user's ledger over the day window (daily tokens + daily cost);
     only if those pass *and* a monthly cap is configured does it read the month
     window (monthly cost). That is 1–2 indexed aggregates on
     ``ix_cost_events_user_created`` — light enough for the turn hot path.
@@ -173,19 +167,6 @@ async def enforce_quota(
                 dimension="daily_tokens",
                 used=used,
                 limit=limits.daily_tokens,
-                reset_at=_next_day_reset(day_start),
-            )
-
-    if limits.daily_requests > 0:
-        # 一回合 = 一个 assistant message_id（与对话累计 / 仪表盘的「请求」口径一致）。
-        used = int(today["turns"])
-        if used >= limits.daily_requests:
-            raise QuotaExceededError(
-                f"已达每日请求上限（{used} / {limits.daily_requests}），"
-                f"{_RESET_HINT}；{_BYOK_EXIT}。",
-                dimension="daily_requests",
-                used=used,
-                limit=limits.daily_requests,
                 reset_at=_next_day_reset(day_start),
             )
 

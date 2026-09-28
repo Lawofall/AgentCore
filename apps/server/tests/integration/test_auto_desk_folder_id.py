@@ -6,20 +6,21 @@ import asyncio
 
 import pytest
 
-from agentcore.core.types import new_id
 from agentcore.db.repositories import ConversationRepository, FolderRepository, UserRepository
 
 
 @pytest.mark.asyncio
 async def test_set_auto_desk_folder_id_conditional_first_write_wins(session_factory):
     """WHERE … IS NULL：后写者输掉竞态，返回赢家 id 且 won=False。"""
-    desk_a = new_id()
-    desk_b = new_id()
+    desk_a_id = ""
+    desk_b_id = ""
     async with session_factory() as session:
         user = await UserRepository(session).create(
             username="auto_desk_race_u", display_name="auto_desk_race_u"
         )
         uid = user.user_id
+        desk_a_id = (await FolderRepository(session).create(user_id=uid, name="A")).id
+        desk_b_id = (await FolderRepository(session).create(user_id=uid, name="B")).id
         conv = await ConversationRepository(session).create(
             user_id=uid, title="裸聊", folder_id=None
         )
@@ -27,28 +28,30 @@ async def test_set_auto_desk_folder_id_conditional_first_write_wins(session_fact
 
     async with session_factory() as session:
         repo = ConversationRepository(session)
-        won = await repo.set_auto_desk_folder_id(cid, desk_a, user_id=uid)
-        lost = await repo.set_auto_desk_folder_id(cid, desk_b, user_id=uid)
+        won = await repo.set_auto_desk_folder_id(cid, desk_a_id, user_id=uid)
+        lost = await repo.set_auto_desk_folder_id(cid, desk_b_id, user_id=uid)
 
-    assert won == (desk_a, True)
-    assert lost == (desk_a, False)
+    assert won == (desk_a_id, True)
+    assert lost == (desk_a_id, False)
 
     async with session_factory() as session:
         conv = await ConversationRepository(session).get_by_id(cid, user_id=uid)
     assert conv is not None
-    assert conv.auto_desk_folder_id == desk_a
+    assert conv.auto_desk_folder_id == desk_a_id
 
 
 @pytest.mark.asyncio
 async def test_set_auto_desk_folder_id_concurrent_writers(session_factory):
     """两会话并发条件更新：恰好一个 won=True，双方 effective 一致。"""
-    desk_x = new_id()
-    desk_y = new_id()
+    desk_x = ""
+    desk_y = ""
     async with session_factory() as session:
         user = await UserRepository(session).create(
             username="auto_desk_conc_u", display_name="auto_desk_conc_u"
         )
         uid = user.user_id
+        desk_x = (await FolderRepository(session).create(user_id=uid, name="X")).id
+        desk_y = (await FolderRepository(session).create(user_id=uid, name="Y")).id
         conv = await ConversationRepository(session).create(
             user_id=uid, title="裸聊", folder_id=None
         )
@@ -71,7 +74,7 @@ async def test_set_auto_desk_folder_id_concurrent_writers(session_factory):
 @pytest.mark.asyncio
 async def test_clear_auto_desk_folder_id_cas(session_factory):
     """失效指针：仅当 expected 仍匹配时清掉，避免误清新桌。"""
-    fresh_id = new_id()
+    fresh_id = ""
     async with session_factory() as session:
         user = await UserRepository(session).create(
             username="auto_desk_clear_u", display_name="auto_desk_clear_u"
@@ -79,6 +82,7 @@ async def test_clear_auto_desk_folder_id_cas(session_factory):
         uid = user.user_id
         folder = await FolderRepository(session).create(user_id=uid, name="dead")
         dead_id = folder.id
+        fresh_id = (await FolderRepository(session).create(user_id=uid, name="fresh")).id
         conv = await ConversationRepository(session).create(
             user_id=uid, title="裸聊", folder_id=None
         )

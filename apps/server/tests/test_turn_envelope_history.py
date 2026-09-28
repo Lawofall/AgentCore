@@ -578,7 +578,7 @@ async def test_t2_persist_fold_drop_opening_matches_probe_keep_window(
     Bubble text stays the original utterance. No upstream call.
     """
     env1 = f"{TURN_ENVELOPE_FENCE}\n<运行时/>"
-    env2 = f"{TURN_ENVELOPE_FENCE}\n<已登记来源/>"
+    env2 = f"{TURN_ENVELOPE_FENCE}\n<表格/>"
     system = "SYS"
     user1 = "q1"
     user2 = "q2"

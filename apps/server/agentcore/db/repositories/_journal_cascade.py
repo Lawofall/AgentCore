@@ -1,18 +1,13 @@
 """Cascade-delete helpers for ``turn_journal`` rows.
 
-The ``turn_journal`` replay stream (§8.3 唯一事实源) has no DB foreign key and no
-own TTL sweep, so every hard-delete of a conversation or its messages must drop the
-matching journal rows in the *same* transaction or they orphan. Centralized here so
-all three delete paths — conversation ``hard_delete``, message ``delete_after``,
-message ``delete_by_id`` — cascade the journal identically: a future delete path
-calls one of these instead of re-inlining ``delete(TurnJournalRow)`` and risking a
-missed cascade (the invariant-drift risk that motivated extracting this).
+Conversation hard-delete drops these rows via ``fk_turn_journal_conversation_id``.
+Regenerate / single-message delete still drops them here: ``turn_id`` is not a
+foreign key to ``messages`` (a paused turn writes rows before the message exists).
 
-In-flight ``turn_stream_state`` snapshots ride a sibling cascade
-(``_stream_state_cascade``); a new delete path must call both.
+``turn_stream_state`` has no ``conversation_id`` either; message delete paths
+call ``_stream_state_cascade`` in the same transaction, before the messages go.
 
-None of these commit; the calling repository commits the surrounding unit of work,
-so the cascade stays atomic with the row delete it accompanies.
+None of these commit; the calling repository commits the surrounding unit of work.
 """
 
 from datetime import datetime
@@ -21,13 +16,6 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.db.models import Message, TurnJournalRow
-
-
-async def delete_journal_for_conversation(session: AsyncSession, conversation_id: str) -> None:
-    """Drop every journal row of a conversation (whole-conversation hard delete)."""
-    await session.execute(
-        delete(TurnJournalRow).where(TurnJournalRow.conversation_id == conversation_id)
-    )
 
 
 async def delete_journal_after(

@@ -31,7 +31,6 @@ function status(overrides: Partial<AdminSystemStatus> = {}): AdminSystemStatus {
     billing_mode: "platform",
     quota: {
       daily_tokens: 1_000_000,
-      daily_requests: 100,
       daily_cost_nano: 0,
       monthly_cost_nano: 5_000_000_000,
     },

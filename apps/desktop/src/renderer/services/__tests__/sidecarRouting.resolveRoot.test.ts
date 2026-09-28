@@ -2,11 +2,6 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const uiState = {
-  sidecarEnabled: false,
-  sidecarPreference: "unset" as "unset" | "on" | "off",
-};
-
 vi.mock("@/hooks/useConversations", () => ({
   getConversations: vi.fn(),
 }));
@@ -20,10 +15,7 @@ vi.mock("@/lib/queryKeys", () => ({
   workspaceKeys: { list: ["workspaces"] },
 }));
 vi.mock("@/lib/capabilities", () => ({
-  hasLocalEngine: () => true,
-}));
-vi.mock("@/stores/ui", () => ({
-  useUIStore: { getState: () => uiState },
+  hasLocalEngine: vi.fn(() => true),
 }));
 vi.mock("@/stores/conversation", () => ({
   getRuntime: () => ({ messages: [] }),
@@ -31,6 +23,7 @@ vi.mock("@/stores/conversation", () => ({
 
 import { getConversations } from "@/hooks/useConversations";
 import { getFolders } from "@/hooks/useFolders";
+import { hasLocalEngine } from "@/lib/capabilities";
 import {
   canConversationUseSidecar,
   resolveConversationLocalTarget,
@@ -44,8 +37,7 @@ const getFolds = getFolders as unknown as ReturnType<typeof vi.fn>;
 
 describe("resolveSidecarRoot（新回合路由 · 本机传统默认同侧）", () => {
   beforeEach(() => {
-    uiState.sidecarEnabled = false;
-    uiState.sidecarPreference = "unset";
+    vi.mocked(hasLocalEngine).mockReturnValue(true);
     getConvs.mockReset();
     getFolds.mockReset();
     getFolds.mockReturnValue([]);
@@ -64,9 +56,7 @@ describe("resolveSidecarRoot（新回合路由 · 本机传统默认同侧）", 
     } as unknown as typeof window.fsApi;
   });
 
-  it("unset（默认关布尔）不挡本机绑定 → 解析 sidecar 目标", async () => {
-    uiState.sidecarEnabled = false;
-    uiState.sidecarPreference = "unset";
+  it("本机绑定 → 解析 sidecar 目标", async () => {
     const target = await resolveSidecarRoot("c1");
     expect(target).toEqual({
       rootId: "container",
@@ -75,27 +65,14 @@ describe("resolveSidecarRoot（新回合路由 · 本机传统默认同侧）", 
     expect(window.fsApi.listRoots).toHaveBeenCalled();
   });
 
-  it("显式 off + 本机绑定 → 不是 sidecar 目标，也不当成无绑定", async () => {
-    uiState.sidecarEnabled = false;
-    uiState.sidecarPreference = "off";
+  it("没有本地引擎 + 本机绑定 → engine_off，不走云", async () => {
+    vi.mocked(hasLocalEngine).mockReturnValue(false);
     expect(await resolveSidecarRoot("c1")).toBeNull();
     expect(await resolveNewTurnBind("c1")).toEqual({
       kind: "engine_off",
       rootId: "container",
       subpath: "conversations/c1",
-      reason: "switch_off",
     });
-  });
-
-  it("显式 on → 仍解析本机绑定目标", async () => {
-    uiState.sidecarEnabled = true;
-    uiState.sidecarPreference = "on";
-    const target = await resolveSidecarRoot("c1");
-    expect(target).toEqual({
-      rootId: "container",
-      subpath: "conversations/c1",
-    });
-    expect(window.fsApi.listRoots).toHaveBeenCalled();
   });
 
   it("§7.2 mode=cloud 项目 → 无 sidecar target（全云）", async () => {
@@ -116,14 +93,12 @@ describe("resolveSidecarRoot（新回合路由 · 本机传统默认同侧）", 
         localSubpath: null,
       },
     ]);
-    uiState.sidecarEnabled = true;
-    uiState.sidecarPreference = "on";
     expect(await resolveConversationLocalTarget("c-cloud")).toBeNull();
     expect(await resolveSidecarRoot("c-cloud")).toBeNull();
     expect(window.fsApi.listRoots).not.toHaveBeenCalled();
   });
 
-  it("§7.2 mode=local + unset → 默认同侧 sidecar", async () => {
+  it("§7.2 mode=local → 默认同侧 sidecar", async () => {
     getConvs.mockReturnValue([
       {
         id: "c-local",
@@ -147,8 +122,6 @@ describe("resolveSidecarRoot（新回合路由 · 本机传统默认同侧）", 
         .mockResolvedValue([{ id: "proj-root", name: "LegacyLocal" }]),
     } as unknown as typeof window.fsApi;
 
-    uiState.sidecarEnabled = false;
-    uiState.sidecarPreference = "unset";
     expect(await resolveConversationLocalTarget("c-local")).toEqual({
       rootId: "proj-root",
       subpath: "",
@@ -225,7 +198,6 @@ describe("resolveSidecarRoot（新回合路由 · 本机传统默认同侧）", 
       ]),
     } as unknown as typeof window.fsApi;
 
-    uiState.sidecarPreference = "unset";
     expect(await resolveLocalBind("c-local")).toEqual({
       kind: "stale",
       rootId: "proj-root",

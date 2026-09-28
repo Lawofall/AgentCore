@@ -44,7 +44,7 @@ def classify_tells(
             errors.append(f"tell[{i}] 需要 note")
             continue
 
-        if active:
+        if session is not None and active:
             waiting = session.resolve_arbitration_target(raw)
             if waiting.reason == "ambiguous":
                 listing = "；".join(waiting.candidates) or "（无）"

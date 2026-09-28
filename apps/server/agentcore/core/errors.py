@@ -762,7 +762,7 @@ class RateLimitedError(AgentCoreError):
 class QuotaExceededError(AgentCoreError):
     """A configured usage quota is exhausted; the next turn is refused.
 
-    Three independent dimensions (daily tokens / monthly cost / daily requests),
+    Three independent dimensions (daily tokens / monthly cost / daily cost),
     checked before a turn starts (成本配额与计费.md §一). Maps to HTTP 429 so the
     client can surface a "quota reached" state distinct from auth (401) or
     validation (422). ``dimension`` / ``used`` / ``limit`` ride along on the

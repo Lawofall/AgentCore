@@ -36,7 +36,6 @@ class TableRepository:
             title=title,
             columns_schema=schema,
             schema_version=1,
-            active_view_id=view["id"],
         )
         self._session.add(table)
         await self._session.flush()
@@ -59,6 +58,9 @@ class TableRepository:
                 is_default=True,
             )
         )
+        # fk_tables_active_view_id is checked immediately; the view row must exist first.
+        await self._session.flush()
+        table.active_view_id = view["id"]
         await commit_or_flush(self._session, commit=commit)
         await self._session.refresh(table)
         return await self.get_state(table.id, user_id=user_id)  # type: ignore[return-value]
@@ -81,7 +83,6 @@ class TableRepository:
             title=title,
             columns_schema={"columns": columns},
             schema_version=1,
-            active_view_id=view_id,
             source_workspace_key=workspace_key,
             source_path=path,
         )
@@ -106,6 +107,8 @@ class TableRepository:
                 is_default=True,
             )
         )
+        await self._session.flush()
+        table.active_view_id = view_id
         await commit_or_flush(self._session, commit=commit)
         await self._session.refresh(table)
         return await self.get_state(table.id, user_id=user_id)  # type: ignore[return-value]
@@ -301,7 +304,6 @@ class TableRepository:
         table.title = state.title
         table.columns_schema = {"columns": state.columns}
         table.schema_version = state.schema_version
-        table.active_view_id = state.active_view_id
         table.undo_batch = state.undo_batch
         table.updated_at = datetime.now(UTC)
         stamp = datetime.now(UTC)
@@ -383,6 +385,7 @@ class TableRepository:
             if vid not in keep_views and view.deleted_at is None:
                 view.deleted_at = datetime.now(UTC)
         await self._session.flush()
+        table.active_view_id = state.active_view_id or None
         await self._realign_undo_stamps(table, state)
         await commit_or_flush(self._session, commit=commit)
 

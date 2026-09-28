@@ -13,7 +13,11 @@ import {
 } from "@/components/ui/popover";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { copyText } from "@/lib/clipboard";
-import { formatDuration, formatOutputSpeed, formatUsageCount } from "@/lib/format";
+import {
+  formatDuration,
+  formatOutputSpeed,
+  formatUsageCount,
+} from "@/lib/format";
 import { MESSAGE_ACTION_REVEAL_CLASS } from "@/lib/messageActionReveal";
 import { formatMessageExport } from "@/lib/messageExport";
 import { completedAtIso } from "@/lib/runningElapsed";

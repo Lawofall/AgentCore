@@ -37,7 +37,6 @@ const summaryBody = {
     daily_tokens: 2_000_000,
     monthly_cost_nano: 5_000_000_000,
     daily_cost_nano: 0,
-    daily_requests: 200,
   },
   billing_mode: "platform",
   recent_daily_cost: [],

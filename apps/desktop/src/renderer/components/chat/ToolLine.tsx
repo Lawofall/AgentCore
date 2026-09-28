@@ -29,8 +29,8 @@ import {
 import { notifyActionError } from "@/lib/toast";
 import { openCloudPreview } from "@/services/openCloudPreview";
 import { useStreamAwareDisclosure } from "@/stores/disclosure";
-import { useToolOutputLiveStore } from "@/stores/toolOutputLive";
 import { useMessageExecution } from "@/stores/execution";
+import { useToolOutputLiveStore } from "@/stores/toolOutputLive";
 import type { ProcessStep } from "@/types/events";
 import {
   AlertTriangle,

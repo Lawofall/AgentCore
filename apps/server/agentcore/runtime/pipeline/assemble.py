@@ -16,7 +16,6 @@ from agentcore.runtime.context import (
     resolve_channel_profile,
 )
 from agentcore.runtime.events import EventSink
-from agentcore.runtime.evidence_ledger import EvidenceLedgerCore, format_registered_sources_prompt
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.runtime.resolve.prompt import (
     attachment_material_scene,
@@ -60,7 +59,6 @@ async def assemble_ceo_turn(
     conversation_id: str,
     user_message: str,
     history: list[dict],
-    evidence_ledger: EvidenceLedgerCore | None = None,
     sink: EventSink,
     backend: WorkspaceBackend,
     folder_id: str | None,
@@ -97,7 +95,6 @@ async def assemble_ceo_turn(
             conversation_id=conversation_id,
             user_message=user_message,
             history=history,
-            evidence_ledger=evidence_ledger,
             sink=sink,
             backend=backend,
             folder_id=folder_id,
@@ -127,7 +124,6 @@ async def _assemble_ceo_wired(
     conversation_id: str,
     user_message: str,
     history: list[dict],
-    evidence_ledger: EvidenceLedgerCore | None,
     sink: EventSink,
     backend: WorkspaceBackend,
     folder_id: str | None,
@@ -291,16 +287,12 @@ async def _assemble_ceo_wired(
         exclude_turn_id=message_id,
         promotion_ledger=prepared.base_tool_context.promotion_ledger,
     )
-    # 出处诚实：hydrate 后注入「已登记来源」结构化摘要（对照台账字段，禁占位叙事）。
-    # Tools register into the ledger only once the loop runs, so its content is settled
-    # for this turn's envelope here. Frozen system stays byte-stable across turns.
     chat_envelope = render_ceo_turn_envelope(
         workspace_context=prepared.workspace_facts,
         workspace_file_index=workspace_overview,
         attachment_material=attachment_material_scene(prepared.attachment_context),
         attachment_context=prepared.attachment_context,
         table_context=prepared.table_context,
-        registered_sources=format_registered_sources_prompt(evidence_ledger),
         soft_cap=settings.prompt_budget_char_soft_cap,
     )
 

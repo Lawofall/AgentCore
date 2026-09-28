@@ -10,7 +10,8 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 
-from agentcore.db.models import Message
+from agentcore.db.models import ConversationShare, Message
+from agentcore.db.repositories import ConversationRepository
 from tests.integration.conftest import TEST_PASSWORD, register_and_login
 
 
@@ -138,6 +139,14 @@ async def test_delete_conversation_revokes_shares(client, new_client, session_fa
     assert (await client.delete(f"/v1/conversations/{conv_id}")).status_code == 200
     async with new_client() as anon:
         assert (await anon.get(share["url"])).status_code == 404
+    async with session_factory() as session:
+        await ConversationRepository(session).hard_delete(conv_id)
+    async with session_factory() as session:
+        row = await session.get(ConversationShare, share["id"])
+    assert row is not None
+    assert row.conversation_id is None
+    assert row.revoked_at is not None
+    assert row.snapshot
 
 
 async def test_delete_account_revokes_shares(client, new_client, session_factory):

@@ -8,7 +8,7 @@ silently clobber (CAS ``version``).
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -24,8 +24,13 @@ class Doc(Base):
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     # Creator (audit). Access is via the folder desk, not this column.
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
-    # Required cloud folder. App-level ref, no DB FK (核心接口 §6.2).
-    folder_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
+    # Required cloud folder. Removed with the folder row
+    # (``fk_docs_folder_id``). Soft-delete keeps the row, so drafts stay for restore.
+    folder_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey("folders.id", name="fk_docs_folder_id", ondelete="CASCADE"),
+        index=True,
+    )
     title: Mapped[str] = mapped_column(String(500), nullable=False, server_default=text("''"))
     body: Mapped[dict] = mapped_column(
         JSONB,
@@ -51,13 +56,21 @@ class DocShare(Base):
     Distinct from ``conversation_shares`` (those stay freeze-on-mint). The row
     id is the stable ``/shared/<id>`` token. Public render reads ``snapshot``,
     never the live doc. Republish overwrites ``snapshot`` in place (same URL);
-    unpublished live edits do not leak.
+    unpublished live edits do not leak. Removing the doc nulls ``doc_id``
+    (``fk_doc_shares_doc_id``) and leaves the row.
     """
 
     __tablename__ = "doc_shares"
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
-    doc_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
+    # Parent doc. NULL after that row is removed
+    # (``fk_doc_shares_doc_id``, ON DELETE SET NULL). Revoke stays a service write.
+    doc_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey("docs.id", name="fk_doc_shares_doc_id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
     # Who minted the link (audit). Revoke is desk can_write, not this column.
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False, server_default=text("''"))

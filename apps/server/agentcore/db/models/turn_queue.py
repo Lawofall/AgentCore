@@ -7,8 +7,9 @@ the enqueue-time API key — drain resolves credentials again.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agentcore.db.base import Base
@@ -26,10 +27,18 @@ class TurnQueueItem(Base):
             "user_id",
             "position",
         ),
+        Index("ix_turn_queue_items_conversation", "conversation_id"),
     )
 
     queue_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    conversation_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_turn_queue_items_conversation_id",
+            ondelete="CASCADE",
+        ),
+    )
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, server_default=text("''"))
     # 1-based FIFO position. Reorder rewrites these; created_at is only a tiebreak.
     position: Mapped[int] = mapped_column(Integer, nullable=False)

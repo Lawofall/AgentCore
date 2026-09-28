@@ -141,7 +141,6 @@ function Dashboard({
   const dayCostUsed = today.cost.total;
   const dayTokenLimit = quota.daily_tokens;
   const dayTokensUsed = today.usage.input + today.usage.output;
-  const dayReqLimit = quota.daily_requests;
   const dayReqUsed = today.requests;
   const moneyCurrency = month.cost.currency ?? today.cost.currency;
 
@@ -158,7 +157,6 @@ function Dashboard({
         dayTokensUsed,
         dayTokenLimit,
         dayReqUsed,
-        dayReqLimit,
       })
     : [
         {
@@ -175,12 +173,8 @@ function Dashboard({
         },
         {
           label: "请求",
-          value:
-            dayReqLimit > 0
-              ? `${dayReqUsed} / ${dayReqLimit}`
-              : String(dayReqUsed),
+          value: String(dayReqUsed),
           caption: `本月 ${month.requests}`,
-          near: isNear(dayReqUsed, dayReqLimit),
         },
       ];
 
@@ -216,16 +210,6 @@ function Dashboard({
             />
           </div>
         )}
-        {!byok && isNear(dayReqUsed, dayReqLimit) && (
-          <div className="mt-3">
-            <QuotaMeter
-              label="今日请求"
-              used={dayReqUsed}
-              limit={dayReqLimit}
-              caption={`${dayReqUsed} / ${dayReqLimit} 次 · ${dailyResetText}`}
-            />
-          </div>
-        )}
       </SettingsSection>
 
       {summary.recent_daily_cost.some((p) => p.cost_total > 0) && !byok && (
@@ -246,7 +230,6 @@ function byokTodayStats(
     dayTokensUsed: number;
     dayTokenLimit: number;
     dayReqUsed: number;
-    dayReqLimit: number;
   },
 ): StatCell[] {
   const { today, month } = summary;
@@ -262,10 +245,7 @@ function byokTodayStats(
     },
     {
       label: "请求",
-      value:
-        counts.dayReqLimit > 0
-          ? `${counts.dayReqUsed} / ${counts.dayReqLimit}`
-          : String(counts.dayReqUsed),
+      value: String(counts.dayReqUsed),
       caption: `本月 ${month.requests}`,
     },
   ];

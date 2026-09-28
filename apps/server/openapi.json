@@ -1814,18 +1814,6 @@
             ],
             "title": "Quota Daily Cost Cny"
           },
-          "quota_daily_requests": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quota Daily Requests"
-          },
           "quota_daily_tokens": {
             "anyOf": [
               {
@@ -1849,6 +1837,30 @@
               }
             ],
             "title": "Quota Monthly Cost Cny"
+          },
+          "quota_search_daily": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quota Search Daily"
+          },
+          "quota_search_monthly": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quota Search Monthly"
           },
           "role": {
             "anyOf": [
@@ -2127,17 +2139,6 @@
             ],
             "title": "Quota Daily Cost Cny"
           },
-          "quota_daily_requests": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quota Daily Requests"
-          },
           "quota_daily_tokens": {
             "anyOf": [
               {
@@ -2159,6 +2160,28 @@
               }
             ],
             "title": "Quota Monthly Cost Cny"
+          },
+          "quota_search_daily": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quota Search Daily"
+          },
+          "quota_search_monthly": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quota Search Monthly"
           },
           "registration_ip": {
             "anyOf": [
@@ -2203,7 +2226,6 @@
           "quota_daily_tokens",
           "quota_monthly_cost_cny",
           "quota_daily_cost_cny",
-          "quota_daily_requests",
           "created_at",
           "deleted_at",
           "cost_total"
@@ -2308,17 +2330,6 @@
             ],
             "title": "Quota Daily Cost Cny"
           },
-          "quota_daily_requests": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quota Daily Requests"
-          },
           "quota_daily_tokens": {
             "anyOf": [
               {
@@ -2340,6 +2351,28 @@
               }
             ],
             "title": "Quota Monthly Cost Cny"
+          },
+          "quota_search_daily": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quota Search Daily"
+          },
+          "quota_search_monthly": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quota Search Monthly"
           },
           "registration_ip": {
             "anyOf": [
@@ -2384,7 +2417,6 @@
           "quota_daily_tokens",
           "quota_monthly_cost_cny",
           "quota_daily_cost_cny",
-          "quota_daily_requests",
           "created_at",
           "deleted_at"
         ],
@@ -5445,6 +5477,38 @@
           "subscription_day"
         ],
         "title": "CreatePlatformCredentialRequest",
+        "type": "object"
+      },
+      "CreateSearchProviderRequest": {
+        "properties": {
+          "api_key": {
+            "default": "",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "base_url": {
+            "default": "",
+            "title": "Base Url",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          },
+          "protocol": {
+            "enum": [
+              "searxng",
+              "cleversee"
+            ],
+            "title": "Protocol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol"
+        ],
+        "title": "CreateSearchProviderRequest",
         "type": "object"
       },
       "CreateShareRequest": {
@@ -10978,10 +11042,6 @@
             "title": "Daily Cost Nano",
             "type": "integer"
           },
-          "daily_requests": {
-            "title": "Daily Requests",
-            "type": "integer"
-          },
           "daily_tokens": {
             "title": "Daily Tokens",
             "type": "integer"
@@ -10994,8 +11054,7 @@
         "required": [
           "daily_tokens",
           "monthly_cost_nano",
-          "daily_cost_nano",
-          "daily_requests"
+          "daily_cost_nano"
         ],
         "title": "QuotaStatus",
         "type": "object"
@@ -12455,6 +12514,171 @@
         "title": "SearchItem",
         "type": "object"
       },
+      "SearchProviderResponse": {
+        "properties": {
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "masked_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Masked Key"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "protocol": {
+            "enum": [
+              "searxng",
+              "cleversee"
+            ],
+            "title": "Protocol",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "unchecked",
+              "active",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "protocol",
+          "base_url",
+          "status"
+        ],
+        "title": "SearchProviderResponse",
+        "type": "object"
+      },
+      "SearchProviderSelectionRequest": {
+        "properties": {
+          "provider_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Id"
+          }
+        },
+        "title": "SearchProviderSelectionRequest",
+        "type": "object"
+      },
+      "SearchProvidersResponse": {
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/SearchProviderResponse"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "quota": {
+            "$ref": "#/components/schemas/SearchQuotaView"
+          },
+          "selected_provider_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Provider Id"
+          }
+        },
+        "required": [
+          "selected_provider_id",
+          "quota",
+          "providers"
+        ],
+        "title": "SearchProvidersResponse",
+        "type": "object"
+      },
+      "SearchQuotaView": {
+        "properties": {
+          "daily_limit": {
+            "title": "Daily Limit",
+            "type": "integer"
+          },
+          "daily_used": {
+            "title": "Daily Used",
+            "type": "integer"
+          },
+          "monthly_limit": {
+            "title": "Monthly Limit",
+            "type": "integer"
+          },
+          "monthly_used": {
+            "title": "Monthly Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "daily_used",
+          "daily_limit",
+          "monthly_used",
+          "monthly_limit"
+        ],
+        "title": "SearchQuotaView",
+        "type": "object"
+      },
       "SearchResponse": {
         "properties": {
           "query": {
@@ -12474,6 +12698,60 @@
           "sections"
         ],
         "title": "SearchResponse",
+        "type": "object"
+      },
+      "SearchRouteView": {
+        "description": "Sidecar-visible route. Never includes an API key.",
+        "properties": {
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "kind": {
+            "enum": [
+              "platform",
+              "provider"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "protocol": {
+            "enum": [
+              "searxng",
+              "cleversee"
+            ],
+            "title": "Protocol",
+            "type": "string"
+          },
+          "provider_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Id"
+          },
+          "proxy": {
+            "title": "Proxy",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "protocol",
+          "proxy"
+        ],
+        "title": "SearchRouteView",
         "type": "object"
       },
       "SearchSection": {
@@ -12908,8 +13186,15 @@
             "type": "array"
           },
           "source_document_id": {
-            "title": "Source Document Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Id"
           },
           "status": {
             "title": "Status",
@@ -13052,8 +13337,15 @@
             "type": "array"
           },
           "source_document_id": {
-            "title": "Source Document Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Id"
           },
           "status": {
             "title": "Status",
@@ -13126,8 +13418,15 @@
             "type": "array"
           },
           "source_document_id": {
-            "title": "Source Document Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Id"
           },
           "status": {
             "title": "Status",
@@ -15329,6 +15628,45 @@
         "title": "UpdateProfileRequest",
         "type": "object"
       },
+      "UpdateSearchProviderRequest": {
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "title": "UpdateSearchProviderRequest",
+        "type": "object"
+      },
       "UpdateTableRequest": {
         "properties": {
           "title": {
@@ -16165,7 +16503,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.27"
+    "version": "0.7.28"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -32768,6 +33106,56 @@
         ]
       }
     },
+    "/v1/inference/search_route": {
+      "get": {
+        "description": "Sidecar-visible search route (inference JWT). Never includes an API key.",
+        "operationId": "inference_search_route_v1_inference_search_route_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchRouteView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inference Search Route",
+        "tags": [
+          "inference"
+        ]
+      }
+    },
     "/v1/inference/token": {
       "post": {
         "description": "Exchange the caller's cookie session for a scoped inference token.",
@@ -32900,7 +33288,7 @@
     },
     "/v1/inference/web_search": {
       "post": {
-        "description": "Run server-side web search for a sidecar turn (SearXNG; no client keys).",
+        "description": "Run server-side web search for a sidecar turn (account index; no client keys).",
         "operationId": "inference_web_search_v1_inference_web_search_post",
         "parameters": [
           {
@@ -38614,6 +39002,449 @@
         "summary": "List User Models",
         "tags": [
           "models"
+        ]
+      }
+    },
+    "/v1/users/me/search-providers": {
+      "get": {
+        "operationId": "list_search_providers_v1_users_me_search_providers_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchProvidersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Search Providers",
+        "tags": [
+          "search-providers"
+        ]
+      },
+      "post": {
+        "operationId": "create_search_provider_v1_users_me_search_providers_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSearchProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchProviderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Search Provider",
+        "tags": [
+          "search-providers"
+        ]
+      }
+    },
+    "/v1/users/me/search-providers/selection": {
+      "put": {
+        "operationId": "select_search_provider_v1_users_me_search_providers_selection_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchProviderSelectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchProvidersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Select Search Provider",
+        "tags": [
+          "search-providers"
+        ]
+      }
+    },
+    "/v1/users/me/search-providers/{provider_id}": {
+      "delete": {
+        "operationId": "delete_search_provider_v1_users_me_search_providers__provider_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Search Provider",
+        "tags": [
+          "search-providers"
+        ]
+      },
+      "patch": {
+        "operationId": "update_search_provider_v1_users_me_search_providers__provider_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSearchProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchProviderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Search Provider",
+        "tags": [
+          "search-providers"
+        ]
+      }
+    },
+    "/v1/users/me/search-providers/{provider_id}/test": {
+      "post": {
+        "operationId": "test_search_provider_v1_users_me_search_providers__provider_id__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchProviderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Search Provider",
+        "tags": [
+          "search-providers"
         ]
       }
     },

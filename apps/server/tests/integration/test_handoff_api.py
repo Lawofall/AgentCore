@@ -11,7 +11,8 @@ op) is covered at the unit level in ``test_handoff_job.py``.
 import httpx
 
 from agentcore.core.types import new_id
-from agentcore.db.repositories import HandoffJobRepository
+from agentcore.db.models import Conversation, HandoffJob
+from agentcore.db.repositories import ConversationRepository, HandoffJobRepository
 from tests.integration.conftest import register_and_login
 
 
@@ -77,12 +78,16 @@ async def _seed_job(session_factory, *, user_id, source_conversation_id, succeed
     ``succeeded=True`` marks it done with a (dummy) result snapshot id, so the
     apply/diff status gate passes and the *next* gate (local mode) can be exercised.
     """
+    host_id = new_id()
     async with session_factory() as session:
+        session.add(
+            Conversation(id=host_id, user_id=user_id, title="host", mode="handoff")
+        )
         repo = HandoffJobRepository(session)
         job = await repo.create(
             user_id=user_id,
             source_conversation_id=source_conversation_id,
-            job_conversation_id=new_id(),
+            job_conversation_id=host_id,
             base_snapshot_id="base-snap",
             task="refactor",
         )
@@ -228,3 +233,26 @@ async def test_discard_unknown_and_idor(client, new_client, session_factory):
         await register_and_login(other, "hjdiscardintruder")
         r = await other.post(f"/v1/conversations/{conv}/handoff/jobs/{job_id}/discard")
         assert r.status_code == 404, r.text
+
+
+async def test_hard_delete_either_conversation_removes_the_job(client, session_factory):
+    user_id = await register_and_login(client, "hjfk")
+    source = await _new_conversation(client, "source")
+    job_id = await _seed_job(session_factory, user_id=user_id, source_conversation_id=source)
+    async with session_factory() as session:
+        host_id = (await session.get(HandoffJob, job_id)).job_conversation_id
+        await ConversationRepository(session).hard_delete(host_id)
+    async with session_factory() as session:
+        assert await session.get(HandoffJob, job_id) is None
+        assert await session.get(Conversation, source) is not None
+
+    other = await _new_conversation(client, "other")
+    other_job = await _seed_job(
+        session_factory, user_id=user_id, source_conversation_id=other
+    )
+    async with session_factory() as session:
+        host_id = (await session.get(HandoffJob, other_job)).job_conversation_id
+        await ConversationRepository(session).hard_delete(other)
+    async with session_factory() as session:
+        assert await session.get(HandoffJob, other_job) is None
+        assert await session.get(Conversation, host_id) is not None

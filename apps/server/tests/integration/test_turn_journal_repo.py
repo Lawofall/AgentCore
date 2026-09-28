@@ -15,6 +15,7 @@ reachable), same posture as the paused-turn repo integration tests.
 
 from uuid import uuid4
 
+from agentcore.db.models import Conversation
 from agentcore.db.repositories import TurnJournalRepository
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
 from agentcore.runtime.facts import (
@@ -25,6 +26,12 @@ from agentcore.runtime.facts import (
     TurnStartedFact,
 )
 from agentcore.runtime.journal import runs_from_entries, window_from_journal
+
+
+async def _own(session_factory, cid: str) -> None:
+    async with session_factory() as s:
+        s.add(Conversation(id=cid, user_id=str(uuid4())))
+        await s.commit()
 
 
 def _paused_journal() -> list[dict]:
@@ -141,6 +148,7 @@ async def test_journal_round_trips_through_postgres_and_window_folds(session_fac
     # the in-memory fold — the DB layer (JSONB) preserves every fact payload, so a resume
     # rebuilding the captain window from the DB matches one rebuilt in-process.
     turn_id, conv_id = str(uuid4()), str(uuid4())
+    await _own(session_factory, conv_id)
     entries = _paused_journal()
     annotated = entries[4]["payload"]["result"]  # the tool_call fact's full-text result
 
@@ -174,6 +182,7 @@ async def test_find_latest_multi_agent_execution(session_factory):
     # prefer_turn_id = 本回合图优先；exclude_turn_id 仅 prompt 回显排除当前回合；
     # 无候选 → None（调用方显式回错，禁静默新建）。
     conv = str(uuid4())
+    await _own(session_factory, conv)
     m1, m2, m_debate = str(uuid4()), str(uuid4()), str(uuid4())
 
     def plan_entries(eid: str, plan_type: str = "multi_agent") -> list[dict]:
@@ -254,6 +263,7 @@ async def test_find_latest_multi_agent_execution(session_factory):
 async def test_find_latest_mlr_execution_namespaced_synthesizer(session_factory):
     """P0：DAG 铸造 del_<uuid>_synthesizer 须被 MLR 宿主查找命中（与 appendable 对齐）。"""
     conv = str(uuid4())
+    await _own(session_factory, conv)
     mid = str(uuid4())
     rid = "del_2468005e-cf60-4032-84e4-9eca57633098_synthesizer"
     entries = [
@@ -289,6 +299,7 @@ async def test_record_replaces_turn_wholesale(session_factory):
     # A resume reuses the turn_id and re-records on completion: record must REPLACE the
     # live-band prefix occupancy, not append — so the window never doubles up.
     turn_id, conv_id = str(uuid4()), str(uuid4())
+    await _own(session_factory, conv_id)
     entries = _paused_journal()
 
     async with session_factory() as s:
@@ -311,6 +322,7 @@ async def test_replace_live_shrinks_occupancy_and_keeps_overflow(session_factory
     alignment needs occupancy to shrink to the snapshot length.
     """
     turn_id, conv_id = str(uuid4()), str(uuid4())
+    await _own(session_factory, conv_id)
     live = [
         {"kind": "run_plan", "payload": {"execution_id": "e1"}, "ts": "t0"},
         {

@@ -9,7 +9,7 @@ import {
   StaleDataNotice,
   TableSkeleton,
 } from "@/components/ui/States";
-import { cn, fmtCompact, fmtCny, fmtInt, nanoToYuan } from "@/lib/utils";
+import { cn, fmtCompact, fmtCny, nanoToYuan } from "@/lib/utils";
 import { errorMessage } from "@/services/api";
 import {
   type AdminSystemStatus,
@@ -130,13 +130,6 @@ export function PlatformQuotaPage() {
                     data.quota.daily_cost_nano === 0
                       ? "0"
                       : fmtCny(nanoToYuan(data.quota.daily_cost_nano)),
-                  )}
-                </Row>
-                <Row label="日请求">
-                  {quotaLimit(
-                    data.quota.daily_requests === 0
-                      ? "0"
-                      : fmtInt(data.quota.daily_requests),
                   )}
                 </Row>
                 <p className="mt-3 text-muted-foreground text-xs">

@@ -26,13 +26,10 @@ from agentcore.db.errors import is_schema_error
 from agentcore.db.models import Conversation
 from agentcore.db.repositories import (
     ConversationRepository,
-    DocRepository,
     DocShareRepository,
-    DocumentRepository,
     FolderRepository,
     HandoffJobRepository,
 )
-from agentcore.folders.unbind import clear_folder_session_pointers
 from agentcore.workspace.handoff_reclaim import soft_delete_job_host
 from agentcore.workspace.locate import (
     folder_tombstone_path,
@@ -182,11 +179,11 @@ async def run_retention_sweep() -> dict[str, int]:
             logger.warning("retention.folder_purge_failed", folder_id=folder.id, error=str(e))
             continue
         async with async_session_factory() as session:
-            # Clear membership on any remaining (archived) conversations before
-            # the folder row disappears. Soft-pointers (auto desk) via
-            # the shared fan-out — no user scope (global sweep). The archive
-            # provenance flag goes with it: nothing can restore this project now,
-            # so a lingering「因项目删除而归档」mark would name a folder that is gone.
+            # Unfile remaining chats before the folder row disappears
+            # (``fk_conversations_folder_id`` is RESTRICT). Auto-desk pointers
+            # SET NULL with the row. The archive provenance flag goes with the
+            # unfile: nothing can restore this project now, so a lingering
+            # 「因项目删除而归档」mark would name a folder that is gone.
             # ``updated_at`` self-assigns — housekeeping must not call ``touch_activity``
             # and scramble the「已归档」recency order.
             await session.execute(
@@ -198,17 +195,9 @@ async def run_retention_sweep() -> dict[str, int]:
                     updated_at=Conversation.updated_at,
                 )
             )
-            await clear_folder_session_pointers(session, folder_id=folder.id)
-            await DocumentRepository(session).hard_delete_for_folders(
-                folder.user_id, [folder.id], commit=False
-            )
             await DocShareRepository(session).revoke_all_for_folder_ids(
                 [folder.id], commit=False
             )
-            await DocRepository(session).hard_delete_for_folders(
-                [folder.id], commit=False
-            )
-            await session.commit()
             await FolderRepository(session).hard_delete(folder.id)
         purged_folders += 1
 

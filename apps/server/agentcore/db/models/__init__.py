@@ -51,6 +51,7 @@ from .runs import (
     TurnMetricsRow,
     TurnStreamStateRow,
 )
+from .search import PlatformSearchUse, UserSearchProvider
 from .skill_store import (
     SkillStoreInstall,
     SkillStoreListing,
@@ -101,6 +102,7 @@ __all__ = [
     "PausedTurnRow",
     "PendingRegistration",
     "PlatformCredential",
+    "PlatformSearchUse",
     "ProductNoticeDismissalRow",
     "ProductNoticeRow",
     "PushDeviceRow",
@@ -125,5 +127,6 @@ __all__ = [
     "FriendRequest",
     "UserGitCredential",
     "UserLlmProvider",
+    "UserSearchProvider",
     "_new_uuid",
 ]

@@ -15,8 +15,9 @@ class ConversationShareRepository:
 
     A share freezes a content-only transcript snapshot at create time; the public
     page renders that copy. Revocation is soft (``revoked_at``) so a killed link
-    404s at once while the row survives, and is cascade-applied when the owning
-    conversation is deleted / the account is注销.
+    404s at once while the row survives. Hard-deleting the conversation nulls
+    ``conversation_id`` (``fk_conversation_shares_conversation_id``). The same
+    revoke runs when the account is 注销.
     """
 
     def __init__(self, session: AsyncSession):

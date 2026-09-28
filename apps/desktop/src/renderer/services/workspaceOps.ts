@@ -127,8 +127,7 @@ export async function performWorkspaceOp(
     conversationId,
     origin,
     logLabel: "workspaceOps",
-    perform: (signal) =>
-      runLocalOp(payload, conversationId, signal, origin),
+    perform: (signal) => runLocalOp(payload, conversationId, signal, origin),
   });
 }
 

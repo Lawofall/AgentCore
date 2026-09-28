@@ -37,7 +37,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     ),
     SystemSkill(
         name="product_help",
-        summary="本产品用法",
+        summary="本产品是什么、入口在哪。用户在问这个产品本身时查阅。",
         blurb="这个产品能做什么、入口在哪",
         body=build_product_help_body(),
         audience=AUDIENCE_CEO_ONLY,

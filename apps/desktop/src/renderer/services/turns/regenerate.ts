@@ -21,7 +21,6 @@ import {
 import {
   type SidecarTarget,
   getActiveSidecarTarget,
-  isSidecarEnabled,
   liveSidecarTarget,
   localBindSendBlock,
   resolveLocalBind,
@@ -42,10 +41,6 @@ import {
   SIDECAR_OCCUPY_FAILED_CODE,
 } from "@/services/streamPathReason";
 import {
-  workspaceRootAbsentMessage,
-  workspaceRootGoneMessage,
-} from "@shared/workspaceRootGone";
-import {
   type AgentMentionMeta,
   type MessageAttachmentMeta,
   getRuntime,
@@ -58,6 +53,10 @@ import {
 } from "@/stores/conversation/turnPhaseActions";
 import { clearInteractionPrompts } from "@/stores/interactionPrompts";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
+import {
+  workspaceRootAbsentMessage,
+  workspaceRootGoneMessage,
+} from "@shared/workspaceRootGone";
 import {
   finalizeGeneratingIfNeeded,
   finalizeHonestStopAbort,
@@ -78,9 +77,9 @@ type ResumeSidecarTarget =
   | { kind: "none" };
 
 /**
- * 续跑本机帧的寻址：跟本地事实，**忽略**显式强制关（`sidecarPreference==="off"`）。
- * 文件夹不在盘上、授权表没有这个 id，都先于活回合登记；否则优先活回合，再会话本地绑定
- * （勿用 `resolveSidecarRoot`——强制关早退会挡续跑）。
+ * 续跑本机帧的寻址：跟本地绑定（{@link resolveLocalBind}），不用 {@link resolveSidecarRoot}
+ * （没有本地引擎时后者是停发，续跑要先分清死绑定和活根）。
+ * 文件夹不在盘上、授权表没有这个 id，都先于活回合登记；否则优先活回合，再会话本地绑定。
  */
 async function resolveResumeSidecarTarget(
   conversationId: string,
@@ -333,11 +332,7 @@ export async function runRegenerate(
       }
     } else {
       store.setExecutionVia(null, conversationId);
-      const reason = !hasLocalEngine()
-        ? "no_local_engine"
-        : !isSidecarEnabled()
-          ? "switch_off"
-          : "no_local_target";
+      const reason = !hasLocalEngine() ? "no_local_engine" : "no_local_target";
       logEvent("info", "turn.stream_path", {
         conversation_id: conversationId,
         via: "cloud",
@@ -443,7 +438,7 @@ export async function runResume(
     .pending.find((p) => p.messageId === resumeMessageId);
   const origin = resolveResumeOrigin(conversationId, resumeMessageId);
   const viaSidecar = shouldResumeViaSidecar(origin);
-  // origin=sidecar：跟本地事实，忽略显式强制关（勿 resolveSidecarRoot）。
+  // origin=sidecar：跟本地绑定（勿用 resolveSidecarRoot，没有引擎时它是停发）。
   const resumeBind = viaSidecar
     ? await resolveResumeSidecarTarget(conversationId)
     : null;

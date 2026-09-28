@@ -262,12 +262,3 @@ def test_merge_history_ledgers_and_doc_kind():
     assert e["selected"] is True
     assert e["deep_read"] is True
     assert e["doc_kind"] == "announcement"
-    from agentcore.runtime.evidence_ledger import format_registered_sources_prompt
-
-    prompt = format_registered_sources_prompt(led)
-    assert "<已登记来源>" in prompt
-    assert "#r1" in prompt
-    assert "deep_read=是" in prompt
-    assert "成稿闸仅允许" not in prompt
-    assert "成稿可引=" not in prompt
-    assert "对话成稿可挂" in prompt

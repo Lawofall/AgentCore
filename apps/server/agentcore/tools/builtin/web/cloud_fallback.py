@@ -1,9 +1,10 @@
-"""Sidecar cloud web_search fallback when local SearXNG is unreachable.
+"""Sidecar call to cloud ``/v1/inference/web_search``.
 
-Desktop sidecar turns bind the round's inference JWT into a ContextVar; when the
-local SearXNG primary fails with a connect / not-ready class error, ``web_search``
-POSTs ``{origin}/v1/inference/web_search`` with that Bearer. Cloud API processes
-never bind the ContextVar → behaviour unchanged. Sidecar holds no search API key.
+Desktop turns bind the round's inference JWT into a ContextVar. Platform search
+and any keyed own provider POST that route directly (the count and the key stay
+on the server). Sidecar holds no search API key. Cloud API processes never bind
+the ContextVar. The unreachable-local fallback helper remains in this module and
+is not the platform path.
 
 Leaf-layer auth is intentionally not ``LLMCredentials`` — web tools must not
 import ``agentcore.llm``. Sidecar maps turn credentials into
@@ -123,11 +124,18 @@ async def cloud_inference_web_search(
     max_results: int = DEFAULT_MAX_RESULTS,
     language: str | None = None,
     on_phase: PhaseCallback | None = None,
+    as_fallback: bool = True,
 ) -> list[SearchResult]:
-    """POST cloud ``/v1/inference/web_search`` with the turn's inference JWT."""
+    """POST cloud ``/v1/inference/web_search`` with the turn's inference JWT.
+
+    ``as_fallback`` is the old local-SearXNG-unreachable path (phase「改用备用引擎」).
+    Platform search and a keyed own provider call this with ``as_fallback=False``:
+    the cloud leg is the selected index, not a backup.
+    """
     url = inference_web_search_url(creds.base_url)
     if on_phase:
-        on_phase("fallback")
+        if as_fallback:
+            on_phase("fallback")
         on_phase("querying")
     payload: dict[str, Any] = {
         "query": query,
@@ -144,11 +152,27 @@ async def cloud_inference_web_search(
         timeout=httpx.Timeout(SEARCH_TIMEOUT, connect=WEB_CONNECT_TIMEOUT)
     ) as client:
         resp = await client.post(url, json=payload, headers=headers)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            raise EgressError(_cloud_search_error_message(resp))
         data = resp.json()
     if not isinstance(data, dict):
         return []
     return _parse_results(data, max_results)
+
+
+def _cloud_search_error_message(resp: httpx.Response) -> str:
+    """Prefer the server's short ``error.message``. Fall back to a generic line."""
+    try:
+        payload = resp.json()
+    except ValueError:
+        payload = None
+    if isinstance(payload, dict):
+        err = payload.get("error")
+        if isinstance(err, dict):
+            message = err.get("message")
+            if isinstance(message, str) and message.strip():
+                return message.strip()
+    return "云端搜索暂时不可用"
 
 
 async def try_cloud_web_search_fallback(

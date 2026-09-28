@@ -365,7 +365,7 @@ async def test_web_search_tool_filters_junk_before_model(monkeypatch):
     assert "dropped_hosts" in payload
     assert "note" in payload
     assert "低相关" in payload["note"]
-    assert result.metadata.get("backend") == "_FakeBackend"
+    assert result.metadata.get("backend") == "searxng"
 
 
 @pytest.mark.asyncio

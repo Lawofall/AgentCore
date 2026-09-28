@@ -35,7 +35,6 @@ async def system_status(
             daily_tokens=settings.quota_daily_tokens,
             monthly_cost_nano=int(settings.quota_monthly_cost_cny * NANO_PER_CNY),
             daily_cost_nano=int(settings.quota_daily_cost_cny * NANO_PER_CNY),
-            daily_requests=settings.quota_daily_requests,
         ),
         database_ok=db_ok,
         version=app_version(),

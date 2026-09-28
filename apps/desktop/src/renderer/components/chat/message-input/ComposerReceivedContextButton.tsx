@@ -86,7 +86,9 @@ function WindowFillRing({
 export function ComposerReceivedContextButton() {
   const conversationId = useConversationStore((s) => s.currentConversationId);
   const messages = useConversationStore((s) => activeRuntime(s).messages);
-  const measured = useConversationStore((s) => activeRuntime(s).ceoWindowTokens);
+  const measured = useConversationStore(
+    (s) => activeRuntime(s).ceoWindowTokens,
+  );
   const message = lastAssistant(messages);
   const projectionId = message ? assistantProjectionId(message) : null;
   const frames = useExecutionStore((s) =>

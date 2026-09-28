@@ -36,7 +36,6 @@ function makeUser(p: Partial<AdminUser> = {}): AdminUser {
     quota_daily_tokens: null,
     quota_monthly_cost_cny: null,
     quota_daily_cost_cny: null,
-    quota_daily_requests: null,
     created_at: "2026-06-01T00:00:00Z",
     deleted_at: null,
     ...p,

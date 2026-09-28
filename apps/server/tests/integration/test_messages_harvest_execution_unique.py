@@ -17,7 +17,7 @@ from agentcore.db.migrations.versions.c8a1f3e6b2d9_messages_harvest_execution_un
     downgrade,
     upgrade,
 )
-from agentcore.db.models import Message
+from agentcore.db.models import Conversation, Message
 
 _HISTORICAL = datetime(2026, 8, 17, 12, 0, tzinfo=UTC)
 _IN_WINDOW = datetime(2026, 8, 18, 7, 0, tzinfo=UTC)
@@ -40,9 +40,16 @@ async def _drop_index(session) -> None:
     await session.commit()
 
 
-def _harvest_row(*, created_at: datetime, execution_id: str) -> Message:
+async def _conversation_id(session) -> str:
+    cid = str(uuid4())
+    session.add(Conversation(id=cid, user_id=str(uuid4())))
+    await session.flush()
+    return cid
+
+
+def _harvest_row(*, conversation_id: str, created_at: datetime, execution_id: str) -> Message:
     return Message(
-        conversation_id=str(uuid4()),
+        conversation_id=conversation_id,
         role="user",
         content="【系统收口】",
         usage={"origin": "execution_harvest", "execution_id": execution_id},
@@ -54,8 +61,17 @@ async def test_upgrade_builds_index_when_historical_duplicates_exist(session_fac
     """Production-shaped: pre-bound dups stay; CREATE INDEX still succeeds."""
     async with session_factory() as session:
         await _drop_index(session)
-        session.add(_harvest_row(created_at=_HISTORICAL, execution_id="exec-hist-dup"))
-        session.add(_harvest_row(created_at=_HISTORICAL, execution_id="exec-hist-dup"))
+        cid = await _conversation_id(session)
+        session.add(
+            _harvest_row(
+                conversation_id=cid, created_at=_HISTORICAL, execution_id="exec-hist-dup"
+            )
+        )
+        session.add(
+            _harvest_row(
+                conversation_id=cid, created_at=_HISTORICAL, execution_id="exec-hist-dup"
+            )
+        )
         await session.commit()
 
         conn = await session.connection()
@@ -74,12 +90,20 @@ async def test_upgrade_builds_index_when_historical_duplicates_exist(session_fac
         assert "TIMESTAMPTZ" in defn.upper() or "timestamp with time zone" in defn.lower()
         assert "2026-08-18 06:00:00" in defn
 
-        session.add(_harvest_row(created_at=_HISTORICAL, execution_id="exec-hist-dup"))
+        session.add(
+            _harvest_row(
+                conversation_id=cid, created_at=_HISTORICAL, execution_id="exec-hist-dup"
+            )
+        )
         await session.commit()
 
-        session.add(_harvest_row(created_at=_IN_WINDOW, execution_id="exec-new"))
+        session.add(
+            _harvest_row(conversation_id=cid, created_at=_IN_WINDOW, execution_id="exec-new")
+        )
         await session.commit()
-        session.add(_harvest_row(created_at=_IN_WINDOW, execution_id="exec-new"))
+        session.add(
+            _harvest_row(conversation_id=cid, created_at=_IN_WINDOW, execution_id="exec-new")
+        )
         with pytest.raises(IntegrityError):
             await session.commit()
         await session.rollback()
@@ -102,8 +126,17 @@ async def test_upgrade_builds_index_when_historical_duplicates_exist(session_fac
 async def test_upgrade_raises_on_in_window_duplicates(session_factory):
     async with session_factory() as session:
         await _drop_index(session)
-        session.add(_harvest_row(created_at=_IN_WINDOW, execution_id="exec-live-dup"))
-        session.add(_harvest_row(created_at=_IN_WINDOW, execution_id="exec-live-dup"))
+        cid = await _conversation_id(session)
+        session.add(
+            _harvest_row(
+                conversation_id=cid, created_at=_IN_WINDOW, execution_id="exec-live-dup"
+            )
+        )
+        session.add(
+            _harvest_row(
+                conversation_id=cid, created_at=_IN_WINDOW, execution_id="exec-live-dup"
+            )
+        )
         await session.commit()
 
         conn = await session.connection()

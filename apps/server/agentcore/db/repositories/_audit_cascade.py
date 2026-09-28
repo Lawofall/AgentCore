@@ -1,4 +1,9 @@
-"""Cascade-delete helpers for ``agent_audit_events`` rows."""
+"""Cascade-delete helpers for ``agent_audit_events`` on message truncate.
+
+Conversation hard-delete drops the rows via ``fk_agent_audit_events_conversation_id``.
+Regenerate / single-message delete still drops the turn's rows here, because
+``turn_id`` is not a foreign key to ``messages``.
+"""
 
 from datetime import datetime
 
@@ -6,12 +11,6 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.db.models import AgentAuditEvent, Message
-
-
-async def delete_audit_for_conversation(session: AsyncSession, conversation_id: str) -> None:
-    await session.execute(
-        delete(AgentAuditEvent).where(AgentAuditEvent.conversation_id == conversation_id)
-    )
 
 
 async def delete_audit_after(

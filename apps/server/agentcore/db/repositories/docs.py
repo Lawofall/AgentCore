@@ -8,11 +8,10 @@ members see the same list. Writes do not check role — routes call
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, exists, or_, select, update
+from sqlalchemy import exists, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.db.models import Doc, Folder, FolderMember
-from agentcore.db.repositories._base import commit_or_flush
 from agentcore.db.repositories._desk_visibility import folder_accessible_clause
 from agentcore.doc.body import empty_body, sanitize_body
 
@@ -112,13 +111,3 @@ class DocRepository:
             .values(deleted_at=datetime.now(UTC))
         )
         await self._session.commit()
-
-    async def hard_delete_for_folders(
-        self, folder_ids: Sequence[str], *, commit: bool = True
-    ) -> None:
-        """Physically remove docs hung on these desks (permanent folder wipe)."""
-        ids = [fid for fid in folder_ids if fid]
-        if not ids:
-            return
-        await self._session.execute(delete(Doc).where(Doc.folder_id.in_(ids)))
-        await commit_or_flush(self._session, commit=commit)

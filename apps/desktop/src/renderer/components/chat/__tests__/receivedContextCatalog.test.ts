@@ -116,6 +116,48 @@ consult(name) 拉全文。
     expect(factory?.body).not.toContain("我的规则。");
   });
 
+  it("lifts path-rule index and attachment full text beside 设定", () => {
+    const text = `适合可视化的内容，优先采用可视化呈现。
+
+<设定>
+常驻全文。
+</设定>
+
+<路径约定>
+碰到匹配路径就遵守这一句。
+- **/*.tsx：布局
+</路径约定>
+
+<路径约定全文>
+### layout
+页面留白。
+</路径约定全文>
+
+<按需目录>
+consult(name) 拉全文。
+</按需目录>`;
+    const groups = buildReceivedContextCatalog(
+      [block({ channel: "system", body: text, chars: text.length })],
+      { includeSystem: true },
+    );
+    const labels = groups[0].items.map((i) => i.label);
+    expect(labels).toEqual([
+      "设定",
+      "路径约定",
+      "路径约定全文",
+      "按需目录",
+      "出厂指令",
+    ]);
+    const index = groups[0].items.find((i) => i.tag === "路径约定");
+    const full = groups[0].items.find((i) => i.tag === "路径约定全文");
+    expect(index?.body).toContain("碰到匹配路径就遵守这一句。");
+    expect(full?.body).toContain("页面留白。");
+    const factory = groups[0].items.find((i) => i.label === "出厂指令");
+    expect(factory?.body).toContain("适合可视化的内容");
+    expect(factory?.body).not.toContain("碰到匹配路径");
+    expect(factory?.body).not.toContain("页面留白");
+  });
+
   it("marks missing 设定 as an absent row instead of backfilling", () => {
     const text = `你是 CEO。
 

@@ -14,7 +14,6 @@ import { logEvent } from "@/lib/log";
 import type { SupportDiagnosticIds } from "@/lib/supportDiagnostics";
 import { markSidecarUnhealthy, probeSidecar } from "@/services/sidecarHealth";
 import {
-  isSidecarEnabled,
   liveSidecarTarget,
   localBindSendBlock,
   resolveNewTurnBind,
@@ -75,10 +74,7 @@ export interface SendTurnSpec {
   tableSelection?: readonly string[];
 }
 
-function setExecutionVia(
-  conversationId: string,
-  via: "sidecar" | null,
-): void {
+function setExecutionVia(conversationId: string, via: "sidecar" | null): void {
   useConversationStore.getState().setExecutionVia(via, conversationId);
 }
 
@@ -87,7 +83,6 @@ type CloudPathReason = CloudStreamPathReason;
 
 function resolveCloudPathReason(): CloudPathReason {
   if (!hasLocalEngine()) return "no_local_engine";
-  if (!isSidecarEnabled()) return "switch_off";
   return "no_local_target";
 }
 
@@ -226,7 +221,7 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
   const turnCommit: TurnCommitReport = { committed: false };
   try {
     traceTurnMilestone(conversationId, "send_start");
-    // 本机文件夹回合只走本地引擎。死绑定 / 授权表没有这个 id / 本机执行关了
+    // 本机文件夹回合只走本地引擎。死绑定 / 授权表没有这个 id
     // / 没有本地引擎 → 横幅，不 probe、不走云。纯云会话才进下面的云链路。
     const bind = await resolveNewTurnBind(conversationId);
     const blocked = localBindSendBlock(bind);

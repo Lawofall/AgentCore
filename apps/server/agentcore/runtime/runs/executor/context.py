@@ -310,30 +310,76 @@ def _build_context_blocks(
     return blocks
 
 
-def _format_captain_history(history: list[dict]) -> str:
-    """Render the prior-turn messages the captain carries into「用户：… / CEO：…」prose.
+def _tool_name_by_call_id(history: list[dict]) -> dict[str, str]:
+    """Map ``tool_call_id`` → function name from assistant ``tool_calls``.
+
+    The model already sees those calls on the assistant message. This index
+    only labels the display mirror; it does not rewrite the LLM window.
+    """
+    names: dict[str, str] = {}
+    for message in history:
+        if not isinstance(message, dict):
+            continue
+        for raw in message.get("tool_calls") or []:
+            if not isinstance(raw, dict):
+                continue
+            call_id = str(raw.get("id") or "").strip()
+            function = raw.get("function")
+            fn = function if isinstance(function, dict) else {}
+            name = str(fn.get("name") or "").strip()
+            if call_id and name:
+                names[call_id] = name
+    return names
+
+
+def _format_captain_history(history: list[dict]) -> tuple[str, int]:
+    """Length-prefixed mirror of prior-turn messages for the context reader.
+
+    Returns ``(body, injected_chars)``. ``injected_chars`` is the sum of the
+    message contents the model already has — record headers and tool names are
+    not counted. The LLM window is the original messages, not this body.
+
+    Each record is ``@@{role} {length} {name}?\\n`` plus exactly ``length``
+    characters of the raw content, then a newline. Roles are ``user`` /
+    ``assistant`` / ``tool`` / ``system``. Tool records carry the function name
+    when the matching ``tool_call_id`` is on an assistant row.
 
     Engine ``[系统提示]`` envelopes stay in the LLM window but are omitted here —
     the current envelope already rides the system catalog block. DeepSeek
-    in-history extra systems likewise stay out of this prose (they belong in
-    the system catalog block as the live compose).
+    in-history extra systems likewise stay out (they belong in the system
+    catalog block as the live compose).
     """
     from agentcore.runtime.resolve.prompt.envelope import (
         IN_HISTORY_SYSTEM_ORIGIN,
         is_turn_envelope_content,
     )
 
-    label = {"user": "用户", "assistant": "CEO", "system": "系统"}
-    parts = [
-        f"{label.get(m.get('role', ''), m.get('role') or '')}：{m.get('content') or ''}"
-        for m in history
-        if (m.get("content") or "").strip()
-        and m.get("origin") != IN_HISTORY_SYSTEM_ORIGIN
-        and not is_turn_envelope_content(
-            m.get("content") if isinstance(m, dict) else None
-        )
-    ]
-    return "\n\n".join(parts)
+    names = _tool_name_by_call_id(history)
+    chunks: list[str] = []
+    injected = 0
+    for message in history:
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content") or ""
+        if not isinstance(content, str):
+            content = str(content)
+        if not content.strip():
+            continue
+        if message.get("origin") == IN_HISTORY_SYSTEM_ORIGIN:
+            continue
+        if is_turn_envelope_content(content):
+            continue
+        role = str(message.get("role") or "")
+        if role not in ("user", "assistant", "tool", "system"):
+            role = "other"
+        header = f"@@{role} {len(content)}"
+        if role == "tool":
+            name = names.get(str(message.get("tool_call_id") or "").strip(), "")
+            if name:
+                header += f" {name}"
+        chunks.append(f"{header}\n{content}\n")
+        injected += len(content)
+    return "".join(chunks), injected
 
 
 def _offered_tools_block(tool_defs: list[dict] | None) -> ContextBlock | None:
@@ -439,13 +485,14 @@ def _build_captain_context_blocks(
     tools_block = _offered_tools_block(tool_defs)
     if tools_block is not None:
         blocks.append(tools_block)
-    history_text = _format_captain_history(history)
+    history_text, history_chars = _format_captain_history(history)
     if history_text:
         blocks.append(
             ContextBlock(
                 channel="history",
                 heading="对话历史（本回合之前的往来）",
                 body=history_text,
+                chars=history_chars,
             )
         )
     blocks.append(ContextBlock(channel="request", heading="原始用户请求", body=user_message))
@@ -480,7 +527,7 @@ def _context_block_payloads(blocks: list[ContextBlock]) -> list[dict[str, Any]]:
                 "channel": b.channel,
                 "heading": b.heading,
                 "body": body,
-                "chars": len(b.body),
+                "chars": len(b.body) if b.chars is None else b.chars,
                 "truncated": truncated,
                 "source_role": b.source_role,
                 "source_run_id": b.source_run_id,

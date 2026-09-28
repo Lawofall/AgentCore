@@ -9,6 +9,7 @@ from datetime import datetime
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -28,7 +29,7 @@ SKILL_STORE_STATUSES = ("published", "unpublished", "taken_down")
 
 
 class SkillStoreListing(Base):
-    """One shelf item. One source document → one listing; republish = new version."""
+    """One shelf item. A live source document has one listing; republish = new version."""
 
     __tablename__ = "skill_store_listings"
     __table_args__ = (
@@ -48,8 +49,27 @@ class SkillStoreListing(Base):
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     author_user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), nullable=False)
-    source_document_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), nullable=False)
-    current_version_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), nullable=True)
+    # Authoring doc. Hard-delete nulls this; version snapshots stay on the shelf.
+    source_document_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "documents.id",
+            name="fk_skill_store_listings_source_document_id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+    # Pointer at the snapshot buyers see. Removing that version nulls it.
+    current_version_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "skill_store_versions.id",
+            name="fk_skill_store_listings_current_version_id",
+            ondelete="SET NULL",
+        ),
+        index=True,
+        nullable=True,
+    )
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default=text("'published'")
     )
@@ -75,7 +95,15 @@ class SkillStoreVersion(Base):
     )
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
-    listing_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), nullable=False)
+    listing_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "skill_store_listings.id",
+            name="fk_skill_store_versions_listing_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
     version_n: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
@@ -98,9 +126,36 @@ class SkillStoreInstall(Base):
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), nullable=False)
-    listing_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), nullable=False)
-    version_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), nullable=False)
-    document_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), nullable=False)
+    listing_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "skill_store_listings.id",
+            name="fk_skill_store_installs_listing_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    version_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "skill_store_versions.id",
+            name="fk_skill_store_installs_version_id",
+            ondelete="CASCADE",
+        ),
+        index=True,
+        nullable=False,
+    )
+    # Local copy. Hard-delete of that document uninstalls. Soft-delete keeps
+    # the row, so the service still drops installs whose copy is gone.
+    document_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "documents.id",
+            name="fk_skill_store_installs_document_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )
@@ -124,7 +179,15 @@ class SkillStoreReport(Base):
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), nullable=False)
-    listing_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), nullable=False)
+    listing_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "skill_store_listings.id",
+            name="fk_skill_store_reports_listing_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False

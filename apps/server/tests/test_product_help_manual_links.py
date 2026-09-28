@@ -351,6 +351,19 @@ def test_product_help_manual_deeplinks_match_section_registry():
     assert not errors, "product_help* manual deep-link drift:\n- " + "\n- ".join(errors)
 
 
+# 教练节与机制选读只留用户手册。别名指向这些节的也不进 CEO 语料。
+_MANUAL_ONLY_SECTIONS = frozenset({
+    "mindset",
+    "quickstart",
+    "briefing",
+    "live",
+    "legend",
+    "panorama",
+    "scenarios",
+})
+_MANUAL_ONLY_ALIASES = frozenset({"collab-overview", "roles", "turnflow"})
+
+
 def test_product_help_corpus_covers_registered_sections():
     reg = load_manual_registry()
     data = load_product_help_corpus()
@@ -358,8 +371,9 @@ def test_product_help_corpus_covers_registered_sections():
     registered: set[str] = set()
     for ids in reg.sections_by_chapter.values():
         registered |= set(ids)
-    assert corpus_ids == registered
-    assert frozenset(data["aliases"]) == reg.aliases
+    assert corpus_ids == registered - _MANUAL_ONLY_SECTIONS
+    assert _MANUAL_ONLY_SECTIONS.isdisjoint(corpus_ids)
+    assert frozenset(data["aliases"]) == reg.aliases - _MANUAL_ONLY_ALIASES
 
 
 def test_intentional_dead_manual_links_fail_gate():

@@ -4090,6 +4090,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/inference/search_route": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inference Search Route
+         * @description Sidecar-visible search route (inference JWT). Never includes an API key.
+         */
+        get: operations["inference_search_route_v1_inference_search_route_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/inference/token": {
         parameters: {
             query?: never;
@@ -4138,7 +4158,7 @@ export interface paths {
         put?: never;
         /**
          * Sidecar cloud web search
-         * @description Run server-side web search for a sidecar turn (SearXNG; no client keys).
+         * @description Run server-side web search for a sidecar turn (account index; no client keys).
          */
         post: operations["inference_web_search_v1_inference_web_search_post"];
         delete?: never;
@@ -5312,6 +5332,76 @@ export interface paths {
         get: operations["list_user_models_v1_users_me_models_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/search-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Search Providers */
+        get: operations["list_search_providers_v1_users_me_search_providers_get"];
+        put?: never;
+        /** Create Search Provider */
+        post: operations["create_search_provider_v1_users_me_search_providers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/search-providers/selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Select Search Provider */
+        put: operations["select_search_provider_v1_users_me_search_providers_selection_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/search-providers/{provider_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Search Provider */
+        delete: operations["delete_search_provider_v1_users_me_search_providers__provider_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Search Provider */
+        patch: operations["update_search_provider_v1_users_me_search_providers__provider_id__patch"];
+        trace?: never;
+    };
+    "/v1/users/me/search-providers/{provider_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Search Provider */
+        post: operations["test_search_provider_v1_users_me_search_providers__provider_id__test_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6646,12 +6736,14 @@ export interface components {
             is_unlimited?: boolean | null;
             /** Quota Daily Cost Cny */
             quota_daily_cost_cny?: number | null;
-            /** Quota Daily Requests */
-            quota_daily_requests?: number | null;
             /** Quota Daily Tokens */
             quota_daily_tokens?: number | null;
             /** Quota Monthly Cost Cny */
             quota_monthly_cost_cny?: number | null;
+            /** Quota Search Daily */
+            quota_search_daily?: number | null;
+            /** Quota Search Monthly */
+            quota_search_monthly?: number | null;
             /** Role */
             role?: ("user" | "admin") | null;
             /** Status */
@@ -6771,12 +6863,14 @@ export interface components {
             is_unlimited: boolean;
             /** Quota Daily Cost Cny */
             quota_daily_cost_cny: number | null;
-            /** Quota Daily Requests */
-            quota_daily_requests: number | null;
             /** Quota Daily Tokens */
             quota_daily_tokens: number | null;
             /** Quota Monthly Cost Cny */
             quota_monthly_cost_cny: number | null;
+            /** Quota Search Daily */
+            quota_search_daily?: number | null;
+            /** Quota Search Monthly */
+            quota_search_monthly?: number | null;
             /** Registration Ip */
             registration_ip?: string | null;
             /**
@@ -6834,12 +6928,14 @@ export interface components {
             is_unlimited: boolean;
             /** Quota Daily Cost Cny */
             quota_daily_cost_cny: number | null;
-            /** Quota Daily Requests */
-            quota_daily_requests: number | null;
             /** Quota Daily Tokens */
             quota_daily_tokens: number | null;
             /** Quota Monthly Cost Cny */
             quota_monthly_cost_cny: number | null;
+            /** Quota Search Daily */
+            quota_search_daily?: number | null;
+            /** Quota Search Monthly */
+            quota_search_monthly?: number | null;
             /** Registration Ip */
             registration_ip?: string | null;
             /**
@@ -8151,6 +8247,29 @@ export interface components {
             /** Subscription Day */
             subscription_day: number;
             tool_surface_limits?: components["schemas"]["ToolSurfaceLimits"] | null;
+        };
+        /** CreateSearchProviderRequest */
+        CreateSearchProviderRequest: {
+            /**
+             * Api Key
+             * @default
+             */
+            api_key: string;
+            /**
+             * Base Url
+             * @default
+             */
+            base_url: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /**
+             * Protocol
+             * @enum {string}
+             */
+            protocol: "searxng" | "cleversee";
         };
         /**
          * CreateShareRequest
@@ -10624,8 +10743,6 @@ export interface components {
         QuotaStatus: {
             /** Daily Cost Nano */
             daily_cost_nano: number;
-            /** Daily Requests */
-            daily_requests: number;
             /** Daily Tokens */
             daily_tokens: number;
             /** Monthly Cost Nano */
@@ -11284,12 +11401,85 @@ export interface components {
             /** Updated At */
             updated_at?: string | null;
         };
+        /** SearchProviderResponse */
+        SearchProviderResponse: {
+            /** Base Url */
+            base_url: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Masked Key */
+            masked_key?: string | null;
+            /** Message */
+            message?: string | null;
+            /**
+             * Protocol
+             * @enum {string}
+             */
+            protocol: "searxng" | "cleversee";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "unchecked" | "active" | "error";
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** SearchProviderSelectionRequest */
+        SearchProviderSelectionRequest: {
+            /** Provider Id */
+            provider_id?: string | null;
+        };
+        /** SearchProvidersResponse */
+        SearchProvidersResponse: {
+            /** Providers */
+            providers: components["schemas"]["SearchProviderResponse"][];
+            quota: components["schemas"]["SearchQuotaView"];
+            /** Selected Provider Id */
+            selected_provider_id: string | null;
+        };
+        /** SearchQuotaView */
+        SearchQuotaView: {
+            /** Daily Limit */
+            daily_limit: number;
+            /** Daily Used */
+            daily_used: number;
+            /** Monthly Limit */
+            monthly_limit: number;
+            /** Monthly Used */
+            monthly_used: number;
+        };
         /** SearchResponse */
         SearchResponse: {
             /** Query */
             query: string;
             /** Sections */
             sections: components["schemas"]["SearchSection"][];
+        };
+        /**
+         * SearchRouteView
+         * @description Sidecar-visible route. Never includes an API key.
+         */
+        SearchRouteView: {
+            /** Base Url */
+            base_url?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "platform" | "provider";
+            /**
+             * Protocol
+             * @enum {string}
+             */
+            protocol: "searxng" | "cleversee";
+            /** Provider Id */
+            provider_id?: string | null;
+            /** Proxy */
+            proxy: boolean;
         };
         /**
          * SearchSection
@@ -11477,7 +11667,7 @@ export interface components {
             /** Offers Tools */
             offers_tools?: string[];
             /** Source Document Id */
-            source_document_id: string;
+            source_document_id: string | null;
             /** Status */
             status: string;
             /** Version N */
@@ -11529,7 +11719,7 @@ export interface components {
             /** Offers Tools */
             offers_tools?: string[];
             /** Source Document Id */
-            source_document_id: string;
+            source_document_id: string | null;
             /** Status */
             status: string;
             /** Version N */
@@ -11557,7 +11747,7 @@ export interface components {
             /** Offers Tools */
             offers_tools?: string[];
             /** Source Document Id */
-            source_document_id: string;
+            source_document_id: string | null;
             /** Status */
             status: string;
             /** Version N */
@@ -12515,6 +12705,15 @@ export interface components {
              * @description Self-selected handle; stored lowercase after claim.
              */
             username?: string | null;
+        };
+        /** UpdateSearchProviderRequest */
+        UpdateSearchProviderRequest: {
+            /** Api Key */
+            api_key?: string | null;
+            /** Base Url */
+            base_url?: string | null;
+            /** Label */
+            label?: string | null;
         };
         /** UpdateTableRequest */
         UpdateTableRequest: {
@@ -20473,6 +20672,37 @@ export interface operations {
             };
         };
     };
+    inference_search_route_v1_inference_search_route_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchRouteView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     mint_inference_token_v1_inference_token_post: {
         parameters: {
             query?: never;
@@ -23175,6 +23405,222 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelCatalogResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_search_providers_v1_users_me_search_providers_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchProvidersResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_search_provider_v1_users_me_search_providers_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSearchProviderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchProviderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    select_search_provider_v1_users_me_search_providers_selection_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchProviderSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchProvidersResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_search_provider_v1_users_me_search_providers__provider_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                provider_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_search_provider_v1_users_me_search_providers__provider_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                provider_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSearchProviderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchProviderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_search_provider_v1_users_me_search_providers__provider_id__test_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                provider_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchProviderResponse"];
                 };
             };
             /** @description Validation Error */

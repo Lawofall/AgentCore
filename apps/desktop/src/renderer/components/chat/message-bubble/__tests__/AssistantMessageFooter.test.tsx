@@ -170,8 +170,9 @@ describe("气泡脚不挂轮次", () => {
       </TooltipProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "用量" }));
-    const panel = (await screen.findByText("输入 token")).parentElement!
-      .parentElement!;
+    const label = await screen.findByText("输入 token");
+    const panel = label.parentElement?.parentElement;
+    if (panel == null) throw new Error("用量面板没有挂上");
     expect(panel.textContent).toBe(
       "输入 token4,312缓存命中4,127 · 96%缓存未命中185输出 token1,204思考628速度602.0 tokens/s",
     );

@@ -4,23 +4,22 @@ import { hasLocalEngine } from "@/lib/capabilities";
 import { queryClient } from "@/lib/queryClient";
 import { workspaceKeys } from "@/lib/queryKeys";
 import { bareConversationScratchSubpath } from "@/services/bareScratchPath";
+import type { WorkspaceInfo } from "@/services/workspaces";
 import {
   localEngineOffMessage,
   workspaceRootAbsentMessage,
   workspaceRootGoneMessage,
 } from "@shared/workspaceRootGone";
-import type { WorkspaceInfo } from "@/services/workspaces";
-import { useUIStore } from "@/stores/ui";
 
 /**
  * 会话路由判定：一个回合该走本地 sidecar，还是云端 SSE。
  *
  * 双模式工作区 §7.2：本机传统（`mode=local` + 活本机根）新开回合**只走** sidecar；
- * 云协作永不 sidecar。死绑定、授权表没有这个 id、本机执行关闭、占位失败：
- * 这一轮不开始，不降级云。unset / 默认关**不**挡本机传统同侧。
+ * 云协作永不 sidecar。死绑定、授权表没有这个 id、这台客户端没有本地引擎、占位失败：
+ * 这一轮不开始，不降级云。
  *
  * 续跑例外：`origin=sidecar` / 已有本机活回合须跟本地事实（{@link resolveLocalBind}
- * / {@link getActiveSidecarTarget}），忽略强制关——本机帧云端没有。
+ * / {@link getActiveSidecarTarget}）——本机帧云端没有。
  *
  * sidecar 暂非真离线（LLM 仍经云推理代理）、被委派 worker 仍走审批门。
  */
@@ -43,19 +42,14 @@ export interface SidecarTarget {
  * - live：授权根在表；空子路径目录在盘上，或非空子路径可 mkdir
  * - stale：授权根在表，空子路径却不是目录 → 不 probe、不 spawn、不走云
  * - absent：会话记着 root id，授权表里没有 → 不走云，请重新选择位置
- * - engine_off：有本机绑定，但这台客户端没有本地引擎或本机执行已关 → 不走云
+ * - engine_off：有本机绑定，但这台客户端没有本地引擎 → 不走云
  */
 export type LocalBindResolution =
   | { kind: "unbound" }
   | { kind: "live"; rootId: string; subpath: string }
   | { kind: "stale"; rootId: string; subpath: string; absPath?: string }
   | { kind: "absent"; rootId: string; subpath: string }
-  | {
-      kind: "engine_off";
-      rootId: string;
-      subpath: string;
-      reason: "no_engine" | "switch_off";
-    };
+  | { kind: "engine_off"; rootId: string; subpath: string };
 
 export function liveSidecarTarget(
   bind: LocalBindResolution,
@@ -168,23 +162,6 @@ export function resetSidecarRoutingForTests(): void {
   lastSidecarTargetByCid.clear();
 }
 
-/**
- * 用户是否显式强制关闭本机执行（进阶开关「允许本机执行」关 → 偏好 `off`）。
- * unset / 默认关**不算**强制关——本机传统仍可默认同侧。web 无本地引擎时亦视为不可用。
- */
-export function isSidecarForceOff(): boolean {
-  return useUIStore.getState().sidecarPreference === "off";
-}
-
-/**
- * 桌面本地引擎能力面是否可用（有引擎 + 未强制关）。
- * 新开回合路由见 {@link resolveNewTurnBind}；本函数仍给纯云会话的路径原因。
- * web 恒 false。
- */
-export function isSidecarEnabled(): boolean {
-  return hasLocalEngine() && !isSidecarForceOff();
-}
-
 function scratchFromWorkspaceCache(
   conversationId: string,
   folderId: string | null,
@@ -280,7 +257,7 @@ export async function resolveConversationLocalTarget(
  * 新开回合绑定。
  *
  * 没有本机绑定 → unbound（云端对话）。有本机绑定但本地引擎接不住
- * （没有引擎 / 本机执行已关 / 授权表没有这个 id / 目录已不在盘上）
+ * （没有引擎 / 授权表没有这个 id / 目录已不在盘上）
  * → 对应的停发态，**不当成** unbound。
  */
 export async function resolveNewTurnBind(
@@ -293,15 +270,6 @@ export async function resolveNewTurnBind(
       kind: "engine_off",
       rootId: bind.rootId,
       subpath: bind.subpath,
-      reason: "no_engine",
-    };
-  }
-  if (isSidecarForceOff()) {
-    return {
-      kind: "engine_off",
-      rootId: bind.rootId,
-      subpath: bind.subpath,
-      reason: "switch_off",
     };
   }
   return bind;
@@ -327,8 +295,8 @@ export function localBindSendBlock(
   }
   if (bind.kind === "engine_off") {
     return {
-      reason: bind.reason === "switch_off" ? "switch_off" : "no_local_engine",
-      message: localEngineOffMessage(bind.reason),
+      reason: "no_local_engine",
+      message: localEngineOffMessage(),
       rootId: bind.rootId,
     };
   }
@@ -338,15 +306,14 @@ export function localBindSendBlock(
 /**
  * 解析**新开回合**应在其上跑 sidecar 的目标；不该走 sidecar 则 null（早退，不 probe / 不 spawn）。
  *
- * = 桌面有本地引擎、用户未显式强制关（{@link isSidecarForceOff}），**且**该会话是活本机绑定。
+ * = 桌面有本地引擎，**且**该会话是活本机绑定。
  * 云项目 / 无本地绑定 → null（交回云链路）。
- * 死绑定、授权表没有这个 id、本机执行关了，也是 null——**sendTurn 必须先看
+ * 死绑定、授权表没有这个 id、没有本地引擎，也是 null——**sendTurn 必须先看
  * {@link localBindSendBlock}，禁止把 null 当云**。
- * **不**因 unset→`SIDECAR_DEFAULT_ENABLED=false` 早退。
  *
  * 纯「新回合路由意图」，**不掺运行时健康**（探活由 `sendTurn` 收敛）。**续跑勿用本函数**：
  * `origin=sidecar` 须跟本地事实（{@link resolveLocalBind} /
- * {@link getActiveSidecarTarget}），忽略强制关——见 `runResume`。
+ * {@link getActiveSidecarTarget}）——见 `runResume`。
  */
 export async function resolveSidecarRoot(
   conversationId: string,
@@ -355,8 +322,7 @@ export async function resolveSidecarRoot(
 }
 
 /**
- * 该会话是否「能用本地引擎」（桌面端 + 本机绑定，含死绑定），**不看强制关**——与
- * {@link isSidecarForceOff} / {@link isSidecarEnabled} 正交的公共查询。供 UI 判断某对话是否
+ * 该会话是否「能用本地引擎」（桌面端 + 本机绑定，含死绑定）。供 UI 判断某对话是否
  * 值得围绕本地引擎做状态展示 / 提示（如启动探活）。死绑定仍 true（芯片要给重新选择）。
  */
 export async function canConversationUseSidecar(

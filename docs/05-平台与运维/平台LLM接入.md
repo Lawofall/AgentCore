@@ -157,7 +157,7 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 | `PLATFORM_MODEL` / `PLATFORM_MODELS` | `deepseek-v4.1-flash`（仅此；须有 CNY curated 价卡，否则启动后不上架 / allowlist 与默认冲突则 fail-fast） |
 | 后台档 | 同钉现网 id（可显式 `PLATFORM_BACKGROUND_MODEL`，须 ∈ allowlist） |
 | `PLATFORM_API_KEY` | 与 Zen 控制台同一把（不换） |
-| 额度 | 月 ¥10 · 日 ¥10 · 日请求 500（`quota_*`） |
+| 额度 | 月 ¥10 · 日 ¥10（`quota_*`） |
 | 价卡 | Flash = DeepSeek 中文官价（空闲 ¥0.02 / ¥1 / ¥4 每百万；高峰 2×）。平台与用户 BYOK 同一把尺；额度只扣平台列。现金 COGS 仍是 Go 订阅月费，不是这把尺 |
 | 上下文窗 | 现网 Go Flash SKU **1M**（`deepseek-v4.1-flash` 与 `deepseek-v4-flash` 同）。目录展示与近顶压缩（窗 × 80% ≈ 800K）跟 SKU，禁止按端点猜成 Zen free 的 200K |
 | Vision | 不配 `VISION_*`。对话贴图 / 工作区光栅走当前主力多模态；主模型不收图则诚实说明 |

@@ -331,28 +331,16 @@ class SkillStoreRepository:
         return rows, total
 
     async def delete_all_for_user(self, user_id: str, *, commit: bool = True) -> None:
-        """注销 cascade: this user's listings / installs / reports (copies stay)."""
-        authored_ids = select(SkillStoreListing.id).where(
-            SkillStoreListing.author_user_id == user_id
+        """注销: this user's installs and reports, then their listings.
+
+        Deleting a listing cascades its versions and other accounts' installs
+        and reports. Local skill copies stay.
+        """
+        await self._session.execute(
+            delete(SkillStoreReport).where(SkillStoreReport.user_id == user_id)
         )
         await self._session.execute(
-            delete(SkillStoreReport).where(
-                or_(
-                    SkillStoreReport.user_id == user_id,
-                    SkillStoreReport.listing_id.in_(authored_ids),
-                )
-            )
-        )
-        await self._session.execute(
-            delete(SkillStoreInstall).where(
-                or_(
-                    SkillStoreInstall.user_id == user_id,
-                    SkillStoreInstall.listing_id.in_(authored_ids),
-                )
-            )
-        )
-        await self._session.execute(
-            delete(SkillStoreVersion).where(SkillStoreVersion.listing_id.in_(authored_ids))
+            delete(SkillStoreInstall).where(SkillStoreInstall.user_id == user_id)
         )
         await self._session.execute(
             delete(SkillStoreListing).where(SkillStoreListing.author_user_id == user_id)

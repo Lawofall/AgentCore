@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -93,15 +94,32 @@ class Conversation(Base):
     model_profile_id: Mapped[str | None] = mapped_column(
         PG_UUID(as_uuid=False), nullable=True
     )
-    # Project this conversation was born into; NULL = 裸聊 (ungrouped). App-level FK
-    # (no DB constraint, per repo convention). Soft-deleting a project archives members
-    # in place (keeps ``folder_id``); permanent wipe hard-deletes member rows.
-    folder_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), index=True, nullable=True)
+    # Project this conversation was born into; NULL = 裸聊 (ungrouped).
+    # ``fk_conversations_folder_id`` is RESTRICT: soft-delete keeps the folder
+    # row and this affiliation. Retention unfiles first; permanent wipe
+    # hard-deletes member chats first.
+    folder_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "folders.id", name="fk_conversations_folder_id", ondelete="RESTRICT"
+        ),
+        index=True,
+        nullable=True,
+    )
     # Bare-chat silent auto cloud desk (写盘自动建云桌). Orthogonal to ``folder_id`` —
     # never auto-promotes affiliation / sidebar / memory scope. NULL until first
     # provision; reused across turns via ``ensure_bare_chat_auto_cloud_desk``.
+    # ``fk_conversations_auto_desk_folder_id`` SET NULLs this when the folder row
+    # goes. Soft-delete keeps the row, so the service still clears the pointer.
     auto_desk_folder_id: Mapped[str | None] = mapped_column(
-        PG_UUID(as_uuid=False), nullable=True
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "folders.id",
+            name="fk_conversations_auto_desk_folder_id",
+            ondelete="SET NULL",
+        ),
+        index=True,
+        nullable=True,
     )
     # Desktop's intended local container root for a 裸聊, captured at creation
     # (NULL = cloud intent: web / mobile /「云端临时对话」). Used when resolving
@@ -232,7 +250,11 @@ class FolderMember(Base):
         Index("ix_folder_members_user_id", "user_id"),
     )
 
-    folder_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
+    folder_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey("folders.id", name="fk_folder_members_folder_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
     role: Mapped[str] = mapped_column(String(20))
     state: Mapped[str] = mapped_column(
@@ -254,7 +276,15 @@ class ConversationPreference(Base):
     __tablename__ = "conversation_preferences"
     __table_args__ = (Index("ix_conversation_preferences_user_id", "user_id"),)
 
-    conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_conversation_preferences_conversation_id",
+            ondelete="CASCADE",
+        ),
+        primary_key=True,
+    )
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
     pinned: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     archived: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
@@ -310,7 +340,14 @@ class Message(Base):
     )
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
-    conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
+    conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_messages_conversation_id",
+            ondelete="CASCADE",
+        ),
+    )
     role: Mapped[str] = mapped_column(String(20))
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     reasoning_content: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -375,8 +412,8 @@ class Message(Base):
 # Content-only by design — the snapshot holds just role + content + timestamp, never
 # reasoning / cost / team graph / files (those are private). The row id doubles as
 # the unguessable URL token (uuid4 = 122 bits). Revoked (not hard-deleted) so a
-# killed link 404s immediately while the audit trail survives; cascade-revoked when
-# the conversation is deleted or the account is注销 (ownership lifecycle).
+# killed link 404s immediately while the audit trail survives. Revoke is a
+# service write. Hard-deleting the conversation nulls ``conversation_id``.
 
 
 class ConversationShare(Base):
@@ -391,8 +428,18 @@ class ConversationShare(Base):
     # PK doubles as the public share token (uuid4, unguessable) — the public URL is
     # ``/shared/<id>``. No separate token column needed (consistent with repo PKs).
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
-    # The shared conversation + its owner (app-level FKs, per repo convention).
-    conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
+    # Parent conversation. NULL after that row is hard-deleted
+    # (``fk_conversation_shares_conversation_id``, ON DELETE SET NULL).
+    # Revoke (``revoked_at``) stays a service write while the row still exists.
+    conversation_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_conversation_shares_conversation_id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
     # Conversation title captured at share time (the public page heading), frozen
     # alongside the transcript so a later rename doesn't change a live link.
@@ -436,10 +483,10 @@ class MemoryUpdateRow(Base):
     (diff ``items``) or ``quota`` (always-pool / billing skip). ``items`` is a list of
     ``{action, file, section, scope, content, target}``.
 
-    **Lifecycle** (no DB FK — app-level cascade, per repo convention): dropped with its
-    conversation on hard-delete (``ConversationRepository.hard_delete``). NOT tied to any
-    message id (it post-dates the whole window), so message delete / regenerate never touch
-    it — a re-run doesn't un-remember what an earlier pass already learned.
+    **Lifecycle**: dropped with the conversation (``fk_memory_updates_conversation_id``).
+    NOT tied to any message id (it post-dates the whole window), so message delete /
+    regenerate never touch it — a re-run doesn't un-remember what an earlier pass
+    already learned.
 
     ``anchor_at`` is a display ordering hint that does NOT change any of that: a plain
     timestamp, deliberately not a message id, so deleting the message it points near can
@@ -455,7 +502,14 @@ class MemoryUpdateRow(Base):
     )
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
-    conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
+    conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_memory_updates_conversation_id",
+            ondelete="CASCADE",
+        ),
+    )
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
     # "semantic" | "quota" — card shape for the conversation-tail / feed.
     kind: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'semantic'"))
@@ -488,10 +542,11 @@ class MemoryUpdateRow(Base):
 class ConversationExternalGrant(Base):
     """One conversation-scoped external directory grant under ``external/<alias>/``.
 
-    **Lifecycle** (no DB FK — app-level, per repo convention): created/updated via
-    ``POST …/external-grants``; dropped on revoke, soft-delete clear, or
-    ``ConversationRepository.hard_delete`` cascade. Desktop reconciles root_id ↔
-    local path on open; orphans without a desktop path are revoked server-side.
+    **Lifecycle**: created/updated via ``POST …/external-grants``; the row goes
+    with the conversation (``fk_conversation_external_grants_conversation_id``).
+    Revoke and soft-delete still delete it while the conversation row remains.
+    Desktop reconciles root_id ↔ local path on open; orphans without a desktop
+    path are revoked server-side.
     """
 
     __tablename__ = "conversation_external_grants"
@@ -510,7 +565,14 @@ class ConversationExternalGrant(Base):
     )
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
-    conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
+    conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_conversation_external_grants_conversation_id",
+            ondelete="CASCADE",
+        ),
+    )
     alias: Mapped[str] = mapped_column(String(64), nullable=False)
     # Desktop authorized-root handle (never an absolute path).
     root_id: Mapped[str] = mapped_column(String(64), nullable=False)

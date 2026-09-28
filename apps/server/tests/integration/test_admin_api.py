@@ -690,7 +690,6 @@ async def test_admin_sets_then_clears_quota(client, make_admin, session_factory)
             "is_unlimited": True,
             "quota_daily_tokens": 1000,
             "quota_monthly_cost_cny": 5.5,
-            "quota_daily_requests": 50,
         },
     )
     assert r.status_code == 200, r.text
@@ -698,13 +697,12 @@ async def test_admin_sets_then_clears_quota(client, make_admin, session_factory)
     assert b["is_unlimited"] is True
     assert b["quota_daily_tokens"] == 1000
     assert b["quota_monthly_cost_cny"] == 5.5
-    assert b["quota_daily_requests"] == 50
 
     # explicit null clears one override (inherit global); untouched fields persist
     r = await client.patch(f"/v1/admin/users/{uid}", json={"quota_daily_tokens": None})
     b = r.json()
     assert b["quota_daily_tokens"] is None
-    assert b["quota_daily_requests"] == 50
+    assert b["quota_monthly_cost_cny"] == 5.5
 
 
 # --- guards & validation ---
@@ -902,7 +900,7 @@ async def test_admin_system_status_reports_config_health_and_counts(
     assert b["billing_mode"] == settings.billing_mode
     assert "cny_per_usd" not in b
     assert b["quota"]["daily_tokens"] == settings.quota_daily_tokens
-    assert b["quota"]["daily_requests"] == settings.quota_daily_requests
+    assert b["quota"]["daily_cost_nano"] == int(settings.quota_daily_cost_cny * NANO_PER_CNY)
     assert b["quota"]["monthly_cost_nano"] == int(settings.quota_monthly_cost_cny * NANO_PER_CNY)
     # Health + provenance: the request itself proves the DB is reachable.
     assert b["database_ok"] is True

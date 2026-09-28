@@ -275,6 +275,13 @@ async def test_permanent_delete_folder_revokes_shares(
     assert r.status_code == 200, r.text
     async with new_client() as anon:
         assert (await anon.get(share["url"])).status_code == 404
+    async with session_factory() as session:
+        row = (
+            await session.execute(select(DocShare).where(DocShare.id == share["id"]))
+        ).scalar_one()
+    assert row.doc_id is None
+    assert row.revoked_at is not None
+    assert row.snapshot
 
 
 async def test_public_view_escapes_xss(client, new_client, _fs_data_dir):

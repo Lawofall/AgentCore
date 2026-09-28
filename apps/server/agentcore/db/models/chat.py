@@ -14,6 +14,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Index,
     String,
     Text,
@@ -49,7 +50,7 @@ class Chat(Base):
     # Group title; NULL for dm (client renders the peer's name) and official.
     title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    # Creator (NULL for system-owned official chats). App-level FK → users.
+    # Creator (NULL for system-owned official chats). Account pointer stays bare.
     created_by: Mapped[str | None] = mapped_column(
         PG_UUID(as_uuid=False), index=True, nullable=True
     )
@@ -82,7 +83,11 @@ class ChatMember(Base):
         CheckConstraint("state in ('accepted', 'pending')", name="ck_chat_members_state"),
     )
 
-    chat_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
+    chat_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey("chats.id", name="fk_chat_members_chat_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
     # Index for the hot "list my chats" query.
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, index=True)
     role: Mapped[str] = mapped_column(String(20), default="member", server_default=text("'member'"))
@@ -92,7 +97,17 @@ class ChatMember(Base):
     # Read cursor for unread counts (count messages created after this) and the
     # sender-side read receipt (last message id this member has seen).
     last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_read_message_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), nullable=True)
+    # Read cursor. Removing that message nulls the pointer; the membership stays.
+    last_read_message_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "chat_messages.id",
+            name="fk_chat_members_last_read_message_id",
+            ondelete="SET NULL",
+        ),
+        index=True,
+        nullable=True,
+    )
     muted: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     # Admin-imposed 禁言 (Stage 3 审核治理): a moderator silenced this member — they
     # can still read but a send is refused (403). Distinct from `muted` (the
@@ -129,8 +144,11 @@ class ChatMessage(Base):
     )
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
-    chat_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
-    # NULL = system/official sender. App-level FK → users.
+    chat_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey("chats.id", name="fk_chat_messages_chat_id", ondelete="CASCADE"),
+    )
+    # NULL = system/official sender. Account pointer stays bare.
     sender_user_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), nullable=True)
     sender_type: Mapped[str] = mapped_column(
         String(20), default="user", server_default=text("'user'")
@@ -145,7 +163,17 @@ class ChatMessage(Base):
     )
     # system_card deep-link payload (e.g. {kind, conversation_id}); NULL otherwise.
     payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    reply_to_message_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), nullable=True)
+    # Quote target. Removing that message nulls the pointer; ``reply_to`` stays.
+    reply_to_message_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "chat_messages.id",
+            name="fk_chat_messages_reply_to_message_id",
+            ondelete="SET NULL",
+        ),
+        index=True,
+        nullable=True,
+    )
     # Frozen reply preview ({sender_user_id, sender_display_name, body_preview}).
     # Written at send time so S3 recall of the target still leaves a readable quote.
     reply_to: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

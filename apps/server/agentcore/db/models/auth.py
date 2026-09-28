@@ -63,7 +63,7 @@ class UserLlmProvider(Base):
     )
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
-    # Owning account (app-level FK → users; account注销 cascades these rows).
+    # Owning account. Stays a bare uuid; 注销 deletes these rows in the service.
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
     # Human-facing display name for this provider (e.g. "DeepSeek", "火山方舟").
     label: Mapped[str] = mapped_column(String(100), server_default=text("''"))

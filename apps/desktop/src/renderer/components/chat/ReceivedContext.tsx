@@ -1,3 +1,4 @@
+import { HistoryTranscriptView } from "@/components/chat/HistoryTranscriptView";
 import { Markdown } from "@/components/chat/Markdown";
 import {
   type CatalogItem,
@@ -142,6 +143,8 @@ function ReaderBody({ item }: { item: CatalogItem }) {
             maxHeightClass="max-h-none"
             compact={false}
           />
+        ) : item.channel === "history" ? (
+          <HistoryTranscriptView body={item.body} />
         ) : (
           <Markdown content={item.body} />
         )}

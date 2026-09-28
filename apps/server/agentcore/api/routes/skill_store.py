@@ -46,7 +46,7 @@ class SkillStoreListingRow(BaseModel):
     installed: bool
     has_update: bool
     status: str
-    source_document_id: str
+    source_document_id: str | None
     group: SkillStoreGroupName
     offers_tools: list[str] = Field(default_factory=list)
 
@@ -402,6 +402,8 @@ async def publish_new_version(
     listing.status = "published"
     if body is not None and body.group is not None:
         listing.shelf_group = body.group
+    if listing.source_document_id is None:
+        raise HTTPException(status_code=404, detail={"message": "找不到要上架的技能"})
     doc = await _require_source_doc(docs, user.user_id, listing.source_document_id)
     name, description, content = _snapshot(doc)
     version = await store.add_version(

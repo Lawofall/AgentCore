@@ -126,7 +126,7 @@ _STABLE_USER = ("Prior user turn body for vendor prompt-cache. " * 80).strip()
 _ENV1 = f"{TURN_ENVELOPE_FENCE}\n<运行时>\n当前日期：2026-09-20 UTC\n</运行时>"
 _ENV2 = (
     f"{TURN_ENVELOPE_FENCE}\n<运行时>\n当前日期：2026-09-20 UTC\n</运行时>\n"
-    "<已登记来源>\n#r1 example.com\n</已登记来源>"
+    "<表格>\n选中 1 行\n</表格>"
 )
 
 

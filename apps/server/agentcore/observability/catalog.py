@@ -465,8 +465,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='chat.turn_start',
         description=(
-            '回合起点（preview/chars/history）。stream_path_reason 只出现在纯云端 POST。 switch_off'
-            ' / no_local_engine / no_local_target'
+            '回合起点（preview/chars/history）。stream_path_reason 只出现在纯云端 POST。 no_local_e'
+            'ngine / no_local_target'
         ),
         fields={
             'chars': FieldType('int'),
@@ -2118,6 +2118,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='redis.probe_failed'),
     EventSpec(name='replan.applied'),
     EventSpec(name='replan.rejected'),
+    EventSpec(name='replan.told'),
     EventSpec(name='resume.already_settled'),
     EventSpec(name='resume.claim_unresolved'),
     EventSpec(name='resume.deferred'),
@@ -2355,7 +2356,12 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(name='sandboxd.started'),
     EventSpec(name='sandboxd.stopped'),
+    EventSpec(name='search.engine_read_failed'),
+    EventSpec(name='search.key_decrypt_failed'),
+    EventSpec(name='search.key_malformed'),
     EventSpec(name='search.phase_duration'),
+    EventSpec(name='search.quota_exceeded'),
+    EventSpec(name='search.quota_record_failed'),
     EventSpec(
         name='search_cache.conversation_evicted',
         description=(
@@ -2366,6 +2372,10 @@ EVENTS: list[EventSpec] = [
             'evicted_conversation_id': FieldType('str'),
         },
     ),
+    EventSpec(name='search_provider.created'),
+    EventSpec(name='search_provider.deleted'),
+    EventSpec(name='search_provider.selected'),
+    EventSpec(name='search_provider.tested'),
     EventSpec(name='searxng.canary_empty'),
     EventSpec(name='searxng.canary_failed'),
     EventSpec(name='searxng.canary_ok'),

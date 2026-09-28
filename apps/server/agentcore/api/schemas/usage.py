@@ -107,7 +107,7 @@ class UsageWindow(BaseModel):
     usage: UsageBreakdown
     cost: CostBreakdown
     estimated_cost: CostBreakdown | None = None
-    # Distinct assistant turns in the window (the quota's「请求」proxy).
+    # Distinct assistant turns in the window. A usage statistic, not a quota.
     requests: int
 
 
@@ -118,7 +118,6 @@ class QuotaStatus(BaseModel):
     monthly_cost_nano: int
     # 单日成本 backstop (成本配额与计费 §〇·六 F2); 0 = unlimited.
     daily_cost_nano: int
-    daily_requests: int
 
 
 class ModelCostLine(BaseModel):

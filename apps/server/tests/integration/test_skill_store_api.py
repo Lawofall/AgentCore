@@ -1,5 +1,8 @@
 """GET/POST/DELETE /v1/skill-store — 开放上架 / 安装快照 / 举报 / admin 下架."""
 
+from sqlalchemy import delete, select
+
+from agentcore.db.models import Document, SkillStoreInstall, SkillStoreListing
 from tests.integration.conftest import (
     TEST_PASSWORD,
     client_platform_headers,
@@ -405,3 +408,50 @@ async def test_skill_store_install_keeps_offers_tools(client):
     )
     assert copy["offers_tools"] == ["host"]
     assert "offers_tools: host" in copy["content"]
+
+
+async def test_source_hard_delete_keeps_listing_and_copy_delete_uninstalls(
+    client, session_factory
+):
+    await register_and_login(client, "ssfkauthor")
+    doc = await _create_on_demand(client, "源稿.md", "正文", description="介绍")
+    published = await client.post("/v1/skill-store", json=_publish_body(doc["id"]))
+    assert published.status_code == 200, published.text
+    listing_id = published.json()["id"]
+
+    await register_and_login(client, "ssfkbuyer")
+    installed = await client.post(f"/v1/skill-store/{listing_id}/install")
+    assert installed.status_code == 200, installed.text
+    copy_id = installed.json()["document_id"]
+
+    async with session_factory() as session:
+        await session.execute(delete(Document).where(Document.id == doc["id"]))
+        await session.commit()
+    async with session_factory() as session:
+        listing = await session.get(SkillStoreListing, listing_id)
+        assert listing is not None
+        assert listing.source_document_id is None
+        kept = (
+            await session.execute(
+                select(SkillStoreInstall).where(SkillStoreInstall.document_id == copy_id)
+            )
+        ).scalar_one()
+    assert kept.listing_id == listing_id
+    detail = await client.get(f"/v1/skill-store/{listing_id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["source_document_id"] is None
+
+    await _login(client, "ssfkauthor")
+    missing = await client.post(f"/v1/skill-store/{listing_id}/versions")
+    assert missing.status_code == 404, missing.text
+
+    async with session_factory() as session:
+        await session.execute(delete(Document).where(Document.id == copy_id))
+        await session.commit()
+    async with session_factory() as session:
+        left = (
+            await session.execute(
+                select(SkillStoreInstall).where(SkillStoreInstall.listing_id == listing_id)
+            )
+        ).scalar_one_or_none()
+    assert left is None

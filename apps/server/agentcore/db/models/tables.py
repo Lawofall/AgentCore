@@ -7,7 +7,7 @@ editors can last-write-win different cells without a whole-table CAS.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -22,9 +22,17 @@ class Table(Base):
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
-    # Dedicated AI conversation, lazily bound on first sendTableTurn. App-level FK.
+    # Dedicated AI conversation, lazily bound on first sendTableTurn.
+    # The grid outlives that chat: hard-delete nulls the pointer.
     conversation_id: Mapped[str | None] = mapped_column(
-        PG_UUID(as_uuid=False), index=True, nullable=True
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_tables_conversation_id",
+            ondelete="SET NULL",
+        ),
+        index=True,
+        nullable=True,
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False, server_default=text("''"))
     # DB column ``schema``; attribute is not ``schema`` (that is SQLAlchemy's
@@ -39,7 +47,17 @@ class Table(Base):
     schema_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default=text("1")
     )
-    active_view_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), nullable=True)
+    # Current view. Hard-deleting that view nulls the pointer; the grid stays.
+    active_view_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "table_views.id",
+            name="fk_tables_active_view_id",
+            ondelete="SET NULL",
+        ),
+        index=True,
+        nullable=True,
+    )
     # Last reversible batch: {id, inverses, row_stamps}. NULL = nothing to undo.
     undo_batch: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # csv 灌数 upsert key（账号级表仍不挂 folder_id）。NULL = 人点新建。
@@ -69,7 +87,11 @@ class TableRow(Base):
     __tablename__ = "table_rows"
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
-    table_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
+    table_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey("tables.id", name="fk_table_rows_table_id", ondelete="CASCADE"),
+        index=True,
+    )
     cells: Mapped[dict] = mapped_column(
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
@@ -84,7 +106,11 @@ class TableView(Base):
     __tablename__ = "table_views"
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
-    table_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
+    table_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey("tables.id", name="fk_table_views_table_id", ondelete="CASCADE"),
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False, server_default=text("''"))
     display_mode: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default=text("'table'")

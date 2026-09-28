@@ -505,30 +505,3 @@ class EvidenceLedgerCore:
             dossier_path=dossier_path,
             dossier_label=dossier_label,
         )
-
-
-def format_registered_sources_prompt(ledger: EvidenceLedgerCore | None) -> str:
-    """hydrate 后注入「已登记来源」结构化摘要（id/url/query/registrant/deep_read）。"""
-    if ledger is None or len(ledger) == 0:
-        return ""
-    lines: list[str] = []
-    for e in ledger.all_entries():
-        eid = e.get("id") or "?"
-        url = (e.get("url") or "").strip() or "（无 URL）"
-        query = (e.get("query") or "").strip() or "—"
-        registrant = (e.get("registrant") or "").strip() or "—"
-        deep = "是" if e.get("deep_read") else "否"
-        selected = "是" if e.get("selected") else "否"
-        lines.append(
-            f"- {eid} · url={url} · query={query} · registrant={registrant} · "
-            f"deep_read={deep} · selected={selected}"
-        )
-    body = "\n".join(lines)
-    return (
-        "<已登记来源>\n"
-        "【已登记来源】本会话台账（跨回合 hydrate 后可见）。"
-        "回答某 #rN 出处必须对照下列字段，禁止占位/巧合叙事；"
-        "对话成稿可挂下列已登记可引用 id（含仅检索未深读）。\n"
-        f"{body}\n"
-        "</已登记来源>"
-    )

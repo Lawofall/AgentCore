@@ -1,9 +1,10 @@
 """Skill body: product_help.
 
-Catalog summary is what this is. Consult body = 产品合同 + 节目录；
-节事实在语料，fetch with consult("product_help:<id>")。
+Catalog summary is what this is, plus when the user is asking about the product.
+Consult body = 产品合同 + 可查事实节；教练节与机制选读不进语料。
+节事实 fetch with consult("product_help:<id>")。
 身份问走本卡【这是什么】。CEO 核不写路由尺；何时派在 delegate description。
-上报与「看不到服务端日志」跟用法同一 WHEN，不另立排查 skill。
+上报与「看不到服务端日志」跟本技能同一 WHEN，不另立排查 skill。
 """
 
 from __future__ import annotations
@@ -21,8 +22,8 @@ _SURFACE_ZH = {"desktop": "桌面", "web": "网页", "mobile": "手机"}
 _ALL_SURFACES = ("desktop", "web", "mobile")
 
 _PRODUCT_HELP_HOW = """\
-<本产品用法>
-身份问：可见正文首句用【这是什么】。点名功能再 consult("product_help:<节id>")。\
+<本产品>
+身份问：可见正文首句用【这是什么】。用户问到某功能再 consult("product_help:<节id>")。\
 对人用产品面说法（对话、协作图、工作区、检查点、审批）≠ `ask_user` / SSE / `run`。
 
 【这是什么】
@@ -88,8 +89,7 @@ def _toc_lines() -> str:
         else:
             default_rows.append(row)
     parts = [
-        "【节目录】点名再 consult(\"product_help:<id>\")。",
-        "默认：",
+        "【可查事实】用户问到该功能再 consult(\"product_help:<id>\")。",
         *default_rows,
     ]
     if optional_rows:
@@ -99,7 +99,7 @@ def _toc_lines() -> str:
 
 def build_product_help_body() -> str:
     how = _PRODUCT_HELP_HOW.rstrip()
-    return f"{how}\n\n{_toc_lines()}\n</本产品用法>"
+    return f"{how}\n\n{_toc_lines()}\n</本产品>"
 
 
 def _availability_line(availability: list[str]) -> str:

@@ -30,8 +30,8 @@ TASK_ARTIFACTS_SCHEMA: dict[str, object] = {
 
 # Shared when-to-use（根 / 嵌套；场面表不进按钮）。
 # 读之前不必仓促定夺；若仍判不出，先买一次廉价信号再判。装得下收在注意力定义里。
-# 窗绑定与机械尾巴分叉：根靠「这扇窗」+立刻返回；嵌套=这张任务卡+阻塞收工。
-# 根按钮首句只钉交回后由你收尾。返回时机在启动回执；协调期开口纪律不进按钮。
+# 窗绑定分叉：根靠「这扇窗」；嵌套=这张任务卡。
+# 根按钮首句只钉交回后由你收尾。返回时机在启动回执，不进按钮；协调期开口纪律不进按钮。
 DELEGATE_WHEN = (
     "读之前不必仓促定夺；若仍判不出，先取一次廉价信号（列目录、看条目数与文件名、数并列对象、回执里的字数行数），再判。"
     "探路只为定位入口，不为收结论。"
@@ -68,7 +68,7 @@ DELEGATE_DESCRIPTION = (
 
 # Nested captain: blocking wait, not coordination. Same fill contract; extra 拆层.
 NESTED_DELEGATE_DESCRIPTION = (
-    "把当前任务拆给由你指挥的子团队（调用后等到子队收工）。"
+    "把当前任务拆给由你指挥的子团队。"
     f"{DELEGATE_WHEN}"
     "你的窗跟这张任务卡走，卡上已是一件则留下。"
     f"{DELEGATE_STAFF_HOW}"

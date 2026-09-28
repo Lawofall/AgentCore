@@ -16,6 +16,7 @@ export const collaborationChapter: ManualChapterContent = {
       id: MANUAL_SECTION_IDS.collaboration.briefing,
       title: "怎么下任务",
       icon: "Target",
+      ai: "off",
       blocks: [
         {
           type: "lead",
@@ -142,7 +143,7 @@ export const collaborationChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "关键决定或拿不准时，团队会停下来问你，不会自作主张。",
+          text: "只有猜错会把活做错时，团队才会停下来问你。能假设的小事会直接做，并在回复里写明假设。",
         },
         {
           type: "paragraph",
@@ -154,7 +155,7 @@ export const collaborationChapter: ManualChapterContent = {
           items: [
             {
               title: "开场澄清",
-              desc: "需求能做但还没钉死、猜错会做错时，先短问一两道再开工，不猜着开干。",
+              desc: "猜错会把活做错时，先短问再开工。语气、次要样式会按一个假设继续，并写明。",
             },
             {
               title: "关键岔路",
@@ -530,7 +531,7 @@ export const collaborationChapter: ManualChapterContent = {
           items: [
             {
               title: "可复用的做法",
-              desc: "先分清这回在干什么，再用现有组队能力，关键处问你。不要另造一套固定角色。",
+              desc: "先分清这回在干什么，再用现有组队能力。不要另造一套固定角色。",
             },
             {
               title: "自家模板可以冻",

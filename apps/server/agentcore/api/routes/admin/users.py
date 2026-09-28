@@ -143,8 +143,10 @@ async def update_user(
         quota["monthly_cost_cny"] = body.quota_monthly_cost_cny
     if "quota_daily_cost_cny" in fields:
         quota["daily_cost_cny"] = body.quota_daily_cost_cny
-    if "quota_daily_requests" in fields:
-        quota["daily_requests"] = body.quota_daily_requests
+    if "quota_search_daily" in fields:
+        quota["search_daily"] = body.quota_search_daily
+    if "quota_search_monthly" in fields:
+        quota["search_monthly"] = body.quota_search_monthly
 
     updated = await service.update_user(
         actor=admin,

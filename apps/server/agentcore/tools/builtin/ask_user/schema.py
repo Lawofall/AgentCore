@@ -46,7 +46,7 @@ _LABEL_DESC = "选项名（回传答案）。"
 _MULTIPLE_DESC = "允许多选。"
 
 # WHEN 短触发。填卡合同在 prompt/label。consult 赶不上这张卡。
-ASK_WHEN = "向用户发问（唯一；调用即停）。"
+ASK_WHEN = "向用户发问。"
 ASK_PROMPT_HOW = "要什么 / 给谁 / 做到哪一档。问句在卡上 ≠ 再抄进正文。假设和背景写正文。"
 ASK_LABEL_HOW = (
     "桌上结果；权衡写进选项名 ≠ 编制套餐 ≠ 正文候选再投卡。"

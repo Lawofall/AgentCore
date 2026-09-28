@@ -188,10 +188,9 @@ def promote_coordination_surface_if_needed(chat_tools: ToolRegistry) -> bool:
         chat_tools.register(ReplanTool(delegate=delegate))  # type: ignore[arg-type]
         added.append("replan")
 
-    if depth == 0:
-        if chat_tools.get_optional("cancel_worker") is None:
-            chat_tools.register(CancelWorkerTool())
-            added.append("cancel_worker")
+    if depth == 0 and chat_tools.get_optional("cancel_worker") is None:
+        chat_tools.register(CancelWorkerTool())
+        added.append("cancel_worker")
 
     if added:
         logger.info(

@@ -45,8 +45,11 @@ export function QuotaDialog({
   const [dailyCost, setDailyCost] = useState(
     initial(user.quota_daily_cost_cny),
   );
-  const [dailyRequests, setDailyRequests] = useState(
-    initial(user.quota_daily_requests),
+  const [searchDaily, setSearchDaily] = useState(
+    initial(user.quota_search_daily),
+  );
+  const [searchMonthly, setSearchMonthly] = useState(
+    initial(user.quota_search_monthly),
   );
   const [saving, setSaving] = useState(false);
 
@@ -59,7 +62,8 @@ export function QuotaDialog({
       quota_daily_tokens: numOrNull(dailyTokens),
       quota_monthly_cost_cny: numOrNull(monthlyCost),
       quota_daily_cost_cny: numOrNull(dailyCost),
-      quota_daily_requests: numOrNull(dailyRequests),
+      quota_search_daily: numOrNull(searchDaily),
+      quota_search_monthly: numOrNull(searchMonthly),
     };
     try {
       const updated = await updateUser(user.id, patch);
@@ -143,14 +147,25 @@ export function QuotaDialog({
               disabled={unlimited || saving}
             />
           </Field>
-          <Field label="日请求数上限">
+          <Field label="日搜索次数">
             <Input
               type="number"
               min={0}
               inputMode="numeric"
               placeholder="继承全局"
-              value={dailyRequests}
-              onChange={(e) => setDailyRequests(e.target.value)}
+              value={searchDaily}
+              onChange={(e) => setSearchDaily(e.target.value)}
+              disabled={unlimited || saving}
+            />
+          </Field>
+          <Field label="月搜索次数">
+            <Input
+              type="number"
+              min={0}
+              inputMode="numeric"
+              placeholder="继承全局"
+              value={searchMonthly}
+              onChange={(e) => setSearchMonthly(e.target.value)}
               disabled={unlimited || saving}
             />
           </Field>

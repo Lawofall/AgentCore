@@ -15,13 +15,7 @@ export function workspaceRootAbsentMessage(): string {
   return "这个文件夹不在这台电脑上。请在工作区芯片里重新选择它所在的位置。";
 }
 
-/**
- * 本机文件夹回合只能走本地引擎。关了本机执行，或这台客户端没有本地引擎时，
- * 不改走云端。
- */
-export function localEngineOffMessage(reason: "no_engine" | "switch_off"): string {
-  if (reason === "switch_off") {
-    return "本机执行已关闭，云端不会改这个文件夹。请先允许本机执行后再发，或把对话改到云端。";
-  }
+/** 本机文件夹回合只能走本地引擎。这台客户端没有本地引擎时，不改走云端。 */
+export function localEngineOffMessage(): string {
   return "这份文件在本机。请在持有该文件夹的电脑上打开客户端后再发。";
 }

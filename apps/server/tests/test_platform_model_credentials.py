@@ -42,7 +42,6 @@ def _user():
         quota_daily_tokens=None,
         quota_monthly_cost_cny=None,
         quota_daily_cost_cny=None,
-        quota_daily_requests=None,
     )
 
 

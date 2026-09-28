@@ -13,7 +13,7 @@ from agentcore.db.models import Conversation, ConversationExternalGrant
 
 
 class ExternalGrantRepository:
-    """CRUD for ``conversation_external_grants`` (app-level conversation ownership)."""
+    """CRUD for ``conversation_external_grants`` (``ON DELETE CASCADE`` from the conversation)."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session

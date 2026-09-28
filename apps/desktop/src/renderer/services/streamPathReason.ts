@@ -6,10 +6,7 @@
  */
 export const STREAM_PATH_REASON_HEADER = "X-AgentCore-Stream-Path-Reason";
 
-export type CloudStreamPathReason =
-  | "switch_off"
-  | "no_local_engine"
-  | "no_local_target";
+export type CloudStreamPathReason = "no_local_engine" | "no_local_target";
 
 /** Renderer code on a recoverable sidecar StreamError: occupy never started the engine. */
 export const SIDECAR_OCCUPY_FAILED_CODE = "sidecar_occupy_failed";

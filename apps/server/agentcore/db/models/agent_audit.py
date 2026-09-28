@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -58,7 +59,15 @@ class AgentAuditEvent(Base):
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
-    conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
+    conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_agent_audit_events_conversation_id",
+            ondelete="CASCADE",
+        ),
+        index=True,
+    )
     turn_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
     trace_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     execution_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)

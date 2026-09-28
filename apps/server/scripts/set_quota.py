@@ -12,8 +12,8 @@ Run from ``apps/server``::
     # raise just the daily token budget, leave the rest inheriting global config
     uv run python scripts/set_quota.py bob --daily-tokens 5000000
 
-    # cap monthly spend at ¥20 and clear the daily-requests override (inherit again)
-    uv run python scripts/set_quota.py carol --monthly-cny 20 --daily-requests inherit
+    # cap monthly spend at ¥20
+    uv run python scripts/set_quota.py carol --monthly-cny 20
 
 Semantics per dimension: a number sets the override (``0`` = unlimited for that
 dimension); ``inherit`` clears it back to the global config threshold; omitting the
@@ -79,11 +79,18 @@ def _parse_args() -> argparse.Namespace:
         help="daily cost cap in CNY (0 = unlimited; 'inherit' clears)",
     )
     p.add_argument(
-        "--daily-requests",
+        "--search-daily",
         type=_opt_int,
         default=_UNSET,
         metavar="N|inherit",
-        help="daily request cap (0 = unlimited; 'inherit' clears the override)",
+        help="platform search count per day (0 = unlimited; 'inherit' clears)",
+    )
+    p.add_argument(
+        "--search-monthly",
+        type=_opt_int,
+        default=_UNSET,
+        metavar="N|inherit",
+        help="platform search count per month (0 = unlimited; 'inherit' clears)",
     )
     return p.parse_args()
 
@@ -105,8 +112,10 @@ async def _run(args: argparse.Namespace) -> None:
             kwargs["monthly_cost_cny"] = args.monthly_cny
         if args.daily_cny is not _UNSET:
             kwargs["daily_cost_cny"] = args.daily_cny
-        if args.daily_requests is not _UNSET:
-            kwargs["daily_requests"] = args.daily_requests
+        if args.search_daily is not _UNSET:
+            kwargs["search_daily"] = args.search_daily
+        if args.search_monthly is not _UNSET:
+            kwargs["search_monthly"] = args.search_monthly
 
         if not kwargs:
             print("nothing to change (pass --unlimited/--daily-tokens/...).\n")
@@ -119,7 +128,8 @@ async def _run(args: argparse.Namespace) -> None:
         print(f"  quota_daily_tokens  : {_fmt(user.quota_daily_tokens)}")
         print(f"  quota_monthly_cny   : {_fmt(user.quota_monthly_cost_cny)}")
         print(f"  quota_daily_cny     : {_fmt(user.quota_daily_cost_cny)}")
-        print(f"  quota_daily_requests: {_fmt(user.quota_daily_requests)}")
+        print(f"  quota_search_daily  : {_fmt(user.quota_search_daily)}")
+        print(f"  quota_search_monthly: {_fmt(user.quota_search_monthly)}")
 
 
 if __name__ == "__main__":

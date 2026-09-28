@@ -174,7 +174,8 @@ const fsApi: FsApi = {
   onExecuteOutput: (cb) => {
     const listener = (_e: unknown, payload: ExecOutputEvent) => cb(payload);
     ipcRenderer.on(FS_CHANNELS.executeOutput, listener);
-    return () => ipcRenderer.removeListener(FS_CHANNELS.executeOutput, listener);
+    return () =>
+      ipcRenderer.removeListener(FS_CHANNELS.executeOutput, listener);
   },
   workspaceOp: (rootId, op, args, timeoutMs, correlation) =>
     ipcRenderer.invoke(FS_CHANNELS.workspaceOp, {

@@ -7,8 +7,7 @@ import {
 /**
  * 本地引擎（sidecar）会话级健康缓存 + 主动探活。
  *
- * 双模式工作区 §7.2 · 探活增强。本机传统新开回合只走 sidecar（`resolveSidecarRoot`：
- * unset 不挡；`sidecarPreference==="off"` 时本机文件夹回合不开始，不改走云）。若用户机器环境起不来（杀软 / 缺组件 /
+ * 双模式工作区 §7.2 · 探活增强。本机传统新开回合只走 sidecar。若用户机器环境起不来（杀软 / 缺组件 /
  * venv 损坏…），没有探活则每个回合都「试 startTurn → 启动失败 → 横幅」，反复 spawn。
  *
  * 本模块把「首轮失败」前移成一次**主动探活**，并按 `root + subpath` 记住结果（app 进程内、
@@ -22,9 +21,9 @@ import {
  *     （`sendTurn` / `runRegenerate` 探活失败出横幅、`runResume` 探活失败保留帧），见各处。
  *   - {@link markSidecarUnhealthy}：启动期失败也标 `bad`，与探活共用同一记坏出口；TTL 内再发
  *     命中缓存后同样报错，不走云。
- *   - {@link clearSidecarHealth}：用户在设置里重新开启本地引擎时清空，给「修好环境后重试」机会。
+ *   - {@link clearSidecarHealth}：换根或重试前清空，给修好环境后的下一次探活机会。
  *
- * 显式强制关不把本机文件夹回合改走云。引擎不可用不出过桥脚注。
+ * 探活失败记 `bad`，TTL 内再发同样报错，不走云。引擎不可用不出过桥脚注。
  *
  * 探活成功留存的进程正好被随后的首个回合复用（主进程 `ensure` 命中缓存），故探活不浪费拉起。
  */
@@ -124,7 +123,7 @@ export async function probeSidecar(
   }
 
   if (typeof window === "undefined" || !window.sidecarApi) {
-    // 非桌面：调用方应已因 isSidecarEnabled 拿不到 target。此处诚实不健康，勿假装可走。
+    // 非桌面：调用方应已因没有本地引擎拿不到 target。此处诚实不健康，勿假装可走。
     return {
       healthy: false,
       probed: false,

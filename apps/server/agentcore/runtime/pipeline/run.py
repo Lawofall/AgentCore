@@ -267,7 +267,6 @@ async def run_chat_pipeline(
                 conversation_id=conversation_id,
                 user_message=user_message,
                 history=history,
-                evidence_ledger=evidence_ledger,
                 sink=sink,
                 backend=assemble_backend,
                 folder_id=folder_id,

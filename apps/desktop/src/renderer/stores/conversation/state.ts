@@ -158,7 +158,10 @@ export interface ConversationState {
     },
     conversationId?: string | null,
   ) => void;
-  noteWindowPrompt: (lastPrompt: number, conversationId?: string | null) => void;
+  noteWindowPrompt: (
+    lastPrompt: number,
+    conversationId?: string | null,
+  ) => void;
   attachErrorToLastMessage: (
     error: {
       code: string;

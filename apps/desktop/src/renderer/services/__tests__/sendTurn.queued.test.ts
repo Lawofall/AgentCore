@@ -30,7 +30,6 @@ vi.mock("@/services/sidecarRouting", () => {
       bind.kind === "live" && typeof bind.rootId === "string"
         ? { rootId: bind.rootId, subpath: bind.subpath ?? "" }
         : null,
-    isSidecarEnabled: vi.fn(() => true),
     localBindSendBlock: () => null,
   };
 });

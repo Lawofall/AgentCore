@@ -327,8 +327,10 @@ def test_captain_context_blocks_channels_order_and_single_source():
     # concern — the desktop「收到的上下文」dialog shows it to all, mobile hides it; the
     # projection/block always carries it verbatim, and is exempt from the 决策④ body cap).
     assert blocks[0].body == "你是 CEO。"
-    # history renders the prior turns as 用户/CEO prose, blank turns dropped.
-    assert blocks[1].body == "用户：你好\n\nCEO：你好，有什么可以帮你？"
+    # history is a length-prefixed mirror; blank turns dropped. chars counts
+    # injected message text, not the record headers.
+    assert blocks[1].body == "@@user 2\n你好\n@@assistant 11\n你好，有什么可以帮你？\n"
+    assert blocks[1].chars == 13
     # the request is this turn's user message verbatim.
     assert blocks[-1].channel == "request"
     assert blocks[-1].body == "帮我润色这段话。"
@@ -344,8 +346,55 @@ def test_captain_history_omits_turn_envelope():
     assert [b.channel for b in blocks] == ["system", "history", "request"]
     assert "[系统提示]" not in blocks[1].body
     assert "<运行时>" not in blocks[1].body
-    assert blocks[1].body == "用户：你好\n\nCEO：你好，有什么可以帮你？"
+    assert blocks[1].body == "@@user 2\n你好\n@@assistant 11\n你好，有什么可以帮你？\n"
+    assert blocks[1].chars == 13
     assert blocks[-1].body == "下一问"
+
+
+def test_captain_history_labels_tool_and_keeps_raw_result():
+    import json
+
+    page = json.dumps(
+        {"url": "https://example.com/a", "title": "例", "content": "甲\n乙"},
+        ensure_ascii=False,
+    )
+    roster = "共 1 个文件夹：\n" + json.dumps({"folders": [{"name": "桌"}]}, ensure_ascii=False)
+    history = [
+        {"role": "user", "content": "看一下"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "web_fetch", "arguments": "{}"},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "c1", "content": page},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "c2",
+                    "type": "function",
+                    "function": {"name": "folders", "arguments": "{}"},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "c2", "content": roster},
+        {"role": "assistant", "content": "抓到了。"},
+    ]
+    blocks = _build_captain_context_blocks("你是 CEO。", history, "刚发生了什么")
+    body = blocks[1].body
+    assert f"@@tool {len(page)} web_fetch\n{page}\n" in body
+    assert f"@@tool {len(roster)} folders\n{roster}\n" in body
+    assert blocks[1].chars == len("看一下") + len(page) + len(roster) + len("抓到了。")
+    payloads = _context_block_payloads(blocks)
+    assert payloads[1]["chars"] == blocks[1].chars
+    assert payloads[1]["chars"] != len(body)
 
 
 def test_captain_context_blocks_first_turn_omits_history():

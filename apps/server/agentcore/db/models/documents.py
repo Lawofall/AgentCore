@@ -10,7 +10,7 @@ different values on orthogonal metadata axes:
   silently rewrite; ``true`` = AI-maintained long-term memory. Stays a **DB-only** column
   (never frontmatter) — it is writer identity, not entry content.
 - scope (§5.3 位置即作用域): carried by ``folder_id`` — ``NULL`` = global root; a workspace
-  ``Folder`` id = that project's layer. App-level ref, no DB FK (§6.2).
+  ``Folder`` id = that project's layer (``fk_documents_folder_id``, ``ON DELETE CASCADE``).
 - ``apply_mode`` / ``description``: **derived indexes** of the md body's frontmatter
   (``apply`` / ``description``). Frontmatter is the sole writable source of truth; these
   columns are recomputed on every body write and must never be set by a bypass path.
@@ -31,7 +31,7 @@ different values on orthogonal metadata axes:
 from datetime import datetime
 from typing import TypedDict
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, String, Text, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -95,7 +95,8 @@ class Document(Base):
     A ``rule``-role, ``ai_maintained=false`` document is a user rule; ``ai_maintained=true`` is
     AI memory — same table, same injection pipeline. Ordinary documents are ``general``. The
     tree is per-user; ``parent_id`` gives structure and ``folder_id`` gives the injection scope
-    (NULL = global). No DB ForeignKey — references are app-level ``*_id`` fields (§6.2).
+    (NULL = global). ``folder_id`` cascades with the folder row. ``user_id`` and
+    ``parent_id`` stay bare.
     """
 
     __tablename__ = "documents"
@@ -122,15 +123,20 @@ class Document(Base):
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), nullable=False)
-    # Intra-tree parent (app-level FK). NULL = a top-level node of its scope (the user's
-    # cloud root for the global layer, §5.3). A folder node's children carry its id here.
+    # Intra-tree parent. Stays a bare uuid: RESTRICT would block one folder
+    # delete of a parent and its children, and CASCADE would also delete
+    # children that live in another scope. NULL = a top-level node of its
+    # scope (the user's cloud root for the global layer, §5.3).
     parent_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), nullable=True)
     # Injection scope (位置即作用域, §5.3): NULL = global (every conversation); a workspace
     # ``Folder`` id = that project's layer. Denormalized onto every node so a scope query is a
-    # flat filter. App-level ref, not a DB FK: soft-deleting a folder does not cascade these
-    # rows (restore must bring 设定 back). Injection skips a missing/soft-deleted folder;
-    # permanent delete / retention purge physically remove the scope.
-    folder_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), nullable=True)
+    # flat filter. ``fk_documents_folder_id`` removes these rows when the folder row goes.
+    # Soft-delete keeps the folder row, so restore still brings 设定 back.
+    folder_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey("folders.id", name="fk_documents_folder_id", ondelete="CASCADE"),
+        nullable=True,
+    )
     kind: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'document'")
     )

@@ -169,14 +169,13 @@ def test_compose_renders_table_context():
     assert "<表格>" in out
 
 
-def test_build_chat_places_table_between_attachment_and_sources():
+def test_build_chat_places_table_after_attachment():
     out = render_ceo_turn_envelope(
         attachment_context="<附件/>",
         table_context="<表格/>",
-        registered_sources="<已登记来源/>",
         include_runtime=False,
     )
-    assert out == f"{TURN_ENVELOPE_FENCE}\n<附件/>\n<表格/>\n<已登记来源/>"
+    assert out == f"{TURN_ENVELOPE_FENCE}\n<附件/>\n<表格/>"
 
 
 def test_empty_selection_omits_selected_block():

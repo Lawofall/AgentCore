@@ -64,7 +64,8 @@ export type FaqAnswerPart =
 
 export type ManualSurface = "desktop" | "web" | "mobile";
 
-export type ManualAiPlacement = "default" | "optional";
+/** default = CEO 可查事实；optional = 选读；off = 只留用户手册，不进 CEO 语料。 */
+export type ManualAiPlacement = "default" | "optional" | "off";
 
 export interface ManualSection {
   id: string;
@@ -74,7 +75,7 @@ export interface ManualSection {
   blocks: ManualBlock[];
   /** 缺省 = 三端都有。缺席的端：CEO 先说无此入口。 */
   availability?: ManualSurface[];
-  /** 缺省 = default（宽问可拉）。机制章 = optional。 */
+  /** 缺省 = default（事实节，CEO 可按 id 查）。off = 教练 / 机制选读，只给人看。 */
   ai?: ManualAiPlacement;
 }
 

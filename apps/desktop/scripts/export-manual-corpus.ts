@@ -14,6 +14,7 @@ import type { ManualChapterId } from "../src/renderer/pages/toolbox/manual/paths
 import { MANUAL_SECTION_ALIASES, manualHref } from "../src/renderer/pages/toolbox/manual/sectionIds.ts";
 import type {
   ManualAiPlacement,
+  ManualBlock,
   ManualSurface,
 } from "../src/renderer/pages/toolbox/manual/types.ts";
 
@@ -46,13 +47,21 @@ interface CorpusFile {
   aliases: Record<string, string>;
 }
 
+function corpusBlockText(block: ManualBlock): string {
+  if (block.type !== "doDont") return extractBlockText(block);
+  const good = block.good.label ?? "这样说";
+  const bad = block.bad.label ?? "别这样";
+  return [good, ...block.good.items, bad, ...block.bad.items].join("\n");
+}
+
 function buildCorpus(): CorpusFile {
   const sections: CorpusSection[] = [];
   for (const chapter of CONTENT_CHAPTERS) {
     const chapterId = chapter.id as ManualChapterId;
     for (const section of chapter.sections) {
+      if (section.ai === "off") continue;
       const text = section.blocks
-        .map((b) => extractBlockText(b).trim())
+        .map((b) => corpusBlockText(b).trim())
         .filter(Boolean)
         .join("\n\n");
       sections.push({
@@ -66,10 +75,15 @@ function buildCorpus(): CorpusFile {
       });
     }
   }
+  const exported = new Set(sections.map((s) => s.id));
+  const aliases: Record<string, string> = {};
+  for (const [alias, target] of Object.entries(MANUAL_SECTION_ALIASES)) {
+    if (exported.has(target)) aliases[alias] = target;
+  }
   return {
     version: 1,
     sections,
-    aliases: { ...MANUAL_SECTION_ALIASES },
+    aliases,
   };
 }
 

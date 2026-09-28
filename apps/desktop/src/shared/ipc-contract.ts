@@ -638,9 +638,7 @@ export interface FsApi {
     correlation?: { conversationId?: string; requestId?: string },
   ): Promise<WorkspaceOpResult>;
   /** Live stdout/stderr while a desktop EXECUTE op is in flight. */
-  onExecuteOutput(
-    cb: (event: ExecOutputEvent) => void,
-  ): () => void;
+  onExecuteOutput(cb: (event: ExecOutputEvent) => void): () => void;
   /**
    * 聊天内 RunConfirm「本会话都允许」→ 主进程置 session run flag（进程重启清零）。
    * 不引入永久跨天 allowlist。

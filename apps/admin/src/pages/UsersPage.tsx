@@ -104,21 +104,21 @@ function fmtDateUtc(iso: string): string {
   return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
 }
 
-/** The four dimensions a per-account override can pin; `null` = 用全局默认值. */
+/** The dimensions a per-account override can pin; `null` = 用全局默认值. */
 type QuotaOverrides = Pick<
   AdminUserListItem,
   | "is_unlimited"
   | "quota_daily_tokens"
-  | "quota_daily_requests"
   | "quota_daily_cost_cny"
   | "quota_monthly_cost_cny"
+  | "quota_search_daily"
+  | "quota_search_monthly"
 >;
 
 /**
  * 配额列：只列这个账号自己覆盖掉的维度，剩下的用一句「其余继承」带过。
  *
- * 逐维打印继承值会把「继承」重复三遍、还把上限写成裸数字——「日 20000000 token ·
- * 月 继承 · 继承 请求」既读不通，也让这一列在 1440 下和用户列抢宽度。
+ * 逐维打印继承值会把「继承」重复多遍、还把上限写成裸数字。
  */
 function quotaSummary(u: QuotaOverrides): string {
   if (u.is_unlimited) return "无限额";
@@ -126,17 +126,20 @@ function quotaSummary(u: QuotaOverrides): string {
   if (u.quota_daily_tokens !== null) {
     parts.push(`日 ${fmtInt(u.quota_daily_tokens)} token`);
   }
-  if (u.quota_daily_requests !== null) {
-    parts.push(`日 ${fmtInt(u.quota_daily_requests)} 次请求`);
-  }
   if (u.quota_daily_cost_cny !== null) {
     parts.push(`日 ${fmtCny(u.quota_daily_cost_cny)}`);
   }
   if (u.quota_monthly_cost_cny !== null) {
     parts.push(`月 ${fmtCny(u.quota_monthly_cost_cny)}`);
   }
+  if (u.quota_search_daily != null) {
+    parts.push(`日搜索 ${fmtInt(u.quota_search_daily)}`);
+  }
+  if (u.quota_search_monthly != null) {
+    parts.push(`月搜索 ${fmtInt(u.quota_search_monthly)}`);
+  }
   if (parts.length === 0) return "继承默认";
-  if (parts.length === 4) return parts.join(" · ");
+  if (parts.length === 5) return parts.join(" · ");
   return `${parts.join(" · ")} · 其余继承`;
 }
 

@@ -322,6 +322,10 @@ class ContextBlock:
     fidelity: str = ""
     truncated: bool = False
     files: list[str] = field(default_factory=list)
+    # When set, the wire ``chars`` is this injected length instead of ``len(body)``.
+    # History uses it so the length-prefix envelope (tool names, record headers)
+    # does not inflate the count the reader shows.
+    chars: int | None = None
 
 
 @dataclass

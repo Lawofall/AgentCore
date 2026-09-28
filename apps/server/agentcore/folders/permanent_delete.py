@@ -2,10 +2,10 @@
 
 Hard-deletes every member conversation (cascade messages / runs / journal / …),
 purges the shared cloud ``folder:<id>`` workspace directory + server snapshots,
-unbinds bare-chat ``auto_desk_folder_id`` soft-pointers (via
-:func:`clear_folder_session_pointers`), physically removes documents in those
-injection scopes and creation-tool docs hung on the desks, then removes the
-folder rows.
+unbinds bare-chat ``auto_desk_folder_id`` when the folder row goes
+(``fk_conversations_auto_desk_folder_id``), revokes public 文档 links, then removes
+the folder rows. Membership, creation drafts, and desk settings go with those
+rows.
 
 Two entry points, same member-chat semantics (弹窗勾选 = 最近删除里再确认):
 
@@ -33,12 +33,9 @@ from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import (
     ConversationRepository,
     ConversationShareRepository,
-    DocRepository,
     DocShareRepository,
-    DocumentRepository,
     FolderRepository,
 )
-from agentcore.folders.unbind import clear_folder_session_pointers
 from agentcore.workspace import grant_store
 from agentcore.workspace.cloud_tree import is_same_or_descendant, normalize_rel_path
 from agentcore.workspace.locate import workspace_storage_key
@@ -76,13 +73,9 @@ async def _collect_member_conv_ids(subtree_ids: list[str], *, user_id: str) -> l
 
 async def _finish_folder_rows(*, user_id: str, subtree_ids: list[str]) -> None:
     async with async_session_factory() as session:
-        await DocumentRepository(session).hard_delete_for_folders(
-            user_id, subtree_ids, commit=False
-        )
         await DocShareRepository(session).revoke_all_for_folder_ids(
             subtree_ids, commit=False
         )
-        await DocRepository(session).hard_delete_for_folders(subtree_ids, commit=False)
         await FolderRepository(session).hard_delete_many(subtree_ids)
     from agentcore.memory.account_prepare_cache import hibernate_folder_injection_cache
 
@@ -101,12 +94,6 @@ async def permanent_delete_folder(*, folder_id: str, user_id: str) -> bool:
 
     conv_ids = await _collect_member_conv_ids(subtree_ids, user_id=user_id)
     await _hard_delete_conversations(conv_ids)
-    async with async_session_factory() as session:
-        for member_id in subtree_ids:
-            await clear_folder_session_pointers(
-                session, folder_id=member_id, user_id=user_id
-            )
-        await session.commit()
 
     # Server-side cloud root + snapshots (also clears any residual server mirror for
     # local projects). Never the user's OS directory behind ``local_root_id``.
@@ -192,12 +179,6 @@ async def purge_trashed_folder(*, folder_id: str, user_id: str) -> bool:
 
         conv_ids = await _collect_member_conv_ids(subtree_ids, user_id=user_id)
         await _hard_delete_conversations(conv_ids)
-        async with async_session_factory() as session:
-            for member_id in subtree_ids:
-                await clear_folder_session_pointers(
-                    session, folder_id=member_id, user_id=user_id
-                )
-            await session.commit()
 
         # Parent directory already sits in the tombstone; the live slot was
         # released at soft-delete. Never pass ``rel_path``.

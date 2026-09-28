@@ -152,7 +152,9 @@ class _FakeChannel:
         *,
         timeout: float | None = None,
         root_id: str | None = None,
+        on_output: object = None,
     ) -> dict[str, object]:
+        del on_output
         self.calls.append({"op": op, "args": args})
         if self._envelopes:
             return self._envelopes.pop(0)
@@ -185,7 +187,9 @@ class _HostChannel(_FakeChannel):
         *,
         timeout: float | None = None,
         root_id: str | None = None,
+        on_output: object = None,
     ) -> dict[str, object]:
+        del on_output
         self.calls.append({"op": op, "args": args})
         language = str(args.get("language") or "")
         if language in self._available:

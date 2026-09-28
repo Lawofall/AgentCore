@@ -241,7 +241,6 @@ async def get_usage_summary(
             daily_tokens=limits.daily_tokens,
             monthly_cost_nano=limits.monthly_cost_nano,
             daily_cost_nano=limits.daily_cost_nano,
-            daily_requests=limits.daily_requests,
         ),
         billing_mode=settings.billing_mode,
     )

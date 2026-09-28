@@ -10,14 +10,10 @@ describe("SettingRow", () => {
     const onCheckedChange = vi.fn();
     const { container } = render(
       <SettingRow
-        label="允许本机执行"
-        description="关闭后全部走云端过桥。"
+        label="通知"
+        description="新消息时在桌面提醒。"
         control={
-          <Switch
-            checked
-            onCheckedChange={onCheckedChange}
-            label="允许本机执行"
-          />
+          <Switch checked onCheckedChange={onCheckedChange} label="通知" />
         }
       />,
     );

@@ -67,13 +67,21 @@ SEARCH_EMPTY_TTL_SECONDS = 45.0
 _LATIN_TOKEN_RE = re.compile(r"^[a-z0-9][a-z0-9_\-./]*$", re.IGNORECASE)
 
 
-def _query_key(query: str, language: str | None = None, *, exact: bool = False) -> str:
+def _query_key(
+    query: str,
+    language: str | None = None,
+    *,
+    exact: bool = False,
+    engine: str = "searxng",
+) -> str:
     """Normalised cache key (A4): casefold + whitespace-collapse; Latin word-order sort.
 
     Phase-1 normalisation only — **no stopword removal** (negation words must stay).
     ``exact=True`` skips word-order sorting (debate carve-out: independent evidence
     discipline). ``language`` is part of the key so a zh-pinned result set never
-    serves an en (or ja) request for the same ASCII query string.
+    serves an en (or ja) request for the same ASCII query string. ``engine`` is
+    part of the key when it is not the default searxng index, so switching to
+    开析 does not replay the other index's hits. The searxng key shape is unchanged.
     """
     base = re.sub(r"\s+", " ", (query or "").strip().casefold())
     if not exact and base:
@@ -81,7 +89,11 @@ def _query_key(query: str, language: str | None = None, *, exact: bool = False) 
         if len(tokens) > 1 and all(_LATIN_TOKEN_RE.fullmatch(t) for t in tokens):
             base = " ".join(sorted(tokens))
     lang = (language or "").strip().casefold()
-    return f"{lang}|{base}" if lang else base
+    body = f"{lang}|{base}" if lang else base
+    eng = (engine or "searxng").strip().casefold() or "searxng"
+    if eng == "searxng":
+        return body
+    return f"{eng}|{body}"
 
 
 def _entry_bytes(results: list[SearchResult]) -> int:
@@ -103,6 +115,7 @@ class SearchCacheEntry:
     max_results: int
     stored_at: float
     language: str = ""
+    engine: str = "searxng"
 
 
 class ConversationSearchCache:
@@ -140,6 +153,7 @@ class ConversationSearchCache:
         min_results: int,
         language: str | None = None,
         exact: bool = False,
+        engine: str = "searxng",
     ) -> SearchCacheEntry | None:
         """The fresh entry for ``query`` that can satisfy a request needing
         ``min_results`` results, or ``None`` (caller then searches).
@@ -151,7 +165,7 @@ class ConversationSearchCache:
         any request. ``exact`` selects the A4 debate carve-out key (no word-order share).
         """
         self.last_access = time.time()
-        key = _query_key(query, language, exact=exact)
+        key = _query_key(query, language, exact=exact, engine=engine)
         entry = self._entries.get(key)
         if entry is None:
             return None
@@ -167,14 +181,21 @@ class ConversationSearchCache:
         """Cache (or refresh) a successful search as most-recently-used, then enforce
         the TTL + count + byte caps."""
         self.last_access = time.time()
-        key = _query_key(entry.query, entry.language or None, exact=exact)
+        key = _query_key(
+            entry.query, entry.language or None, exact=exact, engine=entry.engine or "searxng"
+        )
         self._empty.pop(key, None)  # a real result supersedes any stale "recently empty" marker
         self._entries[key] = entry
         self._entries.move_to_end(key)
         self._prune()
 
     def is_recently_empty(
-        self, query: str, *, language: str | None = None, exact: bool = False
+        self,
+        query: str,
+        *,
+        language: str | None = None,
+        exact: bool = False,
+        engine: str = "searxng",
     ) -> bool:
         """Whether ``query`` returned empty within the negative-cache window.
 
@@ -184,7 +205,7 @@ class ConversationSearchCache:
         the shared SearXNG. An expired marker is pruned and misses (a genuine retry).
         """
         self.last_access = time.time()
-        key = _query_key(query, language, exact=exact)
+        key = _query_key(query, language, exact=exact, engine=engine)
         stored = self._empty.get(key)
         if stored is None:
             return False
@@ -195,11 +216,16 @@ class ConversationSearchCache:
         return True
 
     def note_empty(
-        self, query: str, *, language: str | None = None, exact: bool = False
+        self,
+        query: str,
+        *,
+        language: str | None = None,
+        exact: bool = False,
+        engine: str = "searxng",
     ) -> None:
         """Record that ``query`` just returned empty (negative cache), bounded LRU + TTL."""
         self.last_access = time.time()
-        key = _query_key(query, language, exact=exact)
+        key = _query_key(query, language, exact=exact, engine=engine)
         self._empty[key] = time.time()
         self._empty.move_to_end(key)
         self._prune_empty()

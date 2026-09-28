@@ -75,19 +75,15 @@ vi.mock("@/services/sidecarRouting", () => {
       }
       if (bind.kind === "engine_off") {
         return {
-          reason: bind.reason === "switch_off" ? "switch_off" : "no_local_engine",
+          reason: "no_local_engine",
           rootId: bind.rootId ?? "",
-          message:
-            bind.reason === "switch_off"
-              ? "本机执行已关闭，云端不会改这个文件夹。请先允许本机执行后再发，或把对话改到云端。"
-              : "这份文件在本机。请在持有该文件夹的电脑上打开客户端后再发。",
+          message: "这份文件在本机。请在持有该文件夹的电脑上打开客户端后再发。",
         };
       }
       return null;
     },
     getActiveSidecarTarget: vi.fn(() => null),
     setActiveSidecarTurn: vi.fn(),
-    isSidecarEnabled: vi.fn(() => true),
   };
 });
 vi.mock("@/services/turns/midFlight", () => ({
@@ -128,7 +124,6 @@ import {
 } from "@/services/sidecarHealth";
 import {
   getActiveSidecarTarget,
-  isSidecarEnabled,
   resolveConversationLocalTarget,
   resolveLocalBind,
   resolveNewTurnBind,
@@ -154,7 +149,6 @@ const resolveNewTurnBindMock = vi.mocked(resolveNewTurnBind);
 const resolveLocalTargetMock = vi.mocked(resolveConversationLocalTarget);
 const resolveLocalBindMock = vi.mocked(resolveLocalBind);
 const getActiveSidecarTargetMock = vi.mocked(getActiveSidecarTarget);
-const isSidecarEnabledMock = vi.mocked(isSidecarEnabled);
 const hasLocalEngineMock = vi.mocked(hasLocalEngine);
 const logEventMock = vi.mocked(logEvent);
 const probeSidecarMock = vi.mocked(probeSidecar);
@@ -220,7 +214,6 @@ beforeEach(() => {
   regenerateConversationMock.mockResolvedValue(undefined);
   resolveLocalTargetMock.mockResolvedValue(null);
   getActiveSidecarTargetMock.mockReturnValue(null);
-  isSidecarEnabledMock.mockReturnValue(true);
   hasLocalEngineMock.mockReturnValue(true);
   seedOptimisticUser();
 });
@@ -465,12 +458,11 @@ describe("sendTurn — 探活路由（引擎不可用报错）", () => {
       "本地引擎未能启动",
     );
   });
-  it("开关关 + 绑本机 → 停发，不走云", async () => {
+  it("没有本地引擎 + 绑本机 → 停发，不走云", async () => {
     resolveNewTurnBindMock.mockResolvedValue({
       kind: "engine_off",
       rootId: "r1",
       subpath: "",
-      reason: "switch_off",
     });
 
     const result = await sendTurn(spec());
@@ -481,12 +473,12 @@ describe("sendTurn — 探活路由（引擎不可用报错）", () => {
     expect(streamConversationMock).not.toHaveBeenCalled();
     expect(useConversationStore.getState().byId.c1?.executionVia).toBeNull();
     expect(useConversationStore.getState().byId.c1?.error).toContain(
-      "本机执行已关闭",
+      "这份文件在本机",
     );
     expect(logEventMock).toHaveBeenCalledWith(
       "info",
       "turn.stream_path",
-      expect.objectContaining({ via: "sidecar", reason: "switch_off" }),
+      expect.objectContaining({ via: "sidecar", reason: "no_local_engine" }),
     );
   });
 
@@ -866,27 +858,6 @@ describe("runResume — 续跑探活（不降级、本机帧只在本地）", ()
     expect(assistants).toHaveLength(before);
     expect(assistants[0].id).toBe("client-paused");
     expect(assistants[0].isStreaming).toBe(true);
-  });
-
-  it("偏好强制关 + origin=sidecar → 仍跟本地事实续跑（忽略 off）", async () => {
-    isSidecarEnabledMock.mockReturnValue(false);
-    resolveSidecarRootMock.mockResolvedValue(null);
-    resolveLocalTargetMock.mockResolvedValue(TARGET);
-    probeSidecarMock.mockResolvedValue({
-      healthy: true,
-      probed: true,
-      detail: null,
-    });
-    resumeViaSidecarMock.mockResolvedValue(undefined as never);
-
-    await runResume("m1", "continue", "");
-
-    expect(resolveSidecarRootMock).not.toHaveBeenCalled();
-    expect(resolveLocalTargetMock).toHaveBeenCalledWith("c1");
-    expect(resumeViaSidecarMock).toHaveBeenCalledWith(
-      expect.objectContaining({ rootId: "r1", messageId: "m1" }),
-    );
-    expect(resumeConversationMock).not.toHaveBeenCalled();
   });
 
   it("活回合 active target 优先于 resolveConversationLocalTarget", async () => {

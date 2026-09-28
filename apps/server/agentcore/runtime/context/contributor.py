@@ -105,14 +105,9 @@ class SectionOrder(IntEnum):
     # keep their prefix-cache order.
     PRIOR_FUTILE_RETRIES = 862
     ATTACHMENT = 900
-    # Per-turn 多维表格 facts + optional row selection. Between attachments and
-    # the source ledger so the billed prefix above stays still; empty text is dropped.
+    # Per-turn 多维表格 facts + optional row selection. After attachments; empty
+    # text is dropped.
     TABLE_FACTS = 905
-    # 已登记来源台账 (#rN): hydrated from the whole conversation's assistant rows, so it
-    # grows monotonically with the chat — the most volatile section there is, and the one
-    # a future budget lever would trim first. Last on the CEO turn assembler so the
-    # sections above keep their bytes.
-    REGISTERED_SOURCES = 950
     # Worker opening tail (executor ``worker_turn`` observe). Not used on the CEO
     # turn assembler — numeric values sit after the CEO tail so a mistaken add
     # cannot reorder CEO sections.

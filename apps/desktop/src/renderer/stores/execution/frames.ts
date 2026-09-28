@@ -252,7 +252,9 @@ export type RunFrame =
 /** Wall-clock time of a wire event (ms), used to label timeline frames. The
  * journal stores the same ISO timestamp the live stream carried, so replay and
  * live label frames identically. Live tool 秒表也走这里，attach 回放不从「此刻」重计。 */
-function escalationKindFromWire(kind: unknown): import("./types").EscalationKind {
+function escalationKindFromWire(
+  kind: unknown,
+): import("./types").EscalationKind {
   if (kind === "adjust" || kind === "scope" || kind === "dep") return "adjust";
   return "wait";
 }

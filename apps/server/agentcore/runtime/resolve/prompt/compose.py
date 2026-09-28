@@ -312,7 +312,7 @@ def compose_ceo_chat_prompt(
     Layers the entry coordinator's residual identity (empty unless proven) + unified
     ``<按需目录>`` (omitted when the catalog is empty; ``consult`` stays on the
     opening table). Date, workspace (+ CEO file index), scene gates,
-    attachments, table, and the source ledger ride the turn envelope — not this
+    attachments, and table ride the turn envelope — not this
     string. ``on_demand_entries`` must match the tool's merged source.
     Host / terminal / browser / grant HOW is consult-owned and must not
     hang on this frozen prompt.

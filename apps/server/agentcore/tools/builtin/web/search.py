@@ -15,12 +15,15 @@ from typing import Any
 from urllib.parse import urlparse
 
 from agentcore.core.citation_tier import citation_tier_for_url, stamp_citation_tier
+from agentcore.core.errors import QuotaExceededError
 from agentcore.core.logging import get_logger
-from agentcore.core.net import site_of
+from agentcore.core.net import EgressError, site_of
 from agentcore.core.types import ToolApproval, ToolFace
+from agentcore.tools.builtin.web.cleversee import CleverSeeBackend
 from agentcore.tools.builtin.web.cloud_fallback import (
     CLOUD_FALLBACK_NOTE,
-    try_cloud_web_search_fallback,
+    cloud_inference_web_search,
+    get_inference_search_credentials,
 )
 from agentcore.tools.builtin.web.relevance import (
     dropped_host_samples,
@@ -40,6 +43,15 @@ from agentcore.tools.builtin.web.search_backend import (
 from agentcore.tools.builtin.web.search_cache import (
     SearchCacheEntry,
     default_search_cache_registry,
+)
+from agentcore.tools.builtin.web.search_choice import (
+    CLEVERSEE,
+    SEARXNG,
+    resolve_search_target,
+)
+from agentcore.tools.builtin.web.search_quota import (
+    admit_platform_search,
+    note_platform_search,
 )
 from agentcore.tools.builtin.web.source_domains import default_source_domain_registry
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
@@ -452,13 +464,21 @@ def prepare_search_query(query: str) -> PreparedSearchQuery:
 
 
 def _backend_label(
-    backend: SearchBackend | None, *, cached: bool, cloud_fallback: bool = False
+    backend: SearchBackend | None,
+    *,
+    cached: bool,
+    cloud_fallback: bool = False,
+    engine: str = "",
 ) -> str:
     """Stable backend name for ``tool.web_search`` observability."""
     if cached:
         return "cache"
     if cloud_fallback:
         return "cloud_inference"
+    if engine in (CLEVERSEE, SEARXNG):
+        return engine
+    if isinstance(backend, CleverSeeBackend) or engine == CLEVERSEE:
+        return "cleversee"
     if backend is None:
         return "unknown"
     if isinstance(backend, SearXNGBackend):
@@ -588,6 +608,17 @@ class WebSearchTool:
         # Task-language proxy: pin SearXNG locale so IP / default_lang=auto
         # cannot hijack 中文调研 into Japanese SERPs.
         language = infer_search_language(query)
+        try:
+            target = await resolve_search_target(context.user_id)
+        except EgressError as exc:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="",
+                error=f"搜索失败：{exc}",
+                duration_ms=int((time.monotonic() - start) * 1000),
+            )
+        engine = target.cache_key
         # A4 debate carve-out: debate runs keep exact keys (no Latin word-order share).
         exact_cache = _is_debate_run(context.run_id)
 
@@ -598,7 +629,11 @@ class WebSearchTool:
         )
         if cache is not None:
             hit = cache.get(
-                query, min_results=max_results, language=language, exact=exact_cache
+                query,
+                min_results=max_results,
+                language=language,
+                exact=exact_cache,
+                engine=engine,
             )
             if hit is not None:
                 logger.info("tool.web_search_cache_hit", query=query, result_count=len(hit.results))
@@ -613,11 +648,14 @@ class WebSearchTool:
                     context=context,
                     original_query=original_query,
                     adjustment_note=adjustment_note,
+                    engine=target.protocol,
                 )
             # 负缓存（案例1 防重搜风暴）：同一查询刚返回空（常见于引擎 CAPTCHA 后 HTTP 200 +
             # 空结果），短时内直接回空、不再打网，避免降级 worker 对同一空查询反复重搜把共享
             # SearXNG 再次打爆。空结果会自然过期，CAPTCHA 大概率解除后才真正重搜。
-            if cache.is_recently_empty(query, language=language, exact=exact_cache):
+            if cache.is_recently_empty(
+                query, language=language, exact=exact_cache, engine=engine
+            ):
                 logger.info("tool.web_search_negative_cache_hit", query=query)
                 return self._success_result(
                     query,
@@ -629,6 +667,7 @@ class WebSearchTool:
                     context=context,
                     original_query=original_query,
                     adjustment_note=adjustment_note,
+                    engine=target.protocol,
                 )
 
         # A6: wrap the existing on_phase channel to emit structured phase durations.
@@ -636,34 +675,57 @@ class WebSearchTool:
         cloud_fallback = False
         backend: SearchBackend | None = None
         try:
-            backend = get_search_backend()
-            # 工具执行阶段进度 (联网搜索前端展示优化): thread the engine-injected phase
-            # callback so the backend can surface「排队中 / 正在检索」live
-            # while this blocking request is in flight. ``None`` on unscoped call
-            # sites (tests / evals) — the backend skips it; duration logging still runs
-            # when phases fire.
-            try:
+            creds = get_inference_search_credentials()
+            if target.proxy:
+                # Platform, CleverSee, and keyed SearXNG run on the server so the
+                # desktop never holds a search key and the platform count is real.
+                if creds is None:
+                    raise EgressError("读取联网搜索设置失败")
+                results = await cloud_inference_web_search(
+                    creds,
+                    query,
+                    max_results=max_results,
+                    language=language,
+                    on_phase=on_phase,
+                    as_fallback=False,
+                )
+            elif target.kind == "platform":
+                await admit_platform_search(context.user_id)
+                backend = get_search_backend()
                 results = await backend.search(
                     query,
                     max_results=max_results,
                     on_phase=on_phase,
                     language=language,
                 )
-            except Exception as primary_exc:
-                # Sidecar-only cloud leg: local SearXNG unreachable + inference JWT bound
-                # via ContextVar → POST /v1/inference/web_search. Cloud API never binds
-                # creds → None → original error. Not for HTTP 403 / empty SERP.
-                cloud = await try_cloud_web_search_fallback(
-                    primary_exc,
-                    query=query,
-                    max_results=max_results,
-                    language=language,
-                    on_phase=on_phase,
-                )
-                if cloud is None:
-                    raise primary_exc
-                results = cloud
-                cloud_fallback = True
+                await note_platform_search(context.user_id)
+            else:
+                if target.protocol == CLEVERSEE:
+                    if not target.api_key:
+                        raise EgressError("开析搜索未配置 API key")
+                    backend = CleverSeeBackend(target.api_key, target.base_url or None)
+                else:
+                    backend = SearXNGBackend(
+                        target.base_url or None, api_key=target.api_key or None
+                    )
+                try:
+                    results = await backend.search(
+                        query,
+                        max_results=max_results,
+                        on_phase=on_phase,
+                        language=language,
+                    )
+                finally:
+                    await backend.aclose()
+        except QuotaExceededError as exc:
+            finish_phases()
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="",
+                error=str(exc),
+                duration_ms=int((time.monotonic() - start) * 1000),
+            )
         except Exception as e:
             finish_phases()
             reason = describe_search_error(e, backend)
@@ -671,11 +733,12 @@ class WebSearchTool:
             # Local SearXNG product copy → stable code for curated user face (never lift
             # ``: detail`` / host tokens from the net-error copy onto failure.message).
             searxng_face = reason.startswith("本地搜索服务")
+            error_text = reason if "平台搜索次数" in reason else f"搜索失败：{reason}"
             return ToolResult(
                 tool_call_id="",
                 success=False,
                 output="",
-                error=f"搜索失败：{reason}",
+                error=error_text,
                 duration_ms=int((time.monotonic() - start) * 1000),
                 failure_code="searxng_unreachable" if searxng_face else None,
                 metadata={"code": "searxng_unreachable"} if searxng_face else {},
@@ -706,11 +769,12 @@ class WebSearchTool:
                         max_results=max_results,
                         stored_at=time.time(),
                         language=language,
+                        engine=engine,
                     ),
                     exact=exact_cache,
                 )
             else:
-                cache.note_empty(query, language=language, exact=exact_cache)
+                cache.note_empty(query, language=language, exact=exact_cache, engine=engine)
         self._record_source_domains(context.conversation_id, results)
         return self._success_result(
             query,
@@ -723,6 +787,7 @@ class WebSearchTool:
             original_query=original_query,
             adjustment_note=adjustment_note,
             cloud_fallback=cloud_fallback,
+            engine=target.protocol,
         )
 
     @staticmethod
@@ -754,6 +819,7 @@ class WebSearchTool:
         original_query: str | None = None,
         adjustment_note: str | None = None,
         cloud_fallback: bool = False,
+        engine: str = "",
     ) -> ToolResult:
         """Build the (identical-shape) success ToolResult for a live or cached hit.
 
@@ -877,7 +943,9 @@ class WebSearchTool:
                 for r in kept
             ],
         }
-        backend_name = _backend_label(backend, cached=cached, cloud_fallback=cloud_fallback)
+        backend_name = _backend_label(
+            backend, cached=cached, cloud_fallback=cloud_fallback, engine=engine
+        )
         metadata: dict[str, Any] = {
             "result_count": len(items),
             "query": query,

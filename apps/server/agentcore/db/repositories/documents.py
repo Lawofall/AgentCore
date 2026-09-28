@@ -23,19 +23,19 @@ when frontmatter has none (never mutates ``content``). ``ai_maintained`` stays D
 
 All reads filter ``deleted_at IS NULL`` explicitly (this codebase has no global soft-delete
 event listener — 照 folders.py). Owner scoping is the structural default: mutations
-resolve a node owner-scoped so a non-owner id is treated as absent (SEC-002). No DB FK — refs
-are app-level ``*_id`` fields (§6.2). CAS is the caller's job (content-hash baseline under the
-per-user lock) so the repo stays db-only, no upward import.
+resolve a node owner-scoped so a non-owner id is treated as absent (SEC-002). ``folder_id``
+cascades with the folder row; ``user_id`` and ``parent_id`` stay bare. CAS is the
+caller's job (content-hash baseline under the per-user lock) so the repo stays
+db-only, no upward import.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
-from sqlalchemy import Select, and_, delete, func, or_, select, update
-from sqlalchemy.engine import CursorResult
+from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -1056,24 +1056,3 @@ class DocumentRepository:
         await self._session.commit()
         await self._session.refresh(doc)
         return doc
-
-    async def hard_delete_for_folders(
-        self, user_id: str, folder_ids: Sequence[str], *, commit: bool = True
-    ) -> int:
-        """Physically remove every document in these injection scopes.
-
-        Soft-delete of a folder only hibernates injection (the rows stay so restore
-        brings 设定 back). Permanent delete and retention purge call this so the
-        orphans do not survive the desk.
-        """
-        ids = [fid for fid in folder_ids if fid]
-        if not ids:
-            return 0
-        result = await self._session.execute(
-            delete(Document).where(
-                Document.user_id == user_id,
-                Document.folder_id.in_(ids),
-            )
-        )
-        await commit_or_flush(self._session, commit=commit)
-        return int(cast("CursorResult[Any]", result).rowcount or 0)

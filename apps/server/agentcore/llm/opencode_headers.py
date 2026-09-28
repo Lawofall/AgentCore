@@ -55,10 +55,11 @@ def opencode_session_headers(base_url: str) -> dict[str, str]:
     from agentcore.core.log_context import get_log_value
 
     user = _ascii_token(get_log_value("user_id"))
-    if user is not None:
-        session = f"user:{user}"
-    else:
-        session = _ascii_token(get_log_value("conversation_id"))
+    session = (
+        f"user:{user}"
+        if user is not None
+        else _ascii_token(get_log_value("conversation_id"))
+    )
     if session is None:
         trace = _ascii_token(get_log_value("trace_id"))
         session = f"probe:{trace}" if trace else f"probe:{uuid4().hex}"

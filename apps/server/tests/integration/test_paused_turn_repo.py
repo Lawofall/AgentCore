@@ -41,6 +41,13 @@ from agentcore.runtime.suspension import persistence as persist_mod
 from agentcore.runtime.suspension import retention as retention_mod
 
 
+async def _own(session_factory, cid: str, uid: str | None = None) -> None:
+    async with session_factory() as s:
+        if await s.get(Conversation, cid) is None:
+            s.add(Conversation(id=cid, user_id=uid or str(uuid4())))
+            await s.commit()
+
+
 def _pause_journal_entries() -> list[dict]:
     """An ask_user pause snapshot the suspending face captures (window-rebuildable)."""
     return [
@@ -142,6 +149,7 @@ async def _seed_turn_journal(session_factory, frame: AskUserSuspension) -> None:
 
 async def test_upsert_then_claim_round_trips(session_factory):
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     frame = _frame(mid, cid, uid)
     async with session_factory() as s:
         await PausedTurnRepository(s).upsert(
@@ -175,6 +183,7 @@ async def test_upsert_then_claim_round_trips(session_factory):
 async def test_upsert_overwrites_in_place(session_factory):
     # Re-pausing the same turn (resume → pause again) overwrites the frame, not a 2nd row.
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     async with session_factory() as s:
         repo = PausedTurnRepository(s)
         await repo.upsert(message_id=mid, conversation_id=cid, user_id=uid, frame={"v": 1})
@@ -189,6 +198,7 @@ async def test_upsert_overwrites_in_place(session_factory):
 async def test_claim_scoped_to_conversation_is_idor_safe(session_factory):
     # A claim scoped to the WRONG conversation must neither return nor delete the frame.
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     async with session_factory() as s:
         await PausedTurnRepository(s).upsert(
             message_id=mid,
@@ -221,6 +231,7 @@ async def test_two_ends_claim_at_once_and_the_loser_reads_the_winners_conclusion
     决策生效了」，真正跑的却是对面那份。结论与删帧同事务落库后，落败方无从捞错。
     """
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     async with session_factory() as s:
         await PausedTurnRepository(s).upsert(
             message_id=mid,
@@ -258,6 +269,7 @@ async def test_claim_aligns_journal_resolved_to_the_winners_decision(
     """
     monkeypatch.setattr(persist_mod, "async_session_factory", session_factory)
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     frame = _frame(mid, cid, uid)
     await persist_mod.save_paused_turn(frame)
 
@@ -313,6 +325,7 @@ async def test_a_settled_card_can_never_be_stamped_without_its_checkpoint(sessio
     帧留在原地可重试，绝不「结算了但没人知道结的是哪张卡」。
     """
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     async with session_factory() as s:
         await PausedTurnRepository(s).upsert(
             message_id=mid, conversation_id=cid, user_id=uid, frame={"kind": "ask_user"}
@@ -331,6 +344,7 @@ async def test_a_settled_card_can_never_be_stamped_without_its_checkpoint(sessio
 async def test_re_pausing_clears_the_previous_conclusion(session_factory):
     """帧 ⊕ 结论：卡又在等人了，上一轮的结论不能留着替这一轮回答。"""
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     frame = {"kind": "ask_user", "checkpoint_id": "ck1"}
     async with session_factory() as s:
         repo = PausedTurnRepository(s)
@@ -356,6 +370,7 @@ async def test_re_pausing_clears_the_previous_conclusion(session_factory):
 
 async def test_list_pending_oldest_first(session_factory):
     cid, uid = str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     m1, m2 = str(uuid4()), str(uuid4())
     async with session_factory() as s:
         repo = PausedTurnRepository(s)
@@ -386,13 +401,13 @@ async def test_list_pending_for_user_oldest_first(session_factory):
 
 
 async def test_list_pending_for_user_skips_soft_deleted_and_missing(session_factory):
-    """已软删 / 已不存在的会话不进 attention snapshot 权威表。"""
+    """软删的会话不进 attention snapshot。父行不在时，挂起行写不进去。"""
     from agentcore.attention.snapshot import merge_attention_entries
     from agentcore.fulfill.user_signal import attention_snapshot_frame
 
     u1 = str(uuid4())
-    c_live, c_del, c_gone = str(uuid4()), str(uuid4()), str(uuid4())
-    m_live, m_del, m_gone = str(uuid4()), str(uuid4()), str(uuid4())
+    c_live, c_del = str(uuid4()), str(uuid4())
+    m_live, m_del = str(uuid4()), str(uuid4())
     async with session_factory() as s:
         s.add(Conversation(id=c_live, user_id=u1, title="live"))
         s.add(
@@ -414,13 +429,6 @@ async def test_list_pending_for_user_skips_soft_deleted_and_missing(session_fact
             user_id=u1,
             frame={"kind": "ask_user", "checkpoint_id": "ck-del", "question": "已删？"},
         )
-        await repo.upsert(
-            message_id=m_gone,
-            conversation_id=c_gone,
-            user_id=u1,
-            frame={"kind": "ask_user", "checkpoint_id": "ck-gone", "question": "没了？"},
-        )
-
     async with session_factory() as s:
         rows = await PausedTurnRepository(s).list_pending_for_user(u1)
     assert [r.conversation_id for r in rows] == [c_live]
@@ -430,6 +438,7 @@ async def test_list_pending_for_user_skips_soft_deleted_and_missing(session_fact
 
 async def test_delete_removes_frame(session_factory):
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     async with session_factory() as s:
         await PausedTurnRepository(s).upsert(
             message_id=mid, conversation_id=cid, user_id=uid, frame={"v": 1}
@@ -445,6 +454,7 @@ async def test_save_claim_bridge_round_trips(session_factory, monkeypatch):
     # The bridge uses async_session_factory directly → repoint it at the test schema.
     monkeypatch.setattr(persist_mod, "async_session_factory", session_factory)
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     frame = _frame(mid, cid, uid)
 
     await persist_mod.save_paused_turn(frame)
@@ -491,6 +501,7 @@ async def test_list_skips_leftover_plan_review_and_load_is_gone(
     """存量 kind=plan_review：list skip；peek GoneError 410；帧留在盘上不删。"""
     monkeypatch.setattr(persist_mod, "async_session_factory", session_factory)
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     leftover = _leftover_plan_review_frame(mid, cid, uid)
     async with session_factory() as s:
         await PausedTurnRepository(s).upsert(
@@ -515,6 +526,7 @@ async def test_save_paused_turn_persists_journal_snapshot_without_prior_db_rows(
     """Regression: pause save must snapshot journal_entries even when append-on-emit missed."""
     monkeypatch.setattr(persist_mod, "async_session_factory", session_factory)
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     frame = _frame(mid, cid, uid)
 
     # No _seed_turn_journal — simulates append-on-emit never landing before pause.
@@ -537,6 +549,7 @@ async def test_save_paused_turn_persists_journal_snapshot_without_prior_db_rows(
 async def test_delete_bridge_drops_frame(session_factory, monkeypatch):
     monkeypatch.setattr(persist_mod, "async_session_factory", session_factory)
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     await persist_mod.save_paused_turn(_frame(mid, cid, uid))
     await persist_mod.delete_paused_turn(mid)
     assert await persist_mod.claim_paused_turn(mid, conversation_id=cid, decision="continue") is None
@@ -546,6 +559,7 @@ async def test_restore_paused_turn_after_claim_allows_retry(session_factory, mon
     """Cloud resume failure parity: claim deletes the row; restore puts it back for retry."""
     monkeypatch.setattr(persist_mod, "async_session_factory", session_factory)
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     frame = _frame(mid, cid, uid)
     await persist_mod.save_paused_turn(frame)
 
@@ -578,6 +592,7 @@ async def test_retention_sweep_prunes_aged_and_batches(session_factory, monkeypa
     # batch limit 2 with 3 aged rows → the loop must do >1 round to clear them all.
     monkeypatch.setattr(settings, "paused_turn_sweep_batch_limit", 2)
     cid, uid = str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
     aged_ids = [str(uuid4()) for _ in range(3)]
     fresh_id = str(uuid4())
 
@@ -626,6 +641,7 @@ async def test_retention_sweep_clears_orphan_turn_journal(session_factory, monke
     monkeypatch.setattr(settings, "structured_suspension_persist_enabled", True)
     monkeypatch.setattr(settings, "paused_turn_retention_days", 7)
     mid, cid, uid = str(uuid4()), str(uuid4()), str(uuid4())
+    await _own(session_factory, cid, uid)
 
     frame = _frame(mid, cid, uid)
     await _seed_turn_journal(session_factory, frame)
@@ -663,6 +679,7 @@ async def test_stamp_settled_without_paused_row_classifies_as_settled(
 
     monkeypatch.setattr(consumed_mod, "async_session_factory", session_factory)
     mid, cid = str(uuid4()), str(uuid4())
+    await _own(session_factory, cid)
     async with session_factory() as s:
         await PausedTurnRepository(s).stamp_settled(
             message_id=mid,

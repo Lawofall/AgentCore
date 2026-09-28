@@ -30,7 +30,7 @@ skip_if:
 
 ## 二、数据模型（✅ 已落地）
 
-遵循项目建模约定（UUID 主键、**无 ForeignKey**、`server_default`、按查询维度建索引；见 [`核心接口定义.md` §6.2](/docs/02-架构/核心接口定义.md)）。字段细节 → 见代码 `db/models/chat.py`、`db/models/users.py`（好友）。
+遵循项目建模约定（UUID 主键、`server_default`、按查询维度建索引；外键见 [`核心接口定义.md` §6.2](/docs/02-架构/核心接口定义.md)）。IM 表现状仍是裸 `*_id`。字段细节 → 见代码 `db/models/chat.py`、`db/models/users.py`（好友）。
 
 | 表 | 说明 |
 |---|---|

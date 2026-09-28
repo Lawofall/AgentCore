@@ -10,7 +10,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.core.types import new_id
-from agentcore.db.models import Conversation, ConversationPreference, Folder, FolderMember
+from agentcore.db.models import Conversation, ConversationPreference, Folder
 from agentcore.db.repositories._desk_visibility import folder_accessible_clause
 from agentcore.db.repositories.doc_shares import DocShareRepository
 from agentcore.folders.unbind import clear_folder_session_pointers
@@ -686,14 +686,12 @@ class FolderRepository:
         one outcome 彻底删除 must not produce: the child would survive as a live folder
         whose directory was already purged with the parent's.
 
-        ``folder_members`` has no DB FK, so the roster is deleted first in this
-        same transaction — otherwise hard-deleting the folder orphans memberships.
+        Membership, creation drafts, and desk settings go with each folder row
+        (``fk_folder_members_folder_id``, ``fk_docs_folder_id``,
+        ``fk_documents_folder_id``).
         """
         if not folder_ids:
             return
         ids = list(folder_ids)
-        await self._session.execute(
-            delete(FolderMember).where(FolderMember.folder_id.in_(ids))
-        )
         await self._session.execute(delete(Folder).where(Folder.id.in_(ids)))
         await self._session.commit()

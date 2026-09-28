@@ -16,13 +16,11 @@ from agentcore.core.search_query import (
 from agentcore.core.types import is_uuid_id, new_id
 from agentcore.db.models import (
     Conversation,
-    ConversationExternalGrant,
     ConversationPreference,
+    CostCall,
     CostEvent,
     Folder,
-    MemoryUpdateRow,
     Message,
-    TurnLeaseRow,
     TurnMetricsRow,
     TurnQueueItem,
     User,
@@ -32,14 +30,12 @@ from agentcore.db.repositories._desk_visibility import (
     conversation_visible_clause,
 )
 
-from ._audit_cascade import delete_audit_for_conversation
 from ._base import (
     HIDDEN_CONVERSATION_MODES,
     _ilike_pattern,
     _sum_int,
     commit_or_flush,
 )
-from ._journal_cascade import delete_journal_for_conversation
 from ._stream_state_cascade import delete_stream_state_for_conversation
 
 _after_conversations_removed: Callable[[Sequence[str]], None] | None = None
@@ -1037,52 +1033,19 @@ class ConversationRepository:
         return list(result.scalars().all())
 
     async def hard_delete(self, conversation_id: str) -> None:
-        """Physically remove a conversation and all its rows (messages + cost ledger
-        + turn journal).
+        """Physically remove a conversation.
 
-        App-level cascade (no DB FK, per repo convention). Used by retention after
-        the grace period, and by user-triggered「最近删除」彻底删除 (gated on
-        :meth:`hard_delete_if_soft_deleted`). Distinct from ``soft_delete``. The
-        ``turn_journal`` replay stream (唯一事实源, §8.3)
-        is dropped here too — it would otherwise orphan (it has no own TTL sweep).
-        Per-user ``conversation_preferences`` have no DB FK and go first.
-        In-flight ``turn_stream_state`` snapshots go next (keyed by message id,
-        no ``conversation_id`` — must run before the message delete).
-        ``run_sessions`` are also cleared (现场跟随对话).
+        Composition rows go with the conversation via ``ON DELETE CASCADE``.
+        ``turn_stream_state`` has no ``conversation_id``, so it is deleted while
+        the messages still exist. Conversation-scoped ledger rows are deleted
+        here; the ledger has no cascade (账号注销保留账本).
         """
-        await self._session.execute(
-            delete(ConversationPreference).where(
-                ConversationPreference.conversation_id == conversation_id
-            )
-        )
         await delete_stream_state_for_conversation(self._session, conversation_id)
         await self._session.execute(
-            delete(Message).where(Message.conversation_id == conversation_id)
+            delete(CostCall).where(CostCall.conversation_id == conversation_id)
         )
         await self._session.execute(
             delete(CostEvent).where(CostEvent.conversation_id == conversation_id)
-        )
-        await delete_journal_for_conversation(self._session, conversation_id)
-        await delete_audit_for_conversation(self._session, conversation_id)
-        await self._session.execute(
-            delete(TurnLeaseRow).where(TurnLeaseRow.conversation_id == conversation_id)
-        )
-        # Conversation-tail 记忆已更新 records (keyed by conversation_id, no message FK).
-        await self._session.execute(
-            delete(MemoryUpdateRow).where(MemoryUpdateRow.conversation_id == conversation_id)
-        )
-        # W3 external grants (conversation-scoped; absolute paths live on desktop only).
-        await self._session.execute(
-            delete(ConversationExternalGrant).where(
-                ConversationExternalGrant.conversation_id == conversation_id
-            )
-        )
-        # 现场跟随对话：硬删级联清 run_sessions（与 soft_delete 对称）。
-        from agentcore.db.repositories.runs import RunSessionRepository
-
-        await RunSessionRepository(self._session).delete_for_conversation(conversation_id)
-        await self._session.execute(
-            delete(TurnQueueItem).where(TurnQueueItem.conversation_id == conversation_id)
         )
         await self._session.execute(delete(Conversation).where(Conversation.id == conversation_id))
         await self._session.commit()

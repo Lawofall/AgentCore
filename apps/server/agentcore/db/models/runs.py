@@ -13,6 +13,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -63,11 +64,27 @@ class HandoffJob(Base):
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
     # The local-mode conversation that dispatched this handoff: its workspace is
-    # the source of truth the base snapshot was taken from. App-level FK.
-    source_conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
+    # the source of truth the base snapshot was taken from. Hard-delete of
+    # either conversation removes this row. Soft-delete keeps both rows.
+    source_conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_handoff_jobs_source_conversation_id",
+            ondelete="CASCADE",
+        ),
+    )
     # The hidden cloud conversation hosting the team run: its workspace is the
     # restored snapshot; its messages/cost/runs make the run replayable.
-    job_conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
+    job_conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_handoff_jobs_job_conversation_id",
+            ondelete="CASCADE",
+        ),
+        index=True,
+    )
     # Snapshot of the user's local files the cloud team runs on (the e3 diff base),
     # stored under the *source* conversation's storage key.
     base_snapshot_id: Mapped[str] = mapped_column(String(100))
@@ -110,7 +127,15 @@ class RunSessionRow(Base):
     # The worker's namespaced run id (e.g. ``del_<uuid>_1`` / ``<run>_rev2``) — a
     # plain string, NOT a UUID, so it is the PK directly (globally unique per turn).
     run_id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
+    conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_run_sessions_conversation_id",
+            ondelete="CASCADE",
+        ),
+        index=True,
+    )
     # The source RunSpec (role / model tier / allowed tools / contract) as JSON, so a
     # cross-process continuation runs as the same author under the same policy.
     spec: Mapped[dict] = mapped_column(JSONB, default=dict, server_default=text("'{}'::jsonb"))
@@ -166,7 +191,14 @@ class PausedTurnRow(Base):
     # No column-level index=True: the conversation lookup is served by the explicit
     # ix_paused_turns_conversation in __table_args__ above; a second auto-named index
     # (ix_paused_turns_conversation_id) would drift from the migration.
-    conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
+    conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_paused_turns_conversation_id",
+            ondelete="CASCADE",
+        ),
+    )
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
     # The resumable CONTROL snapshot (runtime/suspension.py TurnSuspension): plan +
     # seed_completed + CEO context + pending checkpoint payload. The journal-so-far is
@@ -227,7 +259,14 @@ class PausedTurnOutcomeRow(Base):
 
     # The paused turn's assistant ``message_id`` — same key as the frame it replaces.
     message_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
-    conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
+    conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_paused_turn_outcomes_conversation_id",
+            ondelete="CASCADE",
+        ),
+    )
     # PAUSED_TURN_SETTLED (someone continued the turn) | PAUSED_TURN_EXPIRED (TTL swept).
     outcome: Mapped[str] = mapped_column(String(16))
     # The suspension kind the card was (ask_user / plan_review), taken
@@ -261,7 +300,14 @@ class TurnLeaseRow(Base):
     )
 
     message_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
-    conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
+    conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_turn_leases_conversation_id",
+            ondelete="CASCADE",
+        ),
+    )
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
     owner_id: Mapped[str] = mapped_column(String(64))
     phase: Mapped[str] = mapped_column(String(40), server_default=text("'running'"))
@@ -328,11 +374,12 @@ class TurnJournalRow(Base):
     prefix occupancy; overflow-band rows stay. Read order is emission order
     (``created_at``, then band-local ``seq``), not live-then-overflow by seq.
 
-    **Lifecycle** (no DB FK — app-level cascade, per repo convention): cleaned with
-    its owning message/conversation on hard-delete (``MessageRepository.delete_by_id``
-    / ``delete_after``, ``ConversationRepository.hard_delete``) and by the paused-turn
-    TTL sweep for an abandoned pause (``PausedTurnRepository.delete_stale``). A paused
-    turn writes rows before any message exists (hence no FK to ``messages``).
+    **Lifecycle**: ``conversation_id`` cascades when the conversation row is
+    deleted (``fk_turn_journal_conversation_id``). ``turn_id`` is not an FK to
+    ``messages`` — a paused turn writes rows before any message exists (§6.2).
+    Message delete / regenerate still removes the matching rows in
+    ``MessageRepository``. The paused-turn TTL sweep drops an abandoned pause
+    (``PausedTurnRepository.delete_stale``).
     """
 
     __tablename__ = "turn_journal"
@@ -361,7 +408,14 @@ class TurnJournalRow(Base):
     # The fact's own emission timestamp (the SSE event's), preserved so the projected
     # replay keeps the original ordering metadata. NULL for derived rows (process / end).
     ts: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
+    conversation_id: Mapped[str] = mapped_column(
+        PG_UUID(as_uuid=False),
+        ForeignKey(
+            "conversations.id",
+            name="fk_turn_journal_conversation_id",
+            ondelete="CASCADE",
+        ),
+    )
     # Originating turn's log trace_id (DB↔logs join), stamped on every fact. See
     # core/log_context.py. NULL when untraced.
     trace_id: Mapped[str | None] = mapped_column(String(32), nullable=True)

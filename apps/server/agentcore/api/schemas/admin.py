@@ -44,7 +44,8 @@ class AdminUserResponse(BaseModel):
     quota_daily_tokens: int | None
     quota_monthly_cost_cny: float | None
     quota_daily_cost_cny: float | None
-    quota_daily_requests: int | None
+    quota_search_daily: int | None = None
+    quota_search_monthly: int | None = None
     created_at: datetime
     # Client IP at registration (加强可查). NULL for pre-column / seeded rows.
     registration_ip: str | None = None
@@ -93,7 +94,8 @@ class AdminUpdateUserRequest(BaseModel):
     quota_daily_tokens: int | None = Field(None, ge=0)
     quota_monthly_cost_cny: float | None = Field(None, ge=0)
     quota_daily_cost_cny: float | None = Field(None, ge=0)
-    quota_daily_requests: int | None = Field(None, ge=0)
+    quota_search_daily: int | None = Field(None, ge=0)
+    quota_search_monthly: int | None = Field(None, ge=0)
 
 
 class AdminResetPasswordResponse(BaseModel):

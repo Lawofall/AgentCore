@@ -38,6 +38,7 @@ export const introChapter: ManualChapterContent = {
       id: MANUAL_SECTION_IDS.intro.mindset,
       title: "你怎么用",
       icon: "Target",
+      ai: "off",
       blocks: [
         {
           type: "bullets",
@@ -66,6 +67,7 @@ export const introChapter: ManualChapterContent = {
       id: MANUAL_SECTION_IDS.intro.quickstart,
       title: "5 分钟上手",
       icon: "Rocket",
+      ai: "off",
       blocks: [
         {
           type: "steps",

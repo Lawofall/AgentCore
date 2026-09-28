@@ -15,7 +15,6 @@ def test_prior_delivery_gaps_module_is_gone():
 def test_ceo_turn_prompt_has_no_prior_delivery_gaps_section():
     out = render_ceo_turn_envelope(
         attachment_context="",
-        registered_sources="",
         include_runtime=False,
     )
     assert "上轮交付缺口" not in out

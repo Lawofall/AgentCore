@@ -55,7 +55,6 @@ function makeSummary(
     dayTokens?: number;
     dayTokenLimit?: number;
     dayRequests?: number;
-    dayReqLimit?: number;
     cacheHit?: number;
     cacheMiss?: number;
     billingMode?: UsageSummary["billing_mode"];
@@ -80,7 +79,6 @@ function makeSummary(
       daily_tokens: over.dayTokenLimit ?? 1_000_000,
       monthly_cost_nano: monthLimit,
       daily_cost_nano: over.dayCostLimit ?? 0,
-      daily_requests: over.dayReqLimit ?? 200,
     },
     billing_mode: over.billingMode ?? "platform",
   };

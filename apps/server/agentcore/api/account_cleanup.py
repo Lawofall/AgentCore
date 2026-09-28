@@ -19,6 +19,7 @@ from agentcore.db.repositories import (
     TableRepository,
     UserLlmProviderRepository,
 )
+from agentcore.db.repositories.search import UserSearchProviderRepository
 from agentcore.folders.service import FolderDeskService
 from agentcore.storage.assets import AssetStorage
 from agentcore.workspace.git_credentials import delete_git_credentials_for_user
@@ -39,7 +40,7 @@ async def cleanup_account_resources(
 
     Soft-deletes the user's conversations (the retention sweeper later reclaims their
     workspaces), revokes every public share link the user created (no shared snapshot
-    outlives the account), drops all BYOK providers + model profiles + Git PAT,
+    outlives the account), drops all BYOK providers, search providers, model profiles, and Git PAT,
     removes the avatar object, cascades collaboration-desk membership
     (owner folders stay for retention; member → drop membership rows + pending invites),
     hides creation-tool docs on folders this user owns, revokes public 文档
@@ -47,8 +48,8 @@ async def cleanup_account_resources(
     listings/installs/reports. Installed skill document copies stay.
     ``avatar_key`` must be captured by the caller *before* the user row is anonymized
     (soft-delete nulls it). Each step is independently idempotent, so re-running on
-    an already-注销 account is harmless. The append-only cost ledger (不变量①) is
-    intentionally untouched.
+    an already-注销 account is harmless. The append-only cost ledger and the
+    platform search-count ledger are intentionally untouched.
     """
     await conversations.soft_delete_all_for_user(user_id)
     await TableRepository(conversations._session).soft_delete_all_for_user(user_id)
@@ -57,6 +58,7 @@ async def cleanup_account_resources(
     await DocShareRepository(conversations._session).revoke_all_for_user(user_id)
     await shares.revoke_all_for_user(user_id)
     await llm_providers.delete_all_for_user(user_id)
+    await UserSearchProviderRepository(conversations._session).delete_all_for_user(user_id)
     if llm_profiles is not None:
         await llm_profiles.delete_all_for_user(user_id)
     else:

@@ -177,7 +177,7 @@ async def test_usage_summary_windows_and_quota(client, session_factory):
         settings.quota_monthly_cost_cny * 1_000_000_000
     )
     assert body["quota"]["daily_cost_nano"] == int(settings.quota_daily_cost_cny * 1_000_000_000)
-    assert body["quota"]["daily_requests"] == settings.quota_daily_requests
+    assert "daily_requests" not in body["quota"]
     assert "cny_per_usd" not in body
 
 
@@ -194,7 +194,7 @@ async def test_usage_summary_quota_shows_global_limits(client):
     assert quota["daily_tokens"] == settings.quota_daily_tokens
     assert quota["monthly_cost_nano"] == int(settings.quota_monthly_cost_cny * 1_000_000_000)
     assert quota["daily_cost_nano"] == int(settings.quota_daily_cost_cny * 1_000_000_000)
-    assert quota["daily_requests"] == settings.quota_daily_requests
+    assert "daily_requests" not in quota
 
 
 async def test_usage_summary_recent_daily_cost_buckets_by_utc_day(

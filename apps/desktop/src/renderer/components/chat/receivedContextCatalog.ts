@@ -84,8 +84,15 @@ const GROUP_META: { id: CatalogGroupId; label: string }[] = [
   { id: "other", label: "其他" },
 ];
 
-/** Human-facing layers lifted out of the system blob; factory remainder stays one row. */
-const PINNED_SYSTEM_TAGS = ["设定", "按需目录", "工作区"] as const;
+/** Layers lifted out of the system blob. Path rows appear only when those tags
+ * are already in the system text. Factory remainder stays one row. */
+const PINNED_SYSTEM_TAGS = [
+  "设定",
+  "路径约定",
+  "路径约定全文",
+  "按需目录",
+  "工作区",
+] as const;
 
 const CONSULT_TOOLS = new Set([
   "consult",
@@ -243,6 +250,7 @@ function factoryItem(
  * Same `channel=system` body the model ate, indexed by existing tags.
  * Pinned layers become their own TOC rows; remaining constitution stays one
  * factory row. Missing `<设定>` is an honest empty row, not a file-page backfill.
+ * `<路径约定>` and `<路径约定全文>` are rows only when present.
  */
 function splitSystemBlock(
   block: ContextBlockWire,
@@ -256,6 +264,8 @@ function splitSystemBlock(
 
   const pinned: Record<(typeof PINNED_SYSTEM_TAGS)[number], PromptSection[]> = {
     设定: [],
+    路径约定: [],
+    路径约定全文: [],
     按需目录: [],
     工作区: [],
   };

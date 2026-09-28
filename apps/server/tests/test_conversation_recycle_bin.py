@@ -448,21 +448,17 @@ def test_trash_routes_are_registered_before_the_conversation_id_matcher():
     assert trash_item < conv
 
 
-# --- 硬删：先清 per-user prefs ------------------------------------------------------
+# --- 硬删：在飞快照和账本，其余交给外键 ------------------------------------------
 
 
-async def test_hard_delete_clears_conversation_preferences_first():
+async def test_hard_delete_drops_stream_and_ledger_then_the_conversation():
     session = _RecordingSession()
 
     await ConversationRepository(session).hard_delete(CONV_ID)
 
     deletes = [s for s in session.statements if isinstance(s, Delete)]
     tables = [s.table.name for s in deletes]
-    assert tables[0] == "conversation_preferences"
-    assert tables.index("conversation_preferences") < tables.index("conversations")
-    assert tables.index("turn_queue_items") < tables.index("conversations")
-    sql = _sql(deletes[0])
-    assert f"conversation_preferences.conversation_id = '{CONV_ID}'" in sql
+    assert tables == ["turn_stream_state", "cost_calls", "cost_events", "conversations"]
     assert session.commits == 1
 
 

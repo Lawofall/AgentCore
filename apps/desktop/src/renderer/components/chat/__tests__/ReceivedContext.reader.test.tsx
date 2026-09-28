@@ -128,6 +128,37 @@ describe("ReceivedContextSection reader", () => {
     expect(body).toContain("并行调用独立工具。");
   });
 
+  it("lists 路径约定 beside 设定 and keeps it out of 出厂指令", () => {
+    const system = `适合可视化的内容，优先采用可视化呈现。
+
+<设定>
+常驻全文。
+</设定>
+
+<路径约定>
+碰到匹配路径就遵守这一句。
+</路径约定>`;
+    render(
+      <ReceivedContextSection
+        blocks={[
+          block({ channel: "system", body: system, chars: system.length }),
+          block({ channel: "request", body: "帮我润色这段话。" }),
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "上下文" }));
+    expect(screen.getByRole("button", { name: /^路径约定\d/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^路径约定\d/ }));
+    expect(screen.getByTestId("received-context-body").textContent).toContain(
+      "碰到匹配路径就遵守这一句。",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /出厂指令/ }));
+    const factory =
+      screen.getByTestId("received-context-body").textContent ?? "";
+    expect(factory).toContain("适合可视化的内容");
+    expect(factory).not.toContain("碰到匹配路径");
+  });
+
   it("hides system slices on a narrow layout", () => {
     isNarrow = true;
     render(
@@ -227,6 +258,45 @@ describe("ReceivedContextSection reader", () => {
 });
 
 describe("ReceivedContextDialog reader", () => {
+  it("renders history tool receipts as prose and a roster code block", () => {
+    const page = JSON.stringify({
+      url: "https://example.com/a",
+      title: "例",
+      content: "甲\n乙",
+    });
+    const roster = `共 1 个文件夹：\n${JSON.stringify({ folders: [{ name: "桌" }] })}`;
+    const body = [
+      `@@tool ${page.length} web_fetch`,
+      page,
+      `@@tool ${roster.length} folders`,
+      roster,
+      "@@tool 5 file_list",
+      "（空目录）",
+      "",
+    ].join("\n");
+    render(
+      <ReceivedContextDialog
+        open
+        onOpenChange={() => undefined}
+        blocks={[
+          block({ channel: "request", body: "刚发生了什么" }),
+          block({ channel: "history", body, chars: 12 }),
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /对话历史/ }));
+    const bodyEl = screen.getByTestId("received-context-body");
+    expect(bodyEl.textContent).toContain("工具 web_fetch");
+    expect(bodyEl.textContent).toContain("工具 folders");
+    expect(bodyEl.textContent).toContain("例");
+    expect(bodyEl.textContent).toContain("https://example.com/a");
+    expect(screen.getByTestId("history-tool-body").textContent).toBe("甲\n乙");
+    expect(bodyEl.textContent).not.toContain("\\n");
+    expect(bodyEl.querySelector("pre.font-mono")?.textContent).toContain("桌");
+    expect(bodyEl.textContent).toContain("（空目录）");
+    expect(bodyEl.textContent).toContain("共 1 个文件夹：");
+  });
+
   it("defaults to injected 设定 even when 本回合工具 is present", () => {
     const system = `<设定>
 我的规则。

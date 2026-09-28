@@ -284,7 +284,7 @@ def test_dropped_ceo_envelope_across_turns_is_history_rewrite_not_growth():
     )
 
     env1 = f"{TURN_ENVELOPE_FENCE}\n<运行时/>"
-    env2 = f"{TURN_ENVELOPE_FENCE}\n<运行时/>\n<已登记来源/>"
+    env2 = f"{TURN_ENVELOPE_FENCE}\n<运行时/>\n<表格/>"
     turn1 = opening_ceo_messages(
         system_prompt="SYS",
         history=None,
@@ -312,7 +312,7 @@ def test_product_cross_turn_replays_stored_envelope_as_history_growth():
     )
 
     env1 = f"{TURN_ENVELOPE_FENCE}\n<运行时/>"
-    env2 = f"{TURN_ENVELOPE_FENCE}\n<已登记来源/>"
+    env2 = f"{TURN_ENVELOPE_FENCE}\n<表格/>"
     turn1 = opening_ceo_messages(
         system_prompt="SYS",
         history=None,
@@ -344,7 +344,7 @@ def test_keeping_prior_ceo_envelope_is_history_growth():
     )
 
     env1 = f"{TURN_ENVELOPE_FENCE}\n<运行时/>"
-    env2 = f"{TURN_ENVELOPE_FENCE}\n<已登记来源/>"
+    env2 = f"{TURN_ENVELOPE_FENCE}\n<表格/>"
     turn1 = opening_ceo_messages(
         system_prompt="SYS",
         history=None,
@@ -1126,7 +1126,7 @@ def test_log_llm_call_dropped_envelope_is_history_rewrite():
     )
 
     env1 = f"{TURN_ENVELOPE_FENCE}\n<运行时/>"
-    env2 = f"{TURN_ENVELOPE_FENCE}\n<运行时/>\n<已登记来源/>"
+    env2 = f"{TURN_ENVELOPE_FENCE}\n<运行时/>\n<表格/>"
     turn1 = opening_ceo_messages(
         system_prompt="SYS",
         history=None,
@@ -1249,29 +1249,26 @@ def test_the_real_ceo_layers_splice_into_leaf_sections():
     assert "</工作区>" not in ceo_prompt
 
 
-def test_a_growing_source_ledger_is_attributable_to_its_own_section():
-    # CTX-A3: the 来源台账 hydrates from the whole conversation, so it is the tail section
-    # most likely to break the prefix. While it was appended outside the assembler the
-    # probe never saw it — a turn whose ONLY change was the ledger looked identical.
+def test_a_growing_table_section_is_attributable_to_its_own_section():
     from agentcore.runtime.resolve.prompt import render_ceo_turn_envelope
 
-    def _turn(sources: str) -> None:
+    def _turn(table: str) -> None:
         render_ceo_turn_envelope(
             attachment_context="",
-            registered_sources=sources,
+            table_context=table,
             include_runtime=False,
             soft_cap=None,
         )
 
     bind_log_context(conversation_id="conv-ledger", trace_id="t1")
-    _turn("<已登记来源>\n- #r1\n</已登记来源>")
+    _turn("<表格>\n行 1\n</表格>")
     bind_log_context(trace_id="t2")
-    _turn("<已登记来源>\n- #r1\n- #r2\n</已登记来源>")
+    _turn("<表格>\n行 1\n行 2\n</表格>")
 
     delta = prompt_section_delta("conv-ledger")
     assert delta.comparable is True
-    assert delta.first_changed == "registered_sources"
-    assert delta.changed == ("registered_sources",)
+    assert delta.first_changed == "table_context"
+    assert delta.changed == ("table_context",)
 
 
 def test_observe_carries_per_section_digests_for_offline_diffing(monkeypatch):

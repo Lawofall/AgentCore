@@ -319,9 +319,8 @@ function VersionSection() {
 /**
  * 关于（/more/about）— 品牌、产品手册、版本溯源、软件更新、法律与合规。
  *
- * 「允许本机执行」原本挂在本页（挨着构建溯源），用户找不到，
- * 已搬到「通用」（/more/general）的「进阶」区。手册入口从工具箱顶栏迁来：
- * 查阅不占工作面；窄屏不上手册页，故本行也不挂。收款码在「赞助」子页。
+ * 手册入口从工具箱顶栏迁来：查阅不占工作面；窄屏不上手册页，故本行也不挂。
+ * 收款码在「赞助」子页。
  */
 export function AboutSettings() {
   const navigate = useNavigate();

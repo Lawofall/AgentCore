@@ -193,7 +193,7 @@ export const referenceChapter: ManualChapterContent = {
             },
             {
               label: "通用",
-              desc: "界面主题与进阶开关",
+              desc: "界面主题与联网搜索",
               to: APP_PATHS.more.general,
             },
             {
@@ -810,15 +810,6 @@ export const referenceChapter: ManualChapterContent = {
                 {
                   type: "text",
                   text: "右坞「工作区」是本对话的文件树（寻址铬条），不是另一种容器。产物落在文件夹里——「我的文件」或本机文件夹。",
-                },
-              ],
-            },
-            {
-              q: "允许本机执行",
-              a: [
-                {
-                  type: "text",
-                  text: "设置 → 通用 → 进阶。开启后，绑定本机文件夹的对话在这台电脑上跑回合（直连磁盘）。这不是离线模式：AI 推理仍走云端。关闭后，本机文件夹的对话先不发送；「我的文件」始终走云。启动失败也不会改走云。断网时只能浏览缓存与本机文件（只读），不能发送。",
                 },
               ],
             },

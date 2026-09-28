@@ -9,6 +9,7 @@ unavailable (integration conftest).
 import uuid
 from pathlib import Path
 
+from agentcore.db.models import Folder
 from agentcore.db.repositories import DocumentRepository
 from agentcore.documents.frontmatter import set_entry_frontmatter
 from agentcore.memory import DocumentMemoryStore, assemble_injected_rules
@@ -175,6 +176,8 @@ async def test_injection_admits_global_and_project_rules(session_factory):
     uid = str(uuid.uuid4())
     proj = str(uuid.uuid4())
     async with session_factory() as session:
+        session.add(Folder(id=proj, user_id=uid, name="proj", rel_path="proj"))
+        await session.flush()
         repo = DocumentRepository(session)
         store = DocumentMemoryStore(session=session)
         await repo.create(

@@ -1,9 +1,10 @@
-"""Clear session soft-pointers that reference a folder being deleted.
+"""Clear session soft-pointers that reference a folder being soft-deleted.
 
 Birth ``Conversation.folder_id`` (project affiliation) is **not** handled here —
 callers keep their distinct semantics (soft-delete archive, retention NULL,
-permanent wipe of member chats). This module only NULLs columns that *point at*
-a folder without belonging to it as members.
+permanent wipe of member chats). Hard-delete of the folder row SET NULLs
+``auto_desk_folder_id`` via ``fk_conversations_auto_desk_folder_id``. This module
+clears that pointer while the folder row still exists (soft-delete).
 """
 
 from __future__ import annotations

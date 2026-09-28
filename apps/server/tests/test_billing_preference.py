@@ -22,7 +22,6 @@ def _user(**quota):
         quota_daily_tokens=quota.get("daily_tokens"),
         quota_monthly_cost_cny=quota.get("monthly_cost_cny"),
         quota_daily_cost_cny=quota.get("daily_cost_cny"),
-        quota_daily_requests=quota.get("daily_requests"),
     )
 
 

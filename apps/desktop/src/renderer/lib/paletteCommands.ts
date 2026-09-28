@@ -505,8 +505,6 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
         "waiguan",
         "外观",
         "主题",
-        "进阶",
-        "本机执行",
       ],
       run: go("/more/general"),
     },

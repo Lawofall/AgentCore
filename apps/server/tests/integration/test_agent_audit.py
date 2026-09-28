@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 
+from agentcore.db.models import Conversation
 from agentcore.db.repositories import AgentAuditEventRepository
 from agentcore.runtime.audit.hooks import bind_recorder, on_delegate_plan, on_journal_fact_appended
 from agentcore.runtime.audit.recorder import current_audit_recorder
@@ -19,6 +20,9 @@ async def test_delegate_turn_audit_rows(session_factory, monkeypatch):
     user_id = str(uuid4())
     conversation_id = str(uuid4())
     turn_id = str(uuid4())
+    async with session_factory() as s:
+        s.add(Conversation(id=conversation_id, user_id=user_id))
+        await s.commit()
     plan, errors = build_run_plan(
         [
             {"id": "w1", "role": "研究员", "task": "调研市场趋势并写摘要"},

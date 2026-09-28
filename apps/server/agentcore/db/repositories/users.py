@@ -237,6 +237,17 @@ class UserRepository:
         )
         await self._session.commit()
 
+    async def set_search_provider(
+        self, user_id: str, provider_id: str | None, *, commit: bool = True
+    ) -> None:
+        """Point the account at one own search provider, or null for platform."""
+        await self._session.execute(
+            update(User)
+            .where(User.user_id == user_id)
+            .values(search_provider_id=provider_id)
+        )
+        await commit_or_flush(self._session, commit=commit)
+
     async def set_default_model_profile(
         self, user_id: str, profile_id: str | None
     ) -> None:
@@ -261,7 +272,8 @@ class UserRepository:
         daily_tokens: int | None | object = _UNSET,
         monthly_cost_cny: float | None | object = _UNSET,
         daily_cost_cny: float | None | object = _UNSET,
-        daily_requests: int | None | object = _UNSET,
+        search_daily: int | None | object = _UNSET,
+        search_monthly: int | None | object = _UNSET,
     ) -> None:
         """Patch a user's per-user quota overrides (成本配额与计费.md §一).
 
@@ -279,8 +291,10 @@ class UserRepository:
             values["quota_monthly_cost_cny"] = monthly_cost_cny
         if daily_cost_cny is not _UNSET:
             values["quota_daily_cost_cny"] = daily_cost_cny
-        if daily_requests is not _UNSET:
-            values["quota_daily_requests"] = daily_requests
+        if search_daily is not _UNSET:
+            values["quota_search_daily"] = search_daily
+        if search_monthly is not _UNSET:
+            values["quota_search_monthly"] = search_monthly
         if not values:
             return
         await self._session.execute(update(User).where(User.user_id == user_id).values(**values))

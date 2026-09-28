@@ -51,15 +51,14 @@ def _clean_log_context():
 def _user(*, daily_cost_nano: int = _CAP, is_unlimited: bool = False) -> SimpleNamespace:
     """A ``User`` stand-in with only the daily-cost dimension capped.
 
-    Leaving the other three at 0 (unlimited) keeps ``enforce_quota`` on a single
-    day-window read, so ``_Ledger.reads`` counts gate invocations exactly.
+    Leaving the other dimensions at 0 (unlimited) keeps ``enforce_quota`` on a
+    single day-window read, so ``_Ledger.reads`` counts gate invocations exactly.
     """
     return SimpleNamespace(
         is_unlimited=is_unlimited,
         quota_daily_tokens=0,
         quota_monthly_cost_cny=0,
         quota_daily_cost_cny=daily_cost_nano / NANO_PER_CNY,
-        quota_daily_requests=0,
     )
 
 

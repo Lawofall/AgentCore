@@ -35,6 +35,7 @@ from agentcore.api.routes import (
     preview,
     realtime,
     search,
+    search_providers,
     sharing,
     skill_catalog,
     skill_store,
@@ -629,6 +630,7 @@ app.include_router(messages.router, prefix="/v1")
 app.include_router(model_catalog.router, prefix="/v1")
 app.include_router(realtime.router, prefix="/v1")
 app.include_router(search.router, prefix="/v1")
+app.include_router(search_providers.router, prefix="/v1")
 app.include_router(skill_catalog.router, prefix="/v1")
 app.include_router(skill_store.router, prefix="/v1")
 # Public shares: conversation manage under /v1, plus /shared/{token} (no auth)

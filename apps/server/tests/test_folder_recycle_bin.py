@@ -649,28 +649,25 @@ async def test_list_ids_by_folder_does_not_filter_conversation_user_id():
     assert "conversations.user_id" not in sql
 
 
-async def test_hard_delete_clears_membership_roster_in_same_transaction():
+async def test_hard_delete_removes_the_folder_row():
     session = _RecordingSession()
 
     await FolderRepository(session).hard_delete(FOLDER_ID)
 
     deletes = [s for s in session.statements if isinstance(s, Delete)]
-    assert [s.table.name for s in deletes] == ["folder_members", "folders"]
+    assert [s.table.name for s in deletes] == ["folders"]
     assert session.commits == 1
-    members_sql = _sql(deletes[0])
-    folders_sql = _sql(deletes[1])
-    assert f"folder_members.folder_id IN ('{FOLDER_ID}'" in members_sql
-    assert f"folders.id IN ('{FOLDER_ID}'" in folders_sql
+    assert f"folders.id IN ('{FOLDER_ID}'" in _sql(deletes[0])
 
 
-async def test_hard_delete_many_clears_membership_roster_before_folders():
+async def test_hard_delete_many_removes_folder_rows():
     session = _RecordingSession()
     other = "99999999-8888-4777-8666-555555555555"
 
     await FolderRepository(session).hard_delete_many([FOLDER_ID, other])
 
     deletes = [s for s in session.statements if isinstance(s, Delete)]
-    assert [s.table.name for s in deletes] == ["folder_members", "folders"]
+    assert [s.table.name for s in deletes] == ["folders"]
     assert session.commits == 1
 
 

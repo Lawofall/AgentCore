@@ -12,12 +12,18 @@ from uuid import uuid4
 from sqlalchemy import update
 
 from agentcore.config import settings
-from agentcore.db.models import RunSessionRow
+from agentcore.db.models import Conversation, RunSessionRow
 from agentcore.db.repositories import RunSessionRepository
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
 from agentcore.runtime import session_persistence as persist_mod
 from agentcore.runtime import session_retention as retention_mod
 from agentcore.runtime.runs import RunSession, RunSpec
+
+
+async def _own(session_factory, cid: str) -> None:
+    async with session_factory() as s:
+        s.add(Conversation(id=cid, user_id=str(uuid4())))
+        await s.commit()
 from agentcore.runtime.runs.types import RunPolicy
 
 
@@ -49,6 +55,7 @@ def _session(run_id: str, content: str, recall: int = 0) -> RunSession:
 
 async def test_upsert_inserts_then_conflict_updates(session_factory):
     cid = str(uuid4())
+    await _own(session_factory, cid)
     async with session_factory() as s:
         repo = RunSessionRepository(s)
         await repo.upsert(
@@ -91,6 +98,7 @@ async def test_save_load_bridge_round_trips(session_factory, monkeypatch):
     # The bridge uses telemetry_session_factory → repoint it at the test schema.
     monkeypatch.setattr(persist_mod, "telemetry_session_factory", session_factory)
     cid = str(uuid4())
+    await _own(session_factory, cid)
     session = _session("del_y_1", "最终产出", recall=2)
 
     await persist_mod.save_run_session(cid, session)
@@ -125,6 +133,7 @@ async def test_retention_sweep_prunes_aged_and_batches(session_factory, monkeypa
     # batch limit 2 with 3 aged rows → the loop must do >1 round to clear them all.
     monkeypatch.setattr(settings, "session_roster_sweep_batch_limit", 2)
     cid = str(uuid4())
+    await _own(session_factory, cid)
 
     async with session_factory() as s:
         repo = RunSessionRepository(s)

@@ -17,9 +17,6 @@ vi.mock("@/lib/queryKeys", () => ({
 vi.mock("@/lib/capabilities", () => ({
   hasLocalEngine: () => true,
 }));
-vi.mock("@/stores/ui", () => ({
-  useUIStore: { getState: () => ({ sidecarEnabled: true }) },
-}));
 vi.mock("@/stores/conversation", () => ({
   getRuntime: () => ({ messages: [] }),
 }));

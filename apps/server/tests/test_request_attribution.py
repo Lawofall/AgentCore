@@ -98,7 +98,7 @@ def test_stream_path_reason_for_log_allowlists() -> None:
     assert stream_path_reason_for_log("probe_unhealthy") is None
     assert stream_path_reason_for_log("sidecar_fallback") is None
     assert stream_path_reason_for_log("occupy_failed") is None
-    assert stream_path_reason_for_log("switch_off") == "switch_off"
+    assert stream_path_reason_for_log("switch_off") is None
     assert stream_path_reason_for_log("  No_Local_Engine  ") == "no_local_engine"
     assert stream_path_reason_for_log("no_local_target") == "no_local_target"
 

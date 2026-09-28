@@ -7,7 +7,9 @@ directory with no folders row (ghost workspace).
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytest
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 
 import agentcore.folders.permanent_delete as permanent_delete_mod
 from agentcore.config import settings
@@ -121,3 +123,25 @@ async def test_retention_purge_clears_auto_desk_folder_id(
     assert desk_id not in folders
 
     build_storage_provider.cache_clear()
+
+
+async def test_hard_delete_refuses_while_a_chat_is_still_filed(session_factory):
+    """归属还在时，文件夹行删不掉。"""
+    async with session_factory() as s:
+        uid = (
+            await UserRepository(s).create(username="restrictfk", display_name="restrictfk")
+        ).user_id
+    async with session_factory() as s:
+        folder = await FolderRepository(s).create(user_id=uid, name="Held")
+        conv = await ConversationRepository(s).create(
+            user_id=uid, title="filed", folder_id=folder.id
+        )
+        fid, cid = folder.id, conv.id
+
+    async with session_factory() as s:
+        with pytest.raises(IntegrityError):
+            await FolderRepository(s).hard_delete(fid)
+
+    async with session_factory() as s:
+        assert await s.get(Folder, fid) is not None
+        assert await s.get(Conversation, cid) is not None

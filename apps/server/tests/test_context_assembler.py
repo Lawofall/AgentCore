@@ -166,7 +166,6 @@ def _ceo_turn(**overrides: object) -> str:
 
     sections: dict[str, object] = {
         "attachment_context": "",
-        "registered_sources": "",
         "soft_cap": None,
         "include_runtime": False,
     }
@@ -174,57 +173,41 @@ def _ceo_turn(**overrides: object) -> str:
     return render_ceo_turn_envelope(**sections)  # type: ignore[arg-type]
 
 
-def test_ceo_turn_renders_the_source_ledger_after_the_volatile_tail():
-    # CTX-A3: the ledger used to be f-string appended by the caller; it keeps the SAME
-    # position (last, after attachments) now that it is a section.
-    out = _ceo_turn(
-        attachment_context="<attachments/>",
-        registered_sources="<已登记来源/>",
-    )
-    assert out == "[系统提示]\n<attachments/>\n<已登记来源/>"
-
-
-def test_ceo_turn_table_facts_sit_between_attachments_and_sources():
+def test_ceo_turn_table_facts_follow_attachments():
     out = _ceo_turn(
         attachment_context="<附件/>",
         table_context="<表格/>",
-        registered_sources="<已登记来源/>",
     )
-    assert out == "[系统提示]\n<附件/>\n<表格/>\n<已登记来源/>"
+    assert out == "[系统提示]\n<附件/>\n<表格/>"
 
 
 def test_ceo_turn_empty_sections_render_prefix_only():
     assert _ceo_turn() == ""
 
 
-def test_ceo_turn_observation_covers_the_source_ledger(monkeypatch):
-    # CTX-A3 ratchet: assembly_hash / total_chars / section_digests must see the ledger.
-    # Appended outside the assembler, both under-reported by the whole block — so the
-    # prefix-drift signal went blind to the one section that grows every turn.
+def test_ceo_turn_observation_covers_table_facts(monkeypatch):
     from agentcore.observability.prefix_cache import digest_text
 
     captured = _spy_on_observe(monkeypatch)
-    ledger = "<已登记来源>\n- #r1 · url=https://example.com\n</已登记来源>"
-    out = _ceo_turn(registered_sources=ledger)
+    table = "<表格>\n选中 1 行\n</表格>"
+    out = _ceo_turn(table_context=table)
 
     row = captured[0]
     assert row["event"] == "cost.prompt_assembled"
-    assert row["sections"]["registered_sources"] == len(ledger)
-    assert row["total_chars"] == len(ledger)
-    assert row["section_digests"]["registered_sources"] == digest_text(ledger)
+    assert row["sections"]["table_context"] == len(table)
+    assert row["total_chars"] == len(table)
+    assert row["section_digests"]["table_context"] == digest_text(table)
     from agentcore.runtime.resolve.prompt import strip_turn_envelope_fence
 
     assert row["assembly_hash"] == assembly_hash(strip_turn_envelope_fence(out))
 
 
-def test_ceo_turn_soft_cap_fires_on_a_ledger_that_alone_blows_it(monkeypatch):
-    # CTX-A3 ratchet: prompt_budget_char_soft_cap was unreachable via the ledger — the
-    # section that grows unbounded across a conversation never counted toward it.
+def test_ceo_turn_soft_cap_fires_on_table_facts_that_alone_blow_it(monkeypatch):
     captured = _spy_on_observe(monkeypatch)
-    ledger = "- #r1 · url=https://example.com · deep_read=是\n" * 40
+    table = "选中一行，单元格里有一段较长的事实。\n" * 20
 
-    _ceo_turn(registered_sources=ledger, soft_cap=200)
+    _ceo_turn(table_context=table, soft_cap=200)
     assert captured[-1]["over_soft_cap"] is True
 
-    _ceo_turn(soft_cap=200)  # same turn without the ledger stays well under
+    _ceo_turn(soft_cap=200)
     assert captured[-1]["over_soft_cap"] is False

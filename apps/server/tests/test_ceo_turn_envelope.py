@@ -93,7 +93,7 @@ def test_opening_messages_insert_envelope_between_history_and_user():
 
 def test_opening_replays_prior_envelope_then_appends():
     env1 = f"{TURN_ENVELOPE_FENCE}\n<运行时/>"
-    env2 = f"{TURN_ENVELOPE_FENCE}\n<已登记来源/>"
+    env2 = f"{TURN_ENVELOPE_FENCE}\n<表格/>"
     history = [
         LLMMessage(role="user", content=env1),
         LLMMessage(role="user", content="q1"),

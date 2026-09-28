@@ -318,9 +318,9 @@ async def test_consult_product_help_section_alias():
     from agentcore.runtime.skills.product_help import fetch_product_help_section
 
     tool = _skill_consult()
-    result = await tool.execute({"name": "product_help:collab-overview"}, _ctx())
+    result = await tool.execute({"name": "product_help:chat"}, _ctx())
     assert result.success
-    assert result.output == fetch_product_help_section("briefing")
+    assert result.output == fetch_product_help_section("faq")
 
 
 def test_product_help_pins_section_ids_and_manual_paths():

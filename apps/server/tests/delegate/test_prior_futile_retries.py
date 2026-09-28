@@ -15,7 +15,6 @@ def test_ceo_turn_prompt_has_no_futile_retry_section():
 
     out = render_ceo_turn_envelope(
         attachment_context="",
-        registered_sources="",
         include_runtime=False,
     )
     assert "上轮徒劳重试" not in out

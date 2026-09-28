@@ -23,8 +23,8 @@ from agentcore.db.base import Base
 from ._helpers import _new_uuid
 
 # --- Users ---
-# Primary key is user_id (the users table's established convention); other
-# tables reference it via a `user_id` foreign-key column (app-level integrity).
+# Primary key is user_id. Other tables keep a bare ``user_id``: 注销 leaves
+# this row in place, so a user foreign key would not delete the account.
 
 
 class User(Base):
@@ -76,11 +76,19 @@ class User(Base):
     # 日成本 backstop override. NULL = inherit config; 0 = unlimited for this user.
     # CNY like quota_monthly_cost_cny (→ nano at check time).
     quota_daily_cost_cny: Mapped[float | None] = mapped_column(Float, nullable=True)
-    quota_daily_requests: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Platform web_search count caps. NULL = inherit config; 0 = unlimited.
+    # Orthogonal to the ¥ / token caps. Own search providers do not use them.
+    quota_search_daily: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quota_search_monthly: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Default boundary for new conversations (安全权限与治理).
     # read | folder (default) | computer — seeds conversation.permission_axes.
     autonomy_policy: Mapped[str] = mapped_column(
         String(32), default="folder", server_default=text("'folder'")
+    )
+    # Account web_search selection. NULL = platform SearXNG (metered). A uuid
+    # points at user_search_providers (own CleverSee or own SearXNG; not metered).
+    search_provider_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=False), nullable=True
     )
     # --- 账号默认模型组合 (模型组合配置 · llm_model_profiles) ---
     # 指向用户组合或系统预置虚拟 id（glm-5.2）。NULL = 解析时回落系统「glm-5.2」预置。

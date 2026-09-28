@@ -41,8 +41,9 @@ function quotaSummary(u: AdminUserDetail["user"]): string {
   const tokens = u.quota_daily_tokens ?? "继承";
   const monthCost = u.quota_monthly_cost_cny ?? "继承";
   const dayCost = u.quota_daily_cost_cny ?? "继承";
-  const req = u.quota_daily_requests ?? "继承";
-  return `日 ${tokens} token · 日 ${typeof dayCost === "number" ? `¥${dayCost}` : dayCost} · 月 ${typeof monthCost === "number" ? `¥${monthCost}` : monthCost} · ${req} 请求`;
+  const searchDay = u.quota_search_daily ?? "继承";
+  const searchMonth = u.quota_search_monthly ?? "继承";
+  return `日 ${tokens} token · 日 ${typeof dayCost === "number" ? `¥${dayCost}` : dayCost} · 月 ${typeof monthCost === "number" ? `¥${monthCost}` : monthCost} · 日搜索 ${searchDay} · 月搜索 ${searchMonth}`;
 }
 
 export function UserDetail({

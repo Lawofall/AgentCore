@@ -381,7 +381,8 @@ def test_conflict_message_distinguishes_declared_vs_written():
     assert "仅派发占位" in declared
     assert "不是上一 run 残留锁" in declared
     assert "进行中" in declared
-    assert "transfer_ownership" in declared
+    assert "replan 的 tell" in declared
+    assert "transfer_ownership" not in declared
 
     written = ownership_conflict_message(
         "src/x.ts",
@@ -739,10 +740,12 @@ def test_conflict_message_unknown_and_ended_ban_user_transfer():
     assert "不要 escalate" in unknown
     assert "用户卡可点" not in unknown
     assert "transfer_ownership" not in unknown
-    # Running still offers structured user card.
+    # A live owner is handed off through replan tell, not a user transfer card.
     running = ownership_conflict_message(
         "docs/x.md",
         "author",
         owner_status="running",
     )
-    assert "用户卡可点「移交写权」" in running
+    assert "replan 的 tell" in running
+    assert "用户卡可点" not in running
+    assert "transfer_ownership" not in running

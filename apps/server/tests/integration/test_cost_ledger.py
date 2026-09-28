@@ -520,8 +520,7 @@ async def test_account_level_spend_counts_against_quota(session_factory):
     """额度数字会涨: ``enforce_quota`` SUMs the same account window.
 
     A cap below the account-level spend must refuse the next turn (money is
-    money), while the 日请求数 dimension stays untouched — that one counts
-    assistant turns, and this spend produced none.
+    money).
     """
     from dataclasses import asdict
 
@@ -560,23 +559,10 @@ async def test_account_level_spend_counts_against_quota(session_factory):
                 limits=QuotaLimits(
                     daily_tokens=0,
                     monthly_cost_nano=0,
-                    daily_requests=0,
                     daily_cost_nano=assist_call.cost_total_nano,
                 ),
             )
         assert excinfo.value.dimension == "daily_cost"
-
-        # 请求数 still zero — a 1-request cap must not fire on account-level spend.
-        await enforce_quota(
-            repo,
-            user_id,
-            limits=QuotaLimits(
-                daily_tokens=0,
-                monthly_cost_nano=0,
-                daily_requests=1,
-                daily_cost_nano=0,
-            ),
-        )
 
 
 async def test_materialize_message_runs_upserts_worker_role_and_run(session_factory):

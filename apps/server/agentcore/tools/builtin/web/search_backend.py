@@ -150,6 +150,8 @@ class SearchBackend(Protocol):
         language: str | None = None,
     ) -> list[SearchResult]: ...
 
+    async def aclose(self) -> None: ...
+
 
 def _parse_results(data: dict[str, Any], max_results: int) -> list[SearchResult]:
     """Filter + dedup + truncate a search JSON payload into SearchResults.
@@ -253,8 +255,9 @@ class SearXNGBackend:
     shutdown via :func:`aclose_search_backend`.
     """
 
-    def __init__(self, base_url: str | None = None) -> None:
+    def __init__(self, base_url: str | None = None, *, api_key: str | None = None) -> None:
         self.base_url = (base_url or settings.searxng_url).rstrip("/")
+        self.api_key = (api_key or "").strip()
         self._client: httpx.AsyncClient | None = None
         self._sem: asyncio.Semaphore | None = None
         self._bucket: _TokenBucket | None = None
@@ -355,7 +358,12 @@ class SearXNGBackend:
             for attempt in range(_SEARCH_ATTEMPTS):
                 raise_if_task_cancelled()
                 try:
-                    resp = await client.get(f"{self.base_url}/search", params=params)
+                    request_kwargs: dict[str, Any] = {"params": params}
+                    if self.api_key:
+                        request_kwargs["headers"] = {
+                            "Authorization": f"Bearer {self.api_key}"
+                        }
+                    resp = await client.get(f"{self.base_url}/search", **request_kwargs)
                     resp.raise_for_status()
                     data = resp.json()
                 except (httpx.TimeoutException, httpx.NetworkError) as e:
@@ -421,6 +429,9 @@ async def aclose_search_backend() -> None:
         closer = getattr(backend, "aclose", None)
         if closer is not None:
             await closer()
+    from agentcore.tools.builtin.web.cleversee import aclose_cleversee_backend
+
+    await aclose_cleversee_backend()
 
 
 async def probe_search_backend() -> tuple[bool, str] | None:

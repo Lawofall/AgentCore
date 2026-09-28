@@ -1,10 +1,10 @@
 """Integration: turn_journal is cleaned with its owning message / conversation.
 
 Backed by real PostgreSQL via ``session_factory`` (auto-skips when none reachable).
-Pins the app-level cascade (no DB FK) that keeps the §18.3 唯一事实源 from orphaning:
-a conversation hard-delete, a regenerate/edit truncate (``delete_after``), and a
-single-message delete each drop the matching turn_journal rows — while a
-cross-conversation id (IDOR) touches neither the message nor its journal.
+Pins journal cleanup: conversation hard-delete uses ``fk_turn_journal_conversation_id``;
+regenerate / single-message delete still drop rows in the repository, because
+``turn_id`` is not a foreign key to ``messages``. A cross-conversation id touches
+neither the message nor its journal.
 
 A paused turn's frame AND its recorded outcome ride the same cascade: a turn that is
 regenerated away must read as「已重新生成」, never answer a「继续」with the decision
@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from sqlalchemy import update
 
-from agentcore.db.models import Message
+from agentcore.db.models import Conversation, Message
 from agentcore.db.repositories import (
     ConversationRepository,
     MessageRepository,
@@ -28,8 +28,15 @@ from agentcore.db.repositories import (
 _ENTRIES = [{"kind": "run_plan", "payload": {}, "ts": "t"}]
 
 
+async def _ensure_conversation(s, cid: str) -> None:
+    if await s.get(Conversation, cid) is None:
+        s.add(Conversation(id=cid, user_id=str(uuid4())))
+        await s.flush()
+
+
 async def _seed_turn(s, *, cid: str, mid: str) -> None:
     """One assistant message + its journal row (same id), as a completed turn writes."""
+    await _ensure_conversation(s, cid)
     await MessageRepository(s).create(
         conversation_id=cid, role="assistant", content="x", message_id=mid
     )

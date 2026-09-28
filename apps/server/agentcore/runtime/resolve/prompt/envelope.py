@@ -5,7 +5,7 @@ If this turn's composed system differs from that node 0, DeepSeek in-history
 appends the changed ``<设定>`` / ``<按需目录>`` (or the full new string when the
 rest drifted) as ``role: system`` after history and before the envelope
 (``usage.in_history_system`` replay). Date, workspace (+ CEO file
-index), scene gates, attachments, table, and source ledger ride a synthetic
+index), scene gates, attachments, and table ride a synthetic
 user message fenced with ``[系统提示]``. A new envelope that matches the last
 one already in the window is omitted. The envelope is snapshotted on
 ``turn_started`` and stamped onto the prompting user row
@@ -174,7 +174,6 @@ def render_ceo_turn_envelope(
     table_context: str | None = None,
     attachment_material: bool = False,
     attachment_context: str = "",
-    registered_sources: str = "",
     soft_cap: int | None = None,
     include_runtime: bool = True,
 ) -> str:
@@ -200,7 +199,6 @@ def render_ceo_turn_envelope(
         .add("attachment_material", material_block, SectionOrder.WORKING_SET)
         .add("attachment_context", attachment_context, SectionOrder.ATTACHMENT)
         .add("table_context", table_context, SectionOrder.TABLE_FACTS)
-        .add("registered_sources", registered_sources, SectionOrder.REGISTERED_SOURCES)
         .observe(scope="ceo_envelope", soft_cap=cap)
         .render()
     )
@@ -216,7 +214,7 @@ def render_worker_turn_envelope(
     attachment_context: str | None = None,
     include_runtime: bool = True,
 ) -> str:
-    """Worker opening ``[系统提示]`` (no CEO file index / source ledger / table)."""
+    """Worker opening ``[系统提示]`` (no CEO file index / table)."""
     cap = settings.prompt_budget_char_soft_cap
     body = (
         ContextAssembler()
