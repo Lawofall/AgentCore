@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui";
 import { resolvedCheckpointTone } from "@/components/ui/tone-presets";
 import { usePersistentDisclosure } from "@/stores/disclosure";
-import { ChevronDown, ChevronRight, type LucideIcon } from "lucide-react";
+import { ChevronRight, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ResolvedToneKey } from "./meta";
 
@@ -17,7 +17,12 @@ export function ResolvedDecisionRecord(
         tone: ResolvedToneKey;
         icon: LucideIcon;
         label: string;
+        /** Single-string scan line. Ignored when `summaryStem` / `summaryAnswer` are set. */
         collapsedSummary?: string;
+        /** Question identity. Stays on the row while the body is open. */
+        summaryStem?: string;
+        /** Reply. Stays at the end of the row so a long stem truncates first. */
+        summaryAnswer?: string;
         askIntent?: string;
         children: ReactNode;
       }
@@ -47,10 +52,11 @@ function ProcessRowIcon({ icon: Icon }: { icon: LucideIcon }) {
 }
 
 function ProcessRowChevron({ open }: { open: boolean }) {
-  return open ? (
-    <ChevronDown size={14} className="shrink-0" />
-  ) : (
-    <ChevronRight size={14} className="shrink-0" />
+  return (
+    <ChevronRight
+      size={14}
+      className={`shrink-0 transition-transform duration-200 ease-out motion-reduce:transition-none${open ? " rotate-90" : ""}`}
+    />
   );
 }
 
@@ -60,6 +66,8 @@ function ToneStubRecord({
   icon: DecisionIcon,
   label,
   collapsedSummary,
+  summaryStem,
+  summaryAnswer,
   askIntent,
   children,
 }: {
@@ -69,16 +77,55 @@ function ToneStubRecord({
   icon: LucideIcon;
   label: string;
   collapsedSummary?: string;
+  summaryStem?: string;
+  summaryAnswer?: string;
   askIntent?: string;
   children: ReactNode;
 }) {
   const tone = resolvedCheckpointTone[toneKey];
   const [open, setOpen] = usePersistentDisclosure(disclosureKey, false);
   const title = label.trim();
+  const stem = (summaryStem ?? "").trim();
+  const answer = (summaryAnswer ?? "").trim();
   const summary =
-    !open && collapsedSummary != null && collapsedSummary !== ""
-      ? collapsedSummary
+    stem === "" && answer === "" && collapsedSummary != null
+      ? collapsedSummary.trim()
       : "";
+  const expandable = children != null && children !== false;
+  const unnamed =
+    title === "" && stem === "" && answer === "" && summary === "";
+  const answerClass =
+    stem !== "" || title !== ""
+      ? "ml-1.5 min-w-0 max-w-64 shrink-0 truncate text-sm"
+      : "min-w-0 truncate text-sm";
+
+  const row = (
+    <>
+      <ProcessRowIcon icon={DecisionIcon} />
+      <span className="flex h-5 min-w-0 items-center overflow-hidden text-left">
+        {title !== "" ? (
+          <span className={`shrink-0 text-sm ${tone.label}`}>{title}</span>
+        ) : null}
+        {stem !== "" ? (
+          <span
+            data-ask-stem=""
+            className={`min-w-0 truncate text-sm${title !== "" ? " ml-1.5" : ""}`}
+          >
+            {stem}
+          </span>
+        ) : null}
+        {answer !== "" ? (
+          <span data-ask-answer="" className={answerClass}>
+            {stem !== "" || title !== "" ? `· ${answer}` : answer}
+          </span>
+        ) : null}
+        {summary !== "" ? (
+          <span className="min-w-0 truncate text-sm">{summary}</span>
+        ) : null}
+      </span>
+      {expandable ? <ProcessRowChevron open={open} /> : null}
+    </>
+  );
 
   return (
     <div
@@ -86,25 +133,38 @@ function ToneStubRecord({
       data-ask-intent={askIntent}
       data-ask-status="resolved"
     >
-      <Button
-        variant="ghost"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-label={title || summary ? undefined : "拍板记录"}
-        className={ROW}
-      >
-        <ProcessRowIcon icon={DecisionIcon} />
-        <span className="flex h-5 min-w-0 items-center gap-1.5 overflow-hidden text-left">
-          {title !== "" ? (
-            <span className={`shrink-0 text-sm ${tone.label}`}>{title}</span>
-          ) : null}
-          {summary !== "" ? (
-            <span className="min-w-0 truncate text-sm">{summary}</span>
-          ) : null}
-        </span>
-        <ProcessRowChevron open={open} />
-      </Button>
-      {open && children}
+      {expandable ? (
+        <Button
+          variant="ghost"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={unnamed ? "拍板记录" : undefined}
+          className={ROW}
+        >
+          {row}
+        </Button>
+      ) : (
+        <div
+          className={`inline-flex items-center ${ROW}`}
+          aria-label={unnamed ? "拍板记录" : undefined}
+        >
+          {row}
+        </div>
+      )}
+      {expandable ? (
+        <div
+          className="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+          style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
+          data-ask-open={open ? "true" : "false"}
+        >
+          <div
+            className="min-h-0 overflow-hidden"
+            aria-hidden={open ? undefined : true}
+          >
+            {children}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

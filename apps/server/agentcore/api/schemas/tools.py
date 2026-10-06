@@ -50,8 +50,9 @@ class CapabilityGuidelines(BaseModel):
     """The system-prompt TEMPLATE the agents follow (静态 蓝图; the per-turn verbatim
     prompt is served separately, see the message prompt endpoint).
 
-    ``shared_base`` is the base every agent (CEO + workers) shares (output
-    style, tool-use, safety); ``worker_leaf`` / ``worker_captain`` are empty
+    ``shared_base`` is the base every agent (CEO + workers) shares. It is empty
+    unless a residual is injected; the official toolbox hides the card when this
+    string is blank. ``worker_leaf`` / ``worker_captain`` are empty
     (no factory worker ``<身份>``; nest-cap is a live opening fact) — not the
     per-turn prompt (form HOW is 交付物规格 in 收到的上下文);
     ``ceo_addon`` is the CEO

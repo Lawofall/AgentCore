@@ -84,7 +84,7 @@ describe("deriveCaptainStatus", () => {
         run({ id: "w2", status: "completed" }),
       ],
     });
-    // Clears「正在收尾」sink; RunStatus has no paused.
+    // Clears the writing spinner; RunStatus has no paused.
     expect(deriveCaptainStatus(e, "cap")).toBe("pending");
   });
 

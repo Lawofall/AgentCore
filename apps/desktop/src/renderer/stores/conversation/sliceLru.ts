@@ -42,21 +42,27 @@ export function pruneConversationSlices(
   order: string[],
   activeKey: string,
   prevKey: string,
+  extraProtected: readonly string[] = [],
 ): { byId: Record<string, ConversationRuntime>; sliceLruOrder: string[] } {
   const nextById = { ...byId };
   let nextOrder = touchConversationSliceLru(order, activeKey);
 
+  const protectedKeys = new Set<string>([activeKey]);
+  for (const key of extraProtected) {
+    protectedKeys.add(key);
+  }
+
   // Idle draft is not a warm-reopen target — drop when leaving.
+  // A draft column sitting beside another chat stays (extraProtected).
   if (
     prevKey === DRAFT_KEY &&
     prevKey !== activeKey &&
+    !protectedKeys.has(DRAFT_KEY) &&
     nextById[DRAFT_KEY] &&
     !isConversationSliceBusy(DRAFT_KEY, nextById[DRAFT_KEY])
   ) {
     delete nextById[DRAFT_KEY];
   }
-
-  const protectedKeys = new Set<string>([activeKey]);
   for (const [key, slice] of Object.entries(nextById)) {
     if (key === DRAFT_KEY) continue;
     if (isConversationSliceBusy(key, slice)) protectedKeys.add(key);

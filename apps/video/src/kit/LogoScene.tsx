@@ -1,18 +1,11 @@
 import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 import { entranceStyle } from "../core/motion/primitives";
 
-const NODES = [
-  { x: 60, y: 60, r: 11 },
-  { x: 16, y: 26, r: 7 },
-  { x: 108, y: 22, r: 7 },
-  { x: 100, y: 104, r: 7 },
-];
-const LINKS = [
-  [0, 1],
-  [0, 2],
-  [0, 3],
-  [1, 2],
-];
+/** Ligature bounds inside assets/agentcore-icon.svg. */
+const PATH_A_AND_LOWER_C =
+  "M 412,245 L 266,529 L 150,761 L 250,761 L 303,647 L 313,630 L 498,630 L 477,558 L 349,558 L 347,556 L 421,408 L 451,408 L 518,642 L 538,680 L 562,709 L 591,732 L 615,745 L 642,755 L 664,760 L 823,761 L 832,677 L 703,677 L 685,674 L 667,668 L 648,658 L 631,645 L 616,628 L 604,608 L 595,586 L 494,246 Z";
+const PATH_UPPER_C =
+  "M 877,245 L 729,245 L 699,249 L 667,258 L 636,272 L 610,289 L 586,311 L 564,338 L 547,369 L 582,486 L 598,486 L 602,450 L 607,423 L 617,401 L 640,369 L 654,356 L 671,345 L 695,334 L 714,329 L 732,327 L 868,327 Z";
 
 export const SLOGAN = "协作，是更高级的智能";
 
@@ -71,31 +64,16 @@ export function LogoScene() {
             transform: `${glyph.transform} scale(${glyphScale})`,
           }}
         >
-          <svg width={132} height={132} viewBox="0 0 132 132" role="presentation">
-            <g transform="translate(6 6)">
-              {LINKS.map(([a, b]) => (
-                <line
-                  key={`${a}-${b}`}
-                  x1={NODES[a].x}
-                  y1={NODES[a].y}
-                  x2={NODES[b].x}
-                  y2={NODES[b].y}
-                  stroke="var(--primary)"
-                  strokeWidth={2.5}
-                  opacity={0.5}
-                />
-              ))}
-              {NODES.map((n, i) => (
-                <circle
-                  key={i}
-                  cx={n.x}
-                  cy={n.y}
-                  r={n.r}
-                  fill="var(--primary)"
-                  opacity={i === 0 ? 1 : 0.85}
-                />
-              ))}
-            </g>
+          <svg
+            width={169}
+            height={120}
+            viewBox="150 245 727 516"
+            fill="currentColor"
+            role="presentation"
+            className="text-foreground"
+          >
+            <path d={PATH_A_AND_LOWER_C} />
+            <path d={PATH_UPPER_C} />
           </svg>
         </div>
 

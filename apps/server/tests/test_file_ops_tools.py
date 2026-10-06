@@ -292,7 +292,7 @@ async def test_outside_workspace_error_is_actionable(tmp_path: Path):
     assert "open_local_project" not in result.error
     assert "bind_local_folder" not in result.error
     assert "Composer" in result.error
-    assert "先在云上做" in result.error
+    assert "云上做完再写入" in result.error
 
 
 # --- read ---
@@ -1092,6 +1092,26 @@ async def test_write_receipt_reports_chars_not_bytes(tmp_path: Path):
     assert f"已写入 {len(body)} 字符到 诉状.md" in result.output
     assert f"chars: {len(body)}" in result.output
     assert "字节" not in result.output
+
+
+def test_prose_write_close_note_skips_skeleton_and_user_rules():
+    from agentcore.tools.builtin.file_ops.integrity import (
+        format_artifact_manifest,
+        prose_write_close_note,
+    )
+
+    prose = "成稿正文。" * 80
+    note = prose_write_close_note(path="note.md", content=prose)
+    assert note
+    assert prose_write_close_note(path="note.md", content="# 提纲\n") == ""
+    assert prose_write_close_note(path=".agentcore/rules/tone.md", content=prose) == ""
+    manifest = format_artifact_manifest(
+        path="note.md",
+        content=prose,
+        chars_written=len(prose),
+        kind="prose",
+    )
+    assert note not in manifest
 
 
 async def test_file_read_allows_author_self_product(tmp_path: Path):

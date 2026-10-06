@@ -12,12 +12,15 @@ import {
   IconButton,
   Input,
   PageHeader,
+  SectionLabel,
   SegmentedControl,
+  Select,
 } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useLlmModelProfiles } from "@/hooks/useLlmModelProfiles";
 import { useLlmProviders } from "@/hooks/useLlmProviders";
 import { useModels } from "@/hooks/useModels";
+import { contextBudgetLabel, contextBudgetSteps } from "@/lib/contextBudget";
 import {
   type DefaultProviderGroup,
   buildDefaultProviderGroups,
@@ -25,14 +28,20 @@ import {
   encodePointer,
   pointerValue,
 } from "@/lib/llmDefaults";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import {
   llmModelProfileKeys,
   llmProviderKeys,
   modelKeys,
 } from "@/lib/queryKeys";
+import { notifySuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { catalogContextLength } from "@/lib/windowFill";
 import {
-  type CreateLlmModelProfileInput,
+  assemblyShelfPath,
+  toolboxTabFromPath,
+} from "@/pages/toolbox/assemblyTabs";
+import {
   type LlmModelProfileView,
   type ModelProfileSlot,
   createLlmModelProfile,
@@ -58,8 +67,14 @@ import {
   Trash2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Link,
+  Navigate,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { ProfileModelSelect, canChooseFromGroups } from "./ProfileModelSelect";
 
 /** 保存响应当次 reminders；列表/详情不带回，仅会话内按组合 id 挂住。 */
@@ -68,6 +83,15 @@ function normalizeSaveWarnings(
 ): string[] {
   if (!warnings?.length) return [];
   return warnings.map((w) => w.trim()).filter(Boolean);
+}
+
+/** 有可达性提醒时，提醒框已经说明结果，不再叠一条 toast。 */
+function notifyUnlessWarnings(
+  message: string,
+  warnings: string[] | null | undefined,
+): void {
+  if (normalizeSaveWarnings(warnings).length > 0) return;
+  notifySuccess(message);
 }
 
 /** 从分组取第一个可选槽（平台或 BYOK），用于新建种子。 */
@@ -126,11 +150,26 @@ function NoAvailableModelsGuide({
  * 模型组合 (/more/model) — 账号默认组合 + 组合 CRUD。
  *
  * 组合 = `{ main, worker?, background?, vision? }`；账号默认组合与会话引用见
- * `/v1/users/me/llm-model-profiles`。凭据与测连见 `/more/providers`。
+ * `/v1/users/me/assemblies`。凭据与测连见 `/more/providers`。
  * `vision` 槽 API 仍在、设置页不再编辑（图走当前主模型）。
  */
 
-export function ModelSettings() {
+/** 宽屏装配在工具箱。窄屏没有工具箱路由，设置里是同一页货架。 */
+export function ModelSettingsRoute() {
+  const { isNarrow } = useNarrowLayoutState();
+  const { pathname } = useLocation();
+  if (!isNarrow) {
+    return (
+      <Navigate
+        to={assemblyShelfPath(toolboxTabFromPath(pathname), "toolbox")}
+        replace
+      />
+    );
+  }
+  return <Outlet />;
+}
+
+export function ModelSettings({ embedded = false }: { embedded?: boolean }) {
   const { data: response, isLoading, isError, error } = useLlmProviders();
   const { data: catalog } = useModels();
   const queryClient = useQueryClient();
@@ -151,7 +190,11 @@ export function ModelSettings() {
 
   return (
     <div>
-      <PageHeader title="模型组合" />
+      {embedded ? (
+        <SectionLabel className="mb-1">模型</SectionLabel>
+      ) : (
+        <PageHeader title="装配" />
+      )}
 
       <SettingsStack>
         <SettingsAsync loading={isLoading} error={loadError}>
@@ -231,7 +274,6 @@ function ModelProfilesSection({
     useState<LlmModelProfileView | null>(null);
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<ReactNode>(null);
-  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   /** 仅来自 create/update 响应；列表 refetch 后仍靠此 map 留住可读提醒。 */
   const [saveWarningsById, setSaveWarningsById] = useState<
     Record<string, string[]>
@@ -293,7 +335,6 @@ function ModelProfilesSection({
   const withPending = async (fn: () => Promise<void>) => {
     setPending(true);
     setActionError(null);
-    setSaveSuccess(null);
     setLastSaveWarnings([]);
     setLastWarnedProfileId(null);
     try {
@@ -309,7 +350,6 @@ function ModelProfilesSection({
   const onSetDefault = (profile: LlmModelProfileView) =>
     withPending(async () => {
       await setDefaultLlmModelProfile(profile.id);
-      setSaveSuccess(`已将「${profile.name}」设为默认组合`);
     });
 
   const confirmDelete = async () => {
@@ -323,7 +363,7 @@ function ModelProfilesSection({
         const { [profile.id]: _removed, ...rest } = prev;
         return rest;
       });
-      setSaveSuccess(`已删除「${profile.name}」`);
+      notifySuccess(`已删除「${profile.name}」`);
     });
     setPendingDelete(null);
   };
@@ -332,17 +372,23 @@ function ModelProfilesSection({
     withPending(async () => {
       const created = await createLlmModelProfile({
         name: `${profile.name} 副本`,
-        main: profile.main,
-        worker: profile.worker ?? null,
-        background: profile.background ?? null,
-        vision: profile.vision ?? null,
-        reasoning_effort: profile.reasoning_effort ?? null,
         set_as_default: false,
       });
-      rememberSaveWarnings(created.id, created.warnings);
+      const updated = profile.main
+        ? await updateLlmModelProfile(created.id, {
+            name: `${profile.name} 副本`,
+            main: profile.main,
+            worker: profile.worker ?? null,
+            background: profile.background ?? null,
+            vision: profile.vision ?? null,
+            reasoning_effort: profile.reasoning_effort ?? null,
+            context_budget: profile.context_budget ?? null,
+          })
+        : created;
+      rememberSaveWarnings(updated.id, updated.warnings);
       setEditingId(created.id);
       setCreating(false);
-      setSaveSuccess(`已复制为「${created.name}」`);
+      notifyUnlessWarnings(`已复制为「${updated.name}」`, updated.warnings);
     });
 
   const onCreate = () => {
@@ -355,7 +401,6 @@ function ModelProfilesSection({
       return;
     }
     setActionError(null);
-    setSaveSuccess(null);
     setLastSaveWarnings([]);
     setLastWarnedProfileId(null);
     setCreating(true);
@@ -368,17 +413,21 @@ function ModelProfilesSection({
     try {
       const created = await createLlmModelProfile({
         name: draft.name.trim() || "未命名组合",
+        set_as_default: false,
+      });
+      const updated = await updateLlmModelProfile(created.id, {
+        name: draft.name.trim() || "未命名组合",
         main: draft.main,
         worker: draft.worker,
         background: draft.background,
         vision: draft.vision,
         reasoning_effort: draft.reasoning_effort,
-        set_as_default: false,
-      } satisfies CreateLlmModelProfileInput);
-      rememberSaveWarnings(created.id, created.warnings);
+        context_budget: draft.context_budget,
+      });
+      rememberSaveWarnings(updated.id, updated.warnings);
       setCreating(false);
       setEditingId(null);
-      setSaveSuccess("组合已保存");
+      notifyUnlessWarnings("组合已保存", updated.warnings);
       onChanged();
     } finally {
       setPending(false);
@@ -401,10 +450,11 @@ function ModelProfilesSection({
         background: draft.background,
         vision: draft.vision,
         reasoning_effort: draft.reasoning_effort,
+        context_budget: draft.context_budget,
       });
       rememberSaveWarnings(updated.id, updated.warnings);
       setEditingId(null);
-      setSaveSuccess(`「${name}」已保存`);
+      notifyUnlessWarnings(`「${name}」已保存`, updated.warnings);
       onChanged();
     } finally {
       setPending(false);
@@ -451,6 +501,7 @@ function ModelProfilesSection({
                 background: null,
                 vision: null,
                 reasoning_effort: null,
+                context_budget: null,
               }}
               pending={pending}
               onCancel={() => setCreating(false)}
@@ -469,11 +520,12 @@ function ModelProfilesSection({
                 platformAvailable={platformAvailable}
                 initial={{
                   name: profile.name,
-                  main: profile.main,
+                  main: profile.main ?? null,
                   worker: profile.worker ?? null,
                   background: profile.background ?? null,
                   vision: profile.vision ?? null,
                   reasoning_effort: profile.reasoning_effort ?? null,
+                  context_budget: profile.context_budget ?? null,
                 }}
                 saveWarnings={saveWarningsById[profile.id]}
                 pending={pending}
@@ -490,7 +542,6 @@ function ModelProfilesSection({
                 onEdit={() => {
                   setCreating(false);
                   setEditingId(profile.id);
-                  setSaveSuccess(null);
                   setLastSaveWarnings([]);
                   setLastWarnedProfileId(null);
                 }}
@@ -502,8 +553,6 @@ function ModelProfilesSection({
           )}
         </div>
       </SettingsAsync>
-
-      <SettingsFormMessage tone="success">{saveSuccess}</SettingsFormMessage>
 
       {lastSaveWarnings.length > 0 &&
       !(
@@ -535,14 +584,64 @@ function ModelProfilesSection({
   );
 }
 
-type ProfileDraft = {
+export type ProfileDraft = {
   name: string;
   main: ModelProfileSlot | null;
   worker: ModelProfileSlot | null;
   background: ModelProfileSlot | null;
   vision: ModelProfileSlot | null;
   reasoning_effort: string | null;
+  context_budget: number | null;
 };
+
+/** Four short tokens fit one segmented track. More than that uses the same select as a model slot. */
+const SEGMENTED_CHOICE_MAX = 4;
+
+function ProfileChoiceControl({
+  id,
+  label,
+  value,
+  onChange,
+  items,
+  disabled,
+  asSelect = false,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  items: readonly { value: string; label: string }[];
+  disabled?: boolean;
+  /** Toolbox row: always a select, even when the tokens would fit a track. */
+  asSelect?: boolean;
+}) {
+  if (asSelect || items.length > SEGMENTED_CHOICE_MAX) {
+    return (
+      <Select
+        id={id}
+        aria-label={label}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {items.map((item) => (
+          <option key={item.value} value={item.value}>
+            {item.label}
+          </option>
+        ))}
+      </Select>
+    );
+  }
+  return (
+    <SegmentedControl
+      aria-label={label}
+      value={value}
+      onChange={onChange}
+      items={items}
+      fit
+    />
+  );
+}
 
 function hasAdvancedSlotOverrides(
   draft: Pick<ProfileDraft, "worker" | "background">,
@@ -727,7 +826,7 @@ function SlotClearAction({
   );
 }
 
-function ProfileEditor({
+export function ProfileEditor({
   title,
   providers,
   catalog,
@@ -738,6 +837,10 @@ function ProfileEditor({
   pending,
   onCancel,
   onSave,
+  showTitle = true,
+  showCancel = true,
+  framed = true,
+  surface = "card",
 }: {
   title: string;
   providers: LlmProviderView[];
@@ -750,6 +853,11 @@ function ProfileEditor({
   pending: boolean;
   onCancel: () => void;
   onSave: (draft: ProfileDraft) => Promise<void>;
+  showTitle?: boolean;
+  showCancel?: boolean;
+  framed?: boolean;
+  /** `shelf` is the toolbox model block: no name, knobs in rows, save on change. */
+  surface?: "card" | "shelf";
 }) {
   const [name, setName] = useState(initial.name);
   const [main, setMain] = useState(initial.main);
@@ -759,11 +867,18 @@ function ProfileEditor({
   const [reasoningEffort, setReasoningEffort] = useState(
     initial.reasoning_effort,
   );
+  const [contextBudget, setContextBudget] = useState(initial.context_budget);
   const [advancedOpen, setAdvancedOpen] = useState(() =>
     hasAdvancedSlotOverrides(initial),
   );
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const shelf = surface === "shelf";
+
+  useEffect(() => {
+    if (!shelf) return;
+    setName(initial.name);
+  }, [shelf, initial.name]);
 
   // 只 fold-in 当前编辑组合的槽位，避免跨组合污染建议。
   const groups = useMemo(
@@ -782,34 +897,140 @@ function ProfileEditor({
   const canChoose = canChooseFromGroups(groups);
   const showEmptyGuide = !canChoose;
   const effortSpec = catalogReasoningEffort(main, catalogModels);
+  const budgetSteps = contextBudgetSteps(
+    catalogContextLength(catalogModels, { slot: main }),
+  );
   const busy = pending || saving;
 
-  const applyMain = (next: ModelProfileSlot | null) => {
-    setMain(next);
-    const spec = catalogReasoningEffort(next, catalogModels);
-    setReasoningEffort((cur) =>
-      spec && cur && spec.options.includes(cur) ? cur : null,
+  type EditorSnap = {
+    name: string;
+    main: ModelProfileSlot | null;
+    worker: ModelProfileSlot | null;
+    background: ModelProfileSlot | null;
+    vision: ModelProfileSlot | null;
+    reasoningEffort: string | null;
+    contextBudget: number | null;
+  };
+
+  const draftFrom = (state: EditorSnap): ProfileDraft => {
+    const spec = catalogReasoningEffort(state.main, catalogModels);
+    const steps = contextBudgetSteps(
+      catalogContextLength(catalogModels, { slot: state.main }),
     );
+    const selectedEffort =
+      spec &&
+      state.reasoningEffort &&
+      spec.options.includes(state.reasoningEffort)
+        ? state.reasoningEffort
+        : null;
+    return {
+      name: state.name,
+      main: state.main,
+      worker: state.worker,
+      background: state.background,
+      vision: state.vision,
+      reasoning_effort: spec ? selectedEffort : null,
+      context_budget:
+        steps &&
+        state.contextBudget != null &&
+        steps.slice(0, -1).includes(state.contextBudget)
+          ? state.contextBudget
+          : null,
+    };
+  };
+
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  const lastQueued = useRef<string | null>(null);
+  const lastOk = useRef<string | null>(null);
+  const saveTail = useRef(Promise.resolve());
+  const shelfSeeded = useRef(false);
+  if (shelf && !shelfSeeded.current) {
+    shelfSeeded.current = true;
+    const signature = JSON.stringify(
+      draftFrom({
+        name: initial.name,
+        main: initial.main,
+        worker: initial.worker,
+        background: initial.background,
+        vision: initial.vision,
+        reasoningEffort: initial.reasoning_effort,
+        contextBudget: initial.context_budget,
+      }),
+    );
+    lastQueued.current = signature;
+    lastOk.current = signature;
+  }
+
+  const persistShelf = (state: EditorSnap) => {
+    const draft = draftFrom(state);
+    if (!draft.main) return;
+    const signature = JSON.stringify(draft);
+    if (signature === lastQueued.current) return;
+    lastQueued.current = signature;
+    saveTail.current = saveTail.current.then(async () => {
+      setSaveError(null);
+      setSaving(true);
+      try {
+        await onSaveRef.current(draft);
+        lastOk.current = signature;
+      } catch (e) {
+        if (lastQueued.current === signature) {
+          lastQueued.current = lastOk.current;
+        }
+        setSaveError(modelConfigApiErrorMessage(e, "保存失败，请重试"));
+      } finally {
+        setSaving(false);
+      }
+    });
+  };
+
+  const applyMain = (next: ModelProfileSlot | null) => {
+    const spec = catalogReasoningEffort(next, catalogModels);
+    const nextEffort =
+      spec && reasoningEffort && spec.options.includes(reasoningEffort)
+        ? reasoningEffort
+        : null;
+    const steps = contextBudgetSteps(
+      catalogContextLength(catalogModels, { slot: next }),
+    );
+    const nextBudget =
+      steps &&
+      contextBudget != null &&
+      steps.slice(0, -1).includes(contextBudget)
+        ? contextBudget
+        : null;
+    setMain(next);
+    setReasoningEffort(nextEffort);
+    setContextBudget(nextBudget);
+    if (shelf) {
+      persistShelf({
+        name,
+        main: next,
+        worker,
+        background,
+        vision,
+        reasoningEffort: nextEffort,
+        contextBudget: nextBudget,
+      });
+    }
   };
 
   const handleSave = async () => {
     setSaveError(null);
     setSaving(true);
     try {
-      const selectedEffort =
-        effortSpec &&
-        reasoningEffort &&
-        effortSpec.options.includes(reasoningEffort)
-          ? reasoningEffort
-          : null;
-      await onSave({
-        name,
-        main,
-        worker,
-        background,
-        vision,
-        reasoning_effort: effortSpec ? selectedEffort : null,
-      });
+      await onSave(
+        draftFrom({
+          name,
+          main,
+          worker,
+          background,
+          vision,
+          reasoningEffort,
+          contextBudget,
+        }),
+      );
     } catch (e) {
       setSaveError(modelConfigApiErrorMessage(e, "保存失败，请重试"));
     } finally {
@@ -817,9 +1038,206 @@ function ProfileEditor({
     }
   };
 
+  const renderSlot = (
+    id: string,
+    label: string,
+    hint: string | undefined,
+    value: ModelProfileSlot | null,
+    onChange: (next: ModelProfileSlot | null) => void,
+    allowClear: boolean,
+    fieldClassName?: string,
+    compactTrigger?: boolean,
+  ) => (
+    <SettingField
+      className={fieldClassName}
+      label={label}
+      htmlFor={id}
+      hint={hint}
+      hintPlacement={hint ? "label" : "below"}
+      action={
+        allowClear && value ? (
+          <SlotClearAction
+            label="恢复跟随"
+            disabled={busy}
+            onClear={() => onChange(null)}
+          />
+        ) : undefined
+      }
+    >
+      <ProfileModelSelect
+        id={id}
+        labelledBy={`${id}-label`}
+        describedBy={hint ? `${id}-hint` : undefined}
+        groups={groups}
+        value={pointerValue(value)}
+        disabled={busy || !canChoose}
+        followLabel="跟随主模型"
+        compactTrigger={compactTrigger}
+        onChange={(next) => onChange(decodePointer(next))}
+      />
+    </SettingField>
+  );
+
+  const effortValue =
+    effortSpec &&
+    reasoningEffort &&
+    effortSpec.options.includes(reasoningEffort)
+      ? reasoningEffort
+      : (effortSpec?.default ?? "");
+  const budgetValue = String(
+    budgetSteps &&
+      contextBudget != null &&
+      budgetSteps.slice(0, -1).includes(contextBudget)
+      ? contextBudget
+      : (budgetSteps?.[budgetSteps.length - 1] ?? ""),
+  );
+
+  const commitShelf = (patch: Partial<EditorSnap>) => {
+    const next: EditorSnap = {
+      name,
+      main,
+      worker,
+      background,
+      vision,
+      reasoningEffort,
+      contextBudget,
+      ...patch,
+    };
+    if (patch.reasoningEffort !== undefined) {
+      setReasoningEffort(patch.reasoningEffort);
+    }
+    if (patch.contextBudget !== undefined)
+      setContextBudget(patch.contextBudget);
+    if (patch.worker !== undefined) setWorker(patch.worker);
+    if (patch.background !== undefined) setBackground(patch.background);
+    persistShelf(next);
+  };
+
+  const messages = (
+    <>
+      <SettingsFormMessage>{saveError}</SettingsFormMessage>
+      {!saveError && saveWarnings && saveWarnings.length > 0 ? (
+        <ProfileSaveWarnings warnings={saveWarnings} />
+      ) : null}
+    </>
+  );
+
+  if (shelf) {
+    return (
+      <div className="space-y-4">
+        <div
+          className="flex flex-wrap items-start gap-4"
+          data-testid="assembly-model-row"
+        >
+          <SettingField
+            className="min-w-64 flex-1"
+            label="主模型"
+            htmlFor="profile-main"
+          >
+            <ProfileModelSelect
+              id="profile-main"
+              labelledBy="profile-main-label"
+              groups={groups}
+              value={pointerValue(main)}
+              disabled={busy}
+              compactTrigger
+              onChange={(value) => applyMain(decodePointer(value))}
+            />
+            {showEmptyGuide && (
+              <NoAvailableModelsGuide
+                className="mt-2"
+                platformAvailable={platformAvailable}
+              />
+            )}
+          </SettingField>
+          <div
+            className="flex w-max max-w-full shrink-0 flex-wrap items-start gap-4"
+            data-testid="assembly-model-shorts"
+          >
+            {effortSpec ? (
+              <SettingField
+                className="w-28 shrink-0"
+                label="思考强度"
+                htmlFor="profile-reasoning-effort"
+              >
+                <ProfileChoiceControl
+                  id="profile-reasoning-effort"
+                  label="思考强度"
+                  value={effortValue}
+                  disabled={busy}
+                  asSelect
+                  onChange={(token) => commitShelf({ reasoningEffort: token })}
+                  items={effortSpec.options.map((token) => ({
+                    value: token,
+                    label: token,
+                  }))}
+                />
+              </SettingField>
+            ) : null}
+            {budgetSteps ? (
+              <SettingField
+                className="w-32 shrink-0"
+                label="上下文长度"
+                htmlFor="profile-context-budget"
+              >
+                <ProfileChoiceControl
+                  id="profile-context-budget"
+                  label="上下文长度"
+                  value={budgetValue}
+                  disabled={busy}
+                  asSelect
+                  onChange={(token) => {
+                    const picked = Number(token);
+                    const windowStep = budgetSteps[budgetSteps.length - 1];
+                    commitShelf({
+                      contextBudget: picked === windowStep ? null : picked,
+                    });
+                  }}
+                  items={budgetSteps.map((step) => ({
+                    value: String(step),
+                    label: contextBudgetLabel(step),
+                  }))}
+                />
+              </SettingField>
+            ) : null}
+            {renderSlot(
+              "profile-worker",
+              "组队队员",
+              undefined,
+              worker,
+              (next) => commitShelf({ worker: next }),
+              false,
+              "w-44 shrink-0",
+              true,
+            )}
+            {renderSlot(
+              "profile-background",
+              "后台任务",
+              undefined,
+              background,
+              (next) => commitShelf({ background: next }),
+              false,
+              "w-36 shrink-0",
+              true,
+            )}
+          </div>
+        </div>
+        {messages}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
-      <p className="text-sm font-semibold text-foreground">{title}</p>
+    <div
+      className={
+        framed
+          ? "space-y-4 rounded-lg border border-border bg-muted/20 p-4"
+          : "space-y-4"
+      }
+    >
+      {showTitle ? (
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+      ) : null}
 
       <div className="max-w-md space-y-4">
         <SettingField label="名称" htmlFor="profile-name">
@@ -859,17 +1277,39 @@ function ProfileEditor({
             hint="厂商档位，对本组合聊天与组队队员生效"
             hintPlacement="label"
           >
-            <SegmentedControl
-              aria-label="思考强度"
-              value={
-                reasoningEffort && effortSpec.options.includes(reasoningEffort)
-                  ? reasoningEffort
-                  : effortSpec.default
-              }
+            <ProfileChoiceControl
+              id="profile-reasoning-effort"
+              label="思考强度"
+              value={effortValue}
+              disabled={busy}
               onChange={(token) => setReasoningEffort(token)}
               items={effortSpec.options.map((token) => ({
                 value: token,
                 label: token,
+              }))}
+            />
+          </SettingField>
+        ) : null}
+        {budgetSteps ? (
+          <SettingField
+            label="上下文长度"
+            htmlFor="profile-context-budget"
+            hint="默认用模型自己的窗口。调低后，旁边的环和收较早内容按这个数。"
+            hintPlacement="label"
+          >
+            <ProfileChoiceControl
+              id="profile-context-budget"
+              label="上下文长度"
+              value={budgetValue}
+              disabled={busy}
+              onChange={(token) => {
+                const picked = Number(token);
+                const windowStep = budgetSteps[budgetSteps.length - 1];
+                setContextBudget(picked === windowStep ? null : picked);
+              }}
+              items={budgetSteps.map((step) => ({
+                value: String(step),
+                label: contextBudgetLabel(step),
               }))}
             />
           </SettingField>
@@ -904,72 +1344,39 @@ function ProfileEditor({
         </button>
         {advancedOpen && (
           <div className="mt-3 max-w-md space-y-4">
-            <SettingField
-              label="组队队员"
-              htmlFor="profile-worker"
-              hint="协作时队员使用；辩论仍用主模型"
-              hintPlacement="label"
-              action={
-                worker ? (
-                  <SlotClearAction
-                    label="恢复跟随"
-                    disabled={busy}
-                    onClear={() => setWorker(null)}
-                  />
-                ) : undefined
-              }
-            >
-              <ProfileModelSelect
-                id="profile-worker"
-                labelledBy="profile-worker-label"
-                describedBy="profile-worker-hint"
-                groups={groups}
-                value={pointerValue(worker)}
-                disabled={busy || !canChoose}
-                followLabel="跟随主模型"
-                onChange={(value) => setWorker(decodePointer(value))}
-              />
-            </SettingField>
-            <SettingField
-              label="后台任务"
-              htmlFor="profile-background"
-              hint="标题等"
-              hintPlacement="label"
-              action={
-                background ? (
-                  <SlotClearAction
-                    label="恢复跟随"
-                    disabled={busy}
-                    onClear={() => setBackground(null)}
-                  />
-                ) : undefined
-              }
-            >
-              <ProfileModelSelect
-                id="profile-background"
-                labelledBy="profile-background-label"
-                describedBy="profile-background-hint"
-                groups={groups}
-                value={pointerValue(background)}
-                disabled={busy || !canChoose}
-                followLabel="跟随主模型"
-                onChange={(value) => setBackground(decodePointer(value))}
-              />
-            </SettingField>
+            {renderSlot(
+              "profile-worker",
+              "组队队员",
+              "协作时队员使用",
+              worker,
+              setWorker,
+              true,
+            )}
+            {renderSlot(
+              "profile-background",
+              "后台任务",
+              "标题等",
+              background,
+              setBackground,
+              true,
+            )}
           </div>
         )}
       </div>
 
-      <SettingsFormMessage>{saveError}</SettingsFormMessage>
-
-      {!saveError && saveWarnings && saveWarnings.length > 0 ? (
-        <ProfileSaveWarnings warnings={saveWarnings} />
-      ) : null}
+      {messages}
 
       <div className="flex justify-end gap-2 border-t border-border pt-3">
-        <Button variant="neutral" size="md" disabled={busy} onClick={onCancel}>
-          取消
-        </Button>
+        {showCancel ? (
+          <Button
+            variant="neutral"
+            size="md"
+            disabled={busy}
+            onClick={onCancel}
+          >
+            取消
+          </Button>
+        ) : null}
         <Button
           size="md"
           disabled={busy || !main}

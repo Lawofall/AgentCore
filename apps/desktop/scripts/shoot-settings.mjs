@@ -106,7 +106,7 @@ const MOCK_USER = {
 
 const PROVIDERS = {
   billing_mode: "platform",
-  default_model_profile_id: "profile_default",
+  default_assembly_id: "profile_default",
   platform_available: true,
   platform_model: "deepseek-v4-flash",
   providers: [
@@ -189,7 +189,7 @@ const byokSlot = (model, providerId) => ({
 });
 
 const MODEL_PROFILES = {
-  default_model_profile_id: "profile_default",
+  default_assembly_id: "profile_default",
   data: [
     {
       id: "profile_default",
@@ -315,7 +315,7 @@ const FIXTURES = new Map([
 
   ["/v1/users/me/llm-providers", PROVIDERS],
   ["/v1/users/me/models", MODEL_CATALOG],
-  ["/v1/users/me/llm-model-profiles", MODEL_PROFILES],
+  ["/v1/users/me/assemblies", MODEL_PROFILES],
   [
     "/v1/users/me/git-credentials",
     {

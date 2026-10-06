@@ -22,7 +22,7 @@ import { useState } from "react";
 
 /**
  * 服务商 (/more/providers) — BYOK 列表 / 表单 / 测连。
- * 页头只留标题；准入走空态，选用组合在「设置 · 模型组合」。
+ * 页头只留标题；准入走空态，选用组合在「设置 · 装配」。
  * 有卡片时页脚一句：加密保存 + 测连绿≠可聊天。
  */
 export function ProviderSettings() {
@@ -75,7 +75,7 @@ export function ProviderSettings() {
   const deleteConsequence = (): string => {
     const remaining = (response?.providers.length ?? 1) - 1;
     return remaining > 0 || response?.platform_available
-      ? "组合槽位会自动回落到其他服务商或平台额度，不会中断对话。"
+      ? "已有装配用着这个服务商，会改指到还在的服务商或平台额度，不会中断对话。"
       : "这是唯一的服务商，删除后将无法发起对话，直到重新接入。";
   };
 
@@ -165,7 +165,7 @@ export function ProviderSettings() {
 
           {providers.length > 0 ? (
             <p className="text-xs text-muted-foreground">
-              Key 已加密保存。测连绿≠可聊天；日常用「设置 · 模型组合」。
+              Key 已加密保存。测连绿≠可聊天；日常选用在「装配」。
             </p>
           ) : null}
         </div>

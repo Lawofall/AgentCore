@@ -78,16 +78,39 @@ export function filesFocusState(
   return { state: { focusWsId: `folder:${folderId}` } };
 }
 
-export function newChatFolderTarget(
-  selected: string,
-  folderIds: Set<string>,
-): string | null {
-  if (
-    selected !== ALL_KEY &&
-    selected !== UNGROUPED_KEY &&
-    folderIds.has(selected)
-  ) {
-    return selected;
+/**
+ * Confirm copy for emptying「最近删除」.
+ * Counts are the retention window, not the rows on screen and not the search.
+ */
+export function emptyTrashConfirmCopy(input: {
+  conversations: number;
+  folders: number;
+  searching: boolean;
+  listedConversations: number;
+  listedFolders: number;
+}): string {
+  const sentences: string[] = [];
+  if (input.conversations > 0 && input.folders > 0) {
+    sentences.push(
+      `将永久删除 ${input.conversations} 条对话，以及 ${input.folders} 个文件夹（含其中的对话、云端文件和这张桌的设定），不可恢复。电脑上的文件夹不会被删除。`,
+    );
+  } else if (input.folders > 0) {
+    sentences.push(
+      `将永久删除 ${input.folders} 个文件夹，以及其中的对话、云端文件和这张桌的设定，不可恢复。电脑上的文件夹不会被删除。`,
+    );
+  } else {
+    sentences.push(
+      `将永久删除 ${input.conversations} 条对话和全部消息，不可恢复。`,
+    );
   }
-  return null;
+  if (
+    input.conversations > input.listedConversations ||
+    input.folders > input.listedFolders
+  ) {
+    sentences.push("列表没有列全，清空仍按这个条数。");
+  }
+  if (input.searching) {
+    sentences.push("当前搜索不会缩小清空范围。");
+  }
+  return sentences.join("");
 }

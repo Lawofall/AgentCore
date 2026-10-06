@@ -62,7 +62,6 @@ async def test_capabilities_lists_system_skills_with_body(client):
     body = (await client.get("/v1/capabilities")).json()
     skills = {s["name"]: s for s in body["skills"]}
     assert "page_ui" in skills
-    assert skills["page_ui"]["summary"] == "页面观感"
     assert skills["page_ui"]["group"] == "交付"
     assert set(skills["page_ui"]["audience"]) == {"ceo", "worker"}
     for skill in skills.values():
@@ -80,7 +79,7 @@ async def test_capabilities_exposes_prompt_template(client):
     await register_and_login(client, "promptuser")
 
     guidelines = (await client.get("/v1/capabilities")).json()["guidelines"]
-    assert guidelines["shared_base"]
+    assert guidelines["shared_base"] == ""
     ceo = guidelines["ceo"]
     addon = guidelines["ceo_addon"]
     # The CEO template carries the always-on 按需目录; factory identity is empty.

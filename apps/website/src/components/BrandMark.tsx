@@ -1,45 +1,29 @@
-/**
- * 品牌标记：一个方框内三个不等亮度的小方块——
- * 主色 / 副色 / 中性各一，对应「一支多元的团队」而非单个节点。
- *
- * `onLight` 用于白底（悬浮胶囊导航、白色页脚）：第三块由「白的 35%」
- * 换成「黑的 30%」，否则在白纸上直接消失。
- */
-export default function BrandMark({
-  size = 22,
-  onLight = false,
-}: {
-  size?: number;
-  onLight?: boolean;
-}) {
-  const unit = size / 22;
-  const box = 5 * unit;
-  const inset = 4 * unit;
+/** AC ligature bounds inside the repo-root assets/agentcore-icon.svg. */
+const MARK_X = 150;
+const MARK_Y = 245;
+const MARK_W = 727;
+const MARK_H = 516;
+
+const PATH_A_AND_LOWER_C =
+  "M 412,245 L 266,529 L 150,761 L 250,761 L 303,647 L 313,630 L 498,630 L 477,558 L 349,558 L 347,556 L 421,408 L 451,408 L 518,642 L 538,680 L 562,709 L 591,732 L 615,745 L 642,755 L 664,760 L 823,761 L 832,677 L 703,677 L 685,674 L 667,668 L 648,658 L 631,645 L 616,628 L 604,608 L 595,586 L 494,246 Z";
+const PATH_UPPER_C =
+  "M 877,245 L 729,245 L 699,249 L 667,258 L 636,272 L 610,289 L 586,311 L 564,338 L 547,369 L 582,486 L 598,486 L 602,450 L 607,423 L 617,401 L 640,369 L 654,356 L 671,345 L 695,334 L 714,329 L 732,327 L 868,327 Z";
+
+/** Product mark. `size` is the cap height; the glyph follows the surrounding text color. */
+export default function BrandMark({ size = 22 }: { size?: number }) {
+  const width = Math.round((size * MARK_W) / MARK_H);
 
   return (
-    <span
+    <svg
+      width={width}
+      height={size}
+      viewBox={`${MARK_X} ${MARK_Y} ${MARK_W} ${MARK_H}`}
+      fill="currentColor"
       aria-hidden="true"
-      className="relative block shrink-0"
-      style={{ width: size, height: size }}
+      className="shrink-0 text-foreground"
     >
-      <span
-        className="absolute inset-0 rounded-[0.23em] border border-primary"
-        style={{ borderRadius: 5 * unit }}
-      />
-      <span
-        className="absolute block rounded-[1px] bg-primary"
-        style={{ left: inset, top: inset, width: box, height: box }}
-      />
-      <span
-        className="absolute block rounded-[1px] bg-blue-2/75"
-        style={{ right: inset, top: inset, width: box, height: box }}
-      />
-      <span
-        className={`absolute block rounded-[1px] ${
-          onLight ? "bg-paper-ink/30" : "bg-foreground/35"
-        }`}
-        style={{ left: 8.5 * unit, bottom: inset, width: box, height: box }}
-      />
-    </span>
+      <path d={PATH_A_AND_LOWER_C} />
+      <path d={PATH_UPPER_C} />
+    </svg>
   );
 }

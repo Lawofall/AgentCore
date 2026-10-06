@@ -60,8 +60,6 @@ export interface SkillStoreListing {
   /** Local copy after install — match 市场徽标 on the prompt tree. */
   installDocumentId: string | null;
   status: SkillStoreListingStatus;
-  /** Bound on-demand tools / connectors in the snapshot; empty if none. */
-  offersTools?: string[];
 }
 
 export interface SkillStoreListingDetail extends SkillStoreListing {
@@ -90,7 +88,6 @@ interface ListingWire {
   content?: string;
   status?: string;
   group?: string;
-  offers_tools?: string[];
 }
 
 interface PageWire {
@@ -144,11 +141,6 @@ function toListing(w: ListingWire): SkillStoreListing {
     documentId: w.source_document_id ?? null,
     installDocumentId: w.document_id ?? null,
     status: asListingStatus(w.status),
-    offersTools: Array.isArray(w.offers_tools)
-      ? w.offers_tools.filter(
-          (name): name is string => typeof name === "string",
-        )
-      : [],
   };
 }
 

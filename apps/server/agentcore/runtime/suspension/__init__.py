@@ -189,6 +189,9 @@ class TurnSuspension:
     # Kickoff 段已 consult 的主题正文；resume 复用，避免同 key 再拉一遍。
     consulted_memory: dict[str, str] = field(default_factory=dict)
     trace_id: str | None = None
+    # Sidecar local file only (not ``paused_turns.frame``). Cloud resume reads
+    # ``messages.usage``. Set when the local record is claimed.
+    active_meter: dict[str, Any] | None = None
 
     @property
     def journal(self) -> list[dict[str, Any]]:

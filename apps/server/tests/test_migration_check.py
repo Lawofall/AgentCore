@@ -64,27 +64,23 @@ async def test_debug_attempts_auto_upgrade(_isolate_settings, monkeypatch):
     upgrade.assert_awaited_once()
 
 
-async def test_upgrade_failure_does_not_raise(_isolate_settings, monkeypatch):
-    """Alembic upgrade failure must not block startup; drift check still runs."""
+async def test_debug_upgrade_failure_refuses_startup(_isolate_settings, monkeypatch):
+    """A failed dev upgrade exits startup with the migration error attached."""
     monkeypatch.setattr(settings, "debug", True)
     monkeypatch.setattr(mc, "_script_heads", lambda: {"head1"})
 
     preflight = MagicMock()
     preflight.run_sync = AsyncMock(return_value={"behind"})
-    drift = MagicMock()
-    drift.run_sync = AsyncMock(return_value={"behind"})
-    monkeypatch.setattr(
-        mc,
-        "engine",
-        _engine_with_connects(_async_cm(preflight), _async_cm(drift)),
-    )
+    monkeypatch.setattr(mc, "engine", _engine_with_connects(_async_cm(preflight)))
     monkeypatch.setattr(
         mc,
         "_upgrade_to_head",
         MagicMock(side_effect=RuntimeError("multiple heads")),
     )
 
-    await mc.check_migrations()  # must not raise
+    with pytest.raises(mc.SchemaUpgradeError, match="multiple heads") as raised:
+        await mc.check_migrations()
+    assert isinstance(raised.value.__cause__, RuntimeError)
 
 
 async def test_auto_upgrade_noop_when_already_at_head(_isolate_settings, monkeypatch):
@@ -203,3 +199,50 @@ async def test_check_migrations_never_raises_on_db_error(_isolate_settings, monk
     monkeypatch.setattr(mc, "_script_heads", MagicMock(side_effect=OSError("no db")))
 
     await mc.check_migrations()  # must not raise
+
+
+async def test_debug_still_behind_refuses_startup(_isolate_settings, monkeypatch):
+    """Dev refuses to serve when upgrade returned and the database is still behind."""
+    monkeypatch.setattr(settings, "debug", True)
+    monkeypatch.setattr(mc, "_auto_upgrade_dev", AsyncMock())
+    monkeypatch.setattr(mc, "_script_heads", lambda: {"new"})
+
+    conn = MagicMock()
+    conn.run_sync = AsyncMock(return_value={"old"})
+    monkeypatch.setattr(mc, "engine", _engine_with_connects(_async_cm(conn)))
+
+    with pytest.raises(mc.SchemaUpgradeError, match="behind the latest migration"):
+        await mc.check_migrations()
+
+
+async def test_prod_still_behind_does_not_raise(_isolate_settings, monkeypatch):
+    """Production logs a pending migration and keeps serving."""
+    monkeypatch.setattr(settings, "debug", False)
+    monkeypatch.setattr(mc, "_script_heads", lambda: {"new"})
+
+    conn = MagicMock()
+    conn.run_sync = AsyncMock(return_value={"old"})
+    monkeypatch.setattr(mc, "engine", _engine_with_connects(_async_cm(conn)))
+
+    with patch.object(mc.logger, "error") as error_log:
+        await mc.check_migrations()
+
+    assert error_log.call_args.args == ("db.migrations_pending",)
+
+
+async def test_debug_orm_ahead_does_not_refuse_startup(_isolate_settings, monkeypatch):
+    """At head with a missing column stays a log — there is no migration to run."""
+    monkeypatch.setattr(settings, "debug", True)
+    monkeypatch.setattr(mc, "_auto_upgrade_dev", AsyncMock())
+    monkeypatch.setattr(mc, "_script_heads", lambda: {"head"})
+
+    conn = MagicMock()
+    conn.run_sync = AsyncMock(
+        side_effect=[{"head"}, ([], ["conversation_external_grants.device_id"])]
+    )
+    monkeypatch.setattr(mc, "engine", _engine_with_connects(_async_cm(conn)))
+
+    with patch.object(mc.logger, "error") as error_log:
+        await mc.check_migrations()
+
+    assert error_log.call_args.args == ("db.schema_orm_ahead",)

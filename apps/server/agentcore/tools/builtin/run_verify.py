@@ -770,8 +770,17 @@ def _format_test_output(
     if result.failed or result.errors:
         parts.append("\n（用 read 查看失败测试的完整上下文）")
     elif result.framework == "unknown" and result.raw_output:
-        parts.append("\n### 原始输出\n")
-        parts.append(result.raw_output)
+        summary = "\n".join(parts)
+
+        def _render_raw(raw_body: str) -> str:
+            if not raw_body:
+                return summary
+            return summary + "\n\n### 原始输出\n\n" + raw_body
+
+        from agentcore.tools.builtin.run_streams import cap_inserted_bodies
+
+        (raw_body,) = cap_inserted_bodies([result.raw_output], _render_raw)
+        return _render_raw(raw_body)
 
     return "\n".join(parts)
 
@@ -814,11 +823,19 @@ def _format_check_output(
         parts.append("未取得完整结果（已中止）。可拆成更短的命令后重试。")
     raw = (exec_result.stdout or "").strip()
     err = (exec_result.stderr or "").strip()
-    if raw:
-        parts.extend(["", raw])
-    if err:
-        parts.extend(["", err])
-    return "\n".join(parts)
+
+    def _render(stdout_body: str, stderr_body: str) -> str:
+        body = list(parts)
+        if stdout_body:
+            body.extend(["", stdout_body])
+        if stderr_body:
+            body.extend(["", stderr_body])
+        return "\n".join(body)
+
+    from agentcore.tools.builtin.run_streams import cap_inserted_bodies
+
+    raw, err = cap_inserted_bodies([raw, err], _render)
+    return _render(raw, err)
 
 
 def _is_budget_timeout(exec_result: ExecutionResult) -> bool:
@@ -1413,12 +1430,15 @@ async def execute_verify(arguments: dict[str, Any], context: ToolContext) -> Too
             if kind == "idle"
             else (EXEC_FORCED_STOP_CODE if budget_exceeded else "verify_result")
         )
+        from agentcore.tools.builtin.run_streams import receipt_output_limit
+
         return ToolResult(
             tool_call_id="",
             success=ok,
             output=output,
             error=error,
             duration_ms=duration_ms,
+            output_limit=receipt_output_limit(output),
             metadata={
                 "check": check,
                 "code": meta_code,

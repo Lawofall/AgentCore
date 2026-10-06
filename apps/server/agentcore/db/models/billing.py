@@ -7,8 +7,8 @@ group beyond the structural captain/member bucket. Old rows may lack call
 details or persona — read side tolerates missing fields (no backfill).
 
 ``conversation_id`` is nullable on all three tables: an **account-level** spend
-line (AI 改写 / 文档 description 自动补, ``role=assist``) belongs to no
-conversation. Such a row is real money and must be visible, so it SUMs into the
+line (AI 改写, ``role=assist``) belongs to no conversation. Such a row is real
+money and must be visible, so it SUMs into the
 account windows (用量页 / 仪表盘 / 配额) while every conversation-scoped read
 filters it out by construction (see 成本配额与计费 §三).
 
@@ -50,8 +50,8 @@ class CostEvent(Base):
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
-    # NULL for an account-level call that belongs to no conversation (AI 改写 /
-    # 文档 description, ``role=assist``). ``user_id`` stays the only mandatory
+    # NULL for an account-level call that belongs to no conversation (AI 改写,
+    # ``role=assist``). ``user_id`` stays the only mandatory
     # owner key — that is what the account windows and 配额 SUM aggregate on.
     conversation_id: Mapped[str | None] = mapped_column(
         PG_UUID(as_uuid=False), nullable=True, index=True

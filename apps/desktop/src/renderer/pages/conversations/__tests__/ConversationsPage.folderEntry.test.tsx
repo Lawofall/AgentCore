@@ -6,10 +6,17 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConversationsPage } from "../ConversationsPage";
 
-const { folder, conversation } = vi.hoisted(() => {
+const { folder, emptyFolder, conversation } = vi.hoisted(() => {
   const folder = {
     id: "f1",
     name: "产品设计",
+    mode: "cloud" as const,
+    localRootId: null,
+    localSubpath: null,
+  };
+  const emptyFolder = {
+    id: "f0",
+    name: "空文件夹",
     mode: "cloud" as const,
     localRootId: null,
     localSubpath: null,
@@ -22,7 +29,7 @@ const { folder, conversation } = vi.hoisted(() => {
     lastMessagePreview: "下周一补竞品对标。",
     folderId: "f1",
   };
-  return { folder, conversation };
+  return { folder, emptyFolder, conversation };
 });
 
 vi.mock("../useConversationList", () => ({
@@ -30,8 +37,9 @@ vi.mock("../useConversationList", () => ({
     selected: "__all__",
     setSelected: vi.fn(),
     flashId: null,
-    folderIds: new Set(["f1"]),
-    folders: [folder],
+    folderIds: new Set(["f1", "f0"]),
+    folders: [emptyFolder, folder],
+    foldersAll: [emptyFolder, folder],
   }),
   useConversationList: () => ({
     conversations: [conversation],
@@ -83,6 +91,13 @@ describe("ConversationsPage folder entry", () => {
     renderPage();
     expect(screen.queryByText("管理文件夹")).toBeNull();
     expect(screen.getByText("产品设计")).toBeTruthy();
+    expect(screen.queryByText("空文件夹")).toBeNull();
+    expect(screen.getByText("已归档")).toBeTruthy();
     expect(screen.getByText("路线图讨论")).toBeTruthy();
+  });
+
+  it("does not offer 新建对话 — empty folders start from the draft workspace chip", () => {
+    renderPage();
+    expect(screen.queryByRole("button", { name: "新建对话" })).toBeNull();
   });
 });

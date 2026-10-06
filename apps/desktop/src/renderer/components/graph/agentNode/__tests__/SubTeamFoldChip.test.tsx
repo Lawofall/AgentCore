@@ -43,6 +43,9 @@ describe("SubTeamFoldChip", () => {
     const btn = screen.getByRole("button", { name: "展开子队（3）" });
     expect(btn.getAttribute("title")).toBe("展开子队（3）");
     expect(btn.getAttribute("aria-expanded")).toBe("false");
+    expect(btn.className).toContain("top-1/2");
+    expect(btn.className).not.toContain("72%");
+    expect(btn.querySelector(".lucide-chevron-right")).toBeTruthy();
     expect(btn.textContent).toMatch(/3/);
     fireEvent.click(btn);
     expect(onToggle).toHaveBeenCalledTimes(1);
@@ -64,6 +67,9 @@ describe("SubTeamFoldChip", () => {
     );
     const btn = screen.getByRole("button", { name: "收起子队（2）" });
     expect(btn.getAttribute("aria-expanded")).toBe("true");
+    expect(btn.className).toContain("left-1/2");
+    expect(btn.className).not.toContain("72%");
+    expect(btn.querySelector(".lucide-chevron-up")).toBeTruthy();
     fireEvent.click(btn);
     expect(onToggle).toHaveBeenCalledTimes(1);
     expect(parentClick).not.toHaveBeenCalled();

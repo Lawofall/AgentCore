@@ -156,35 +156,52 @@ export function getModels(): Promise<ModelCatalog> {
 
 // —— 跨会话的「上次选择」偏好（走统一 UI 持久化层，禁止直碰 localStorage）——
 
-/** 上次在聊天里选择的模型组合 id（新会话首次的默认建议来源）。 */
+/** 拆分前聊天里记下的装配 id。第一次读装配时抄进 `chat:assembly:last`。 */
 const LAST_USED_PROFILE_LEAF = "chat:profile:last";
+const LAST_USED_ASSEMBLY_LEAF = "chat:assembly:last";
 
-/** The profile id last picked in chat (seeds a new conversation's default suggestion). */
-export function getLastUsedProfileId(): string | null {
-  const raw = uiGet(LAST_USED_PROFILE_LEAF);
+function readStoredId(leaf: string): string | null {
+  const raw = uiGet(leaf);
   if (typeof raw === "string") {
     const id = raw.trim();
     return id || null;
   }
-  if (
-    raw &&
-    typeof raw === "object" &&
-    typeof (raw as { id?: unknown }).id === "string"
-  ) {
-    // Migrate legacy `{ id, origin, … }` shape if any leftover — ignore, clear.
-    return null;
-  }
   return null;
 }
 
-/** Remember the last picked profile id (cross-conversation, global scope). */
-export function setLastUsedProfileId(profileId: string): void {
-  const id = profileId.trim();
-  if (!id) return;
-  uiSet(LAST_USED_PROFILE_LEAF, id);
+function writeStoredId(leaf: string, id: string): void {
+  const trimmed = id.trim();
+  if (!trimmed) return;
+  uiSet(leaf, trimmed);
 }
 
-/** Clear last-used profile preference (local UI storage). */
+/**
+ * 上次在聊天里选择的装配。
+ * `chat:assembly:last` 还空时，把旧键抄过来一次。
+ */
+export function getLastUsedAssemblyId(): string | null {
+  const current = readStoredId(LAST_USED_ASSEMBLY_LEAF);
+  if (current) return current;
+  const legacy = readStoredId(LAST_USED_PROFILE_LEAF);
+  if (!legacy) return null;
+  uiSet(LAST_USED_ASSEMBLY_LEAF, legacy);
+  return legacy;
+}
+
+export function setLastUsedAssemblyId(assemblyId: string): void {
+  writeStoredId(LAST_USED_ASSEMBLY_LEAF, assemblyId);
+}
+
+/** 装配上次选择。旧调用点仍用这个名字。 */
+export function getLastUsedProfileId(): string | null {
+  return getLastUsedAssemblyId();
+}
+
+export function setLastUsedProfileId(profileId: string): void {
+  setLastUsedAssemblyId(profileId);
+}
+
 export function clearLastUsedProfileId(): void {
   uiRemove(LAST_USED_PROFILE_LEAF);
+  uiRemove(LAST_USED_ASSEMBLY_LEAF);
 }

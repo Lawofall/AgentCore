@@ -316,6 +316,19 @@ def _postcondition_error(action: str, data: dict[str, Any]) -> str | None:
             "使交互无效。"
             "请先消除禁用条件或改点其它可用控件；勿宣称点击成功。"
         )
+    if action == "navigate":
+        status = data.get("http_status")
+        if isinstance(status, bool) or not isinstance(status, int):
+            return None
+        if status < 400 or status > 599:
+            return None
+        url = str(data.get("final_url") or "").strip()
+        where = f"（{url}）" if url else ""
+        return (
+            f"browser(action=navigate) 主文档状态为 HTTP {status}{where}。"
+            "这一页没有成功打开。请核对工作区相对路径是否存在，"
+            "勿把错误页当成已打开的页面。"
+        )
     return None
 
 

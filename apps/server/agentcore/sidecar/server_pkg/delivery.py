@@ -12,12 +12,12 @@ from agentcore.runtime.turn.delivery import (
     DeliveryBlockedError,
     NoLiveTurnError,
     deliver_in_flight,
+    deliver_queued_item_to_captain,
     delivery_json_ack,
     edit_queued_item,
     queued_turns_json,
     raise_if_delivery_blocked,
     reorder_queued_items,
-    stop_and_send_queued_item,
 )
 from agentcore.runtime.turn.queue import QueuedTurn, set_queue_starter
 from agentcore.runtime.turn.runs import turn_runs
@@ -346,7 +346,9 @@ class DeliveryMixin:
             return
         await self._reply(request_id, {"ok": True})
 
-    async def _on_stop_and_send_queued_turn(self, request_id: Any, params: dict[str, Any]) -> None:
+    async def _on_deliver_queued_turn_to_captain(
+        self, request_id: Any, params: dict[str, Any]
+    ) -> None:
         if not self._initialized:
             await self._send(
                 protocol.make_error(
@@ -361,12 +363,12 @@ class DeliveryMixin:
                 protocol.make_error(
                     request_id,
                     protocol.INVALID_PARAMS,
-                    "stopAndSendQueuedTurn requires conversationId and queueId",
+                    "deliverQueuedTurnToCaptain requires conversationId and queueId",
                 )
             )
             return
-        item = await stop_and_send_queued_item(conversation_id, queue_id)
-        if item is None:
+        result = await deliver_queued_item_to_captain(conversation_id, queue_id)
+        if result.status == "missing":
             await self._send(
                 protocol.make_error(
                     request_id,
@@ -376,12 +378,18 @@ class DeliveryMixin:
                 )
             )
             return
-        from agentcore.core.task_cancel import cancel_task
-
-        task = self.live_turn_task(conversation_id)
-        if task is not None:
-            cancel_task(task, "user_stop")
-        await self._reply(request_id, {"ok": True, "queueId": queue_id})
+        await self._reply(
+            request_id,
+            {
+                "status": result.status,
+                "queueId": queue_id,
+                **(
+                    {"interjectionId": result.interjection_id}
+                    if result.interjection_id
+                    else {}
+                ),
+            },
+        )
 
     async def _on_edit_queued_turn(self, request_id: Any, params: dict[str, Any]) -> None:
         if not self._initialized:

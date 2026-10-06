@@ -1,9 +1,10 @@
 import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import { visibleMessageText } from "@/lib/errors";
 import {
   NO_ACTIVE_MESSAGES,
-  activeRuntime,
+  runtimeOf,
   useActiveUserTurnCount,
   useConversationStore,
 } from "@/stores/conversation";
@@ -24,12 +25,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 export function ConversationOutline() {
   const userTurnCount = useActiveUserTurnCount();
   const focusMessage = useConversationStore((s) => s.focusMessage);
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
+  const paneKey = useChatPaneSliceKey();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const messages = useConversationStore((s) => {
     if (!open) return NO_ACTIVE_MESSAGES;
-    return activeRuntime(s).messages;
+    return runtimeOf(s, paneKey).messages;
   });
 
   const turns = useMemo(

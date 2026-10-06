@@ -45,11 +45,11 @@ async def _wire_consult_if_entries(
     user_id: str,
     skill_audience: str,
 ) -> bool:
-    """Register unified ``consult`` on the opening table (empty catalog is a soft miss).
+    """Register ``consult`` only when this turn's directory has at least one row.
 
-    Returns whether the tool was wired. Prompt listing still omits ``<按需目录>``
-    when there are no entries; the tool stays so the table does not flicker.
-    ``skill_audience`` is the reader role (``ceo`` / ``worker``) — not a task guess.
+    An empty directory leaves the tool off the opening table. Official rows are
+    already absent when this assembly omits the factory catalog; user on-demand
+    rows still count. ``skill_audience`` is the reader role (``ceo`` / ``worker``).
     """
     from agentcore.runtime.resolve.prepare import default_memory_store
 
@@ -64,6 +64,9 @@ async def _wire_consult_if_entries(
         skill_audience=skill_audience,
         tool_registry=registry,
     )
+    entries = await source.list_directory(user_id)
+    if not entries:
+        return False
     if registry.get_optional("consult") is None:
         registry.register(ConsultTool(source=source))
     return True
@@ -135,7 +138,11 @@ def _assemble_ceo_toolset(
         include_browser="browser" in worker_tools.names,
         include_execution_tools="run" in worker_tools.names,
     )
-    chat_tools.register(delegate_tool)
+    from agentcore.tools.switchboard import switch_blocks
+
+    mount_delegate = not switch_blocks("delegate")
+    if mount_delegate:
+        chat_tools.register(delegate_tool)
     from agentcore.tools.builtin.debate import DebateTool
 
     debate_tool = DebateTool(
@@ -159,19 +166,21 @@ def _assemble_ceo_toolset(
         session_store=session_store,
         session_loader=session_loader,
     )
-    chat_tools.register(debate_tool)
+    if not switch_blocks("debate"):
+        chat_tools.register(debate_tool)
     from agentcore.runtime.resolve.ceo_surface import register_coordination_surface
 
-    register_coordination_surface(
-        chat_tools,
-        delegate_tool=delegate_tool,
-        include=True,
-    )
+    if mount_delegate:
+        register_coordination_surface(
+            chat_tools,
+            delegate_tool=delegate_tool,
+            include=True,
+        )
     register_always_ceo_tools(
         chat_tools,
         skill_registry=skill_registry,
     )
-    if checkpoint_enabled:
+    if checkpoint_enabled and not switch_blocks("ask_user"):
         chat_tools.register(
             AskUserTool(
                 sink=sink,
@@ -216,7 +225,7 @@ async def wire_worker_consult(
     folder_id: str | None = None,
     user_id: str,
 ) -> bool:
-    """Register unified ``consult`` on the worker toolset (empty catalog is a soft miss)."""
+    """Register ``consult`` on the worker toolset when the directory has a row."""
     return await _wire_consult_if_entries(
         worker_tools,
         skill_registry=skill_registry,

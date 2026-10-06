@@ -1,13 +1,7 @@
 import type { RunStatus } from "@/stores/execution";
 import { NODE_HEIGHT, NODE_WIDTH } from "@agentcore/graph-layout";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
-import {
-  CheckCircle2,
-  Loader2,
-  Sparkles,
-  UserRound,
-  XCircle,
-} from "lucide-react";
+import { CheckCircle2, Sparkles, UserRound, XCircle } from "lucide-react";
 import { graphNodeDimClass, useGraphNodeDimmed } from "./graphHover";
 import {
   useCaptainEndpointLive,
@@ -70,9 +64,10 @@ const SINK_STYLES: Record<string, { ring: string; icon: React.ReactNode }> = {
     ring: "ring-muted-foreground/30",
     icon: <Sparkles size={15} className="text-muted-foreground" />,
   },
+  // 队员已齐、回合尚未收口：不转圈。勾是团队已结束；「已收尾」等回合收口。
   running: {
-    ring: "ring-primary",
-    icon: <Loader2 size={15} className="animate-spin text-primary" />,
+    ring: "ring-muted-foreground/30",
+    icon: <CheckCircle2 size={15} className="text-muted-foreground" />,
   },
   completed: {
     ring: "ring-success",
@@ -176,7 +171,6 @@ export function EndpointNodeFace({
   flashing?: boolean;
 }) {
   const style = SINK_STYLES[status] ?? SINK_STYLES.pending;
-  const running = !isInput && status === "running";
   const interactive = !!onActivate;
   const highlighted = !!focused;
   const flashColor =
@@ -190,7 +184,7 @@ export function EndpointNodeFace({
         tabIndex: 0,
         "aria-label": isInput
           ? "你的任务，查看完整提问"
-          : `CEO 汇总，${statusCaption || shortStatus}，${actionLabel ?? "查看最终回答"}`,
+          : captainAriaLabel(statusCaption, shortStatus, actionLabel),
         onKeyDown: (e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
@@ -213,7 +207,7 @@ export function EndpointNodeFace({
       }
       className={`overflow-hidden rounded-xl border px-3 py-2.5 text-left shadow-sm outline-none ${
         isInput ? "border-border bg-muted/40" : `bg-card ring-2 ${style.ring}`
-      } ${running ? "animate-pulse" : ""} ${flashing ? "animate-graph-node-flash" : ""} ${interactive ? "cursor-pointer" : ""} ${
+      } ${flashing ? "animate-graph-node-flash" : ""} ${interactive ? "cursor-pointer" : ""} ${
         highlighted
           ? "outline outline-2 outline-offset-2 outline-primary"
           : interactive
@@ -235,9 +229,7 @@ export function EndpointNodeFace({
       </div>
       {shortStatus ? (
         <p
-          className={`mt-1 truncate text-xs ${
-            running ? "text-primary" : "text-muted-foreground"
-          }`}
+          className="mt-1 truncate text-xs text-muted-foreground"
           data-testid="captain-sink-label"
         >
           {shortStatus}
@@ -248,11 +240,7 @@ export function EndpointNodeFace({
           className={`line-clamp-2 text-xs leading-snug ${
             isInput ? "mt-1" : "mt-2"
           } ${
-            isInput
-              ? "text-muted-foreground/70"
-              : running
-                ? "text-foreground/80"
-                : "text-muted-foreground/80"
+            isInput ? "text-muted-foreground/70" : "text-muted-foreground/80"
           }`}
           data-testid={isInput ? undefined : "captain-sink-preview"}
         >
@@ -275,10 +263,21 @@ export function endpointBodyText(opts: {
   return (opts.statusCaption ?? "").trim();
 }
 
+function captainAriaLabel(
+  statusCaption: string | undefined,
+  shortStatus: string | null,
+  actionLabel: string | undefined,
+): string {
+  const face = (statusCaption || shortStatus || "").trim();
+  const action = actionLabel ?? "查看最终回答";
+  return face ? `CEO 汇总，${face}，${action}` : `CEO 汇总，${action}`;
+}
+
 function sinkLabel(status: RunStatus): string {
   const labels: Record<RunStatus, string> = {
     pending: "待收尾",
-    running: "正在收尾…",
+    // 写结尾没有阶段名：进行中靠转圈，正文是这句结尾。
+    running: "",
     completed: "已收尾",
     failed: "失败",
     cancelled: "已停止",

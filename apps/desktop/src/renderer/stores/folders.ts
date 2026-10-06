@@ -73,7 +73,7 @@ interface FoldersUiState {
    *（入口「连接 Git = 云 clone remote」）。
    */
   connectGitWsId: string | null;
-  /** 命令面板 / 文件中枢「云上做完再写入」→ 借用云拷贝对话框。Composer 两选不走此框。 */
+  /** 命令面板「云上做完再写入」→ 借用云拷贝对话框。Composer 点本机文件夹不再进此框。 */
   borrowToCloudOpen: boolean;
   /** Optional prefill when the caller already picked the local folder. */
   borrowToCloudPrefill: ImportToCloudPrefill | null;

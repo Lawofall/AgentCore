@@ -20,6 +20,22 @@ describe("Markdown math", () => {
     expect(container.textContent).toContain("E");
   });
 
+  it("typesets a display formula that re-wraps a symbol", () => {
+    const content = [
+      "\\[",
+      "\\operatorname{Delegate}(t,\\delta) \\iff \\begin{cases}",
+      "\\forall i\\ \\operatorname{Unit}(i)，或整个 \\(t\\) 作为不可分单元；\\\\",
+      "H(\\phi_t\\mid I_t)\\le\\varepsilon",
+      "\\end{cases}",
+      "\\]",
+    ].join("\n");
+    const { container } = render(<Markdown content={content} />);
+    expect(container.querySelector(".katex-error")).toBeNull();
+    expect(container.querySelector(".katex-display")).toBeTruthy();
+    expect(container.textContent).toContain("Delegate");
+    expect(container.textContent).toContain("不可分单元");
+  });
+
   it("does not typeset \\( inside a fenced code block", () => {
     const { container } = render(<Markdown content={"```\n\\(x^2\\)\n```"} />);
     expect(container.querySelector(".katex")).toBeNull();

@@ -188,6 +188,21 @@ class RunToolProgressPayload(WirePayload):
 WorkerRunPhase = Literal["thinking", "tool", "waiting_children", "winding_down"]
 
 
+class RunSpendPayload(WirePayload):
+    """累计用量（``run_spend``）：该 run 到目前为止已经返回的模型调用。
+
+    EPHEMERAL。``usage`` / ``cost`` 是累计值，不是这一次调用的增量。
+    金额是逐次 ``calculate_cost`` 相加，不把 token 合计后再计价（峰谷价随调用时间）。
+    """
+
+    run_id: str
+    agent_id: str
+    role: str
+    model: str
+    usage: UsageBreakdown
+    cost: CostBreakdown
+
+
 class RunPhasePayload(WirePayload):
     """Worker 活动相位（``run_phase``）：等 LLM / 跑工具 / 等子 / 超时·token 收尾。
 
@@ -301,9 +316,10 @@ class DeliveryAction(WirePayload):
     """One user action that would close a delivery gap. ``kind`` is a widened string
     on the wire (like ``ToolPhase``) so the backend can add kinds without a client
     bump — known: ``bind_local_folder`` (wire kind；产品文案按会话分流：
-    工程尚在本机 → 云协作「先在云上做」优先；远程仓进当前云桌走 git clone /
+    工程尚在本机 → 云协作「云上做完再写入」（命令面板，不经 Composer）优先；
+    远程仓进当前云桌走 git clone /
     Composer「从 Git 克隆」；**已是云端会话但沙箱未装配** →
-    禁止再导「先在云上做」，改稍后重试 / export_to_local / 本机传统；
+    禁止再导「云上做完再写入」，改稍后重试 / export_to_local / 本机传统；
     桌面默认同通道（本地对话 / 打开本机文件夹），≠离线；云端对话并列可选)；
     ``export_to_local`` (云端已有 delivered_files → 导出到本机文件夹后即可 npm install / 本地运行；
     与 bind_local_folder 可并存但语义不同);
@@ -578,6 +594,9 @@ class RunFailedPayload(WirePayload):
     error_code: str | None = absent()
     retryable: bool | None = absent()
     retry_after: float | None = absent()
+    # 失败前已经打到模型上的用量。缺省 = 还没花，或旧 journal。
+    usage: UsageBreakdown | None = absent()
+    cost: CostBreakdown | None = absent()
 
 
 class RunCancelledPayload(WirePayload):
@@ -585,6 +604,9 @@ class RunCancelledPayload(WirePayload):
     agent_id: str
     reason: Literal["redirect", "stop", "user_stop", "worker_timeout"]
     execution_id: str | None = absent()
+    # 中断前已经打到模型上的用量。缺省 = 还没花，或旧 journal。
+    usage: UsageBreakdown | None = absent()
+    cost: CostBreakdown | None = absent()
 
 
 class RunSkippedPayload(WirePayload):

@@ -409,13 +409,27 @@ class DelegateTool:
             from agentcore.runtime.delegate.task_models import (
                 ensure_delegate_route_extras,
                 inherit_model_from_tool,
+                load_catalog_for_items,
                 prepare_task_model_fields,
             )
 
+            user_id = getattr(self._base_tool_context, "user_id", "") or ""
+            catalog, cat_err = await load_catalog_for_items(tasks_raw, user_id=user_id)
+            if cat_err:
+                msg = "委派任务无效：" + cat_err
+                logger.info("delegate.rejected", errors=[cat_err], reason="task_model")
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output="",
+                    error=msg,
+                    contract_failure=True,
+                )
             model_errors, model_idents = await prepare_task_model_fields(
                 tasks_raw,
-                user_id=getattr(self._base_tool_context, "user_id", "") or "",
+                user_id=user_id,
                 where_prefix="tasks",
+                catalog=catalog,
                 inherit_model=lambda rid: inherit_model_from_tool(self, rid),
             )
             if model_errors:

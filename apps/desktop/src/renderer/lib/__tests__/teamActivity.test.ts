@@ -92,6 +92,15 @@ describe("isConversationOnScene", () => {
   it("is false on another route with no matching float", () => {
     expect(isConversationOnScene("abc", "#/files", ["other"])).toBe(false);
   });
+
+  it("counts a beside pane that is actually on screen", () => {
+    expect(
+      isConversationOnScene("beside", "#/conversations/focus", [], ["beside"]),
+    ).toBe(true);
+    expect(
+      isConversationOnScene("beside", "#/conversations/focus/turn/t1", [], []),
+    ).toBe(false);
+  });
 });
 
 describe("pickAmbientOutlet", () => {

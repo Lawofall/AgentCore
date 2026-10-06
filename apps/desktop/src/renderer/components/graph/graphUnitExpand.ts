@@ -1,29 +1,37 @@
 /**
- * Resolve which collaboration-graph units render expanded (nested sub-teams visible).
- * Defaults to expand every non-debate unit that has folded descendants; user override
- * only applies after an explicit toggle (`touched`).
+ * Which collaboration-graph leaders render their direct reports.
+ * Default is every non-debate leader expanded. After the user toggles, only
+ * explicitly collapsed leaders stay shut — a leader that appears later stays open.
  */
 export function resolveGraphExpandedUnits(opts: {
   defaults: ReadonlySet<string>;
   touched: boolean;
-  /** Comma-joined unit ids the user left expanded (empty = collapsed all after touch). */
-  storedFingerprint: string;
-  /** Session override for non-persisted hosts; null = use defaults. */
-  sessionOverride: ReadonlySet<string> | null;
+  /** Comma-joined leader ids the user collapsed. */
+  collapsedFingerprint: string;
+  /** Session collapses for non-persisted hosts; null = nothing collapsed. */
+  sessionCollapsed: ReadonlySet<string> | null;
   persist: boolean;
 }): Set<string> {
-  const { defaults, touched, storedFingerprint, sessionOverride, persist } =
+  const { defaults, touched, collapsedFingerprint, sessionCollapsed, persist } =
     opts;
-  if (!persist) {
-    return new Set(sessionOverride ?? defaults);
+  const collapsed = persist
+    ? touched
+      ? parseCollapsed(collapsedFingerprint)
+      : new Set<string>()
+    : (sessionCollapsed ?? new Set<string>());
+  const expanded = new Set<string>();
+  for (const id of defaults) {
+    if (!collapsed.has(id)) expanded.add(id);
   }
-  if (!touched) return new Set(defaults);
-  if (!storedFingerprint) return new Set();
+  return expanded;
+}
+
+function parseCollapsed(fingerprint: string): Set<string> {
   return new Set(
-    storedFingerprint
+    fingerprint
       .split(",")
       .map((id) => id.trim())
-      .filter((id) => id.length > 0 && id !== "__touched"),
+      .filter((id) => id.length > 0 && id !== GRAPH_UNIT_EXPAND_TOUCHED),
   );
 }
 

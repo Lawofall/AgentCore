@@ -5,7 +5,7 @@ import type { components } from "@/types/api.generated";
  * BYOK 多服务商配置（设置·模型配置）数据层。
  *
  * 一个账号可配置一组 OpenAI 兼容服务商（各自 label + key + 端点）。
- * 账号默认「模型组合」走 `/v1/users/me/llm-model-profiles`（见
+ * 星标装配走 `/v1/users/me/assemblies`（见
  * {@link import("@/services/llmModelProfiles")}）。
  * REST 类型由后端 OpenAPI 生成（仓库根 `pnpm gen:types`）。
  */

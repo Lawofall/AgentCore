@@ -432,7 +432,7 @@ export function ConversationReplay({
         createdAt: data.conversation.created_at,
         conversationId: data.conversation.id,
         modelProfileName: data.conversation.model_profile_name,
-        modelProfileId: data.conversation.model_profile_id,
+        modelProfileId: data.conversation.assembly_id,
         turns: data.turns,
         errors: data.errors,
         costLabel: fmtCny(nanoToYuan(data.cost_total)),

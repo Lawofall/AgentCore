@@ -25,6 +25,7 @@ USAGE_SETTLE_WIRE_INT_KEYS: tuple[str, ...] = (
 USAGE_SETTLE_POSITIVE_INT_KEYS: tuple[str, ...] = (
     "duration_ms",
     "generation_ms",
+    "ttft_ms",
 )
 
 USAGE_SETTLE_INT_KEYS: tuple[str, ...] = (

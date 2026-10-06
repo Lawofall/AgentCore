@@ -119,6 +119,18 @@ export function formatOutputSpeed(
   return `${tps.toFixed(1)} tokens/s`;
 }
 
+/**
+ * 用量面板 TTFT。不足 1 分钟保留一位小数秒（`1.8s`）；更长走 {@link formatDuration}。
+ * 四舍五入后仍不到 0.1s 写 `<0.1s`。非正数不展示。
+ */
+export function formatTtft(ms: number): string | null {
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  if (ms >= 60_000) return formatDuration(ms);
+  const text = (ms / 1000).toFixed(1);
+  if (text === "0.0") return "<0.1s";
+  return `${text}s`;
+}
+
 /** 取文本末尾若干字符并折行成单段预览（用于 worker 节点的实时输出片段：运行中
  * 最新内容在末尾，tail 才是「正在写什么」）。 */
 export function tailText(text: string, max = 80): string {

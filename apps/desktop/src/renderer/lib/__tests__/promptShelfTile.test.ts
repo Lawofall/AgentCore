@@ -120,7 +120,6 @@ function listing(over: Partial<SkillStoreListing>): SkillStoreListing {
     documentId: "x",
     installDocumentId: null,
     status: "published",
-    offersTools: [],
     ...over,
   };
 }
@@ -182,14 +181,14 @@ describe("promptItemShelfCopy", () => {
     ).toBe("");
   });
 
-  it("夹里未上架不打我的；常驻才打", () => {
+  it("夹里未上架不打我的；常驻打必带", () => {
     expect(
       promptItemShelfCopy(mineItem({ label: "合同审查" })).accessory,
     ).toEqual([]);
     expect(
       promptItemShelfCopy(mineItem({ label: "短约束", applyMode: "always" }))
         .accessory,
-    ).toEqual([{ label: "我的" }]);
+    ).toEqual([{ label: "必带" }]);
     expect(
       promptItemShelfCopy(mineItem({ label: "偏好", aiMaintained: true }))
         .accessory,
@@ -236,7 +235,7 @@ describe("promptItemShelfCopy", () => {
           applyMode: "always",
         }),
       ).accessory,
-    ).toEqual([{ label: "我的" }]);
+    ).toEqual([{ label: "必带" }]);
   });
 
   it("出厂工具标题用中文简介，底栏打工具，例外才叠加", () => {
@@ -259,17 +258,15 @@ describe("promptItemShelfCopy", () => {
     ).toEqual(["工具", "需审批", "CEO"]);
   });
 
-  it("绑了手脚的我的条目打工具，不把名单铺上卡", () => {
+  it("我的条目只打分组", () => {
     const copy = promptItemShelfCopy(
       mineItem({
         label: "合同审查",
-        content:
-          "---\napply: on_demand\noffers_tools: host, debate\n---\n怎么审",
+        content: "---\napply: on_demand\ndescription: 审\n---\n怎么审",
       }),
       { sceneGroupLabel: "法律合规" },
     );
-    expect(copy.tags).toEqual(["工具", "法律合规"]);
-    expect(copy.tags.join(" ")).not.toContain("host");
+    expect(copy.tags).toEqual(["法律合规"]);
   });
 
   it("读卡标题旁为列出的工具补开场即用", () => {

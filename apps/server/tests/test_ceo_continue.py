@@ -573,7 +573,8 @@ async def test_continue_ceo_rebuilds_worker_base_not_chat_prompt(monkeypatch):
         assemble_system_prompt(),
         ceo_tool_names={"consult", "delegate"},
     )
-    assert ceo_chat_prompt.strip()
+    # Shared base and CEO core are empty until an eval proves a line. The
+    # continue path must still rebuild a worker base, not reuse this string.
 
     captured: dict[str, str] = {}
     wired = SimpleNamespace(

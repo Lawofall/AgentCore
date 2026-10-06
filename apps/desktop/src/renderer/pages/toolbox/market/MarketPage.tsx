@@ -1,9 +1,9 @@
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PromptDocument } from "@/components/prompt/PromptDocument";
 import {
+  ASSEMBLY_CARD_GRID_CLASS,
   Badge,
   Button,
-  CATALOG_GRID_CLASS,
   CatalogIconShell,
   EmptyHint,
   SearchField,
@@ -20,13 +20,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { artifactColorVar } from "@/lib/catalogColors";
-import {
-  MARKET_CATALOG_CAPTION,
-  MARKET_OFFERS_CAPTION,
-} from "@/lib/skillStoreCopy";
+import { MARKET_CATALOG_CAPTION } from "@/lib/skillStoreCopy";
 import { notifyError, notifySuccess } from "@/lib/toast";
-import { ToolboxSourceTabs } from "@/pages/toolbox/ToolboxSourceTabs";
 import { TOOLBOX_PROMPT_NOUN } from "@/pages/toolbox/kinds";
+import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 import { ShelfRail } from "@/pages/toolbox/market/ShelfRail";
 import { StoreListingCard } from "@/pages/toolbox/market/StoreListingCard";
 import {
@@ -38,10 +35,7 @@ import {
   skillStoreGroupLabel,
 } from "@/pages/toolbox/market/skillStoreGroups";
 import { ApiError } from "@/services/api";
-import {
-  parseOffersTools,
-  skillBodyFromContent,
-} from "@/services/skillCatalog";
+import { skillBodyFromContent } from "@/services/skillCatalog";
 import {
   EMPTY_SKILL_STORE_GROUPS,
   SKILL_STORE_DISCOVER_PAGE_SIZE,
@@ -55,11 +49,11 @@ import {
   listSkillStore,
   reportSkill,
 } from "@/services/skillStore";
-import { Loader2, Store } from "lucide-react";
+import { ChevronLeft, Loader2, Store } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
-const SKILL_GRID_CLASS = `mt-3 ${CATALOG_GRID_CLASS}`;
+const SKILL_GRID_CLASS = `mt-3 ${ASSEMBLY_CARD_GRID_CLASS}`;
 
 function errMsg(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
@@ -247,7 +241,6 @@ export function MarketPage() {
   const description = detail?.description || selected?.description || "";
   const showDescription =
     Boolean(description) && selectedCopy?.title !== description;
-  const offeredTools = detail?.content ? parseOffersTools(detail.content) : [];
   const skillBody = detail?.content ? skillBodyFromContent(detail.content) : "";
   const hasMore = items.length < total && !loading && !error;
   const queryLabel = searchLabel();
@@ -257,17 +250,23 @@ export function MarketPage() {
 
   return (
     <PageContainer width="canvas" fill padding="page">
-      <ToolboxSourceTabs
-        action={
-          <SearchField
-            aria-label={queryLabel}
-            placeholder={queryLabel}
-            value={q}
-            onValueChange={setQ}
-            className="w-52"
-          />
-        }
-      />
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          to={`${APP_PATHS.toolbox.root}#prompts`}
+          className="inline-flex h-8 shrink-0 items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ChevronLeft size={16} />
+          交代
+        </Link>
+        <h1 className="sr-only">工具箱</h1>
+        <SearchField
+          aria-label={queryLabel}
+          placeholder={queryLabel}
+          value={q}
+          onValueChange={setQ}
+          className="w-52"
+        />
+      </div>
       <div className="flex min-h-0 flex-1 flex-col">
         {!searching && visibleGroupChips.length > 0 ? (
           <fieldset className="m-0 mt-3 flex shrink-0 flex-wrap gap-1.5 border-0 p-0">
@@ -453,20 +452,6 @@ export function MarketPage() {
                   <p className="mt-1.5 text-sm text-foreground">
                     {description}
                   </p>
-                </div>
-              ) : null}
-              {offeredTools.length > 0 ? (
-                <div data-testid="skill-store-offers">
-                  <p className="text-muted-foreground text-xs">
-                    {MARKET_OFFERS_CAPTION}
-                  </p>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {offeredTools.map((name) => (
-                      <Badge key={name} pill>
-                        {name}
-                      </Badge>
-                    ))}
-                  </div>
                 </div>
               ) : null}
               {skillBody ? (

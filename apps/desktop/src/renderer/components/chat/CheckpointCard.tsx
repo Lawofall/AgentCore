@@ -13,11 +13,14 @@ import { useState } from "react";
 import { AskDecisionBody } from "./ask/AskDecisionBody";
 import {
   type AskUserContent,
-  collapsedAskGlance,
-  displayAskReply,
   flattenAskNotes,
   useAskAnswer,
 } from "./ask/AskUserFields";
+import {
+  type SettledAskBlock,
+  settledAskBlocks,
+  settledAskFace,
+} from "./ask/askSettledFace";
 
 /**
  * Inline ask_user card — the CEO paused the turn to ask the user. This is the ONE
@@ -123,61 +126,96 @@ export function AskUserCard({
   );
 }
 
-/** Collapsed glance: picks / short reply, never the CEO question or compose dump. */
-function resolvedCollapsedSummary(checkpoint: CheckpointDisplay): string {
-  return collapsedAskGlance({
-    selected: checkpoint.selected,
-    note: checkpoint.note,
-    prompts: checkpoint.questions.map((q) => q.prompt),
-  });
+function blockKey(block: SettledAskBlock, seen: Map<string, number>): string {
+  const base = `${block.prompt}\n${block.reply}\n${block.picks.join("\n")}`;
+  const n = seen.get(base) ?? 0;
+  seen.set(base, n + 1);
+  return n === 0 ? base : `${base}#${n}`;
 }
 
-/** Settled heading: question prompts; old no-question frames keep wire `question`. */
-function settledAskStem(checkpoint: CheckpointDisplay): string {
-  const prompts = checkpoint.questions
-    .map((q) => q.prompt.trim())
-    .filter(Boolean);
-  if (prompts.length === 1) return prompts[0];
-  if (prompts.length > 1) return prompts.join("\n");
-  return checkpoint.question;
+function SettledAskBody({ blocks }: { blocks: readonly SettledAskBlock[] }) {
+  const seen = new Map<string, number>();
+  return (
+    <div className="mt-2 space-y-2" data-ask-settled-body="">
+      {blocks.map((block) => (
+        <div key={blockKey(block, seen)} className="space-y-2">
+          {block.prompt ? (
+            <p className="whitespace-pre-wrap text-sm text-foreground">
+              {block.prompt}
+            </p>
+          ) : null}
+          {block.picks.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {block.picks.map((pick) => (
+                <Badge key={pick} tone="muted" pill>
+                  {pick}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+          {block.reply ? (
+            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+              {block.reply}
+            </p>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
 }
 
-/** The settled record of an ask_user card: how it was decided, plus the user's
- * answer note. Process-row stub — not a success toast or DecisionCard.
- * 取消 / 确认 / 超时都占时间线存根；缺 decision 不猜超时。 */
-function ResolvedCheckpoint({ checkpoint }: { checkpoint: CheckpointDisplay }) {
-  const resolved = askResolvedDisplay(checkpoint.intent, checkpoint.decision);
-  const reply = displayAskReply(checkpoint.note);
+/** Settled ask row. Outcome labels (取消 / 超时 / 失效) keep the header;
+ * the question drops into the body. A continue row's header is stem · reply. */
+export function AskSettledRecord({
+  disclosureKey,
+  question,
+  prompts,
+  intent,
+  decision,
+  note,
+  selected,
+}: {
+  disclosureKey: string | null;
+  question: string;
+  prompts: readonly string[];
+  intent: CheckpointDisplay["intent"];
+  decision: CheckpointDisplay["decision"];
+  note: string;
+  selected: readonly string[];
+}) {
+  const resolved = askResolvedDisplay(intent, decision);
+  const face = settledAskFace({ question, prompts, note, selected });
+  const stemInHeader = resolved.label === "";
+  const blocks = settledAskBlocks(face, stemInHeader);
 
   return (
     <ResolvedDecisionRecord
       layout="toneStub"
-      disclosureKey={checkpoint.id ? `${checkpoint.id}:resolved` : null}
+      disclosureKey={disclosureKey}
       tone={resolved.tone}
       icon={resolved.icon}
       label={resolved.label}
-      collapsedSummary={resolvedCollapsedSummary(checkpoint)}
-      askIntent={checkpoint.intent}
+      summaryStem={stemInHeader ? face.stem : ""}
+      summaryAnswer={face.answer}
+      askIntent={intent}
     >
-      <div className="mt-1.5 space-y-1.5">
-        <p className="whitespace-pre-wrap text-sm text-foreground">
-          {settledAskStem(checkpoint)}
-        </p>
-        {checkpoint.selected.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {checkpoint.selected.map((s) => (
-              <Badge key={s} tone="muted" pill>
-                {s}
-              </Badge>
-            ))}
-          </div>
-        )}
-        {reply ? (
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-            {reply}
-          </p>
-        ) : null}
-      </div>
+      {blocks.length > 0 ? <SettledAskBody blocks={blocks} /> : null}
     </ResolvedDecisionRecord>
+  );
+}
+
+/** The settled record of an ask_user card. Process-row stub — not a success
+ * toast or DecisionCard. 取消 / 确认 / 超时都占时间线存根；缺 decision 不猜超时。 */
+function ResolvedCheckpoint({ checkpoint }: { checkpoint: CheckpointDisplay }) {
+  return (
+    <AskSettledRecord
+      disclosureKey={checkpoint.id ? `${checkpoint.id}:resolved` : null}
+      question={checkpoint.question}
+      prompts={checkpoint.questions.map((q) => q.prompt)}
+      intent={checkpoint.intent}
+      decision={checkpoint.decision}
+      note={checkpoint.note}
+      selected={checkpoint.selected}
+    />
   );
 }

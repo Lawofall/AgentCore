@@ -162,37 +162,58 @@ export async function reorderQueuedTurns(
   }
 }
 
+/** 送给主管：已交给在跑的团队，或团队已不在（条目仍排队），或条目已不在队。 */
+export type DeliverToCaptainOutcome =
+  | "delivered"
+  | "no_captain"
+  | "already_gone";
+
 /**
- * 停止并发送：该条放到队首，再硬停当前回合。后面的排队留着。
+ * 把一条已排队的话送给在跑的主管，并把它撤出 FIFO。团队继续做。
+ * 用户行留着，读到之前不进时间线。团队已散 → ``no_captain``，条不动。
  */
-export async function stopAndSendQueuedTurn(
+export async function deliverQueuedTurnToCaptain(
   conversationId: string,
   queueId: string,
-): Promise<void> {
-  const prev = snapshotQueue(conversationId);
-  const ids = prev.map((entry) => entry.queueId);
-  if (!ids.includes(queueId)) return;
-  useQueuedTurnsStore
-    .getState()
-    .reorder(conversationId, [queueId, ...ids.filter((id) => id !== queueId)]);
-  try {
-    if (routesQueuedTurnToSidecar(conversationId)) {
-      const target = await resolveSidecarQueueTarget(conversationId);
-      if (!target) throw new Error("本地引擎未运行，无法停止并发送");
-      await window.sidecarApi.stopAndSendQueuedTurn({
-        rootId: target.rootId,
-        subpath: target.subpath,
-        conversationId,
-        queueId,
-      });
-      return;
+): Promise<DeliverToCaptainOutcome> {
+  const clearKept = () => {
+    clearQueuedTurnLocally(conversationId, queueId, { dropBubble: false });
+  };
+  if (routesQueuedTurnToSidecar(conversationId)) {
+    const target = await resolveSidecarQueueTarget(conversationId);
+    if (!target) throw new Error("本地引擎未运行，无法送给主管");
+    const ack = await window.sidecarApi.deliverQueuedTurnToCaptain({
+      rootId: target.rootId,
+      subpath: target.subpath,
+      conversationId,
+      queueId,
+    });
+    if (ack.status === "no_captain") return "no_captain";
+    if (ack.status === "not_found") {
+      clearKept();
+      return "already_gone";
     }
+    clearKept();
+    return "delivered";
+  }
+
+  try {
     await api.post(
-      `/v1/conversations/${conversationId}/queued-turns/${queueId}/stop-and-send`,
+      `/v1/conversations/${conversationId}/queued-turns/${queueId}/to-captain`,
       {},
     );
+    clearKept();
+    return "delivered";
   } catch (err) {
-    restoreQueue(conversationId, prev);
+    if (err instanceof ApiError && err.status === 409) return "no_captain";
+    if (
+      err instanceof ApiError &&
+      err.status === 404 &&
+      (err.serverMessage ?? "").includes("排队项不存在")
+    ) {
+      clearKept();
+      return "already_gone";
+    }
     throw err;
   }
 }

@@ -4,6 +4,7 @@ import {
 } from "@/components/chat/debate/CollapsibleSpeech";
 import { Button, IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useChatPaneId } from "@/lib/chatPane";
 import { hasInlineMarkers, renderInlineLabels } from "@/lib/inlineBody";
 import {
   MESSAGE_ACTION_REVEAL_CLASS,
@@ -17,6 +18,7 @@ import {
 } from "@/stores/conversation";
 import { Check, Copy, Pencil, X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { ContextCutAction } from "./ContextCutAction";
 import { MessageTime } from "./MessageActions";
 import { SyncStatusHint } from "./SyncStatusHint";
 import {
@@ -39,7 +41,7 @@ export function UserMessage({ message }: MessageBubbleProps) {
   const { copied, onCopy } = useCopyAction(() =>
     renderInlineLabels(message.content, attachments, agentMentions),
   );
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   const marked = hasInlineMarkers(message.content) || hasInlineMarkers(draft);
 
   const startEdit = () => {
@@ -202,6 +204,7 @@ export function UserMessage({ message }: MessageBubbleProps) {
                 {copied ? <Check size={14} /> : <Copy size={14} />}
               </IconButton>
             </SimpleTooltip>
+            <ContextCutAction message={message} />
             <SimpleTooltip label="编辑">
               <IconButton size="sm" aria-label="编辑" onClick={startEdit}>
                 <Pencil size={14} />

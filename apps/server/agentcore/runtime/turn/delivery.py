@@ -137,11 +137,6 @@ async def reorder_queued_items(conversation_id: str, queue_ids: list[str]) -> bo
         return ok
 
 
-def promote_queued_item(conversation_id: str, queue_id: str) -> QueuedTurn | None:
-    """Move one pending item to the front. Missing / already started → None."""
-    return turn_queue.move_to_front(conversation_id, queue_id)
-
-
 async def stop_live_turn(conversation_id: str) -> bool:
     """Hard-cancel the occupying turn. Same sequence as ``POST …/stop``.
 
@@ -161,25 +156,89 @@ async def stop_live_turn(conversation_id: str) -> bool:
     return stopped
 
 
-async def stop_and_send_queued_item(
-    conversation_id: str, queue_id: str
-) -> QueuedTurn | None:
-    """Put this queued item first, then hard-stop the live turn.
+@dataclass(frozen=True, slots=True)
+class QueuedToCaptain:
+    """Result of handing one queued line to the live captain.
 
-    Drain after stop starts the new front item. When the slot is already free,
-    arm drain so the promoted item starts now. Missing id → None.
+    ``delivered`` withdrew the FIFO row and posted ``user_interjection``.
+    The persisted user row stays; the team is not stopped.
+    ``no_captain`` leaves the row queued (session gone or refused the post).
+    ``missing`` is unknown or already started.
     """
-    from agentcore.runtime.turn.durable import sync_durable_order
+
+    status: Literal["delivered", "missing", "no_captain"]
+    interjection_id: str = ""
+
+
+async def deliver_queued_item_to_captain(
+    conversation_id: str, queue_id: str
+) -> QueuedToCaptain:
+    """Move one pending queue item into the live coordination turn.
+
+    Same landing as coordination ``delivery=steer``: stash + ``USER_INTERJECTION``,
+    then drop the FIFO row (durable + memory) without deleting the user message.
+    No active session, or ``post`` refused → ``no_captain`` and the item stays.
+    """
+    from agentcore.runtime.coordination.session import (
+        CoordinationEvent,
+        CoordinationEventKind,
+        active_coordination_for_conversation,
+    )
+    from agentcore.runtime.turn.durable import delete_durable_item
 
     async with turn_queue.mutation_lock(conversation_id):
-        item = promote_queued_item(conversation_id, queue_id)
+        item = turn_queue.find_pending(conversation_id, queue_id)
         if item is None:
-            return None
-        await sync_durable_order(conversation_id)
-    stopped = await stop_live_turn(conversation_id)
-    if not stopped:
-        turn_queue.schedule_drain(conversation_id)
-    return item
+            return QueuedToCaptain("missing")
+        coord = active_coordination_for_conversation(conversation_id)
+        if coord is None or not getattr(coord, "active", False):
+            return QueuedToCaptain("no_captain")
+        interjection_id = new_id()
+        mentions = list(item.agent_mentions or [])
+        attachments = list(item.attachments or [])
+        att_meta = interjection_attachment_meta(attachments)
+        coord.stash_interjection(
+            interjection_id,
+            {
+                "content": item.content,
+                "user_id": item.user_id,
+                "conversation_id": conversation_id,
+                "attachments": attachments,
+                "agent_mentions": mentions,
+            },
+        )
+        posted = coord.post(
+            CoordinationEvent(
+                kind=CoordinationEventKind.USER_INTERJECTION,
+                payload={
+                    "interjection_id": interjection_id,
+                    "content": item.content,
+                    **({"attachments": att_meta} if att_meta else {}),
+                    **({"agent_mentions": mentions} if mentions else {}),
+                },
+            )
+        )
+        if not posted:
+            coord.take_interjection(interjection_id)
+            return QueuedToCaptain("no_captain")
+        # post already handed the line to the captain. Drop the FIFO row so drain
+        # cannot also open a new turn. A durable-delete miss still drops memory;
+        # ``delete_durable_item`` logs that write failure itself.
+        await delete_durable_item(queue_id)
+        cancel_queued_item(conversation_id, queue_id)
+        run = turn_runs.get(conversation_id)
+        live_sink = run.sink if run is not None and not run.task.done() else None
+        if live_sink is not None:
+            _emit_received_once(
+                live_sink,
+                interjection_id=interjection_id,
+                execution_id=str(getattr(coord, "execution_id", "") or ""),
+                content=item.content,
+                attachments_meta=att_meta,
+                agent_mentions=mentions,
+                user_message_id=item.user_message_id,
+            )
+        return QueuedToCaptain("delivered", interjection_id=interjection_id)
 
 
 async def edit_queued_item(

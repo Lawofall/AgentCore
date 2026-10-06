@@ -157,6 +157,8 @@ export interface BackendMessage {
   duration_ms?: number | null;
   /** 各次 LLM 吐字时长之和 (ms)：与 message_end.generation_ms 同锚。 */
   generation_ms?: number | null;
+  /** 用量 TTFT (ms)：与 message_end.ttft_ms 同锚。 */
+  ttft_ms?: number | null;
   /** Server-attested turn result (`turn_metrics.status` / `message_end.outcome`). */
   outcome?: ("ok" | "partial" | "paused" | "error") | null;
   /** 协作质量 (学·度量 §2.5): orchestration signals（采集仍在、产品不展示调度明细）; nested in usage column. */
@@ -356,6 +358,7 @@ export function toMessage(m: BackendMessage): Message {
     rounds: m.rounds ?? undefined,
     durationMs: m.duration_ms ?? undefined,
     generationMs: m.generation_ms ?? undefined,
+    ttftMs: m.ttft_ms ?? undefined,
     collab: m.collab ?? undefined,
     teamBatch: m.team_batch ?? undefined,
     // 回合 ¥ 成本 (P2 DERIVED)：messages.cost 列；重载 footer 直接用（hover 明细仍走 GET …/cost）。

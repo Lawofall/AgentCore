@@ -129,8 +129,17 @@ def settle_moderator_node(
     usage = moderator.usage if moderator is not None else TokenUsage()
     cost = calculate_cost(model, usage)
     if error:
-        # run_failed 无 usage / cost 字段（全平台失败帧同形）：钱走 ``_acc`` 折回回合总账。
-        tool._sink.emit(run_failed(moderator_run_id, moderator_run_id, error))
+        # 失败帧带上已经打到模型上的用量；钱仍同时走 ``_acc`` 折回回合总账。
+        has_spend = bool(usage.input_tokens or usage.output_tokens)
+        tool._sink.emit(
+            run_failed(
+                moderator_run_id,
+                moderator_run_id,
+                error,
+                usage=usage.as_dict() if has_spend else None,
+                cost=asdict(cost) if has_spend else None,
+            )
+        )
     else:
         tool._sink.emit(
             run_completed(

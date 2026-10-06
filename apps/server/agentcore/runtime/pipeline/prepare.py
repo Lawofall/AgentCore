@@ -306,8 +306,7 @@ async def prepare_fresh_turn(
             backend = adopted.backend
             auto_desk_folder_id = adopted.folder_id
     sitting_folder_id = folder_id or auto_desk_folder_id
-    # Desktop channel early: MCP discovery (stdio on desktop) must complete before
-    # workspace_context stamps mcp= — same ClientTool sink the turn will stream.
+    # Desktop channel early: cache-only MCP discovery uses the same ClientTool sink.
     desktop_channel = (
         DesktopClientChannel(
             user_id=user_id,
@@ -319,7 +318,7 @@ async def prepare_fresh_turn(
         else None
     )
     from agentcore.llm.credentials import bind_credential_pricing_context
-    from agentcore.tools.mcp import discover_mcp_tools, mcp_capability_label, register_mcp_tools
+    from agentcore.tools.mcp import discover_mcp_tools, register_mcp_tools
     from agentcore.tools.sandbox.desk_provision import provision_server_desk
 
     # Call-level pricing + optional user unit card (同路贯穿 calculate_cost).
@@ -370,14 +369,11 @@ async def prepare_fresh_turn(
         ),
     )
     exec_languages, git_fact, desk_visibly_empty, material_paths = local_probe
-    mcp_label = mcp_capability_label(mcp_discover, desktop_online=desktop_online)
     workspace_facts = build_workspace_context(
         backend,
         desktop_online=desktop_online,
         exec_languages=exec_languages,
         permission_axes=permission_axes,
-        mcp_enabled=mcp_discover.tool_count > 0,
-        mcp_label=mcp_label,
         git_fact=git_fact,
         desk_folder_id=sitting_folder_id,
         desk_folder_label=desk_folder_label,

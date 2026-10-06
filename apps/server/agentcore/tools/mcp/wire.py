@@ -237,19 +237,6 @@ def parse_mcp_list_payload(value: Any) -> McpDiscoverResult:
     )
 
 
-def mcp_capability_label(result: McpDiscoverResult | None, *, desktop_online: bool) -> str:
-    """Capability-line token for ``mcp=…``."""
-    if not desktop_online:
-        return "未装配"
-    if result is None:
-        return "未装配"
-    if result.tool_count > 0:
-        return "已装配"
-    if result.degraded or result.failed_servers > 0:
-        return "降级（无可用工具）"
-    return "未装配"
-
-
 def _duration_ms(started: float) -> int:
     return int((time.monotonic() - started) * 1000)
 
@@ -375,10 +362,19 @@ async def discover_mcp_tools(
 
 
 def register_mcp_tools(registry: ToolRegistry, result: McpDiscoverResult) -> int:
-    """Register discovered MCP tools onto ``registry``. Returns count registered."""
+    """Register discovered MCP tools onto ``registry``. Returns count registered.
+
+    An armed turn only registers servers this assembly enables. Unset means
+    the caller did not arm (tests / background) and every discovered spec stays.
+    """
+    from agentcore.assembly.bind import current_mcp_server_ids
+
+    allowed = current_mcp_server_ids()
     used_names: set[str] = set(registry.names)
     count = 0
     for spec in result.specs:
+        if allowed is not None and spec.server_id not in allowed:
+            continue
         fc_name = sanitize_mcp_tool_name(spec.server_id, spec.mcp_tool_name)
         base = fc_name
         n = 2

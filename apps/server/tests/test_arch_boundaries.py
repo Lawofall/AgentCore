@@ -101,6 +101,7 @@ def test_llm_gateway_does_not_import_db() -> None:
     - ``platform_credential_service`` — platform-pool credential CRUD + snapshot reload
       (boot/refresh opens a session; hot-path pick lives in db-free ``platform_pool``)
     - ``model_profiles`` — combo CRUD + expand (derived from catalog 上架; not metadata owner)
+    - ``turn_catalog`` — this turn's catalog: cloud opens a session; a sidecar ticket uses account HTTP
     - ``factory`` — ``build_turn_router`` may open a session to inject a cross-provider
       worker (agent provider_id ≠ chat provider)
     """
@@ -109,6 +110,7 @@ def test_llm_gateway_does_not_import_db() -> None:
         "resolve.py",
         "platform_credential_service.py",
         "model_profiles.py",
+        "turn_catalog.py",
         "factory.py",
     }
     files = [f for f in _py_files("llm") if f.name not in bridge]

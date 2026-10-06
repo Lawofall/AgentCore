@@ -55,7 +55,7 @@ class ConsultTool:
     registration = ToolRegistration(
         surface=ToolSurface.CEO_ORCHESTRATION,
         audience=AUDIENCE_BOTH,
-        # Wired by hand onto the opening table (empty catalog → soft miss, not omitted).
+        # Wired when the directory has a row. An empty catalog leaves it off the table.
         ceo_wire=CeoWire.CONSULT,
         catalog_summary="按名查阅按需目录",
         blurb="翻开官方 HOW 或技能",

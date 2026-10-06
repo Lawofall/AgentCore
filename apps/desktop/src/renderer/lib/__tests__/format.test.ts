@@ -16,6 +16,7 @@ import {
   formatMessageTimeOfDay,
   formatOutputSpeed,
   formatQuotaRemaining,
+  formatTtft,
   formatUsageCount,
   pickCostMoney,
   stripDurationFaceSuffix,
@@ -245,6 +246,18 @@ describe("formatOutputSpeed", () => {
     expect(formatOutputSpeed(80, 2_000)).toBe("40.0 tokens/s");
     expect(formatOutputSpeed(19, 2_000)).toBe("9.5 tokens/s");
     expect(formatOutputSpeed(10, 1_000)).toBe("10.0 tokens/s");
+  });
+});
+
+describe("formatTtft", () => {
+  it("shows one decimal under a minute and hides non-positive", () => {
+    expect(formatTtft(1_800)).toBe("1.8s");
+    expect(formatTtft(400)).toBe("0.4s");
+    expect(formatTtft(40)).toBe("<0.1s");
+    expect(formatTtft(12_400)).toBe("12.4s");
+    expect(formatTtft(125_000)).toBe("2m 5s");
+    expect(formatTtft(0)).toBeNull();
+    expect(formatTtft(-1)).toBeNull();
   });
 });
 

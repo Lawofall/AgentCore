@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -472,6 +472,16 @@ class FolderRepository:
         )
         return result.scalars().all()
 
+    @staticmethod
+    def _deleted_window(user_id: str, not_before: datetime):
+        """User-deleted projects「最近删除」may still offer. Cascade children stay out."""
+        return (
+            Folder.user_id == user_id,
+            Folder.deleted_at.is_not(None),
+            Folder.deleted_at > not_before,
+            Folder.delete_origin == FOLDER_DELETE_ORIGIN_USER,
+        )
+
     async def list_deleted_by_user(
         self, user_id: str, *, not_before: datetime, limit: int
     ) -> Sequence[Folder]:
@@ -486,16 +496,36 @@ class FolderRepository:
             return []
         result = await self._session.execute(
             select(Folder)
-            .where(
-                Folder.user_id == user_id,
-                Folder.deleted_at.is_not(None),
-                Folder.deleted_at > not_before,
-                Folder.delete_origin == FOLDER_DELETE_ORIGIN_USER,
-            )
+            .where(*self._deleted_window(user_id, not_before))
             .order_by(Folder.deleted_at.desc(), Folder.created_at.desc())
             .limit(limit)
         )
         return result.scalars().all()
+
+    async def count_deleted_by_user(self, user_id: str, *, not_before: datetime) -> int:
+        """How many projects the bin still holds. The list page is capped; this is not."""
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(Folder)
+            .where(*self._deleted_window(user_id, not_before))
+        )
+        return int(result.scalar_one())
+
+    async def list_deleted_ids_by_user(
+        self, user_id: str, *, not_before: datetime
+    ) -> list[str]:
+        """Every in-window user-deleted project id, newest first, uncapped.
+
+        Cascade children are not rows in the bin (``delete_origin`` is not ``user``);
+        purging a listed id already wipes that subtree. The page list is capped, so
+        emptying the bin must not follow only the page.
+        """
+        result = await self._session.execute(
+            select(Folder.id)
+            .where(*self._deleted_window(user_id, not_before))
+            .order_by(Folder.deleted_at.desc(), Folder.created_at.desc())
+        )
+        return list(result.scalars().all())
 
     async def get_deleted_by_id(self, folder_id: str, *, user_id: str) -> Folder | None:
         """One user-deleted project regardless of retention window (owner-scoped).

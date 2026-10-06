@@ -263,9 +263,10 @@ def test_skill_directory_orders_by_decision_moment_without_subtitles():
 
 
 def test_system_skill_summaries_are_short_when_triggers():
-    """目录行只写这是什么；Python len ≤80。"""
+    """目录行是打开前的触发器；Python len ≤80。不钉教学句。"""
     for skill in build_system_skill_registry().list_all():
         assert len(skill.summary) <= 80, (skill.name, len(skill.summary), skill.summary)
+        assert "查阅" in skill.summary, skill.name
 
 
 def test_system_skill_blurbs_stay_off_directory():
@@ -305,13 +306,44 @@ async def test_consult_product_help_section_hit():
     assert "product_help:workspace" not in directory
 
 
-async def test_consult_product_help_unknown_section_soft_miss():
+async def test_consult_product_help_unknown_section_returns_card():
+    """对不上节：回索引卡，不倒出节 id 菜单。"""
+    from agentcore.runtime.skills.product_help import build_product_help_body
+
     tool = _skill_consult()
     result = await tool.execute({"name": "product_help:nope_section"}, _ctx())
     assert result.success
     assert result.error is None
-    assert "没有名为" in result.output
-    assert "what" in result.output
+    assert result.output == build_product_help_body()
+    assert "没有名为" not in (result.output or "")
+    assert "progress" not in (result.output or "")
+
+
+def test_product_help_user_words_match_title_or_card():
+    """用户原话含节标题才回那一节；短尾词与多节命中只回索引卡。"""
+    from agentcore.runtime.skills.product_help import (
+        build_product_help_body,
+        fetch_product_help_section,
+        format_product_help_section,
+        load_product_help_corpus,
+    )
+
+    sections = {str(s["id"]): s for s in load_product_help_corpus()["sections"]}
+    card = build_product_help_body()
+    assert fetch_product_help_section("检查点在哪") == format_product_help_section(
+        sections["checkpoint"]
+    )
+    assert fetch_product_help_section("工作区里的文件在哪") == format_product_help_section(
+        sections["workspace"]
+    )
+    assert fetch_product_help_section("整理这个文件") == card
+    assert fetch_product_help_section("用工具整理表") == card
+    assert fetch_product_help_section("   ") == card
+    multi = fetch_product_help_section("检查点和辩论室")
+    assert multi.startswith("对上多节：检查点与审批、辩论室。")
+    assert "# 检查点与审批" not in multi
+    assert "# 辩论室" not in multi
+    assert "看进度" not in multi
 
 
 async def test_consult_product_help_section_alias():
@@ -333,6 +365,8 @@ def test_product_help_pins_section_ids_and_manual_paths():
 
     help_body = _body("product_help")
     assert 'consult("product_help:' in help_body
+    assert "【可查事实】" not in help_body
+    assert "progress —" not in help_body
     assert "#/toolbox/manual/" in help_body
     assert "https://fashitianxia.xyz" in help_body
     assert "https://fashitianxia.xyz/download" in help_body

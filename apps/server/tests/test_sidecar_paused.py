@@ -100,6 +100,26 @@ def test_store_save_list_claim_round_trip(tmp_path):
     assert second is None  # claimed once → gone
 
 
+def test_store_stamp_active_meter_is_on_the_claim(tmp_path):
+    store = LocalPausedTurnStore(tmp_path / "paused")
+
+    async def drive():
+        await store.save(_suspension("m1", "c1"))
+        await store.stamp_active_meter(
+            "m1",
+            {"duration_ms": 23_199, "output_tokens": 4979, "generation_ms": 7_259},
+        )
+        claimed = await store.claim("m1", conversation_id="c1")
+        missing = await store.stamp_active_meter("m1", {"duration_ms": 1})
+        return claimed, missing
+
+    claimed, missing = asyncio.run(drive())
+    assert claimed is not None
+    assert claimed.active_meter["duration_ms"] == 23_199
+    assert claimed.active_meter["output_tokens"] == 4979
+    assert missing is None
+
+
 def test_store_round_trips_journal_entries_and_history(tmp_path):
     """The Sidecar has no DB, so its local frame record IS its turn_journal + message DB:
     ``journal_entries`` (folded by ``window_from_journal`` on resume) and ``history`` (the

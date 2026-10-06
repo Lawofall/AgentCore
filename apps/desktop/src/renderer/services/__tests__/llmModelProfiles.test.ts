@@ -1,9 +1,20 @@
 import {
-  type LlmModelProfileView,
   profileSlotSummary,
   slotDisplayName,
 } from "@/services/llmModelProfiles";
 import { describe, expect, it } from "vitest";
+
+type ProfileRow = {
+  id: string;
+  name: string;
+  kind: "user";
+  is_default: boolean;
+  main: { origin: "byok"; model: string; provider_id: string };
+  worker: { origin: "byok"; model: string; provider_id: string } | null;
+  background: { origin: "byok"; model: string; provider_id: string } | null;
+  vision: { origin: "byok"; model: string; provider_id: string } | null;
+  reasoning_effort?: string | null;
+};
 
 const CATALOG = [
   {
@@ -26,9 +37,7 @@ const CATALOG = [
   },
 ];
 
-function profile(
-  overrides: Partial<LlmModelProfileView> = {},
-): LlmModelProfileView {
+function profile(overrides: Partial<ProfileRow> = {}): ProfileRow {
   return {
     id: "p1",
     name: "日常",

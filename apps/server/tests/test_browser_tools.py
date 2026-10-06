@@ -677,6 +677,27 @@ async def test_navigate_missing_frame_succeeds_with_honest_note(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_navigate_http_error_is_postcondition_failure(tmp_path):
+    """主文档 4xx 不是打开成功。回执仍带状态码，供模型改路径。"""
+    session = _FakeSession(
+        BrowserCommandResult(
+            ok=True,
+            data={
+                "final_url": "workspace://conv.c/index.html",
+                "title": "",
+                "http_status": 404,
+            },
+        )
+    )
+    tool = BrowserNavigateTool(registry=_FakeRegistry(session=session))
+    result = await tool.execute({"url": "https://example.com/missing"}, _ctx(tmp_path))
+    assert result.success is False
+    assert (result.metadata or {}).get("code") == "postcondition_failed"
+    assert "404" in _fail_text(result)
+    assert json.loads(result.output)["http_status"] == 404
+
+
+@pytest.mark.asyncio
 async def test_screenshot_missing_frame_is_weak_failure(tmp_path):
     """Case C: browser_screenshot without a frame must not mark success."""
     session = _FakeSession(

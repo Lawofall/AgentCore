@@ -96,6 +96,9 @@ vi.mock("@/components/files/BorrowToCloudDialog", () => ({
 vi.mock("@/components/workspace/MergeLandingReview", () => ({
   MergeLandingReviewHost: () => null,
 }));
+vi.mock("@/lib/assemblyMcp", () => ({
+  AssemblyMcpBridge: () => null,
+}));
 vi.mock("@/components/layout/SidePanelFloatHost", () => ({
   SidePanelFloatHost: () => <div data-testid="side-panel-float-host" />,
 }));

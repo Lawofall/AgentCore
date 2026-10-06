@@ -47,11 +47,13 @@ export function ResourceSection({
   const tokenTotal = usage ? usage.input + usage.output : 0;
   const byokHint =
     (cost?.estimated_total ?? 0) > 0 || money?.estimated === true;
+  const accrued = run.status === "running" || run.status === "pending";
+  const soFar = accrued ? " 至今" : "";
   const costLabel =
     money != null && money.nano > 0
-      ? formatDisplayCost(money.nano, money.estimated, money.currency)
+      ? `${formatDisplayCost(money.nano, money.estimated, money.currency)}${soFar}`
       : tokenTotal > 0
-        ? `${formatCompact(tokenTotal)} tok`
+        ? `${formatCompact(tokenTotal)} tok${soFar}`
         : null;
   const cache = usage ? cacheUsageDisplay(usage) : null;
   const think = reasoningMeta(agent.thinking, run.reasoningEffort);

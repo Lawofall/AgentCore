@@ -154,4 +154,8 @@ def register_always_ceo_tools(
         name = declared_tool_name(cls)
         if name in _ALWAYS_HAND_WIRE_NAMES:
             continue
+        from agentcore.tools.switchboard import switch_blocks
+
+        if switch_blocks(name):
+            continue
         chat_tools.register(instantiate_declared(cls))

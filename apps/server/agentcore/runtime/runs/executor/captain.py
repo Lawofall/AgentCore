@@ -354,6 +354,7 @@ async def _drive_captain_loop(
             error_code=signal.error_code,
             exc_info=True,
         )
+        has_partial = bool(partial.input_tokens or partial.output_tokens)
         sink.emit(
             run_failed(
                 spec.run_id,
@@ -363,6 +364,10 @@ async def _drive_captain_loop(
                 error_code=signal.error_code,
                 retryable=signal.retryable,
                 retry_after=signal.retry_after,
+                usage=partial.as_dict() if has_partial else None,
+                cost=asdict(calculate_cost(turn_model, partial))
+                if turn_model and has_partial
+                else None,
             )
         )
         from agentcore.runtime.runs.salvage import (

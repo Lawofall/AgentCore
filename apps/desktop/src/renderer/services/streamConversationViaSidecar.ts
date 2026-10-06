@@ -3,6 +3,7 @@ import {
   patchConversationCache,
 } from "@/hooks/useConversations";
 import { getFolders } from "@/hooks/useFolders";
+import { contextBudgetForConversation } from "@/lib/composerModelProfile";
 import { StreamError } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
 import {
@@ -297,6 +298,14 @@ function isSidecarUserCancel(conversationId: string, err: unknown): boolean {
   return getTurnPhase(conversationId) === "stopping";
 }
 
+/** Positive assembly step only; omit the key when the model window is the default. */
+function contextBudgetPayload(
+  conversationId: string,
+): { contextBudget: number } | Record<string, never> {
+  const budget = contextBudgetForConversation(conversationId);
+  return budget ? { contextBudget: budget } : {};
+}
+
 /** 引擎中断（`TURN_INTERRUPTED` / `"turn interrupted"`）：非用户停止、非引擎故障横幅。 */
 function isSidecarTurnInterrupted(err: unknown): boolean {
   const msg = unwrapSidecarRejectMessage(err)?.toLowerCase() ?? "";
@@ -406,6 +415,7 @@ export async function streamConversationViaSidecar({
         userMessageId: optimisticUserId,
         messageId,
         ...(history !== undefined ? { history } : {}),
+        ...contextBudgetPayload(conversationId),
         ...(regenerate ? { regenerate: true } : {}),
         ...(replaceMaterials ? { replaceMaterials: true } : {}),
         ...(agentMentions && (replaceMaterials || agentMentions.length > 0)
@@ -533,6 +543,7 @@ export async function resumeConversationViaSidecar({
           traceId,
           userId: useAuthStore.getState().user?.id ?? "local",
           userMessageId,
+          ...contextBudgetPayload(conversationId),
           decision,
           note,
           selected,
@@ -886,6 +897,7 @@ export async function startQueuedSidecarTurn(
           userMessage: notice.userMessage,
           userMessageId: notice.userMessageId,
           messageId: notice.messageId,
+          ...contextBudgetPayload(conversationId),
           queueId: notice.queueId,
           ...(notice.agentMentions && notice.agentMentions.length > 0
             ? { agentMentions: notice.agentMentions }

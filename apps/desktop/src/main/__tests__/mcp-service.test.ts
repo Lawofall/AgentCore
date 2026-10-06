@@ -158,6 +158,25 @@ describe("mcp-service SDK client", () => {
     ]);
   });
 
+  it("published run ids replace the enabled flag", async () => {
+    const handler = await registerAndGetRunOp();
+    const { ipcMain } = await import("electron");
+    const setRunIds = vi
+      .mocked(ipcMain.handle)
+      .mock.calls.find((call) => call[0] === "mcp:setRunIds");
+    if (!setRunIds) throw new Error("mcp:setRunIds handler not registered");
+    const publish = setRunIds[1] as (
+      event: unknown,
+      ids: string[],
+    ) => Promise<unknown>;
+    await publish({}, []);
+    connect.mockClear();
+    const result = await handler({}, { op: "list_tools" });
+    expect(connect).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    expect(result.value?.servers).toEqual([]);
+  });
+
   it("spawnEnv uses getDefaultEnvironment + config.env (not full process.env)", async () => {
     process.env.SECRET_LEAK_PROBE = "should-not-inherit";
     const handler = await registerAndGetRunOp();

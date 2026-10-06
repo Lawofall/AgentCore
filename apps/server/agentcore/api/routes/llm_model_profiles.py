@@ -1,8 +1,7 @@
-"""Model combination profiles CRUD (设置·模型组合).
+"""Assemblies CRUD (工具箱·装配).
 
-``/v1/users/me/llm-model-profiles`` — list (system presets + user), create / update /
-delete user combinations, set account default. Conversation pins use
-``PATCH /conversations/{id}`` with ``model_profile_id``.
+``/v1/users/me/assemblies`` — list, create, update, delete, set the star.
+The model columns live on the assembly. A conversation stores only ``assembly_id``.
 """
 
 from fastapi import APIRouter, Depends
@@ -13,7 +12,6 @@ from agentcore.api.schemas import (
     CreateLlmModelProfileRequest,
     LlmModelProfileListResponse,
     LlmModelProfileView,
-    ModelProfileSlot,
     SetDefaultModelProfileRequest,
     StatusResponse,
     UpdateLlmModelProfileRequest,
@@ -28,19 +26,21 @@ from agentcore.llm.model_profiles import (
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/users/me/llm-model-profiles", tags=["llm-model-profiles"])
+router = APIRouter(prefix="/users/me/assemblies", tags=["assemblies"])
 
 
 def get_profile_service(session: AsyncSession = Depends(get_db)) -> LlmModelProfileService:
     return LlmModelProfileService(session)
 
 
-def _slot_to_api(slot: ProfileSlot | None) -> ModelProfileSlot | None:
+def _slot(slot: object) -> dict | None:
     if slot is None:
         return None
-    return ModelProfileSlot(
-        origin=slot.origin, model=slot.model, provider_id=slot.provider_id
-    )
+    return {
+        "origin": slot.origin,  # type: ignore[attr-defined]
+        "provider_id": slot.provider_id,  # type: ignore[attr-defined]
+        "model": slot.model,  # type: ignore[attr-defined]
+    }
 
 
 def _to_response(view: ModelProfileView) -> LlmModelProfileView:
@@ -48,19 +48,17 @@ def _to_response(view: ModelProfileView) -> LlmModelProfileView:
         id=view.id,
         name=view.name,
         kind=view.kind,
-        main=_slot_to_api(view.main),  # type: ignore[arg-type]
-        worker=_slot_to_api(view.worker),
-        background=_slot_to_api(view.background),
-        vision=_slot_to_api(view.vision),
-        reasoning_effort=view.reasoning_effort,
         is_default=view.is_default,
+        recipe=view.recipe,  # type: ignore[arg-type]
+        main=_slot(view.main),  # type: ignore[arg-type]
+        worker=_slot(view.worker),  # type: ignore[arg-type]
+        background=_slot(view.background),  # type: ignore[arg-type]
+        vision=_slot(view.vision),  # type: ignore[arg-type]
+        reasoning_effort=view.reasoning_effort,
+        context_budget=view.context_budget,
+        enabled_mcp_server_ids=list(view.enabled_mcp_server_ids),
+        omit_factory_catalog=view.omit_factory_catalog,
         warnings=list(view.warnings),
-    )
-
-
-def _to_service_slot(slot: ModelProfileSlot) -> ProfileSlot:
-    return ProfileSlot(
-        origin=slot.origin, model=slot.model, provider_id=slot.provider_id
     )
 
 
@@ -72,10 +70,10 @@ async def list_model_profiles(
 ):
     views = await service.list_profiles(user.user_id)
     u = await UserRepository(session).get_by_id(user.user_id)
-    default_id = getattr(u, "default_model_profile_id", None) if u else None
+    default_id = getattr(u, "default_assembly_id", None) if u else None
     return LlmModelProfileListResponse(
         data=[_to_response(v) for v in views],
-        default_model_profile_id=default_id,
+        default_assembly_id=default_id,
     )
 
 
@@ -88,11 +86,6 @@ async def create_model_profile(
     view = await service.create_profile(
         user.user_id,
         name=body.name,
-        main=_to_service_slot(body.main),
-        worker=_to_service_slot(body.worker) if body.worker else None,
-        background=_to_service_slot(body.background) if body.background else None,
-        vision=_to_service_slot(body.vision) if body.vision else None,
-        reasoning_effort=body.reasoning_effort,
         set_as_default=body.set_as_default,
     )
     logger.info(
@@ -129,34 +122,31 @@ async def update_model_profile(
     user: AuthUser,
     service: LlmModelProfileService = Depends(get_profile_service),
 ):
-    from agentcore.db.repositories._base import _UNSET
+    fields = set(body.model_fields_set)
 
-    fields = body.model_fields_set
-    worker: ProfileSlot | None | object = _UNSET
-    if "worker" in fields:
-        worker = _to_service_slot(body.worker) if body.worker is not None else None
-    background: ProfileSlot | None | object = _UNSET
-    if "background" in fields:
-        background = (
-            _to_service_slot(body.background) if body.background is not None else None
+    def _as_slot(raw: object) -> ProfileSlot | None:
+        if raw is None:
+            return None
+        return ProfileSlot(
+            origin=raw.origin,  # type: ignore[attr-defined]
+            model=raw.model,  # type: ignore[attr-defined]
+            provider_id=raw.provider_id,  # type: ignore[attr-defined]
         )
-    vision: ProfileSlot | None | object = _UNSET
-    if "vision" in fields:
-        vision = _to_service_slot(body.vision) if body.vision is not None else None
-    reasoning_effort: str | None | object = _UNSET
-    if "reasoning_effort" in fields:
-        reasoning_effort = body.reasoning_effort
+
     return _to_response(
         await service.update_profile(
             user.user_id,
             profile_id,
             name=body.name,
-            main=_to_service_slot(body.main) if body.main else None,
-            worker=worker,
-            background=background,
-            vision=vision,
-            reasoning_effort=reasoning_effort,
-            fields_set=set(fields),
+            enabled_mcp_server_ids=body.enabled_mcp_server_ids,
+            omit_factory_catalog=body.omit_factory_catalog,
+            main=_as_slot(body.main) if "main" in fields else None,
+            worker=_as_slot(body.worker) if "worker" in fields else None,
+            background=_as_slot(body.background) if "background" in fields else None,
+            vision=_as_slot(body.vision) if "vision" in fields else None,
+            reasoning_effort=body.reasoning_effort,
+            context_budget=body.context_budget,
+            fields_set=fields,
         )
     )
 

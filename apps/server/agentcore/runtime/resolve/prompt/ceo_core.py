@@ -2,18 +2,18 @@
 
 Resident core is empty unless eval proves a strategy residual the tool graph
 cannot encode — Assembler skips a falsy fragment. 署名 / 「你是谁」走 ``product_help``；
-何时派在 ``delegate`` description。共享诚实 / 输出在基座一段；consult 钩在
+何时派在 ``delegate`` description。全员基座同样现空；consult 钩在
 ``<按需目录>`` / consult description。
-何时用 ``delegate`` / ``ask_user`` / ``debate`` 写在各工具 description（``delegate`` = 信息判据四问，不进核）；场面 HOW 的
+何时用 ``delegate`` / ``ask_user`` / ``debate`` 写在各工具 description（``delegate`` = 信息判据原理句，不进核）；场面 HOW 的
 唯一所有者是 skill 正文；编制 HOW 在 ``delegate`` 按钮；填卡 HOW 在 ``ask_user`` 按钮。
-``<工作区>`` 只陈述本回合事实；``<按需目录>`` 只列这是什么（前言另切目录行 ≠ 已查阅）。
-已做以回执为准在 ``prompt/base.py``；未装配 ≠ 写进队员任务 在 ``delegate.task``。
+``<工作区>`` 只陈述本回合事实；``<按需目录>`` 的系统 Skill 行写何时才查阅（前言另切目录行 ≠ 已查阅）。
+全员基座现空（``prompt/base.py``）。未装配 ≠ 写进队员任务 在 ``delegate.task``。
 不写编号判决树。每条纪律在装配后的提示串里只应出现一次。
 """
 
 # Appended ONLY to the entry CEO chat agent's prompt (not to delegated workers).
 # Factory identity is empty: add ``<身份>`` back only via the 入场闸 after eval.
-# when-to-use for ``delegate`` is the four questions on its description.
+# when-to-use for ``delegate`` is the principle on its description, not a quiz.
 # 「你是谁」→ ``product_help``. Assembly state lives in ``<工作区>``.
 # HOW lives on the owning tool / skill — one owner per piece.
 # Credential plaintext writes: breaker DENY (not this fragment).

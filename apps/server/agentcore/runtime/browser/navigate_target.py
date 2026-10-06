@@ -1,7 +1,8 @@
 """Classify / rewrite ``browser(action=navigate)`` URL targets.
 
 甲：桌面 Local Bridge —— 本会话工作区相对路径 → ``workspace://conv.{conv}/…``
-（desk host；与用户「完整预览」同源）；公网 http(s) / 已构 workspace:// 原样通过。
+（同一 partition。本机字节由 Bridge 按引擎工作区根读盘；云端完整预览仍走 files API）。
+公网 http(s) / 已构 workspace:// 原样通过。
 乙：Sandbox / 非 local —— 相对路径与 workspace:// 诚实失败（见 browser 工具），禁止假成功。
 不放开任意 ``file://``。
 """

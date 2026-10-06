@@ -2,9 +2,14 @@ import {
   useArchivedConversations,
   useConversationTrash,
   useConversations,
+  useGroupedConversationsSettled,
 } from "@/hooks/useConversations";
 import { useFolderTrash, useFolders } from "@/hooks/useFolders";
-import { dedupeFoldersByLocalBinding } from "@/services/folders";
+import { canonicalFolderIds } from "@/hooks/useWorkspaceGroups";
+import {
+  type FolderMeta,
+  dedupeFoldersByLocalBinding,
+} from "@/services/folders";
 import { UNGROUPED_KEY } from "@/stores/folders";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
@@ -19,6 +24,11 @@ import {
   byPinnedThenRecency,
   isSyntheticFilter,
 } from "./constants";
+import {
+  isUngroupedLiveChat,
+  liveChatInFolder,
+  partitionLiveConversationCounts,
+} from "./liveFolderCounts";
 
 /**
  * Left-pane filter selection + deep-link routing from global search / CommandPalette.
@@ -58,8 +68,11 @@ export function useConversationRouting() {
     }
     const target = state?.focusFolderId;
     if (!target) return;
-    setSelected(target);
-    setFlashId(target);
+    // Flash the row the rail actually shows. A historical local-binding
+    // duplicate is not its own row.
+    const shown = canonicalFolderIds(foldersAll).get(target) ?? target;
+    setSelected(shown);
+    setFlashId(shown);
     const t = setTimeout(() => setFlashId(null), 1500);
     return () => clearTimeout(t);
   }, [location.key]);
@@ -70,13 +83,19 @@ export function useConversationRouting() {
     if (!folderIds.has(selected)) setSelected(ALL_KEY);
   }, [folderIds, selected]);
 
-  return { selected, setSelected, flashId, folderIds, folders };
+  return { selected, setSelected, flashId, folderIds, folders, foldersAll };
 }
 
 /**
  * Right-pane list: search, stale filter, folder scoping, per-folder counts.
+ *
+ * `folders` is the full catalog (including historical local-binding duplicates).
+ * Counts roll those duplicates onto the displayed row.
  */
-export function useConversationList(selected: string, folderIds: Set<string>) {
+export function useConversationList(
+  selected: string,
+  folders: readonly FolderMeta[],
+) {
   const conversations = useConversations();
   const [query, setQuery] = useState("");
   const [staleOnly, setStaleOnly] = useState(false);
@@ -100,28 +119,29 @@ export function useConversationList(selected: string, folderIds: Set<string>) {
     trashQuery.data?.retentionDays ??
     convTrashQuery.data?.retentionDays ??
     null;
-  const trashCount = trash.length + deletedConversations.length;
+  // ``total`` is the retention window. The arrays are a capped page, so the badge
+  // and the empty-bin confirm follow the totals once a response has landed.
+  const conversationTrashTotal =
+    convTrashQuery.data?.total ?? deletedConversations.length;
+  const folderTrashTotal = trashQuery.data?.total ?? trash.length;
+  const trashCount = conversationTrashTotal + folderTrashTotal;
 
-  const counts = useMemo(() => {
-    let ungrouped = 0;
-    const perFolder = new Map<string, number>();
-    for (const c of conversations) {
-      const fid = c.folderId;
-      if (fid && folderIds.has(fid))
-        perFolder.set(fid, (perFolder.get(fid) ?? 0) + 1);
-      else ungrouped += 1;
-    }
-    return { ungrouped, perFolder };
-  }, [conversations, folderIds]);
+  const groupedSettled = useGroupedConversationsSettled();
+
+  const counts = useMemo(
+    () => partitionLiveConversationCounts(conversations, folders),
+    [conversations, folders],
+  );
 
   const list = useMemo(() => {
+    const { canonical } = counts;
     const base = isArchivedView
       ? archived
       : conversations.filter((c) => {
           if (selected === ALL_KEY) return true;
           if (selected === UNGROUPED_KEY)
-            return !c.folderId || !folderIds.has(c.folderId);
-          return c.folderId === selected;
+            return isUngroupedLiveChat(c.folderId, canonical);
+          return liveChatInFolder(c.folderId, selected, canonical);
         });
     const q = query.trim().toLowerCase();
     let filtered = q
@@ -140,7 +160,7 @@ export function useConversationList(selected: string, folderIds: Set<string>) {
     isArchivedView,
     selected,
     query,
-    folderIds,
+    counts,
     staleOnly,
   ]);
 
@@ -173,5 +193,10 @@ export function useConversationList(selected: string, folderIds: Set<string>) {
     trashList,
     deletedConversationList,
     retentionDays,
+    conversationTrashTotal,
+    folderTrashTotal,
+    conversationTrashListed: deletedConversations.length,
+    folderTrashListed: trash.length,
+    groupedSettled,
   };
 }

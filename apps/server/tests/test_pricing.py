@@ -209,6 +209,19 @@ def test_from_openai_wire_keeps_omitted_split_as_zero_zero():
     assert usage.cache_hit_tokens == 0
     assert usage.cache_miss_tokens == 0
     assert usage.input_tokens == 800
+    assert usage.usage_keys == "completion_tokens,prompt_tokens"
+
+
+def test_from_openai_wire_records_nested_usage_key_names():
+    usage = TokenUsage.from_openai_wire(
+        {
+            "prompt_tokens": 800,
+            "completion_tokens": 40,
+            "prompt_tokens_details": {"cached_tokens": 0},
+        }
+    )
+    assert usage.cache_hit_tokens == 0
+    assert "prompt_tokens_details.cached_tokens" in usage.usage_keys.split(",")
 
 
 # --- pricing fallback is observable, not silent ---

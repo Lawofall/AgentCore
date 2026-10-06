@@ -201,6 +201,12 @@ async def resume_chat_pipeline(
     )
     fact_log = TurnFactLog(inherited_entries=list(suspension.journal_entries))
     fact_log_token = current_fact_log.set(fact_log)
+    from agentcore.llm.context_budget import (
+        bind_profile_context_budget,
+        reset_context_budget,
+    )
+
+    context_budget_token = bind_profile_context_budget(profiles.context_budget)
     from agentcore.llm.turn_auth_dead import bind_turn_auth_dead, reset_turn_auth_dead
     from agentcore.runtime.turn.token_budget import (
         bind_turn_token_meter,
@@ -468,6 +474,7 @@ async def resume_chat_pipeline(
             orphan_registry_pending(conversation_id, turn_id=message_id),
             step="orphan_registry_pending",
         )
+        reset_context_budget(context_budget_token)
         current_fact_log.reset(fact_log_token)
         # Drain the append-on-emit journal BEFORE dropping the writer: an abandoned in-flight
         # write leaves a checked-out DB connection for the GC to terminate (asyncpg

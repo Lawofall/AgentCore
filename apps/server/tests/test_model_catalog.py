@@ -729,7 +729,7 @@ async def test_platform_selection_passes_through_to_turn(monkeypatch):
         "agentcore.llm.model_profiles.LlmModelProfileService.expand",
         AsyncMock(return_value=expanded),
     )
-    conv = SimpleNamespace(model_profile_id="sys")
+    conv = SimpleNamespace(assembly_id="sys")
 
     sel = await resolve_conversation_model_selection(None, conv, "u1")
     assert sel.model == "deepseek-v4-pro"
@@ -758,7 +758,7 @@ async def test_resolve_turn_profiles_no_worker_slot_follows_main(monkeypatch):
         "agentcore.llm.model_profiles.LlmModelProfileService.expand_for_conversation",
         AsyncMock(return_value=expanded),
     )
-    conv = SimpleNamespace(model_profile_id="p")
+    conv = SimpleNamespace(assembly_id="p")
     creds = LLMCredentials(api_key="sk", base_url="https://x", default_model="main-model")
     profiles = await resolve_turn_profiles(None, conv, "u1", credentials=creds)
     assert profiles.model == "main-model"
@@ -785,7 +785,7 @@ async def test_resolve_turn_profiles_worker_slot_overrides_agent(monkeypatch):
         "agentcore.llm.model_profiles.LlmModelProfileService.expand_for_conversation",
         AsyncMock(return_value=expanded),
     )
-    conv = SimpleNamespace(model_profile_id="p")
+    conv = SimpleNamespace(assembly_id="p")
     creds = LLMCredentials(api_key="sk", base_url="https://x", default_model="ceo-pro")
     profiles = await resolve_turn_profiles(None, conv, "u1", credentials=creds)
     assert profiles.model == "ceo-pro"
@@ -816,7 +816,7 @@ async def test_resolve_turn_profiles_worker_platform_with_byok_main(monkeypatch)
         "agentcore.llm.model_profiles.LlmModelProfileService.expand_for_conversation",
         AsyncMock(return_value=expanded),
     )
-    conv = SimpleNamespace(model_profile_id="p")
+    conv = SimpleNamespace(assembly_id="p")
     creds = LLMCredentials(
         api_key="sk", base_url="https://x", default_model="ceo-pro", provider_id="p1"
     )
@@ -867,7 +867,7 @@ async def test_resolve_turn_profiles_dangling_worker_follows_main(monkeypatch):
         "agentcore.llm.model_profiles.LlmModelProfileService.expand_for_conversation",
         AsyncMock(return_value=expanded),
     )
-    conv = SimpleNamespace(model_profile_id="p")
+    conv = SimpleNamespace(assembly_id="p")
     creds = LLMCredentials(api_key="sk", base_url="https://x", default_model="ceo-pro")
     profiles = await resolve_turn_profiles(None, conv, "u1", credentials=creds)
     assert profiles.model_for("agent") == "ceo-pro"
@@ -888,7 +888,7 @@ async def test_conversation_profile_pin_expands_main(monkeypatch):
         "agentcore.llm.model_profiles.LlmModelProfileService.expand_for_conversation",
         AsyncMock(return_value=expanded),
     )
-    conv = SimpleNamespace(model_profile_id="imp")
+    conv = SimpleNamespace(assembly_id="imp")
     sel = await resolve_conversation_model_selection(None, conv, "u1")
     assert sel.model == "picked"
     assert sel.origin == "byok"
@@ -910,7 +910,7 @@ async def test_dangling_profile_falls_back_via_expand(monkeypatch):
         "agentcore.llm.model_profiles.LlmModelProfileService.expand_for_conversation",
         AsyncMock(return_value=fallback),
     )
-    conv = SimpleNamespace(model_profile_id="dead")
+    conv = SimpleNamespace(assembly_id="dead")
     sel = await resolve_conversation_model_selection(None, conv, "u1")
     assert sel.model == "acct-model"
     assert sel.provider_id == "p2"
@@ -919,7 +919,7 @@ async def test_dangling_profile_falls_back_via_expand(monkeypatch):
 # --- conversation PATCH (crud) -----------------------------------------------
 
 
-async def test_patch_conversation_persists_model_profile_id(monkeypatch):
+async def test_patch_conversation_persists_assembly_id(monkeypatch):
     from datetime import datetime
 
     from agentcore.api.routes.conversations import crud
@@ -938,7 +938,7 @@ async def test_patch_conversation_persists_model_profile_id(monkeypatch):
         archived=False,
         permission_preset="workspace",
         deep_research_auto=False,
-        model_profile_id=None,
+        assembly_id=None,
     )
 
     class _Repo:
@@ -950,22 +950,22 @@ async def test_patch_conversation_persists_model_profile_id(monkeypatch):
         async def preference_flags_for(self, _user_id, _ids):
             return {}
 
-        async def set_model_profile(self, _cid, model_profile_id, *, user_id):
-            written["model_profile_id"] = model_profile_id
-            conv.model_profile_id = model_profile_id
+        async def set_model_profile(self, _cid, assembly_id, *, user_id):
+            written["assembly_id"] = assembly_id
+            conv.assembly_id = assembly_id
             return conv
 
     monkeypatch.setattr(
         "agentcore.llm.model_profiles.LlmModelProfileService.ensure_profile_usable",
-        AsyncMock(return_value=None),
+        AsyncMock(return_value="prof-1"),
     )
     monkeypatch.setattr(crud, "_require_conversation_write", AsyncMock())
-    body = UpdateConversationRequest(model_profile_id="prof-1")
+    body = UpdateConversationRequest(assembly_id="prof-1")
     result = await crud.update_conversation(
         "c1", body, SimpleNamespace(user_id="u1"), repo=_Repo()
     )
-    assert written == {"model_profile_id": "prof-1"}
-    assert result.model_profile_id == "prof-1"
+    assert written == {"assembly_id": "prof-1"}
+    assert result.assembly_id == "prof-1"
 
 
 async def test_patch_conversation_null_repins_account_default(monkeypatch):
@@ -986,7 +986,7 @@ async def test_patch_conversation_null_repins_account_default(monkeypatch):
         archived=False,
         permission_preset="workspace",
         deep_research_auto=False,
-        model_profile_id="prof-1",
+        assembly_id="prof-1",
     )
     written: dict = {}
 
@@ -999,9 +999,9 @@ async def test_patch_conversation_null_repins_account_default(monkeypatch):
         async def preference_flags_for(self, _user_id, _ids):
             return {}
 
-        async def set_model_profile(self, _cid, model_profile_id, *, user_id):
-            written["model_profile_id"] = model_profile_id
-            conv.model_profile_id = model_profile_id
+        async def set_model_profile(self, _cid, assembly_id, *, user_id):
+            written["assembly_id"] = assembly_id
+            conv.assembly_id = assembly_id
             return conv
 
     monkeypatch.setattr(
@@ -1009,14 +1009,14 @@ async def test_patch_conversation_null_repins_account_default(monkeypatch):
         AsyncMock(return_value="sys-default"),
     )
     monkeypatch.setattr(crud, "_require_conversation_write", AsyncMock())
-    body = UpdateConversationRequest(model_profile_id=None)
+    body = UpdateConversationRequest(assembly_id=None)
     # Explicit null is in model_fields_set.
-    assert "model_profile_id" in body.model_fields_set
+    assert "assembly_id" in body.model_fields_set
     result = await crud.update_conversation(
         "c1", body, SimpleNamespace(user_id="u1"), repo=_Repo()
     )
-    assert written == {"model_profile_id": "sys-default"}
-    assert result.model_profile_id == "sys-default"
+    assert written == {"assembly_id": "sys-default"}
+    assert result.assembly_id == "sys-default"
 
 
 async def test_create_conversation_snapshots_account_default(monkeypatch):
@@ -1038,7 +1038,7 @@ async def test_create_conversation_snapshots_account_default(monkeypatch):
         archived=False,
         permission_axes={"boundary": "folder"},
         deep_research_auto=False,
-        model_profile_id="sys-default",
+        assembly_id="sys-default",
         compaction_summary=None,
         compacted_through=None,
     )
@@ -1048,12 +1048,16 @@ async def test_create_conversation_snapshots_account_default(monkeypatch):
 
         async def create(self, **kwargs):
             written.update(kwargs)
-            conv.model_profile_id = kwargs.get("model_profile_id")
+            conv.assembly_id = kwargs.get("assembly_id")
             return conv
 
     monkeypatch.setattr(
         "agentcore.api.routes.conversations.crud.default_permission_axes_for_user",
         AsyncMock(return_value=SimpleNamespace(to_dict=lambda: {"boundary": "folder"})),
+    )
+    monkeypatch.setattr(
+        "agentcore.tools.switchboard.disabled_tools_for_user",
+        AsyncMock(return_value=[]),
     )
     monkeypatch.setattr(
         "agentcore.llm.model_profiles.LlmModelProfileService.snapshot_default_profile_id",
@@ -1063,8 +1067,8 @@ async def test_create_conversation_snapshots_account_default(monkeypatch):
     result = await crud.create_conversation(
         body, SimpleNamespace(user_id="u1"), repo=_Repo(), folder_repo=SimpleNamespace()
     )
-    assert written["model_profile_id"] == "sys-default"
-    assert result.model_profile_id == "sys-default"
+    assert written["assembly_id"] == "sys-default"
+    assert result.assembly_id == "sys-default"
 
 
 # --- inference proxy authoritative re-resolution ------------------------------
@@ -1106,7 +1110,7 @@ async def test_inference_proxy_uses_conversation_profile(monkeypatch):
             pass
 
         async def get_by_id(self, cid, *, user_id):
-            return SimpleNamespace(id=cid, model_profile_id="imp")
+            return SimpleNamespace(id=cid, assembly_id="imp")
 
     monkeypatch.setattr("agentcore.db.repositories.ConversationRepository", _ConvRepo)
     cfg = await inference._resolve_inference_credentials(

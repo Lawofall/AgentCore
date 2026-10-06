@@ -282,6 +282,40 @@ describe("AssistantMessage turn cost at bubble end", () => {
       }),
     );
     expect(screen.getByText("¥8.00")).toBeTruthy();
+    expect(screen.queryByText(/至今/)).toBeNull();
+  });
+
+  it("团队还在跑：脚上是已入账合计，标至今", () => {
+    execById.value = {
+      "asst-1": { deliveryStatus: null, plan: { agents: [] } },
+    };
+    mockExecution.value = teamExecution([
+      runNode({
+        id: "r1",
+        agentId: "a1",
+        task: "队长",
+        status: "completed",
+        role: "captain",
+        cost: nanoCost(5_000_000_000),
+      }),
+      runNode({
+        id: "r2",
+        agentId: "a2",
+        task: "撰写",
+        status: "running",
+        role: "member",
+        cost: nanoCost(3_000_000_000),
+      }),
+    ]);
+    renderBubble(
+      settledMessage({
+        executionId: "exec-1",
+        content: "先写到这里",
+        isStreaming: true,
+      }),
+    );
+    expect(screen.getByText("¥8.00 至今")).toBeTruthy();
+    expect(screen.queryByText("12s")).toBeNull();
   });
 
   it("团队图无价目：不展示未计价，气泡脚仍出整轮用时", () => {

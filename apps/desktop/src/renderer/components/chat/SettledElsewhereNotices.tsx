@@ -18,7 +18,7 @@
  * 不必在决策区再说一遍。
  */
 import { DecisionCard, DecisionCardIcon } from "@/components/ui";
-import { useConversationStore } from "@/stores/conversation";
+import { useChatPaneId } from "@/lib/chatPane";
 import { toolLabel } from "@/stores/execution/types";
 import {
   INTERACTION_CARD_NAME,
@@ -43,7 +43,7 @@ export function settledElsewhereLabel(entry: InteractionEntry): string {
 }
 
 export function SettledElsewhereNotices() {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   const [notices, setNotices] = useState<SettledNotice[]>([]);
 
   useEffect(() => {

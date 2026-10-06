@@ -135,7 +135,7 @@ class HandlerMixin:
                     "cancelQueuedTurn": True,
                     "listQueuedTurns": True,
                     "reorderQueuedTurns": True,
-                    "stopAndSendQueuedTurn": True,
+                    "deliverQueuedTurnToCaptain": True,
                     "editQueuedTurn": True,
                 },
             },
@@ -710,7 +710,12 @@ class HandlerMixin:
         # the meantime. Spawning a task lets ``respond`` / ``cancel`` be serviced by
         # the read loop while the turn runs. Missing inference is refused inside
         # ``_run_turn`` (structured result + outbox) before prepare/build_turn_router.
-        task = asyncio.create_task(self._run_turn(request_id, turn_id, params))
+        from agentcore.sidecar.server_pkg.turns import schedule_with_context_budget
+
+        task = schedule_with_context_budget(
+            params.get("contextBudget"),
+            self._run_turn(request_id, turn_id, params),
+        )
         self._register_turn(turn_id, task, conversation_id=conversation_id)
 
     async def _reject_turn_already_running(
@@ -911,7 +916,10 @@ class HandlerMixin:
             local_subpath=str(getattr(suspension, "folder_local_subpath", "") or ""),
         )
 
-        task = asyncio.create_task(
+        from agentcore.sidecar.server_pkg.turns import schedule_with_context_budget
+
+        task = schedule_with_context_budget(
+            params.get("contextBudget"),
             self._run_resume(
                 request_id,
                 suspension,
@@ -921,7 +929,7 @@ class HandlerMixin:
                 trace_id,
                 user_message_id,
                 params.get("externalMounts"),
-            )
+            ),
         )
         self._register_turn(message_id, task, conversation_id=conversation_id)
 
@@ -1158,7 +1166,10 @@ class HandlerMixin:
                         getattr(peeked, "folder_local_subpath", "") or ""
                     ),
                 )
-                task = asyncio.create_task(
+                from agentcore.sidecar.server_pkg.turns import schedule_with_context_budget
+
+                task = schedule_with_context_budget(
+                    params.get("contextBudget"),
                     self._run_resume(
                         request_id,
                         peeked,
@@ -1170,7 +1181,7 @@ class HandlerMixin:
                         params.get("externalMounts"),
                         settlement_prewritten=outbox is not None,
                         reply_ids=waiter.reply_ids,
-                    )
+                    ),
                 )
                 self._register_turn(message_id, task, conversation_id=conversation_id)
             except Exception as e:  # noqa: BLE001 — keep read-loop safe if wait task escapes

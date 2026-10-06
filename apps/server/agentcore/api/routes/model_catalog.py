@@ -32,7 +32,7 @@ def _unavailable_reason(item: ModelCatalogEntry) -> ModelUnavailableReason | Non
     )
 
 
-def _to_response(catalog: ModelCatalog) -> ModelCatalogResponse:
+def to_model_catalog_response(catalog: ModelCatalog) -> ModelCatalogResponse:
     return ModelCatalogResponse(
         current=ModelCatalogCurrent(
             id=catalog.current.id,
@@ -78,10 +78,13 @@ def _to_response(catalog: ModelCatalog) -> ModelCatalogResponse:
     )
 
 
+_to_response = to_model_catalog_response
+
+
 @router.get("", response_model=ModelCatalogResponse)
 async def list_user_models(
     user: AuthUser,
     session: AsyncSession = Depends(get_db),
 ) -> ModelCatalogResponse:
     """List the models this user may pick + the account's currently-resolved default."""
-    return _to_response(await resolve_model_catalog(session, user.user_id))
+    return to_model_catalog_response(await resolve_model_catalog(session, user.user_id))

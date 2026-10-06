@@ -6,7 +6,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getConversations } from "@/hooks/useConversations";
-import { useFolders } from "@/hooks/useFolders";
+import { getFolders, useFolders } from "@/hooks/useFolders";
 import { isNativeRuntime } from "@/lib/capabilities";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import {
@@ -15,12 +15,16 @@ import {
   buildPaletteCommands,
   commandMatches,
 } from "@/lib/paletteCommands";
+import { queryClient } from "@/lib/queryClient";
+import { conversationKeys } from "@/lib/queryKeys";
 import {
   TIME_FILTER_LABELS,
   TIME_FILTER_ORDER,
   type TimeFilter,
   timeFilterSince,
 } from "@/lib/searchFilters";
+import { filesFocusState } from "@/pages/conversations/constants";
+import { folderHitHasNoLiveChat } from "@/pages/conversations/liveFolderCounts";
 import { fetchDemoTapeCatalog } from "@/services/demoTape";
 import { dedupeFoldersByLocalBinding } from "@/services/folders";
 import { jumpToMessage } from "@/services/messages";
@@ -401,10 +405,23 @@ export function CommandPalette() {
   };
 
   const openFolder = (id: string) => {
-    // Folders moved out of the sidebar onto the /conversations management page.
-    // Jump there and pass the folder via navigation state so the page selects
-    // and flashes it (mirrors a conversation/message hit landing on its target).
-    navigate("/conversations", { state: { focusFolderId: id } });
+    // A folder with live chats opens the conversation filter and flashes that row.
+    // A folder with none is not a filter — open its files. An unloaded grouped
+    // cache is not evidence of emptiness, so that case still lands here.
+    const groupedSettled =
+      queryClient.getQueryData(conversationKeys.grouped) !== undefined;
+    const files = filesFocusState(id);
+    const noLiveChat = folderHitHasNoLiveChat(
+      id,
+      getConversations(),
+      getFolders(),
+      groupedSettled,
+    );
+    if (files && noLiveChat) {
+      navigate("/files", files);
+    } else {
+      navigate("/conversations", { state: { focusFolderId: id } });
+    }
     close();
   };
 

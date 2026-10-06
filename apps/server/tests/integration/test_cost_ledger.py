@@ -6,7 +6,7 @@ step depends on: the service envelope (user / conversation / message) is attache
 to every run row, and the write is idempotent by ``run_id`` so a retried turn
 never double-bills.
 
-Also pins the **account-level** row shape (AI 改写 / 文档 description): a ledger
+Also pins the **account-level** row shape (AI 改写): a ledger
 row that belongs to no conversation must persist, SUM into the account windows
 (用量页 / 仪表盘 / 配额), and stay out of every conversation- or message-scoped
 read — those are SQL-level properties, so only a real database can prove them.
@@ -414,7 +414,7 @@ async def _seed_turn_and_account_level_spend(session_factory, *, username: str):
 
 
 async def test_account_level_row_persists_without_a_conversation(session_factory):
-    """AI 改写 / 文档 description spend has no conversation and is billed anyway.
+    """AI 改写 spend has no conversation and is billed anyway.
 
     Before「放宽账本」the three ledger tables took ``conversation_id`` NOT NULL, so
     the call meter dropped this spend rather than hang it on an unrelated chat.
@@ -527,15 +527,14 @@ async def test_account_level_spend_counts_against_quota(session_factory):
     from agentcore.conversation.quota import QuotaLimits, enforce_quota
     from agentcore.core.errors import QuotaExceededError
     from agentcore.llm.provider.protocol import TokenUsage
-    from agentcore.runtime.costing import PERSONA_DESCRIPTION, ROLE_ASSIST, priced_call_cost
+    from agentcore.runtime.costing import PERSONA_REWRITE, ROLE_ASSIST, priced_call_cost
 
     user_id = new_id()
-    # 文档 description 自动补 — the account's only spend.
     assist_call = priced_call_cost(
         model="deepseek-v4-flash",
         usage=TokenUsage(input_tokens=2000, output_tokens=400),
         role=ROLE_ASSIST,
-        persona=PERSONA_DESCRIPTION,
+        persona=PERSONA_REWRITE,
         call_id=f"call_{new_id()}",
         credential_source="platform",
     )

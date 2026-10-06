@@ -635,6 +635,23 @@ async def react_loop(
         # ``max_rounds <= 0`` = no product round fuse. Increment-at-start so
         # ``continue`` and early ``return`` keep the same 0-based index as the
         # old ``for range`` loop.
+        spent_cost = None
+
+        def _note_spend(call_usage: TokenUsage) -> None:
+            nonlocal spent_cost
+            from agentcore.runtime.engine.run_spend import note_run_spend
+
+            spent_cost = note_run_spend(
+                sink,
+                run_id=run_id,
+                agent_id=agent_id,
+                role=role,
+                model=base_model or "",
+                call_usage=call_usage,
+                total_usage=total_usage,
+                spent=spent_cost,
+            )
+
         round_idx = -1
         while True:
             round_idx += 1
@@ -862,6 +879,7 @@ async def react_loop(
                 if usage:
                     total_usage = total_usage + usage
                     _note_last_prompt(usage)
+                    _note_spend(usage)
                 if usage_sink is not None:
                     usage_sink[:] = [total_usage]
                 if round_result.content:
@@ -893,6 +911,7 @@ async def react_loop(
                 if usage:
                     total_usage = total_usage + usage
                     _note_last_prompt(usage)
+                    _note_spend(usage)
                 if usage_sink is not None:
                     usage_sink[:] = [total_usage]
 

@@ -44,13 +44,15 @@ export interface Conversation {
     boundary: "read" | "folder" | "computer";
   };
   /**
-   * 会话级模型组合 id：非空即本会话使用的组合（新建拍快照；改组合定义下一 turn 生效）。
-   * null = 存量未钉死记录（展开时按账号默认）；勿再解释为「活跟随」。
-   * 源自 `ConversationSummary.model_profile_id`，由
-   * {@link import("@/components/chat/message-input/ModelPicker").ModelPicker} /
-   * 建会话 POST 写入。
+   * Switch ids turned off for this conversation. Empty = all on.
+   * Absent until the list payload includes the field.
    */
-  modelProfileId?: string | null;
+  disabledTools?: string[];
+  /**
+   * 这场钉的装配。null = 还没钉（展开时用账号星标）。
+   * 源自 `ConversationSummary.assembly_id`。
+   */
+  assemblyId?: string | null;
   /**
    * 较早对话已压缩（`ConversationSummary.context_compacted`）。
    * 时间线隔断以 ``compactedThrough`` 为准；不携带摘要正文。
@@ -61,6 +63,10 @@ export interface Conversation {
    * 最后一条被折进摘要的消息 ``created_at``；有值时时间线在其后插隔断。
    */
   compactedThrough?: string | null;
+  /**
+   * 最近一次「从此按这条继续」还能撤回（水印还没被之后的自动压缩推走）。
+   */
+  contextCutUndoable?: boolean;
   /**
    * 压缩没跟上，早期对话已掉出上下文窗口（`ConversationSummary.context_gap`）。
    * 非空 = 后端已证明「这一轮 AI 读不到那段」，展示降级提示；缺省 = 完好或未计算，保持安静。
@@ -170,6 +176,12 @@ export interface Message {
   /** 回合调研台账（`evidence_ledger` SSE / Message.evidence_ledger）；缺省 []。 */
   evidenceLedger?: import("@/types/events").TurnEvidenceLedgerEntry[];
   cost?: CostBreakdown;
+  /**
+   * Captain spend already returned this turn, before `message_end` stamps `cost`.
+   * Live only — reload reads the ledger on `cost`.
+   */
+  accruedCost?: CostBreakdown;
+  accruedUsage?: UsageBreakdown;
   usage?: UsageBreakdown & {
     error?: { code: string; message: string } | null;
   };
@@ -181,6 +193,11 @@ export interface Message {
    * 重载自 MessageDetail.generation_ms。缺省 = 旧记录，不在「用量」里编速度。
    */
   generationMs?: number;
+  /**
+   * 队长首流更早的那口正数 (ms)：live 自 message_end.ttft_ms；
+   * 重载自 MessageDetail.ttft_ms。缺省 = 旧记录，用量里不画 TTFT。
+   */
+  ttftMs?: number;
   finishReason?: string;
   /**
    * Server-attested turn result (`message_end.outcome` live; REST

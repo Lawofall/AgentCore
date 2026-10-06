@@ -711,6 +711,32 @@
   }
 }
 
+/* 窗口环默认挂在输入卡片外（见 TurnComposer COMPOSER_ENDCAP_PLACE），不占列宽。
+   聊天列窄到右侧没有这颗 32px 按钮的空位时，收回 MessageInput 的 1rem 留白，
+   底排让出发送。容器由 ChatView / 预览列的 `@container/chat` 声明。
+   并排栏的输入列就是栏宽，没有单栏居中留白，环一律收回列内。 */
+@container chat (max-width: 50.5rem) {
+  [data-composer-endcap] {
+    left: auto;
+    right: -1rem;
+  }
+  [data-composer-shell]:has([data-testid="composer-received-context"])
+    [data-composer-actions] {
+    padding-inline-end: 1.25rem;
+  }
+}
+
+[data-chat-layout="split"] [data-composer-endcap] {
+  left: auto;
+  right: -1rem;
+}
+
+[data-chat-layout="split"]
+  [data-composer-shell]:has([data-testid="composer-received-context"])
+  [data-composer-actions] {
+  padding-inline-end: 1.25rem;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);

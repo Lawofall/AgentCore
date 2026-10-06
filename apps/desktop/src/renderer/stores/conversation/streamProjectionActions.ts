@@ -45,6 +45,7 @@ type StreamProjectionActions = Pick<
   | "recordTurnWarning"
   | "stampPendingTurnWarning"
   | "attachCostToLastMessage"
+  | "attachAccruedSpendToLastMessage"
   | "attachTurnMetaToLastMessage"
   | "noteWindowPrompt"
   | "attachErrorToLastMessage"
@@ -428,6 +429,20 @@ export function createStreamProjectionActions(
         return { messages };
       }),
 
+    attachAccruedSpendToLastMessage: (usage, cost, conversationId) =>
+      patchConversation(conversationId, (rt) => {
+        const messages = [...rt.messages];
+        const last = messages[messages.length - 1];
+        if (last && last.role === "assistant") {
+          messages[messages.length - 1] = {
+            ...last,
+            accruedUsage: usage,
+            accruedCost: cost,
+          };
+        }
+        return { messages };
+      }),
+
     attachTurnMetaToLastMessage: (meta, conversationId) =>
       patchConversation(conversationId, (rt) => {
         const messages = [...rt.messages];
@@ -443,6 +458,7 @@ export function createStreamProjectionActions(
             ...(meta.generationMs !== undefined
               ? { generationMs: meta.generationMs }
               : {}),
+            ...(meta.ttftMs !== undefined ? { ttftMs: meta.ttftMs } : {}),
             ...(meta.finishReason !== undefined
               ? { finishReason: meta.finishReason }
               : {}),

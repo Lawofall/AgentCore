@@ -40,7 +40,7 @@ def test_check_keeps_identifiers() -> None:
 def test_check_rejects_missing_identifier() -> None:
     sample = next(s for s in SAMPLES if s.id == "chat_identifiers")
     result = check_summary(
-        "## 已确立的事实 / 背景\n忘了路径\n## 涉及的文件与标识符\n- x",
+        "## 已确立的事实\n忘了路径\n## 涉及的文件与标识符\n- x",
         sample,
     )
     assert not result.ok
@@ -62,7 +62,7 @@ def test_check_open_section_omitted_is_ok_for_absent() -> None:
     sample = next(s for s in SAMPLES if s.id == "chat_closed_not_open")
     # 未决整段省略 → 已关闭项没有被当成还要做；但本条还要求工单出现在未决。
     result = check_summary(
-        "## 已确立的事实 / 背景\nhx9f2a-ticket 仍开着\n## 涉及的文件与标识符\n- hx9f2a-ticket",
+        "## 已确立的事实\nhx9f2a-ticket 仍开着\n## 涉及的文件与标识符\n- hx9f2a-ticket",
         sample,
     )
     assert not result.ok
@@ -84,7 +84,7 @@ def test_check_veto_must_not_reopen() -> None:
 def test_ledger_token_required_in_files() -> None:
     sample = next(s for s in SAMPLES if s.id == "chat_file_ledger")
     result = check_summary(
-        "## 已确立的事实 / 背景\nsettleOmegaBatch\n## 涉及的文件与标识符\n- apps/billing/omega_ledger.py",
+        "## 已确立的事实\nsettleOmegaBatch\n## 涉及的文件与标识符\n- apps/billing/omega_ledger.py",
         sample,
     )
     assert not result.ok
@@ -135,7 +135,7 @@ def test_run_with_scripted_provider() -> None:
 def test_run_detects_lossy_scripted_summary() -> None:
     class _Drop:
         async def complete(self, request):  # noqa: ANN001
-            return LLMResponse(content="## 已确立的事实 / 背景\n什么都忘了")
+            return LLMResponse(content="## 已确立的事实\n什么都忘了")
 
     result = asyncio.run(run_compaction_fidelity(_Drop(), "fake-model", SAMPLES[:1]))
     assert result.n_ok == 0

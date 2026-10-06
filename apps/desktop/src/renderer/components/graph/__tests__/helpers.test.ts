@@ -467,6 +467,76 @@ function debateMultibeatRuns(): GraphRunLike[] {
   ];
 }
 
+describe("computeGraphFold · nested delegation", () => {
+  const tree = (): GraphRunLike[] => [
+    run("mpm"),
+    run("lead", [], { parentRunId: "mpm" }),
+    run("eng1", [], { parentRunId: "lead" }),
+    run("eng2", [], { parentRunId: "lead" }),
+    run("down", ["eng1"]),
+  ];
+
+  it("folds each leader's direct reports only", () => {
+    const fold = computeGraphFold(tree(), null);
+    expect(fold.unitOf.get("lead")).toBe("mpm");
+    expect(fold.unitOf.get("eng1")).toBe("lead");
+    expect(fold.unitOf.get("eng2")).toBe("lead");
+    expect(fold.descendants.get("mpm")).toEqual(["lead"]);
+    expect([...(fold.descendants.get("lead") ?? [])].sort()).toEqual([
+      "eng1",
+      "eng2",
+    ]);
+  });
+
+  it("collapsing an inner leader hides only that leader's reports", () => {
+    const { nodeIds, subTeams, rawEdges } = buildGraphStructure(
+      tree(),
+      "__input__",
+      new Set(["mpm"]),
+    );
+    expect(nodeIds).toContain("lead");
+    expect(nodeIds).not.toContain("eng1");
+    expect(nodeIds).not.toContain("eng2");
+    expect(subTeams.map((s) => s.parentId)).toEqual(["mpm"]);
+    expect(
+      rawEdges.some(
+        (e) => e.kind === "dep" && e.source === "lead" && e.target === "down",
+      ),
+    ).toBe(true);
+  });
+
+  it("collapsing the root hides the whole tree even if an inner leader is expanded", () => {
+    const { nodeIds, rawEdges } = buildGraphStructure(
+      [run("captain", [], { kind: "captain" }), ...tree()],
+      "__input__",
+      new Set(["lead"]),
+    );
+    expect(nodeIds).toContain("mpm");
+    expect(nodeIds).not.toContain("lead");
+    expect(nodeIds).not.toContain("eng1");
+    expect(
+      rawEdges.some(
+        (e) => e.kind === "dep" && e.source === "mpm" && e.target === "down",
+      ),
+    ).toBe(true);
+    expect(
+      rawEdges.some((e) => e.source === "mpm" && e.target === "captain"),
+    ).toBe(false);
+  });
+
+  it("shows both compounds when every leader is expanded", () => {
+    const { nodeIds, subTeams } = buildGraphStructure(
+      tree(),
+      "__input__",
+      new Set(["mpm", "lead"]),
+    );
+    expect(nodeIds).toEqual(
+      expect.arrayContaining(["mpm", "lead", "eng1", "eng2", "down"]),
+    );
+    expect(subTeams.map((s) => s.parentId).sort()).toEqual(["lead", "mpm"]);
+  });
+});
+
 describe("computeGraphFold · debate compound", () => {
   it("folds all debater runs under the moderator unit", () => {
     const runs = debateRuns(4);

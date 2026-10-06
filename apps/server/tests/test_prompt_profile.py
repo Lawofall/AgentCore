@@ -17,7 +17,6 @@ from agentcore.runtime.resolve.profile import (
     use_profile,
 )
 from agentcore.runtime.resolve.prompt import (
-    _DEFAULT_SYSTEM_PROMPT,
     assemble_system_prompt,
     compose_ceo_chat_prompt,
 )
@@ -101,8 +100,7 @@ def test_base_override_reaches_both_workers_and_ceo() -> None:
     with use_profile(PromptProfile("x", {FRAGMENT_BASE: sentinel})):
         base = assemble_system_prompt()
         ceo = _ceo()
-    assert sentinel in base
-    assert _DEFAULT_SYSTEM_PROMPT not in base  # 原 base 文案被换掉
+    assert base == sentinel
     assert sentinel in ceo  # CEO 的 base_prompt 即 assemble 输出，故也变
 
 
@@ -113,7 +111,7 @@ def test_ceo_core_override_only_swaps_ceo_core() -> None:
         base = assemble_system_prompt()
     assert sentinel in ceo
     assert "<身份>" not in ceo  # 原 ceo_core 被换掉
-    assert _DEFAULT_SYSTEM_PROMPT in base  # base 片段未受影响（隔离）
+    assert sentinel not in base  # base 片段未受影响（隔离）
 
 
 def test_empty_override_ablates_fragment_cleanly() -> None:
@@ -122,7 +120,7 @@ def test_empty_override_ablates_fragment_cleanly() -> None:
         ceo = _ceo()
     assert "<身份>" not in ceo
     assert "\n\n\n" not in ceo  # 没有因移除留下连续空行
-    assert _DEFAULT_SYSTEM_PROMPT in ceo  # 其余片段完好
+    assert "<按需目录>" in ceo  # 其余片段完好
 
 
 def test_citation_block_is_absent_from_production_ceo() -> None:

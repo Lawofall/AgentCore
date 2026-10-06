@@ -1,11 +1,17 @@
 /**
  * LLM math delimiters → remark-math dollars.
  *
- * Chat Markdown is remark-math (only `$` / `$$`). Claude-class models emit
- * `\(...\)` / `\[...\]`; converting at render time keeps those formulas in the
- * bubble without teaching delimiter dialect in the system prompt.
+ * remark-math only sees `$` / `$$`. CommonMark treats `\(` as an escape, so
+ * the usual chat pipeline (LobeChat / LibreChat / assistant-ui) rewrites
+ * `\(...\)` / `\[...\]` on the raw string before parse, and skips fenced and
+ * inline code. This scanner is that rewrite: left to right, an outer `\[`
+ * owns the span, an unclosed opener stays prose.
  *
- * Skips fenced / inline code so a snippet of `\(` stays literal.
+ * Those four sequences are delimiters, not math commands. Models often wrap a
+ * symbol again inside an open span (`\[ ... \(t\) ... \]`). KaTeX then throws
+ * `Can't use function '\(' in math mode`, and rehype-katex paints the whole
+ * formula as red source. Unwrap the inner pair and keep the tex. Do not
+ * rewrite it to `$t$`: `$` is illegal in math mode as well.
  */
 
 export type TexMathSpan = {
@@ -75,6 +81,64 @@ function findClose(source: string, from: number, close: "\\)" | "\\]"): number {
   return -1;
 }
 
+function texDelimiterAt(
+  source: string,
+  i: number,
+): { close: "\\)" | "\\]" } | null {
+  if (source[i] !== "\\" || isEscaped(source, i)) return null;
+  const next = source[i + 1];
+  if (next === "(") return { close: "\\)" };
+  if (next === "[") return { close: "\\]" };
+  return null;
+}
+
+/** Matching closer for one already-open delimiter, counting same-type nesting. */
+function findMatchingClose(
+  source: string,
+  from: number,
+  close: "\\)" | "\\]",
+): number {
+  const open = close === "\\)" ? "\\(" : "\\[";
+  let depth = 1;
+  let j = from;
+  while (j < source.length) {
+    if (source[j] === "\\" && !isEscaped(source, j)) {
+      if (source.startsWith(open, j)) {
+        depth++;
+        j += 2;
+        continue;
+      }
+      if (source.startsWith(close, j)) {
+        depth--;
+        if (depth === 0) return j;
+        j += 2;
+        continue;
+      }
+    }
+    j++;
+  }
+  return -1;
+}
+
+function unwrapNestedTexDelimiters(tex: string): string {
+  let out = "";
+  let i = 0;
+  while (i < tex.length) {
+    const open = texDelimiterAt(tex, i);
+    if (open) {
+      const closeAt = findMatchingClose(tex, i + 2, open.close);
+      if (closeAt !== -1) {
+        out += unwrapNestedTexDelimiters(tex.slice(i + 2, closeAt));
+        i = closeAt + 2;
+        continue;
+      }
+    }
+    out += tex[i];
+    i++;
+  }
+  return out;
+}
+
 export function findTexMathSpans(source: string): TexMathSpan[] {
   const spans: TexMathSpan[] = [];
   const n = source.length;
@@ -115,7 +179,7 @@ export function findTexMathSpans(source: string): TexMathSpan[] {
         const close = display ? "\\]" : "\\)";
         const closeAt = findClose(source, i + 2, close);
         if (closeAt !== -1) {
-          const tex = source.slice(i + 2, closeAt);
+          const tex = unwrapNestedTexDelimiters(source.slice(i + 2, closeAt));
           if (tex.trim()) {
             spans.push({
               from: i,

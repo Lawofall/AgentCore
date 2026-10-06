@@ -658,8 +658,7 @@ def test_schema_omits_retired_completion_criteria():
     assert "playbook_args" not in props
     assert "completion_criteria" not in props
     assert "finalize" not in props
-    # S3 字段已删 ⇒ 描述里也不留负面清单（体积棘轮见
-    # tests/test_tool_schema_size_ratchet.py）；误传仍由 execute 静默忽略 + 打点。
+    # S3 字段已删 ⇒ 描述里也不留负面清单；误传仍由 execute 静默忽略 + 打点。
     assert "completion_criteria" not in t.schema.description
 
 

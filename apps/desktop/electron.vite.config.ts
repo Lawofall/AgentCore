@@ -8,6 +8,10 @@ import {
   parseReleaseChannel,
   resolveReleaseIdentity,
 } from "./scripts/release-channel.mjs";
+import {
+  assertDesktopDevPortFree,
+  DESKTOP_DEV_PORT,
+} from "./scripts/desktop-dev-port.mjs";
 import { resolveApiBaseUrl } from "./scripts/resolve-api-base-url";
 
 const clientBuildDefine = viteClientBuildDefine(
@@ -29,6 +33,8 @@ const channelBuildDefine = {
 const packageDir = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode, command }) => {
+  // 只在 dev（command=serve）查占用者。build / preview 不绑这端口。
+  if (command === "serve") assertDesktopDevPortFree();
   // 主进程非 VITE_ 变量 Vite 默认不注入。把本机引擎热更新开关从 .env.local 喂进
   // Electron（打包态代码仍以 `app.isPackaged` 为硬闸，不会看这个值就弹进程）。
   const fileEnv = loadEnv(mode, packageDir, "");
@@ -95,7 +101,11 @@ export default defineConfig(({ mode, command }) => {
       },
       // Allow serving the monorepo root so the 前端预览 route (#/preview) can glob the
       // committed conformance vectors from packages/protocol-conformance/fixtures.
+      // 桌面开发源钉在 5173（CORS 明示列表里的那一个）。strictPort：被占就失败，
+      // 不顺延到 5174+。顺延后的源过不了预检，输入框会显示断线，而 API 仍是好的。
       server: {
+        port: DESKTOP_DEV_PORT,
+        strictPort: true,
         fs: { allow: [searchForWorkspaceRoot(packageDir)] },
       },
       // Force-prebundle mermaid: dynamic import("mermaid") otherwise races Vite's

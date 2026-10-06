@@ -17,7 +17,8 @@ Default output is ``decision_spine`` (human + ``--json`` isomorphic).
 ``--messages`` prints message text to stdout (same redaction as pack
 ``messages.json``: no reasoning body, no LLM bodies, no journal) and does not
 write a file. Pass ``--raw`` for the full ``log_events`` firehose (``llm.call``
-lines pin ``prefix_breach`` before the 120-char cut). ``--pack`` writes an investigation
+lines pin ``prefix_breach`` / ``opening_vs_prev`` / cache tokens, and
+``chat.turn_complete`` pins Phase-0 clocks, before the 120-char cut). ``--pack`` writes an investigation
 pack (decision_spine.json + timeline.jsonl + meta.json; optional previews /
 turn_metrics; redacted journal when the store has rows; ``--full`` adds
 messages.json without LLM bodies — never raw turn_journal). Exact-ID queries
@@ -298,7 +299,28 @@ async def _print_message_text(
 
 
 # Human --raw truncates at 120 chars; pin these so prefix-cache triage survives the cut.
-_LLM_CALL_PIN = ("prefix_breach", "tools_changed", "cache_hit_tokens", "input_tokens")
+_LLM_CALL_PIN = (
+    "prefix_breach",
+    "opening_vs_prev",
+    "tools_fp",
+    "system_fp",
+    "cache_hit_tokens",
+    "cache_miss_tokens",
+    "usage_keys",
+    "input_tokens",
+)
+_TURN_COMPLETE_PIN = (
+    "prepare_ms",
+    "assemble_ms",
+    "ttft_reasoning_ms",
+    "ttft_content_ms",
+    "generation_ms",
+    "duration_ms",
+)
+_EVENT_PINS = {
+    "llm.call": _LLM_CALL_PIN,
+    "chat.turn_complete": _TURN_COMPLETE_PIN,
+}
 
 
 def _fmt_log_line(item: dict, indent: str = "  ", hide: tuple[str, ...] = ()) -> str:
@@ -307,18 +329,23 @@ def _fmt_log_line(item: dict, indent: str = "  ", hide: tuple[str, ...] = ()) ->
     icon = {"error": "[E]", "warning": "[W]"}.get(item.get("level", ""), "   ")
     skip = ("type", "timestamp", "event", "level", *hide)
     detail_keys = {k: v for k, v in item.items() if k not in skip}
-    if event == "llm.call":
+    pin = _EVENT_PINS.get(event)
+    if pin:
         bits: list[str] = []
         rest = dict(detail_keys)
-        for key in _LLM_CALL_PIN:
+        for key in pin:
             if key in rest:
                 bits.append(f"{key}={rest.pop(key)}")
-        bits.extend(f"{k}={v}" for k, v in rest.items())
-        detail = " ".join(bits)
+        # Pinned keys are the triage line; the 120-char cut applies only to the tail
+        # so a long fingerprint list cannot hide cache_miss / ttft.
+        tail = " ".join(f"{k}={v}" for k, v in rest.items())
+        if len(tail) > 120:
+            tail = tail[:120] + "..."
+        detail = f"{' '.join(bits)} {tail}".strip() if bits else tail
     else:
         detail = " ".join(f"{k}={v}" for k, v in detail_keys.items())
-    if len(detail) > 120:
-        detail = detail[:120] + "..."
+        if len(detail) > 120:
+            detail = detail[:120] + "..."
     return f"{indent}{ts}  {icon} {event}  {detail}"
 
 

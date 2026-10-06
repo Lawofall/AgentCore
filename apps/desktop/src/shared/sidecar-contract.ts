@@ -141,6 +141,11 @@ export interface SidecarStartTurnRequest {
    */
   history?: SidecarHistoryEntry[];
   /**
+   * 装配上调低的上下文长度（token）。缺省 = 用模型自己的窗口。
+   * 只进本机引擎，云端回合仍读装配行。
+   */
+  contextBudget?: number;
+  /**
    * 云代理凭据。桌面侧开跑前必须已铸票；缺省时引擎 `build_turn_router` 硬拒空凭据
    * （无本机平台模型 / sidecar 自身配置回退）。
    */
@@ -353,6 +358,8 @@ export interface SidecarResumeRequest {
    * 覆盖进程级 initialize / 帧内旧 ``suspension.user_id``。
    */
   userId?: string;
+  /** 同 {@link SidecarStartTurnRequest.contextBudget}。续跑按当前装配重送。 */
+  contextBudget?: number;
   /** 挂起时已落库的原始 user 气泡 id —— outbox 幂等锚（同 startTurn.userMessageId）。 */
   userMessageId?: string;
   /** continue / adjust / stop（冷 resume）。 */
@@ -502,6 +509,7 @@ export function buildSidecarResumeRpcParams(
     | "selected"
     | "userId"
     | "userMessageId"
+    | "contextBudget"
     | "permissionAxes"
     | "folderId"
     | "localRootId"
@@ -526,6 +534,7 @@ export function buildSidecarResumeRpcParams(
     localRootId: req.localRootId ?? null,
     localSubpath: req.localSubpath ?? null,
     ...(req.userId ? { userId: req.userId } : {}),
+    ...(req.contextBudget ? { contextBudget: req.contextBudget } : {}),
     ...(req.userMessageId ? { userMessageId: req.userMessageId } : {}),
     ...(inference ? { inference } : {}),
     ...(foldersAuth ? { foldersAuth } : {}),
@@ -891,13 +900,19 @@ export type SidecarEditQueuedTurnAck =
   | { status: "saved" }
   | { status: "not_found" };
 
-/** 把该排队项放到队首并硬停当前回合，槽空后这条开跑。 */
-export interface SidecarStopAndSendQueuedTurnRequest {
+/** 把已排队的这句话送给在跑的主管，团队继续做。 */
+export interface SidecarDeliverQueuedToCaptainRequest {
   rootId: string;
   subpath?: string;
   conversationId: string;
   queueId: string;
 }
+
+/** ``no_captain`` = 团队已不在，条目仍在队里。``not_found`` = 已不在队。 */
+export type SidecarDeliverQueuedToCaptainAck =
+  | { status: "delivered" }
+  | { status: "no_captain" }
+  | { status: "not_found" };
 
 /** 本机 outbox 未同步回合的投影自足摘要（recovery → renderer D5，不透传 journal）。 */
 export interface SidecarUnsyncedTurnSummary {
@@ -995,7 +1010,7 @@ export const SIDECAR_CHANNELS = {
   cancelQueuedTurn: "sidecar:cancelQueuedTurn",
   listQueuedTurns: "sidecar:listQueuedTurns",
   reorderQueuedTurns: "sidecar:reorderQueuedTurns",
-  stopAndSendQueuedTurn: "sidecar:stopAndSendQueuedTurn",
+  deliverQueuedTurnToCaptain: "sidecar:deliverQueuedTurnToCaptain",
   editQueuedTurn: "sidecar:editQueuedTurn",
   occupancy: "sidecar:occupancy",
   resume: "sidecar:resume",
@@ -1050,10 +1065,13 @@ export interface SidecarApi {
   ): Promise<SidecarListQueuedTurnsResult>;
   /** 本机 FIFO 改顺序。失败须 reject，调用方回滚本地顺序。 */
   reorderQueuedTurns(req: SidecarReorderQueuedTurnsRequest): Promise<void>;
-  /** 队首 + 硬停。``not_found`` 须 reject。 */
-  stopAndSendQueuedTurn(
-    req: SidecarStopAndSendQueuedTurnRequest,
-  ): Promise<void>;
+  /**
+   * 已排队的话送给在跑的主管。``no_captain`` 时条目仍在队里。
+   * ``not_found`` = 已不在队。无进程须 reject。
+   */
+  deliverQueuedTurnToCaptain(
+    req: SidecarDeliverQueuedToCaptainRequest,
+  ): Promise<SidecarDeliverQueuedToCaptainAck>;
   /** 就地改正文 / 附件 / @。``not_found`` = 已开跑。 */
   editQueuedTurn(
     req: SidecarEditQueuedTurnRequest,

@@ -1,3 +1,4 @@
+import { focusOtherConversationPane } from "@/lib/conversationSplitActions";
 import { startNewConversation } from "@/lib/newConversation";
 import { isMac } from "@/lib/platform";
 import { switchRailConversationByDigit } from "@/lib/railHotkeys";
@@ -144,6 +145,13 @@ export const GLOBAL_SHORTCUTS: GlobalShortcut[] = [
       startNewConversation(navigate);
       return undefined;
     },
+  },
+  {
+    id: "focus-other-conversation",
+    label: "跳到旁边的对话",
+    keys: ["]"],
+    allowInEditable: true,
+    run: (navigate) => focusOtherConversationPane(navigate),
   },
   {
     id: "toggle-sidebar",

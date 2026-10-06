@@ -3,7 +3,6 @@
 import re
 from collections.abc import Sequence
 
-from agentcore.config import settings
 from agentcore.core.types import TOOL_FACE_LABELS, TOOL_FACE_ORDER
 from agentcore.runtime.context import ContextAssembler, SectionOrder
 from agentcore.runtime.context.consultable import ConsultDirectoryEntry
@@ -96,10 +95,20 @@ def _consult_call(name: str) -> str:
     return f'consult("{name}")'
 
 
+def _directory_bullet(text: str, call: str) -> str:
+    """Summary text, then the consult call, separated by a space.
+
+    The call is a suffix token. Sentence punctuation belongs to ``text``.
+    The row must not insert ``。``: a fragment has no stop of its own, and a
+    finished sentence already ends with one — inserting another doubles it.
+    """
+    return f"- {text} {call}"
+
+
 def _catalog_row(entry: ConsultDirectoryEntry, *, with_summaries: bool) -> str:
     call = _consult_call(entry.name)
     if with_summaries and entry.summary:
-        return f"- {entry.summary}。{call}"
+        return _directory_bullet(entry.summary, call)
     return f"- {call}"
 
 
@@ -176,7 +185,7 @@ def _grouped_tool_rows(
         label = lead.family_label.strip() or lead.name
         calls = "、".join(_consult_call(m.name) for m in members)
         # 成套启用合同在 consult description。目录行写组名，成员只出现在 consult 调用里。
-        lines.append(f"- {label}。{calls}")
+        lines.append(_directory_bullet(label, calls))
     return lines
 
 
@@ -293,7 +302,7 @@ def compose_worker_base_prompt(
         ContextAssembler()
         .add("shared_base", shared_base, SectionOrder.BASE)
         .add("on_demand_directory", on_demand_block, SectionOrder.SKILL_DIRECTORY)
-        .observe(scope="worker_base", soft_cap=settings.prompt_budget_char_soft_cap)
+        .observe(scope="worker_base")
         .render()
     )
 
@@ -310,8 +319,8 @@ def compose_ceo_chat_prompt(
     """Compose the frozen CEO system prompt from the clean base.
 
     Layers the entry coordinator's residual identity (empty unless proven) + unified
-    ``<按需目录>`` (omitted when the catalog is empty; ``consult`` stays on the
-    opening table). Date, workspace (+ CEO file index), scene gates,
+    ``<按需目录>`` (omitted when the catalog is empty or ``consult`` is off the
+    table). Date, workspace (+ CEO file index), scene gates,
     attachments, and table ride the turn envelope — not this
     string. ``on_demand_entries`` must match the tool's merged source.
     Host / terminal / browser / grant HOW is consult-owned and must not

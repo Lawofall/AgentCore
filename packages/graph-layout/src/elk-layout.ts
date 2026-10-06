@@ -38,10 +38,12 @@ export const COMPOUND_LAYER_SPACING = 40;
  * four alignment runs, so a binary fork (方案决策 → 产品/技术) comes out symmetric
  * around its parent — the thing NETWORK_SIMPLEX packs lopsided (one wing flush to
  * the spine, the other flung wide). Paired with `considerModelOrder` (set on the
- * root in computeLayout) for deterministic wing order, this lets ELK produce the
- * layout directly instead of a pile of hand post-passes. BK's one weakness — it
- * does NOT center a lone fan bookend (用户输入 / CEO 汇聚点) — is handled by
- * {@link centerLoneEndpoints}, the single surviving cross-axis polish.
+ * root in computeLayout) for deterministic wing order.
+ *
+ * INCLUDE_CHILDREN still drops two org-chart centerings, so two cross-axis
+ * polishes run after ELK: {@link centerSubTeamCaptains} (captain on its member
+ * span — bookend edges otherwise pin the captain and the stack hangs below),
+ * then {@link centerLoneEndpoints} (lone 用户输入 / CEO 汇聚点 on its neighbors).
  */
 const LAYOUT_OPTIONS: Record<GraphLayout, Record<string, string>> = {
   tree: {
@@ -313,11 +315,11 @@ export async function computeLayout(
 
   extractPositions(laidOut.children ?? [], 0, 0);
 
-  // ELK (BK BALANCED + considerModelOrder + INCLUDE_CHILDREN compounds) lays out
-  // layers, minimizes crossings, keeps revision chains straight and boxes sub-teams
-  // directly — no hand alignment/overlap/crossing passes. The one thing BK can't do
-  // is center a lone fan bookend (用户输入 / CEO 汇聚点) on an even neighbor count, so
-  // this single cross-axis polish pulls those onto their neighbors' midline.
+  // ELK (BK BALANCED + considerModelOrder + INCLUDE_CHILDREN) lays out layers,
+  // crossings, revision lanes, and sub-team boxes. It does not keep a sub-team
+  // captain on the member span once 用户输入 / CEO edges pin that captain, so
+  // center the captains first; bookends then follow the updated span.
+  centerSubTeamCaptains(positions, subTeams, edges, layout, sizeOf);
   centerLoneEndpoints(positions, edges, layout, sizeOf);
 
   // Always pin the placed-node origin to ELK padding. INCLUDE_CHILDREN compounds
@@ -427,17 +429,242 @@ export async function computeLayout(
 }
 
 /**
+ * Put each sub-team captain on the cross-axis midpoint of its direct members'
+ * extent (odd count → the middle card, even → the gap between the two central
+ * cards). Innermost teams first, so an outer captain sees already-centered
+ * nested captains.
+ *
+ * INCLUDE_CHILDREN plus edges to 用户输入 / CEO lock the captain onto that
+ * bookend line and pack members downward from the box top. A flat fan does not
+ * need this — BK BALANCED already centers it, and {@link centerLoneEndpoints}
+ * centers the bookends. Direct members stay put, so a revision lane keeps its
+ * row; the captain's own continuation chain moves with the captain.
+ * If the midpoint overlaps another card in the captain's column, the captain
+ * slides to the nearest free gap along that column.
+ *
+ * Sibling captains that share one non-captain predecessor and the same bias
+ * (a balanced fork whose stacks all hang off one side) then move as whole
+ * subtrees the other way. Captains return to the mirrored positions and the
+ * members come with them, so each captain stays on its span. A predecessor
+ * that is itself a sub-team captain is left alone — it was just centered on
+ * these nodes.
+ */
+function centerSubTeamCaptains(
+  positions: Record<string, { x: number; y: number }>,
+  subTeams: SubTeamInput[],
+  edges: GraphEdge[],
+  layout: GraphLayout,
+  sizeOf: (id: string) => { width: number; height: number },
+): void {
+  if (subTeams.length === 0) return;
+  const horizontal = layout === "leftright";
+  const crossSizeOf = (id: string) => {
+    const s = sizeOf(id);
+    return horizontal ? s.height : s.width;
+  };
+  const mainSizeOf = (id: string) => {
+    const s = sizeOf(id);
+    return horizontal ? s.width : s.height;
+  };
+  const mainOf = (id: string) =>
+    horizontal ? positions[id].x : positions[id].y;
+  const crossOf = (id: string) =>
+    horizontal ? positions[id].y : positions[id].x;
+  const crossCenterOf = (id: string) => crossOf(id) + crossSizeOf(id) / 2;
+  const setCross = (id: string, origin: number) => {
+    positions[id] = horizontal
+      ? { x: positions[id].x, y: origin }
+      : { x: origin, y: positions[id].y };
+  };
+  const mainOverlaps = (a: string, b: string) => {
+    const a0 = mainOf(a);
+    const b0 = mainOf(b);
+    return a0 < b0 + mainSizeOf(b) && a0 + mainSizeOf(a) > b0;
+  };
+
+  const byParent = new Map(subTeams.map((st) => [st.parentId, st]));
+  const depthOf = (st: SubTeamInput, seen: Set<string>): number => {
+    if (seen.has(st.groupId)) return 1;
+    seen.add(st.groupId);
+    let depth = 1;
+    for (const memberId of st.memberIds) {
+      const nested = byParent.get(memberId);
+      if (nested) depth = Math.max(depth, 1 + depthOf(nested, seen));
+    }
+    seen.delete(st.groupId);
+    return depth;
+  };
+  // Depth counts nested captains. Smaller depth is the inner team — center
+  // those first so an outer captain reads the updated member positions.
+  const ordered = [...subTeams].sort(
+    (a, b) => depthOf(a, new Set()) - depthOf(b, new Set()),
+  );
+
+  const legalOrigin = (
+    captain: string,
+    target: number,
+    size: number,
+  ): number => {
+    const intervals = Object.keys(positions)
+      .filter((id) => id !== captain && mainOverlaps(captain, id))
+      .map((id) => {
+        const start = crossOf(id);
+        return { start, end: start + crossSizeOf(id) };
+      })
+      .sort((a, b) => a.start - b.start);
+    const merged: { start: number; end: number }[] = [];
+    for (const interval of intervals) {
+      const last = merged[merged.length - 1];
+      if (last && interval.start <= last.end) {
+        last.end = Math.max(last.end, interval.end);
+      } else {
+        merged.push({ start: interval.start, end: interval.end });
+      }
+    }
+    const gaps: Array<[number, number]> = [];
+    let cursor = Number.NEGATIVE_INFINITY;
+    for (const interval of merged) {
+      const hi = interval.start - size;
+      if (cursor <= hi) gaps.push([cursor, hi]);
+      cursor = Math.max(cursor, interval.end);
+    }
+    gaps.push([cursor, Number.POSITIVE_INFINITY]);
+
+    let best: number | null = null;
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const [lo, hi] of gaps) {
+      if (lo > hi) continue;
+      const clamped = Math.min(hi, Math.max(lo, target));
+      const dist = Math.abs(clamped - target);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = clamped;
+      }
+    }
+    return best ?? target;
+  };
+
+  const continuations = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (edge.kind !== "continuation") continue;
+    if (!positions[edge.source] || !positions[edge.target]) continue;
+    const arr = continuations.get(edge.source);
+    if (arr) arr.push(edge.target);
+    else continuations.set(edge.source, [edge.target]);
+  }
+
+  const collect = (
+    id: string,
+    into: Set<string>,
+    includeMembers: boolean,
+  ): void => {
+    if (!positions[id] || into.has(id)) return;
+    into.add(id);
+    for (const next of continuations.get(id) ?? []) {
+      collect(next, into, includeMembers);
+    }
+    if (!includeMembers) return;
+    const team = byParent.get(id);
+    if (!team) return;
+    for (const memberId of team.memberIds) collect(memberId, into, true);
+  };
+
+  const proposedCross = (id: string, moves: Map<string, number>) =>
+    crossOf(id) + (moves.get(id) ?? 0);
+
+  const shiftsFit = (moves: Map<string, number>): boolean => {
+    const ids = Object.keys(positions);
+    for (const id of moves.keys()) {
+      const origin = proposedCross(id, moves);
+      const size = crossSizeOf(id);
+      for (const other of ids) {
+        if (other === id || !mainOverlaps(id, other)) continue;
+        const otherOrigin = proposedCross(other, moves);
+        if (
+          origin < otherOrigin + crossSizeOf(other) &&
+          origin + size > otherOrigin
+        ) {
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
+  const applyMoves = (moves: Map<string, number>) => {
+    for (const [id, delta] of moves) setCross(id, crossOf(id) + delta);
+  };
+
+  const applied = new Map<string, number>();
+  for (const st of ordered) {
+    const captain = st.parentId;
+    if (!positions[captain]) continue;
+    const members = st.memberIds.filter((id) => positions[id]);
+    if (members.length === 0) continue;
+    const centers = members.map(crossCenterOf);
+    const mid = (Math.min(...centers) + Math.max(...centers)) / 2;
+    const size = crossSizeOf(captain);
+    const target = mid - size / 2;
+    const old = crossOf(captain);
+    if (Math.abs(target - old) < 0.5) continue;
+    const origin = legalOrigin(captain, target, size);
+    const delta = origin - old;
+    if (Math.abs(delta) < 0.5) continue;
+    const chain = new Set<string>();
+    collect(captain, chain, false);
+    const moves = new Map<string, number>();
+    for (const id of chain) moves.set(id, delta);
+    if (shiftsFit(moves)) applyMoves(moves);
+    else setCross(captain, origin);
+    applied.set(captain, crossOf(captain) - old);
+  }
+
+  // Uniform bias across a balanced fork: put the bias on the member blocks
+  // so the captains return to the mirrored ELK positions.
+  const byPred = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (edge.kind === "continuation") continue;
+    if (!applied.has(edge.target) || !positions[edge.source]) continue;
+    const arr = byPred.get(edge.source);
+    if (arr) arr.push(edge.target);
+    else byPred.set(edge.source, [edge.target]);
+  }
+  const repaired = new Set<string>();
+  for (const [pred, captains] of byPred) {
+    // A sub-team parent was just centered on these captains. Sliding the
+    // fork back would pull them off that parent.
+    if (byParent.has(pred)) continue;
+    const unique = [...new Set(captains)].filter((id) => !repaired.has(id));
+    if (unique.length < 2) continue;
+    const bias = applied.get(unique[0]);
+    if (bias == null || Math.abs(bias) < 0.5) continue;
+    if (unique.some((id) => Math.abs((applied.get(id) ?? 0) - bias) >= 0.5)) {
+      continue;
+    }
+    const moves = new Map<string, number>();
+    for (const captain of unique) {
+      const subtree = new Set<string>();
+      collect(captain, subtree, true);
+      for (const id of subtree) moves.set(id, -bias);
+    }
+    if (!shiftsFit(moves)) continue;
+    applyMoves(moves);
+    for (const captain of unique) repaired.add(captain);
+  }
+}
+
+/**
  * Pull a lone fan bookend onto the cross-axis midpoint of the nodes it connects
  * to. ELK's BRANDES_KOEPF leaves a node that is the only one in its layer free
  * to sit anywhere in its neighbors' band when their count is even (the aligned
  * position is a range, not a point), so a 1→2 / 2→1 端点 (用户输入 / CEO 汇聚点)
  * can land off-center and draw asymmetric fan edges.
  *
- * Only **pure sources** (no incoming, fan-out root) and **pure sinks** (no
- * outgoing, fan-in 汇聚点) are recentered — a lone *middle* node (one in, one+
- * out) is a chain link ELK already aligns straight, so moving it would re-break
- * that. Recentering is cross-axis only (y for the left-right flow, x for the
- * tree) and stays within the neighbors' existing span, so the bbox is unchanged.
+ * Only pure sources and pure sinks move. Sub-team captains are already on their
+ * member span ({@link centerSubTeamCaptains}); any other through-node stays, so
+ * a 1-in-1-out chain keeps the straight edge ELK gave it. Recentering is
+ * cross-axis only (y for left-right, x for the tree) and stays within the
+ * neighbors' existing span, so the bbox is unchanged.
  */
 function centerLoneEndpoints(
   positions: Record<string, { x: number; y: number }>,
@@ -487,7 +714,7 @@ function centerLoneEndpoints(
         ? outs // pure source → center on its targets
         : outs.length === 0 && ins.length > 0
           ? ins // pure sink → center on its sources
-          : null; // middle node → leave ELK's alignment alone
+          : null; // through-node: captains already centered; keep chain edges straight
     if (!refs || refs.length === 0) continue;
     const centers = refs.map(crossCenterOf);
     const mid = (Math.min(...centers) + Math.max(...centers)) / 2;

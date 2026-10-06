@@ -87,6 +87,10 @@ class EventType(StrEnum):
     # EPHEMERAL liveliness（对称 run_tool_progress / coordination_wait）——reload 后由
     # status（pending/skipped/terminal）兜底；queued/skipped 不走本事件（见 status）。
     RUN_PHASE = "run_phase"
+    # 一次模型调用返回后，该 run 的累计用量与已计价金额。
+    # EPHEMERAL——不进 journal。进行中的侧栏 / 回复脚「至今」靠它；
+    # 终态以 run_completed / run_failed / run_cancelled 上的用量为准。
+    RUN_SPEND = "run_spend"
     BATCH_METRICS = "batch_metrics"
     RUN_ESCALATION = "run_escalation"
     # Worker 内部路由 Phase 1：Escalation Gate 方案层判定（确定性后置检查，正交于

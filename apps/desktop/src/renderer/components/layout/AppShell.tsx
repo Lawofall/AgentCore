@@ -5,6 +5,7 @@ import {
 } from "@/hooks/useFolderSharing";
 import { startAndroidUpdates } from "@/lib/androidUpdates";
 import { bindAppNavigate } from "@/lib/appNavigate";
+import { AssemblyMcpBridge } from "@/lib/assemblyMcp";
 import { isWebClient } from "@/lib/capabilities";
 import { NarrowLayoutProvider, useNarrowLayoutState } from "@/lib/narrowLayout";
 import { startShellPresence } from "@/lib/nativeNotification";
@@ -201,6 +202,7 @@ function AppShellFrame() {
   return (
     <div className="relative flex h-screen w-screen flex-col overflow-hidden">
       {!webClient && !isNarrow && <TitleBar />}
+      <AssemblyMcpBridge />
       <WorkspaceChannelBanner />
       <OutdatedAndroidBanner />
       <ProductNoticeBanner />

@@ -272,7 +272,7 @@ async def test_invalid_payload_still_quarantines(ledger_queue, tmp_path):
 
 
 async def test_enqueue_account_level_row_without_a_conversation(monkeypatch, ledger_queue):
-    """AI 改写 / 文档 description: no conversation, and the outbox carries it anyway.
+    """AI 改写: no conversation, and the outbox carries it anyway.
 
     ``conversation_id`` used to be a hard requirement here, so this spend was
     dropped at enqueue. It now rides through to the sink as NULL — the row is

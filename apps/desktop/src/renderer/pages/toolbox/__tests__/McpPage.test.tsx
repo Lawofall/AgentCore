@@ -1,6 +1,7 @@
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 import { McpPage } from "@/pages/toolbox/mcp/McpPage";
 import type { McpServerListItem } from "@shared/mcp-contract";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 // @vitest-environment jsdom
 import {
   cleanup,
@@ -48,10 +49,15 @@ function stubApi(
 }
 
 function renderPage(path: string = APP_PATHS.toolbox.mcp) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <McpPage />
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[path]}>
+        <McpPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -61,14 +67,9 @@ afterEach(() => {
 });
 
 describe("MCP 栏", () => {
-  it("顶栏在我的和市场之间，没有本机通道时不画", () => {
+  it("没有本机通道时不假装已接上", () => {
     renderPage();
-    const nav = screen.getByRole("navigation", { name: "工具箱" });
-    expect(
-      within(nav)
-        .getAllByRole("link")
-        .map((link) => link.textContent),
-    ).toEqual(["官方", "我的", "市场"]);
+    expect(screen.queryByRole("navigation", { name: "工具箱" })).toBeNull();
     expect(screen.getByText("MCP 只在桌面本机可用。")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "添加 MCP" })).toBeNull();
   });
@@ -76,12 +77,7 @@ describe("MCP 栏", () => {
   it("列出 Server，不铺报出的动作", async () => {
     stubApi(async () => ({ ok: true, servers: [FS, GH] }));
     renderPage();
-    const nav = screen.getByRole("navigation", { name: "工具箱" });
-    expect(
-      within(nav)
-        .getAllByRole("link")
-        .map((link) => link.textContent),
-    ).toEqual(["官方", "我的", "MCP", "市场"]);
+    expect(screen.queryByRole("navigation", { name: "工具箱" })).toBeNull();
     const list = await screen.findByTestId("mcp-list");
     expect(
       within(list).getByRole("button", { name: "Filesystem" }),
@@ -114,6 +110,14 @@ describe("MCP 栏", () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "添加 MCP" }));
     expect(screen.getByRole("heading", { name: "新建 MCP" })).toBeTruthy();
+  });
+
+  it("节标题与添加 MCP 同一行", async () => {
+    stubApi(async () => ({ ok: true, servers: [FS] }));
+    renderPage();
+    const add = await screen.findByRole("button", { name: "添加 MCP" });
+    const title = screen.getByRole("heading", { name: "MCP" });
+    expect(title.parentElement).toBe(add.parentElement?.parentElement);
   });
 
   it("listServers 失败时诚实说明", async () => {

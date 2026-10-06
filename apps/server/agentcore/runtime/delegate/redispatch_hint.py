@@ -9,15 +9,15 @@ from __future__ import annotations
 from typing import Any
 
 from agentcore.runtime.delegate.empty_tasks import is_empty_delegate_error
-from agentcore.runtime.engine.tool_exec import TOOL_FAILED_MARKER
+from agentcore.runtime.engine.tool_exec import strip_model_failure_envelope
 from agentcore.runtime.events.types import FinishReason
 from agentcore.runtime.facts import FactKind
 from agentcore.runtime.journal.entries import KIND_TURN_END
 
 
 def _clean_tool_result(result: str) -> str:
-    """Strip the model-facing failure trailer so gate classifiers see the raw error."""
-    return (result or "").replace(TOOL_FAILED_MARKER, "").strip()
+    """Strip the status line and trailer so gate classifiers see the diagnostic."""
+    return strip_model_failure_envelope(result or "")
 
 
 def prior_turn_has_redispatch_fingerprint(entries: list[dict[str, Any]] | None) -> bool:

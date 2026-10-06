@@ -105,43 +105,16 @@ export function coordinationWaitCaptainCaption(
   },
 ): string | null {
   if (!wait) return null;
+  const roles = (opts?.waitingRoles ?? []).filter(Boolean);
+  // 没有还在跑的人时不说「等待团队」——进度数字本身不是等待。
+  if (roles.length === 0) return null;
   const total = Math.max(0, wait.total);
   const completed = Math.max(
     0,
     Math.min(wait.completed, total || wait.completed),
   );
-  const roles = (opts?.waitingRoles ?? []).filter(Boolean);
   if (roles.length === 1) {
     return `等待「${roles[0]}」(${completed}/${total})`;
   }
   return `等待团队 (${completed}/${total})`;
-}
-
-/**
- * All workers finished while execution is still running — CEO writing the
- * same-turn close. Matches {@link deriveCaptainStatus}'s "running" sink.
- *
- * ``detached``: captain already left; background settle does not write a close.
- * ``turnTerminal`` without detach is still the same-turn writing window
- * (attach grace). Hiding the spinner while attached painted a false「已汇总」.
- *
- * ``paused``: cold ask hang — workers may be 2/2, but CEO is
- * waiting on the user (same invariant as deriveCaptainStatus).
- */
-export function isTeamSynthesizing(
-  execution: Execution,
-  opts?: { turnTerminal?: boolean; detached?: boolean },
-): boolean {
-  void opts?.turnTerminal;
-  if (opts?.detached) return false;
-  if (execution.status === "paused") return false;
-  if (execution.status !== "running") return false;
-  const { total } = workerProgress(execution);
-  return total > 0 && workersAreTerminal(execution);
-}
-
-/** Deterministic strip / indicator copy for the synthesis empty window. */
-export function teamSynthesisPhaseLabel(execution: Execution): string {
-  const { completed, total } = workerProgress(execution);
-  return `${completed}/${total} 已完成，正在收尾`;
 }

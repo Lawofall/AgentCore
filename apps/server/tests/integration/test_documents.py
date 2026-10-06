@@ -11,7 +11,6 @@ from pathlib import Path
 
 from agentcore.db.models import Folder
 from agentcore.db.repositories import DocumentRepository
-from agentcore.documents.frontmatter import set_entry_frontmatter
 from agentcore.memory import DocumentMemoryStore, assemble_injected_rules
 from agentcore.memory.store import (
     CORE_MEMORY_FILE,
@@ -434,105 +433,6 @@ async def test_user_rule_apply_mode_always_on_demand_and_reject_conditional(
         assert "合规附录.md" not in names
         on_demand_docs = await repo.list_on_demand_user_rules(uid, None)
         assert {d.name for d in on_demand_docs} == {"合规附录.md"}
-
-
-async def test_apply_description_if_empty_column_only_preserves_content(session_factory):
-    """AI fill writes the column only; content (CAS) and user FM description stay intact."""
-    uid = str(uuid.uuid4())
-    async with session_factory() as session:
-        repo = DocumentRepository(session)
-        doc = await repo.create(
-            uid,
-            name="条目.md",
-            role="rule",
-            apply_mode="on_demand",
-            content="- 部署约定与回滚步骤",
-        )
-        assert (doc.description or "") == ""
-        content_before = doc.content
-        filled = await repo.apply_description_if_empty(
-            doc.id, user_id=uid, description="部署与回滚"
-        )
-        assert filled is not None
-        assert filled.description == "部署与回滚"
-        assert filled.content == content_before
-        assert "description:" not in filled.content
-
-        again = await repo.apply_description_if_empty(doc.id, user_id=uid, description="不该覆盖")
-        assert again is not None
-        assert again.description == "部署与回滚"
-        assert again.content == content_before
-
-        # Body write with empty FM description clears stale AI column → fill again.
-        refreshed = await repo.update_content(
-            doc.id, user_id=uid, content="---\napply: on_demand\n---\n新正文\n"
-        )
-        assert refreshed is not None
-        assert (refreshed.description or "") == ""
-        content_after_edit = refreshed.content
-        regen = await repo.apply_description_if_empty(
-            doc.id, user_id=uid, description="清空后新摘要"
-        )
-        assert regen is not None
-        assert regen.description == "清空后新摘要"
-        assert regen.content == content_after_edit
-
-
-async def test_apply_description_if_empty_respects_user_frontmatter(session_factory):
-    """User-written frontmatter description is never overwritten by AI fill."""
-    uid = str(uuid.uuid4())
-    async with session_factory() as session:
-        repo = DocumentRepository(session)
-        body = set_entry_frontmatter(
-            "---\napply: on_demand\n---\n手写条目\n", description="用户手写摘要"
-        )
-        doc = await repo.create(
-            uid,
-            name="手写.md",
-            role="rule",
-            apply_mode="on_demand",
-            content=body,
-        )
-        assert doc.description == "用户手写摘要"
-        content_before = doc.content
-        skipped = await repo.apply_description_if_empty(
-            doc.id, user_id=uid, description="AI不该覆盖"
-        )
-        assert skipped is not None
-        assert skipped.description == "用户手写摘要"
-        assert skipped.content == content_before
-        assert "description: 用户手写摘要" in skipped.content
-
-
-async def test_apply_description_if_empty_skips_stale_content(session_factory):
-    """Fill generated against an older body must not land after a later save."""
-    uid = str(uuid.uuid4())
-    async with session_factory() as session:
-        repo = DocumentRepository(session)
-        doc = await repo.create(
-            uid,
-            name="竞态.md",
-            role="rule",
-            apply_mode="on_demand",
-            content="- v1 正文",
-        )
-        old_content = doc.content
-        updated = await repo.update_content(
-            doc.id, user_id=uid, content="---\napply: on_demand\n---\n- v2 正文\n"
-        )
-        assert updated is not None
-        assert (updated.description or "") == ""
-        stale = await repo.apply_description_if_empty(
-            doc.id,
-            user_id=uid,
-            description="针对 v1 的摘要",
-            expected_content=old_content,
-        )
-        assert stale is None
-        fresh = await repo.get(doc.id, user_id=uid)
-        assert fresh is not None
-        assert (fresh.description or "") == ""
-        assert "v2" in fresh.content
 
 
 # --- AI memory write guards (API) ------------------------------------------------------------

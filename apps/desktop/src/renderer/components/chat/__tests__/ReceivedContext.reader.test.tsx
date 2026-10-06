@@ -128,6 +128,32 @@ describe("ReceivedContextSection reader", () => {
     expect(body).toContain("并行调用独立工具。");
   });
 
+  it("lists 运行时 beside 工作区 when the date is the only envelope leftover", () => {
+    const system = `<工作区>
+桌面已连接。
+</工作区>
+
+<运行时>
+当前日期：2026-10-01 中国标准时间
+</运行时>`;
+    render(
+      <ReceivedContextSection
+        blocks={[
+          block({ channel: "system", body: system, chars: system.length }),
+          block({ channel: "request", body: "今天几号。" }),
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "上下文" }));
+    expect(screen.getByRole("button", { name: /工作区/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /运行时/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /出厂指令/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /运行时/ }));
+    expect(screen.getByTestId("received-context-body").textContent).toContain(
+      "当前日期：2026-10-01 中国标准时间",
+    );
+  });
+
   it("lists 路径约定 beside 设定 and keeps it out of 出厂指令", () => {
     const system = `适合可视化的内容，优先采用可视化呈现。
 
@@ -452,5 +478,152 @@ describe("ReceivedContextDialog reader", () => {
     expect(screen.getByTestId("received-context-files").textContent).toContain(
       "src/lib/store.ts",
     );
+  });
+
+  it("opens 全部 in wire order without catalog slices or later consults", () => {
+    const system = `你是 CEO。
+
+<输出>
+直接给结论。
+</输出>`;
+    render(
+      <ReceivedContextDialog
+        open
+        onOpenChange={() => undefined}
+        blocks={[
+          block({
+            channel: "system",
+            heading: "CEO 系统提示（本回合实际遵循的系统指令）",
+            body: system,
+            chars: 80,
+          }),
+          block({
+            channel: "tools",
+            heading: "本回合工具",
+            body: "**web_search**",
+            chars: 12,
+          }),
+          block({
+            channel: "request",
+            heading: "原始用户请求",
+            body: "发下参数",
+            chars: 4,
+          }),
+        ]}
+        process={[
+          {
+            kind: "tool",
+            id: "c1",
+            tool_name: "consult",
+            arguments: { name: "写作风格" },
+            result: "按需规则全文。",
+            status: "success",
+            display: { name: "写作风格", origin: "user" },
+          },
+        ]}
+      />,
+    );
+
+    const allBtn = screen.getByRole("button", { name: /全部/ });
+    expect(allBtn.getAttribute("aria-current")).toBeNull();
+    expect(allBtn.textContent).toContain("96 字");
+    const nav = screen.getByRole("navigation", { name: "上下文目录" });
+    expect(nav.textContent?.indexOf("全部")).toBeLessThan(
+      nav.textContent?.indexOf("设定") ?? -1,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: /原始请求/ })
+        .getAttribute("aria-current"),
+    ).toBe("true");
+
+    fireEvent.click(allBtn);
+    expect(allBtn.getAttribute("aria-current")).toBe("true");
+    const all = screen.getByTestId("received-context-all");
+    const headings = [...all.querySelectorAll("h2")].map(
+      (node) => node.textContent,
+    );
+    expect(headings).toEqual([
+      "CEO 系统提示（本回合实际遵循的系统指令）",
+      "本回合工具",
+      "原始用户请求",
+    ]);
+    expect(all.textContent).toContain("你是 CEO。");
+    expect(all.textContent).toContain("直接给结论。");
+    expect(all.textContent).not.toContain("本回合未注入常驻规则。");
+    expect(all.textContent).not.toContain("按需规则全文。");
+    expect(screen.queryByTestId("received-context-absent")).toBeNull();
+  });
+
+  it("omits the system block from 全部 on a narrow layout", () => {
+    isNarrow = true;
+    const system = "你是 CEO。";
+    render(
+      <ReceivedContextDialog
+        open
+        onOpenChange={() => undefined}
+        blocks={[
+          block({
+            channel: "system",
+            heading: "CEO 系统提示",
+            body: system,
+            chars: 40,
+          }),
+          block({
+            channel: "request",
+            heading: "原始用户请求",
+            body: "窄屏请求",
+            chars: 4,
+          }),
+        ]}
+      />,
+    );
+    const allBtn = screen.getByRole("button", { name: /全部/ });
+    expect(allBtn.textContent).toContain("4 字");
+    fireEvent.click(allBtn);
+    const all = screen.getByTestId("received-context-all");
+    expect(all.textContent).not.toContain("你是 CEO。");
+    expect(all.textContent).toContain("原始用户请求");
+    expect(all.textContent).toContain("窄屏请求");
+  });
+
+  it("badges a truncated opening section and keeps pointer files off 全部", () => {
+    render(
+      <ReceivedContextDialog
+        open
+        onOpenChange={() => undefined}
+        blocks={[
+          block({
+            channel: "dependency",
+            heading: "前置结果（来自 骨架）",
+            body: "digest",
+            chars: 100,
+            truncated: true,
+            fidelity: "summarize",
+            files: ["src/lib/store.ts"],
+            source_role: "骨架",
+          }),
+          block({
+            channel: "team_result",
+            heading: "工程（completed）",
+            body: "交接结论：已落盘。",
+            chars: 8,
+            truncated: true,
+            fidelity: "pointer",
+            files: ["package.json"],
+            source_role: "工程",
+          }),
+        ]}
+        preferMaterial
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /全部/ }));
+    expect(screen.getAllByText("已截断")).toHaveLength(1);
+    expect(screen.getByTestId("received-context-files").textContent).toContain(
+      "src/lib/store.ts",
+    );
+    expect(
+      screen.getByTestId("received-context-files").textContent,
+    ).not.toContain("package.json");
   });
 });

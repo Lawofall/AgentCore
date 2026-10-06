@@ -1,5 +1,15 @@
-import type { LlmModelProfileView } from "@/services/llmModelProfiles";
 import type { ModelCatalogItem } from "@/services/models";
+
+type ProfileRow = {
+  id: string;
+  name: string;
+  kind: "system" | "user";
+  is_default: boolean;
+  main: { origin: "byok"; provider_id: string; model: string };
+  worker: null;
+  background: null;
+  vision: { origin: "byok"; provider_id: string; model: string } | null;
+};
 import { describe, expect, it } from "vitest";
 import {
   draftHasImageAttachment,
@@ -9,7 +19,7 @@ import {
   shouldShowComposerVisionHint,
 } from "../composerModelProfile";
 
-const textMain: LlmModelProfileView = {
+const textMain: ProfileRow = {
   id: "sys-52",
   name: "Flash",
   kind: "system",
@@ -20,7 +30,7 @@ const textMain: LlmModelProfileView = {
   vision: null,
 };
 
-const visionMain: LlmModelProfileView = {
+const visionMain: ProfileRow = {
   ...textMain,
   id: "user-vision",
   name: "看图",
@@ -29,7 +39,7 @@ const visionMain: LlmModelProfileView = {
   main: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
 };
 
-const slotted: LlmModelProfileView = {
+const slotted: ProfileRow = {
   ...textMain,
   id: "user-slot",
   name: "识图槽",

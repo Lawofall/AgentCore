@@ -846,14 +846,6 @@ def test_resolve_tool_timeout_by_face():
         resolve_tool_timeout(_schema(ToolFace.FOLDER))
         == settings.tool_default_timeout_seconds
     )
-    assert (
-        resolve_tool_timeout(_schema(ToolFace.TABLE))
-        == settings.tool_default_timeout_seconds
-    )
-    assert (
-        resolve_tool_timeout(_schema(ToolFace.DOC))
-        == settings.tool_default_timeout_seconds
-    )
     # an explicit per-tool override wins over the face rule — even the exemption
     assert resolve_tool_timeout(_schema(ToolFace.ORCHESTRATION, 12.5)) == 12.5
     assert resolve_tool_timeout(_schema(ToolFace.EXECUTION, 5.0)) == 5.0

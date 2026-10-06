@@ -1,4 +1,5 @@
 import { useConversations } from "@/hooks/useConversations";
+import { useChatPaneId } from "@/lib/chatPane";
 import { heldUserMessageIds } from "@/lib/pendingUserMessage";
 import {
   useBackgroundTasks,
@@ -8,7 +9,6 @@ import {
 import {
   useActiveMemoryUpdates,
   useActiveMessages,
-  useConversationStore,
 } from "@/stores/conversation";
 import { useExecutionStore } from "@/stores/execution";
 import {
@@ -27,7 +27,7 @@ import { mergeTimeline } from "./messageTimeline";
 // Auto-scroll lives in ChatView's useChatScroll: it owns the scroll container
 // and only follows new content while the user is already at the bottom.
 export function MessageList() {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   const conversations = useConversations();
   const compactedThrough = conversationId
     ? (conversations.find((c) => c.id === conversationId)?.compactedThrough ??

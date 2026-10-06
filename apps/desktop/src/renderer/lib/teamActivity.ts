@@ -39,16 +39,18 @@ export function isTransientRoute(hash: string): boolean {
 }
 
 /**
- * 这场协作事件的场面是否已在眼前：主画布就是这条对话，或已打开跟它的浮窗。
- * 浮窗 id 由调用方传入（真窗走主进程表；网页应用内浮层另取）。
+ * 这场协作事件的场面是否已在眼前：主画布就是这条对话，并排时旁边那栏也算，
+ * 或已打开跟它的浮窗。浮窗 id、旁边栏 id 由调用方传入（真窗走主进程表）。
  */
 export function isConversationOnScene(
   conversationId: string,
   hash: string,
   floatConversationIds: readonly string[],
+  besideConversationIds: readonly string[] = [],
 ): boolean {
   if (isTransientRoute(hash)) return false;
   if (conversationIdFromHash(hash) === conversationId) return true;
+  if (besideConversationIds.includes(conversationId)) return true;
   return floatConversationIds.includes(conversationId);
 }
 

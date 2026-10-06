@@ -316,6 +316,8 @@ export function handleMessageStreamEvent(
             typeof payload.generation_ms === "number"
               ? payload.generation_ms
               : undefined,
+          ttftMs:
+            typeof payload.ttft_ms === "number" ? payload.ttft_ms : undefined,
           finishReason: payload.finish_reason,
           collab: payload.collab,
           outcome: payload.outcome ?? null,
@@ -351,7 +353,7 @@ export function handleMessageStreamEvent(
           // running，交由 recordFrame 的 run 终态 reconcile 在最后一个托管 worker
           // 终态帧落时收口（经重连回放 / 跨回合追加送达）。paused 收口与「工人已终态」
           // 两条路径不变。Captain 假 pending（pre-plan run_started 被丢）不参与 hold，
-          // 否则 end_turn 后会永久钉在「正在收尾」。
+          // 否则 end_turn 后汇点会一直转。
           // cancelled/interrupted：后端终态权威，立刻定格（finalizeFold 冻残留 running）。
           // attested/finish paused wins over a preceding error event's failed stamp
           // so CEO 汇总 stays pending, not a second red failure.

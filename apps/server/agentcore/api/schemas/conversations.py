@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from agentcore.conversation.context_cut_plan import context_cut_undoable
 from agentcore.core.types import WorkspaceBoundary
 
 
@@ -61,8 +62,8 @@ class CreateConversationRequest(BaseModel):
     # Session permission axes. Omit → seed from the user's autonomy recipe
     # (default recipe = less_interrupt → session/auto/rules/session).
     permission_axes: PermissionAxesModel | None = None
-    # 新建拍快照：显式 uuid = 钉该组合；省略 = 服务端写入当时账号默认（非活跟随）。
-    model_profile_id: str | None = None
+    # 新建拍快照：显式 uuid = 钉该装配；省略 = 服务端写入当时星标装配。
+    assembly_id: str | None = None
     # 幂等键：客户端为「这一次发送」自铸一个 id（重试 / 重按都复用同一个）。同一用户
     # 同一个键只会建出一条会话，第二次起原样返回首次那条（201，body 同形）。省略 =
     # 保持旧行为，一次请求建一条——老客户端不受影响。
@@ -94,14 +95,17 @@ class ConversationSummary(BaseModel):
     )
     # 深度研究自治（会话级显式旗标；不再由权限配方蕴含）。
     deep_research_auto: bool = False
-    # 会话级模型组合钉（拍快照）。新建应非 null；存量 null = 仍按账号默认展开（兼容）。
-    model_profile_id: str | None = None
+    # 这场用的装配。新建写入星标或客户端所选。模型在这份装配上。
+    assembly_id: str | None = None
     # True iff ORM has both compaction_summary and compacted_through.
     # Flag only — never expose rolling-summary text to clients.
     context_compacted: bool = False
     # Last folded message ``created_at``. Present only with ``context_compacted``.
     # Desktop timeline divider sits after this instant. Not the summary body.
     compacted_through: datetime | None = None
+    # The latest user context cut can still be undone (watermark has not moved since).
+    # Never the summary body and never the undo snapshot.
+    context_cut_undoable: bool = False
     # 压缩没跟上，早期对话已经掉出窗口（见 ContextGapModel）。null = 完好或本端点未计算。
     context_gap: ContextGapModel | None = None
 
@@ -143,10 +147,14 @@ def conversation_summary_from_orm(
     summary = ConversationSummary.model_validate(conv)
     watermark = getattr(conv, "compacted_through", None)
     compacted = bool(getattr(conv, "compaction_summary", None) and watermark)
+    live_watermark = watermark if compacted else None
     updates: dict[str, object] = {
         "context_compacted": compacted,
         # Orphan watermark without a summary must not leak a fold boundary.
-        "compacted_through": watermark if compacted else None,
+        "compacted_through": live_watermark,
+        "context_cut_undoable": context_cut_undoable(
+            getattr(conv, "context_cut_undo", None), live_watermark
+        ),
         "last_message_preview": last_message_preview,
     }
     db_title = (summary.title or "").strip()
@@ -215,6 +223,9 @@ class DeletedConversationListResponse(BaseModel):
     past retention — those are no longer restorable, and listing them would promise a
     recovery the sweeper is entitled to refuse. ``retention_days`` mirrors
     ``workspace_retention_days``, the same window the project bin runs on.
+
+    ``total`` is every recoverable row in that window. ``data`` is a capped page, so
+    emptying the bin follows ``total``, not ``len(data)``.
     """
 
     data: list[DeletedConversationSummary]
@@ -235,14 +246,47 @@ class UpdateConversationRequest(BaseModel):
     archived: bool | None = None
     # 深度研究自治：省略 = 不变；显式 true/false 切换会话旗标（设置页 UI 另批）。
     deep_research_auto: bool | None = None
-    # 会话级模型组合：省略 = 不变；显式 uuid = 钉组合；显式 null = 再钉当时账号默认（非活跟随）。
-    model_profile_id: str | None = None
+    # 会话级装配：省略 = 不变；显式 uuid = 钉装配；显式 null = 再钉当时星标。
+    assembly_id: str | None = None
 
 
 class PermissionAxesUpdate(BaseModel):
     """Switch the conversation's permission axes mid-session."""
 
     permission_axes: PermissionAxesModel
+
+
+class ContextCutPreviewRequest(BaseModel):
+    """Fold everything still in the model window before this message."""
+
+    message_id: str = Field(..., min_length=1)
+
+
+class ContextCutPreviewResponse(BaseModel):
+    """Prose the user can edit before it becomes the prefix.
+
+    ``keep_message_id`` may be the user message that opened the chosen
+    assistant turn. ``summary`` is the editable prose only. Commit stores
+    that prose plus the program-owned identity ledger for this fold.
+    """
+
+    summary: str
+    keep_message_id: str
+    fold_through: datetime
+    fold_digest: str
+    folded_count: int
+
+
+class ContextCutCommitRequest(BaseModel):
+    """Write the prose the user confirmed. Does not summarize again.
+
+    ``summary`` is editable prose. The server drops any identity-ledger fence
+    in it and appends the ledger for this fold.
+    """
+
+    message_id: str = Field(..., min_length=1)
+    fold_digest: str = Field(..., min_length=64, max_length=64)
+    summary: str = Field(..., min_length=1, max_length=32_000)
 
 
 class DuplicateConversationRequest(BaseModel):
@@ -438,11 +482,26 @@ class DeletedFolderListResponse(BaseModel):
     cloud desk) and projects soft-deleted before the recycle bin existed are omitted,
     as are projects already past retention (they are no longer restorable).
     ``retention_days`` mirrors ``workspace_retention_days``.
+
+    ``total`` is every recoverable row in that window. ``data`` is a capped page, so
+    emptying the bin follows ``total``, not ``len(data)``.
     """
 
     data: list[DeletedFolderSummary]
     total: int
     retention_days: int
+
+
+class TrashEmptyResponse(BaseModel):
+    """How much of one「最近删除」half a collection purge actually removed.
+
+    ``purged`` is bin rows hard-deleted. ``skipped_busy`` is folders a live turn
+    still holds — those stay in the bin. A restore that wins the race is neither:
+    that row is already gone.
+    """
+
+    purged: int
+    skipped_busy: int = 0
 
 
 class FolderGroup(BaseModel):

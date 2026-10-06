@@ -720,6 +720,8 @@ class MessageDetail(BaseModel):
     duration_ms: int | None = None
     # 各次 LLM 吐字时长之和 (ms)：与 message_end.generation_ms 同锚；写入 usage JSON。
     generation_ms: int | None = None
+    # 用量 TTFT (ms)：队长首流两口钟里更早的正数；与 message_end.ttft_ms 同锚。
+    ttft_ms: int | None = None
     # Progressive assistant-row lifecycle (messages.usage.status): running / complete /
     # incomplete / failed. Projected on read like ``rounds`` (not part of UsageBreakdown).
     # In-flight turns carry ``running`` + may hold partial content/reasoning (P1 overlay
@@ -1009,6 +1011,9 @@ def normalize_local_turn_tool_failure_code(message: str, *, code: str | None = N
     Prefer known client ``code``. Else: structured declaration-gate templates,
     then coarse keyword buckets for searxng/egress/exec timeout. Unknown → ``other``.
     """
+    from agentcore.runtime.engine.tool_exec import strip_model_failure_envelope
+
+    message = strip_model_failure_envelope(message or "")
     raw_code = (code or "").strip()
     if raw_code in LOCAL_TURN_TOOL_FAILURE_CODES:
         if raw_code in ("schema", "other"):
@@ -1161,6 +1166,9 @@ class RecordTurnRequest(BaseModel):
     # Decode-window sum (ms). Same number as live ``message_end.generation_ms``.
     # Optional so older desktops still write back; omitted → no 输出速度 on reload.
     generation_ms: int | None = Field(None, ge=0)
+    # Usage-panel TTFT (ms). Same number as live ``message_end.ttft_ms``.
+    # Optional so older desktops still write back; omitted → no TTFT row on reload.
+    ttft_ms: int | None = Field(None, ge=0)
     error_code: str | None = Field(None, max_length=64)
     collab: dict[str, Any] | None = None
     outcome: str | None = Field(None, max_length=32)

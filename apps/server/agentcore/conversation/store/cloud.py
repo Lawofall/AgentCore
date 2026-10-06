@@ -327,6 +327,9 @@ def _usage_metadata(
     gm = _positive_duration_ms(result.get("generation_ms"))
     if gm is not None:
         meta["generation_ms"] = gm
+    ttft = _positive_duration_ms(result.get("ttft_ms"))
+    if ttft is not None:
+        meta["ttft_ms"] = ttft
     prompt_tokens = int(result.get("prompt_tokens", 0) or 0)
     if prompt_tokens > 0:
         # CEO's latest single-request prompt (window fill). Distinct from summed
@@ -1220,6 +1223,7 @@ class CloudStore:
         rounds: int = 0,
         duration_ms: int | None = None,
         generation_ms: int | None = None,
+        ttft_ms: int | None = None,
         prompt_tokens: int = 0,
         error_code: str | None = None,
         collab: dict | None = None,
@@ -1433,6 +1437,10 @@ class CloudStore:
             generation_ms,
             runs.get("generation_ms") if isinstance(runs, dict) else None,
         )
+        ttft = _positive_duration_ms(
+            ttft_ms,
+            runs.get("ttft_ms") if isinstance(runs, dict) else None,
+        )
         local_outcome = coerce_produced_outcome(outcome)
         if local_outcome is None and isinstance(runs, dict):
             local_outcome = coerce_produced_outcome(runs.get("outcome"))
@@ -1459,6 +1467,8 @@ class CloudStore:
             settle["duration_ms"] = wall_ms
         if gen_ms is not None:
             settle["generation_ms"] = gen_ms
+        if ttft is not None:
+            settle["ttft_ms"] = ttft
         extra: dict[str, Any] = {"paused": bool(is_paused)}
         if not is_paused and is_incomplete:
             extra["incomplete"] = True

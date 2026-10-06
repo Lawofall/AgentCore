@@ -147,6 +147,20 @@ def test_message_end_auto_fills_generation_from_probe():
 def test_message_end_omits_generation_without_probe():
     ev = message_end(FinishReason.END_TURN)
     assert "generation_ms" not in ev.payload
+    assert "ttft_ms" not in ev.payload
+
+
+def test_message_end_auto_fills_ttft_from_probe():
+    from agentcore.runtime.turn.latency import bind_turn_latency, reset_turn_latency
+
+    probe, token = bind_turn_latency()
+    try:
+        probe.ttft_reasoning_ms = 2_400
+        probe.ttft_content_ms = 1_800
+        ev = message_end(FinishReason.END_TURN)
+        assert ev.payload["ttft_ms"] == 1_800
+    finally:
+        reset_turn_latency(token)
 
 
 def test_run_completed_carries_role_model_usage_cost():

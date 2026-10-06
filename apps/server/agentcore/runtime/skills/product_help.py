@@ -1,8 +1,8 @@
 """Skill body: product_help.
 
 Catalog summary is what this is, plus when the user is asking about the product.
-Consult body = 产品合同 + 可查事实节；教练节与机制选读不进语料。
-节事实 fetch with consult("product_help:<id>")。
+Consult body = 产品合同，不附节名清单。教练节与机制选读不进语料。
+节事实：consult("product_help:<用户原话>") 按节标题对上一节；精确节 id 仍可取。
 身份问走本卡【这是什么】。CEO 核不写路由尺；何时派在 delegate description。
 上报与「看不到服务端日志」跟本技能同一 WHEN，不另立排查 skill。
 """
@@ -23,7 +23,7 @@ _ALL_SURFACES = ("desktop", "web", "mobile")
 
 _PRODUCT_HELP_HOW = """\
 <本产品>
-身份问：可见正文首句用【这是什么】。用户问到某功能再 consult("product_help:<节id>")。\
+身份问：可见正文首句用【这是什么】。问到某功能时 consult("product_help:<用户原话>")。\
 对人用产品面说法（对话、协作图、工作区、检查点、审批）≠ `ask_user` / SSE / `run`。
 
 【这是什么】
@@ -36,7 +36,7 @@ AgentCore 是 Multi-Agent AI 工作台：你只对接一位 CEO；轻问它直�
 网页版：https://app.fashitianxia.xyz
 
 【入口】
-桌面「设置 · 服务商」/「设置 · 模型组合」/「设置 · 用量」；手机 ☰ 打开侧栏进「设置」再点「服务商」、再点「模型组合」、再点「用量」。\
+桌面「设置 · 服务商」/「设置 · 装配」/「设置 · 用量」；手机 ☰ 打开侧栏进「设置」再点「服务商」、再点「装配」、再点「用量」。\
 手机无对应页 → 「手机无此入口」或真实替代路径 ≠ 编手机页名。\
 桌面可附手册 `#/toolbox/manual/{章}?s={节}`；手机无手册入口。
 
@@ -79,27 +79,36 @@ def list_product_help_section_ids() -> list[str]:
     return [str(s["id"]) for s in _sections()]
 
 
-def _toc_lines() -> str:
-    default_rows: list[str] = []
-    optional_rows: list[str] = []
+# 标题整段，或「与 / 和」两侧至少 3 字的一段。短尾（文件、工具、审批）不对上。
+_TITLE_SEPS = ("与", "和")
+_MIN_TITLE_PART = 3
+
+
+def _title_keys(title: str) -> list[str]:
+    keys = [title] if title else []
+    for sep in _TITLE_SEPS:
+        if sep not in title:
+            continue
+        left, right = title.split(sep, 1)
+        for part in (left.strip(), right.strip()):
+            if len(part) >= _MIN_TITLE_PART and part not in keys:
+                keys.append(part)
+        break
+    return keys
+
+
+def _sections_matching_query(query: str) -> list[dict[str, Any]]:
+    hits: list[dict[str, Any]] = []
     for sec in _sections():
-        row = f"- {sec['id']} — {sec['title']}"
-        if sec.get("ai") == "optional":
-            optional_rows.append(row)
-        else:
-            default_rows.append(row)
-    parts = [
-        "【可查事实】用户问到该功能再 consult(\"product_help:<id>\")。",
-        *default_rows,
-    ]
-    if optional_rows:
-        parts.extend(["选读：", *optional_rows])
-    return "\n".join(parts)
+        title = str(sec.get("title") or "")
+        if any(key in query for key in _title_keys(title)):
+            hits.append(sec)
+    return hits
 
 
 def build_product_help_body() -> str:
     how = _PRODUCT_HELP_HOW.rstrip()
-    return f"{how}\n\n{_toc_lines()}\n</本产品>"
+    return f"{how}\n</本产品>"
 
 
 def _availability_line(availability: list[str]) -> str:
@@ -126,14 +135,21 @@ def format_product_help_section(sec: dict[str, Any]) -> str:
 
 
 def fetch_product_help_section(section_id: str) -> str:
-    """Return section body or a soft-miss listing valid ids (never None)."""
+    """Exact id / alias, else one section whose title appears in the words.
+
+    Miss and multi-hit return the index card and do not list the section menu.
+    """
     raw = section_id.strip()
     if not raw:
-        ids = "、".join(list_product_help_section_ids())
-        return f"缺少节 id。可查阅：{ids}。"
+        return build_product_help_body()
     canonical = resolve_product_help_section_id(raw)
     for sec in _sections():
         if str(sec["id"]) == canonical:
             return format_product_help_section(sec)
-    ids = "、".join(list_product_help_section_ids())
-    return f"没有名为 '{raw}' 的手册节。可查阅：{ids}。"
+    hits = _sections_matching_query(raw)
+    if len(hits) == 1:
+        return format_product_help_section(hits[0])
+    if len(hits) > 1:
+        names = "、".join(str(sec["title"]) for sec in hits)
+        return f"对上多节：{names}。说具体是哪一个。\n\n{build_product_help_body()}"
+    return build_product_help_body()

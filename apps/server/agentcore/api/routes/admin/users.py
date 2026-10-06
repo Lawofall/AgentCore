@@ -54,7 +54,6 @@ from agentcore.db.repositories import (
     ConversationRepository,
     ConversationShareRepository,
     CostEventRepository,
-    LlmModelProfileRepository,
     MessageRepository,
     TurnMetricsRepository,
     UserLlmProviderRepository,
@@ -309,17 +308,19 @@ async def user_detail(
     month_start = day_start.replace(day=1)
     since_30d = now - timedelta(days=30)
 
-    # Account default 模型组合 (names only) + how many providers are configured.
+    # Account default model slot (names only) + how many providers are configured.
     default_model: str | None = None
     background_model: str | None = None
-    profile_id = getattr(user, "default_model_profile_id", None)
-    if profile_id:
-        profile = await LlmModelProfileRepository(session).get(
-            profile_id, user_id=user_id
+    assembly_id = getattr(user, "default_assembly_id", None)
+    if assembly_id:
+        from agentcore.db.repositories import LlmModelProfileRepository
+
+        assembly = await LlmModelProfileRepository(session).get(
+            assembly_id, user_id=user_id
         )
-        if profile is not None:
-            default_model = profile.main_model
-            background_model = profile.background_model
+        if assembly is not None:
+            default_model = assembly.main_model
+            background_model = assembly.background_model
     provider_count = await llm_providers.count_for_user(user_id)
 
     today = await cost_repo.aggregate_for_window(user_id=user_id, since=day_start)

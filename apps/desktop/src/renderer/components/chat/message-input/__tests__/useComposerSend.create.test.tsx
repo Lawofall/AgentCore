@@ -37,7 +37,9 @@ vi.mock("@/services/conversations", () => ({
   deleteConversation,
 }));
 vi.mock("@/services/messages", () => ({ loadLatestWindow: vi.fn() }));
-vi.mock("@/services/models", () => ({ getLastUsedProfileId: () => null }));
+vi.mock("@/services/models", () => ({
+  getLastUsedProfileId: () => null,
+}));
 vi.mock("@/services/permissionAxes", () => ({
   resolveDefaultPermissionAxes: vi.fn(async () => ({ boundary: "folder" })),
   setComposerDraftAxes: vi.fn(),
@@ -61,6 +63,11 @@ import { __resetDraftRequestIdsForTests } from "@/lib/draftRequestId";
 import { notifyError } from "@/lib/toast";
 import { api } from "@/services/api";
 import { ensureDefaultContainerRoot } from "@/services/defaultWorkspace";
+import {
+  __resetEnvelopeSwitchStoresForTests,
+  setComposerDraftOmittedProjections,
+} from "@/services/envelopeSwitches";
+import { setComposerDraftDisabledTools } from "@/services/toolSwitches";
 import { sendTurn } from "@/services/turns";
 import { draftKeyFor, useComposerDraftStore } from "@/stores/composer";
 import { __resetComposerSendLatchesForTests } from "@/stores/composerSend";
@@ -212,6 +219,8 @@ beforeEach(() => {
   useFoldersStore.setState({
     draftWorkspaceIntent: { kind: "quick_cloud" },
   });
+  setComposerDraftDisabledTools(null);
+  __resetEnvelopeSwitchStoresForTests();
 });
 
 describe("useComposerSend 草稿首发建会话", () => {
@@ -232,6 +241,23 @@ describe("useComposerSend 草稿首发建会话", () => {
       folder_id: null,
       local_container_root_id: "root-default",
     });
+    expect(post.mock.calls[0][1]).not.toHaveProperty("disabled_tools");
+    expect(post.mock.calls[0][1]).not.toHaveProperty("omitted_projections");
+  });
+
+  it("工具和信封写在装配上，建会话不再带名单", async () => {
+    setComposerDraftDisabledTools(["web"]);
+    setComposerDraftOmittedProjections(["runtime_date"]);
+    post.mockResolvedValue({ id: NEW_CONV, assembly_id: "asm-1" } as never);
+    seedDraft();
+    const { result } = renderHook(() => useSendHarness());
+
+    await act(async () => {
+      await result.current.send.handleSend();
+    });
+
+    expect(post.mock.calls[0][1]).not.toHaveProperty("disabled_tools");
+    expect(post.mock.calls[0][1]).not.toHaveProperty("omitted_projections");
   });
 
   it("创建窗口内重复触发只产生一次创建请求", async () => {

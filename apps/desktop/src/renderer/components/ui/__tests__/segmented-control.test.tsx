@@ -111,4 +111,22 @@ describe("SegmentedControl", () => {
       screen.getByRole("tab", { name: "低" }).getAttribute("aria-selected"),
     ).toBe("false");
   });
+
+  it("fits every segment on one line when asked", () => {
+    render(
+      <SegmentedControl
+        aria-label="强度"
+        value="low"
+        onChange={vi.fn()}
+        items={THREE}
+        fit
+      />,
+    );
+    const list = screen.getByRole("tablist", { name: "强度" });
+    expect(list.className).toContain("overflow-hidden");
+    expect(list.className).not.toContain("overflow-x-auto");
+    expect(screen.getByRole("tab", { name: "低" }).className).toContain(
+      "truncate",
+    );
+  });
 });

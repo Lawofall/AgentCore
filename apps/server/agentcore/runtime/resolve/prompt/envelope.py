@@ -26,7 +26,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from agentcore.config import settings
 from agentcore.llm.provider.protocol import (
     LLMMessage,
     ToolCall,
@@ -34,11 +33,51 @@ from agentcore.llm.provider.protocol import (
     llm_content_text,
 )
 from agentcore.runtime.context import ContextAssembler, SectionOrder
+from agentcore.runtime.context.envelope_switches import (
+    include_file_index,
+    include_runtime_date,
+)
 from agentcore.runtime.context.workspace_overview import attach_workspace_file_index
 from agentcore.runtime.resolve.prompt.base import render_runtime_date_block
 from agentcore.runtime.resolve.prompt.ceo_core import _attachment_material_block
 
 TURN_ENVELOPE_FENCE = "[系统提示]"
+
+
+def _runtime_fragment(include_runtime: bool) -> str | None:
+    """Date line, unless the caller or this conversation left it out."""
+    if not include_runtime or not include_runtime_date():
+        return None
+    return render_runtime_date_block()
+
+
+def _file_index_fragment(workspace_file_index: str | None) -> str:
+    """CEO file index, unless this conversation left that projection out."""
+    index = (workspace_file_index or "").strip()
+    if not index or not include_file_index():
+        return ""
+    return index
+
+
+def _ceo_workspace_block(
+    workspace_context: str | None,
+    workspace_file_index: str | None,
+) -> str | None:
+    """Facts, plus the CEO file index inside the same ``<工作区>``.
+
+    Fact lines are already filtered. When every fact line is off and the index
+    remains, this opens the tag for that index alone.
+    ``attach_workspace_file_index`` still refuses to invent a wrapper.
+    """
+    facts = (workspace_context or "").strip()
+    index = _file_index_fragment(workspace_file_index)
+    if facts:
+        return attach_workspace_file_index(facts, index) or None
+    if not index:
+        return None
+    return f"<工作区>\n{index}\n</工作区>"
+
+
 # Stamped on the prompting user row (``messages.usage``). REST UsageBreakdown
 # strips unknown keys — the blob must not become bubble text.
 TURN_ENVELOPE_USAGE_KEY = "turn_envelope"
@@ -129,7 +168,9 @@ def opening_ceo_messages(
     to the last ``[系统提示]`` already in the window is omitted — the prior
     snapshot stays the complete environment truth.
     """
-    messages = [LLMMessage(role="system", content=system_prompt)]
+    messages: list[LLMMessage] = []
+    if (system_prompt or "").strip():
+        messages.append(LLMMessage(role="system", content=system_prompt))
     for msg in history or []:
         if isinstance(msg, LLMMessage):
             messages.append(msg)
@@ -138,7 +179,12 @@ def opening_ceo_messages(
     extra = (in_history_system or "").strip()
     if extra and extra != (system_prompt or "").strip():
         last_extra = ""
-        for msg in reversed(messages[1:]):
+        prior = (
+            messages[1:]
+            if messages and messages[0].role == "system"
+            else messages
+        )
+        for msg in reversed(prior):
             if msg.role != "system":
                 continue
             text = llm_content_text(msg.content).strip()
@@ -157,13 +203,42 @@ def opening_ceo_messages(
     return messages
 
 
-def _last_envelope_text(messages: Sequence[LLMMessage]) -> str:
-    """Most recent ``[系统提示]`` envelope already in the window, or empty."""
-    for msg in reversed(messages):
+def _message_content(msg: object) -> str:
+    if isinstance(msg, LLMMessage):
         raw = msg.content
-        text = raw.strip() if isinstance(raw, str) else ""
+    elif isinstance(msg, dict):
+        raw = msg.get("content")
+    else:
+        raw = getattr(msg, "content", None)
+    return raw.strip() if isinstance(raw, str) else ""
+
+
+def last_window_envelope(history: Sequence[object] | None) -> str:
+    """Most recent ``[系统提示]`` envelope already in the window, or empty."""
+    for msg in reversed(tuple(history or ())):
+        text = _message_content(msg)
         if is_turn_envelope_content(text):
             return text
+    return ""
+
+
+def _last_envelope_text(messages: Sequence[LLMMessage]) -> str:
+    return last_window_envelope(messages)
+
+
+def resolve_emitted_envelope(rendered: str, history: Sequence[object] | None) -> str:
+    """Envelope to stamp and append for this turn.
+
+    A rendered body is used as-is. When this turn renders nothing but the
+    window still holds a fact-bearing envelope, stamp the fence alone so the
+    latest snapshot is empty. A first turn that renders nothing stays empty.
+    """
+    env = (rendered or "").strip()
+    if env:
+        return env
+    last = last_window_envelope(history)
+    if last and strip_turn_envelope_fence(last):
+        return TURN_ENVELOPE_FENCE
     return ""
 
 
@@ -174,32 +249,26 @@ def render_ceo_turn_envelope(
     table_context: str | None = None,
     attachment_material: bool = False,
     attachment_context: str = "",
-    soft_cap: int | None = None,
     include_runtime: bool = True,
 ) -> str:
     """Render the CEO's ephemeral ``[系统提示]`` user message (empty → ``""``)."""
     material_block = _attachment_material_block(attachment_material)
-    cap = settings.prompt_budget_char_soft_cap if soft_cap is None else soft_cap
     body = (
         ContextAssembler()
         .add(
             "runtime_context",
-            render_runtime_date_block() if include_runtime else None,
+            _runtime_fragment(include_runtime),
             SectionOrder.RUNTIME_CONTEXT,
         )
         .add(
             "workspace_facts",
-            attach_workspace_file_index(
-                workspace_context or "",
-                workspace_file_index or "",
-            )
-            or None,
+            _ceo_workspace_block(workspace_context, workspace_file_index),
             SectionOrder.WORKSPACE_FACTS,
         )
         .add("attachment_material", material_block, SectionOrder.WORKING_SET)
         .add("attachment_context", attachment_context, SectionOrder.ATTACHMENT)
         .add("table_context", table_context, SectionOrder.TABLE_FACTS)
-        .observe(scope="ceo_envelope", soft_cap=cap)
+        .observe(scope="ceo_envelope")
         .render()
     )
     text = (body or "").strip()
@@ -215,12 +284,11 @@ def render_worker_turn_envelope(
     include_runtime: bool = True,
 ) -> str:
     """Worker opening ``[系统提示]`` (no CEO file index / table)."""
-    cap = settings.prompt_budget_char_soft_cap
     body = (
         ContextAssembler()
         .add(
             "runtime_context",
-            render_runtime_date_block() if include_runtime else None,
+            _runtime_fragment(include_runtime),
             SectionOrder.RUNTIME_CONTEXT,
         )
         .add(
@@ -233,7 +301,7 @@ def render_worker_turn_envelope(
             (attachment_context or "").strip() or None,
             SectionOrder.ATTACHMENT,
         )
-        .observe(scope="worker_envelope", soft_cap=cap)
+        .observe(scope="worker_envelope")
         .render()
     )
     text = (body or "").strip()

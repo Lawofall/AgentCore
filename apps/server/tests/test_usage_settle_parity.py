@@ -101,3 +101,13 @@ def test_usage_metadata_projects_prompt_tokens_to_last_prompt():
     assert meta["collab"] == {"boundary_yields": 1}
     assert meta["outcome"] == "ok"
     assert LOCAL_USAGE_EXTRA_KEYS.isdisjoint(meta)
+
+
+def test_usage_metadata_copies_ttft_when_positive():
+    meta = _usage_metadata(
+        {"ttft_ms": 1_800, "finish_reason": "end_turn"},
+        status="complete",
+    )
+    assert meta["ttft_ms"] == 1_800
+    missing = _usage_metadata({"finish_reason": "end_turn"}, status="complete")
+    assert "ttft_ms" not in missing

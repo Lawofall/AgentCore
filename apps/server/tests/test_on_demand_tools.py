@@ -163,9 +163,23 @@ def test_directory_groups_sections_and_compacts_tool_families():
     assert "能力指引：" in out
     assert "交付：" not in out
     assert "低频工具：" in out
-    assert '- 真实浏览器。consult("browser")' in out
-    assert '- 整理表。consult("data_file_landing")' in out
+    assert '- 真实浏览器 consult("browser")' in out
+    assert '- 整理表 consult("data_file_landing")' in out
     assert "- data_file_landing：" not in out
+
+
+def test_directory_row_does_not_add_a_second_full_stop():
+    """句号属于摘要。行模板再插一枚会叠成两个。"""
+    out = render_on_demand_directory(
+        [
+            ConsultDirectoryEntry(
+                name="data_file_landing",
+                summary="要交表时才查阅。成篇不查阅。",
+            )
+        ]
+    )
+    assert "。。" not in out
+    assert '成篇不查阅。 consult("data_file_landing")' in out
 
 
 async def test_merged_consult_copies_group_and_face():
@@ -213,7 +227,7 @@ async def test_consult_user_skill_strips_frontmatter():
     reg = ToolRegistry()
     reg.register(HostTool())
     assert "host" in _def_names(reg)
-    body = "---\napply: on_demand\noffers_tools: host\n---\n怎么审\n"
+    body = "---\napply: on_demand\ndescription: 审\n---\n怎么审\n"
 
     class _FakeRule:
         async def list_directory(self, user_id: str):
@@ -235,7 +249,7 @@ async def test_consult_user_skill_strips_frontmatter():
     hit = await merged.fetch_hit("u", "合同审查")
     assert hit is not None
     assert "怎么审" in hit.body
-    assert "offers_tools" not in hit.body
+    assert "apply:" not in hit.body
     assert "已在开场表" not in hit.body
     assert _def_names(reg) == {"host"}
 

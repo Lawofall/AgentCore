@@ -14,9 +14,6 @@ export const PUBLISH_MISSING_BODY = "先写正文。空的做法上架没有用�
 /** 市场详情 · 介绍句旁。 */
 export const MARKET_CATALOG_CAPTION = "装进去之后，CEO 靠这句决定什么时候翻开";
 
-/** 市场详情 · 快照里写过工具名时。空名单不画。 */
-export const MARKET_OFFERS_CAPTION = "会用到这些";
-
 /** `content` 空串视为尚未加载，不误判成没有正文。 */
 export function publishBlockReason(
   description: string,

@@ -170,6 +170,55 @@ def test_format_trace_pins_llm_call_prefix_breach() -> None:
     out = format_trace("t1", events)
     assert "prefix_breach=history_rewrite" in out
     assert "cache_hit_tokens=12" in out
+    assert out.index("prefix_breach=history_rewrite") < out.index("cache_hit_tokens=12")
+
+
+def test_format_trace_pins_cache_miss_and_turn_clocks() -> None:
+    events = [
+        {
+            "type": "log",
+            "timestamp": "2026-10-01T08:42:59.000000Z",
+            "event": "llm.call",
+            "scenario": "chat",
+            "model": "deepseek-flash",
+            "finish_reason": "stop",
+            "latency_ms": 3800,
+            "prefix_breach": "cold_chain",
+            "opening_vs_prev": "same",
+            "tools_fp": "abcdef0123456789",
+            "system_fp": "0123456789abcdef",
+            "cache_hit_tokens": 0,
+            "cache_miss_tokens": 4496,
+            "input_tokens": 4496,
+            "reply_preview": "x" * 80,
+        },
+        {
+            "type": "log",
+            "timestamp": "2026-10-01T08:42:59.000000Z",
+            "event": "chat.turn_complete",
+            "finish_reason": "end_turn",
+            "outcome": "ok",
+            "rounds": 1,
+            "input_tokens": 4496,
+            "output_tokens": 166,
+            "reply_preview": "y" * 80,
+            "duration_ms": 4312,
+            "generation_ms": 900,
+            "prepare_ms": 404,
+            "assemble_ms": 12,
+            "ttft_reasoning_ms": 2100,
+            "ttft_content_ms": 3400,
+        },
+    ]
+    out = format_trace("t1", events)
+    call = next(line for line in out.splitlines() if "llm.call" in line)
+    assert call.index("opening_vs_prev=same") < call.index("cache_miss_tokens=4496")
+    assert "tools_fp=abcdef0123456789" in call
+    assert "system_fp=0123456789abcdef" in call
+    close = next(line for line in out.splitlines() if "chat.turn_complete" in line)
+    assert close.index("prepare_ms=404") < close.index("ttft_reasoning_ms=2100")
+    assert "ttft_content_ms=3400" in close
+    assert "generation_ms=900" in close
 
 
 def test_attach_failure_pack_meta(monkeypatch) -> None:

@@ -103,7 +103,7 @@ async def test_mint_inference_token_uses_conversation_main_model(monkeypatch):
         async def get_by_id(self, cid, *, user_id):
             assert user_id == "u1"
             assert cid == "c-pinned"
-            return SimpleNamespace(id=cid, model_profile_id="pinned")
+            return SimpleNamespace(id=cid, assembly_id="pinned")
 
     monkeypatch.setattr(inference.token, "resolve_user_chat_model", _fake_account)
     monkeypatch.setattr(

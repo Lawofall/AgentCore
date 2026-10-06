@@ -60,14 +60,24 @@ function ensureConfigFile(): void {
   }
 }
 
-function loadConfigs(): McpServerConfig[] {
+/** null = this file has not published an assembly union yet. */
+let publishedRunIds: string[] | null = null;
+
+function readConfigFile(): {
+  servers: McpServerConfig[];
+  runIds: string[] | null;
+} {
   ensureConfigFile();
   try {
     const raw = JSON.parse(readFileSync(configPath(), "utf8")) as {
       servers?: unknown;
+      runIds?: unknown;
     };
-    if (!Array.isArray(raw.servers)) return [];
-    return raw.servers
+    const runIds = Array.isArray(raw.runIds)
+      ? raw.runIds.map((id) => String(id))
+      : null;
+    if (!Array.isArray(raw.servers)) return { servers: [], runIds };
+    const servers = raw.servers
       .filter((s): s is Record<string, unknown> => !!s && typeof s === "object")
       .map((s) => ({
         id: String(s.id || randomUUID()),
@@ -85,14 +95,35 @@ function loadConfigs(): McpServerConfig[] {
             : undefined,
       }))
       .filter((s) => s.command.trim().length > 0);
+    return { servers, runIds };
   } catch {
-    return [];
+    return { servers: [], runIds: null };
   }
+}
+
+function loadConfigs(): McpServerConfig[] {
+  return readConfigFile().servers;
+}
+
+function currentRunIds(): string[] | null {
+  if (publishedRunIds !== null) return publishedRunIds;
+  return readConfigFile().runIds;
 }
 
 function saveConfigs(servers: McpServerConfig[]): void {
   ensureConfigFile();
-  writeFileSync(configPath(), JSON.stringify({ servers }, null, 2), "utf8");
+  const runIds = currentRunIds();
+  const body: { servers: McpServerConfig[]; runIds?: string[] } = { servers };
+  if (runIds !== null) body.runIds = runIds;
+  writeFileSync(configPath(), JSON.stringify(body, null, 2), "utf8");
+}
+
+function runnableConfigs(): McpServerConfig[] {
+  const servers = loadConfigs();
+  const runIds = currentRunIds();
+  if (runIds === null) return servers.filter((server) => server.enabled);
+  const allow = new Set(runIds);
+  return servers.filter((server) => allow.has(server.id));
 }
 
 const sessions = new Map<string, LiveSession>();
@@ -272,7 +303,7 @@ export async function listMcpToolsValue(): Promise<Record<string, unknown>> {
 }
 
 async function listToolsValue(): Promise<Record<string, unknown>> {
-  const configs = loadConfigs().filter((s) => s.enabled);
+  const configs = runnableConfigs();
   const servers: Array<Record<string, unknown>> = [];
   for (const cfg of configs) {
     try {
@@ -308,7 +339,7 @@ async function callToolValue(
   if (!serverId || !toolName) {
     throw new Error("call_tool 需要 server_id 与 tool_name");
   }
-  const cfg = loadConfigs().find((s) => s.id === serverId && s.enabled);
+  const cfg = runnableConfigs().find((s) => s.id === serverId);
   if (!cfg) {
     throw new Error(`MCP Server 未启用或不存在（${serverId}）`);
   }
@@ -440,9 +471,25 @@ function setServerEnabled(id: string, enabled: boolean): McpMutationResult {
     };
   }
   all[idx] = { ...all[idx], enabled };
-  if (!enabled) void killSession(id);
+  if (!enabled && currentRunIds() === null) void killSession(id);
   saveConfigs(all);
   return { ok: true, server: toListItem(all[idx]) };
+}
+
+function setRunIds(ids: string[]): McpConfigResult {
+  const next = [
+    ...new Set(
+      ids.map((id) => String(id).trim()).filter((id) => id.length > 0),
+    ),
+  ];
+  publishedRunIds = next;
+  const servers = loadConfigs();
+  saveConfigs(servers);
+  const allow = new Set(next);
+  for (const id of sessions.keys()) {
+    if (!allow.has(id)) void killSession(id);
+  }
+  return { ok: true, servers: servers.map(toListItem) };
 }
 
 async function testServer(id: string): Promise<McpTestResult> {
@@ -482,6 +529,9 @@ export function registerMcpIpc(): void {
   ipcMain.handle(
     MCP_CHANNELS.setServerEnabled,
     async (_e, id: string, enabled: boolean) => setServerEnabled(id, enabled),
+  );
+  ipcMain.handle(MCP_CHANNELS.setRunIds, async (_e, ids: string[]) =>
+    setRunIds(Array.isArray(ids) ? ids : []),
   );
   ipcMain.handle(MCP_CHANNELS.testServer, async (_e, id: string) =>
     testServer(id),

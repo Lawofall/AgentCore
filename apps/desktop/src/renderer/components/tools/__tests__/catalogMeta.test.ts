@@ -10,14 +10,10 @@ describe("catalogMeta faces", () => {
       "web",
       "execution",
       "host_browser",
-      "table",
-      "doc",
       "orchestration",
     ]);
     expect(Object.keys(FACE_META)).toEqual(FACE_ORDER);
     expect(FACE_META.folder.label).toBe("文件夹");
-    expect(FACE_META.table.label).toBe("表格");
-    expect(FACE_META.doc.label).toBe("文档");
     expect(FACE_META.orchestration.label).toBe("编排");
   });
 

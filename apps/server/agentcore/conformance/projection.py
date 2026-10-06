@@ -585,6 +585,17 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
                     "chars": p.get("chars", 0),
                 }
 
+        elif etype == "run_spend":
+            # Cumulative booked calls. Does not change status.
+            run = run_by_id(p.get("run_id", ""))
+            if run is not None:
+                if p.get("role"):
+                    run["role"] = p.get("role")
+                if p.get("model"):
+                    run["model"] = p.get("model")
+                run["usage"] = p.get("usage")
+                run["cost"] = p.get("cost")
+
         elif etype == "run_completed":
             run = run_by_id(p.get("run_id", ""))
             if run is not None:
@@ -619,6 +630,10 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
                 # 完工交接简报 on a failed run: the author's wrap-up when a contract-missing
                 # worker still produced one (else absent → stays None).
                 run["debrief"] = p.get("debrief")
+                if p.get("usage") is not None:
+                    run["usage"] = p.get("usage")
+                if p.get("cost") is not None:
+                    run["cost"] = p.get("cost")
                 run.pop("phase", None)
                 run.pop("phaseTool", None)
             ag = agent_by_id(p.get("agent_id", ""))
@@ -635,6 +650,10 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
             run = run_by_id(p.get("run_id", ""))
             if run is not None:
                 run["status"] = "cancelled"
+                if p.get("usage") is not None:
+                    run["usage"] = p.get("usage")
+                if p.get("cost") is not None:
+                    run["cost"] = p.get("cost")
                 run.pop("phase", None)
                 run.pop("phaseTool", None)
             ag = agent_by_id(p.get("agent_id", ""))

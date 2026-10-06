@@ -26,6 +26,7 @@ from sqlalchemy import Delete, Select, Update
 from sqlalchemy.dialects import postgresql
 
 from agentcore.api.routes.conversations.crud import (
+    empty_deleted_conversations,
     list_deleted_conversations,
     purge_deleted_conversation,
     restore_deleted_conversation,
@@ -59,11 +60,17 @@ class _Result:
         self._rows = rows or []
         self.rowcount = rowcount
 
+    def scalar_one(self) -> Any:
+        return self._scalar
+
     def scalar_one_or_none(self) -> Any:
         return self._scalar
 
     def scalars(self) -> _Scalars:
         return _Scalars(self._rows)
+
+    def all(self) -> list[Any]:
+        return list(self._rows)
 
 
 class _RecordingSession:
@@ -98,7 +105,7 @@ def _fake_conversation(**overrides: Any) -> SimpleNamespace:
         "archived": False,
         "permission_axes": {"boundary": "folder"},
         "deep_research_auto": False,
-        "model_profile_id": None,
+        "assembly_id": None,
         "compaction_summary": None,
         "compacted_through": None,
         "created_at": datetime(2026, 1, 1, tzinfo=UTC),
@@ -225,6 +232,35 @@ async def test_deleted_list_short_circuits_on_nonpositive_limit():
     assert session.statements == []
 
 
+async def test_deleted_count_uses_the_same_window_as_the_list():
+    session = _RecordingSession([_Result(scalar=4)])
+
+    count = await ConversationRepository(session).count_deleted_by_user(
+        USER_ID, not_before=datetime(2026, 1, 1, tzinfo=UTC)
+    )
+
+    assert count == 4
+    sql = _selects(session)[0]
+    assert "count(" in sql.lower()
+    assert "conversations.deleted_at > <ts:2026-01-01" in sql
+    assert "conversations.mode NOT IN ('handoff', 'standing')" in sql
+    assert "LIMIT" not in sql
+
+
+async def test_deleted_id_list_is_the_whole_window():
+    """清空不能跟着列表的 200 条上限走，否则剩下的还在桶里。"""
+    session = _RecordingSession([_Result(rows=[(CONV_ID, FOLDER_ID)])])
+
+    ids = await ConversationRepository(session).list_deleted_ids_by_user(
+        USER_ID, not_before=datetime(2026, 1, 1, tzinfo=UTC)
+    )
+
+    assert ids == [(CONV_ID, FOLDER_ID)]
+    sql = _selects(session)[0]
+    assert "conversations.deleted_at > <ts:2026-01-01" in sql
+    assert "LIMIT" not in sql
+
+
 async def test_get_deleted_by_id_ignores_retention_window():
     """按 id 取不设保留期判据：过期的也要查得到，才能回 409 而不是分不清的 404。"""
     session = _RecordingSession([_Result(scalar=None)])
@@ -299,12 +335,22 @@ async def test_restore_rereads_with_populate_existing():
 
 class _StubRepo:
     def __init__(
-        self, *, deleted: Any = None, restored: Any = None, purged: bool = True
+        self,
+        *,
+        deleted: Any = None,
+        restored: Any = None,
+        purged: bool | dict[str, bool] = True,
+        total: int | None = None,
+        ids: list[tuple[str, str | None]] | None = None,
     ) -> None:
         self._deleted = deleted
         self._restored = restored
         self._purged = purged
+        self._total = total
+        self._ids = ids
         self.listed: list[dict[str, Any]] = []
+        self.counted: list[dict[str, Any]] = []
+        self.id_lists: list[dict[str, Any]] = []
         self.restores: list[dict[str, Any]] = []
         self.purges: list[dict[str, Any]] = []
 
@@ -316,6 +362,22 @@ class _StubRepo:
         self.listed.append({"user_id": user_id, **kwargs})
         return [self._deleted] if self._deleted is not None else []
 
+    async def count_deleted_by_user(self, user_id: str, **kwargs: Any) -> int:
+        self.counted.append({"user_id": user_id, **kwargs})
+        if self._total is not None:
+            return self._total
+        return 0 if self._deleted is None else 1
+
+    async def list_deleted_ids_by_user(
+        self, user_id: str, **kwargs: Any
+    ) -> list[tuple[str, str | None]]:
+        self.id_lists.append({"user_id": user_id, **kwargs})
+        if self._ids is not None:
+            return list(self._ids)
+        if self._deleted is None:
+            return []
+        return [(self._deleted.id, self._deleted.folder_id)]
+
     async def restore(self, conversation_id: str, **kwargs: Any) -> Any:
         self.restores.append({"conversation_id": conversation_id, **kwargs})
         return self._restored
@@ -324,6 +386,8 @@ class _StubRepo:
         self, conversation_id: str, **kwargs: Any
     ) -> bool:
         self.purges.append({"conversation_id": conversation_id, **kwargs})
+        if isinstance(self._purged, dict):
+            return self._purged.get(conversation_id, False)
         return self._purged
 
 
@@ -433,6 +497,57 @@ async def test_trash_list_computes_purge_moment_server_side(
     assert entry.folder_id == FOLDER_ID
     # 列表也把过期行挡在外面：仓储收到的是清扫用的同一个截止点。
     assert repo.listed[0]["not_before"] < datetime.now(UTC)
+    assert repo.counted[0]["not_before"] == repo.listed[0]["not_before"]
+
+
+async def test_trash_list_total_counts_the_window_not_the_page(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """页上最多 200 条；确认框和清空跟的是窗口里的总数。"""
+    monkeypatch.setattr(settings, "workspace_retention_days", 30)
+    repo = _StubRepo(
+        deleted=_fake_conversation(deleted_at=datetime(2026, 8, 1, tzinfo=UTC)),
+        total=250,
+    )
+
+    body = await list_deleted_conversations(
+        _user(), repo=repo, msg_repo=_StubMessageRepo()
+    )
+
+    assert len(body.data) == 1
+    assert body.total == 250
+
+
+async def test_empty_trash_claims_each_chat_then_clears_scratch(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """竞态输掉的那条跳过，不把整次清空打成 409。"""
+    monkeypatch.setattr(settings, "workspace_retention_days", 30)
+    space_calls: list[dict[str, Any]] = []
+
+    async def _space(**kwargs: Any) -> None:
+        space_calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "agentcore.api.routes.conversations.crud._purge_conversation_space",
+        _space,
+    )
+    kept = "22222222-3333-4444-8555-666666666666"
+    repo = _StubRepo(
+        ids=[(CONV_ID, FOLDER_ID), (kept, None)],
+        purged={CONV_ID: True, kept: False},
+    )
+
+    body = await empty_deleted_conversations(_user(), repo=repo)
+
+    assert body.purged == 1
+    assert body.skipped_busy == 0
+    assert "limit" not in repo.id_lists[0]
+    assert repo.id_lists[0]["not_before"] < datetime.now(UTC)
+    assert [call["conversation_id"] for call in repo.purges] == [CONV_ID, kept]
+    assert space_calls == [
+        {"user_id": USER_ID, "conversation_id": CONV_ID, "folder_id": FOLDER_ID}
+    ]
 
 
 # --- 路由注册顺序 ------------------------------------------------------------------

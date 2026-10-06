@@ -10,11 +10,12 @@ import {
 } from "@/components/ui/dialog";
 
 /**
- * 「在哪工作」说明弹窗——对着菜单两问：这次聊哪、本机目录怎么用。
+ * 「在哪工作」说明弹窗——对着第一屏：这次聊哪。
  *
  * 只写菜单名和图标看不出来的后果。入口名与「在哪工作」菜单逐字一致；
  * 内部实现词与设计文档术语一律不出现（同名测试守着，防抄设计文档回潮）。
  * 桌面第一屏并列「本地对话 / 云端对话」（默认本地）；网页/手机只有云端对话。
+ * 点本机文件夹即改电脑上那份，这里不再讲第二问。
  */
 export function WorkspaceChannelGuideDialog({
   open,
@@ -23,7 +24,7 @@ export function WorkspaceChannelGuideDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 有本机盘（桌面端）才讲本机目录两选；Web 只讲云。 */
+  /** 有本机盘（桌面端）才讲本地对话；Web 只讲云。 */
   showLocalTraditional: boolean;
 }) {
   return (
@@ -31,11 +32,7 @@ export function WorkspaceChannelGuideDialog({
       <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>在哪工作：怎么选</DialogTitle>
-          <DialogDescription className="sr-only">
-            {showLocalTraditional
-              ? "这次聊哪，以及电脑上的文件夹怎么用。"
-              : "这次聊哪。"}
-          </DialogDescription>
+          <DialogDescription className="sr-only">这次聊哪。</DialogDescription>
         </DialogHeader>
 
         <DialogBody>
@@ -64,7 +61,7 @@ export function WorkspaceChannelGuideDialog({
                     </div>
                   </dl>
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    列表里点云图标的接着聊；点硬盘图标的会再问怎么用。
+                    列表里点云图标的接着聊；点硬盘图标的改电脑上那份。
                   </p>
                 </>
               ) : (
@@ -74,32 +71,6 @@ export function WorkspaceChannelGuideDialog({
                 </p>
               )}
             </section>
-
-            {showLocalTraditional ? (
-              <section className="space-y-2 rounded-lg border border-border/60 p-3">
-                <h3 className="text-sm font-medium text-foreground">
-                  电脑上的文件夹怎么用
-                </h3>
-                <dl className="space-y-2">
-                  <div className="space-y-0.5">
-                    <dt className="text-xs font-medium text-foreground">
-                      直接改这个文件夹
-                    </dt>
-                    <dd className="text-xs leading-relaxed text-muted-foreground">
-                      改的就是电脑上那份。
-                    </dd>
-                  </div>
-                  <div className="space-y-0.5">
-                    <dt className="text-xs font-medium text-foreground">
-                      先在云上做，原件先不动
-                    </dt>
-                    <dd className="text-xs leading-relaxed text-muted-foreground">
-                      这一单在云上做；做完再决定写不写回，或在芯片上「留在云上接着用」。
-                    </dd>
-                  </div>
-                </dl>
-              </section>
-            ) : null}
           </div>
         </DialogBody>
 

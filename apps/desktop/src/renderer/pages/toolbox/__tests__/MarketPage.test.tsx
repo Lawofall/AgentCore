@@ -1,7 +1,4 @@
-import {
-  MARKET_CATALOG_CAPTION,
-  MARKET_OFFERS_CAPTION,
-} from "@/lib/skillStoreCopy";
+import { MARKET_CATALOG_CAPTION } from "@/lib/skillStoreCopy";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 import { MarketPage } from "@/pages/toolbox/market/MarketPage";
 import type { SkillStoreListing } from "@/services/skillStore";
@@ -50,7 +47,6 @@ const ROW: SkillStoreListing = {
   documentId: "doc-1",
   installDocumentId: null,
   status: "published",
-  offersTools: [],
 };
 
 function shelf(items: SkillStoreListing[]) {
@@ -104,35 +100,18 @@ describe("市场页", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "工具箱" }).className,
     ).toContain("sr-only");
-    expect(
-      within(screen.getByRole("navigation", { name: "工具箱" })).getByRole(
-        "link",
-        { name: "市场" },
-      ),
-    ).toBeTruthy();
-    expect(
-      within(screen.getByRole("navigation", { name: "工具箱" })).getByRole(
-        "link",
-        { name: "官方" },
-      ),
-    ).toBeTruthy();
-    expect(
-      within(screen.getByRole("navigation", { name: "工具箱" })).getByRole(
-        "link",
-        { name: "我的" },
-      ),
-    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "交代" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "市场" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "官方" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "我的" })).toBeNull();
     expect(screen.queryByRole("link", { name: "MCP" })).toBeNull();
     expect(screen.queryByRole("link", { name: "工具箱" })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "工具箱" })).toBeNull();
     expect(
       screen.queryByRole("heading", { level: 1, name: "商店" }),
     ).toBeNull();
     expect(screen.queryByLabelText(/模型组合：/)).toBeNull();
-    expect(
-      within(screen.getByRole("navigation", { name: "工具箱" })).getByLabelText(
-        "搜索提示词",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByLabelText("搜索提示词")).toBeTruthy();
   });
 
   it("点卡片出对话框，安装只调 install", async () => {
@@ -146,33 +125,11 @@ describe("市场页", () => {
       "审合同时用",
     );
     expect(await screen.findByText("HOW 正文")).toBeTruthy();
-    expect(screen.queryByTestId("skill-store-offers")).toBeNull();
     expect(screen.queryByRole("button", { name: "展开正文" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "安装" }));
     await waitFor(() => {
       expect(installSkill).toHaveBeenCalledWith("listing-1");
     });
-  });
-
-  it("快照写过工具名则列出「会用到这些」", async () => {
-    vi.mocked(getSkillStoreListing).mockResolvedValue({
-      ...ROW,
-      content:
-        "---\napply: on_demand\ndescription: 审合同时用\noffers_tools: host\n---\n怎么审",
-    });
-    renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "合同审查" }));
-    expect(await screen.findByTestId("skill-store-offers")).toBeTruthy();
-    expect(screen.getByTestId("skill-store-offers").textContent).toContain(
-      MARKET_OFFERS_CAPTION,
-    );
-    expect(screen.getByTestId("skill-store-offers").textContent).toContain(
-      "host",
-    );
-    expect(screen.getByTestId("skill-store-offers").textContent).not.toContain(
-      "查阅后启用",
-    );
-    expect(screen.getByText("怎么审")).toBeTruthy();
   });
 
   it("首页官方精选不在本组条再铺一遍", async () => {
@@ -206,16 +163,6 @@ describe("市场页", () => {
       1,
     );
     expect(screen.queryByRole("button", { name: "查看全部" })).toBeNull();
-  });
-
-  it("绑了手脚的货架卡打工具，名单不铺上卡", async () => {
-    vi.mocked(listSkillStore).mockResolvedValue(
-      shelf([{ ...ROW, offersTools: ["host"] }]),
-    );
-    renderPage();
-    const card = await screen.findByRole("button", { name: "合同审查" });
-    expect(within(card).getByText("工具")).toBeTruthy();
-    expect(within(card).queryByText("host")).toBeNull();
   });
 
   it("用户货按组出条", async () => {

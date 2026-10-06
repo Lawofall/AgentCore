@@ -450,10 +450,12 @@ exports[`buildGraphScene · golden > nested sub-team → nested compounds + node
   "fold": {
     "debateUnits": [],
     "descendants": {
-      "mpm": [
-        "lead",
+      "lead": [
         "eng1",
         "eng2",
+      ],
+      "mpm": [
+        "lead",
       ],
     },
     "folded": [
@@ -462,8 +464,8 @@ exports[`buildGraphScene · golden > nested sub-team → nested compounds + node
       "lead",
     ],
     "unitOf": {
-      "eng1": "mpm",
-      "eng2": "mpm",
+      "eng1": "lead",
+      "eng2": "lead",
       "lead": "mpm",
       "mpm": "mpm",
     },

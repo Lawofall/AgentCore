@@ -23,17 +23,6 @@ function emptyRail(over: Partial<PromptRail> = {}): PromptRail {
   };
 }
 
-function sharedItem(text: string): PromptCatalogItem {
-  return {
-    id: "shared",
-    kind: "shared",
-    group: "factory",
-    label: "全员共享准则",
-    depth: 0,
-    text,
-  };
-}
-
 function mineItem(over: {
   id: string;
   label: string;
@@ -72,15 +61,6 @@ function mineItem(over: {
 }
 
 describe("buildAlwaysRows", () => {
-  it("空核也进名单", () => {
-    const rail = emptyRail({
-      constitution: [sharedItem("")],
-    });
-    expect(buildAlwaysRows(rail).map((row) => row.label)).toEqual([
-      "全员共享准则",
-    ]);
-  });
-
   it("停用的我的常驻仍在名单", () => {
     const rail = emptyRail({
       alwaysMine: [

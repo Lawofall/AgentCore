@@ -65,7 +65,7 @@ function profiles(
   rows: LlmModelProfileListResponse["data"] = [textProfile],
 ): LlmModelProfileListResponse {
   return {
-    default_model_profile_id: rows[0]?.id ?? "sys-52",
+    default_assembly_id: rows[0]?.id ?? "sys-52",
     data: rows,
   };
 }
@@ -84,7 +84,7 @@ const png = {
 beforeEach(() => {
   useConversationStore.setState({ currentConversationId: null, byId: {} });
   useConversationsMock.mockReturnValue([]);
-  useComposerProfileDraftStore.setState({ profileId: null });
+  useComposerProfileDraftStore.setState({ profileId: null, assemblyId: null });
   useComposerDraftStore.setState({
     drafts: {},
     fillToken: 0,
@@ -151,7 +151,7 @@ describe("ComposerVisionHint", () => {
       isError: false,
       refetch: vi.fn(),
     } as unknown as ReturnType<typeof useLlmModelProfiles>);
-    useComposerProfileDraftStore.getState().setProfileId("user-vision");
+    useComposerProfileDraftStore.getState().setAssemblyId("user-vision");
     render(<ComposerVisionHint />);
     expect(screen.queryByTestId("composer-vision-hint")).toBeNull();
   });
@@ -164,7 +164,7 @@ describe("ComposerVisionHint", () => {
       isError: false,
       refetch: vi.fn(),
     } as unknown as ReturnType<typeof useLlmModelProfiles>);
-    useComposerProfileDraftStore.getState().setProfileId("user-slot");
+    useComposerProfileDraftStore.getState().setAssemblyId("user-slot");
     render(<ComposerVisionHint />);
     expect(screen.getByTestId("composer-vision-hint")).toBeTruthy();
     expect(screen.getByText(COMPOSER_VISION_HINT)).toBeTruthy();
@@ -176,7 +176,7 @@ describe("ComposerVisionHint", () => {
       byId: {},
     });
     useConversationsMock.mockReturnValue([
-      { id: "c1", modelProfileId: "user-vision" } as Conversation,
+      { id: "c1", assemblyId: "user-vision" } as Conversation,
     ]);
     useComposerDraftStore.getState().setAttachments("c1", [png]);
     useProfilesMock.mockReturnValue({

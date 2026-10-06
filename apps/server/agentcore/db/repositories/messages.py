@@ -716,6 +716,40 @@ class MessageRepository:
         has_more_after = len(rows) > limit
         return rows[:limit], has_more_after
 
+    async def list_strictly_between(
+        self,
+        conversation_id: str,
+        *,
+        before: datetime,
+        after: datetime | None,
+        limit: int,
+    ) -> tuple[list[Message], bool]:
+        """Oldest-first rows with ``after < created_at < before``.
+
+        ``after is None`` means the start of the transcript. The extra row
+        detects a fold larger than ``limit`` without loading it.
+        """
+        conds = [
+            Message.conversation_id == conversation_id,
+            Message.created_at < before,
+        ]
+        if after is not None:
+            conds.append(Message.created_at > after)
+        rows = (
+            (
+                await self._session.execute(
+                    select(Message)
+                    .where(*conds)
+                    .order_by(Message.created_at.asc())
+                    .limit(limit + 1)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        more = len(rows) > limit
+        return list(rows[:limit]), more
+
     async def window_around(
         self, conversation_id: str, *, message_id: str, before: int, after: int
     ) -> tuple[Sequence[Message], bool, bool] | None:

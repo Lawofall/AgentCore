@@ -82,6 +82,9 @@ CUT_KEEP_EPHEMERAL: frozenset[EventType] = frozenset(
         EventType.RUN_TOOL_PROGRESS,
         # oracle 写 run.phase / phaseTool（run_phase 分支）——mid-flight 活动相位单一源。
         EventType.RUN_PHASE,
+        # oracle 写 run.usage / cost（run_spend 分支）——进行中已入账。终态帧会覆盖，
+        # 但录制停在调用中途时丢掉它，投影就看不到这笔花费。
+        EventType.RUN_SPEND,
     }
 )
 

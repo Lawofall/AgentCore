@@ -16,7 +16,6 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from agentcore.core.logging import get_logger
-from agentcore.tools.protocol import tool_schema_to_openai_format
 
 if TYPE_CHECKING:
     from agentcore.tools.builtin.delegate import DelegateTool
@@ -252,8 +251,3 @@ def observe_tools_offered(
         approx_tokens_high=high,
         per_tool=per_tool,
     )
-
-
-def measure_openai_tool_chars(schema: Any) -> int:
-    """OpenAI-format JSON char length of one schema (tests / probes)."""
-    return len(json.dumps(tool_schema_to_openai_format(schema), ensure_ascii=False))

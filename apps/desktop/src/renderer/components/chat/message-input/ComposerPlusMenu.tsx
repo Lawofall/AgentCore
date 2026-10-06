@@ -14,7 +14,12 @@ import {
   useState,
 } from "react";
 
-export type PlusDrillId = "workspace" | "model" | "permission";
+export type PlusDrillId =
+  | "workspace"
+  | "model"
+  | "assembly"
+  | "permission"
+  | "tools";
 
 type PlusPanel = "list" | PlusDrillId;
 
@@ -108,7 +113,7 @@ export function ComposerPlusBackHeader({
 
 /**
  * 底栏 bar 的「＋」外壳：低频/绑定后少改的会话配置由调用方塞进菜单。
- * 工作区 / 模型 / 权限在同一面板内展开（返回 + 列表），不再叠第二层 Popover。
+ * 工作区 / 模型 / 权限 / 工具在同一面板内展开（返回 + 列表），不再叠第二层 Popover。
  */
 export function ComposerPlusMenu({
   children,

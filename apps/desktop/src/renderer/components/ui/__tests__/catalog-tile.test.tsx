@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CATALOG_GRID_CLASS, CatalogTile } from "../catalog-tile";
+import {
+  ASSEMBLY_CARD_GRID_CLASS,
+  CATALOG_GRID_CLASS,
+  CatalogTile,
+} from "../catalog-tile";
 
 afterEach(cleanup);
 
@@ -76,6 +80,27 @@ describe("CatalogTile", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps an accessory button from opening the tile", () => {
+    const onClick = vi.fn();
+    const onAccessory = vi.fn();
+    render(
+      <CatalogTile
+        icon={<span>icon</span>}
+        colorVar="--tools"
+        title="改文件"
+        onClick={onClick}
+        accessory={
+          <button type="button" onClick={onAccessory}>
+            开关
+          </button>
+        }
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "开关" }));
+    expect(onAccessory).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it("renders extra copy under the title", () => {
     render(
       <CatalogTile
@@ -95,6 +120,57 @@ describe("CatalogTile", () => {
   it("sizes shelf columns to fill the canvas", () => {
     expect(CATALOG_GRID_CLASS).toContain("1fr");
     expect(CATALOG_GRID_CLASS).toContain("auto-fill");
+    expect(CATALOG_GRID_CLASS).toContain("240px");
+    expect(ASSEMBLY_CARD_GRID_CLASS).toContain("200px");
+  });
+
+  it("compact card keeps one line and a side control", () => {
+    const onClick = vi.fn();
+    const onAccessory = vi.fn();
+    render(
+      <CatalogTile
+        density="compact"
+        title="改文件"
+        description="在这个文件夹里写、改、删文件。"
+        onClick={onClick}
+        accessory={
+          <button type="button" onClick={onAccessory}>
+            开关
+          </button>
+        }
+      />,
+    );
+    const description = screen.getByText("在这个文件夹里写、改、删文件。");
+    expect(description.className).toContain("truncate");
+    expect(description.className).not.toContain("line-clamp-2");
+    fireEvent.click(screen.getByRole("button", { name: "开关" }));
+    expect(onAccessory).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "改文件" }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("description placement keeps the title clear of the mark", () => {
+    render(
+      <CatalogTile
+        density="compact"
+        accessoryPlacement="description"
+        title="把数据文件整理成打开扫得懂的表"
+        description="用户要把数据文件交成可打开的表时才查阅。"
+        accessory={<span>官方</span>}
+        onClick={() => {}}
+      />,
+    );
+    const title = screen.getByRole("heading", {
+      name: "把数据文件整理成打开扫得懂的表",
+    });
+    const description = screen.getByText(
+      "用户要把数据文件交成可打开的表时才查阅。",
+    );
+    expect(description.className).toContain("line-clamp-2");
+    expect(description.className).not.toContain("truncate");
+    expect(title.nextElementSibling?.textContent).toContain("官方");
+    expect(title.parentElement?.contains(description)).toBe(true);
   });
 
   it("muted tiles are not buttons even with onClick", () => {

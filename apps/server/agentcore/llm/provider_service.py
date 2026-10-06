@@ -47,13 +47,13 @@ logger = get_logger(__name__)
 
 # Shown when connectivity test succeeds with no other message — green ≠ chat-ready.
 CONNECTIVITY_OK_HINT = (
-    "连接正常。已验证服务商连通（GET /models 或模型组合）。"
-    "日常聊天请到「模型组合」配置主模型；"
+    "连接正常。已验证服务商连通（GET /models 或装配上的模型）。"
+    "日常聊天请到装配配置主模型；"
     "自定义 Base URL 通常需含 /v1（例如 https://api.example.com/v1）。"
 )
 CONNECTIVITY_NO_CATALOG = (
     "上游未列出模型（无 GET /models 或列表为空）。"
-    "请到「模型组合」手填模型 ID 后再测；测连不代填模型。"
+    "请到装配里手填模型 ID 后再测；测连不代填模型。"
 )
 
 
@@ -77,7 +77,7 @@ class LlmProvidersView:
     """Provider list + deployment caps (+ account default profile id)."""
 
     providers: list[LlmProviderView] = field(default_factory=list)
-    default_model_profile_id: str | None = None
+    default_assembly_id: str | None = None
     billing_mode: str = "byok"
     platform_available: bool = False
     platform_model: str | None = None
@@ -144,8 +144,8 @@ class LlmProviderService:
         platform_available = platform_catalog_visible()
         return LlmProvidersView(
             providers=providers,
-            default_model_profile_id=(
-                getattr(user, "default_model_profile_id", None) if user else None
+            default_assembly_id=(
+                getattr(user, "default_assembly_id", None) if user else None
             ),
             billing_mode=settings.billing_mode,
             platform_available=platform_available,
@@ -160,7 +160,10 @@ class LlmProviderService:
         api_key: str,
         base_url: str | None = None,
     ) -> LlmProviderView:
-        """Add a provider. First provider + matching vendor preset seeds「当前配置」."""
+        """Add a provider.
+
+        First provider + matching vendor preset writes the starred assembly's main.
+        """
         api_key = (api_key or "").strip()
         if not api_key:
             raise ValidationError("API Key 不能为空")
@@ -188,12 +191,15 @@ class LlmProviderService:
         if was_empty and seed:
             from agentcore.llm.model_profiles import LlmModelProfileService
 
-            await LlmModelProfileService(self._session).create_profile(
-                user_id,
-                name="当前配置",
-                main=ProfileSlot(origin="byok", model=seed, provider_id=row.id),
-                set_as_default=True,
-            )
+            profiles = LlmModelProfileService(self._session)
+            assembly_id = await profiles.snapshot_default_profile_id(user_id)
+            if assembly_id:
+                await profiles.update_profile(
+                    user_id,
+                    assembly_id,
+                    main=ProfileSlot(origin="byok", model=seed, provider_id=row.id),
+                    fields_set={"main"},
+                )
         # A different upstream is being asked now: anything cached about the old one
         # refusing this account (背景整理的申报冷却) no longer describes reality — and
         # 「接入自己的 key」is the very exit the 429 copy offers.
@@ -405,7 +411,7 @@ class LlmProviderService:
                 detail = extra_msg or "连接失败"
                 return (
                     "error",
-                    f"模型组合引用的模型「{extra_s}」不可用：{detail}",
+                    f"装配引用的模型「{extra_s}」不可用：{detail}",
                     None,
                 )
 

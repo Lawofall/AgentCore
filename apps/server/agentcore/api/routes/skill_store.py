@@ -21,7 +21,6 @@ from agentcore.db.skill_store_groups import (
     empty_group_counts,
 )
 from agentcore.documents.frontmatter import (
-    offers_tools_from_content,
     set_entry_frontmatter,
     strip_entry_frontmatter,
 )
@@ -48,7 +47,6 @@ class SkillStoreListingRow(BaseModel):
     status: str
     source_document_id: str | None
     group: SkillStoreGroupName
-    offers_tools: list[str] = Field(default_factory=list)
 
 
 class SkillStoreListingDetail(SkillStoreListingRow):
@@ -131,7 +129,6 @@ def _row(
         status=listing.status,
         source_document_id=listing.source_document_id,
         group=listing.shelf_group,  # type: ignore[arg-type]
-        offers_tools=list(offers_tools_from_content(version.content or "")),
     )
 
 

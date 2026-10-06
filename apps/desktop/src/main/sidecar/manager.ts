@@ -11,6 +11,8 @@ import {
   type SidecarDebateSteerRequest,
   type SidecarDeliverMessageAck,
   type SidecarDeliverMessageRequest,
+  type SidecarDeliverQueuedToCaptainAck,
+  type SidecarDeliverQueuedToCaptainRequest,
   type SidecarEditQueuedTurnAck,
   type SidecarEditQueuedTurnRequest,
   type SidecarExecOutputRequest,
@@ -35,7 +37,6 @@ import {
   type SidecarRunStopRequest,
   type SidecarStartTurnRequest,
   type SidecarStatusPush,
-  type SidecarStopAndSendQueuedTurnRequest,
   type SidecarTurnFilesDiffRequest,
   type SidecarTurnFilesDiffResult,
   type SidecarTurnResult,
@@ -358,6 +359,17 @@ function parseDeliverMessageAck(reply: unknown): SidecarDeliverMessageAck {
   throw new Error("本地引擎回执无法识别");
 }
 
+function parseDeliverQueuedToCaptainAck(
+  reply: unknown,
+): SidecarDeliverQueuedToCaptainAck {
+  if (!isRecord(reply)) throw new Error("本地引擎回执无效");
+  const status = String(reply.status ?? "").trim();
+  if (status === "no_captain") return { status: "no_captain" };
+  if (status === "not_found") return { status: "not_found" };
+  if (status === "delivered") return { status: "delivered" };
+  throw new Error("本地引擎回执无效");
+}
+
 function parseCancelQueuedTurnAck(reply: unknown): SidecarCancelQueuedTurnAck {
   if (isRecord(reply) && reply.ok === true) {
     return { status: "cancelled" };
@@ -671,6 +683,7 @@ export class SidecarManager {
           : {}),
         // Per-turn account id (long-lived sidecar may have initialized as "local").
         ...(req.userId?.trim() ? { userId: req.userId.trim() } : {}),
+        ...(req.contextBudget ? { contextBudget: req.contextBudget } : {}),
         // W3: session read-only mounts (abs paths stay in main → sidecar only).
         ...(externalMounts.length > 0 ? { externalMounts } : {}),
         // Re-send the current cloud-proxy token every turn: the sidecar is long-lived
@@ -1649,16 +1662,22 @@ export class SidecarManager {
     });
   }
 
-  /** 队首 + 硬停。无进程 / 已不在队抛错。 */
-  async stopAndSendQueuedTurn(
-    req: SidecarStopAndSendQueuedTurnRequest,
-  ): Promise<void> {
+  /** 已排队的话送给在跑的主管。无进程抛错；已不在队 → ``not_found``。 */
+  async deliverQueuedTurnToCaptain(
+    req: SidecarDeliverQueuedToCaptainRequest,
+  ): Promise<SidecarDeliverQueuedToCaptainAck> {
     const entry = this.entries.get(entryKey(req.rootId, req.subpath));
-    if (!entry) throw new Error("本地引擎未运行，无法停止并发送");
-    await entry.client.request("stopAndSendQueuedTurn", {
-      conversationId: req.conversationId,
-      queueId: req.queueId,
-    });
+    if (!entry) throw new Error("本地引擎未运行，无法送给主管");
+    try {
+      const reply = await entry.client.request("deliverQueuedTurnToCaptain", {
+        conversationId: req.conversationId,
+        queueId: req.queueId,
+      });
+      return parseDeliverQueuedToCaptainAck(reply);
+    } catch (err) {
+      if (isQueuedTurnNotFound(err)) return { status: "not_found" };
+      throw err;
+    }
   }
 
   /** 就地改正文 / 附件 / @。无进程或已不在队 → ``not_found``。 */

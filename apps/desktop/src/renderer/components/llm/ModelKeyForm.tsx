@@ -77,7 +77,7 @@ export type ModelKeyFormProps = {
  *
  * 主路径 = 厂商 + 名称 + Key（自定义另有 Base URL）。
  * 预设厂商：Base URL 进高级。自定义端点：Base URL 主路径必填。
- * 对话日常选用在「模型组合」/ picker，不在本表单。
+ * 对话日常选用在「装配」/ picker，不在本表单。
  */
 export function ModelKeyForm({
   providerId,
@@ -193,7 +193,7 @@ export function ModelKeyForm({
           </select>
           {!isCustom && (
             <p className="mt-1 text-xs text-muted-foreground">
-              选择后将预填名称与端点；日常选用请到「模型组合」。
+              选择后将预填名称与端点；日常选用请到「装配」。
             </p>
           )}
         </label>

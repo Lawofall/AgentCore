@@ -378,7 +378,7 @@ class CostLedgerQueue:
         """Assemble one outbox payload, or ``None`` when there is nothing to bill.
 
         ``user_id`` is the only mandatory envelope key: an account-level call
-        (AI 改写 / 文档 description) legitimately has no conversation, and the
+        (AI 改写) legitimately has no conversation, and the
         ledger now carries such rows rather than dropping real spend. Empty
         strings normalise to ``NULL`` so a caller passing ``""`` cannot fail the
         UUID insert downstream.

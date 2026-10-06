@@ -190,6 +190,7 @@ async def select_turn_profiles(
         model_overrides=overrides,
         agent_provider_id=agent_provider_id,
         reasoning_effort=expanded.reasoning_effort,
+        context_budget=expanded.context_budget,
     )
 
 

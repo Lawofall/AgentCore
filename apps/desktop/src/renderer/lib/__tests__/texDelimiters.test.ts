@@ -71,4 +71,26 @@ describe("texDelimitersToDollars", () => {
   it("is a no-op when there are no tex delimiters", () => {
     expect(texDelimitersToDollars("plain")).toBe("plain");
   });
+
+  it("unwraps a nested inline delimiter inside display math", () => {
+    const src = [
+      "一个任务 \\(t\\) 是否派，形式化为：",
+      "",
+      "\\[",
+      "\\forall i\\ \\operatorname{Unit}(i)，或整个 \\(t\\) 作为不可分单元；\\\\",
+      "\\]",
+    ].join("\n");
+    const out = texDelimitersToDollars(src);
+    expect(out).toContain("$t$");
+    expect(out).not.toContain("\\(");
+    expect(out).toContain("或整个 t 作为不可分单元");
+  });
+
+  it("unwraps same-type nesting down to the symbol", () => {
+    expect(findTexMathSpans("\\[\\(\\(t\\)\\)\\]")[0]?.tex).toBe("t");
+  });
+
+  it("leaves an unclosed inner delimiter in the formula", () => {
+    expect(findTexMathSpans("\\[a \\(b\\]")[0]?.tex).toBe("a \\(b");
+  });
 });

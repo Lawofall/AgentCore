@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   CONSOLE_MAX_MESSAGES,
   ConsoleRingBuffer,
+  isElectronHostSecurityWarning,
   normalizeConsoleLevel,
   scrubConsoleText,
 } from "../browser/console-buffer";
@@ -32,6 +33,28 @@ describe("normalizeConsoleLevel", () => {
     expect(normalizeConsoleLevel(3)).toBe("error");
     expect(normalizeConsoleLevel("Warning")).toBe("warning");
     expect(normalizeConsoleLevel(null)).toBe("info");
+  });
+});
+
+describe("isElectronHostSecurityWarning", () => {
+  it("drops Electron's own CSP warning and keeps page violations", () => {
+    expect(
+      isElectronHostSecurityWarning(
+        "Electron Security Warning (Insecure Content-Security-Policy) This renderer process has either no Content Security Policy",
+      ),
+    ).toBe(true);
+    const buf = new ConsoleRingBuffer();
+    buf.pushMessage(
+      "warning",
+      "Electron Security Warning (Insecure Content-Security-Policy)",
+    );
+    buf.pushMessage(
+      "error",
+      "Refused to execute inline script because it violates the following Content Security Policy directive",
+    );
+    const snap = buf.snapshot();
+    expect(snap.messages).toHaveLength(1);
+    expect(snap.messages[0]?.text).toContain("Refused to execute");
   });
 });
 

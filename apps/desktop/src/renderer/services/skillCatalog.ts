@@ -123,33 +123,6 @@ export function skillBodyFromContent(content: string): string {
   return split ? split.body : content;
 }
 
-const OFFER_TOKEN = /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/;
-
-export function normalizeOfferTools(names: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of names) {
-    const token = raw.trim();
-    if (!token || seen.has(token) || !OFFER_TOKEN.test(token)) continue;
-    seen.add(token);
-    out.push(token);
-  }
-  return out;
-}
-
-export function parseOffersTools(content: string): string[] {
-  const split = splitFrontmatter(content);
-  if (!split) return [];
-  const line = split.fm
-    .split(/\r?\n/)
-    .find((row) => /^\s*offers_tools\s*:/i.test(row));
-  if (!line) return [];
-  const raw = line
-    .replace(/^\s*offers_tools\s*:\s*/i, "")
-    .replace(/\s+#.*$/, "");
-  return normalizeOfferTools(raw.split(/[,，、]/));
-}
-
 function splitFrontmatter(
   content: string,
 ): { fm: string; body: string } | null {

@@ -425,6 +425,97 @@ describe("fulfillStream", () => {
     vi.mocked(Math.random).mockRestore();
   });
 
+  it("流在心跳前结束时退避继续加长", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async () => sseResponse({ end: true }));
+
+    startFulfillStream();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // 第二次仍在心跳前结束 → 下一次等 2s，不再是 1s。
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    stopFulfillStream();
+    vi.mocked(Math.random).mockRestore();
+  });
+
+  it("收到心跳后重连退避从 1s 重新算", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const encoder = new TextEncoder();
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(sseResponse({ end: true }))
+      .mockResolvedValueOnce(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode(": keep-alive\n\n"));
+              controller.close();
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        ),
+      )
+      .mockImplementation(async () => sseResponse({ end: true }));
+
+    startFulfillStream();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    stopFulfillStream();
+    vi.mocked(Math.random).mockRestore();
+  });
+
+  it("被接管后不再重连，也不把在途操作判失败", async () => {
+    vi.useFakeTimers();
+    const encoder = new TextEncoder();
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode('data: {"type":"superseded"}\n\n'),
+            );
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ),
+    );
+
+    startFulfillStream();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(failInflightMock).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    stopFulfillStream();
+  });
+
   it("no-ops under the offline preview (no backend behind #/preview)", async () => {
     isWebRuntimeMock.mockReturnValue(true);
     isWebPreviewMock.mockReturnValue(true);

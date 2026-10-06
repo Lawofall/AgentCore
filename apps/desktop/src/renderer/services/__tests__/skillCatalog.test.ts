@@ -1,7 +1,6 @@
 import {
   composeOnDemandSkillContent,
   composeSkillContent,
-  parseOffersTools,
   skillBodyFromContent,
   skillFileName,
 } from "@/services/skillCatalog";
@@ -26,20 +25,6 @@ describe("skillCatalog helpers", () => {
     expect(skillBodyFromContent(composeOnDemandSkillContent("", "正文"))).toBe(
       "正文",
     );
-  });
-
-  it("存量 offers_tools 仍能解析，新组的稿不写这键", () => {
-    expect(
-      parseOffersTools(
-        "---\napply: on_demand\ndescription: 审\noffers_tools: host, debate\n---\n怎么审",
-      ),
-    ).toEqual(["host", "debate"]);
-    expect(
-      skillBodyFromContent(composeOnDemandSkillContent("审", "怎么审")),
-    ).toBe("怎么审");
-    expect(
-      parseOffersTools(composeOnDemandSkillContent("审", "怎么审")),
-    ).toEqual([]);
   });
 
   it("文件名缺 .md 就补", () => {

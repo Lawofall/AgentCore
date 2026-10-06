@@ -145,12 +145,18 @@ export interface ConversationState {
     cost: CostBreakdown,
     conversationId?: string | null,
   ) => void;
+  attachAccruedSpendToLastMessage: (
+    usage: UsageBreakdown,
+    cost: CostBreakdown,
+    conversationId?: string | null,
+  ) => void;
   attachTurnMetaToLastMessage: (
     meta: {
       usage?: UsageBreakdown;
       rounds?: number;
       durationMs?: number;
       generationMs?: number;
+      ttftMs?: number;
       finishReason?: string;
       collab?: import("@/types/events").TurnCollabMetrics;
       outcome?: "ok" | "partial" | "paused" | "error" | null;
@@ -235,6 +241,8 @@ export interface ConversationState {
    * 不得把草稿残留消息倒进目标会话。
    */
   adoptDraftRuntime: (newId: string) => void;
+  /** 旁边那栏要先占住切片，整窗写入才不会被「不在焦点」拒掉。 */
+  ensureResidentSlice: (id: string) => void;
   /**
    * Explicit idle-slice drop (tests / diagnostics). Production terminal SSE
    * (`message_end` / `error`) no longer calls this — idle eviction is LRU-only

@@ -101,6 +101,10 @@ vi.mock("@/services/skillCatalog", async (importOriginal) => {
   };
 });
 
+vi.mock("@/pages/toolbox/useEditingAssembly", () => ({
+  useEditingAssembly: () => ({ profile: null, pending: false }),
+}));
+
 vi.mock("@/services/skillStore", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/skillStore")>();
   return {
@@ -195,8 +199,9 @@ describe("GuidelinesPage 提示词阅读器", () => {
     expect(screen.queryByText("共享准则正文")).toBeNull();
 
     expect(screen.queryByText("角色身份")).toBeNull();
-    expect(screen.queryByText("全员共享准则")).toBeNull();
-    expect(screen.getByRole("heading", { name: "必带" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "全员共享准则" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "必带" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
   });
 
   it("官方 HOW 以货架卡出现，不露内部名", async () => {
@@ -265,7 +270,15 @@ describe("GuidelinesPage 提示词阅读器", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "合同审查" })).toBeTruthy();
     });
-    expect(screen.queryByRole("button", { name: "派单进阶" })).toBeNull();
+    const factory = screen.getByTestId("prompt-rail-factory");
+    const shelf = screen.getByTestId("prompt-rail-shelf");
+    expect(shelf.contains(factory)).toBe(true);
+    expect(
+      within(factory).getByRole("button", { name: "派单进阶" }),
+    ).toBeTruthy();
+    expect(within(factory).getByText("官方")).toBeTruthy();
+    expect(screen.queryByTestId("my-skills")).toBeNull();
+    expect(shelf.querySelector("[data-prompt-folder]")).toBeNull();
   });
 
   it("官方 HOW 不在目录里改", async () => {

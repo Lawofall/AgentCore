@@ -302,12 +302,23 @@ def handle_agent_node_cancel(
     ``worker_timeout``, never「已改方向」.
     """
     cancel_reason = cancel_reason_from_exc(e)
+    usage_acc = run_usage or TokenUsage()
+    if inflight:
+        usage_acc = usage_acc + inflight[0]
+    has_spend = bool(usage_acc.input_tokens or usage_acc.output_tokens)
+    cost_dict = (
+        asdict(calculate_cost(priced_model, usage_acc))
+        if priced_model and has_spend
+        else None
+    )
     env.sink.emit(
         run_cancelled(
             spec.run_id,
             agent_id,
             reason=cancel_reason,
             execution_id=env.execution_id,
+            usage=usage_acc.as_dict() if has_spend else None,
+            cost=cost_dict,
         )
     )
     if cancel_reason in ("redirect", "worker_timeout"):
@@ -320,9 +331,6 @@ def handle_agent_node_cancel(
         if draft and not any(m.role in ("assistant", "tool") for m in salvage_msgs):
             salvage_msgs.append(LLMMessage(role="assistant", content=draft))
         session = try_salvage_session(spec=spec, messages=salvage_msgs)
-        usage_acc = run_usage or TokenUsage()
-        if inflight:
-            usage_acc = usage_acc + inflight[0]
         salvage_fields = {
             "run_id": spec.run_id,
             "salvage": session is not None,
@@ -344,9 +352,6 @@ def handle_agent_node_cancel(
     if cancel_reason == "user_stop":
         # Absorb like redirect so the wave continues, but do not salvage for hot
         # continue — run-stop never triggers revision / ``_redir``.
-        usage_acc = run_usage or TokenUsage()
-        if inflight:
-            usage_acc = usage_acc + inflight[0]
         logger.info(
             "run.user_stop_cancelled",
             run_id=spec.run_id,
@@ -412,19 +417,6 @@ def handle_agent_node_exception(
         product_landed = (
             len(filter_product_landing_paths(touched, product_landing_artifacts)) > 0
         )
-    env.sink.emit(
-        run_failed(
-            spec.run_id,
-            agent_id,
-            str(e),
-            failure_kind="call",
-            execution_id=env.execution_id,
-            product_landed=product_landed or None,
-            error_code=signal.error_code,
-            retryable=retryable,
-            retry_after=signal.retry_after,
-        )
-    )
     failed = _priced_failure(
         str(e),
         model=priced_model,
@@ -436,6 +428,21 @@ def handle_agent_node_exception(
         retry_after=signal.retry_after,
         transcript=frozen or None,
         content=content_from_transcript(frozen) if frozen else "",
+    )
+    env.sink.emit(
+        run_failed(
+            spec.run_id,
+            agent_id,
+            str(e),
+            failure_kind="call",
+            execution_id=env.execution_id,
+            product_landed=product_landed or None,
+            error_code=signal.error_code,
+            retryable=retryable,
+            retry_after=signal.retry_after,
+            usage=failed.usage or None,
+            cost=failed.cost or None,
+        )
     )
     if tool_ctx is not None:
         return _stamp_retrieval_evidence_gap(

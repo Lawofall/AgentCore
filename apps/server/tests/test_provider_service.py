@@ -48,7 +48,7 @@ def _row(**kwargs):
 def _user(**kwargs):
     defaults = {
         "user_id": "u1",
-        "default_model_profile_id": None,
+        "default_assembly_id": None,
     }
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -86,21 +86,24 @@ def _enc():
 async def test_create_provider_first_seeds_current_config_profile(service):
     from agentcore.llm.byok_provider_presets import seed_model_for_base_url
 
-    created = MagicMock()
     with (
         patch.object(service, "_encryptor", return_value=_enc()),
         patch(
-            "agentcore.llm.model_profiles.LlmModelProfileService.create_profile",
-            new=AsyncMock(return_value=created),
-        ) as create_profile,
+            "agentcore.llm.model_profiles.LlmModelProfileService.snapshot_default_profile_id",
+            new=AsyncMock(return_value="asm-1"),
+        ) as snapshot,
+        patch(
+            "agentcore.llm.model_profiles.LlmModelProfileService.update_profile",
+            new=AsyncMock(),
+        ) as update_profile,
     ):
         view = await service.create_provider(
             "u1", label="DeepSeek", api_key="sk-secret-1234"
         )
-    create_profile.assert_awaited_once()
-    kwargs = create_profile.await_args.kwargs
-    assert kwargs["name"] == "当前配置"
-    assert kwargs["set_as_default"] is True
+    snapshot.assert_awaited_once()
+    update_profile.assert_awaited_once()
+    kwargs = update_profile.await_args.kwargs
+    assert kwargs["fields_set"] == {"main"}
     assert kwargs["main"].origin == "byok"
     assert kwargs["main"].provider_id == "prov-1"
     assert kwargs["main"].model == seed_model_for_base_url(settings.platform_base_url)
@@ -116,7 +119,7 @@ async def test_create_provider_custom_url_does_not_seed_profile(service):
     with (
         patch.object(service, "_encryptor", return_value=_enc()),
         patch(
-            "agentcore.llm.model_profiles.LlmModelProfileService.create_profile",
+            "agentcore.llm.model_profiles.LlmModelProfileService.snapshot_default_profile_id",
             new=AsyncMock(),
         ) as create_profile,
     ):
@@ -134,7 +137,7 @@ async def test_create_provider_second_does_not_seed_profile(service):
     with (
         patch.object(service, "_encryptor", return_value=_enc()),
         patch(
-            "agentcore.llm.model_profiles.LlmModelProfileService.create_profile",
+            "agentcore.llm.model_profiles.LlmModelProfileService.snapshot_default_profile_id",
             new=AsyncMock(),
         ) as create_profile,
     ):
@@ -187,11 +190,11 @@ async def test_list_providers_reports_profile_id_and_platform(service, monkeypat
     monkeypatch.setattr(settings, "billing_mode", "platform")
     service._repo.list_for_user = AsyncMock(return_value=[])
     service._users.get_by_id = AsyncMock(
-        return_value=_user(default_model_profile_id=preset)
+        return_value=_user(default_assembly_id=preset)
     )
     view = await service.list_providers("u1")
     assert view.providers == []
-    assert view.default_model_profile_id == preset
+    assert view.default_assembly_id == preset
     assert view.platform_available is True
 
 
@@ -284,7 +287,7 @@ async def test_test_provider_records_active_and_tools(service):
     assert fake.probe_called is False
     assert view.status == "active"
     assert view.message is not None
-    assert "连通" in view.message and "模型组合" in view.message
+    assert "连通" in view.message and "装配" in view.message
     service._repo.update_status.assert_awaited_once_with("prov-1", "active")
     service._repo.update_supports_tools.assert_awaited_once_with("prov-1", True)
     start = next(c for c in caps if c.get("event") == "llm_provider.test.start")
@@ -320,7 +323,7 @@ async def test_test_provider_empty_models_list_without_profile_is_not_green(serv
     assert fake.probe_called is False
     assert view.status == "error"
     assert "未列出模型" in (view.message or "")
-    assert "模型组合" in (view.message or "")
+    assert "装配" in (view.message or "")
 
 
 async def test_test_provider_nonempty_list_does_not_probe_unlisted_seed(service):
@@ -349,7 +352,7 @@ async def test_test_provider_nonempty_list_does_not_probe_unlisted_seed(service)
     assert fake.probe_called is False
     assert view.status == "active"
     assert view.message is not None
-    assert "连通" in view.message and "模型组合" in view.message
+    assert "连通" in view.message and "装配" in view.message
     service._repo.update_status.assert_awaited_once_with("prov-1", "active")
 
 
@@ -385,7 +388,7 @@ async def test_test_provider_profile_model_missing_from_list_probe_failure_is_er
     assert "stale-model" in fake.probe_models
     assert view.status == "error"
     assert "stale-model" in (view.message or "")
-    assert "模型组合" in (view.message or "")
+    assert "装配" in (view.message or "")
 
 
 async def test_test_provider_profile_ark_ep_missing_from_list_still_active_via_combo(
@@ -425,7 +428,7 @@ async def test_test_provider_profile_ark_ep_missing_from_list_still_active_via_c
     assert ep in fake.probe_models
     assert view.status == "active"
     assert view.message is not None
-    assert "连通" in view.message and "模型组合" in view.message
+    assert "连通" in view.message and "装配" in view.message
     service._repo.update_status.assert_awaited_once_with("prov-1", "active")
 
 
@@ -456,7 +459,7 @@ async def test_test_provider_list_models_auth_error_is_hard_failure(service):
         view = await service.test_provider("u1", "prov-1")
     assert view.status == "error"
     assert "API Key" in (view.message or "")
-    assert "模型组合" not in (view.message or "")
+    assert "装配" not in (view.message or "")
     assert fake.probe_called is False
 
 
@@ -502,7 +505,7 @@ async def test_test_provider_list_ok_profile_probe_401_blames_combo_model_not_ke
     assert "模型「DeepSeek1」" in msg
     assert "不被上游接受" in msg
     assert "列出模型" in msg
-    assert "模型组合" in msg
+    assert "装配" in msg
     assert "API Key 无效" not in msg
     assert "连接测试用模型" not in msg
 
@@ -701,7 +704,7 @@ async def test_test_provider_tools_failure_does_not_error_status(service):
         view = await service.test_provider("u1", "prov-1")
     assert view.status == "active"
     assert view.message is not None
-    assert "连通" in view.message and "模型组合" in view.message
+    assert "连通" in view.message and "装配" in view.message
     service._repo.update_supports_tools.assert_awaited_once_with("prov-1", None)
 
 
@@ -734,7 +737,7 @@ async def test_test_provider_logs_probe_failure(service):
     ):
         view = await service.test_provider("u1", "prov-1")
     assert view.status == "error"
-    assert "模型组合" in (view.message or "")
+    assert "装配" in (view.message or "")
     failed = next(c for c in caps if c.get("event") == "llm_provider.test.failed")
     assert failed["provider_id"] == "prov-1"
     assert "bad key" in failed["error"] or DEEPSEEK_V4_FLASH in failed["error"]
@@ -870,7 +873,7 @@ async def test_test_provider_fails_naming_bad_profile_model(service):
         view = await service.test_provider("u1", "prov-1")
     assert view.status == "error"
     assert "gpt5.6" in (view.message or "")
-    assert "模型组合" in (view.message or "")
+    assert "装配" in (view.message or "")
     assert "gpt5.6" in fake.probe_models
     service._repo.update_status.assert_awaited_once_with("prov-1", "error")
 

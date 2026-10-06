@@ -113,6 +113,26 @@ def _prose_body_chars(content: str) -> int:
     return len(text.strip())
 
 
+_PROSE_CLOSE_NOTE = (
+    "正文写路径，以及这份文件里没有的内容。给用户的正文 ≠ 这份文件的全文。"
+)
+
+
+def prose_write_close_note(*, path: str, content: str) -> str:
+    """Model-transcript tail after a prose ``write``. Empty for skeleton and user rules.
+
+    The manifest stays a disk check and is also the tool-row text. This sentence
+    is about the user-facing close, so callers append it only to the model message.
+    """
+    from agentcore.memory.rule_files import classify_rule_path
+
+    if classify_rule_path(path)[0] is not None:
+        return ""
+    if classify_write_kind(content) != "prose":
+        return ""
+    return _PROSE_CLOSE_NOTE
+
+
 def classify_write_kind(content: str) -> Literal["skeleton", "prose"]:
     """Classify a ``write`` body as skeleton or prose (research QC / read-back)."""
     text = content or ""

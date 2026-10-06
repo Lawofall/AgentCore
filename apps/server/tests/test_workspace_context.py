@@ -161,7 +161,8 @@ def test_birth_desk_facts_include_folder_id_without_tool_how():
     )
     assert "本会话出生桌=`白板`" not in out
     assert "folder_id=`fid-board`" not in out
-    assert "桌：白板（云端文件夹）" in out
+    assert "桌：白板（文件夹）" in out
+    assert "云端文件夹" not in out
     _assert_how_identifiers_not_in_facts(out)
 
     worker = build_workspace_context(
@@ -172,7 +173,7 @@ def test_birth_desk_facts_include_folder_id_without_tool_how():
         desk_folder_label="设计/图标",
         desk_is_birth=False,
     )
-    assert "桌：设计/图标（云端文件夹）" in worker
+    assert "桌：设计/图标（文件夹）" in worker
     assert "folder_id=`fid-icon`" not in worker
     assert "本会话出生桌=" not in worker
     _assert_how_identifiers_not_in_facts(worker)
@@ -188,12 +189,12 @@ def test_cloud_scratch_facts():
     assert "执行：云端" in out
     assert "执行：云端 · 出站：产品网络 · 原件：不能改" in out
     assert "执行：云端沙箱" not in out
-    assert "桌：本会话草稿（云端）" in out
+    assert "桌：本会话草稿\n" in out
+    assert "（云端）" not in out
     assert "host" not in _gaps(out)  # desktop_online
     assert "run" in _gaps(out)
-    assert "package_install" in _gaps(out)
     assert "browser" in _gaps(out)
-    assert "local_open" in _gaps(out)
+    assert "local_open" not in out
     assert "host=已装配" not in out
     assert "run=未装配" not in out
     assert "folder_id=" not in out
@@ -297,7 +298,7 @@ def test_cloud_folder_desk_identity_is_not_scratch():
         desktop_online=True,
         run_enabled=False,
     )
-    assert "桌：我的白板（云端文件夹）" in out
+    assert "桌：我的白板（文件夹）" in out
     assert "非本机目录" not in out
     assert "云端草稿/临时文件空间" not in out
     assert "桌：本会话草稿" not in out
@@ -315,8 +316,8 @@ def test_cloud_conv_root_stays_scratch_identity():
         desktop_online=True,
         run_enabled=False,
     )
-    assert "桌：本会话草稿（云端）" in out
-    assert "桌：workspace（云端文件夹）" not in out
+    assert "桌：本会话草稿\n" in out
+    assert "桌：workspace（文件夹）" not in out
 
 
 def test_folder_does_not_list_host_as_a_gap():
@@ -332,6 +333,15 @@ def test_folder_does_not_list_host_as_a_gap():
     assert "边界：这个文件夹" in out
     assert "客户端：桌面已连接" in out
     assert "客户端：未连接" not in out
+    computer = build_workspace_context(
+        _FakeBackend("local"),
+        desktop_online=True,
+        run_enabled=True,
+        permission_axes=WorkspaceBoundary.COMPUTER,
+    )
+    assert "边界：这台电脑" in computer
+    assert "host" not in _gaps(computer)
+    assert "客户端：" not in computer
     assert "桌面回填通道未连接" not in out
     _assert_no_capability_restatements(out)
 
@@ -373,9 +383,8 @@ def test_local_remote_channel_facts():
     assert "请人贴" not in out
     assert "桌：MyProject" in out
     assert "run" not in _gaps(out)
-    assert "package_install" not in _gaps(out)
     assert "browser" in _gaps(out)
-    assert "local_open" not in _gaps(out)
+    assert "local_open" not in out
     assert "产物出口" not in out
     assert "客户端：桌面已连接" in out
     assert "open_local_project" not in out
@@ -427,7 +436,7 @@ def test_browser_capability_override():
         browser_enabled=True,
     )
     assert "browser" not in _gaps(out)
-    assert "local_open" in _gaps(out)
+    assert "local_open" not in out
     assert "CEO 可直持" not in out
     assert "仅 worker" not in out
     assert "浏览器宿主：" not in out
@@ -514,8 +523,8 @@ def test_local_browser_unassembled_guide_splits_reason_no_sandbox_teaser():
     assert "同轮可开工" not in out
 
 
-def test_host_mcp_unassembled_states_facts_and_defers_posture_to_core():
-    """host/mcp 未装配：事实层只写装没装配与为什么；同轮可开工姿势不进本块。"""
+def test_desktop_offline_folder_omits_host_gap_and_posture():
+    """文件夹边界 + 桌面不在线：host 不进缺口；开工姿势不进本块。"""
     out = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=False,
@@ -523,27 +532,10 @@ def test_host_mcp_unassembled_states_facts_and_defers_posture_to_core():
         browser_enabled=False,
     )
     assert "host" not in _gaps(out)
-    assert "mcp" in _gaps(out)
     assert "客户端：未连接" in out
     _assert_no_capability_restatements(out)
     assert "同轮可开工" not in out
     assert "【能力未装配·统一姿势】" not in out
-
-
-def test_mcp_assembled_states_channel_not_who_holds():
-    """mcp 已装配：只报通道事实与工具名形；谁可持不在事实层。"""
-    out = build_workspace_context(
-        _FakeBackend("server"),
-        desktop_online=True,
-        run_enabled=False,
-        mcp_enabled=True,
-    )
-    assert "mcp" not in _gaps(out)
-    assert "mcp=" not in out
-    _assert_no_capability_restatements(out)
-    assert "mcp_<server>_<tool>" not in out
-    assert "CEO 不直持" not in out
-    assert "仅 worker 持 MCP" not in out
 
 
 def test_sidecar_local_without_channel():
@@ -598,7 +590,7 @@ def test_channel_offline_self_claim_desktop_recheck_honesty():
         run_enabled=False,
     )
     assert "host" not in _gaps(out)
-    assert "local_open" in _gaps(out)
+    assert "local_open" not in out
     assert "通道复检铁律" not in out
     assert "正在用客户端" not in out
     assert "口述覆盖" not in out
@@ -778,46 +770,8 @@ def test_git_unassembled_states_channel_without_enable_steps():
     assert "main" not in out
 
 
-def test_cloud_package_install_tracks_code_execute():
-    """云端：package_install 与 run 同一谓词；override 仅测试探针。"""
-    out_off = build_workspace_context(
-        _FakeBackend("server"),
-        desktop_online=True,
-        run_enabled=True,
-        package_install_enabled=False,
-    )
-    assert "run" not in _gaps(out_off)
-    assert "package_install" in _gaps(out_off)
-    _assert_no_capability_restatements(out_off)
-
-    out_on = build_workspace_context(
-        _FakeBackend("server"),
-        desktop_online=True,
-        run_enabled=True,
-        package_install_enabled=True,
-    )
-    assert "run" not in _gaps(out_on)
-    assert "package_install" not in _gaps(out_on)
-    assert "allowlist" not in out_on
-    assert "chokepoint" not in out_on
-
-    out_same = build_workspace_context(
-        _FakeBackend("server"),
-        desktop_online=True,
-        run_enabled=True,
-    )
-    assert "package_install" not in _gaps(out_same)
-
-    out_both_off = build_workspace_context(
-        _FakeBackend("server"),
-        desktop_online=True,
-        run_enabled=False,
-    )
-    assert "package_install" in _gaps(out_both_off)
-
-
-def test_local_package_install_follows_execution_class():
-    """本机：装依赖跟执行类，不吃主机 registry_egress。"""
+def test_local_run_omits_registry_egress_from_facts():
+    """本机执行开着时，事实层不写包装源门禁。"""
     out = build_workspace_context(
         _FakeBackend("local", root_label="MyProject", channel=object()),
         desktop_online=True,
@@ -825,16 +779,8 @@ def test_local_package_install_follows_execution_class():
         browser_enabled=False,
     )
     assert "run" not in _gaps(out)
-    assert "package_install" not in _gaps(out)
     _assert_no_capability_restatements(out)
     assert "registry_egress" not in out
-
-    out_off = build_workspace_context(
-        _FakeBackend("local"),
-        desktop_online=True,
-        run_enabled=False,
-    )
-    assert "package_install" in _gaps(out_off)
 
 
 def test_no_execution_omits_table_structure_facts():

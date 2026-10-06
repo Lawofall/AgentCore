@@ -240,7 +240,7 @@ def _ideal_summary(sample: CompactionFidelitySample) -> str:
         files.append(f"- {token}")
     facts.extend(leftovers)
     heading_facts = (
-        "## 已确立的事实 / 背景" if sample.lane == "conversation" else "## 已确立的事实 / 已完成"
+        "## 已确立的事实" if sample.lane == "conversation" else "## 已确立的事实 / 已完成"
     )
     heading_open = (
         "## 未决问题 / 待办" if sample.lane == "conversation" else "## 未决问题 / 还要做的"
@@ -325,7 +325,7 @@ SAMPLES: tuple[CompactionFidelitySample, ...] = (
         lane="conversation",
         tags=("incremental",),
         prior_summary=(
-            "## 已确立的事实 / 背景\n"
+            "## 已确立的事实\n"
             "项目入口在 apps/legacy/alpha_hx.py 的 bootAlphaHx。\n\n"
             "## 涉及的文件与标识符\n"
             "- apps/legacy/alpha_hx.py\n"
@@ -493,7 +493,7 @@ def check_prompt_contract() -> list[str]:
         gaps.append("chat_missing_shared_policy")
     if SHARED_COMPACT_POLICY not in worker:
         gaps.append("worker_missing_shared_policy")
-    if "## 已确立的事实 / 背景" not in chat:
+    if "## 已确立的事实\n" not in chat or "## 已确立的事实 / 背景" in chat:
         gaps.append("chat_missing_facts_heading")
     if "## 未决问题 / 待办" not in chat:
         gaps.append("chat_missing_open_heading")

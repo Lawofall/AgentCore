@@ -420,11 +420,12 @@ async def maybe_compact_worker_window(
         already_folded=already,
         min_fold_rounds=1,
     )
-    context_length = None
-    if model_id:
-        from agentcore.llm.model_metadata import model_metadata_for
+    from agentcore.llm.context_budget import (
+        current_context_budget,
+        effective_context_length,
+    )
 
-        context_length = model_metadata_for(model_id).context_length
+    context_length = effective_context_length(model_id, current_context_budget())
     near = near_window_ceiling(last_prompt_tokens, context_length)
     due = window_compact_due(
         new_spans=new_spans,

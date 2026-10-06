@@ -70,7 +70,7 @@ async def test_maybe_enqueue_records_non_proxy_scenario(running_ledger):
 
 @pytest.mark.asyncio
 async def test_maybe_enqueue_records_a_conversation_less_call(running_ledger):
-    """An account-level call (AI 改写 / 文档 description) belongs to no conversation
+    """An account-level call (AI 改写) belongs to no conversation
     and is now billed as such: the ledger takes ``conversation_id = NULL`` rather
     than dropping real spend or inventing a conversation to hang it on. Only
     ``user_id`` is required — that is what the account windows / 配额 SUM on."""

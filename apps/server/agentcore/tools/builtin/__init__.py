@@ -252,11 +252,16 @@ def build_builtin_registry(
     ``languages`` trims ``code_execute``'s language enum after a local/sidecar probe
     (cloud / catalog leave ``None`` → full fixed surface).
     """
+    from agentcore.tools.switchboard import switch_blocks
+
     registry = ToolRegistry()
     mutation_names = file_mutation_tool_names()
     for cls in declared_tools(surface=ToolSurface.BUILTIN):
         reg = tool_registration(cls)
-        if not include_file_mutations and declared_tool_name(cls) in mutation_names:
+        name = declared_tool_name(cls)
+        if switch_blocks(name):
+            continue
+        if not include_file_mutations and name in mutation_names:
             continue
         if reg.browser_class:
             if not include_browser:
@@ -310,8 +315,12 @@ def build_worker_registry(
         location=location,
         languages=resolved_languages,
     )
+    from agentcore.tools.switchboard import switch_blocks
+
     for cls in declared_tools(surface=ToolSurface.WORKER_ONLY):
         reg = tool_registration(cls)
+        if switch_blocks(declared_tool_name(cls)):
+            continue
         if reg.manual_wire:
             # Manual-wire (e.g. conversation log tools): registered after registry
             # build — see ``_wire_conversation_log_tools``.

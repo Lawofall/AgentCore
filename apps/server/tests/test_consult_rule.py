@@ -119,11 +119,11 @@ def test_compose_worker_rule_entries():
     rules = [OnDemandUserRule(name="合规附录", summary="长条文")]
     out = compose_worker_base_prompt(assemble_system_prompt(), on_demand_rules=rules)
     assert "<按需目录>" in out
-    assert '长条文。consult("合规附录")' in out
+    assert '长条文 consult("合规附录")' in out
 
 
 def test_render_on_demand_with_rule_entry():
     out = render_on_demand_directory(
         [ConsultDirectoryEntry(name="合规附录", summary="长条文")]
     )
-    assert '长条文。consult("合规附录")' in out
+    assert '长条文 consult("合规附录")' in out

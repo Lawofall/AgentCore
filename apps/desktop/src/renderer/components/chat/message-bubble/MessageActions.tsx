@@ -1,6 +1,7 @@
 import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useDuplicateConversation } from "@/hooks/useConversations";
+import { useChatPaneId } from "@/lib/chatPane";
 import { formatMessageTime } from "@/lib/format";
 import { notifyError } from "@/lib/toast";
 import { useConversationStore } from "@/stores/conversation";
@@ -64,7 +65,7 @@ export function RegenerateMessageAction({
  * Non-destructive (original unchanged); cutoff is this bubble.
  */
 export function CloneMessageAction({ messageId }: { messageId: string }) {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   const switchConversation = useConversationStore((s) => s.switchConversation);
   const navigate = useNavigate();
   const duplicateMutation = useDuplicateConversation();

@@ -68,6 +68,19 @@ from agentcore.workspace.attachments import persist_attachments
 logger = get_logger(__name__)
 
 
+async def _arm_tool_switches(session: object, conv: object):
+    """Publish this conversation's assembly onto the turn."""
+    from agentcore.assembly.bind import arm_conversation_assembly
+
+    return await arm_conversation_assembly(session, conv)  # type: ignore[arg-type]
+
+
+def _disarm_tool_switches(token: object) -> None:
+    from agentcore.assembly.bind import disarm_conversation_assembly
+
+    disarm_conversation_assembly(token)
+
+
 async def stream_chat(
     *,
     conversation_id: str,
@@ -88,6 +101,7 @@ async def stream_chat(
     (queue / steer). Drain reuses it instead of inserting a second bubble.
     """
     backend = None
+    switch_token = None
     try:
         async with async_session_factory() as session:
             conv = await ConversationRepository(session).get_by_id_unscoped(conversation_id)
@@ -95,13 +109,12 @@ async def stream_chat(
                 sink.emit(error_event(ErrorCode.NOT_FOUND, "Conversation not found"))
                 sink.emit(message_end(FinishReason.ERROR))
                 return
+            switch_token = await _arm_tool_switches(session, conv)
             folder_id = conv.folder_id
             auto_desk_raw = getattr(conv, "auto_desk_folder_id", None)
             ws_folder_id, _auto_desk_folder_id = resolve_turn_file_workspace(
                 birth_folder_id=folder_id,
-                auto_desk_folder_id=auto_desk_raw
-                if isinstance(auto_desk_raw, str)
-                else None,
+                auto_desk_folder_id=auto_desk_raw if isinstance(auto_desk_raw, str) else None,
             )
             if ws_folder_id and not folder_id:
                 local_binding = await resolve_folder_local_binding(session, ws_folder_id)
@@ -218,6 +231,7 @@ async def stream_chat(
             sink.emit(error_event(code, message, context=err_ctx))
             sink.emit(message_end(FinishReason.ERROR))
     finally:
+        _disarm_tool_switches(switch_token)
         if not sink._closed:
             sink.close(reason="turn_finally")
 
@@ -236,6 +250,7 @@ async def regenerate_chat(
 ) -> None:
     """Re-run a turn from an existing user message (regenerate / edit-and-resend)."""
     backend = None
+    switch_token = None
     try:
         # Align with stream_chat: resolve bindings + truncate in session 1, compact
         # outside, load history in session 2. Never expire_all then touch ORM attrs
@@ -256,6 +271,7 @@ async def regenerate_chat(
                 sink.emit(error_event(ErrorCode.NOT_FOUND, "Conversation not found"))
                 sink.emit(message_end(FinishReason.ERROR))
                 return
+            switch_token = await _arm_tool_switches(session, conv)
 
             target = await msg_repo.get_by_id(message_id, conversation_id=conversation_id)
             if not target or target.role != "user":
@@ -273,9 +289,7 @@ async def regenerate_chat(
                 return
 
             # Capture scalars before commit (expire_on_commit) while attrs are hot.
-            user_message = (
-                edited_content if edited_content is not None else (target.content or "")
-            )
+            user_message = edited_content if edited_content is not None else (target.content or "")
             if edited_agent_mentions is not None:
                 stored_mentions = to_stored_agent_mentions(
                     [
@@ -298,9 +312,7 @@ async def regenerate_chat(
             auto_desk_raw = getattr(conv, "auto_desk_folder_id", None)
             ws_folder_id, _auto_desk_folder_id = resolve_turn_file_workspace(
                 birth_folder_id=folder_id,
-                auto_desk_folder_id=auto_desk_raw
-                if isinstance(auto_desk_raw, str)
-                else None,
+                auto_desk_folder_id=auto_desk_raw if isinstance(auto_desk_raw, str) else None,
             )
             if ws_folder_id and not folder_id:
                 local_binding = await resolve_folder_local_binding(session, ws_folder_id)
@@ -322,9 +334,7 @@ async def regenerate_chat(
                     message_id,
                     edited_content if edited_content is not None else None,
                     attachments=stored_attachments,
-                    agent_mentions=(
-                        stored_mentions if edited_agent_mentions is not None else None
-                    ),
+                    agent_mentions=(stored_mentions if edited_agent_mentions is not None else None),
                     commit=False,
                 )
 
@@ -389,6 +399,7 @@ async def regenerate_chat(
             sink.emit(error_event(code, message, context=err_ctx))
             sink.emit(message_end(FinishReason.ERROR))
     finally:
+        _disarm_tool_switches(switch_token)
         if not sink._closed:
             sink.close(reason="regenerate_finally")
 
@@ -420,6 +431,9 @@ async def resume_chat(
     # already-authorized card, e.g. leftover team_preview reappearing after 停止 mid-run).
     settlement_durable = True
     backend = None
+    switch_token = None
+    latency_token = None
+    meter_token = None
     try:
         async with async_session_factory() as session:
             conv = await ConversationRepository(session).get_by_id_unscoped(conversation_id)
@@ -427,13 +441,12 @@ async def resume_chat(
                 sink.emit(error_event(ErrorCode.NOT_FOUND, "Conversation not found"))
                 sink.emit(message_end(FinishReason.ERROR))
                 return
+            switch_token = await _arm_tool_switches(session, conv)
             folder_id = conv.folder_id
             auto_desk_raw = getattr(conv, "auto_desk_folder_id", None)
             ws_folder_id, _auto_desk_folder_id = resolve_turn_file_workspace(
                 birth_folder_id=folder_id,
-                auto_desk_folder_id=auto_desk_raw
-                if isinstance(auto_desk_raw, str)
-                else None,
+                auto_desk_folder_id=auto_desk_raw if isinstance(auto_desk_raw, str) else None,
             )
             if ws_folder_id and not folder_id:
                 local_binding = await resolve_folder_local_binding(session, ws_folder_id)
@@ -472,6 +485,16 @@ async def resume_chat(
         # Fresh attempt_id on every resume (same message_id / journal turn_id).
         attempt_id = new_id()
         started = time.monotonic()
+        from agentcore.runtime.turn.latency import bind_active_meter, bind_turn_latency
+
+        meter = await _load_active_meter(conversation_id, suspension.message_id)
+        _, latency_token = bind_turn_latency(
+            started,
+            carried_duration_ms=meter.duration_ms,
+            carried_generation_ms=meter.generation_ms,
+            first_stream_done=meter.first_stream_done,
+        )
+        meter_token = bind_active_meter(meter)
         with log_context(
             trace_id=trace_id,
             conversation_id=conversation_id,
@@ -568,7 +591,7 @@ async def resume_chat(
                     raise
                 finish = result.get("finish_reason")
                 finish_value = getattr(finish, "value", finish)
-                duration_ms = int((time.monotonic() - started) * 1000)
+                duration_ms = _product_duration_ms(result, started)
                 delegated, workers = turn_worker_stats(result)
                 # 协作质量 (学·度量 §2.5): publish the same four counters the
                 # fresh path logs at chat.turn_complete and both paths persist
@@ -656,6 +679,13 @@ async def resume_chat(
             sink.emit(error_event(code, message, context=err_ctx))
             sink.emit(message_end(FinishReason.ERROR))
     finally:
+        _disarm_tool_switches(switch_token)
+        from agentcore.runtime.turn.latency import reset_active_meter, reset_turn_latency
+
+        if latency_token is not None:
+            reset_turn_latency(latency_token)
+        if meter_token is not None:
+            reset_active_meter(meter_token)
         # Pre-settlement failures would re-upsert the frame for retry; the cloud route
         # guarantees a durable settlement before dispatch (D1), so this stays dormant —
         # a post-decision cancel/error is interrupted_after_decision, never a frame revive.
@@ -676,6 +706,49 @@ def _turn_started_fields(entries: list[dict]) -> tuple[str, str]:
             str(payload.get("system_prompt") or ""),
         )
     return "", ""
+
+
+def _product_duration_ms(result: dict, started: float) -> int:
+    """Active time already stamped for this message, else the bound probe.
+
+    Resume used to publish ``monotonic - started`` for this segment only and
+    leave the previous segment's decode window on the row. The footer and the
+    usage speed then described different slices. The probe carries the earlier
+    active time, and settle writes that sum onto ``result``.
+    """
+    from agentcore.runtime.turn.latency import turn_wall_ms
+
+    stamped = result.get("duration_ms")
+    if isinstance(stamped, int) and not isinstance(stamped, bool) and stamped > 0:
+        return stamped
+    wall = turn_wall_ms()
+    if wall is not None and wall > 0:
+        return wall
+    return max(int((time.monotonic() - started) * 1000), 0)
+
+
+async def _load_active_meter(conversation_id: str, message_id: str):
+    """Pause snapshot on the assistant row. Empty when the row cannot be read."""
+    from agentcore.runtime.turn.latency import ActiveMeter
+
+    try:
+        async with async_session_factory() as session:
+            msg = await MessageRepository(session).get_by_id(
+                message_id, conversation_id=conversation_id
+            )
+        if asyncio.iscoroutine(msg):
+            msg.close()
+            msg = None
+        usage = msg.usage if msg is not None and isinstance(msg.usage, dict) else None
+    except Exception as e:
+        logger.warning(
+            "chat.active_meter_load_failed",
+            conversation_id=conversation_id,
+            message_id=message_id,
+            error=str(e),
+        )
+        return ActiveMeter()
+    return ActiveMeter.from_usage(usage)
 
 
 def _captain_run_id_from_journal(entries: list[dict]) -> str:
@@ -704,8 +777,11 @@ async def continue_chat(
     from agentcore.runtime.turn.ceo_continue import CEO_CONTINUE_KIND
 
     backend = None
+    switch_token = None
     lock_user_id = user_id
     restore_lock = True
+    latency_token = None
+    meter_token = None
     try:
         async with async_session_factory() as session:
             conv = await ConversationRepository(session).get_by_id_unscoped(conversation_id)
@@ -713,13 +789,12 @@ async def continue_chat(
                 sink.emit(error_event(ErrorCode.NOT_FOUND, "Conversation not found"))
                 sink.emit(message_end(FinishReason.ERROR))
                 return
+            switch_token = await _arm_tool_switches(session, conv)
             folder_id = conv.folder_id
             auto_desk_raw = getattr(conv, "auto_desk_folder_id", None)
             ws_folder_id, _auto_desk_folder_id = resolve_turn_file_workspace(
                 birth_folder_id=folder_id,
-                auto_desk_folder_id=auto_desk_raw
-                if isinstance(auto_desk_raw, str)
-                else None,
+                auto_desk_folder_id=auto_desk_raw if isinstance(auto_desk_raw, str) else None,
             )
             if ws_folder_id and not folder_id:
                 local_binding = await resolve_folder_local_binding(session, ws_folder_id)
@@ -762,6 +837,16 @@ async def continue_chat(
         trace_id = new_trace_id()
         attempt_id = new_id()
         started = time.monotonic()
+        from agentcore.runtime.turn.latency import bind_active_meter, bind_turn_latency
+
+        meter = await _load_active_meter(conversation_id, message_id)
+        _, latency_token = bind_turn_latency(
+            started,
+            carried_duration_ms=meter.duration_ms,
+            carried_generation_ms=meter.generation_ms,
+            first_stream_done=meter.first_stream_done,
+        )
+        meter_token = bind_active_meter(meter)
         with log_context(
             trace_id=trace_id,
             conversation_id=conversation_id,
@@ -837,7 +922,7 @@ async def continue_chat(
                     raise
                 finish = result.get("finish_reason")
                 finish_value = getattr(finish, "value", finish)
-                duration_ms = int((time.monotonic() - started) * 1000)
+                duration_ms = _product_duration_ms(result, started)
                 delegated, workers = turn_worker_stats(result)
                 collab = result.get("collab")
                 collab_fields = (
@@ -915,6 +1000,13 @@ async def continue_chat(
             sink.emit(error_event(code, message, context=err_ctx))
             sink.emit(message_end(FinishReason.ERROR))
     finally:
+        _disarm_tool_switches(switch_token)
+        from agentcore.runtime.turn.latency import reset_active_meter, reset_turn_latency
+
+        if latency_token is not None:
+            reset_turn_latency(latency_token)
+        if meter_token is not None:
+            reset_active_meter(meter_token)
         if restore_lock:
             await restore_ceo_continue_lock(
                 message_id=message_id,
@@ -922,8 +1014,6 @@ async def continue_chat(
                 user_id=lock_user_id,
             )
         else:
-            await release_ceo_continue_claim(
-                message_id, conversation_id=conversation_id
-            )
+            await release_ceo_continue_claim(message_id, conversation_id=conversation_id)
         if not sink._closed:
             sink.close(reason="continue_finally")

@@ -45,8 +45,12 @@ _OPTIONS_DESC = f"候选项（最多 {_MAX_OPTIONS}）。"
 _LABEL_DESC = "选项名（回传答案）。"
 _MULTIPLE_DESC = "允许多选。"
 
-# WHEN 短触发。填卡合同在 prompt/label。consult 赶不上这张卡。
-ASK_WHEN = "向用户发问。"
+# WHEN：挡路才问。填卡合同在 prompt/label。consult 赶不上这张卡。
+# 「讨论」不是路由键；桌上结果就是这场对话时用正文，不靠这张卡。
+ASK_WHEN = (
+    "猜错会做错活才发问；改了也好收回的，在正文写明假设再继续。"
+    "桌上结果就是这场对话时，正文说完 ≠ 写盘或组队。"
+)
 ASK_PROMPT_HOW = "要什么 / 给谁 / 做到哪一档。问句在卡上 ≠ 再抄进正文。假设和背景写正文。"
 ASK_LABEL_HOW = (
     "桌上结果；权衡写进选项名 ≠ 编制套餐 ≠ 正文候选再投卡。"

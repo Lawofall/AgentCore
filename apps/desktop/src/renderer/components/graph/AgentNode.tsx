@@ -73,7 +73,7 @@ export function AgentNode({ data }: NodeProps) {
       <Handle
         type="source"
         position={horizontal ? Position.Right : Position.Bottom}
-        className="!bg-border"
+        className={foldCount > 0 ? "!opacity-0" : "!bg-border"}
       />
     </>
   );

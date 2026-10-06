@@ -450,8 +450,8 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
             await self._on_list_queued_turns(request_id, params)
         elif method == "reorderQueuedTurns":
             await self._on_reorder_queued_turns(request_id, params)
-        elif method == "stopAndSendQueuedTurn":
-            await self._on_stop_and_send_queued_turn(request_id, params)
+        elif method == "deliverQueuedTurnToCaptain":
+            await self._on_deliver_queued_turn_to_captain(request_id, params)
         elif method == "editQueuedTurn":
             await self._on_edit_queued_turn(request_id, params)
         elif method == "runRedirect":

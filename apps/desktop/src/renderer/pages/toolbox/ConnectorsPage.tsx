@@ -92,6 +92,8 @@ export function ConnectorInspector({
   onCloseNew,
   onSaved,
   hideChrome = false,
+  assemblyEnabled,
+  onAssemblyToggle,
 }: {
   server: McpServerListItem | null;
   api: NonNullable<Window["mcpApi"]>;
@@ -100,6 +102,9 @@ export function ConnectorInspector({
   onCloseNew?: () => void;
   onSaved: () => Promise<void>;
   hideChrome?: boolean;
+  /** When set, 启用 writes this assembly's plug list instead of the machine flag. */
+  assemblyEnabled?: boolean;
+  onAssemblyToggle?: (enabled: boolean) => Promise<void>;
 }) {
   const editing = Boolean(server?.id);
   const [draft, setDraft] = useState<McpServerConfig>(() =>
@@ -151,7 +156,18 @@ export function ConnectorInspector({
   };
 
   const toggleEnabled = async () => {
-    if (!draft.id || !api.setServerEnabled) return;
+    if (!draft.id) return;
+    if (onAssemblyToggle) {
+      onBusy(draft.id);
+      try {
+        await onAssemblyToggle(!assemblyEnabled);
+        await onSaved();
+      } finally {
+        onBusy(null);
+      }
+      return;
+    }
+    if (!api.setServerEnabled) return;
     onBusy(draft.id);
     try {
       await api.setServerEnabled(draft.id, !draft.enabled);
@@ -219,7 +235,9 @@ export function ConnectorInspector({
           {editing ? (
             <div className="flex items-center gap-2">
               <Switch
-                checked={draft.enabled}
+                checked={
+                  onAssemblyToggle ? Boolean(assemblyEnabled) : draft.enabled
+                }
                 disabled={busyId === draft.id}
                 onCheckedChange={() => void toggleEnabled()}
                 label="启用"

@@ -14,12 +14,13 @@ import {
   UserInlineBody,
 } from "@/components/chat/message-bubble/UserInlineBody";
 import { getConversations } from "@/hooks/useConversations";
+import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import { hasInlineMarkers } from "@/lib/inlineBody";
 import { ignoresCloudTurnActivity } from "@/stores/aiTurnActivity";
 import {
   type MessageAttachmentMeta,
-  activeRuntime,
   assistantProjectionId,
+  runtimeOf,
   useConversationStore,
 } from "@/stores/conversation";
 import type { UserInterjection } from "@/stores/execution";
@@ -46,8 +47,9 @@ export function InterjectionTimeline({
     if (!list) return null;
     return list.find((i) => i.interjectionId === interjectionId) ?? null;
   });
+  const paneKey = useChatPaneSliceKey();
   const turnTerminal = useConversationStore((s) => {
-    const rt = activeRuntime(s);
+    const rt = runtimeOf(s, paneKey);
     const msg = rt.messages.find(
       (m) =>
         m.role === "assistant" &&
@@ -62,7 +64,7 @@ export function InterjectionTimeline({
   const foldContent = item?.content ?? null;
   const folded = useConversationStore((s) => {
     if (!foldContent) return false;
-    const messages = activeRuntime(s).messages;
+    const messages = runtimeOf(s, paneKey).messages;
     const assistantIdx = messages.findIndex(
       (m) =>
         m.role === "assistant" &&
@@ -76,11 +78,11 @@ export function InterjectionTimeline({
     return false;
   });
 
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   const localQueue = useConversationStore((s) => {
-    const id = s.currentConversationId;
+    const id = paneKey;
     if (!id) return false;
-    const via = s.byId[id]?.executionVia ?? null;
+    const via = s.byId?.[id]?.executionVia ?? null;
     const localContainerRootId =
       getConversations().find((c) => c.id === id)?.localContainerRootId ?? null;
     return ignoresCloudTurnActivity(via, localContainerRootId);

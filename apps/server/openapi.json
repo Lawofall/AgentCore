@@ -156,6 +156,11 @@
             ],
             "title": "Folder Id"
           },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -3391,7 +3396,7 @@
         "type": "object"
       },
       "CapabilityGuidelines": {
-        "description": "The system-prompt TEMPLATE the agents follow (静态 蓝图; the per-turn verbatim\nprompt is served separately, see the message prompt endpoint).\n\n``shared_base`` is the base every agent (CEO + workers) shares (output\nstyle, tool-use, safety); ``worker_leaf`` / ``worker_captain`` are empty\n(no factory worker ``<身份>``; nest-cap is a live opening fact) — not the\nper-turn prompt (form HOW is 交付物规格 in 收到的上下文);\n``ceo_addon`` is the CEO\ncoordinator's layers on top of that base\n(routing core + 按需目录 + citation guidance); ``ceo`` is the full chat\nsystem-prompt template (shared base + ceo_addon), composed by the SAME\n``compose_ceo_chat_prompt`` the live turn uses, so it never drifts.",
+        "description": "The system-prompt TEMPLATE the agents follow (静态 蓝图; the per-turn verbatim\nprompt is served separately, see the message prompt endpoint).\n\n``shared_base`` is the base every agent (CEO + workers) shares. It is empty\nunless a residual is injected; the official toolbox hides the card when this\nstring is blank. ``worker_leaf`` / ``worker_captain`` are empty\n(no factory worker ``<身份>``; nest-cap is a live opening fact) — not the\nper-turn prompt (form HOW is 交付物规格 in 收到的上下文);\n``ceo_addon`` is the CEO\ncoordinator's layers on top of that base\n(routing core + 按需目录 + citation guidance); ``ceo`` is the full chat\nsystem-prompt template (shared base + ceo_addon), composed by the SAME\n``compose_ceo_chat_prompt`` the live turn uses, so it never drifts.",
         "properties": {
           "ceo": {
             "title": "Ceo",
@@ -4244,6 +4249,85 @@
         "title": "CloneRepoResponse",
         "type": "object"
       },
+      "ContextCutCommitRequest": {
+        "description": "Write the prose the user confirmed. Does not summarize again.\n\n``summary`` is editable prose. The server drops any identity-ledger fence\nin it and appends the ledger for this fold.",
+        "properties": {
+          "fold_digest": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Fold Digest",
+            "type": "string"
+          },
+          "message_id": {
+            "minLength": 1,
+            "title": "Message Id",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "fold_digest",
+          "summary"
+        ],
+        "title": "ContextCutCommitRequest",
+        "type": "object"
+      },
+      "ContextCutPreviewRequest": {
+        "description": "Fold everything still in the model window before this message.",
+        "properties": {
+          "message_id": {
+            "minLength": 1,
+            "title": "Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id"
+        ],
+        "title": "ContextCutPreviewRequest",
+        "type": "object"
+      },
+      "ContextCutPreviewResponse": {
+        "description": "Prose the user can edit before it becomes the prefix.\n\n``keep_message_id`` may be the user message that opened the chosen\nassistant turn. ``summary`` is the editable prose only. Commit stores\nthat prose plus the program-owned identity ledger for this fold.",
+        "properties": {
+          "fold_digest": {
+            "title": "Fold Digest",
+            "type": "string"
+          },
+          "fold_through": {
+            "format": "date-time",
+            "title": "Fold Through",
+            "type": "string"
+          },
+          "folded_count": {
+            "title": "Folded Count",
+            "type": "integer"
+          },
+          "keep_message_id": {
+            "title": "Keep Message Id",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "keep_message_id",
+          "fold_through",
+          "fold_digest",
+          "folded_count"
+        ],
+        "title": "ContextCutPreviewResponse",
+        "type": "object"
+      },
       "ContextGapModel": {
         "description": "早期对话没能进摘要、也已滑出原文窗口——这一轮 AI 确实读不到它们。\n\nThe failure half of ``context_compacted``: that flag says folding HAS run, and a\nbool cannot tell a healthy rolling summary apart from folding that kept failing\nuntil the chat outgrew its window. Present only when the loss is provable from\nstored state (``conversation/context_gap.py``); absent means either intact or\nnot computed, and a client must stay quiet on both rather than warn on a guess.\n\nWording obligations for whoever renders this (same honesty bar as the memory\nalways-quota card): name what did not happen and what the user can do, never let\nit read as a capability lost for good. Nothing was deleted — the transcript is\nwhole on screen, and the backlog folds itself in incrementally once folding can\nrun again. ``recovery_at`` is upstream's own date when it gave one; its absence\nmeans「不知道，会自动重试」and must not be dressed up as a deadline.",
         "properties": {
@@ -4686,6 +4770,17 @@
             "title": "Archived",
             "type": "boolean"
           },
+          "assembly_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Id"
+          },
           "compacted_through": {
             "anyOf": [
               {
@@ -4701,6 +4796,11 @@
           "context_compacted": {
             "default": false,
             "title": "Context Compacted",
+            "type": "boolean"
+          },
+          "context_cut_undoable": {
+            "default": false,
+            "title": "Context Cut Undoable",
             "type": "boolean"
           },
           "context_gap": {
@@ -4764,17 +4864,6 @@
             "default": 0,
             "title": "Message Count",
             "type": "integer"
-          },
-          "model_profile_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model Profile Id"
           },
           "permission_axes": {
             "$ref": "#/components/schemas/PermissionAxesModel"
@@ -4983,6 +5072,17 @@
       },
       "CreateConversationRequest": {
         "properties": {
+          "assembly_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Id"
+          },
           "client_request_id": {
             "anyOf": [
               {
@@ -5018,17 +5118,6 @@
               }
             ],
             "title": "Local Container Root Id"
-          },
-          "model_profile_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model Profile Id"
           },
           "permission_axes": {
             "anyOf": [
@@ -5182,67 +5271,21 @@
         "type": "object"
       },
       "CreateLlmModelProfileRequest": {
+        "description": "New assembly. Copies the starred assembly, including its model.",
         "properties": {
-          "background": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ModelProfileSlot"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "main": {
-            "$ref": "#/components/schemas/ModelProfileSlot"
-          },
           "name": {
             "maxLength": 200,
             "title": "Name",
             "type": "string"
           },
-          "reasoning_effort": {
-            "anyOf": [
-              {
-                "maxLength": 32,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Vendor thinking-effort token. Null = vendor default for the main model. Must be an official control value of the main model.",
-            "title": "Reasoning Effort"
-          },
           "set_as_default": {
             "default": false,
             "title": "Set As Default",
             "type": "boolean"
-          },
-          "vision": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ModelProfileSlot"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "worker": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ModelProfileSlot"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "required": [
-          "name",
-          "main"
+          "name"
         ],
         "title": "CreateLlmModelProfileRequest",
         "type": "object"
@@ -5631,7 +5674,7 @@
         "type": "object"
       },
       "DeletedConversationListResponse": {
-        "description": "Recoverable conversations, most recently deleted first.\n\nHidden infrastructure hosts (handoff / standing) never appear, nor do chats already\npast retention — those are no longer restorable, and listing them would promise a\nrecovery the sweeper is entitled to refuse. ``retention_days`` mirrors\n``workspace_retention_days``, the same window the project bin runs on.",
+        "description": "Recoverable conversations, most recently deleted first.\n\nHidden infrastructure hosts (handoff / standing) never appear, nor do chats already\npast retention — those are no longer restorable, and listing them would promise a\nrecovery the sweeper is entitled to refuse. ``retention_days`` mirrors\n``workspace_retention_days``, the same window the project bin runs on.\n\n``total`` is every recoverable row in that window. ``data`` is a capped page, so\nemptying the bin follows ``total``, not ``len(data)``.",
         "properties": {
           "data": {
             "items": {
@@ -5718,7 +5761,7 @@
         "type": "object"
       },
       "DeletedFolderListResponse": {
-        "description": "Recoverable projects, most recently deleted first.\n\nOnly projects the user deleted appear — machine reclaims (a race loser's auto\ncloud desk) and projects soft-deleted before the recycle bin existed are omitted,\nas are projects already past retention (they are no longer restorable).\n``retention_days`` mirrors ``workspace_retention_days``.",
+        "description": "Recoverable projects, most recently deleted first.\n\nOnly projects the user deleted appear — machine reclaims (a race loser's auto\ncloud desk) and projects soft-deleted before the recycle bin existed are omitted,\nas are projects already past retention (they are no longer restorable).\n``retention_days`` mirrors ``workspace_retention_days``.\n\n``total`` is every recoverable row in that window. ``data`` is a capped page, so\nemptying the bin follows ``total``, not ``len(data)``.",
         "properties": {
           "data": {
             "items": {
@@ -7132,6 +7175,71 @@
         "title": "EmailSendCodeRequest",
         "type": "object"
       },
+      "EnvelopeSwitchRow": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "off": {
+            "title": "Off",
+            "type": "boolean"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "summary",
+          "off"
+        ],
+        "title": "EnvelopeSwitchRow",
+        "type": "object"
+      },
+      "EnvelopeSwitchUpdate": {
+        "properties": {
+          "omitted": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Omitted",
+            "type": "array"
+          }
+        },
+        "title": "EnvelopeSwitchUpdate",
+        "type": "object"
+      },
+      "EnvelopeSwitchboardView": {
+        "properties": {
+          "omitted": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Omitted",
+            "type": "array"
+          },
+          "switches": {
+            "items": {
+              "$ref": "#/components/schemas/EnvelopeSwitchRow"
+            },
+            "title": "Switches",
+            "type": "array"
+          }
+        },
+        "required": [
+          "omitted",
+          "switches"
+        ],
+        "title": "EnvelopeSwitchboardView",
+        "type": "object"
+      },
       "EvidenceLedgerEntryRest": {
         "description": "回合调研台账条目（REST / 落库；与 SSE ``TurnEvidenceLedgerEntry`` 同形）。",
         "properties": {
@@ -8513,7 +8621,7 @@
             "title": "Data",
             "type": "array"
           },
-          "default_model_profile_id": {
+          "default_assembly_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -8522,7 +8630,7 @@
                 "type": "null"
               }
             ],
-            "title": "Default Model Profile Id"
+            "title": "Default Assembly Id"
           }
         },
         "required": [
@@ -8532,6 +8640,7 @@
         "type": "object"
       },
       "LlmModelProfileView": {
+        "description": "One assembly, including its model columns.",
         "properties": {
           "background": {
             "anyOf": [
@@ -8542,6 +8651,18 @@
                 "type": "null"
               }
             ]
+          },
+          "context_budget": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Shorter context ceiling in tokens (128000 / 256000 / 512000). Null = the main model's own window.",
+            "title": "Context Budget"
           },
           "created_at": {
             "anyOf": [
@@ -8554,6 +8675,14 @@
               }
             ],
             "title": "Created At"
+          },
+          "enabled_mcp_server_ids": {
+            "description": "Local MCP server ids this assembly enables. Empty = none.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Enabled Mcp Server Ids",
+            "type": "array"
           },
           "id": {
             "title": "Id",
@@ -8574,11 +8703,30 @@
             "type": "string"
           },
           "main": {
-            "$ref": "#/components/schemas/ModelProfileSlot"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelProfileSlot"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "omit_factory_catalog": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When true, this assembly does not carry the three factory skill rows. consult stays only if user on-demand rows remain. Null means the factory rows are still on.",
+            "title": "Omit Factory Catalog"
           },
           "reasoning_effort": {
             "anyOf": [
@@ -8589,8 +8737,24 @@
                 "type": "null"
               }
             ],
-            "description": "Vendor thinking-effort token for this combination (e.g. low/high/max). Null = that model's vendor default. Official control values only.",
             "title": "Reasoning Effort"
+          },
+          "recipe": {
+            "anyOf": [
+              {
+                "enum": [
+                  "chat",
+                  "web",
+                  "full"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Official recipe still locked on this assembly. Null once tools, the envelope, the factory catalog, or plugs are edited, or the row was never a recipe.",
+            "title": "Recipe"
           },
           "updated_at": {
             "anyOf": [
@@ -8636,8 +8800,7 @@
         "required": [
           "id",
           "name",
-          "kind",
-          "main"
+          "kind"
         ],
         "title": "LlmModelProfileView",
         "type": "object"
@@ -8730,7 +8893,7 @@
         "type": "object"
       },
       "LlmProvidersResponse": {
-        "description": "The full 设置·模型配置 state: provider list + deployment caps.\n\nAccount default combination lives on ``/users/me/llm-model-profiles``\n(``default_model_profile_id``).",
+        "description": "The full 设置·模型配置 state: provider list + deployment caps.\n\nThe starred assembly lives on ``/users/me/assemblies``\n(``default_assembly_id``). Its model columns are the account default brain.",
         "properties": {
           "billing_mode": {
             "default": "byok",
@@ -8738,7 +8901,7 @@
             "title": "Billing Mode",
             "type": "string"
           },
-          "default_model_profile_id": {
+          "default_assembly_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -8747,7 +8910,7 @@
                 "type": "null"
               }
             ],
-            "title": "Default Model Profile Id"
+            "title": "Default Assembly Id"
           },
           "platform_available": {
             "default": false,
@@ -9648,6 +9811,17 @@
             ],
             "title": "Trace Id"
           },
+          "ttft_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttft Ms"
+          },
           "usage": {
             "anyOf": [
               {
@@ -9827,14 +10001,6 @@
           "name": {
             "title": "Name",
             "type": "string"
-          },
-          "offers_tools": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Offers Tools",
-            "type": "array"
           },
           "version": {
             "title": "Version",
@@ -11313,6 +11479,18 @@
             "title": "Trace Id",
             "type": "string"
           },
+          "ttft_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttft Ms"
+          },
           "user_message": {
             "default": "",
             "maxLength": 32000,
@@ -11564,6 +11742,17 @@
       "ReplayConversation": {
         "description": "The conversation header for a 复盘 (owner identity + title + model profile).",
         "properties": {
+          "assembly_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -11595,17 +11784,6 @@
           "id": {
             "title": "Id",
             "type": "string"
-          },
-          "model_profile_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model Profile Id"
           },
           "model_profile_name": {
             "anyOf": [
@@ -13178,13 +13356,6 @@
             "title": "Name",
             "type": "string"
           },
-          "offers_tools": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Offers Tools",
-            "type": "array"
-          },
           "source_document_id": {
             "anyOf": [
               {
@@ -13329,13 +13500,6 @@
             "title": "Name",
             "type": "string"
           },
-          "offers_tools": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Offers Tools",
-            "type": "array"
-          },
           "source_document_id": {
             "anyOf": [
               {
@@ -13409,13 +13573,6 @@
           "name": {
             "title": "Name",
             "type": "string"
-          },
-          "offers_tools": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Offers Tools",
-            "type": "array"
           },
           "source_document_id": {
             "anyOf": [
@@ -14453,8 +14610,6 @@
           "web",
           "execution",
           "host_browser",
-          "table",
-          "doc",
           "orchestration"
         ],
         "title": "ToolFace",
@@ -14502,6 +14657,114 @@
           }
         },
         "title": "ToolSurfaceLimits",
+        "type": "object"
+      },
+      "ToolSwitchRow": {
+        "properties": {
+          "doc_tool": {
+            "title": "Doc Tool",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "off": {
+            "title": "Off",
+            "type": "boolean"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "tools": {
+            "description": "Model-facing names this switch removes, sorted. Companions that leave with it are included.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "summary",
+          "doc_tool",
+          "off"
+        ],
+        "title": "ToolSwitchRow",
+        "type": "object"
+      },
+      "ToolSwitchUpdate": {
+        "properties": {
+          "disabled": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Disabled",
+            "type": "array"
+          }
+        },
+        "title": "ToolSwitchUpdate",
+        "type": "object"
+      },
+      "ToolSwitchboardView": {
+        "properties": {
+          "disabled": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Disabled",
+            "type": "array"
+          },
+          "switches": {
+            "items": {
+              "$ref": "#/components/schemas/ToolSwitchRow"
+            },
+            "title": "Switches",
+            "type": "array"
+          }
+        },
+        "required": [
+          "disabled",
+          "switches"
+        ],
+        "title": "ToolSwitchboardView",
+        "type": "object"
+      },
+      "TrashEmptyResponse": {
+        "description": "How much of one「最近删除」half a collection purge actually removed.\n\n``purged`` is bin rows hard-deleted. ``skipped_busy`` is folders a live turn\nstill holds — those stay in the bin. A restore that wins the race is neither:\nthat row is already gone.",
+        "properties": {
+          "purged": {
+            "title": "Purged",
+            "type": "integer"
+          },
+          "skipped_busy": {
+            "default": 0,
+            "title": "Skipped Busy",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "purged"
+        ],
+        "title": "TrashEmptyResponse",
         "type": "object"
       },
       "TrashEntrySummary": {
@@ -15035,6 +15298,17 @@
             ],
             "title": "Archived"
           },
+          "assembly_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Id"
+          },
           "deep_research_auto": {
             "anyOf": [
               {
@@ -15045,17 +15319,6 @@
               }
             ],
             "title": "Deep Research Auto"
-          },
-          "model_profile_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model Profile Id"
           },
           "pinned": {
             "anyOf": [
@@ -15195,7 +15458,7 @@
         "type": "object"
       },
       "UpdateLlmModelProfileRequest": {
-        "description": "Partial update. Omitted fields unchanged; explicit null on worker/background/vision\nclears the slot (worker/background → follow_main; vision → no dedicated slot).\nExplicit null on reasoning_effort clears to the vendor default.",
+        "description": "Partial update. Explicit null on worker/background/vision clears that slot.\n\nChanging the model does not release a locked recipe.",
         "properties": {
           "background": {
             "anyOf": [
@@ -15206,6 +15469,33 @@
                 "type": "null"
               }
             ]
+          },
+          "context_budget": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Shorter context ceiling in tokens. Null = the main model's own window. Omitted = unchanged.",
+            "title": "Context Budget"
+          },
+          "enabled_mcp_server_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Local MCP server ids this assembly enables. Omitted = unchanged. Empty list = this assembly enables none.",
+            "title": "Enabled Mcp Server Ids"
           },
           "main": {
             "anyOf": [
@@ -15229,6 +15519,18 @@
             ],
             "title": "Name"
           },
+          "omit_factory_catalog": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Omit the three factory skill rows on this assembly. Omitted = unchanged.",
+            "title": "Omit Factory Catalog"
+          },
           "reasoning_effort": {
             "anyOf": [
               {
@@ -15239,7 +15541,6 @@
                 "type": "null"
               }
             ],
-            "description": "Vendor thinking-effort token. Explicit null clears to the vendor default. Must be an official control value of the (new) main model.",
             "title": "Reasoning Effort"
           },
           "vision": {
@@ -16503,7 +16804,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.28"
+    "version": "0.7.29"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -16845,6 +17146,72 @@
           }
         },
         "summary": "Search Account Conversations",
+        "tags": [
+          "account"
+        ]
+      }
+    },
+    "/v1/account/models": {
+      "get": {
+        "description": "Model catalog for a ticketed sidecar. Same rows as ``GET /v1/users/me/models``.",
+        "operationId": "list_account_models_v1_account_models_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Account Models",
         "tags": [
           "account"
         ]
@@ -22089,6 +22456,70 @@
       }
     },
     "/v1/conversations/trash": {
+      "delete": {
+        "description": "彻底删除「最近删除」里仍在保留期内的全部对话。\n\nSame claim as the single-row purge (conditional hard-delete, then scratch).\nThe list page is capped; this follows the window, not the page. A restore\nthat lands first is skipped — that chat is already out of the bin — and does\nnot fail the rest.",
+        "operationId": "empty_deleted_conversations_v1_conversations_trash_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrashEmptyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Empty Deleted Conversations",
+        "tags": [
+          "conversations"
+        ]
+      },
       "get": {
         "description": "列出可恢复的已删对话（最近删除）。\n\nDelete has always been a soft delete — the rows never went anywhere — but nothing\never listed them, so「删了就没了」was true in practice. Same retention window and\nsame cutoff as the project bin: a chat is offered here only while the sweeper is\nstill forbidden to purge it.",
         "operationId": "list_deleted_conversations_v1_conversations_trash_get",
@@ -23412,6 +23843,251 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/context-cut": {
+      "post": {
+        "description": "Store the prose the user confirmed. Does not summarize again.",
+        "operationId": "commit_context_cut_route_v1_conversations__conversation_id__context_cut_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextCutCommitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Commit Context Cut Route",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/context-cut/preview": {
+      "post": {
+        "description": "Summarize everything still in the window before this message. Does not write.",
+        "operationId": "preview_context_cut_route_v1_conversations__conversation_id__context_cut_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextCutPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextCutPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Context Cut Route",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/context-cut/undo": {
+      "post": {
+        "description": "Restore the compaction state from immediately before the latest cut.",
+        "operationId": "undo_context_cut_route_v1_conversations__conversation_id__context_cut_undo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Undo Context Cut Route",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/cost": {
       "get": {
         "description": "A conversation's cumulative spend (对话累计 — the conversation-header chip).\n\n404 for a non-owner, consistent with the other conversation reads.",
@@ -23654,6 +24330,163 @@
         "summary": "Duplicate Conversation",
         "tags": [
           "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/envelope-switches": {
+      "get": {
+        "operationId": "get_conversation_envelope_switches_v1_conversations__conversation_id__envelope_switches_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeSwitchboardView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Conversation Envelope Switches",
+        "tags": [
+          "envelope-switches"
+        ]
+      },
+      "put": {
+        "description": "Takes effect the next time a turn entry renders the envelope.",
+        "operationId": "put_conversation_envelope_switches_v1_conversations__conversation_id__envelope_switches_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvelopeSwitchUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeSwitchboardView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Conversation Envelope Switches",
+        "tags": [
+          "envelope-switches"
         ]
       }
     },
@@ -26366,10 +27199,10 @@
         ]
       }
     },
-    "/v1/conversations/{conversation_id}/queued-turns/{queue_id}/stop-and-send": {
+    "/v1/conversations/{conversation_id}/queued-turns/{queue_id}/to-captain": {
       "post": {
-        "description": "Move this queued item to the front, then hard-stop the live turn.\n\nThe next drain starts this item. Items that were ahead of it stay behind.\nStop still does not clear the rest of the FIFO.",
-        "operationId": "stop_and_send_queued_turn_v1_conversations__conversation_id__queued_turns__queue_id__stop_and_send_post",
+        "description": "Hand this queued line to the live captain and drop it from the FIFO.\n\nThe team keeps running. The user row stays (hidden until the interjection\nis injected). No live coordination → 409 and the item stays queued.",
+        "operationId": "deliver_queued_turn_to_captain_v1_conversations__conversation_id__queued_turns__queue_id__to_captain_post",
         "parameters": [
           {
             "in": "path",
@@ -26444,7 +27277,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Stop And Send Queued Turn",
+        "summary": "Deliver Queued Turn To Captain",
         "tags": [
           "conversations"
         ]
@@ -27441,6 +28274,163 @@
         "summary": "Attach Stream",
         "tags": [
           "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/tool-switches": {
+      "get": {
+        "operationId": "get_conversation_tool_switches_v1_conversations__conversation_id__tool_switches_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolSwitchboardView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Conversation Tool Switches",
+        "tags": [
+          "tool-switches"
+        ]
+      },
+      "put": {
+        "description": "Takes effect the next time a turn entry builds the tool table.",
+        "operationId": "put_conversation_tool_switches_v1_conversations__conversation_id__tool_switches_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolSwitchUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolSwitchboardView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Conversation Tool Switches",
+        "tags": [
+          "tool-switches"
         ]
       }
     },
@@ -31994,6 +32984,70 @@
       }
     },
     "/v1/folders/trash": {
+      "delete": {
+        "description": "彻底删除「最近删除」里仍在保留期内的全部项目。\n\nEach row uses the tombstone purge (member chats + cloud files + desk\nsettings; never the user's OS directory). A workspace a turn still holds\nstays in the bin and is counted in ``skipped_busy``; the rest continue.\nA restore that already won is skipped, not a failure of the whole empty.",
+        "operationId": "empty_deleted_folders_v1_folders_trash_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrashEmptyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Empty Deleted Folders",
+        "tags": [
+          "folders"
+        ]
+      },
       "get": {
         "description": "列出可恢复的已删项目（最近删除）。\n\nAccess-session only — the folders narrow ticket is for the sidecar CEO's roster\nchores, and recovery is the user's own remedy surface.",
         "operationId": "list_deleted_folders_v1_folders_trash_get",
@@ -37589,7 +38643,7 @@
     },
     "/v1/usage/summary": {
       "get": {
-        "description": "Account dashboard: today's tokens/cost, the month's cost, the recent\ndaily-cost trend, and the quota.\n\nWindows are bounded at the current UTC day / month start (MVP — a per-user\ntimezone is a later refinement). ``recent_daily_cost`` is the last\n``_TREND_DAYS`` UTC days (zero-filled, oldest-first) for the sparkline.\nMoney is nano-CNY; ``CostBreakdown.cny_total`` is already yuan (no FX).\nPer-role split lives on the turn payroll\n(``GET /messages/{id}/cost``), not this monthly account view.\n\nThis is the account total, so it also carries spend that belongs to no\nconversation at all (AI 改写 / 文档 description — ``role=assist`` ledger rows).\n``requests`` counts assistant turns only, so those rows raise 花销 without\nraising 请求数.\n\n``quota`` mirrors what ``enforce_quota`` will actually apply to this user:\nper-user override columns first, else global ``quota_*`` — so the meters\nnever show a cap the gate wouldn't enforce.",
+        "description": "Account dashboard: today's tokens/cost, the month's cost, the recent\ndaily-cost trend, and the quota.\n\nWindows are bounded at the current UTC day / month start (MVP — a per-user\ntimezone is a later refinement). ``recent_daily_cost`` is the last\n``_TREND_DAYS`` UTC days (zero-filled, oldest-first) for the sparkline.\nMoney is nano-CNY; ``CostBreakdown.cny_total`` is already yuan (no FX).\nPer-role split lives on the turn payroll\n(``GET /messages/{id}/cost``), not this monthly account view.\n\nThis is the account total, so it also carries spend that belongs to no\nconversation at all (AI 改写 — ``role=assist`` ledger rows).\n``requests`` counts assistant turns only, so those rows raise 花销 without\nraising 请求数.\n\n``quota`` mirrors what ``enforce_quota`` will actually apply to this user:\nper-user override columns first, else global ``quota_*`` — so the meters\nnever show a cap the gate wouldn't enforce.",
         "operationId": "get_usage_summary_v1_usage_summary_get",
         "parameters": [
           {
@@ -37650,6 +38704,447 @@
         "summary": "Get Usage Summary",
         "tags": [
           "usage"
+        ]
+      }
+    },
+    "/v1/users/me/assemblies": {
+      "get": {
+        "operationId": "list_model_profiles_v1_users_me_assemblies_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmModelProfileListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Model Profiles",
+        "tags": [
+          "assemblies"
+        ]
+      },
+      "post": {
+        "operationId": "create_model_profile_v1_users_me_assemblies_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLlmModelProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmModelProfileView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Model Profile",
+        "tags": [
+          "assemblies"
+        ]
+      }
+    },
+    "/v1/users/me/assemblies/default": {
+      "put": {
+        "operationId": "set_default_model_profile_v1_users_me_assemblies_default_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDefaultModelProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmModelProfileView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Default Model Profile",
+        "tags": [
+          "assemblies"
+        ]
+      }
+    },
+    "/v1/users/me/assemblies/{profile_id}": {
+      "delete": {
+        "operationId": "delete_model_profile_v1_users_me_assemblies__profile_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Model Profile",
+        "tags": [
+          "assemblies"
+        ]
+      },
+      "get": {
+        "operationId": "get_model_profile_v1_users_me_assemblies__profile_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmModelProfileView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Model Profile",
+        "tags": [
+          "assemblies"
+        ]
+      },
+      "patch": {
+        "operationId": "update_model_profile_v1_users_me_assemblies__profile_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLlmModelProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmModelProfileView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Model Profile",
+        "tags": [
+          "assemblies"
         ]
       }
     },
@@ -37921,6 +39416,144 @@
         ]
       }
     },
+    "/v1/users/me/envelope-switches": {
+      "get": {
+        "operationId": "get_account_envelope_switches_v1_users_me_envelope_switches_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeSwitchboardView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Account Envelope Switches",
+        "tags": [
+          "envelope-switches"
+        ]
+      },
+      "put": {
+        "operationId": "put_account_envelope_switches_v1_users_me_envelope_switches_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvelopeSwitchUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeSwitchboardView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Account Envelope Switches",
+        "tags": [
+          "envelope-switches"
+        ]
+      }
+    },
     "/v1/users/me/git-credentials": {
       "delete": {
         "description": "Clear the account Git PAT.",
@@ -38122,447 +39755,6 @@
         "summary": "Upsert Git Credentials",
         "tags": [
           "git-credentials"
-        ]
-      }
-    },
-    "/v1/users/me/llm-model-profiles": {
-      "get": {
-        "operationId": "list_model_profiles_v1_users_me_llm_model_profiles_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LlmModelProfileListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Model Profiles",
-        "tags": [
-          "llm-model-profiles"
-        ]
-      },
-      "post": {
-        "operationId": "create_model_profile_v1_users_me_llm_model_profiles_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateLlmModelProfileRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LlmModelProfileView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Model Profile",
-        "tags": [
-          "llm-model-profiles"
-        ]
-      }
-    },
-    "/v1/users/me/llm-model-profiles/default": {
-      "put": {
-        "operationId": "set_default_model_profile_v1_users_me_llm_model_profiles_default_put",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetDefaultModelProfileRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LlmModelProfileView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Set Default Model Profile",
-        "tags": [
-          "llm-model-profiles"
-        ]
-      }
-    },
-    "/v1/users/me/llm-model-profiles/{profile_id}": {
-      "delete": {
-        "operationId": "delete_model_profile_v1_users_me_llm_model_profiles__profile_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "profile_id",
-            "required": true,
-            "schema": {
-              "title": "Profile Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Model Profile",
-        "tags": [
-          "llm-model-profiles"
-        ]
-      },
-      "get": {
-        "operationId": "get_model_profile_v1_users_me_llm_model_profiles__profile_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "profile_id",
-            "required": true,
-            "schema": {
-              "title": "Profile Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LlmModelProfileView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Model Profile",
-        "tags": [
-          "llm-model-profiles"
-        ]
-      },
-      "patch": {
-        "operationId": "update_model_profile_v1_users_me_llm_model_profiles__profile_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "profile_id",
-            "required": true,
-            "schema": {
-              "title": "Profile Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateLlmModelProfileRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LlmModelProfileView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Update Model Profile",
-        "tags": [
-          "llm-model-profiles"
         ]
       }
     },
@@ -39445,6 +40637,144 @@
         "summary": "Test Search Provider",
         "tags": [
           "search-providers"
+        ]
+      }
+    },
+    "/v1/users/me/tool-switches": {
+      "get": {
+        "operationId": "get_account_tool_switches_v1_users_me_tool_switches_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolSwitchboardView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Account Tool Switches",
+        "tags": [
+          "tool-switches"
+        ]
+      },
+      "put": {
+        "operationId": "put_account_tool_switches_v1_users_me_tool_switches_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolSwitchUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolSwitchboardView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Account Tool Switches",
+        "tags": [
+          "tool-switches"
         ]
       }
     },

@@ -143,10 +143,6 @@ async def test_mutate_write_read_delete_list(monkeypatch: pytest.MonkeyPatch):
         )
 
     monkeypatch.setattr("agentcore.memory.always_quota.check_always_write", _allow)
-    monkeypatch.setattr(
-        "agentcore.memory.rules_injection.maybe_schedule_description_fill",
-        lambda **kwargs: None,
-    )
     repo = _FakeRepo()
     written = await mutate_user_rule(
         repo,  # type: ignore[arg-type]
@@ -293,10 +289,6 @@ async def test_mutate_omitted_apply_skips_always_quota(
         )
 
     monkeypatch.setattr("agentcore.memory.always_quota.check_always_write", _deny)
-    monkeypatch.setattr(
-        "agentcore.memory.rules_injection.maybe_schedule_description_fill",
-        lambda **kwargs: None,
-    )
     repo = _FakeRepo()
     written = await mutate_user_rule(
         repo,  # type: ignore[arg-type]
@@ -324,10 +316,6 @@ async def test_mutate_rewrite_omitted_apply_keeps_existing_tier(
         )
 
     monkeypatch.setattr("agentcore.memory.always_quota.check_always_write", _allow)
-    monkeypatch.setattr(
-        "agentcore.memory.rules_injection.maybe_schedule_description_fill",
-        lambda **kwargs: None,
-    )
     repo = _FakeRepo()
     repo.docs["回复语言.md"] = _FakeDoc(
         "回复语言.md",

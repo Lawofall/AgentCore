@@ -288,6 +288,56 @@ def test_due_token_rounds_and_near() -> None:
     )
 
 
+@pytest.mark.asyncio
+async def test_assembly_budget_folds_a_short_window_before_round_triggers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agentcore.llm.context_budget import bind_context_budget, reset_context_budget
+    from agentcore.runtime.engine import window_compact as wc
+
+    wc._cooldown_until_round.clear()
+
+    async def _fake(old: str, folded, **_kw) -> str:
+        return f"sum:{len(folded)}"
+
+    monkeypatch.setattr(wc, "_summarize_worker_fold", _fake)
+    msgs = _worker_window(3, body="Z" * 50_000)
+    log = TurnFactLog()
+    fact = current_fact_log.set(log)
+    try:
+        assert (
+            await maybe_compact_worker_window(
+                msgs,
+                run_id="w-budget-off",
+                role="worker",
+                round_idx=3,
+                last_prompt_tokens=110_000,
+                conversation_id="c1",
+                user_id="u1",
+                model_id="deepseek-v4-flash",
+            )
+            is False
+        )
+        token = bind_context_budget(128_000)
+        try:
+            wrote = await maybe_compact_worker_window(
+                msgs,
+                run_id="w-budget-on",
+                role="worker",
+                round_idx=3,
+                last_prompt_tokens=110_000,
+                conversation_id="c1",
+                user_id="u1",
+                model_id="deepseek-v4-flash",
+            )
+        finally:
+            reset_context_budget(token)
+        assert wrote is True
+    finally:
+        current_fact_log.reset(fact)
+        wc._cooldown_until_round.clear()
+
+
 def test_near_window_ceiling_ratio_and_absolute() -> None:
     assert near_window_ceiling(0, 100_000) is False
     assert near_window_ceiling(79_999, 100_000) is False

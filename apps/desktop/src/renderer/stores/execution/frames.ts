@@ -20,6 +20,7 @@ import type {
   RunProgressPayload,
   RunReasoningDeltaPayload,
   RunSkippedPayload,
+  RunSpendPayload,
   RunStartedPayload,
   RunToolProgressPayload,
   SSEEvent,
@@ -111,6 +112,17 @@ export type RunFrame =
       toolName?: string;
     }
   | {
+      // Cumulative spend after one model call (`run_spend`). EPHEMERAL.
+      t: number;
+      kind: "run_spend";
+      runId: string;
+      agentId: string;
+      role: string;
+      model: string;
+      usage: import("@/types/events").UsageBreakdown;
+      cost: import("@/types/events").CostBreakdown;
+    }
+  | {
       t: number;
       kind: "run_completed";
       runId: string;
@@ -147,6 +159,8 @@ export type RunFrame =
       retryAfter?: number | null;
       // 完工交接简报: a contract-missing run's authored wrap-up; absent for infra failures.
       debrief?: import("@/types/events").RunDebrief;
+      usage?: import("@/types/events").UsageBreakdown;
+      cost?: import("@/types/events").CostBreakdown;
     }
   | {
       // 跑一半改方向 / 整轮停止: interrupted mid-flight (orthogonal to run_failed).
@@ -156,6 +170,8 @@ export type RunFrame =
       agentId: string;
       // 从契约派生：后端新增取值（如 user_stop）时编译期就逼消费方处理，避免帧类型漏跟。
       reason: RunCancelledPayload["reason"];
+      usage?: import("@/types/events").UsageBreakdown;
+      cost?: import("@/types/events").CostBreakdown;
     }
   | {
       // 级联跳过 / graceful abort: node never ran — materialised SKIPPED.
@@ -344,6 +360,19 @@ export function frameFromEvent(event: SSEEvent): RunFrame | null {
         chars: p.chars,
       };
     }
+    case "run_spend": {
+      const p = event.payload as RunSpendPayload;
+      return {
+        t,
+        kind: "run_spend",
+        runId: p.run_id,
+        agentId: p.agent_id,
+        role: p.role,
+        model: p.model,
+        usage: p.usage,
+        cost: p.cost,
+      };
+    }
     case "run_phase": {
       const p = event.payload as RunPhasePayload;
       const phase = p.phase;
@@ -399,6 +428,8 @@ export function frameFromEvent(event: SSEEvent): RunFrame | null {
         retryable: p.retryable ?? null,
         retryAfter: p.retry_after ?? null,
         debrief: p.debrief,
+        usage: p.usage,
+        cost: p.cost,
       };
     }
     case "run_cancelled": {
@@ -409,6 +440,8 @@ export function frameFromEvent(event: SSEEvent): RunFrame | null {
         runId: p.run_id,
         agentId: p.agent_id,
         reason: p.reason,
+        usage: p.usage,
+        cost: p.cost,
       };
     }
     case "run_skipped": {

@@ -4,6 +4,7 @@ vi.mock("@/services/api", () => ({
 
 import { api } from "@/services/api";
 import {
+  emptyConversationTrash,
   listConversationTrash,
   purgeTrashedConversation,
   restoreConversation,
@@ -42,6 +43,7 @@ describe("最近删除 (conversation trash)", () => {
 
     expect(get).toHaveBeenCalledWith("/v1/conversations/trash");
     expect(trash.retentionDays).toBe(30);
+    expect(trash.total).toBe(1);
     // purge_at is taken as given: re-deriving it client-side from deleted_at plus a
     // hard-coded window is how the countdown drifts from what the sweeper will do.
     expect(trash.items).toEqual([
@@ -105,5 +107,14 @@ describe("最近删除 (conversation trash)", () => {
     del.mockResolvedValue(undefined);
     await purgeTrashedConversation("c1");
     expect(del).toHaveBeenCalledWith("/v1/conversations/trash/c1");
+  });
+
+  it("empty hits the collection, not one row", async () => {
+    del.mockResolvedValue({ purged: 3, skipped_busy: 0 });
+    await expect(emptyConversationTrash()).resolves.toEqual({
+      purged: 3,
+      skippedBusy: 0,
+    });
+    expect(del).toHaveBeenCalledWith("/v1/conversations/trash");
   });
 });

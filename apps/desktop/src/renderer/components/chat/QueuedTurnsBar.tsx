@@ -3,8 +3,8 @@ import { renderInlineLabels } from "@/lib/inlineBody";
 import { notifyError } from "@/lib/toast";
 import {
   cancelQueuedTurn,
+  deliverQueuedTurnToCaptain,
   reorderQueuedTurns,
-  stopAndSendQueuedTurn,
 } from "@/services/turns/cancelQueuedTurn";
 import { type QueuedTurnEntry, useQueuedTurns } from "@/stores/queuedTurns";
 import { GripVertical, Loader2, X } from "lucide-react";
@@ -27,7 +27,8 @@ interface QueueEditDraft {
 
 /**
  * 排队挂件：生成中再发先挂在输入框上方。
- * 点行编辑正文、附件和 @；停止并发送 / 取消都在这里；两条以上可拖动改顺序。
+ * 点行编辑正文、附件和 @。团队还在时可以「送给主管」。取消仍在。
+ * 两条以上可拖动改顺序。整轮停在输入框「停止生成」，停完队首那句自己开跑。
  * 时间线用户泡等到出队再出现，所以单条也画，不跟气泡重复一套按钮。
  */
 export function QueuedTurnsBar({
@@ -51,7 +52,6 @@ export function QueuedTurnsBar({
     : undefined;
   const orphan = Boolean(session && (session.detached || !live));
   if (!conversationId || (items.length === 0 && !session)) return null;
-  const stopSendLabel = teamLive ? "停掉团队并发送" : "停止并发送";
 
   const onDropOn = (targetId: string, draggedId: string) => {
     if (!draggedId || draggedId === targetId) return;
@@ -119,7 +119,7 @@ export function QueuedTurnsBar({
             key={item.queueId}
             item={item}
             canDrag={items.length > 1 && !session}
-            stopSendLabel={stopSendLabel}
+            toCaptain={teamLive}
             onDropOn={onDropOn}
             onEdit={() => openEdit(item)}
           />
@@ -132,13 +132,13 @@ export function QueuedTurnsBar({
 function QueuedTurnRow({
   item,
   canDrag,
-  stopSendLabel,
+  toCaptain,
   onDropOn,
   onEdit,
 }: {
   item: QueuedTurnEntry;
   canDrag: boolean;
-  stopSendLabel: string;
+  toCaptain: boolean;
   onDropOn: (targetId: string, draggedId: string) => void;
   onEdit: () => void;
 }) {
@@ -213,22 +213,29 @@ function QueuedTurnRow({
         排队中
         {fromInterjection ? " · 来自你的插话" : ""}：{preview}
       </button>
-      <button
-        type="button"
-        className="shrink-0 rounded-lg px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-        aria-label={stopSendLabel}
-        title="停掉当前回合，这条马上开跑；排在后面的仍留在队里"
-        disabled={busy}
-        data-testid="queued-turn-stop-send"
-        onClick={() =>
-          void run(
-            () => stopAndSendQueuedTurn(item.conversationId, item.queueId),
-            "停止并发送失败",
-          )
-        }
-      >
-        {stopSendLabel}
-      </button>
+      {toCaptain ? (
+        <button
+          type="button"
+          className="shrink-0 rounded-lg px-1.5 py-0.5 text-xs text-foreground hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          aria-label="送给主管"
+          title="送给主管，团队继续做。主管下一拍读到，不会自动改派"
+          disabled={busy}
+          data-testid="queued-turn-to-captain"
+          onClick={() =>
+            void run(async () => {
+              const outcome = await deliverQueuedTurnToCaptain(
+                item.conversationId,
+                item.queueId,
+              );
+              if (outcome === "no_captain") {
+                notifyError("团队已经不在，这句话还在排队", "送给主管失败");
+              }
+            }, "送给主管失败")
+          }
+        >
+          送给主管
+        </button>
+      ) : null}
       <button
         type="button"
         className="shrink-0 rounded-lg p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"

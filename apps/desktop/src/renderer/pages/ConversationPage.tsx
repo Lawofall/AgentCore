@@ -3,9 +3,20 @@ import {
   ConversationHydrateOverlay,
   type ConversationHydratePhase,
 } from "@/components/chat/ConversationHydrateOverlay";
+import { ConversationSplitView } from "@/components/chat/ConversationSplitView";
 import { SidePanel } from "@/components/layout/SidePanel";
 import { SidePanelToggle } from "@/components/layout/SidePanelToggle";
-import { getConversations } from "@/hooks/useConversations";
+import {
+  getConversations,
+  useConversations,
+  useGroupedConversationsSettled,
+} from "@/hooks/useConversations";
+import { ChatPaneProvider } from "@/lib/chatPane";
+import {
+  SPLIT_MIN_PANE_PX,
+  dropMissingPanes,
+  replaceFocusedPane,
+} from "@/lib/conversationSplit";
 import { logEvent } from "@/lib/log";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import {
@@ -37,13 +48,14 @@ import {
   useConversationStore,
   windowHasSlimJournal,
 } from "@/stores/conversation";
+import { useConversationSplitStore } from "@/stores/conversationSplit";
 import {
   WORKSPACE_TAB_ID,
   dismissFocusedFloat,
   useSidePanelStore,
 } from "@/stores/sidePanel";
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
 function hasOpenDestination(conversationId: string): boolean {
   const pending = useConversationStore.getState().pendingFocus;
@@ -115,6 +127,8 @@ function sliceHasVisibleContent(id: string): boolean {
 
 export function ConversationPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const frameRef = useRef<HTMLDivElement>(null);
   // Cold open with `:id` must not paint one ready frame of empty draft before the
   // effect flips to loading (ConversationHydrateOverlay purpose). Draft `/` stays ready.
   const [hydratePhase, setHydratePhase] = useState<ConversationHydratePhase>(
@@ -129,8 +143,8 @@ export function ConversationPage() {
     const store = useConversationStore.getState();
     // 索引路由 `/` = 新草稿：丢弃上一条已打开的会话，渲染空白对话。这样无论从哪个
     // 入口落到 `/`（导航「对话」、Ctrl/Cmd+N、刷新直达），看到的都是新对话，而不是
-    // store 里残留的上次对话。draftWorkspaceIntent 不在这里碰——那是「新建对话」入口
-    // 设置的落库目标（见 startNewConversation），清掉会破坏「全部对话」按项目新建。
+    // store 里残留的上次对话。draftWorkspaceIntent 不在这里碰——侧栏文件夹菜单、
+    // 打开本机文件夹等入口已经写好落库目标（见 startNewConversation），清掉会丢掉。
     if (!id) {
       if (store.currentConversationId !== null) store.switchConversation(null);
       syncConversationFollow(null);
@@ -362,6 +376,45 @@ export function ConversationPage() {
     };
   }, [id, hydrateRetry]);
 
+  // 路由是焦点栏。单击、1–9、后退都先落到路由，再把分屏里的焦点栏换成它。
+  useLayoutEffect(() => {
+    const { split, setSplit } = useConversationSplitStore.getState();
+    const next = replaceFocusedPane(split, id ?? null);
+    if (next !== split) setSplit(next);
+  }, [id]);
+
+  const conversations = useConversations();
+  const conversationsSettled = useGroupedConversationsSettled();
+  useEffect(() => {
+    if (!conversationsSettled) return;
+    const known = new Set(conversations.map((c) => c.id));
+    const { split, setSplit } = useConversationSplitStore.getState();
+    const dropped = dropMissingPanes(split, (cid) => known.has(cid));
+    if (dropped.split !== split) setSplit(dropped.split);
+    if (dropped.navigateTo === "stay") return;
+    if (dropped.navigateTo) navigate(`/conversations/${dropped.navigateTo}`);
+    else navigate("/");
+  }, [conversations, conversationsSettled, navigate]);
+
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el) return;
+    const apply = () => {
+      useConversationSplitStore
+        .getState()
+        .setRoomFits(el.clientWidth >= SPLIT_MIN_PANE_PX * 2);
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      useConversationSplitStore
+        .getState()
+        .setRoomFits(window.innerWidth >= 1280);
+    };
+  }, []);
+
   // Page-scoped shortcuts for the single side panel: Ctrl/Cmd+I shows / hides it
   // (keeping the active tab), Ctrl/Cmd+J reveals it straight on the 工作区 home
   // tab. Scoped here (not the global shell) as both are only meaningful on the
@@ -403,21 +456,42 @@ export function ConversationPage() {
   // （有会话时 Ctrl/Cmd+I；草稿不可用）。
   const panelOpen = useSidePanelStore((s) => s.open);
   const { isNarrow } = useNarrowLayoutState();
+  const split = useConversationSplitStore((s) => s.split);
+  const roomFits = useConversationSplitStore((s) => s.roomFits);
+  const showSplit = Boolean(split) && roomFits && !isNarrow;
+  const padDockToggle = Boolean(id && !panelOpen && !isNarrow);
 
   return (
     <>
-      <ChatView />
-      {id && (
-        <ConversationHydrateOverlay
-          phase={hydratePhase}
-          onRetry={() => setHydrateRetry((n) => n + 1)}
-        />
-      )}
-      {id && !panelOpen && !isNarrow && (
-        <div className="absolute right-3 top-2 z-20">
-          <SidePanelToggle />
-        </div>
-      )}
+      <div
+        ref={frameRef}
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+      >
+        {showSplit ? (
+          <ConversationSplitView
+            routeHydratePhase={hydratePhase}
+            onRouteHydrateRetry={() => setHydrateRetry((n) => n + 1)}
+            showDockToggle={padDockToggle}
+          />
+        ) : (
+          <ChatPaneProvider id={id ?? null}>
+            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+              <ChatView />
+              {id && (
+                <ConversationHydrateOverlay
+                  phase={hydratePhase}
+                  onRetry={() => setHydrateRetry((n) => n + 1)}
+                />
+              )}
+            </div>
+          </ChatPaneProvider>
+        )}
+        {padDockToggle && !showSplit && (
+          <div className="absolute right-3 top-2 z-20">
+            <SidePanelToggle />
+          </div>
+        )}
+      </div>
       {/* 草稿不挂右坞（不出现、不能打开）；有会话才挂载。 */}
       {id && <SidePanel />}
     </>

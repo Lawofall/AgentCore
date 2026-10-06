@@ -191,12 +191,11 @@ async def _wire_continuation_toolset(
         if desktop_online
         else None
     )
-    from agentcore.tools.mcp import discover_mcp_tools, mcp_capability_label, register_mcp_tools
+    from agentcore.tools.mcp import discover_mcp_tools, register_mcp_tools
 
     mcp_discover = await discover_mcp_tools(
         desktop_channel, cache_scope=user_id, cache_only=True
     )
-    mcp_label = mcp_capability_label(mcp_discover, desktop_online=desktop_online)
     skill_registry = build_system_skill_registry()
     from agentcore.runtime.pipeline.prepare import _timed_phase
     from agentcore.tools.sandbox.desk_provision import provision_server_desk
@@ -347,8 +346,6 @@ async def _wire_continuation_toolset(
         desktop_online=desktop_online,
         exec_languages=exec_languages,
         permission_axes=permission_axes,
-        mcp_enabled=mcp_discover.tool_count > 0,
-        mcp_label=mcp_label,
         git_fact=git_fact,
         desk_folder_id=sitting_folder_id,
         desk_folder_label=(getattr(backend, "root_label", None) or "").strip() or None,

@@ -24,7 +24,6 @@ from agentcore.core.types import new_id
 from agentcore.costing import (
     COST_KEYS,
     PERSONA_CEO,
-    PERSONA_DESCRIPTION,
     PERSONA_REWRITE,
     ROLE_ARENA,
     ROLE_ASSIST,
@@ -56,7 +55,6 @@ __all__ = [
     "COST_KEYS",
     "USAGE_KEYS",
     "PERSONA_CEO",
-    "PERSONA_DESCRIPTION",
     "PERSONA_REWRITE",
     "ROLE_ARENA",
     "ROLE_ASSIST",

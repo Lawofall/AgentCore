@@ -45,12 +45,6 @@ MAX_WORKER_SUBDELEGATIONS = 4
 DEFAULT_CONTRACT_RETRIES = 1
 MAX_CONTRACT_RETRIES = 3
 
-# 带现场续派（乙）唤回闸：一条作者链累计可被续写（CEO continue_from_run_id + redirect
-# 热修共用）的次数上限，防无限打磨；辩论编排续写豁免（轮次上限归 RoundPolicy）。参照
-# contract 的「一次自动返工」略宽到 3；超限后续派项拒绝并提示回落甲（冷 delegate）。
-# → 见设计: docs/03-AI核心/多轮编排与同人续派.md §四 §五
-DEFAULT_RECALL_LIMIT = 3
-
 # 留人 roster（乙 续派）内存治理 (P2)：进程内留住 worker session 供【跨回合】带现场续派，
 # 对齐 approvals / channel / locks 的单机 posture（多进程扩展时换 Redis）。三道闸防内存
 # 无界增长 + 一道闸防跨会话泄漏：

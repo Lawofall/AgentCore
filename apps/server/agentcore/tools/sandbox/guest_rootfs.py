@@ -20,8 +20,9 @@ DEFAULT_GUEST_ROOTFS = "/opt/agentcore/guest-rootfs"
 MARKER_NAME = ".agentcore-guest-rootfs"
 HOST_USERLAND_PATHS = frozenset({"/usr", "/lib", "/lib64", "/bin", "/etc"})
 
-# Model-facing PATH inventory of the packed guest (Dockerfile guest stage).
-# Absence is implied by this list; do not maintain a denylist here.
+# Notable commands present on the packed guest (Dockerfile guest stage).
+# Not a closed PATH: Debian slim still has coreutils. Do not add a denylist
+# to the prompt.
 CLOUD_GUEST_SURFACE: tuple[str, ...] = (
     "python3",
     "node",

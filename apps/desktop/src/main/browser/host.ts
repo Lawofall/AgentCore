@@ -8,7 +8,8 @@
  * - 导航策略见 navigation.ts（按 web | workspace 模式）；
  * - web `window.open`：popup → 同 partition 子窗；target=_blank → 同壳新页签（见 openTab IPC）。
  *
- * 多页：一 client pageId 一 view；仅激活页 show+bounds，其余 hide；关页销毁 view。
+ * 多页：一 client pageId 一 view；仅激活页对用户可见。脱离附着仍保留
+ * 1280×800 布局视口并关闭后台计时器节流，不缩成 1×1。关页销毁 view。
  * 同 pageId 在 http(s) ↔ workspace 间切换时销毁重建以换 partition。
  * Bridge（sidecar）经 {@link bridgeDispatchLocalBrowser} 驱动同一套页（pageId = session_id）。
  */
@@ -41,11 +42,24 @@ import {
   normalizeBrowserConversationId,
 } from "./paths";
 import {
+  bindLocalWorkspaceRoot,
+  clearAllLocalWorkspaceRoots,
+  clearLocalWorkspaceRoot,
+  consumeWorkspaceDocumentStatus,
+} from "./workspace-local-files";
+import {
   isWorkspaceBrowserUrl,
   resolveWorkspaceHtmlUrl,
   workspacePartitionFor,
 } from "./workspace-paths";
 import { registerWorkspaceProtocolFor } from "./workspace-protocol";
+
+/** 脱离右坞时的布局视口，与沙箱浏览器默认 1280×800 对齐。 */
+const AGENT_VIEWPORT = { x: 0, y: 0, width: 1280, height: 800 } as const;
+
+function parkDetachedViewport(view: WebContentsView): void {
+  view.setBounds({ ...AGENT_VIEWPORT });
+}
 
 interface PageView {
   pageId: string;
@@ -457,9 +471,13 @@ function createPageView(
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: false,
+      // 脱离右坞时页面仍在跑：关节流，导航不抢聊天框焦点。
+      backgroundThrottling: false,
+      focusOnNavigation: false,
       // 刻意不挂 preload —— 浏览页不得拿应用 IPC。
     },
   });
+  view.webContents.setBackgroundThrottling?.(false);
   lockLocalBrowserNavigation(
     view.webContents,
     kind,
@@ -469,6 +487,7 @@ function createPageView(
   view.webContents.on("did-navigate-in-page", () => pushNavState(pageId));
   view.webContents.on("page-title-updated", () => pushNavState(pageId));
   setPageVisible(pageId, view, false);
+  parkDetachedViewport(view);
   win.contentView.addChildView(view);
   void view.webContents.loadURL(LOCAL_BROWSER_BLANK);
   return view;
@@ -576,7 +595,9 @@ function ensurePageKind(
 
 function hideAllViews(): void {
   for (const [pageId, { view }] of pages) {
-    if (!view.webContents.isDestroyed()) setPageVisible(pageId, view, false);
+    if (view.webContents.isDestroyed()) continue;
+    setPageVisible(pageId, view, false);
+    parkDetachedViewport(view);
   }
 }
 
@@ -609,6 +630,7 @@ export function closeAllLocalBrowserPages(): void {
   hostWin = null;
   activePageId = null;
   attachmentGeneration += 1;
+  clearAllLocalWorkspaceRoots();
 }
 
 /**
@@ -622,6 +644,7 @@ export function closeConversationBrowserPages(conversationId: string): void {
     .filter(([, e]) => e.conversationId === cid)
     .map(([id]) => id);
   for (const id of ids) destroyPageView(id);
+  clearLocalWorkspaceRoot(cid);
 }
 
 /** 测试接缝：某对话存活 popup 子窗数量。 */
@@ -907,8 +930,8 @@ function ensurePageForBridge(
   hostWin = win;
   ensureHostCleanup(win);
   const view = createPageView(win, id, "web", cid);
-  // 隐藏占位：Agent 驱动时可先不 show；用户打开右坞后再 setBounds。
-  view.setBounds({ x: 0, y: 0, width: 1, height: 1 });
+  // 隐藏但保持真实布局视口：右坞 show 时再换成面板 bounds。
+  parkDetachedViewport(view);
   setPageVisible(id, view, false);
   const entry: PageView = {
     pageId: id,
@@ -934,22 +957,69 @@ async function pageMeta(
 }
 
 /** capturePage → jpeg base64 + device pixel size（live / keyframe 共用）. */
+function jpegFromImage(
+  img: {
+    isEmpty: () => boolean;
+    getSize: () => { width: number; height: number };
+    toJPEG: (quality: number) => Uint8Array;
+  },
+  quality: number,
+): { frame_b64: string; width: number; height: number } | undefined {
+  if (img.isEmpty()) return undefined;
+  const size = img.getSize();
+  if (size.width === 0 || size.height === 0) return undefined;
+  const q = Math.min(100, Math.max(1, Math.round(quality)));
+  const jpeg = img.toJPEG(q);
+  return {
+    frame_b64: Buffer.from(jpeg).toString("base64"),
+    width: size.width,
+    height: size.height,
+  };
+}
+
+async function tryCapturePage(
+  entry: PageView,
+  quality: number,
+): Promise<{ frame_b64: string; width: number; height: number } | undefined> {
+  if (typeof entry.view.webContents.capturePage !== "function")
+    return undefined;
+  try {
+    const img = await entry.view.webContents.capturePage();
+    return jpegFromImage(img, quality);
+  } catch {
+    return undefined;
+  }
+}
+
+/** capturePage → jpeg base64 + device pixel size（live / keyframe 共用）. */
 async function captureJpegFrame(
   entry: PageView,
   quality = 70,
 ): Promise<{ frame_b64: string; width: number; height: number } | undefined> {
-  try {
-    const img = await entry.view.webContents.capturePage();
-    const size = img.getSize();
-    const q = Math.min(100, Math.max(1, Math.round(quality)));
-    const jpeg = img.toJPEG(q);
-    return {
-      frame_b64: Buffer.from(jpeg).toString("base64"),
-      width: size.width,
-      height: size.height,
-    };
-  } catch {
+  const first = await tryCapturePage(entry, quality);
+  if (first) return first;
+  // 右坞没打开时隐藏页往往没有合成画面。短暂挪到窗口外再截，不改附着态。
+  if (pageVisible.get(entry.pageId)) return undefined;
+  if (typeof entry.view.webContents.capturePage !== "function")
     return undefined;
+  const view = entry.view;
+  const prev = view.getBounds();
+  view.setBounds({
+    x: -16000,
+    y: -16000,
+    width: AGENT_VIEWPORT.width,
+    height: AGENT_VIEWPORT.height,
+  });
+  view.setVisible(true);
+  try {
+    await new Promise((r) => setTimeout(r, 50));
+    return await tryCapturePage(entry, quality);
+  } finally {
+    // show 若在这 50ms 里把页挂回右坞，附着标记已是 true，不要再藏起来。
+    if (!pageVisible.get(entry.pageId)) {
+      view.setVisible(false);
+      view.setBounds(prev);
+    }
   }
 }
 
@@ -996,26 +1066,6 @@ async function bumpSnapshotAndState(
   return state;
 }
 
-async function waitLoad(wc: WebContents, timeoutMs: number): Promise<void> {
-  if (wc.isLoadingMainFrame()) {
-    await new Promise<void>((resolve) => {
-      const t = setTimeout(() => {
-        wc.removeListener("did-finish-load", onLoad);
-        wc.removeListener("did-fail-load", onFail);
-        resolve();
-      }, timeoutMs);
-      const done = () => {
-        clearTimeout(t);
-        resolve();
-      };
-      const onLoad = () => done();
-      const onFail = () => done();
-      wc.once("did-finish-load", onLoad);
-      wc.once("did-fail-load", onFail);
-    });
-  }
-}
-
 /**
  * Bridge 派发：与 sandbox browser driver 动作语义对齐（含 console 只读证据）。
  * pageId = Registry session_id；conversationId 强制。
@@ -1026,6 +1076,9 @@ export async function bridgeDispatchLocalBrowser(
   args: Record<string, unknown>,
   conversationId: string,
 ): Promise<BridgeHostResult> {
+  if (typeof args.workspaceRoot === "string") {
+    bindLocalWorkspaceRoot(conversationId, args.workspaceRoot);
+  }
   const ensured = ensurePageForBridge(pageId, conversationId);
   if ("ok" in ensured && ensured.ok === false) return ensured;
   const entry = ensured as PageView;
@@ -1061,17 +1114,45 @@ export async function bridgeDispatchLocalBrowser(
           entry.conversationId,
         );
         const wcNav = page.view.webContents;
-        const load = wcNav.loadURL(target);
-        await Promise.race([
-          load,
-          new Promise<void>((r) =>
-            setTimeout(r, Number(args.timeout_ms ?? 45_000)),
-          ),
-        ]);
-        await waitLoad(wcNav, 5_000);
+        let navCode: number | null = null;
+        const onNav = (_event: unknown, _url: string, code: number) => {
+          if (typeof code === "number" && code >= 100 && code < 600) {
+            navCode = code;
+          }
+        };
+        wcNav.on("did-navigate", onNav);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const rawTimeout = Number(args.timeout_ms ?? 45_000);
+          const timeoutMs =
+            Number.isFinite(rawTimeout) && rawTimeout > 0 ? rawTimeout : 45_000;
+          await Promise.race([
+            wcNav.loadURL(target),
+            new Promise<never>((_resolve, reject) => {
+              timer = setTimeout(
+                () => reject(new Error("navigation timed out")),
+                timeoutMs,
+              );
+            }),
+          ]);
+        } finally {
+          if (timer !== undefined) clearTimeout(timer);
+          wcNav.removeListener("did-navigate", onNav);
+        }
         const capture = args.capture !== false;
         const data = await bumpSnapshotAndState(page, { capture });
-        data.http_status = null;
+        const landed = wcNav.getURL() || target;
+        const recorded = consumeWorkspaceDocumentStatus(
+          page.conversationId,
+          landed,
+        );
+        // workspace:// 的状态由协议处理函数记下（did-navigate 对自定义协议常为 -1，
+        // 偶发还会把错误文档报成 200）。http(s) 用导航事件上的状态码。
+        const workspaceNav =
+          isWorkspaceBrowserUrl(landed) || isWorkspaceBrowserUrl(target);
+        data.http_status = workspaceNav
+          ? (recorded ?? navCode)
+          : (navCode ?? recorded);
         pushNavState(page.pageId);
         return { ok: true, data };
       }

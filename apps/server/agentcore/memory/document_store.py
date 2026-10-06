@@ -42,7 +42,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agentcore.core.logging import get_logger
 from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import DocumentRepository
-from agentcore.documents.description import maybe_schedule_description_fill
 from agentcore.memory.always_quota import (
     AlwaysQuotaExceededError,
     notify_always_quota_exceeded,
@@ -226,7 +225,7 @@ class DocumentMemoryStore:
         role, apply_mode = _classify(path)
         async with self._repo() as repo:
             try:
-                note = await repo.save_memory_note(
+                await repo.save_memory_note(
                     user_id,
                     path,
                     markdown,
@@ -238,17 +237,6 @@ class DocumentMemoryStore:
             except AlwaysQuotaExceededError as exc:
                 await notify_always_quota_exceeded(user_id, exc)
                 raise
-        if apply_mode == "on_demand":
-            # An on-demand topic reaches the model as NAME + description only, so a topic
-            # with no description is effectively unfindable. Always-injected cores ride the
-            # prompt whole and need none.
-            maybe_schedule_description_fill(
-                document_id=note.id,
-                user_id=user_id,
-                kind=note.kind,
-                description=note.description or "",
-                content=note.content,
-            )
 
     async def delete(self, user_id: str, path: str, scope: MemoryScope = None) -> None:
         creds = self._account_cloud_creds()

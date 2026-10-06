@@ -1,23 +1,19 @@
 """Model combination profiles (模型组合) — CRUD + expand as a **derived query layer**.
 
 A profile is ``{main, worker?, background?, vision?}`` plus optional vendor
-``reasoning_effort``. Empty worker / background =
+``reasoning_effort`` and optional ``context_budget`` (NULL = model window).
+Empty worker / background =
 follow_main. The ``vision`` column is unused by live turns (images ride
 ``main``); CRUD still round-trips the field so existing rows / duplicate-profile
 do not invent a second reader.
 
 **Not a model-metadata owner.** Platform 上架 / display enrichment live in
-:mod:`agentcore.llm.catalog` (+ :mod:`agentcore.llm.model_metadata`). System presets
-are virtual well-known ids **projected** from
-:func:`agentcore.llm.catalog.platform_listable_model_ids` (recognition) /
-:func:`agentcore.llm.catalog.visible_platform_listable_model_ids` (list / select).
-Each listable platform model id → one system combo (main = that platform model;
-worker / background / vision follow-null). Combo names come from
-:func:`agentcore.llm.catalog.platform_model_label` — display name **plus** curated
-badge, since a combo name is a lone string and the free / priced SKUs of one model
-share a display name. Stable ids use
-``uuid5(NAMESPACE_URL, "agentcore:platform-preset:{model_id}")`` — no hardcoded
-product UUID table.
+:mod:`agentcore.llm.catalog` (+ :mod:`agentcore.llm.model_metadata`). The official
+list is three capability recipes (极简 / 轻量 / 完整); ids are
+``uuid5(NAMESPACE_URL, "agentcore:capability-preset:{chat|web|full}")``. Each uses
+the platform default model (or the first visible 上架 id). Older
+``uuid5(…, "agentcore:platform-preset:{model_id}")`` ids still resolve so a pin
+from that projection can materialize, and they are not listed.
 
 Distinct from scenario ``ProfileParams`` (temperature / rounds) in ``llm/profiles.py``.
 """
@@ -41,6 +37,7 @@ from agentcore.db.repositories import (
 )
 from agentcore.db.repositories._base import _UNSET
 from agentcore.llm.byok_provider_presets import seed_model_for_base_url
+from agentcore.llm.context_budget import normalize_context_budget, snap_context_budget
 from agentcore.llm.profiles import PLATFORM_MODEL_FLASH
 from agentcore.llm.resolve import ModelOrigin, ModelSelection
 
@@ -73,20 +70,54 @@ class ExpandedProfile:
     background: ModelSelection | None = None
     vision: ModelSelection | None = None
     reasoning_effort: str | None = None
+    # Shorter than the main model's window. None = that model's catalog window.
+    context_budget: int | None = None
 
 
 @dataclass(frozen=True)
 class ModelProfileView:
+    """One assembly, including its model columns."""
+
     id: str
     name: str
     kind: ProfileKind
-    main: ProfileSlot
+    is_default: bool = False
+    # chat | web | full while the official recipe is still locked. None once
+    # tools, the envelope, the factory catalog, or plugs are edited.
+    recipe: str | None = None
+    warnings: tuple[str, ...] = ()
+    enabled_mcp_server_ids: tuple[str, ...] = ()
+    omit_factory_catalog: bool = False
+    main: ProfileSlot | None = None
     worker: ProfileSlot | None = None
     background: ProfileSlot | None = None
     vision: ProfileSlot | None = None
     reasoning_effort: str | None = None
-    is_default: bool = False
-    warnings: tuple[str, ...] = ()
+    context_budget: int | None = None
+
+
+def _locked_recipe_key(row: object) -> str | None:
+    """Recipe key still on this owned row, or None once it has been released."""
+    from agentcore.assembly.recipes import capability_recipe_for_key
+
+    recipe = capability_recipe_for_key(getattr(row, "recipe", None))
+    if recipe is None:
+        return None
+    return recipe.key
+
+
+def _mcp_server_ids(raw: object) -> tuple[str, ...]:
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in raw:
+        server_id = str(item).strip()
+        if not server_id or server_id in seen:
+            continue
+        seen.add(server_id)
+        out.append(server_id)
+    return tuple(out)
 
 
 def platform_preset_id(model_id: str) -> str:
@@ -108,20 +139,40 @@ def system_presets() -> dict[str, str]:
     return {platform_preset_id(mid): mid for mid in platform_listable_model_ids()}
 
 
-def system_profile_default_id() -> str | None:
-    """Logical default preset: ``PLATFORM_MODEL`` if listable, else first system preset."""
-    presets = system_presets()
-    if not presets:
+def _capability_main_model_id() -> str | None:
+    """Platform default when it is visible, else the first visible 上架 id."""
+    from agentcore.llm.catalog import visible_platform_listable_model_ids
+
+    visible = list(visible_platform_listable_model_ids())
+    if not visible:
         return None
     platform_model = (settings.platform_model or "").strip() or PLATFORM_MODEL_FLASH
-    for pid, mid in presets.items():
-        if mid == platform_model:
-            return pid
-    return next(iter(presets))
+    if platform_model in visible:
+        return platform_model
+    return visible[0]
+
+
+def system_profile_default_id() -> str:
+    """Logical default assembly: the 完整 recipe. Its model is copied on materialize."""
+    from agentcore.assembly.recipes import FULL, capability_preset_id
+
+    return capability_preset_id(FULL)
 
 
 def is_system_profile_id(profile_id: str | None) -> bool:
-    return bool(profile_id) and profile_id in system_presets()
+    """True for an official capability recipe. Legacy per-model ids are slots."""
+    if not profile_id:
+        return False
+    from agentcore.assembly.recipes import capability_recipe_for_id
+
+    return capability_recipe_for_id(profile_id) is not None
+
+
+def _recipe_key_hidden(profile_id: str, hidden: frozenset[str]) -> bool:
+    from agentcore.assembly.recipes import capability_recipe_for_id
+
+    recipe = capability_recipe_for_id(profile_id)
+    return recipe is not None and recipe.key in hidden
 
 
 def _system_preset_display_name(model_id: str) -> str:
@@ -131,18 +182,15 @@ def _system_preset_display_name(model_id: str) -> str:
 
 
 def _visible_system_ids() -> list[str]:
-    """System preset ids currently listable (= catalog visible 上架 projection)."""
-    from agentcore.llm.catalog import visible_platform_listable_model_ids
+    """Official recipes. Listing does not depend on a platform model."""
+    from agentcore.assembly.recipes import CAPABILITY_ORDER, capability_preset_id
 
-    return [platform_preset_id(mid) for mid in visible_platform_listable_model_ids()]
+    return [capability_preset_id(key) for key in CAPABILITY_ORDER]
 
 
 def _system_preset_available(profile_id: str) -> bool:
-    """True when this system preset may appear in list / be selected.
-
-    Derived solely from catalog's visible 上架 set (no parallel gate).
-    """
-    return profile_id in set(_visible_system_ids())
+    """Official recipes stay selectable. Model availability is the slot's concern."""
+    return is_system_profile_id(profile_id)
 
 
 def resolve_system_preset_main(profile_id: str) -> ModelSelection:
@@ -249,44 +297,70 @@ class LlmModelProfileService:
         user = await self._users.get_by_id(user_id)
         if user is None:
             return None
-        return getattr(user, "default_model_profile_id", None)
+        return getattr(user, "default_assembly_id", None)
+
+    async def _hidden_recipe_keys(self, user_id: str) -> frozenset[str]:
+        keys = await self._users.hidden_capability_recipe_keys(user_id)
+        return frozenset(keys)
 
     def _view_system(self, profile_id: str, *, is_default: bool) -> ModelProfileView:
-        model_id = system_presets()[profile_id]
-        main = resolve_system_preset_main(profile_id)
+        from agentcore.assembly.recipes import capability_recipe_for_id
+
+        recipe = capability_recipe_for_id(profile_id)
+        assert recipe is not None
+        model_id = _capability_main_model_id()
+        main = (
+            ProfileSlot(origin="platform", model=model_id, provider_id=None)
+            if model_id
+            else None
+        )
         return ModelProfileView(
             id=profile_id,
-            name=_system_preset_display_name(model_id),
+            name=recipe.name,
             kind="system",
-            main=ProfileSlot(
-                origin=main.origin, model=main.model, provider_id=main.provider_id
-            ),
-            worker=None,
-            background=None,
-            vision=None,
-            reasoning_effort=None,
             is_default=is_default,
+            recipe=recipe.key,
+            omit_factory_catalog=recipe.omit_factory_catalog,
+            main=main,
         )
 
     def _view_row(self, row: LlmModelProfile, *, is_default: bool) -> ModelProfileView:
-        main = _slot_from_row(row.main_origin, row.main_model, row.main_provider_id)
-        assert main is not None  # DB requires main_model
+        main = _slot_from_row(
+            getattr(row, "main_origin", None),
+            getattr(row, "main_model", None),
+            getattr(row, "main_provider_id", None),
+        )
         return ModelProfileView(
             id=row.id,
             name=row.name,
             kind=row.kind if row.kind in ("user", "implicit") else "user",  # type: ignore[arg-type]
+            is_default=is_default,
+            recipe=_locked_recipe_key(row),
+            enabled_mcp_server_ids=_mcp_server_ids(
+                getattr(row, "enabled_mcp_server_ids", None)
+            ),
+            omit_factory_catalog=bool(getattr(row, "omit_factory_catalog", False)),
             main=main,
             worker=_slot_from_row(
-                row.worker_origin, row.worker_model, row.worker_provider_id
+                getattr(row, "worker_origin", None),
+                getattr(row, "worker_model", None),
+                getattr(row, "worker_provider_id", None),
             ),
             background=_slot_from_row(
-                row.background_origin, row.background_model, row.background_provider_id
+                getattr(row, "background_origin", None),
+                getattr(row, "background_model", None),
+                getattr(row, "background_provider_id", None),
             ),
             vision=_slot_from_row(
-                row.vision_origin, row.vision_model, row.vision_provider_id
+                getattr(row, "vision_origin", None),
+                getattr(row, "vision_model", None),
+                getattr(row, "vision_provider_id", None),
             ),
             reasoning_effort=getattr(row, "reasoning_effort", None),
-            is_default=is_default,
+            context_budget=snap_context_budget(
+                main.model if main is not None else "",
+                getattr(row, "context_budget", None),
+            ),
         )
 
     def _visible_system_ids(self) -> list[str]:
@@ -312,22 +386,187 @@ class LlmModelProfileService:
             for v in views
         ]
 
-    async def list_profiles(self, user_id: str) -> list[ModelProfileView]:
+    async def _capture_legacy_model_star(self, user_id: str) -> None:
+        """A leftover per-model preset id is not an assembly. Move the star to 完整."""
         default_id = await self._default_id(user_id)
+        if not default_id or is_system_profile_id(default_id):
+            return
+        if default_id not in system_presets():
+            return
+        from agentcore.llm.catalog import visible_platform_listable_model_ids
+
+        model_id = system_presets()[default_id]
+        await self._users.set_default_model_profile(user_id, system_profile_default_id())
+        if model_id not in set(visible_platform_listable_model_ids()):
+            return
+        real_id = await self._materialize_preset(
+            user_id, system_profile_default_id(), set_as_default=True
+        )
+        await self.update_profile(
+            user_id,
+            real_id,
+            main=ProfileSlot(origin="platform", model=model_id, provider_id=None),
+            fields_set={"main"},
+        )
+
+    async def list_profiles(self, user_id: str) -> list[ModelProfileView]:
+        await self._capture_legacy_model_star(user_id)
+        default_id = await self._default_id(user_id)
+        hidden = await self._hidden_recipe_keys(user_id)
         views = [
             self._view_system(pid, is_default=False)
             for pid in self._visible_system_ids()
+            if not _recipe_key_hidden(pid, hidden)
         ]
         for row in await self._repo.list_for_user(user_id, include_implicit=False):
             views.append(self._view_row(row, is_default=False))
         return self._mark_default(views, default_id)
 
     async def snapshot_default_profile_id(self, user_id: str) -> str | None:
-        """Profile id to pin on a new conversation (account default / logical preset)."""
-        for view in await self.list_profiles(user_id):
-            if view.is_default:
-                return view.id
-        return None
+        """Real assembly id to pin on a new conversation.
+
+        A virtual system preset is materialized into a per-user row first.
+        The stored id is never a preset uuid.
+        """
+        await self._capture_legacy_model_star(user_id)
+        hidden = await self._hidden_recipe_keys(user_id)
+        default_id = await self._default_id(user_id)
+        if default_id and not is_system_profile_id(default_id):
+            row = await self._repo.get(default_id, user_id=user_id)
+            if row is not None:
+                return row.id
+        if (
+            default_id
+            and is_system_profile_id(default_id)
+            and not _recipe_key_hidden(default_id, hidden)
+        ):
+            return await self._materialize_preset(
+                user_id, default_id, set_as_default=True
+            )
+        visible = self._preferred_visible_preset_ids(hidden)
+        if visible:
+            return await self._materialize_preset(
+                user_id, visible[0], set_as_default=True
+            )
+        rows = await self._repo.list_for_user(user_id, include_implicit=False)
+        if rows:
+            await self._users.set_default_model_profile(user_id, rows[0].id)
+            return rows[0].id
+        # Tray can be empty. A new conversation still gets an owned 完整.
+        # The hidden chip does not come back.
+        return await self._materialize_preset(
+            user_id, system_profile_default_id(), set_as_default=True
+        )
+
+    def _preferred_visible_preset_ids(self, hidden: frozenset[str]) -> list[str]:
+        from agentcore.assembly.recipes import CHAT, FULL, WEB, capability_preset_id
+
+        picked: list[str] = []
+        for key in (FULL, WEB, CHAT):
+            preset_id = capability_preset_id(key)
+            if _recipe_key_hidden(preset_id, hidden):
+                continue
+            if _system_preset_available(preset_id):
+                picked.append(preset_id)
+        return picked
+
+    async def _materialize_preset(
+        self,
+        user_id: str,
+        preset_id: str,
+        *,
+        set_as_default: bool,
+        avoid_id: str | None = None,
+    ) -> str:
+        """Turn a virtual system preset into one owned assembly. Reuses a matching row."""
+        from agentcore.assembly.recipes import capability_recipe_for_id
+
+        if not is_system_profile_id(preset_id):
+            raise ValidationError("所选装配不存在")
+        recipe = capability_recipe_for_id(preset_id)
+        assert recipe is not None
+        return await self._materialize_capability(
+            user_id, recipe, set_as_default=set_as_default, avoid_id=avoid_id
+        )
+
+    async def _materialize_capability(
+        self,
+        user_id: str,
+        recipe: object,
+        *,
+        set_as_default: bool,
+        avoid_id: str | None = None,
+    ) -> str:
+        """Own a row for one official recipe. The recipe key stays until the user edits it."""
+        from sqlalchemy import delete
+
+        from agentcore.assembly.recipes import FULL, write_recipe
+        from agentcore.db.models import AssemblySkill
+
+        key = recipe.key  # type: ignore[attr-defined]
+        for row in await self._repo.list_for_user(user_id, include_implicit=False):
+            if row.id == avoid_id:
+                continue
+            if getattr(row, "recipe", None) == key:
+                if set_as_default:
+                    await self._users.set_default_model_profile(user_id, row.id)
+                return row.id
+        had_real_star = False
+        star_id = await self._default_id(user_id)
+        if star_id and not is_system_profile_id(star_id):
+            had_real_star = await self._repo.get(star_id, user_id=user_id) is not None
+        view = await self.create_profile(
+            user_id,
+            name=recipe.name,  # type: ignore[attr-defined]
+            set_as_default=set_as_default,
+        )
+        created = await self._repo.get(view.id, user_id=user_id)
+        assert created is not None
+        write_recipe(created, recipe)  # type: ignore[arg-type]
+        await self._session.commit()
+        await self._session.execute(
+            delete(AssemblySkill).where(AssemblySkill.assembly_id == created.id)
+        )
+        await self._session.commit()
+        if key == FULL and not had_real_star:
+            from agentcore.assembly.membership import seed_assembly_skills_from_account
+
+            await seed_assembly_skills_from_account(self._session, user_id, view.id)
+        return view.id
+
+    async def _copy_working_set(
+        self, user_id: str, source_id: str, dest: LlmModelProfile
+    ) -> None:
+        """Copy tools, envelope, plugs, and 交代 from one assembly onto another."""
+        src = await self._repo.get(source_id, user_id=user_id)
+        if src is None:
+            return
+        dest.disabled_tools = list(src.disabled_tools or [])
+        dest.omitted_projections = list(src.omitted_projections or [])
+        dest.enabled_mcp_server_ids = list(src.enabled_mcp_server_ids or [])
+        dest.omit_factory_catalog = bool(getattr(src, "omit_factory_catalog", False))
+        dest.recipe = getattr(src, "recipe", None)
+        dest.omit_desk_rules = bool(getattr(src, "omit_desk_rules", False))
+        if (getattr(src, "main_model", None) or "").strip():
+            dest.main_origin = src.main_origin
+            dest.main_provider_id = src.main_provider_id
+            dest.main_model = src.main_model
+            dest.worker_origin = src.worker_origin
+            dest.worker_provider_id = src.worker_provider_id
+            dest.worker_model = src.worker_model
+            dest.background_origin = src.background_origin
+            dest.background_provider_id = src.background_provider_id
+            dest.background_model = src.background_model
+            dest.vision_origin = src.vision_origin
+            dest.vision_provider_id = src.vision_provider_id
+            dest.vision_model = src.vision_model
+            dest.reasoning_effort = src.reasoning_effort
+            dest.context_budget = getattr(src, "context_budget", None)
+        await self._session.commit()
+        from agentcore.assembly.membership import copy_assembly_skills
+
+        await copy_assembly_skills(self._session, source_id, dest.id)
+        await self._session.refresh(dest)
 
     async def get_profile(self, user_id: str, profile_id: str) -> ModelProfileView:
         if is_system_profile_id(profile_id):
@@ -432,66 +671,26 @@ class LlmModelProfileService:
         user_id: str,
         *,
         name: str,
-        main: ProfileSlot,
-        worker: ProfileSlot | None = None,
-        background: ProfileSlot | None = None,
-        vision: ProfileSlot | None = None,
-        reasoning_effort: str | None = None,
         kind: str = "user",
         set_as_default: bool = False,
     ) -> ModelProfileView:
         name_s = (name or "").strip()
         if not name_s:
-            raise ValidationError("组合名称不能为空")
-        await self._validate_slot(user_id, main, label="main")
-        if worker is not None:
-            await self._validate_slot(user_id, worker, label="worker")
-        if background is not None:
-            await self._validate_slot(user_id, background, label="background")
-        if vision is not None:
-            await self._validate_slot(user_id, vision, label="vision")
-        effort = _normalize_reasoning_effort(main.model, reasoning_effort)
-
+            raise ValidationError("装配名称不能为空")
+        star_id = await self._default_id(user_id)
+        model_id = _capability_main_model_id() or PLATFORM_MODEL_FLASH
         row = await self._repo.create(
             user_id=user_id,
             name=name_s,
             kind=kind,
-            main_origin=main.origin,
-            main_provider_id=main.provider_id if main.origin == "byok" else None,
-            main_model=main.model.strip(),
-            worker_origin=worker.origin if worker else None,
-            worker_provider_id=(
-                worker.provider_id if worker and worker.origin == "byok" else None
-            ),
-            worker_model=worker.model.strip() if worker else None,
-            background_origin=background.origin if background else None,
-            background_provider_id=(
-                background.provider_id
-                if background and background.origin == "byok"
-                else None
-            ),
-            background_model=background.model.strip() if background else None,
-            vision_origin=vision.origin if vision else None,
-            vision_provider_id=(
-                vision.provider_id if vision and vision.origin == "byok" else None
-            ),
-            vision_model=vision.model.strip() if vision else None,
-            reasoning_effort=effort,
+            main_origin="platform",
+            main_model=model_id,
         )
+        if star_id and not is_system_profile_id(star_id) and star_id != row.id:
+            await self._copy_working_set(user_id, star_id, row)
         if set_as_default:
             await self._users.set_default_model_profile(user_id, row.id)
-        warn_slots: list[tuple[str, ProfileSlot]] = [("main", main)]
-        if worker is not None:
-            warn_slots.append(("worker", worker))
-        if background is not None:
-            warn_slots.append(("background", background))
-        if vision is not None:
-            warn_slots.append(("vision", vision))
-        warnings = await self._byok_reachability_warnings(user_id, warn_slots)
-        view = self._view_row(row, is_default=set_as_default)
-        if not warnings:
-            return view
-        return replace(view, warnings=warnings)
+        return self._view_row(row, is_default=set_as_default)
 
     async def update_profile(
         self,
@@ -499,18 +698,21 @@ class LlmModelProfileService:
         profile_id: str,
         *,
         name: str | None = None,
+        enabled_mcp_server_ids: list[str] | None = None,
+        omit_factory_catalog: bool | None = None,
         main: ProfileSlot | None = None,
         worker: ProfileSlot | None | object = _UNSET,
         background: ProfileSlot | None | object = _UNSET,
         vision: ProfileSlot | None | object = _UNSET,
         reasoning_effort: str | None | object = _UNSET,
+        context_budget: int | None | object = _UNSET,
         fields_set: set[str],
     ) -> ModelProfileView:
         if is_system_profile_id(profile_id):
             raise ValidationError("系统预置组合不可编辑")
         row = await self._repo.get(profile_id, user_id=user_id)
         if row is None:
-            raise NotFoundError("模型组合不存在")
+            raise NotFoundError("装配不存在")
         if row.kind == "implicit":
             raise ValidationError("隐式组合不可编辑，请新建用户组合")
 
@@ -518,8 +720,16 @@ class LlmModelProfileService:
         if "name" in fields_set and name is not None:
             name_s = name.strip()
             if not name_s:
-                raise ValidationError("组合名称不能为空")
+                raise ValidationError("装配名称不能为空")
             kwargs["name"] = name_s
+        if "enabled_mcp_server_ids" in fields_set:
+            kwargs["enabled_mcp_server_ids"] = list(
+                _mcp_server_ids(enabled_mcp_server_ids)
+            )
+        if "omit_factory_catalog" in fields_set and omit_factory_catalog is not None:
+            kwargs["omit_factory_catalog"] = bool(omit_factory_catalog)
+        if fields_set & {"enabled_mcp_server_ids", "omit_factory_catalog"}:
+            kwargs["recipe"] = None
         if "main" in fields_set:
             if main is None:
                 raise ValidationError("main 不能为空")
@@ -568,27 +778,40 @@ class LlmModelProfileService:
                     vision.provider_id if vision.origin == "byok" else None
                 )
                 kwargs["vision_model"] = vision.model.strip()
-
-        main_model_for_effort = kwargs.get("main_model") or row.main_model
+        main_model_for_effort = kwargs.get("main_model") or getattr(row, "main_model", "")
         if "reasoning_effort" in fields_set:
             raw = None if reasoning_effort is None else str(reasoning_effort)
             kwargs["reasoning_effort"] = _normalize_reasoning_effort(
-                main_model_for_effort, raw
+                str(main_model_for_effort), raw
             )
         elif "main" in fields_set:
-            snapped = _snap_reasoning_effort(main_model_for_effort, row.reasoning_effort)
-            if snapped != (row.reasoning_effort or None):
+            snapped = _snap_reasoning_effort(
+                str(main_model_for_effort), getattr(row, "reasoning_effort", None)
+            )
+            if snapped != (getattr(row, "reasoning_effort", None) or None):
                 kwargs["reasoning_effort"] = snapped
+        if "context_budget" in fields_set:
+            raw_budget = context_budget if isinstance(context_budget, int) else None
+            kwargs["context_budget"] = normalize_context_budget(
+                str(main_model_for_effort), raw_budget
+            )
+        elif "main" in fields_set:
+            snapped_budget = snap_context_budget(
+                str(main_model_for_effort), getattr(row, "context_budget", None)
+            )
+            stored_budget = getattr(row, "context_budget", None) or None
+            if snapped_budget != stored_budget:
+                kwargs["context_budget"] = snapped_budget
 
         updated = await self._repo.update(profile_id, user_id=user_id, **kwargs)
         assert updated is not None
         default_id = await self._default_id(user_id)
         view = self._view_row(updated, is_default=(updated.id == default_id))
-
-        slot_touched = bool(fields_set & {"main", "worker", "background", "vision"})
-        if not slot_touched:
+        if not (fields_set & {"main", "worker", "background", "vision"}):
             return view
-        warn_slots: list[tuple[str, ProfileSlot]] = [("main", view.main)]
+        warn_slots: list[tuple[str, ProfileSlot]] = []
+        if view.main is not None:
+            warn_slots.append(("main", view.main))
         if view.worker is not None:
             warn_slots.append(("worker", view.worker))
         if view.background is not None:
@@ -601,31 +824,78 @@ class LlmModelProfileService:
         return replace(view, warnings=warnings)
 
     async def delete_profile(self, user_id: str, profile_id: str) -> None:
+        """Drop an assembly. A starred one moves the star first.
+
+        An official recipe leaves the tray and stays in code. An owned row,
+        including the star, is deleted. Conversations pinned here move to
+        whatever is starred afterward.
+        """
         if is_system_profile_id(profile_id):
-            raise ValidationError("系统预置组合不可删除")
-        default_id = await self._default_id(user_id)
-        if default_id == profile_id:
-            raise ValidationError("不能删除账号默认组合，请先切换默认")
+            await self._dismiss_preset(user_id, profile_id)
+            return
         row = await self._repo.get(profile_id, user_id=user_id)
         if row is None:
             raise NotFoundError("模型组合不存在")
-        # Conversations pinned here re-pin to account default (snapshot), not live NULL.
-        from agentcore.db.repositories import ConversationRepository
-
-        fallback = default_id or system_profile_default_id()
-        await ConversationRepository(self._session).reassign_model_profile_refs(
-            user_id, profile_id, to_profile_id=fallback
-        )
+        await self._repoint_pins(user_id, profile_id)
         deleted = await self._repo.delete(profile_id, user_id=user_id)
         if not deleted:
             raise NotFoundError("模型组合不存在")
 
+    async def _dismiss_preset(self, user_id: str, profile_id: str) -> None:
+        from agentcore.assembly.recipes import capability_recipe_for_id
+
+        recipe = capability_recipe_for_id(profile_id)
+        if recipe is None:
+            raise NotFoundError("装配不存在")
+        await self._users.hide_capability_recipe(user_id, recipe.key)
+        await self._repoint_pins(user_id, profile_id)
+
+    async def _replacement_star(self, user_id: str, *, excluding: str) -> str | None:
+        """Next star after ``excluding`` leaves: another owned row, else a tray recipe."""
+        for row in await self._repo.list_for_user(user_id, include_implicit=False):
+            if row.id != excluding and row.kind == "user":
+                return row.id
+        hidden = await self._hidden_recipe_keys(user_id)
+        for preset_id in self._preferred_visible_preset_ids(hidden):
+            if preset_id == excluding:
+                continue
+            # Chats store an owned id. A tray recipe is materialized first.
+            # Do not reuse the row that is about to be deleted.
+            return await self._materialize_preset(
+                user_id,
+                preset_id,
+                set_as_default=False,
+                avoid_id=excluding,
+            )
+        return None
+
+    async def _repoint_pins(self, user_id: str, profile_id: str) -> None:
+        """Move the star off ``profile_id`` when it is the star, then retarget chats."""
+        from agentcore.db.repositories import ConversationRepository
+
+        default_id = await self._default_id(user_id)
+        if default_id == profile_id:
+            fallback = await self._replacement_star(user_id, excluding=profile_id)
+            await self._users.set_default_model_profile(user_id, fallback)
+        else:
+            fallback = default_id
+            if fallback is None:
+                fallback = await self._replacement_star(user_id, excluding=profile_id)
+        if fallback == profile_id:
+            fallback = None
+        await ConversationRepository(self._session).reassign_model_profile_refs(
+            user_id, profile_id, to_profile_id=fallback
+        )
+
     async def set_default(self, user_id: str, profile_id: str) -> ModelProfileView:
         if is_system_profile_id(profile_id):
-            if not _system_preset_available(profile_id):
-                raise ValidationError("所选系统预置当前不可用")
-            await self._users.set_default_model_profile(user_id, profile_id)
-            return self._view_system(profile_id, is_default=True)
+            real_id = await self._materialize_preset(
+                user_id, profile_id, set_as_default=True
+            )
+            row = await self._repo.get(real_id, user_id=user_id)
+            if row is None:
+                raise NotFoundError("装配不存在")
+            return self._view_row(row, is_default=True)
         row = await self._repo.get(profile_id, user_id=user_id)
         if row is None:
             raise NotFoundError("模型组合不存在")
@@ -634,80 +904,21 @@ class LlmModelProfileService:
         await self._users.set_default_model_profile(user_id, profile_id)
         return self._view_row(row, is_default=True)
 
-    async def ensure_profile_usable(self, user_id: str, profile_id: str) -> None:
-        """Raise if ``profile_id`` is not a usable system preset and not owned by the user."""
+    async def ensure_profile_usable(self, user_id: str, profile_id: str) -> str:
+        """Return an owned assembly id. A system preset is materialized first."""
         if is_system_profile_id(profile_id):
-            if not _system_preset_available(profile_id):
-                raise ValidationError("所选模型组合当前不可用")
-            return
+            return await self._materialize_preset(
+                user_id, profile_id, set_as_default=False
+            )
         row = await self._repo.get(profile_id, user_id=user_id)
         if row is None:
-            raise ValidationError("所选模型组合不存在或不属于你")
+            raise ValidationError("所选装配不存在或不属于你")
+        return profile_id
 
-    async def _expand_logical_fallback(self, user_id: str) -> ExpandedProfile:
-        """Visible BYOK combo or provider-first; name/origin match runtime (no DB write)."""
-        from agentcore.llm.catalog import platform_model_label
-
-        rows = await self._repo.list_for_user(user_id, include_implicit=False)
-        if rows:
-            return await self.expand(user_id, rows[0].id)
-        main = await _provider_first_fallback(self._session, user_id)
-        return ExpandedProfile(
-            profile_id=main.provider_id or "",
-            name=platform_model_label(main.model),
-            kind="implicit",
-            main=main,
-            worker=None,
-            background=None,
-            vision=None,
-        )
-
-    async def expand(
-        self,
-        user_id: str,
-        profile_id: str | None,
-    ) -> ExpandedProfile:
-        """Expand a profile id (or account default / platform preset) into live selections."""
-        logical_default = system_profile_default_id()
-        effective = profile_id or await self._default_id(user_id) or logical_default
-
-        if effective and is_system_profile_id(effective):
-            if not _system_preset_available(effective):
-                if (
-                    logical_default
-                    and effective != logical_default
-                    and _system_preset_available(logical_default)
-                ):
-                    return await self.expand(user_id, logical_default)
-                # Dormant / missing from allowlist — logical fallback, keep DB pin.
-                return await self._expand_logical_fallback(user_id)
-            model_id = system_presets()[effective]
-            name = _system_preset_display_name(model_id)
-            main = resolve_system_preset_main(effective)
-            return ExpandedProfile(
-                profile_id=effective,
-                name=name,
-                kind="system",
-                main=main,
-                worker=None,
-                background=None,
-                vision=None,
-            )
-
-        if not effective:
-            return await self._expand_logical_fallback(user_id)
-
-        row = await self._repo.get(effective, user_id=user_id)
-        if row is None:
-            # Dangling default / conversation pin / retired virtual id → logical default.
-            if logical_default and _system_preset_available(logical_default):
-                return await self.expand(user_id, logical_default)
-            return await self._expand_logical_fallback(user_id)
-
+    async def _expand_row(self, user_id: str, row: LlmModelProfile) -> ExpandedProfile:
         main_slot = _slot_from_row(row.main_origin, row.main_model, row.main_provider_id)
         assert main_slot is not None
         main = await _live_selection(self._session, user_id, main_slot)
-
         worker_slot = _slot_from_row(
             row.worker_origin, row.worker_model, row.worker_provider_id
         )
@@ -716,14 +927,12 @@ class LlmModelProfileService:
             if worker_slot
             else None
         )
-
         bg_slot = _slot_from_row(
             row.background_origin, row.background_model, row.background_provider_id
         )
         background = (
             await _live_selection(self._session, user_id, bg_slot) if bg_slot else None
         )
-
         vision_slot = _slot_from_row(
             row.vision_origin, row.vision_model, row.vision_provider_id
         )
@@ -732,11 +941,11 @@ class LlmModelProfileService:
             if vision_slot
             else None
         )
-
+        kind: ProfileKind = "implicit" if row.kind == "implicit" else "user"
         return ExpandedProfile(
             profile_id=row.id,
             name=row.name,
-            kind="implicit" if row.kind == "implicit" else "user",
+            kind=kind,
             main=main,
             worker=worker,
             background=background,
@@ -744,10 +953,58 @@ class LlmModelProfileService:
             reasoning_effort=_snap_reasoning_effort(
                 main.model, getattr(row, "reasoning_effort", None)
             ),
+            context_budget=snap_context_budget(
+                main.model, getattr(row, "context_budget", None)
+            ),
         )
+
+    async def _expand_platform_default(
+        self, user_id: str, profile_id: str | None
+    ) -> ExpandedProfile:
+        model_id = _capability_main_model_id()
+        if model_id is None or not platform_catalog_visible():
+            return await self._expand_logical_fallback(user_id)
+        from agentcore.assembly.recipes import capability_recipe_for_id
+
+        effective = (
+            profile_id
+            if profile_id and is_system_profile_id(profile_id)
+            else system_profile_default_id()
+        )
+        recipe = capability_recipe_for_id(effective)
+        return ExpandedProfile(
+            profile_id=effective,
+            name=recipe.name if recipe is not None else "完整",
+            kind="system",
+            main=ModelSelection(model=model_id, origin="platform", provider_id=None),
+        )
+
+    async def _expand_logical_fallback(self, user_id: str) -> ExpandedProfile:
+        from agentcore.llm.catalog import platform_model_label
+
+        main = await _provider_first_fallback(self._session, user_id)
+        return ExpandedProfile(
+            profile_id=main.provider_id or "",
+            name=platform_model_label(main.model),
+            kind="implicit",
+            main=main,
+        )
+
+    async def expand(
+        self,
+        user_id: str,
+        profile_id: str | None,
+    ) -> ExpandedProfile:
+        """Live model selection from an assembly id, or the account star."""
+        effective = profile_id or await self._default_id(user_id)
+        if effective and not is_system_profile_id(effective):
+            row = await self._repo.get(effective, user_id=user_id)
+            if row is not None and (getattr(row, "main_model", None) or "").strip():
+                return await self._expand_row(user_id, row)
+        return await self._expand_platform_default(user_id, effective)
 
     async def expand_for_conversation(
         self, user_id: str, conv
     ) -> ExpandedProfile:
-        profile_id = getattr(conv, "model_profile_id", None) or None
-        return await self.expand(user_id, profile_id)
+        assembly_id = getattr(conv, "assembly_id", None) or None
+        return await self.expand(user_id, assembly_id)

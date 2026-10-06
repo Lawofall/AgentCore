@@ -1,4 +1,4 @@
-import { useConversationStore } from "@/stores/conversation";
+import { useChatPaneId } from "@/lib/chatPane";
 import { QueuedTurnsBar } from "./QueuedTurnsBar";
 import { SteerWaitingBar } from "./SteerWaitingBar";
 import {
@@ -28,7 +28,7 @@ export function MessageInput({
   /** Flush under ApprovalPrompt in the bottom-bar 一体态. */
   attachedBelowApproval?: boolean;
 }) {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   return (
     <div className={className ?? "px-4 pb-4 pt-2"}>
       <SteerWaitingBar conversationId={conversationId} />

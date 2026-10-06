@@ -4,6 +4,7 @@ export {
   type CatalogIconShellProps,
 } from "./catalog-icon-shell";
 export {
+  ASSEMBLY_CARD_GRID_CLASS,
   CATALOG_GRID_CLASS,
   CatalogTile,
   type CatalogTileProps,

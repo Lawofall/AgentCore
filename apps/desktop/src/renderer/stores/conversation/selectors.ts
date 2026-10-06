@@ -1,7 +1,9 @@
+import { useChatPaneScope } from "@/lib/chatPaneContext";
 import { type ErrorAction, visibleMessageText } from "@/lib/errors";
 import { precedingUserMessageId } from "@/lib/supportDiagnostics";
 import type { ProcessStep } from "@/types/events";
 import {
+  DRAFT_KEY,
   activeRuntime,
   lastAssistantMessageId,
   lastAssistantProjectionId,
@@ -17,15 +19,34 @@ const NO_PROCESS: ProcessStep[] = [];
 /** Stable empty window — a fresh `[]` per closed-find/outline tick would re-render. */
 export const NO_ACTIVE_MESSAGES: Message[] = [];
 
+function usePaneSliceKey(): string {
+  const scoped = useChatPaneScope();
+  const current = useConversationStore((s) =>
+    scoped === undefined ? s.currentConversationId : null,
+  );
+  return (scoped === undefined ? current : scoped) ?? DRAFT_KEY;
+}
+
+function usePaneRuntime<T>(project: (rt: ConversationRuntime) => T): T {
+  const scoped = useChatPaneScope();
+  return useConversationStore((s) => {
+    const key =
+      scoped === undefined
+        ? (s.currentConversationId ?? DRAFT_KEY)
+        : (scoped ?? DRAFT_KEY);
+    return project(runtimeOf(s, key));
+  });
+}
+
 export const useActiveMessages = (): Message[] =>
-  useConversationStore((s) => activeRuntime(s).messages);
+  usePaneRuntime((rt) => rt.messages);
 
 /** Whether the loaded window has any bubbles — stable during a streaming tick. */
 export const useActiveHasMessages = (): boolean =>
-  useConversationStore((s) => activeRuntime(s).messages.length > 0);
+  usePaneRuntime((rt) => rt.messages.length > 0);
 
 export const useActiveFirstMessageId = (): string | null =>
-  useConversationStore((s) => activeRuntime(s).messages[0]?.id ?? null);
+  usePaneRuntime((rt) => rt.messages[0]?.id ?? null);
 
 /**
  * Stick-to-bottom key for the live tail.
@@ -48,43 +69,43 @@ export function stickContentKey(
 }
 
 export const useActiveStickContentKey = (): string =>
-  useConversationStore((s) =>
-    stickContentKey(activeRuntime(s).messages.at(-1)),
-  );
+  usePaneRuntime((rt) => stickContentKey(rt.messages.at(-1)));
 
 export const useActiveUserTurnCount = (): number =>
-  useConversationStore((s) => {
+  usePaneRuntime((rt) => {
     let n = 0;
-    for (const m of activeRuntime(s).messages) {
+    for (const m of rt.messages) {
       if (m.role === "user") n++;
     }
     return n;
   });
 
 export const useActiveLastAssistantProjectionId = (): string | null =>
-  useConversationStore((s) =>
-    lastAssistantProjectionId(activeRuntime(s).messages),
-  );
+  usePaneRuntime((rt) => lastAssistantProjectionId(rt.messages));
 
 export const usePrecedingUserMessageId = (
   assistantMessageId: string | null,
-): string | null =>
-  useConversationStore((s) => {
+): string | null => {
+  const key = usePaneSliceKey();
+  return useConversationStore((s) => {
     if (!assistantMessageId) return null;
     return precedingUserMessageId(
-      activeRuntime(s).messages,
+      runtimeOf(s, key).messages,
       assistantMessageId,
     );
   });
+};
 
 export const useActiveMessageHasVisibleText = (
   messageId: string | null,
-): boolean =>
-  useConversationStore((s) => {
+): boolean => {
+  const key = usePaneSliceKey();
+  return useConversationStore((s) => {
     if (!messageId) return false;
-    const m = activeRuntime(s).messages.find((x) => x.id === messageId);
+    const m = runtimeOf(s, key).messages.find((x) => x.id === messageId);
     return m ? Boolean(visibleMessageText(m)) : false;
   });
+};
 
 /**
  * The `content` of one message in the active conversation by id (or "" when absent /
@@ -92,13 +113,15 @@ export const useActiveMessageHasVisibleText = (
  * SidePanel content tab) re-renders only when THAT message's text changes, not on every
  * streaming tick that mints a new `messages` array (白屏卡死修复·Stage 3 收窄订阅).
  */
-export const useActiveMessageContent = (messageId: string | null): string =>
-  useConversationStore((s) =>
+export const useActiveMessageContent = (messageId: string | null): string => {
+  const key = usePaneSliceKey();
+  return useConversationStore((s) =>
     messageId
-      ? (activeRuntime(s).messages.find((m) => m.id === messageId)?.content ??
+      ? (runtimeOf(s, key).messages.find((m) => m.id === messageId)?.content ??
         "")
       : "",
   );
+};
 
 /**
  * 某条消息的过程线（本会话内按 client / server id 任一命中）。缺失 → 稳定空数组。
@@ -106,27 +129,28 @@ export const useActiveMessageContent = (messageId: string | null): string =>
  */
 export const useActiveMessageProcess = (
   messageId: string | null,
-): ProcessStep[] =>
-  useConversationStore((s) => {
+): ProcessStep[] => {
+  const key = usePaneSliceKey();
+  return useConversationStore((s) => {
     if (!messageId) return NO_PROCESS;
-    const found = activeRuntime(s).messages.find(
+    const found = runtimeOf(s, key).messages.find(
       (m) => m.id === messageId || m.serverMessageId === messageId,
     );
     return found?.process ?? NO_PROCESS;
   });
+};
 
 export const useActiveMemoryUpdates = (): MemoryUpdate[] =>
-  useConversationStore((s) => activeRuntime(s).memoryUpdates);
+  usePaneRuntime((rt) => rt.memoryUpdates);
 
 export const useActiveGenerating = (): boolean =>
-  useConversationStore((s) => conversationStillWriting(activeRuntime(s)));
+  usePaneRuntime((rt) => conversationStillWriting(rt));
 
 /** 桌面：最近一回合执行路径（`sidecar` / null）。 */
 export const useActiveExecutionVia = (): ConversationRuntime["executionVia"] =>
-  useConversationStore((s) => activeRuntime(s).executionVia);
+  usePaneRuntime((rt) => rt.executionVia);
 
-export const useActiveTurnPhase = () =>
-  useConversationStore((s) => activeRuntime(s).turnPhase);
+export const useActiveTurnPhase = () => usePaneRuntime((rt) => rt.turnPhase);
 
 /**
  * 列表蓝点 / 输入区停止键：本轮还在写。队员齐了把图标成完成之后，
@@ -150,12 +174,12 @@ export function liveTailWritingForMessage(
   return lastAssistantMessageId(rt.messages) === messageId;
 }
 
-export const useLiveTailWriting = (messageId: string): boolean =>
-  useConversationStore((s) => {
-    const id = s.currentConversationId;
-    if (!id) return false;
-    return liveTailWritingForMessage(runtimeOf(s, id), messageId);
-  });
+export const useLiveTailWriting = (messageId: string): boolean => {
+  const key = usePaneSliceKey();
+  return useConversationStore((s) =>
+    liveTailWritingForMessage(runtimeOf(s, key), messageId),
+  );
+};
 
 export const useConversationGenerating = (conversationId: string): boolean =>
   useConversationStore((s) =>
@@ -163,28 +187,28 @@ export const useConversationGenerating = (conversationId: string): boolean =>
   );
 
 export const useActiveError = (): string | null =>
-  useConversationStore((s) => activeRuntime(s).error);
+  usePaneRuntime((rt) => rt.error);
 
 export const useActiveRetry = (): (() => void) | null =>
-  useConversationStore((s) => activeRuntime(s).retry);
+  usePaneRuntime((rt) => rt.retry);
 
 export const useActiveErrorAction = (): ErrorAction | null =>
-  useConversationStore((s) => activeRuntime(s).errorAction);
+  usePaneRuntime((rt) => rt.errorAction);
 
 export const useActiveMessageFocus = (): { id: string; nonce: number } | null =>
-  useConversationStore((s) => activeRuntime(s).messageFocus);
+  usePaneRuntime((rt) => rt.messageFocus);
 
 export const useActiveHasMoreBefore = (): boolean =>
-  useConversationStore((s) => activeRuntime(s).hasMoreBefore);
+  usePaneRuntime((rt) => rt.hasMoreBefore);
 
 export const useActiveHasMoreAfter = (): boolean =>
-  useConversationStore((s) => activeRuntime(s).hasMoreAfter);
+  usePaneRuntime((rt) => rt.hasMoreAfter);
 
 export const useActiveLoadingOlder = (): boolean =>
-  useConversationStore((s) => activeRuntime(s).loadingOlder);
+  usePaneRuntime((rt) => rt.loadingOlder);
 
 export const useActiveLoadingNewer = (): boolean =>
-  useConversationStore((s) => activeRuntime(s).loadingNewer);
+  usePaneRuntime((rt) => rt.loadingNewer);
 
 export const getActiveRuntime = (): ConversationRuntime =>
   activeRuntime(useConversationStore.getState());

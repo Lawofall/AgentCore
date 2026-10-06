@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+
 def _user_message_from_journal(entries: tuple[dict[str, Any], ...] | list[dict]) -> str | None:
     """Extract the turn's user line from ``turn_started``."""
     for entry in entries:
@@ -51,6 +52,7 @@ def _user_message_from_journal(entries: tuple[dict[str, Any], ...] | list[dict])
             return user_message
         return ""
     return None
+
 
 def _captain_run_id_from_journal(
     entries: tuple[dict[str, Any], ...] | list[dict],
@@ -65,6 +67,7 @@ def _captain_run_id_from_journal(
                 return run_id
     return None
 
+
 async def production_crash_delegate_factory(
     lease: TurnLeaseRow,
     state: TurnState,
@@ -75,6 +78,7 @@ async def production_crash_delegate_factory(
     message_id = lease.message_id
     conversation_id = lease.conversation_id
     user_id = lease.user_id
+    switch_token = None
     try:
         user_message = _user_message_from_journal(state.entries)
         if user_message is None:
@@ -84,6 +88,9 @@ async def production_crash_delegate_factory(
             conv = await ConversationRepository(session).get_by_id_unscoped(conversation_id)
             if conv is None:
                 raise ValueError("conversation not found")
+            from agentcore.assembly.bind import arm_conversation_assembly
+
+            switch_token = await arm_conversation_assembly(session, conv)
             folder_id = conv.folder_id
             local_binding = await resolve_local_binding(session, conv)
             llm_credentials = await resolve_credentials(session, user_id, "user_facing")
@@ -97,7 +104,6 @@ async def production_crash_delegate_factory(
                 conversation_id, user_id=user_id
             )
             table_id = table.id if table else None
-
 
         profiles = turn_profiles_for_turn(profile_set, llm_credentials)
         bind_credential_pricing_context(llm_credentials)
@@ -163,3 +169,8 @@ async def production_crash_delegate_factory(
             error=str(e),
         )
         return None
+    finally:
+        if switch_token is not None:
+            from agentcore.assembly.bind import disarm_conversation_assembly
+
+            disarm_conversation_assembly(switch_token)

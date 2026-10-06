@@ -34,21 +34,44 @@ class ModelProfileSlot(BaseModel):
 
 
 class LlmModelProfileView(BaseModel):
+    """One assembly, including its model columns."""
+
     id: str
     name: str
     kind: Literal["system", "user", "implicit"]
-    main: ModelProfileSlot
+    is_default: bool = False
+    recipe: Literal["chat", "web", "full"] | None = Field(
+        default=None,
+        description=(
+            "Official recipe still locked on this assembly. "
+            "Null once tools, the envelope, the factory catalog, or plugs "
+            "are edited, or the row was never a recipe."
+        ),
+    )
+    main: ModelProfileSlot | None = None
     worker: ModelProfileSlot | None = None
     background: ModelProfileSlot | None = None
     vision: ModelProfileSlot | None = None
-    reasoning_effort: str | None = Field(
+    reasoning_effort: str | None = None
+    context_budget: int | None = Field(
         default=None,
         description=(
-            "Vendor thinking-effort token for this combination (e.g. low/high/max). "
-            "Null = that model's vendor default. Official control values only."
+            "Shorter context ceiling in tokens (128000 / 256000 / 512000). "
+            "Null = the main model's own window."
         ),
     )
-    is_default: bool = False
+    enabled_mcp_server_ids: list[str] = Field(
+        default_factory=list,
+        description="Local MCP server ids this assembly enables. Empty = none.",
+    )
+    omit_factory_catalog: bool | None = Field(
+        default=None,
+        description=(
+            "When true, this assembly does not carry the three factory skill rows. "
+            "consult stays only if user on-demand rows remain. Null means the "
+            "factory rows are still on."
+        ),
+    )
     created_at: datetime | None = None
     updated_at: datetime | None = None
     warnings: list[str] = Field(
@@ -61,42 +84,47 @@ class LlmModelProfileView(BaseModel):
 
 class LlmModelProfileListResponse(BaseModel):
     data: list[LlmModelProfileView]
-    default_model_profile_id: str | None = None
+    default_assembly_id: str | None = None
 
 
 class CreateLlmModelProfileRequest(BaseModel):
+    """New assembly. Copies the starred assembly, including its model."""
+
     name: str = Field(max_length=200)
-    main: ModelProfileSlot
-    worker: ModelProfileSlot | None = None
-    background: ModelProfileSlot | None = None
-    vision: ModelProfileSlot | None = None
-    reasoning_effort: str | None = Field(
-        default=None,
-        max_length=32,
-        description=(
-            "Vendor thinking-effort token. Null = vendor default for the main model. "
-            "Must be an official control value of the main model."
-        ),
-    )
     set_as_default: bool = False
 
 
 class UpdateLlmModelProfileRequest(BaseModel):
-    """Partial update. Omitted fields unchanged; explicit null on worker/background/vision
-    clears the slot (worker/background → follow_main; vision → no dedicated slot).
-    Explicit null on reasoning_effort clears to the vendor default."""
+    """Partial update. Explicit null on worker/background/vision clears that slot.
+
+    Changing the model does not release a locked recipe.
+    """
 
     name: str | None = Field(default=None, max_length=200)
     main: ModelProfileSlot | None = None
     worker: ModelProfileSlot | None = None
     background: ModelProfileSlot | None = None
     vision: ModelProfileSlot | None = None
-    reasoning_effort: str | None = Field(
+    reasoning_effort: str | None = Field(default=None, max_length=32)
+    context_budget: int | None = Field(
         default=None,
-        max_length=32,
         description=(
-            "Vendor thinking-effort token. Explicit null clears to the vendor default. "
-            "Must be an official control value of the (new) main model."
+            "Shorter context ceiling in tokens. Null = the main model's own window. "
+            "Omitted = unchanged."
+        ),
+    )
+    enabled_mcp_server_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "Local MCP server ids this assembly enables. "
+            "Omitted = unchanged. Empty list = this assembly enables none."
+        ),
+    )
+    omit_factory_catalog: bool | None = Field(
+        default=None,
+        description=(
+            "Omit the three factory skill rows on this assembly. "
+            "Omitted = unchanged."
         ),
     )
 

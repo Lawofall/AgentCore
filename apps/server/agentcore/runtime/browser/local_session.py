@@ -73,9 +73,11 @@ class LocalBridgeSession:
         session_id: str,
         command_timeout_s: float = 60.0,
         screencast_interval_s: float | None = None,
+        workspace_root: str | None = None,
     ) -> None:
         self.conversation_id = conversation_id
         self.session_id = session_id
+        self._workspace_root = (workspace_root or "").strip() or None
         self.created_at = time.time()
         self.last_used = self.created_at
         self._alive = True
@@ -130,7 +132,7 @@ class LocalBridgeSession:
             return BrowserCommandResult(ok=False, error=msg, data={"code": code})
         self.last_used = time.time()
         args = dict(command.args or {})
-        # 甲：相对路径 → workspace://（与用户完整预览同源）；工具层通常已改写，此处纵深。
+        # 甲：相对路径 → workspace://。本机字节由桌面按 workspaceRoot 读盘，不经云端 files API。
         if command.action == "navigate":
             raw_url = str(args.get("url") or "").strip()
             rewritten = rewrite_local_navigate_url(raw_url, self.conversation_id)
@@ -143,6 +145,8 @@ class LocalBridgeSession:
                     data={},
                 )
             args["url"] = rewritten
+        if self._workspace_root:
+            args["workspaceRoot"] = self._workspace_root
         payload = {
             "pageId": self.session_id,
             "conversationId": self.conversation_id,
@@ -272,4 +276,5 @@ async def open_local_bridge_session(request: BrowserSessionRequest) -> LocalBrid
         conversation_id=request.conversation_id,
         session_id=sid,
         command_timeout_s=float(settings.browser_command_timeout_seconds),
+        workspace_root=request.workspace_root,
     )

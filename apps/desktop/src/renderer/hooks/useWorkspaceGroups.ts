@@ -61,7 +61,12 @@ function byRecency(a: Conversation, b: Conversation): number {
  * sidebar groups don't duplicate the same local path when historical duplicate
  * rows exist.
  */
-function canonicalFolderIds(folders: FolderMeta[]): Map<string, string> {
+/** Map every folder id to the row the UI shows for that local binding.
+ * Cloud rows map to themselves. Historical duplicate local rows map to the
+ * first (oldest) row, matching {@link dedupeFoldersByLocalBinding}. */
+export function canonicalFolderIds(
+  folders: readonly FolderMeta[],
+): Map<string, string> {
   const keptByBinding = new Map<string, string>();
   const canonical = new Map<string, string>();
   for (const f of folders) {

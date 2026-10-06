@@ -26,6 +26,7 @@ from sqlalchemy import Delete, Select, Update
 from sqlalchemy.dialects import postgresql
 
 from agentcore.api.routes.folders import (
+    empty_deleted_folders,
     list_deleted_folders,
     purge_deleted_folder,
     restore_deleted_folder,
@@ -63,6 +64,9 @@ class _Result:
         self._scalar = scalar
         self._rows = rows or []
         self.rowcount = rowcount
+
+    def scalar_one(self) -> Any:
+        return self._scalar
 
     def scalar_one_or_none(self) -> Any:
         return self._scalar
@@ -308,6 +312,35 @@ async def test_deleted_list_only_selects_user_deleted_rows():
     assert f"folders.user_id = '{USER_ID}'" in sql
 
 
+async def test_deleted_count_uses_the_same_window_as_the_list():
+    session = _RecordingSession([_Result(scalar=4)])
+
+    count = await FolderRepository(session).count_deleted_by_user(
+        USER_ID, not_before=datetime(2026, 1, 1, tzinfo=UTC)
+    )
+
+    assert count == 4
+    sql = _selects(session)[0]
+    assert "count(" in sql.lower()
+    assert f"folders.delete_origin = '{FOLDER_DELETE_ORIGIN_USER}'" in sql
+    assert "folders.deleted_at > <ts:2026-01-01" in sql
+    assert "LIMIT" not in sql
+
+
+async def test_deleted_id_list_is_the_whole_window():
+    """清空不能跟着列表上限走。级联子夹不在这条查询里。"""
+    session = _RecordingSession([_Result(rows=[FOLDER_ID])])
+
+    ids = await FolderRepository(session).list_deleted_ids_by_user(
+        USER_ID, not_before=datetime(2026, 1, 1, tzinfo=UTC)
+    )
+
+    assert ids == [FOLDER_ID]
+    sql = _selects(session)[0]
+    assert f"folders.delete_origin = '{FOLDER_DELETE_ORIGIN_USER}'" in sql
+    assert "LIMIT" not in sql
+
+
 async def test_auto_desk_reclaim_tags_machine_origin(monkeypatch: pytest.MonkeyPatch):
     """裸聊自动云桌回收走同一个 soft_delete，但必须自报家门。"""
     from agentcore.runtime.delegate.target_desktop_auto_cloud import (
@@ -398,9 +431,19 @@ async def test_restore_losing_the_purge_race_touches_no_conversations():
 
 
 class _StubRepo:
-    def __init__(self, *, deleted: Any = None) -> None:
+    def __init__(
+        self,
+        *,
+        deleted: Any = None,
+        total: int | None = None,
+        ids: list[str] | None = None,
+    ) -> None:
         self._deleted = deleted
+        self._total = total
+        self._ids = ids
         self.listed: list[dict[str, Any]] = []
+        self.counted: list[dict[str, Any]] = []
+        self.id_lists: list[dict[str, Any]] = []
 
     async def get_deleted_by_id(self, folder_id: str, *, user_id: str) -> Any:
         del folder_id, user_id
@@ -409,6 +452,20 @@ class _StubRepo:
     async def list_deleted_by_user(self, user_id: str, **kwargs: Any) -> list[Any]:
         self.listed.append({"user_id": user_id, **kwargs})
         return [self._deleted] if self._deleted is not None else []
+
+    async def count_deleted_by_user(self, user_id: str, **kwargs: Any) -> int:
+        self.counted.append({"user_id": user_id, **kwargs})
+        if self._total is not None:
+            return self._total
+        return 0 if self._deleted is None else 1
+
+    async def list_deleted_ids_by_user(self, user_id: str, **kwargs: Any) -> list[str]:
+        self.id_lists.append({"user_id": user_id, **kwargs})
+        if self._ids is not None:
+            return list(self._ids)
+        if self._deleted is None:
+            return []
+        return [self._deleted.id]
 
 
 class _TreeRestoreSpy:
@@ -529,20 +586,45 @@ async def test_trash_list_computes_purge_moment_server_side(
     # 列表也把过期行挡在外面：仓储收到的是清扫用的同一个截止点。
     assert body.data[0].mode == "cloud"
     assert repo.listed[0]["not_before"] < datetime.now(UTC)
+    assert repo.counted[0]["not_before"] == repo.listed[0]["not_before"]
+
+
+async def test_trash_list_total_counts_the_window_not_the_page(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "workspace_retention_days", 30)
+    repo = _StubRepo(
+        deleted=_fake_folder(
+            deleted_at=datetime(2026, 8, 1, tzinfo=UTC),
+            delete_origin=FOLDER_DELETE_ORIGIN_USER,
+        ),
+        total=40,
+    )
+
+    body = await list_deleted_folders(_user(), repo=repo)
+
+    assert len(body.data) == 1
+    assert body.total == 40
 
 
 # --- 彻底删除：过期 409、竞态 409、未知 404 ----------------------------------------
 
 
 class _TrashPurgeSpy:
-    def __init__(self, wiped: bool = True, busy: bool = False) -> None:
+    def __init__(
+        self,
+        wiped: bool = True,
+        busy: bool = False,
+        busy_ids: set[str] | None = None,
+    ) -> None:
         self.wiped = wiped
         self.busy = busy
+        self.busy_ids = busy_ids or set()
         self.calls: list[dict[str, Any]] = []
 
     async def __call__(self, *, folder_id: str, user_id: str) -> bool:
         self.calls.append({"folder_id": folder_id, "user_id": user_id})
-        if self.busy:
+        if self.busy or folder_id in self.busy_ids:
             raise WorkspaceBusyError("busy")
         return self.wiped
 
@@ -553,6 +635,25 @@ def _spy_on_trash_purge(
     spy = _TrashPurgeSpy(wiped=wiped, busy=busy)
     monkeypatch.setattr("agentcore.api.routes.folders.purge_trashed_folder", spy)
     return spy
+
+
+async def test_empty_trash_skips_a_busy_folder_and_purges_the_rest(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """一个文件夹正被回合占用时，其余照清，忙的留在最近删除里。"""
+    monkeypatch.setattr(settings, "workspace_retention_days", 30)
+    busy_id = "22222222-3333-4444-8555-666666666666"
+    repo = _StubRepo(ids=[FOLDER_ID, busy_id])
+    spy = _TrashPurgeSpy(busy_ids={busy_id})
+    monkeypatch.setattr("agentcore.api.routes.folders.purge_trashed_folder", spy)
+
+    body = await empty_deleted_folders(_user(), repo=repo)
+
+    assert body.purged == 1
+    assert body.skipped_busy == 1
+    assert [call["folder_id"] for call in spy.calls] == [FOLDER_ID, busy_id]
+    assert "limit" not in repo.id_lists[0]
+    assert repo.id_lists[0]["not_before"] < datetime.now(UTC)
 
 
 async def test_purge_past_retention_is_409_not_silent_success(

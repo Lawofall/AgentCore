@@ -195,3 +195,34 @@ describe("ResourceSection ledger layout", () => {
     expect(screen.getByText(/思考 1.2k/)).toBeTruthy();
   });
 });
+
+describe("ResourceSection live spend", () => {
+  it("labels a still-running run 至今 once a call has been booked", () => {
+    render(
+      <ResourceSection
+        run={runWithUsage(
+          {
+            input: 100,
+            output: 20,
+            reasoning: 0,
+            cache_hit: 0,
+            cache_miss: 0,
+          },
+          {
+            status: "running",
+            cost: {
+              input: 1_000_000_000,
+              output: 0,
+              cached: 0,
+              total: 1_000_000_000,
+              currency: "CNY",
+            },
+          },
+        )}
+        agent={agent}
+        keyBase="live"
+      />,
+    );
+    expect(screen.getByText("¥1.00 至今")).toBeTruthy();
+  });
+});

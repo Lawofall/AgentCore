@@ -178,7 +178,7 @@ def _seed_registered_session(
         rehang_pending_client_tools(session.user_id)
     account_queue = turn_queue.account_snapshot_frame(session.user_id)
     hub.deliver(session, account_queue)
-    logger.info(
+    logger.debug(
         "fulfill.queue_account_snapshot_pushed",
         user=session.user_id,
         device=session.device_id,
@@ -187,7 +187,7 @@ def _seed_registered_session(
     if running_conversation_ids is not None:
         running = list(running_conversation_ids)
         hub.deliver(session, turn_activity_snapshot_frame(running))
-        logger.info(
+        logger.debug(
             "fulfill.turn_activity_snapshot_pushed",
             user=session.user_id,
             device=session.device_id,
@@ -196,7 +196,7 @@ def _seed_registered_session(
     if attention_entries is not None:
         entries = list(attention_entries)
         hub.deliver(session, attention_snapshot_frame(entries))
-        logger.info(
+        logger.debug(
             "fulfill.attention_snapshot_pushed",
             user=session.user_id,
             device=session.device_id,
@@ -232,7 +232,7 @@ async def _fulfill_stream(
     finally:
         if get_task is not None:
             get_task.cancel()
-        hub.unregister(session)
+        hub.unregister(session, reason="client_disconnect")
 
 
 @router.get("")
@@ -266,12 +266,17 @@ async def fulfill_stream(
         roots=root_list,
         platform=x_client_platform,
     )
-    _seed_registered_session(
-        fulfiller,
-        hub,
-        running_conversation_ids=running_ids,
-        attention_entries=attention_entries,
-    )
+    try:
+        _seed_registered_session(
+            fulfiller,
+            hub,
+            running_conversation_ids=running_ids,
+            attention_entries=attention_entries,
+        )
+    finally:
+        # Old connection learns it lost the device only after the seed is
+        # queued here, so the new stream is the one that owns the snapshots.
+        hub.complete_handover(fulfiller)
 
     return StreamingResponse(
         _fulfill_stream(fulfiller, hub),

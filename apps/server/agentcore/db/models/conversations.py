@@ -86,12 +86,10 @@ class Conversation(Base):
     deep_research_auto_debate_count: Mapped[int] = mapped_column(
         Integer, server_default=text("0")
     )
-    # Session-level model combination pin (模型组合). New chats snapshot a profile
-    # id at create time. NULL remains valid for legacy rows and expands via
-    # account ``users.default_model_profile_id`` (live) — not the new-chat path.
-    # Live reference into ``llm_model_profiles`` (or a virtual system preset id);
-    # expanded at turn time via ``llm/model_profiles.py``.
-    model_profile_id: Mapped[str | None] = mapped_column(
+    # Which assembly this conversation uses. Create writes the starred id or
+    # the client's pick. Editing the assembly changes the next turn of every
+    # conversation that points here.
+    assembly_id: Mapped[str | None] = mapped_column(
         PG_UUID(as_uuid=False), nullable=True
     )
     # Project this conversation was born into; NULL = 裸聊 (ungrouped).
@@ -152,6 +150,10 @@ class Conversation(Base):
         DateTime(timezone=True), nullable=True
     )
     compaction_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # One-step undo for a user context cut (方案切点). NULL = no cut to undo.
+    # Shape: prior summary / watermark / input_tokens, plus the watermark this cut wrote.
+    # Auto compaction that later moves the watermark makes the snapshot unrestorable.
+    context_cut_undo: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # Client-minted idempotency key for「新建会话」(see the partial unique index above).
     # NULL = the caller did not send one (every client before this column shipped),
     # and those rows are exempt from the constraint rather than deduped by a guess.

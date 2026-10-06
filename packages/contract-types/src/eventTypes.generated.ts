@@ -51,6 +51,7 @@ export type SSEEventType =
   | "run_progress"
   | "run_reasoning_delta"
   | "run_skipped"
+  | "run_spend"
   | "run_started"
   | "run_tool_progress"
   | "title_generated"
@@ -120,6 +121,7 @@ export const SSE_EVENT_TYPE_VALUES = [
   "run_progress",
   "run_reasoning_delta",
   "run_skipped",
+  "run_spend",
   "run_started",
   "run_tool_progress",
   "title_generated",

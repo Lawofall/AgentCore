@@ -11,10 +11,9 @@ Drift L1 = JSONL-internal ``collab_drift``; Drift L2 = turn_metrics ⋈ JSONL
 close/recompute — never silently pick one side.
 
 Token 口径（复盘必读）：
-- ``llm.input_tokens`` / ``llm.output_tokens`` = 本 trace JSONL 全部 ``llm.call`` 合计
-  （含 pause 前段 / team_preview 前）。
-- ``tail`` / ``turn_metrics`` tokens = 收口折账；``kind=resume`` 时通常只有 resume
-  段 usage（不含 pause 前 captain），与 ``llm`` 合计可能不一致——属两口径，非漂移必修。
+- ``llm.input_tokens`` / ``llm.output_tokens`` = 本 trace JSONL 全部 ``llm.call`` 合计。
+- ``tail`` / ``turn_metrics`` tokens = 这条回复的主动账（各段相加，等人的空档除外）。
+  与 ``llm`` 合计可能不一致：标题等不进用量的调用只在 ``llm``。不是 resume 丢掉暂停前。
 
 执行面（保持可扫）：``execution`` 是折叠摘要——工具按名聚合、run 只取
 ``obs.turn_spans`` 的 ``invoke_agent`` 行（失败优先、有上限）、prepare 分段一行。
@@ -464,7 +463,7 @@ def _llm_summary(log_events: list[dict[str, Any]]) -> dict[str, Any]:
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "cost_nano": cost_nano,
-        # 与 turn_metrics/tail 区分：此处为全 trace ``llm.call`` 合计（含 pause 前）。
+        # 与 turn_metrics/tail 区分：此处为全 trace ``llm.call`` 合计。
         "token_scope": "full_trace",
     }
     if scenarios:
@@ -504,11 +503,7 @@ def _tail_from_close(close: dict[str, Any] | None) -> dict[str, Any]:
         "error_code": close.get("error_code"),
         "error_type": close.get("error_type"),
         # jsonl close：turn_complete 常带 tokens；resume_complete 通常不带 → 勿当全 trace。
-        "token_scope": (
-            "settlement_segment"
-            if close.get("event") == "chat.resume_complete"
-            else "settlement"
-        ),
+        "token_scope": "settlement",
     }
     for col in COLLAB_FIELD_MAP:
         if col in close:
@@ -534,11 +529,7 @@ def _tail_from_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         tail["mode"] = metrics["mode"]
     if "turn_id" in metrics:
         tail["turn_id"] = metrics["turn_id"]
-    # resume 收口折账 ≠ 全 trace llm 合计（pause 前段不在本段 usage）。
-    if metrics.get("kind") == "resume":
-        tail["token_scope"] = "settlement_segment"
-    else:
-        tail["token_scope"] = "settlement"
+    tail["token_scope"] = "settlement"
     return tail
 
 
@@ -751,12 +742,7 @@ def build_decision_spine(
         # 复盘用：两口径说明（非 L2 漂移字段）。
         "token_accounting": {
             "llm": "full_trace_llm_call_sum",
-            "tail": "turn_metrics_or_jsonl_close_settlement",
-            "resume_note": (
-                "kind=resume / chat.resume_complete：tail·metrics 为收口折账"
-                "（通常不含 pause 前 / team_preview 前段）；"
-                "llm 为同 trace 全部 llm.call 合计"
-            ),
+            "tail": "message_active_meter",
         },
     }
 
@@ -1037,32 +1023,17 @@ def format_decision_spine(spine: dict[str, Any]) -> str:
     elif err_bits:
         lines.append("         error: " + " ".join(err_bits))
 
-    # 两口径提示：llm 全 trace vs tail 收口折账（resume 常见差）。
+    # 两口径：llm 全 trace vs 这条回复的主动账。差值是不进用量的调用（例如标题）。
     llm_in = int(llm.get("input_tokens") or 0)
     llm_out = int(llm.get("output_tokens") or 0)
     if "input_tokens" in tail or "output_tokens" in tail:
         tail_in = int(tail.get("input_tokens") or 0)
         tail_out = int(tail.get("output_tokens") or 0)
         if (llm_in, llm_out) != (tail_in, tail_out):
-            resume_hint = ""
-            if (
-                tail.get("kind") == "resume"
-                or tail.get("token_scope") == "settlement_segment"
-            ):
-                resume_hint = "；resume 折账通常不含 pause 前 / team_preview 前"
             lines.append(
                 f"  Token口径: llm=全trace合计 in={llm_in}/out={llm_out}；"
-                f"tail/metrics=收口折账 in={tail_in}/out={tail_out}"
-                f"{resume_hint}"
+                f"tail/metrics=回复主动账 in={tail_in}/out={tail_out}"
             )
-    elif health.get("token_accounting"):
-        note = (health.get("token_accounting") or {}).get("resume_note")
-        if note and (
-            tail.get("kind") == "resume"
-            or tail.get("event") == "chat.resume_complete"
-            or tail.get("token_scope") == "settlement_segment"
-        ):
-            lines.append(f"  Token口径: {note}")
 
     cost = spine.get("cost") or {}
     if cost.get("source") != "none":

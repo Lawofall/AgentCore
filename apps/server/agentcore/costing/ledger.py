@@ -24,15 +24,14 @@ ROLE_MEMORY = "memory"
 # 同跨档不复价) so its spend shows as its own line on the turn team payroll
 # (``GET /messages/{id}/cost``).
 ROLE_VISION = "vision"
-# ``assist`` tags an **account-level** product-chrome call — AI 改写（划词改写）与
-# 文档 description 自动补: real spend that belongs to no conversation at all, so its
-# ledger row carries ``conversation_id = NULL`` (and ``message_id = NULL``) and only
-# SUMs into the account windows / 配额. ``persona`` carries which chrome it was.
+# ``assist`` tags an **account-level** product-chrome call — AI 改写（划词改写）:
+# real spend that belongs to no conversation at all, so its ledger row carries
+# ``conversation_id = NULL`` (and ``message_id = NULL``) and only SUMs into the
+# account windows / 配额. ``persona`` carries which chrome it was.
 ROLE_ASSIST = "assist"
 PERSONA_CEO = "CEO"
-# Human-facing ``persona`` labels for the two account-level chrome paths.
+# Human-facing ``persona`` label for the account-level chrome path.
 PERSONA_REWRITE = "AI 改写"
-PERSONA_DESCRIPTION = "文档摘要"
 # The four money keys carried in cost_events.cost (integer nano-CNY). The Cost
 # dataclass also exposes ``currency`` / ``pricing_source`` / ``credential_source``.
 COST_KEYS = ("input", "cached", "output", "total")

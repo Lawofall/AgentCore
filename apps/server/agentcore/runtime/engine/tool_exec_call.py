@@ -49,6 +49,7 @@ from .tool_exec_args import (
     _shell_observe_log_fields,
     _short_tool_error_reason,
     emit_args_parse_failed,
+    model_failure_status,
     with_tool_failed_marker,
 )
 from .tool_exec_coalesce import _clone_tool_result, _file_read_round_coalesce_key
@@ -66,6 +67,23 @@ from .tool_protocol_sanitize import (
 )
 
 logger = get_logger(__name__)
+
+
+def _append_prose_close_note(msg_content: str, *, name: str, args: dict[str, Any]) -> str:
+    """Prose ``write`` close line, model transcript only. Skeleton and user rules stay quiet."""
+    if name != "write":
+        return msg_content
+    raw_path = args.get("file_path")
+    content = args.get("content")
+    if not isinstance(raw_path, str) or not raw_path.strip() or not isinstance(content, str):
+        return msg_content
+    from agentcore.tools.builtin.file_ops.integrity import prose_write_close_note
+
+    note = prose_write_close_note(path=raw_path, content=content)
+    if not note:
+        return msg_content
+    return f"{msg_content}\n{note}" if msg_content else note
+
 
 _MISSING_FILE_MODEL_MSG = "内部资源缺失，请换一种方式继续，不要原样重试。"
 
@@ -239,7 +257,7 @@ async def run_one_tool(
             reason=landed_name_err,
         )
         return (
-            _failed_tool_message(tc.id, landed_name_err),
+            _failed_tool_message(tc.id, landed_name_err, status="validation"),
             None,
             ToolAttempt(
                 fingerprint,
@@ -278,7 +296,7 @@ async def run_one_tool(
             reason=error_msg,
         )
         return (
-            _failed_tool_message(tc.id, error_msg),
+            _failed_tool_message(tc.id, error_msg, status="permission"),
             None,
             ToolAttempt(
                 fingerprint,
@@ -334,7 +352,7 @@ async def run_one_tool(
             reason=error_msg,
         )
         return (
-            _failed_tool_message(tc.id, error_msg),
+            _failed_tool_message(tc.id, error_msg, status="permission"),
             None,
             ToolAttempt(
                 fingerprint,
@@ -383,7 +401,11 @@ async def run_one_tool(
             duration_ms=0,
         )
         return (
-            _failed_tool_message(tc.id, error_msg),
+            _failed_tool_message(
+                tc.id,
+                error_msg,
+                status="permission" if policy_failure else "error",
+            ),
             None,
             ToolAttempt(
                 fingerprint,
@@ -459,7 +481,7 @@ async def run_one_tool(
                 retrieval_budget_used=budget_state.used,
             )
             return (
-                _failed_tool_message(tc.id, exhausted),
+                _failed_tool_message(tc.id, exhausted, status="permanent"),
                 None,
                 ToolAttempt(
                     fingerprint,
@@ -569,7 +591,15 @@ async def run_one_tool(
         timeout_fields.update(_shell_observe_log_fields(name, args))
         logger.warning("tool.execute_end", **timeout_fields)
         return (
-            _failed_tool_message(tc.id, timeout_msg),
+            _failed_tool_message(
+                tc.id,
+                timeout_msg,
+                status=(
+                    "permanent"
+                    if failure_code == "exec_env_sandbox_unavailable"
+                    else "timeout"
+                ),
+            ),
             None,
             ToolAttempt(
                 fingerprint,
@@ -632,7 +662,7 @@ async def run_one_tool(
                 **_shell_observe_log_fields(name, args),
             )
             return (
-                _failed_tool_message(tc.id, error_msg),
+                _failed_tool_message(tc.id, error_msg, status="validation"),
                 None,
                 ToolAttempt(
                     fingerprint,
@@ -799,13 +829,21 @@ async def run_one_tool(
     logger.info("tool.execute_end", **end_fields)
 
     citations = result.citations if (result.success and result.citations) else []
-    # 落盘产物自报 + 执行层失败：两条机器尾注都只进 transcript（SSE 上文仍是无 marker 的
-    # output），所以工具回执文案不受影响；也因此产物尾注落在 ToolResult 截断之后，不会被
-    # 截掉。自报即事实，不按 success 二次裁决——写盘工具失败时本就不自报，而脚本非零退出前
+    # 落盘产物自报、失败状态行、机器尾注都只进 transcript（SSE output 仍是无状态行、
+    # 无 marker 的诊断）。产物尾注落在 ToolResult 截断之后，不会被截掉。自报即事实，
+    # 不按 success 二次裁决——写盘工具失败时本就不自报，而脚本非零退出前
     # 已 copy-out 的产物确实躺在盘上（漏账才是事故）；被拒 / 未执行的调用没有结果可自报。
     msg_content = with_file_products_marker(output, result.file_products)
     if not result.success:
-        msg_content = with_tool_failed_marker(msg_content or "")
+        msg_content = with_tool_failed_marker(
+            msg_content or "",
+            status=model_failure_status(
+                failure_code=wire_fail_code,
+                metadata=result.metadata,
+                contract_failure=bool(result.contract_failure),
+                policy_failure=bool((result.metadata or {}).get("policy_failure")),
+            ),
+        )
     elif name in {"read", "write", "edit"} and isinstance(args, dict):
         raw_path = args.get("file_path")
         if isinstance(raw_path, str) and raw_path.strip():
@@ -814,6 +852,7 @@ async def run_one_tool(
             note = path_rule_note(getattr(context, "path_rules", ()), raw_path)
             if note:
                 msg_content = f"{msg_content}\n{note}" if msg_content else note
+        msg_content = _append_prose_close_note(msg_content, name=name, args=args)
     message = LLMMessage(
         role="tool",
         content=msg_content,

@@ -190,7 +190,8 @@ export type CheckpointDecision =
  * `action` marks an option that the desktop client fulfils with a
  * native client action instead of a plain text answer (unknown/absent → plain option):
  * `open_local_project` / `register_local_project` / `bind_local_folder` are
- * **本机传统** wire enums（桌面默认同通道；云协作是选项：「先在云上做」/「从 Git 克隆」；≠离线；
+ * **本机传统** wire enums（桌面默认同通道；云协作是选项：「云上做完再写入」/「从 Git 克隆」；
+ * ≠离线；
  * 网页/手机无本机盘；新开云文件夹走「我的文件」）。
  * ``review_kind`` / ``body`` / ``slug`` / ``section`` remain on the wire for
  * historical events. */
@@ -362,6 +363,19 @@ export type WorkerRunPhase =
   | "waiting_children"
   | "winding_down";
 
+/** 累计用量（``run_spend``）：该 run 到目前为止已经返回的模型调用。
+ * 
+ * EPHEMERAL。``usage`` / ``cost`` 是累计值，不是这一次调用的增量。
+ * 金额是逐次 ``calculate_cost`` 相加，不把 token 合计后再计价（峰谷价随调用时间）。 */
+export interface RunSpendPayload {
+  run_id: string;
+  agent_id: string;
+  role: string;
+  model: string;
+  usage: UsageBreakdown;
+  cost: CostBreakdown;
+}
+
 /** Worker 活动相位（``run_phase``）：等 LLM / 跑工具 / 等子 / 超时·token 收尾。
  * 
  * EPHEMERAL——传输态；``tool_name`` 仅 ``phase=tool`` 时有意义。``winding_down``
@@ -526,9 +540,10 @@ export interface DeliveryGap {
 /** One user action that would close a delivery gap. ``kind`` is a widened string
  * on the wire (like ``ToolPhase``) so the backend can add kinds without a client
  * bump — known: ``bind_local_folder`` (wire kind；产品文案按会话分流：
- * 工程尚在本机 → 云协作「先在云上做」优先；远程仓进当前云桌走 git clone /
+ * 工程尚在本机 → 云协作「云上做完再写入」（命令面板，不经 Composer）优先；
+ * 远程仓进当前云桌走 git clone /
  * Composer「从 Git 克隆」；**已是云端会话但沙箱未装配** →
- * 禁止再导「先在云上做」，改稍后重试 / export_to_local / 本机传统；
+ * 禁止再导「云上做完再写入」，改稍后重试 / export_to_local / 本机传统；
  * 桌面默认同通道（本地对话 / 打开本机文件夹），≠离线；云端对话并列可选)；
  * ``export_to_local`` (云端已有 delivered_files → 导出到本机文件夹后即可 npm install / 本地运行；
  * 与 bind_local_folder 可并存但语义不同);
@@ -825,6 +840,8 @@ export interface RunFailedPayload {
   error_code?: string;
   retryable?: boolean;
   retry_after?: number;
+  usage?: UsageBreakdown;
+  cost?: CostBreakdown;
 }
 
 export interface RunCancelledPayload {
@@ -832,6 +849,8 @@ export interface RunCancelledPayload {
   agent_id: string;
   reason: "redirect" | "stop" | "user_stop" | "worker_timeout";
   execution_id?: string;
+  usage?: UsageBreakdown;
+  cost?: CostBreakdown;
 }
 
 export interface RunSkippedPayload {
@@ -1149,6 +1168,8 @@ export interface MessageEndPayload {
   duration_ms?: number;
   /** Sum of per-call LLM decode windows (first output chunk → stream end). Excludes tools and waits. Absent on old journals. */
   generation_ms?: number;
+  /** Earlier positive captain first-stream clock (reasoning or content/tool). Absent when neither was marked. Old journals omit it. */
+  ttft_ms?: number;
   /** Turn-level result quality, independent of finish_reason. partial = landed product with gaps. paused is reserved (not produced this wave). */
   outcome?: "ok" | "partial" | "paused" | "error";
 }
@@ -1368,6 +1389,7 @@ export type SSEPayloadMap = {
   run_reasoning_delta: RunReasoningDeltaPayload;
   run_tool_progress: RunToolProgressPayload;
   run_phase: RunPhasePayload;
+  run_spend: RunSpendPayload;
   run_completed: RunCompletedPayload;
   run_failed: RunFailedPayload;
   run_cancelled: RunCancelledPayload;

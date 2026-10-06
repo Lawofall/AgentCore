@@ -700,6 +700,11 @@ describe("drainOutbox", () => {
     ).toBe("declaration_empty");
     expect(
       normalizeToolFailureCode(
+        'error: validation\ndelegate 缺 tasks：默认顶层放非空 `tasks`，可抄：{"tasks":[{"role":"角色","task":"目标+边界+验收"}]}。\n<!--agentcore:tool_failed-->',
+      ),
+    ).toBe("declaration_empty");
+    expect(
+      normalizeToolFailureCode(
         "delegate 缺 tasks/playbook：请在 payload 顶层直接放非空 `tasks`",
       ),
     ).toBe("other");
@@ -1501,6 +1506,18 @@ describe("toRecordTurnBody", () => {
       generation_ms: 1_900,
     });
     expect(body.generation_ms).toBe(1_900);
+  });
+
+  it("forwards ttft_ms when present", () => {
+    const body = toRecordTurnBody({
+      user_message_id: "u1",
+      conversation_id: "c1",
+      user_message: "hello",
+      content: "world",
+      trace_id: "a".repeat(32),
+      ttft_ms: 1_800,
+    });
+    expect(body.ttft_ms).toBe(1_800);
   });
 
   it("forwards prompt_tokens / collab / outcome / evidence_ledger", () => {

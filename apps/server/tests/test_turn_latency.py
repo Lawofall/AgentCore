@@ -8,14 +8,18 @@ import time
 import pytest
 
 from agentcore.core.log_context import log_context
-from agentcore.llm.provider.protocol import LLMChunk, LLMRequest, ToolCallDelta
+from agentcore.llm.provider.protocol import LLMChunk, LLMRequest, TokenUsage, ToolCallDelta
 from agentcore.runtime.engine.stream import stream_llm_round
 from agentcore.runtime.turn import complete_log as complete_mod
 from agentcore.runtime.turn.latency import (
+    ActiveMeter,
     TurnLatencyProbe,
+    bind_active_meter,
     bind_turn_latency,
+    fold_active_meter,
     get_turn_latency,
     interrupt_usage_clocks,
+    reset_active_meter,
     reset_turn_latency,
     stamp_turn_wall,
     turn_wall_ms,
@@ -327,6 +331,43 @@ def test_interrupt_usage_clocks_omits_missing_generation():
     clocks = interrupt_usage_clocks(duration_ms=12)
     assert clocks["duration_ms"] == 12
     assert "generation_ms" not in clocks
+    assert "ttft_ms" not in clocks
+
+
+def test_earliest_ttft_ms_picks_the_earlier_positive_clock():
+    probe = TurnLatencyProbe(anchor_mono=time.monotonic())
+    assert probe.earliest_ttft_ms() is None
+    probe.ttft_reasoning_ms = 1_800
+    assert probe.earliest_ttft_ms() == 1_800
+    probe.ttft_content_ms = 400
+    assert probe.earliest_ttft_ms() == 400
+    probe.ttft_reasoning_ms = 0
+    assert probe.earliest_ttft_ms() == 400
+
+
+def test_stamp_turn_wall_stamps_ttft_and_keeps_existing():
+    probe, token = bind_turn_latency()
+    try:
+        probe.ttft_reasoning_ms = 2_200
+        probe.ttft_content_ms = 1_800
+        target: dict = {}
+        stamp_turn_wall(target, duration_ms=5_000)
+        assert target["ttft_ms"] == 1_800
+        probe.ttft_content_ms = 200
+        stamp_turn_wall(target, duration_ms=99)
+        assert target["ttft_ms"] == 1_800
+    finally:
+        reset_turn_latency(token)
+
+
+def test_interrupt_usage_clocks_includes_ttft_from_probe():
+    probe, token = bind_turn_latency()
+    try:
+        probe.ttft_content_ms = 900
+        clocks = interrupt_usage_clocks(duration_ms=5_000)
+        assert clocks["ttft_ms"] == 900
+    finally:
+        reset_turn_latency(token)
 
 
 def test_log_chat_turn_complete_emits_phase0_keys(monkeypatch):
@@ -352,3 +393,52 @@ def test_log_chat_turn_complete_emits_phase0_keys(monkeypatch):
     assert kw["ttft_content_ms"] is None
     assert kw["generation_ms"] is None
     assert kw["reply_preview"]
+
+
+def test_resume_probe_adds_carried_active_time_and_keeps_first_ttft():
+    probe, token = bind_turn_latency(
+        time.monotonic(),
+        carried_duration_ms=10_000,
+        carried_generation_ms=4_000,
+        first_stream_done=True,
+    )
+    try:
+        elapsed = probe.elapsed_ms()
+        assert 10_000 <= elapsed < 10_500
+        assert probe.generation_ms == 4_000
+        assert probe.begin_captain_stream() is False
+        probe.add_generation_ms(300)
+        assert probe.generation_ms == 4_300
+    finally:
+        reset_turn_latency(token)
+
+
+def test_fold_active_meter_adds_the_same_message():
+    meter = ActiveMeter.from_usage(
+        {
+            "input_tokens": 50,
+            "output_tokens": 100,
+            "rounds": 2,
+            "generation_ms": 4_000,
+            "ttft_ms": 800,
+        }
+    )
+    assert meter.first_stream_done is True
+    token = bind_active_meter(meter)
+    try:
+        usage, rounds = fold_active_meter(
+            TokenUsage(input_tokens=3, output_tokens=7, last_prompt_tokens=9),
+            1,
+        )
+    finally:
+        reset_active_meter(token)
+    assert usage.input_tokens == 53
+    assert usage.output_tokens == 107
+    assert usage.last_prompt_tokens == 9
+    assert rounds == 3
+
+
+def test_fold_active_meter_passes_through_a_fresh_turn():
+    usage, rounds = fold_active_meter(TokenUsage(output_tokens=7), 1)
+    assert usage.output_tokens == 7
+    assert rounds == 1

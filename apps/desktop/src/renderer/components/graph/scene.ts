@@ -49,6 +49,7 @@ import {
   isDebateClosingRun,
   isDebateFoldedBeatRun,
   isDebateParticipantRun,
+  outermostFoldUnit,
   resolveCaptainSinkId,
   workerRunsOf,
 } from "./helpers";
@@ -192,7 +193,8 @@ export function computeTopologicalRunWaves(
   const runById = new Map(workerRuns.map((r) => [r.id, r]));
   const foldInfo = computeGraphFold(runs, captainId);
 
-  const unitOf = (runId: string): string => foldInfo.unitOf.get(runId) ?? runId;
+  // 波次按委派树根聚合。内层队长单独收放，孙节点不因此另成一批。
+  const unitOf = (runId: string): string => outermostFoldUnit(foldInfo, runId);
 
   const unitMembers = new Map<string, Set<string>>();
   for (const r of workerRuns) {

@@ -410,12 +410,14 @@ def test_token_accounting_marks_full_trace_vs_resume_settlement() -> None:
     assert spine["llm"]["token_scope"] == "full_trace"
     assert spine["llm"]["input_tokens"] == 120
     assert spine["llm"]["output_tokens"] == 60
-    assert spine["tail"]["token_scope"] == "settlement_segment"
+    assert spine["tail"]["token_scope"] == "settlement"
     assert spine["tail"]["input_tokens"] == 20
     assert spine["health"]["token_accounting"]["llm"] == "full_trace_llm_call_sum"
+    assert spine["health"]["token_accounting"]["tail"] == "message_active_meter"
     text = format_decision_spine(spine)
     assert "Token口径" in text
-    assert "全trace" in text or "full_trace" in text or "resume" in text.lower()
+    assert "全trace" in text
+    assert "不含 pause" not in text
 
 
 def _events_local_turn(trace_id: str = "e" * 32) -> list[dict]:

@@ -5,8 +5,8 @@ names, consult pointers, fences, assembly order, date granularity, one-layer-one
 Does not pin teaching Chinese. Skill HOW bodies belong in ``test_skills.py``;
 this file only asserts those identifiers are absent from the core / compose opening.
 
-The CEO factory core is empty unless residual identity is injected. Honesty / output
-live in the shared base. Who to trust is message roles and injection fences.
+The CEO factory core and the shared base are empty unless a residual is injected.
+Who to trust is message roles and injection fences.
 HOW lives in system Skills / tool descriptions.
 """
 
@@ -115,7 +115,6 @@ def test_output_style_survives_memory_and_context_layers():
         rules_markdown="- 用户偏好简洁回复",
         extra_context="<附件>...</附件>",
     )
-    assert _DEFAULT_SYSTEM_PROMPT in out
     assert "用户偏好简洁回复" in out
     assert "<附件>" in out
     assert "<设定>" in out and "</设定>" in out

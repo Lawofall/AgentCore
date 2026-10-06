@@ -58,7 +58,7 @@ function providersResponse(
         masked_key: "••••wxyz",
       },
     ],
-    default_model_profile_id: "sys-52",
+    default_assembly_id: "sys-52",
     billing_mode: "byok",
     platform_available: false,
     platform_model: null,
@@ -101,9 +101,7 @@ describe("ProviderSettings", () => {
     expect(screen.getByRole("button", { name: "添加服务商" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "模型组合" })).toBeNull();
     expect(
-      screen.getByText(
-        "Key 已加密保存。测连绿≠可聊天；日常用「设置 · 模型组合」。",
-      ),
+      screen.getByText("Key 已加密保存。测连绿≠可聊天；日常选用在「装配」。"),
     ).toBeTruthy();
   });
 

@@ -191,6 +191,9 @@ class TokenUsage:
     # next-turn watermark read this field — a later compact must be able to
     # shrink it.
     last_prompt_tokens: int = 0
+    # Wire ``usage`` key names only (no counts). Empty on synthetic usages.
+    # Logged when both cache numbers stay 0, so a silent provider is visible.
+    usage_keys: str = ""
 
     @property
     def total_tokens(self) -> int:
@@ -227,6 +230,7 @@ class TokenUsage:
                 if other.last_prompt_tokens > 0
                 else self.last_prompt_tokens
             ),
+            usage_keys=other.usage_keys or self.usage_keys,
         )
 
     def as_dict(self) -> dict[str, int]:
@@ -283,6 +287,8 @@ class TokenUsage:
 
         Neither present → both 0; pricing then reconciles the whole prompt as a miss.
         Values ride ``int(x or 0)`` so ``null`` fields from lenient proxies parse as 0.
+        ``usage_keys`` keeps the wire key names (including one level of ``*_details``)
+        so a silent cache split can be told apart from a real zero on the next log.
         """
         completion_details = usage_data.get("completion_tokens_details") or {}
         prompt_details = usage_data.get("prompt_tokens_details") or {}
@@ -301,7 +307,18 @@ class TokenUsage:
             cache_hit_tokens=cache_hit,
             cache_miss_tokens=cache_miss,
             last_prompt_tokens=input_tokens,
+            usage_keys=_wire_usage_keys(usage_data),
         )
+
+
+def _wire_usage_keys(usage_data: Mapping[str, Any]) -> str:
+    """Sorted key names from one wire ``usage`` object. Values are not kept."""
+    names = [str(key) for key in usage_data]
+    for parent in ("prompt_tokens_details", "completion_tokens_details"):
+        nested = usage_data.get(parent)
+        if isinstance(nested, dict):
+            names.extend(f"{parent}.{key}" for key in nested)
+    return ",".join(sorted(names))
 
 
 @dataclass

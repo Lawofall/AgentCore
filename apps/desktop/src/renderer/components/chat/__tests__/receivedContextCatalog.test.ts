@@ -4,6 +4,7 @@ import {
   buildReceivedContextCatalog,
   defaultCatalogItemId,
   flattenCatalog,
+  openingContextView,
 } from "../receivedContextCatalog";
 
 function block(
@@ -158,6 +159,63 @@ consult(name) 拉全文。
     expect(factory?.body).not.toContain("页面留白");
   });
 
+  it("lifts 运行时 beside 工作区 and leaves factory only for constitution", () => {
+    const dateOnly = `<按需目录>
+consult(name) 拉全文。
+</按需目录>
+
+<工作区>
+桌面已连接。
+</工作区>
+
+<运行时>
+当前日期：2026-10-01 中国标准时间
+</运行时>`;
+    const dateGroups = buildReceivedContextCatalog(
+      [block({ channel: "system", body: dateOnly, chars: dateOnly.length })],
+      { includeSystem: true },
+    );
+    expect(dateGroups[0].items.map((i) => i.label)).toEqual([
+      "设定",
+      "按需目录",
+      "工作区",
+      "运行时",
+    ]);
+    const runtime = dateGroups[0].items.find((i) => i.tag === "运行时");
+    expect(runtime?.body).toContain("当前日期：2026-10-01");
+    expect(runtime?.body).not.toContain("<运行时>");
+    expect(dateGroups[0].items.some((i) => i.label === "出厂指令")).toBe(false);
+
+    const withConstitution = `你是 CEO。
+
+<工作区>
+桌面已连接。
+</工作区>
+
+<运行时>
+当前日期：2026-10-01
+</运行时>`;
+    const mixed = buildReceivedContextCatalog(
+      [
+        block({
+          channel: "system",
+          body: withConstitution,
+          chars: withConstitution.length,
+        }),
+      ],
+      { includeSystem: true },
+    );
+    expect(mixed[0].items.map((i) => i.label)).toEqual([
+      "设定",
+      "工作区",
+      "运行时",
+      "出厂指令",
+    ]);
+    const factory = mixed[0].items.find((i) => i.label === "出厂指令");
+    expect(factory?.body).toContain("你是 CEO。");
+    expect(factory?.body).not.toContain("当前日期");
+  });
+
   it("marks missing 设定 as an absent row instead of backfilling", () => {
     const text = `你是 CEO。
 
@@ -225,6 +283,80 @@ consult(name) 拉全文。
         label: "其他",
       }),
     ]);
+  });
+});
+
+describe("openingContextView", () => {
+  it("keeps wire order and sums original chars, system body unsplit", () => {
+    const system = `<设定>
+规则。
+</设定>
+
+其余出厂。`;
+    const view = openingContextView(
+      [
+        block({
+          channel: "system",
+          heading: "CEO 系统提示",
+          body: system,
+          chars: 100,
+        }),
+        block({
+          channel: "tools",
+          heading: "本回合工具",
+          body: "**web_search**",
+          chars: 5,
+        }),
+        block({
+          channel: "history",
+          heading: "对话历史（本回合之前的往来）",
+          body: "旧",
+          chars: 1,
+        }),
+        block({
+          channel: "request",
+          heading: "原始用户请求",
+          body: "目标",
+          chars: 2,
+        }),
+      ],
+      { includeSystem: true },
+    );
+    expect(view.sections.map((section) => section.channel)).toEqual([
+      "system",
+      "tools",
+      "history",
+      "request",
+    ]);
+    expect(view.sections.map((section) => section.heading)).toEqual([
+      "CEO 系统提示",
+      "本回合工具",
+      "对话历史（本回合之前的往来）",
+      "原始用户请求",
+    ]);
+    expect(view.sections[0]?.body).toBe(system);
+    expect(view.chars).toBe(108);
+  });
+
+  it("drops the system block when includeSystem is false", () => {
+    const view = openingContextView(
+      [
+        block({ channel: "system", heading: "系统", body: "核", chars: 50 }),
+        block({ channel: "tools", heading: "工具", body: "t", chars: 3 }),
+        block({
+          channel: "request",
+          heading: "原始用户请求",
+          body: "目标",
+          chars: 2,
+        }),
+      ],
+      { includeSystem: false },
+    );
+    expect(view.sections.map((section) => section.channel)).toEqual([
+      "tools",
+      "request",
+    ]);
+    expect(view.chars).toBe(5);
   });
 });
 

@@ -26,7 +26,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agentcore.api.dependencies import AuthUser, get_db, get_document_repo
 from agentcore.db.models import Document
 from agentcore.db.repositories import DocumentRepository, SkillStoreRepository
-from agentcore.documents.description import maybe_schedule_description_fill
 from agentcore.documents.frontmatter import (
     FrontmatterEditError,
     FrontmatterError,
@@ -315,14 +314,6 @@ async def create_document(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    # Async empty-description fill — never blocks / fails the save (定案).
-    maybe_schedule_description_fill(
-        document_id=doc.id,
-        user_id=user.user_id,
-        kind=doc.kind,
-        description=doc.description or "",
-        content=doc.content or "",
-    )
     return _detail(doc)
 
 
@@ -382,14 +373,6 @@ async def update_document_content(
 
     updated = await repo.update_content(document_id, user_id=user.user_id, content=body.content)
     assert updated is not None
-    # Clear → regenerate; non-empty description never auto-overwritten (定案).
-    maybe_schedule_description_fill(
-        document_id=updated.id,
-        user_id=user.user_id,
-        kind=updated.kind,
-        description=updated.description or "",
-        content=updated.content or "",
-    )
     return DocumentWriteResult(
         ok=True,
         version=memory_version(body.content),

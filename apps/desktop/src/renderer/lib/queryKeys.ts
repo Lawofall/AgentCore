@@ -56,7 +56,7 @@ export const gitCredentialKeys = {
   detail: ["git-credentials", "detail"] as const,
 };
 
-/** 账号模型组合（`GET /v1/users/me/llm-model-profiles`）。 */
+/** 账号装配（`GET /v1/users/me/assemblies`）。 */
 export const llmModelProfileKeys = {
   all: ["llm-model-profiles"] as const,
   list: ["llm-model-profiles", "list"] as const,

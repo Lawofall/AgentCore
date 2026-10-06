@@ -1,4 +1,4 @@
-import { BrandMark } from "@/components/brand/BrandMark";
+import { BrandMarkIcon } from "@/components/brand/BrandMark";
 import {
   Button,
   IconButton,
@@ -153,12 +153,7 @@ export function Sidebar({
           >
             {!collapsed && (
               <span className="flex flex-1 items-center gap-1.5 text-sidebar-foreground">
-                <BrandMark size="sm" />
-                {import.meta.env.DEV && (
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-                    DEV
-                  </span>
-                )}
+                <BrandMarkIcon size={16} title="AgentCore" />
               </span>
             )}
             {overlay ? (

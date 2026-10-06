@@ -1,5 +1,6 @@
 import { getConversations } from "@/hooks/useConversations";
 import { hasNativeNotification, isNativeRuntime } from "@/lib/capabilities";
+import { besideIdsOnScene } from "@/lib/conversationSplit";
 import {
   isShellPresent,
   openFloatConversationIds,
@@ -23,6 +24,7 @@ import {
   useAiTurnActivityStore,
 } from "@/stores/aiTurnActivity";
 import { DRAFT_KEY, useConversationStore } from "@/stores/conversation";
+import { useConversationSplitStore } from "@/stores/conversationSplit";
 import {
   type InteractionEntry,
   isAwaitingUserEntry,
@@ -130,7 +132,16 @@ function notifyAmbient(
   if (isTransientRoute(hash)) return;
   const outlet = pickAmbientOutlet({
     shellPresent: isShellPresent(),
-    onScene: isConversationOnScene(conversationId, hash, sceneFloatIds()),
+    onScene: isConversationOnScene(
+      conversationId,
+      hash,
+      sceneFloatIds(),
+      besideIdsOnScene(
+        hash,
+        useConversationSplitStore.getState().split,
+        useConversationSplitStore.getState().roomFits,
+      ),
+    ),
     hasOsNotification: hasNativeNotification(),
     nativeMobile: isNativeRuntime(),
   });

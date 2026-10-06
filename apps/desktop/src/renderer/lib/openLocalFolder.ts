@@ -37,8 +37,7 @@ export type PickAndOpenLocalFolderResult =
 
 /**
  * Create/reuse a local Folder for an already-authorized root, then start a
- * **new** conversation under it. Composer「从本机加入」picks first, then asks
- * how to use the path — this is the「直接改这个文件夹」leg.
+ * **new** conversation under it. Composer「从本机加入」选完路径即走这里（直接改）。
  *
  * Does **not** rewrite the current session's ``folder_id`` (出生定终身).
  * Distinct from {@link pickAndBindLocalFolder} (bare-chat scratch execution bind).

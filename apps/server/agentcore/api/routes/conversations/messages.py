@@ -69,7 +69,7 @@ from agentcore.conversation.store.overlay import (
     overlay_message_fields,
     overlay_runs_with_segments,
 )
-from agentcore.core.errors import NotFoundError
+from agentcore.core.errors import ConflictError, NotFoundError
 from agentcore.db.repositories import (
     ConversationRepository,
     MemoryUpdateRepository,
@@ -142,6 +142,11 @@ def _project_message_detail(
         n = int(generation_ms)
         if n > 0:
             detail.generation_ms = n
+    ttft_ms = usage.get("ttft_ms")
+    if ttft_ms is not None:
+        n = int(ttft_ms)
+        if n > 0:
+            detail.ttft_ms = n
     # Assistant-row lifecycle (usage.status) — overlay criterion for stream_state.
     status = usage.get("status")
     if status is not None:
@@ -671,26 +676,28 @@ async def reorder_queued_turns(
 
 
 @router.post(
-    "/{conversation_id}/queued-turns/{queue_id}/stop-and-send",
+    "/{conversation_id}/queued-turns/{queue_id}/to-captain",
     response_model=StatusResponse,
 )
-async def stop_and_send_queued_turn(
+async def deliver_queued_turn_to_captain(
     conversation_id: str,
     queue_id: str,
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
 ):
-    """Move this queued item to the front, then hard-stop the live turn.
+    """Hand this queued line to the live captain and drop it from the FIFO.
 
-    The next drain starts this item. Items that were ahead of it stay behind.
-    Stop still does not clear the rest of the FIFO.
+    The team keeps running. The user row stays (hidden until the interjection
+    is injected). No live coordination → 409 and the item stays queued.
     """
     await _require_conversation_write(conversation_id, user.user_id, conv_repo._session)
-    from agentcore.runtime.turn.delivery import stop_and_send_queued_item
+    from agentcore.runtime.turn.delivery import deliver_queued_item_to_captain
 
-    item = await stop_and_send_queued_item(conversation_id, queue_id)
-    if item is None:
+    result = await deliver_queued_item_to_captain(conversation_id, queue_id)
+    if result.status == "missing":
         raise NotFoundError("排队项不存在或已开始")
+    if result.status == "no_captain":
+        raise ConflictError("团队已经不在，这句话还在排队")
     return StatusResponse()
 
 
@@ -886,6 +893,7 @@ async def record_local_turn_endpoint(
         rounds=body.rounds,
         duration_ms=body.duration_ms,
         generation_ms=body.generation_ms,
+        ttft_ms=body.ttft_ms,
         prompt_tokens=body.prompt_tokens,
         error_code=body.error_code,
         collab=body.collab,

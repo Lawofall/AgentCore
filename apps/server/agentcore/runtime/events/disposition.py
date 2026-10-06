@@ -186,6 +186,11 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
         "worker 活动相位（thinking/tool/waiting_children/winding_down）——传输态；"
         "queued/skipped 走 RunStatus；reload 后由 status 兜底",
     ),
+    EventType.RUN_SPEND: (
+        Disposition.EPHEMERAL,
+        "run 累计用量——每次模型调用返回后推已入账的 token 与金额；"
+        "reload 读终态帧 / 台账，不重放这条心跳",
+    ),
     EventType.WORKSPACE_OP_REQUIRED: (Disposition.EPHEMERAL, "客户端工具请求（请求/响应交换，非回合内容）"),
     EventType.EXTERNAL_MOUNT_REQUIRED: (
         Disposition.EPHEMERAL,

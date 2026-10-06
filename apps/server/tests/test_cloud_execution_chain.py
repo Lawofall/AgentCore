@@ -109,10 +109,8 @@ def test_cloud_gvisor_on_chain_flips_end_to_end(tmp_path: Path, monkeypatch: pyt
     assert "run" in names
 
     # ② 能力自述：workspace_context 能力行翻「已装配」。
-    # 装包另位：无 netns egress 时 package_install 保持未装配（能跑 ≠ 能装）。
     ctx = build_workspace_context(backend, desktop_online=True)
     assert "run" not in _gaps(ctx)
-    assert "package_install=" not in ctx
 
 
     # ③ 委派能力闸：S3 后无 code_verified kind 硬放行；二进制产物启发不再软警告。

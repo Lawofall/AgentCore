@@ -254,7 +254,7 @@ async def _check_safety_and_approval_gates(
             **_shell_observe_log_fields(name, args),
         )
         return _ToolGateDenied(
-            message=_failed_tool_message(tc.id, denial),
+            message=_failed_tool_message(tc.id, denial, status="permission"),
             attempt=ToolAttempt(
                 fingerprint,
                 name,
@@ -341,7 +341,7 @@ async def _check_safety_and_approval_gates(
                 **_shell_observe_log_fields(name, args),
             )
             return _ToolGateDenied(
-                message=_failed_tool_message(tc.id, blocked),
+                message=_failed_tool_message(tc.id, blocked, status="permission"),
                 attempt=ToolAttempt(
                     fingerprint,
                     name,
@@ -439,7 +439,7 @@ async def _check_safety_and_approval_gates(
                 **_shell_observe_log_fields(name, args),
             )
             return _ToolGateDenied(
-                message=_failed_tool_message(tc.id, denial),
+                message=_failed_tool_message(tc.id, denial, status="permission"),
                 attempt=ToolAttempt(
                     fingerprint,
                     name,
@@ -522,7 +522,7 @@ async def _check_safety_and_approval_gates(
                     **_shell_observe_log_fields(name, args),
                 )
                 return _ToolGateDenied(
-                    message=_failed_tool_message(tc.id, denial),
+                    message=_failed_tool_message(tc.id, denial, status="permission"),
                     attempt=ToolAttempt(
                         fingerprint,
                         name,

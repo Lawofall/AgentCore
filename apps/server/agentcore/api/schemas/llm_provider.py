@@ -62,12 +62,12 @@ class LlmProviderView(BaseModel):
 class LlmProvidersResponse(BaseModel):
     """The full 设置·模型配置 state: provider list + deployment caps.
 
-    Account default combination lives on ``/users/me/llm-model-profiles``
-    (``default_model_profile_id``).
+    The starred assembly lives on ``/users/me/assemblies``
+    (``default_assembly_id``). Its model columns are the account default brain.
     """
 
     providers: list[LlmProviderView]
-    default_model_profile_id: str | None = None
+    default_assembly_id: str | None = None
     billing_mode: str = Field(
         default="byok",
         description=(

@@ -35,13 +35,39 @@ from agentcore.runtime.turn.interrupt import (
     finish_reason_for,
     normalize_interrupt_reason,
 )
-from agentcore.runtime.turn.latency import bind_turn_latency, reset_turn_latency, stamp_turn_wall
+from agentcore.runtime.turn.latency import (
+    ActiveMeter,
+    bind_active_meter,
+    bind_turn_latency,
+    reset_active_meter,
+    reset_turn_latency,
+    stamp_turn_wall,
+)
 from agentcore.sidecar import protocol
 from agentcore.sidecar.server_pkg.result import trim_result
 
 logger = get_logger(__name__)
 
 _TRACE_HEX32 = re.compile(r"^[0-9a-fA-F]{32}$")
+
+
+def schedule_with_context_budget(raw: object, coro: Any) -> asyncio.Task:
+    """Start ``coro`` with this turn's context budget copied into the task.
+
+    ``create_task`` copies the current context. Resetting the parent afterwards
+    does not clear the task's copy.
+    """
+    from agentcore.llm.context_budget import (
+        bind_context_budget,
+        coerce_context_budget,
+        reset_context_budget,
+    )
+
+    token = bind_context_budget(coerce_context_budget(raw))
+    try:
+        return asyncio.create_task(coro)
+    finally:
+        reset_context_budget(token)
 
 
 def parse_client_turn_ids(params: dict[str, Any]) -> tuple[str, str, str] | None:
@@ -217,6 +243,17 @@ def _finish_str(result: dict[str, Any]) -> str | None:
     if finish is None:
         return None
     return finish.value if hasattr(finish, "value") else str(finish)
+
+
+async def _remember_pause_meter(store: Any, message_id: str, result: dict[str, Any] | None) -> None:
+    """Keep this message's active meter on the local pause file.
+
+    Cloud resume reads ``messages.usage``. The sidecar has no message DB, so
+    the next local resume continues from this stamp.
+    """
+    if store is None or result is None or _finish_str(result) != "paused":
+        return
+    await store.stamp_active_meter(message_id, ActiveMeter.from_usage(result).as_dict())
 
 
 def _inference_search_creds(creds: Any):
@@ -657,6 +694,7 @@ class TurnExecutionMixin:
                             table_selection=table_selection or None,
                         )
                         stamp_turn_wall(result)
+                        await _remember_pause_meter(self._paused_store, message_id, result)
                         # Duration / Phase-0 close before the detached-drive hold —
                         # same wall-clock as cloud turn_runner (harvest wait is not TTFT).
                         log_chat_turn_complete(
@@ -1066,7 +1104,14 @@ class TurnExecutionMixin:
         )
         result: dict[str, Any] | None = None
         started = time.monotonic()
-        _, latency_token = bind_turn_latency(started)
+        meter = ActiveMeter.from_usage(suspension.active_meter)
+        _, latency_token = bind_turn_latency(
+            started,
+            carried_duration_ms=meter.duration_ms,
+            carried_generation_ms=meter.generation_ms,
+            first_stream_done=meter.first_stream_done,
+        )
+        meter_token = bind_active_meter(meter)
         try:
             try:
                 # Bind this continuation's trace_id (same rationale as _run_turn) so the
@@ -1115,6 +1160,7 @@ class TurnExecutionMixin:
                             x_client_platform="desktop",
                         )
                         stamp_turn_wall(result)
+                        await _remember_pause_meter(self._paused_store, turn_id, result)
                         # Same D1 hold as _run_turn: delay close while detached drive lives.
                         from agentcore.runtime.coordination import await_live_detached_drive
                         from agentcore.runtime.pipeline.finalize import (
@@ -1127,6 +1173,7 @@ class TurnExecutionMixin:
                 _emit_cancel_end_if_cancelling(sink)
                 _emit_hot_orphans_if_cancelling(sink, conversation_id)
                 reset_turn_latency(latency_token)
+                reset_active_meter(meter_token)
                 # The pipeline no longer closes the sink (its owner does); the sidecar owns
                 # this one, so close it on EVERY path — success or crash — or the pump would
                 # await the None sentinel forever.

@@ -221,24 +221,28 @@ async def _default_chat_provider_row(
     Used as a low-level fallback when expanding slots / decrypting without a full
     profile walk. Prefer ``resolve_account_default_model`` for turn selection.
     """
-    from agentcore.db.repositories import UserLlmProviderRepository, UserRepository
-    from agentcore.llm.model_profiles import is_system_profile_id
+    from agentcore.db.repositories import (
+        LlmModelProfileRepository,
+        UserLlmProviderRepository,
+        UserRepository,
+    )
 
     repo = UserLlmProviderRepository(session)
     if user is None:
         user = await UserRepository(session).get_by_id(user_id)
-    profile_id = getattr(user, "default_model_profile_id", None) if user is not None else None
-    if profile_id and not is_system_profile_id(profile_id):
-        from agentcore.db.repositories import LlmModelProfileRepository
-
-        row_prof = await LlmModelProfileRepository(session).get(profile_id, user_id=user_id)
-        if row_prof is not None and row_prof.main_provider_id:
-            row = await repo.get(row_prof.main_provider_id, user_id=user_id)
+    assembly_id = getattr(user, "default_assembly_id", None) if user is not None else None
+    if assembly_id:
+        row_assembly = await LlmModelProfileRepository(session).get(
+            assembly_id, user_id=user_id
+        )
+        if (
+            row_assembly is not None
+            and row_assembly.main_origin == "byok"
+            and row_assembly.main_provider_id
+        ):
+            row = await repo.get(row_assembly.main_provider_id, user_id=user_id)
             if row is not None:
                 return row
-    elif profile_id and is_system_profile_id(profile_id):
-        # System presets are platform-origin; no BYOK default row.
-        return await repo.first_for_user(user_id)
     return await repo.first_for_user(user_id)
 
 
@@ -312,7 +316,7 @@ async def resolve_conversation_model_selection(
 ) -> ModelSelection:
     """Resolve main model + origin + provider for a user-facing turn (profile expand).
 
-    ``conversations.model_profile_id`` when set; else account ``default_model_profile_id``;
+    ``conversations.assembly_id`` when set; else account ``default_assembly_id``;
     else system glm-5.2 preset. Live expand — dangling provider pins fall back silently.
     """
     from agentcore.llm.model_profiles import LlmModelProfileService

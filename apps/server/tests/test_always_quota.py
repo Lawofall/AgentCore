@@ -299,3 +299,63 @@ async def test_measure_usage_counts_only_user_rules():
     assert usage.global_chars == g_chars
     assert usage.project_chars == p_chars
     assert usage.used_chars == g_chars + p_chars
+
+
+async def test_starred_assembly_always_pool_ignores_column_only_docs():
+    """A star's 必带 is the account pool. A column-always doc not on the star does not count."""
+    from agentcore.db.models import LlmModelProfile, User
+
+    on_star = _Doc("star-doc", "---\napply: always\n---\n" + ("s" * 8))
+    on_star.user_id = "u"  # type: ignore[attr-defined]
+    on_star.deleted_at = None  # type: ignore[attr-defined]
+    on_star.ai_maintained = False  # type: ignore[attr-defined]
+    column_only = _Doc("col", "---\napply: always\n---\n" + ("c" * 40))
+
+    class _Skill:
+        document_id = "star-doc"
+        apply_mode = "always"
+
+    class _Session:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def get(self, model, key):  # type: ignore[no-untyped-def]
+            del key
+            if model is User:
+                return type("U", (), {"default_assembly_id": "asm-1"})()
+            if model is LlmModelProfile:
+                return type("A", (), {"user_id": "u"})()
+            return None
+
+        async def execute(self, stmt):  # type: ignore[no-untyped-def]
+            del stmt
+            self.calls += 1
+            rows = [_Skill()] if self.calls == 1 else [on_star]
+
+            class _Result:
+                def scalars(self):  # type: ignore[no-untyped-def]
+                    return iter(rows)
+
+            return _Result()
+
+    class _Repo:
+        def __init__(self) -> None:
+            self._session = _Session()
+
+        async def list_injectable_rules(self, user_id, folder_id, *, ai_maintained):  # type: ignore[no-untyped-def]
+            del user_id, ai_maintained
+            if folder_id is None:
+                raise AssertionError("starred account pool must not read the column")
+            return [column_only]
+
+        async def list_path_user_rules(self, user_id, folder_id):  # type: ignore[no-untyped-def]
+            del user_id, folder_id
+            return []
+
+    usage = await measure_always_usage(_Repo(), "u", folder_id=None)  # type: ignore[arg-type]
+    assert usage.used_chars == always_entry_chars(on_star.content)
+    assert usage.global_chars == usage.used_chars
+
+    usage_folder = await measure_always_usage(_Repo(), "u", folder_id="F1")  # type: ignore[arg-type]
+    assert usage_folder.global_chars == always_entry_chars(on_star.content)
+    assert usage_folder.project_chars == always_entry_chars(column_only.content)

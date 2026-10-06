@@ -34,6 +34,8 @@ import {
 } from "@/lib/conversationDeleteCopy";
 import { buildMessagePreview } from "@/lib/conversationListPreview";
 import { useConversationLocationId } from "@/lib/conversationLocation";
+import { canOpenBeside, isSplitHostPath } from "@/lib/conversationSplit";
+import { openConversationBeside } from "@/lib/conversationSplitActions";
 import { shouldShowConversationCloudIcon } from "@/lib/conversationWorkspaceMode";
 import { isMac } from "@/lib/platform";
 import {
@@ -41,6 +43,7 @@ import {
   useRailHotkeyIndex,
 } from "@/lib/railHotkeys";
 import { notifyError, notifyInfo } from "@/lib/toast";
+import { useNarrowLayout } from "@/lib/useNarrowLayout";
 import { cn } from "@/lib/utils";
 import {
   type ExportFormat,
@@ -58,6 +61,7 @@ import {
   useConversationGenerating,
   useConversationStore,
 } from "@/stores/conversation";
+import { useConversationSplitStore } from "@/stores/conversationSplit";
 import {
   isAwaitingUserEntry,
   isColdResumeKind,
@@ -67,6 +71,7 @@ import { usePausedTurnStore } from "@/stores/pausedTurns";
 import { useShareStore } from "@/stores/share";
 import {
   Archive,
+  Columns2,
   Download,
   FileJson,
   MoreHorizontal,
@@ -77,7 +82,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ConversationCloudIcon } from "./ConversationWorkspaceModeIcon";
 
 const PREVIEW_DELAY_MS = 500;
@@ -157,8 +162,25 @@ export function ConversationItem({
   // ——从没在这台机器上打开过的对话也能亮灯（云对话多端同权 B2 · L1）。
   const awaitingAttention = useConversationAwaitingAttention(conversation.id);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const locationId = useConversationLocationId();
   const isActive = locationId === conversation.id;
+  const isNarrow = useNarrowLayout();
+  const split = useConversationSplitStore((s) => s.split);
+  const roomFits = useConversationSplitStore((s) => s.roomFits);
+  const currentId = useConversationStore((s) => s.currentConversationId);
+  const focusedPaneId = split ? split.panes[split.focus] : currentId;
+  const canBeside = canOpenBeside(
+    conversation.id,
+    split,
+    focusedPaneId,
+    roomFits && !isNarrow,
+  );
+  const splitDrawn =
+    roomFits && !isNarrow && isSplitHostPath(pathname) && split != null;
+  const besideOpen = Boolean(
+    splitDrawn && split?.panes.includes(conversation.id) && !isActive,
+  );
   const showRowActions = hovered || moreOpen;
   const hotkeyIndex = useRailHotkeyIndex(conversation.id);
   const showHotkeyIndex =
@@ -338,7 +360,11 @@ export function ConversationItem({
               variant="sidebar"
               active={isActive}
               // 列表行比导航项低一档（h-8 vs 导航 h-9），让二级内容不占一级高度。
-              className={cn("touch-row h-8", className)}
+              className={cn(
+                "touch-row h-8",
+                besideOpen && "bg-sidebar-accent/45",
+                className,
+              )}
               onMouseEnter={() => {
                 setHovered(true);
                 if (!suppressPreview) {
@@ -444,6 +470,19 @@ export function ConversationItem({
                       align="end"
                       onClick={(e) => e.stopPropagation()}
                     >
+                      {canBeside && (
+                        <>
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              openConversationBeside(conversation.id, navigate)
+                            }
+                          >
+                            <Columns2 size={14} className="shrink-0" />
+                            <span className="flex-1 truncate">在旁边打开</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                        </>
+                      )}
                       <DropdownMenuItem onSelect={() => startEdit()}>
                         <Pencil size={14} className="shrink-0" />
                         <span className="flex-1 truncate">重命名</span>
@@ -524,6 +563,17 @@ export function ConversationItem({
       </Tooltip>
 
       <ContextMenuContent>
+        {canBeside && (
+          <>
+            <ContextMenuItem
+              onSelect={() => openConversationBeside(conversation.id, navigate)}
+            >
+              <Columns2 size={14} className="shrink-0" />
+              <span className="flex-1 truncate">在旁边打开</span>
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
         <ContextMenuItem onSelect={() => startEdit()}>
           <Pencil size={14} className="shrink-0" />
           <span className="flex-1 truncate">重命名</span>

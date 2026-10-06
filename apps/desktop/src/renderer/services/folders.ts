@@ -309,6 +309,8 @@ export interface DeletedFolderMeta {
 /** The recycle bin plus the retention window it is governed by. */
 export interface FolderTrash {
   items: DeletedFolderMeta[];
+  /** Every recoverable project in the window. The page may show fewer. */
+  total: number;
   retentionDays: number;
 }
 
@@ -330,6 +332,7 @@ export async function listFolderTrash(): Promise<FolderTrash> {
     await api.get<Schemas["DeletedFolderListResponse"]>("/v1/folders/trash");
   return {
     items: res.data.map(toDeletedFolder),
+    total: res.total,
     retentionDays: res.retention_days,
   };
 }
@@ -349,6 +352,16 @@ export async function restoreFolder(id: string): Promise<FolderMeta> {
 /** Permanently remove a trash project. Past retention / a restore that won is 409. */
 export async function purgeTrashedFolder(id: string): Promise<void> {
   await api.delete(`/v1/folders/trash/${id}`);
+}
+
+/** Permanently remove every in-window trash project, not just the capped page. */
+export async function emptyFolderTrash(): Promise<{
+  purged: number;
+  skippedBusy: number;
+}> {
+  const res =
+    await api.delete<Schemas["TrashEmptyResponse"]>("/v1/folders/trash");
+  return { purged: res.purged, skippedBusy: res.skipped_busy };
 }
 
 /** Hard-delete a folder and every member conversation + cloud workspace (彻底删除文件夹). */

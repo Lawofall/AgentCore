@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from agentcore.llm.model_ref import format_model_ref, parse_model_input
 from agentcore.llm.profiles import PLATFORM_PROVIDER_SENTINEL
+from agentcore.llm.turn_catalog import DEBATE_CATALOG_UNAVAILABLE
 from agentcore.runtime.debate.types import DebateSide
 
 if TYPE_CHECKING:
@@ -106,6 +107,23 @@ def coerce_identity(ident: ModelIdentity) -> tuple[ModelIdentity, str]:
             "",
         )
     return ident, ""
+
+
+def debate_needs_model_catalog(config: DebateConfig, *, cross_model: bool) -> bool:
+    """True when the plan must read the catalog (cross-model, a named side, or a named judge).
+
+    Empty identities and no flag is a same-model field: do not fetch.
+    """
+    if cross_model:
+        return True
+    named_mod = ModelIdentity(
+        model=getattr(config, "moderator_model", "") or "",
+        origin=getattr(config, "moderator_origin", "") or "",
+        provider_id=getattr(config, "moderator_provider_id", "") or "",
+    )
+    if not named_mod.is_empty():
+        return True
+    return any(not identity_from_side(side).is_empty() for side in config.sides)
 
 
 def identity_from_side(side: DebateSide) -> ModelIdentity:
@@ -624,10 +642,7 @@ async def prepare_debate_model_plan(
     all_empty = all(identity_from_side(s).is_empty() for s in config.sides)
     if cross_model and all_empty:
         if catalog is None:
-            return (
-                "cross_model=true 但无法加载模型目录，凑不出默认对阵。"
-                "请点名双方模型，或稍后重试。"
-            )
+            return DEBATE_CATALOG_UNAVAILABLE
         matchup = resolve_default_matchup(catalog)
         if matchup is None:
             config.model_candidates = [
@@ -660,10 +675,7 @@ async def prepare_debate_model_plan(
         if not needs_mention_resolve(ident):
             continue
         if catalog is None:
-            return (
-                f"{where} 已填模型提及「{ident.model}」但无法加载目录消歧；"
-                "请稍后重试，禁止 silent 回退 / ask_user 元问题。"
-            )
+            return DEBATE_CATALOG_UNAVAILABLE
         prefer: ModelOrigin | None = None
         if ident.origin in ("platform", "byok"):
             prefer = ident.origin  # type: ignore[assignment]
@@ -689,10 +701,7 @@ async def prepare_debate_model_plan(
         if ident.is_empty():
             continue
         if catalog is None and session is None:
-            return (
-                f"{where} 已填模型身份但无法校验目录；"
-                "请稍后重试，禁止 silent 回退。"
-            )
+            return DEBATE_CATALOG_UNAVAILABLE
         err = await validate_identity_in_catalog(
             session,
             user_id,
@@ -716,10 +725,7 @@ async def prepare_debate_model_plan(
     if not mod_named.is_empty():
         if needs_mention_resolve(mod_named):
             if catalog is None:
-                return (
-                    f"moderator_model 已填模型提及「{mod_named.model}」但无法加载目录消歧；"
-                    "请稍后重试，禁止 silent 回退 / ask_user 元问题。"
-                )
+                return DEBATE_CATALOG_UNAVAILABLE
             prefer_mod: ModelOrigin | None = None
             if mod_named.origin in ("platform", "byok"):
                 prefer_mod = mod_named.origin  # type: ignore[assignment]
@@ -739,10 +745,7 @@ async def prepare_debate_model_plan(
             if shape:
                 return shape
             if catalog is None and session is None:
-                return (
-                    "moderator_model 已填模型身份但无法校验目录；"
-                    "请稍后重试，禁止 silent 回退。"
-                )
+                return DEBATE_CATALOG_UNAVAILABLE
             mod_err = await validate_identity_in_catalog(
                 session,
                 user_id,

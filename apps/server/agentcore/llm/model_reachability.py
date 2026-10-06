@@ -130,7 +130,7 @@ def _connectivity_probe_auth_copy(
     if list_outcome.kind == "ok" and list_outcome.model_ids:
         return (
             f"模型「{model}」不被上游接受（不存在或无权）。"
-            "当前 API Key 已能列出模型，请改「模型组合」中的该模型。"
+            "当前 API Key 已能列出模型，请改「装配」中的该模型。"
         )
     return (
         f"请核对 API Key 与模型「{model}」。"

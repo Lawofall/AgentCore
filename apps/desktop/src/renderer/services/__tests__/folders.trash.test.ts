@@ -4,6 +4,7 @@ vi.mock("@/services/api", () => ({
 
 import { api } from "@/services/api";
 import {
+  emptyFolderTrash,
   listFolderTrash,
   purgeTrashedFolder,
   restoreFolder,
@@ -43,6 +44,7 @@ describe("最近删除 (folder trash)", () => {
 
     expect(get).toHaveBeenCalledWith("/v1/folders/trash");
     expect(trash.retentionDays).toBe(30);
+    expect(trash.total).toBe(1);
     expect(trash.items).toEqual([
       {
         id: "f1",
@@ -86,5 +88,14 @@ describe("最近删除 (folder trash)", () => {
     del.mockResolvedValue(undefined);
     await purgeTrashedFolder("f1");
     expect(del).toHaveBeenCalledWith("/v1/folders/trash/f1");
+  });
+
+  it("empty hits the collection and keeps a busy skip", async () => {
+    del.mockResolvedValue({ purged: 2, skipped_busy: 1 });
+    await expect(emptyFolderTrash()).resolves.toEqual({
+      purged: 2,
+      skippedBusy: 1,
+    });
+    expect(del).toHaveBeenCalledWith("/v1/folders/trash");
   });
 });

@@ -20,6 +20,7 @@ export const RUN_FRAME_EVENT_TYPES: ReadonlySet<string> = new Set([
   "run_reasoning_delta",
   "run_tool_progress",
   "run_phase",
+  "run_spend",
   "run_completed",
   "run_failed",
   "run_cancelled",

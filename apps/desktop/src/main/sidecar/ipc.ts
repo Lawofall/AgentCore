@@ -7,6 +7,7 @@ import {
   type SidecarCreateWorkspaceVersionRequest,
   type SidecarDebateSteerRequest,
   type SidecarDeliverMessageRequest,
+  type SidecarDeliverQueuedToCaptainRequest,
   type SidecarEditQueuedTurnRequest,
   type SidecarExecOutputRequest,
   type SidecarListBrowserSessionsRequest,
@@ -27,7 +28,6 @@ import {
   type SidecarRunRedirectRequest,
   type SidecarRunStopRequest,
   type SidecarStartTurnRequest,
-  type SidecarStopAndSendQueuedTurnRequest,
   type SidecarTurnFilesDiffRequest,
   type SidecarTurnFilesDiffResult,
   type SidecarTurnResult,
@@ -261,15 +261,15 @@ export function registerSidecarIpc(): void {
   );
 
   ipcMain.handle(
-    SIDECAR_CHANNELS.stopAndSendQueuedTurn,
-    (_e, req: SidecarStopAndSendQueuedTurnRequest) => {
+    SIDECAR_CHANNELS.deliverQueuedTurnToCaptain,
+    (_e, req: SidecarDeliverQueuedToCaptainRequest) => {
       assertSidecarShape(
-        SIDECAR_CHANNELS.stopAndSendQueuedTurn,
+        SIDECAR_CHANNELS.deliverQueuedTurnToCaptain,
         req,
         ["rootId", "conversationId", "queueId"],
         ["subpath"],
       );
-      return manager.stopAndSendQueuedTurn(req);
+      return manager.deliverQueuedTurnToCaptain(req);
     },
   );
 

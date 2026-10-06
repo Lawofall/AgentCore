@@ -341,7 +341,7 @@ async def test_list_folders_empty(monkeypatch: pytest.MonkeyPatch):
     assert "过写盘闸" in result.output or "勿" in result.output
     # Empty roster must not default-nudge a model open-folder action.
     assert "open_local_project" not in result.output
-    assert "先在云上做" in result.output
+    assert "云上做完再写入" in result.output
     assert _FOLDER_HOW_CONSULT not in result.output
     assert "开发双仓" not in result.output
 
@@ -395,8 +395,8 @@ async def test_resolve_zero(monkeypatch: pytest.MonkeyPatch):
     assert "层级" in result.output
     # Must not default-urge a model open-folder action as the create path.
     assert "open_local_project" not in result.output
-    assert "先在云上做" in result.output
-    assert "本机 scratch" in result.output or "先在云上做" in result.output
+    assert "云上做完再写入" in result.output
+    assert "本机 scratch" in result.output or "云上做完再写入" in result.output
 
 
 async def test_resolve_ambiguous(monkeypatch: pytest.MonkeyPatch):

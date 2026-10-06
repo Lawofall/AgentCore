@@ -1,7 +1,8 @@
 import { IconButton } from "@/components/ui";
+import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import {
   NO_ACTIVE_MESSAGES,
-  activeRuntime,
+  runtimeOf,
   useConversationStore,
 } from "@/stores/conversation";
 import { useUIStore } from "@/stores/ui";
@@ -26,12 +27,13 @@ export function FindBar({
   open: boolean;
   onClose: () => void;
 }) {
+  const paneKey = useChatPaneSliceKey();
   const messages = useConversationStore((s) => {
     if (!open) return NO_ACTIVE_MESSAGES;
-    return activeRuntime(s).messages;
+    return runtimeOf(s, paneKey).messages;
   });
   const focusMessage = useConversationStore((s) => s.focusMessage);
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   const openSearch = useUIStore((s) => s.openSearch);
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);

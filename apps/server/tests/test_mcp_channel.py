@@ -22,7 +22,6 @@ from agentcore.tools.mcp.wire import (
     McpToolSpec,
     clear_mcp_discover_cache,
     discover_mcp_tools,
-    mcp_capability_label,
     parse_mcp_list_payload,
     register_mcp_tools,
     seed_mcp_discover_cache,
@@ -44,15 +43,6 @@ def test_sanitize_mcp_tool_name_stable_and_bounded():
     assert len(name) <= 64
     assert "/" not in name
     assert "!" not in name
-
-
-def test_mcp_capability_label_matrix():
-    assert mcp_capability_label(None, desktop_online=False) == "未装配"
-    assert mcp_capability_label(None, desktop_online=True) == "未装配"
-    ready = McpDiscoverResult(tool_count=2, ready_servers=1)
-    assert mcp_capability_label(ready, desktop_online=True) == "已装配"
-    degraded = McpDiscoverResult(degraded=True, failed_servers=1)
-    assert mcp_capability_label(degraded, desktop_online=True) == "降级（无可用工具）"
 
 
 def test_register_mcp_tools_grantable():
@@ -262,7 +252,6 @@ async def test_discover_mcp_tools_cache_only_miss_skips_channel(monkeypatch):
     assert miss[0][1]["detail"] == "cache_miss"
     assert miss[0][1]["conversation_id"] == "c-cache-only-miss"
     assert miss[0][1]["cache_scope"] == "user-1"
-    assert mcp_capability_label(result, desktop_online=True) == "未装配"
 
 
 @pytest.mark.asyncio

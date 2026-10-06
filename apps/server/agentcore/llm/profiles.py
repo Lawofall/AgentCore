@@ -117,6 +117,8 @@ class TurnProfiles:
     agent_provider_id: str | None = None
     # Combination-level vendor thinking-effort token. None = that model's default.
     reasoning_effort: str | None = None
+    # Shorter context ceiling from the assembly. None = each role's catalog window.
+    context_budget: int | None = None
 
     def model_for(self, profile_name: str) -> str:
         return self.model_overrides.get(profile_name, self.model)

@@ -104,9 +104,33 @@ vi.mock("@/hooks/useModels", () => ({
   useModels: () => ({ data: undefined }),
 }));
 
+const editingAssembly = vi.hoisted(() => ({
+  profile: null as {
+    id: string;
+    kind: "user" | "system";
+    omit_factory_catalog?: boolean;
+  } | null,
+  pending: false,
+}));
+
+vi.mock("@/pages/toolbox/useEditingAssembly", () => ({
+  useEditingAssembly: () => editingAssembly,
+}));
+
+vi.mock("@/services/llmModelProfiles", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/services/llmModelProfiles")>();
+  return {
+    ...actual,
+    updateLlmModelProfile: vi.fn(),
+  };
+});
+
+const { updateLlmModelProfile } = await import("@/services/llmModelProfiles");
 const { getSkillCatalog } = await import("@/services/skillCatalog");
 const { listInstalledSkills } = await import("@/services/skillStore");
 const {
+  createRuleDocument,
   createRuleFolder,
   deleteDocument,
   getDocument,
@@ -173,11 +197,14 @@ function renderCatalog(
 }
 
 function alwaysRail() {
-  return screen.getByTestId("prompt-rail-always");
+  return screen.getByTestId("prompt-rail-shelf");
 }
 
 function onDemandRail() {
-  return screen.getByTestId("prompt-rail-on-demand");
+  return (
+    screen.queryByTestId("prompt-folder-open") ??
+    screen.getByTestId("prompt-rail-shelf")
+  );
 }
 
 async function openReadDialog(from: HTMLElement, label: string) {
@@ -190,6 +217,9 @@ function previewText(from: HTMLElement, text: string) {
 }
 
 beforeEach(() => {
+  editingAssembly.profile = null;
+  editingAssembly.pending = false;
+  vi.mocked(updateLlmModelProfile).mockReset();
   vi.mocked(getSkillCatalog).mockReset();
   vi.mocked(getSkillCatalog).mockResolvedValue({
     slots: [],
@@ -266,13 +296,12 @@ describe("PromptCatalog 概览", () => {
       expect(screen.getByTestId("prompt-overview")).toBeTruthy();
     });
     expect(screen.queryByText("自带")).toBeNull();
-    expect(screen.getByRole("heading", { name: "必带" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "按需" })).toBeTruthy();
-    const title = screen.getByRole("heading", { level: 1, name: "工具箱" });
-    expect(title.className).toContain("sr-only");
-    const source = screen.getByRole("navigation", { name: "工具箱" });
-    expect(within(source).getByLabelText("搜提示词")).toBeTruthy();
-    expect(within(source).getByRole("button", { name: /^新建$/ })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "必带" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "交代" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "工具箱" })).toBeNull();
+    expect(screen.getByLabelText("搜提示词")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^新建$/ })).toBeTruthy();
     expect(screen.queryByText("下一回合会带这些")).toBeNull();
     expect(screen.queryByText("每回合都带着")).toBeNull();
     expect(screen.queryByText("用到才翻")).toBeNull();
@@ -280,30 +309,30 @@ describe("PromptCatalog 概览", () => {
     expect(
       within(onDemandRail()).queryByRole("heading", { name: "官方" }),
     ).toBeNull();
-    expect(screen.queryByRole("button", { name: "薄技能" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "全员共享准则" })).toBeNull();
+    const factory = screen.getByTestId("prompt-rail-factory");
+    expect(onDemandRail().contains(factory)).toBe(true);
+    expect(
+      within(factory).getByRole("button", { name: "薄技能" }),
+    ).toBeTruthy();
+    expect(within(factory).getByText("官方")).toBeTruthy();
+    expect(within(onDemandRail()).queryByRole("switch")).toBeNull();
+    expect(screen.queryByRole("switch", { name: "出厂" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "出厂" })).toBeNull();
+    expect(
+      within(screen.getByTestId("prompt-rail-constitution")).getByRole(
+        "button",
+        { name: "全员共享准则" },
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText("偏好")).toBeNull();
     expect(screen.queryByText("画像")).toBeNull();
     expect(screen.queryByRole("button", { name: "概览" })).toBeNull();
     expect(screen.getByRole("button", { name: /^新建$/ })).toBeTruthy();
-    expect(
-      within(screen.getByRole("navigation", { name: "工具箱" })).getByRole(
-        "link",
-        { name: "市场" },
-      ),
-    ).toBeTruthy();
-    expect(
-      within(screen.getByRole("navigation", { name: "工具箱" })).getByRole(
-        "link",
-        { name: "官方" },
-      ),
-    ).toBeTruthy();
-    expect(
-      within(screen.getByRole("navigation", { name: "工具箱" })).getByRole(
-        "link",
-        { name: "我的" },
-      ),
-    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "市场" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "总" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "MCP" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "官方" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "我的" })).toBeNull();
     expect(screen.queryByRole("link", { name: "说明书" })).toBeNull();
     expect(screen.queryByTestId("prompt-overview-updates")).toBeNull();
     expect(screen.queryByRole("button", { name: "最近学到" })).toBeNull();
@@ -312,17 +341,46 @@ describe("PromptCatalog 概览", () => {
     expect(screen.getByTestId("prompt-overview")).toBeTruthy();
   });
 
-  it("官方栏打开准则读卡", async () => {
-    renderCatalog("/toolbox/official");
+  it("出厂开关和交代标题同一行", async () => {
+    editingAssembly.profile = {
+      id: "mine",
+      kind: "user",
+      omit_factory_catalog: false,
+    };
+    vi.mocked(updateLlmModelProfile).mockResolvedValue(undefined as never);
+    renderCatalog();
     await waitFor(() => {
       expect(screen.getByTestId("prompt-overview")).toBeTruthy();
     });
-    expect(screen.queryByRole("button", { name: /^新建$/ })).toBeNull();
-    const prompts = screen.getByTestId("prompt-rail-prompts");
-    expect(within(prompts).getByText("每回合都在的工作宪法")).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "准则" })).toBeNull();
+    const title = screen.getByRole("heading", { name: "交代" });
+    const row = title.parentElement?.parentElement as HTMLElement;
+    const toggle = within(row).getByRole("switch", { name: "出厂" });
+    expect(within(row).getByRole("button", { name: "新建夹" })).toBeTruthy();
+    expect(within(row).getByRole("button", { name: /^新建$/ })).toBeTruthy();
+    expect(screen.getByTestId("prompt-rail-shelf").contains(toggle)).toBe(
+      false,
+    );
+    expect(screen.getByTestId("prompt-rail-factory").contains(toggle)).toBe(
+      false,
+    );
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(updateLlmModelProfile).toHaveBeenCalledWith("mine", {
+        omit_factory_catalog: true,
+      });
+    });
+  });
+
+  it("准则矮卡打开读卡", async () => {
+    renderCatalog();
+    await waitFor(() => {
+      expect(screen.getByTestId("prompt-overview")).toBeTruthy();
+    });
+    const constitution = screen.getByTestId("prompt-rail-constitution");
+    expect(within(constitution).getByText("每回合都在的工作宪法")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "准则" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "教法" })).toBeNull();
-    const dialog = await openReadDialog(prompts, "全员共享准则");
+    const dialog = await openReadDialog(constitution, "全员共享准则");
     expect(
       within(dialog).getByRole("heading", { name: "全员共享准则" }),
     ).toBeTruthy();
@@ -339,8 +397,8 @@ describe("PromptCatalog 概览", () => {
     expect(screen.getByTestId("prompt-overview")).toBeTruthy();
   });
 
-  it("官方 HOW 进提示词货架，不进我的必带/按需", async () => {
-    renderCatalog("/toolbox/official", {
+  it("官方 HOW 在按需里标官方，不进必带、不进夹", async () => {
+    renderCatalog("/toolbox/mine/skills", {
       ...base,
       skills: [
         {
@@ -364,41 +422,35 @@ describe("PromptCatalog 概览", () => {
     await waitFor(() => {
       expect(screen.getByTestId("prompt-overview")).toBeTruthy();
     });
+    const factory = screen.getByTestId("prompt-rail-factory");
+    expect(onDemandRail().contains(factory)).toBe(true);
+    expect(
+      within(factory).getByRole("button", { name: "团队拆法" }),
+    ).toBeTruthy();
+    expect(
+      within(factory).getByRole("button", { name: "跑命令 / 启服" }),
+    ).toBeTruthy();
+    expect(within(factory).getAllByText("官方")).toHaveLength(2);
+    expect(within(factory).queryByText("必带")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-always")).toBeNull();
-    expect(screen.queryByTestId("prompt-rail-on-demand")).toBeNull();
-    const prompts = screen.getByTestId("prompt-rail-prompts");
-    expect(
-      within(prompts)
-        .getAllByRole("button")
-        .map((button) => button.getAttribute("aria-label"))[0],
-    ).toBe("全员共享准则");
-    expect(
-      within(prompts).getByRole("button", {
-        name: "团队拆法",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(prompts).getByRole("button", {
-        name: "跑命令 / 启服",
-      }),
-    ).toBeTruthy();
+    expect(screen.queryByTestId("my-skills")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-official")).toBeNull();
   });
 
-  it("无官方 HOW 时提示词货架仍留准则卡", async () => {
-    renderCatalog("/toolbox/official", { ...base, skills: [] });
+  it("无官方 HOW 时仍留准则矮卡", async () => {
+    renderCatalog("/toolbox/mine/skills", { ...base, skills: [] });
     await waitFor(() => {
       expect(screen.getByTestId("prompt-overview")).toBeTruthy();
     });
     expect(screen.queryByTestId("prompt-rail-how")).toBeNull();
-    expect(screen.queryByTestId("prompt-rail-constitution")).toBeNull();
+    expect(screen.queryByTestId("prompt-rail-factory")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-official")).toBeNull();
     expect(screen.queryByRole("heading", { name: "教法" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "准则" })).toBeNull();
     expect(
-      within(screen.getByTestId("prompt-rail-prompts")).getByRole("button", {
-        name: "全员共享准则",
-      }),
+      within(screen.getByTestId("prompt-rail-constitution")).getByRole(
+        "button",
+        { name: "全员共享准则" },
+      ),
     ).toBeTruthy();
   });
 
@@ -421,8 +473,8 @@ describe("PromptCatalog 概览", () => {
     await waitFor(() => {
       expect(previewText(onDemandRail(), "合同审查")).toBeTruthy();
     });
-    expect(within(onDemandRail()).getByText("其他")).toBeTruthy();
-    expect(screen.queryByTestId("my-skills")).toBeTruthy();
+    expect(screen.queryByText("其他")).toBeNull();
+    expect(screen.queryByTestId("my-skills")).toBeNull();
     const dialog = await openReadDialog(onDemandRail(), "合同审查");
     expect(within(dialog).queryByText("我的")).toBeNull();
     expect(await screen.findByTestId("mine-skill-editor")).toBeTruthy();
@@ -454,7 +506,6 @@ describe("PromptCatalog 概览", () => {
         installDocumentId: "d1",
         status: "published",
         group: "legal",
-        offersTools: [],
       },
     ]);
     vi.mocked(getSkillCatalog).mockResolvedValue({
@@ -479,7 +530,9 @@ describe("PromptCatalog 概览", () => {
     expect(within(dialog).getByText("市场")).toBeTruthy();
     expect(within(dialog).queryByText("我的")).toBeNull();
     expect(within(dialog).getByText("法律合规")).toBeTruthy();
-    expect(onDemandRail().textContent).toContain("法律合规");
+    expect(onDemandRail().textContent).toContain("市场");
+    expect(onDemandRail().textContent).not.toContain("我的");
+    expect(onDemandRail().textContent).not.toContain("法律合规");
     expect(screen.queryByRole("button", { name: "上架" })).toBeNull();
   });
 });
@@ -579,6 +632,14 @@ describe("PromptCatalog 拖拽搬家", () => {
     expect(screen.getByText("删除")).toBeTruthy();
   });
 
+  function dropOnAlways(mineId: string) {
+    const dataTransfer = dropTransfer(mineId);
+    fireEvent.dragOver(screen.getByTestId("prompt-rail-shelf"), {
+      dataTransfer,
+    });
+    fireEvent.drop(screen.getByTestId("prompt-rail-always"), { dataTransfer });
+  }
+
   it("手写条目可拖", async () => {
     await renderMineCatalog();
     const started = startDrag("合同审查", onDemandRail());
@@ -588,21 +649,17 @@ describe("PromptCatalog 拖拽搬家", () => {
     );
   });
 
-  it("拖到常驻区里的条目也写成常驻", async () => {
+  it("拖到常驻落点写成常驻", async () => {
     await renderMineCatalog();
-    fireEvent.drop(alwaysRail(), {
-      dataTransfer: dropTransfer("d1"),
-    });
+    dropOnAlways("d1");
     await waitFor(() => {
       expect(reparentDocument).toHaveBeenCalledWith("d1", "rules", "always");
     });
   });
 
-  it("拖到常驻区头写成常驻", async () => {
+  it("拖过货架后松手在必带落点写成常驻", async () => {
     await renderMineCatalog();
-    fireEvent.drop(alwaysRail(), {
-      dataTransfer: dropTransfer("d1"),
-    });
+    dropOnAlways("d1");
     await waitFor(() => {
       expect(reparentDocument).toHaveBeenCalledWith("d1", "rules", "always");
     });
@@ -623,16 +680,22 @@ describe("PromptCatalog 拖拽搬家", () => {
     });
   });
 
-  it("我的目录没有官方 HOW 可拖", async () => {
+  it("出厂三行在按需里，不进夹、不能拖", async () => {
     await renderMineCatalog();
-    expect(screen.queryByRole("button", { name: "团队拆法" })).toBeNull();
+    const factory = screen.getByTestId("prompt-rail-factory");
+    const row = within(factory).getByRole("button", { name: "团队拆法" });
+    expect(onDemandRail().contains(factory)).toBe(true);
+    expect(row.getAttribute("draggable")).not.toBe("true");
+    expect(screen.queryByTestId("my-skills")).toBeNull();
+    expect(onDemandRail().querySelector("[data-prompt-folder]")).toBeNull();
+    expect(within(factory).getByText("官方")).toBeTruthy();
     expect(screen.queryByTestId("prompt-rail-official")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-how")).toBeNull();
   });
 
   it("拖进其他调 reparentDocument 不写官方 home", async () => {
     await renderMineCatalog();
-    fireEvent.drop(within(onDemandRail()).getByText("其他"), {
+    fireEvent.drop(within(onDemandRail()).getByText("合同审查"), {
       dataTransfer: dropTransfer("d1"),
     });
     await waitFor(() => {
@@ -838,22 +901,21 @@ describe("PromptCatalog 工具与 MCP 深链", () => {
     );
   });
 
-  it("开场即用的出厂工具铺官方货架卡", async () => {
-    renderCatalog("/toolbox/official", {
+  it("交代不铺出厂工具大卡", async () => {
+    renderCatalog("/toolbox/mine/skills", {
       ...base,
       tools: [webSearchTool, hostTool],
     });
     await waitFor(() => {
       expect(screen.getByTestId("prompt-overview")).toBeTruthy();
     });
-    expect(screen.getByRole("button", { name: "联网检索" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "本机" })).toBeTruthy();
-    expect(screen.queryByTestId("prompt-rail-on-demand-tools")).toBeNull();
-    expect(screen.queryByTestId("prompt-rail-official")).toBeNull();
+    expect(screen.queryByRole("button", { name: "联网检索" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "本机" })).toBeNull();
+    expect(screen.queryByTestId("prompt-rail-tools")).toBeNull();
   });
 
   it("?tool= 直达工具读卡", async () => {
-    renderCatalog("/toolbox/official?tool=web_search", {
+    renderCatalog("/toolbox/mine/skills?tool=web_search", {
       ...base,
       tools: [webSearchTool, hostTool],
     });
@@ -865,7 +927,7 @@ describe("PromptCatalog 工具与 MCP 深链", () => {
   });
 
   it("?skill= 直达官方 HOW 读卡", async () => {
-    renderCatalog("/toolbox/official?skill=thin_skill", {
+    renderCatalog("/toolbox/mine/skills?skill=thin_skill", {
       ...base,
       skills: [
         {
@@ -970,9 +1032,33 @@ describe("PromptCatalog 就地命名", () => {
     });
   });
 
-  it("Esc 取消改名仍保留未命名夹", async () => {
+  it("Esc 取消改名去掉空的未命名夹，之后新建进其他", async () => {
     const created = ruleFolder("f-new", "未命名夹");
-    vi.mocked(createRuleFolder).mockResolvedValue(created);
+    vi.mocked(createRuleFolder).mockImplementation(async (name) =>
+      ruleFolder(name === "其他" ? "other-1" : "f-new", name),
+    );
+    vi.mocked(deleteDocument).mockImplementation(async () => {
+      vi.mocked(listAccountPromptTree).mockResolvedValue({
+        rulesDirId: "rules",
+        folders: [],
+        documents: [],
+      });
+      return {
+        ok: true,
+        version: "v",
+        conflict: false,
+        frontmatterError: null,
+        quotaWarning: null,
+      };
+    });
+    vi.mocked(createRuleDocument).mockResolvedValue({
+      ...ruleFolder("d-new", "未命名提示词.md"),
+      kind: "document",
+      parentId: "other-1",
+      content: "",
+      version: "v1",
+      quotaWarning: null,
+    });
     renderCatalog();
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "新建夹" })).toBeTruthy();
@@ -989,10 +1075,144 @@ describe("PromptCatalog 就地命名", () => {
     fireEvent.keyDown(screen.getByRole("textbox", { name: "夹名称" }), {
       key: "Escape",
     });
-    expect(screen.queryByRole("textbox", { name: "夹名称" })).toBeNull();
-    expect(createRuleFolder).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(deleteDocument).toHaveBeenCalledWith("f-new");
+    });
     expect(renameDocument).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(within(onDemandRail()).queryByText("未命名夹")).toBeNull();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "新建" }));
+    await waitFor(() => {
+      expect(createRuleFolder).toHaveBeenCalledWith("其他");
+      expect(createRuleDocument).toHaveBeenCalledWith(
+        "未命名提示词.md",
+        null,
+        expect.any(String),
+        "on_demand",
+        "other-1",
+      );
+    });
+  });
+
+  it("点开未改名的空夹也去掉", async () => {
+    const created = ruleFolder("f-new", "未命名夹");
+    vi.mocked(createRuleFolder).mockResolvedValue(created);
+    vi.mocked(deleteDocument).mockResolvedValue({
+      ok: true,
+      version: "v",
+      conflict: false,
+      frontmatterError: null,
+      quotaWarning: null,
+    });
+    renderCatalog();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "新建夹" })).toBeTruthy();
+    });
+    vi.mocked(listAccountPromptTree).mockResolvedValue({
+      rulesDirId: "rules",
+      folders: [created],
+      documents: [],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "新建夹" }));
+    const input = await screen.findByRole("textbox", { name: "夹名称" });
+    fireEvent.blur(input);
+    await waitFor(() => {
+      expect(deleteDocument).toHaveBeenCalledWith("f-new");
+    });
+    expect(renameDocument).not.toHaveBeenCalled();
+  });
+
+  it("起名后的夹留下，下一条新建进这只夹", async () => {
+    vi.mocked(deleteDocument).mockClear();
+    const created = ruleFolder("f-law", "未命名夹");
+    vi.mocked(createRuleFolder).mockResolvedValue(created);
+    vi.mocked(renameDocument).mockImplementation(async (_id, name) =>
+      ruleFolder("f-law", name),
+    );
+    vi.mocked(createRuleDocument).mockResolvedValue({
+      ...ruleFolder("d-new", "未命名提示词.md"),
+      kind: "document",
+      parentId: "f-law",
+      content: "",
+      version: "v1",
+      quotaWarning: null,
+    });
+    renderCatalog();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "新建夹" })).toBeTruthy();
+    });
+    vi.mocked(listAccountPromptTree).mockResolvedValue({
+      rulesDirId: "rules",
+      folders: [created],
+      documents: [],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "新建夹" }));
+    const input = await screen.findByRole("textbox", { name: "夹名称" });
+    vi.mocked(listAccountPromptTree).mockResolvedValue({
+      rulesDirId: "rules",
+      folders: [ruleFolder("f-law", "法律")],
+      documents: [],
+    });
+    fireEvent.change(input, { target: { value: "法律" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => {
+      expect(within(onDemandRail()).getByText("法律")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "新建" }));
+    await waitFor(() => {
+      expect(createRuleDocument).toHaveBeenCalledWith(
+        "未命名提示词.md",
+        null,
+        expect.any(String),
+        "on_demand",
+        "f-law",
+      );
+    });
+    expect(createRuleFolder).not.toHaveBeenCalledWith("其他");
+    expect(deleteDocument).not.toHaveBeenCalled();
+  });
+
+  it("夹里已有条目时取消改名仍留下未命名夹", async () => {
+    vi.mocked(deleteDocument).mockClear();
+    const created = ruleFolder("f-new", "未命名夹");
+    vi.mocked(createRuleFolder).mockResolvedValue(created);
+    renderCatalog();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "新建夹" })).toBeTruthy();
+    });
+    vi.mocked(listAccountPromptTree).mockResolvedValue({
+      rulesDirId: "rules",
+      folders: [created],
+      documents: [],
+    });
+    vi.mocked(listScopeEntries).mockResolvedValue([
+      {
+        id: "d1",
+        parentId: "f-new",
+        folderId: null,
+        kind: "document",
+        role: "rule",
+        aiMaintained: false,
+        applyMode: "on_demand",
+        description: "审合同时用",
+        name: "合同审查.md",
+        frontmatterError: null,
+        alwaysChars: null,
+        disputedAt: null,
+      },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "新建夹" }));
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "夹名称" })).toBeTruthy();
+      expect(within(onDemandRail()).getByText("合同审查")).toBeTruthy();
+    });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "夹名称" }), {
+      key: "Escape",
+    });
+    expect(deleteDocument).not.toHaveBeenCalled();
     expect(within(onDemandRail()).getByText("未命名夹")).toBeTruthy();
+    expect(within(onDemandRail()).getByText("合同审查")).toBeTruthy();
   });
 
   it("右键重命名就地改名", async () => {
@@ -1036,6 +1256,210 @@ describe("PromptCatalog 就地命名", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => {
       expect(renameDocument).toHaveBeenCalledWith("d1", "新合同.md");
+    });
+  });
+});
+
+describe("PromptCatalog 夹", () => {
+  function ruleFolder(id: string, name: string) {
+    return {
+      id,
+      parentId: "rules",
+      folderId: null,
+      kind: "folder" as const,
+      role: "rule" as const,
+      aiMaintained: false,
+      applyMode: "on_demand" as const,
+      description: "",
+      name,
+      frontmatterError: null,
+      alwaysChars: null,
+      disputedAt: null,
+    };
+  }
+
+  const deleted = {
+    ok: true as const,
+    version: "v",
+    conflict: false,
+    frontmatterError: null,
+    quotaWarning: null,
+  };
+
+  function scopeDoc(id: string, parentId: string, name: string) {
+    return {
+      id,
+      parentId,
+      folderId: null,
+      kind: "document" as const,
+      role: "rule" as const,
+      aiMaintained: false,
+      applyMode: "on_demand" as const,
+      description: "审合同时用",
+      name,
+      frontmatterError: null,
+      alwaysChars: null,
+      disputedAt: null,
+    };
+  }
+
+  beforeEach(() => {
+    vi.mocked(deleteDocument).mockReset();
+    vi.mocked(deleteDocument).mockResolvedValue(deleted);
+  });
+
+  it("打开货架时收掉空的未命名夹，起过名的空夹留下", async () => {
+    let folders = [
+      ruleFolder("f-stuck", "未命名夹"),
+      ruleFolder("f-num", "未命名夹 (2)"),
+      ruleFolder("f-law", "法律"),
+    ];
+    vi.mocked(listAccountPromptTree).mockImplementation(async () => ({
+      rulesDirId: "rules",
+      folders,
+      documents: [],
+    }));
+    vi.mocked(deleteDocument).mockImplementation(async (id: string) => {
+      folders = folders.filter((folder) => folder.id !== id);
+      return deleted;
+    });
+    renderCatalog();
+    await waitFor(() => {
+      expect(deleteDocument).toHaveBeenCalledWith("f-stuck");
+      expect(deleteDocument).toHaveBeenCalledWith("f-num");
+    });
+    expect(deleteDocument).not.toHaveBeenCalledWith("f-law");
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "未命名夹" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "未命名夹 (2)" })).toBeNull();
+      expect(screen.getByRole("button", { name: "法律" })).toBeTruthy();
+    });
+  });
+
+  it("空夹右键直接删除", async () => {
+    vi.mocked(listAccountPromptTree).mockResolvedValue({
+      rulesDirId: "rules",
+      folders: [ruleFolder("f-law", "法律")],
+      documents: [],
+    });
+    vi.mocked(deleteDocument).mockImplementation(async () => {
+      vi.mocked(listAccountPromptTree).mockResolvedValue({
+        rulesDirId: "rules",
+        folders: [],
+        documents: [],
+      });
+      return deleted;
+    });
+    renderCatalog();
+    fireEvent.contextMenu(await screen.findByRole("button", { name: "法律" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => {
+      expect(deleteDocument).toHaveBeenCalledWith("f-law");
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "法律" })).toBeNull();
+    });
+  });
+
+  it("夹内标题右键也能删空夹", async () => {
+    vi.mocked(listAccountPromptTree).mockResolvedValue({
+      rulesDirId: "rules",
+      folders: [ruleFolder("f-law", "法律")],
+      documents: [],
+    });
+    vi.mocked(deleteDocument).mockImplementation(async () => {
+      vi.mocked(listAccountPromptTree).mockResolvedValue({
+        rulesDirId: "rules",
+        folders: [],
+        documents: [],
+      });
+      return deleted;
+    });
+    renderCatalog();
+    fireEvent.click(await screen.findByRole("button", { name: "法律" }));
+    fireEvent.contextMenu(await screen.findByRole("heading", { name: "法律" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+    await waitFor(() => {
+      expect(deleteDocument).toHaveBeenCalledWith("f-law");
+    });
+  });
+
+  it("有条目的夹先确认，条目回到货架后再删夹", async () => {
+    const entry = scopeDoc("d1", "f-law", "合同审查.md");
+    vi.mocked(listAccountPromptTree).mockResolvedValue({
+      rulesDirId: "rules",
+      folders: [ruleFolder("f-law", "法律"), ruleFolder("other-1", "其他")],
+      documents: [],
+    });
+    vi.mocked(listScopeEntries).mockResolvedValue([entry]);
+    renderCatalog();
+    fireEvent.contextMenu(await screen.findByRole("button", { name: "法律" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("回到货架");
+    expect(deleteDocument).not.toHaveBeenCalled();
+    expect(reparentDocument).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "法律" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+    const again = await screen.findByRole("dialog");
+    vi.mocked(reparentDocument).mockImplementation(async () => {
+      vi.mocked(listScopeEntries).mockResolvedValue([
+        { ...entry, parentId: "other-1" },
+      ]);
+      return { ...entry, parentId: "other-1" };
+    });
+    vi.mocked(deleteDocument).mockImplementation(async () => {
+      vi.mocked(listAccountPromptTree).mockResolvedValue({
+        rulesDirId: "rules",
+        folders: [ruleFolder("other-1", "其他")],
+        documents: [],
+      });
+      return deleted;
+    });
+    fireEvent.click(within(again).getByRole("button", { name: "删除" }));
+    await waitFor(() => {
+      expect(reparentDocument).toHaveBeenCalledWith("d1", "other-1");
+      expect(deleteDocument).toHaveBeenCalledWith("f-law");
+    });
+    const reparentAt = vi.mocked(reparentDocument).mock.invocationCallOrder[0];
+    const deleteAt = vi.mocked(deleteDocument).mock.invocationCallOrder[0];
+    expect(reparentAt).toBeLessThan(deleteAt);
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "法律" })).toBeNull();
+      expect(screen.getByText("合同审查")).toBeTruthy();
+    });
+  });
+
+  it("夹右键可以改名", async () => {
+    vi.mocked(listAccountPromptTree).mockResolvedValue({
+      rulesDirId: "rules",
+      folders: [ruleFolder("f-law", "法律")],
+      documents: [],
+    });
+    vi.mocked(renameDocument).mockImplementation(async (_id, name) => {
+      vi.mocked(listAccountPromptTree).mockResolvedValue({
+        rulesDirId: "rules",
+        folders: [ruleFolder("f-law", name)],
+        documents: [],
+      });
+      return ruleFolder("f-law", name);
+    });
+    renderCatalog();
+    fireEvent.contextMenu(await screen.findByRole("button", { name: "法律" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "重命名" }));
+    const input = await screen.findByRole("textbox", { name: "夹名称" });
+    expect((input as HTMLInputElement).value).toBe("法律");
+    fireEvent.change(input, { target: { value: "合规" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => {
+      expect(renameDocument).toHaveBeenCalledWith("f-law", "合规");
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "合规" })).toBeTruthy();
     });
   });
 });
@@ -1105,7 +1529,7 @@ describe("PromptCatalog 我的条目多选", () => {
   });
 
   it("官方 HOW Ctrl 点不进选区", async () => {
-    renderCatalog("/toolbox/official");
+    renderCatalog("/toolbox/mine/skills");
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "薄技能" })).toBeTruthy();
     });

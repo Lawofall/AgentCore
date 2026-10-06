@@ -63,6 +63,10 @@ class SkillConsultSource:
 
     async def list_directory(self, user_id: str) -> Sequence[ConsultDirectoryEntry]:
         del user_id
+        from agentcore.assembly.bind import current_omit_factory_catalog
+
+        if current_omit_factory_catalog():
+            return []
         names = set(self.tool_names)
         return [
             ConsultDirectoryEntry(
@@ -76,6 +80,10 @@ class SkillConsultSource:
 
     async def fetch_by_name(self, user_id: str, name: str) -> str | None:
         del user_id
+        from agentcore.assembly.bind import current_omit_factory_catalog
+
+        if current_omit_factory_catalog():
+            return None
         key = name.strip()
         if not key:
             return None

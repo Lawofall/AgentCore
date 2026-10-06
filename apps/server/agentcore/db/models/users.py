@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -90,11 +91,18 @@ class User(Base):
     search_provider_id: Mapped[str | None] = mapped_column(
         PG_UUID(as_uuid=False), nullable=True
     )
-    # --- 账号默认模型组合 (模型组合配置 · llm_model_profiles) ---
-    # 指向用户组合或系统预置虚拟 id（glm-5.2）。NULL = 解析时回落系统「glm-5.2」预置。
-    # 活引用：改组合定义 → 下一 turn 用新展开。与场景 ProfileParams（温度等）无关。
-    default_model_profile_id: Mapped[str | None] = mapped_column(
+    # Starred assembly. New conversations snapshot this id. NULL until the
+    # first assembly is seeded. Changing the star does not move old chats.
+    default_assembly_id: Mapped[str | None] = mapped_column(
         PG_UUID(as_uuid=False), nullable=True
+    )
+    # Official recipes removed from the toolbox tray (chat / web / full).
+    # The recipe stays in code. A row the user already materialized is separate.
+    hidden_capability_recipes: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")

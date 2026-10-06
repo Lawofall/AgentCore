@@ -16,7 +16,7 @@ def load_roster() -> tuple[type, ...]:
     return (
         EscalateTool,
         HandoffTool,
-        # worker log tools (manual_wire; not auto-registered; product-always-on)
+        # worker log tools (manual_wire; assembly switch ``chats``)
         SearchConversationsTool,
         ReadConversationTool,
     )

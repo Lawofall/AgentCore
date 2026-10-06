@@ -8,7 +8,6 @@ repo needs so ``db`` never imports ``runtime``.
 from agentcore.costing.ledger import (
     COST_KEYS,
     PERSONA_CEO,
-    PERSONA_DESCRIPTION,
     PERSONA_REWRITE,
     ROLE_ARENA,
     ROLE_ASSIST,
@@ -35,7 +34,6 @@ __all__ = [
     "ROLE_TITLE",
     "ROLE_VISION",
     "PERSONA_CEO",
-    "PERSONA_DESCRIPTION",
     "PERSONA_REWRITE",
     "CallCost",
     "RunCost",

@@ -14,12 +14,13 @@ from agentcore.runtime.skills.registry import (
 )
 
 # --- The system skills (single source of truth) -----------------------------
-# Catalog summaries: name-like (what this is), not a 19-way scene classifier.
-# Python len ≤80; HOW lives in the body. ``blurb`` is toolbox-card only.
+# Catalog summary is the only trigger before consult: when to open, plus the
+# usual false friend. Python len ≤80. HOW stays in the body. ``blurb`` is
+# toolbox-card only. A bare noun ("整理表") is opened on unrelated turns.
 _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     SystemSkill(
         name="data_file_landing",
-        summary="整理表",
+        summary="用户要把数据文件交成可打开的表时才查阅。成篇、做页面、问产品不查阅。",
         blurb="把数据文件整理成打开扫得懂的表",
         body=_DATA_FILE_LANDING,
         # Consult is CEO+worker. Body is the worker loop; CEO still consults to brief.
@@ -29,7 +30,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     ),
     SystemSkill(
         name="page_ui",
-        summary="页面观感",
+        summary="用户要打开的展示页、落地页、工具壳、仪表盘或原型才查阅。脚本、文档、接口、只改逻辑不查阅。",
         blurb="页面长什么样、交互怎么铺",
         body=_PAGE_UI,
         # CEO+worker：主管把方向写进 task，工人铺像素。无工具门。
@@ -37,7 +38,8 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     ),
     SystemSkill(
         name="product_help",
-        summary="本产品是什么、入口在哪。用户在问这个产品本身时查阅。",
+        # 行首「本产品是什么」会被读成开工前要补的身份，所以不以问句或「本产品」开头。
+        summary="用户在问这个产品怎么用、入口在哪或为什么这样时才查阅。交代任务去干活不查阅。",
         blurb="这个产品能做什么、入口在哪",
         body=build_product_help_body(),
         audience=AUDIENCE_CEO_ONLY,

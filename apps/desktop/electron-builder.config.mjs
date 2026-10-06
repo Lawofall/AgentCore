@@ -37,11 +37,11 @@ const config = {
   appId: identity.appId,
   productName: identity.productName,
 
-  // 应用图标按平台分源（母版在仓库根 assets/agentcore-icon-orbit-*.png，二进制复制入仓，勿重烤）：
+  // 应用图标按平台分源（母版 assets/agentcore-icon.svg，导出 PNG 入仓）：
   // - Win / Linux：icon-win.png = rounded（四角透明 squircle）。Windows 快捷方式/任务栏不会再套一层
   //   圆角，若用满铺直角源会呈「方角块」；须预先烤好透明角。
   // - macOS：icon-mac.png = cropped（满铺、四角不透明）。系统会自己做 mask，预圆角反而被裁切/发糊。
-  // 测试轨：resources/channel-icons/*-beta.png（角标+色相，见 scripts/generate-beta-icons.mjs）。
+  // 测试轨：resources/channel-icons/*-beta.png（「测」角标，见 scripts/generate-beta-icons.mjs）。
   // 运行时窗口/任务栏图标另在 resources/icon.png（= rounded；经 ?asset，见 main/index.ts）。
   directories: {
     output: "release/${version}",

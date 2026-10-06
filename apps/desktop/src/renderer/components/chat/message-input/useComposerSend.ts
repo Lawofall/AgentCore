@@ -3,12 +3,14 @@ import {
   patchConversationCache,
   upsertConversationFront,
 } from "@/hooks/useConversations";
+import { useChatPaneId } from "@/lib/chatPane";
 import {
   type MessageDelivery,
   isLiveCoordinatingTurn,
   resolveDefaultDelivery,
 } from "@/lib/composerDelivery";
 import { confirmSendDespitePendingIfNeeded } from "@/lib/composerPendingHint";
+import { promoteDraftConversationPane } from "@/lib/conversationSplitActions";
 import {
   forgetDraftRequestId,
   pinDraftRequestId,
@@ -58,13 +60,12 @@ import {
 } from "@/stores/composerSendError";
 import {
   DRAFT_KEY,
-  getActiveRuntime,
   getRuntime,
   useConversationStore,
 } from "@/stores/conversation";
 import { restoreWritingFromOccupancy } from "@/stores/conversation/turnPhaseActions";
 import { useFoldersStore } from "@/stores/folders";
-import { type Dispatch, type SetStateAction, useCallback } from "react";
+import { type Dispatch, type SetStateAction, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   forgetAttachmentUpload,
@@ -232,10 +233,10 @@ export function useComposerSend({
   const navigate = useNavigate();
   // 门闩 + 按钮 in-flight 态存在 store 里、与草稿同键：组件重挂载（切对话回来、居中
   // 草稿 → 底栏、路由重建、刷新 / 重启）不再把闸归零，也不再丢「在发」的视觉态。
-  const activeConversationId = useConversationStore(
-    (s) => s.currentConversationId,
-  );
-  const sendPhase = useComposerSendPhase(draftKeyFor(activeConversationId));
+  const paneId = useChatPaneId();
+  const paneIdRef = useRef(paneId);
+  paneIdRef.current = paneId;
+  const sendPhase = useComposerSendPhase(draftKeyFor(paneId));
   const isSending = sendPhase !== null;
 
   const toOutgoingMentions = useCallback(
@@ -269,8 +270,8 @@ export function useComposerSend({
     async (opts?: ComposerSendOpts) => {
       const content = value.trim();
       const preview = plainText(value).trim();
-      const activeConvId =
-        useConversationStore.getState().currentConversationId;
+      const activeConvId = paneIdRef.current;
+      const sliceKey = activeConvId ?? DRAFT_KEY;
       const liveDebate = liveDebateSteerTarget(activeConvId);
 
       if (!composerHasSendableDraft(value, attachments, agentMentions)) {
@@ -434,43 +435,45 @@ export function useComposerSend({
       };
       try {
         const pending = attachments;
-        const store = useConversationStore.getState();
-        const isFirstMessage = getActiveRuntime().messages.length === 0;
+        const isFirstMessage = getRuntime(sliceKey).messages.length === 0;
         const userMsgId = crypto.randomUUID();
         const paintOptimisticSend = () => {
-          addMessage({
-            id: userMsgId,
-            role: "user",
-            content,
-            createdAt: new Date().toISOString(),
-            executionId: null,
-            isStreaming: false,
-            attachments: pending.length
-              ? pending.map((a) => ({
-                  id: a.id,
-                  name: a.name,
-                  path: a.path,
-                  truncated: a.truncated,
-                  kind: a.kind,
-                  conversationId: a.conversationId,
-                  documentId: a.documentId,
-                  workspacePath: a.workspacePath,
-                }))
-              : undefined,
-            agentMentions: agentMentions.length
-              ? agentMentions.map((a) => ({
-                  agentId: a.agentId,
-                  role: a.role,
-                }))
-              : undefined,
-          });
+          addMessage(
+            {
+              id: userMsgId,
+              role: "user",
+              content,
+              createdAt: new Date().toISOString(),
+              executionId: null,
+              isStreaming: false,
+              attachments: pending.length
+                ? pending.map((a) => ({
+                    id: a.id,
+                    name: a.name,
+                    path: a.path,
+                    truncated: a.truncated,
+                    kind: a.kind,
+                    conversationId: a.conversationId,
+                    documentId: a.documentId,
+                    workspacePath: a.workspacePath,
+                  }))
+                : undefined,
+              agentMentions: agentMentions.length
+                ? agentMentions.map((a) => ({
+                    agentId: a.agentId,
+                    role: a.role,
+                  }))
+                : undefined,
+            },
+            sliceKey,
+          );
           // Thinking 与用户泡同帧：已有会话覆盖附件收尾；草稿首发覆盖建会话 POST。
           // sendTurn 复用这条干净占位（不 truncate 换 id）。
-          useConversationStore.getState().createAssistantMessage();
+          useConversationStore.getState().createAssistantMessage(sliceKey);
           clearComposer();
         };
 
-        let conversationId = store.currentConversationId;
+        let conversationId = activeConvId;
         let createdNew = false;
         let createdFolderId: string | null = null;
         if (!conversationId) {
@@ -506,7 +509,7 @@ export function useComposerSend({
             const conv = await api.post<{
               id: string;
               permission_axes?: PermissionAxes;
-              model_profile_id?: string | null;
+              assembly_id?: string | null;
             }>("/v1/conversations", {
               title: null,
               folder_id: targetFolderId,
@@ -514,7 +517,7 @@ export function useComposerSend({
               permission_axes: permissionAxes,
               client_request_id: clientRequestId,
               ...(inheritedProfileId
-                ? { model_profile_id: inheritedProfileId }
+                ? { assembly_id: inheritedProfileId }
                 : {}),
             });
             conversationId = conv.id;
@@ -528,8 +531,7 @@ export function useComposerSend({
               folderId: targetFolderId,
               localContainerRootId,
               permissionAxes: conv.permission_axes ?? permissionAxes,
-              modelProfileId:
-                conv.model_profile_id ?? inheritedProfileId ?? null,
+              assemblyId: conv.assembly_id ?? inheritedProfileId ?? null,
             });
             // 把草稿上的乐观气泡接到新 id（同一 write，避免空窗一帧）。
             // 不得用 switchConversation——从首页点开已有对话不能倒进草稿残留。
@@ -555,7 +557,7 @@ export function useComposerSend({
             return;
           }
         } else {
-          if (!isFirstMessage && getActiveRuntime().hasMoreAfter) {
+          if (!isFirstMessage && getRuntime(sliceKey).hasMoreAfter) {
             try {
               await loadLatestWindow(conversationId);
             } catch {
@@ -576,6 +578,8 @@ export function useComposerSend({
         }
 
         if (createdNew) {
+          // 先占住这一栏的草稿位，再改路由。否则路由会把新 id 写进当时的焦点栏。
+          promoteDraftConversationPane(conversationId);
           navigate(`/conversations/${conversationId}`);
         }
 

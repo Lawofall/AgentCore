@@ -57,7 +57,7 @@ export function deriveCaptainStatus(
 ): RunStatus {
   if (execution.status === "cancelled") return "cancelled";
   // Cold pause (ask_user / …): workers may all be done, but CEO
-  // is waiting on the user — never paint the sink as「正在收尾」.
+  // is waiting on the user — never paint the sink as the writing spinner.
   // RunStatus has no `paused`; `pending` clears the synthesis spinner.
   if (execution.status === "paused") return "pending";
   // Captain paints failed only from its own run_failed — whole-graph
@@ -74,8 +74,8 @@ export function deriveCaptainStatus(
   if (execution.status === "completed") return "completed";
   // Workers all terminal but captain never failed: not synthesizing, not 失败.
   if (execution.status === "failed") return "pending";
-  // Workers all terminal, execution still live: same-turn CEO writing the close.
-  // Captain already left (detached) — no second close; don't paint「正在收尾」.
+  // 队员已齐、执行尚未 completed：汇点静下来，不跟 CEO 写作转。
+  // 「已收尾」只在 execution completed。主管已离开则不画收尾。
   if (workers.length > 0) {
     if (opts?.detached) return "pending";
     return "running";
@@ -376,15 +376,19 @@ function belongsToDebateUnit(
   return false;
 }
 
-/** Run-level fold: which runs collapse under a parent unit on the collaboration graph. */
+/**
+ * Run-level fold for the collaboration graph.
+ * Delegation is an org chart: a child folds under its immediate leader.
+ * Debate members still fold under the moderator (one compound, no per-debater chip).
+ */
 export interface GraphFoldInfo {
-  /** Run ids hidden from the top-level graph (children of a layout unit). */
+  /** Run ids hidden until every ancestor fold-unit is expanded. */
   folded: Set<string>;
-  /** Every worker run id → its visible layout-unit root id. */
+  /** Worker run id → immediate fold parent (self when the run is a fold root). */
   unitOf: Map<string, string>;
   /** Debate moderator unit roots — always layout-expanded (参与者×轮次 grid). */
   debateUnits: Set<string>;
-  /** Layout unit id → all folded descendant run ids (for drill-in / subTeams). */
+  /** Fold parent → runs folded directly under it (chip count = direct reports). */
   descendants: Map<string, string[]>;
 }
 
@@ -456,9 +460,15 @@ export function computeGraphFold(
         unitOf.set(runId, runId);
         return runId;
       }
-      const u = resolveUnit(r.parentRunId);
-      unitOf.set(runId, u);
-      return u;
+      const parentUnit = resolveUnit(r.parentRunId);
+      // 辩论复合体保持一个单元：辩手下的附属 run 不另开可折叠子队。
+      if (debateUnits.has(parentUnit)) {
+        unitOf.set(runId, parentUnit);
+        return parentUnit;
+      }
+      // 组织图：只折到直接队长。再往上的队长各自是一层折叠。
+      unitOf.set(runId, r.parentRunId);
+      return r.parentRunId;
     }
 
     unitOf.set(runId, runId);
@@ -484,16 +494,62 @@ export function computeGraphFold(
   return { folded, unitOf, debateUnits, descendants };
 }
 
-/** Lift an edge endpoint to its layout unit (dedupe after lifting). */
-function liftEdgeEndpoints(
-  source: string,
-  target: string,
-  unitOf: Map<string, string>,
-): { source: string; target: string } | null {
-  const src = unitOf.get(source) ?? source;
-  const tgt = unitOf.get(target) ?? target;
-  if (src === tgt) return null;
-  return { source: src, target: tgt };
+/** Walk immediate fold parents to the self-unit (delegation root / debate moderator). */
+export function outermostFoldUnit(fold: GraphFoldInfo, runId: string): string {
+  let current = runId;
+  const seen = new Set<string>();
+  while (!seen.has(current)) {
+    seen.add(current);
+    const next = fold.unitOf.get(current) ?? current;
+    if (next === current) return current;
+    current = next;
+  }
+  return current;
+}
+
+function isFoldUnitExpanded(
+  unitId: string,
+  fold: GraphFoldInfo,
+  expandedUnits: ReadonlySet<string>,
+): boolean {
+  return fold.debateUnits.has(unitId) || expandedUnits.has(unitId);
+}
+
+/** Folded runs stay visible only while every ancestor fold-unit is expanded. */
+export function isRunFoldVisible(
+  runId: string,
+  fold: GraphFoldInfo,
+  expandedUnits: ReadonlySet<string>,
+): boolean {
+  let current = runId;
+  const seen = new Set<string>();
+  while (fold.folded.has(current) && !seen.has(current)) {
+    seen.add(current);
+    const unit = fold.unitOf.get(current) ?? current;
+    if (unit === current) return true;
+    if (!isFoldUnitExpanded(unit, fold, expandedUnits)) return false;
+    current = unit;
+  }
+  return true;
+}
+
+/** Nearest visible fold parent for an edge into a collapsed subtree. */
+export function foldVisibleAnchor(
+  runId: string,
+  fold: GraphFoldInfo,
+  expandedUnits: ReadonlySet<string>,
+): string {
+  if (isRunFoldVisible(runId, fold, expandedUnits)) return runId;
+  let current = runId;
+  const seen = new Set<string>();
+  while (!seen.has(current)) {
+    seen.add(current);
+    const unit = fold.unitOf.get(current) ?? current;
+    if (unit === current) return current;
+    if (isRunFoldVisible(unit, fold, expandedUnits)) return unit;
+    current = unit;
+  }
+  return current;
 }
 
 export interface SubTeam {
@@ -567,15 +623,9 @@ export function buildGraphStructure(
     workerRuns.filter(isDebateFoldedBeatRun).map((r) => r.id),
   );
 
-  /** Debate units are always expanded; other units follow user toggle. */
-  const isUnitExpanded = (unit: string): boolean =>
-    debateUnits.has(unit) || expandedUnits.has(unit);
-
   const isLayoutVisible = (runId: string): boolean => {
     if (seatHidden.has(runId) || beatHidden.has(runId)) return false;
-    if (!folded.has(runId)) return true;
-    const unit = unitOf.get(runId) ?? runId;
-    return isUnitExpanded(unit);
+    return isRunFoldVisible(runId, foldInfo, expandedUnits);
   };
 
   const layoutWorkers = workerRuns.filter((r) => isLayoutVisible(r.id));
@@ -593,66 +643,49 @@ export function buildGraphStructure(
     `${e.kind ?? "dep"}:${e.source}->${e.target}`;
   const edgeSet = new Map<string, GraphEdge>();
 
-  const addEdge = (e: GraphEdge, lift = false) => {
-    const seated: GraphEdge = {
-      ...e,
-      source: remapSeat(e.source),
-      target: remapSeat(e.target),
-    };
-    if (seated.source === seated.target) return;
-    const src = lift
-      ? (unitOf.get(seated.source) ?? seated.source)
-      : seated.source;
-    const tgt = lift
-      ? (unitOf.get(seated.target) ?? seated.target)
-      : seated.target;
-    if (src === tgt) return;
+  const anchorIfFolded = (id: string): string | null => {
+    if (isLayoutVisible(id)) return id;
+    if (!folded.has(id)) return null;
+    return foldVisibleAnchor(id, foldInfo, expandedUnits);
+  };
+
+  const addEdge = (e: GraphEdge) => {
+    let source = remapSeat(e.source);
+    let target = remapSeat(e.target);
     if (
-      seatHidden.has(src) ||
-      seatHidden.has(tgt) ||
-      beatHidden.has(src) ||
-      beatHidden.has(tgt)
+      seatHidden.has(source) ||
+      seatHidden.has(target) ||
+      beatHidden.has(source) ||
+      beatHidden.has(target)
     )
       return;
-    if (!isLayoutVisible(src) && folded.has(src)) return;
-    if (!isLayoutVisible(tgt) && folded.has(tgt)) return;
-    const lifted = lift
-      ? liftEdgeEndpoints(seated.source, seated.target, unitOf)
-      : null;
-    const finalSrc = lifted?.source ?? src;
-    const finalTgt = lifted?.target ?? tgt;
-    if (finalSrc === finalTgt) return;
+    const anchoredSource = anchorIfFolded(source);
+    const anchoredTarget = anchorIfFolded(target);
+    if (anchoredSource == null || anchoredTarget == null) return;
+    source = anchoredSource;
+    target = anchoredTarget;
+    if (source === target) return;
     if (
-      seatHidden.has(finalSrc) ||
-      seatHidden.has(finalTgt) ||
-      beatHidden.has(finalSrc) ||
-      beatHidden.has(finalTgt)
+      seatHidden.has(source) ||
+      seatHidden.has(target) ||
+      beatHidden.has(source) ||
+      beatHidden.has(target)
     )
       return;
-    const key = edgeKey({ ...e, source: finalSrc, target: finalTgt });
+    const key = edgeKey({ ...e, source, target });
     if (edgeSet.has(key)) return;
-    edgeSet.set(key, {
-      ...seated,
-      id: e.id,
-      source: finalSrc,
-      target: finalTgt,
-    });
+    edgeSet.set(key, { ...e, source, target });
   };
 
   for (const run of workerRuns) {
     if (beatHidden.has(run.id)) continue;
     for (const depId of run.dependsOn) {
-      const collapsed =
-        folded.has(run.id) && !isUnitExpanded(unitOf.get(run.id) ?? run.id);
-      addEdge(
-        {
-          id: `${depId}->${run.id}`,
-          source: depId,
-          target: run.id,
-          kind: "dep",
-        },
-        collapsed,
-      );
+      addEdge({
+        id: `${depId}->${run.id}`,
+        source: depId,
+        target: run.id,
+        kind: "dep",
+      });
     }
   }
 
@@ -772,8 +805,7 @@ export function buildGraphStructure(
     const dependedOn = new Set<string>();
     for (const r of topWorkers) {
       for (const dep of r.dependsOn) {
-        const seated = remapSeat(dep);
-        dependedOn.add(unitOf.get(seated) ?? seated);
+        dependedOn.add(outermostFoldUnit(foldInfo, remapSeat(dep)));
       }
     }
     // 补派/接手：被 replaces_run_id 指向的失败节点不再作 CEO 汇入；补派节点本身
@@ -782,7 +814,7 @@ export function buildGraphStructure(
     for (const r of topWorkers) {
       const from = r.replacesRunId;
       if (!from) continue;
-      replacedUnits.add(unitOf.get(remapSeat(from)) ?? remapSeat(from));
+      replacedUnits.add(outermostFoldUnit(foldInfo, remapSeat(from)));
     }
     nodeIds.push(inputId, captainId);
     for (const r of topWorkers) {

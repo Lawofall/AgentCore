@@ -264,6 +264,27 @@ async def test_local_bridge_rewrites_relative_path_to_workspace(fake_bridge):
     assert result.data["final_url"] == expected
     assert fake_bridge["server"].navigations[-1]["url"] == expected
     assert fake_bridge["server"].navigations[-1]["args"]["url"] == expected
+    assert "workspaceRoot" not in fake_bridge["server"].navigations[-1]["args"]
+
+
+@pytest.mark.asyncio
+async def test_local_bridge_sends_workspace_root(fake_bridge):
+    """本机导航把引擎工作区根交给 Bridge，桌面按这份目录读字节。"""
+    from agentcore.tools.sandbox.browser.protocol import BrowserCommand
+
+    root = r"C:\desk\conv"
+    sess = LocalBridgeSession(
+        conversation_id="c1",
+        session_id="sess-root",
+        workspace_root=root,
+    )
+    result = await sess.send(BrowserCommand(action="navigate", args={"url": "index.html"}))
+    assert result.ok
+    assert fake_bridge["server"].navigations[-1]["args"]["workspaceRoot"] == root
+    assert (
+        fake_bridge["server"].navigations[-1]["args"]["url"]
+        == "workspace://conv.c1/index.html"
+    )
 
 
 @pytest.mark.asyncio

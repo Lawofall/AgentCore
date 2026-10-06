@@ -280,7 +280,7 @@ export function BoundaryTable({
 
 const DEFAULT_SETTINGS_ROWS: { label: string; desc: string; to: string }[] = [
   {
-    label: "模型组合",
+    label: "装配",
     desc: "账号默认组合与组合管理",
     to: APP_PATHS.more.model,
   },

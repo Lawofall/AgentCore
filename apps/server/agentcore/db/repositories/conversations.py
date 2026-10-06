@@ -20,6 +20,7 @@ from agentcore.db.models import (
     CostCall,
     CostEvent,
     Folder,
+    LlmModelProfile,
     Message,
     TurnMetricsRow,
     TurnQueueItem,
@@ -87,7 +88,7 @@ class ConversationRepository:
         local_container_root_id: str | None = None,
         permission_axes: dict | None = None,
         deep_research_auto: bool | None = None,
-        model_profile_id: str | None = None,
+        assembly_id: str | None = None,
         client_request_id: str | None = None,
         commit: bool = True,
     ) -> Conversation:
@@ -105,8 +106,8 @@ class ConversationRepository:
         # the hidden host for a local→云 cloud job's team run (双模式工作区 P2e /
         # e2), kept out of the sidebar by the list filters below.
         #
-        # ``model_profile_id``: HTTP create snapshots account default (or client
-        # pick). Internal callers may omit (NULL) — expand still falls back.
+        # ``assembly_id``: HTTP create snapshots the starred assembly (or the
+        # client's pick). Internal callers may omit.
         #
         # ``client_request_id`` is the caller's idempotency key; passing one makes
         # this insert racy-by-design against the partial unique index, so HTTP
@@ -129,8 +130,8 @@ class ConversationRepository:
             conv.permission_axes = permission_axes
         if deep_research_auto is not None:
             conv.deep_research_auto = bool(deep_research_auto)
-        if model_profile_id is not None:
-            conv.model_profile_id = model_profile_id
+        if assembly_id is not None:
+            conv.assembly_id = assembly_id
         if client_request_id is not None:
             conv.client_request_id = client_request_id
         self._session.add(conv)
@@ -165,7 +166,7 @@ class ConversationRepository:
         folder_id: str | None = None,
         local_container_root_id: str | None = None,
         permission_axes: dict | None = None,
-        model_profile_id: str | None = None,
+        assembly_id: str | None = None,
     ) -> tuple[Conversation, bool]:
         """Create a conversation once per ``client_request_id``; returns ``(conv, created)``.
 
@@ -195,7 +196,7 @@ class ConversationRepository:
                     folder_id=folder_id,
                     local_container_root_id=local_container_root_id,
                     permission_axes=permission_axes,
-                    model_profile_id=model_profile_id,
+                    assembly_id=assembly_id,
                     client_request_id=client_request_id,
                     commit=False,
                 )
@@ -250,23 +251,76 @@ class ConversationRepository:
             await self._session.refresh(conv)
         return conv
 
-    async def set_model_profile(
+    async def _assembly_for_conversation(
+        self, conv: Conversation
+    ) -> LlmModelProfile | None:
+        if not conv.assembly_id:
+            return None
+        row = await self._session.get(LlmModelProfile, conv.assembly_id)
+        if row is None or row.user_id != conv.user_id:
+            return None
+        return row
+
+    async def set_disabled_tools(
         self,
         conversation_id: str,
-        model_profile_id: str | None,
         *,
         user_id: str,
+        disabled: list[str],
+        commit: bool = True,
     ) -> Conversation | None:
-        """Owner-scoped set of the session model combination pin.
-
-        Callers should pass a concrete profile id (new-chat snapshot / user pick).
-        ``None`` is allowed only for legacy clear paths; HTTP PATCH null re-pins
-        to the account default before reaching here.
-        """
+        """Write the tool deny list on this conversation's assembly."""
         conv = await self.get_by_id(conversation_id, user_id=user_id)
         if not conv:
             return None
-        conv.model_profile_id = model_profile_id
+        row = await self._assembly_for_conversation(conv)
+        if row is None:
+            return None
+        from agentcore.assembly.recipes import clear_recipe
+
+        clear_recipe(row)
+        row.disabled_tools = list(disabled)
+        await commit_or_flush(self._session, commit=commit)
+        if commit:
+            await self._session.refresh(conv)
+        return conv
+
+    async def set_omitted_projections(
+        self,
+        conversation_id: str,
+        *,
+        user_id: str,
+        omitted: list[str],
+        commit: bool = True,
+    ) -> Conversation | None:
+        """Write envelope omissions on this conversation's assembly."""
+        conv = await self.get_by_id(conversation_id, user_id=user_id)
+        if not conv:
+            return None
+        row = await self._assembly_for_conversation(conv)
+        if row is None:
+            return None
+        from agentcore.assembly.recipes import clear_recipe
+
+        clear_recipe(row)
+        row.omitted_projections = list(omitted)
+        await commit_or_flush(self._session, commit=commit)
+        if commit:
+            await self._session.refresh(conv)
+        return conv
+
+    async def set_model_profile(
+        self,
+        conversation_id: str,
+        assembly_id: str | None,
+        *,
+        user_id: str,
+    ) -> Conversation | None:
+        """Point this conversation at an assembly. None is not a live follow."""
+        conv = await self.get_by_id(conversation_id, user_id=user_id)
+        if not conv:
+            return None
+        conv.assembly_id = assembly_id
         await self._session.commit()
         await self._session.refresh(conv)
         return conv
@@ -274,16 +328,16 @@ class ConversationRepository:
     async def reassign_model_profile_refs(
         self, user_id: str, profile_id: str, *, to_profile_id: str | None
     ) -> int:
-        """Point conversations pinned to ``profile_id`` at ``to_profile_id`` (or NULL)."""
+        """Point conversations on ``profile_id`` at ``to_profile_id``."""
         from sqlalchemy import update as sa_update
 
         result = await self._session.execute(
             sa_update(Conversation)
             .where(
                 Conversation.user_id == user_id,
-                Conversation.model_profile_id == profile_id,
+                Conversation.assembly_id == profile_id,
             )
-            .values(model_profile_id=to_profile_id)
+            .values(assembly_id=to_profile_id)
         )
         await self._session.commit()
         return int(result.rowcount or 0)
@@ -469,7 +523,7 @@ class ConversationRepository:
         ``sort`` accepts ``updated_at`` / ``created_at`` / ``cost`` / ``delegated``
         (multi-agent turn count).
         """
-        # Account-level ledger rows (NULL conversation — AI 改写 / 文档 description)
+        # Account-level ledger rows (NULL conversation — AI 改写)
         # are filtered out rather than grouped into a NULL bucket that joins to
         # nothing: they are the account's spend, shown on 用量页 / 全站看板, and no
         # conversation on this roster may claim them.
@@ -900,6 +954,16 @@ class ConversationRepository:
         _drop_turn_queue_memory(conv_ids)
         return int(result.rowcount or 0)
 
+    @staticmethod
+    def _deleted_window(user_id: str, not_before: datetime):
+        """Rows「最近删除」may still offer: visible, inside the retention window."""
+        return (
+            conversation_deleted_visible_clause(user_id),
+            Conversation.deleted_at.is_not(None),
+            Conversation.deleted_at > not_before,
+            Conversation.mode.notin_(HIDDEN_CONVERSATION_MODES),
+        )
+
     async def list_deleted_by_user(
         self, user_id: str, *, not_before: datetime, limit: int
     ) -> Sequence[Conversation]:
@@ -919,16 +983,35 @@ class ConversationRepository:
             return []
         result = await self._session.execute(
             select(Conversation)
-            .where(
-                conversation_deleted_visible_clause(user_id),
-                Conversation.deleted_at.is_not(None),
-                Conversation.deleted_at > not_before,
-                Conversation.mode.notin_(HIDDEN_CONVERSATION_MODES),
-            )
+            .where(*self._deleted_window(user_id, not_before))
             .order_by(Conversation.deleted_at.desc(), Conversation.created_at.desc())
             .limit(limit)
         )
         return result.scalars().all()
+
+    async def count_deleted_by_user(self, user_id: str, *, not_before: datetime) -> int:
+        """How many chats the bin still holds. The list page is capped; this is not."""
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(Conversation)
+            .where(*self._deleted_window(user_id, not_before))
+        )
+        return int(result.scalar_one())
+
+    async def list_deleted_ids_by_user(
+        self, user_id: str, *, not_before: datetime
+    ) -> list[tuple[str, str | None]]:
+        """Every in-window trash chat ``(id, folder_id)``, newest first, uncapped.
+
+        Backs emptying the bin. The page list stops at a human-scale cap; a purge
+        that followed only that page would leave the rest behind.
+        """
+        result = await self._session.execute(
+            select(Conversation.id, Conversation.folder_id)
+            .where(*self._deleted_window(user_id, not_before))
+            .order_by(Conversation.deleted_at.desc(), Conversation.created_at.desc())
+        )
+        return [(row[0], row[1]) for row in result.all()]
 
     async def get_deleted_by_id(
         self, conversation_id: str, *, user_id: str
@@ -1101,6 +1184,47 @@ class ConversationRepository:
                 compaction_summary=summary,
                 compacted_through=compacted_through,
                 compaction_input_tokens=input_tokens,
+            )
+        )
+        await self._session.commit()
+
+    async def apply_context_cut(
+        self,
+        conversation_id: str,
+        *,
+        summary: str,
+        compacted_through: datetime,
+        undo: dict,
+    ) -> None:
+        """Write a user context cut. Leaves ``compaction_input_tokens`` and ``updated_at``."""
+        await self._session.execute(
+            update(Conversation)
+            .where(Conversation.id == conversation_id)
+            .values(
+                compaction_summary=summary,
+                compacted_through=compacted_through,
+                context_cut_undo=undo,
+            )
+        )
+        await self._session.commit()
+
+    async def restore_context_cut(
+        self,
+        conversation_id: str,
+        *,
+        summary: str | None,
+        compacted_through: datetime | None,
+        input_tokens: int | None,
+    ) -> None:
+        """Put compaction back to the snapshot taken before the latest cut."""
+        await self._session.execute(
+            update(Conversation)
+            .where(Conversation.id == conversation_id)
+            .values(
+                compaction_summary=summary,
+                compacted_through=compacted_through,
+                compaction_input_tokens=input_tokens,
+                context_cut_undo=None,
             )
         )
         await self._session.commit()

@@ -205,6 +205,38 @@ describe("气泡脚不挂轮次", () => {
     expect(screen.queryByText("缓存命中")).toBeNull();
     expect(screen.queryByText("缓存未命中")).toBeNull();
     expect(screen.queryByText("思考")).toBeNull();
+    expect(screen.queryByText("TTFT")).toBeNull();
+  });
+
+  it("用量弹出层在速度后单独画 TTFT", async () => {
+    render(
+      <TooltipProvider>
+        <AssistantTurnInspect
+          message={{
+            ...message,
+            generationMs: 2_000,
+            ttftMs: 1_800,
+            usage: {
+              input: 100,
+              output: 80,
+              reasoning: 0,
+              cache_hit: 0,
+              cache_miss: 0,
+            },
+          }}
+          captainContext={[]}
+        />
+      </TooltipProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "用量" }));
+    const label = await screen.findByText("TTFT");
+    expect(screen.getByText("1.8s")).toBeTruthy();
+    const row = label.parentElement;
+    expect(row?.className).not.toContain("pl-3");
+    const speed = screen.getByText("速度");
+    expect(
+      speed.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("用量弹出层缺 generationMs 不编速度", async () => {

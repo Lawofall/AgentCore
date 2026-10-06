@@ -31,8 +31,9 @@ SKILL_GROUP_ORDER: tuple[str, ...] = (
 class SystemSkill:
     """One code-defined capability doc, surfaced in the catalog and pulled by consult.
 
-    ``summary`` is the consult-directory one-liner (what this is). ``blurb`` is the
-    toolbox card description only — never injected into ``<按需目录>`` or consult.
+    ``summary`` is the consult-directory trigger (when to open, plus one false
+    friend). ``blurb`` is the toolbox card description only — never injected
+    into ``<按需目录>`` or consult.
     ``body`` is HOW, returned only when ``consult(name)`` is called.
     ``requires_tools`` gates the catalog entry: the skill appears only when every
     named tool is wired this turn (e.g. ``run`` needs the ``run`` tool), so the

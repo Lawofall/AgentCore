@@ -21,6 +21,7 @@ from agentcore.api.routes import (
     devices,
     docs,
     documents,
+    envelope_switches,
     favicon,
     files,
     folders,
@@ -41,12 +42,14 @@ from agentcore.api.routes import (
     skill_store,
     system,
     tables,
+    tool_switches,
     usage,
     users,
     workspaces,
 )
 from agentcore.auth.retention import refresh_token_retention_loop
 from agentcore.config import settings
+from agentcore.config.auth import dev_cors_origin_regex
 from agentcore.conversation.compaction import shutdown_compaction
 from agentcore.core.errors import AgentCoreError, wire_moments
 from agentcore.core.logging import get_logger, setup_logging
@@ -311,10 +314,9 @@ async def lifespan(app: FastAPI):
     from agentcore.tools.builtin.git_ops.binary_health import probe_git_binary_at_startup
 
     await probe_git_binary_at_startup()
-    # Schema-drift notice: warn loudly (never block) when the live DB is behind the
-    # migration head — or at head yet missing schema the ORM maps — so a missing
-    # migration surfaces at boot instead of as a mid-session UndefinedColumnError
-    # on a core endpoint.
+    # Debug: auto-upgrade, and refuse to serve if the database is still behind
+    # head (SchemaUpgradeError → lifespan failure → non-zero exit). Production
+    # only logs. At-head schema the ORM still lacks stays a log in both modes.
     await check_migrations()
 
     # Platform credential pool: decrypt into the process snapshot so the sync
@@ -526,6 +528,10 @@ async def lifespan(app: FastAPI):
                 from agentcore.demo_tape.recorder import uninstall_recorder
 
                 uninstall_recorder()
+            # After turn salvage: live desktops learn the process is gone.
+            from agentcore.fulfill.hub import default_fulfiller_hub
+
+            default_fulfiller_hub().close_all(reason="process_exit")
 
         try:
             await asyncio.wait_for(
@@ -569,6 +575,10 @@ app.add_middleware(JSONErrorMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    # DEBUG only. A drifted local Vite origin (5173 taken → 5178) otherwise
+    # fails the browser preflight and the desktop heartbeat shows 「与服务器断开连接」
+    # while /readyz is healthy. Production passes None.
+    allow_origin_regex=dev_cors_origin_regex(debug=settings.debug),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -610,6 +620,8 @@ app.include_router(admin.router, prefix="/v1")
 app.include_router(account.router, prefix="/v1")
 app.include_router(auth.router, prefix="/v1")
 app.include_router(autonomy.router, prefix="/v1")
+app.include_router(tool_switches.router, prefix="/v1")
+app.include_router(envelope_switches.router, prefix="/v1")
 app.include_router(capabilities.router, prefix="/v1")
 app.include_router(conversations.router, prefix="/v1")
 app.include_router(demo_tape.router, prefix="/v1")

@@ -26,7 +26,7 @@ describe("MorePage narrow", () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole("link", { name: "账户设置" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "模型组合" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "装配" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "消息隐私" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "关于" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "赞助" })).toBeTruthy();

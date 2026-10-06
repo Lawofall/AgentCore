@@ -123,11 +123,11 @@ async def test_create_provider_masks_and_seeds_profile(client, byok):
 
     listed = (await client.get(_BASE)).json()
     assert len(listed["providers"]) == 1
-    assert listed["default_model_profile_id"] is not None
+    assert listed["default_assembly_id"] is not None
 
-    profiles = (await client.get("/v1/users/me/llm-model-profiles")).json()
-    assert any(p["name"] == "当前配置" and p["is_default"] for p in profiles["data"])
-    default = next(p for p in profiles["data"] if p["is_default"])
+    assemblies = (await client.get("/v1/users/me/assemblies")).json()
+    default = next(p for p in assemblies["data"] if p["id"] == listed["default_assembly_id"])
+    assert default["name"] == "完整"
     assert default["main"]["provider_id"] == body["id"]
     assert default["main"]["model"] == "gpt-4o"
 
@@ -177,20 +177,20 @@ async def test_multiple_providers_and_delete_retargets_profile(client, byok):
     b = (await client.post(_BASE, json={"api_key": "sk-b-2222", "label": "B"})).json()
     listed = (await client.get(_BASE)).json()
     assert {p["label"] for p in listed["providers"]} == {"A", "B"}
-    profile_id = listed["default_model_profile_id"]
-    assert profile_id is not None
+    assembly_id = listed["default_assembly_id"]
+    assert assembly_id is not None
 
-    profiles = (await client.get("/v1/users/me/llm-model-profiles")).json()
-    default = next(p for p in profiles["data"] if p["id"] == profile_id)
+    assemblies = (await client.get("/v1/users/me/assemblies")).json()
+    default = next(p for p in assemblies["data"] if p["id"] == assembly_id)
     assert default["main"]["provider_id"] == a["id"]
 
-    # Delete the default provider → profile main retargets to the survivor.
+    # Delete the default provider → assembly main retargets to the survivor.
     r = await client.delete(f"{_BASE}/{a['id']}")
     assert r.status_code == 200, r.text
     listed = (await client.get(_BASE)).json()
     assert [p["id"] for p in listed["providers"]] == [b["id"]]
-    profiles = (await client.get("/v1/users/me/llm-model-profiles")).json()
-    default = next(p for p in profiles["data"] if p["id"] == profile_id)
+    assemblies = (await client.get("/v1/users/me/assemblies")).json()
+    default = next(p for p in assemblies["data"] if p["id"] == assembly_id)
     assert default["main"]["provider_id"] == b["id"]
 
 
@@ -200,34 +200,39 @@ async def test_model_profile_crud_and_set_default(client, byok):
     b = (await client.post(_BASE, json={"api_key": "sk-b-2222", "label": "B"})).json()
 
     r = await client.post(
-        "/v1/users/me/llm-model-profiles",
-        json={
-            "name": "双槽",
-            "main": {"origin": "byok", "provider_id": b["id"], "model": "m-b"},
-            "background": {"origin": "byok", "provider_id": a["id"], "model": "m-a"},
-            "set_as_default": True,
-        },
+        "/v1/users/me/assemblies",
+        json={"name": "双槽", "set_as_default": True},
     )
     assert r.status_code == 201, r.text
+    created = r.json()
+    assert created["name"] == "双槽"
+    assert created["is_default"] is True
+
+    r = await client.patch(
+        f"/v1/users/me/assemblies/{created['id']}",
+        json={
+            "main": {"origin": "byok", "provider_id": b["id"], "model": "m-b"},
+            "background": {"origin": "byok", "provider_id": a["id"], "model": "m-a"},
+        },
+    )
+    assert r.status_code == 200, r.text
     body = r.json()
-    assert body["name"] == "双槽"
     assert body["main"]["provider_id"] == b["id"]
     assert body["background"]["provider_id"] == a["id"]
-    assert body["is_default"] is True
 
     listed = (await client.get(_BASE)).json()
-    assert listed["default_model_profile_id"] == body["id"]
+    assert listed["default_assembly_id"] == body["id"]
 
 
 async def test_model_profile_rejects_foreign_provider(client, byok):
     await register_and_login(client, "provuser9")
     await client.post(_BASE, json={"api_key": "sk-a-1111"})
-    r = await client.post(
-        "/v1/users/me/llm-model-profiles",
-        json={
-            "name": "坏",
-            "main": {"origin": "byok", "provider_id": new_id(), "model": "m"},
-        },
+    created = (
+        await client.post("/v1/users/me/assemblies", json={"name": "坏"})
+    ).json()
+    r = await client.patch(
+        f"/v1/users/me/assemblies/{created['id']}",
+        json={"main": {"origin": "byok", "provider_id": new_id(), "model": "m"}},
     )
     assert r.status_code == 422, r.text
 

@@ -11,11 +11,11 @@
  * failure is the shape that most needs saying out loud.
  */
 import { useConversations } from "@/hooks/useConversations";
+import { useChatPaneId } from "@/lib/chatPane";
 import { composerContextGapHint } from "@/lib/composerContextCompactedHint";
-import { useConversationStore } from "@/stores/conversation";
 
 export function ComposerContextCompactedHint() {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   const conversations = useConversations();
   const gapHint = composerContextGapHint(
     conversationId

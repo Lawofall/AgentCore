@@ -1,14 +1,8 @@
-import { AskUserCard } from "@/components/chat/CheckpointCard";
 import {
-  type AskUserContent,
-  collapsedAskGlance,
-  displayAskReply,
-} from "@/components/chat/ask/AskUserFields";
-import {
-  ResolvedDecisionRecord,
-  askResolvedOutcome,
-} from "@/components/chat/decision";
-import { Badge } from "@/components/ui/badge";
+  AskSettledRecord,
+  AskUserCard,
+} from "@/components/chat/CheckpointCard";
+import type { AskUserContent } from "@/components/chat/ask/AskUserFields";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import { useState } from "react";
@@ -48,14 +42,6 @@ type DemoSettled = {
   selected: string[];
 };
 
-function collapsedSummary(settled: DemoSettled): string {
-  return collapsedAskGlance({
-    selected: settled.selected,
-    note: settled.note,
-    prompts: DEMO_ASK.questions.map((q) => q.prompt),
-  });
-}
-
 function ManualAskSettledRecord({
   settled,
   disclosureKey,
@@ -63,38 +49,16 @@ function ManualAskSettledRecord({
   settled: DemoSettled;
   disclosureKey: string;
 }) {
-  const resolved = askResolvedOutcome("decision", settled.decision);
-  const reply = displayAskReply(settled.note);
   return (
-    <ResolvedDecisionRecord
-      layout="toneStub"
+    <AskSettledRecord
       disclosureKey={disclosureKey}
-      tone={resolved.tone}
-      icon={resolved.icon}
-      label={resolved.label}
-      collapsedSummary={collapsedSummary(settled)}
-      askIntent="decision"
-    >
-      <div className="mt-1.5 space-y-1.5">
-        <p className="whitespace-pre-wrap text-sm text-foreground">
-          {DEMO_ASK.question}
-        </p>
-        {settled.selected.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {settled.selected.map((s) => (
-              <Badge key={s} tone="muted" pill>
-                {s}
-              </Badge>
-            ))}
-          </div>
-        )}
-        {reply ? (
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-            {reply}
-          </p>
-        ) : null}
-      </div>
-    </ResolvedDecisionRecord>
+      question={DEMO_ASK.question}
+      prompts={DEMO_ASK.questions.map((q) => q.prompt)}
+      intent="decision"
+      decision={settled.decision}
+      note={settled.note}
+      selected={settled.selected}
+    />
   );
 }
 

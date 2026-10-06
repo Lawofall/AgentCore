@@ -1,4 +1,4 @@
-"""Strict md-entry frontmatter: ``apply`` + ``description`` + optional ``paths`` / ``offers_tools``.
+"""Strict md-entry frontmatter: ``apply`` + ``description`` + optional ``paths``.
 
 Known keys are parsed as ``key: value`` lines. Unknown keys / comment lines / blank
 lines stay opaque text. Write-back is **text-level minimal edit** — never
@@ -21,11 +21,9 @@ ApplyMode = Literal["always", "on_demand", "paths"]
 _VALID_APPLY: frozenset[str] = frozenset({"always", "on_demand", "paths"})
 _FENCE = "---"
 _KNOWN_LINE = re.compile(
-    r"^(\s*)(apply|description|offers_tools|paths)(\s*:\s*)(.*)$",
+    r"^(\s*)(apply|description|paths)(\s*:\s*)(.*)$",
     re.IGNORECASE,
 )
-_OFFER_SPLIT = re.compile(r"[,，、]")
-_OFFER_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 
 
 @dataclass(frozen=True)
@@ -38,8 +36,6 @@ class ParsedFrontmatter:
     has_frontmatter: bool
     apply_present: bool
     description_present: bool
-    offers_tools: tuple[str, ...] = ()
-    offers_tools_present: bool = False
     paths: tuple[str, ...] = ()
     paths_present: bool = False
 
@@ -111,11 +107,9 @@ def parse_entry_frontmatter(content: str) -> ParsedFrontmatter | FrontmatterErro
 
     apply: ApplyMode = "on_demand"
     description = ""
-    offers_tools: tuple[str, ...] = ()
     paths: tuple[str, ...] = ()
     apply_present = False
     description_present = False
-    offers_tools_present = False
     paths_present = False
     for line in split.fm_lines:
         raw = line.rstrip("\r\n")
@@ -133,9 +127,6 @@ def parse_entry_frontmatter(content: str) -> ParsedFrontmatter | FrontmatterErro
         elif key == "description":
             description_present = True
             description = value
-        elif key == "offers_tools":
-            offers_tools_present = True
-            offers_tools = parse_offers_tools_tokens(value)
         elif key == "paths":
             paths_present = True
             paths = parse_path_patterns(value)
@@ -150,8 +141,6 @@ def parse_entry_frontmatter(content: str) -> ParsedFrontmatter | FrontmatterErro
         has_frontmatter=True,
         apply_present=apply_present,
         description_present=description_present,
-        offers_tools=offers_tools,
-        offers_tools_present=offers_tools_present,
         paths=paths,
         paths_present=paths_present,
     )
@@ -162,17 +151,16 @@ def set_entry_frontmatter(
     *,
     apply: ApplyMode | None = None,
     description: str | None = None,
-    offers_tools: Sequence[str] | None = None,
     paths: Sequence[str] | None = None,
 ) -> str:
     """Text-level minimal edit of known keys. ``None`` = leave that key untouched.
 
     Preserves unknown keys, ``#`` comment lines, blank lines, and existing key order.
     New keys are appended just before the closing fence (or in a new block when absent).
-    ``offers_tools=()`` / ``paths=()`` removes that key. Raises
-    :class:`FrontmatterEditError` on unclosed frontmatter (no auto-repair).
+    ``paths=()`` removes that key. Raises :class:`FrontmatterEditError` on unclosed
+    frontmatter (no auto-repair).
     """
-    if apply is None and description is None and offers_tools is None and paths is None:
+    if apply is None and description is None and paths is None:
         return content
 
     split = _split_frontmatter(content)
@@ -184,20 +172,15 @@ def set_entry_frontmatter(
             + _render_new_block(
                 apply=apply,
                 description=description,
-                offers_tools=offers_tools,
                 paths=paths,
             )
             + split.text
         )
 
-    offers_value = (
-        None if offers_tools is None else _format_offers_tools(offers_tools)
-    )
     paths_value = None if paths is None else _format_paths(paths)
     updated = list(split.fm_lines)
     seen_apply = False
     seen_description = False
-    seen_offers = False
     seen_paths = False
     drop: set[int] = set()
     for i, line in enumerate(updated):
@@ -218,13 +201,6 @@ def set_entry_frontmatter(
             seen_description = True
             key_token = m.group(2)
             updated[i] = f"{indent}{key_token}{colon}{description}{comment}{ending}"
-        elif key == "offers_tools" and offers_tools is not None:
-            seen_offers = True
-            if offers_value is None:
-                drop.add(i)
-            else:
-                key_token = m.group(2)
-                updated[i] = f"{indent}{key_token}{colon}{offers_value}{comment}{ending}"
         elif key == "paths" and paths is not None:
             seen_paths = True
             if paths_value is None:
@@ -242,8 +218,6 @@ def set_entry_frontmatter(
         to_append.append(f"apply: {apply}{nl}")
     if description is not None and not seen_description:
         to_append.append(f"description: {description}{nl}")
-    if offers_value is not None and not seen_offers:
-        to_append.append(f"offers_tools: {offers_value}{nl}")
     if paths_value is not None and not seen_paths:
         to_append.append(f"paths: {paths_value}{nl}")
 
@@ -311,7 +285,7 @@ def set_entry_frontmatter_total(content: str, *, apply: ApplyMode) -> tuple[str,
             bom = "\ufeff"
             text = text[1:]
         return (
-            bom + _render_new_block(apply=apply, description=None, offers_tools=None) + text,
+            bom + _render_new_block(apply=apply, description=None) + text,
             True,
         )
 
@@ -373,34 +347,6 @@ def _split_inline_comment(value_raw: str) -> tuple[str, str]:
     return value_raw[:idx].strip(), value_raw[idx:]
 
 
-def parse_offers_tools_tokens(raw: str) -> tuple[str, ...]:
-    """Split a one-line ``offers_tools`` value. Invalid tokens are dropped, not errors."""
-    seen: set[str] = set()
-    out: list[str] = []
-    for part in _OFFER_SPLIT.split(raw or ""):
-        token = part.strip().strip("'\"")
-        if not token or token in seen or _OFFER_TOKEN.fullmatch(token) is None:
-            continue
-        seen.add(token)
-        out.append(token)
-    return tuple(out)
-
-
-def offers_tools_from_content(content: str) -> tuple[str, ...]:
-    """Bound on-demand tool / connector names; empty when parse fails or the key is absent."""
-    parsed = parse_entry_frontmatter(content)
-    if isinstance(parsed, FrontmatterError):
-        return ()
-    return parsed.offers_tools
-
-
-def _format_offers_tools(names: Sequence[str]) -> str | None:
-    tokens = parse_offers_tools_tokens(",".join(names))
-    if not tokens:
-        return None
-    return ", ".join(tokens)
-
-
 def _format_paths(patterns: Sequence[str]) -> str | None:
     tokens = parse_path_patterns(",".join(patterns))
     if not tokens:
@@ -412,7 +358,6 @@ def _render_new_block(
     *,
     apply: ApplyMode | None,
     description: str | None,
-    offers_tools: Sequence[str] | None = None,
     paths: Sequence[str] | None = None,
 ) -> str:
     lines = [_FENCE]
@@ -420,9 +365,6 @@ def _render_new_block(
         lines.append(f"apply: {apply}")
     if description is not None:
         lines.append(f"description: {description}")
-    formatted = None if offers_tools is None else _format_offers_tools(offers_tools)
-    if formatted is not None:
-        lines.append(f"offers_tools: {formatted}")
     formatted_paths = None if paths is None else _format_paths(paths)
     if formatted_paths is not None:
         lines.append(f"paths: {formatted_paths}")

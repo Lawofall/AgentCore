@@ -18,16 +18,20 @@ import { AccountSettings } from "@/pages/more/AccountSettings";
 import { GeneralSettings } from "@/pages/more/GeneralSettings";
 import { GitCredentialSettings } from "@/pages/more/GitCredentialSettings";
 import { ImPrivacySettings } from "@/pages/more/ImPrivacySettings";
-import { ModelSettings } from "@/pages/more/ModelSettings";
+import { ModelSettingsRoute } from "@/pages/more/ModelSettings";
 import { MoreIndexRedirect } from "@/pages/more/MoreIndexRedirect";
 import { ProviderSettings } from "@/pages/more/ProviderSettings";
 import { RedirectToOfficialChat } from "@/pages/more/RedirectToOfficialChat";
 import { ShortcutsSettings } from "@/pages/more/ShortcutsSettings";
 import { SponsorSettings } from "@/pages/more/SponsorSettings";
 import { UsageSettings } from "@/pages/more/UsageSettings";
+import { AssemblyShelfPage } from "@/pages/toolbox/AssemblyShelf";
 import { FactoryGuidePage } from "@/pages/toolbox/FactoryGuidePage";
-import { GuidelinesPage } from "@/pages/toolbox/GuidelinesPage";
 import { ToolboxShell } from "@/pages/toolbox/ToolboxShell";
+import {
+  AssemblySectionRedirect,
+  OfficialShelfRedirect,
+} from "@/pages/toolbox/assemblyPages";
 import {
   ManualCollaboration,
   ManualIntro,
@@ -37,7 +41,6 @@ import {
 } from "@/pages/toolbox/manual";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 import { MarketPage } from "@/pages/toolbox/market/MarketPage";
-import { McpPage } from "@/pages/toolbox/mcp/McpPage";
 import { Navigate, createHashRouter } from "react-router-dom";
 
 export const router = createHashRouter([
@@ -92,9 +95,23 @@ export const router = createHashRouter([
           </NarrowBlockedPage>
         ),
         children: [
-          { index: true, element: <Navigate to="mine/skills" replace /> },
-          { path: "official", element: <GuidelinesPage /> },
-          { path: "mine/skills", element: <GuidelinesPage /> },
+          { index: true, element: <AssemblyShelfPage /> },
+          {
+            path: "overview",
+            element: <AssemblySectionRedirect tab="overview" />,
+          },
+          { path: "model", element: <AssemblySectionRedirect tab="model" /> },
+          { path: "tools", element: <AssemblySectionRedirect tab="tools" /> },
+          {
+            path: "envelope",
+            element: <AssemblySectionRedirect tab="envelope" />,
+          },
+          { path: "official", element: <OfficialShelfRedirect /> },
+          {
+            path: "mine/skills",
+            element: <AssemblySectionRedirect tab="prompts" />,
+          },
+          { path: "mcp", element: <AssemblySectionRedirect tab="plugs" /> },
           {
             path: "mine/tools",
             element: <Navigate to={APP_PATHS.toolbox.mine.skills} replace />,
@@ -114,14 +131,6 @@ export const router = createHashRouter([
         ],
       },
       {
-        path: "toolbox/mcp",
-        element: (
-          <NarrowBlockedPage>
-            <McpPage />
-          </NarrowBlockedPage>
-        ),
-      },
-      {
         path: "toolbox/market",
         element: (
           <NarrowBlockedPage>
@@ -136,10 +145,6 @@ export const router = createHashRouter([
             <FactoryGuidePage />
           </NarrowBlockedPage>
         ),
-      },
-      {
-        path: "toolbox/tools",
-        element: <Navigate to={APP_PATHS.toolbox.mine.skills} replace />,
       },
       {
         path: "toolbox/guidelines",
@@ -210,9 +215,38 @@ export const router = createHashRouter([
         path: "more",
         element: <MorePage />,
         children: [
-          // Opening 设置：platform / 已有平台或服务商 → 模型；byok 空接 → 服务商。
           { index: true, element: <MoreIndexRedirect /> },
-          { path: "model", element: <ModelSettings /> },
+          {
+            path: "model",
+            element: <ModelSettingsRoute />,
+            children: [
+              { index: true, element: <AssemblyShelfPage /> },
+              {
+                path: "overview",
+                element: <AssemblySectionRedirect tab="overview" />,
+              },
+              {
+                path: "model",
+                element: <AssemblySectionRedirect tab="model" />,
+              },
+              {
+                path: "tools",
+                element: <AssemblySectionRedirect tab="tools" />,
+              },
+              {
+                path: "envelope",
+                element: <AssemblySectionRedirect tab="envelope" />,
+              },
+              {
+                path: "prompts",
+                element: <AssemblySectionRedirect tab="prompts" />,
+              },
+              {
+                path: "plugs",
+                element: <AssemblySectionRedirect tab="plugs" />,
+              },
+            ],
+          },
           { path: "providers", element: <ProviderSettings /> },
           {
             path: "git",

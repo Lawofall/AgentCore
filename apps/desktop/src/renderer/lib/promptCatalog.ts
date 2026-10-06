@@ -96,8 +96,6 @@ const TOOL_FACE_ORDER = [
   "web",
   "execution",
   "host_browser",
-  "table",
-  "doc",
   "orchestration",
 ] as const;
 
@@ -145,18 +143,23 @@ function sortSkills(skills: CapabilitySkill[]): CapabilitySkill[] {
     .map((row) => row.skill);
 }
 
+/** Blank shared base is not a toolbox card. A non-empty residual shows the tile. */
+function sharedGuidelineItem(text: string): PromptCatalogItem | null {
+  if (!text.trim()) return null;
+  return {
+    id: "shared",
+    kind: "shared",
+    group: "factory",
+    label: "全员共享准则",
+    depth: 0,
+    text,
+  };
+}
+
 /** Split the capability payload into 常驻 / 按需 TOC groups. */
 export function buildPromptCatalog(data: Capabilities): PromptCatalogGroup[] {
-  const standing: PromptCatalogItem[] = [
-    {
-      id: "shared",
-      kind: "shared",
-      group: "factory",
-      label: "全员共享准则",
-      depth: 0,
-      text: data.guidelines.shared_base,
-    },
-  ];
+  const shared = sharedGuidelineItem(data.guidelines.shared_base);
+  const standing: PromptCatalogItem[] = shared ? [shared] : [];
   const onDemand: PromptCatalogItem[] = sortSkills(data.skills).map(
     (skill) => ({
       id: skillCatalogId(skill.name),
@@ -341,7 +344,7 @@ export function promptRailAlways(rail: PromptRail): PromptCatalogItem[] {
   return [...rail.constitution, ...rail.alwaysMine];
 }
 
-/** Dropping on the 按需 zone (not a named 夹) lands in 其他. */
+/** Dropping on the root shelf (not a named 夹) lands in 其他. */
 export function onDemandDropFolder(rail: PromptRail): PromptRailFolder {
   return (
     rail.folders.find((folder) => folder.source === "other") ?? {

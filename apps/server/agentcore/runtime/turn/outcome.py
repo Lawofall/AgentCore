@@ -24,7 +24,6 @@ OUTCOMES: tuple[TurnOutcome, ...] = ("ok", "partial", "paused", "error")
 PRODUCED_OUTCOMES: tuple[TurnOutcome, ...] = ("ok", "partial", "paused", "error")
 
 _DELEGATE_TOOL = "delegate"
-_TOOL_FAILED_MARKER = "<!--agentcore:tool_failed-->"
 
 
 def coerce_produced_outcome(value: object) -> TurnOutcome | None:
@@ -183,6 +182,6 @@ def salvage_captain_delegate_reply(
 
 def _clean_tool_text(text: str) -> str:
     body = strip_file_products_markers(text or "")
-    if _TOOL_FAILED_MARKER in body:
-        body = body.replace(_TOOL_FAILED_MARKER, "")
-    return body.strip()
+    from agentcore.runtime.engine.tool_exec import strip_model_failure_envelope
+
+    return strip_model_failure_envelope(body)

@@ -3,6 +3,7 @@ import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useComposerDockFlip } from "@/hooks/useComposerDockFlip";
 import { useConversations } from "@/hooks/useConversations";
+import { useChatPaneId } from "@/lib/chatPane";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { shouldCenterDraftComposer } from "@/lib/onboarding";
 import { useChatScroll, useTranscriptResetKey } from "@/lib/useChatScroll";
@@ -20,7 +21,6 @@ import {
   useActiveHasMoreBefore,
   useActiveLoadingNewer,
   useActiveLoadingOlder,
-  useConversationStore,
 } from "@/stores/conversation";
 import { ArrowDown, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -30,9 +30,19 @@ import { FindBar } from "./FindBar";
 import { MessageInput } from "./MessageInput";
 import { MessageList } from "./MessageList";
 
-export function ChatView() {
+export function ChatView({
+  layout = "single",
+  ownsFind = true,
+}: {
+  layout?: "single" | "split";
+  ownsFind?: boolean;
+} = {}) {
   const { isNarrow } = useNarrowLayoutState();
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
+  const columnClass =
+    layout === "split"
+      ? "mx-auto min-w-0 w-full"
+      : "mx-auto min-w-0 w-full max-w-3xl";
   const hasMessages = useActiveHasMessages();
   const conversations = useConversations();
   // 草稿态（未落库对话）才可能进居中欢迎态。已落库对话切换时会先经历一个「历史尚未
@@ -56,8 +66,15 @@ export function ChatView() {
   useComposerDockFlip(composerFlipRef, centerComposer, dockFlipToken);
 
   return (
-    <div className="relative flex min-w-0 flex-1 flex-col">
-      <ChatTranscriptPane isNarrow={isNarrow} />
+    <div
+      className="@container/chat relative flex min-h-0 min-w-0 flex-1 flex-col"
+      data-chat-layout={layout}
+    >
+      <ChatTranscriptPane
+        isNarrow={isNarrow}
+        ownsFind={ownsFind}
+        columnClass={columnClass}
+      />
 
       {/* Composer dock: empty draft → input at viewport center, greeting/chips
           above it; in-session → bottom bar. First send FLIPs input center→bottom. */}
@@ -65,16 +82,12 @@ export function ChatView() {
         className={
           centerComposer
             ? "absolute inset-0 z-10 flex items-center justify-center overflow-y-auto py-10"
-            : "mx-auto min-w-0 w-full max-w-3xl"
+            : cn(columnClass, "shrink-0")
         }
         data-composer-dock={centerComposer ? "center" : "bottom"}
       >
         <div
-          className={
-            centerComposer
-              ? "relative mx-auto min-w-0 w-full max-w-3xl"
-              : undefined
-          }
+          className={centerComposer ? cn("relative", columnClass) : undefined}
         >
           {centerComposer && (
             <div className="absolute inset-x-0 bottom-full mb-6">
@@ -95,8 +108,16 @@ export function ChatView() {
 }
 
 /** Owns stick-to-bottom + find/outline so streaming ticks do not re-render the composer. */
-function ChatTranscriptPane({ isNarrow }: { isNarrow: boolean }) {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+function ChatTranscriptPane({
+  isNarrow,
+  ownsFind,
+  columnClass,
+}: {
+  isNarrow: boolean;
+  ownsFind: boolean;
+  columnClass: string;
+}) {
+  const conversationId = useChatPaneId();
   const hasMessages = useActiveHasMessages();
   const firstMessageId = useActiveFirstMessageId();
   const hasMoreBefore = useActiveHasMoreBefore();
@@ -116,7 +137,7 @@ function ChatTranscriptPane({ isNarrow }: { isNarrow: boolean }) {
 
   const [findOpen, setFindOpen] = useState(false);
   useEffect(() => {
-    if (isNarrow) return;
+    if (isNarrow || !ownsFind) return;
     const onKey = (e: KeyboardEvent) => {
       if (
         (e.ctrlKey || e.metaKey) &&
@@ -130,7 +151,7 @@ function ChatTranscriptPane({ isNarrow }: { isNarrow: boolean }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [hasMessages, isNarrow]);
+  }, [hasMessages, isNarrow, ownsFind]);
   useEffect(() => {
     if (!hasMessages && findOpen) setFindOpen(false);
   }, [hasMessages, findOpen]);
@@ -163,7 +184,7 @@ function ChatTranscriptPane({ isNarrow }: { isNarrow: boolean }) {
           <div
             ref={contentRef}
             className={cn(
-              "mx-auto min-w-0 w-full max-w-3xl space-y-4",
+              cn(columnClass, "space-y-4"),
               isNarrow ? "px-4 pb-4 pt-4" : "px-6 pb-4 pt-10",
             )}
           >

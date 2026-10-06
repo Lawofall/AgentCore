@@ -18,6 +18,7 @@ import {
   DecisionCardIcon,
 } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useChatPaneId } from "@/lib/chatPane";
 import { notifyError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -25,7 +26,6 @@ import {
   isFileOpTool,
   supportsTurnGrant,
 } from "@/services/approvals";
-import { useConversationStore } from "@/stores/conversation";
 import {
   type ApprovalView,
   isToolGranted,
@@ -541,7 +541,7 @@ export function ApprovalPrompt({
   /** True when stacked flush above the chat composer (同底栏一体). */
   attached?: boolean;
 }) {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   const pending = usePendingApprovals(conversationId);
   const visible = pending.filter(
     (p) => conversationId != null && !isToolGranted(conversationId, p.toolName),

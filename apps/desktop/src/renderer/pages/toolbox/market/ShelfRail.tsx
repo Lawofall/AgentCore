@@ -1,4 +1,4 @@
-import { CATALOG_GRID_CLASS, SectionLabel } from "@/components/ui";
+import { ASSEMBLY_CARD_GRID_CLASS, SectionLabel } from "@/components/ui";
 import type { ReactNode } from "react";
 
 /**
@@ -15,7 +15,7 @@ export function ShelfRail({
   return (
     <section className="mb-8">
       <SectionLabel>{title}</SectionLabel>
-      <div className={`mt-3 ${CATALOG_GRID_CLASS}`}>{children}</div>
+      <div className={`mt-3 ${ASSEMBLY_CARD_GRID_CLASS}`}>{children}</div>
     </section>
   );
 }

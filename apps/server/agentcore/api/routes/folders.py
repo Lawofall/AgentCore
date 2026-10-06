@@ -35,6 +35,7 @@ from agentcore.api.schemas import (
     FolderSummary,
     InviteFolderMemberRequest,
     StatusResponse,
+    TrashEmptyResponse,
     UpdateFolderMemberRequest,
     UpdateFolderRequest,
 )
@@ -231,12 +232,14 @@ async def list_deleted_folders(
     Access-session only — the folders narrow ticket is for the sidecar CEO's roster
     chores, and recovery is the user's own remedy surface.
     """
+    cutoff = retention_cutoff()
     folders = await repo.list_deleted_by_user(
-        user.user_id, not_before=retention_cutoff(), limit=_TRASH_LIST_LIMIT
+        user.user_id, not_before=cutoff, limit=_TRASH_LIST_LIMIT
     )
+    total = await repo.count_deleted_by_user(user.user_id, not_before=cutoff)
     return DeletedFolderListResponse(
         data=[DeletedFolderSummary.from_folder(f, purge_at=_purge_at(f)) for f in folders],
-        total=len(folders),
+        total=total,
         retention_days=settings.workspace_retention_days,
     )
 
@@ -319,6 +322,39 @@ async def purge_deleted_folder(
         user_id=user.user_id,
     )
     return StatusResponse()
+
+
+@router.delete("/trash", response_model=TrashEmptyResponse)
+async def empty_deleted_folders(
+    user: AuthUser,
+    repo: FolderRepository = Depends(get_folder_repo),
+):
+    """彻底删除「最近删除」里仍在保留期内的全部项目。
+
+    Each row uses the tombstone purge (member chats + cloud files + desk
+    settings; never the user's OS directory). A workspace a turn still holds
+    stays in the bin and is counted in ``skipped_busy``; the rest continue.
+    A restore that already won is skipped, not a failure of the whole empty.
+    """
+    cutoff = retention_cutoff()
+    folder_ids = await repo.list_deleted_ids_by_user(user.user_id, not_before=cutoff)
+    purged = 0
+    skipped_busy = 0
+    for folder_id in folder_ids:
+        try:
+            wiped = await purge_trashed_folder(folder_id=folder_id, user_id=user.user_id)
+        except WorkspaceBusyError:
+            skipped_busy += 1
+            continue
+        if not wiped:
+            continue
+        logger.info(
+            "folders.trash_purged",
+            folder_id=folder_id,
+            user_id=user.user_id,
+        )
+        purged += 1
+    return TrashEmptyResponse(purged=purged, skipped_busy=skipped_busy)
 
 
 @router.get("/shared-with-me", response_model=list[FolderSummary])

@@ -54,8 +54,18 @@ def counts_as_always_content(content: str) -> bool:
     return parsed.apply == "paths" and patterns_are_unbounded(parsed.paths)
 
 
-def live_rule_from_doc(doc: object, *, column_apply: str, rank: int) -> LiveRule | None:
-    """One stored rule. Frontmatter ``apply`` wins when the key is present."""
+def live_rule_from_doc(
+    doc: object,
+    *,
+    column_apply: str,
+    rank: int,
+    apply_override: str | None = None,
+) -> LiveRule | None:
+    """One stored rule. Frontmatter ``apply`` wins when the key is present.
+
+    ``apply_override`` is the assembly membership mode. It wins over both the
+    column and frontmatter for account-level rules on an armed turn.
+    """
     raw_name = (
         str(doc.get("name") or "")
         if isinstance(doc, Mapping)
@@ -68,7 +78,10 @@ def live_rule_from_doc(doc: object, *, column_apply: str, rank: int) -> LiveRule
     parsed = parse_entry_frontmatter(content)
     if isinstance(parsed, FrontmatterError):
         return None
-    apply = parsed.apply if parsed.apply_present else column_apply
+    if apply_override in _APPLY:
+        apply = apply_override
+    else:
+        apply = parsed.apply if parsed.apply_present else column_apply
     if apply not in _APPLY:
         return None
     description = parsed.description if parsed.description_present else _description_of(doc)
@@ -83,9 +96,18 @@ def live_rule_from_doc(doc: object, *, column_apply: str, rank: int) -> LiveRule
 
 
 def live_rule_from_mapping(
-    doc: Mapping[str, object], *, column_apply: str, rank: int
+    doc: Mapping[str, object],
+    *,
+    column_apply: str,
+    rank: int,
+    apply_override: str | None = None,
 ) -> LiveRule | None:
-    return live_rule_from_doc(doc, column_apply=column_apply, rank=rank)
+    return live_rule_from_doc(
+        doc,
+        column_apply=column_apply,
+        rank=rank,
+        apply_override=apply_override,
+    )
 
 
 def resolve_rules(rules: Sequence[LiveRule]) -> ResolvedRules:

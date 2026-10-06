@@ -84,14 +84,15 @@ const GROUP_META: { id: CatalogGroupId; label: string }[] = [
   { id: "other", label: "其他" },
 ];
 
-/** Layers lifted out of the system blob. Path rows appear only when those tags
- * are already in the system text. Factory remainder stays one row. */
+/** Layers lifted out of the system blob. Path rows and `<运行时>` appear only
+ * when those tags are already in the system text. Factory remainder stays one row. */
 const PINNED_SYSTEM_TAGS = [
   "设定",
   "路径约定",
   "路径约定全文",
   "按需目录",
   "工作区",
+  "运行时",
 ] as const;
 
 const CONSULT_TOOLS = new Set([
@@ -250,7 +251,8 @@ function factoryItem(
  * Same `channel=system` body the model ate, indexed by existing tags.
  * Pinned layers become their own TOC rows; remaining constitution stays one
  * factory row. Missing `<设定>` is an honest empty row, not a file-page backfill.
- * `<路径约定>` and `<路径约定全文>` are rows only when present.
+ * `<路径约定>`, `<路径约定全文>`, and `<运行时>` are rows only when present.
+ * `<运行时>` sits beside `<工作区>`: both are per-turn envelope facts.
  */
 function splitSystemBlock(
   block: ContextBlockWire,
@@ -268,6 +270,7 @@ function splitSystemBlock(
     路径约定全文: [],
     按需目录: [],
     工作区: [],
+    运行时: [],
   };
   const rest: PromptSection[] = [];
   for (const section of sections) {
@@ -381,6 +384,45 @@ export function buildReceivedContextCatalog(
 
 export function flattenCatalog(groups: readonly CatalogGroup[]): CatalogItem[] {
   return groups.flatMap((g) => g.items);
+}
+
+/** TOC id for the opening-projection row. Not a catalog slice. */
+export const RECEIVED_CONTEXT_ALL_ID = "all";
+
+export interface OpeningSection {
+  heading: string;
+  channel: string;
+  body: string;
+  truncated: boolean;
+  fidelity: string;
+  files: string[];
+}
+
+/**
+ * Opening projection in wire order: the blocks the model was fed at the start
+ * of the turn. System stays one body (catalog slices are an index). Consult
+ * receipts are not blocks and stay out. Narrow layouts drop `channel=system`.
+ */
+export function openingContextView(
+  blocks: readonly ContextBlockWire[],
+  opts: { includeSystem: boolean },
+): { sections: OpeningSection[]; chars: number } {
+  const included = opts.includeSystem
+    ? blocks
+    : blocks.filter((block) => block.channel !== "system");
+  let chars = 0;
+  const sections = included.map((block) => {
+    chars += block.chars;
+    return {
+      heading: block.heading,
+      channel: block.channel,
+      body: block.body,
+      truncated: block.truncated,
+      fidelity: block.fidelity,
+      files: block.files,
+    };
+  });
+  return { sections, chars };
 }
 
 /** CEO: injected 设定 → 原始请求 → 本回合工具. Worker dock: first 材料 row wins. */

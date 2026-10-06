@@ -1,5 +1,5 @@
 import { CreateFolderCascadePanel } from "@/components/folders/CreateFolderPanel";
-import { Button, ConfirmDialog, SearchField } from "@/components/ui";
+import { Button, SearchField } from "@/components/ui";
 import {
   Popover,
   PopoverContent,
@@ -17,12 +17,8 @@ import {
   pickLocalFolderRoot,
 } from "@/lib/bindLocalFolder";
 import { isBorrowActive } from "@/lib/borrowOriginalPreference";
-import { startBorrowToCloudJob } from "@/lib/borrowToCloudJob";
 import { hasLocalFiles } from "@/lib/capabilities";
-import {
-  setComposerChannelPreference,
-  storedComposerChannelPreference,
-} from "@/lib/composerChannelPreference";
+import { setComposerChannelPreference } from "@/lib/composerChannelPreference";
 import { visibleDraftFolders } from "@/lib/draftWorkspaceFolders";
 import { folderAncestorNames } from "@/lib/folderTree";
 import { openLocalFolderFromRoot } from "@/lib/openLocalFolder";
@@ -34,21 +30,19 @@ import {
   mergeAccessibleFolders,
 } from "@/services/folders";
 import { type DraftWorkspaceIntent, useFoldersStore } from "@/stores/folders";
-import type { FsRoot } from "@shared/ipc-contract";
 import {
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronUp,
   Cloud,
-  CloudUpload,
   FolderOpen,
   GitBranch,
   HardDrive,
   Loader2,
   Plus,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ComposerPlusBackHeader, useComposerPlusRow } from "./ComposerPlusMenu";
 import { WorkspaceChannelGuideDialog } from "./WorkspaceChannelGuideDialog";
@@ -56,7 +50,7 @@ import { WorkspaceChannelGuideDialog } from "./WorkspaceChannelGuideDialog";
 /**
  * Always-on「在哪工作」chip for the TurnComposer 底栏左簇（工作区首位）。
  * Draft first screen = pick a place (本地对话 + 云端对话 + folders);
- * join / local-use nest 新建·Git·本机两选. Bound conversation: read-only status.
+ * join nest 新建·Git·从本机加入（选完即直接改）. Bound conversation: read-only status.
  */
 export function ComposerWorkspaceChip({
   conversationId,
@@ -194,25 +188,7 @@ function FolderChannelIcon({ folder }: { folder: FolderMeta }) {
   );
 }
 
-type DraftView = "pick" | "join" | "create" | "local-use";
-type LocalPicked = {
-  root: FsRoot;
-  owns: boolean;
-  /** List item already in 本机文件夹 — 直接改只改草稿意图，不新开会话。 */
-  existingFolderId?: string;
-  backView: "pick" | "join";
-};
-type CloudCopyConfirm = { picked: LocalPicked };
-
-function localToCloudConfirmCopy(folderName: string): {
-  title: string;
-  description: string;
-} {
-  return {
-    title: "先在云上做，原件先不动",
-    description: `把「${folderName}」复制到云上做这一单。电脑上的原件先不动，做完再决定写不写回。`,
-  };
-}
+type DraftView = "pick" | "join" | "create";
 
 function DraftChip() {
   const plus = useComposerPlusRow("workspace");
@@ -224,17 +200,9 @@ function DraftChip() {
   /** Same popover handoff — avoid close→open race that swallows the create dialog. */
   const [view, setView] = useState<DraftView>("pick");
   const [pickingLocal, setPickingLocal] = useState(false);
-  const [localPicked, setLocalPicked] = useState<LocalPicked | null>(null);
-  const localPickedRef = useRef<LocalPicked | null>(null);
-  localPickedRef.current = localPicked;
-  const [cloudCopyConfirm, setCloudCopyConfirm] =
-    useState<CloudCopyConfirm | null>(null);
-  const cloudCopyStartedRef = useRef(false);
   const intent = useFoldersStore((s) => s.draftWorkspaceIntent);
   const setIntent = useFoldersStore((s) => s.setDraftWorkspaceIntent);
   const isDesktop = hasLocalFiles();
-  const lastWasLocal =
-    storedComposerChannelPreference() === "local_traditional";
 
   const grouped = useGroupedConversations().data;
   const sharedWithMe = useSharedWithMeFolders().data ?? [];
@@ -295,35 +263,16 @@ function DraftChip() {
     intent.kind === "folder" && isBorrowActive(intent.folderId);
   const draftTitle = borrowActiveDraft ? `${text} · 原件尚未改动` : text;
 
-  const dropOwnedLocal = () => {
-    const picked = localPickedRef.current;
-    if (picked?.owns) {
-      void window.fsApi?.removeRoot?.(picked.root.id);
-    }
-    localPickedRef.current = null;
-    setLocalPicked(null);
-  };
-
   const resetPickChrome = () => {
     setQuery("");
     setFoldersExpanded(false);
     setView("pick");
-    dropOwnedLocal();
   };
 
   const closePick = () => {
     setPop(false);
     resetPickChrome();
     if (plus.mode === "panel" || plus.mode === "row") plus.close();
-  };
-
-  const handoffLocalPicked = (): LocalPicked | null => {
-    const picked = localPickedRef.current;
-    if (!picked) return null;
-    const released = { ...picked, owns: false };
-    localPickedRef.current = released;
-    setLocalPicked(released);
-    return picked;
   };
 
   const pickQuickCloud = () => {
@@ -340,15 +289,9 @@ function DraftChip() {
 
   const pickFolder = (folder: FolderMeta) => {
     if (folder.mode === "local" && folder.localRootId) {
-      const next: LocalPicked = {
-        root: { id: folder.localRootId, name: folder.name },
-        owns: false,
-        existingFolderId: folder.id,
-        backView: "pick",
-      };
-      localPickedRef.current = next;
-      setLocalPicked(next);
-      setView("local-use");
+      setComposerChannelPreference("local_traditional");
+      setIntent({ kind: "folder", folderId: folder.id });
+      closePick();
       return;
     }
     setComposerChannelPreference("cloud");
@@ -372,69 +315,13 @@ function DraftChip() {
         }
         return;
       }
-      const next: LocalPicked = {
-        root: picked.root,
-        owns: true,
-        backView: "join",
-      };
-      localPickedRef.current = next;
-      setLocalPicked(next);
-      setView("local-use");
+      setComposerChannelPreference("local_traditional");
+      closePick();
+      void openLocalFolderFromRoot(picked.root, navigate);
     } finally {
       setPickingLocal(false);
     }
   };
-
-  const useLocalDirect = () => {
-    const picked = handoffLocalPicked();
-    if (!picked) return;
-    setComposerChannelPreference("local_traditional");
-    if (picked.existingFolderId) {
-      setIntent({ kind: "folder", folderId: picked.existingFolderId });
-      closePick();
-      return;
-    }
-    closePick();
-    void openLocalFolderFromRoot(picked.root, navigate);
-  };
-
-  const dropRootIfOwned = (picked: LocalPicked) => {
-    if (!picked.owns) return;
-    void window.fsApi?.removeRoot?.(picked.root.id);
-  };
-
-  const askCloudCopy = () => {
-    const picked = handoffLocalPicked();
-    if (!picked) return;
-    closePick();
-    cloudCopyStartedRef.current = false;
-    setCloudCopyConfirm({ picked });
-  };
-
-  const dismissCloudCopy = () => {
-    setCloudCopyConfirm((pending) => {
-      if (pending && !cloudCopyStartedRef.current) {
-        dropRootIfOwned(pending.picked);
-      }
-      return null;
-    });
-  };
-
-  const confirmCloudCopy = () => {
-    const pending = cloudCopyConfirm;
-    if (!pending) return;
-    cloudCopyStartedRef.current = true;
-    setCloudCopyConfirm(null);
-    setComposerChannelPreference("cloud");
-    const { picked } = pending;
-    const started = startBorrowToCloudJob({
-      root: picked.root,
-      folderName: picked.root.name,
-    });
-    if (!started) dropRootIfOwned(picked);
-  };
-
-  const useLocalBorrow = () => askCloudCopy();
 
   const openCreateCloud = () => {
     setComposerChannelPreference("cloud");
@@ -528,24 +415,7 @@ function DraftChip() {
       showLocalTraditional={isDesktop}
     />
   );
-  const cloudCopyCopy = cloudCopyConfirm
-    ? localToCloudConfirmCopy(cloudCopyConfirm.picked.root.name)
-    : null;
-  const hosts = (
-    <>
-      {guide}
-      <ConfirmDialog
-        open={cloudCopyConfirm !== null}
-        onOpenChange={(open) => {
-          if (!open) dismissCloudCopy();
-        }}
-        title={cloudCopyCopy?.title ?? ""}
-        description={cloudCopyCopy?.description}
-        confirmLabel="开始"
-        onConfirm={confirmCloudCopy}
-      />
-    </>
-  );
+  const hosts = guide;
 
   const trigger = (
     <button
@@ -604,32 +474,6 @@ function DraftChip() {
             }
             label="从本机加入"
             onClick={() => void joinFromLocal()}
-          />
-        </div>
-      </div>
-    ) : view === "local-use" ? (
-      <div>
-        <NestedHeader
-          title={localPicked?.root.name ?? "本机文件夹"}
-          onBack={() => {
-            const back = localPickedRef.current?.backView ?? "join";
-            dropOwnedLocal();
-            setView(back);
-          }}
-        />
-        <div className="p-1.5">
-          <DraftRow
-            icon={<HardDrive size={14} />}
-            label="直接改这个文件夹"
-            hint="立刻改电脑上的原件"
-            badge={lastWasLocal ? "上次" : undefined}
-            onClick={useLocalDirect}
-          />
-          <DraftRow
-            icon={<CloudUpload size={14} />}
-            label="先在云上做，原件先不动"
-            hint="做完再决定写不写回"
-            onClick={useLocalBorrow}
           />
         </div>
       </div>
@@ -767,14 +611,12 @@ function DraftRow({
   icon,
   label,
   hint,
-  badge,
   selected,
   onClick,
 }: {
   icon: ReactNode;
   label: string;
   hint?: string;
-  badge?: string;
   selected?: boolean;
   onClick: () => void;
 }) {
@@ -790,14 +632,7 @@ function DraftRow({
       }
     >
       <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate">{label}</span>
-          {badge ? (
-            <span className="shrink-0 rounded-lg bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-              {badge}
-            </span>
-          ) : null}
-        </span>
+        <span className="block truncate">{label}</span>
         {hint && (
           <span className="block truncate text-xs font-normal text-muted-foreground">
             {hint}

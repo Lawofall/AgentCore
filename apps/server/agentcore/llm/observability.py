@@ -138,6 +138,8 @@ def log_llm_call(
             extra.update(prefix_probe.as_llm_call_fields())
     except Exception:  # noqa: BLE001 — observability must never break the LLM path
         pass
+    if not u.cache_hit_tokens and not u.cache_miss_tokens and u.usage_keys:
+        extra["usage_keys"] = u.usage_keys
     try:
         from agentcore.core.log_context import get_log_value
         from agentcore.observability.session_llm_header import record_session_header

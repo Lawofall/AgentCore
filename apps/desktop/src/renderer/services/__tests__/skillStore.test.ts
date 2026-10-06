@@ -66,28 +66,7 @@ describe("skillStore", () => {
     expect(page.items[0]?.version).toBe("1");
     expect(page.items[0]?.documentId).toBe("d1");
     expect(page.items[0]?.installDocumentId).toBeNull();
-    expect(page.items[0]?.offersTools).toEqual([]);
     expect(page.items[0]).not.toHaveProperty("content");
-  });
-
-  it("列表映射快照里的手脚名单", async () => {
-    apiGet.mockResolvedValue({
-      data: [
-        {
-          id: "l1",
-          name: "合同审查",
-          description: "审合同时用",
-          author: "ssauthor",
-          version_n: 1,
-          installed: false,
-          has_update: false,
-          source_document_id: "d1",
-          offers_tools: ["host"],
-        },
-      ],
-    });
-    const page = await listSkillStore();
-    expect(page.items[0]?.offersTools).toEqual(["host"]);
   });
 
   it("安装走 POST /install，并刷新账号目录缓存", async () => {

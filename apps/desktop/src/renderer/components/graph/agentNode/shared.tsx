@@ -102,7 +102,7 @@ export interface AgentNodeData {
   failureKind?: import("@/types/events").RunFailureKind | null;
   /** `run_failed.product_landed` — files already on disk before failure. */
   productLanded?: boolean | null;
-  /** Folded child runs under this unit root (delegation drill-in). */
+  /** Direct reports under this leader (org-chart fold chip). */
   foldedChildCount?: number;
   unitExpanded?: boolean;
   onToggleUnitExpand?: () => void;

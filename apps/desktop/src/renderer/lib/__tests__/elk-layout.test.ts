@@ -51,7 +51,7 @@ async function layout(
  * 协作图布局后处理不变量（端点钉层 + ELK compound 子队，见 elk-layout.ts / 前端UX设计 §五）。
  *
  * 用真实 `computeLayout`（含 ELK + layerConstraint + compound 子队 +
- * centerLoneEndpoints）断言几何不变量。含 delegate 的用例以 compound 容器为单元：
+ * centerSubTeamCaptains + centerLoneEndpoints）断言几何不变量。含 delegate 的用例以 compound 容器为单元：
  *   1. 末层钉层——CEO 汇聚点恒在最右（最大主轴坐标）。
  *   2. 同 compound 内成员两两不重叠。
  *   3. 多支子树（compound 或顶层节点）互不重叠。
@@ -59,6 +59,18 @@ async function layout(
 // 镜像 elk-layout 内部常量（NODE_WIDTH 未导出，NODE_HEIGHT 已导出但此处一并固定）。
 const NW = 210;
 const NH = 110;
+
+const cy = (pos: Record<string, { x: number; y: number }>, id: string) =>
+  pos[id].y + NH / 2;
+
+/** Midpoint of the cross-axis extent (leftright). Odd count → middle card. */
+const spanMidY = (
+  pos: Record<string, { x: number; y: number }>,
+  ids: string[],
+) => {
+  const centers = ids.map((id) => cy(pos, id));
+  return (Math.min(...centers) + Math.max(...centers)) / 2;
+};
 
 const e = (
   source: string,
@@ -127,6 +139,12 @@ describe("computeLayout · 嵌套委派布局不变量（leftright）", () => {
     expect(inner.y + inner.height).toBeLessThanOrEqual(
       outer.y + outer.height + 0.01,
     );
+    expect(cy(positions, "lead")).toBeCloseTo(
+      spanMidY(positions, ["eng1", "eng2"]),
+      1,
+    );
+    expect(cy(positions, "mpm")).toBeCloseTo(cy(positions, "lead"), 1);
+
     for (const id of ["mpm", "lead", "eng1", "eng2"]) {
       expect(positions[id].x).toBeGreaterThanOrEqual(outer.x - 0.01);
       expect(positions[id].y).toBeGreaterThanOrEqual(outer.y - 0.01);
@@ -218,6 +236,9 @@ describe("computeLayout · 嵌套委派布局不变量（leftright）", () => {
     expect(noneOverlap(positions, ["w1", "w2", "w3"])).toEqual([]);
     expect(positions.__input__.x).toBeLessThan(positions.w1.x);
     expect(positions.cap.x).toBeGreaterThan(positions.w1.x);
+    const peerMid = spanMidY(positions, ["w1", "w2", "w3"]);
+    expect(cy(positions, "__input__")).toBeCloseTo(peerMid, 1);
+    expect(cy(positions, "cap")).toBeCloseTo(peerMid, 1);
   });
 
   it("3 父同波次各带子队：compound 互不重叠、汇聚点钉末层", async () => {
@@ -355,9 +376,9 @@ describe("computeLayout · 嵌套委派布局不变量（leftright）", () => {
     }
     // 全员两两不重叠。
     expect(noneOverlap(positions, ids)).toEqual([]);
-    // 主持人领先圆桌（主轴更靠前）：leftright 下 mod.x 小于三视角。交叉轴上 ELK(BK)
-    // 把 mod 居中于扇面而非钉顶——等效可读布局，故只守「源领先目标」这一真不变量。
-    const subXs = ["s_a", "s_b", "s_c"].map((id) => positions[id].x);
+    const lanes = ["s_a", "s_b", "s_c"];
+    expect(cy(positions, "mod")).toBeCloseTo(spanMidY(positions, lanes), 1);
+    const subXs = lanes.map((id) => positions[id].x);
     expect(positions.mod.x).toBeLessThan(Math.min(...subXs));
   });
 
@@ -396,9 +417,15 @@ describe("computeLayout · 嵌套委派布局不变量（leftright）", () => {
     ]) {
       expect(positions[rev].y).toBeCloseTo(positions[src].y, 5);
     }
-    // 汇聚点钉末层。
+    // 汇聚点钉末层。带端点时 ELK 会把主持人钉在书立线上、辩手列往下挂；
+    // 后处理把主持人拉回辩手跨度中线，书立跟着这条线。
     const maxX = Math.max(...ids.map((id) => positions[id].x));
     expect(positions.cap.x).toBe(maxX);
+    const lanes = ["s_a", "s_b", "s_c"];
+    const laneMid = spanMidY(positions, lanes);
+    expect(cy(positions, "mod")).toBeCloseTo(laneMid, 1);
+    expect(cy(positions, "__input__")).toBeCloseTo(laneMid, 1);
+    expect(cy(positions, "cap")).toBeCloseTo(laneMid, 1);
     expect(
       noneOverlap(positions, ["s_a", "s_b", "s_c", "s_a2", "s_b2", "s_c2"]),
     ).toEqual([]);
@@ -445,6 +472,75 @@ describe("computeLayout · 嵌套委派布局不变量（leftright）", () => {
   });
 });
 
+describe("computeLayout · 子队队长对齐队员中线", () => {
+  it("单独三名队员：队长、你的任务、汇聚点落在中间队员", async () => {
+    const ids = ["__input__", "cap", "m1", "m2", "m3", "ceo"];
+    const edges: GraphEdge[] = [
+      e("__input__", "cap"),
+      e("cap", "ceo"),
+      e("cap", "m1", "delegate"),
+      e("cap", "m2", "delegate"),
+      e("cap", "m3", "delegate"),
+    ];
+    const { positions } = await layout(ids, edges, "leftright", {
+      source: "__input__",
+      sink: "ceo",
+    });
+    const mid = spanMidY(positions, ["m1", "m2", "m3"]);
+    expect(cy(positions, "cap")).toBeCloseTo(mid, 1);
+    expect(cy(positions, "__input__")).toBeCloseTo(mid, 1);
+    expect(cy(positions, "ceo")).toBeCloseTo(mid, 1);
+    expect(noneOverlap(positions, ["cap", "m1", "m2", "m3"])).toEqual([]);
+  });
+
+  it("两名队员：队长落在两卡中心的中点", async () => {
+    const ids = ["__input__", "cap", "m1", "m2", "ceo"];
+    const edges: GraphEdge[] = [
+      e("__input__", "cap"),
+      e("cap", "ceo"),
+      e("cap", "m1", "delegate"),
+      e("cap", "m2", "delegate"),
+    ];
+    const { positions } = await layout(ids, edges, "leftright", {
+      source: "__input__",
+      sink: "ceo",
+    });
+    expect(cy(positions, "cap")).toBeCloseTo(
+      spanMidY(positions, ["m1", "m2"]),
+      1,
+    );
+  });
+
+  it("上下有平铺兄弟：队长仍在子队中线，书立用三名直接子节点的跨度", async () => {
+    const ids = ["__input__", "fe", "cap", "spec", "m1", "m2", "m3", "ceo"];
+    const edges: GraphEdge[] = [
+      e("__input__", "fe"),
+      e("__input__", "cap"),
+      e("__input__", "spec"),
+      e("fe", "ceo"),
+      e("cap", "ceo"),
+      e("spec", "ceo"),
+      e("cap", "m1", "delegate"),
+      e("cap", "m2", "delegate"),
+      e("cap", "m3", "delegate"),
+    ];
+    const { positions } = await layout(ids, edges, "leftright", {
+      source: "__input__",
+      sink: "ceo",
+    });
+    expect(cy(positions, "cap")).toBeCloseTo(
+      spanMidY(positions, ["m1", "m2", "m3"]),
+      1,
+    );
+    const bookendMid = spanMidY(positions, ["fe", "cap", "spec"]);
+    expect(cy(positions, "__input__")).toBeCloseTo(bookendMid, 1);
+    expect(cy(positions, "ceo")).toBeCloseTo(bookendMid, 1);
+    expect(
+      noneOverlap(positions, ["fe", "cap", "spec", "m1", "m2", "m3"]),
+    ).toEqual([]);
+  });
+});
+
 describe("computeLayout · 树形分叉对称", () => {
   it("1→2 双父 + 各自子队：两支镜像等距、汇聚点钉末层", async () => {
     const ids = [
@@ -475,6 +571,12 @@ describe("computeLayout · 树形分叉对称", () => {
     });
 
     const cx = (id: string) => positions[id].x + NW / 2;
+    const spanMidX = (ids: string[]) => {
+      const centers = ids.map((id) => cx(id));
+      return (Math.min(...centers) + Math.max(...centers)) / 2;
+    };
+    expect(cx("pd")).toBeCloseTo(spanMidX(["ix", "vd"]), 1);
+    expect(cx("arch")).toBeCloseTo(spanMidX(["be", "dm"]), 1);
     const decideC = cx("decide");
     const pdDist = decideC - cx("pd");
     const archDist = cx("arch") - decideC;

@@ -179,6 +179,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Account Models
+         * @description Model catalog for a ticketed sidecar. Same rows as ``GET /v1/users/me/models``.
+         */
+        get: operations["list_account_models_v1_account_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/account/rules/delete": {
         parameters: {
             query?: never;
@@ -1507,7 +1527,16 @@ export interface paths {
         get: operations["list_deleted_conversations_v1_conversations_trash_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Empty Deleted Conversations
+         * @description 彻底删除「最近删除」里仍在保留期内的全部对话。
+         *
+         *     Same claim as the single-row purge (conditional hard-delete, then scratch).
+         *     The list page is capped; this follows the window, not the page. A restore
+         *     that lands first is skipped — that chat is already out of the bin — and does
+         *     not fail the rest.
+         */
+        delete: operations["empty_deleted_conversations_v1_conversations_trash_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1774,6 +1803,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/context-cut": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Commit Context Cut Route
+         * @description Store the prose the user confirmed. Does not summarize again.
+         */
+        post: operations["commit_context_cut_route_v1_conversations__conversation_id__context_cut_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/context-cut/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Context Cut Route
+         * @description Summarize everything still in the window before this message. Does not write.
+         */
+        post: operations["preview_context_cut_route_v1_conversations__conversation_id__context_cut_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/context-cut/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo Context Cut Route
+         * @description Restore the compaction state from immediately before the latest cut.
+         */
+        post: operations["undo_context_cut_route_v1_conversations__conversation_id__context_cut_undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}/cost": {
         parameters: {
             query?: never;
@@ -1846,6 +1935,27 @@ export interface paths {
          *     Returns the new conversation summary.
          */
         post: operations["duplicate_conversation_v1_conversations__conversation_id__duplicate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/envelope-switches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Conversation Envelope Switches */
+        get: operations["get_conversation_envelope_switches_v1_conversations__conversation_id__envelope_switches_get"];
+        /**
+         * Put Conversation Envelope Switches
+         * @description Takes effect the next time a turn entry renders the envelope.
+         */
+        put: operations["put_conversation_envelope_switches_v1_conversations__conversation_id__envelope_switches_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2609,7 +2719,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/conversations/{conversation_id}/queued-turns/{queue_id}/stop-and-send": {
+    "/v1/conversations/{conversation_id}/queued-turns/{queue_id}/to-captain": {
         parameters: {
             query?: never;
             header?: never;
@@ -2619,13 +2729,13 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Stop And Send Queued Turn
-         * @description Move this queued item to the front, then hard-stop the live turn.
+         * Deliver Queued Turn To Captain
+         * @description Hand this queued line to the live captain and drop it from the FIFO.
          *
-         *     The next drain starts this item. Items that were ahead of it stay behind.
-         *     Stop still does not clear the rest of the FIFO.
+         *     The team keeps running. The user row stays (hidden until the interjection
+         *     is injected). No live coordination → 409 and the item stays queued.
          */
-        post: operations["stop_and_send_queued_turn_v1_conversations__conversation_id__queued_turns__queue_id__stop_and_send_post"];
+        post: operations["deliver_queued_turn_to_captain_v1_conversations__conversation_id__queued_turns__queue_id__to_captain_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2927,6 +3037,27 @@ export interface paths {
          */
         get: operations["attach_stream_v1_conversations__conversation_id__stream_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/tool-switches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Conversation Tool Switches */
+        get: operations["get_conversation_tool_switches_v1_conversations__conversation_id__tool_switches_get"];
+        /**
+         * Put Conversation Tool Switches
+         * @description Takes effect the next time a turn entry builds the tool table.
+         */
+        put: operations["put_conversation_tool_switches_v1_conversations__conversation_id__tool_switches_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3858,7 +3989,16 @@ export interface paths {
         get: operations["list_deleted_folders_v1_folders_trash_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Empty Deleted Folders
+         * @description 彻底删除「最近删除」里仍在保留期内的全部项目。
+         *
+         *     Each row uses the tombstone purge (member chats + cloud files + desk
+         *     settings; never the user's OS directory). A workspace a turn still holds
+         *     stays in the bin and is counted in ``skipped_busy``; the rest continue.
+         *     A restore that already won is skipped, not a failure of the whole empty.
+         */
+        delete: operations["empty_deleted_folders_v1_folders_trash_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5102,7 +5242,7 @@ export interface paths {
          *     (``GET /messages/{id}/cost``), not this monthly account view.
          *
          *     This is the account total, so it also carries spend that belongs to no
-         *     conversation at all (AI 改写 / 文档 description — ``role=assist`` ledger rows).
+         *     conversation at all (AI 改写 — ``role=assist`` ledger rows).
          *     ``requests`` counts assistant turns only, so those rows raise 花销 without
          *     raising 请求数.
          *
@@ -5117,6 +5257,60 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/assemblies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Model Profiles */
+        get: operations["list_model_profiles_v1_users_me_assemblies_get"];
+        put?: never;
+        /** Create Model Profile */
+        post: operations["create_model_profile_v1_users_me_assemblies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/assemblies/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Default Model Profile */
+        put: operations["set_default_model_profile_v1_users_me_assemblies_default_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/assemblies/{profile_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Model Profile */
+        get: operations["get_model_profile_v1_users_me_assemblies__profile_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Model Profile */
+        delete: operations["delete_model_profile_v1_users_me_assemblies__profile_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Model Profile */
+        patch: operations["update_model_profile_v1_users_me_assemblies__profile_id__patch"];
         trace?: never;
     };
     "/v1/users/me/autonomy": {
@@ -5168,6 +5362,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/users/me/envelope-switches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Account Envelope Switches */
+        get: operations["get_account_envelope_switches_v1_users_me_envelope_switches_get"];
+        /** Put Account Envelope Switches */
+        put: operations["put_account_envelope_switches_v1_users_me_envelope_switches_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/users/me/git-credentials": {
         parameters: {
             query?: never;
@@ -5194,60 +5406,6 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/v1/users/me/llm-model-profiles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Model Profiles */
-        get: operations["list_model_profiles_v1_users_me_llm_model_profiles_get"];
-        put?: never;
-        /** Create Model Profile */
-        post: operations["create_model_profile_v1_users_me_llm_model_profiles_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/users/me/llm-model-profiles/default": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Set Default Model Profile */
-        put: operations["set_default_model_profile_v1_users_me_llm_model_profiles_default_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/users/me/llm-model-profiles/{profile_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Model Profile */
-        get: operations["get_model_profile_v1_users_me_llm_model_profiles__profile_id__get"];
-        put?: never;
-        post?: never;
-        /** Delete Model Profile */
-        delete: operations["delete_model_profile_v1_users_me_llm_model_profiles__profile_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Model Profile */
-        patch: operations["update_model_profile_v1_users_me_llm_model_profiles__profile_id__patch"];
         trace?: never;
     };
     "/v1/users/me/llm-providers": {
@@ -5402,6 +5560,24 @@ export interface paths {
         put?: never;
         /** Test Search Provider */
         post: operations["test_search_provider_v1_users_me_search_providers__provider_id__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/tool-switches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Account Tool Switches */
+        get: operations["get_account_tool_switches_v1_users_me_tool_switches_get"];
+        /** Put Account Tool Switches */
+        put: operations["put_account_tool_switches_v1_users_me_tool_switches_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5994,6 +6170,11 @@ export interface components {
             description: string;
             /** Folder Id */
             folder_id?: string | null;
+            /**
+             * Id
+             * @default
+             */
+            id: string;
             /** Name */
             name: string;
         };
@@ -7356,8 +7537,9 @@ export interface components {
          * @description The system-prompt TEMPLATE the agents follow (静态 蓝图; the per-turn verbatim
          *     prompt is served separately, see the message prompt endpoint).
          *
-         *     ``shared_base`` is the base every agent (CEO + workers) shares (output
-         *     style, tool-use, safety); ``worker_leaf`` / ``worker_captain`` are empty
+         *     ``shared_base`` is the base every agent (CEO + workers) shares. It is empty
+         *     unless a residual is injected; the official toolbox hides the card when this
+         *     string is blank. ``worker_leaf`` / ``worker_captain`` are empty
          *     (no factory worker ``<身份>``; nest-cap is a live opening fact) — not the
          *     per-turn prompt (form HOW is 交付物规格 in 收到的上下文);
          *     ``ceo_addon`` is the CEO
@@ -7721,6 +7903,52 @@ export interface components {
             path: string;
         };
         /**
+         * ContextCutCommitRequest
+         * @description Write the prose the user confirmed. Does not summarize again.
+         *
+         *     ``summary`` is editable prose. The server drops any identity-ledger fence
+         *     in it and appends the ledger for this fold.
+         */
+        ContextCutCommitRequest: {
+            /** Fold Digest */
+            fold_digest: string;
+            /** Message Id */
+            message_id: string;
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * ContextCutPreviewRequest
+         * @description Fold everything still in the model window before this message.
+         */
+        ContextCutPreviewRequest: {
+            /** Message Id */
+            message_id: string;
+        };
+        /**
+         * ContextCutPreviewResponse
+         * @description Prose the user can edit before it becomes the prefix.
+         *
+         *     ``keep_message_id`` may be the user message that opened the chosen
+         *     assistant turn. ``summary`` is the editable prose only. Commit stores
+         *     that prose plus the program-owned identity ledger for this fold.
+         */
+        ContextCutPreviewResponse: {
+            /** Fold Digest */
+            fold_digest: string;
+            /**
+             * Fold Through
+             * Format: date-time
+             */
+            fold_through: string;
+            /** Folded Count */
+            folded_count: number;
+            /** Keep Message Id */
+            keep_message_id: string;
+            /** Summary */
+            summary: string;
+        };
+        /**
          * ContextGapModel
          * @description 早期对话没能进摘要、也已滑出原文窗口——这一轮 AI 确实读不到它们。
          *
@@ -7937,6 +8165,8 @@ export interface components {
              * @default false
              */
             archived: boolean;
+            /** Assembly Id */
+            assembly_id?: string | null;
             /** Compacted Through */
             compacted_through?: string | null;
             /**
@@ -7944,6 +8174,11 @@ export interface components {
              * @default false
              */
             context_compacted: boolean;
+            /**
+             * Context Cut Undoable
+             * @default false
+             */
+            context_cut_undoable: boolean;
             context_gap?: components["schemas"]["ContextGapModel"] | null;
             /**
              * Created At
@@ -7968,8 +8203,6 @@ export interface components {
              * @default 0
              */
             message_count: number;
-            /** Model Profile Id */
-            model_profile_id?: string | null;
             permission_axes?: components["schemas"]["PermissionAxesModel"];
             /**
              * Pinned
@@ -8087,14 +8320,14 @@ export interface components {
         };
         /** CreateConversationRequest */
         CreateConversationRequest: {
+            /** Assembly Id */
+            assembly_id?: string | null;
             /** Client Request Id */
             client_request_id?: string | null;
             /** Folder Id */
             folder_id?: string | null;
             /** Local Container Root Id */
             local_container_root_id?: string | null;
-            /** Model Profile Id */
-            model_profile_id?: string | null;
             permission_axes?: components["schemas"]["PermissionAxesModel"] | null;
             /** Title */
             title?: string | null;
@@ -8140,24 +8373,18 @@ export interface components {
             /** User Id */
             user_id: string;
         };
-        /** CreateLlmModelProfileRequest */
+        /**
+         * CreateLlmModelProfileRequest
+         * @description New assembly. Copies the starred assembly, including its model.
+         */
         CreateLlmModelProfileRequest: {
-            background?: components["schemas"]["ModelProfileSlot"] | null;
-            main: components["schemas"]["ModelProfileSlot"];
             /** Name */
             name: string;
-            /**
-             * Reasoning Effort
-             * @description Vendor thinking-effort token. Null = vendor default for the main model. Must be an official control value of the main model.
-             */
-            reasoning_effort?: string | null;
             /**
              * Set As Default
              * @default false
              */
             set_as_default: boolean;
-            vision?: components["schemas"]["ModelProfileSlot"] | null;
-            worker?: components["schemas"]["ModelProfileSlot"] | null;
         };
         /**
          * CreateLlmProviderRequest
@@ -8342,6 +8569,9 @@ export interface components {
          *     past retention — those are no longer restorable, and listing them would promise a
          *     recovery the sweeper is entitled to refuse. ``retention_days`` mirrors
          *     ``workspace_retention_days``, the same window the project bin runs on.
+         *
+         *     ``total`` is every recoverable row in that window. ``data`` is a capped page, so
+         *     emptying the bin follows ``total``, not ``len(data)``.
          */
         DeletedConversationListResponse: {
             /** Data */
@@ -8391,6 +8621,9 @@ export interface components {
          *     cloud desk) and projects soft-deleted before the recycle bin existed are omitted,
          *     as are projects already past retention (they are no longer restorable).
          *     ``retention_days`` mirrors ``workspace_retention_days``.
+         *
+         *     ``total`` is every recoverable row in that window. ``data`` is a capped page, so
+         *     emptying the bin follows ``total``, not ``len(data)``.
          */
         DeletedFolderListResponse: {
             /** Data */
@@ -8998,6 +9231,29 @@ export interface components {
         EmailSendCodeRequest: {
             /** Email */
             email: string;
+        };
+        /** EnvelopeSwitchRow */
+        EnvelopeSwitchRow: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Off */
+            off: boolean;
+            /** Summary */
+            summary: string;
+        };
+        /** EnvelopeSwitchUpdate */
+        EnvelopeSwitchUpdate: {
+            /** Omitted */
+            omitted?: string[];
+        };
+        /** EnvelopeSwitchboardView */
+        EnvelopeSwitchboardView: {
+            /** Omitted */
+            omitted: string[];
+            /** Switches */
+            switches: components["schemas"]["EnvelopeSwitchRow"][];
         };
         /**
          * EvidenceLedgerEntryRest
@@ -9637,14 +9893,27 @@ export interface components {
         LlmModelProfileListResponse: {
             /** Data */
             data: components["schemas"]["LlmModelProfileView"][];
-            /** Default Model Profile Id */
-            default_model_profile_id?: string | null;
+            /** Default Assembly Id */
+            default_assembly_id?: string | null;
         };
-        /** LlmModelProfileView */
+        /**
+         * LlmModelProfileView
+         * @description One assembly, including its model columns.
+         */
         LlmModelProfileView: {
             background?: components["schemas"]["ModelProfileSlot"] | null;
+            /**
+             * Context Budget
+             * @description Shorter context ceiling in tokens (128000 / 256000 / 512000). Null = the main model's own window.
+             */
+            context_budget?: number | null;
             /** Created At */
             created_at?: string | null;
+            /**
+             * Enabled Mcp Server Ids
+             * @description Local MCP server ids this assembly enables. Empty = none.
+             */
+            enabled_mcp_server_ids?: string[];
             /** Id */
             id: string;
             /**
@@ -9657,14 +9926,21 @@ export interface components {
              * @enum {string}
              */
             kind: "system" | "user" | "implicit";
-            main: components["schemas"]["ModelProfileSlot"];
+            main?: components["schemas"]["ModelProfileSlot"] | null;
             /** Name */
             name: string;
             /**
-             * Reasoning Effort
-             * @description Vendor thinking-effort token for this combination (e.g. low/high/max). Null = that model's vendor default. Official control values only.
+             * Omit Factory Catalog
+             * @description When true, this assembly does not carry the three factory skill rows. consult stays only if user on-demand rows remain. Null means the factory rows are still on.
              */
+            omit_factory_catalog?: boolean | null;
+            /** Reasoning Effort */
             reasoning_effort?: string | null;
+            /**
+             * Recipe
+             * @description Official recipe still locked on this assembly. Null once tools, the envelope, the factory catalog, or plugs are edited, or the row was never a recipe.
+             */
+            recipe?: ("chat" | "web" | "full") | null;
             /** Updated At */
             updated_at?: string | null;
             vision?: components["schemas"]["ModelProfileSlot"] | null;
@@ -9706,8 +9982,8 @@ export interface components {
          * LlmProvidersResponse
          * @description The full 设置·模型配置 state: provider list + deployment caps.
          *
-         *     Account default combination lives on ``/users/me/llm-model-profiles``
-         *     (``default_model_profile_id``).
+         *     The starred assembly lives on ``/users/me/assemblies``
+         *     (``default_assembly_id``). Its model columns are the account default brain.
          */
         LlmProvidersResponse: {
             /**
@@ -9716,8 +9992,8 @@ export interface components {
              * @default byok
              */
             billing_mode: string;
-            /** Default Model Profile Id */
-            default_model_profile_id?: string | null;
+            /** Default Assembly Id */
+            default_assembly_id?: string | null;
             /**
              * Platform Available
              * @description Whether platform-billed models are usable on this deployment (billing selectable ∧ platform credentials). False while BYOK-dormant even if PLATFORM_API_KEY is still configured.
@@ -10081,6 +10357,8 @@ export interface components {
             team_batch?: (components["schemas"]["TeamBatchNoBatch"] | components["schemas"]["TeamBatchInFlight"] | components["schemas"]["TeamBatchSettled"]) | null;
             /** Trace Id */
             trace_id?: string | null;
+            /** Ttft Ms */
+            ttft_ms?: number | null;
             usage?: components["schemas"]["UsageBreakdown"] | null;
         };
         /**
@@ -10178,11 +10456,6 @@ export interface components {
             id: string;
             /** Name */
             name: string;
-            /**
-             * Offers Tools
-             * @default []
-             */
-            offers_tools: string[];
             /** Version */
             version: string;
         };
@@ -10845,6 +11118,8 @@ export interface components {
             tool_failures?: components["schemas"]["LocalTurnToolFailure"][];
             /** Trace Id */
             trace_id: string;
+            /** Ttft Ms */
+            ttft_ms?: number | null;
             /**
              * User Message
              * @default
@@ -10950,6 +11225,8 @@ export interface components {
          * @description The conversation header for a 复盘 (owner identity + title + model profile).
          */
         ReplayConversation: {
+            /** Assembly Id */
+            assembly_id?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -10961,8 +11238,6 @@ export interface components {
             display_name: string | null;
             /** Id */
             id: string;
-            /** Model Profile Id */
-            model_profile_id?: string | null;
             /** Model Profile Name */
             model_profile_name?: string | null;
             /** Title */
@@ -11664,8 +11939,6 @@ export interface components {
             installed: boolean;
             /** Name */
             name: string;
-            /** Offers Tools */
-            offers_tools?: string[];
             /** Source Document Id */
             source_document_id: string | null;
             /** Status */
@@ -11716,8 +11989,6 @@ export interface components {
             installed: boolean;
             /** Name */
             name: string;
-            /** Offers Tools */
-            offers_tools?: string[];
             /** Source Document Id */
             source_document_id: string | null;
             /** Status */
@@ -11744,8 +12015,6 @@ export interface components {
             installed: boolean;
             /** Name */
             name: string;
-            /** Offers Tools */
-            offers_tools?: string[];
             /** Source Document Id */
             source_document_id: string | null;
             /** Status */
@@ -12266,7 +12535,7 @@ export interface components {
          *     are wired, not a dumpster for this enum.
          * @enum {string}
          */
-        ToolFace: "file" | "folder" | "search" | "web" | "execution" | "host_browser" | "table" | "doc" | "orchestration";
+        ToolFace: "file" | "folder" | "search" | "web" | "execution" | "host_browser" | "orchestration";
         /**
          * ToolSurfaceLimits
          * @description Operator-declared upstream tool-surface caps on one pool member.
@@ -12283,6 +12552,55 @@ export interface components {
             max_properties_total?: number | null;
             /** Max Tools */
             max_tools?: number | null;
+        };
+        /** ToolSwitchRow */
+        ToolSwitchRow: {
+            /** Doc Tool */
+            doc_tool: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Note */
+            note?: string | null;
+            /** Off */
+            off: boolean;
+            /** Summary */
+            summary: string;
+            /**
+             * Tools
+             * @description Model-facing names this switch removes, sorted. Companions that leave with it are included.
+             */
+            tools?: string[];
+        };
+        /** ToolSwitchUpdate */
+        ToolSwitchUpdate: {
+            /** Disabled */
+            disabled?: string[];
+        };
+        /** ToolSwitchboardView */
+        ToolSwitchboardView: {
+            /** Disabled */
+            disabled: string[];
+            /** Switches */
+            switches: components["schemas"]["ToolSwitchRow"][];
+        };
+        /**
+         * TrashEmptyResponse
+         * @description How much of one「最近删除」half a collection purge actually removed.
+         *
+         *     ``purged`` is bin rows hard-deleted. ``skipped_busy`` is folders a live turn
+         *     still holds — those stay in the bin. A restore that wins the race is neither:
+         *     that row is already gone.
+         */
+        TrashEmptyResponse: {
+            /** Purged */
+            purged: number;
+            /**
+             * Skipped Busy
+             * @default 0
+             */
+            skipped_busy: number;
         };
         /**
          * TrashEntrySummary
@@ -12556,10 +12874,10 @@ export interface components {
         UpdateConversationRequest: {
             /** Archived */
             archived?: boolean | null;
+            /** Assembly Id */
+            assembly_id?: string | null;
             /** Deep Research Auto */
             deep_research_auto?: boolean | null;
-            /** Model Profile Id */
-            model_profile_id?: string | null;
             /** Pinned */
             pinned?: boolean | null;
             /** Title */
@@ -12604,19 +12922,31 @@ export interface components {
         };
         /**
          * UpdateLlmModelProfileRequest
-         * @description Partial update. Omitted fields unchanged; explicit null on worker/background/vision
-         *     clears the slot (worker/background → follow_main; vision → no dedicated slot).
-         *     Explicit null on reasoning_effort clears to the vendor default.
+         * @description Partial update. Explicit null on worker/background/vision clears that slot.
+         *
+         *     Changing the model does not release a locked recipe.
          */
         UpdateLlmModelProfileRequest: {
             background?: components["schemas"]["ModelProfileSlot"] | null;
+            /**
+             * Context Budget
+             * @description Shorter context ceiling in tokens. Null = the main model's own window. Omitted = unchanged.
+             */
+            context_budget?: number | null;
+            /**
+             * Enabled Mcp Server Ids
+             * @description Local MCP server ids this assembly enables. Omitted = unchanged. Empty list = this assembly enables none.
+             */
+            enabled_mcp_server_ids?: string[] | null;
             main?: components["schemas"]["ModelProfileSlot"] | null;
             /** Name */
             name?: string | null;
             /**
-             * Reasoning Effort
-             * @description Vendor thinking-effort token. Explicit null clears to the vendor default. Must be an official control value of the (new) main model.
+             * Omit Factory Catalog
+             * @description Omit the three factory skill rows on this assembly. Omitted = unchanged.
              */
+            omit_factory_catalog?: boolean | null;
+            /** Reasoning Effort */
             reasoning_effort?: string | null;
             vision?: components["schemas"]["ModelProfileSlot"] | null;
             worker?: components["schemas"]["ModelProfileSlot"] | null;
@@ -13334,6 +13664,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_account_models_v1_account_models_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelCatalogResponse"];
                 };
             };
             /** @description Validation Error */
@@ -15756,6 +16119,39 @@ export interface operations {
             };
         };
     };
+    empty_deleted_conversations_v1_conversations_trash_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrashEmptyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     purge_deleted_conversation_v1_conversations_trash__conversation_id__delete: {
         parameters: {
             query?: never;
@@ -16317,6 +16713,119 @@ export interface operations {
             };
         };
     };
+    commit_context_cut_route_v1_conversations__conversation_id__context_cut_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextCutCommitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_context_cut_route_v1_conversations__conversation_id__context_cut_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextCutPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextCutPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_context_cut_route_v1_conversations__conversation_id__context_cut_undo_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_conversation_cost_v1_conversations__conversation_id__cost_get: {
         parameters: {
             query?: never;
@@ -16417,6 +16926,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_conversation_envelope_switches_v1_conversations__conversation_id__envelope_switches_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvelopeSwitchboardView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_conversation_envelope_switches_v1_conversations__conversation_id__envelope_switches_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvelopeSwitchUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvelopeSwitchboardView"];
                 };
             };
             /** @description Validation Error */
@@ -17582,7 +18165,7 @@ export interface operations {
             };
         };
     };
-    stop_and_send_queued_turn_v1_conversations__conversation_id__queued_turns__queue_id__stop_and_send_post: {
+    deliver_queued_turn_to_captain_v1_conversations__conversation_id__queued_turns__queue_id__to_captain_post: {
         parameters: {
             query?: never;
             header?: {
@@ -18048,6 +18631,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_conversation_tool_switches_v1_conversations__conversation_id__tool_switches_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolSwitchboardView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_conversation_tool_switches_v1_conversations__conversation_id__tool_switches_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolSwitchUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolSwitchboardView"];
                 };
             };
             /** @description Validation Error */
@@ -20187,6 +20844,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeletedFolderListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    empty_deleted_folders_v1_folders_trash_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrashEmptyResponse"];
                 };
             };
             /** @description Validation Error */
@@ -22751,6 +23441,222 @@ export interface operations {
             };
         };
     };
+    list_model_profiles_v1_users_me_assemblies_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmModelProfileListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_model_profile_v1_users_me_assemblies_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLlmModelProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmModelProfileView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_default_model_profile_v1_users_me_assemblies_default_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetDefaultModelProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmModelProfileView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_model_profile_v1_users_me_assemblies__profile_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                profile_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmModelProfileView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_model_profile_v1_users_me_assemblies__profile_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                profile_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_model_profile_v1_users_me_assemblies__profile_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                profile_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLlmModelProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmModelProfileView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_autonomy_v1_users_me_autonomy_get: {
         parameters: {
             query?: never;
@@ -22887,6 +23793,76 @@ export interface operations {
             };
         };
     };
+    get_account_envelope_switches_v1_users_me_envelope_switches_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvelopeSwitchboardView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_account_envelope_switches_v1_users_me_envelope_switches_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvelopeSwitchUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvelopeSwitchboardView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_git_credentials_v1_users_me_git_credentials_get: {
         parameters: {
             query?: never;
@@ -22977,222 +23953,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_model_profiles_v1_users_me_llm_model_profiles_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LlmModelProfileListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_model_profile_v1_users_me_llm_model_profiles_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateLlmModelProfileRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LlmModelProfileView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_default_model_profile_v1_users_me_llm_model_profiles_default_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetDefaultModelProfileRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LlmModelProfileView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_model_profile_v1_users_me_llm_model_profiles__profile_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                profile_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LlmModelProfileView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_model_profile_v1_users_me_llm_model_profiles__profile_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                profile_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_model_profile_v1_users_me_llm_model_profiles__profile_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                profile_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateLlmModelProfileRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LlmModelProfileView"];
                 };
             };
             /** @description Validation Error */
@@ -23621,6 +24381,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchProviderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_account_tool_switches_v1_users_me_tool_switches_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolSwitchboardView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_account_tool_switches_v1_users_me_tool_switches_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolSwitchUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolSwitchboardView"];
                 };
             };
             /** @description Validation Error */

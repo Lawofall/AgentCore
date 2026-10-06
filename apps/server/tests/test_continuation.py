@@ -1,8 +1,6 @@
-"""同人续派（delegate.continue_from_run_id）— 成功路径、校验失败分支、唤回闸、同批组合。"""
+"""同人续派（delegate.continue_from_run_id）— 成功路径、校验失败分支、同批组合。"""
 
 from pathlib import Path
-
-import pytest
 
 from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, TokenUsage
@@ -22,7 +20,6 @@ from agentcore.runtime.runs import (
     build_agent_executor,
     build_run_plan,
 )
-from agentcore.runtime.runs.constants import DEFAULT_RECALL_LIMIT
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunPhase, RunSpec, RunState
 from agentcore.runtime.sessions import SessionStore
@@ -267,11 +264,12 @@ def _session_for_roster(run_id: str, *, text: str = "x"):
     )
 
 
-async def test_continue_from_capped_rejects():
+async def test_continue_from_past_former_cap_still_recalls():
+    """同一作者链不设唤回次数上限：已续写 3 次仍唤回原人。"""
     store = SessionStore()
     provider = _Provider(["第一版", "续"])
     session = await _seed(store, provider)
-    session.recall_count = DEFAULT_RECALL_LIMIT
+    session.recall_count = 3
     store.put(session)
     tool = _tool(store, provider)
     result = await tool.execute(
@@ -288,31 +286,10 @@ async def test_continue_from_capped_rejects():
         },
         _ctx(),
     )
-    # 业务上限拒绝（≠ 参数填错）：CEO 会拿它向用户解释这块为何还没改好，故须是人话。
-    assert "返工" in result.output
-    assert "换一位队员接手" in result.output
-    assert tool.continuation_count == 0
-
-
-async def test_recall_limit_rejection_copy_is_plain_language():
-    """案 b25bdb59：这条闸拒被 CEO 转述进用户气泡 → 文案本身不得留内部编排术语。
-
-    断言打在拒绝文案上，不打整份 CEO 简报——简报另有「续派或冷委派」等固定模型向指令，
-    那是给 CEO 的操作面，不在本条约束内。
-    """
-    store = SessionStore()
-    provider = _Provider(["第一版"])
-    session = await _seed(store, provider)
-    session.recall_count = DEFAULT_RECALL_LIMIT
-    store.put(session)
-    tool = _tool(store, provider)
-    with pytest.raises(ContinuationRejectedError) as excinfo:
-        await resolve_session(tool, "t_1", own_run_id="other")
-    message = str(excinfo.value)
-    assert excinfo.value.cause == "recall_limit"
-    assert "返工" in message and "换一位队员接手" in message
-    assert "带现场续派" not in message
-    assert "冷委派" not in message
+    assert result.success is True
+    assert "续" in result.output
+    assert tool.continuation_count == 1
+    assert store.get("t_1").recall_count == 4
 
 
 async def test_same_batch_depends_on_plus_continue_from():

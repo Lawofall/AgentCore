@@ -39,6 +39,41 @@ def _wire_cost(cost: dict[str, Any] | None) -> dict[str, Any]:
     return out
 
 
+def _wire_usage(usage: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Short-key usage, or None when this run has not spent tokens yet."""
+    if not usage:
+        return None
+    wired = {
+        "input": int(usage.get("input", 0) or 0),
+        "output": int(usage.get("output", 0) or 0),
+        "reasoning": int(usage.get("reasoning", 0) or 0),
+        "cache_hit": int(usage.get("cache_hit", 0) or 0),
+        "cache_miss": int(usage.get("cache_miss", 0) or 0),
+    }
+    last = usage.get("last_prompt")
+    if last:
+        wired["last_prompt"] = int(last)
+    if wired["input"] or wired["output"]:
+        return wired
+    return None
+
+
+def _attach_spend(
+    payload: dict[str, Any],
+    usage: dict[str, Any] | None,
+    cost: dict[str, Any] | None,
+) -> None:
+    """Add usage/cost only when tokens were actually spent. Keeps old fixtures byte-identical."""
+    wired_usage = _wire_usage(usage)
+    if wired_usage:
+        payload["usage"] = wired_usage
+    if not cost:
+        return
+    wired_cost = _wire_cost(cost)
+    if int(wired_cost.get("total") or 0) > 0 or int(wired_cost.get("estimated_total") or 0) > 0:
+        payload["cost"] = wired_cost
+
+
 def run_plan(
     *,
     execution_id: str,
@@ -345,6 +380,8 @@ def run_failed(
     error_code: str | None = None,
     retryable: bool | None = None,
     retry_after: float | None = None,
+    usage: dict[str, Any] | None = None,
+    cost: dict[str, Any] | None = None,
 ) -> SSEEvent:
     payload: dict[str, Any] = {"run_id": run_id, "agent_id": agent_id, "error": error}
     # Additive machine-readable face class (model/call). Omit when unknown so
@@ -372,6 +409,7 @@ def run_failed(
         payload["retryable"] = bool(retryable)
     if retry_after is not None:
         payload["retry_after"] = float(retry_after)
+    _attach_spend(payload, usage, cost)
     return SSEEvent(type=EventType.RUN_FAILED, payload=payload)
 
 
@@ -381,6 +419,8 @@ def run_cancelled(
     *,
     reason: str = "stop",
     execution_id: str = "",
+    usage: dict[str, Any] | None = None,
+    cost: dict[str, Any] | None = None,
 ) -> SSEEvent:
     """A run was interrupted mid-flight (跑一半改方向 / 整轮停止 / 只停这项工作).
 
@@ -405,9 +445,40 @@ def run_cancelled(
     }
     if execution_id:
         payload["execution_id"] = execution_id
+    _attach_spend(payload, usage, cost)
     return SSEEvent(
         type=EventType.RUN_CANCELLED,
         payload=payload,
+    )
+
+
+def run_spend(
+    run_id: str,
+    agent_id: str,
+    *,
+    role: str,
+    model: str,
+    usage: dict[str, Any],
+    cost: dict[str, Any],
+) -> SSEEvent:
+    """Cumulative spend for one run after a model call returns. Not journaled."""
+    return SSEEvent(
+        type=EventType.RUN_SPEND,
+        payload={
+            "run_id": run_id,
+            "agent_id": agent_id,
+            "role": role,
+            "model": model,
+            "usage": _wire_usage(usage)
+            or {
+                "input": 0,
+                "output": 0,
+                "reasoning": 0,
+                "cache_hit": 0,
+                "cache_miss": 0,
+            },
+            "cost": _wire_cost(cost),
+        },
     )
 
 

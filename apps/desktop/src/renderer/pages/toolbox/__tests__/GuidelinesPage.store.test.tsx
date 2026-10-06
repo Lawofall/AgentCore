@@ -15,6 +15,10 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GuidelinesPage } from "../GuidelinesPage";
 
+vi.mock("@/pages/toolbox/useEditingAssembly", () => ({
+  useEditingAssembly: () => ({ profile: null, pending: false }),
+}));
+
 vi.mock("@/components/markdown/MarkdownSourceEditor", async () => {
   const React = await import("react");
   let current = "";

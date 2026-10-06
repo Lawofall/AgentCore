@@ -71,7 +71,7 @@ export function conversationSummary(
     permission_axes: partial.permission_axes ?? {
       boundary: "folder",
     },
-    model_profile_id: partial.model_profile_id ?? null,
+    assembly_id: partial.assembly_id ?? null,
   };
 }
 

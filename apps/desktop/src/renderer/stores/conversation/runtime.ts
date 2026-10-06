@@ -67,7 +67,7 @@ export function runtimeOf(
   conversationId?: string | null,
 ): ConversationRuntime {
   const key = conversationId ?? state.currentConversationId ?? DRAFT_KEY;
-  return state.byId[key] ?? EMPTY_RUNTIME;
+  return state.byId?.[key] ?? EMPTY_RUNTIME;
 }
 
 export function activeRuntime(

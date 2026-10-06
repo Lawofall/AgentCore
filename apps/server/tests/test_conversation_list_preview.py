@@ -105,7 +105,7 @@ def _conv(**overrides: Any) -> SimpleNamespace:
         "archived": False,
         "permission_axes": {"boundary": "folder"},
         "deep_research_auto": False,
-        "model_profile_id": None,
+        "assembly_id": None,
         "compaction_summary": None,
         "compacted_through": None,
     }

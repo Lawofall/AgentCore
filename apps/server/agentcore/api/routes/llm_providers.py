@@ -2,7 +2,7 @@
 
 A user's list of OpenAI-compatible providers: list (+ deployment caps), add, edit,
 remove, and connectivity-test each. Account default combination is under
-``/users/me/llm-model-profiles``.
+``/users/me/assemblies``.
 """
 
 from fastapi import APIRouter, Depends
@@ -46,7 +46,7 @@ def _provider_to_response(view: ServiceProviderView) -> LlmProviderView:
 def _collection_to_response(view: LlmProvidersView) -> LlmProvidersResponse:
     return LlmProvidersResponse(
         providers=[_provider_to_response(p) for p in view.providers],
-        default_model_profile_id=view.default_model_profile_id,
+        default_assembly_id=view.default_assembly_id,
         billing_mode=view.billing_mode,
         platform_available=view.platform_available,
         platform_model=view.platform_model,

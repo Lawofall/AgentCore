@@ -62,8 +62,8 @@ class CeoWire(StrEnum):
     """When a CEO-orchestration tool is wired at runtime (catalog always lists it)."""
 
     ALWAYS = "always"
-    # Unified on-demand catalog → ``consult`` (技能 ∪ 规则 ∪ 低频工具). Always on the
-    # opening table; empty catalog is a soft miss, not an omitted tool.
+    # Unified on-demand catalog → ``consult``. Wired only when the directory
+    # has a row; an empty catalog leaves the tool off the opening table.
     CONSULT = "consult"
     CHECKPOINT = "checkpoint"
     # Advertised in catalog; runtime inject via ``ceo_surface`` (idle/coord gate).

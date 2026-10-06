@@ -378,6 +378,17 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
       run.phaseTool = f.phase === "tool" ? (f.toolName ?? null) : null;
       break;
     }
+    case "run_spend": {
+      // Cumulative booked calls. Does not change status — the run is still going.
+      ensureRun(s, f.runId);
+      const run = s.runIndex.get(f.runId);
+      if (!run) break;
+      if (f.role) run.role = f.role;
+      if (f.model) run.model = f.model;
+      run.usage = f.usage;
+      run.cost = f.cost;
+      break;
+    }
     case "run_completed": {
       const run = s.runIndex.get(f.runId);
       if (run) {
@@ -432,6 +443,8 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
         run.retryable = f.retryable ?? null;
         run.retryAfter = f.retryAfter ?? null;
         run.debrief = f.debrief ?? null;
+        if (f.usage) run.usage = f.usage;
+        if (f.cost) run.cost = f.cost;
         run.phase = null;
         run.phaseTool = null;
       }
@@ -448,6 +461,8 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
       const run = s.runIndex.get(f.runId);
       if (run) {
         run.status = "cancelled";
+        if (f.usage) run.usage = f.usage;
+        if (f.cost) run.cost = f.cost;
         run.phase = null;
         run.phaseTool = null;
       }
@@ -791,6 +806,8 @@ export function describeFrame(frame: RunFrame, plan: ExecutionPlan): string {
       return `${role(frame.agentId)} 思考中…`;
     case "run_tool_progress":
       return `${role(frame.agentId)} 生成 ${toolLabel(frame.toolName)}…`;
+    case "run_spend":
+      return `${role(frame.agentId)} 已入账`;
     case "run_phase": {
       const phaseText =
         frame.phase === "waiting_children"

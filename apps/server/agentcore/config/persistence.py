@@ -55,10 +55,3 @@ class PersistenceSettings(BaseModel):
     # Lifespan flush of in-flight folds. Fold is best-effort; do not hold the
     # Docker stop window for a wedged LLM call.
     compaction_shutdown_seconds: float = 2.0
-
-    # Assembled system-prompt budget (项目审计-成本性能专项 COST-004). Observe-only today:
-    # ``cost.prompt_assembled`` logs per-section chars, ``assembly_hash``, and whether the
-    # turn's CEO system prompt exceeds this soft cap, to gather data (无真实数据期 → 先观测,
-    # 后开「仅裁易变尾」软闸). ~120k chars ≈ 数万 token, far below DeepSeek's 1M window but
-    # enough to flag abnormal bloat.
-    prompt_budget_char_soft_cap: int = 120_000

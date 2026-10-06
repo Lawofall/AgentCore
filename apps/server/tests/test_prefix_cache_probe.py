@@ -22,6 +22,10 @@ from agentcore.observability.prefix_cache import (
     BREACH_IDENTICAL,
     BREACH_SYSTEM_PROMPT,
     BREACH_TOOLS,
+    OPENING_COLD,
+    OPENING_SAME,
+    OPENING_SYSTEM,
+    OPENING_TOOLS,
     ChainState,
     SectionDelta,
     compute_probe,
@@ -43,6 +47,7 @@ _CHAIN_LOG_KEYS = (
     "run_id",
     "cost_role",
     "message_id",
+    "user_id",
 )
 
 
@@ -675,6 +680,140 @@ def test_observe_tools_promotion_is_tools_not_history_growth(monkeypatch):
     assert probe.tools_count == 2
 
 
+def test_silent_cache_split_logs_wire_usage_keys():
+    from structlog.testing import capture_logs
+
+    from agentcore.llm.observability import log_llm_call
+
+    bind_log_context(conversation_id="conv-keys", trace_id="t-keys", user_id="user-1")
+    usage = TokenUsage.from_openai_wire(
+        {"prompt_tokens": 100, "completion_tokens": 4, "total_tokens": 104}
+    )
+    with capture_logs() as caps:
+        log_llm_call(
+            scenario="chat",
+            model="deepseek-flash",
+            usage=usage,
+            finish_reason="stop",
+            latency_ms=10,
+            stream=True,
+            messages=[_m("system", "SYS"), _m("user", "q")],
+        )
+    call = next(row for row in caps if row.get("event") == "llm.call")
+    assert call["cache_hit_tokens"] == 0
+    assert call["cache_miss_tokens"] == 0
+    assert call["usage_keys"] == "completion_tokens,prompt_tokens,total_tokens"
+
+
+def test_opening_vs_prev_spans_conversations_for_the_same_user(monkeypatch):
+    """A new chat is cold_chain, but the opening fingerprint still compares to the last chat."""
+    monkeypatch.setattr(
+        "agentcore.observability.prefix_cache.logger",
+        type(
+            "_Spy",
+            (),
+            {
+                "debug": lambda self, event, **kw: None,
+                "info": lambda self, event, **kw: None,
+            },
+        )(),
+    )
+    bind_log_context(user_id="user-1", conversation_id="conv-a", trace_id="t1")
+    first = [LLMMessage(role="system", content="SYS"), LLMMessage(role="user", content="你好")]
+    cold = observe_prefix_cache(
+        scenario="chat",
+        model="deepseek-flash",
+        messages=first,
+        input_tokens=4496,
+        cache_hit_tokens=0,
+        cache_miss_tokens=4496,
+        tools=_TOOL_A,
+    )
+    assert cold is not None
+    assert cold.breach == BREACH_COLD_CHAIN
+    assert cold.opening_vs_prev == OPENING_COLD
+    assert cold.tools_fp
+    assert cold.system_fp
+
+    bind_log_context(conversation_id="conv-b", trace_id="t2")
+    same_opening = [
+        LLMMessage(role="system", content="SYS"),
+        LLMMessage(role="user", content="你好呀"),
+    ]
+    matched = observe_prefix_cache(
+        scenario="chat",
+        model="deepseek-flash",
+        messages=same_opening,
+        input_tokens=4497,
+        cache_hit_tokens=0,
+        cache_miss_tokens=4497,
+        tools=_TOOL_A,
+    )
+    assert matched is not None
+    assert matched.breach == BREACH_COLD_CHAIN
+    assert matched.opening_vs_prev == OPENING_SAME
+    assert matched.tools_fp == cold.tools_fp
+    assert matched.system_fp == cold.system_fp
+
+    tools_moved = observe_prefix_cache(
+        scenario="chat",
+        model="deepseek-flash",
+        messages=same_opening,
+        input_tokens=4497,
+        cache_hit_tokens=0,
+        cache_miss_tokens=4497,
+        tools=_TOOL_B,
+    )
+    assert tools_moved is not None and tools_moved.opening_vs_prev == OPENING_TOOLS
+
+    system_moved = observe_prefix_cache(
+        scenario="chat",
+        model="deepseek-flash",
+        messages=[LLMMessage(role="system", content="SYS-2"), LLMMessage(role="user", content="你好")],
+        input_tokens=4500,
+        cache_hit_tokens=0,
+        cache_miss_tokens=4500,
+        tools=_TOOL_B,
+    )
+    assert system_moved is not None and system_moved.opening_vs_prev == OPENING_SYSTEM
+
+
+def test_opening_vs_prev_stays_cold_without_a_user_id(monkeypatch):
+    monkeypatch.setattr(
+        "agentcore.observability.prefix_cache.logger",
+        type(
+            "_Spy",
+            (),
+            {
+                "debug": lambda self, event, **kw: None,
+                "info": lambda self, event, **kw: None,
+            },
+        )(),
+    )
+    bind_log_context(conversation_id="conv-anon", trace_id="t1")
+    messages = [LLMMessage(role="system", content="SYS"), LLMMessage(role="user", content="q")]
+    first = observe_prefix_cache(
+        scenario="chat",
+        model="m",
+        messages=messages,
+        input_tokens=10,
+        cache_hit_tokens=0,
+        cache_miss_tokens=10,
+        tools=_TOOL_A,
+    )
+    second = observe_prefix_cache(
+        scenario="chat",
+        model="m",
+        messages=messages,
+        input_tokens=10,
+        cache_hit_tokens=0,
+        cache_miss_tokens=10,
+        tools=_TOOL_A,
+    )
+    assert first is not None and first.opening_vs_prev == OPENING_COLD
+    assert second is not None and second.opening_vs_prev == OPENING_COLD
+
+
 def test_observe_skips_calls_with_no_chain_identity_or_no_tokens(monkeypatch):
     captured: list[dict] = []
 
@@ -1105,8 +1244,11 @@ def test_log_llm_call_attaches_compact_prefix_fields():
     calls = [c for c in caps if c.get("event") == "llm.call"]
     assert len(calls) == 2
     assert calls[0]["prefix_breach"] == BREACH_COLD_CHAIN
+    assert calls[0]["opening_vs_prev"] == OPENING_COLD
     assert calls[0]["tools_changed"] is False
     assert calls[0]["tools_count"] == 1
+    assert calls[0]["tools_fp"]
+    assert calls[0]["system_fp"]
     assert calls[1]["prefix_breach"] == BREACH_TOOLS
     assert calls[1]["tools_changed"] is True
     assert calls[1]["tools_count"] == 2
@@ -1234,16 +1376,16 @@ def test_the_real_ceo_layers_splice_into_leaf_sections():
         (
             ContextAssembler()
             .add("ceo_prompt", ceo_prompt, SectionOrder.BASE)
-            .observe(scope="ceo_turn", soft_cap=None)
+            .observe(scope="ceo_turn")
         )
     from agentcore.observability.prefix_cache import _conversation_sections
 
     keys = [leaf.key for leaf in flatten_sections(_conversation_sections[cid].scopes)]
     assert "ceo_prompt" not in keys and "ceo_base" not in keys  # containers were spliced
-    assert keys[0] == "base"
-    # Empty FRAGMENT_CEO_CORE is skipped (Assembler omits falsy fragments).
+    # Empty base and CEO core are skipped (Assembler omits falsy fragments).
+    assert "base" not in keys
     assert "ceo_core" not in keys
-    assert "memory_rules" in keys
+    assert keys[0] == "memory_rules"
     assert "runtime_context" not in keys
     assert "workspace_facts" not in keys
     assert "</工作区>" not in ceo_prompt
@@ -1257,7 +1399,6 @@ def test_a_growing_table_section_is_attributable_to_its_own_section():
             attachment_context="",
             table_context=table,
             include_runtime=False,
-            soft_cap=None,
         )
 
     bind_log_context(conversation_id="conv-ledger", trace_id="t1")
@@ -1285,7 +1426,7 @@ def test_observe_carries_per_section_digests_for_offline_diffing(monkeypatch):
         .add("base", "BASE", SectionOrder.BASE)
         .add("tail", "TAIL", SectionOrder.ATTACHMENT)
     )
-    asm.observe(scope="unit", soft_cap=None)
+    asm.observe(scope="unit")
     assert captured[0]["section_digests"] == {
         "base": digest_text("BASE"),
         "tail": digest_text("TAIL"),
@@ -1295,5 +1436,5 @@ def test_observe_carries_per_section_digests_for_offline_diffing(monkeypatch):
     bind_log_context(trace_id="t2")
     ContextAssembler().add("base", "BASE", SectionOrder.BASE).add(
         "tail", "TAIL-2", SectionOrder.ATTACHMENT
-    ).observe(scope="unit", soft_cap=None)
+    ).observe(scope="unit")
     assert prompt_section_delta("conv-1").first_changed == "tail"

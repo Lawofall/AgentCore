@@ -1,6 +1,8 @@
+import { useChatPaneSliceKey } from "@/lib/chatPane";
 import {
   getRuntime,
   lastAssistantProjectionId,
+  runtimeOf,
   useConversationStore,
 } from "@/stores/conversation";
 import {
@@ -26,11 +28,10 @@ export function isCoordinationActive(
 
 /** 订阅最新助手泡是否已有 plan；ingestPlan 后按钮布局要跟着换，不能只 getState。 */
 export function useCoordinationActive(): boolean {
-  const lastKey = useConversationStore((s) => {
-    const id = s.currentConversationId;
-    if (!id) return null;
-    return lastAssistantProjectionId(s.byId[id]?.messages ?? []);
-  });
+  const paneKey = useChatPaneSliceKey();
+  const lastKey = useConversationStore((s) =>
+    lastAssistantProjectionId(runtimeOf(s, paneKey).messages),
+  );
   return useExecutionStore((s) =>
     lastKey ? Boolean(s.byId[lastKey]?.plan) : false,
   );
@@ -52,11 +53,10 @@ export function isLiveCoordinatingTurn(
 
 /** 订阅最新助手泡的协作图是否还在转。 */
 export function useLiveCoordinatingTurn(): boolean {
-  const lastKey = useConversationStore((s) => {
-    const id = s.currentConversationId;
-    if (!id) return null;
-    return lastAssistantProjectionId(s.byId[id]?.messages ?? []);
-  });
+  const paneKey = useChatPaneSliceKey();
+  const lastKey = useConversationStore((s) =>
+    lastAssistantProjectionId(runtimeOf(s, paneKey).messages),
+  );
   return useExecutionStore((s) =>
     lastKey ? isConversationExecutionLive(execRuntime(s, lastKey)) : false,
   );
@@ -88,11 +88,10 @@ export function classicToolStepOpen(
 
 /** 订阅最新助手泡是否有正在执行的工具步。 */
 export function useClassicToolStepOpen(): boolean {
-  return useConversationStore((s) => {
-    const id = s.currentConversationId;
-    if (!id) return false;
-    return assistantHasRunningTool(s.byId[id]?.messages ?? []);
-  });
+  const paneKey = useChatPaneSliceKey();
+  return useConversationStore((s) =>
+    assistantHasRunningTool(runtimeOf(s, paneKey).messages),
+  );
 }
 
 /**

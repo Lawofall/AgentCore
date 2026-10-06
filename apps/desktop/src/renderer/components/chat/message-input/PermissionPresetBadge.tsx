@@ -9,6 +9,7 @@ import {
   useConversations,
 } from "@/hooks/useConversations";
 import { hasLocalEngine } from "@/lib/capabilities";
+import { useChatPaneId } from "@/lib/chatPane";
 import { notifyError, notifySuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -24,7 +25,6 @@ import {
   setConversationPermissionAxes,
   setUserDefaultRecipe,
 } from "@/services/permissionAxes";
-import { useConversationStore } from "@/stores/conversation";
 import { usePermissionChangeStore } from "@/stores/permissionChanges";
 import { ChevronDown, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -42,7 +42,7 @@ export function PermissionAxesBadge({
   /** 二级入口：只显示盾牌图标，标签进 tooltip / aria-label。 */
   iconOnly?: boolean;
 }) {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   const conversations = useConversations();
   const [draftAxes, setDraftAxes] = useState<PermissionAxes>(
     DEFAULT_PERMISSION_AXES,

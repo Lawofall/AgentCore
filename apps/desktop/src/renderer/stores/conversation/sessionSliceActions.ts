@@ -1,5 +1,6 @@
 import { detachLocalBrowserHost } from "@/lib/detachLocalBrowserHost";
 import { logEvent } from "@/lib/log";
+import { protectedSliceKeys } from "@/stores/conversationSplit";
 import { DRAFT_KEY, EMPTY_RUNTIME } from "./runtime";
 import { isConversationSliceBusy, pruneConversationSlices } from "./sliceLru";
 import type {
@@ -15,6 +16,7 @@ type SessionSliceActions = Pick<
   | "switchConversation"
   | "adoptDraftRuntime"
   | "releaseBackgroundSlice"
+  | "ensureResidentSlice"
 >;
 
 /** Session switch + slice LRU / explicit idle drop. */
@@ -60,6 +62,7 @@ export function createSessionSliceActions(
           state.sliceLruOrder ?? [],
           nextKey,
           prevKey,
+          protectedSliceKeys(),
         );
         return {
           currentConversationId: id,
@@ -82,12 +85,22 @@ export function createSessionSliceActions(
           state.sliceLruOrder ?? [],
           newId,
           prevKey,
+          protectedSliceKeys(),
         );
         return {
           currentConversationId: newId,
           byId: pruned.byId,
           sliceLruOrder: pruned.sliceLruOrder,
         };
+      });
+    },
+
+    ensureResidentSlice: (id) => {
+      if (!id || id === DRAFT_KEY) return;
+      if (get().byId[id]) return;
+      set((state) => {
+        if (state.byId[id]) return {};
+        return { byId: { ...state.byId, [id]: { ...EMPTY_RUNTIME } } };
       });
     },
 

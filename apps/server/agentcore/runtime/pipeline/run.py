@@ -218,6 +218,12 @@ async def run_chat_pipeline(
     execution_id_token = None
     bound_execution_id: str | None = None
     llm = None
+    from agentcore.llm.context_budget import (
+        bind_profile_context_budget,
+        reset_context_budget,
+    )
+
+    context_budget_token = bind_profile_context_budget(profiles.context_budget)
 
     try:
         # Ticketed prepare/assemble: DocumentMemoryStore must not sync-hit cloud
@@ -403,6 +409,7 @@ async def run_chat_pipeline(
             orphan_registry_pending(conversation_id, turn_id=message_id),
             step="orphan_registry_pending",
         )
+        reset_context_budget(context_budget_token)
         current_fact_log.reset(fact_log_token)
         # Drain the append-on-emit journal BEFORE dropping the writer: an abandoned in-flight
         # write leaves a checked-out DB connection for the GC to terminate (asyncpg

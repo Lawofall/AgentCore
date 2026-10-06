@@ -22,7 +22,7 @@ describe("WorkspaceChannelGuideDialog", () => {
     expect(screen.getByText("这次聊哪")).toBeTruthy();
     expect(screen.queryByText("我的文件")).toBeNull();
     expect(dialogText()).toContain("点云图标的接着聊");
-    expect(dialogText()).toContain("点硬盘图标的会再问怎么用");
+    expect(dialogText()).toContain("点硬盘图标的改电脑上那份");
     expect(dialogText()).toContain("文件和运行在这台电脑");
     expect(dialogText()).toContain("不是离线");
     expect(dialogText()).toContain("接着改同一份");
@@ -37,17 +37,14 @@ describe("WorkspaceChannelGuideDialog", () => {
         showLocalTraditional
       />,
     );
-    for (const label of [
-      "本地对话",
-      "云端对话",
-      "直接改这个文件夹",
-      "先在云上做，原件先不动",
-    ]) {
+    for (const label of ["本地对话", "云端对话"]) {
       expect(screen.getByText(label)).toBeTruthy();
     }
+    expect(screen.queryByText("直接改这个文件夹")).toBeNull();
+    expect(screen.queryByText("先在云上做，原件先不动")).toBeNull();
   });
 
-  it("先在云上做说清这一单在云上、原件先不动", () => {
+  it("不再讲本机文件夹的第二问", () => {
     render(
       <WorkspaceChannelGuideDialog
         open
@@ -55,11 +52,8 @@ describe("WorkspaceChannelGuideDialog", () => {
         showLocalTraditional
       />,
     );
-    const borrow = screen.getByText("先在云上做，原件先不动");
-    const borrowDd = borrow.closest("div")?.querySelector("dd");
-    expect(borrowDd?.textContent).toMatch(/这一单在云上做/);
-    expect(borrowDd?.textContent).toMatch(/写不写回/);
-    expect(borrowDd?.textContent).toMatch(/留在云上接着用/);
+    expect(screen.queryByText("电脑上的文件夹怎么用")).toBeNull();
+    expect(screen.queryByText("先在云上做，原件先不动")).toBeNull();
   });
 
   it("本地对话明说不是离线", () => {

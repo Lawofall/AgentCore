@@ -1,7 +1,6 @@
 import { PausedContinueSurface } from "@/components/chat/PausedContinueSurface";
 import {
   graphProgress,
-  isTeamSynthesizing,
   workerProgress,
   workersAreTerminal,
 } from "@/components/chat/teamSynthesisPhase";
@@ -13,6 +12,7 @@ import {
 import { Badge, Button, IconButton as UiIconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useRunningElapsed } from "@/hooks/useRunningElapsed";
+import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import { formatDuration, formatLiveElapsed } from "@/lib/format";
 import {
   PARTIAL_STATUS_LABEL,
@@ -23,7 +23,7 @@ import {
 } from "@/lib/turnOutcome";
 import { continuePausedTurn } from "@/services/turns/continuePaused";
 import {
-  isTerminalPhase,
+  runtimeOf,
   useActiveError,
   useActiveTurnPhase,
   useConversationStore,
@@ -60,6 +60,12 @@ export interface StatusStripProps {
  * Captain running is the CEO turn itself — not a worker batch. */
 function hasActiveRunningRuns(execution: Execution): boolean {
   return hasActiveRunningWorkers(execution.runs);
+}
+
+/** 至少一名队员，且都已离开进行中。空名单不算团队已结束。 */
+function teamRosterSettled(execution: Execution): boolean {
+  const workers = execution.runs.filter((r) => r.kind !== "captain");
+  return workers.length > 0 && workersAreTerminal(execution);
 }
 
 /** 工人未齐或汇聚点非 completed 时不得画「完成」（与 deriveCaptainStatus 一致）. */
@@ -112,11 +118,11 @@ export function StatusStrip(props: StatusStripProps) {
   const attestedKind = useActiveExecField((rt) => rt.attestedOutcome);
   const detached = Boolean(useActiveExecField((rt) => rt.executionDetached));
   const scopeId = useExecutionScope();
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
+  const paneKey = useChatPaneSliceKey();
   const scopedAssistant = useConversationStore((s) => {
-    const cid = s.currentConversationId;
-    if (!cid || !scopeId) return null;
-    const messages = s.byId?.[cid]?.messages;
+    if (!scopeId) return null;
+    const messages = runtimeOf(s, paneKey).messages;
     if (!messages) return null;
     return (
       messages.find(
@@ -201,13 +207,12 @@ export function StatusStrip(props: StatusStripProps) {
   ) {
     return <CompletedStrip {...props} stopped />;
   }
-  // Detached + workers done is not「已汇总」: captain already left, settle
-  // has not stamped execution_completed yet. Stay on the 后台 strip.
-  if (
-    !detached &&
-    canPaintTeamCompleted(props.execution) &&
-    !isTeamSynthesizing(props.execution, { detached })
-  ) {
+  // 队员都结束了就收成团队完成条。CEO 还在写结尾不让条继续转。
+  // 已 detached：人齐了仍走后台，直到 execution_completed。
+  if (!detached && teamRosterSettled(props.execution)) {
+    return <CompletedStrip {...props} />;
+  }
+  if (!detached && canPaintTeamCompleted(props.execution)) {
     return <CompletedStrip {...props} />;
   }
   return <RunningOrBackgroundStrip {...props} />;
@@ -316,19 +321,11 @@ function RunningStrip({
   // Background (detached): follow live execution.progress, not a frozen wait stamp.
   // stopping/terminal drop coordination_wait, so the pre-detach stamp never moves.
   const liveWait = backgroundBadge || stopping ? null : coordinationWait;
-  const synthesizing =
-    !isDebate(execution) &&
-    !liveWait &&
-    isTeamSynthesizing(execution, {
-      turnTerminal: isTerminalPhase(turnPhase),
-      detached: Boolean(backgroundBadge),
-    });
   const workers = workerProgress(execution);
   const graph = graphProgress(execution);
-  const progressLabel =
-    liveWait || synthesizing
-      ? `${workers.completed}/${workers.total}`
-      : `${graph.completed}/${graph.total}`;
+  const progressLabel = liveWait
+    ? `${workers.completed}/${workers.total}`
+    : `${graph.completed}/${graph.total}`;
   const frames = useActiveExecField((rt) => rt.frames);
   const elapsedSec = useRunningElapsed(!stopping, frames[0]?.t, {
     freezeWhenStopped: true,
@@ -340,9 +337,7 @@ function RunningStrip({
       ? "status-strip-background"
       : liveWait
         ? "status-strip-coordination-wait"
-        : synthesizing
-          ? "status-strip-synthesizing"
-          : undefined;
+        : undefined;
 
   return (
     <div className="px-3 py-1.5" data-testid={testId}>

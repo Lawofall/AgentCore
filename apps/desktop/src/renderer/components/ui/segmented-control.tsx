@@ -13,6 +13,8 @@ export interface SegmentedControlProps<T extends string = string> {
   value: T;
   onChange: (value: T) => void;
   items: readonly SegmentedControlItem<T>[];
+  /** Keep every segment on one line. Use when the option count fits the column. */
+  fit?: boolean;
   className?: string;
 }
 
@@ -25,6 +27,7 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   items,
+  fit = false,
   className,
 }: SegmentedControlProps<T>) {
   return (
@@ -32,7 +35,8 @@ export function SegmentedControl<T extends string>({
       role="tablist"
       aria-label={ariaLabel}
       className={cn(
-        "scrollbar-hidden flex min-w-0 gap-1 overflow-x-auto rounded-lg bg-muted p-1",
+        "scrollbar-hidden flex min-w-0 gap-1 rounded-lg bg-muted p-1",
+        fit ? "overflow-hidden" : "overflow-x-auto",
         className,
       )}
     >
@@ -49,7 +53,8 @@ export function SegmentedControl<T extends string>({
             aria-controls={item["aria-controls"]}
             onClick={() => onChange(item.value)}
             className={cn(
-              "h-8 min-w-0 flex-1 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm",
+              "h-8 min-w-0 flex-1 rounded-lg px-3 text-sm",
+              fit ? "shrink truncate" : "shrink-0 whitespace-nowrap",
               selected
                 ? "bg-card text-foreground shadow-raised hover:bg-card"
                 : "text-muted-foreground hover:text-foreground",

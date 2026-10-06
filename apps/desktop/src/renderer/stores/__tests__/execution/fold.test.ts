@@ -41,6 +41,41 @@ describe("projectExecution (fold)", () => {
     expect(exec.runs.find((s) => s.id === "run-1")?.kind).toBe("agent");
   });
 
+  it("run_spend stamps usage and cost and leaves the run running", () => {
+    const frames: RunFrame[] = [
+      started("agent-1", "run-1"),
+      {
+        t: 2,
+        kind: "run_spend",
+        runId: "run-1",
+        agentId: "agent-1",
+        role: "member",
+        model: "glm-5.2",
+        usage: {
+          input: 10,
+          output: 2,
+          reasoning: 0,
+          cache_hit: 0,
+          cache_miss: 0,
+        },
+        cost: {
+          input: 1,
+          cached: 0,
+          output: 1,
+          total: 2,
+          currency: "CNY",
+        },
+      },
+    ];
+    const exec = projectExecution(plan, frames, "running");
+    const run = exec.runs.find((s) => s.id === "run-1");
+    expect(run?.status).toBe("running");
+    expect(run?.usage?.input).toBe(10);
+    expect(run?.cost?.total).toBe(2);
+    expect(run?.role).toBe("member");
+    expect(run?.model).toBe("glm-5.2");
+  });
+
   it("marks run running and agent working on run_started", () => {
     const frames: RunFrame[] = [started("agent-1", "run-1")];
     const exec = projectExecution(plan, frames, "running");

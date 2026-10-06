@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any, Literal
 
@@ -14,6 +15,7 @@ from agentcore.llm.provider.protocol import LLMMessage
 from agentcore.runtime.events import EventSink, tool_use_end, tool_use_start
 from agentcore.runtime.loop_controller import (
     ERROR_CLASS_PERMANENT,
+    ERROR_CLASS_PERMISSION,
     ERROR_CLASS_VALIDATION,
     EXEC_RUN_TOOL_NAMES,
     ToolAttempt,
@@ -44,6 +46,38 @@ _USER_WRITE_PARSE_MSG = "长文保存失败，请改用更短但完整的写入�
 # 与产物自报尾注（tools/file_products.py）同构：producer 在此、consumer 在 serialize，
 # 格式靠 round-trip 单测锁死。禁止用拒绝文案子串匹配。
 TOOL_FAILED_MARKER = "<!--agentcore:tool_failed-->"
+
+# Model-visible failure class. Closed set — the first line of a failed tool
+# message. Engine ``error_class`` stays on the attempt; this token is only the
+# receipt the model reads. User ``tool_use_end`` output does not carry it.
+MODEL_FAILURE_STATUSES = frozenset(
+    {
+        "validation",
+        "permission",
+        "permanent",
+        "redirect",
+        "postcondition",
+        "timeout",
+        "error",
+    }
+)
+_MODEL_FAILURE_STATUS_RE = re.compile(
+    r"^error: (?:validation|permission|permanent|redirect|postcondition|timeout|error)\n?"
+)
+# Dead environment: a hang here is not "shrink and retry".
+_PERMANENT_ENV_CODES = frozenset(
+    {
+        "exec_env_sandbox_unavailable",
+        "sandbox_network_unsupported",
+    }
+)
+_TIMEOUT_CODES = frozenset(
+    {
+        "liveness_timeout",
+        "exec_timeout",
+        "exec_forced_stop",
+    }
+)
 
 # Aggregable tip length for ``tool.execute_end`` reason (status=error).
 _TOOL_ERROR_REASON_MAX = 200
@@ -145,17 +179,89 @@ def _shell_observe_log_fields(name: str, args: Any) -> dict[str, Any]:
     return fields
 
 
-def with_tool_failed_marker(content: str) -> str:
-    """Append the machine failure trailer (idempotent)."""
+def model_failure_status(
+    *,
+    failure_code: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    contract_failure: bool = False,
+    policy_failure: bool = False,
+) -> str:
+    """Map signals the engine already has onto the model receipt token.
+
+    Order: redirect, postcondition, dead-env permanent, adaptable timeout,
+    then ``error_class`` / contract / policy. Timeout wins over the permanent
+    class a liveness hang also stamps, except dead-environment codes.
+    """
+    from agentcore.runtime.engine.tool_channel_redirect import is_channel_redirect_code
+
+    meta = metadata if isinstance(metadata, dict) else {}
+    code = (failure_code or "").strip()
+    if not code:
+        raw_code = meta.get("code")
+        code = raw_code.strip() if isinstance(raw_code, str) else ""
+    if is_channel_redirect_code(code):
+        return "redirect"
+    if code == "postcondition_failed":
+        return "postcondition"
+    if code in _PERMANENT_ENV_CODES:
+        return "permanent"
+    if (
+        code in _TIMEOUT_CODES
+        or bool(meta.get("liveness_timeout"))
+        or meta.get("timeout_kind") in {"idle", "disaster"}
+    ):
+        return "timeout"
+    err = meta.get("error_class")
+    if err in {ERROR_CLASS_VALIDATION, ERROR_CLASS_PERMISSION, ERROR_CLASS_PERMANENT}:
+        return str(err)
+    if meta.get("retire_tools"):
+        return "permanent"
+    if contract_failure:
+        return "validation"
+    if policy_failure:
+        return "permission"
+    return "error"
+
+
+def with_tool_failed_marker(content: str, *, status: str = "error") -> str:
+    """Model failure receipt: ``error: <status>`` line, then the diagnostic, then the trailer.
+
+    Idempotent once the trailer is present. ``status`` outside the closed set
+    becomes ``error``. The line is for the model transcript only.
+    """
     body = (content or "").rstrip()
     if TOOL_FAILED_MARKER in body:
         return body
-    return f"{body}\n{TOOL_FAILED_MARKER}" if body else TOOL_FAILED_MARKER
+    token = status if status in MODEL_FAILURE_STATUSES else "error"
+    prefix = f"error: {token}"
+    if body == prefix or body.startswith(prefix + "\n"):
+        headed = body
+    else:
+        headed = f"{prefix}\n{body}" if body else prefix
+    return f"{headed}\n{TOOL_FAILED_MARKER}"
 
 
-def _failed_tool_message(tool_call_id: str, content: str) -> LLMMessage:
+def strip_model_failure_envelope(content: str) -> str:
+    """Drop the status line and trailer so classifiers see the diagnostic.
+
+    No-op unless the trailer is present, so a successful body that happens to
+    start with ``error:`` is left alone.
+    """
+    body = content or ""
+    if TOOL_FAILED_MARKER not in body:
+        return body.strip()
+    body = body.replace(TOOL_FAILED_MARKER, "")
+    body = _MODEL_FAILURE_STATUS_RE.sub("", body, count=1)
+    return body.strip()
+
+
+def _failed_tool_message(
+    tool_call_id: str, content: str, *, status: str = "error"
+) -> LLMMessage:
     return LLMMessage(
-        role="tool", content=with_tool_failed_marker(content), tool_call_id=tool_call_id
+        role="tool",
+        content=with_tool_failed_marker(content, status=status),
+        tool_call_id=tool_call_id,
     )
 
 
@@ -409,7 +515,7 @@ def emit_args_parse_failed(
         duration_ms=0,
     )
     return (
-        _failed_tool_message(tool_call_id, model_msg),
+        _failed_tool_message(tool_call_id, model_msg, status="validation"),
         None,
         ToolAttempt(
             fingerprint,

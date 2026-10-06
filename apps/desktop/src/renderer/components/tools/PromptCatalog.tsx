@@ -1,6 +1,7 @@
 import { InlineInput } from "@/components/files/FileTreeInline";
 import {
   UNTITLED_PROMPT_FOLDER_NAME,
+  isUntitledPromptFolderName,
   uniqueNumberedName,
 } from "@/components/files/dedupeName";
 import {
@@ -15,13 +16,15 @@ import {
   PromptOverview,
 } from "@/components/tools/PromptOverview";
 import { PromptReadDialog } from "@/components/tools/PromptReadDialog";
-import { Button, SearchField } from "@/components/ui";
+import { Button, ConfirmDialog, SearchField } from "@/components/ui";
+import { Switch } from "@/components/ui/Switch";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { patchConversationCache } from "@/hooks/useConversations";
 import { useLlmProviders } from "@/hooks/useLlmProviders";
 import { useModels } from "@/hooks/useModels";
 import {
@@ -62,10 +65,11 @@ import {
   selectionForContextMenu,
   selectionHas,
 } from "@/lib/promptCatalogSelection";
-import { ToolboxSourceTabs } from "@/pages/toolbox/ToolboxSourceTabs";
-import { APP_PATHS } from "@/pages/toolbox/manual/paths";
+import { llmModelProfileKeys } from "@/lib/queryKeys";
+import { useEditingAssembly } from "@/pages/toolbox/useEditingAssembly";
 import { ApiError } from "@/services/api";
 import type { Capabilities } from "@/services/capabilities";
+import { setConversationModelProfile } from "@/services/conversations";
 import {
   createRuleDocument,
   createRuleFolder,
@@ -76,6 +80,10 @@ import {
   reparentDocument,
   writeDocument,
 } from "@/services/documents";
+import {
+  setDefaultLlmModelProfile,
+  updateLlmModelProfile,
+} from "@/services/llmModelProfiles";
 import { defaultChatSupportsTools } from "@/services/llmProviders";
 import {
   EMPTY_SKILL_CATALOG,
@@ -93,6 +101,7 @@ import {
   publishSkillVersion,
   unpublishSkill,
 } from "@/services/skillStore";
+import { useQueryClient } from "@tanstack/react-query";
 import { Pencil, Trash2 } from "lucide-react";
 import {
   type DragEvent,
@@ -100,9 +109,10 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { Navigate, useLocation, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 function overlayErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
@@ -132,6 +142,13 @@ function readPromptDrag(event: DragEvent) {
   return parsePromptDragPayload(event.dataTransfer.getData(PROMPT_DRAG_MIME));
 }
 
+/** A name the person actually chose. The generated placeholder does not count. */
+function chosenFolderName(raw: string, generated: string): string | null {
+  const name = raw.trim().replace(/^\/+|\/+$/g, "");
+  if (!name || name.includes("/") || name === generated) return null;
+  return name;
+}
+
 function toScopeEntry(
   doc: Awaited<ReturnType<typeof listScopeEntries>>[number],
 ): AccountScopeEntry {
@@ -147,12 +164,19 @@ function toScopeEntry(
   };
 }
 
-/** Portrait overview + centered read dialog for the 工具箱「提示词」page. */
-export function PromptCatalog({ data }: { data: Capabilities }) {
-  const location = useLocation();
-  const pane = location.pathname.startsWith(APP_PATHS.toolbox.official)
-    ? "official"
-    : "mine";
+/** Portrait overview + centered read dialog for the toolbox 交代 section. */
+export function PromptCatalog({
+  data,
+  query: queryProp,
+  suppressMiss = false,
+  onMissChange,
+}: {
+  data: Capabilities;
+  /** When set, the page owns the search box and this section only filters. */
+  query?: string;
+  suppressMiss?: boolean;
+  onMissChange?: (miss: boolean) => void;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [overlay, setOverlay] = useState<SkillCatalog>(EMPTY_SKILL_CATALOG);
   const [accountEntries, setAccountEntries] = useState<AccountScopeEntry[]>([]);
@@ -166,10 +190,29 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
   const [promptFolders, setPromptFolders] = useState<
     { id: string; name: string }[]
   >([]);
-  const [createFolderId, setCreateFolderId] = useState<string | null>(null);
+  const createFolderIdRef = useRef<string | null>(null);
+  const pendingUntitledRef = useRef<{ id: string; name: string } | null>(null);
+  const folderSettleRef = useRef<Promise<void> | null>(null);
+  /** Skip the empty-placeholder sweep while a new folder is still being created. */
+  const suppressSweepRef = useRef(false);
+  /** Folder ids already handed to delete, so the sweep does not delete them twice. */
+  const releasedFolderIdsRef = useRef(new Set<string>());
+  /** Placeholder still on screen while its chosen name is being saved. */
+  const renameHoldRef = useRef<string | null>(null);
+  const promptFoldersRef = useRef(promptFolders);
+  promptFoldersRef.current = promptFolders;
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [renamingMineId, setRenamingMineId] = useState<string | null>(null);
+  const [openFolderId, setOpenFolderId] = useState<string | null>(null);
+  const [promptDragging, setPromptDragging] = useState(false);
   const [dropDest, setDropDest] = useState<PromptDropDest | null>(null);
+  const queryClient = useQueryClient();
+  const {
+    profile,
+    pending: assemblyPending,
+    conversationId,
+  } = useEditingAssembly();
+  const [factoryPending, setFactoryPending] = useState(false);
   const { data: llmProviders } = useLlmProviders();
   const { data: modelCatalog } = useModels();
   const showToolsHint = needsToolsGateHint(
@@ -186,7 +229,9 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
   );
   const items = useMemo(() => flattenPromptRail(rail), [rail]);
   const otherDrop = useMemo(() => onDemandDropFolder(rail), [rail]);
-  const [query, setQuery] = useState("");
+  const [ownQuery, setOwnQuery] = useState("");
+  const query = queryProp ?? ownQuery;
+  const searchOwned = queryProp !== undefined;
   const [selectedId, setSelectedId] = useState<string>(() => {
     const tool = searchParams.get("tool");
     if (tool) return toolCatalogId(tool);
@@ -197,12 +242,18 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
   const [selection, setSelection] = useState(EMPTY_MINE_SELECTION);
   const [deleteConfirm, setDeleteConfirm] =
     useState<MineBatchConfirmState | null>(null);
+  const [folderDissolve, setFolderDissolve] = useState<{
+    documentId: string;
+    name: string;
+    childIds: readonly string[];
+    busy: boolean;
+  } | null>(null);
   const [batchFailure, setBatchFailure] =
     useState<MineBatchFailureState | null>(null);
 
   const visibleMine = useMemo(
-    () => flattenVisibleMineItems(rail, query),
-    [rail, query],
+    () => flattenVisibleMineItems(rail, query, openFolderId),
+    [openFolderId, rail, query],
   );
   const pickedIds = useMemo(() => selectionCatalogIds(selection), [selection]);
 
@@ -226,18 +277,31 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (deleteConfirm || batchFailure) return;
+      if (deleteConfirm || folderDissolve || batchFailure) return;
       if (dialogOpen) return;
       if (selection.items.length === 0) return;
       setSelection(EMPTY_MINE_SELECTION);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [batchFailure, deleteConfirm, dialogOpen, selection.items.length]);
+  }, [
+    batchFailure,
+    deleteConfirm,
+    dialogOpen,
+    folderDissolve,
+    selection.items.length,
+  ]);
+
+  useEffect(() => {
+    const tool = searchParams.get("tool");
+    const skill = searchParams.get("skill");
+    if (tool) setSelectedId(toolCatalogId(tool));
+    else if (skill) setSelectedId(skillCatalogId(skill));
+  }, [searchParams]);
 
   const closeDialog = useCallback(() => {
     setSelectedId(OVERVIEW_CATALOG_ID);
-    setCreateFolderId(null);
+    createFolderIdRef.current = null;
     setRenamingMineId(null);
     setRenamingFolderId(null);
     if (searchParams.has("tool") || searchParams.has("skill")) {
@@ -260,9 +324,12 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     ]);
     setAccountEntries(entries.map(toScopeEntry));
     setRulesDirId(tree.rulesDirId);
-    setPromptFolders(
-      tree.folders.map((folder) => ({ id: folder.id, name: folder.name })),
-    );
+    const folders = tree.folders.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+    }));
+    promptFoldersRef.current = folders;
+    setPromptFolders(folders);
     return catalog;
   }, []);
 
@@ -315,9 +382,12 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
         ]);
         setAccountEntries(entries.map(toScopeEntry));
         setRulesDirId(tree.rulesDirId);
-        setPromptFolders(
-          tree.folders.map((folder) => ({ id: folder.id, name: folder.name })),
-        );
+        const folders = tree.folders.map((folder) => ({
+          id: folder.id,
+          name: folder.name,
+        }));
+        promptFoldersRef.current = folders;
+        setPromptFolders(folders);
       } else {
         setOverlay(await loadAccountLayer());
       }
@@ -330,6 +400,61 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     }
   }
 
+  function rememberCreateFolder(id: string | null) {
+    createFolderIdRef.current = id;
+  }
+
+  function folderHasItems(id: string): boolean {
+    return mineRows.some((row) => row.parentId === id);
+  }
+
+  function folderChildIds(documentId: string): string[] {
+    return accountEntries
+      .filter((row) => row.parentId === documentId)
+      .map((row) => row.id);
+  }
+
+  function closeFolderDocument(documentId: string) {
+    setOpenFolderId((current) =>
+      current === `folder:${documentId}` ? null : current,
+    );
+    setRenamingFolderId((current) => (current === documentId ? null : current));
+    if (createFolderIdRef.current === documentId) rememberCreateFolder(null);
+    if (pendingUntitledRef.current?.id === documentId) {
+      pendingUntitledRef.current = null;
+    }
+  }
+
+  function trackSettle(work: Promise<void>): Promise<void> {
+    let current: Promise<void> | null = null;
+    const settled = work.finally(() => {
+      if (current && folderSettleRef.current === current) {
+        folderSettleRef.current = null;
+      }
+    });
+    current = settled;
+    folderSettleRef.current = settled;
+    return settled;
+  }
+
+  function beginReleaseUntitled(id: string): Promise<void> {
+    const pending = pendingUntitledRef.current;
+    if (!pending || pending.id !== id) return Promise.resolve();
+    pendingUntitledRef.current = null;
+    if (folderHasItems(id)) return Promise.resolve();
+    releasedFolderIdsRef.current.add(id);
+    if (createFolderIdRef.current === id) rememberCreateFolder(null);
+    return trackSettle(
+      persist(
+        async () => {
+          await deleteDocument(id);
+          return undefined;
+        },
+        { lock: false },
+      ).then(() => undefined),
+    );
+  }
+
   async function ensureNamedFolder(name: string): Promise<string> {
     const existing = promptFolders.find((folder) => folder.name === name);
     if (existing) return existing.id;
@@ -338,11 +463,23 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
   }
 
   async function onCreateMine() {
-    setRenamingFolderId(null);
     setRenamingMineId(null);
+    // 夹名输入先失焦收场，再决定这条新建进哪只夹。
+    if (folderSettleRef.current) await folderSettleRef.current;
+    setRenamingFolderId(null);
+    const openFolder = rail.folders.find(
+      (folder) => folder.id === openFolderId,
+    );
+    const openDoc =
+      openFolder?.source === "user" ? openFolder.documentId : null;
+    const openStillThere =
+      Boolean(openDoc) &&
+      promptFoldersRef.current.some((folder) => folder.id === openDoc);
     await persist(async () => {
       const parentId =
-        createFolderId ?? (await ensureNamedFolder(OTHER_FOLDER_NAME));
+        (openStillThere ? openDoc : null) ??
+        createFolderIdRef.current ??
+        (await ensureNamedFolder(OTHER_FOLDER_NAME));
       const created = await createRuleDocument(
         skillFileName("未命名提示词"),
         null,
@@ -356,32 +493,164 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     });
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: accountEntries is the catalog key; helpers are recreated each render
+  useEffect(() => {
+    if (suppressSweepRef.current) return;
+    const pendingId = pendingUntitledRef.current?.id ?? null;
+    const targets = promptFolders.filter(
+      (folder) =>
+        isUntitledPromptFolderName(folder.name) &&
+        folderChildIds(folder.id).length === 0 &&
+        folder.id !== pendingId &&
+        folder.id !== renamingFolderId &&
+        folder.id !== renameHoldRef.current &&
+        !releasedFolderIdsRef.current.has(folder.id),
+    );
+    if (targets.length === 0) return;
+    for (const folder of targets) releasedFolderIdsRef.current.add(folder.id);
+    void persist(
+      async () => {
+        for (const folder of targets) {
+          closeFolderDocument(folder.id);
+          await deleteDocument(folder.id);
+        }
+        return undefined;
+      },
+      { lock: false },
+    );
+  }, [accountEntries, promptFolders, renamingFolderId]);
+
   async function createUntitledPromptFolder() {
+    suppressSweepRef.current = true;
     setRenamingMineId(null);
-    let createdId: string | null = null;
-    const ok = await persist(async () => {
-      const name = uniqueNumberedName(
-        UNTITLED_PROMPT_FOLDER_NAME,
-        promptFolders.map((folder) => folder.name),
-      );
-      const created = await createRuleFolder(name);
-      createdId = created.id;
-      setCreateFolderId(created.id);
-      return undefined;
-    });
-    if (ok && createdId) setRenamingFolderId(createdId);
+    try {
+      if (folderSettleRef.current) await folderSettleRef.current;
+      let createdId: string | null = null;
+      let createdName = "";
+      const ok = await persist(async () => {
+        createdName = uniqueNumberedName(
+          UNTITLED_PROMPT_FOLDER_NAME,
+          promptFoldersRef.current.map((folder) => folder.name),
+        );
+        const created = await createRuleFolder(createdName);
+        createdId = created.id;
+        return undefined;
+      });
+      if (ok && createdId) {
+        pendingUntitledRef.current = { id: createdId, name: createdName };
+        rememberCreateFolder(createdId);
+        setRenamingFolderId(createdId);
+        setOpenFolderId(`folder:${createdId}`);
+      }
+    } finally {
+      suppressSweepRef.current = false;
+    }
   }
 
   async function submitRenameFolder(id: string, raw: string) {
+    const pending = pendingUntitledRef.current;
+    if (pending && pending.id === id) {
+      const name = chosenFolderName(raw, pending.name);
+      if (!name) {
+        setRenamingFolderId(null);
+        await beginReleaseUntitled(id);
+        return;
+      }
+      // Hold the placeholder until the chosen name is on screen, or the sweep
+      // deletes this empty folder in the gap.
+      renameHoldRef.current = id;
+      pendingUntitledRef.current = null;
+      setRenamingFolderId(null);
+      try {
+        await trackSettle(
+          persist(
+            async () => {
+              await renameDocument(id, name);
+              return undefined;
+            },
+            { lock: false },
+          ).then(() => undefined),
+        );
+      } finally {
+        renameHoldRef.current = null;
+      }
+      return;
+    }
     setRenamingFolderId(null);
     const name = raw.trim().replace(/^\/+|\/+$/g, "");
     if (!name || name.includes("/")) return;
     const current = promptFolders.find((folder) => folder.id === id);
     if (current && current.name === name) return;
-    await persist(async () => {
-      await renameDocument(id, name);
-      return undefined;
+    await trackSettle(
+      persist(async () => {
+        await renameDocument(id, name);
+        return undefined;
+      }).then(() => undefined),
+    );
+  }
+
+  function cancelRenameFolder() {
+    const id = renamingFolderId;
+    setRenamingFolderId(null);
+    if (id) void beginReleaseUntitled(id);
+  }
+
+  function startRenameFolder(folder: PromptRailFolder) {
+    if (!folder.documentId) return;
+    setRenamingMineId(null);
+    setRenamingFolderId(folder.documentId);
+  }
+
+  async function removeEmptyFolder(documentId: string) {
+    releasedFolderIdsRef.current.add(documentId);
+    closeFolderDocument(documentId);
+    await persist(
+      async () => {
+        await deleteDocument(documentId);
+        return undefined;
+      },
+      { lock: false },
+    );
+  }
+
+  function requestDeleteFolder(folder: PromptRailFolder) {
+    const id = folder.documentId;
+    if (!id || folder.source !== "user") return;
+    const childIds = folderChildIds(id);
+    if (childIds.length === 0) {
+      void removeEmptyFolder(id);
+      return;
+    }
+    setFolderDissolve({
+      documentId: id,
+      name: folder.name,
+      childIds,
+      busy: false,
     });
+  }
+
+  async function confirmDissolveFolder() {
+    const target = folderDissolve;
+    if (!target || target.busy) return;
+    setFolderDissolve({ ...target, busy: true });
+    setError(null);
+    try {
+      const otherId = await ensureNamedFolder(OTHER_FOLDER_NAME);
+      for (const childId of target.childIds) {
+        // Server folder delete removes the subtree. Move entries out first.
+        await reparentDocument(childId, otherId);
+      }
+      releasedFolderIdsRef.current.add(target.documentId);
+      closeFolderDocument(target.documentId);
+      await deleteDocument(target.documentId);
+      setOverlay(await loadAccountLayer());
+      setFolderDissolve(null);
+    } catch (err) {
+      setError(overlayErrorMessage(err));
+      setFolderDissolve((current) =>
+        current ? { ...current, busy: false } : null,
+      );
+    }
   }
 
   function alreadyAtDest(
@@ -472,6 +741,41 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     setDropDest(null);
   }
 
+  async function toggleFactoryCatalog(present: boolean) {
+    if (
+      !profile ||
+      (profile.kind !== "user" && profile.kind !== "system") ||
+      factoryPending
+    ) {
+      return;
+    }
+    setFactoryPending(true);
+    setError(null);
+    try {
+      let id = profile.id;
+      if (profile.kind === "system") {
+        const materialized = await setDefaultLlmModelProfile(profile.id);
+        id = materialized.id;
+        if (conversationId) {
+          const saved = await setConversationModelProfile(conversationId, id);
+          patchConversationCache(conversationId, {
+            assemblyId: saved.assemblyId ?? id,
+          });
+        }
+      }
+      await updateLlmModelProfile(id, {
+        omit_factory_catalog: !present,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: llmModelProfileKeys.list,
+      });
+    } catch (err) {
+      setError(overlayErrorMessage(err));
+    } finally {
+      setFactoryPending(false);
+    }
+  }
+
   function handleActivate(
     id: string,
     event?: Pick<MouseEvent, "ctrlKey" | "metaKey" | "shiftKey">,
@@ -483,11 +787,28 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
       setSelection((sel) => selectRow(sel, mine, intent, visibleMine));
       if (isSelectionOnlyClick(intent)) return;
       setSelectedId(id);
+      clearDeepLink();
       return;
     }
     if (isSelectionOnlyClick(intent)) return;
     setSelection(EMPTY_MINE_SELECTION);
     setSelectedId(id);
+    const next = new URLSearchParams(searchParams);
+    next.delete("tool");
+    next.delete("skill");
+    if (item?.kind === "tool") next.set("tool", item.tool.name);
+    if (item?.kind === "skill") next.set("skill", item.skill.name);
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }
+
+  function clearDeepLink() {
+    if (!searchParams.has("tool") && !searchParams.has("skill")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("tool");
+    next.delete("skill");
+    setSearchParams(next, { replace: true });
   }
 
   function startRenameMine(item: PromptCatalogItem) {
@@ -599,8 +920,12 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
             promptDragPayload({ kind: "mine", mineIds }),
           );
           event.dataTransfer.effectAllowed = "move";
+          setPromptDragging(true);
         }}
-        onDragEnd={() => setDropDest(null)}
+        onDragEnd={() => {
+          setPromptDragging(false);
+          setDropDest(null);
+        }}
       >
         {children}
       </div>
@@ -639,42 +964,33 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     );
   }
 
-  if (
-    pane === "mine" &&
-    (searchParams.get("tool") || searchParams.get("skill"))
-  ) {
-    const qs = searchParams.toString();
-    return (
-      <Navigate
-        to={`${APP_PATHS.toolbox.official}${qs ? `?${qs}` : ""}`}
-        replace
-      />
-    );
-  }
-  return (
-    <div className="w-full" data-testid="prompt-catalog">
-      <ToolboxSourceTabs
-        action={
-          <>
-            <SearchField
-              aria-label={pane === "official" ? "搜提示词、工具" : "搜提示词"}
-              placeholder={pane === "official" ? "搜提示词、工具" : "搜提示词"}
-              value={query}
-              onValueChange={setQuery}
-              className="w-52"
-            />
-            {pane === "mine" ? (
-              <Button
-                size="md"
-                disabled={busy}
-                onClick={() => void onCreateMine()}
-              >
-                新建
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+  const catalogActions = (
+    <>
+      {searchOwned ? null : (
+        <SearchField
+          aria-label="搜提示词"
+          placeholder="搜提示词"
+          value={query}
+          onValueChange={setOwnQuery}
+          className="w-52"
+        />
+      )}
+      {busy || query.trim() ? null : (
+        <button
+          type="button"
+          className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          onClick={() => void createUntitledPromptFolder()}
+        >
+          新建夹
+        </button>
+      )}
+      <Button size="md" disabled={busy} onClick={() => void onCreateMine()}>
+        新建
+      </Button>
+    </>
+  );
+  const catalog = (
+    <>
       {error ? (
         <p className="mb-3 text-destructive text-xs" role="alert">
           {error}
@@ -700,7 +1016,6 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
         }}
       >
         <PromptOverview
-          pane={pane}
           rail={rail}
           selectedId={selectedId === OVERVIEW_CATALOG_ID ? null : selectedId}
           pickedIds={pickedIds}
@@ -711,11 +1026,24 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
           listings={listings}
           installedListings={installedListings}
           query={query}
+          suppressMiss={suppressMiss}
+          onMissChange={onMissChange}
+          factoryControl={{
+            present: !profile?.omit_factory_catalog,
+            canToggle: profile?.kind === "user" || profile?.kind === "system",
+            pending: factoryPending || assemblyPending,
+            onPresentChange: (present) => void toggleFactoryCatalog(present),
+          }}
+          dragging={promptDragging}
+          openFolderId={openFolderId}
+          onOpenFolder={setOpenFolderId}
+          onCloseFolder={() => setOpenFolderId(null)}
           onOpenItem={handleActivate}
           onCreateMine={() => void onCreateMine()}
-          onCreateFolder={() => void createUntitledPromptFolder()}
           onSubmitRenameFolder={(id, name) => void submitRenameFolder(id, name)}
-          onCancelRenameFolder={() => setRenamingFolderId(null)}
+          onCancelRenameFolder={cancelRenameFolder}
+          onRenameFolder={startRenameFolder}
+          onDeleteFolder={requestDeleteFolder}
           onAcceptAlwaysDrag={(event) =>
             acceptPromptDrag(event, { kind: "root" })
           }
@@ -809,6 +1137,42 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
         failure={batchFailure}
         onCloseFailure={() => setBatchFailure(null)}
       />
+      <ConfirmDialog
+        open={folderDissolve !== null}
+        onOpenChange={(open) => {
+          if (!open && !folderDissolve?.busy) setFolderDissolve(null);
+        }}
+        title={`删除「${folderDissolve?.name ?? ""}」？`}
+        description={`里面 ${folderDissolve?.childIds.length ?? 0} 条会回到货架，这些条目不删。`}
+        confirmLabel="删除"
+        tone="danger"
+        busy={folderDissolve?.busy ?? false}
+        onConfirm={() => void confirmDissolveFolder()}
+      />
+    </>
+  );
+  const showFactorySwitch =
+    profile?.kind === "user" || profile?.kind === "system";
+  return (
+    <div className="w-full" data-testid="prompt-catalog">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <h2 className="text-sm font-medium text-foreground">交代</h2>
+          {showFactorySwitch ? (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">出厂</span>
+              <Switch
+                checked={!profile?.omit_factory_catalog}
+                disabled={factoryPending || assemblyPending}
+                label="出厂"
+                onCheckedChange={(on) => void toggleFactoryCatalog(on)}
+              />
+            </div>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">{catalogActions}</div>
+      </div>
+      {catalog}
     </div>
   );
 }

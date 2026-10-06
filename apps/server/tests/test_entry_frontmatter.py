@@ -1,4 +1,4 @@
-"""Entry frontmatter: sole writable source for apply / description / offers_tools."""
+"""Entry frontmatter: sole writable source for apply / description / paths."""
 
 from __future__ import annotations
 
@@ -197,37 +197,3 @@ def test_derive_indexes_match_parse():
     mode, desc = _derive_indexes("---\nunclosed")
     assert mode == "on_demand" and desc == ""
 
-
-def test_parse_offers_tools_comma_list():
-    from agentcore.documents.frontmatter import offers_tools_from_content
-
-    content = "---\napply: on_demand\noffers_tools: host, debate\n---\n正文\n"
-    parsed = parse_entry_frontmatter(content)
-    assert isinstance(parsed, ParsedFrontmatter)
-    assert parsed.offers_tools == ("host", "debate")
-    assert offers_tools_from_content(content) == ("host", "debate")
-
-
-def test_offers_tools_roundtrip_preserves_apply():
-    original = "---\napply: always\ndescription: 审\n---\n怎么审\n"
-    edited = set_entry_frontmatter(original, offers_tools=("host", "browser"))
-    parsed = parse_entry_frontmatter(edited)
-    assert isinstance(parsed, ParsedFrontmatter)
-    assert parsed.apply == "always"
-    assert parsed.description == "审"
-    assert parsed.offers_tools == ("host", "browser")
-    cleared = set_entry_frontmatter(edited, offers_tools=())
-    gone = parse_entry_frontmatter(cleared)
-    assert isinstance(gone, ParsedFrontmatter)
-    assert gone.offers_tools == ()
-    assert "offers_tools" not in cleared
-    assert gone.apply == "always"
-
-
-def test_offers_tools_drops_invalid_tokens():
-    from agentcore.documents.frontmatter import parse_offers_tools_tokens
-
-    assert parse_offers_tools_tokens("host, ../etc, file read, debate") == (
-        "host",
-        "debate",
-    )

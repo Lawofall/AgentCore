@@ -178,6 +178,35 @@ describe("ProfileModelSelect", () => {
     expect(screen.getByRole("option", { name: /Flash/ })).toBeTruthy();
   });
 
+  it("keeps window and price on the open row when the trigger is one line", () => {
+    render(
+      <ProfileModelSelect
+        compactTrigger
+        groups={[
+          {
+            providerId: "p1",
+            providerLabel: "DeepSeek",
+            models: [
+              opt("flash", "Flash", {
+                vendor: "DeepSeek",
+                contextLength: 1_000_000,
+                price: { cache_miss: "1", output: "4", currency: "CNY" },
+              }),
+            ],
+          },
+        ]}
+        value="@byok/p1/flash"
+        onChange={vi.fn()}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: "Flash" });
+    expect(trigger.textContent).not.toContain("1M");
+    expect(trigger.textContent).not.toContain("¥");
+    fireEvent.click(trigger);
+    expect(screen.getByRole("option", { name: /1M/ })).toBeTruthy();
+    expect(screen.getByRole("option", { name: /¥1 \/ ¥4/ })).toBeTruthy();
+  });
+
   it("renders catalog unit prices in CNY, not a dollar sign", () => {
     const priced = opt("flash", "Flash", {
       vendor: "DeepSeek",

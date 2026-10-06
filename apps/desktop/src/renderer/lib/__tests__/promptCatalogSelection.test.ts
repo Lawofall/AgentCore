@@ -174,22 +174,25 @@ describe("flattenVisibleMineItems", () => {
     tools: [],
   };
 
-  it("必带用户稿在前，按需按夹顺序，跳过准则", () => {
+  it("根上是必带和散落按需；夹里的卡要有搜索词才算可见", () => {
     expect(flattenVisibleMineItems(rail).map((i) => i.mineId)).toEqual([
       "pin",
-      "x",
-      "y",
       "z",
     ]);
   });
 
-  it("搜索只留命中的我的条目（夹名命中则该夹全留）", () => {
+  it("搜索命中夹里的条目时把它铺出来；只命中夹名不把里面拉出来", () => {
     expect(flattenVisibleMineItems(rail, "合同").map((i) => i.mineId)).toEqual([
       "x",
     ]);
-    expect(flattenVisibleMineItems(rail, "法律").map((i) => i.mineId)).toEqual([
-      "x",
-      "y",
-    ]);
+    expect(flattenVisibleMineItems(rail, "法律").map((i) => i.mineId)).toEqual(
+      [],
+    );
+  });
+
+  it("点进夹只看见这只夹", () => {
+    expect(
+      flattenVisibleMineItems(rail, "", "folder:law").map((i) => i.mineId),
+    ).toEqual(["x", "y"]);
   });
 });

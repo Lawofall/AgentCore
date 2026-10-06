@@ -3,6 +3,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   EmptyHint,
   IconButton,
   PageHeader,
@@ -19,7 +20,6 @@ import {
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { folderAncestorNames } from "@/lib/folderTree";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
-import { startNewConversation } from "@/lib/newConversation";
 import { cn } from "@/lib/utils";
 import type { DeletedConversationMeta } from "@/services/conversations";
 import type { DeletedFolderMeta, FolderMeta } from "@/services/folders";
@@ -34,11 +34,10 @@ import {
   Inbox,
   ListChecks,
   MessageSquare,
-  Plus,
   Trash2,
 } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ArchivedConversationManageRow } from "./ArchivedConversationManageRow";
 import { ConversationManageRow } from "./ConversationManageRow";
 import { DeletedConversationManageRow } from "./DeletedConversationManageRow";
@@ -49,17 +48,22 @@ import {
   STALE_DAYS,
   TRASH_KEY,
   activeFilterName,
+  emptyTrashConfirmCopy,
   filesFocusState,
   isRealFolderFilter,
-  newChatFolderTarget,
 } from "./constants";
 import { folderAccentVar } from "./folderAccent";
 import { groupConversationsByRecency } from "./groupByRecency";
+import {
+  foldersWithLiveChats,
+  resolveFolderFilterSelection,
+} from "./liveFolderCounts";
 import { useConversationBulkSelect } from "./useConversationBulkSelect";
 import {
   useConversationList,
   useConversationRouting,
 } from "./useConversationList";
+import { useEmptyRecentlyDeleted } from "./useEmptyRecentlyDeleted";
 
 /**
  * Dedicated conversation management page (`/conversations`). Timeline-style
@@ -68,7 +72,9 @@ import {
 export function ConversationsPage() {
   const { isNarrow } = useNarrowLayoutState();
   const navigate = useNavigate();
-  const { selected, setSelected, flashId, folderIds, folders } =
+  const location = useLocation();
+  const consumedFolderJump = useRef<string | null>(null);
+  const { selected, setSelected, flashId, folderIds, folders, foldersAll } =
     useConversationRouting();
   const {
     conversations,
@@ -85,8 +91,15 @@ export function ConversationsPage() {
     trashList,
     deletedConversationList,
     retentionDays,
-  } = useConversationList(selected, folderIds);
+    conversationTrashTotal = 0,
+    folderTrashTotal = 0,
+    conversationTrashListed = 0,
+    folderTrashListed = 0,
+    groupedSettled,
+  } = useConversationList(selected, foldersAll);
   const bulk = useConversationBulkSelect(list, selected, isArchivedView);
+  const emptyTrash = useEmptyRecentlyDeleted();
+  const [emptyOpen, setEmptyOpen] = useState(false);
 
   const activeName = activeFilterName(selected, folders);
   const isFolderFilter = isRealFolderFilter(selected, folderIds);
@@ -94,9 +107,43 @@ export function ConversationsPage() {
 
   const groups = useMemo(() => groupConversationsByRecency(list), [list]);
 
-  const handleNewChat = () => {
-    startNewConversation(navigate, newChatFolderTarget(selected, folderIds));
-  };
+  // The folder block is a conversation filter. A 0 badge filters to an empty
+  // list, so those rows stay off the rail (files page still lists the folder).
+  // Wait until the grouped cache has landed — an empty cache is not "no chats".
+  const railReady = groupedSettled !== false;
+  const visibleFolders = useMemo(
+    () => (railReady ? foldersWithLiveChats(folders, counts.perFolder) : []),
+    [railReady, folders, counts],
+  );
+
+  useEffect(() => {
+    if (!railReady) return;
+    const jump = (location.state as { focusFolderId?: string } | null)
+      ?.focusFolderId;
+    // A search/deep link onto a folder with no live chats is not a filter.
+    // Consume the navigation once so a later archive of the last chat
+    // returns here to 全部对话 instead of leaving for the files page.
+    if (jump && consumedFolderJump.current !== location.key) {
+      const shown = counts.canonical?.get(jump) ?? jump;
+      if ((counts.perFolder.get(shown) ?? 0) === 0) {
+        consumedFolderJump.current = location.key;
+        const files = filesFocusState(shown);
+        if (files) {
+          navigate("/files", { replace: true, ...files });
+          return;
+        }
+      } else {
+        consumedFolderJump.current = location.key;
+      }
+    }
+    const next = resolveFolderFilterSelection(
+      selected,
+      folderIds,
+      counts.perFolder,
+      counts.canonical,
+    );
+    if (next) setSelected(next);
+  }, [railReady, selected, folderIds, counts, setSelected, location, navigate]);
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
@@ -165,11 +212,11 @@ export function ConversationsPage() {
                 </div>
               </div>
 
-              {folders.length > 0 && (
+              {visibleFolders.length > 0 && (
                 <div>
                   <SectionLabel className="mb-1.5 px-2">文件夹</SectionLabel>
                   <div className="space-y-0.5">
-                    {folders.map((f) => (
+                    {visibleFolders.map((f) => (
                       <FolderFilterRow
                         key={f.id}
                         folder={f}
@@ -186,23 +233,14 @@ export function ConversationsPage() {
           </aside>
 
           <section className="flex min-h-0 flex-1 flex-col">
-            <div className="flex shrink-0 items-center gap-3">
-              <SearchField
-                size="md"
-                value={query}
-                onValueChange={setQuery}
-                placeholder={`在「${activeName}」中搜索…`}
-                aria-label={`在「${activeName}」中搜索对话`}
-                className="min-w-0 flex-1"
-              />
-              <Button
-                className="h-9 shrink-0"
-                icon={<Plus size={16} className="shrink-0" />}
-                onClick={handleNewChat}
-              >
-                新建对话
-              </Button>
-            </div>
+            <SearchField
+              size="md"
+              value={query}
+              onValueChange={setQuery}
+              placeholder={`在「${activeName}」中搜索…`}
+              aria-label={`在「${activeName}」中搜索对话`}
+              className="w-full shrink-0"
+            />
 
             <div className="mt-2.5 flex shrink-0 flex-wrap items-center gap-1.5">
               {!isArchivedView && !isTrashView && (
@@ -279,6 +317,16 @@ export function ConversationsPage() {
                   <FolderOpen size={12} className="shrink-0" />
                   浏览文件
                 </button>
+              )}
+              {isTrashView && trashCount > 0 && (
+                <Button
+                  variant="danger"
+                  className="ml-auto"
+                  icon={<Trash2 size={12} className="shrink-0" />}
+                  onClick={() => setEmptyOpen(true)}
+                >
+                  清空
+                </Button>
               )}
             </div>
 
@@ -385,6 +433,26 @@ export function ConversationsPage() {
           </section>
         </div>
       </div>
+      <ConfirmDialog
+        open={emptyOpen}
+        onOpenChange={setEmptyOpen}
+        title="清空最近删除？"
+        description={emptyTrashConfirmCopy({
+          conversations: conversationTrashTotal,
+          folders: folderTrashTotal,
+          searching: query.trim().length > 0,
+          listedConversations: conversationTrashListed,
+          listedFolders: folderTrashListed,
+        })}
+        confirmLabel="清空"
+        tone="danger"
+        busy={emptyTrash.isPending}
+        onConfirm={() => {
+          emptyTrash.mutate(undefined, {
+            onSuccess: () => setEmptyOpen(false),
+          });
+        }}
+      />
     </div>
   );
 }
@@ -392,9 +460,10 @@ export function ConversationsPage() {
 /**
  * 最近删除 pane — deleted conversations and deleted projects, neither of which is a
  * live `Conversation`, so no recency grouping (the server already returns each list
- * most-recently-deleted first) and no bulk bar. 彻底删除 is per-row, behind a
- * confirm — not a bulk empty-trash. Folder wipe matches the delete-dialog
- * checkbox (chats + cloud files + desk settings), via the tombstone path.
+ * most-recently-deleted first) and no per-row bulk bar. 彻底删除 stays per-row.
+ * 清空 is the page button: one confirm, then both halves of the retention window.
+ * Folder wipe matches the delete-dialog checkbox (chats + cloud files + desk
+ * settings), via the tombstone path.
  */
 function RecentlyDeletedPane({
   conversations,

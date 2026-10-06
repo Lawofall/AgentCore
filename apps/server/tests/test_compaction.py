@@ -112,7 +112,7 @@ def test_conversation_summary_context_compacted_flag_only():
             archived=False,
             permission_axes={"boundary": "folder"},
             deep_research_auto=False,
-            model_profile_id=None,
+            assembly_id=None,
         )
     )
     assert both.context_compacted is True
@@ -132,7 +132,7 @@ def test_conversation_summary_context_compacted_flag_only():
             archived=False,
             permission_axes={"boundary": "folder"},
             deep_research_auto=False,
-            model_profile_id=None,
+            assembly_id=None,
         )
     )
     assert missing.context_compacted is False
@@ -150,7 +150,7 @@ def test_conversation_summary_context_compacted_flag_only():
             archived=False,
             permission_axes={"boundary": "folder"},
             deep_research_auto=False,
-            model_profile_id=None,
+            assembly_id=None,
         )
     )
     assert orphan_watermark.context_compacted is False
@@ -2234,7 +2234,7 @@ def test_rest_summary_stays_quiet_unless_the_count_was_actually_taken():
         archived=False,
         permission_axes={"boundary": "folder"},
         deep_research_auto=False,
-        model_profile_id=None,
+        assembly_id=None,
     )
 
     quiet = conversation_summary_from_orm(conv, message_count=500)

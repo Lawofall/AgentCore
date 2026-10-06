@@ -8,8 +8,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from agentcore.assembly.recipes import FULL, capability_preset_id
 from agentcore.llm.model_profiles import (
     LlmModelProfileService,
+    _capability_main_model_id,
     is_system_profile_id,
     platform_preset_id,
     resolve_system_preset_main,
@@ -44,7 +46,9 @@ def test_system_presets_project_from_listable_catalog(monkeypatch):
     assert list(presets.values()) == ["glm-5.2", "grok-4.5"]
     assert presets[_glm_preset_id()] == "glm-5.2"
     assert presets[platform_preset_id("grok-4.5")] == "grok-4.5"
-    assert is_system_profile_id(_glm_preset_id())
+    assert _glm_preset_id() in presets
+    assert not is_system_profile_id(_glm_preset_id())
+    assert is_system_profile_id(capability_preset_id(FULL))
     assert not is_system_profile_id(_LEGACY_SYSTEM_PROFILE_52)
     assert not is_system_profile_id(_LEGACY_SYSTEM_PROFILE_GROK)
     assert not is_system_profile_id("00000000-0000-4000-8000-000000000002")
@@ -56,10 +60,19 @@ def test_system_profile_default_prefers_platform_model(monkeypatch):
         lambda: ["grok-4.5", "glm-5.2"],
     )
     monkeypatch.setattr(
+        "agentcore.billing.preference.platform_billing_selectable",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "agentcore.billing.preference.is_platform_available",
+        lambda: True,
+    )
+    monkeypatch.setattr(
         "agentcore.llm.model_profiles.settings.platform_model",
         "glm-5.2",
     )
-    assert system_profile_default_id() == _glm_preset_id()
+    assert system_profile_default_id() == capability_preset_id(FULL)
+    assert _capability_main_model_id() == "glm-5.2"
 
 
 def test_system_profile_default_falls_to_first_when_platform_model_absent(monkeypatch):
@@ -68,10 +81,19 @@ def test_system_profile_default_falls_to_first_when_platform_model_absent(monkey
         lambda: ["grok-4.5", "glm-5.2"],
     )
     monkeypatch.setattr(
+        "agentcore.billing.preference.platform_billing_selectable",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "agentcore.billing.preference.is_platform_available",
+        lambda: True,
+    )
+    monkeypatch.setattr(
         "agentcore.llm.model_profiles.settings.platform_model",
         "not-in-list",
     )
-    assert system_profile_default_id() == platform_preset_id("grok-4.5")
+    assert system_profile_default_id() == capability_preset_id(FULL)
+    assert _capability_main_model_id() == "grok-4.5"
 
 
 def test_resolve_system_preset_main_is_fixed(monkeypatch):
@@ -101,10 +123,11 @@ async def test_list_profiles_hides_missing_catalog_models(monkeypatch):
     )
     svc = LlmModelProfileService(MagicMock())
     svc._default_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    svc._hidden_recipe_keys = AsyncMock(return_value=frozenset())  # type: ignore[method-assign]
     svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert views == []
+    assert [v.name for v in views] == ["极简", "轻量", "完整"]
 
 
 @pytest.mark.asyncio
@@ -124,10 +147,11 @@ async def test_list_profiles_hides_system_when_platform_billing_off(monkeypatch)
     )
     svc = LlmModelProfileService(MagicMock())
     svc._default_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    svc._hidden_recipe_keys = AsyncMock(return_value=frozenset())  # type: ignore[method-assign]
     svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert views == []
+    assert [v.name for v in views] == ["极简", "轻量", "完整"]
 
 
 @pytest.mark.asyncio
@@ -150,15 +174,16 @@ async def test_list_profiles_marks_default_when_present(monkeypatch):
     )
     svc = LlmModelProfileService(MagicMock())
     svc._default_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    svc._hidden_recipe_keys = AsyncMock(return_value=frozenset())  # type: ignore[method-assign]
     svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert [v.id for v in views] == [_glm_preset_id()]
-    assert views[0].is_default is True
-    assert views[0].name == "GLM-5.2"
-    assert views[0].main.model == "glm-5.2"
-    assert views[0].worker is None
-    assert views[0].background is None
+    assert [v.name for v in views] == ["极简", "轻量", "完整"]
+    assert views[2].id == capability_preset_id(FULL)
+    assert views[2].is_default is True
+    assert views[0].omit_factory_catalog is True
+    assert views[1].omit_factory_catalog is True
+    assert views[2].omit_factory_catalog is False
 
 
 @pytest.mark.asyncio
@@ -181,17 +206,17 @@ async def test_list_profiles_projects_multiple_models(monkeypatch):
     )
     svc = LlmModelProfileService(MagicMock())
     svc._default_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    svc._hidden_recipe_keys = AsyncMock(return_value=frozenset())  # type: ignore[method-assign]
     svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert [v.main.model for v in views] == ["glm-5.2", "grok-4.5"]
-    assert views[0].is_default is True
-    assert views[1].name == "Grok 4.5"
+    assert [v.name for v in views] == ["极简", "轻量", "完整"]
+    assert views[2].is_default is True
 
 
 @pytest.mark.asyncio
-async def test_system_preset_names_distinguish_free_and_priced_skus(monkeypatch):
-    """One display_name, two badges → combo names must differ (ids stay separate)."""
+async def test_official_list_is_three_recipes_not_one_row_per_sku(monkeypatch):
+    """Free and priced SKUs stay in the catalog. The official list does not grow with them."""
     monkeypatch.setattr(
         "agentcore.llm.catalog.platform_listable_model_ids",
         lambda: ["deepseek-v4-flash-free", "deepseek-v4-flash"],
@@ -206,17 +231,17 @@ async def test_system_preset_names_distinguish_free_and_priced_skus(monkeypatch)
     )
     svc = LlmModelProfileService(MagicMock())
     svc._default_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    svc._hidden_recipe_keys = AsyncMock(return_value=frozenset())  # type: ignore[method-assign]
     svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert [v.main.model for v in views] == ["deepseek-v4-flash-free", "deepseek-v4-flash"]
-    assert [v.name for v in views] == ["DeepSeek V4 Flash · 免费额度", "DeepSeek V4 Flash"]
-    assert views[0].id != views[1].id
+    assert [v.name for v in views] == ["极简", "轻量", "完整"]
+    assert [v.recipe for v in views] == ["chat", "web", "full"]
 
-    # A conversation pinned to the free preset must name the free tier when expanded.
-    expanded = await svc.expand("u1", views[0].id)
+    expanded = await svc.expand("u1", None)
     assert expanded.main.model == "deepseek-v4-flash-free"
-    assert expanded.name == "DeepSeek V4 Flash · 免费额度"
+    assert expanded.name == "完整"
+    assert expanded.profile_id == capability_preset_id(FULL)
 
 
 @pytest.mark.asyncio
@@ -242,12 +267,12 @@ async def test_expand_none_and_dangling_fall_back_to_platform_default(monkeypatc
     svc._repo.get = AsyncMock(return_value=None)  # type: ignore[method-assign]
 
     expanded = await svc.expand("u1", None)
-    assert expanded.profile_id == _glm_preset_id()
+    assert expanded.profile_id == system_profile_default_id()
     assert expanded.main.model == "glm-5.2"
-    assert expanded.name == "GLM-5.2"
+    assert expanded.name == "完整"
 
     dangling = await svc.expand("u1", "00000000-0000-4000-8000-000000000002")
-    assert dangling.profile_id == _glm_preset_id()
+    assert dangling.profile_id == system_profile_default_id()
     assert dangling.main.model == "glm-5.2"
 
 
@@ -276,55 +301,34 @@ async def test_expand_legacy_hardcoded_uuid_falls_back_to_default(monkeypatch):
 
     for legacy in (_LEGACY_SYSTEM_PROFILE_52, _LEGACY_SYSTEM_PROFILE_GROK):
         expanded = await svc.expand("u1", legacy)
-        assert expanded.profile_id == _glm_preset_id()
+        assert expanded.profile_id == system_profile_default_id()
         assert expanded.main.model == "glm-5.2"
 
 
 @pytest.mark.asyncio
-async def test_set_default_rejects_unavailable_system_preset(monkeypatch):
-    from agentcore.core.errors import ValidationError
+async def test_set_default_rejects_legacy_preset_id():
+    """A leftover per-model preset id is not an assembly."""
+    from agentcore.core.errors import NotFoundError
 
-    monkeypatch.setattr(
-        "agentcore.llm.catalog.platform_listable_model_ids",
-        lambda: ["glm-5.2"],
-    )
-    monkeypatch.setattr(
-        "agentcore.billing.preference.platform_billing_selectable",
-        lambda: False,
-    )
-    monkeypatch.setattr(
-        "agentcore.billing.preference.is_platform_available",
-        lambda: True,
-    )
     svc = LlmModelProfileService(MagicMock())
-    with pytest.raises(ValidationError, match="不可用"):
+    svc._repo.get = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    with pytest.raises(NotFoundError, match="模型组合不存在"):
         await svc.set_default("u1", _glm_preset_id())
 
 
 @pytest.mark.asyncio
-async def test_ensure_rejects_unavailable_system_preset(monkeypatch):
+async def test_ensure_rejects_legacy_preset_id():
     from agentcore.core.errors import ValidationError
 
-    monkeypatch.setattr(
-        "agentcore.llm.catalog.platform_listable_model_ids",
-        lambda: ["glm-5.2"],
-    )
-    monkeypatch.setattr(
-        "agentcore.billing.preference.platform_billing_selectable",
-        lambda: False,
-    )
-    monkeypatch.setattr(
-        "agentcore.billing.preference.is_platform_available",
-        lambda: True,
-    )
     svc = LlmModelProfileService(MagicMock())
-    with pytest.raises(ValidationError, match="不可用"):
+    svc._repo.get = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    with pytest.raises(ValidationError, match="不存在"):
         await svc.ensure_profile_usable("u1", _glm_preset_id())
 
 
 @pytest.mark.asyncio
 async def test_list_marks_user_default_when_system_pin_dormant(monkeypatch):
-    """DB pin on invisible system preset → list marks first visible user combo (no DB write)."""
+    """A leftover per-model pin is not an assembly. Recipes stay listed; 完整 is the star."""
     from types import SimpleNamespace
 
     monkeypatch.setattr(
@@ -359,14 +363,65 @@ async def test_list_marks_user_default_when_system_pin_dormant(monkeypatch):
     )
     svc = LlmModelProfileService(MagicMock())
     svc._default_id = AsyncMock(return_value=_glm_preset_id())  # type: ignore[method-assign]
+    svc._hidden_recipe_keys = AsyncMock(return_value=frozenset())  # type: ignore[method-assign]
     svc._repo.list_for_user = AsyncMock(return_value=[user_row])  # type: ignore[method-assign]
     svc._users.set_default_model_profile = AsyncMock()  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert len(views) == 1
-    assert views[0].id == "user-combo-1"
-    assert views[0].is_default is True
-    svc._users.set_default_model_profile.assert_not_awaited()
+    assert [v.name for v in views] == ["极简", "轻量", "完整", "我的组合"]
+    assert views[2].is_default is True
+    assert views[3].id == "user-combo-1"
+    assert views[3].is_default is False
+    assert views[3].recipe is None
+    svc._users.set_default_model_profile.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_list_projects_locked_recipe_on_owned_row(monkeypatch):
+    """The shelf folds this row into the tray chip while the key is still set."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "agentcore.llm.catalog.platform_listable_model_ids",
+        lambda: ["glm-5.2"],
+    )
+    monkeypatch.setattr(
+        "agentcore.billing.preference.platform_billing_selectable",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "agentcore.billing.preference.is_platform_available",
+        lambda: True,
+    )
+    owned = SimpleNamespace(
+        id="owned-chat",
+        name="极简",
+        kind="user",
+        recipe="chat",
+        main_origin="platform",
+        main_model="glm-5.2",
+        main_provider_id=None,
+        worker_origin=None,
+        worker_model=None,
+        worker_provider_id=None,
+        background_origin=None,
+        background_model=None,
+        background_provider_id=None,
+        vision_origin=None,
+        vision_model=None,
+        vision_provider_id=None,
+        reasoning_effort=None,
+    )
+    svc = LlmModelProfileService(MagicMock())
+    svc._default_id = AsyncMock(return_value="owned-chat")  # type: ignore[method-assign]
+    svc._hidden_recipe_keys = AsyncMock(return_value=frozenset())  # type: ignore[method-assign]
+    svc._repo.list_for_user = AsyncMock(return_value=[owned])  # type: ignore[method-assign]
+    svc._capture_legacy_model_star = AsyncMock()  # type: ignore[method-assign]
+
+    views = await svc.list_profiles("u1")
+    hit = next(view for view in views if view.id == "owned-chat")
+    assert hit.recipe == "chat"
+    assert hit.is_default is True
 
 
 @pytest.mark.asyncio
@@ -512,7 +567,7 @@ async def test_system_preset_view_vision_always_null(monkeypatch):
         lambda: ["glm-5.2"],
     )
     svc = LlmModelProfileService(MagicMock())
-    view = svc._view_system(_glm_preset_id(), is_default=True)
+    view = svc._view_system(capability_preset_id(FULL), is_default=True)
     assert view.vision is None
 
 
@@ -602,18 +657,20 @@ class _ReachFake:
 
 
 @pytest.mark.asyncio
-async def test_create_profile_warns_on_unreachable_byok_model_but_saves():
+async def test_create_slot_warns_on_unreachable_byok_model_but_saves():
     from agentcore.llm.credentials import LLMCredentials
     from agentcore.llm.model_profiles import ProfileSlot
 
     svc = LlmModelProfileService(MagicMock())
+    svc._default_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
     svc._providers = MagicMock()
     svc._providers.get = AsyncMock(return_value=_prov_row())
     svc._users = MagicMock()
     svc._users.set_default_model_profile = AsyncMock()
     created = _profile_db_row()
     svc._repo = MagicMock()
-    svc._repo.create = AsyncMock(return_value=created)
+    svc._repo.get = AsyncMock(return_value=created)
+    svc._repo.update = AsyncMock(return_value=created)
 
     fake = _ReachFake(model_ids=["gpt-4o"], fail_models={"gpt5.6"})
     creds = LLMCredentials(
@@ -626,13 +683,14 @@ async def test_create_profile_warns_on_unreachable_byok_model_but_saves():
         ),
         patch("agentcore.llm.factory.build_provider", return_value=fake),
     ):
-        view = await svc.create_profile(
+        view = await svc.update_profile(
             "u1",
-            name="combo",
+            "prof-1",
             main=ProfileSlot(origin="byok", model="gpt-4o", provider_id="prov-1"),
             background=ProfileSlot(
                 origin="byok", model="gpt5.6", provider_id="prov-1"
             ),
+            fields_set={"main", "background"},
         )
     assert view.id == "prof-1"
     assert view.background is not None
@@ -643,18 +701,20 @@ async def test_create_profile_warns_on_unreachable_byok_model_but_saves():
 
 
 @pytest.mark.asyncio
-async def test_create_profile_ark_ep_not_in_list_no_warning():
+async def test_create_slot_ark_ep_not_in_list_no_warning():
     from agentcore.llm.credentials import LLMCredentials
     from agentcore.llm.model_profiles import ProfileSlot
 
     ep = "ep-20240101000000-abcde"
     svc = LlmModelProfileService(MagicMock())
+    svc._default_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
     svc._providers = MagicMock()
     svc._providers.get = AsyncMock(return_value=_prov_row())
     svc._users = MagicMock()
     created = _profile_db_row(background_model=ep)
     svc._repo = MagicMock()
-    svc._repo.create = AsyncMock(return_value=created)
+    svc._repo.get = AsyncMock(return_value=created)
+    svc._repo.update = AsyncMock(return_value=created)
 
     fake = _ReachFake(model_ids=["gpt-4o", "doubao-pro"], fail_models=set())
     creds = LLMCredentials(
@@ -667,29 +727,32 @@ async def test_create_profile_ark_ep_not_in_list_no_warning():
         ),
         patch("agentcore.llm.factory.build_provider", return_value=fake),
     ):
-        view = await svc.create_profile(
+        view = await svc.update_profile(
             "u1",
-            name="combo",
+            "prof-1",
             main=ProfileSlot(origin="byok", model="gpt-4o", provider_id="prov-1"),
             background=ProfileSlot(origin="byok", model=ep, provider_id="prov-1"),
+            fields_set={"main", "background"},
         )
     assert view.warnings == ()
     assert ep in fake.probe_models
 
 
 @pytest.mark.asyncio
-async def test_create_profile_list_fetch_failure_saves_without_warning():
+async def test_create_slot_list_fetch_failure_saves_without_warning():
     from agentcore.core.errors import LLMError
     from agentcore.llm.credentials import LLMCredentials
     from agentcore.llm.model_profiles import ProfileSlot
 
     svc = LlmModelProfileService(MagicMock())
+    svc._default_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
     svc._providers = MagicMock()
     svc._providers.get = AsyncMock(return_value=_prov_row())
     svc._users = MagicMock()
     created = _profile_db_row(background_model="gpt5.6")
     svc._repo = MagicMock()
-    svc._repo.create = AsyncMock(return_value=created)
+    svc._repo.get = AsyncMock(return_value=created)
+    svc._repo.update = AsyncMock(return_value=created)
 
     fake = _ReachFake(list_error=LLMError("upstream /models 500"), fail_models={"gpt5.6"})
     creds = LLMCredentials(
@@ -702,13 +765,14 @@ async def test_create_profile_list_fetch_failure_saves_without_warning():
         ),
         patch("agentcore.llm.factory.build_provider", return_value=fake),
     ):
-        view = await svc.create_profile(
+        view = await svc.update_profile(
             "u1",
-            name="combo",
+            "prof-1",
             main=ProfileSlot(origin="byok", model="gpt-4o", provider_id="prov-1"),
             background=ProfileSlot(
                 origin="byok", model="gpt5.6", provider_id="prov-1"
             ),
+            fields_set={"main", "background"},
         )
     assert view.id == "prof-1"
     assert view.warnings == ()
@@ -716,61 +780,67 @@ async def test_create_profile_list_fetch_failure_saves_without_warning():
 
 
 @pytest.mark.asyncio
-async def test_create_profile_rejects_alias_and_unsupported_effort():
+async def test_create_slot_rejects_alias_and_unsupported_effort():
     from agentcore.core.errors import ValidationError
     from agentcore.llm.model_profiles import ProfileSlot
 
     svc = LlmModelProfileService(MagicMock())
     svc._validate_slot = AsyncMock()  # type: ignore[method-assign]
     svc._repo = MagicMock()
-    svc._repo.create = AsyncMock()
+    svc._repo.get = AsyncMock(return_value=_profile_db_row())
+    svc._repo.update = AsyncMock()
 
     with pytest.raises(ValidationError, match="厂商档位"):
-        await svc.create_profile(
+        await svc.update_profile(
             "u1",
-            name="combo",
+            "prof-1",
             main=ProfileSlot(
                 origin="byok", model="deepseek-v4-flash", provider_id="prov-1"
             ),
             reasoning_effort="medium",
+            fields_set={"main", "reasoning_effort"},
         )
     with pytest.raises(ValidationError, match="不支持思考强度"):
-        await svc.create_profile(
+        await svc.update_profile(
             "u1",
-            name="combo",
+            "prof-1",
             main=ProfileSlot(origin="byok", model="gpt-4o", provider_id="prov-1"),
             reasoning_effort="low",
+            fields_set={"main", "reasoning_effort"},
         )
-    svc._repo.create.assert_not_awaited()
+    svc._repo.update.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_create_profile_persists_official_effort():
+async def test_create_slot_persists_official_effort():
     from agentcore.llm.model_profiles import ProfileSlot
 
     svc = LlmModelProfileService(MagicMock())
+    svc._default_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
     svc._validate_slot = AsyncMock()  # type: ignore[method-assign]
     svc._byok_reachability_warnings = AsyncMock(return_value=())  # type: ignore[method-assign]
     created = _profile_db_row(
         main_model="deepseek-v4-flash", reasoning_effort="low"
     )
     svc._repo = MagicMock()
-    svc._repo.create = AsyncMock(return_value=created)
+    svc._repo.get = AsyncMock(return_value=created)
+    svc._repo.update = AsyncMock(return_value=created)
 
-    view = await svc.create_profile(
+    view = await svc.update_profile(
         "u1",
-        name="combo",
+        "prof-1",
         main=ProfileSlot(
             origin="byok", model="deepseek-v4-flash", provider_id="prov-1"
         ),
         reasoning_effort="low",
+        fields_set={"main", "reasoning_effort"},
     )
-    assert svc._repo.create.await_args.kwargs["reasoning_effort"] == "low"
+    assert svc._repo.update.await_args.kwargs["reasoning_effort"] == "low"
     assert view.reasoning_effort == "low"
 
 
 @pytest.mark.asyncio
-async def test_update_profile_snaps_effort_when_main_loses_spec():
+async def test_update_slot_snaps_effort_when_main_loses_spec():
     from agentcore.llm.model_profiles import ProfileSlot
 
     svc = LlmModelProfileService(MagicMock())
@@ -793,3 +863,129 @@ async def test_update_profile_snaps_effort_when_main_loses_spec():
     )
     assert svc._repo.update.await_args.kwargs["reasoning_effort"] is None
     assert view.reasoning_effort is None
+
+
+@pytest.mark.asyncio
+async def test_list_profiles_omits_hidden_recipe(monkeypatch):
+    monkeypatch.setattr(
+        "agentcore.llm.catalog.platform_listable_model_ids",
+        lambda: ["glm-5.2"],
+    )
+    monkeypatch.setattr(
+        "agentcore.billing.preference.platform_billing_selectable",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "agentcore.billing.preference.is_platform_available",
+        lambda: True,
+    )
+    svc = LlmModelProfileService(MagicMock())
+    svc._default_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    svc._hidden_recipe_keys = AsyncMock(return_value=frozenset({"chat"}))  # type: ignore[method-assign]
+    svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    views = await svc.list_profiles("u1")
+    assert [v.name for v in views] == ["轻量", "完整"]
+
+
+@pytest.mark.asyncio
+async def test_delete_starred_user_assembly_moves_star():
+    kept = SimpleNamespace(id="kept", kind="user")
+    svc = LlmModelProfileService(MagicMock())
+    svc._repo.get = AsyncMock(return_value=SimpleNamespace(id="star", kind="user"))  # type: ignore[method-assign]
+    svc._repo.list_for_user = AsyncMock(return_value=[SimpleNamespace(id="star", kind="user"), kept])  # type: ignore[method-assign]
+    svc._repo.delete = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    svc._default_id = AsyncMock(return_value="star")  # type: ignore[method-assign]
+    svc._users.set_default_model_profile = AsyncMock()  # type: ignore[method-assign]
+    with patch(
+        "agentcore.db.repositories.ConversationRepository"
+    ) as repo_cls:
+        repo_cls.return_value.reassign_model_profile_refs = AsyncMock()
+        await svc.delete_profile("u1", "star")
+    svc._users.set_default_model_profile.assert_awaited_with("u1", "kept")
+    repo_cls.return_value.reassign_model_profile_refs.assert_awaited_with(
+        "u1", "star", to_profile_id="kept"
+    )
+    svc._repo.delete.assert_awaited_with("star", user_id="u1")
+
+
+@pytest.mark.asyncio
+async def test_delete_system_preset_leaves_the_tray():
+    from agentcore.assembly.recipes import CHAT, capability_preset_id
+
+    preset_id = capability_preset_id(CHAT)
+    svc = LlmModelProfileService(MagicMock())
+    svc._users.hide_capability_recipe = AsyncMock()  # type: ignore[method-assign]
+    svc._default_id = AsyncMock(return_value=preset_id)  # type: ignore[method-assign]
+    svc._repo.delete = AsyncMock()  # type: ignore[method-assign]
+    svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    svc._hidden_recipe_keys = AsyncMock(return_value=frozenset({"chat"}))  # type: ignore[method-assign]
+    svc._users.set_default_model_profile = AsyncMock()  # type: ignore[method-assign]
+    svc._materialize_preset = AsyncMock(return_value="owned-next")  # type: ignore[method-assign]
+    with patch(
+        "agentcore.db.repositories.ConversationRepository"
+    ) as repo_cls:
+        repo_cls.return_value.reassign_model_profile_refs = AsyncMock()
+        await svc.delete_profile("u1", preset_id)
+    svc._users.hide_capability_recipe.assert_awaited_with("u1", "chat")
+    svc._users.set_default_model_profile.assert_awaited_with("u1", "owned-next")
+    svc._materialize_preset.assert_awaited()
+    assert svc._materialize_preset.await_args.args[1] != preset_id
+    assert svc._materialize_preset.await_args.kwargs["avoid_id"] == preset_id
+    svc._repo.delete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_context_budget_persists_shorter_step_and_snaps():
+    from agentcore.core.errors import ValidationError
+    from agentcore.llm.model_profiles import ProfileSlot
+
+    svc = LlmModelProfileService(MagicMock())
+    svc._default_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    svc._validate_slot = AsyncMock()  # type: ignore[method-assign]
+    svc._byok_reachability_warnings = AsyncMock(return_value=())  # type: ignore[method-assign]
+    stored = _profile_db_row(
+        main_model="deepseek-v4-flash", context_budget=128_000
+    )
+    svc._repo = MagicMock()
+    svc._repo.get = AsyncMock(return_value=stored)
+    svc._repo.update = AsyncMock(return_value=stored)
+
+    view = await svc.update_profile(
+        "u1",
+        "prof-1",
+        main=ProfileSlot(
+            origin="byok", model="deepseek-v4-flash", provider_id="prov-1"
+        ),
+        context_budget=128_000,
+        fields_set={"main", "context_budget"},
+    )
+    assert svc._repo.update.await_args.kwargs["context_budget"] == 128_000
+    assert view.context_budget == 128_000
+
+    with pytest.raises(ValidationError, match="其中一档"):
+        await svc.update_profile(
+            "u1",
+            "prof-1",
+            context_budget=100_000,
+            fields_set={"context_budget"},
+        )
+
+    narrower = _profile_db_row(
+        main_model="deepseek-v4-flash-free", context_budget=None
+    )
+    svc._repo.get = AsyncMock(
+        return_value=_profile_db_row(
+            main_model="deepseek-v4-flash", context_budget=512_000
+        )
+    )
+    svc._repo.update = AsyncMock(return_value=narrower)
+    await svc.update_profile(
+        "u1",
+        "prof-1",
+        main=ProfileSlot(
+            origin="byok", model="deepseek-v4-flash-free", provider_id="prov-1"
+        ),
+        fields_set={"main"},
+    )
+    assert svc._repo.update.await_args.kwargs["context_budget"] is None

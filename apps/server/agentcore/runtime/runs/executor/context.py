@@ -41,7 +41,6 @@ def _observe_worker_opening(
     supplement: str | None,
 ) -> None:
     """COST-004: log worker opening system sections (observe-only; join stays ``\\n\\n``)."""
-    from agentcore.config import settings
     from agentcore.runtime.context import ContextAssembler, SectionOrder
 
     role_text = f"你的角色：{role}" if role else None
@@ -51,7 +50,7 @@ def _observe_worker_opening(
         .add("identity", identity, SectionOrder.WORKER_IDENTITY)
         .add("role", role_text, SectionOrder.WORKER_ROLE)
         .add("supplement", supplement, SectionOrder.WORKER_SUPPLEMENT)
-        .observe(scope="worker_turn", soft_cap=settings.prompt_budget_char_soft_cap)
+        .observe(scope="worker_turn")
     )
 
 
@@ -134,7 +133,7 @@ def _build_messages(
     tool_defs: list[dict] | None = None,
     turn_envelope: str | None = None,
 ) -> list[LLMMessage]:
-    """Assemble the worker's OPENING (system, user) messages from its inline role,
+    """Assemble the worker's opening messages from its inline role,
     the original request, its upstream dependency products, and its task.
 
     ``deliverable`` (when present) is stated up front as hard requirements so the
@@ -146,7 +145,8 @@ def _build_messages(
     Leaf identity default is empty.
 
     单一源 (上下文传递可视化): ``system_content`` is the shared base only. The LLM
-    ``system`` message is that string. Material blocks from
+    ``system`` message is that string when it has text; an empty string is not
+    sent. Material blocks from
     :func:`_build_context_blocks` RENDER the user message — they are NOT joined with
     the system block (that would double-inject the prompt into the user turn). When
     ``blocks_sink`` is given, the sink is ``[system block mirroring system_content]``
@@ -200,10 +200,10 @@ def _build_messages(
                     ),
                 )
         user_content = f"{env}\n\n{user_content}" if user_content else env
-    return [
-        LLMMessage(role="system", content=system_content),
-        LLMMessage(role="user", content=user_content),
-    ]
+    messages = [LLMMessage(role="user", content=user_content)]
+    if (system_content or "").strip():
+        messages.insert(0, LLMMessage(role="system", content=system_content))
+    return messages
 
 
 def _build_context_blocks(

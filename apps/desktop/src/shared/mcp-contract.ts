@@ -11,6 +11,7 @@ export const MCP_CHANNELS = {
   upsertServer: "mcp:upsertServer",
   removeServer: "mcp:removeServer",
   setServerEnabled: "mcp:setServerEnabled",
+  setRunIds: "mcp:setRunIds",
   testServer: "mcp:testServer",
 } as const;
 
@@ -66,5 +67,7 @@ export interface McpApi {
     id: string,
     enabled: boolean,
   ) => Promise<McpMutationResult>;
+  /** Server ids any assembly enables. Processes stay up for this union. */
+  setRunIds: (ids: string[]) => Promise<McpConfigResult>;
   testServer: (id: string) => Promise<McpTestResult>;
 }

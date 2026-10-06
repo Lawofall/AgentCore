@@ -37,10 +37,16 @@ def _wire_conversation_log_tools(
 
     ``search_conversations`` / ``read_conversation`` are ``manual_wire`` —
     never auto-registered by ``build_worker_registry`` / ``build_ceo_tool_registry``.
-    Product-always-on (跨会话对话日志访问定案 A); opening-table resident.
+    The assembly switch ``chats`` withholds both names. Off means neither is
+    registered, so they are absent from the opening table and from execution.
+    Default (the switch is not on the deny list) still wires both.
     """
-    tools.register(SearchConversationsTool(folder_id=folder_id))
-    tools.register(ReadConversationTool(folder_id=folder_id))
+    from agentcore.tools.switchboard import switch_blocks
+
+    if not switch_blocks("search_conversations"):
+        tools.register(SearchConversationsTool(folder_id=folder_id))
+    if not switch_blocks("read_conversation"):
+        tools.register(ReadConversationTool(folder_id=folder_id))
 
 
 def _build_agent_mention_context(

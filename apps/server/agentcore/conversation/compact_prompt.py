@@ -27,9 +27,9 @@ _VERBATIM_RULE = """\
 
 _HEADING_TAIL = """\
 按以下固定小标题组织（某标题没有内容就整段省略）：
-## 已确立的事实 / __FACTS__
+__FACTS_HEADING__
 ## 关键决策与理由
-## 未决问题 / __OPEN__
+__OPEN_HEADING__
 ## 涉及的文件与标识符
 
 保持紧凑：合并同类项，越早期的越精炼；总长控制在约 __BUDGET__ 字以内。"""
@@ -60,6 +60,13 @@ _WORKER_LIFETIME = """\
 失败过的调用只留仍会改变以后怎么试的信息。"""
 
 
+def _section_heading(stem: str, suffix: str) -> str:
+    """``suffix`` empty → stem only. A slash suffix names a second job for that slot."""
+    if suffix:
+        return f"## {stem} / {suffix}"
+    return f"## {stem}"
+
+
 def _assemble_compact_prompt(
     *,
     preamble: str,
@@ -69,7 +76,11 @@ def _assemble_compact_prompt(
     open_suffix: str,
 ) -> str:
     verbatim = _VERBATIM_RULE.replace("__DATA__", data_name)
-    tail = _HEADING_TAIL.replace("__FACTS__", facts_suffix).replace("__OPEN__", open_suffix)
+    tail = (
+        _HEADING_TAIL.replace(
+            "__FACTS_HEADING__", _section_heading("已确立的事实", facts_suffix)
+        ).replace("__OPEN_HEADING__", _section_heading("未决问题", open_suffix))
+    )
     return f"{preamble}\n\n{SHARED_COMPACT_POLICY}\n{lifetime}\n\n{verbatim}\n\n{tail}"
 
 
@@ -77,7 +88,8 @@ _COMPACT_SYSTEM_PROMPT = _assemble_compact_prompt(
     preamble=_CHAT_PREAMBLE,
     lifetime=_CHAT_LIFETIME,
     data_name="对话",
-    facts_suffix="背景",
+    # 不缀「背景」：背景会把过程叙事吸进事实，和寿命句对着干。
+    facts_suffix="",
     open_suffix="待办",
 )
 

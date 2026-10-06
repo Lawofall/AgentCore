@@ -333,8 +333,8 @@ export interface RunNode {
   /** Node kind from `run_started` / the plan: `captain` is the CEO root 汇聚点,
    * `agent` a delegated worker. Drives how the graph styles the node. */
   kind: RunKind;
-  /** Cost-ledger role of the run (member/captain/…) from `run_completed`; null
-   * until the run completes. 阶段1 scheduled runs are always "member". */
+  /** Cost-ledger role (`run_spend` / `run_completed`). Null until the first
+   * booked call. 阶段1 scheduled runs are "member". */
   role: string | null;
   /** Model id the run billed on (e.g. deepseek-v4-flash); null until completed.
    * Workers may differ in tier, so this is per-run (payroll power detail). */
@@ -342,10 +342,11 @@ export interface RunNode {
   /** Vendor thinking-effort token actually sent (`run_completed.reasoning_effort`);
    * null until completed, on old journals, or when the leaf does not send the field. */
   reasoningEffort: string | null;
-  /** This run's token usage (payroll power detail); null until completed. */
+  /** This run's token usage. Live `run_spend` fills it after each call; the
+   * terminal frame replaces it. Null until the first booked call. */
   usage: UsageBreakdown | null;
-  /** This run's priced cost in nano-CNY (lights up one payroll row, §7.3B);
-   * null until completed / unmetered. All-zero `total` renders as「—」(§7.5). */
+  /** This run's priced cost in nano. Live `run_spend` fills it after each call.
+   * All-zero `total` renders as「—」(§7.5). */
   cost: CostBreakdown | null;
   /** 辩论/审查 呈现标记 (前端UX设计.md §四, display-only): this run's side in an
    * opposing batch (`pro`/`con`), the `group` it is paired in, and its `round`

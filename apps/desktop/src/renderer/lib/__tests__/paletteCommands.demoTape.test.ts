@@ -131,11 +131,11 @@ describe("paletteCommands · 前往发现性", () => {
     ).toBe(false);
   });
 
-  it("前往标题是提示词，搜技能仍命中同一页", () => {
+  it("前往标题是交代，搜提示词和技能仍命中同一页", () => {
     const cmds = buildPaletteCommands(baseCtx);
     const guidelines = cmds.find((c) => c.id === "nav-guidelines");
     expect(guidelines).toBeTruthy();
-    expect(guidelines?.title).toBe("提示词");
+    expect(guidelines?.title).toBe("交代");
     expect(guidelines?.category).toBe("前往");
     if (!guidelines) return;
     expect(commandMatches(guidelines, "提示词")).toBe(true);
@@ -156,6 +156,7 @@ describe("paletteCommands · 前往发现性", () => {
     expect(commandMatches(guidelines, "开场工具")).toBe(false);
     const mcp = cmds.find((c) => c.id === "nav-mcp");
     expect(mcp).toBeTruthy();
+    expect(mcp?.title).toBe("MCP");
     if (!mcp) return;
     expect(commandMatches(mcp, "连接器")).toBe(false);
     expect(commandMatches(mcp, "MCP")).toBe(true);
@@ -167,7 +168,7 @@ describe("paletteCommands · 前往发现性", () => {
     expect(commandMatches(official, "官方")).toBe(true);
     expect(commandMatches(official, "开场工具")).toBe(true);
     official.run();
-    expect(baseCtx.navigate).toHaveBeenCalledWith("/toolbox/official");
+    expect(baseCtx.navigate).toHaveBeenCalledWith("/toolbox#tools");
   });
 
   it("不再有自动化 / 收件箱 / 工作流命令", () => {

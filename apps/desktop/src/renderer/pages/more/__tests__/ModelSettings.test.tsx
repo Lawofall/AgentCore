@@ -27,12 +27,16 @@ vi.mock("@/services/llmModelProfiles", async (importOriginal) => ({
   deleteLlmModelProfile: vi.fn(() => Promise.resolve({ status: "ok" })),
   setDefaultLlmModelProfile: vi.fn(),
 }));
+vi.mock("@/lib/toast", () => ({
+  notifySuccess: vi.fn(),
+}));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useLlmModelProfiles } from "@/hooks/useLlmModelProfiles";
 import { useLlmProviders } from "@/hooks/useLlmProviders";
 import { useModels } from "@/hooks/useModels";
 import { PLATFORM_POINTER_ID } from "@/lib/llmDefaults";
+import { notifySuccess } from "@/lib/toast";
 import { ApiError } from "@/services/api";
 import type { LlmModelProfileListResponse } from "@/services/llmModelProfiles";
 import {
@@ -42,7 +46,7 @@ import {
   updateLlmModelProfile,
 } from "@/services/llmModelProfiles";
 import type { LlmProvidersResponse } from "@/services/llmProviders";
-import { ModelSettings } from "../ModelSettings";
+import { ModelSettings, ProfileEditor } from "../ModelSettings";
 
 const useLlmProvidersMock = vi.mocked(useLlmProviders);
 const useProfilesMock = vi.mocked(useLlmModelProfiles);
@@ -69,7 +73,7 @@ function providersResponse(
         masked_key: "••••wxyz",
       },
     ],
-    default_model_profile_id: "sys-52",
+    default_assembly_id: "sys-52",
     billing_mode: "byok",
     platform_available: false,
     platform_model: null,
@@ -81,7 +85,7 @@ function profilesResponse(
   over: Partial<LlmModelProfileListResponse> = {},
 ): LlmModelProfileListResponse {
   return {
-    default_model_profile_id: "sys-52",
+    default_assembly_id: "sys-52",
     data: [
       {
         id: "sys-52",
@@ -217,7 +221,28 @@ beforeEach(() => {
     refetch: vi.fn(),
   } as unknown as ReturnType<typeof useModels>);
   mockProfiles(profilesResponse());
+  vi.mocked(createLlmModelProfile).mockImplementation(async (body) => ({
+    id: "user-created",
+    name: body.name,
+    kind: "user",
+    is_default: false,
+    warnings: [],
+  }));
+  vi.mocked(updateLlmModelProfile).mockImplementation(async (id, body) => ({
+    id,
+    name: body.name ?? "组合",
+    kind: "user",
+    is_default: false,
+    main: body.main ?? null,
+    worker: body.worker ?? null,
+    background: body.background ?? null,
+    vision: body.vision ?? null,
+    reasoning_effort: body.reasoning_effort ?? null,
+    context_budget: body.context_budget ?? null,
+    warnings: [],
+  }));
   vi.mocked(deleteLlmModelProfile).mockClear();
+  vi.mocked(notifySuccess).mockClear();
   vi.mocked(setDefaultLlmModelProfile).mockClear();
   vi.mocked(createLlmModelProfile).mockClear();
   vi.mocked(updateLlmModelProfile).mockClear();
@@ -229,7 +254,7 @@ describe("ModelSettings (profiles)", () => {
   it("renders model combinations without provider key cards", () => {
     mockProviders(providersResponse());
     renderPage();
-    expect(screen.getByRole("heading", { name: "模型组合" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "装配" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "新建" }));
     expect(screen.getByText("必填，下一回合生效")).toBeTruthy();
     expect(screen.queryByText(/多人协作（委派）对工具调用要求较高/)).toBeNull();
@@ -289,7 +314,8 @@ describe("ModelSettings (profiles)", () => {
     await waitFor(() =>
       expect(setDefaultLlmModelProfile).toHaveBeenCalledWith("user-mine"),
     );
-    expect(screen.getByText(/已将「办公」设为默认组合/)).toBeTruthy();
+    expect(screen.queryByText(/已将「办公」设为默认组合/)).toBeNull();
+    expect(notifySuccess).not.toHaveBeenCalled();
   });
 
   it("copies a system preset into a user profile", async () => {
@@ -304,18 +330,24 @@ describe("ModelSettings (profiles)", () => {
     renderPage();
     fireEvent.click(screen.getAllByRole("button", { name: "复制" })[0]);
     await waitFor(() =>
-      expect(createLlmModelProfile).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: "GLM-5.2 副本",
-          main: {
-            origin: "byok",
-            provider_id: "p1",
-            model: "deepseek-v4-pro",
-          },
-          set_as_default: false,
-        }),
-      ),
+      expect(createLlmModelProfile).toHaveBeenCalledWith({
+        name: "GLM-5.2 副本",
+        set_as_default: false,
+      }),
     );
+    expect(updateLlmModelProfile).toHaveBeenCalledWith(
+      "user-copy",
+      expect.objectContaining({
+        name: "GLM-5.2 副本",
+        main: {
+          origin: "byok",
+          provider_id: "p1",
+          model: "deepseek-v4-pro",
+        },
+      }),
+    );
+    expect(notifySuccess).toHaveBeenCalledWith("已复制为「GLM-5.2 副本」");
+    expect(screen.queryByText(/已复制为/)).toBeNull();
   });
 
   it("deletes a user profile after confirming in the dialog", async () => {
@@ -331,6 +363,8 @@ describe("ModelSettings (profiles)", () => {
     await waitFor(() =>
       expect(deleteLlmModelProfile).toHaveBeenCalledWith("user-mine"),
     );
+    expect(notifySuccess).toHaveBeenCalledWith("已删除「办公」");
+    expect(screen.queryByText("已删除「办公」")).toBeNull();
   });
 
   it("does not offer delete on system presets", () => {
@@ -363,7 +397,8 @@ describe("ModelSettings (profiles)", () => {
     // 空态只出现在触发器，下方不再重复裸文案。
     expect(screen.getAllByText("跟随主模型")).toHaveLength(2);
     expect(screen.queryByText("不配置")).toBeNull();
-    expect(screen.getByText(/辩论仍用主模型/)).toBeTruthy();
+    expect(screen.getByText("协作时队员使用")).toBeTruthy();
+    expect(screen.queryByText(/辩论仍用主模型/)).toBeNull();
     expect(screen.getByText(/标题等/)).toBeTruthy();
     expect(screen.queryByText(/主模型不能看图时再配/)).toBeNull();
   });
@@ -434,7 +469,8 @@ describe("ModelSettings (profiles)", () => {
     await waitFor(() =>
       expect(screen.queryByText("编辑组合", { selector: "p" })).toBeNull(),
     );
-    expect(screen.getByText(/「办公」已保存/)).toBeTruthy();
+    expect(notifySuccess).toHaveBeenCalledWith("「办公」已保存");
+    expect(screen.queryByText("「办公」已保存")).toBeNull();
     expect(screen.getByRole("button", { name: "编辑" })).toBeTruthy();
     expect(screen.queryByText("已保存，但请留意模型可达性")).toBeNull();
     expect(screen.queryByText("模型提醒")).toBeNull();
@@ -457,19 +493,16 @@ describe("ModelSettings (profiles)", () => {
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() =>
-      expect(screen.getByText(/「办公」已保存/)).toBeTruthy(),
+      expect(screen.getByText("已保存，但请留意模型可达性")).toBeTruthy(),
     );
     expect(screen.queryByText("编辑组合", { selector: "p" })).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+    expect(notifySuccess).not.toHaveBeenCalled();
+    expect(screen.queryByText("「办公」已保存")).toBeNull();
     const statuses = screen.getAllByRole("status");
     expect(statuses.some((el) => el.textContent?.includes(warning))).toBe(true);
-    expect(screen.getByText("已保存，但请留意模型可达性")).toBeTruthy();
     expect(screen.getByText("模型提醒")).toBeTruthy();
     expect(screen.getByText(warning)).toBeTruthy();
-    // 成功路径：绿色成功文案仍在，警告不是 destructive。
-    expect(screen.getByText(/「办公」已保存/).className).toContain(
-      "text-success",
-    );
     const warningBox = statuses.find((el) => el.textContent?.includes(warning));
     expect(warningBox?.className).toContain("text-warning");
     expect(warningBox?.className).not.toContain("text-destructive");
@@ -491,8 +524,9 @@ describe("ModelSettings (profiles)", () => {
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() =>
-      expect(screen.getByText(/「办公」已保存/)).toBeTruthy(),
+      expect(notifySuccess).toHaveBeenCalledWith("「办公」已保存"),
     );
+    expect(screen.queryByText("「办公」已保存")).toBeNull();
     expect(screen.queryByText("已保存，但请留意模型可达性")).toBeNull();
     expect(screen.queryByText("模型提醒")).toBeNull();
   });
@@ -557,7 +591,7 @@ describe("ModelSettings (profiles)", () => {
       }),
     );
     renderPage();
-    expect(screen.getByRole("heading", { name: "模型组合" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "装配" })).toBeTruthy();
     expect(screen.getByText("GLM-5.2")).toBeTruthy();
   });
 
@@ -570,7 +604,7 @@ describe("ModelSettings (profiles)", () => {
       }),
     );
     renderPage();
-    expect(screen.getByRole("heading", { name: "模型组合" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "装配" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "接入服务商" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "接入服务商" })).toBeTruthy();
     expect(screen.queryByText(/需自行接入服务商后才能对话/)).toBeNull();
@@ -1081,12 +1115,16 @@ describe("ModelSettings (profiles)", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "复制" }));
     await waitFor(() =>
-      expect(createLlmModelProfile).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: "办公 副本",
-          vision: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
-        }),
-      ),
+      expect(createLlmModelProfile).toHaveBeenCalledWith({
+        name: "办公 副本",
+        set_as_default: false,
+      }),
+    );
+    expect(updateLlmModelProfile).toHaveBeenCalledWith(
+      "user-copy",
+      expect.objectContaining({
+        vision: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
+      }),
     );
   });
 
@@ -1111,7 +1149,8 @@ describe("ModelSettings (profiles)", () => {
     fireEvent.click(screen.getByRole("tab", { name: "low" }));
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() =>
-      expect(createLlmModelProfile).toHaveBeenCalledWith(
+      expect(updateLlmModelProfile).toHaveBeenCalledWith(
+        "user-new",
         expect.objectContaining({ reasoning_effort: "low" }),
       ),
     );
@@ -1175,6 +1214,50 @@ describe("ModelSettings (profiles)", () => {
     );
   });
 
+  it("saves a shorter context step and hides the control at 128K", async () => {
+    useModelsMock.mockReturnValue({
+      data: {
+        ...defaultCatalog(),
+        models: defaultCatalog().models.map((model) =>
+          model.id === "deepseek-v4-pro"
+            ? { ...model, context_length: 1_000_000 }
+            : { ...model, context_length: 128_000 },
+        ),
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useModels>);
+    mockProviders(providersResponse());
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "新建" }));
+    expect(screen.getByRole("tablist", { name: "上下文长度" })).toBeTruthy();
+    expect(
+      screen.getByRole("tab", { name: "1M" }).getAttribute("aria-selected"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("tab", { name: "128K" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(updateLlmModelProfile).toHaveBeenCalledWith(
+        "user-created",
+        expect.objectContaining({ context_budget: 128_000 }),
+      ),
+    );
+
+    cleanup();
+    useModelsMock.mockReturnValue({
+      data: defaultCatalog(),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useModels>);
+    mockProviders(providersResponse());
+    mockProfiles(profilesResponse());
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    expect(screen.queryByRole("tablist", { name: "上下文长度" })).toBeNull();
+  });
+
   it("copies reasoning_effort with the combination", async () => {
     vi.mocked(createLlmModelProfile).mockResolvedValue({
       id: "user-copy",
@@ -1208,11 +1291,105 @@ describe("ModelSettings (profiles)", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "复制" }));
     await waitFor(() =>
-      expect(createLlmModelProfile).toHaveBeenCalledWith(
+      expect(updateLlmModelProfile).toHaveBeenCalledWith(
+        "user-copy",
         expect.objectContaining({
           name: "办公 副本",
           reasoning_effort: "max",
         }),
+      ),
+    );
+  });
+
+  it("shelf surface lays knobs in rows and saves a context step without a button", async () => {
+    const catalog = {
+      ...defaultCatalog(),
+      models: defaultCatalog().models.map((model) =>
+        model.id === "deepseek-v4-pro"
+          ? {
+              ...model,
+              context_length: 1_000_000,
+              reasoning_effort: {
+                options: ["low", "high", "max"],
+                default: "high",
+              },
+            }
+          : model,
+      ),
+    };
+    const onSave = vi.fn(async () => undefined);
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ProfileEditor
+            surface="shelf"
+            title=""
+            showTitle={false}
+            showCancel={false}
+            framed={false}
+            providers={providersResponse().providers}
+            catalog={catalog as never}
+            catalogModels={catalog.models as never}
+            platformAvailable={false}
+            initial={{
+              name: "办公",
+              main: {
+                origin: "byok",
+                provider_id: "p1",
+                model: "deepseek-v4-pro",
+              },
+              worker: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
+              background: null,
+              vision: null,
+              reasoning_effort: null,
+              context_budget: null,
+            }}
+            pending={false}
+            onCancel={() => undefined}
+            onSave={onSave}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("名称")).toBeNull();
+    expect(screen.queryByText("高级 · 其他模型")).toBeNull();
+    expect(screen.queryByText("必填，下一回合生效")).toBeNull();
+    expect(screen.queryByText(/厂商档位/)).toBeNull();
+    expect(screen.queryByText(/标题等/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "恢复跟随" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
+    const row = screen.getByTestId("assembly-model-row");
+    expect(row.className).toContain("flex-wrap");
+    const mainTrigger = document.getElementById("profile-main");
+    expect(mainTrigger?.textContent).toContain("DeepSeek V4 Pro");
+    expect(mainTrigger?.textContent).not.toContain("1M");
+    const shorts = screen.getByTestId("assembly-model-shorts");
+    expect(shorts.className).toContain("w-max");
+    expect(shorts.className).toContain("max-w-full");
+    expect(shorts.className).toContain("shrink-0");
+    expect(
+      within(shorts).queryByRole("tablist", { name: "思考强度" }),
+    ).toBeNull();
+    expect(
+      within(shorts).getByRole("combobox", { name: "思考强度" }),
+    ).toBeTruthy();
+    expect(
+      within(shorts).queryByRole("tablist", { name: "上下文长度" }),
+    ).toBeNull();
+    expect(
+      within(shorts).getByRole("combobox", { name: "上下文长度" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("调低后，窗口环和较早内容按这个数。")).toBeNull();
+    expect(within(shorts).getByText("组队队员")).toBeTruthy();
+    expect(within(shorts).getByText("后台任务")).toBeTruthy();
+    expect(within(shorts).queryByText("辩论仍用主模型")).toBeNull();
+    fireEvent.change(screen.getByRole("combobox", { name: "上下文长度" }), {
+      target: { value: "128000" },
+    });
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ context_budget: 128_000 }),
       ),
     );
   });

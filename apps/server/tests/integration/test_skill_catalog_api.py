@@ -47,28 +47,7 @@ async def test_skill_catalog_lists_mine(client):
     assert r.status_code == 200, r.text
     mine = next(m for m in r.json()["mine"] if m["id"] == doc["id"])
     assert mine["name"] == "合同审查"
-    assert mine["offers_tools"] == []
     assert "occupies" not in mine
-
-
-async def test_skill_catalog_lists_offers_tools(client):
-    await register_and_login(client, "skoffer")
-    r = await client.post(
-        "/v1/documents",
-        json={
-            "name": "合同审查.md",
-            "role": "rule",
-            "content": (
-                "---\napply: on_demand\ndescription: 审\noffers_tools: host\n---\n怎么审\n"
-            ),
-            "apply_mode": "on_demand",
-        },
-    )
-    assert r.status_code == 200, r.text
-    catalog = await client.get("/v1/skill-catalog")
-    assert catalog.status_code == 200, catalog.text
-    mine = next(m for m in catalog.json()["mine"] if m["id"] == r.json()["id"])
-    assert mine["offers_tools"] == ["host"]
 
 
 async def test_skill_catalog_write_routes_gone(client):

@@ -361,7 +361,7 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
     {
       // 我的 · 提示词。搜「技能」落到这里。
       id: "nav-guidelines",
-      title: "提示词",
+      title: "交代",
       category: "前往",
       icon: ScrollText,
       keywords: [
@@ -373,6 +373,8 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
         "jineng",
         "nengli",
         "技能",
+        "提示词",
+        "jiaodai",
       ],
       run: go(APP_PATHS.toolbox.guidelines),
     },
@@ -381,7 +383,7 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
       title: "MCP",
       category: "前往",
       icon: Unplug,
-      keywords: ["mcp", "stdio"],
+      keywords: ["mcp", "stdio", "插头"],
       run: go(APP_PATHS.toolbox.mcp),
     },
     {
@@ -399,7 +401,7 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
         "开场工具",
         "出厂",
       ],
-      run: go(APP_PATHS.toolbox.official),
+      run: go(`${APP_PATHS.toolbox.root}#tools`),
     },
     {
       id: "nav-store",
@@ -443,10 +445,18 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
     },
     {
       id: "nav-settings-model",
-      title: "设置 · 模型组合",
+      title: "设置 · 装配",
       category: "前往",
       icon: Cpu,
-      keywords: ["settings", "model", "moxing", "zuhe", "组合"],
+      keywords: [
+        "settings",
+        "model",
+        "moxing",
+        "zuhe",
+        "组合",
+        "装配",
+        "zhuangpei",
+      ],
       run: go("/more/model"),
     },
     {

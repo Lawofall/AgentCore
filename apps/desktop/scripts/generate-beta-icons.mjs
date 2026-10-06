@@ -1,6 +1,9 @@
 /**
- * Derive beta pack / runtime icons from stable sources (hue + 「测」角标).
- * Does not redesign the brand mark — only a distinguishable channel cue.
+ * Derive beta pack / runtime icons from stable sources (「测」角标).
+ * The ligature is near-neutral, so a hue shift would not mark the channel.
+ * Badge sits in the empty top-right. The mark leans 6°, so the C's top
+ * terminal sits further right: r is 10% of the side and the margin is
+ * 3.125%, which clears that stroke and stays inside the squircle.
  *
  *   node scripts/generate-beta-icons.mjs
  */
@@ -18,9 +21,10 @@ async function makeBetaIcon(src, dest) {
   const w = meta.width ?? 512;
   const h = meta.height ?? 512;
   const size = Math.min(w, h);
-  const badgeR = Math.round(size * 0.18);
-  const cx = w - badgeR - Math.round(size * 0.06);
-  const cy = badgeR + Math.round(size * 0.06);
+  const badgeR = Math.round(size * 0.1);
+  const margin = Math.round(size * 0.03125);
+  const cx = w - badgeR - margin;
+  const cy = badgeR + margin;
   const fontSize = Math.round(badgeR * 1.15);
   const svg = Buffer.from(
     `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
@@ -35,7 +39,6 @@ async function makeBetaIcon(src, dest) {
   mkdirSync(dirname(dest), { recursive: true });
   await sharp(src)
     .ensureAlpha()
-    .modulate({ hue: 42, saturation: 1.06 })
     .composite([{ input: svg, blend: "over" }])
     .png()
     .toFile(dest);

@@ -1,4 +1,5 @@
 import { useModels } from "@/hooks/useModels";
+import { useChatPaneId } from "@/lib/chatPane";
 import {
   COMPOSER_VISION_HINT,
   draftHasImageAttachment,
@@ -6,7 +7,6 @@ import {
   useComposerActiveProfile,
 } from "@/lib/composerModelProfile";
 import { draftKeyFor, useComposerDraftStore } from "@/stores/composer";
-import { useConversationStore } from "@/stores/conversation";
 
 const EMPTY_ATTACHMENTS: { name: string }[] = [];
 
@@ -15,7 +15,7 @@ const EMPTY_ATTACHMENTS: { name: string }[] = [];
  * main, no vision slot). Muted pre-send line; does not block send.
  */
 export function ComposerVisionHint() {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   const draftKey = draftKeyFor(conversationId);
   const attachments = useComposerDraftStore(
     (s) => s.drafts[draftKey]?.attachments ?? EMPTY_ATTACHMENTS,

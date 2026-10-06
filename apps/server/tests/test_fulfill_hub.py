@@ -64,8 +64,25 @@ async def test_reregister_same_device_replaces_session():
     assert hub.connection_count("u1") == 1
     assert "host" in new.caps
     assert new.roots == {"r2"}
-    # Old session was closed (sentinel delivered).
+    # Routing moves immediately; the old stream stays up until handover so the
+    # new session can be seeded first.
+    assert old._queue.empty()
+    hub.complete_handover(new)
+    assert await old.get() == {"type": "superseded"}
     assert await old.get() is None
+    # The stream's own unregister is a no-op once handover closed it.
+    hub.unregister(old, reason="client_disconnect")
+    assert hub.get_session("u1", "d1") is new
+
+
+async def test_close_all_ends_live_sessions():
+    hub = FulfillerHub()
+    desktop = hub.register("u1", "d1", caps=["workspace"], roots=["r1"])
+    web = hub.register("u1", "web-1", caps=[], roots=[], platform="web")
+    hub.close_all()
+    assert hub.connection_count("u1") == 0
+    assert await desktop.get() is None
+    assert await web.get() is None
 
 
 async def test_find_prefers_origin_device_over_most_recent():

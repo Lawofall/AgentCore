@@ -2,7 +2,7 @@
 
 ``AUDIENCE_BOTH`` + ``ToolSurface.WORKER_ONLY`` + ``manual_wire``. Wired after
 ``build_*_registry`` by ``_wire_conversation_log_tools`` (CEO and worker).
-Product-always-on; opening-table resident (not on-demand).
+Opening-table resident unless the assembly switch ``chats`` is off.
 
 With account narrow-ticket creds (sidecar), calls the cloud HTTP API instead of
 the local ConversationRepository (大众桌面无本机 PG).

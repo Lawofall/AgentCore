@@ -47,7 +47,7 @@ def maybe_enqueue_inprocess_call(
     """Enqueue one ``cost_calls`` row (+ materialize its run) when drain is live.
 
     ``user_id`` is the only envelope key required: an account-level chrome call
-    (AI 改写 / 文档 description, ``cost_role=assist``) belongs to no conversation
+    (AI 改写, ``cost_role=assist``) belongs to no conversation
     and lands as a ``conversation_id = NULL`` row — real spend stays visible in
     the account windows instead of being dropped (成本配额与计费 §三).
 

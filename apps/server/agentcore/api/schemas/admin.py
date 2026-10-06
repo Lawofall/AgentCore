@@ -744,9 +744,8 @@ class ReplayConversation(BaseModel):
     username: str | None
     display_name: str | None
     created_at: datetime
-    # Session pin into ``llm_model_profiles`` (or system preset id); null = follow
-    # account default. Display name always comes from expand (effective combo).
-    model_profile_id: str | None = None
+    # This conversation's assembly. Display name comes from expand.
+    assembly_id: str | None = None
     model_profile_name: str | None = None
     # Soft-delete stamp. Roster includes tombstones by default; replay must match
     # (null = live). Not an owner-scoped recycle-bin field.

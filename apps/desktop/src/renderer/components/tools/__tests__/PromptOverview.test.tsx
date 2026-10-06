@@ -8,6 +8,7 @@ import {
   skillCatalogId,
   toolCatalogId,
 } from "@/lib/promptCatalog";
+import { PROMPT_DRAG_MIME } from "@/lib/promptCatalogDrag";
 import type { CapabilityTool } from "@/services/capabilities";
 import {
   cleanup,
@@ -16,7 +17,8 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(cleanup);
@@ -165,7 +167,6 @@ function renderOverview(
   const noop = () => {};
   return render(
     <PromptOverview
-      pane="mine"
       rail={filledRail()}
       selectedId={null}
       dropDest={null}
@@ -174,7 +175,6 @@ function renderOverview(
       busy={false}
       onOpenItem={vi.fn()}
       onCreateMine={vi.fn()}
-      onCreateFolder={vi.fn()}
       onSubmitRenameFolder={vi.fn()}
       onCancelRenameFolder={vi.fn()}
       onAcceptAlwaysDrag={noop}
@@ -188,31 +188,39 @@ function renderOverview(
 }
 
 describe("PromptOverview", () => {
-  it("必带叶子铺成矮卡，点开对应条目", () => {
+  it("必带叶子铺成矮卡，右上角标必带，点开对应条目", () => {
     const onOpenItem = vi.fn();
     renderOverview({ onOpenItem });
-    fireEvent.click(screen.getByRole("button", { name: "短约束" }));
+    const shelf = screen.getByTestId("prompt-rail-shelf");
+    fireEvent.click(within(shelf).getByRole("button", { name: "短约束" }));
     expect(onOpenItem.mock.calls.map((call) => call[0])).toEqual([
       mineCatalogId("rule"),
     ]);
-    expect(screen.queryByRole("button", { name: "全员共享准则" })).toBeNull();
+    expect(within(shelf).getByText("必带")).toBeTruthy();
+    expect(
+      within(screen.getByTestId("prompt-rail-constitution")).queryByRole(
+        "button",
+        { name: "短约束" },
+      ),
+    ).toBeNull();
+    expect(screen.queryByRole("heading", { name: "必带" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
     expect(screen.queryByRole("button", { name: "读工作区文件" })).toBeNull();
     expect(screen.queryByTestId("prompt-tile-tool:read")).toBeNull();
     expect(screen.queryByTestId("prompt-resident-bar")).toBeNull();
     expect(screen.getByTestId("prompt-overview").textContent).not.toMatch(/%/);
   });
 
-  it("空必带也留区，拖得进", () => {
+  it("不拖的时候不留必带虚线，拖过才出现落点", () => {
     renderOverview({
       rail: emptyRail(),
     });
-    expect(screen.getByRole("heading", { name: "必带" })).toBeTruthy();
-    expect(screen.getByText("拖一条进来，下一回合就会带上。")).toBeTruthy();
-    expect(
-      screen.queryByText("没有必带条目。拖一条进来，下一回合就会带上。"),
-    ).toBeNull();
-    expect(screen.getByText("还没有夹。")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "还没有夹。" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "必带" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
+    expect(screen.queryByText("0 条")).toBeNull();
+    expect(screen.queryByText("拖一条进来，下一回合就会带上。")).toBeNull();
+    expect(screen.queryByText("还没有夹。")).toBeNull();
+    expect(screen.queryByTestId("prompt-rail-always")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-official")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-tools")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-how")).toBeNull();
@@ -220,14 +228,26 @@ describe("PromptOverview", () => {
     expect(screen.queryByTestId("prompt-rail-factory")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-always-tools")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-on-demand-tools")).toBeNull();
+    fireEvent.dragOver(screen.getByTestId("prompt-rail-shelf"), {
+      dataTransfer: { types: [PROMPT_DRAG_MIME] },
+    });
+    const strip = screen.getByText("松手后下一回合会带上");
+    expect(strip.className).toContain("min-h-11");
+    expect(strip.className).not.toContain("justify-center");
+    expect(strip.className).not.toContain("text-center");
   });
 
-  it("按需叶子铺成行，夹只当区标题", () => {
+  it("没归夹的按需铺在根上，不画其他", () => {
     const onOpenItem = vi.fn();
     renderOverview({ onOpenItem });
-    expect(screen.getByRole("heading", { name: "其他" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "合同审查" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "合同审查" }));
+    expect(screen.queryByRole("heading", { name: "其他" })).toBeNull();
+    expect(screen.queryByText("其他")).toBeNull();
+    const shelf = screen.getByTestId("prompt-rail-shelf");
+    expect(
+      within(shelf).getByRole("button", { name: "合同审查" }),
+    ).toBeTruthy();
+    expect(within(shelf).queryByText("按需")).toBeNull();
+    fireEvent.click(within(shelf).getByRole("button", { name: "合同审查" }));
     expect(onOpenItem.mock.calls.map((call) => call[0])).toEqual([
       mineCatalogId("d1"),
     ]);
@@ -235,129 +255,266 @@ describe("PromptOverview", () => {
     expect(screen.getByTestId("prompt-overview").textContent).not.toMatch(/%/);
   });
 
-  it("按需先铺我的夹；出厂工具和官方 HOW 不在我的", () => {
+  it("出厂卡和必带、散落按需在同一张货架", () => {
     renderOverview();
-    const always = screen.getByTestId("prompt-rail-always");
-    const onDemand = screen.getByTestId("prompt-rail-on-demand");
-    const create = screen.getByTestId("prompt-rail-create");
-    const folders = screen.getByTestId("my-skills");
+    const shelf = screen.getByTestId("prompt-rail-shelf");
+    const factory = screen.getByTestId("prompt-rail-factory");
     expect(screen.queryByTestId("prompt-rail-official")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-tools")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-how")).toBeNull();
+    expect(screen.queryByTestId("prompt-rail-on-demand")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-on-demand-tools")).toBeNull();
-    expect(screen.queryByTestId("prompt-rail-factory")).toBeNull();
+    expect(shelf.contains(factory)).toBe(true);
+    expect(
+      within(factory).getByRole("button", { name: "写一条按需薄技能" }),
+    ).toBeTruthy();
+    expect(within(factory).getByText("薄技能")).toBeTruthy();
+    expect(within(factory).getByText("官方")).toBeTruthy();
+    expect(within(factory).queryByText("合同审查")).toBeNull();
+    expect(within(factory).queryByText("短约束")).toBeNull();
+    expect(factory.querySelector("[draggable='true']")).toBeNull();
+    expect(within(shelf).getByText("必带")).toBeTruthy();
+    expect(within(shelf).queryByText("按需")).toBeNull();
     expect(screen.queryByRole("heading", { name: "工具" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "文件" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "出厂" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "出厂项" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "官方" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "必带" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
     expect(screen.queryByRole("button", { name: "薄技能" })).toBeNull();
     expect(screen.queryByRole("button", { name: "读工作区文件" })).toBeNull();
     expect(screen.queryByRole("button", { name: "这台电脑。" })).toBeNull();
-    expect(
-      always.compareDocumentPosition(onDemand) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(onDemand.contains(folders)).toBe(true);
-    expect(
-      create.compareDocumentPosition(folders) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      within(create).queryByRole("button", { name: "新建条目" }),
-    ).toBeNull();
-    expect(within(create).getByRole("button", { name: "新建夹" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "新建夹" })).toBeNull();
     expect(screen.queryByTestId("prompt-overview-updates")).toBeNull();
-    expect(screen.getByRole("heading", { name: "必带" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "按需" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "连接器" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "手上的工具" })).toBeNull();
     expect(
       screen.queryByText("打开文本、代码或图片，看里面写了什么"),
     ).toBeNull();
-    expect(screen.queryByText("写一条按需薄技能")).toBeNull();
+    expect(screen.getByText("写一条按需薄技能")).toBeTruthy();
     expect(screen.queryByText("每回合都带着")).toBeNull();
     expect(screen.queryByText("用到才翻")).toBeNull();
+    const constitution = screen.getByTestId("prompt-rail-constitution");
+    expect(
+      constitution.compareDocumentPosition(shelf) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
-  it("空夹是拖放空文案，不是按钮", () => {
+  it("出厂开关不占货架，点卡只打开这条", () => {
+    const onOpenItem = vi.fn();
+    renderOverview({
+      onOpenItem,
+      factoryControl: {
+        present: true,
+        canToggle: true,
+        onPresentChange: vi.fn(),
+      },
+    });
+    const shelf = screen.getByTestId("prompt-rail-shelf");
+    expect(screen.queryByRole("heading", { name: "出厂" })).toBeNull();
+    expect(within(shelf).queryByRole("switch", { name: "出厂" })).toBeNull();
+    fireEvent.click(
+      within(shelf).getByRole("button", { name: "写一条按需薄技能" }),
+    );
+    expect(onOpenItem.mock.calls.map((call) => call[0])).toEqual([
+      skillCatalogId("thin_skill"),
+    ]);
+    expect(within(shelf).queryByText("thin_skill")).toBeNull();
+  });
+
+  it("出厂卡标题独占一行，说明停在第一句", () => {
     renderOverview({
       rail: emptyRail({
-        folders: [
+        official: [
           {
-            id: "folder:law",
-            name: "法律合规",
-            source: "user",
-            documentId: "law",
-            items: [],
+            id: skillCatalogId("data_file_landing"),
+            kind: "skill",
+            group: "factory",
+            label: "data_file_landing",
+            depth: 0,
+            tocGroup: "交付",
+            parentId: null,
+            skill: {
+              name: "data_file_landing",
+              summary:
+                "用户要把数据文件交成可打开的表时才查阅。成篇、做页面、问产品不查阅。",
+              body: "how",
+              group: "交付",
+              blurb: "把数据文件整理成打开扫得懂的表",
+            },
           },
         ],
       }),
     });
+    const factory = screen.getByTestId("prompt-rail-factory");
+    const title = within(factory).getByRole("heading", {
+      name: "把数据文件整理成打开扫得懂的表",
+    });
+    expect(
+      within(factory).getByText("用户要把数据文件交成可打开的表时才查阅。"),
+    ).toBeTruthy();
+    expect(factory.textContent).not.toContain("成篇");
+    expect(title.nextElementSibling?.textContent).toContain("官方");
+    expect(screen.queryByText("0 条")).toBeNull();
+  });
+
+  it("空夹在根上是一格，点进去才写拖到这里", () => {
+    function Harness({
+      children,
+    }: {
+      children: (
+        openId: string | null,
+        open: (id: string) => void,
+        close: () => void,
+      ) => ReactNode;
+    }) {
+      const [openId, setOpenId] = useState<string | null>(null);
+      return <>{children(openId, setOpenId, () => setOpenId(null))}</>;
+    }
+    const rail = emptyRail({
+      folders: [
+        {
+          id: "folder:law",
+          name: "法律合规",
+          source: "user",
+          documentId: "law",
+          items: [
+            mineItem({ id: "d1", label: "合同审查", applyMode: "on_demand" }),
+          ],
+        },
+      ],
+    });
+    render(
+      <Harness>
+        {(openId, open, close) => (
+          <PromptOverview
+            rail={rail}
+            selectedId={null}
+            dropDest={null}
+            otherFolder={otherFolder}
+            busy={false}
+            openFolderId={openId}
+            onOpenFolder={open}
+            onCloseFolder={close}
+            onOpenItem={vi.fn()}
+            onCreateMine={vi.fn()}
+            onSubmitRenameFolder={vi.fn()}
+            onCancelRenameFolder={vi.fn()}
+            onAcceptAlwaysDrag={() => {}}
+            onDropAlways={() => {}}
+            onAcceptFolderDrag={() => {}}
+            onDropFolder={() => {}}
+            onRejectDrag={() => {}}
+          />
+        )}
+      </Harness>,
+    );
+    expect(screen.queryByText("拖到这里")).toBeNull();
+    expect(screen.queryByRole("button", { name: "合同审查" })).toBeNull();
+    expect(screen.getByText("1 条")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "法律合规" }));
+    expect(screen.getByRole("button", { name: "合同审查" })).toBeTruthy();
+    expect(screen.queryByText("拖到这里")).toBeNull();
+    expect(screen.queryByText("按需")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+    expect(screen.queryByRole("button", { name: "合同审查" })).toBeNull();
+    expect(screen.getByRole("button", { name: "法律合规" })).toBeTruthy();
+  });
+
+  it("空夹点进去写拖到这里，不是按钮", () => {
+    function Harness() {
+      const [openId, setOpenId] = useState<string | null>("folder:law");
+      return (
+        <PromptOverview
+          rail={emptyRail({
+            folders: [
+              {
+                id: "folder:law",
+                name: "法律合规",
+                source: "user",
+                documentId: "law",
+                items: [],
+              },
+            ],
+          })}
+          selectedId={null}
+          dropDest={null}
+          otherFolder={otherFolder}
+          busy={false}
+          openFolderId={openId}
+          onOpenFolder={setOpenId}
+          onCloseFolder={() => setOpenId(null)}
+          dragging
+          onOpenItem={vi.fn()}
+          onCreateMine={vi.fn()}
+          onSubmitRenameFolder={vi.fn()}
+          onCancelRenameFolder={vi.fn()}
+          onAcceptAlwaysDrag={() => {}}
+          onDropAlways={() => {}}
+          onAcceptFolderDrag={() => {}}
+          onDropFolder={() => {}}
+          onRejectDrag={() => {}}
+        />
+      );
+    }
+    render(<Harness />);
     expect(screen.getByText("拖到这里")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "拖到这里" })).toBeNull();
+    expect(screen.getByText("松手后下一回合会带上")).toBeTruthy();
+    expect(screen.getByText("松手后不归夹")).toBeTruthy();
+    expect(screen.queryByText("0 条")).toBeNull();
   });
 
   it("必带矮卡不塞准则正文", () => {
     renderOverview();
     expect(screen.queryByText("aaaa")).toBeNull();
-    expect(screen.queryByRole("button", { name: "全员共享准则" })).toBeNull();
-    expect(screen.queryByText("每回合都在的工作宪法")).toBeNull();
+    expect(
+      within(screen.getByTestId("prompt-rail-shelf")).queryByRole("button", {
+        name: "全员共享准则",
+      }),
+    ).toBeNull();
+    expect(screen.getByText("每回合都在的工作宪法")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "薄技能" })).toBeNull();
     expect(screen.queryByTestId("prompt-rail-official")).toBeNull();
     expect(screen.queryByTestId("prompt-tile-tool:read")).toBeNull();
     expect(screen.queryByText("本机")).toBeNull();
   });
 
-  it("官方栏：提示词（准则在前）/ 工具分区", () => {
+  it("准则矮卡在出厂上面，点开读准则，不铺工具大卡", () => {
     const onOpenItem = vi.fn();
-    renderOverview({ pane: "official", onOpenItem });
+    renderOverview({ onOpenItem });
     fireEvent.click(screen.getByRole("button", { name: "全员共享准则" }));
     expect(onOpenItem.mock.calls.map((call) => call[0])).toEqual(["shared"]);
-    const prompts = screen.getByTestId("prompt-rail-prompts");
-    expect(
-      within(prompts)
-        .getAllByRole("button")
-        .map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["全员共享准则", "薄技能"]);
-    expect(within(prompts).getByText("每回合都在的工作宪法")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "提示词" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "工具" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "准则" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "教法" })).toBeNull();
+    const constitution = screen.getByTestId("prompt-rail-constitution");
+    expect(within(constitution).getByText("每回合都在的工作宪法")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "准则" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "必带" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "手上的工具" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "短约束" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "合同审查" })).toBeNull();
-    expect(
-      within(screen.getByTestId("prompt-rail-tools")).getByRole("button", {
-        name: "读工作区文件",
-      }),
-    ).toBeTruthy();
-    expect(screen.getByTestId("prompt-tile-tool:read")).toBeTruthy();
-    expect(screen.queryByTestId("prompt-rail-always")).toBeNull();
-    expect(screen.queryByTestId("prompt-rail-on-demand")).toBeNull();
-    expect(screen.queryByTestId("prompt-rail-connectors")).toBeNull();
-    expect(screen.queryByTestId("prompt-rail-constitution")).toBeNull();
-    expect(screen.queryByTestId("prompt-rail-how")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "提示词" })).toBeNull();
+    expect(screen.queryByTestId("prompt-rail-tools")).toBeNull();
+    expect(screen.queryByTestId("prompt-tile-tool:read")).toBeNull();
     expect(screen.queryByText("aaaa")).toBeNull();
+    const shelf = screen.getByTestId("prompt-rail-shelf");
+    expect(
+      constitution.compareDocumentPosition(shelf) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      within(shelf).getByRole("button", { name: "写一条按需薄技能" }),
+    ).toBeTruthy();
   });
 
-  it("官方空核也留卡，点得开", () => {
-    const onOpenItem = vi.fn();
+  it("空基座不留准则卡", () => {
     renderOverview({
-      pane: "official",
       rail: emptyRail({
         constitution: [sharedItem("")],
       }),
-      onOpenItem,
     });
-    fireEvent.click(screen.getByRole("button", { name: "全员共享准则" }));
-    expect(onOpenItem.mock.calls.map((call) => call[0])).toEqual(["shared"]);
-    expect(screen.getByTestId("prompt-rail-prompts")).toBeTruthy();
-    expect(screen.getByText("每回合都在的工作宪法")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "全员共享准则" })).toBeNull();
+    expect(screen.queryByText("每回合都在的工作宪法")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-constitution")).toBeNull();
-    expect(screen.queryByTestId("prompt-rail-how")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-tools")).toBeNull();
   });
 });

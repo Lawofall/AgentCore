@@ -241,12 +241,8 @@ def test_catalog_faces_are_not_an_orchestration_dumpster():
         assert by_name[name] is face, name
     orchestration = {n for n, f in by_name.items() if f is ToolFace.ORCHESTRATION}
     folder = {n for n, f in by_name.items() if f is ToolFace.FOLDER}
-    table = {n for n, f in by_name.items() if f is ToolFace.TABLE}
-    doc = {n for n, f in by_name.items() if f is ToolFace.DOC}
     assert orchestration == {n for n, f in _CATALOG_FACE.items() if f is ToolFace.ORCHESTRATION}
     assert folder == {n for n, f in _CATALOG_FACE.items() if f is ToolFace.FOLDER}
-    assert table == {n for n, f in _CATALOG_FACE.items() if f is ToolFace.TABLE}
-    assert doc == {n for n, f in _CATALOG_FACE.items() if f is ToolFace.DOC}
 
 
 def test_on_demand_directory_splits_folder_off_orchestration():

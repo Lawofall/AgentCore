@@ -7,6 +7,14 @@ export const APP_PATHS = {
   files: "/files",
   toolbox: {
     root: "/toolbox",
+    /** 装配「总」节：换份、星标、摘要。 */
+    overview: "/toolbox/overview",
+    /** 装配「模型」节。 */
+    model: "/toolbox/model",
+    /** 装配「工具」节。旧 `/toolbox/mine/tools` 仍收向交代。 */
+    toolSwitches: "/toolbox/tools",
+    /** 装配「信封」节。 */
+    envelope: "/toolbox/envelope",
     mine: {
       skills: "/toolbox/mine/skills",
       tools: "/toolbox/mine/tools",
@@ -15,9 +23,9 @@ export const APP_PATHS = {
       workflows: "/toolbox/mine/workflows",
     },
     market: "/toolbox/market",
-    /** 出厂只读：提示词（准则与教法）/ 工具。 */
+    /** 旧官方深页。落到组装页，?tool= / ?skill= 打开读卡。 */
     official: "/toolbox/official",
-    /** 旧说明书深页书签；?tool= / ?skill= 收到官方读卡，其余收到我的。 */
+    /** 旧说明书深页书签；?tool= / ?skill= 落到组装页读卡，其余收到交代。 */
     guides: "/toolbox/guides",
     /** Canonical aliases — 旧名仍可用，指向现行壳。 */
     tools: "/toolbox/mine/tools",
@@ -57,7 +65,7 @@ export const APP_PATHS = {
 
 /** Deep pages that leave the two-page shell (画布 / 手册). */
 export const TOOLBOX_PAGE_BACK = {
-  to: APP_PATHS.toolbox.mine.skills,
+  to: `${APP_PATHS.toolbox.root}#prompts`,
   label: "工具箱",
 } as const;
 

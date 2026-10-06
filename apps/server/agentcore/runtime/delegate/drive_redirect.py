@@ -134,13 +134,12 @@ class RedirectController:
     ) -> bool:
         """Salvage → continue_run. True on successful hot path; False → caller cold-falls.
 
-        Continuation ids follow the same 唤回闸 as CEO ``continue_from``:
+        Continuation ids follow CEO ``continue_from`` numbering:
         ``{run_id}_rev{recall_count+1}`` with ``continues_run_id`` = session root on the wire.
         A second redirect on the same author continues from the author session so
         numbering increments (``_rev2``, …) instead of minting a duplicate ``_rev1``.
         """
         from agentcore.runtime.runs import RunPhase, RunSession, continue_run
-        from agentcore.runtime.runs.constants import DEFAULT_RECALL_LIMIT
         from agentcore.runtime.runs.salvage import is_continuable_transcript
         from agentcore.runtime.runs.types import ContextBlock
 
@@ -166,14 +165,6 @@ class RedirectController:
                 partial=True,
             )
         else:
-            return False
-        if session.recall_count >= DEFAULT_RECALL_LIMIT:
-            logger.info(
-                "delegate.run_redirect_hot_capped",
-                execution_id=self.execution_id,
-                run_id=original.run_id,
-                recall_count=session.recall_count,
-            )
             return False
         continuation_run_id = f"{original.run_id}_rev{session.recall_count + 1}"
         context_blocks = [

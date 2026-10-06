@@ -7,7 +7,6 @@ import type { PromptCatalogItem } from "@/lib/promptCatalog";
 import { formatAlwaysRowChars } from "@/lib/promptSizes";
 import { skillStoreGroupLabel } from "@/pages/toolbox/market/skillStoreGroups";
 import type { CapabilitySkill } from "@/services/capabilities";
-import { parseOffersTools } from "@/services/skillCatalog";
 import type { SkillStoreListing } from "@/services/skillStore";
 
 export type PromptShelfChipTone =
@@ -141,10 +140,7 @@ function mineShelfCopy(
   opts: PromptMineShelfOpts & { subtitle?: string },
 ): PromptShelfCopy {
   const description = distinctLine(item.description, item.label);
-  const tags = [
-    ...toolsTag(parseOffersTools(item.content).length > 0),
-    ...(opts.sceneGroupLabel ? [opts.sceneGroupLabel] : []),
-  ];
+  const tags = [...(opts.sceneGroupLabel ? [opts.sceneGroupLabel] : [])];
   return {
     title: item.label,
     subtitle: opts.subtitle,
@@ -158,16 +154,19 @@ function mineAccessory(
   item: Extract<PromptCatalogItem, { kind: "mine" }>,
   opts: PromptMineShelfOpts,
 ): PromptShelfChip[] {
+  const inAlways = item.applyMode === "always";
   if (opts.fromMarket) {
-    const chips = [chip("市场")];
+    const chips: PromptShelfChip[] = [];
+    if (inAlways) chips.push(chip("必带"));
+    chips.push(chip("市场"));
     if (opts.hasUpdate) chips.push(chip("有更新", "primary"));
     return chips;
   }
   const published = opts.listingStatus === "published";
   const takenDown = opts.listingStatus === "taken_down";
-  const inAlways = item.applyMode === "always";
   const chips: PromptShelfChip[] = [];
-  if (inAlways || published || takenDown) chips.push(chip("我的"));
+  if (inAlways) chips.push(chip("必带"));
+  if (published || takenDown) chips.push(chip("我的"));
   if (published) chips.push(chip("已上架"));
   if (takenDown) chips.push(chip("平台已下架"));
   return chips;

@@ -290,12 +290,10 @@ export function stepEdgeAnimatedSig(
 ): string {
   if (!execution) return "0";
   if (captainRunId && bareTarget === captainRunId) {
-    return deriveCaptainStatus(execution, captainRunId, {
-      turnTerminal,
-      detached,
-    }) === "running"
-      ? "1"
-      : "0";
+    // 指向汇点的边不因 CEO 还在写字而流动。活边只跟还在跑的队员。
+    void turnTerminal;
+    void detached;
+    return "0";
   }
   return execution.runs.find((s) => s.id === bareTarget)?.status === "running"
     ? "1"
@@ -673,17 +671,19 @@ export function useCaptainEndpointLive(runId: string): EndpointLive {
       : ("pending" as RunStatus);
     const waitingRoles = execution ? waitingWorkerRoles(execution) : [];
     const seatWait = execution ? workerProgress(execution) : wait;
-    const waitCaption = (
-      coordinationWaitCaptainCaption(seatWait, { waitingRoles }) ?? ""
-    ).trim();
-    const sinkStatus: RunStatus =
-      waitCaption && !detached ? "running" : captainStatus;
+    // 等人时正文写在等谁。人齐了不再生成「等待团队」，也不靠这句把汇点焊成进行中。
+    const waitCaption =
+      captainStatus === "pending"
+        ? (
+            coordinationWaitCaptainCaption(seatWait, { waitingRoles }) ?? ""
+          ).trim()
+        : "";
     const preview = captainSinkPreview({
       captainStatus,
       answerPreview: answerContent ? headText(answerContent) : "",
     });
     return {
-      status: sinkStatus,
+      status: captainStatus,
       statusCaption: waitCaption || undefined,
       label: "",
       preview,

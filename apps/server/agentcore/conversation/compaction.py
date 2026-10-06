@@ -25,8 +25,9 @@ Design (mirrors the offline memory consolidation pattern):
   and does not push the watermark. Does not wait when nothing is foldable.
 - **Near-ceiling (pre-turn, 定案⑦A)** — when last-turn **single-request**
   ``prompt_tokens`` are near **this turn's** model window (``compaction_near_context_ratio``
-  of ``context_length``, or absolute ``compaction_near_context_tokens`` when length
-  is unknown), ``compact_before_turn`` **awaits** fold pass(es) before history assemble.
+  of the effective window (assembly context budget, else catalog ``context_length``;
+  absolute ``compaction_near_context_tokens`` when that window is unknown),
+  ``compact_before_turn`` **awaits** fold pass(es) before history assemble.
   A successful fold proceeds even if the stored watermark still looks near. If the
   watermark is near **and** the fold did not write, the send is refused (product
   overflow copy) so the turn never spends an upstream 413. Does not wait for the
@@ -107,7 +108,6 @@ from agentcore.llm.background_failure import (
 )
 from agentcore.llm.credentials import LLMCredentials
 from agentcore.llm.factory import build_provider
-from agentcore.llm.model_metadata import model_metadata_for
 from agentcore.llm.model_selection import build_selected_request, select_call
 from agentcore.llm.provider.call_budget import complete_within_budget
 from agentcore.llm.resolve import resolve_turn_model as resolve_user_model
@@ -890,6 +890,27 @@ async def ensure_compaction_before_turn(
         return False
 
 
+async def _assembly_context_budget(session: object, conversation_id: str) -> int | None:
+    """Shorter ceiling on this conversation's assembly, or None for the model window."""
+    try:
+        from agentcore.db.models import LlmModelProfile
+        from agentcore.db.repositories import ConversationRepository
+
+        conv = await ConversationRepository(session).get_by_id_unscoped(conversation_id)  # type: ignore[arg-type]
+        aid = getattr(conv, "assembly_id", None) if conv is not None else None
+        if not aid:
+            return None
+        row = await session.get(LlmModelProfile, aid)  # type: ignore[attr-defined]
+        if row is None or getattr(row, "user_id", None) != getattr(conv, "user_id", None):
+            return None
+        budget = getattr(row, "context_budget", None)
+        if isinstance(budget, int) and not isinstance(budget, bool) and budget > 0:
+            return budget
+        return None
+    except Exception:
+        return None
+
+
 async def _load_fit_watermark(
     conversation_id: str, model_id: str | None
 ) -> tuple[int, int | None]:
@@ -899,6 +920,7 @@ async def _load_fit_watermark(
     refuse a send. Empty-fail zeros are skipped inside ``latest_prompt_tokens``.
     """
     tokens = 0
+    budget: int | None = None
     try:
         async with async_session_factory() as session:
             loaded = await TurnMetricsRepository(session).latest_prompt_tokens(
@@ -914,6 +936,7 @@ async def _load_fit_watermark(
                     else 0
                 )
             tokens = int(loaded or 0)
+            budget = await _assembly_context_budget(session, conversation_id)
     except Exception as e:
         logger.warning(
             "compaction.near_ceiling_failed",
@@ -921,10 +944,10 @@ async def _load_fit_watermark(
             error=str(e),
         )
         tokens = 0
-    context_length: int | None = None
-    if model_id:
-        context_length = model_metadata_for(model_id).context_length
-    return tokens, context_length
+        budget = None
+    from agentcore.llm.context_budget import effective_context_length
+
+    return tokens, effective_context_length(model_id, budget)
 
 
 def _overflow_error() -> Exception:

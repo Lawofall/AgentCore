@@ -200,15 +200,68 @@ def _fingerprint(docs: list[Document], *, used: int, max_chars: int) -> str:
     return f"{digest}:{used}:{max_chars}"
 
 
+async def _starred_assembly_always_docs(
+    repo: DocumentRepository, user_id: str
+) -> list[Document] | None:
+    """Starred assembly's 必带 set.
+
+    ``None`` means this user has no star yet, so the caller keeps the document
+    column. An empty list means the star carries no always rules.
+    """
+    from sqlalchemy import select
+
+    from agentcore.db.models import AssemblySkill, LlmModelProfile, User
+    from agentcore.memory.rule_resolve import counts_as_always_content
+
+    session = getattr(repo, "_session", None)
+    if session is None:
+        return None
+    user = await session.get(User, user_id)
+    assembly_id = getattr(user, "default_assembly_id", None) if user else None
+    if not isinstance(assembly_id, str) or not assembly_id:
+        return None
+    assembly = await session.get(LlmModelProfile, assembly_id)
+    if assembly is None or assembly.user_id != user_id:
+        return None
+    skills = await session.execute(
+        select(AssemblySkill).where(AssemblySkill.assembly_id == assembly_id)
+    )
+    modes = {
+        skill.document_id: skill.apply_mode
+        for skill in skills.scalars()
+        if skill.apply_mode in ("always", "paths")
+    }
+    if not modes:
+        return []
+    found = await session.execute(select(Document).where(Document.id.in_(list(modes))))
+    out: list[Document] = []
+    for doc in found.scalars():
+        if getattr(doc, "deleted_at", None) is not None or getattr(doc, "ai_maintained", False):
+            continue
+        if getattr(doc, "user_id", user_id) != user_id:
+            continue
+        mode = modes.get(doc.id)
+        if mode == "always" or (
+            mode == "paths" and counts_as_always_content(doc.content or "")
+        ):
+            out.append(doc)
+    return out
+
+
 async def _always_docs_for_scope(
     repo: DocumentRepository, user_id: str, scope: str | None
 ) -> list[Document]:
     """Always-on user-rule docs of one scope (``ai_maintained=false``).
 
-    Matches ``<设定>`` injection: AI-maintained cores (偏好 / 画像 / 导航) stay
-    off the pool. Callers that need global vs project meters still invoke this
-    once per scope — that split cannot be collapsed into a single query.
+    Account scope (``scope is None``) is the starred assembly's 必带 set when a
+    star exists. No star keeps the document column, so callers that never
+    created an assembly still meter the old pool. Folder scope stays on the
+    document. AI-maintained cores stay off the pool.
     """
+    if scope is None:
+        starred = await _starred_assembly_always_docs(repo, user_id)
+        if starred is not None:
+            return starred
     from agentcore.memory.rule_resolve import counts_as_always_content
 
     always = await repo.list_injectable_rules(user_id, scope, ai_maintained=False)

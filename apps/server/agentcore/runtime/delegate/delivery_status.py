@@ -1196,7 +1196,7 @@ Callers stamp disk truth (``stamp_results_disk_truth``) before emit; this
     blocking = [g for g in gaps if _is_blocking(g)]
     warnings = [g for g in gaps if not _is_blocking(g)]
 
-    # 待用户操作：① 无执行环境 → 按会话 location 诚实分流（已在云≠再「先在云上做」；
+    # 待用户操作：① 无执行环境 → 按会话 location 诚实分流（已在云≠再「云上做完再写入」；
     #    wire kind 仍可 bind_local_folder；桌面默认同通道，云是选项）；
     # ② 额度 SKIPPED 未跑节点 → 续跑入口。
     # 整页 QA 预算 defer 不再挂一键续派。

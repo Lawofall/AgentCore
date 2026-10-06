@@ -3,12 +3,10 @@
 上下文注入统一 Step 2（常驻源插件化）. Step 1 centralized the *assembly* (ContextAssembler);
 this gives every always-on source — base prompt, runtime context, memory ``<设定>``, CEO
 core, skill directory, workspace facts, per-turn attachment — ONE shape:
-a named fragment + its render ``order`` + an optional ``budget``. So:
-
-- ordering is DECLARATIVE in one place (:class:`SectionOrder`), not implicit in the
-  ``.add()`` call sequence at each site, and
-- ``budget`` is unused metadata on the contributor; the assembler never trims
-  against it. Write-side always-on quota lives in ``memory/always_quota.py``.
+a named fragment + its render ``order``. Ordering is DECLARATIVE in one place
+(:class:`SectionOrder`), not implicit in the ``.add()`` call sequence at each site.
+The assembler never trims. Write-side always-on quota lives in
+``memory/always_quota.py``.
 
 Eager by design: the owner computes ``text`` (some sources are async, e.g. the workspace
 overview) and hands the finished string here — this is a descriptor, not a lazy renderer.
@@ -122,12 +120,10 @@ class PromptContributor:
 
     ``key`` is a stable identifier (debuggable / addressable; not rendered). ``text`` is
     the verbatim fragment — the owner keeps owning exact wording + whitespace. ``order``
-    places it (see :class:`SectionOrder`). ``budget`` is unused metadata
-    (``None`` = unbounded); the assembler never trims against it. Write-side
+    places it (see :class:`SectionOrder`). The assembler never trims. Write-side
     always-on quota lives in ``memory/always_quota.py``.
     """
 
     key: str
     text: str
     order: int
-    budget: int | None = None

@@ -99,8 +99,6 @@ class ToolFace(StrEnum):
     WEB = "web"
     EXECUTION = "execution"
     HOST_BROWSER = "host_browser"
-    TABLE = "table"
-    DOC = "doc"
     ORCHESTRATION = "orchestration"
 
 
@@ -111,8 +109,6 @@ TOOL_FACE_LABELS: dict[ToolFace, str] = {
     ToolFace.WEB: "网络",
     ToolFace.EXECUTION: "执行",
     ToolFace.HOST_BROWSER: "本机 · 浏览器",
-    ToolFace.TABLE: "表格",
-    ToolFace.DOC: "文档",
     ToolFace.ORCHESTRATION: "编排",
 }
 
@@ -123,8 +119,6 @@ TOOL_FACE_ORDER: tuple[ToolFace, ...] = (
     ToolFace.WEB,
     ToolFace.EXECUTION,
     ToolFace.HOST_BROWSER,
-    ToolFace.TABLE,
-    ToolFace.DOC,
     ToolFace.ORCHESTRATION,
 )
 

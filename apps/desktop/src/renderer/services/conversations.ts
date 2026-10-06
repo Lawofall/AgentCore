@@ -14,6 +14,8 @@ type Schemas = components["schemas"];
 type BackendConversation = Schemas["ConversationSummary"] & {
   /** List preview; field name is fixed even if OpenAPI lags the payload. */
   last_message_preview?: string | null;
+  /** Present once OpenAPI includes the field; older generated types omit it. */
+  context_cut_undoable?: boolean;
 };
 /** Paginated conversation list (`GET /v1/conversations`). */
 type ConversationListResponse = Schemas["ConversationListResponse"];
@@ -48,9 +50,10 @@ function toConversation(c: BackendConversation): Conversation {
     pinned: c.pinned ?? false,
     archived: c.archived ?? false,
     permissionAxes: normalizeAxes(c.permission_axes ?? undefined),
-    modelProfileId: c.model_profile_id ?? null,
+    assemblyId: c.assembly_id ?? null,
     contextCompacted: c.context_compacted ?? false,
     compactedThrough: c.compacted_through ?? null,
+    contextCutUndoable: c.context_cut_undoable ?? false,
     ...(c.context_gap
       ? {
           contextGap: {
@@ -151,7 +154,14 @@ export interface DeletedConversationMeta {
 /** The conversation recycle bin plus the retention window it is governed by. */
 export interface ConversationTrash {
   items: DeletedConversationMeta[];
+  /** Every recoverable chat in the window. The page may show fewer. */
+  total: number;
   retentionDays: number;
+}
+
+export interface TrashEmptyResult {
+  purged: number;
+  skippedBusy: number;
 }
 
 type BackendDeletedConversation = Schemas["DeletedConversationSummary"];
@@ -176,6 +186,7 @@ export async function listConversationTrash(): Promise<ConversationTrash> {
   );
   return {
     items: res.data.map(toDeletedConversation),
+    total: res.total,
     retentionDays: res.retention_days,
   };
 }
@@ -197,6 +208,14 @@ export async function restoreConversation(id: string): Promise<Conversation> {
 /** Permanently remove a trash row. Past retention / a restore that won is 409. */
 export async function purgeTrashedConversation(id: string): Promise<void> {
   await api.delete(`/v1/conversations/trash/${id}`);
+}
+
+/** Permanently remove every in-window trash chat, not just the capped page. */
+export async function emptyConversationTrash(): Promise<TrashEmptyResult> {
+  const res = await api.delete<Schemas["TrashEmptyResponse"]>(
+    "/v1/conversations/trash",
+  );
+  return { purged: res.purged, skippedBusy: res.skipped_busy };
 }
 
 /** Persist a new conversation title. */
@@ -240,6 +259,59 @@ export async function duplicateConversation(
   const res = await api.post<BackendConversation>(
     `/v1/conversations/${id}/duplicate`,
     { until_message_id: untilMessageId },
+  );
+  return toConversation(res);
+}
+
+export interface ContextCutPreview {
+  summary: string;
+  keepMessageId: string;
+  foldThrough: string;
+  foldDigest: string;
+  foldedCount: number;
+}
+
+/** Summarize everything still in the window before this message. Does not write. */
+export async function previewContextCut(
+  id: string,
+  messageId: string,
+): Promise<ContextCutPreview> {
+  const res = await api.post<{
+    summary: string;
+    keep_message_id: string;
+    fold_through: string;
+    fold_digest: string;
+    folded_count: number;
+  }>(`/v1/conversations/${id}/context-cut/preview`, {
+    message_id: messageId,
+  });
+  return {
+    summary: res.summary,
+    keepMessageId: res.keep_message_id,
+    foldThrough: res.fold_through,
+    foldDigest: res.fold_digest,
+    foldedCount: res.folded_count,
+  };
+}
+
+/** Store the prose the user confirmed. The server reattaches the identity ledger. */
+export async function commitContextCut(
+  id: string,
+  messageId: string,
+  foldDigest: string,
+  summary: string,
+): Promise<Conversation> {
+  const res = await api.post<BackendConversation>(
+    `/v1/conversations/${id}/context-cut`,
+    { message_id: messageId, fold_digest: foldDigest, summary },
+  );
+  return toConversation(res);
+}
+
+/** Restore compaction to the moment before the latest cut. */
+export async function undoContextCut(id: string): Promise<Conversation> {
+  const res = await api.post<BackendConversation>(
+    `/v1/conversations/${id}/context-cut/undo`,
   );
   return toConversation(res);
 }
@@ -304,16 +376,16 @@ export async function setConversationArchived(
 }
 
 /**
- * 切换会话使用的模型组合。传 profile id 固定本会话组合（活引用定义）；
- * 传 `null` = 再钉当时账号默认（不是活跟随）。不可用 / 越权时后端返 422（由调用方 toast 呈现）。
+ * 换这场用的装配。传 id 钉住；传 `null` 再钉当时星标。
+ * 不可用 / 越权时后端返 422（由调用方 toast 呈现）。
  */
 export async function setConversationModelProfile(
   id: string,
   profileId: string | null,
 ): Promise<Conversation> {
-  const model_profile_id = profileId?.trim() ? profileId.trim() : null;
+  const assembly_id = profileId?.trim() ? profileId.trim() : null;
   const res = await api.patch<BackendConversation>(`/v1/conversations/${id}`, {
-    model_profile_id,
+    assembly_id,
   });
   return toConversation(res);
 }

@@ -32,6 +32,14 @@ export type ConsoleBufferSnapshot = {
   };
 };
 
+/**
+ * Electron 宿主打进页面 console 的安全警告（无 CSP / unsafe-eval）。
+ * 不是页面脚本的错误；留在缓冲里会被模型当成页面故障。
+ */
+export function isElectronHostSecurityWarning(text: string): boolean {
+  return text.includes("Electron Security Warning");
+}
+
 function looksLikeBlob(text: string): boolean {
   if (text.length < 400) return false;
   if (text.length > 4_000) return true;
@@ -77,6 +85,7 @@ export class ConsoleRingBuffer {
     text: unknown,
     timestamp: number = Date.now() / 1000,
   ): void {
+    if (isElectronHostSecurityWarning(String(text ?? ""))) return;
     const entry: ConsoleMessageEntry = {
       level: normalizeConsoleLevel(level),
       text: scrubConsoleText(text),

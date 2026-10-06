@@ -60,13 +60,6 @@ def test_contributors_returns_kept_in_render_order():
     assert keys == ["base", "attach"]  # sorted by order, falsy dropped
 
 
-def test_budget_is_carried_but_not_enforced_today():
-    # budget rides on the contributor; assembler does not trim.
-    asm = ContextAssembler().add("base", "x" * 100, SectionOrder.BASE, budget=10)
-    assert asm.render() == "x" * 100
-    assert asm.contributors()[0].budget == 10
-
-
 def test_observe_is_chainable_and_side_effect_free():
     # COST-004 仅观测起步: observe() only logs per-section chars — it returns self (chainable)
     # and the rendered prompt is byte-identical with or without it (zero behavior change).
@@ -76,7 +69,7 @@ def test_observe_is_chainable_and_side_effect_free():
         .add("attach", "ATTACH", SectionOrder.ATTACHMENT)
     )
     before = asm.render()
-    assert asm.observe(scope="test", soft_cap=1000) is asm  # chainable (returns self)
+    assert asm.observe(scope="test") is asm  # chainable (returns self)
     assert asm.render() == before == "BASE\nATTACH"  # observe trimmed/changed nothing
 
 
@@ -137,7 +130,7 @@ def test_observe_emits_assembly_hash(monkeypatch):
         .add("memory", "MEM", SectionOrder.MEMORY)
     )
     expected = assembly_hash(asm.render())
-    asm.observe(scope="unit", soft_cap=None)
+    asm.observe(scope="unit")
     assert len(captured) == 1
     row = captured[0]
     assert row["event"] == "cost.prompt_assembled"
@@ -166,7 +159,6 @@ def _ceo_turn(**overrides: object) -> str:
 
     sections: dict[str, object] = {
         "attachment_context": "",
-        "soft_cap": None,
         "include_runtime": False,
     }
     sections.update(overrides)
@@ -200,14 +192,3 @@ def test_ceo_turn_observation_covers_table_facts(monkeypatch):
     from agentcore.runtime.resolve.prompt import strip_turn_envelope_fence
 
     assert row["assembly_hash"] == assembly_hash(strip_turn_envelope_fence(out))
-
-
-def test_ceo_turn_soft_cap_fires_on_table_facts_that_alone_blow_it(monkeypatch):
-    captured = _spy_on_observe(monkeypatch)
-    table = "选中一行，单元格里有一段较长的事实。\n" * 20
-
-    _ceo_turn(table_context=table, soft_cap=200)
-    assert captured[-1]["over_soft_cap"] is True
-
-    _ceo_turn(soft_cap=200)
-    assert captured[-1]["over_soft_cap"] is False

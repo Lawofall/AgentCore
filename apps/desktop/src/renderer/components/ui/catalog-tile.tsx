@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CatalogIconShell } from "@/components/ui/catalog-icon-shell";
 import { cn } from "@/lib/utils";
@@ -8,20 +7,35 @@ import type { MouseEvent, ReactNode } from "react";
 export const CATALOG_GRID_CLASS =
   "grid grid-cols-[repeat(auto-fill,minmax(min(240px,100%),1fr))] gap-3";
 
+/** Assembly-page cards: min 200px, one line of copy, about five columns on the canvas. */
+export const ASSEMBLY_CARD_GRID_CLASS =
+  "grid grid-cols-[repeat(auto-fill,minmax(min(200px,100%),1fr))] gap-2";
+
 const TILE_BODY_CLASS = "flex min-h-0 flex-1 flex-col gap-3 p-4";
 
 export interface CatalogTileProps {
-  icon: ReactNode;
-  colorVar: string;
+  /** `shelf` is the store / 官方 tile. `compact` is the assembly-page card. */
+  density?: "shelf" | "compact";
+  icon?: ReactNode;
+  colorVar?: string;
   title: string;
   /** One line under the title, in the identity row (author, etc.). */
   subtitle?: ReactNode;
   description?: string;
   /** Top-right: status or unique identity only (已装 / 有更新 / 尚未开放 / 官方). */
   accessory?: ReactNode;
+  /**
+   * `description` puts a non-interactive mark on the explanation row so the
+   * title keeps the full card width. Switches stay on the default corner.
+   */
+  accessoryPlacement?: "corner" | "description";
   /** Bottom chips: classification metadata, not status. */
   tags?: ReactNode;
   muted?: boolean;
+  /** Fade the title but keep the tile openable. Off switches use this. */
+  dim?: boolean;
+  /** Accessible name of the open target. Defaults to the title. */
+  ariaLabel?: string;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   /** Keep description to two lines. */
   descriptionClamp?: boolean;
@@ -40,16 +54,25 @@ export interface CatalogTileProps {
  *
  * Slots: icon+title(+subtitle) | accessory → description → children → tags → footer.
  * Do not put classification chips in accessory, or status in tags.
+ *
+ * `compact` drops the icon plate, the two-line description reserve, and the
+ * bottom tag row. Title and one-line description sit left; accessory sits right.
+ * `accessoryPlacement="description"` moves that mark onto the explanation row
+ * and lets the explanation wrap to two lines.
  */
 export function CatalogTile({
+  density = "shelf",
   icon,
   colorVar,
   title,
   subtitle,
   description,
   accessory,
+  accessoryPlacement = "corner",
   tags,
   muted,
+  dim = false,
+  ariaLabel,
   onClick,
   descriptionClamp = true,
   children,
@@ -57,6 +80,108 @@ export function CatalogTile({
   className,
 }: CatalogTileProps) {
   const interactive = Boolean(onClick) && !muted;
+  const faded = muted || dim;
+
+  if (density === "compact" && accessoryPlacement === "description") {
+    const titleClass = cn(
+      "truncate text-sm font-medium",
+      faded ? "text-muted-foreground" : "text-foreground",
+    );
+    const explanation = (
+      <>
+        <h3 className={titleClass}>{title}</h3>
+        {description || accessory ? (
+          <span className="mt-2 flex items-start gap-2">
+            {description ? (
+              <span className="line-clamp-2 min-w-0 flex-1 text-xs text-muted-foreground">
+                {description}
+              </span>
+            ) : (
+              <span className="min-w-0 flex-1" />
+            )}
+            {accessory ? (
+              <span className="flex shrink-0 items-center gap-1.5">
+                {accessory}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
+        {children ? <div className="mt-2 min-w-0">{children}</div> : null}
+      </>
+    );
+    return (
+      <Card
+        variant={interactive ? "interactive" : "default"}
+        className={cn(
+          "relative flex h-full w-full min-w-0 flex-col",
+          className,
+        )}
+      >
+        {interactive ? (
+          <button
+            type="button"
+            aria-label={ariaLabel ?? title}
+            onClick={onClick}
+            className="w-full px-3 py-3 text-left"
+          >
+            {explanation}
+          </button>
+        ) : (
+          <div className="px-3 py-3">{explanation}</div>
+        )}
+      </Card>
+    );
+  }
+
+  if (density === "compact") {
+    const compactCopy = (
+      <>
+        <h3
+          className={cn(
+            "truncate text-sm font-medium",
+            faded ? "text-muted-foreground" : "text-foreground",
+          )}
+        >
+          {title}
+        </h3>
+        {description ? (
+          <p className="mt-2 truncate text-xs text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
+        {children ? <div className="mt-2 min-w-0">{children}</div> : null}
+      </>
+    );
+    return (
+      <Card
+        variant={interactive ? "interactive" : "default"}
+        className={cn(
+          "relative flex h-full w-full min-w-0 flex-col",
+          className,
+        )}
+      >
+        <div className="flex items-start gap-2 px-3 py-3">
+          {interactive ? (
+            <button
+              type="button"
+              aria-label={ariaLabel ?? title}
+              onClick={onClick}
+              className="min-w-0 flex-1 text-left"
+            >
+              {compactCopy}
+            </button>
+          ) : (
+            <div className="min-w-0 flex-1">{compactCopy}</div>
+          )}
+          {accessory ? (
+            <div className="flex shrink-0 items-center gap-1.5">
+              {accessory}
+            </div>
+          ) : null}
+        </div>
+      </Card>
+    );
+  }
   const bottom =
     tags || footer ? (
       <div className="mt-auto flex flex-col gap-2">
@@ -67,31 +192,26 @@ export function CatalogTile({
       </div>
     ) : null;
 
-  const body = (
+  const copy = (
     <>
       <div className="flex shrink-0 items-center gap-3">
-        <CatalogIconShell colorVar={colorVar} muted={muted}>
-          {icon}
-        </CatalogIconShell>
-        <div className="flex min-w-0 flex-1 items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <h3
-              className={cn(
-                "truncate text-sm font-medium",
-                muted ? "text-muted-foreground" : "text-foreground",
-              )}
-            >
-              {title}
-            </h3>
-            {subtitle ? (
-              <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                {subtitle}
-              </div>
-            ) : null}
-          </div>
-          {accessory ? (
-            <div className="flex shrink-0 items-center gap-1.5">
-              {accessory}
+        {icon && colorVar ? (
+          <CatalogIconShell colorVar={colorVar} muted={faded}>
+            {icon}
+          </CatalogIconShell>
+        ) : null}
+        <div className={cn("min-w-0 flex-1", accessory && "pr-16")}>
+          <h3
+            className={cn(
+              "truncate text-sm font-medium",
+              faded ? "text-muted-foreground" : "text-foreground",
+            )}
+          >
+            {title}
+          </h3>
+          {subtitle ? (
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">
+              {subtitle}
             </div>
           ) : null}
         </div>
@@ -117,27 +237,32 @@ export function CatalogTile({
     <Card
       variant={interactive ? "interactive" : "default"}
       className={cn(
-        "flex h-full w-full min-w-0 flex-col",
+        "relative flex h-full w-full min-w-0 flex-col",
         interactive &&
           "shadow-raised transition-shadow group-hover:shadow-overlay",
         className,
       )}
     >
       {interactive ? (
-        <Button
-          variant="ghost"
-          aria-label={title}
+        <button
+          type="button"
+          aria-label={ariaLabel ?? title}
           onClick={onClick}
           className={cn(
-            "group !flex h-full w-full min-w-0 items-stretch justify-start text-left font-normal",
+            "flex h-full w-full min-w-0 flex-col text-left",
             TILE_BODY_CLASS,
           )}
         >
-          {body}
-        </Button>
+          {copy}
+        </button>
       ) : (
-        <div className={TILE_BODY_CLASS}>{body}</div>
+        <div className={TILE_BODY_CLASS}>{copy}</div>
       )}
+      {accessory ? (
+        <div className="absolute right-4 top-4 z-10 flex items-center gap-1.5">
+          {accessory}
+        </div>
+      ) : null}
     </Card>
   );
 }

@@ -345,6 +345,8 @@ def test_salvage_stamps_generation_ms_from_probe(tmp_path):
     )
     probe, token = bind_turn_latency()
     probe.add_generation_ms(1_900)
+    probe.ttft_reasoning_ms = 2_200
+    probe.ttft_content_ms = 400
 
     async def run() -> dict:
         await store.begin_turn(conversation_id="c1", message_id="m1", trace_id="c" * 32)
@@ -362,8 +364,10 @@ def test_salvage_stamps_generation_ms_from_probe(tmp_path):
     finally:
         reset_turn_latency(token)
     assert record["generation_ms"] == 1_900
+    assert record["ttft_ms"] == 400
     body = to_record_turn_body(record)
     assert body["generation_ms"] == 1_900
+    assert body["ttft_ms"] == 400
 
 
 def test_to_record_turn_body_includes_sorted_journal(tmp_path):

@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Input, fieldSurfaceClass } from "@/components/ui/input";
 import { SearchField } from "@/components/ui/search-field";
 import {
   type DefaultModelOption,
@@ -211,6 +211,7 @@ export function ProfileModelSelect({
   followLabel,
   labelledBy,
   describedBy,
+  compactTrigger = false,
   onChange,
 }: {
   id?: string;
@@ -223,6 +224,11 @@ export function ProfileModelSelect({
   labelledBy?: string;
   /** 外部说明元素 id。 */
   describedBy?: string;
+  /**
+   * Closed trigger is one line (the name) at the same height as a native
+   * select. Window, capabilities and price stay on the open rows.
+   */
+  compactTrigger?: boolean;
   onChange: (value: string) => void;
 }) {
   const decoded = value ? decodePointer(value) : null;
@@ -338,6 +344,7 @@ export function ProfileModelSelect({
     title: string;
     badge?: string | null;
     sub?: string;
+    unavailable?: boolean;
   } => {
     if (!decoded?.model) {
       return {
@@ -373,6 +380,7 @@ export function ProfileModelSelect({
         sub:
           reason ||
           triggerSecondaryLine(selectedGroup?.providerLabel, opt, false),
+        unavailable: Boolean(reason),
       };
     }
     return {
@@ -382,6 +390,10 @@ export function ProfileModelSelect({
   };
 
   const trigger = triggerLabel();
+  const triggerSub =
+    trigger.sub && (!compactTrigger || trigger.unavailable)
+      ? trigger.sub
+      : undefined;
   const channelChipLabel = selectedGroup
     ? selectedGroup.orphan
       ? `${selectedGroup.providerLabel}（需改选）`
@@ -442,8 +454,16 @@ export function ProfileModelSelect({
             else openPicker();
           }}
           className={cn(
-            "mt-1.5 flex w-full items-center gap-2 rounded-lg border border-input bg-background px-2.5 text-left text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60",
-            trigger.sub ? "min-h-9 py-1.5" : "h-9",
+            compactTrigger
+              ? cn(
+                  fieldSurfaceClass,
+                  "flex w-full items-center gap-2 px-2.5 text-left",
+                  triggerSub ? "h-auto min-h-8 py-1" : "h-8",
+                )
+              : cn(
+                  "mt-1.5 flex w-full items-center gap-2 rounded-lg border border-input bg-background px-2.5 text-left text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60",
+                  triggerSub ? "min-h-9 py-1.5" : "h-9",
+                ),
             !decoded?.model && "text-muted-foreground",
           )}
         >
@@ -461,9 +481,9 @@ export function ProfileModelSelect({
                 <Badge tone="primary">{trigger.badge}</Badge>
               ) : null}
             </span>
-            {trigger.sub ? (
+            {triggerSub ? (
               <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                {trigger.sub}
+                {triggerSub}
               </span>
             ) : null}
           </span>

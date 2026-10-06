@@ -13,6 +13,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from agentcore.llm.model_ref import parse_model_input
+from agentcore.llm.turn_catalog import DELEGATE_CATALOG_UNAVAILABLE
 from agentcore.runtime.debate.models import (
     ModelIdentity,
     coerce_identity,
@@ -39,6 +40,32 @@ TASK_MODEL_SCHEMA_PROPS: dict[str, dict[str, object]] = {
         ),
     },
 }
+
+
+def items_need_model_catalog(items: Sequence[Any]) -> bool:
+    """True when any task names a model. Empty model follows the worker slot."""
+    for raw in items:
+        if isinstance(raw, dict) and not identity_from_task_item(raw).is_empty():
+            return True
+    return False
+
+
+async def load_catalog_for_items(
+    items: Sequence[Any],
+    *,
+    user_id: str,
+) -> tuple[ModelCatalog | None, str]:
+    """``(None, "")`` when no task names a model. Otherwise the turn catalog or an error."""
+    if not items_need_model_catalog(items):
+        return None, ""
+    from agentcore.llm.turn_catalog import (
+        DELEGATE_CATALOG_UNAVAILABLE,
+        require_turn_model_catalog,
+    )
+
+    return await require_turn_model_catalog(
+        user_id, unavailable=DELEGATE_CATALOG_UNAVAILABLE
+    )
 
 
 def identity_from_task_item(item: Mapping[str, Any]) -> ModelIdentity:
@@ -100,10 +127,7 @@ async def prepare_task_model_fields(
 
         if needs_mention_resolve(ident):
             if catalog is None and session is None:
-                errors.append(
-                    f"{where}.model 已填模型提及「{ident.model}」但无法加载目录消歧；"
-                    "请稍后重试，禁止 silent 回退。"
-                )
+                errors.append(f"{where}.model {DELEGATE_CATALOG_UNAVAILABLE}")
                 continue
             from agentcore.llm.catalog import resolve_model_catalog as _resolve_cat
 
@@ -111,10 +135,7 @@ async def prepare_task_model_fields(
             if cat is None and session is not None and user_id:
                 cat = await _resolve_cat(session, user_id)
             if cat is None:
-                errors.append(
-                    f"{where}.model 已填模型提及「{ident.model}」但无法加载目录消歧；"
-                    "请稍后重试，禁止 silent 回退。"
-                )
+                errors.append(f"{where}.model {DELEGATE_CATALOG_UNAVAILABLE}")
                 continue
             prefer = ident.origin if ident.origin in ("platform", "byok") else None
             result = resolve_model_mention(
@@ -135,9 +156,7 @@ async def prepare_task_model_fields(
             continue
 
         if not user_id and catalog is None and session is None:
-            errors.append(
-                f"{where}.model 已填模型身份但无法校验目录；请稍后重试，禁止 silent 回退。"
-            )
+            errors.append(f"{where}.model {DELEGATE_CATALOG_UNAVAILABLE}")
             continue
 
         catalog_err = await validate_identity_in_catalog(

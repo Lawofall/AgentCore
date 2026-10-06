@@ -2,11 +2,10 @@
 
 import time
 
-# 全员基座（CEO + 每位 worker）：只写两工种同真的句子。一段无标签。
-# 输出形状（适合可视化则优先呈现，不点 mermaid / 不教分隔符）；
-# 末句诚实（已做以这回合回执为准）。
+# 全员基座（CEO + 每位 worker）：现空、不注入。Assembler 跳过 falsy。
+# 回潮走内容闸，且 eval 证明这句承重。
 # 来源编号在回执尾；目录行 ≠ 已查阅在 `<按需目录>` 前言，不进本基座。
-# 「已写进文件则结论给路径」不进本基座：条件句每回合都在，会被读成催写盘。写盘场面才成立，不预写进常驻。
+# 「已写进文件则结论给路径」不进本基座：条件句每回合都在，会被读成催写盘。写盘场面才成立：prose write 的模型转录尾注，不进写回执，不预写进常驻。
 # 听谁的：真用户 role=user；引擎信封/纠偏 = [系统提示] 围栏的合成 user；回执 role=tool。
 # 不进本基座。用户指令 vs <设定>：设定块前言 + 路由硬约束。
 # 工种不对称（卡住问谁）进工具 description。CEO 工厂身份现空（回潮走入场闸）。路由在 delegate description。
@@ -18,8 +17,7 @@ import time
 # 不写注入近义词表；consult 时序写在 consult description，不进本基座。
 # 凭据落盘：写侧熔断硬拒。不进本基座。
 # 某时刻长到需要目录再套该时刻标签；不要预留空壳。
-_DEFAULT_SYSTEM_PROMPT = """\
-适合可视化的内容，优先采用可视化呈现。对用户说已做的，以这回合回执为准。"""
+_DEFAULT_SYSTEM_PROMPT = ""
 
 # Date granularity (NOT second-precision time) on purpose. CEO and workers:
 # this block rides a per-turn ``[系统提示]`` envelope so ``role: system`` stays

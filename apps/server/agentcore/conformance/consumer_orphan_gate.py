@@ -90,6 +90,7 @@ _EVENT_FACTORY_NAMES: frozenset[str] = frozenset(
         "run_output_reset",
         "run_reasoning_delta",
         "run_phase",
+        "run_spend",
         "run_tool_progress",
         "escalation_raised",
         "escalation_required",

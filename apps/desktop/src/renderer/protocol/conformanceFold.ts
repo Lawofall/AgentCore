@@ -268,6 +268,7 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
       case "run_reasoning_delta":
       case "run_tool_progress":
       case "run_phase":
+      case "run_spend":
       case "run_completed":
       case "run_failed":
       case "run_cancelled":

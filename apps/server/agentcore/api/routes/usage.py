@@ -190,7 +190,7 @@ async def get_usage_summary(
     (``GET /messages/{id}/cost``), not this monthly account view.
 
     This is the account total, so it also carries spend that belongs to no
-    conversation at all (AI 改写 / 文档 description — ``role=assist`` ledger rows).
+    conversation at all (AI 改写 — ``role=assist`` ledger rows).
     ``requests`` counts assistant turns only, so those rows raise 花销 without
     raising 请求数.
 

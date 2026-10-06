@@ -6,11 +6,8 @@
   glyph on transparency — anything with color or gradient collapses into a white blob. The brand
   tint is applied by the system from default_notification_color, not from here.
 
-  The mark is BrandMarkIcon (apps/desktop/src/renderer/components/brand/BrandMark.tsx) — three
-  linked nodes — kept in its original 32-unit coordinates so drift against the brand mark stays
-  visible; the group scales it into the 24dp box with ~1.2dp of breathing room. The orbit launcher
-  icon is deliberately NOT the source: its hairline ellipses and glow are exactly what the
-  silhouette pass destroys.
+  The mark is the AC ligature from assets/agentcore-icon.svg (paths a-and-lower-c / upper-c).
+  The group scales those 1024-unit paths into the 24dp box with about 1.5dp of side padding.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
@@ -19,23 +16,16 @@
     android:viewportHeight="24">
 
     <group
-        android:scaleX="0.96"
-        android:scaleY="0.96"
-        android:translateX="-3.36"
-        android:translateY="-2.88">
+        android:scaleX="0.031204"
+        android:scaleY="0.031204"
+        android:translateX="-4.023"
+        android:translateY="-3.696">
 
-        <!-- Nodes: circles at (16,8) / (8,23) / (24,23), r=3.25. -->
         <path
             android:fillColor="#FFFFFFFF"
-            android:pathData="M16,4.75 a3.25,3.25 0 1,1 0,6.5 a3.25,3.25 0 1,1 0,-6.5 Z M8,19.75 a3.25,3.25 0 1,1 0,6.5 a3.25,3.25 0 1,1 0,-6.5 Z M24,19.75 a3.25,3.25 0 1,1 0,6.5 a3.25,3.25 0 1,1 0,-6.5 Z" />
-
-        <!-- Links between the nodes. -->
+            android:pathData="M 385,245 L 269,529 L 177,761 L 277,761 L 318,647 L 326,630 L 511,630 L 483,558 L 355,558 L 353,556 L 425,373 L 428,375 L 533,642 L 557,680 L 584,709 L 615,732 L 640,745 L 668,755 L 691,760 L 850,761 L 850,677 L 721,677 L 703,674 L 684,668 L 664,658 L 646,645 L 629,628 L 615,608 L 604,586 L 467,246 Z" />
         <path
-            android:pathData="M14.2,10.6 L9.8,20.4 M17.8,10.6 L22.2,20.4 M11.2,23 L20.8,23"
-            android:strokeColor="#FFFFFFFF"
-            android:strokeWidth="2"
-            android:strokeLineCap="round" />
-
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M 850,245 L 702,245 L 672,249 L 641,258 L 612,272 L 588,289 L 566,311 L 547,338 L 533,369 L 597,527 L 596,450 L 599,423 L 606,401 L 626,369 L 639,356 L 654,345 L 677,334 L 696,329 L 714,327 L 850,327 Z" />
     </group>
-
 </vector>

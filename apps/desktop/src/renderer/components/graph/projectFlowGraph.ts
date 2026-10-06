@@ -42,6 +42,7 @@ import {
   debateRoundSettledMark,
   deriveArtifacts,
   isDebateFoldedBeatRun,
+  isRunFoldVisible,
   pickDebateCrossExamActivateId,
   workerRunsOf,
 } from "./helpers";
@@ -268,11 +269,7 @@ export function projectFlowNodes({
       continue;
     }
 
-    const unit = foldInfo.unitOf.get(run.id) ?? run.id;
-    const isFoldedChild = foldInfo.folded.has(run.id);
-    const unitExpanded =
-      foldInfo.debateUnits.has(unit) || expandedUnits.has(unit);
-    if (isFoldedChild && !unitExpanded) {
+    if (!isRunFoldVisible(run.id, foldInfo, expandedUnits)) {
       foldedIds.push(run.id);
       continue;
     }
@@ -529,11 +526,8 @@ export function projectFlowNodes({
       const captainPos = placed(captainRun.id);
       if (captainPos) {
         const waitCaption = (captainStatusCaption ?? "").trim();
-        // Coordination wait uses running chrome (spinner) even while derived
-        // captain status is still pending (workers in flight).
-        const sinkStatus: RunStatus = waitCaption
-          ? "running"
-          : (captainStatus ?? "pending");
+        // 等待句只进正文。汇点状态跟队长推导走，有进度数字不能改画成进行中。
+        const sinkStatus: RunStatus = captainStatus ?? "pending";
         const preview = captainSinkPreview({
           captainStatus: captainStatus ?? "pending",
           answerPreview: finalAnswer ? headText(finalAnswer.content) : "",

@@ -2,14 +2,14 @@
 /**
  * 草稿态「在哪工作」（双模式工作区 §5.1）。
  *
- * 第一屏选地方：本地对话 + 云端对话 + 文件夹；新建 / Git / 本机两选收进「新建或加入…」。
+ * 第一屏选地方：本地对话 + 云端对话 + 文件夹；新建 / Git / 从本机加入收进「新建或加入…」。
+ * 点本机文件夹或从本机加入即直接改，不再问「先在云上做」。
  * 全菜单只有一条分隔线（文件夹列表 ↔ 新建或加入）。
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { pickLocalFolderRoot } from "@/lib/bindLocalFolder";
 import { isBorrowActive, set } from "@/lib/borrowOriginalPreference";
-import { startBorrowToCloudJob } from "@/lib/borrowToCloudJob";
 import { setComposerChannelPreference } from "@/lib/composerChannelPreference";
 import { openLocalFolderFromRoot } from "@/lib/openLocalFolder";
 import { uiSet } from "@/lib/uiStorage";
@@ -66,12 +66,6 @@ vi.mock("@/lib/bindLocalFolder", () => ({
 vi.mock("@/lib/openLocalFolder", () => ({
   openLocalFolderFromRoot: vi.fn(),
   pickAndOpenLocalFolder: vi.fn(),
-}));
-
-vi.mock("@/lib/borrowToCloudJob", () => ({
-  startBorrowToCloudJob: vi.fn(() => true),
-  isBorrowToCloudJobRunning: () => false,
-  cancelBorrowToCloudJob: vi.fn(),
 }));
 
 const boundEffective = {
@@ -174,23 +168,6 @@ function precedes(a: Element, b: Element): boolean {
   );
 }
 
-function expectBorrowConfirm(folderName: string) {
-  expect(
-    screen.getByRole("heading", { name: "先在云上做，原件先不动" }),
-  ).toBeTruthy();
-  expect(
-    screen.getByText(
-      `把「${folderName}」复制到云上做这一单。电脑上的原件先不动，做完再决定写不写回。`,
-    ),
-  ).toBeTruthy();
-  expect(screen.queryByText("云上做完再写入")).toBeNull();
-  expect(startBorrowToCloudJob).not.toHaveBeenCalled();
-}
-
-function confirmCloudCopyStart() {
-  fireEvent.click(screen.getByRole("button", { name: "开始" }));
-}
-
 beforeEach(() => {
   grouped.value = { folders: [], conversations: [] };
   sharedWithMe.value = [];
@@ -199,7 +176,6 @@ beforeEach(() => {
   useFoldersStore.setState({ draftWorkspaceIntent: { kind: "quick_cloud" } });
   vi.mocked(pickLocalFolderRoot).mockReset();
   vi.mocked(openLocalFolderFromRoot).mockReset();
-  vi.mocked(startBorrowToCloudJob).mockReset().mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -270,7 +246,7 @@ describe("DraftChip pick view · 选地方", () => {
     expect(menu.queryByRole("button", { name: "本地对话" })).toBeNull();
   });
 
-  it("从本机加入选完路径后两选一；直接改走已选根", async () => {
+  it("从本机加入选完路径即直接改", async () => {
     vi.mocked(pickLocalFolderRoot).mockResolvedValue({
       ok: true,
       root: { id: "root-1", name: "MyRepo" },
@@ -280,77 +256,14 @@ describe("DraftChip pick view · 选地方", () => {
     await act(async () => {
       fireEvent.click(menu.getByRole("button", { name: "从本机加入" }));
     });
-    expect(menu.getByRole("button", { name: /直接改这个文件夹/ })).toBeTruthy();
+    expect(menu.queryByRole("button", { name: /直接改这个文件夹/ })).toBeNull();
     expect(
-      menu.getByRole("button", { name: /先在云上做，原件先不动/ }),
-    ).toBeTruthy();
-
-    fireEvent.click(menu.getByRole("button", { name: /直接改这个文件夹/ }));
+      menu.queryByRole("button", { name: /先在云上做，原件先不动/ }),
+    ).toBeNull();
     expect(openLocalFolderFromRoot).toHaveBeenCalledWith(
       { id: "root-1", name: "MyRepo" },
       expect.any(Function),
     );
-  });
-
-  it("取消轻量确认不上传，并丢掉新授权的本机根", async () => {
-    vi.mocked(pickLocalFolderRoot).mockResolvedValue({
-      ok: true,
-      root: { id: "root-1", name: "MyRepo" },
-    });
-    const removeRoot = vi.fn();
-    (
-      window as unknown as { fsApi?: { removeRoot?: ReturnType<typeof vi.fn> } }
-    ).fsApi = { removeRoot };
-    const menu = within(openPicker());
-    fireEvent.click(menu.getByRole("button", { name: "新建或加入…" }));
-    await act(async () => {
-      fireEvent.click(menu.getByRole("button", { name: "从本机加入" }));
-    });
-    fireEvent.click(
-      menu.getByRole("button", { name: /先在云上做，原件先不动/ }),
-    );
-    expectBorrowConfirm("MyRepo");
-    fireEvent.click(screen.getByRole("button", { name: "取消" }));
-    expect(startBorrowToCloudJob).not.toHaveBeenCalled();
-    expect(removeRoot).toHaveBeenCalledWith("root-1");
-  });
-
-  it("先在云上做先确认再开传，不打推荐；上次只打在直接改", async () => {
-    setComposerChannelPreference("local_traditional");
-    vi.mocked(pickLocalFolderRoot).mockResolvedValue({
-      ok: true,
-      root: { id: "root-1", name: "MyRepo" },
-    });
-    const openBorrow = vi.spyOn(
-      useFoldersStore.getState(),
-      "openBorrowToCloud",
-    );
-    const menu = within(openPicker());
-    fireEvent.click(menu.getByRole("button", { name: "新建或加入…" }));
-    expect(
-      within(menu.getByRole("button", { name: "从本机加入" })).queryByText(
-        "上次",
-      ),
-    ).toBeNull();
-    await act(async () => {
-      fireEvent.click(menu.getByRole("button", { name: "从本机加入" }));
-    });
-    const borrow = menu.getByRole("button", { name: /先在云上做，原件先不动/ });
-    expect(within(borrow).queryByText("推荐")).toBeNull();
-    expect(within(borrow).queryByText("上次")).toBeNull();
-    expect(
-      within(menu.getByRole("button", { name: /直接改这个文件夹/ })).getByText(
-        "上次",
-      ),
-    ).toBeTruthy();
-    fireEvent.click(borrow);
-    expect(openBorrow).not.toHaveBeenCalled();
-    expectBorrowConfirm("MyRepo");
-    confirmCloudCopyStart();
-    expect(startBorrowToCloudJob).toHaveBeenCalledWith({
-      root: { id: "root-1", name: "MyRepo" },
-      folderName: "MyRepo",
-    });
   });
 
   it("草稿落到借用中的云文件夹时标明原件尚未改动", () => {
@@ -393,22 +306,17 @@ describe("DraftChip pick view · 选地方", () => {
     expect(rules(content)).toHaveLength(1);
   });
 
-  it("点本机文件夹进入两选；直接改只改草稿，不新开会话", () => {
+  it("点本机文件夹即改草稿，不新开会话，不再问怎么用", () => {
     grouped.value = {
       folders: [localFolder("f-repo", "MyRepo", null)],
       conversations: [],
     };
     const menu = within(openPicker());
     fireEvent.click(menu.getByRole("button", { name: /MyRepo/ }));
-    expect(menu.getByRole("button", { name: /直接改这个文件夹/ })).toBeTruthy();
+    expect(menu.queryByRole("button", { name: /直接改这个文件夹/ })).toBeNull();
     expect(
-      menu.getByRole("button", { name: /先在云上做，原件先不动/ }),
-    ).toBeTruthy();
-    expect(useFoldersStore.getState().draftWorkspaceIntent).toEqual({
-      kind: "quick_cloud",
-    });
-
-    fireEvent.click(menu.getByRole("button", { name: /直接改这个文件夹/ }));
+      menu.queryByRole("button", { name: /先在云上做，原件先不动/ }),
+    ).toBeNull();
     expect(openLocalFolderFromRoot).not.toHaveBeenCalled();
     expect(useFoldersStore.getState().draftWorkspaceIntent).toEqual({
       kind: "folder",
@@ -416,58 +324,7 @@ describe("DraftChip pick view · 选地方", () => {
     });
   });
 
-  it("点本机文件夹后先在云上做，确认后再开传且不交出根", () => {
-    grouped.value = {
-      folders: [localFolder("f-repo", "MyRepo", null)],
-      conversations: [],
-    };
-    const openBorrow = vi.spyOn(
-      useFoldersStore.getState(),
-      "openBorrowToCloud",
-    );
-    const menu = within(openPicker());
-    fireEvent.click(menu.getByRole("button", { name: /MyRepo/ }));
-    fireEvent.click(
-      menu.getByRole("button", { name: /先在云上做，原件先不动/ }),
-    );
-    expect(openBorrow).not.toHaveBeenCalled();
-    expectBorrowConfirm("MyRepo");
-    confirmCloudCopyStart();
-    expect(startBorrowToCloudJob).toHaveBeenCalledWith({
-      root: { id: "root-1", name: "MyRepo" },
-      folderName: "MyRepo",
-    });
-  });
-
-  it("确认后若上传已在进行，丢掉新授权的本机根", async () => {
-    vi.mocked(startBorrowToCloudJob).mockReturnValue(false);
-    vi.mocked(pickLocalFolderRoot).mockResolvedValue({
-      ok: true,
-      root: { id: "root-1", name: "MyRepo" },
-    });
-    const removeRoot = vi.fn();
-    (
-      window as unknown as { fsApi?: { removeRoot?: ReturnType<typeof vi.fn> } }
-    ).fsApi = { removeRoot };
-    const openBorrow = vi.spyOn(
-      useFoldersStore.getState(),
-      "openBorrowToCloud",
-    );
-    const menu = within(openPicker());
-    fireEvent.click(menu.getByRole("button", { name: "新建或加入…" }));
-    await act(async () => {
-      fireEvent.click(menu.getByRole("button", { name: "从本机加入" }));
-    });
-    fireEvent.click(
-      menu.getByRole("button", { name: /先在云上做，原件先不动/ }),
-    );
-    expect(openBorrow).not.toHaveBeenCalled();
-    expectBorrowConfirm("MyRepo");
-    confirmCloudCopyStart();
-    expect(removeRoot).toHaveBeenCalledWith("root-1");
-  });
-
-  it("点云文件夹仍立刻选中，不进两选", () => {
+  it("点云文件夹仍立刻选中", () => {
     grouped.value = {
       folders: [cloudFolder("f-cloud", "云文件夹")],
       conversations: [],

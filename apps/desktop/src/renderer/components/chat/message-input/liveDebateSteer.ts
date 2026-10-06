@@ -1,6 +1,8 @@
+import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import {
   getRuntime,
   lastAssistantProjectionId,
+  runtimeOf,
   useConversationStore,
 } from "@/stores/conversation";
 import {
@@ -47,12 +49,11 @@ export function liveDebateSteerTarget(
 
 /** 主框 chrome：进行中隐藏排队/插队，发送即对这场说话。 */
 export function useLiveDebateSteer(): boolean {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
-  const lastKey = useConversationStore((s) => {
-    const id = s.currentConversationId;
-    if (!id) return null;
-    return lastAssistantProjectionId(s.byId[id]?.messages ?? []);
-  });
+  const conversationId = useChatPaneId();
+  const paneKey = useChatPaneSliceKey();
+  const lastKey = useConversationStore((s) =>
+    lastAssistantProjectionId(runtimeOf(s, paneKey).messages),
+  );
   const rt = useExecutionStore((s) =>
     conversationId && lastKey ? s.byId[lastKey] : undefined,
   );

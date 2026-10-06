@@ -137,7 +137,7 @@ async def _seed_llm_key(
             api_key_enc=b"test-cipher-not-a-real-key",
             default_model=default_model,
         )
-        profile = await LlmModelProfileRepository(session).create(
+        assembly = await LlmModelProfileRepository(session).create(
             user_id=user_id,
             name="default",
             main_origin="byok",
@@ -147,7 +147,7 @@ async def _seed_llm_key(
             background_provider_id=provider.id if background_model else None,
             background_model=background_model,
         )
-        await UserRepository(session).set_default_model_profile(user_id, profile.id)
+        await UserRepository(session).set_default_model_profile(user_id, assembly.id)
 
 
 async def _seed_user(
@@ -1328,7 +1328,7 @@ async def test_admin_conversation_replay_merges_timeline(client, make_admin, ses
     assert assistant_msg["models"] == ["deepseek-v4-pro"]
     assert assistant_msg["credential_source"] == "platform"
     # Session profile pin may be null; expand still yields a display name.
-    assert "model_profile_id" in b["conversation"]
+    assert "assembly_id" in b["conversation"]
     assert isinstance(b["conversation"]["model_profile_name"], str)
     assert b["conversation"]["model_profile_name"]
     m = assistant_msg["metrics"]

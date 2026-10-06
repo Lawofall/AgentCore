@@ -22,6 +22,22 @@ describe("parseHistoryTranscript", () => {
       { role: "tool", name: "web_fetch", text: page },
     ]);
   });
+
+  it("keeps a trailing ideographic stop on the emoji turn", () => {
+    const content = "看到了👍。";
+    const next = "下一";
+    const body = `@@assistant ${[...content].length}\n${content}\n@@user ${[...next].length}\n${next}\n`;
+    expect(parseHistoryTranscript(body)).toEqual([
+      { role: "assistant", name: "", text: content },
+      { role: "user", name: "", text: next },
+    ]);
+  });
+
+  it("dumps the remainder when the code-point length runs past the body", () => {
+    expect(parseHistoryTranscript("@@assistant 5\n好。\n")).toEqual([
+      { role: "other", name: "", text: "好。\n" },
+    ]);
+  });
 });
 
 describe("presentToolReceipt", () => {

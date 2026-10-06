@@ -36,6 +36,7 @@ from agentcore.runtime.resolve.prompt.envelope import (
     opening_ceo_messages,
     render_ceo_turn_envelope,
     render_worker_turn_envelope,
+    resolve_emitted_envelope,
     strip_turn_envelope_fence,
     visualization_system_body,
 )
@@ -72,6 +73,7 @@ __all__ = [
     "render_on_demand_directory",
     "render_runtime_date_block",
     "render_worker_turn_envelope",
+    "resolve_emitted_envelope",
     "splice_on_demand_directory",
     "strip_turn_envelope_fence",
     "visualization_system_body",

@@ -138,6 +138,7 @@ const MOCK_ARCHIVED: Conversation[] = [
 
 const MOCK_TRASH: FolderTrash = {
   retentionDays: 30,
+  total: 3,
   items: [
     {
       id: "folder-gone-cloud",
@@ -165,6 +166,7 @@ const MOCK_TRASH: FolderTrash = {
 
 const MOCK_CONVERSATION_TRASH: ConversationTrash = {
   retentionDays: 30,
+  total: 3,
   items: [
     {
       id: "c-gone-1",

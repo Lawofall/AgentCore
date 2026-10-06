@@ -36,6 +36,7 @@ from agentcore.api.schemas import (
     GroupedConversationsResponse,
     PermissionAxesUpdate,
     StatusResponse,
+    TrashEmptyResponse,
     UpdateConversationRequest,
     conversation_summary_from_orm,
 )
@@ -204,13 +205,12 @@ async def create_conversation(
             axes = body.permission_axes.to_axes().to_dict()
         else:
             axes = (await default_permission_axes_for_user(repo._session, user.user_id)).to_dict()
-        # 新建拍快照：显式 profile 钉住；省略则写入当时账号默认（非活跟随）。
+        # 新建拍快照：显式装配钉住；省略则写入当时星标。
         from agentcore.llm.model_profiles import LlmModelProfileService
 
         profile_svc = LlmModelProfileService(repo._session)
-        if "model_profile_id" in body.model_fields_set and body.model_profile_id is not None:
-            await profile_svc.ensure_profile_usable(user.user_id, body.model_profile_id)
-            pin = body.model_profile_id
+        if "assembly_id" in body.model_fields_set and body.assembly_id is not None:
+            pin = await profile_svc.ensure_profile_usable(user.user_id, body.assembly_id)
         else:
             pin = await profile_svc.snapshot_default_profile_id(user.user_id)
         # Project chats inherit the project's workspace — never write session-level
@@ -223,7 +223,7 @@ async def create_conversation(
                 folder_id=body.folder_id,
                 local_container_root_id=container_root,
                 permission_axes=axes,
-                model_profile_id=pin,
+                assembly_id=pin,
             )
         else:
             conv, created = await repo.create_idempotent(
@@ -233,7 +233,7 @@ async def create_conversation(
                 folder_id=body.folder_id,
                 local_container_root_id=container_root,
                 permission_axes=axes,
-                model_profile_id=pin,
+                assembly_id=pin,
             )
 
     # The create itself was invisible in production: the 8 duplicate-conversation
@@ -274,9 +274,7 @@ async def duplicate_conversation(
     if not src:
         raise NotFoundError("对话不存在")
     await _require_conversation_write(conversation_id, user.user_id, conv_repo._session)
-    until = await msg_repo.get_by_id(
-        body.until_message_id, conversation_id=conversation_id
-    )
+    until = await msg_repo.get_by_id(body.until_message_id, conversation_id=conversation_id)
     if until is None:
         raise NotFoundError("消息不存在")
     usage = until.usage if isinstance(until.usage, dict) else {}
@@ -284,9 +282,7 @@ async def duplicate_conversation(
         raise ConflictError("这条回复还在生成，不能克隆")
     base = (src.title or "").strip()
     if not base:
-        first_users = await msg_repo.first_user_contents_for_conversations(
-            [conversation_id]
-        )
+        first_users = await msg_repo.first_user_contents_for_conversations([conversation_id])
         raw = first_users.get(conversation_id) or ""
         if raw:
             base = fallback_title(raw)
@@ -294,7 +290,7 @@ async def duplicate_conversation(
     # 克隆：有源钉则拷贝；源为存量 null 则拍当时账号默认。
     from agentcore.llm.model_profiles import LlmModelProfileService
 
-    src_pin = getattr(src, "model_profile_id", None) or None
+    src_pin = getattr(src, "assembly_id", None) or None
     if src_pin is None:
         src_pin = await LlmModelProfileService(conv_repo._session).snapshot_default_profile_id(
             user.user_id
@@ -306,7 +302,7 @@ async def duplicate_conversation(
         local_container_root_id=src.local_container_root_id,
         permission_axes=dict(src.permission_axes or {}),
         deep_research_auto=bool(getattr(src, "deep_research_auto", False)),
-        model_profile_id=src_pin,
+        assembly_id=src_pin,
     )
     count = await msg_repo.copy_through(
         conversation_id, new_conv.id, until_message_id=body.until_message_id
@@ -448,10 +444,12 @@ async def list_deleted_conversations(
     same cutoff as the project bin: a chat is offered here only while the sweeper is
     still forbidden to purge it.
     """
+    cutoff = retention_cutoff()
     conversations = await repo.list_deleted_by_user(
-        user.user_id, not_before=retention_cutoff(), limit=_TRASH_LIST_LIMIT
+        user.user_id, not_before=cutoff, limit=_TRASH_LIST_LIMIT
     )
     counts = await msg_repo.counts_for_conversations([c.id for c in conversations])
+    total = await repo.count_deleted_by_user(user.user_id, not_before=cutoff)
     return DeletedConversationListResponse(
         data=[
             DeletedConversationSummary.from_conversation(
@@ -461,7 +459,7 @@ async def list_deleted_conversations(
             )
             for c in conversations
         ],
-        total=len(conversations),
+        total=total,
         retention_days=settings.workspace_retention_days,
     )
 
@@ -488,9 +486,7 @@ async def restore_deleted_conversation(
     if not conv:
         raise NotFoundError("对话不存在或不在最近删除中")
     if conv.deleted_at <= retention_cutoff():
-        raise ConflictError(
-            f"该对话已超过 {settings.workspace_retention_days} 天保留期，无法恢复"
-        )
+        raise ConflictError(f"该对话已超过 {settings.workspace_retention_days} 天保留期，无法恢复")
 
     restored = await repo.restore(
         conversation_id, user_id=user.user_id, not_before=retention_cutoff()
@@ -504,9 +500,7 @@ async def restore_deleted_conversation(
         folder_id=restored.folder_id,
     )
     counts = await msg_repo.counts_for_conversations([conversation_id])
-    return conversation_summary_from_orm(
-        restored, message_count=counts.get(conversation_id, 0)
-    )
+    return conversation_summary_from_orm(restored, message_count=counts.get(conversation_id, 0))
 
 
 @router.delete("/trash/{conversation_id}", response_model=StatusResponse)
@@ -545,6 +539,42 @@ async def purge_deleted_conversation(
         folder_id=folder_id,
     )
     return StatusResponse()
+
+
+@router.delete("/trash", response_model=TrashEmptyResponse)
+async def empty_deleted_conversations(
+    user: AuthUser,
+    repo: ConversationRepository = Depends(get_conversation_repo),
+):
+    """彻底删除「最近删除」里仍在保留期内的全部对话。
+
+    Same claim as the single-row purge (conditional hard-delete, then scratch).
+    The list page is capped; this follows the window, not the page. A restore
+    that lands first is skipped — that chat is already out of the bin — and does
+    not fail the rest.
+    """
+    cutoff = retention_cutoff()
+    targets = await repo.list_deleted_ids_by_user(user.user_id, not_before=cutoff)
+    purged = 0
+    for conversation_id, folder_id in targets:
+        wiped = await repo.hard_delete_if_soft_deleted(
+            conversation_id, user_id=user.user_id, not_before=cutoff
+        )
+        if not wiped:
+            continue
+        await _purge_conversation_space(
+            user_id=user.user_id,
+            conversation_id=conversation_id,
+            folder_id=folder_id,
+        )
+        logger.info(
+            "conversation.trash_purged",
+            conversation_id=conversation_id,
+            user_id=user.user_id,
+            folder_id=folder_id,
+        )
+        purged += 1
+    return TrashEmptyResponse(purged=purged)
 
 
 @router.get("/{conversation_id}", response_model=ConversationSummary)
@@ -654,7 +684,11 @@ async def update_conversation(
     conv = await repo.get_by_id(conversation_id, user_id=user.user_id)
     if not conv:
         raise NotFoundError("对话不存在")
-    shared_write = fields & {"title", "deep_research_auto", "model_profile_id"}
+    shared_write = fields & {
+        "title",
+        "deep_research_auto",
+        "assembly_id",
+    }
     if shared_write:
         await _require_conversation_write(conversation_id, user.user_id, repo._session)
     if "title" in fields and body.title is not None:
@@ -672,16 +706,18 @@ async def update_conversation(
         )
         if updated:
             conv = updated
-    # 会话级模型组合: explicit profile_id pins; null re-pins to account default snapshot.
-    if "model_profile_id" in fields:
+    # 换这场用的装配。显式 null 再钉当时星标。
+    if "assembly_id" in fields:
         from agentcore.llm.model_profiles import LlmModelProfileService
 
         profile_svc = LlmModelProfileService(repo._session)
-        profile_id = body.model_profile_id
+        profile_id = body.assembly_id
         if profile_id is None:
             profile_id = await profile_svc.snapshot_default_profile_id(user.user_id)
         else:
-            await profile_svc.ensure_profile_usable(user.user_id, profile_id)
+            profile_id = await profile_svc.ensure_profile_usable(
+                user.user_id, profile_id
+            )
         updated = await repo.set_model_profile(conversation_id, profile_id, user_id=user.user_id)
         if updated:
             conv = updated

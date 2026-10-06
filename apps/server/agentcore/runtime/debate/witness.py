@@ -6,8 +6,8 @@
 - 图锚：在辩论幕内声明证人席位节点；答问用席位 session（fork 自透镜 transcript），
   ``continues_run_id`` 指席位根（辩论幕内），避免把辩论拍挂到幕1 透镜节点。
 - 点名：主持人质询 beat 内 LLM 判定（只问事实性问题）；失败/超时不阻塞主流程。
-- 续写：窄 ``continue_run``；工具面默认全开，只读纪律靠提示自觉；不递增透镜
-  ``recall_count``（豁免 CEO 续派额度）。
+- 续写：窄 ``continue_run``；工具面默认全开，只读纪律靠提示自觉；不改透镜
+  ``recall_count``。
 - 台账：答问登记进场级 ``EvidenceLedger``（``side_key=witness:{key}``）。
 """
 
@@ -520,7 +520,7 @@ def make_witness_runner(
                 session.transcript = state.transcript
                 session.content = state.content
                 session.updated_at = time.time()
-                # 独立计数（不走 CEO DEFAULT_RECALL_LIMIT）。
+                # 席位自己的续写计数，不改透镜。
                 session.recall_count += 1
                 qa_pairs = parse_cross_exam_response(
                     qs, state.content, side_key=key

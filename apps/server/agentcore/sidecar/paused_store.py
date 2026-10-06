@@ -235,6 +235,30 @@ class LocalPausedTurnStore:
         tmp.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
         os.replace(tmp, target)  # atomic on the same filesystem
 
+    async def stamp_active_meter(self, message_id: str, meter: dict[str, Any]) -> None:
+        """Remember this message's active meter on a frame that is still paused.
+
+        Save runs before settle, so the file does not yet have the clocks.
+        Resume reads the stamp. Missing file (already claimed) is a no-op.
+        """
+        if not _is_safe_message_id(message_id):
+            return
+        try:
+            await asyncio.to_thread(self._stamp_active_meter_sync, message_id, meter)
+        except Exception as e:  # noqa: BLE001 — a missed stamp must not fail the pause
+            logger.warning(
+                "sidecar.paused_meter_stamp_failed",
+                message_id=message_id,
+                error=str(e),
+            )
+
+    def _stamp_active_meter_sync(self, message_id: str, meter: dict[str, Any]) -> None:
+        record = self._load_sync(message_id, None)
+        if record is None:
+            return
+        record["active_meter"] = dict(meter)
+        self._write_sync(message_id, record)
+
     async def delete(self, message_id: str) -> None:
         """Drop a paused-turn frame (a live in-process resolve / timeout settled it).
 
@@ -458,6 +482,8 @@ def _suspension_from_record(record: dict[str, Any]) -> TurnSuspension:
     suspension = suspension_from_json(record.get("frame") or {})
     suspension.journal_entries = list(record.get("journal_entries") or [])
     suspension.history = list(record.get("history") or [])
+    meter = record.get("active_meter")
+    suspension.active_meter = meter if isinstance(meter, dict) else None
     return suspension
 
 

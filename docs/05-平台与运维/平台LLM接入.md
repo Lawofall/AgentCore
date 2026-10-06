@@ -20,11 +20,13 @@ skip_if:
 | **多厂商 provider 路由** | model 串带 `厂商/` 前缀 | 豆包 / Moonshot / 智谱 等（§四） |
 | **platform 平台凭据** | `billing_mode=platform` / 显式 platform | `PLATFORM_*` 三项 |
 
-**BYOK 去向**：每用户多服务商列表（`user_llm_providers`：AES-GCM 密文 key + base_url）；账号/会话选的是**模型组合**（`llm_model_profiles` → `{main, worker?, background?, vision?}` 槽，每槽解析为目录身份 `@platform/{id}` / `@byok/{provider_id}/{id}`，库内仍存 `(model, origin, provider_id)`）。服务商表单不收模型 id。测连只认 `GET /models`（合法 JSON 且非空即连通）；空列表 / 无该接口 → 诚实「未列出，请到模型组合手填」，**不**用猜测的 chat 模型刷绿灯。已有模型组合槽指向该服务商时，才对这些 id 做 `POST /chat/completions` 探针（火山 `ep-…` 等目录未列出的 id）。目录已成功列出后槽位探针仍 401/403（非余额）→ 点名该模型不被上游接受，**禁止**说 Key 无效；目录未证明 Key 时同时请核 Key 与该模型。第一个服务商且 `base_url` 命中厂商预设时，用代码里的预设种子建「当前配置」；自定义端点不自动建组合。连通≠聊天就绪写在服务商列表页脚（并指向模型组合）；自定义 Base URL 通常需含 `/v1` 写在字段 hint 与失败错误，不进测连成功徽章。key **不在 `.env`**。BYOK 且无服务商、又无 platform 回退 → `402 LLM_KEY_REQUIRED`。
+**BYOK 去向**：每用户多服务商列表（`user_llm_providers`：AES-GCM 密文 key + base_url）；账号选的是**装配上的模型列**（`assemblies` 的 main / worker / background / vision，每列解析为目录身份 `@platform/{id}` / `@byok/{provider_id}/{id}`，库内仍存 `(model, origin, provider_id)`）。服务商表单不收模型 id。测连只认 `GET /models`（合法 JSON 且非空即连通）；空列表 / 无该接口 → 诚实「未列出，请到装配手填」，**不**用猜测的 chat 模型刷绿灯。已有装配的模型列指向该服务商时，才对这些 id 做 `POST /chat/completions` 探针（火山 `ep-…` 等目录未列出的 id）。目录已成功列出后槽位探针仍 401/403（非余额）→ 点名该模型不被上游接受，**禁止**说 Key 无效；目录未证明 Key 时同时请核 Key 与该模型。第一个服务商且 `base_url` 命中厂商预设时，用代码里的预设种子写进当时星标装配的主模型，名字仍是那份装配的名字；自定义端点不改装配上的模型。连通≠聊天就绪写在服务商列表页脚（并指向装配）；自定义 Base URL 通常需含 `/v1` 写在字段 hint 与失败错误，不进测连成功徽章。key **不在 `.env`**。BYOK 且无服务商、又无 platform 回退 → `402 LLM_KEY_REQUIRED`。
 
 ## 二、模型与凭据解析
 
-**模型组合**：CRUD `/v1/users/me/llm-model-profiles`；会话只认 `model_profile_id`（**新建拍快照**：create 写入当时账号默认或客户端所选 uuid；改账号默认不改旧会话）。存量 `null` 仍按账号默认展开（兼容活跟随）。PATCH 显式 `null` = 再钉当时默认（非清成活跟随）。设默认只在设置 / `PUT …/default`；输入框 picker 只选具体组合。可选 `reasoning_effort`：厂商官方 token（目录 `reasoning_effort.options`），null = 该主模型默认；主模型换到不列该 token 的叶则清掉。**元数据事实源** = `llm/catalog.py`（上架集）+ `llm/model_metadata.py`（展示 enrichment）；`model_profiles` 只做组合 CRUD / expand，系统预置 = 对 catalog 可见上架集的 uuid5 投影（`uuid5(…, agentcore:platform-preset:{model_id})`，无硬编码产品 UUID）。逻辑默认 = `PLATFORM_MODEL` 对应预置（须在上架集内）否则 allowlist 首个。明确不做：质量档矩阵、账号级角色→模型矩阵、输入框双 picker /「跟随账号默认」行。✅ **Per-worker 节点显式覆盖**（执行链 + sidecar proxy；确认面不提供人改模）与组合槽正交 → [编排器 · Per-worker 模型覆盖](/docs/03-AI核心/编排器与CEO主Agent.md#per-worker-模型覆盖abc-同一功能)。
+人侧模型列在 [装配](/docs/03-AI核心/工具与能力系统.md#装配) 上。本节写列的解析、拍快照、思考强度、凭据解析；会话只钉 `assembly_id`。哪一列算装进装配，以装配文为准。
+
+**装配上的模型列**：读写在 `/v1/users/me/assemblies`（**新建拍快照**：create 写入当时星标或客户端所选的装配；预置先落成该用户自己的一行再存；改星标不改旧会话）。设星标在装配胶囊 / `PUT …/assemblies/default`；输入框的装配芯片换这场用哪一份，模型跟着这份走。可选 `reasoning_effort`：厂商官方 token（目录 `reasoning_effort.options`），null = 该主模型默认；主模型换到不列该 token 的叶则清掉。**元数据事实源** = `llm/catalog.py`（上架集）+ `llm/model_metadata.py`（展示 enrichment）。旧的 `platform-preset:{model_id}` 不再列入名单；该模型仍可见、且账号星标还是这个 id 时，星标改到「完整」，并把该模型写进落成行的主模型。能力配方（极简 / 轻量 / 完整）落成时抄当时星标装配的模型。配方细节 → [工具与能力 · 装配](/docs/03-AI核心/工具与能力系统.md#装配)。明确不做：质量档矩阵、账号级角色→模型矩阵、「跟随账号默认」行、对话上另钉模型 id。输入区是一颗装配芯片。✅ **Per-worker 节点显式覆盖**（执行链 + sidecar proxy；确认面不提供人改模）与组合槽正交 → [编排器 · Per-worker 模型覆盖](/docs/03-AI核心/编排器与CEO主Agent.md#per-worker-模型覆盖abc-同一功能)。
 
 **识图槽 `vision`（可选，已停用）**：组合列与 API 仍保留该槽，设置页不再编辑。图只进**当前主力**原生多模态（贴图挂当前 user；工作区光栅走 `read`）。主模型不收图 → 诚实说明，**不**走 VisionReader / `VISION_*` / 推理代理 `X-AgentCore-Role: vision`。历史 `role=vision` 入账行仍可折账。visual critic **已退役**。能力位只认该厂商契约（精确 id + 进程内负例），不是展示元数据家族继承、也不是 id 关键词。
 
@@ -68,9 +70,9 @@ skip_if:
 |---|---|
 | 模型名 | 官方现行 `deepseek-flash`（V4.1 Flash）。旧名 `deepseek-v4-flash` / `deepseek-v4-flash-vision-exp` / `deepseek-v4-pro` 仍可能被上游接受，产品 **hideFromPicker**（官方 / Go / Zen 对新选隐藏；已钉组合仍能跑）。`deepseek-chat` / `deepseek-reasoner` 已停用。**平台 / OpenCode Go 现网钉** `deepseek-v4.1-flash`（不是官方 id）。官方 id 与 Go 识图契约不同：Go / Zen 亦隐藏 `deepseek-flash`。产品计价走 DeepSeek 中文官价，不跟 OpenCode 额度倍数 |
 | 识图 | 官方 `deepseek-flash` 收图。产品契约：`deepseek-v4-flash` / `deepseek-v4.1-flash` / Pro 文本 id 不收（Go 仍把 Vision Exp 列成独立 SKU）；旧 `deepseek-v4-flash-vision-exp` 仍收 |
-| 上下文 | 官方 **1M**（input+output 合计）；max output 384K。目录 `context_length` 与近顶压缩跟这条，不跟过期的 128K 记忆 |
+| 上下文 | 官方 **1M**（input+output 合计）；max output 384K。目录 `context_length` 仍是这条，不跟过期的 128K 记忆。装配可以把近顶和窗口环用的上限调低，目录窗仍是 1M |
 | base_url | `https://api.deepseek.com`（兼容 `/v1`） |
-| 思考开关 | `extra_body.thinking.type=enabled/disabled`。官方省略 = 默认 enabled；**AgentCore 聊天/CEO/worker 显式发 enabled**，DeepSeek V4 同时发 `reasoning_effort`（组合未设则官方默认 `high`）。档位来自方言表官方 token，设置·模型组合暴露；别名不上 UI。OpenCode Go 省略 `thinking` 时思考 token=0；只发 `thinking.enabled` 仍可能不回 CoT |
+| 思考开关 | `extra_body.thinking.type=enabled/disabled`。官方省略 = 默认 enabled；**AgentCore 聊天/CEO/worker 显式发 enabled**，DeepSeek V4 同时发 `reasoning_effort`（组合未设则官方默认 `high`）。档位来自方言表官方 token，工具箱·模型暴露；别名不上 UI。OpenCode Go 省略 `thinking` 时思考 token=0；只发 `thinking.enabled` 仍可能不回 CoT |
 | 温度坑 | **思考模式下** `temperature`/`top_p`/penalty **静默忽略** |
 | 工具调用 | 有 tool call 的回合必须原样回传 `reasoning_content`，否则 400 |
 | 其它 | 不支持强制 `tool_choice=required`（probe 遇 400 回退）；无 `developer` role |
@@ -159,7 +161,7 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 | `PLATFORM_API_KEY` | 与 Zen 控制台同一把（不换） |
 | 额度 | 月 ¥10 · 日 ¥10（`quota_*`） |
 | 价卡 | Flash = DeepSeek 中文官价（空闲 ¥0.02 / ¥1 / ¥4 每百万；高峰 2×）。平台与用户 BYOK 同一把尺；额度只扣平台列。现金 COGS 仍是 Go 订阅月费，不是这把尺 |
-| 上下文窗 | 现网 Go Flash SKU **1M**（`deepseek-v4.1-flash` 与 `deepseek-v4-flash` 同）。目录展示与近顶压缩（窗 × 80% ≈ 800K）跟 SKU，禁止按端点猜成 Zen free 的 200K |
+| 上下文窗 | 现网 Go Flash SKU **1M**（`deepseek-v4.1-flash` 与 `deepseek-v4-flash` 同）。目录展示跟 SKU。近顶默认按窗 × 80% ≈ 800K；装配把上下文长度调低后，按调低后的有效窗口 × 80%。禁止按端点猜成 Zen free 的 200K |
 | Vision | 不配 `VISION_*`。对话贴图 / 工作区光栅走当前主力多模态；主模型不收图则诚实说明 |
 | 公告 | 恢复时归档 `quota_unavailable`（以及仍在线的旧 `quota_jiurelay`）；发模板 **`quota_platform_restored`** → [产品公告文案模板 §4.2](/docs/05-平台与运维/产品公告文案模板.md) |
 

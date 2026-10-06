@@ -18,7 +18,7 @@ def test_compose_ceo_omits_folder_catalog_tag():
         ceo_tool_names={"delegate", "consult"},
     )
     env = render_ceo_turn_envelope(
-        workspace_context="<工作区>\n桌：设计/图标（云端文件夹）。\n</工作区>",
+        workspace_context="<工作区>\n桌：设计/图标（文件夹）\n</工作区>",
         include_runtime=False,
     )
     assert "<文件夹清单>" not in ceo

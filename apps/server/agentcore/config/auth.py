@@ -63,6 +63,10 @@ class AuthSettings(BaseModel):
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     cookie_path_prefix: str = ""
 
+    # Explicit origins for credentialed CORS (browsers reject "*" with
+    # credentials). DEBUG additionally allows any http://localhost:<port> and
+    # http://127.0.0.1:<port> via dev_cors_origin_regex — do not grow this list
+    # to absorb a Vite port walk. Desktop dev is pinned to 5173.
     cors_allow_origins: str = (
         "http://localhost:5173,http://localhost:5174,http://localhost:3000,"
         "http://localhost:5175,http://localhost:5176,app://agentcore,"
@@ -137,3 +141,20 @@ class AuthSettings(BaseModel):
     def cors_origins(self) -> list[str]:
         """Parsed, trimmed list of allowed CORS origins."""
         return [o.strip() for o in self.cors_allow_origins.split(",") if o.strip()]
+
+
+# Starlette matches this with ``re.fullmatch``. Loopback only: a public page
+# cannot choose ``Origin: http://localhost``. Credentialed CORS still cannot be
+# ``*``. Production leaves the regex unset and uses ``cors_origins`` alone.
+DEV_LOOPBACK_ORIGIN_REGEX = r"http://(localhost|127\.0\.0\.1):[0-9]{1,5}"
+
+
+def dev_cors_origin_regex(*, debug: bool) -> str | None:
+    """Extra CORS origin pattern while DEBUG is on.
+
+    Covers a local Vite that landed on an unlisted port. Non-DEBUG returns
+    None so production stays on the explicit list.
+    """
+    if not debug:
+        return None
+    return DEV_LOOPBACK_ORIGIN_REGEX

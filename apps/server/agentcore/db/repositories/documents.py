@@ -744,7 +744,13 @@ class DocumentRepository:
             doc.description = ""
         await self._session.commit()
         await self._session.refresh(doc)
+        await self._note_account_rule(doc)
         return doc
+
+    async def _note_account_rule(self, doc: Document) -> None:
+        from agentcore.assembly.membership import note_account_rule
+
+        await note_account_rule(self._session, doc)
 
     async def get(self, document_id: str, *, user_id: str) -> Document | None:
         """Owner-scoped fetch (non-owner / unknown id → None → route 404; SEC-002)."""
@@ -797,6 +803,7 @@ class DocumentRepository:
         self._set_content_and_derive(doc, content)
         await self._session.commit()
         await self._session.refresh(doc)
+        await self._note_account_rule(doc)
         return doc
 
     async def rename(self, document_id: str, *, user_id: str, name: str) -> Document | None:
@@ -830,6 +837,7 @@ class DocumentRepository:
         self._set_content_and_derive(doc, body)
         await self._session.commit()
         await self._session.refresh(doc)
+        await self._note_account_rule(doc)
         return doc
 
     async def set_disputed(
@@ -954,42 +962,6 @@ class DocumentRepository:
         cleared = len(result.all())
         await self._session.commit()
         return cleared
-
-    async def apply_description_if_empty(
-        self,
-        document_id: str,
-        *,
-        user_id: str,
-        description: str,
-        expected_content: str | None = None,
-    ) -> Document | None:
-        """Write AI ``description`` to the column only — never mutate ``content``.
-
-        Used by async fill after user saves leave the field blank. User-written
-        frontmatter ``description`` wins and is never overwritten. A prior non-empty
-        column value is also left alone. When ``expected_content`` is set, skip if the
-        body changed since generation (stale fill after a later save). Empty
-        ``description`` arg is a no-op.
-        """
-        doc = await self.get(document_id, user_id=user_id)
-        if doc is None or doc.kind != "document":
-            return None
-        text = (description or "").strip()
-        if not text:
-            return doc
-        if expected_content is not None and doc.content != expected_content:
-            return None
-        parsed = parse_entry_frontmatter(doc.content)
-        if isinstance(parsed, FrontmatterError):
-            return None
-        if parsed.description.strip():
-            return doc
-        if (doc.description or "").strip():
-            return doc
-        doc.description = text
-        await self._session.commit()
-        await self._session.refresh(doc)
-        return doc
 
     async def _descendant_ids(self, user_id: str, root_id: str) -> list[str]:
         """All live descendant ids of a node (BFS), so a folder delete cascades its subtree."""

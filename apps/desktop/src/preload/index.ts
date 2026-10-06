@@ -276,8 +276,8 @@ const sidecarApi: SidecarApi = {
     ipcRenderer.invoke(SIDECAR_CHANNELS.listQueuedTurns, req),
   reorderQueuedTurns: (req) =>
     ipcRenderer.invoke(SIDECAR_CHANNELS.reorderQueuedTurns, req),
-  stopAndSendQueuedTurn: (req) =>
-    ipcRenderer.invoke(SIDECAR_CHANNELS.stopAndSendQueuedTurn, req),
+  deliverQueuedTurnToCaptain: (req) =>
+    ipcRenderer.invoke(SIDECAR_CHANNELS.deliverQueuedTurnToCaptain, req),
   editQueuedTurn: (req) =>
     ipcRenderer.invoke(SIDECAR_CHANNELS.editQueuedTurn, req),
   occupancy: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.occupancy, req),
@@ -441,6 +441,7 @@ const mcpApi: McpApi = {
   removeServer: (id) => ipcRenderer.invoke(MCP_CHANNELS.removeServer, id),
   setServerEnabled: (id, enabled) =>
     ipcRenderer.invoke(MCP_CHANNELS.setServerEnabled, id, enabled),
+  setRunIds: (ids) => ipcRenderer.invoke(MCP_CHANNELS.setRunIds, ids),
   testServer: (id) => ipcRenderer.invoke(MCP_CHANNELS.testServer, id),
 };
 

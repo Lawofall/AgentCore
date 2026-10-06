@@ -33,7 +33,11 @@ from agentcore.runtime.turn.ceo_continue import (
     is_ceo_rate_limit_pause,
     mark_host_turn_paused,
 )
-from agentcore.runtime.turn.latency import stamp_turn_wall, turn_wall_ms
+from agentcore.runtime.turn.latency import (
+    fold_active_meter,
+    stamp_turn_wall,
+    turn_wall_ms,
+)
 from agentcore.runtime.turn.outcome import (
     last_delegate_tool_output_from_events,
     resolve_turn_outcome,
@@ -218,6 +222,9 @@ async def settle_successful_turn(
         "revises_by_user": delegate_tool.user_continuation_count,
         "audit_drops": audit_recorder.drops,
     }
+    # Same meter as the pause snapshot: this segment's tokens/rounds join the
+    # message. Cost rows above stay this segment's new calls only.
+    turn_usage, rounds = fold_active_meter(turn_usage, rounds)
     duration_ms = turn_wall_ms()
     sink.emit(
         message_end(

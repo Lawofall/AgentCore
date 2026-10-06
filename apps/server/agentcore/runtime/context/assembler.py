@@ -3,15 +3,14 @@
 上下文注入统一 Step 1（装配主干）+ Step 2（常驻源插件化）. Before Step 1 the system prompt
 was built by ad-hoc string concatenation scattered across ``runtime.resolve.prompt``. Step 1
 collected those fragments into one assembler; Step 2 made each fragment a uniform
-:class:`PromptContributor` plugin carrying its own ``order`` (and a reserved ``budget``),
-so:
+:class:`PromptContributor` plugin carrying its own ``order``, so:
 
-- every injected fragment has a stable ``key`` (debuggable / addressable),
+- every injected fragment has a stable ``key`` (debuggable / addressable), and
 - ordering is DECLARATIVE (each contributor's :class:`SectionOrder`), not implicit in the
   ``.add()`` call sequence — the render order is the same no matter what sequence a site
-  contributes in, and
-- contributor ``budget`` is unused metadata (carried, not enforced); the assembler
-  never trims. Write-side always-on quota lives in ``memory/always_quota.py``.
+  contributes in.
+
+The assembler never trims. Write-side always-on quota lives in ``memory/always_quota.py``.
 
 Behavior-preserving today: with the ``SectionOrder`` values the call sites pass, the
 sorted render reproduces the prior inline order exactly, joined with ``"\\n"`` —
@@ -71,22 +70,18 @@ class ContextAssembler:
             self._contributors.append(contributor)
         return self
 
-    def add(
-        self, key: str, text: str | None, order: int, *, budget: int | None = None
-    ) -> ContextAssembler:
+    def add(self, key: str, text: str | None, order: int) -> ContextAssembler:
         """Ergonomic sugar: build a :class:`PromptContributor` and contribute it.
 
         ``text`` is typed ``str | None`` so a site can pass an optional section straight
         through — a falsy one is skipped (no blank line), same guard as ``contribute``.
         """
         if text:
-            self._contributors.append(
-                PromptContributor(key=key, text=text, order=order, budget=budget)
-            )
+            self._contributors.append(PromptContributor(key=key, text=text, order=order))
         return self
 
     def contributors(self) -> list[PromptContributor]:
-        """The kept contributors in RENDER order (sorted; for debugging / budgeting)."""
+        """The kept contributors in RENDER order (sorted; for debugging)."""
         return sorted(self._contributors, key=lambda c: c.order)
 
     def track_sections(self, *, scope: str) -> ContextAssembler:
@@ -106,16 +101,14 @@ class ContextAssembler:
         record_prompt_sections(scope=scope, sections=[(c.key, c.text) for c in kept])
         return self
 
-    def observe(self, *, scope: str, soft_cap: int | None = None) -> ContextAssembler:
+    def observe(self, *, scope: str) -> ContextAssembler:
         """Log assembled size, per-section chars, and ``assembly_hash`` — observe-only
         (COST-004 / M6).
 
         零行为副作用: 只埋点不改装配 (返回 ``self`` 供链式调用)。``cost.prompt_assembled`` 给出
-        每段 chars 明细 (归因哪段膨胀) + 总 chars + 是否越软闸 + 装配产物 ``assembly_hash``
-        (同输入同 hash；段序/正文变则 hash 变)——为「开发期无真实数据」攒据, 并让前缀漂移可检索,
-        待数据出再据此开「仅裁易变尾 (order≥800)」软闸 (项目审计-成本性能专项 §九)。trace /
-        conversation 上下文由 contextvars 自动并入每行日志, 故此处无需显式传。``soft_cap`` 为
-        None ⇒ 不判越限。
+        每段 chars 明细 (归因哪段膨胀) + 总 chars + 装配产物 ``assembly_hash``
+        (同输入同 hash；段序/正文变则 hash 变), 并让前缀漂移可检索。不设字数上限, 也不裁装配。
+        trace / conversation 上下文由 contextvars 自动并入每行日志, 故此处无需显式传。
 
         ``section_digests`` (D4) 让「哪段变了」离线可算: 比对相邻两回合同 scope 的日志行即可,
         无需进程内状态 (在线归因见 ``track_sections``)。
@@ -131,8 +124,6 @@ class ContextAssembler:
             sections=sections,
             section_digests={c.key: digest_text(c.text) for c in kept},
             assembly_hash=assembly_hash(rendered),
-            over_soft_cap=soft_cap is not None and soft_cap > 0 and total > soft_cap,
-            soft_cap=soft_cap,
         )
         return self.track_sections(scope=scope)
 

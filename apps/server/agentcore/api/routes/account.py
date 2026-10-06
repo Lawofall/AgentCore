@@ -8,7 +8,8 @@ Desktop convention (parallel desktop inject):
 - Cloud calls (account ticket **or** access):
   ``POST {baseUrl}/conversations/search|read|chat-context``,
   ``POST {baseUrl}/rules/list|write|read|delete`` (list = always + on_demand bodies for
-  规则目录 / ``consult``).
+  规则目录 / ``consult``),
+  ``GET {baseUrl}/models`` (same catalog as ``GET /v1/users/me/models``).
 - Does **not** open UI conversation / documents CRUD to the
   narrow ticket — engine-minimal surface only.
 """
@@ -24,6 +25,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.api.dependencies import AccountApiUser, AuthUser, get_db
+from agentcore.api.schemas import ModelCatalogResponse
 from agentcore.config import settings
 from agentcore.conversation.log_export import (
     DEFAULT_FOCUS,
@@ -62,6 +64,19 @@ class AccountTokenResponse(BaseModel):
 
     token: str
     expires_in_sec: int
+
+
+@router.get("/models", response_model=ModelCatalogResponse)
+async def list_account_models(
+    user: AccountApiUser,
+    session: AsyncSession = Depends(get_db),
+) -> ModelCatalogResponse:
+    """Model catalog for a ticketed sidecar. Same rows as ``GET /v1/users/me/models``."""
+    from agentcore.api.routes.model_catalog import to_model_catalog_response
+    from agentcore.llm.catalog import resolve_model_catalog
+
+    catalog = await resolve_model_catalog(session, user.user_id)
+    return to_model_catalog_response(catalog)
 
 
 @router.post("/token", response_model=AccountTokenResponse)
@@ -340,6 +355,7 @@ class AccountRulesListRequest(BaseModel):
 
 
 class AccountRuleDoc(BaseModel):
+    id: str = ""
     name: str
     content: str
     # Retrieval summary for the 规则目录; on_demand entries are picked by this, not by body.
@@ -372,6 +388,7 @@ class AccountRulesListResponse(BaseModel):
 def _rule_docs(docs: Sequence[Document]) -> list[AccountRuleDoc]:
     return [
         AccountRuleDoc(
+            id=str(d.id),
             name=d.name,
             content=d.content or "",
             description=d.description or "",

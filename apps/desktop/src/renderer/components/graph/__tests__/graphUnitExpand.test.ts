@@ -12,67 +12,79 @@ describe("resolveGraphExpandedUnits", () => {
       ...resolveGraphExpandedUnits({
         defaults,
         touched: false,
-        storedFingerprint: "",
-        sessionOverride: null,
+        collapsedFingerprint: "mpm",
+        sessionCollapsed: null,
         persist: true,
       }),
     ]).toEqual(["lead", "mpm"]);
   });
 
-  it("after touch, empty fingerprint means user collapsed all", () => {
+  it("after touch, empty collapsed list keeps every current leader open", () => {
     expect([
       ...resolveGraphExpandedUnits({
         defaults,
         touched: true,
-        storedFingerprint: "",
-        sessionOverride: null,
+        collapsedFingerprint: "",
+        sessionCollapsed: null,
         persist: true,
       }),
-    ]).toEqual([]);
+    ]).toEqual(["lead", "mpm"]);
   });
 
-  it("after touch, fingerprint drives expanded set", () => {
+  it("after touch, only listed leaders stay collapsed", () => {
     expect([
       ...resolveGraphExpandedUnits({
         defaults,
         touched: true,
-        storedFingerprint: "lead",
-        sessionOverride: null,
+        collapsedFingerprint: "lead",
+        sessionCollapsed: null,
         persist: true,
       }),
-    ]).toEqual(["lead"]);
+    ]).toEqual(["mpm"]);
   });
 
-  it("session override wins when not persisting; null falls back to defaults", () => {
+  it("a leader that is not in the collapsed list stays open", () => {
+    expect([
+      ...resolveGraphExpandedUnits({
+        defaults: new Set(["lead", "mpm", "eng"]),
+        touched: true,
+        collapsedFingerprint: "mpm",
+        sessionCollapsed: null,
+        persist: true,
+      }),
+    ]).toEqual(["lead", "eng"]);
+  });
+
+  it("session collapses apply when not persisting; null collapses nothing", () => {
     expect([
       ...resolveGraphExpandedUnits({
         defaults,
         touched: false,
-        storedFingerprint: "",
-        sessionOverride: new Set(["lead"]),
+        collapsedFingerprint: "",
+        sessionCollapsed: new Set(["lead"]),
         persist: false,
       }),
-    ]).toEqual(["lead"]);
+    ]).toEqual(["mpm"]);
     expect([
       ...resolveGraphExpandedUnits({
         defaults,
         touched: false,
-        storedFingerprint: "",
-        sessionOverride: null,
+        collapsedFingerprint: "mpm",
+        sessionCollapsed: null,
         persist: false,
       }),
     ]).toEqual(["lead", "mpm"]);
   });
 
-  it("ignores touched sentinel id if it leaks into fingerprint", () => {
+  it("ignores the touched sentinel if it leaks into the collapsed list", () => {
     expect([
       ...resolveGraphExpandedUnits({
         defaults,
         touched: true,
-        storedFingerprint: `lead,${GRAPH_UNIT_EXPAND_TOUCHED}`,
-        sessionOverride: null,
+        collapsedFingerprint: `lead,${GRAPH_UNIT_EXPAND_TOUCHED}`,
+        sessionCollapsed: null,
         persist: true,
       }),
-    ]).toEqual(["lead"]);
+    ]).toEqual(["mpm"]);
   });
 });

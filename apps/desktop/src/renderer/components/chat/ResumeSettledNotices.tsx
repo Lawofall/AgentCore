@@ -12,11 +12,11 @@
  * 最好的交代，再压一条「已处理」只会喧宾夺主。
  */
 import { DecisionCard, DecisionCardIcon } from "@/components/ui";
+import { useChatPaneId } from "@/lib/chatPane";
 import {
   resumeSettledHeadline,
   resumeSettledTurnCopy,
 } from "@/lib/resumeSettled";
-import { useConversationStore } from "@/stores/conversation";
 import {
   INTERACTION_CARD_NAME,
   useInteractionStore,
@@ -35,7 +35,7 @@ type ResumeSettledNotice = {
 };
 
 export function ResumeSettledNotices() {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   const [notices, setNotices] = useState<ResumeSettledNotice[]>([]);
 
   useEffect(() => {

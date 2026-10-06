@@ -78,15 +78,41 @@ function orderByVisible(
   return [...out, ...rest.values()];
 }
 
+function pushMatchingMine(
+  out: MineSelectedItem[],
+  item: PromptCatalogItem,
+  query: string,
+  extra?: string,
+): void {
+  const mine = mineItemOf(item);
+  if (!mine) return;
+  const copy = promptItemShelfCopy(item);
+  if (!matchQuery(query, extra, copy.title, copy.description, item.label)) {
+    return;
+  }
+  out.push(mine);
+}
+
 /**
- * 与 PromptOverview 渲染次序一致：必带卡从左到右（跳过准则），再按需各夹从上到下。
+ * 与 PromptOverview 看得见的卡一致。
+ * 根上：必带，再没归夹的按需；有搜索词时把夹里命中的卡也铺出来。
+ * 点进夹且不在搜索：只算这只夹。夹名本身不把里面的卡算进可见名单。
  * Shift 连选和「可见」都以这份名单为准。
  */
 export function flattenVisibleMineItems(
   rail: PromptRail,
   query = "",
+  openFolderId: string | null = null,
 ): MineSelectedItem[] {
   const q = query.trim();
+  if (!q && openFolderId) {
+    const folder = rail.folders.find((row) => row.id === openFolderId);
+    if (folder) {
+      const inside: MineSelectedItem[] = [];
+      for (const item of folder.items) pushMatchingMine(inside, item, q);
+      return inside;
+    }
+  }
   const out: MineSelectedItem[] = [];
   for (const row of buildAlwaysRows(rail)) {
     const mine = mineItemOf(row.item);
@@ -96,16 +122,9 @@ export function flattenVisibleMineItems(
     out.push(mine);
   }
   for (const folder of rail.folders) {
+    if (folder.source !== "other" && !q) continue;
     for (const item of folder.items) {
-      const mine = mineItemOf(item);
-      if (!mine) continue;
-      const copy = promptItemShelfCopy(item);
-      if (
-        !matchQuery(q, folder.name, copy.title, copy.description, item.label)
-      ) {
-        continue;
-      }
-      out.push(mine);
+      pushMatchingMine(out, item, q);
     }
   }
   return out;

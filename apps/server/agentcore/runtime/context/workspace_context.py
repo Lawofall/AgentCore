@@ -5,7 +5,8 @@
 表格解析 / 通道履约剧本不在这里。本机「桌」写文件夹名 / ``root_label``，不写 OS 绝对路径
 （工具 path 只认相对 POSIX；盘符进任务会让队员按错坐标系）。
 
-空状态不写。空桌只标「顶层空」。CEO 文件索引仍拼在本块末节（工人不加）。
+空状态不写。空桌只标「顶层空」。某一行在 ``omitted_projections`` 里则不写；
+全空则不输出标签。关掉只丢这行字，探测和边界照常。CEO 文件索引仍拼在本块末节（工人不加）。
 HOW → ``product_help`` / 工具 description / consult。
 分层 → docs/03-AI核心/上下文工程.md「提示词设计原则」。
 """
@@ -18,6 +19,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from agentcore.runtime.context.envelope_switches import (
+    BOUNDARY,
+    CLIENT,
+    DESK,
+    EXECUTION,
+    GAPS,
+    GIT,
+    INTERPRETERS,
+    MOUNTS,
+    SANDBOX,
+    SYSTEM,
+    include_projection,
+)
 from agentcore.workspace.layout import CONV_SEGMENT, INTERNAL_SEGMENT, TREE_SEGMENT
 
 if TYPE_CHECKING:
@@ -260,19 +274,23 @@ def _desk_line(
 
     Local sidecar ``backend.root`` is an OS path (``C:\\…``). Never put it here:
     file tools reject drive letters, and captains copy the desk line into tasks.
+    The 执行 line already says 云端; this line only distinguishes 文件夹 vs 草稿.
     """
-    empty = "；顶层空" if desk_visibly_empty else ""
+    empty = "顶层空" if desk_visibly_empty else ""
+
+    def _note(*parts: str) -> str:
+        body = "；".join(part for part in parts if part)
+        return f"（{body}）" if body else ""
+
     if is_local:
         shown = (desk_folder_label or "").strip() or root_label
-        if empty:
-            return f"桌：{shown}（顶层空）"
-        return f"桌：{shown}"
+        return f"桌：{shown}{_note(empty)}"
     fid = (desk_folder_id or "").strip()
     label = (desk_folder_label or "").strip() or (root_label if fid else "")
     if fid or _is_cloud_folder_desk(backend):
         shown = label or fid or root_label
-        return f"桌：{shown}（云端文件夹{empty}）"
-    return f"桌：本会话草稿（云端{empty}）"
+        return f"桌：{shown}{_note('文件夹', empty)}"
+    return f"桌：本会话草稿{_note(empty)}"
 
 
 def _gap_line(flags: Sequence[tuple[str, bool]]) -> str:
@@ -293,18 +311,22 @@ def desktop_client_can_bind(x_client_platform: str | None) -> bool:
     return resolve_channel_profile(x_client_platform).can_bind_folder
 
 
+def _kept(projection_id: str, line: str) -> str:
+    """Drop a fact line this conversation chose not to tell the model."""
+    if not line or not include_projection(projection_id):
+        return ""
+    return line
+
+
 def build_workspace_context(
     backend: WorkspaceBackend | None,
     *,
     desktop_online: bool,
     run_enabled: bool | None = None,
     browser_enabled: bool | None = None,
-    package_install_enabled: bool | None = None,
     git_tool_enabled: bool | None = None,
     exec_languages: list[str] | tuple[str, ...] | None = None,
     permission_axes: WorkspaceBoundary | None = None,
-    mcp_enabled: bool = False,
-    mcp_label: str | None = None,
     git_fact: WorkspaceGitFact | None = None,
     desk_folder_id: str | None = None,
     desk_folder_label: str | None = None,
@@ -313,8 +335,9 @@ def build_workspace_context(
 ) -> str:
     """Render the ``<工作区>`` block for this turn's backend + client.
 
-    Always returns a non-empty block when ``backend`` is set (environment is a fact,
-    even for an empty cloud scratch). ``backend is None`` → ``""`` (caller omits).
+    ``backend is None`` → ``""``. A set backend still yields ``""`` when every
+    projected line is omitted or naturally empty — callers then omit the tag.
+    Omissions drop text only; probes and the permission boundary still run.
 
     Gap line uses the same predicates as worker registry assembly
     (``execution_class_enabled_for`` / ``browser_execution_enabled_for``).
@@ -328,14 +351,11 @@ def build_workspace_context(
     bridge down, desktop offline) stay on the gap line only when the boundary
     includes that face.
 
-    ``package_install`` on cloud uses the same predicate as ``run``.
-    Local follows execution-class only. Override ``package_install_enabled``
-    is tests/probes only.
-
     ``exec_languages`` is the probed (local/sidecar) or fixed (cloud) language
     surface advertised on ``run``. Incomplete local probes get a short
     ``解释器：`` line; the full set is omitted. Cloud ``run`` assembled also
-    lists ``CLOUD_GUEST_SURFACE`` on the system line (declared guest PATH).
+    lists ``CLOUD_GUEST_SURFACE`` on the system line (commands present on the
+    guest, not a closed PATH).
 
     ``git_fact`` is the root-``.git`` probe. Unassembled git is a gap, not a
     Git line. Repo-policy lives in git tool receipts.
@@ -368,7 +388,6 @@ def build_workspace_context(
         if is_local
         else "执行：云端 · 出站：产品网络 · 原件：不能改"
     )
-    desktop_line = "客户端：桌面已连接" if desktop_online else "客户端：未连接"
 
     mounts = getattr(backend, "_mounts", None) or {}
     mounts_line: str | None = None
@@ -401,12 +420,14 @@ def build_workspace_context(
     from agentcore.runtime.closing_posture import note_browser_assembled
 
     note_browser_assembled(browser_on)
-    local_open_on = is_local
     host_on = boundary.allows_host and desktop_online
-    mcp_on = mcp_enabled if mcp_label is None else mcp_label != "未装配"
-    pkg_on = (
-        package_install_enabled if package_install_enabled is not None else exec_on
-    )
+    # host 已在开场表时，连接是表的推论。文件夹边界下桌面在线时，这行是唯一的客户端信号。
+    if not desktop_online:
+        desktop_line = "客户端：未连接"
+    elif host_on:
+        desktop_line = ""
+    else:
+        desktop_line = "客户端：桌面已连接"
     if git_tool_enabled is not None:
         git_on = git_tool_enabled
     else:
@@ -448,29 +469,35 @@ def build_workspace_context(
         gap_flags.extend(
             (
                 ("run", exec_on),
-                ("package_install", pkg_on),
                 ("browser", browser_on),
             )
         )
     if boundary.allows_host:
         gap_flags.append(("host", host_on))
-    gap_flags.extend((("local_open", local_open_on), ("mcp", mcp_on)))
+    # local_open 不是工具；云端不能改原件已经在执行行。
+    # Omissions drop the rendered line after the probes. They do not skip
+    # ``note_browser_assembled`` or change ``permission_axes``.
     body_lines = [
-        location_line,
-        boundary_line,
-        desk_line,
-        _system_line(
-            is_local=is_local,
-            is_remote_local=is_remote_local,
-            langs=tuple(langs) if langs is not None else None,
-            exec_on=exec_on,
+        _kept(EXECUTION, location_line),
+        _kept(BOUNDARY, boundary_line),
+        _kept(DESK, desk_line),
+        _kept(
+            SYSTEM,
+            _system_line(
+                is_local=is_local,
+                is_remote_local=is_remote_local,
+                langs=tuple(langs) if langs is not None else None,
+                exec_on=exec_on,
+            ),
         ),
-        git_line,
-        desktop_line,
-        *([mounts_line] if mounts_line else []),
-        _gap_line(gap_flags),
-        *leftover_lines,
-        interpreters_line,
+        _kept(GIT, git_line),
+        _kept(CLIENT, desktop_line),
+        _kept(MOUNTS, mounts_line or ""),
+        _kept(GAPS, _gap_line(gap_flags)),
+        *[_kept(SANDBOX, line) for line in leftover_lines],
+        _kept(INTERPRETERS, interpreters_line),
     ]
     body = "\n".join(line for line in body_lines if line)
+    if not body:
+        return ""
     return f"<工作区>\n{body}\n</工作区>"

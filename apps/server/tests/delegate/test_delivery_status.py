@@ -204,7 +204,7 @@ def test_plan_cutoff_skip_suppressed_when_replaces_ran():
 
 def test_blocked_with_criteria_gap_and_bind_action_on_cloud():
     # 「验收」批次级缺口 + 云端无执行环境 → bind_local_folder 行动项（复用单一真相源判定）。
-    # 已是云会话：文案须诚实「沙箱未装配」，禁止再推「先在云上做」。
+    # 已是云会话：文案须诚实「沙箱未装配」，禁止再推「云上做完再写入」。
     plan = _plan(RunSpec(run_id="w1", task="运行脚本生成 course.pptx", role="课件工程师"))
     results = {"w1": RunState(phase=RunPhase.COMPLETED, content="只有文字")}
     payload = build_delivery_status(
@@ -222,7 +222,8 @@ def test_blocked_with_criteria_gap_and_bind_action_on_cloud():
     desc = payload["actions"][0]["description"]
     assert "沙箱" in desc or "未装配" in desc
     assert "不要" in desc or "勿" in desc or "禁止" in desc
-    assert "先在云上做" in desc  # 出现在「不要再引导」语境
+    assert "云上做完再写入" in desc  # 出现在「不要再引导」语境
+    assert "Composer「先在云上做" not in desc
     assert "推荐** Composer「先在云上做" not in desc
     assert "**推荐** Composer「先在云上做" not in desc
     assert "合法非默认" in desc or "本机传统" in desc or "export_to_local" in desc

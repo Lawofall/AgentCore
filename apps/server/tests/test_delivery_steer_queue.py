@@ -576,3 +576,116 @@ async def test_coord_steer_posts_interjection(monkeypatch):
         with pytest.raises(asyncio.CancelledError):
             await blocker
         turn_queue.clear(cid)
+
+
+async def test_deliver_queued_item_to_captain_posts_and_keeps_siblings(monkeypatch):
+    """排队条「送给主管」：撤出这一条，插话进当前协调回合，团队不停，其余排队留着。"""
+    from agentcore.conversation import midflight_persist
+
+    cid = "c-to-captain"
+    turn_queue.clear(cid)
+    blocker = asyncio.create_task(_never())
+    host_sink = EventSink()
+    turn_runs.register(conversation_id=cid, task=blocker, sink=host_sink)
+
+    coord = MagicMock()
+    coord.active = True
+    coord.execution_id = "exec-cap"
+    coord.post = MagicMock(return_value=True)
+    coord.stash_interjection = MagicMock()
+    coord.take_interjection = MagicMock()
+    monkeypatch.setattr(
+        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        lambda _cid: coord,
+    )
+    target = new_queued_turn(
+        content="你我测试下",
+        user_id="u",
+        user_message_id="22222222-2222-4222-8222-222222222222",
+    )
+    sibling = new_queued_turn(content="下一条", user_id="u")
+    turn_queue.enqueue(cid, target)
+    turn_queue.enqueue(cid, sibling)
+
+    from agentcore.runtime.turn.delivery import deliver_queued_item_to_captain
+
+    try:
+        result = await deliver_queued_item_to_captain(cid, target.queue_id)
+        assert result.status == "delivered"
+        assert result.interjection_id
+        assert turn_queue.depth(cid) == 1
+        assert turn_queue.find_pending(cid, sibling.queue_id) is not None
+        assert turn_queue.find_pending(cid, target.queue_id) is None
+        assert not blocker.done()
+        coord.post.assert_called_once()
+        coord.take_interjection.assert_not_called()
+        midflight_persist.delete_midflight_user_message.assert_not_called()
+        kinds = [e.type for e in host_sink._history]  # noqa: SLF001
+        assert EventType.TURN_QUEUE_CANCELLED in kinds
+        injected = [
+            e
+            for e in host_sink._history  # noqa: SLF001
+            if e.type is EventType.USER_INTERJECTION
+        ]
+        assert len(injected) == 1
+        assert injected[0].payload["status"] == "received"
+        assert injected[0].payload["content"] == "你我测试下"
+        assert (
+            injected[0].payload["user_message_id"]
+            == "22222222-2222-4222-8222-222222222222"
+        )
+    finally:
+        blocker.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await blocker
+        turn_queue.clear(cid)
+
+
+async def test_deliver_queued_item_to_captain_keeps_queue_without_team(monkeypatch):
+    cid = "c-to-captain-idle"
+    turn_queue.clear(cid)
+    monkeypatch.setattr(
+        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        lambda _cid: None,
+    )
+    item = new_queued_turn(content="还在队里", user_id="u")
+    turn_queue.enqueue(cid, item)
+    from agentcore.runtime.turn.delivery import deliver_queued_item_to_captain
+
+    try:
+        result = await deliver_queued_item_to_captain(cid, item.queue_id)
+        assert result.status == "no_captain"
+        assert turn_queue.find_pending(cid, item.queue_id) is not None
+        missing = await deliver_queued_item_to_captain(cid, "missing")
+        assert missing.status == "missing"
+        assert turn_queue.depth(cid) == 1
+    finally:
+        turn_queue.clear(cid)
+
+
+async def test_to_captain_route_conflict_when_team_gone(monkeypatch):
+    from agentcore.api.routes.conversations import messages as messages_mod
+    from agentcore.core.errors import ConflictError
+
+    cid = "c-to-captain-route"
+    turn_queue.clear(cid)
+    monkeypatch.setattr(
+        messages_mod, "_require_conversation_write", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        lambda _cid: None,
+    )
+    item = new_queued_turn(content="留着", user_id="u")
+    turn_queue.enqueue(cid, item)
+    try:
+        with pytest.raises(ConflictError, match="团队已经不在"):
+            await messages_mod.deliver_queued_turn_to_captain(
+                conversation_id=cid,
+                queue_id=item.queue_id,
+                user=SimpleNamespace(user_id="u1"),
+                conv_repo=MagicMock(),
+            )
+        assert turn_queue.find_pending(cid, item.queue_id) is not None
+    finally:
+        turn_queue.clear(cid)

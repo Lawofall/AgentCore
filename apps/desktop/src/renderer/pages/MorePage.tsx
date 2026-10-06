@@ -29,9 +29,9 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// Settings are grouped by intent, three groups over ten items: 账户（含 Git 凭据 /
-// 用量）、模型（组合 + Key 相邻）、偏好（含关于与赞助，避免单列组）。旧 /more/feedback
-// 书签见 router 重定向。
+// Settings are grouped by intent: 账户（含 Git 凭据 / 用量）、模型、偏好（含关于与赞助）。
+// 宽屏装配在工具箱，侧栏不放「装配」，模型组只剩「服务商」。窄屏没有工具箱，设置里保留「装配」。
+// 旧 /more/feedback 书签见 router 重定向。
 // 「外观」→「通用」（多收了原本藏在关于页的诊断类开关）；旧路径见 router 重定向。
 // Opening /more 宽屏落点见 MoreIndexRedirect；窄屏 /more 是设置列表，不重定向。
 // 设定（画像 / 偏好 / 规则）在「文件」页，不设设置子页。
@@ -49,7 +49,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "模型",
     items: [
-      { icon: Cpu, label: "模型组合", path: "/more/model" },
+      { icon: Cpu, label: "装配", path: "/more/model" },
       { icon: KeyRound, label: "服务商", path: "/more/providers" },
     ],
   },
@@ -73,10 +73,13 @@ const NARROW_HIDE_PATHS = new Set([
 ]);
 
 function visibleGroups(narrow: boolean): NavGroup[] {
-  if (!narrow) return NAV_GROUPS;
   return NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => !NARROW_HIDE_PATHS.has(item.path)),
+    items: group.items.filter(
+      (item) =>
+        (narrow || item.path !== "/more/model") &&
+        (!narrow || !NARROW_HIDE_PATHS.has(item.path)),
+    ),
   })).filter((group) => group.items.length > 0);
 }
 

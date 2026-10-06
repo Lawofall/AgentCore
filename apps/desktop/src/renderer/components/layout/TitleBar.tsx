@@ -1,4 +1,4 @@
-import { BrandMark } from "@/components/brand/BrandMark";
+import { BrandMarkIcon } from "@/components/brand/BrandMark";
 import { WindowControls } from "@/components/layout/WindowControls";
 import { WindowFrameMenu } from "@/components/layout/WindowFrameMenu";
 import { IconButton } from "@/components/ui";
@@ -27,15 +27,10 @@ export function TitleBar() {
       >
         {!collapsed && (
           <span className="flex flex-1 items-center gap-1.5 text-sidebar-foreground [-webkit-app-region:no-drag]">
-            <BrandMark size="sm" />
+            <BrandMarkIcon size={16} title="AgentCore" />
             {isBeta && (
               <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
                 测试
-              </span>
-            )}
-            {import.meta.env.DEV && (
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-                DEV
               </span>
             )}
           </span>

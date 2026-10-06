@@ -119,7 +119,12 @@ describe("AssistantMessage ask settled", () => {
     renderBubble(settledMessage());
     expect(screen.queryByTestId("assistant-body")).toBeNull();
     expect(screen.getByText("已取消本回合")).toBeTruthy();
-    expect(document.body.textContent).not.toContain(baseCheckpoint.question);
+    expect(screen.getByRole("button").textContent).not.toContain(
+      baseCheckpoint.question,
+    );
+    expect(
+      document.querySelector("[data-ask-settled-body]")?.textContent,
+    ).toContain(baseCheckpoint.question);
   });
 
   it("continue resolved + 空 content：藏空正文，保留成功存根", () => {
@@ -129,7 +134,9 @@ describe("AssistantMessage ask settled", () => {
     renderBubble(settledMessage());
     expect(screen.queryByTestId("assistant-body")).toBeNull();
     expect(screen.queryByText("已按你的决定继续")).toBeNull();
-    expect(screen.getByText("就按这个开做")).toBeTruthy();
+    expect(document.querySelector("[data-ask-answer]")?.textContent).toContain(
+      "就按这个开做",
+    );
   });
 
   it("continue resolved + CEO 续聊：存根与续聊正文同时在", () => {
@@ -143,7 +150,9 @@ describe("AssistantMessage ask settled", () => {
       "好，按你确认的默认项来——先不派活，继续聊。",
     );
     expect(screen.queryByText("已按你的决定继续")).toBeNull();
-    expect(screen.getByText("就按这个开做")).toBeTruthy();
+    expect(document.querySelector("[data-ask-answer]")?.textContent).toContain(
+      "就按这个开做",
+    );
   });
 
   it("正文就是问句副本时仍藏（避免贴在结论文旁像还在催）", () => {

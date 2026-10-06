@@ -265,7 +265,7 @@ async def observability_conversation(
             username=owner.username if owner else None,
             display_name=owner.display_name if owner else None,
             created_at=conv.created_at,
-            model_profile_id=conv.model_profile_id,
+            assembly_id=conv.assembly_id,
             model_profile_name=expanded.name,
             deleted_at=conv.deleted_at,
         ),

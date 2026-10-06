@@ -85,11 +85,17 @@ def origin_pinned(channel: str, *, root_id: str | None) -> bool:
 # only a genuinely stuck client trips the health gate.
 _FULFILLER_QUEUE_MAXSIZE = 128
 
-# How long after a disconnect a device still counts as "just here". Production
-# desktops re-open the fulfill SSE in 1–4s (tail into the teens), so a minute is
-# several times the observed worst case while a machine that has been away
-# longer reads as plainly absent — which is what fail-fast is for.
-RECENT_PRESENCE_SECONDS = 60.0
+# How long after a disconnect a device still counts as "just here".
+# The desktop fulfill client backs off up to 30s (+ jitter) before the next
+# open, so this matches that cap with a small margin. A live session counts as
+# here without this clock; the window only covers the gap while it reconnects.
+# Keep it ≥ ``fulfill.grace.RECONNECT_GRACE_SECONDS`` (an op must not outwait
+# the presence answer that parked it).
+RECENT_PRESENCE_SECONDS = 35.0
+
+# Terminal frame for the connection a newer subscribe replaced. The replaced
+# client must stop; reconnecting would tear down the session that just took over.
+FRAME_SUPERSEDED = "superseded"
 
 # Departure marks are only ever read inside the window above; prune once the map
 # grows past this so a long-lived process cannot accumulate dead devices.
@@ -122,6 +128,11 @@ class FulfillerSession:
             maxsize=_FULFILLER_QUEUE_MAXSIZE
         )
         self._closed = False
+        self._unregistered = False
+        # Previous connection for this device, detached from routing but still
+        # open until :meth:`FulfillerHub.complete_handover` (after the new
+        # session has its seed queued).
+        self._predecessor: FulfillerSession | None = None
 
     @property
     def user_id(self) -> str:
@@ -176,8 +187,13 @@ class FulfillerSession:
         except asyncio.QueueFull:
             return False
 
-    def close(self) -> None:
-        """Signal end-of-stream (drain backlog, then sentinel). Idempotent."""
+    def close(self, *, terminal: dict[str, Any] | None = None) -> None:
+        """Signal end-of-stream (drain backlog, optional last frame, sentinel).
+
+        Idempotent. ``terminal`` is the one frame the holder should still see
+        (a superseded connection); queued ops are dropped so they cannot run
+        on the connection that just lost the device.
+        """
         if self._closed:
             return
         self._closed = True
@@ -186,6 +202,9 @@ class FulfillerSession:
                 self._queue.get_nowait()
             except asyncio.QueueEmpty:
                 break
+        if terminal is not None:
+            with contextlib.suppress(asyncio.QueueFull):
+                self._queue.put_nowait(terminal)
         with contextlib.suppress(asyncio.QueueFull):
             self._queue.put_nowait(None)
 
@@ -223,13 +242,15 @@ class FulfillerHub:
     ) -> FulfillerSession:
         """Register (or replace) a live fulfillment connection for ``device_id``.
 
-        Reconnecting the same device closes the previous session first so caps /
-        roots always reflect the newest subscription.
+        Replacing detaches the previous session from routing immediately so
+        caps / roots always reflect the newest subscription, but does not close
+        it. Call :meth:`complete_handover` after the new session is seeded so
+        the previous connection receives :data:`FRAME_SUPERSEDED` and stops.
         """
         key = (user_id, device_id)
         existing = self._by_device.get(key)
         if existing is not None:
-            self.unregister(existing)
+            self._detach(existing)
 
         cap_set = frozenset(c for c in caps if c in FULFILL_CHANNELS)
         identity = FulfillerIdentity(
@@ -240,21 +261,66 @@ class FulfillerHub:
             roots={r for r in (roots or ()) if r},
         )
         session = FulfillerSession(identity, registered_at=time.monotonic())
+        session._predecessor = existing
         self._by_user.setdefault(user_id, set()).add(session)
         self._by_device[key] = session
-        logger.info(
-            "fulfill.register",
-            user=user_id,
-            device=device_id,
-            platform=platform,
-            caps=sorted(cap_set),
-            roots=len(identity.roots),
-            devices=len(self._by_user.get(user_id, ())),
-        )
+        # A replacement is the same device staying online. Log only the
+        # absent → online edge; the old connection's unregister carries
+        # reason=superseded.
+        if existing is None:
+            logger.info(
+                "fulfill.register",
+                user=user_id,
+                device=device_id,
+                platform=platform,
+                caps=sorted(cap_set),
+                roots=len(identity.roots),
+                devices=len(self._by_user.get(user_id, ())),
+            )
         return session
 
-    def unregister(self, session: FulfillerSession) -> None:
-        """Remove a connection (on disconnect / unhealthy close). Idempotent."""
+    def complete_handover(self, session: FulfillerSession) -> None:
+        """Close the connection ``session`` replaced, after its seed is queued."""
+        previous = session._predecessor
+        session._predecessor = None
+        if previous is not None:
+            self.unregister(previous, reason="superseded")
+
+    def unregister(
+        self,
+        session: FulfillerSession,
+        *,
+        reason: str = "client_disconnect",
+    ) -> None:
+        """Remove a connection (on disconnect / unhealthy close). Idempotent.
+
+        ``reason`` is ``client_disconnect`` (the holder went away),
+        ``superseded`` (a newer subscribe took the device), ``queue_full``,
+        or ``process_exit``.
+        """
+        if session._unregistered:
+            return
+        session._unregistered = True
+        previous = session._predecessor
+        session._predecessor = None
+        self._detach(session)
+        terminal = {"type": FRAME_SUPERSEDED} if reason == "superseded" else None
+        session.close(terminal=terminal)
+        if session.can_fulfil:
+            now = time.monotonic()
+            self._last_seen[(session.user_id, session.device_id)] = now
+            self._prune_last_seen(now)
+        logger.info(
+            "fulfill.unregister",
+            user=session.user_id,
+            device=session.device_id,
+            reason=reason,
+        )
+        if previous is not None:
+            self.unregister(previous, reason="superseded")
+
+    def _detach(self, session: FulfillerSession) -> None:
+        """Drop ``session`` from the routing maps. Does not close it."""
         key = (session.user_id, session.device_id)
         if self._by_device.get(key) is session:
             self._by_device.pop(key, None)
@@ -263,16 +329,12 @@ class FulfillerHub:
             conns.discard(session)
             if not conns:
                 self._by_user.pop(session.user_id, None)
-        session.close()
-        if session.can_fulfil:
-            now = time.monotonic()
-            self._last_seen[key] = now
-            self._prune_last_seen(now)
-        logger.info(
-            "fulfill.unregister",
-            user=session.user_id,
-            device=session.device_id,
-        )
+
+    def close_all(self, *, reason: str = "process_exit") -> None:
+        """Unregister every live session (process shutdown)."""
+        sessions = [s for conns in self._by_user.values() for s in list(conns)]
+        for session in sessions:
+            self.unregister(session, reason=reason)
 
     def _prune_last_seen(self, now: float) -> None:
         """Drop departure marks nobody can still read (bounded memory)."""
@@ -432,7 +494,7 @@ class FulfillerHub:
             type=event.get("type"),
             qsize=_FULFILLER_QUEUE_MAXSIZE,
         )
-        self.unregister(session)
+        self.unregister(session, reason="queue_full")
         return False
 
     def connection_count(self, user_id: str) -> int:

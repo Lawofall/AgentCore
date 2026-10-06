@@ -24,6 +24,18 @@ export const UNTITLED_FOLDER_NAME = "未命名文件夹";
 export const UNTITLED_PROMPT_FOLDER_NAME = "未命名夹";
 
 /**
+ * Generated placeholder (`未命名夹`, then `未命名夹 (2)`…), not a name the person chose.
+ * `(1)` is not part of that sequence.
+ */
+export function isUntitledPromptFolderName(name: string): boolean {
+  if (name === UNTITLED_PROMPT_FOLDER_NAME) return true;
+  const prefix = `${UNTITLED_PROMPT_FOLDER_NAME} (`;
+  if (!name.startsWith(prefix) || !name.endsWith(")")) return false;
+  const n = name.slice(prefix.length, -1);
+  return /^[1-9]\d*$/.test(n) && Number(n) >= 2;
+}
+
+/**
  * Same numbering as server `unique_sibling_name`: `base`, then `base (2)`…
  * Comparison is case-insensitive so `报告` and `报告` cannot both land.
  */

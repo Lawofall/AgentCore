@@ -95,7 +95,7 @@ describe("ModelKeyForm", () => {
     expect(screen.getByText(/^API Key/)).toBeTruthy();
     expect(screen.getByText("高级选项")).toBeTruthy();
     expect(
-      screen.getByText(/选择后将预填名称与端点；日常选用请到「模型组合」/),
+      screen.getByText(/选择后将预填名称与端点；日常选用请到「装配」/),
     ).toBeTruthy();
     openAdvancedOptions();
     expect(screen.getByLabelText("Base URL")).toBeTruthy();

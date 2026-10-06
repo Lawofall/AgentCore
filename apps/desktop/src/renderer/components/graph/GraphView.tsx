@@ -108,9 +108,8 @@ export const GraphView = memo(function GraphView({
   const setShowAuditInjectFlow = useGraphStore((s) => s.setShowAuditInjectFlow);
   const layoutKind = useGraphStore((s) => s.layoutKind);
   const setLayoutKind = useGraphStore((s) => s.setLayoutKind);
-  // 内嵌模式：expandedUnits 按对话持久化（与画布 graph-fold 独立）。
-  // 默认展开有子队的 unit（对齐画布 / 协作图 UX「默认展开」）；用户点过收起后才记覆盖。
-  // 交互/全屏 GraphView 仍用会话内存态；画布多回合折叠走 graph store。
+  // 内嵌模式：只持久化用户收起的队长（默认展开）。后出现的新层不在收起表里，仍展开。
+  // 交互/全屏 GraphView 用会话内存态。
   const persistEmbedUnits = !interactive && !!messageId && !!conversationId;
   const embedUnitPrefix = persistEmbedUnits
     ? `${conversationId}::${messageId}:embed-unit:`
@@ -122,11 +121,11 @@ export const GraphView = memo(function GraphView({
   const embedTouched = useDisclosureStore((s) =>
     embedTouchedKey ? !!s.map[embedTouchedKey] : false,
   );
-  const embedUnitsFingerprint = useDisclosureStore((s) => {
+  const embedCollapsedFingerprint = useDisclosureStore((s) => {
     if (!embedUnitPrefix) return "";
     const ids: string[] = [];
     for (const [k, v] of Object.entries(s.map)) {
-      if (!v || !k.startsWith(embedUnitPrefix)) continue;
+      if (v !== false || !k.startsWith(embedUnitPrefix)) continue;
       const id = k.slice(embedUnitPrefix.length);
       if (id === GRAPH_UNIT_EXPAND_TOUCHED) continue;
       ids.push(id);
@@ -138,30 +137,31 @@ export const GraphView = memo(function GraphView({
     if (!execution) return new Set<string>();
     return expandedUnitsFromFold(execution.runs, new Set());
   }, [structureStatusEpoch]);
-  const [sessionExpandedUnits, setSessionExpandedUnits] =
-    useState<Set<string> | null>(null);
+  const [sessionCollapsed, setSessionCollapsed] = useState<Set<string> | null>(
+    null,
+  );
   const expandedUnits = useMemo(
     () =>
       resolveGraphExpandedUnits({
         defaults: defaultExpandedUnits,
         touched: embedTouched,
-        storedFingerprint: embedUnitsFingerprint,
-        sessionOverride: sessionExpandedUnits,
+        collapsedFingerprint: embedCollapsedFingerprint,
+        sessionCollapsed,
         persist: !!embedUnitPrefix,
       }),
     [
       defaultExpandedUnits,
       embedTouched,
-      embedUnitsFingerprint,
-      sessionExpandedUnits,
+      embedCollapsedFingerprint,
+      sessionCollapsed,
       embedUnitPrefix,
     ],
   );
   const onToggleUnitExpand = useCallback(
     (unitId: string) => {
       if (!embedUnitPrefix) {
-        setSessionExpandedUnits((prev) => {
-          const next = new Set(prev ?? defaultExpandedUnits);
+        setSessionCollapsed((prev) => {
+          const next = new Set(prev ?? []);
           if (next.has(unitId)) next.delete(unitId);
           else next.add(unitId);
           return next;
@@ -171,8 +171,8 @@ export const GraphView = memo(function GraphView({
       const current = resolveGraphExpandedUnits({
         defaults: defaultExpandedUnits,
         touched: embedTouched,
-        storedFingerprint: embedUnitsFingerprint,
-        sessionOverride: null,
+        collapsedFingerprint: embedCollapsedFingerprint,
+        sessionCollapsed: null,
         persist: true,
       });
       if (current.has(unitId)) current.delete(unitId);
@@ -180,14 +180,15 @@ export const GraphView = memo(function GraphView({
       if (embedTouchedKey) setDisclosureKey(embedTouchedKey, true, false);
       const known = new Set([...defaultExpandedUnits, ...current, unitId]);
       for (const id of known) {
-        setDisclosureKey(`${embedUnitPrefix}${id}`, current.has(id), false);
+        // 默认展开：只把收起写成 false。展开删键，后出现的队长不在表里即展开。
+        setDisclosureKey(`${embedUnitPrefix}${id}`, current.has(id), true);
       }
     },
     [
       embedUnitPrefix,
       embedTouchedKey,
       embedTouched,
-      embedUnitsFingerprint,
+      embedCollapsedFingerprint,
       defaultExpandedUnits,
       setDisclosureKey,
     ],

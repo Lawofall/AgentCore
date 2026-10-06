@@ -380,6 +380,41 @@ async def test_tool_result_error_keeps_model_detail_and_curated_failure():
     }
 
 
+async def test_prose_write_close_note_stays_off_the_tool_row(tmp_path: Path):
+    """Prose write close line is on the model tool message, not tool_use_end."""
+    from agentcore.tools.builtin.file_ops.integrity import prose_write_close_note
+
+    prose = "成稿正文。" * 80
+    note = prose_write_close_note(path="note.md", content=prose)
+    reg = ToolRegistry()
+    reg.register(_OkTool("write", output="已写入"))
+    sink = EventSink()
+    messages, _terminal, _attempts = await execute_tools(
+        [_call("c1", "write", json.dumps({"file_path": "note.md", "content": prose}))],
+        reg,
+        _ctx(ServerWorkspace(root=tmp_path, sandbox=SubprocessSandbox())),
+        sink,
+        approval_gate=None,
+        run_id="r1",
+    )
+    assert note in (messages[0].content or "")
+    ends = [e for e in sink._history if e.type == EventType.TOOL_USE_END]  # noqa: SLF001
+    assert note not in (ends[0].payload.get("result") or "")
+
+    sink_short = EventSink()
+    short = "# 提纲\n"
+    messages_short, _, _ = await execute_tools(
+        [_call("c2", "write", json.dumps({"file_path": "note.md", "content": short}))],
+        reg,
+        _ctx(ServerWorkspace(root=tmp_path, sandbox=SubprocessSandbox())),
+        sink_short,
+        approval_gate=None,
+        run_id="r1",
+    )
+    assert prose_write_close_note(path="note.md", content=short) == ""
+    assert note not in (messages_short[0].content or "")
+
+
 async def test_success_tool_use_end_omits_failure(registry: tuple[ToolRegistry, _OkTool]):
     reg, _ok_b = registry
     sink = EventSink()

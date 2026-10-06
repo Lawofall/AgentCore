@@ -7,8 +7,8 @@ import {
   journalHydrateIdentityEqual,
 } from "@/components/graph/journalHydrate";
 import { executionGraphCapabilities } from "@/components/graph/planCapabilities";
+import { useChatPaneId } from "@/lib/chatPane";
 import { ensureFullMessageRuns } from "@/services/messages";
-import { useConversationStore } from "@/stores/conversation";
 import { useStreamAwareDisclosure } from "@/stores/disclosure";
 import {
   type ExecutionJournal,
@@ -58,7 +58,7 @@ export function InlineTeamGraph({
   journal?: ExecutionJournal;
 }) {
   const navigate = useNavigate();
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   const hydrateFromJournal = useExecutionStore((s) => s.hydrateFromJournal);
   const journalIdentity = journalHydrateIdentity(journal);
   const journalIdentityRef = useRef(journalIdentity);

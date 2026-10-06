@@ -28,6 +28,11 @@ compact copy (``prefix_breach`` / ``prefix_breach_section`` / ``tools_changed`` 
 
 - **命中率** — ``hit_ratio`` = cache_hit_tokens / input_tokens, with ``cache_reported`` saying
   whether the provider spoke about caching at all (a silent provider is NOT a 0% hit).
+- **跨对话开头** — ``opening_vs_prev`` compares this request's tools digest and first
+  message digest with the previous request of the same user, model, and scenario,
+  including a new conversation. ``cold_chain`` stays per conversation and does not
+  answer that. The memory dies with the process: after a restart the next call is
+  ``cold`` even when the provider disk cache is still warm.
 - **被什么击穿** — ``breach`` classifies the first divergence (tools table / system prompt /
   mid-history rewrite / pure append). Tools sit ahead of messages: a mid-chain
   ``tools[]`` rewrite is still ``tools``, not ``history_growth``. ``breach_section`` names
@@ -80,6 +85,13 @@ BREACH_TOOLS = "tools"  # opening tools[] changed (renders before system + messa
 BREACH_SYSTEM_PROMPT = "system_prompt"  # message 0 changed → the whole request is a miss
 BREACH_HEAD_REWRITE = "head_rewrite"  # first message changed but it is not a system message
 BREACH_HISTORY_REWRITE = "history_rewrite"  # a mid-history message changed (compaction / edit)
+
+# ``opening_vs_prev`` — tools + first message vs the previous request for this user.
+# Independent of the conversation chain: a new chat is still ``cold_chain`` there.
+OPENING_COLD = "cold"  # no earlier request for this user+model+scenario in-process
+OPENING_SAME = "same"  # tools and first message match; a provider miss is not our bytes
+OPENING_TOOLS = "tools"  # tools[] differs; DeepSeek matches from token 0, so the hit is 0
+OPENING_SYSTEM = "system"  # tools match, first message does not
 
 # ``reusable_basis`` values — how ``reusable_tokens`` was obtained.
 BASIS_MEASURED = "measured"  # the previous request's own input_tokens (pure append)
@@ -305,6 +317,17 @@ class ChainState:
 
 _chains: OrderedDict[str, ChainState] = OrderedDict()
 
+
+@dataclass(frozen=True, slots=True)
+class OpeningState:
+    """Tools + first-message digests of one earlier request. No prompt text."""
+
+    tools_digest: str
+    system_digest: str
+
+
+_openings: OrderedDict[str, OpeningState] = OrderedDict()
+
 # The chain scope of every ``cost_role=captain`` call. A constant, because the CEO's
 # transcript belongs to the CONVERSATION and outlives the run that carries any one turn.
 _CAPTAIN_CHAIN_SCOPE = "captain"
@@ -356,6 +379,9 @@ class PrefixCacheProbe:
     chain_calls: int
     tools_changed: bool = False
     tools_count: int = 0
+    tools_fp: str = ""
+    system_fp: str = ""
+    opening_vs_prev: str = OPENING_COLD
 
     def as_log_fields(self) -> dict[str, object]:
         return {
@@ -376,12 +402,18 @@ class PrefixCacheProbe:
             "chain_calls": self.chain_calls,
             "tools_changed": self.tools_changed,
             "tools_count": self.tools_count,
+            "tools_fp": self.tools_fp,
+            "system_fp": self.system_fp,
+            "opening_vs_prev": self.opening_vs_prev,
         }
 
     def as_llm_call_fields(self) -> dict[str, object]:
         """Compact info-line copy. No forfeited / char counts — those are inferred."""
         fields: dict[str, object] = {
             "prefix_breach": self.breach,
+            "opening_vs_prev": self.opening_vs_prev,
+            "tools_fp": self.tools_fp,
+            "system_fp": self.system_fp,
             "tools_changed": self.tools_changed,
             "tools_count": self.tools_count,
         }
@@ -453,6 +485,9 @@ def compute_probe(
     section_delta: SectionDelta = _EMPTY_DELTA,
     tools_digest: str = "",
     tools_count: int = 0,
+    tools_fp: str = "",
+    system_fp: str = "",
+    opening_vs_prev: str = OPENING_COLD,
 ) -> PrefixCacheProbe:
     """Pure metric computation — the unit under test (no globals, no logging).
 
@@ -490,6 +525,9 @@ def compute_probe(
             chain_calls=1,
             tools_changed=False,
             tools_count=tools_count,
+            tools_fp=tools_fp,
+            system_fp=system_fp,
+            opening_vs_prev=opening_vs_prev,
         )
 
     tools_changed = tools_digest != previous.tools_digest
@@ -542,7 +580,38 @@ def compute_probe(
         chain_calls=previous.calls + 1,
         tools_changed=tools_changed,
         tools_count=tools_count,
+        tools_fp=tools_fp,
+        system_fp=system_fp,
+        opening_vs_prev=opening_vs_prev,
     )
+
+
+def classify_opening(
+    tools_digest: str,
+    system_digest: str,
+    previous: OpeningState | None,
+) -> str:
+    """How this request's opening sits against the previous one for the same user.
+
+    Tools are compared first: they render before the system message, so a tools
+    change hides a system change. ``same`` means both digests match; the tail
+    (history, envelope, user text) is not part of this verdict.
+    """
+    if previous is None:
+        return OPENING_COLD
+    if tools_digest != previous.tools_digest:
+        return OPENING_TOOLS
+    if system_digest != previous.system_digest:
+        return OPENING_SYSTEM
+    return OPENING_SAME
+
+
+def _opening_key(model: str, scenario: str) -> str | None:
+    """User + model + scenario. No user id → no cross-chat memory."""
+    user = (get_log_value("user_id") or "").strip()
+    if not user:
+        return None
+    return "|".join((user, (model or "").strip(), (scenario or "").strip()))
 
 
 def observe_prefix_cache(
@@ -579,6 +648,10 @@ def observe_prefix_cache(
     chain_key = "|".join((conversation_id, scenario, _chain_scope()))
     digests, sizes = message_fingerprints(messages)
     tools_digest, tools_count = tools_fingerprint(tools)
+    system_fp = digests[0] if digests else ""
+    opening_key = _opening_key(model, scenario)
+    previous_opening = _openings.get(opening_key) if opening_key else None
+    opening_vs_prev = classify_opening(tools_digest, system_fp, previous_opening)
     probe = compute_probe(
         digests=digests,
         sizes=sizes,
@@ -590,7 +663,17 @@ def observe_prefix_cache(
         section_delta=prompt_section_delta(conversation_id),
         tools_digest=tools_digest,
         tools_count=tools_count,
+        tools_fp=tools_digest,
+        system_fp=system_fp,
+        opening_vs_prev=opening_vs_prev,
     )
+    if opening_key:
+        _lru_put(
+            _openings,
+            opening_key,
+            OpeningState(tools_digest=tools_digest, system_digest=system_fp),
+            _MAX_CHAINS,
+        )
     _lru_put(
         _chains,
         chain_key,
@@ -617,4 +700,5 @@ def observe_prefix_cache(
 def reset_prefix_cache_state() -> None:
     """Drop all in-process probe state (test isolation)."""
     _chains.clear()
+    _openings.clear()
     _conversation_sections.clear()

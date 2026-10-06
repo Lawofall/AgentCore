@@ -10,6 +10,12 @@ import { useEffect } from "react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
+
 const fetchMessageWindow =
   vi.fn<typeof import("@/services/messages").fetchMessageWindow>();
 const loadLatestWindow = vi.fn<
@@ -23,6 +29,9 @@ const getConversations = vi.fn(
 );
 vi.mock("@/hooks/useConversations", () => ({
   getConversations: () => getConversations(),
+  useConversations: () => [],
+  // 本文件只看 hydrate。列表未落定，分屏不会因空名单把对话导航走。
+  useGroupedConversationsSettled: () => false,
 }));
 
 const scheduleHydrateAttachSettle =

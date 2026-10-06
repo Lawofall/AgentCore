@@ -34,7 +34,6 @@ class MineSkillView(BaseModel):
     description: str
     content: str
     version: str
-    offers_tools: list[str] = []
 
 
 class SkillCatalogView(BaseModel):
@@ -100,7 +99,6 @@ async def _catalog_view(
     folder_id: str | None,
     writable: bool,
 ) -> SkillCatalogView:
-    from agentcore.documents.frontmatter import offers_tools_from_content
     from agentcore.memory import memory_version
 
     del session
@@ -121,7 +119,6 @@ async def _catalog_view(
                 description=doc.description or "",
                 content=doc.content or "",
                 version=memory_version(doc.content or ""),
-                offers_tools=list(offers_tools_from_content(doc.content or "")),
             )
             for doc in mine_docs
             if _eligible_mine_doc(doc)

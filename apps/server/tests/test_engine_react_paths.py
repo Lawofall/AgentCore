@@ -247,6 +247,9 @@ async def test_captain_window_prompt_follows_each_round():
     assert usage.input_tokens == 11_000
     journal = sink.execution_journal() or []
     assert EventType.WINDOW_PROMPT.value not in [e["type"] for e in journal]
+    spends = [e for e in sink.history_snapshot() if e.type is EventType.RUN_SPEND]
+    assert [e.payload["usage"]["input"] for e in spends] == [8_000, 11_000]
+    assert EventType.RUN_SPEND.value not in [e["type"] for e in journal]
 
 
 async def test_worker_loop_does_not_emit_window_prompt():
@@ -275,6 +278,13 @@ async def test_worker_loop_does_not_emit_window_prompt():
         approval_gate=None,
     )
     assert not any(e.type is EventType.WINDOW_PROMPT for e in sink.history_snapshot())
+    spends = [e for e in sink.history_snapshot() if e.type is EventType.RUN_SPEND]
+    assert len(spends) == 1
+    assert spends[0].payload["run_id"] == "run-w"
+    assert spends[0].payload["role"] == "worker"
+    assert EventType.RUN_SPEND.value not in [
+        e["type"] for e in (sink.execution_journal() or [])
+    ]
 
 
 async def test_react_loop_replays_unmatched_trailing_tools_before_llm():

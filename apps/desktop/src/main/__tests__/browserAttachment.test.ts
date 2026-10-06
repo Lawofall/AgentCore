@@ -2,6 +2,7 @@
  * Local 浏览器 Attachment：hide=脱离、过期 show 拒、ensurePageKind 不因 wasActive 复活；
  * Bridge mutation（navigate/click/type/scroll）成功 data 含 elements + snapshot_version。
  */
+import { WebContentsView } from "electron";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ELEMENTS_TREE = "[e1] button: Go\n[e2] link: More";
@@ -138,6 +139,23 @@ describe("Local browser Attachment", () => {
     expect(localBrowserPageVisibleForTests("page-1")).toBe(false);
     expect(localBrowserAttachmentGenerationForTests()).toBeGreaterThan(
       genBefore,
+    );
+    const view = vi.mocked(WebContentsView).mock.results.at(-1)?.value as {
+      setBounds: ReturnType<typeof vi.fn>;
+    };
+    expect(view.setBounds).toHaveBeenLastCalledWith({
+      x: 0,
+      y: 0,
+      width: 1280,
+      height: 800,
+    });
+    expect(WebContentsView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        webPreferences: expect.objectContaining({
+          backgroundThrottling: false,
+          focusOnNavigation: false,
+        }),
+      }),
     );
   });
 

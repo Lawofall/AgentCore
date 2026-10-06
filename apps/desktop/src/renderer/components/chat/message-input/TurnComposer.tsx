@@ -3,6 +3,7 @@ import { MentionMenu } from "@/components/chat/MentionMenu";
 import { IconButton } from "@/components/ui";
 import { useConversations } from "@/hooks/useConversations";
 import { useFolders } from "@/hooks/useFolders";
+import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import {
   COMPOSER_CONTINUE_PLACEHOLDER,
   isContinuableAssistant,
@@ -36,8 +37,8 @@ import {
   useComposerSendError,
 } from "@/stores/composerSendError";
 import {
-  activeRuntime,
   assistantProjectionId,
+  runtimeOf,
   useActiveError,
   useActiveErrorAction,
   useActiveGenerating,
@@ -55,6 +56,7 @@ import { useServerHealthStore } from "@/stores/serverHealth";
 import { AtSign, Loader2, Send, Square, X } from "lucide-react";
 import type { ChangeEvent, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AssemblyPicker } from "./AssemblyPicker";
 import {
   ComposerBodyEditor,
   type ComposerBodyHandle,
@@ -70,7 +72,6 @@ import {
 import { ComposerReceivedContextButton } from "./ComposerReceivedContextButton";
 import { ComposerVisionHint } from "./ComposerVisionHint";
 import { ComposerWorkspaceChip } from "./ComposerWorkspaceChip";
-import { ModelPicker } from "./ModelPicker";
 import { PermissionAxesBadge } from "./PermissionPresetBadge";
 import { RecordingBar } from "./RecordingBar";
 import { ComposerConnectionNotice } from "./ServerStatusIndicator";
@@ -107,11 +108,18 @@ const MIN_COMPOSER_HEIGHT_CARD = 56;
 const MIN_COMPOSER_HEIGHT_BAR = 36;
 const MAX_COMPOSER_HEIGHT = 200;
 
-/** bar 底排盒：＋ / 输入 / 语音 / 发送 与窗外环共用，环跟按钮对齐，不跟卡片边框底边对齐。 */
+/** bar 底排盒：＋ / 输入 / 语音 / 发送。窗外环用同一 `py-1` 对齐，不跟卡片边框底边对齐。 */
 const COMPOSER_BAR_ROW = "flex items-end gap-1 py-1";
 const COMPOSER_BAR_CLUSTER = "flex shrink-0 items-center pb-0.5";
 /** card 底栏：窗外环与工具条同一 `pb-3`，不跟卡片边框底边对齐。 */
 const COMPOSER_CARD_ENDCAP = "flex items-end pb-3";
+/**
+ * 窗口环不进输入列的 flex。默认整颗挂在卡片右侧空白（`left: 100% + 4px`）。
+ * 聊天列窄于 50.5rem 时，globals.css `@container chat` 把环收回列内留白，
+ * 并给 `[data-composer-actions]` 加 end padding，避免压住发送或被裁切。
+ */
+const COMPOSER_ENDCAP_PLACE =
+  "absolute bottom-0 z-10 left-[calc(100%+0.25rem)]";
 
 /** Align with backend `MessageCreate.content` max_length. */
 const MESSAGE_CHAR_LIMIT = 32_000;
@@ -127,7 +135,7 @@ export type TurnComposerVariant = "card" | "bar";
  *
  * `variant="bar"` is the compact single-row chrome used only by the chat bottom dock:
  * `[＋]` · textarea · 语音 · 发送；工作区/Git/模型/权限/@ 收进＋菜单。
- * 窗口环贴在整块输入框外侧右边，不进卡片；与底排同一行盒（不是贴边框底边）。
+ * 窗口环贴在整块输入框外侧右边，不进卡片、不占输入列宽；与底排同一行盒（不是贴边框底边）。
  * default `card` keeps textarea-above-toolbar（居中草稿），左簇摊开。
  * 离线态靠 {@link ComposerConnectionNotice} 与发送硬禁，不再用安静连接绿点。
  *
@@ -167,7 +175,8 @@ export function TurnComposer({
   const isStopping = turnPhase === "stopping";
   // 冻图会立刻关 isGenerating、execution 也不再算活队；停完之前输入框仍走停止，不露出发送。
   const deskOccupied = isGenerating || teamLive || isStopping;
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
+  const paneKey = useChatPaneSliceKey();
   const byId = useInteractionStore((s) => s.byId);
   const pausedPending = usePausedTurnStore((s) => s.pending);
   const recoveryState = usePausedTurnStore((s) =>
@@ -182,14 +191,14 @@ export function TurnComposer({
         conversationId,
         byId,
         pausedPending,
-        messages: s.byId[conversationId]?.messages ?? EMPTY_MESSAGES,
+        messages: s.byId?.[paneKey]?.messages ?? EMPTY_MESSAGES,
         recoveryState,
       }).length > 0
     );
   });
   const pendingApprovals = usePendingApprovals(conversationId);
   const lastMessageRaw = useConversationStore((s) => {
-    const rt = activeRuntime(s);
+    const rt = runtimeOf(s, paneKey);
     if (rt.isGenerating) return null;
     return rt.messages.at(-1) ?? null;
   });
@@ -664,14 +673,14 @@ export function TurnComposer({
 
   const menuOpen = mention.menuMode !== null;
 
-  // 左簇顺序：工作区 · Git? · 模型 · 权限 · @
-  // bar：整簇收进 ComposerPlusMenu（权限/@ 带文案）；card：底栏摊开（iconOnly）。
+  // 左簇顺序：工作区 · Git? · 装配 · 权限 · @
+  // bar：整簇收进 ComposerPlusMenu（权限/@ 带文案）；card：底栏摊开（权限 iconOnly）。
   // 否决 Composer 并排「本地引擎/云端过桥」切换器；引擎不可用走诊断横幅，不自动过桥。
   const sessionChrome = (
     <>
       <ComposerWorkspaceChip conversationId={conversationId} />
       <ComposerGitStatusChip conversationId={conversationId} />
-      <ModelPicker disabled={deskOccupied} />
+      <AssemblyPicker disabled={deskOccupied} />
       <PermissionAxesBadge disabled={deskOccupied} iconOnly={!isBar} />
     </>
   );
@@ -693,7 +702,7 @@ export function TurnComposer({
   );
 
   // 生成中：停止常显。有草稿时复用空闲「发送」钮（Enter = 排队，挂在输入框上方）。
-  // 停止并发送在排队挂件上。Ctrl/Cmd+Enter 只在队还在或工具步还在执行时送进当前回合。
+  // 整轮停在这枚停止钮。Ctrl/Cmd+Enter 只在队还在或工具步还在执行时送进当前回合。
   // 辩论进行中：发送=continue；隐藏排队；收场靠裁判收敛，不在此露出结论。
   // 离线 / 只读协作桌硬禁用发送（按钮 disabled + title；键盘走 handleKeyDown）。
   // 辩论进行中主框是「对这场说话」：发送只看正文。@ 入口已藏，mention 芯片不得单独点亮发送。
@@ -803,8 +812,8 @@ export function TurnComposer({
   );
 
   return (
-    <div className="flex items-end gap-1">
-      <div className="flex min-w-0 flex-1 flex-col">
+    <div data-composer-shell="" className="relative w-full">
+      <div className="flex min-w-0 w-full flex-col">
         {failureNotice && (
           <ComposerFailureBanner
             message={failureNotice.message}
@@ -914,7 +923,10 @@ export function TurnComposer({
           )}
 
           {isBar ? (
-            <div className={`${COMPOSER_BAR_ROW} px-2`}>
+            <div
+              className={`${COMPOSER_BAR_ROW} px-2`}
+              data-composer-actions=""
+            >
               <div className={COMPOSER_BAR_CLUSTER}>
                 <ComposerPlusMenu>
                   {sessionChrome}
@@ -932,7 +944,10 @@ export function TurnComposer({
           ) : (
             <>
               {editorBlock}
-              <div className="flex items-center justify-between px-4 pb-3">
+              <div
+                className="flex items-center justify-between px-4 pb-3"
+                data-composer-actions=""
+              >
                 <div className="flex min-w-0 flex-1 items-center gap-1">
                   {leftCluster}
                 </div>
@@ -949,7 +964,7 @@ export function TurnComposer({
       </div>
       <div
         data-composer-endcap={isBar ? "bar" : "card"}
-        className={isBar ? COMPOSER_BAR_ROW : COMPOSER_CARD_ENDCAP}
+        className={`${COMPOSER_ENDCAP_PLACE} ${isBar ? COMPOSER_BAR_ROW : COMPOSER_CARD_ENDCAP}`}
       >
         <div className={isBar ? COMPOSER_BAR_CLUSTER : "flex items-center"}>
           <ComposerReceivedContextButton />

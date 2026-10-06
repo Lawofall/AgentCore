@@ -33,6 +33,7 @@ export const USAGE_SETTLE_WIRE_INT_KEYS = [
 export const USAGE_SETTLE_POSITIVE_INT_KEYS = [
   "duration_ms",
   "generation_ms",
+  "ttft_ms",
 ] as const;
 
 /** Mirrors server ``USAGE_SETTLE_PASSTHROUGH_KEYS``. */
@@ -120,6 +121,8 @@ export interface OutboxRecord {
   duration_ms?: number;
   /** Decode-window sum (ms); same number as live message_end.generation_ms. */
   generation_ms?: number;
+  /** Usage-panel TTFT (ms); same number as live message_end.ttft_ms. */
+  ttft_ms?: number;
   error_code?: string | null;
   collab?: unknown;
   outcome?: string | null;
@@ -416,6 +419,21 @@ function remapPathOrVerifyFailure(raw: string): string | null {
   return null;
 }
 
+/** Model receipt trailer. Producer: Python ``TOOL_FAILED_MARKER``. */
+const TOOL_FAILED_MARKER = "<!--agentcore:tool_failed-->";
+const MODEL_FAILURE_STATUS_LINE =
+  /^error: (?:validation|permission|permanent|redirect|postcondition|timeout|error)\n?/;
+
+/** Drop the model status line and trailer. No-op without the trailer. */
+function stripModelFailureEnvelope(message: string): string {
+  if (!message.includes(TOOL_FAILED_MARKER)) return message;
+  return message
+    .split(TOOL_FAILED_MARKER)
+    .join("")
+    .replace(MODEL_FAILURE_STATUS_LINE, "")
+    .trim();
+}
+
 /**
  * Coarse write-back failure codes (mirrors server
  * ``normalize_local_turn_tool_failure_code``).
@@ -425,10 +443,11 @@ export function normalizeToolFailureCode(
   message: string,
   code?: string | null,
 ): string {
+  const diagnostic = stripModelFailureEnvelope(message || "");
   const rawCode = (code || "").trim();
   if (LOCAL_TURN_TOOL_FAILURE_CODES.has(rawCode)) {
     if (rawCode === "schema" || rawCode === "other") {
-      const remapped = remapPathOrVerifyFailure(message || "");
+      const remapped = remapPathOrVerifyFailure(diagnostic);
       if (remapped) return remapped;
     }
     return rawCode;
@@ -443,7 +462,7 @@ export function normalizeToolFailureCode(
   if (rawCode === "exec_forced_stop") {
     return "exec_forced_stop";
   }
-  const raw = message || "";
+  const raw = diagnostic;
   // Empty-tasks reject: current EMPTY_DELEGATE_MSG only (not retired prefixes).
   if (raw === EMPTY_DELEGATE_MSG) {
     return "declaration_empty";

@@ -15,7 +15,6 @@ from dataclasses import dataclass
 
 from agentcore.core.logging import get_logger
 from agentcore.db.repositories import DocumentRepository
-from agentcore.documents.description import maybe_schedule_description_fill
 from agentcore.documents.frontmatter import (
     ApplyMode,
     FrontmatterEditError,
@@ -308,13 +307,6 @@ async def mutate_user_rule(
         apply=apply_mode,
         description=description,
     )
-    maybe_schedule_description_fill(
-        document_id=doc.id,
-        user_id=user_id,
-        kind=doc.kind,
-        description=doc.description or "",
-        content=doc.content or "",
-    )
     label = _apply_label(apply_mode)
     return UserRuleMutationResult(
         action="write",
@@ -382,8 +374,12 @@ async def _scope_live_rules(
     repo: DocumentRepository, user_id: str, folder_id: str | None, rank: int
 ):
     """Always + on_demand + path docs of one scope, tagged with ``rank``."""
+    from agentcore.assembly.bind import current_omit_desk_rules, current_skill_membership
     from agentcore.memory.rule_resolve import LiveRule, live_rule_from_doc
 
+    if folder_id is not None and current_omit_desk_rules():
+        return []
+    membership = current_skill_membership() if folder_id is None else None
     out: list[LiveRule] = []
     loaded = (
         ("always", await repo.list_injectable_rules(user_id, folder_id, ai_maintained=False)),
@@ -392,7 +388,15 @@ async def _scope_live_rules(
     )
     for column, docs in loaded:
         for doc in docs:
-            live = live_rule_from_doc(doc, column_apply=column, rank=rank)
+            override = None
+            if membership is not None:
+                mode = membership.get(str(getattr(doc, "id", "") or ""))
+                if mode is None:
+                    continue
+                override = mode
+            live = live_rule_from_doc(
+                doc, column_apply=column, rank=rank, apply_override=override
+            )
             if live is not None:
                 out.append(live)
     return out
@@ -484,21 +488,33 @@ def _bucket_ancestor_docs(
 
 def _cloud_rules(payload: Mapping[str, object], *, folder_id: str | None) -> _CloudRules:
     """Outer-to-inner live rules. Later rows overwrite the same consult name."""
+    from agentcore.assembly.bind import current_omit_desk_rules, current_skill_membership
     from agentcore.memory.rule_resolve import live_rule_from_mapping
 
+    membership = current_skill_membership()
+    skip_desk = current_omit_desk_rules()
     chain = cloud_scope_chain(payload, folder_id)
     out: list = []
 
     def _add(docs: list[Mapping[str, object]], column: str, rank: int) -> None:
         for doc in docs:
-            live = live_rule_from_mapping(doc, column_apply=column, rank=rank)
+            override = None
+            if rank == 0 and membership is not None:
+                doc_id = str(doc.get("id") or "")
+                mode = membership.get(doc_id) if doc_id else None
+                if mode is None:
+                    continue
+                override = mode
+            live = live_rule_from_mapping(
+                doc, column_apply=column, rank=rank, apply_override=override
+            )
             if live is not None:
                 out.append(live)
 
     _add(_iter_cloud_rule_docs(payload, "global_rules"), "always", 0)
     _add(_iter_cloud_rule_docs(payload, "global_on_demand_rules"), "on_demand", 0)
     _add(_iter_cloud_rule_docs(payload, "global_path_rules"), "paths", 0)
-    if not chain:
+    if skip_desk or not chain:
         return _CloudRules(rules=out, ancestor_count=0, has_current=False)
 
     ancestors = ancestor_scopes(chain)

@@ -20,6 +20,17 @@ from agentcore.runtime.resolve.prompt import (
 from agentcore.runtime.skills import build_system_skill_registry
 
 
+def test_empty_system_is_omitted_from_the_opening_window():
+    messages = opening_ceo_messages(
+        system_prompt="  ",
+        history=[],
+        turn_envelope="",
+        user_content="你好",
+    )
+    assert [message.role for message in messages] == ["user"]
+    assert messages[0].content == "你好"
+
+
 def test_frozen_ceo_system_omits_runtime_and_workspace():
     ceo = compose_ceo_chat_prompt(
         assemble_system_prompt(),
@@ -122,6 +133,33 @@ def test_opening_omits_envelope_identical_to_last_in_window():
         user_content="q2",
     )
     assert [m.content for m in messages] == ["SYS", env, "q1", "a1", "q2"]
+
+
+def test_empty_render_replaces_a_fact_bearing_envelope_with_the_fence():
+    from agentcore.runtime.resolve.prompt.envelope import resolve_emitted_envelope
+
+    previous = f"{TURN_ENVELOPE_FENCE}\n<工作区>\n边界：只看\n</工作区>"
+    history = [
+        {"role": "user", "content": previous},
+        {"role": "user", "content": "q1"},
+        {"role": "assistant", "content": "a1"},
+    ]
+    stamped = resolve_emitted_envelope("", history)
+    assert stamped == TURN_ENVELOPE_FENCE
+    messages = opening_ceo_messages(
+        system_prompt="SYS",
+        history=history,
+        turn_envelope=stamped,
+        user_content="q2",
+    )
+    assert messages[-2].content == TURN_ENVELOPE_FENCE
+    assert messages[-1].content == "q2"
+    followed = history + [
+        {"role": "user", "content": TURN_ENVELOPE_FENCE},
+        {"role": "user", "content": "q2"},
+    ]
+    assert resolve_emitted_envelope("", followed) == ""
+    assert resolve_emitted_envelope("", None) == ""
 
 
 def test_opening_omits_empty_envelope():

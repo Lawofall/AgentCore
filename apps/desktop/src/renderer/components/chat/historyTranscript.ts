@@ -1,7 +1,8 @@
 /** Display mirror of prior-turn messages. Wire format is owned by
  * `_format_captain_history`: `@@{role} {length} {name}?\\n` plus exactly
- * `length` characters of the raw message, then a newline. The model still
- * receives the original messages; this string is only the reader mirror.
+ * `length` Unicode code points of the raw message (Python `len`), then a
+ * newline. The model still receives the original messages; this string is
+ * only the reader mirror.
  */
 
 export type HistoryRole = "user" | "assistant" | "tool" | "system" | "other";
@@ -13,6 +14,22 @@ export interface HistoryRecord {
 }
 
 const HEADER = /^@@(user|assistant|tool|system|other) (\d+)(?: (\S+))?$/;
+
+/** `length` is a code-point count. `slice` counts UTF-16 units, so one emoji
+ * would leave the following character (often 「。」) as a bogus `other` turn. */
+function takeCodePoints(
+  text: string,
+  count: number,
+): { taken: string; rest: string } | null {
+  let units = 0;
+  for (let seen = 0; seen < count; seen += 1) {
+    if (units >= text.length) return null;
+    const code = text.codePointAt(units);
+    if (code === undefined) return null;
+    units += code > 0xffff ? 2 : 1;
+  }
+  return { taken: text.slice(0, units), rest: text.slice(units) };
+}
 
 /** `null` means the body is the older prose mirror (or empty). */
 export function parseHistoryTranscript(body: string): HistoryRecord[] | null {
@@ -31,21 +48,22 @@ export function parseHistoryTranscript(body: string): HistoryRecord[] | null {
       break;
     }
     const length = Number(match[2]);
-    const start = nl + 1;
-    if (
-      !Number.isInteger(length) ||
-      length < 0 ||
-      start + length > rest.length
-    ) {
-      records.push({ role: "other", name: "", text: rest.slice(start) });
+    const payload = rest.slice(nl + 1);
+    if (!Number.isInteger(length) || length < 0) {
+      records.push({ role: "other", name: "", text: payload });
+      break;
+    }
+    const sliced = takeCodePoints(payload, length);
+    if (sliced == null) {
+      records.push({ role: "other", name: "", text: payload });
       break;
     }
     records.push({
       role: match[1] as HistoryRole,
       name: match[3] ?? "",
-      text: rest.slice(start, start + length),
+      text: sliced.taken,
     });
-    rest = rest.slice(start + length);
+    rest = sliced.rest;
     if (rest.startsWith("\n")) rest = rest.slice(1);
     else if (rest.length > 0) {
       records.push({ role: "other", name: "", text: rest });

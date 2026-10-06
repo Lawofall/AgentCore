@@ -119,6 +119,17 @@ describe("buildPromptCatalog", () => {
       flattenPromptCatalog(groups).find((i) => i.id === "identity"),
     ).toBeUndefined();
   });
+
+  it("空基座不进常驻", () => {
+    const data: Capabilities = {
+      ...base,
+      guidelines: { ...base.guidelines, shared_base: "  " },
+    };
+    const groups = buildPromptCatalog(data);
+    expect(groups.find((g) => g.id === "always")?.items).toEqual([]);
+    const rail = buildPromptRail(data, buildMineCatalogRows([], []), [], null);
+    expect(rail.constitution).toEqual([]);
+  });
 });
 
 describe("buildPromptRail", () => {

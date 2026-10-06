@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * 设置二级导航的信息架构：三组十项（赞助在偏好末项）。
+ * 设置二级导航：宽屏三组九项（装配在工具箱，不进侧栏）。赞助在偏好末项。
  */
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -20,20 +20,25 @@ afterEach(() => {
 });
 
 describe("MorePage 导航分组", () => {
-  it("groups the ten sub-pages under three headings", () => {
+  it("groups wide settings under three headings and leaves 装配 to the toolbox", () => {
     const { container } = renderNav();
     const groups = Array.from(container.querySelectorAll("nav h2")).map(
       (h) => h.textContent,
     );
     expect(groups).toEqual(["账户", "模型", "偏好"]);
-    expect(container.querySelectorAll("nav a")).toHaveLength(10);
+    expect(container.querySelectorAll("nav a")).toHaveLength(9);
+    expect(screen.queryByRole("link", { name: "装配" })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "服务商" }).getAttribute("href"),
+    ).toBe("/more/providers");
   });
 
-  it("keeps every group multi-item, so no heading outweighs its content", () => {
+  it("keeps 账户 and 偏好 multi-item; 模型 is only 服务商 on a wide screen", () => {
     const { container } = renderNav();
-    for (const group of container.querySelectorAll("nav > div > div")) {
-      expect(group.querySelectorAll("a").length).toBeGreaterThan(1);
-    }
+    const counts = Array.from(
+      container.querySelectorAll("nav > div > div"),
+    ).map((group) => group.querySelectorAll("a").length);
+    expect(counts).toEqual([3, 1, 5]);
   });
 
   it("points 偏好 at 通用 / 消息隐私 / 快捷键 / 关于 / 赞助", () => {

@@ -382,22 +382,18 @@ async def test_skill_store_publish_requires_group_and_filters_shelf(client):
     )
 
 
-async def test_skill_store_install_keeps_offers_tools(client):
+async def test_skill_store_install_copies_snapshot_text(client):
     await register_and_login(client, "ssbind")
     doc = await _create_on_demand(
         client,
         "绑手脚.md",
-        "---\napply: on_demand\ndescription: 审\noffers_tools: host\n---\n怎么审\n",
+        "---\napply: on_demand\ndescription: 审\nnote: host\n---\n怎么审\n",
     )
     published = await client.post("/v1/skill-store", json=_publish_body(doc["id"]))
     assert published.status_code == 200, published.text
     lid = published.json()["id"]
-    assert published.json()["offers_tools"] == ["host"]
-    assert "offers_tools: host" in published.json()["content"]
-
-    listed = (await client.get("/v1/skill-store")).json()["data"]
-    row = next(item for item in listed if item["id"] == lid)
-    assert row["offers_tools"] == ["host"]
+    assert "note: host" in published.json()["content"]
+    assert "怎么审" in published.json()["content"]
 
     await register_and_login(client, "ssbindbuyer")
     installed = await client.post(f"/v1/skill-store/{lid}/install")
@@ -406,8 +402,8 @@ async def test_skill_store_install_keeps_offers_tools(client):
     copy = next(
         m for m in catalog.json()["mine"] if m["id"] == installed.json()["document_id"]
     )
-    assert copy["offers_tools"] == ["host"]
-    assert "offers_tools: host" in copy["content"]
+    assert "note: host" in copy["content"]
+    assert "怎么审" in copy["content"]
 
 
 async def test_source_hard_delete_keeps_listing_and_copy_delete_uninstalls(

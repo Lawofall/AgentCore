@@ -354,20 +354,6 @@ def _pin_billing_mode_byok(monkeypatch) -> None:
     monkeypatch.setattr(settings, "billing_mode", "byok")
 
 
-@pytest.fixture(autouse=True)
-def _stub_entry_description_schedule(monkeypatch) -> None:
-    """Documents API schedules async description fill after empty saves.
-
-    Integration suites must not hit a real LLM (20s timeout × many creates).
-    Empty-only write semantics are covered by unit tests +
-    ``test_apply_description_if_empty_column_only_preserves_content``.
-    """
-    monkeypatch.setattr(
-        "agentcore.documents.description.schedule_description_generation",
-        lambda **_kwargs: None,
-    )
-
-
 @pytest_asyncio.fixture
 async def make_admin(session_factory) -> Callable:
     """Return an async helper that seeds an admin user (with credentials)."""

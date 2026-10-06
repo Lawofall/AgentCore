@@ -183,6 +183,7 @@ async def apply_replan(
     from agentcore.runtime.delegate.task_models import (
         ensure_delegate_route_extras,
         inherit_model_from_tool,
+        load_catalog_for_items,
         prepare_task_model_fields,
     )
 
@@ -193,10 +194,14 @@ async def apply_replan(
 
     model_idents: list = []
     if adds_list:
+        catalog, cat_err = await load_catalog_for_items(adds_list, user_id=user_id)
+        if cat_err:
+            return [cat_err]
         add_model_errors, add_idents = await prepare_task_model_fields(
             adds_list,
             user_id=user_id,
             where_prefix="add",
+            catalog=catalog,
             inherit_model=lambda rid: inherit_model_from_tool(tool, rid),
         )
         if add_model_errors:

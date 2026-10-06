@@ -74,7 +74,7 @@ def reject_non_exclusive_ask_user_batch(
         )
         quads.append(
             (
-                _failed_tool_message(tc.id, ASK_USER_NOT_EXCLUSIVE_MSG),
+                _failed_tool_message(tc.id, ASK_USER_NOT_EXCLUSIVE_MSG, status="validation"),
                 None,
                 ToolAttempt(
                     fingerprint_tool_call(name, tc.function.arguments or ""),

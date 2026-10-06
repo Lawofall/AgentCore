@@ -16,6 +16,7 @@ from agentcore.observability.events import EventSpec, FieldType
 # fields empty means name-only registration.
 EVENTS: list[EventSpec] = [
     EventSpec(name='account.cloud_chat_context_failed'),
+    EventSpec(name='account.cloud_models_failed'),
     EventSpec(name='account.cloud_read_failed'),
     EventSpec(name='account.cloud_search_failed'),
     EventSpec(
@@ -318,6 +319,7 @@ EVENTS: list[EventSpec] = [
             'recent_graph': FieldType('bool'),
         },
     ),
+    EventSpec(name='chat.active_meter_load_failed'),
     EventSpec(name='chat.admin_mute'),
     EventSpec(name='chat.announced'),
     EventSpec(name='chat.assistant_placeholder_failed'),
@@ -590,6 +592,9 @@ EVENTS: list[EventSpec] = [
         name='consult.skill_replacements_snapshot_failed',
         description='历史兼容：换用 overlay 已撤，不再 emit',
     ),
+    EventSpec(name='context_cut.committed'),
+    EventSpec(name='context_cut.previewed'),
+    EventSpec(name='context_cut.undone'),
     EventSpec(
         name='contract.failed',
         description='历史兼容：曾作 logger 事件名；现为 RunPhase.FAILED 的 error 字面，不再 emit',
@@ -813,11 +818,9 @@ EVENTS: list[EventSpec] = [
         description='系统提示装配观测（段 chars + section_digests + assembly_hash；零行为副作用）',
         fields={
             'assembly_hash': FieldType('str'),
-            'over_soft_cap': FieldType('bool'),
             'scope': FieldType('str'),
             'section_digests': FieldType('dict'),
             'sections': FieldType('dict'),
-            'soft_cap': FieldType('int'),
             'total_chars': FieldType('int'),
         },
     ),
@@ -1044,7 +1047,6 @@ EVENTS: list[EventSpec] = [
             'recall_count': FieldType('int'),
         },
     ),
-    EventSpec(name='delegate.run_redirect_hot_capped'),
     EventSpec(name='delegate.run_redirect_hot_empty'),
     EventSpec(name='delegate.run_redirect_hot_failed'),
     EventSpec(name='delegate.run_redirect_ignored'),
@@ -1354,10 +1356,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='engine.window_compact_project'),
     EventSpec(name='engine.window_compact_skip'),
     EventSpec(name='engine.window_compact_timeout'),
-    EventSpec(name='entry_description.auth_exhausted'),
-    EventSpec(name='entry_description.generate_failed'),
-    EventSpec(name='entry_description.schedule_failed'),
-    EventSpec(name='entry_description.timeout'),
     EventSpec(name='evals.case_start'),
     EventSpec(name='evals.comparison_start'),
     EventSpec(name='evals.credentials_using_platform'),
@@ -1725,14 +1723,18 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='llm.call',
         description=(
-            '单次 LLM 调用（latency/tokens/cost；prefix_breach 为前缀缓存归因，白付不进本行）'
+            '单次 LLM 调用（latency/tokens/cost；prefix_breach 为同对话前缀归因，opening_vs_prev 为'
+            '同用户跨对话的 tools+首条消息指纹；白付不进本行）'
         ),
         fields={
+            'cache_hit_tokens': FieldType('int'),
+            'cache_miss_tokens': FieldType('int'),
             'cost_nano': FieldType('int'),
             'finish_reason': FieldType('str'),
             'input_tokens': FieldType('int'),
             'latency_ms': FieldType('int'),
             'model': FieldType('str'),
+            'opening_vs_prev': FieldType('str'),
             'output_tokens': FieldType('int'),
             'platform_credential_id': FieldType('str'),
             'prefix_breach': FieldType('str'),
@@ -1740,8 +1742,11 @@ EVENTS: list[EventSpec] = [
             'reasoning_tokens': FieldType('int'),
             'scenario': FieldType('str'),
             'stream': FieldType('bool'),
+            'system_fp': FieldType('str'),
             'tools_changed': FieldType('bool'),
             'tools_count': FieldType('int'),
+            'tools_fp': FieldType('str'),
+            'usage_keys': FieldType('str'),
         },
     ),
     EventSpec(
@@ -1905,6 +1910,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='memory.user_rules_load_failed'),
     EventSpec(name='messaging.thumbnail_pillow_missing'),
     EventSpec(name='model_catalog.discovery_failed'),
+    EventSpec(name='model_catalog.load_failed'),
     EventSpec(name='obs.span_export_failed'),
     EventSpec(name='obs.turn_spans'),
     EventSpec(name='observability.turn_metrics_write_failed'),
@@ -2466,6 +2472,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='sidecar.paused_delete_failed'),
     EventSpec(name='sidecar.paused_list_failed'),
     EventSpec(name='sidecar.paused_load_failed'),
+    EventSpec(name='sidecar.paused_meter_stamp_failed'),
     EventSpec(name='sidecar.paused_rollback_claim_failed'),
     EventSpec(name='sidecar.paused_save_failed'),
     EventSpec(name='sidecar.paused_stale_claim_consumed'),

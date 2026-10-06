@@ -1,8 +1,6 @@
 import {
   coordinationWaitCaptainCaption,
   graphProgress,
-  isTeamSynthesizing,
-  teamSynthesisPhaseLabel,
   waitingWorkerRoles,
   workerProgress,
 } from "@/components/chat/teamSynthesisPhase";
@@ -100,100 +98,6 @@ describe("teamSynthesisPhase", () => {
     expect(graphProgress(e)).toEqual({ completed: 1, total: 2 });
   });
 
-  it("isTeamSynthesizing when all workers done and turn still running", () => {
-    const e = exec({
-      status: "running",
-      runs: [
-        run({ id: "w1", status: "completed" }),
-        run({ id: "w2", status: "completed" }),
-      ],
-    });
-    expect(isTeamSynthesizing(e)).toBe(true);
-    expect(teamSynthesisPhaseLabel(e)).toBe("2/2 已完成，正在收尾");
-  });
-
-  it("not synthesizing while a worker is still running", () => {
-    const e = exec({
-      status: "running",
-      runs: [
-        run({ id: "w1", status: "completed" }),
-        run({ id: "w2", status: "running" }),
-      ],
-    });
-    expect(isTeamSynthesizing(e)).toBe(false);
-  });
-
-  it("not synthesizing after turn completes", () => {
-    const e = exec({
-      status: "completed",
-      runs: [
-        run({ id: "w1", status: "completed" }),
-        run({ id: "w2", status: "completed" }),
-      ],
-    });
-    expect(isTeamSynthesizing(e)).toBe(false);
-  });
-
-  it("still synthesizing after CEO turn ended while still attached", () => {
-    const e = exec({
-      status: "running",
-      runs: [
-        run({ id: "w1", status: "completed" }),
-        run({ id: "w2", status: "completed" }),
-      ],
-    });
-    expect(isTeamSynthesizing(e, { turnTerminal: true })).toBe(true);
-  });
-
-  it("not synthesizing when detached even if all workers are done", () => {
-    const e = exec({
-      status: "running",
-      runs: [
-        run({ id: "w1", status: "completed" }),
-        run({ id: "w2", status: "completed" }),
-      ],
-    });
-    expect(isTeamSynthesizing(e, { detached: true })).toBe(false);
-    expect(isTeamSynthesizing(e, { turnTerminal: true, detached: true })).toBe(
-      false,
-    );
-  });
-
-  it("not synthesizing when CEO turn ended but a worker is still live", () => {
-    const e = exec({
-      status: "running",
-      runs: [
-        run({ id: "w1", status: "completed" }),
-        run({ id: "w2", status: "running" }),
-      ],
-    });
-    expect(isTeamSynthesizing(e, { turnTerminal: true })).toBe(false);
-  });
-
-  it("not synthesizing when execution is paused (workers already done)", () => {
-    const e = exec({
-      status: "paused",
-      runs: [
-        run({ id: "w1", status: "completed" }),
-        run({ id: "w2", status: "completed" }),
-      ],
-    });
-    expect(isTeamSynthesizing(e)).toBe(false);
-  });
-
-  it("isTeamSynthesizing when workers are terminal beyond completed", () => {
-    const e = exec({
-      status: "running",
-      runs: [
-        run({ id: "w1", status: "completed" }),
-        run({ id: "w2", status: "failed" }),
-        run({ id: "w3", status: "cancelled" }),
-        run({ id: "w4", status: "skipped" }),
-      ],
-    });
-    expect(isTeamSynthesizing(e)).toBe(true);
-  });
-
   it("coordinationWaitCaptainCaption stays short without elapsed", () => {
     expect(
       coordinationWaitCaptainCaption(
@@ -207,6 +111,12 @@ describe("teamSynthesisPhase", () => {
         { waitingRoles: ["研究员", "撰写员"] },
       ),
     ).toBe("等待团队 (1/2)");
+    expect(
+      coordinationWaitCaptainCaption(
+        { completed: 1, total: 1 },
+        { waitingRoles: [] },
+      ),
+    ).toBeNull();
   });
 
   it("waitingWorkerRoles lists outstanding workers", () => {

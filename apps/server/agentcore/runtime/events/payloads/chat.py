@@ -332,6 +332,11 @@ class MessageEndPayload(WirePayload):
         "Sum of per-call LLM decode windows (first output chunk → stream end). "
         "Excludes tools and waits. Absent on old journals."
     )
+    # 用量面板 TTFT：队长首流思考与正文/工具两口里更早的正数。旧向量可省略。
+    ttft_ms: int | None = absent(
+        "Earlier positive captain first-stream clock (reasoning or content/tool). "
+        "Absent when neither was marked. Old journals omit it."
+    )
     # 回合结果质量（与 finish_reason 正交）：ok | partial | paused | error。
     # ``paused`` 本波不产出（产品面卡下一波才落）。旧向量可省略，fold 从批次表达位回推。
     outcome: Literal["ok", "partial", "paused", "error"] | None = absent(

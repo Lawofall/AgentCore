@@ -423,6 +423,31 @@ async def test_record_local_turn_writes_generation_into_usage(monkeypatch):
     assert usage[2]["generation_ms"] == 1_900
 
 
+async def test_record_local_turn_writes_ttft_into_usage(monkeypatch):
+    events: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="done",
+        runs={"events": [], "finish_reason": "end_turn"},
+        user_message_id=_USER_MSG_ID,
+        message_id="m-ttft",
+        input_tokens=1,
+        output_tokens=80,
+        rounds=1,
+        duration_ms=57_000,
+        ttft_ms=1_800,
+        trace_id=_TRACE,
+        finish_reason=FinishReason.END_TURN.value,
+    )
+
+    usage = next(e for e in events if e[0] == "usage")
+    assert usage[2]["ttft_ms"] == 1_800
+
+
 async def test_record_local_turn_writes_last_prompt_into_usage(monkeypatch):
     """Settle prompt_tokens lands as last_prompt_tokens (window fill after reload)."""
     events: list = []

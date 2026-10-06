@@ -205,7 +205,7 @@ describe("projectFlowNodes · captain synthesis preview", () => {
     const waitCaption = "等待「撰写员」(1/2)";
     expect(captain?.data).toMatchObject({
       variant: "captain",
-      status: "running",
+      status: "pending",
       statusCaption: waitCaption,
     });
     // Pure wait: preview must stay empty (or at least not echo waitCaption).

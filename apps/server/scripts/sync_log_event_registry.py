@@ -524,6 +524,12 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "prefix_breach_section": "str",
         "tools_changed": "bool",
         "tools_count": "int",
+        "tools_fp": "str",
+        "system_fp": "str",
+        "opening_vs_prev": "str",
+        "cache_hit_tokens": "int",
+        "cache_miss_tokens": "int",
+        "usage_keys": "str",
     },
     "llm.request": {"scenario": "str", "model": "str"},
     "llm.response": {"scenario": "str", "model": "str"},
@@ -564,8 +570,6 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "sections": "dict",
         "section_digests": "dict",
         "assembly_hash": "str",
-        "over_soft_cap": "bool",
-        "soft_cap": "int",
     },
     "cost.prefix_cache": {
         "scenario": "str",
@@ -1230,7 +1234,8 @@ KEY_DESC: dict[str, str] = {
         "error_type / classified / error 与 engine.llm_round_exception 对齐（中断无 type）"
     ),
     "llm.call": (
-        "单次 LLM 调用（latency/tokens/cost；prefix_breach 为前缀缓存归因，白付不进本行）"
+        "单次 LLM 调用（latency/tokens/cost；prefix_breach 为同对话前缀归因，"
+        "opening_vs_prev 为同用户跨对话的 tools+首条消息指纹；白付不进本行）"
     ),
     "llm.request": "LLM prompt 截断脱敏（需 LOG_LLM_BODIES）",
     "llm.response": "LLM 回复截断脱敏（需 LOG_LLM_BODIES）",

@@ -263,8 +263,15 @@ class DebateTool:
         )
 
         # §7.5：校验非空目录身份 + 解析裁判（点名优先；空=系统默认，可同模）。
+        # 同模型场不读目录。要目录时：有窄票走 account HTTP，无票走本机 session。
+        # 读不到就硬失败，不退回空目录。
+        from agentcore.llm.turn_catalog import (
+            DEBATE_CATALOG_UNAVAILABLE,
+            require_turn_model_catalog,
+        )
         from agentcore.runtime.debate.models import (
             collect_debate_identities,
+            debate_needs_model_catalog,
             ensure_debate_route_extras,
             prepare_debate_model_plan,
         )
@@ -272,41 +279,23 @@ class DebateTool:
         turn_model = (self._profile_set.model or "").strip()
         user_id = (self._base_tool_context.user_id or "").strip()
         cross_model = arguments.get("cross_model", False) is True
-        model_err = ""
-        try:
-            from agentcore.db.base import async_session_factory
-
-            if user_id:
-                async with async_session_factory() as session:
-                    model_err = await prepare_debate_model_plan(
-                        config,
-                        user_id=user_id,
-                        turn_model=turn_model,
-                        session=session,
-                        cross_model=cross_model,
-                        user_message=self._user_message or "",
-                    )
-            else:
-                model_err = await prepare_debate_model_plan(
-                    config,
-                    user_id="",
-                    turn_model=turn_model,
-                    session=None,
-                    catalog=None,
-                    cross_model=cross_model,
-                    user_message=self._user_message or "",
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("debate.model_plan_failed", error=str(exc))
-            model_err = await prepare_debate_model_plan(
-                config,
-                user_id=user_id,
-                turn_model=turn_model,
-                session=None,
-                catalog=None,
-                cross_model=cross_model,
-                user_message=self._user_message or "",
+        catalog = None
+        if debate_needs_model_catalog(config, cross_model=cross_model):
+            catalog, load_err = await require_turn_model_catalog(
+                user_id, unavailable=DEBATE_CATALOG_UNAVAILABLE
             )
+            if load_err:
+                logger.warning("debate.model_plan_failed", error="catalog_unavailable")
+                return err(load_err)
+        model_err = await prepare_debate_model_plan(
+            config,
+            user_id=user_id,
+            turn_model=turn_model,
+            session=None,
+            catalog=catalog,
+            cross_model=cross_model,
+            user_message=self._user_message or "",
+        )
         if model_err:
             candidates = list(getattr(config, "model_candidates", None) or [])
             if candidates:

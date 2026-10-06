@@ -232,22 +232,31 @@ async def execute_short(
 
     stdout = scrub_env_values(result.stdout or "", exec_env)
     stderr = scrub_env_values(result.stderr or "", exec_env)
+    written = list(result.written_files or [])
 
-    output_parts = []
-    if stdout:
-        output_parts.append(f"stdout:\n{stdout}")
-    if stderr:
-        output_parts.append(f"stderr:\n{stderr}")
-    if not output_parts:
-        output_parts.append("（无输出）")
+    def _render_short(out: str, err: str) -> str:
+        output_parts = []
+        if out:
+            output_parts.append(f"stdout:\n{out}")
+        if err:
+            output_parts.append(f"stderr:\n{err}")
+        if not output_parts:
+            output_parts.append("（无输出）")
+        text = "\n".join(output_parts)
+        if result.exit_code != 0:
+            text += f"\n\n退出码：{result.exit_code}"
+        if written:
+            text += "\n\n已写回工作区：" + "、".join(written)
+        return text
 
-    output = "\n".join(output_parts)
-    if result.exit_code != 0:
-        output += f"\n\n退出码：{result.exit_code}"
+    from agentcore.tools.builtin.run_streams import (
+        cap_inserted_bodies,
+        receipt_output_limit,
+    )
 
-    # 产物写回: tell the model exactly which files landed in the workspace.
-    if result.written_files:
-        output += "\n\n已写回工作区：" + "、".join(result.written_files)
+    model_stdout, model_stderr = cap_inserted_bodies([stdout, stderr], _render_short)
+    output = _render_short(model_stdout, model_stderr)
+    stream_limit = receipt_output_limit(output)
     # Render-oriented twin of ``output`` (工具结果富渲染): the client shows a
     # terminal-style view (stdout, stderr in red, exit-code badge) instead of
     # the flattened "stdout:\n…\nstderr:\n…" text. Kept structured so failures
@@ -322,6 +331,7 @@ async def execute_short(
         output=output,
         error=None if result.success else f"退出码 {result.exit_code}",
         duration_ms=duration_ms,
+        output_limit=stream_limit,
         display=display,
         metadata=meta,
         contract_failure=launcher_unavailable or probe_language_unavailable,

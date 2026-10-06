@@ -3,7 +3,9 @@
 Desktop injects ``accountAuth: {baseUrl, apiKey}`` shaped like folders/inference.
 ``baseUrl`` is the account API root (``…/v1/account``); ``apiKey`` is the
 ``type=account`` JWT from ``POST /v1/account/token``. Cloud API processes never
-bind the ContextVar → conversation-log / rules / memory keep the in-process DB path.
+bind the ContextVar → conversation-log / rules / memory / model catalog keep
+the in-process DB path. Ticketed turns read the catalog with
+``GET {baseUrl}/models``.
 """
 
 from __future__ import annotations
@@ -204,6 +206,25 @@ async def cloud_chat_context(
     data = resp.json()
     if not isinstance(data, dict):
         raise AccountCloudError("account chat-context response is not an object")
+    return data
+
+
+async def cloud_list_models(creds: AccountCredentials) -> dict[str, Any]:
+    """GET ``…/account/models`` → the user's model catalog (same shape as ``/users/me/models``)."""
+    url = f"{_root_url(creds.base_url)}/models"
+    try:
+        async with outbound_async_client(timeout=_ACCOUNT_HTTP_TIMEOUT) as client:
+            resp = await client.get(url, headers=_auth_headers(creds))
+    except httpx.HTTPError as exc:
+        logger.warning("account.cloud_models_failed", error=str(exc))
+        raise AccountCloudError(
+            f"model catalog unreachable: {exc}",
+            code="account_cloud_unreachable",
+        ) from exc
+    _raise_for_status(resp, op="models")
+    data = resp.json()
+    if not isinstance(data, dict):
+        raise AccountCloudError("account models response is not an object")
     return data
 
 

@@ -1,5 +1,6 @@
 import {
   dedupeName,
+  isUntitledPromptFolderName,
   uniqueNumberedName,
   uniqueUntitledFolder,
 } from "@/components/files/dedupeName";
@@ -47,5 +48,20 @@ describe("uniqueUntitledFolder（新建目录的默认名）", () => {
 
   it("大小写视为同名", () => {
     expect(uniqueNumberedName("Docs", ["docs"])).toBe("Docs (2)");
+  });
+});
+
+describe("isUntitledPromptFolderName", () => {
+  it("认生成出来的占位名", () => {
+    expect(isUntitledPromptFolderName("未命名夹")).toBe(true);
+    expect(isUntitledPromptFolderName("未命名夹 (2)")).toBe(true);
+    expect(isUntitledPromptFolderName("未命名夹 (10)")).toBe(true);
+  });
+
+  it("起过的名字和 (1) 不算占位", () => {
+    expect(isUntitledPromptFolderName("法律")).toBe(false);
+    expect(isUntitledPromptFolderName("未命名夹 (1)")).toBe(false);
+    expect(isUntitledPromptFolderName("未命名夹 2")).toBe(false);
+    expect(isUntitledPromptFolderName("未命名文件夹")).toBe(false);
   });
 });

@@ -103,7 +103,7 @@ class CostEventRepository:
     may be dual-written at finalize or materialized from calls.
 
     ``conversation_id`` is optional on every write: an account-level chrome call
-    (AI 改写 / 文档 description, ``role=assist``) belongs to no conversation and is
+    (AI 改写, ``role=assist``) belongs to no conversation and is
     written with NULL. The account-window reads below (which is what 用量页 /
     仪表盘 / ``enforce_quota`` use) therefore include it, while the
     conversation-scoped and per-message reads exclude it by construction.
@@ -527,7 +527,7 @@ class CostEventRepository:
         aggregates platform-wide (admin 全站用量看板 — every account).
 
         Deliberately unfiltered on ``conversation_id``: this is the account's
-        total, so it must include account-level rows (AI 改写 / 文档 description)
+        total, so it must include account-level rows (AI 改写)
         as well as every conversation's. Same query backs ``enforce_quota``, so
         that spend counts against the cap it was billed under.
         """

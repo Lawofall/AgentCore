@@ -1,11 +1,10 @@
-import { PageContainer } from "@/components/layout/PageContainer";
 import {
+  ASSEMBLY_CARD_GRID_CLASS,
   Button,
-  Card,
-  CatalogIconShell,
+  CatalogTile,
   SearchField,
-  SurfaceRowButton,
 } from "@/components/ui";
+import { Switch } from "@/components/ui/Switch";
 import {
   Dialog,
   DialogBody,
@@ -14,9 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { artifactColorVar } from "@/lib/catalogColors";
+import { useAssemblyPlugController } from "@/lib/assemblyMcp";
 import { promptConnectorShelfCopy } from "@/lib/promptShelfTile";
-import { cn } from "@/lib/utils";
 import {
   ConnectorInspector,
   ConnectorStatusBadge,
@@ -24,9 +22,7 @@ import {
   connectorCatalogId,
   useMcpConnectors,
 } from "@/pages/toolbox/ConnectorsPage";
-import { ToolboxSourceTabs } from "@/pages/toolbox/ToolboxSourceTabs";
 import type { McpServerListItem } from "@shared/mcp-contract";
-import { Unplug } from "lucide-react";
 import { useState } from "react";
 
 function matchServer(query: string, server: McpServerListItem): boolean {
@@ -38,11 +34,28 @@ function matchServer(query: string, server: McpServerListItem): boolean {
   );
 }
 
+/** Standalone MCP route: 启用 writes the open conversation's assembly, else the star. */
+export function McpRoute() {
+  const plugs = useAssemblyPlugController();
+  return (
+    <McpPage
+      plugEnabled={(id) => plugs.enabledIds.has(id)}
+      onPlugToggle={plugs.toggle}
+    />
+  );
+}
+
 /**
  * 工具箱 MCP 栏：本机 stdio Server 列表。没有 mcpApi 时不假装已接上。
- * 不把插头报出的动作再铺一层。
+ * 不把插头报出的动作再铺一层。启用写在装配的插头名单上。
  */
-export function McpPage() {
+export function McpPage({
+  plugEnabled,
+  onPlugToggle,
+}: {
+  plugEnabled?: (serverId: string) => boolean;
+  onPlugToggle?: (serverId: string, enabled: boolean) => Promise<void>;
+}) {
   const mcp = useMcpConnectors();
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -60,78 +73,95 @@ export function McpPage() {
     setOpenId(null);
   };
 
+  const addActions = mcp.api ? (
+    <>
+      <SearchField
+        aria-label="搜 MCP"
+        placeholder="搜 MCP"
+        value={query}
+        onValueChange={setQuery}
+        className="w-52"
+      />
+      <Button size="md" onClick={() => setOpenId(NEW_CONNECTOR_ID)}>
+        添加 MCP
+      </Button>
+    </>
+  ) : null;
+
   return (
-    <PageContainer width="canvas" padding="page">
-      <div className="w-full" data-testid="mcp-page">
-        <ToolboxSourceTabs
-          action={
-            mcp.api ? (
-              <>
-                <SearchField
-                  aria-label="搜 MCP"
-                  placeholder="搜 MCP"
-                  value={query}
-                  onValueChange={setQuery}
-                  className="w-52"
-                />
-                <Button size="md" onClick={() => setOpenId(NEW_CONNECTOR_ID)}>
-                  添加 MCP
-                </Button>
-              </>
-            ) : null
-          }
-        />
-        <McpBody
-          api={mcp.api}
-          loaded={mcp.loaded}
-          error={mcp.error}
-          query={query}
-          hits={hits}
-          selectedId={openId}
-          onOpen={(id) => setOpenId(id)}
-        />
-        {mcp.api ? (
-          <Dialog
-            open={dialogOpen}
-            onOpenChange={(open) => {
-              if (!open) closeDialog();
-            }}
-          >
-            <DialogContent
-              size="lg"
-              className="flex max-h-[min(80vh,36rem)] flex-col"
-              data-testid="mcp-dialog"
-            >
-              <DialogHeader className="shrink-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <DialogTitle>
-                    {creating ? "新建 MCP" : "编辑 MCP"}
-                  </DialogTitle>
-                  {editing ? <ConnectorStatusBadge server={editing} /> : null}
-                </div>
-                <DialogDescription className="sr-only">
-                  {creating ? "新建 MCP" : (editing?.name ?? "编辑 MCP")}
-                </DialogDescription>
-              </DialogHeader>
-              <DialogBody className="flex min-h-0 flex-1 flex-col pb-5">
-                {dialogOpen ? (
-                  <ConnectorInspector
-                    key={openId ?? NEW_CONNECTOR_ID}
-                    server={editing}
-                    api={mcp.api}
-                    busyId={busyId}
-                    onBusy={setBusyId}
-                    onCloseNew={closeDialog}
-                    onSaved={mcp.reload}
-                    hideChrome
-                  />
-                ) : null}
-              </DialogBody>
-            </DialogContent>
-          </Dialog>
+    <div className="w-full" data-testid="mcp-page">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="min-w-0 text-sm font-medium text-foreground">MCP</h2>
+        {addActions ? (
+          <div className="flex shrink-0 items-center gap-3">{addActions}</div>
         ) : null}
       </div>
-    </PageContainer>
+      <McpBody
+        api={mcp.api}
+        loaded={mcp.loaded}
+        error={mcp.error}
+        query={query}
+        hits={hits}
+        selectedId={openId}
+        onOpen={(id) => setOpenId(id)}
+        plugEnabled={plugEnabled}
+        onPlugToggle={onPlugToggle}
+      />
+      {mcp.api ? (
+        <Dialog
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            if (!open) closeDialog();
+          }}
+        >
+          <DialogContent
+            size="lg"
+            className="flex max-h-[min(80vh,36rem)] flex-col"
+            data-testid="mcp-dialog"
+          >
+            <DialogHeader className="shrink-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <DialogTitle>{creating ? "新建 MCP" : "编辑 MCP"}</DialogTitle>
+                {editing ? (
+                  <ConnectorStatusBadge
+                    server={
+                      plugEnabled
+                        ? { ...editing, enabled: plugEnabled(editing.id) }
+                        : editing
+                    }
+                  />
+                ) : null}
+              </div>
+              <DialogDescription className="sr-only">
+                {creating ? "新建 MCP" : (editing?.name ?? "编辑 MCP")}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody className="flex min-h-0 flex-1 flex-col pb-5">
+              {dialogOpen ? (
+                <ConnectorInspector
+                  key={openId ?? NEW_CONNECTOR_ID}
+                  server={editing}
+                  api={mcp.api}
+                  busyId={busyId}
+                  onBusy={setBusyId}
+                  onCloseNew={closeDialog}
+                  onSaved={mcp.reload}
+                  hideChrome
+                  assemblyEnabled={
+                    editing && plugEnabled ? plugEnabled(editing.id) : undefined
+                  }
+                  onAssemblyToggle={
+                    editing && onPlugToggle
+                      ? (enabled) => onPlugToggle(editing.id, enabled)
+                      : undefined
+                  }
+                />
+              ) : null}
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </div>
   );
 }
 
@@ -143,6 +173,8 @@ function McpBody({
   hits,
   selectedId,
   onOpen,
+  plugEnabled,
+  onPlugToggle,
 }: {
   api: Window["mcpApi"];
   loaded: boolean;
@@ -151,70 +183,65 @@ function McpBody({
   hits: McpServerListItem[];
   selectedId: string | null;
   onOpen: (id: string) => void;
+  plugEnabled?: (serverId: string) => boolean;
+  onPlugToggle?: (serverId: string, enabled: boolean) => Promise<void>;
 }) {
   if (!api) {
     return (
-      <p className="mt-3 text-sm text-muted-foreground">
-        MCP 只在桌面本机可用。
-      </p>
+      <p className="text-sm text-muted-foreground">MCP 只在桌面本机可用。</p>
     );
   }
   if (!loaded) return null;
   if (error) {
     return (
-      <p className="mt-3 text-sm text-muted-foreground" role="alert">
+      <p className="text-sm text-muted-foreground" role="alert">
         {error}
       </p>
     );
   }
   if (hits.length === 0) {
     return (
-      <div className="mt-3 flex min-h-[4.5rem] items-center justify-center rounded-xl border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
+      <div className="flex min-h-[4.5rem] items-center justify-center rounded-xl border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
         {query.trim() ? "没有匹配的 MCP。" : "还没有 MCP。"}
       </div>
     );
   }
   return (
-    <Card className="mt-3 overflow-hidden" data-testid="mcp-list">
-      <div className="divide-y divide-border">
-        {hits.map((server) => {
-          const id = connectorCatalogId(server.id);
-          const copy = promptConnectorShelfCopy({
-            label: server.name,
-            runtimeError: server.runtimeError,
-          });
-          return (
-            <SurfaceRowButton
-              key={id}
-              variant="default"
-              aria-label={copy.title}
-              className={cn(
-                "w-full gap-3 rounded-none px-3 py-2.5 text-left",
-                selectedId === id && "bg-accent text-accent-foreground",
-              )}
-              onClick={() => onOpen(id)}
-            >
-              <CatalogIconShell
-                colorVar={artifactColorVar("connectors")}
-                className="size-8 rounded-lg"
-              >
-                <Unplug size={18} />
-              </CatalogIconShell>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-foreground">
-                  {copy.title}
-                </span>
-                {copy.description ? (
-                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                    {copy.description}
-                  </span>
+    <div className={ASSEMBLY_CARD_GRID_CLASS} data-testid="mcp-list">
+      {hits.map((server) => {
+        const id = connectorCatalogId(server.id);
+        const shown = plugEnabled
+          ? { ...server, enabled: plugEnabled(server.id) }
+          : server;
+        const copy = promptConnectorShelfCopy({
+          label: server.name,
+          runtimeError: server.runtimeError,
+        });
+        return (
+          <CatalogTile
+            key={id}
+            density="compact"
+            title={copy.title}
+            description={copy.description || undefined}
+            onClick={() => onOpen(id)}
+            className={
+              selectedId === id ? "border-foreground/20 bg-muted/50" : undefined
+            }
+            accessory={
+              <>
+                <ConnectorStatusBadge server={shown} />
+                {onPlugToggle ? (
+                  <Switch
+                    checked={shown.enabled}
+                    label={`启用${shown.name}`}
+                    onCheckedChange={(on) => void onPlugToggle(server.id, on)}
+                  />
                 ) : null}
-              </span>
-              <ConnectorStatusBadge server={server} />
-            </SurfaceRowButton>
-          );
-        })}
-      </div>
-    </Card>
+              </>
+            }
+          />
+        );
+      })}
+    </div>
   );
 }

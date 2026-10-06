@@ -41,7 +41,7 @@ describe("EndpointNodeFace · whiteboard slot", () => {
     render(
       <EndpointNodeFace
         isInput={false}
-        status="running"
+        status="pending"
         statusCaption="等待「协作图渲染链路审计员」(0/1)"
         preview=""
       />,
@@ -49,12 +49,28 @@ describe("EndpointNodeFace · whiteboard slot", () => {
     const card = screen.getByTestId("endpoint-node-card");
     expect(card.style.width).toBe(`${NODE_WIDTH}px`);
     expect(card.style.height).toBe(`${NODE_HEIGHT}px`);
-    expect(screen.getByTestId("captain-sink-label").textContent).toBe(
-      "正在收尾…",
-    );
+    expect(screen.getByTestId("captain-sink-label").textContent).toBe("待收尾");
     expect(screen.getByTestId("captain-sink-preview").textContent).toBe(
       "等待「协作图渲染链路审计员」(0/1)",
     );
+    expect(screen.queryByText("正在收尾…")).toBeNull();
+  });
+
+  it("writing the close keeps the live card and drops the phase title", () => {
+    render(
+      <EndpointNodeFace
+        isInput={false}
+        status="running"
+        preview="测完第一段"
+      />,
+    );
+    const card = screen.getByTestId("endpoint-node-card");
+    expect(card.className).not.toContain("animate-pulse");
+    expect(screen.queryByTestId("captain-sink-label")).toBeNull();
+    expect(screen.getByTestId("captain-sink-preview").textContent).toBe(
+      "测完第一段",
+    );
+    expect(card.textContent).not.toContain("正在收尾");
   });
 
   it("pins the input bookend to the same slot", () => {

@@ -37,7 +37,9 @@ vi.mock("@/services/conversations", () => ({
   deleteConversation: vi.fn(),
 }));
 vi.mock("@/services/messages", () => ({ loadLatestWindow: vi.fn() }));
-vi.mock("@/services/models", () => ({ getLastUsedProfileId: () => null }));
+vi.mock("@/services/models", () => ({
+  getLastUsedProfileId: () => null,
+}));
 vi.mock("@/services/permissionAxes", () => ({
   resolveDefaultPermissionAxes: vi.fn(async () => ({ boundary: "folder" })),
   setComposerDraftAxes: vi.fn(),

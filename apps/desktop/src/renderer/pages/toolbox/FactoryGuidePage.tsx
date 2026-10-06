@@ -1,7 +1,7 @@
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 import { Navigate, useSearchParams } from "react-router-dom";
 
-/** 旧 /toolbox/guides：?tool= / ?skill= 收到官方读卡，其余收到我的。 */
+/** 旧 /toolbox/guides：?tool= / ?skill= 落到组装页并打开读卡，其余收到交代。 */
 export function FactoryGuidePage() {
   const [params] = useSearchParams();
   const next = new URLSearchParams();
@@ -10,7 +10,14 @@ export function FactoryGuidePage() {
   if (tool) next.set("tool", tool);
   if (skill) next.set("skill", skill);
   const q = next.toString();
-  const dest =
-    tool || skill ? APP_PATHS.toolbox.official : APP_PATHS.toolbox.mine.skills;
-  return <Navigate to={`${dest}${q ? `?${q}` : ""}`} replace />;
+  if (!tool && !skill) {
+    return <Navigate to={APP_PATHS.toolbox.mine.skills} replace />;
+  }
+  const hash = tool ? "#tools" : "#prompts";
+  return (
+    <Navigate
+      to={`${APP_PATHS.toolbox.root}${q ? `?${q}` : ""}${hash}`}
+      replace
+    />
+  );
 }

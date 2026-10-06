@@ -2,8 +2,9 @@ import { Markdown } from "@/components/chat/Markdown";
 import { PausedContinueSurface } from "@/components/chat/PausedContinueSurface";
 import { TurnWarningBanner } from "@/components/chat/TurnWarningBanner";
 import { Badge } from "@/components/ui/badge";
-import { resolveTurnDisplayMoney } from "@/lib/cost";
-import { formatDisplayCost, pickCostMoney } from "@/lib/format";
+import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
+import { type SpendRun, resolveReplyInvoice } from "@/lib/cost";
+import { formatDisplayCost } from "@/lib/format";
 import { completedAtIso } from "@/lib/runningElapsed";
 import { precedingUserMessageId } from "@/lib/supportDiagnostics";
 import {
@@ -17,11 +18,18 @@ import { continuePausedTurn } from "@/services/turns/continuePaused";
 import {
   type CheckpointDisplay,
   assistantProjectionId,
-  getActiveRuntime,
+  getRuntime,
+  runtimeOf,
   useConversationStore,
   useLiveTailWriting,
 } from "@/stores/conversation";
-import { useExecutionStore, useMessageExecution } from "@/stores/execution";
+import {
+  type AgentState,
+  type Execution,
+  type RunNode,
+  useExecutionStore,
+  useMessageExecution,
+} from "@/stores/execution";
 import { useMessageInteractionCards } from "@/stores/interactions";
 import { useUsageStore } from "@/stores/usage";
 import { RotateCcw } from "lucide-react";
@@ -38,6 +46,23 @@ import { SyncStatusHint } from "./SyncStatusHint";
 import { ThinkingPanel } from "./Thinking";
 import { WholeFilePasteHint } from "./WholeFilePasteHint";
 import type { MessageBubbleProps } from "./types";
+
+function spendLabel(run: RunNode, agents: AgentState[]): string {
+  const titled = agents.find((agent) => agent.id === run.agentId)?.role.trim();
+  if (titled) return titled;
+  return run.role === "captain" ? "队长" : "队员";
+}
+
+function invoiceRuns(execution: Execution): SpendRun[] {
+  return execution.runs.map((run) => ({
+    id: run.id,
+    status: run.status,
+    role: run.role,
+    label: spendLabel(run, execution.agents),
+    cost: run.cost,
+    usage: run.usage,
+  }));
+}
 
 /**
  * 「曾中断恢复」：这条回合中途崩过、由系统重驱跑完，成果仍在本条消息里。
@@ -86,19 +111,16 @@ function shouldHideAskDuplicateQuestion(
 export function AssistantMessage({ message }: MessageBubbleProps) {
   const loadMessageCost = useUsageStore((s) => s.loadMessageCost);
   const cachedTurn = useUsageStore((s) => s.messageCosts[message.id] ?? null);
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
+  const paneKey = useChatPaneSliceKey();
   const liveTailWriting = useLiveTailWriting(message.id);
   const bubbleLive = message.isStreaming || liveTailWriting;
-  const waitingForWorkspaceLock = useConversationStore((s) => {
-    const id = s.currentConversationId;
-    if (!id) return false;
-    return s.byId?.[id]?.waitingForWorkspaceLock ?? false;
-  });
-  const waitingForDeskProvision = useConversationStore((s) => {
-    const id = s.currentConversationId;
-    if (!id) return false;
-    return s.byId?.[id]?.waitingForDeskProvision ?? false;
-  });
+  const waitingForWorkspaceLock = useConversationStore(
+    (s) => runtimeOf(s, paneKey).waitingForWorkspaceLock,
+  );
+  const waitingForDeskProvision = useConversationStore(
+    (s) => runtimeOf(s, paneKey).waitingForDeskProvision,
+  );
   const finishReason = !bubbleLive
     ? (message.finishReason ?? message.runs?.finishReason)
     : undefined;
@@ -164,48 +186,34 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
   const displayContent = rawContent;
   const hasTeamGraph = message.executionId != null;
   const execution = useMessageExecution(hasTeamGraph ? projectionId : null);
-  const fallbackMoney =
-    pickCostMoney(message.cost) ??
+  const ledger =
+    message.cost ??
     (cachedTurn
-      ? pickCostMoney({
+      ? {
           total: cachedTurn.cost.total,
           currency: cachedTurn.cost.currency,
           estimated_total: cachedTurn.estimated_cost?.total ?? null,
           estimated_currency: cachedTurn.estimated_cost?.currency ?? null,
-        })
+        }
       : null);
-  let costText: string | null = null;
-  if (hasTeamGraph) {
-    if (execution) {
-      const money = resolveTurnDisplayMoney(
-        null,
-        execution.runs.map((r) => r.cost),
-      );
-      if (money && money.nano > 0) {
-        costText = formatDisplayCost(
-          money.nano,
-          money.estimated,
-          money.currency,
-        );
-      }
-    } else if (fallbackMoney != null && fallbackMoney.nano > 0) {
-      costText = formatDisplayCost(
-        fallbackMoney.nano,
-        fallbackMoney.estimated,
-        fallbackMoney.currency,
-      );
-    }
-  } else if (fallbackMoney != null && fallbackMoney.nano > 0) {
-    costText = formatDisplayCost(
-      fallbackMoney.nano,
-      fallbackMoney.estimated,
-      fallbackMoney.currency,
-    );
-  }
-  const showCostMeta =
-    !bubbleLive &&
-    (costText != null ||
-      (message.durationMs != null && message.durationMs > 0));
+  const invoice = resolveReplyInvoice({
+    ledger,
+    runs: execution ? invoiceRuns(execution) : [],
+    soloAccrued: message.accruedCost,
+    soloUsage: message.accruedUsage,
+    bubbleLive,
+  });
+  const costText =
+    invoice.money != null
+      ? `${formatDisplayCost(
+          invoice.money.nano,
+          invoice.money.estimated,
+          invoice.money.currency,
+        )}${invoice.provisional ? " 至今" : ""}`
+      : null;
+  const showDuration =
+    !bubbleLive && message.durationMs != null && message.durationMs > 0;
+  const showCostMeta = costText != null || showDuration;
 
   const onPeekCost = () => {
     if (!bubbleLive && message.cost == null) {
@@ -215,7 +223,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
 
   const handleRegenerate = () => {
     const userId = precedingUserMessageId(
-      getActiveRuntime().messages,
+      getRuntime(paneKey).messages,
       message.id,
     );
     if (userId) void runRegenerate(userId);
@@ -329,6 +337,8 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
           message={message}
           captainContext={captainContext}
           costText={costText}
+          spendLines={invoice.lines}
+          showDuration={showDuration}
           onRegenerate={handleRegenerate}
           displayError={displayError}
           pinSupportPack={packPinned}
@@ -345,13 +355,14 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
             <AssistantTurnInspect
               message={message}
               captainContext={captainContext}
+              spendLines={invoice.lines}
             />
           ) : null}
           {showCostMeta ? (
             <div className="flex shrink-0 items-center gap-1.5">
               <AssistantMessageMetaSummary
                 costText={costText}
-                durationMs={message.durationMs}
+                durationMs={showDuration ? message.durationMs : undefined}
               />
               <MessageTime
                 iso={completedAtIso(message.createdAt, message.durationMs)}

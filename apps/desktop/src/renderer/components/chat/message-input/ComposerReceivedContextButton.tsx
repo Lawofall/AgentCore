@@ -2,7 +2,9 @@ import { ReceivedContextDialog } from "@/components/chat/ReceivedContext";
 import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useModels } from "@/hooks/useModels";
+import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import { useComposerActiveProfile } from "@/lib/composerModelProfile";
+import { effectiveContextWindow } from "@/lib/contextBudget";
 import { cn } from "@/lib/utils";
 import {
   WINDOW_FILL_WARN_RATIO,
@@ -14,8 +16,8 @@ import {
 } from "@/lib/windowFill";
 import {
   type Message,
-  activeRuntime,
   assistantProjectionId,
+  runtimeOf,
   useConversationStore,
 } from "@/stores/conversation";
 import { useExecutionStore } from "@/stores/execution";
@@ -78,16 +80,17 @@ function WindowFillRing({
 
 /**
  * 整块输入框外侧右边：当前这场 CEO「收到的上下文」。气泡底栏仍留当时快照，这里不替代。
- * 铬条尺寸与＋/语音同档 `md`，宿主用底排行盒对齐，不跟卡片边框底边对齐。
+ * 不占输入列宽（宿主绝对定位）。铬条尺寸与＋/语音同档 `md`，底排行盒对齐，不跟卡片边框底边对齐。
  * 第一帧 `run_context` 写进最后一条助手泡就亮，不等停笔；弹窗开着跟 blocks / process 变长。
- * 窗口环 = 本场一条水位 / 目录 context_length。每次 CEO 请求 usage 返回就
+ * 窗口环 = 本场一条水位 / 有效窗口（装配上调低的那一档，否则目录窗口）。每次 CEO 请求 usage 返回就
  * 改写这一个数；本场还没有观测时，用最近一条已落盘的水位。
  */
 export function ComposerReceivedContextButton() {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
-  const messages = useConversationStore((s) => activeRuntime(s).messages);
+  const conversationId = useChatPaneId();
+  const paneKey = useChatPaneSliceKey();
+  const messages = useConversationStore((s) => runtimeOf(s, paneKey).messages);
   const measured = useConversationStore(
-    (s) => activeRuntime(s).ceoWindowTokens,
+    (s) => runtimeOf(s, paneKey).ceoWindowTokens,
   );
   const message = lastAssistant(messages);
   const projectionId = message ? assistantProjectionId(message) : null;
@@ -100,10 +103,14 @@ export function ComposerReceivedContextButton() {
   const blocks = message?.captainContext ?? EMPTY_BLOCKS;
   const process = message?.process ?? EMPTY_PROCESS;
   const used = sessionWindowPrompt(measured, messages);
-  const windowTokens = catalogContextLength(catalog?.models ?? [], {
+  const catalogWindow = catalogContextLength(catalog?.models ?? [], {
     modelId: captainCompletedModel(frames ?? EMPTY_FRAMES),
     slot: profile?.main ?? null,
   });
+  const windowTokens = effectiveContextWindow(
+    catalogWindow,
+    profile?.context_budget,
+  );
   const fill =
     used != null && windowTokens != null
       ? windowFill(used, windowTokens)

@@ -237,6 +237,38 @@ class UserRepository:
         )
         await self._session.commit()
 
+    async def set_disabled_tools(self, user_id: str, disabled: list[str]) -> None:
+        """Tool deny list on the starred assembly. Does not rewrite other assemblies."""
+        from agentcore.db.models import LlmModelProfile
+
+        user = await self.get_by_id(user_id)
+        if user is None or not user.default_assembly_id:
+            return
+        row = await self._session.get(LlmModelProfile, user.default_assembly_id)
+        if row is None or row.user_id != user_id:
+            return
+        from agentcore.assembly.recipes import clear_recipe
+
+        clear_recipe(row)
+        row.disabled_tools = list(disabled)
+        await self._session.commit()
+
+    async def set_omitted_projections(self, user_id: str, omitted: list[str]) -> None:
+        """Envelope omissions on the starred assembly."""
+        from agentcore.db.models import LlmModelProfile
+
+        user = await self.get_by_id(user_id)
+        if user is None or not user.default_assembly_id:
+            return
+        row = await self._session.get(LlmModelProfile, user.default_assembly_id)
+        if row is None or row.user_id != user_id:
+            return
+        from agentcore.assembly.recipes import clear_recipe
+
+        clear_recipe(row)
+        row.omitted_projections = list(omitted)
+        await self._session.commit()
+
     async def set_search_provider(
         self, user_id: str, provider_id: str | None, *, commit: bool = True
     ) -> None:
@@ -251,11 +283,36 @@ class UserRepository:
     async def set_default_model_profile(
         self, user_id: str, profile_id: str | None
     ) -> None:
-        """Set the account default model combination (模型组合)."""
+        """Set the starred assembly. New conversations snapshot this id."""
         await self._session.execute(
             update(User)
             .where(User.user_id == user_id)
-            .values(default_model_profile_id=profile_id)
+            .values(default_assembly_id=profile_id)
+        )
+        await self._session.commit()
+
+    async def hidden_capability_recipe_keys(self, user_id: str) -> tuple[str, ...]:
+        """Recipe keys this account removed from the toolbox tray."""
+        user = await self.get_by_id(user_id)
+        if user is None:
+            return ()
+        raw = getattr(user, "hidden_capability_recipes", None) or ()
+        if not isinstance(raw, list):
+            return ()
+        return tuple(
+            str(item) for item in raw if isinstance(item, str) and item
+        )
+
+    async def hide_capability_recipe(self, user_id: str, key: str) -> None:
+        """Drop one official recipe from the tray. Idempotent."""
+        keys = list(await self.hidden_capability_recipe_keys(user_id))
+        if key in keys:
+            return
+        keys.append(key)
+        await self._session.execute(
+            update(User)
+            .where(User.user_id == user_id)
+            .values(hidden_capability_recipes=keys)
         )
         await self._session.commit()
 

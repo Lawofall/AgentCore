@@ -1,3 +1,4 @@
+import { useChatPaneId } from "@/lib/chatPane";
 import { selectVisibleColdResumes } from "@/services/resume";
 import { useConversationStore } from "@/stores/conversation";
 import { useInteractionStore } from "@/stores/interactions";
@@ -10,7 +11,7 @@ const EMPTY_MESSAGES: { id: string; role: string }[] = [];
 
 /** Cold-path pending cards only (`pausesTurn && !hot` / COLD_RESUME_KINDS). */
 export function ResumePrompt() {
-  const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversationId = useChatPaneId();
   // Live authority = InteractionStore cold pending with origin; pausedTurns =
   // still-waiting recovery frames. Journal required is not enough to paint.
   const byId = useInteractionStore((s) => s.byId);

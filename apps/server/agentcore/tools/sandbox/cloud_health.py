@@ -160,8 +160,7 @@ def note_cloud_sandbox_unhealthy(reason: str, detail: str | None = None) -> None
         phase="exec",
         regressed=(previous is not None and previous.healthy) or None,
         hint=(
-            "云端 run/package_install/browser 将不装配，直到 desk/net "
-            "guest 可用"
+            "云端 run/browser 将不装配，直到 desk/net guest 可用"
         ),
     )
 
@@ -268,8 +267,7 @@ async def _probe_and_store(*, phase: str) -> None:
         phase=phase,
         regressed=was_healthy or None,
         hint=(
-            "云端 run/package_install/browser 将不装配，直到 desk/net "
-            "guest 可用"
+            "云端 run/browser 将不装配，直到 desk/net guest 可用"
         ),
     )
 

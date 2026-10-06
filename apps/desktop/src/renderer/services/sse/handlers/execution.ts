@@ -31,6 +31,7 @@ import type {
   RunContextPayload,
   RunEscalationPayload,
   RunPlanPayload,
+  RunSpendPayload,
   RunStartedPayload,
   SSEEvent,
   ToolUseEndPayload,
@@ -158,6 +159,20 @@ export function handleExecutionEvent(
     // Worker mid-flight activity phase (`run_phase`): low-frequency structural
     // stamp onto RunNode.phase / phaseTool (EPHEMERAL — not journaled; live +
     // conformance vectors fold via the same frame path).
+    case "run_spend": {
+      recordFrameNow(event, conversationId);
+      const spent = event.payload as RunSpendPayload;
+      if (spent.role === "captain") {
+        useConversationStore
+          .getState()
+          .attachAccruedSpendToLastMessage(
+            spent.usage,
+            spent.cost,
+            conversationId,
+          );
+      }
+      return true;
+    }
     case "run_phase":
     // 结构性帧 (低频): recordFrameNow 先 flush 高频缓冲以保帧顺序，再立即落。
     case "run_completed":

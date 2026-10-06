@@ -45,10 +45,49 @@ import {
  *
  * Transport only: op execution / settle is owned by the fulfill consumer (D2)
  * via {@link onFulfillFrame}.
+ *
+ * One live socket per page. A newer subscribe for the same device sends
+ * `superseded`; that copy stops instead of reconnecting (it would only kill
+ * the socket that just took over). Backoff resets after the stream has been
+ * quiet-healthy — a heartbeat, or open longer than one server heartbeat —
+ * not when the HTTP status first comes back 200.
  */
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30000;
+/** Server fulfill heartbeat (`_HEARTBEAT_SECONDS`). */
+const HEARTBEAT_MS = 25_000;
+/** Two heartbeat intervals plus a margin, with no bytes at all. */
+const IDLE_TIMEOUT_MS = HEARTBEAT_MS * 2 + 10_000;
+const SUPERSEDED_TYPE = "superseded";
+
+type FulfillSlot = {
+  running: boolean;
+  controller: AbortController | null;
+  reconnectTimer: number | null;
+  attempts: number;
+  lastKnownRoots: string[] | null;
+  observerId: string | null;
+  listeners: Set<FulfillFrameListener>;
+};
+
+const SLOT_KEY = "__agentcoreFulfillStream";
+
+function slot(): FulfillSlot {
+  const g = globalThis as typeof globalThis & { [SLOT_KEY]?: FulfillSlot };
+  if (!g[SLOT_KEY]) {
+    g[SLOT_KEY] = {
+      running: false,
+      controller: null,
+      reconnectTimer: null,
+      attempts: 0,
+      lastKnownRoots: null,
+      observerId: null,
+      listeners: new Set(),
+    };
+  }
+  return g[SLOT_KEY];
+}
 
 /** Caps advertised on every connect (comma-joined query param). */
 export const FULFILL_CAPS = [
@@ -73,17 +112,7 @@ export type FulfillFrame = {
 
 export type FulfillFrameListener = (frame: FulfillFrame) => void;
 
-type StreamOutcome = "reconnect" | "stop";
-
-let running = false;
-let controller: AbortController | null = null;
-let reconnectTimer: number | null = null;
-let attempts = 0;
-/** Last root set actually read off the main process (`null` = never read one). */
-let lastKnownRoots: string[] | null = null;
-/** Observer connection id, minted on first connect (`null` = not minted yet). */
-let observerId: string | null = null;
-const listeners = new Set<FulfillFrameListener>();
+type StreamOutcome = "reconnect" | "stop" | "superseded";
 
 /** True when this runtime only reads account state and fulfils nothing. */
 function isObserver(): boolean {
@@ -101,12 +130,13 @@ function isObserver(): boolean {
  * ops to a machine.
  */
 function observerConnectionId(): string {
-  if (!observerId) observerId = `web-${crypto.randomUUID()}`;
-  return observerId;
+  const state = slot();
+  if (!state.observerId) state.observerId = `web-${crypto.randomUUID()}`;
+  return state.observerId;
 }
 
 function emitFrame(frame: FulfillFrame): void {
-  for (const cb of listeners) {
+  for (const cb of slot().listeners) {
     try {
       cb(frame);
     } catch {
@@ -148,7 +178,7 @@ async function readRootIds(): Promise<RootsRead> {
       .map((r) => r?.id)
       .filter((id): id is string => typeof id === "string" && id.length > 0)
       .sort();
-    lastKnownRoots = ids;
+    slot().lastKnownRoots = ids;
     return { ok: true, roots: ids };
   } catch (err) {
     console.warn("[fulfill] 读取本地永久根失败：沿用上次读到的那份", err);
@@ -198,7 +228,49 @@ async function declaration(): Promise<{
   const read = await readRootIds();
   return {
     caps: FULFILL_CAPS,
-    roots: read.ok ? read.roots : (lastKnownRoots ?? []),
+    roots: read.ok ? read.roots : (slot().lastKnownRoots ?? []),
+  };
+}
+
+function isKeepAlive(frame: string): boolean {
+  const lines = frame
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return lines.length > 0 && lines.every((line) => line.startsWith(":"));
+}
+
+function frameType(frame: string): string | null {
+  const dataLines: string[] = [];
+  for (const line of frame.split("\n")) {
+    if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+  }
+  if (dataLines.length === 0) return null;
+  try {
+    const event = JSON.parse(dataLines.join("\n")) as { type?: unknown };
+    return typeof event.type === "string" ? event.type : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch signal that follows `parent` (user stop) and can also die on idle
+ * without looking like a stop. Idle abort must still reconnect.
+ */
+function linkedSignal(parent: AbortSignal): {
+  signal: AbortSignal;
+  abortIdle: () => void;
+  dispose: () => void;
+} {
+  const link = new AbortController();
+  const follow = () => link.abort(parent.reason);
+  if (parent.aborted) follow();
+  else parent.addEventListener("abort", follow);
+  return {
+    signal: link.signal,
+    abortIdle: () => link.abort("idle"),
+    dispose: () => parent.removeEventListener("abort", follow),
   };
 }
 
@@ -207,6 +279,7 @@ async function runStream(
   deviceId: string,
 ): Promise<StreamOutcome> {
   const { caps, roots } = await declaration();
+  const link = linkedSignal(signal);
   let response: Response;
   try {
     response = await fetch(buildFulfillUrl(deviceId, caps, roots), {
@@ -218,48 +291,81 @@ async function runStream(
         ...bearerAuthHeader(),
         ...getCsrfHeaders("GET"),
       },
-      signal,
+      signal: link.signal,
     });
     captureCsrf(response); // 履约长连接是本端最常开的一条，令牌从这里续
   } catch {
+    link.dispose();
     return "reconnect";
   }
 
   if (response.status === 401) {
+    link.dispose();
     const outcome = await tryRefresh();
     if (outcome === "renewed" || outcome === "transient") return "reconnect";
     notifyUnauthorized();
     return "stop";
   }
-  if (!response.ok || !response.body) return "reconnect";
-
-  attempts = 0;
+  if (!response.ok || !response.body) {
+    link.dispose();
+    return "reconnect";
+  }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let sawSuperseded = false;
+  let idleTimer: number | null = null;
+  let stableTimer: number | null = null;
+  const markStable = () => {
+    slot().attempts = 0;
+  };
+  const armIdle = () => {
+    if (idleTimer !== null) window.clearTimeout(idleTimer);
+    idleTimer = window.setTimeout(() => link.abortIdle(), IDLE_TIMEOUT_MS);
+  };
+  const clearWatch = () => {
+    if (idleTimer !== null) window.clearTimeout(idleTimer);
+    if (stableTimer !== null) window.clearTimeout(stableTimer);
+    idleTimer = null;
+    stableTimer = null;
+  };
+  armIdle();
+  stableTimer = window.setTimeout(markStable, HEARTBEAT_MS);
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      armIdle();
       buffer += decoder.decode(value, { stream: true });
       const frames = buffer.split("\n\n");
       buffer = frames.pop() ?? "";
-      for (const frame of frames) handleFrame(frame);
+      for (const frame of frames) {
+        if (isKeepAlive(frame)) markStable();
+        if (frameType(frame) === SUPERSEDED_TYPE) sawSuperseded = true;
+        handleFrame(frame);
+      }
     }
   } catch {
-    return "reconnect";
+    return sawSuperseded ? "superseded" : "reconnect";
+  } finally {
+    clearWatch();
+    link.dispose();
   }
-  return "reconnect";
+  return sawSuperseded ? "superseded" : "reconnect";
 }
 
 function scheduleReconnect(): void {
-  if (!running || reconnectTimer !== null) return;
-  const delay = Math.min(RECONNECT_BASE_MS * 2 ** attempts, RECONNECT_MAX_MS);
-  attempts += 1;
-  reconnectTimer = window.setTimeout(
+  const state = slot();
+  if (!state.running || state.reconnectTimer !== null) return;
+  const delay = Math.min(
+    RECONNECT_BASE_MS * 2 ** state.attempts,
+    RECONNECT_MAX_MS,
+  );
+  state.attempts += 1;
+  state.reconnectTimer = window.setTimeout(
     () => {
-      reconnectTimer = null;
+      slot().reconnectTimer = null;
       void connect();
     },
     delay + Math.random() * 500,
@@ -267,7 +373,8 @@ function scheduleReconnect(): void {
 }
 
 async function connect(): Promise<void> {
-  if (!running) return;
+  const state = slot();
+  if (!state.running) return;
   let deviceId: string;
   if (isObserver()) {
     deviceId = observerConnectionId();
@@ -277,25 +384,29 @@ async function connect(): Promise<void> {
     } catch {
       // Electron shell with no durable identity (missing preload) — a fulfiller
       // that cannot name itself has nothing to reconnect for.
-      running = false;
+      slot().running = false;
       return;
     }
   }
   const ac = new AbortController();
-  controller = ac;
+  slot().controller = ac;
   let outcome: StreamOutcome = "reconnect";
   try {
     outcome = await runStream(ac.signal, deviceId);
   } catch {
     outcome = "reconnect";
   }
-  if (ac.signal.aborted || !running) return;
-  if (outcome === "stop") {
-    running = false;
+  if (ac.signal.aborted || !slot().running) return;
+  if (outcome === "stop" || outcome === "superseded") {
+    // A newer connect may already own the slot. Only the copy that was
+    // replaced should stand down.
+    if (slot().controller === ac) slot().running = false;
     return;
   }
   // Already-running workspace ops: fail-fast so the server does not wait out
   // the settle deadline. Not-yet-delivered ops still use reconnect grace.
+  // A superseded stream must not fail them — the connection that took over
+  // rehangs those ops.
   failInflightClientToolsForReconnect("cloud");
   scheduleReconnect();
 }
@@ -308,21 +419,23 @@ async function connect(): Promise<void> {
  */
 export function startFulfillStream(): void {
   if (isWebPreview()) return;
-  if (running) return;
-  running = true;
-  attempts = 0;
+  const state = slot();
+  if (state.running) return;
+  state.running = true;
+  state.attempts = 0;
   void connect();
 }
 
 /** Close the fulfill firehose and cancel pending reconnect / polls (idempotent). */
 export function stopFulfillStream(): void {
-  running = false;
-  if (reconnectTimer !== null) {
-    window.clearTimeout(reconnectTimer);
-    reconnectTimer = null;
+  const state = slot();
+  state.running = false;
+  if (state.reconnectTimer !== null) {
+    window.clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = null;
   }
-  controller?.abort();
-  controller = null;
+  state.controller?.abort();
+  state.controller = null;
 }
 
 /**
@@ -330,6 +443,7 @@ export function stopFulfillStream(): void {
  * Returns an unsubscribe function.
  */
 export function onFulfillFrame(cb: FulfillFrameListener): () => void {
+  const listeners = slot().listeners;
   listeners.add(cb);
   return () => {
     listeners.delete(cb);
@@ -339,9 +453,7 @@ export function onFulfillFrame(cb: FulfillFrameListener): () => void {
 /** Test-only: reset module state between cases. */
 export function resetFulfillStreamForTests(): void {
   stopFulfillStream();
-  attempts = 0;
   resetDeviceIdentityForTests();
-  lastKnownRoots = null;
-  observerId = null;
-  listeners.clear();
+  const g = globalThis as typeof globalThis & { [SLOT_KEY]?: FulfillSlot };
+  delete g[SLOT_KEY];
 }

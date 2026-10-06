@@ -498,7 +498,7 @@ const FIXTURES = new Map([
     "/v1/users/me/llm-providers",
     {
       billing_mode: "platform",
-      default_model_profile_id: "profile_default",
+      default_assembly_id: "profile_default",
       platform_available: true,
       platform_model: "deepseek-v4-flash",
       providers: [],

@@ -46,7 +46,7 @@ skip_if:
 
 基座里进模型的是**用户自己的规则**：带 frontmatter 的 md 条目。文件页已取消「记忆 / 规则 / 文档」三夹。
 
-**条目形态**：正文 md + frontmatter 已知键——生效（`apply: always | on_demand | paths`，UI「常驻 / 按需 / 碰到文件」）、`description`（一行摘要，空时异步生成、非空永不自动覆盖）、`paths`（仅 `apply: paths` 时必填，逗号分隔的工作区相对 glob）、可选 `offers_tools`（存量 / 市场快照列出用到的工具名，逗号分隔；编辑面不再写，不挡开场表）。没有类型、没有权威档、没有来源标记。作用域是挂载关系（全局 vs 某文件夹），不是字段。
+**条目形态**：正文 md + frontmatter 已知键——生效（`apply: always | on_demand | paths`，UI「常驻 / 按需 / 碰到文件」）、`description`（一行摘要，人写；空着保持空）、`paths`（仅 `apply: paths` 时必填，逗号分隔的工作区相对 glob）。没有类型、没有权威档、没有来源标记。作用域是挂载关系（全局 vs 某文件夹），不是字段。
 
 **frontmatter 是唯一可写真源**，DB 列（`apply_mode` 等）是派生索引。不一致时 md 无条件赢。写入须过仓储层唯一派生点 `_set_content_and_derive`。**frontmatter 解析失败 = 不注入 + UI 明确报错**。注入时剥掉 frontmatter 再喂模型。→ 见代码: `documents/frontmatter.py`
 
@@ -55,17 +55,16 @@ skip_if:
 apply: on_demand        # always | on_demand | paths；缺省 on_demand
 description: 一行摘要    # 可空；空不是错误。按需与路径都靠这一句
 paths: "**/*.tsx"        # 仅 apply: paths；* 不跨 /，** 跨
-offers_tools: host, debate  # 可选
 ---
 ```
 
-- **已知键只有这些**。名字由文件名承载、作用域由目录层级承载。生效档、摘要进 frontmatter。`offers_tools` 是可选存量键（给人看），不是启用闸。
+- **已知键只有这些**。名字由文件名承载、作用域由目录层级承载。生效档、摘要进 frontmatter。
 - **生效三档**：`always | on_demand | paths`。**否决** `conditional`（没有可证明的触发）。常驻把正文打进 `<设定>`。按需进 `<按需目录>`，`consult` 只取正文。路径不进目录：每回合一条 `<路径约定>`（模式 + 这一句）；全文只在已经出现的路径旁边（附件、`@` 文件、`read` / `write` / `edit` 的 `file_path`）。不从用户自由文猜路径。`*` / `**` / `**/*` / `**/**` 算常驻，占常驻配额。
 - **`ai_maintained` 不进 frontmatter**：写入者身份，真源留 DB。读侧只注入 `ai_maintained=false` 的用户规则。
 - **不引 YAML**：已知键按 `key: value` 行解析；未知键当不透明文本保留；写回走文本级最小编辑。
 - **键缺席 ≠ 解析失败**：没写 `apply` 缺省 `on_demand`。`apply` 写了但读不懂 → 报错，不退回缺省。`apply: paths` 没有 `paths` 模式 → 报错。
 
-**`description` 是枢纽**：按需目录只认名字 + `description`，**不**回退取正文首行。空摘要 = 实际不可检索。→ 见代码: `documents/description.py` · `memory/rules_injection.py`
+**`description` 是枢纽**：按需目录只认名字 + `description`，**不**回退取正文首行。空摘要 = 实际不可检索。→ 见代码: `memory/rule_resolve.py`
 
 **注入**：
 
@@ -79,6 +78,8 @@ offers_tools: host, debate  # 可选
 **纠错 UI 已撤**。手写提示词用删除。存量 `disputed_at` 见代码，不当人侧入口。**严禁**扫对话原文猜「用户是否在否认某条规则」。
 
 ### 注入 {#注入}
+
+账号层条目进不进这场，由 [装配](/docs/03-AI核心/工具与能力系统.md#装配) 的成员名单决定。回合武装了装配之后只注入这份名单；没武装的调用仍按条目上的档。文件夹层仍按下面由外向里叠。
 
 1. 本场对话历史经 `load_recent_history` 进窗口（CEO / worker 共用）。
 2. `<设定>` 只叠用户常驻规则：全局 → 祖先外→内 → 当前。同名硬覆盖，标签只说在哪张桌。`<路径约定>` 跟在后面，同样每回合稳定。改这两块会打穿前缀缓存；DeepSeek 窗内替换认这两块和 `<按需目录>`。
@@ -97,7 +98,7 @@ offers_tools: host, debate  # 可选
 
 ## 过往事实 {#过往事实}
 
-Worker / CEO 开场即持 `search_conversations` / `read_conversation`。**过往事实走这里**，不靠笔记。能力产品层恒开。工具面（query / folder_id / focus / 分页）权威 → [工具与能力 · 跨会话工具边界](/docs/03-AI核心/工具与能力系统.md#四跨会话工具边界)。
+Worker / CEO 默认开场持 `search_conversations` / `read_conversation`。**过往事实走这里**，不靠笔记。工具箱「对话」关掉则这两把离开开场表和执行。用户 `@` 一场旧对话仍由服务端塞对话稿，不靠这两把。工具面（query / folder_id / focus / 分页）权威 → [工具与能力 · 跨会话工具边界](/docs/03-AI核心/工具与能力系统.md#四跨会话工具边界)。
 
 对外口径：白话三层——当前会话 / 你写的规矩 / 旧场可查；不报工具名。→ 见代码：`core/search_query.py` · `conversation/log_export.py` · `tools/builtin/search_conversations.py`
 

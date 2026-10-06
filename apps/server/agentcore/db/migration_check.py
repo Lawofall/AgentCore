@@ -13,15 +13,21 @@ no-op, and the mismatch only surfaces as a 500 on the first query touching the
 model — so the schema itself is compared to the ORM as well.
 
 In **production** (``settings.debug`` false) this is a *notice* only: it never
-mutates schema, never raises, and never blocks startup. Auto-upgrade failures
-in debug likewise never block startup — they fall through to the same drift
-warnings so the signal still fires.
+mutates schema, never raises, and never blocks startup.
+
+In **debug**, an upgrade that fails — or that returns with the database still
+behind head — raises :class:`SchemaUpgradeError`. The lifespan failure makes
+uvicorn exit non-zero and print the traceback, instead of serving requests
+that 500 on the missing column. A database already at head whose live schema
+still lacks a mapped column (``db.schema_orm_ahead``) stays a log: no migration
+exists to apply.
 """
 
 from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import NoReturn
 
 from alembic import command
 from alembic.config import Config
@@ -37,6 +43,10 @@ from agentcore.db.base import engine
 logger = get_logger(__name__)
 
 _UPGRADE_HINT = "run `uv run alembic upgrade head` from apps/server"
+
+
+class SchemaUpgradeError(RuntimeError):
+    """Debug startup cannot serve until ``alembic upgrade head`` reaches head."""
 
 
 def _alembic_config() -> Config:
@@ -114,24 +124,32 @@ def _upgrade_to_head() -> None:
     command.upgrade(_alembic_config(), "head")
 
 
+def _upgrade_failed(exc: Exception, **fields: object) -> NoReturn:
+    """Log the failed dev upgrade, then refuse to serve."""
+    logger.warning(
+        "db.migration_upgrade_failed",
+        error=str(exc),
+        exc_info=True,
+        **fields,
+    )
+    raise SchemaUpgradeError(
+        f"alembic upgrade head failed: {exc}; {_UPGRADE_HINT}"
+    ) from exc
+
+
 async def _auto_upgrade_dev() -> None:
-    """Best-effort ``upgrade head`` when ``settings.debug``. Never raises.
+    """``upgrade head`` when ``settings.debug``.
 
     Already-at-head is a cheap no-op (revision compare only, no Alembic command).
-    On any failure, returns quietly so the subsequent drift check still warns.
+    A failed upgrade raises :class:`SchemaUpgradeError`. Still-behind after a
+    command that returned is left for :func:`check_migrations` to refuse.
     """
     try:
         heads = _script_heads()
         async with engine.connect() as conn:
             before = await conn.run_sync(_db_heads)
     except Exception as exc:
-        logger.warning(
-            "db.migration_upgrade_failed",
-            error=str(exc),
-            phase="preflight",
-            exc_info=True,
-        )
-        return
+        _upgrade_failed(exc, phase="preflight")
 
     if before == heads:
         logger.debug("db.migrations_upgrade_noop", heads=sorted(heads))
@@ -140,27 +158,17 @@ async def _auto_upgrade_dev() -> None:
     try:
         await asyncio.to_thread(_upgrade_to_head)
     except Exception as exc:
-        logger.warning(
-            "db.migration_upgrade_failed",
-            error=str(exc),
+        _upgrade_failed(
+            exc,
             from_revisions=sorted(before),
             heads=sorted(heads),
-            exc_info=True,
         )
-        return
 
     try:
         async with engine.connect() as conn:
             after = await conn.run_sync(_db_heads)
     except Exception as exc:
-        logger.warning(
-            "db.migration_upgrade_failed",
-            error=str(exc),
-            phase="verify",
-            from_revisions=sorted(before),
-            exc_info=True,
-        )
-        return
+        _upgrade_failed(exc, phase="verify", from_revisions=sorted(before))
 
     if before != after:
         logger.info(
@@ -174,7 +182,7 @@ async def _auto_upgrade_dev() -> None:
 
 
 async def check_migrations() -> None:
-    """Warn (never raise) when the DB schema diverges from the migration head.
+    """Report schema drift. Debug refuses to serve when the database is not at head.
 
     In debug, attempts an auto-upgrade first; production only reports drift.
 
@@ -210,23 +218,29 @@ async def check_migrations() -> None:
         # Root-cause, persistent until someone migrates — error (not warning) so it
         # can't hide among routine startup noise. A schema-dependent background sweep
         # WILL fail every interval until this is resolved.
+        detail = f"database has no Alembic version row; {_UPGRADE_HINT}"
         logger.error(
             "db.migrations_unmanaged",
             heads=sorted(heads),
-            detail=f"database has no Alembic version row; {_UPGRADE_HINT}",
+            detail=detail,
         )
+        if settings.debug:
+            raise SchemaUpgradeError(detail)
         return
 
     if current != heads:
         # Schema is behind code: any table added by a pending migration is missing,
         # so dependent sweeps fail every interval. Error, not warning.
+        detail = f"database schema is behind the latest migration; {_UPGRADE_HINT}"
         logger.error(
             "db.migrations_pending",
             db=sorted(current),
             heads=sorted(heads),
             pending=sorted(heads - current),
-            detail=f"database schema is behind the latest migration; {_UPGRADE_HINT}",
+            detail=detail,
         )
+        if settings.debug:
+            raise SchemaUpgradeError(detail)
         return
 
     try:

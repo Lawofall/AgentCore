@@ -18,6 +18,7 @@ from . import (
     browser_input,
     browser_live,
     browser_sessions,
+    context_cut,
     crud,
     debate_steer,
     external_grants,
@@ -62,3 +63,5 @@ router.include_router(browser_live.router)
 router.include_router(browser_input.router)
 # M0 多 session_id：list / create / close（追加在末尾）。
 router.include_router(browser_sessions.router)
+# 方案切点（追加在末尾，不改既有 OpenAPI 顺序）。
+router.include_router(context_cut.router)

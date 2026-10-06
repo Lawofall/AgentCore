@@ -15,13 +15,17 @@ from agentcore.runtime.context import (
     build_workspace_overview,
     resolve_channel_profile,
 )
+from agentcore.runtime.context.envelope_switches import include_file_index
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.runtime.resolve.prompt import (
     attachment_material_scene,
     compose_ceo_chat_prompt,
 )
-from agentcore.runtime.resolve.prompt.envelope import render_ceo_turn_envelope
+from agentcore.runtime.resolve.prompt.envelope import (
+    render_ceo_turn_envelope,
+    resolve_emitted_envelope,
+)
 from agentcore.runtime.sessions import SessionLoader, SessionSaver, default_session_registry
 from agentcore.runtime.suspension import SuspensionDeleter, SuspensionSaver
 from agentcore.tools.builtin import (
@@ -77,17 +81,24 @@ async def assemble_ceo_turn(
     # File index is independent of coordinator wiring — start it immediately so a
     # large desk listing overlaps the toolset / consult work instead of sitting
     # on the first-token path after both finish.
-    overview_task = asyncio.create_task(
-        _timed_phase(
-            "workspace_overview",
-            build_workspace_overview(
-                backend,
-                shared_workspace=folder_id is not None,
-                conversation_id=conversation_id,
-                exclude_turn_id=message_id,
-            ),
+    if include_file_index():
+        overview_task = asyncio.create_task(
+            _timed_phase(
+                "workspace_overview",
+                build_workspace_overview(
+                    backend,
+                    shared_workspace=folder_id is not None,
+                    conversation_id=conversation_id,
+                    exclude_turn_id=message_id,
+                ),
+            )
         )
-    )
+    else:
+
+        async def _no_file_index() -> str:
+            return ""
+
+        overview_task = asyncio.create_task(_no_file_index())
     await asyncio.sleep(0)
     try:
         return await _assemble_ceo_wired(
@@ -201,9 +212,7 @@ async def _assemble_ceo_wired(
     from agentcore.runtime.pipeline import run as run_mod
 
     # ChannelProfile is orthogonal to workspace location (no local lift).
-    channel = resolve_channel_profile(x_client_platform).for_turn(
-        member_turn=prepared.member_turn
-    )
+    channel = resolve_channel_profile(x_client_platform).for_turn(member_turn=prepared.member_turn)
     delegate_tool, debate_tool, chat_tools = run_mod._assemble_ceo_toolset(
         llm=prepared.llm,
         sink=sink,
@@ -287,13 +296,15 @@ async def _assemble_ceo_wired(
         exclude_turn_id=message_id,
         promotion_ledger=prepared.base_tool_context.promotion_ledger,
     )
-    chat_envelope = render_ceo_turn_envelope(
-        workspace_context=prepared.workspace_facts,
-        workspace_file_index=workspace_overview,
-        attachment_material=attachment_material_scene(prepared.attachment_context),
-        attachment_context=prepared.attachment_context,
-        table_context=prepared.table_context,
-        soft_cap=settings.prompt_budget_char_soft_cap,
+    chat_envelope = resolve_emitted_envelope(
+        render_ceo_turn_envelope(
+            workspace_context=prepared.workspace_facts,
+            workspace_file_index=workspace_overview,
+            attachment_material=attachment_material_scene(prepared.attachment_context),
+            attachment_context=prepared.attachment_context,
+            table_context=prepared.table_context,
+        ),
+        history,
     )
 
     # COST-004 tools 面: 补工具 schema JSON chars / 约算 token（原先只观测系统提示，编排工具
