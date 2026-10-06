@@ -6,6 +6,7 @@ from agentcore.storage.protocol import SnapshotRef
 from agentcore.workspace.snapshot_kinds import (
     byte_cap_prune_ids,
     classify_snapshot_label,
+    recent_baseline_pin_ids,
     system_prune_ids,
 )
 
@@ -147,6 +148,28 @@ def test_byte_cap_skips_kept_label():
     stale = byte_cap_prune_ids(refs, max_bytes=150)
     assert "kept" not in stale
     assert set(stale) == {"auto1", "auto2"}
+
+
+def test_recent_baseline_pins_are_per_conversation_and_inside_ttl():
+    now = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
+    rows = [
+        ("c-busy", "b3", now - timedelta(days=1)),
+        ("c-busy", "b2", now - timedelta(days=2)),
+        ("c-busy", "b1", now - timedelta(days=3)),
+        ("c-busy", "old", now - timedelta(days=40)),
+        ("c-quiet", "q1", now - timedelta(days=4)),
+        ("c-blank", "", now),
+    ]
+    pinned = recent_baseline_pin_ids(
+        rows, baseline_max=2, max_age=timedelta(days=30), now=now
+    )
+    assert pinned == {"b3", "b2", "q1"}
+
+
+def test_recent_baseline_pins_empty_when_cap_disabled():
+    now = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
+    rows = [("c1", "b1", now)]
+    assert recent_baseline_pin_ids(rows, baseline_max=0, max_age=timedelta(days=30), now=now) == set()
 
 
 def test_byte_cap_skips_pinned_ids():

@@ -124,3 +124,18 @@ class FilesystemStorageProvider:
         # storage tree mirrors the workspace key, so this drops exactly one
         # workspace's snapshot history. ignore_errors keeps it idempotent.
         shutil.rmtree(self._key_dir(storage_key), ignore_errors=True)
+
+    def list_storage_keys(self) -> list[str]:
+        """Storage keys that have a manifest, relative to the snapshot root.
+
+        Quiet keys are never visited by ``create_snapshot``, so retention has to
+        enumerate them. Keys are POSIX (``workspaces/<user>/<folder>``).
+        """
+        if not self._base.is_dir():
+            return []
+        keys: list[str] = []
+        for manifest in self._base.rglob(MANIFEST_NAME):
+            if not manifest.is_file():
+                continue
+            keys.append(manifest.parent.relative_to(self._base).as_posix())
+        return keys

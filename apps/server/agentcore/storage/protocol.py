@@ -39,8 +39,8 @@ class SnapshotRef:
     non-empty ``label`` is either a **kept version** (user-pinned name, never
     auto-pruned — including the per-key byte cap) or a **system** label
     (turn-baseline / handoff / export·merge — D+C capped + TTL'd, then the
-    workspace byte cap; ids still referenced by open handoff Diff /
-    ``baseline_snapshot_id`` stay pinned). ``label is None`` marks an automatic
+    workspace byte cap; open handoff Diff bases and each conversation's recent
+    baselines stay pinned). ``label is None`` marks an automatic
     post-turn backup.
     """
 

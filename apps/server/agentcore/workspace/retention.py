@@ -38,7 +38,7 @@ from agentcore.workspace.locate import (
     workspace_storage_key,
 )
 from agentcore.workspace.locks import workspace_lock
-from agentcore.workspace.snapshots import purge_snapshots
+from agentcore.workspace.snapshots import purge_snapshots, sweep_snapshot_retention
 
 logger = get_logger(__name__)
 
@@ -239,6 +239,7 @@ async def retention_loop() -> None:
             result = await run_retention_sweep()
             if result["folders"] or result["conversations"] or result["handoff_hosts_aged"]:
                 logger.info("retention.sweep_purged", **result)
+            await sweep_snapshot_retention()
         except asyncio.CancelledError:
             raise
         except Exception as e:

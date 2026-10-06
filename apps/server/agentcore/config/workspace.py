@@ -18,7 +18,9 @@ class WorkspaceSettings(BaseModel):
     workspace_auto_snapshot_max: int = 10
     # System snapshots (turn-baseline / handoff / export·merge labels): D+C —
     # keep newest N AND within TTL; user-named kept versions are never pruned here.
-    # Open handoff Diff base + turn baseline_snapshot_id refs are pinned (skipped).
+    # Pins (skipped): open handoff Diff bases, plus each conversation's newest
+    # baselines that are still inside this TTL. Historical baseline_snapshot_id
+    # rows are not pins — that exemption kept every turn zip forever.
     # TTL defaults align with workspace_retention_days (soft-delete grace).
     workspace_system_baseline_snapshot_max: int = 5
     workspace_system_other_snapshot_max: int = 10
@@ -26,9 +28,9 @@ class WorkspaceSettings(BaseModel):
     # Third retention axis on the same storage key: total zip bytes (count + TTL
     # stay). Whole-tree zips have no increment/dedup — a 84MB workspace at the
     # count caps still grows without bound. 0 disables this leg. User-named kept
-    # versions and open-handoff / turn-baseline pins are never evicted here;
-    # oldest evictable first. A single zip over the cap is kept (do not erase
-    # the restore point just written).
+    # versions and the pins from ``collect_pinned_system_snapshot_ids`` are never
+    # evicted here; oldest evictable first. A single zip over the cap is kept
+    # (do not erase the restore point just written).
     workspace_snapshot_max_bytes: int = 500 * 1024 * 1024
 
     # Local turn baseline zips (``AgentCore/baselines/<message_id>.zip``, sidecar +

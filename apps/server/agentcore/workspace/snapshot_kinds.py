@@ -5,11 +5,14 @@ agree on what is a user pin vs system artefact.
 
 Industry posture (Time Machine / Dropbox version history / Git reflog-ish):
 rolling auto backups, named pins kept, intermediate system checkpoints capped
-and aged out — except ids still referenced by open Diff / turn baselines.
+and aged out — except open handoff Diff bases and each conversation's recent
+turn baselines (newest N inside the TTL). Historical ``baseline_snapshot_id``
+rows are not pins.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
@@ -60,8 +63,8 @@ def system_prune_ids(
     Within each system bucket, keep only entries that are both among the newest
     ``max`` and younger than ``max_age``; delete the rest.
 
-    ``pinned_ids`` (open handoff Diff base / turn ``baseline_snapshot_id`` refs) are
-    never returned — callers collect them by storage key before prune.
+    ``pinned_ids`` (open handoff Diff bases / each conversation's recent baselines)
+    are never returned — callers collect them by storage key before prune.
     """
     if baseline_max < 0 or other_max < 0:
         return []
@@ -138,3 +141,47 @@ def _bucket_prune_ids(
         if too_old or beyond_cap:
             out.append(ref.snapshot_id)
     return out
+
+
+def recent_baseline_pin_ids(
+    rows: Sequence[tuple[str, str, datetime]],
+    *,
+    baseline_max: int,
+    max_age: timedelta,
+    now: datetime | None = None,
+) -> set[str]:
+    """Ids still owed a restore point: newest ``baseline_max`` per conversation, inside ``max_age``.
+
+    A folder's snapshots share one storage key. The key-level count cap would
+    drop a quiet conversation's only recent baseline when a sibling is busier,
+    so those ids are pins. Rows outside the window are not: pinning every
+    ``messages.baseline_snapshot_id`` exempts the whole history from both caps.
+
+    ``rows`` is ``(conversation_id, snapshot_id, created_at)``. Blank ids are
+    ignored. ``baseline_max <= 0`` keeps nothing from this axis. Newest first;
+    the first row past ``max_age`` ends that conversation (older rows are older).
+    """
+    if baseline_max <= 0:
+        return set()
+    clock = _aware(now or datetime.now(UTC))
+    grouped: dict[str, list[tuple[datetime, str]]] = {}
+    for conversation_id, snapshot_id, created_at in rows:
+        if not snapshot_id or not str(snapshot_id).strip() or created_at is None:
+            continue
+        grouped.setdefault(conversation_id, []).append(
+            (_aware(created_at), str(snapshot_id).strip())
+        )
+    pinned: set[str] = set()
+    for items in grouped.values():
+        items.sort(key=lambda item: item[0], reverse=True)
+        kept = 0
+        seen: set[str] = set()
+        for created_at, snapshot_id in items:
+            if snapshot_id in seen:
+                continue
+            seen.add(snapshot_id)
+            if clock - created_at > max_age or kept >= baseline_max:
+                break
+            pinned.add(snapshot_id)
+            kept += 1
+    return pinned

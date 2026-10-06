@@ -17,9 +17,11 @@ from agentcore.workspace.locate import resolve_workspace_root
 from agentcore.workspace.snapshots import (
     create_snapshot,
     list_snapshots,
+    parse_snapshot_storage_key,
     purge_snapshots,
     read_snapshot,
     restore_snapshot,
+    sweep_snapshot_retention,
 )
 
 
@@ -312,6 +314,37 @@ async def test_byte_cap_keeps_pinned(fs_storage, monkeypatch):
     assert pinned.snapshot_id in ids
     assert newest.snapshot_id in ids
     assert mid.snapshot_id not in ids
+
+
+async def test_sweep_applies_baseline_cap_without_a_new_snapshot(fs_storage, monkeypatch):
+    """Quiet keys are not waiting on the next create — the sweep enforces D+C."""
+    monkeypatch.setattr(settings, "workspace_system_baseline_snapshot_max", 10)
+    root = resolve_workspace_root(user_id="u1", folder_rel_path=None, conversation_id="sweep")
+    (root / "f.txt").write_text("x", encoding="utf-8")
+    refs = [
+        await create_snapshot(
+            user_id="u1",
+            folder_id=None,
+            folder_rel_path=None,
+            conversation_id="sweep",
+            label=f"turn-baseline:m{i}",
+        )
+        for i in range(4)
+    ]
+    monkeypatch.setattr(settings, "workspace_system_baseline_snapshot_max", 2)
+    removed = await sweep_snapshot_retention()
+    listed = await list_snapshots(user_id="u1", folder_id=None, conversation_id="sweep")
+    ids = {r.snapshot_id for r in listed}
+    assert removed == 2
+    assert refs[-1].snapshot_id in ids
+    assert refs[-2].snapshot_id in ids
+    assert refs[0].snapshot_id not in ids
+
+
+def test_parse_snapshot_storage_key_shapes():
+    assert parse_snapshot_storage_key("workspaces/u1/folder-1") == ("u1", "folder-1", "")
+    assert parse_snapshot_storage_key("workspaces/u1/conv/c9") == ("u1", None, "c9")
+    assert parse_snapshot_storage_key("workspaces/u1") is None
 
 
 async def test_purge_snapshots_clears_history(fs_storage):

@@ -12,6 +12,7 @@ A′: ``create_snapshot`` / ``restore_snapshot`` / ``restore_into_workspace`` ho
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from pathlib import Path
 
@@ -20,9 +21,15 @@ from sqlalchemy import select
 from agentcore.config import settings
 from agentcore.core.logging import get_logger
 from agentcore.storage import SnapshotRef, StorageProvider, build_storage_provider
+from agentcore.storage.filesystem import FilesystemStorageProvider
+from agentcore.workspace.layout import CONV_SEGMENT, WORKSPACES_SEGMENT
 from agentcore.workspace.locate import resolve_workspace_root, workspace_storage_key
 from agentcore.workspace.locks import workspace_lock
-from agentcore.workspace.snapshot_kinds import byte_cap_prune_ids, system_prune_ids
+from agentcore.workspace.snapshot_kinds import (
+    byte_cap_prune_ids,
+    recent_baseline_pin_ids,
+    system_prune_ids,
+)
 
 logger = get_logger(__name__)
 
@@ -53,10 +60,12 @@ _OPEN_HANDOFF_STATUSES = ("pending", "running", "succeeded", "failed")
 async def collect_pinned_system_snapshot_ids(
     *, user_id: str, folder_id: str | None, conversation_id: str
 ) -> set[str]:
-    """Snapshot ids still referenced under this workspace storage key.
+    """Snapshot ids that must survive D+C and the byte cap for this storage key.
 
     Folder conversations share one key — collect across all members of the folder.
-    Pins: open ``handoff_jobs.base_snapshot_id`` + non-null ``messages.baseline_snapshot_id``.
+    Pins: open ``handoff_jobs.base_snapshot_id``, plus each conversation's newest
+    baselines that are still inside the system TTL (count cap ∧ age). Older
+    ``messages.baseline_snapshot_id`` values are not pins.
     """
     from agentcore.db.base import async_session_factory
     from agentcore.db.models import Conversation, HandoffJob, Message
@@ -86,12 +95,26 @@ async def collect_pinned_system_snapshot_ids(
         pinned.update(handoff_rows.scalars().all())
 
         baseline_rows = await session.execute(
-            select(Message.baseline_snapshot_id).where(
+            select(
+                Message.conversation_id,
+                Message.baseline_snapshot_id,
+                Message.created_at,
+            ).where(
                 Message.conversation_id.in_(conv_ids),
                 Message.baseline_snapshot_id.is_not(None),
             )
         )
-        pinned.update(sid for sid in baseline_rows.scalars().all() if sid)
+        pinned.update(
+            recent_baseline_pin_ids(
+                [
+                    (conversation_id, snapshot_id, created_at)
+                    for conversation_id, snapshot_id, created_at in baseline_rows.all()
+                    if snapshot_id
+                ],
+                baseline_max=settings.workspace_system_baseline_snapshot_max,
+                max_age=timedelta(days=settings.workspace_system_snapshot_retention_days),
+            )
+        )
         return pinned
 
 
@@ -191,10 +214,11 @@ async def create_snapshot(
 
     Auto snapshots (no ``label``) are capped to ``workspace_auto_snapshot_max``
     (决策⑥). User-named kept versions are never pruned. System labels
-    (turn-baseline / handoff / export·merge) are capped + TTL'd (D+C), except
-    ids still pinned by open handoff Diff / turn baselines. After those, a
-    per-key ``workspace_snapshot_max_bytes`` cap evicts oldest evictable
-    leftovers (same kept / pin exemptions).
+    (turn-baseline / handoff / export·merge) are capped + TTL'd (D+C). Pins that
+    survive that pass are open handoff Diff bases and each conversation's recent
+    baselines (same count ∧ TTL). After those, a per-key
+    ``workspace_snapshot_max_bytes`` cap evicts oldest evictable leftovers
+    (same kept / pin exemptions).
 
     Holds ``workspace_lock`` for the manifest RMW (A′ sink).
     """
@@ -226,6 +250,73 @@ async def create_snapshot(
             conversation_id=conversation_id,
         )
         return ref
+
+
+def parse_snapshot_storage_key(key: str) -> tuple[str, str | None, str] | None:
+    """Split a snapshot storage key into ``(user_id, folder_id, conversation_id)``.
+
+    Folder keys are ``workspaces/<user>/<folder>`` (conversation id empty).
+    Bare-chat keys are ``workspaces/<user>/conv/<conversation>``. Anything else
+    is not a workspace snapshot key.
+    """
+    parts = [part for part in key.split("/") if part]
+    if len(parts) == 3 and parts[0] == WORKSPACES_SEGMENT and parts[2] != CONV_SEGMENT:
+        return parts[1], parts[2], ""
+    if len(parts) == 4 and parts[0] == WORKSPACES_SEGMENT and parts[2] == CONV_SEGMENT:
+        return parts[1], None, parts[3]
+    return None
+
+
+async def sweep_snapshot_retention() -> int:
+    """Apply auto / system / byte caps to every filesystem snapshot key.
+
+    ``create_snapshot`` only prunes the key it just wrote. Quiet workspaces
+    would otherwise keep every historical turn zip. Returns how many snapshot
+    ids were removed. Non-filesystem providers are skipped (no key listing).
+    """
+    provider = build_storage_provider()
+    if not isinstance(provider, FilesystemStorageProvider):
+        return 0
+    keys = await asyncio.to_thread(provider.list_storage_keys)
+    removed = 0
+    for key in keys:
+        parsed = parse_snapshot_storage_key(key)
+        if parsed is None:
+            continue
+        user_id, folder_id, conversation_id = parsed
+        try:
+            async with workspace_lock(key):
+                before = {ref.snapshot_id for ref in await provider.list_snapshots(key)}
+                await _enforce_auto_cap(provider, key, settings.workspace_auto_snapshot_max)
+                await _enforce_system_caps(
+                    provider,
+                    key,
+                    user_id=user_id,
+                    folder_id=folder_id,
+                    conversation_id=conversation_id,
+                )
+                await _enforce_byte_cap(
+                    provider,
+                    key,
+                    user_id=user_id,
+                    folder_id=folder_id,
+                    conversation_id=conversation_id,
+                )
+                after = {ref.snapshot_id for ref in await provider.list_snapshots(key)}
+                removed += len(before - after)
+        except Exception as e:
+            logger.warning(
+                "retention.snapshot_caps_key_failed",
+                storage_key=key,
+                error=str(e),
+            )
+    if removed:
+        logger.info(
+            "retention.snapshot_caps_pruned",
+            removed=removed,
+            keys=len(keys),
+        )
+    return removed
 
 
 async def purge_snapshots(*, user_id: str, folder_id: str | None, conversation_id: str) -> None:
