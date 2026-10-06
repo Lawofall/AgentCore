@@ -17,7 +17,7 @@
     "@capacitor/android": "^8.4.0",
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.4.0",
-    "@capacitor/ios": "^8.4.0",
+    "@capacitor/ios": "^8.4.3",
     "@capacitor/push-notifications": "^8.1.1",
     "@capgo/capacitor-speech-recognition": "^8.1.9"
   },
