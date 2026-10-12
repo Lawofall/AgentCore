@@ -363,12 +363,12 @@ describe("AssistantMessage empty-response single surface", () => {
         finishReason: "degraded",
         error: {
           code: "LLM_EMPTY_RESPONSE",
-          message: "模型多次空响应 · 模型返回空内容",
+          message: "模型空响应 · 模型返回空内容",
           context: { empty_diagnosis: "silent_empty" },
         },
       }),
     );
-    expect(screen.queryByText(/模型多次空响应/)).toBeNull();
+    expect(screen.queryByText(/模型空响应/)).toBeNull();
     expect(screen.queryByText("空响应收尾")).toBeNull();
     expect(screen.queryByText(/降级完成/)).toBeNull();
     expect(screen.queryByText(/模型返回空内容/)).toBeNull();
@@ -386,7 +386,7 @@ describe("AssistantMessage empty-response single surface", () => {
         error: {
           code: "LLM_EMPTY_RESPONSE",
           message:
-            "模型多次空响应 · 上游返回了网页或登录页，请检查服务商地址与鉴权",
+            "模型空响应 · 上游返回了网页或登录页，请检查服务商地址与鉴权",
           context: { empty_diagnosis: "oauth_expired" },
         },
       }),

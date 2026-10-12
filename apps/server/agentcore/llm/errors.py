@@ -182,19 +182,16 @@ def empty_response_error_context(
 def empty_response_event_message(diagnosis: str | EmptyResponseDiagnosis | None) -> str:
     """User-facing SSE error message for a degraded empty-response finish.
 
-    ``length_empty`` is a first-round hard cutoff (not a streak), so its copy
-    must not say「多次空响应」— that wording is reserved for the silent-empty ladder.
+    One completed empty round is enough, so the copy does not say「多次」.
     """
     key = _coerce_diagnosis(diagnosis)
     if key is not None:
-        if key is EmptyResponseDiagnosis.LENGTH_EMPTY:
-            return f"模型空响应 · {_DIAGNOSIS_LABELS[key]}"
         label = _DIAGNOSIS_LABELS.get(key)
-        base = "模型多次空响应"
+        base = "模型空响应"
         return f"{base} · {label}" if label else base
     if diagnosis is not None:
-        return f"模型多次空响应 · {diagnosis}"
-    return "模型多次空响应"
+        return f"模型空响应 · {diagnosis}"
+    return "模型空响应"
 
 
 def empty_response_chip_label(diagnosis: str | EmptyResponseDiagnosis | None) -> str | None:

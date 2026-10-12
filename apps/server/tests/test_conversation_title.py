@@ -183,8 +183,8 @@ async def test_generator_empty_messages_skips_call():
     assert provider.requests == []
 
 
-async def test_generator_blank_output_retries_then_returns_empty():
-    """Empty model body triggers one retry; still-empty → "" for caller fallback."""
+async def test_generator_blank_output_returns_empty_without_resample():
+    """A completed empty title is not sampled again; caller falls back."""
     provider = _FakeProvider("   \n  ")
     result = await LLMTitleGenerator(provider).generate(
         TitleInput(
@@ -193,31 +193,19 @@ async def test_generator_blank_output_retries_then_returns_empty():
         )
     )
     assert result == TitleResult(title="")
-    assert len(provider.requests) == 2
+    assert len(provider.requests) == 1
 
 
-async def test_generator_empty_then_success_uses_retry():
-    """First empty JSON title, second good → return the retry result."""
-
-    class _EmptyThenTitle:
-        def __init__(self) -> None:
-            self.requests: list[LLMRequest] = []
-
-        async def complete(self, request: LLMRequest) -> LLMResponse:
-            self.requests.append(request)
-            if len(self.requests) == 1:
-                return LLMResponse(content="")
-            return LLMResponse(content='{"title":"登录功能设计"}')
-
-    provider = _EmptyThenTitle()
+async def test_generator_empty_body_does_not_resample():
+    provider = _FakeProvider("")
     result = await LLMTitleGenerator(provider).generate(
         TitleInput(
             conversation_id="c1",
             messages=[{"role": "user", "content": "帮我设计登录"}],
         )
     )
-    assert result == TitleResult(title="登录功能设计")
-    assert len(provider.requests) == 2
+    assert result == TitleResult(title="")
+    assert len(provider.requests) == 1
 
 
 async def test_generator_times_out_returns_empty_without_retry(monkeypatch):

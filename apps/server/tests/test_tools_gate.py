@@ -13,16 +13,12 @@ from agentcore.runtime.loop_controller import LoopController
 
 def test_tools_unavailable_message_when_tools_offered_and_empty():
     controller = LoopController(
-        empty_threshold=2,
         tool_failure_warn=3,
         tool_failure_disable=5,
         unproductive_threshold=3,
         convergence_finalize_rounds=3,
         investigation_tools=frozenset(),
     )
-    # Two empty rounds → degraded finalize
-    controller.note_empty_round(True)
-    controller.note_empty_round(True)
     outcome = RoundOutcome(content="", reasoning="", usage=TokenUsage())
     directive = decide_no_tool_round(
         outcome,
@@ -41,15 +37,12 @@ def test_tools_unavailable_message_when_tools_offered_and_empty():
 def test_tools_unavailable_not_triggered_when_supports_tools_unknown():
     """None = probe inconclusive; soft gate must not fire the hard error copy."""
     controller = LoopController(
-        empty_threshold=2,
         tool_failure_warn=3,
         tool_failure_disable=5,
         unproductive_threshold=3,
         convergence_finalize_rounds=3,
         investigation_tools=frozenset(),
     )
-    controller.note_empty_round(True)
-    controller.note_empty_round(True)
     outcome = RoundOutcome(content="", reasoning="", usage=TokenUsage())
     directive = decide_no_tool_round(
         outcome,
@@ -67,7 +60,6 @@ def test_tools_unavailable_not_triggered_when_supports_tools_unknown():
 
 def test_tools_unavailable_not_used_when_model_produced_text():
     controller = LoopController(
-        empty_threshold=2,
         tool_failure_warn=3,
         tool_failure_disable=5,
         unproductive_threshold=3,

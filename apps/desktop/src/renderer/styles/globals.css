@@ -737,6 +737,32 @@
   padding-inline-end: 1.25rem;
 }
 
+/* 窄屏空草稿名字行：工作区 / 装配各占半行，长名在半行内截断。
+   Git 跟在工作区后，flex-shrink 更大，空间不够先截断分支名。
+   不分层，才能压过芯片上的 max-w-* / shrink-0。 */
+[data-composer-name-half] .composer-fill-chip > .relative {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+[data-composer-name-half] .composer-fill-chip button {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+[data-composer-name-row] .composer-fill-git {
+  min-width: 0;
+  max-width: 45%;
+  flex-shrink: 2;
+}
+[data-composer-name-row] .composer-fill-git:empty {
+  display: none;
+}
+[data-composer-name-row] .composer-fill-git > button {
+  max-width: 100%;
+  min-width: 0;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);

@@ -600,12 +600,14 @@ def filter_results_for_injection(
     )
 
 
-# Honest, actionable warning when the SERP is uniformly weak (全垃圾): nothing reached
-# ``min_score``, injection is empty, model must rephrase — not "engine degraded".
+# Uniformly weak (全垃圾): nothing reached ``min_score``, injection is empty.
+# Not "engine degraded", and not a default to re-query or hedge known claims.
+# This batch is not evidence. Answer from knowledge already held; another query
+# only when a claim still lacks a source the model does not have.
 _WEAK_SERP_NOTE = (
     "本次结果与查询字面重合不足，疑似离题 SERP（并非确认该信息不存在）。"
-    "未注入任何结果；请勿把搜索引擎摘要当证据。"
-    "建议换用更通用或同义的核心词重拟查询后重试，或对相关主张标注「待核实」。"
+    "未注入任何结果，本批不是证据。"
+    "用已有知识作答；只有主张仍缺一个你没有的出处时，才换词再搜。"
 )
 
 _ACADEMIC_GAP_NOTE = (
@@ -624,7 +626,7 @@ def relevance_note(
     """Short model-facing note when filtering changed the payload.
 
     When ``uniformly_weak`` (not one hit reached ``min_score``), injection is empty
-    and the note asks for a rewritten query — it replaces any "dropped N" line
+    and the note says this batch is not evidence — it replaces any "dropped N" line
     (there is nothing on-topic to keep). ``evidence_gap`` adds the academic
     literature gap line (structured flag is separate on the ToolResult metadata).
     """

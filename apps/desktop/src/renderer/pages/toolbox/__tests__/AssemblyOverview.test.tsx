@@ -221,12 +221,26 @@ describe("装配胶囊", () => {
       within(model).queryByRole("button", { name: "删除这份" }),
     ).toBeNull();
     expect(
-      within(model).getByRole("button", { name: "以后新建也用这份" }),
-    ).toBeTruthy();
+      within(model).queryByRole("button", { name: "以后新建也用这份" }),
+    ).toBeNull();
+    const nameChip = screen.getByRole("button", { name: "写稿", pressed: true });
+    const adopt = screen.getByRole("button", { name: "以后新建也用这份" });
+    expect(adopt.parentElement).toBe(nameChip.parentElement);
     expect(screen.getByText("主模型")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "以后新建也用这份" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "GLM-5.2，新建对话用这份" }),
+    );
+    expect(select).toHaveBeenCalledWith("sys");
+    expect(star).not.toHaveBeenCalled();
+    fireEvent.click(adopt);
     expect(star).toHaveBeenCalledWith("mine");
+    expect(select).toHaveBeenCalledTimes(1);
+    star.mockClear();
+    select.mockClear();
+    fireEvent.click(nameChip);
+    expect(star).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
     expect(screen.queryByText(/只对之后用这份装配新建的对话成立/)).toBeNull();
     expect(screen.queryByRole("switch", { name: "出厂" })).toBeNull();
     expect(screen.queryByRole("switch", { name: "出厂目录" })).toBeNull();
@@ -328,7 +342,7 @@ describe("装配胶囊", () => {
     expect(select).toHaveBeenCalledWith("mine");
   });
 
-  it("新建和删除交给标题行，排在搜索左边", () => {
+  it("新建和删除交给标题行，市场不在这一行里", () => {
     editing.conversationId = "c1";
     editing.profile = mine;
     const client = new QueryClient({
@@ -338,7 +352,6 @@ describe("装配胶囊", () => {
       <div data-testid="assembly-name-row">
         {names}
         <div data-testid="assembly-title-slot">{actions}</div>
-        <input aria-label="搜提示词、工具" />
       </div>
     );
     render(
@@ -359,15 +372,18 @@ describe("装配胶囊", () => {
     expect(
       within(slot).queryByRole("button", { name: "以后新建也用这份" }),
     ).toBeNull();
-    const search = screen.getByRole("textbox", { name: "搜提示词、工具" });
     expect(
-      slot.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING,
+      within(row).getByRole("button", { name: "以后新建也用这份" }),
     ).toBeTruthy();
     expect(
-      within(screen.getByTestId("assembly-model-block")).getByRole("button", {
-        name: "以后新建也用这份",
-      }),
-    ).toBeTruthy();
+      within(row).queryByRole("textbox", { name: "搜提示词、工具" }),
+    ).toBeNull();
+    expect(
+      within(screen.getByTestId("assembly-model-block")).queryByRole(
+        "button",
+        { name: "以后新建也用这份" },
+      ),
+    ).toBeNull();
   });
 
   it("模型直接铺在名字下面，不进对话框", () => {

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.api.dependencies import (
@@ -40,8 +40,14 @@ async def get_run_llm_window(
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
     msg_repo: MessageRepository = Depends(get_message_repo),
     journal_repo: TurnJournalRepository = Depends(get_turn_journal_repo),
+    round_idx: int | None = Query(default=None),
 ) -> RunLlmWindowResponse:
-    """Fold one run's LLM input window from turn_journal (owner-scoped, diagnostic)."""
+    """Fold one run's LLM input window from turn_journal (owner-scoped, diagnostic).
+
+    ``round_idx`` selects the request that call received, including the compact
+    watermark already stored before it. Omitted, the end-state transcript is
+    returned with compact left off.
+    """
     await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
 
     turn = await msg_repo.get_by_id(message_id, conversation_id=conversation_id)
@@ -69,4 +75,10 @@ async def get_run_llm_window(
                 history_len=history_len,
             )
 
-    return project_run_llm_window(entries, run_id=run_id, history=history)
+    return project_run_llm_window(
+        entries,
+        run_id=run_id,
+        history=history,
+        round_idx=round_idx,
+        history_len=history_len,
+    )

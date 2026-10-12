@@ -7,8 +7,6 @@ class EngineSettings(BaseModel):
     tool_default_timeout_seconds: float = 60.0
     tool_execution_timeout_seconds: float = 90.0
 
-    engine_empty_response_threshold: int = 2
-
     engine_tool_failure_warn: int = 2
     engine_tool_failure_disable: int = 3
     engine_unproductive_threshold: int = 3

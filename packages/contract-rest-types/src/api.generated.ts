@@ -2585,8 +2585,35 @@ export interface paths {
         /**
          * Get Run Llm Window
          * @description Fold one run's LLM input window from turn_journal (owner-scoped, diagnostic).
+         *
+         *     ``round_idx`` selects the request that call received, including the compact
+         *     watermark already stored before it. Omitted, the end-state transcript is
+         *     returned with compact left off.
          */
         get: operations["get_run_llm_window_v1_conversations__conversation_id__messages__message_id__runs__run_id__llm_window_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/messages/{message_id}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Turn Trace
+         * @description One owned assistant turn as the facts the model read and wrote.
+         *
+         *     Display events stay in the journal for the chat and are not listed.
+         *     The page does not read dev JSONL. A missing journal is a gap sentence.
+         */
+        get: operations["get_turn_trace_v1_conversations__conversation_id__messages__message_id__trace_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9865,6 +9892,34 @@ export interface components {
             user_id: string;
         };
         /**
+         * JournalLine
+         * @description One window fact, in the order it was written.
+         *
+         *     Display events that only paint the chat stay in the journal and are omitted
+         *     here. ``payload`` is the stored object. ``mark`` is the single field that tells
+         *     this line from its neighbors (a round, a tool name, or a run). ``run_id``
+         *     and ``round_idx`` are set only on ``llm_call``, so the client can ask for
+         *     that call's folded window.
+         */
+        JournalLine: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Mark */
+            mark?: string | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Round Idx */
+            round_idx?: number | null;
+            /** Run Id */
+            run_id?: string | null;
+            /** Ts */
+            ts?: string | null;
+        };
+        /**
          * KeyInputEvent
          * @description A key event. ``modifiers`` is a CDP bitmask or a list of names (alt/ctrl/meta/shift).
          *
@@ -11580,6 +11635,11 @@ export interface components {
         /**
          * RunLlmWindowResponse
          * @description One run's folded LLM input window for a turn (diagnostic replay).
+         *
+         *     Without ``round_idx`` this is the end-state transcript (tool rounds folded,
+         *     final answer omitted, window compact not applied). With ``round_idx`` it is
+         *     the request that call received: facts before it, plus the compact watermark
+         *     already stored for that run.
          */
         RunLlmWindowResponse: {
             /**
@@ -11587,8 +11647,25 @@ export interface components {
              * @description False when the journal lacks execution facts to fold a window.
              */
             available: boolean;
+            /**
+             * Compacted
+             * @description True when this call's request replaced earlier rounds with the stored summary.
+             * @default false
+             */
+            compacted: boolean;
+            /**
+             * History Omitted
+             * @description True when the captain opening declared history_len and fewer prior messages were loaded.
+             * @default false
+             */
+            history_omitted: boolean;
             /** Messages */
             messages?: components["schemas"]["LlmWindowMessageLine"][];
+            /**
+             * New From
+             * @description Index of the first message added since the previous call of this run. Set only for a per-call projection.
+             */
+            new_from?: number | null;
             /** Run Id */
             run_id: string;
         };
@@ -12869,6 +12946,32 @@ export interface components {
             paused?: components["schemas"]["PausedTurnSummary"][];
             /** Pending Interactions */
             pending_interactions?: components["schemas"]["PendingInteractionSummary"][];
+        };
+        /**
+         * TurnTraceResponse
+         * @description One assistant turn's model transcript.
+         *
+         *     ``gap`` is set when there is nothing to list. ``lines`` is empty then.
+         *     Display events stay in the journal and are not listed.
+         */
+        TurnTraceResponse: {
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Gap */
+            gap?: string | null;
+            /**
+             * In Progress
+             * @default false
+             */
+            in_progress: boolean;
+            /** Lines */
+            lines?: components["schemas"]["JournalLine"][];
+            /** Model */
+            model?: string | null;
+            /** Trace Id */
+            trace_id?: string | null;
+            /** Where */
+            where?: string | null;
         };
         /** UpdateConversationRequest */
         UpdateConversationRequest: {
@@ -17941,7 +18044,9 @@ export interface operations {
     };
     get_run_llm_window_v1_conversations__conversation_id__messages__message_id__runs__run_id__llm_window_get: {
         parameters: {
-            query?: never;
+            query?: {
+                round_idx?: number | null;
+            };
             header?: {
                 authorization?: string | null;
             };
@@ -17963,6 +18068,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunLlmWindowResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_turn_trace_v1_conversations__conversation_id__messages__message_id__trace_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+                message_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TurnTraceResponse"];
                 };
             };
             /** @description Validation Error */

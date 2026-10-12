@@ -16,7 +16,7 @@ import {
   PromptOverview,
 } from "@/components/tools/PromptOverview";
 import { PromptReadDialog } from "@/components/tools/PromptReadDialog";
-import { Button, ConfirmDialog, SearchField } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { Switch } from "@/components/ui/Switch";
 import {
   ContextMenu,
@@ -165,18 +165,7 @@ function toScopeEntry(
 }
 
 /** Portrait overview + centered read dialog for the toolbox 交代 section. */
-export function PromptCatalog({
-  data,
-  query: queryProp,
-  suppressMiss = false,
-  onMissChange,
-}: {
-  data: Capabilities;
-  /** When set, the page owns the search box and this section only filters. */
-  query?: string;
-  suppressMiss?: boolean;
-  onMissChange?: (miss: boolean) => void;
-}) {
+export function PromptCatalog({ data }: { data: Capabilities }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [overlay, setOverlay] = useState<SkillCatalog>(EMPTY_SKILL_CATALOG);
   const [accountEntries, setAccountEntries] = useState<AccountScopeEntry[]>([]);
@@ -229,9 +218,6 @@ export function PromptCatalog({
   );
   const items = useMemo(() => flattenPromptRail(rail), [rail]);
   const otherDrop = useMemo(() => onDemandDropFolder(rail), [rail]);
-  const [ownQuery, setOwnQuery] = useState("");
-  const query = queryProp ?? ownQuery;
-  const searchOwned = queryProp !== undefined;
   const [selectedId, setSelectedId] = useState<string>(() => {
     const tool = searchParams.get("tool");
     if (tool) return toolCatalogId(tool);
@@ -252,8 +238,8 @@ export function PromptCatalog({
     useState<MineBatchFailureState | null>(null);
 
   const visibleMine = useMemo(
-    () => flattenVisibleMineItems(rail, query, openFolderId),
-    [openFolderId, rail, query],
+    () => flattenVisibleMineItems(rail, openFolderId),
+    [openFolderId, rail],
   );
   const pickedIds = useMemo(() => selectionCatalogIds(selection), [selection]);
 
@@ -966,16 +952,7 @@ export function PromptCatalog({
 
   const catalogActions = (
     <>
-      {searchOwned ? null : (
-        <SearchField
-          aria-label="搜提示词"
-          placeholder="搜提示词"
-          value={query}
-          onValueChange={setOwnQuery}
-          className="w-52"
-        />
-      )}
-      {busy || query.trim() ? null : (
+      {busy ? null : (
         <button
           type="button"
           className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -1025,9 +1002,6 @@ export function PromptCatalog({
           busy={busy}
           listings={listings}
           installedListings={installedListings}
-          query={query}
-          suppressMiss={suppressMiss}
-          onMissChange={onMissChange}
           factoryControl={{
             present: !profile?.omit_factory_catalog,
             canToggle: profile?.kind === "user" || profile?.kind === "system",

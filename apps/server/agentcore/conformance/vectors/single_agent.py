@@ -688,7 +688,7 @@ def _empty_face_shell(
 def _empty_face_degraded() -> list[SSEEvent]:
     return _empty_face_shell(
         code="LLM_EMPTY_RESPONSE",
-        message="模型多次空响应 · 模型返回空内容",
+        message="模型空响应 · 模型返回空内容",
         finish=FinishReason.DEGRADED,
     )
 

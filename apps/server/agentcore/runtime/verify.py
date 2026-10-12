@@ -1,8 +1,8 @@
 """交付前核验·轻层守卫（finish_guard）。
 
 模型在某轮宣布 done（不再调工具、且有正文）时，:func:`~agentcore.runtime.engine.react_loop`
-不立刻接受，先过这道纯代码轻层守卫：扫产物的*可观测信号*，命中即返回锚定具体事实的
-「待修正项」，由 loop 拼成系统提示注入、回炉一轮，而非照发。
+先过这道纯代码轻层守卫。非空「待修正项」会由 loop 拼成 ``[系统提示]`` 注入并回炉；
+当前无命中项（围栏回炉已撤，交付诚实只打影子），返回空列表即放行。
 
 这是 ReAct「唯一终止信号 = 模型自报 done」的**对称解**——给「交付前先核一道」一个不依赖
 模型自觉、不经 CEO 判断的决定论闸门（CEO captain 与 worker 跑同一个 react_loop，故一处
@@ -11,10 +11,10 @@
 
 对话气泡 **不因引用回炉**：``#rN``、悬空 ``[n]``、书目形态不是 ``finish_guard`` 的命中项
 （来源卡 = 已登记非 blocked，含 search-only；未登记号留白字）。
-轻层覆盖两类**纯机械、近零误报**的校验：
+轻层覆盖：
 
-1. **结构完整性**——代码围栏未闭合（``` 开了没收尾、后文整片被当代码渲染）。
-   空语言围栏（标了 ``python`` 却空体）已撤（质检启发式）。
+1. **结构完整性**——未闭合围栏与空语言围栏回炉均已撤（渲染 / 质检启发式）。
+   不扫正文、不注入 ``[系统提示]``、不清气泡。禁复活。
 2. **交付验收对照**（仅 CEO：``check_citations`` + 本回合已发射的 ``delivery_verdict``）——
    **真源 = 对账档位**（见 ``closing_posture``）：``delivered``=正式完成；
    ``partial``/``notes``≈草稿·部分；``blocked``=阻塞。档位非正式完成时不得姿势 A
@@ -29,8 +29,9 @@
 如实写「该资料待客户提供」，机械判会误伤——轻层的立身之本是近零误报，宁缺毋滥。后续轻层（如
 受限的 JSON 可解析）与重层（要跑 / 要重算 / 换眼睛找漏 / 回源对照）在此扩展。
 
-**统一底线**：结构完整性两查对 CEO 与 worker 同样成立，二者收尾都过这道关（worker 回炉经
-``run_output_reset`` 干净重写其卡片）；交付验收对照（含概览篇幅）仅 CEO 路径开。
+**统一底线**：围栏回炉已撤，CEO 与 worker 收尾都不再因围栏清稿。交付验收对照
+（含概览篇幅）仅 CEO 路径开，且当前只影子、不回炉。本函数仍会跑，以便打影子；
+返回空列表 = 放行。回炉机制留下，供影子转真拦，当前无命中项。
 
 → 见设计: docs/03-AI核心/执行引擎架构设计.md（ReAct 循环 · 交付前核验）
 """
@@ -60,7 +61,7 @@ def finish_guard(
     这是**所有 react_loop 收尾共过的统一底线**——CEO captain 与 worker 都在 done 点过此关。
     对话气泡不扫 ``[n]`` / ``#rN`` / 书目（``citation_count`` 已不参与判定）。现查两类：
 
-    1. **结构完整性**（始终查）：:func:`_code_fence_reworks`。
+    1. **结构完整性**：未闭合围栏回炉已撤，不再产出待修正项。
     2. **交付验收对照**（仅 ``check_citations``）：
        - 收口诚实性（``closing_honesty_rework``）：真源=``delivery_verdict`` 档位；
          非正式完成不得姿势 A（默认影子）；无卡 / ``no_batch`` 不拦正文；
@@ -69,7 +70,6 @@ def finish_guard(
     """
     _ = citation_count  # 对话不再因角标回炉；调用面仍可传。
     reworks: list[str] = []
-    reworks.extend(_code_fence_reworks(content))
     if check_citations:
         from agentcore.runtime.closing_posture import closing_honesty_rework
 
@@ -118,30 +118,11 @@ def _overview_length_reworks(
     return []
 
 
-def _code_fence_reworks(content: str) -> list[str]:
-    """结构完整性轻检：代码围栏未闭合（``` 开了没收尾）。
-
-    空语言围栏（标了语言却空体）已撤。单遍扫行、把每个行首 ``` 当作开/合切换
-    （标准 Markdown 同字符围栏不嵌套）；扫完仍在块内记一条未闭合项。
-    """
-    reworks: list[str] = []
-    in_fence = False
-    for line in content.splitlines():
-        if line.lstrip().startswith("```"):
-            in_fence = not in_fence
-    if in_fence:
-        reworks.append(
-            "正文里有一个用 ``` 开启的代码块没有闭合（缺少结尾的 ```）——会导致后面的内容"
-            "全部被当作代码渲染。请补上结尾的 ```，或删除多余的起始标记。"
-        )
-    return reworks
-
-
 def format_guard_steer(reworks: list[str]) -> str:
     """把待修正项拼成一条 ``[系统提示]``（空列表 → 空串）。
 
-    只陈述窗里没有的结构事实（现：未闭合围栏）。HOW / 礼貌课不进。
-    合成 ``role=user``；围栏是 ``[系统提示]``。不在每条上自报身份。
+    对话 ``finish_guard`` 当前不产出项（围栏回炉已撤；诚实性为影子）。
+    HOW / 礼貌课不进。合成 ``role=user``；围栏是 ``[系统提示]``。
     """
     if not reworks:
         return ""

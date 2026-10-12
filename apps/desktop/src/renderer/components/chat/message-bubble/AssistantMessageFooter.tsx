@@ -36,12 +36,14 @@ import { cn } from "@/lib/utils";
 import type { UsageBreakdown } from "@/services/usage";
 import type { Message } from "@/stores/conversation";
 import { assistantProjectionId, getRuntime } from "@/stores/conversation";
+import { useSidePanelStore } from "@/stores/sidePanel";
+import { useUIStore } from "@/stores/ui";
 import type { ContextBlockWire } from "@/types/events";
 import {
   CACHE_BILLED_AS_MISS_LABEL,
   cacheUsageDisplay,
 } from "@agentcore/protocol-fold-kit";
-import { Check, Copy, Gauge, Layers, Package } from "lucide-react";
+import { Check, Copy, Gauge, Layers, ListTree, Package } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ContextCutAction } from "./ContextCutAction";
 import {
@@ -333,8 +335,24 @@ export function AssistantTurnInspect({
   /** False when this bubble is not allowed to host the pack. */
   showSupportPack?: boolean;
 }) {
+  const developerMode = useUIStore((s) => s.developerMode);
+  const showTurnTrace = useSidePanelStore((s) => s.showTurnTrace);
+  const conversationId = useChatPaneId();
+  const serverMessageId = assistantProjectionId(message);
+
   return (
     <>
+      {developerMode && conversationId && showUsage ? (
+        <SimpleTooltip label="这一回合">
+          <IconButton
+            size="sm"
+            aria-label="这一回合"
+            onClick={() => showTurnTrace(conversationId, serverMessageId)}
+          >
+            <ListTree size={14} />
+          </IconButton>
+        </SimpleTooltip>
+      ) : null}
       {showContext ? (
         <ReceivedContextButton
           blocks={captainContext}

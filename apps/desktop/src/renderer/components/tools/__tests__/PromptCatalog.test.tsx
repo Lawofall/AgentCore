@@ -300,7 +300,7 @@ describe("PromptCatalog 概览", () => {
     expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
     expect(screen.getByRole("heading", { name: "交代" })).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "工具箱" })).toBeNull();
-    expect(screen.getByLabelText("搜提示词")).toBeTruthy();
+    expect(screen.queryByLabelText("搜提示词")).toBeNull();
     expect(screen.getByRole("button", { name: /^新建$/ })).toBeTruthy();
     expect(screen.queryByText("下一回合会带这些")).toBeNull();
     expect(screen.queryByText("每回合都带着")).toBeNull();

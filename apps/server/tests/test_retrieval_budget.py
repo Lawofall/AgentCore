@@ -457,11 +457,9 @@ async def test_awareness_silent_when_exhausted_and_leaves_wind_down_intact():
 
     assert await rb.try_reserve("web_fetch")
     assert rb.remaining == 0
-    from agentcore.runtime.runs.cutoff import wind_down_instruction_retrieval
-
     wind_down = LLMMessage(
         role="user",
-        content=wind_down_instruction_retrieval(),
+        content="[系统提示] 检索预算已用尽。",
     )
     messages.append(wind_down)
 

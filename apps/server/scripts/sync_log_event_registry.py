@@ -1103,6 +1103,9 @@ HISTORICAL_COMPAT: dict[str, str] = {
     "attachment.vision_billing_failed": (
         "历史兼容：曾为附件视觉计费失败；现并入 read 路径，不再发此事件"
     ),
+    "title.empty_retry": (
+        "历史兼容：完成的空标题曾用同一份请求再采样一次；已撤，空结果交给调用方回退"
+    ),
 }
 
 KEY_DESC: dict[str, str] = {

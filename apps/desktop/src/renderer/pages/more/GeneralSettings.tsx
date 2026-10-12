@@ -11,6 +11,7 @@ import {
   PageHeader,
   Select,
 } from "@/components/ui";
+import { Switch } from "@/components/ui/Switch";
 import { type Theme, resolveDark } from "@/lib/theme";
 import { notifyError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -68,12 +69,28 @@ const THEME_OPTIONS: ThemeOption[] = [
 export function GeneralSettings() {
   const theme = useUIStore((s) => s.theme);
   const setTheme = useUIStore((s) => s.setTheme);
+  const developerMode = useUIStore((s) => s.developerMode);
+  const setDeveloperMode = useUIStore((s) => s.setDeveloperMode);
 
   return (
     <div>
       <PageHeader title="通用" />
 
       <SettingsStack>
+        <SettingsSection title="开发者模式">
+          <SettingRow
+            label="查看这一回合"
+            description="打开后，回复底栏可以打开这一回合的记录。"
+            control={
+              <Switch
+                checked={developerMode}
+                label="开发者模式"
+                onCheckedChange={setDeveloperMode}
+              />
+            }
+          />
+        </SettingsSection>
+
         <SettingsSection title="主题" contentClassName="space-y-2">
           {THEME_OPTIONS.map((option) => (
             <ThemeRow

@@ -17,10 +17,6 @@ from agentcore.tools.file_products import LANDING_TOOLS as LANDING_TOOLS
 
 DEFAULT_WINDOW = 8
 DEFAULT_THRESHOLD = 3
-# Consecutive empty-response rounds that trip a degraded finish (B2). The fallback
-# retry sits inside this streak, so the default 2 = one empty → fallback retry → if
-# still empty, degraded.
-DEFAULT_EMPTY_THRESHOLD = 2
 # Tool failure circuit breaker (B2): cumulative (run-scoped, args-agnostic) failure
 # counts per tool. At the warn threshold the model is told to stop retrying that
 # tool; at the disable threshold later calls fail at execute (the OpenAI table

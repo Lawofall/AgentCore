@@ -33,9 +33,16 @@ export interface LlmWindowMessage {
   origin?: string | null;
 }
 
-/** `GET .../runs/{run_id}/llm-window` response. */
+/** `GET .../runs/{run_id}/llm-window` response.
+
+`round_idx` set: the request that call received. Omitted: end-state transcript.
+`new_from` / `compacted` / `history_omitted` are set on the per-call read.
+*/
 export interface RunLlmWindowResponse {
   run_id: string;
   available: boolean;
   messages: LlmWindowMessage[];
+  new_from?: number | null;
+  compacted?: boolean;
+  history_omitted?: boolean;
 }

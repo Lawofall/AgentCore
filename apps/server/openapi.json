@@ -8555,6 +8555,74 @@
         "title": "InviteFolderMemberRequest",
         "type": "object"
       },
+      "JournalLine": {
+        "description": "One window fact, in the order it was written.\n\nDisplay events that only paint the chat stay in the journal and are omitted\nhere. ``payload`` is the stored object. ``mark`` is the single field that tells\nthis line from its neighbors (a round, a tool name, or a run). ``run_id``\nand ``round_idx`` are set only on ``llm_call``, so the client can ask for\nthat call's folded window.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "mark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mark"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "round_idx": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Round Idx"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "ts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "title": "JournalLine",
+        "type": "object"
+      },
       "KeyInputEvent": {
         "description": "A key event. ``modifiers`` is a CDP bitmask or a list of names (alt/ctrl/meta/shift).\n\nUse this for non-text keys (Enter / Backspace / arrows / shortcuts); actual typed text\nshould ride a ``text`` event so it inserts verbatim (and never lands in any log — D17).",
         "properties": {
@@ -12464,11 +12532,23 @@
         "type": "object"
       },
       "RunLlmWindowResponse": {
-        "description": "One run's folded LLM input window for a turn (diagnostic replay).",
+        "description": "One run's folded LLM input window for a turn (diagnostic replay).\n\nWithout ``round_idx`` this is the end-state transcript (tool rounds folded,\nfinal answer omitted, window compact not applied). With ``round_idx`` it is\nthe request that call received: facts before it, plus the compact watermark\nalready stored for that run.",
         "properties": {
           "available": {
             "description": "False when the journal lacks execution facts to fold a window.",
             "title": "Available",
+            "type": "boolean"
+          },
+          "compacted": {
+            "default": false,
+            "description": "True when this call's request replaced earlier rounds with the stored summary.",
+            "title": "Compacted",
+            "type": "boolean"
+          },
+          "history_omitted": {
+            "default": false,
+            "description": "True when the captain opening declared history_len and fewer prior messages were loaded.",
+            "title": "History Omitted",
             "type": "boolean"
           },
           "messages": {
@@ -12477,6 +12557,18 @@
             },
             "title": "Messages",
             "type": "array"
+          },
+          "new_from": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Index of the first message added since the previous call of this run. Set only for a per-call projection.",
+            "title": "New From"
           },
           "run_id": {
             "title": "Run Id",
@@ -15283,6 +15375,80 @@
           }
         },
         "title": "TurnRecoveryResponse",
+        "type": "object"
+      },
+      "TurnTraceResponse": {
+        "description": "One assistant turn's model transcript.\n\n``gap`` is set when there is nothing to list. ``lines`` is empty then.\nDisplay events stay in the journal and are not listed.",
+        "properties": {
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "gap": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap"
+          },
+          "in_progress": {
+            "default": false,
+            "title": "In Progress",
+            "type": "boolean"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/JournalLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "where": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Where"
+          }
+        },
+        "title": "TurnTraceResponse",
         "type": "object"
       },
       "UpdateConversationRequest": {
@@ -26685,7 +26851,7 @@
     },
     "/v1/conversations/{conversation_id}/messages/{message_id}/runs/{run_id}/llm-window": {
       "get": {
-        "description": "Fold one run's LLM input window from turn_journal (owner-scoped, diagnostic).",
+        "description": "Fold one run's LLM input window from turn_journal (owner-scoped, diagnostic).\n\n``round_idx`` selects the request that call received, including the compact\nwatermark already stored before it. Omitted, the end-state transcript is\nreturned with compact left off.",
         "operationId": "get_run_llm_window_v1_conversations__conversation_id__messages__message_id__runs__run_id__llm_window_get",
         "parameters": [
           {
@@ -26713,6 +26879,22 @@
             "schema": {
               "title": "Run Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "round_idx",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Round Idx"
             }
           },
           {
@@ -26771,6 +26953,90 @@
           }
         },
         "summary": "Get Run Llm Window",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/messages/{message_id}/trace": {
+      "get": {
+        "description": "One owned assistant turn as the facts the model read and wrote.\n\nDisplay events stay in the journal for the chat and are not listed.\nThe page does not read dev JSONL. A missing journal is a gap sentence.",
+        "operationId": "get_turn_trace_v1_conversations__conversation_id__messages__message_id__trace_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "title": "Message Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnTraceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Turn Trace",
         "tags": [
           "conversations"
         ]

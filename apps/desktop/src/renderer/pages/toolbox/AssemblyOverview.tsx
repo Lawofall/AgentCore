@@ -1,5 +1,5 @@
 import { modelConfigApiErrorMessage } from "@/components/llm/ModelKeyForm";
-import { Button, ConfirmDialog, IconButton } from "@/components/ui";
+import { ConfirmDialog, IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { foldedIntoPreset } from "@/lib/assemblyFold";
 import { conversationKeys, llmModelProfileKeys } from "@/lib/queryKeys";
@@ -66,7 +66,8 @@ export function countPromptModes(documents: readonly { applyMode: string }[]): {
  * clicked again, renames in place.
  * New and delete are icon buttons on that same row, to the right of the names.
  * Model knobs sit under the names and write as they change.
- * The adopt-as-default action stays with the model.
+ * With a conversation open, the star on the current chip adopts that copy
+ * for later new conversations. The name still only switches this one.
  * `names` and those two actions stay in the sticky bar; `model` scrolls away.
  */
 export function AssemblyOverview({
@@ -74,7 +75,7 @@ export function AssemblyOverview({
 }: {
   /**
    * Pins the name row. `actions` is new / delete;
-   * the shelf places that cluster to the left of search.
+   * the shelf places that cluster to the left of 市场.
    */
   renderNames?: (names: ReactNode, actions?: ReactNode) => ReactNode;
 }) {
@@ -207,6 +208,11 @@ export function AssemblyOverview({
               setRenaming(false);
               void select(row.id);
             }}
+            onAdopt={
+              canAdopt && chipIsFace(row, profile, presets)
+                ? () => void star(profile.id)
+                : undefined
+            }
           />
         );
       })}
@@ -226,6 +232,11 @@ export function AssemblyOverview({
             setRenaming(false);
             void select(row.id);
           }}
+          onAdopt={
+            canAdopt && chipIsFace(row, profile, presets)
+              ? () => void star(profile.id)
+              : undefined
+          }
         />
       ))}
     </div>
@@ -235,18 +246,6 @@ export function AssemblyOverview({
     <>
       <div data-testid="assembly-model-block">
         <ModelAssemblySection />
-        {canAdopt ? (
-          <div className="mt-3 flex justify-end">
-            <Button
-              variant="neutral"
-              size="md"
-              disabled={chipPending}
-              onClick={() => void star(profile.id)}
-            >
-              以后新建也用这份
-            </Button>
-          </div>
-        ) : null}
       </div>
       {deleteError ? (
         <p className="mt-3 text-xs text-muted-foreground" role="alert">
@@ -420,6 +419,7 @@ function AssemblyNameChip({
   onCommitRename,
   onCancelRename,
   onSelect,
+  onAdopt,
   starred,
 }: {
   row: LlmModelProfileView;
@@ -432,15 +432,35 @@ function AssemblyNameChip({
   onCommitRename: (name: string) => void;
   onCancelRename: () => void;
   onSelect: () => void;
+  /** 当前这颗还不是星标时，点星才把以后新建改到这份。 */
+  onAdopt?: () => void;
   starred?: boolean;
 }) {
   const marked = starred ?? Boolean(row.is_default);
+  const adopt = Boolean(onAdopt) && !marked;
   const chipClass = cn(
     "inline-flex h-8 max-w-full items-center gap-1 rounded-full px-3 text-sm",
     selected
       ? "bg-accent text-accent-foreground"
       : "border border-border bg-card text-foreground hover:bg-muted",
   );
+  const starMark = marked ? (
+    <Star size={14} className="shrink-0 fill-current" aria-hidden />
+  ) : null;
+  const adoptStar =
+    adopt && onAdopt ? (
+      <SimpleTooltip label="以后新建也用这份">
+        <button
+          type="button"
+          aria-label="以后新建也用这份"
+          disabled={pending}
+          onClick={onAdopt}
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-inherit hover:bg-background/40 disabled:opacity-50"
+        >
+          <Star size={14} aria-hidden />
+        </button>
+      </SimpleTooltip>
+    ) : null;
   if (renaming && face) {
     return (
       <span className={chipClass}>
@@ -450,9 +470,28 @@ function AssemblyNameChip({
           onCommit={onCommitRename}
           onCancel={onCancelRename}
         />
-        {marked ? (
-          <Star size={14} className="shrink-0 fill-current" aria-hidden />
-        ) : null}
+        {starMark}
+        {adoptStar}
+      </span>
+    );
+  }
+  if (adopt) {
+    return (
+      <span className={chipClass}>
+        <button
+          type="button"
+          aria-pressed={selected}
+          aria-label={row.name}
+          disabled={pending}
+          onClick={() => {
+            if (selected && face) onBeginRename();
+            else onSelect();
+          }}
+          className="min-w-0 truncate bg-transparent text-left text-inherit"
+        >
+          {row.name}
+        </button>
+        {adoptStar}
       </span>
     );
   }
@@ -469,9 +508,7 @@ function AssemblyNameChip({
       className={chipClass}
     >
       <span className="truncate">{row.name}</span>
-      {marked ? (
-        <Star size={14} className="shrink-0 fill-current" aria-hidden />
-      ) : null}
+      {starMark}
     </button>
   );
 }

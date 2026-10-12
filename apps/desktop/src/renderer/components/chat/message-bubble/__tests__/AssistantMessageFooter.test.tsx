@@ -37,6 +37,7 @@ vi.mock("@/hooks/useConversations", () => ({
 }));
 
 import { copyText } from "@/lib/clipboard";
+import { useUIStore } from "@/stores/ui";
 import {
   AssistantMessageFooter,
   AssistantMessageMetaSummary,
@@ -55,6 +56,26 @@ const message: Message = {
 
 afterEach(() => {
   cleanup();
+  useUIStore.setState({ developerMode: false });
+});
+
+describe("开发者模式", () => {
+  it("关掉时没有这一回合，打开后底栏出现", () => {
+    render(
+      <TooltipProvider>
+        <AssistantTurnInspect message={message} captainContext={[]} />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "这一回合" })).toBeNull();
+    cleanup();
+    useUIStore.setState({ developerMode: true });
+    render(
+      <TooltipProvider>
+        <AssistantTurnInspect message={message} captainContext={[]} />
+      </TooltipProvider>,
+    );
+    expect(screen.getByRole("button", { name: "这一回合" })).toBeTruthy();
+  });
 });
 
 describe("底栏复制排查包", () => {

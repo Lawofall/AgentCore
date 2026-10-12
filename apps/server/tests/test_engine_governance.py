@@ -445,33 +445,6 @@ async def test_deliverable_only_keeps_terminal_checkpoint_content():
     assert "streamed answer" in content  # terminal 的 final_text 追加在其后
 
 
-async def test_deliverable_only_drops_steer_acknowledgement_after_rework():
-    # 真实事故复现：finish_guard 以 role=user 注入纠错 → 模型回「谢谢指正，我重新整理」
-    # 后接着调工具。那句寒暄是「非终止工具轮」的前置旁白，deliverable_only 下必须回退，
-    # 不得进入 message.content；最终只留修正后的答案。（Fork-A 让模型少说这句；Fork-B 是
-    # 结构兜底：即便说了，也不落进交付正文。）
-    provider = _ScriptedProvider(
-        [
-            [_content_chunk("我先查一下。"), _tool_chunk("search", '{"q": "a"}', call_id="c0")],
-            [_content_chunk("见下：\n```python\nprint(1)")],  # 未闭合围栏 → finish_guard 回炉
-            [
-                _content_chunk("谢谢指正，我重新整理。"),
-                _tool_chunk("search", '{"q": "b"}', call_id="c1"),
-            ],
-            [_content_chunk("修正后的最终结论，无代码块。")],
-        ]
-    )
-    (content, *_), messages = await _run(
-        provider, _StubTool(), max_rounds=20, citation_sink=[], deliverable_only=True
-    )
-    assert content == "修正后的最终结论，无代码块。"
-    assert "谢谢指正" not in content
-    assert "我先查一下" not in content
-    # 证明确实走了回炉路径（注入过一条 finish_guard 纠错 steer）。
-    steers = [m for m in messages if m.role == "user" and m.content and "没有闭合" in m.content]
-    assert len(steers) == 1
-
-
 async def test_worker_deliverable_only_resets_card_on_narration_rollback():
     # worker 路径（on_reset→run_output_reset，卡片=数据同一通道）：写旁白 + 调非终止工具 →
     # 回退交付正文时【必须】发一次 reset 清掉卡片已流式草稿，使 直播==重载(合成自 message_final)。
@@ -946,7 +919,7 @@ async def test_tool_timeout_aborts_and_loop_recovers():
     assert "禁止原样重试" in (tool_msg.content or "")
 
 
-# --- B2: empty-response degraded (same-model retry) -----------------------------
+# --- B2: empty-response degraded (no same-context resample) -------------------
 
 
 class _ModelRecordingProvider:
@@ -991,19 +964,19 @@ async def _run_loop(  # noqa: ANN001
     )
 
 
-async def test_empty_response_retries_same_model_and_recovers():
-    # Round 0 is empty (no content, no tool) → the engine retries round 1 on the same
-    # model, which answers. The turn finishes clean (not degraded).
+async def test_empty_response_degrades_on_first_round():
+    """A completed empty round finishes degraded. The scripted recovery is not called."""
     provider = _ModelRecordingProvider([[], [_content_chunk("recovered")]])
     profile = make_profile_params(max_rounds=20)
     finish_override: list[FinishReason] = []
-    content, _r, _u, _rounds = await _run_loop(
+    content, _r, _u, rounds = await _run_loop(
         provider, profile, finish_override_sink=finish_override
     )
 
-    assert content == "recovered"
-    assert provider.models == ["primary", "primary"]
-    assert finish_override == []  # recovered → not degraded
+    assert content == ""
+    assert rounds == 1
+    assert provider.models == ["primary"]
+    assert finish_override == [FinishReason.DEGRADED]
 
 
 async def test_length_empty_degrades_immediately_without_continue():
@@ -1089,28 +1062,18 @@ async def test_length_with_partial_content_does_not_hard_cut_empty_ladder():
     assert finish_override == []
 
 
-async def test_consecutive_empty_finishes_degraded():
-    # Two consecutive empty rounds hit the threshold → degraded finish (no blank end_turn).
+async def test_consecutive_empty_script_stops_after_the_first():
+    # A second empty chunk is never requested: the first completed empty degrades.
     provider = _ModelRecordingProvider([[], []])
     profile = make_profile_params(max_rounds=20)
     finish_override: list[FinishReason] = []
-    content, _r, _u, _rounds = await _run_loop(
+    content, _r, _u, rounds = await _run_loop(
         provider, profile, finish_override_sink=finish_override
     )
 
     assert content == ""
-    assert provider.models == ["primary", "primary"]
-    assert finish_override == [FinishReason.DEGRADED]
-
-
-async def test_empty_response_degrades_without_model_switch():
-    # Same as consecutive empty: model is never switched; turn ends degraded.
-    provider = _ModelRecordingProvider([[], []])
-    profile = make_profile_params(max_rounds=20)
-    finish_override: list[FinishReason] = []
-    await _run_loop(provider, profile, finish_override_sink=finish_override)
-
-    assert provider.models == ["primary", "primary"]
+    assert rounds == 1
+    assert provider.models == ["primary"]
     assert finish_override == [FinishReason.DEGRADED]
 
 

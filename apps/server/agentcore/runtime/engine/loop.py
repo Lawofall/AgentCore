@@ -231,8 +231,8 @@ async def react_loop(
     entry and only ever hold the latest cumulative value; on a normal return the
     caller uses the returned usage instead. ``finish_override`` (CEO captain path)
     carries a :class:`FinishReason` the caller should stamp instead of the
-    rounds-derived default (``end_turn`` / ``max_rounds``) — ``DEGRADED`` on
-    empty-response threshold, ``UNPRODUCTIVE`` on all-tools-failed early-stop (B2);
+    rounds-derived default (``end_turn`` / ``max_rounds``) — ``DEGRADED`` on a
+    completed empty response, ``UNPRODUCTIVE`` on all-tools-failed early-stop (B2);
     left empty on a normal finish. ``citations`` aggregates web sources from
     research tools (de-duped, capped). ``gate_escalations`` (Worker routing Phase 1)
     collects Escalation Gate rows after ``execute_tools`` (CEO / solo leave
@@ -934,23 +934,23 @@ async def react_loop(
                     provider_base_url=round_result.provider_base_url,
                     thinking_blocks=round_result.thinking_blocks,
                 )
-                # 协调监听豁免：captain 在活跃协调中对纯进展事件保持静默（无正文、无工具）
-                # 是被指引的合法行为，不进 B2 空响应梯子；ALL_COMPLETED 注入即关闭 session，
-                # 终稿阶段的空响应仍按原梯子降级收口。
-                # length+空正文：不再豁免（截断不会因 Continue 变好，避免再挂墙钟）。
-                counts_as_empty = outcome.is_empty
-                if counts_as_empty and role == "captain" and outcome.finish_reason != "length":
+                # 队长在队还没散时的静默由 decide_no_tool_round 继续听团。
+                # ALL_COMPLETED 关掉 session 之后的空响应照常降级。
+                # length+空正文不听团。
+                if (
+                    outcome.is_empty
+                    and role == "captain"
+                    and outcome.finish_reason != "length"
+                ):
                     from agentcore.runtime.coordination.session import active_coordination
 
                     coord_session = active_coordination()
                     if coord_session is not None and coord_session.active:
-                        counts_as_empty = False
                         logger.info(
                             "engine.coordination_listen",
                             round=round_idx,
                             execution_id=coord_session.execution_id,
                         )
-                controller.note_empty_round(counts_as_empty)
 
                 if not outcome.has_tool_calls:
                     directive = decide_no_tool_round(

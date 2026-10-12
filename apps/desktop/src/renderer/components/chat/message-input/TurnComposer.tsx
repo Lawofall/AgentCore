@@ -20,6 +20,7 @@ import {
   migrateLegacyDraft,
   plainText,
 } from "@/lib/inlineBody";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import {
   assistantHasTeamStrip,
   turnOutcomeForAssistant,
@@ -108,7 +109,7 @@ const MIN_COMPOSER_HEIGHT_CARD = 56;
 const MIN_COMPOSER_HEIGHT_BAR = 36;
 const MAX_COMPOSER_HEIGHT = 200;
 
-/** bar 底排盒：＋ / 输入 / 语音 / 发送。窗外环用同一 `py-1` 对齐，不跟卡片边框底边对齐。 */
+/** bar 底排盒：宽屏是 ＋ / 输入 / 语音 / 发送 一行。窄屏输入另起一行，这一盒只留 ＋ / 语音 / 发送。窗外环用同一 `py-1` 对齐，不跟卡片边框底边对齐。 */
 const COMPOSER_BAR_ROW = "flex items-end gap-1 py-1";
 const COMPOSER_BAR_CLUSTER = "flex shrink-0 items-center pb-0.5";
 /** card 底栏：窗外环与工具条同一 `pb-3`，不跟卡片边框底边对齐。 */
@@ -126,6 +127,9 @@ const MESSAGE_CHAR_LIMIT = 32_000;
 
 export type TurnComposerVariant = "card" | "bar";
 
+/** 宽屏空输入的可见占位。窄屏不画这句（列太短），读屏名仍用它。 */
+const DEFAULT_COMPOSER_PLACEHOLDER = "输入消息，@ 引用内容…";
+
 /**
  * The ONE turn composer (统一 AI 输入框): the full-featured card — auto-growing
  * textarea, @ 引用（含本机附件）, drag-drop attachments, 停止生成,
@@ -133,10 +137,12 @@ export type TurnComposerVariant = "card" | "bar";
  * {@link import("../MessageInput").MessageInput}. Canvas is look-only; 下达指令
  * stays in chat. Hosts only pick chrome (placeholder).
  *
- * `variant="bar"` is the compact single-row chrome used only by the chat bottom dock:
- * `[＋]` · textarea · 语音 · 发送；工作区/Git/模型/权限/@ 收进＋菜单。
- * 窗口环贴在整块输入框外侧右边，不进卡片、不占输入列宽；与底排同一行盒（不是贴边框底边）。
- * default `card` keeps textarea-above-toolbar（居中草稿），左簇摊开。
+ * `variant="bar"` is the compact chrome used only by the chat bottom dock:
+ * 宽屏一行 `[＋]` · textarea · 语音 · 发送；窄屏两行（通栏输入 / ＋ · 语音 · 发送）。
+ * 工作区/Git/模型/权限/@ 收进＋菜单。
+ * 窗口环贴在整块输入框外侧右边，不进卡片、不占输入列宽；与有发送的那一行同一行盒（不是贴边框底边，窄屏也不跟名字行）。
+ * default `card` keeps textarea-above-toolbar（居中草稿）。宽屏左簇一行摊开；
+ * 窄屏两行：工作区 · Git? · 装配，下一行权限 · @ · 语音 · 发送。
  * 离线态靠 {@link ComposerConnectionNotice} 与发送硬禁，不再用安静连接绿点。
  *
  * Draft state (text + attachments) lives in {@link useComposerDraftStore} keyed by
@@ -150,7 +156,7 @@ export type TurnComposerVariant = "card" | "bar";
  * self-gated on `!conversationId`.
  */
 export function TurnComposer({
-  placeholder = "输入消息，@ 引用内容…",
+  placeholder = DEFAULT_COMPOSER_PLACEHOLDER,
   variant = "card",
   attachedBelowApproval = false,
 }: {
@@ -164,6 +170,7 @@ export function TurnComposer({
   attachedBelowApproval?: boolean;
 }) {
   const isBar = variant === "bar";
+  const { isNarrow } = useNarrowLayoutState();
   const minComposerHeight = isBar
     ? MIN_COMPOSER_HEIGHT_BAR
     : MIN_COMPOSER_HEIGHT_CARD;
@@ -243,6 +250,9 @@ export function TurnComposer({
     }
     return placeholder;
   }, [liveDebate, deskOccupied, lastMessage, placeholder]);
+  // 窄屏只藏默认占位。继续 / 辩论占位仍是当场提示，不跟这句一起删。
+  const hideDefaultPlaceholder =
+    isNarrow && resolvedPlaceholder === DEFAULT_COMPOSER_PLACEHOLDER;
   const draftKey = draftKeyFor(conversationId);
   const composerError = useComposerSendError(draftKey);
   const sessionAction = useActiveErrorAction();
@@ -675,13 +685,22 @@ export function TurnComposer({
 
   // 左簇顺序：工作区 · Git? · 装配 · 权限 · @
   // bar：整簇收进 ComposerPlusMenu（权限/@ 带文案）；card：底栏摊开（权限 iconOnly）。
+  // 窄屏 card 把带字的工作区/装配放上行，图标放下行。同一组元素只渲染一次。
   // 否决 Composer 并排「本地引擎/云端过桥」切换器；引擎不可用走诊断横幅，不自动过桥。
+  const workspaceChip = (
+    <ComposerWorkspaceChip conversationId={conversationId} />
+  );
+  const gitChip = <ComposerGitStatusChip conversationId={conversationId} />;
+  const assemblyChip = <AssemblyPicker disabled={deskOccupied} />;
+  const permissionChip = (
+    <PermissionAxesBadge disabled={deskOccupied} iconOnly={!isBar} />
+  );
   const sessionChrome = (
     <>
-      <ComposerWorkspaceChip conversationId={conversationId} />
-      <ComposerGitStatusChip conversationId={conversationId} />
-      <AssemblyPicker disabled={deskOccupied} />
-      <PermissionAxesBadge disabled={deskOccupied} iconOnly={!isBar} />
+      {workspaceChip}
+      {gitChip}
+      {assemblyChip}
+      {permissionChip}
     </>
   );
 
@@ -775,6 +794,9 @@ export function TurnComposer({
   ) : (
     primarySendButton
   );
+  const voiceControl = voice.isSupported ? (
+    <VoiceButton state={voice.state} onClick={voice.toggle} />
+  ) : null;
 
   const editorBlock = (
     <div ref={bodyHostRef} className="relative min-w-0 flex-1">
@@ -794,7 +816,8 @@ export function TurnComposer({
         value={value}
         attachments={attachments}
         agentMentions={agentMentions}
-        placeholder={resolvedPlaceholder}
+        placeholder={hideDefaultPlaceholder ? undefined : resolvedPlaceholder}
+        label={hideDefaultPlaceholder ? resolvedPlaceholder : undefined}
         className={isBar ? "px-2 py-2" : "px-4 pt-3 pb-1"}
         maxLength={MESSAGE_CHAR_LIMIT}
         onChange={handleBodyChange}
@@ -922,7 +945,26 @@ export function TurnComposer({
             <RecordingBar duration={voice.duration} onCancel={voice.cancel} />
           )}
 
-          {isBar ? (
+          {isBar && isNarrow ? (
+            <>
+              <div className="min-w-0 px-2 pt-1">{editorBlock}</div>
+              <div
+                className={`${COMPOSER_BAR_ROW} px-2`}
+                data-composer-actions=""
+              >
+                <div className={COMPOSER_BAR_CLUSTER}>
+                  <ComposerPlusMenu>
+                    {sessionChrome}
+                    {liveDebate ? null : mentionButton}
+                  </ComposerPlusMenu>
+                </div>
+                <div className={`${COMPOSER_BAR_CLUSTER} ml-auto gap-1`}>
+                  {voiceControl}
+                  {sendControls}
+                </div>
+              </div>
+            </>
+          ) : isBar ? (
             <div
               className={`${COMPOSER_BAR_ROW} px-2`}
               data-composer-actions=""
@@ -935,12 +977,49 @@ export function TurnComposer({
               </div>
               {editorBlock}
               <div className={`${COMPOSER_BAR_CLUSTER} gap-1`}>
-                {voice.isSupported && (
-                  <VoiceButton state={voice.state} onClick={voice.toggle} />
-                )}
+                {voiceControl}
                 {sendControls}
               </div>
             </div>
+          ) : isNarrow ? (
+            <>
+              {editorBlock}
+              <div className="flex flex-col gap-2 px-4 pb-3">
+                <div
+                  className="flex min-w-0 items-center gap-1"
+                  data-composer-name-row=""
+                >
+                  <div
+                    className="flex min-w-0 flex-1 basis-0 items-center gap-1"
+                    data-composer-name-half=""
+                  >
+                    <div className="composer-fill-chip min-w-0 flex-1 overflow-hidden">
+                      {workspaceChip}
+                    </div>
+                    <div className="composer-fill-git">{gitChip}</div>
+                  </div>
+                  <div
+                    className="min-w-0 flex-1 basis-0 overflow-hidden"
+                    data-composer-name-half=""
+                  >
+                    <div className="composer-fill-chip">{assemblyChip}</div>
+                  </div>
+                </div>
+                <div
+                  className="flex items-center justify-between gap-1"
+                  data-composer-actions=""
+                >
+                  <div className="flex items-center gap-1">
+                    {permissionChip}
+                    {liveDebate ? null : mentionButton}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {voiceControl}
+                    {sendControls}
+                  </div>
+                </div>
+              </div>
+            </>
           ) : (
             <>
               {editorBlock}
@@ -952,9 +1031,7 @@ export function TurnComposer({
                   {leftCluster}
                 </div>
                 <div className="flex items-center gap-1">
-                  {voice.isSupported && (
-                    <VoiceButton state={voice.state} onClick={voice.toggle} />
-                  )}
+                  {voiceControl}
                   {sendControls}
                 </div>
               </div>

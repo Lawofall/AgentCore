@@ -1,5 +1,6 @@
 import { Markdown } from "@/components/chat/Markdown";
 import { RunDetailScroll } from "@/components/chat/detail/RunDetailScroll";
+import { TurnTracePanel } from "@/components/chat/detail/TurnTracePanel";
 import { FileTypeIcon } from "@/components/files/FileTypeIcon";
 import { closeOsFloatWindowsForTabs } from "@/components/layout/DesktopFloatWindowBridge";
 import { FileTabSurface } from "@/components/layout/FileTabSurface";
@@ -60,6 +61,7 @@ import {
   Diff,
   FileText,
   FolderOpen,
+  ListTree,
   MessageSquare,
   PanelRight,
   Plus,
@@ -92,7 +94,8 @@ function isDetailTabLive(
     tab.kind === "simple-turn" ||
     tab.kind === "terminal" ||
     tab.kind === "file" ||
-    tab.kind === "browser"
+    tab.kind === "browser" ||
+    tab.kind === "turn-trace"
   ) {
     return true;
   }
@@ -571,6 +574,12 @@ export function SidePanel() {
             </div>
           );
         })}
+        {activeTab?.kind === "turn-trace" && (
+          <TurnTracePanel
+            conversationId={activeTab.conversationId}
+            messageId={activeTab.messageId}
+          />
+        )}
         {activeTab?.kind === "content" && (
           <div className="absolute inset-0 overflow-y-auto p-4">
             <Markdown content={contentTabText} />
@@ -637,6 +646,9 @@ function detailTabIcon(tab: DetailTab): ReactNode {
   }
   if (tab.kind === "browser") {
     return <Radio size={14} className="shrink-0" />;
+  }
+  if (tab.kind === "turn-trace") {
+    return <ListTree size={14} className="shrink-0" />;
   }
   return null;
 }

@@ -17,7 +17,6 @@ from agentcore.runtime.loop_controller import LoopController
 
 def _controller() -> LoopController:
     return LoopController(
-        empty_threshold=2,
         tool_failure_warn=3,
         tool_failure_disable=5,
         unproductive_threshold=3,

@@ -4,7 +4,6 @@
  */
 
 import { api } from "@/services/api";
-import type { CapabilityTool } from "@/services/capabilities";
 import { __resetToolSwitchStoresForTests } from "@/services/toolSwitches";
 import {
   cleanup,
@@ -137,20 +136,6 @@ describe("ToolSwitchList bulk", () => {
   });
 });
 
-function catalogTool(name: string, summary: string): CapabilityTool {
-  return {
-    name,
-    face: "file",
-    resident: true,
-    summary,
-    blurb: "",
-    description: summary,
-    parameters: {},
-    approval: "never",
-    available_to: ["ceo", "worker"],
-  };
-}
-
 function LocationProbe() {
   const loc = useLocation();
   return (
@@ -181,15 +166,7 @@ describe("ToolSwitchList shelf", () => {
             path="/toolbox"
             element={
               <>
-                <ToolSwitchList
-                  scope="draft"
-                  layout="shelf"
-                  catalogTools={[
-                    catalogTool("write", "写工作区文件"),
-                    catalogTool("edit", "改工作区文件里的一段"),
-                    catalogTool("consult", "按名查阅按需目录"),
-                  ]}
-                />
+                <ToolSwitchList scope="draft" layout="shelf" />
                 <LocationProbe />
               </>
             }
@@ -207,21 +184,5 @@ describe("ToolSwitchList shelf", () => {
     expect(screen.getByTestId("loc").textContent).toBe(
       "/toolbox?tool=write#tools",
     );
-  });
-
-  it("搜索只留下命中的开关卡", async () => {
-    const listed = board([]);
-    listed.switches = listed.switches.map((row) =>
-      row.id === "web" ? { ...row, tools: ["web_search"] } : row,
-    );
-    get.mockResolvedValue(listed);
-    renderList({
-      layout: "shelf",
-      query: "联网",
-      catalogTools: [catalogTool("web_search", "联网检索")],
-    });
-    expect(await screen.findByRole("heading", { name: "上网" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "改文件" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "联网检索" })).toBeNull();
   });
 });

@@ -19,7 +19,7 @@ from agentcore.runtime.error_fields import error_fields_for
 from agentcore.runtime.events import FinishReason
 from agentcore.runtime.evidence_ledger import EvidenceLedgerCore
 from agentcore.runtime.facts import LlmCallFact, NoteFact, RoundBoundaryFact, record_turn_fact
-from agentcore.runtime.loop_controller import Intervention, LoopController
+from agentcore.runtime.loop_controller import LoopController
 from agentcore.runtime.verify import finish_guard, format_guard_steer
 
 from .directive import Continue, LoopDirective, Return, Rework
@@ -335,18 +335,22 @@ def decide_no_tool_round(
     """Pick the directive for a round with no tool calls.
 
     A round that produced text either finishes cleanly (``Return``) or, if
-    finish_guard rejects it and reworks remain, is reworked (``Rework``). An empty
-    round walks the convergence controller's degraded ladder: finish degraded
-    (``Return`` + DEGRADED) or retry on the same model (``Continue``). Upstream
-    ``finish_reason=length`` with empty body skips the one-shot Continue.
+    finish_guard rejects it and reworks remain, is reworked (``Rework``). A
+    completed empty round (no content, no tool call) finishes degraded on this
+    round. It is not resampled on the same context. ``finish_reason=length`` is
+    the same decision.
 
     Captain + live coordinating team: ``Continue`` (listen), not ``Return`` — occupancy
     stays this desk until the session closes. Exception: ``finish_reason=length`` with
     empty body still finalizes degraded (waiting will not grow the output). Workers
     are unaffected.
 
-    对话气泡不因 ``#rN`` / 悬空 ``[n]`` / 书目回炉；结构围栏与 CEO 交付结构闸仍可 Rework。
+    对话气泡不因围栏、``#rN`` / 悬空 ``[n]`` / 书目回炉。交付诚实只打影子。
+    ``Rework`` 仅当 ``finish_guard`` 返回非空（当前无命中项）。
     """
+    # Empty-response streak used to live on the controller. Completed empties
+    # now finish here; the parameter stays so callers do not change shape.
+    _ = controller
     from agentcore.runtime.coordination.session import (
         active_coordination,
         live_team_holds_captain_turn,
@@ -388,20 +392,19 @@ def decide_no_tool_round(
             return Rework()
         return Return()
 
-    action = controller.empty_response_action(finish_reason=outcome.finish_reason)
-    if action is Intervention.FINALIZE:
-        logger.warning(
-            "engine.degraded",
-            finish_reason=outcome.finish_reason,
-            empty_diagnosis=outcome.empty_diagnosis,
+    # Completed empty response: degrade this round. Transport failures and
+    # incomplete streams retry in the provider; this path does not sample again.
+    logger.warning(
+        "engine.degraded",
+        finish_reason=outcome.finish_reason,
+        empty_diagnosis=outcome.empty_diagnosis,
+    )
+    if tools_offered and supports_tools is False and not outcome.content:
+        return Return(
+            finish_reason=FinishReason.ERROR,
+            extra_content=TOOLS_UNAVAILABLE_RUNTIME_MESSAGE,
         )
-        if tools_offered and supports_tools is False and not outcome.content:
-            return Return(
-                finish_reason=FinishReason.ERROR,
-                extra_content=TOOLS_UNAVAILABLE_RUNTIME_MESSAGE,
-            )
-        return Return(finish_reason=FinishReason.DEGRADED)
-    return Continue()
+    return Return(finish_reason=FinishReason.DEGRADED)
 
 
 def apply_finish_guard_rework(

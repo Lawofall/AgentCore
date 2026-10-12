@@ -1,6 +1,6 @@
 ---
-description: 硬/软拦截纪律——禁默认加闸；误伤优先；提拦截须走人确认
-alwaysApply: true
+description: 产品 AI 不听话、想加硬拒 / 软警告 / 扫自由文时先读——禁默认加闸；阶梯、白名单、提案格式在正文。
+alwaysApply: false
 ---
 
 # 拦截纪律（硬闸 · 软闸）

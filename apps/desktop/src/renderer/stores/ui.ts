@@ -2,6 +2,7 @@ import { uiGet, uiSet } from "@/lib/uiStorage";
 import { create } from "zustand";
 
 const THEME_KEY = "theme";
+const DEVELOPER_MODE_KEY = "developer-mode";
 
 type Theme = "light" | "dark" | "system";
 
@@ -16,16 +17,27 @@ function persistTheme(v: Theme): void {
   uiSet(THEME_KEY, v);
 }
 
+function loadDeveloperMode(): boolean {
+  return uiGet<boolean>(DEVELOPER_MODE_KEY) === true;
+}
+
+function persistDeveloperMode(on: boolean): void {
+  uiSet(DEVELOPER_MODE_KEY, on);
+}
+
 interface UIState {
   searchOpen: boolean;
   /** Prefill for the next palette open; consumed on open. */
   searchInitialQuery: string;
   theme: Theme;
+  /** Desktop developer mode. Off until the user turns it on in 设置 · 通用. */
+  developerMode: boolean;
 
   openSearch: (initialQuery?: string) => void;
   closeSearch: () => void;
   toggleSearch: () => void;
   setTheme: (theme: UIState["theme"]) => void;
+  setDeveloperMode: (on: boolean) => void;
 }
 
 /** Full-screen turn detail view (`#/conversations/:id/turn/:turnId?view=`). */
@@ -48,6 +60,7 @@ export const useUIStore = create<UIState>((set) => ({
   searchOpen: false,
   searchInitialQuery: "",
   theme: loadTheme(),
+  developerMode: loadDeveloperMode(),
 
   // Default "" is required: Sidebar SearchTrigger calls openSearch() with no args.
   // Without it, searchInitialQuery becomes undefined and CommandPalette crashes
@@ -66,5 +79,9 @@ export const useUIStore = create<UIState>((set) => ({
   setTheme: (theme) => {
     persistTheme(theme);
     set({ theme });
+  },
+  setDeveloperMode: (on) => {
+    persistDeveloperMode(on);
+    set({ developerMode: on });
   },
 }));

@@ -17,16 +17,14 @@ from .types import (
 
 
 class StuckInterventionMixin:
-    """Sliding-window stuck patterns + empty/unproductive/delivery-idle ladders."""
+    """Sliding-window stuck patterns + unproductive/delivery-idle ladders."""
 
     # Declared on LoopController.__init__; listed for type-checkers.
     _window: int
     _threshold: int
-    _empty_threshold: int
     _unproductive_threshold: int
     _recent: deque[ToolAttempt]
     _nudged: bool
-    _consecutive_empty: int
     _consecutive_unproductive: int
     _investigation_tools: frozenset[str]
     _investigation_calls: int
@@ -46,30 +44,6 @@ class StuckInterventionMixin:
     _delivery_idle_narrowed: bool
     _delivery_idle_narrow_apply_pending: bool
     _validation_thrash_latched: bool
-
-    def note_empty_round(self, is_empty: bool) -> None:
-        """Track consecutive empty-response rounds (B2).
-
-        An empty round = the model produced no content and called no tool. A
-        non-empty round (real answer OR a tool call) resets the streak — so only
-        *consecutive* empties escalate toward a degraded finish.
-        """
-        self._consecutive_empty = self._consecutive_empty + 1 if is_empty else 0
-
-    def empty_response_action(self, *, finish_reason: str | None = None) -> Intervention:
-        """Decide what to do after an empty round (B2 degraded ladder).
-
-        ``finish_reason == "length"`` (protocol-proven truncation with empty body +
-        no tools) skips the default one-shot Continue and finalizes immediately —
-        retrying will not grow the output budget. Ordinary silent empties still
-        ``CONTINUE`` once, then ``FINALIZE`` once the consecutive-empty streak hits
-        the threshold (the turn ends as degraded rather than blank).
-        """
-        if finish_reason == "length":
-            return Intervention.FINALIZE
-        if self._consecutive_empty >= self._empty_threshold:
-            return Intervention.FINALIZE
-        return Intervention.CONTINUE
 
     def note_round_productivity(
         self,

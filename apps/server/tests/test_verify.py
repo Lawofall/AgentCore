@@ -2,8 +2,9 @@
 
 Mirrors the check_contract / out_of_range_markers test posture: finish_guard is a
 pure function over content returning concrete rework items, and format_guard_steer
-renders them into one injected ``[系统提示]``. Chat finish_guard covers structural
-completeness and CEO delivery honesty — not ``#rN`` / ``[n]`` / bibliography.
+renders them into one injected ``[系统提示]``. Chat finish_guard no longer
+flags unclosed fences; CEO delivery honesty is shadow-only — not ``#rN`` /
+``[n]`` / bibliography.
 """
 
 from agentcore.runtime.closing_posture import closing_honesty_verdict_hit
@@ -40,10 +41,9 @@ def test_closed_nonempty_fence_passes():
     assert finish_guard(content, citation_count=0) == []
 
 
-def test_unclosed_fence_flagged():
-    reworks = finish_guard("步骤如下：\n```python\nprint(1)", citation_count=0)
-    assert len(reworks) == 1
-    assert "没有闭合" in reworks[0]
+def test_unclosed_fence_does_not_rework():
+    """未闭合围栏回炉已撤：不注入 [系统提示]、不清气泡。"""
+    assert finish_guard("步骤如下：\n```python\nprint(1)", citation_count=0) == []
 
 
 def test_empty_fence_with_language_does_not_rework():
@@ -86,10 +86,13 @@ def test_format_steer_is_fact_only():
 
 
 def test_guard_to_steer_roundtrip():
-    # finish_guard 命中 → format_guard_steer 出一条非空提示；干净 → 空串。
-    assert format_guard_steer(
-        finish_guard("步骤如下：\n```python\nprint(1)", citation_count=0)
-    ).startswith("[系统提示]")
+    # 未闭合围栏不再命中；干净正文 → 空串。
+    assert (
+        format_guard_steer(
+            finish_guard("步骤如下：\n```python\nprint(1)", citation_count=0)
+        )
+        == ""
+    )
     assert format_guard_steer(finish_guard("好引用 [1]", citation_count=1)) == ""
 
 

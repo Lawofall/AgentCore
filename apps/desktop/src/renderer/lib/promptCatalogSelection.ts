@@ -1,5 +1,4 @@
 import type { PromptCatalogItem, PromptRail } from "@/lib/promptCatalog";
-import { promptItemShelfCopy } from "@/lib/promptShelfTile";
 import { buildAlwaysRows } from "@/lib/promptSizes";
 
 /**
@@ -53,15 +52,6 @@ export function selectionCatalogIds(sel: MineSelection): Set<string> {
   return new Set(sel.items.map((i) => i.catalogId));
 }
 
-function matchQuery(
-  query: string,
-  ...parts: Array<string | undefined>
-): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return parts.some((part) => part?.toLowerCase().includes(q));
-}
-
 function orderByVisible(
   items: readonly MineSelectedItem[],
   visible: readonly MineSelectedItem[],
@@ -78,54 +68,37 @@ function orderByVisible(
   return [...out, ...rest.values()];
 }
 
-function pushMatchingMine(
-  out: MineSelectedItem[],
-  item: PromptCatalogItem,
-  query: string,
-  extra?: string,
-): void {
+function pushMine(out: MineSelectedItem[], item: PromptCatalogItem): void {
   const mine = mineItemOf(item);
-  if (!mine) return;
-  const copy = promptItemShelfCopy(item);
-  if (!matchQuery(query, extra, copy.title, copy.description, item.label)) {
-    return;
-  }
-  out.push(mine);
+  if (mine) out.push(mine);
 }
 
 /**
  * 与 PromptOverview 看得见的卡一致。
- * 根上：必带，再没归夹的按需；有搜索词时把夹里命中的卡也铺出来。
- * 点进夹且不在搜索：只算这只夹。夹名本身不把里面的卡算进可见名单。
+ * 根上：必带，再没归夹的按需。点进夹只算这只夹。
+ * 夹名本身不把里面的卡算进可见名单。
  * Shift 连选和「可见」都以这份名单为准。
  */
 export function flattenVisibleMineItems(
   rail: PromptRail,
-  query = "",
   openFolderId: string | null = null,
 ): MineSelectedItem[] {
-  const q = query.trim();
-  if (!q && openFolderId) {
+  if (openFolderId) {
     const folder = rail.folders.find((row) => row.id === openFolderId);
     if (folder) {
       const inside: MineSelectedItem[] = [];
-      for (const item of folder.items) pushMatchingMine(inside, item, q);
+      for (const item of folder.items) pushMine(inside, item);
       return inside;
     }
   }
   const out: MineSelectedItem[] = [];
   for (const row of buildAlwaysRows(rail)) {
     const mine = mineItemOf(row.item);
-    if (!mine) continue;
-    const copy = promptItemShelfCopy(row.item, { alwaysChars: row.chars });
-    if (!matchQuery(q, copy.title, copy.description, row.label)) continue;
-    out.push(mine);
+    if (mine) out.push(mine);
   }
   for (const folder of rail.folders) {
-    if (folder.source !== "other" && !q) continue;
-    for (const item of folder.items) {
-      pushMatchingMine(out, item, q);
-    }
+    if (folder.source !== "other") continue;
+    for (const item of folder.items) pushMine(out, item);
   }
   return out;
 }

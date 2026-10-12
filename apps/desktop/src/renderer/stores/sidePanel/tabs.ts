@@ -25,6 +25,7 @@ const CONVERSATION_SCOPED_KINDS = new Set<DetailTab["kind"]>([
   "content",
   "simple-turn",
   "file",
+  "turn-trace",
 ]);
 
 function omitFileTabChrome(

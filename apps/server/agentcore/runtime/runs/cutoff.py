@@ -72,18 +72,6 @@ WIND_DOWN_ALLOWED_TOOLS = frozenset(
 WIND_DOWN_FILE_READ = "read"
 
 
-def wind_down_instruction_token() -> str:
-    return "[系统提示] 累计 token 已接近预算硬顶。"
-
-
-def wind_down_instruction_timeout() -> str:
-    return "[系统提示] 墙钟已触及超时阈值。"
-
-
-def wind_down_instruction_retrieval() -> str:
-    return "[系统提示] 检索预算已用尽。"
-
-
 def wind_down_deny_output(name: str) -> str:
     """Tool-result fact when a call is outside the wind-down whitelist."""
     return f"工具 '{name}' 不在收尾窗口白名单，未执行。"

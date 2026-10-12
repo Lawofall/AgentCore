@@ -30,6 +30,7 @@ from . import (
     run_redirect,
     run_stop,
     snapshots,
+    trace_view,
     trash,
     turn_files_diff,
     turns,
@@ -65,3 +66,5 @@ router.include_router(browser_input.router)
 router.include_router(browser_sessions.router)
 # 方案切点（追加在末尾，不改既有 OpenAPI 顺序）。
 router.include_router(context_cut.router)
+# 桌面开发者模式：主人可读的折叠脊（追加在末尾）。
+router.include_router(trace_view.router)

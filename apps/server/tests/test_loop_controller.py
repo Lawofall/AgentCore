@@ -201,36 +201,31 @@ def test_nudge_clears_window_so_one_stale_repeat_does_not_finalize():
     assert c.detect() is None
 
 
-# --- B2: empty-response degraded ladder ---
+# --- B2: completed empty response finishes degraded (no resample) ---
 
 
-def test_empty_response_continues_then_finalizes():
-    # The default ladder: 1st empty retries on the same model (CONTINUE), and a
-    # 2nd consecutive empty → FINALIZE (the turn ends degraded, not blank).
-    c = LoopController(empty_threshold=2)
-    c.note_empty_round(True)
-    assert c.empty_response_action() is Intervention.CONTINUE
-    c.note_empty_round(True)
-    assert c.empty_response_action() is Intervention.FINALIZE
+def test_empty_response_finalizes_without_a_second_sample():
+    """A finished empty completion does not open a same-context resample."""
+    from agentcore.llm.provider.protocol import TokenUsage
+    from agentcore.runtime.engine.outcome import RoundOutcome
+    from agentcore.runtime.engine.round import decide_no_tool_round
+    from agentcore.runtime.events import FinishReason
 
-
-def test_length_empty_finalizes_without_continue():
-    """finish_reason=length + empty skips the default one-shot Continue."""
-    c = LoopController(empty_threshold=2)
-    c.note_empty_round(True)  # streak=1 would normally CONTINUE
-    assert c.empty_response_action(finish_reason="length") is Intervention.FINALIZE
-    # Ordinary silent empty still Continues on the first hit.
-    assert c.empty_response_action(finish_reason="stop") is Intervention.CONTINUE
-
-
-def test_empty_streak_resets_on_nonempty_round():
-    # A real answer / tool call between empties breaks the streak, so only
-    # *consecutive* empties escalate.
-    c = LoopController(empty_threshold=2)
-    c.note_empty_round(True)
-    c.note_empty_round(False)  # recovered
-    c.note_empty_round(True)  # streak restarts at 1
-    assert c.empty_response_action() is Intervention.CONTINUE
+    for finish_reason in (None, "stop", "length"):
+        directive = decide_no_tool_round(
+            RoundOutcome(
+                content="",
+                reasoning="",
+                usage=TokenUsage(),
+                finish_reason=finish_reason,
+            ),
+            final_content="",
+            controller=LoopController(),
+            annotate_citations=False,
+            citation_sink=None,
+            finish_guard_reworks=0,
+        )
+        assert directive.finish_reason is FinishReason.DEGRADED
 
 
 # --- B2: tool failure circuit breaker ---

@@ -57,7 +57,6 @@ from .cancel_zero import (
     turn_has_cancel_zero_output,
 )
 from .ceiling import (
-    ceiling_honesty_steer,
     downgrade_verdict_for_ceiling,
     downgrade_verdict_for_max_rounds,
     enforce_ceiling_closing_honesty,
@@ -133,7 +132,6 @@ from .write_ownership import (
 __all__ = [
     "apply_write_ownership_honesty_for_session",
     "asks_whole_file_user_paste",
-    "ceiling_honesty_steer",
     "claims_browser_open_or_login",
     "claims_ceo_mutation_done",
     "claims_cloud_web_verify_green",

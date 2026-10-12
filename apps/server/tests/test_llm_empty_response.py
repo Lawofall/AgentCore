@@ -34,7 +34,7 @@ def test_upstream_non_api_label_is_generic():
     label = empty_response_event_message(EmptyResponseDiagnosis.UPSTREAM_NON_API)
     assert "Sub2API" not in label
     assert "网页" in label or "登录" in label
-    assert label.startswith("模型多次空响应")
+    assert label.startswith("模型空响应")
 
 
 def test_diagnose_model_unknown():
@@ -116,12 +116,17 @@ def test_empty_response_error_context_html_and_base_url():
 
 def test_empty_response_event_message_appends_diagnosis():
     msg = empty_response_event_message(EmptyResponseDiagnosis.SILENT_EMPTY)
-    assert msg.startswith("模型多次空响应")
+    assert msg.startswith("模型空响应")
     assert "模型返回空内容" in msg
 
 
-def test_empty_response_event_message_length_is_not_multiple():
-    """Truncation hard-cutoff copy must not say「多次空响应」."""
-    msg = empty_response_event_message(EmptyResponseDiagnosis.LENGTH_EMPTY)
-    assert "多次空响应" not in msg
-    assert "截断" in msg
+def test_empty_response_event_message_does_not_say_multiple():
+    """One completed empty round — copy must not say「多次空响应」."""
+    for diagnosis in (
+        EmptyResponseDiagnosis.SILENT_EMPTY,
+        EmptyResponseDiagnosis.LENGTH_EMPTY,
+        EmptyResponseDiagnosis.UPSTREAM_NON_API,
+    ):
+        msg = empty_response_event_message(diagnosis)
+        assert "多次空响应" not in msg
+    assert "截断" in empty_response_event_message(EmptyResponseDiagnosis.LENGTH_EMPTY)

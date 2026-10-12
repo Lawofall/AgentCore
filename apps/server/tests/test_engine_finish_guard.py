@@ -1,11 +1,8 @@
 """Integration tests for 交付前核验·finish_guard wired into ``react_loop``.
 
 Drives the done-round verification guard with a scripted provider (no network):
-structural defects (unclosed code fence) are the 统一底线 — they fire on BOTH
-paths. Empty language fences no longer rework. Citation markers (``[n]`` / ``#rN``)
-do **not** rework the chat bubble. On the CEO path the reset is ``content_reset``;
-a worker passes ``on_reset`` so its rework clears the run card via
-``run_output_reset`` instead.
+unclosed code fences no longer rework. Empty language fences no longer rework.
+Citation markers (``[n]`` / ``#rN``) do **not** rework the chat bubble.
 """
 
 from pathlib import Path
@@ -103,64 +100,47 @@ async def test_clean_citation_finishes_without_rework():
     assert _resets(sink) == []
 
 
-async def test_rework_cap_ships_product_as_is():
-    # 始终结构缺陷：回炉到上限（默认 2）后放行，不无限循环。
-    bad = [_content_chunk("见下：\n```python\nprint(1)")]
-    provider = _ScriptedProvider([bad, bad, bad])
-    (content, _r, _u, rounds), _messages, sink = await _run(
+async def test_unclosed_fence_ships_without_rework():
+    # 未闭合围栏回炉已撤：CEO 照发，不 content_reset、不注入 [系统提示]。
+    provider = _ScriptedProvider(
+        [[_content_chunk("见下：\n```python\nprint(1)")], [_content_chunk("不会跑到。")]]
+    )
+    (content, _r, _u, rounds), messages, sink = await _run(
         provider, citation_sink=[], max_rounds=10
     )
-    assert "```python" in content  # 额度耗尽后照发
-    assert rounds == 3  # round0 回炉 → round1 回炉 → round2 放行
-    assert len(_resets(sink)) == 2  # 恰好回炉上限次数
-
-
-async def test_worker_path_skips_citation_guard():
-    # worker 路径（annotate_citations=False）不跑角标校验：越界 [1] 也直接结束。
-    provider = _ScriptedProvider([[_content_chunk("worker 产出 [1]。")]])
-    (content, _r, _u, rounds), messages, sink = await _run(
-        provider, citation_sink=[], annotate_citations=False
-    )
-    assert content == "worker 产出 [1]。"
+    assert content == "见下：\n```python\nprint(1)"
     assert rounds == 1
+    assert provider.calls == 1
     assert _resets(sink) == []
-
-
-async def test_ceo_structural_defect_reworks():
-    # 统一底线·CEO 路径：未闭合代码块 → 回炉 + content_reset；次轮干净 → 结束。
-    provider = _ScriptedProvider(
-        [
-            [_content_chunk("见下：\n```python\nprint(1)")],
-            [_content_chunk("修正：\n```python\nprint(1)\n```\n完成。")],
-        ]
+    assert not any(
+        m.role == "user" and m.content and "没有闭合" in m.content for m in messages
     )
-    (content, _r, _u, rounds), messages, sink = await _run(provider, citation_sink=[])
-    assert rounds == 2
-    assert content.endswith("完成。")
-    steers = [m for m in messages if m.role == "user" and m.content and "没有闭合" in m.content]
-    assert len(steers) == 1
-    assert "没有闭合" in steers[0].content
-    assert len(_resets(sink)) == 1
 
 
-async def test_worker_structural_defect_reworks_via_on_reset():
-    # 统一底线·worker 路径：结构缺陷照样回炉，但重置走 on_reset（run_output_reset），
-    # 而非 content_reset；引用查仍跳过。
+async def test_worker_unclosed_fence_does_not_reset():
+    # worker 路径同样照发，不走 on_reset。
     resets: list[str] = []
     provider = _ScriptedProvider(
-        [
-            [_content_chunk("草稿：\n```json\n{\"a\": 1}")],  # 未闭合围栏
-            [_content_chunk("修正后的产出，无代码块。")],
-        ]
+        [[_content_chunk("草稿：\n```json\n{\"a\": 1}")]]
     )
-    (content, _r, _u, rounds), messages, sink = await _run(
+    (content, _r, _u, rounds), _messages, sink = await _run(
         provider,
         citation_sink=[],
         annotate_citations=False,
         on_reset=resets.append,
     )
-    assert rounds == 2
-    assert content == "修正后的产出，无代码块。"
-    # worker 的重置回调被触发，且 reason=finish_guard（结构回炉；fold 只清草稿）。
-    assert resets == ["finish_guard"]
-    assert _resets(sink) == []  # 没有走 CEO 的 content_reset
+    assert rounds == 1
+    assert "```json" in content
+    assert resets == []
+    assert _resets(sink) == []
+
+
+async def test_worker_path_skips_citation_guard():
+    # worker 路径（annotate_citations=False）不跑角标校验：越界 [1] 也直接结束。
+    provider = _ScriptedProvider([[_content_chunk("worker 产出 [1]。")]])
+    (content, _r, _u, rounds), _messages, sink = await _run(
+        provider, citation_sink=[], annotate_citations=False
+    )
+    assert content == "worker 产出 [1]。"
+    assert rounds == 1
+    assert _resets(sink) == []

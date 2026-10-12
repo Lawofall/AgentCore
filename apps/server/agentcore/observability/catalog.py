@@ -2658,7 +2658,10 @@ EVENTS: list[EventSpec] = [
         description='历史兼容：曾把已退役的先调研续跑选项降级为停止；契约已拒收，不再发此事件',
     ),
     EventSpec(name='test_run.verify_shared'),
-    EventSpec(name='title.empty_retry'),
+    EventSpec(
+        name='title.empty_retry',
+        description='历史兼容：完成的空标题曾用同一份请求再采样一次；已撤，空结果交给调用方回退',
+    ),
     EventSpec(name='title.timeout'),
     EventSpec(
         name='tool.args_parse_failed',

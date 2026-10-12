@@ -47,6 +47,7 @@ export const ComposerBodyEditor = forwardRef(function ComposerBodyEditor(
     attachments,
     agentMentions,
     placeholder,
+    label,
     className,
     maxLength,
     onChange,
@@ -62,6 +63,8 @@ export const ComposerBodyEditor = forwardRef(function ComposerBodyEditor(
     attachments: PendingAttachment[];
     agentMentions: PendingAgentMention[];
     placeholder?: string;
+    /** 读屏名。缺省用可见 placeholder。窄屏可藏占位文案、仍留名字。 */
+    label?: string;
     className?: string;
     maxLength: number;
     onChange: (next: string) => void;
@@ -280,7 +283,7 @@ export const ComposerBodyEditor = forwardRef(function ComposerBodyEditor(
         ref={rootRef}
         role="textbox"
         aria-multiline="true"
-        aria-label={placeholder}
+        aria-label={label ?? placeholder}
         contentEditable
         tabIndex={0}
         suppressContentEditableWarning

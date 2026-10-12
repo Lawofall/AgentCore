@@ -211,14 +211,28 @@ export interface BrowserDetailTab {
   title: string;
 }
 
-/** A side-panel content tab (详情 / 终端 / 文件 / 浏览器). */
+/**
+ * Developer-mode ledger for one assistant turn. Not floatable. Lives only
+ * while 开发者模式 is on; the chat process timeline stays the user face.
+ */
+export interface TurnTraceTab {
+  kind: "turn-trace";
+  /** Dedup identity: `turn-trace:<messageId>`. */
+  id: string;
+  title: string;
+  messageId: string;
+  conversationId: string;
+}
+
+/** A side-panel content tab (详情 / 终端 / 文件 / 浏览器 / 这一回合). */
 export type DetailTab =
   | RunDetailTab
   | ContentDetailTab
   | SimpleTurnDetailTab
   | TerminalDetailTab
   | FileDetailTab
-  | BrowserDetailTab;
+  | BrowserDetailTab
+  | TurnTraceTab;
 
 /** Kinds that may leave the dock as an in-app float (Move). */
 export type FloatableTabKind = "run" | "file" | "workspace" | "changes";
@@ -260,6 +274,9 @@ export const contentDetailTabId = (
 
 export const simpleTurnDetailTabId = (messageId: string): string =>
   `simple-turn:${messageId}`;
+
+export const turnTraceTabId = (messageId: string): string =>
+  `turn-trace:${messageId}`;
 
 /**
  * File tab identity — path alone for session-desk opens; include desk when
@@ -401,6 +418,8 @@ export interface SidePanelState {
     answerMessageId: string,
     title?: string,
   ) => void;
+  /** Open the developer-mode ledger for one assistant message. */
+  showTurnTrace: (conversationId: string, messageId: string) => void;
   /**
    * Drop every reading-context tab (endpoint content + simple-turn Q&A), keeping
    * run / terminal / file / browser tabs. TurnDetailPage calls this on unmount

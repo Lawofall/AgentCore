@@ -504,18 +504,32 @@ def _empty_result_note(query: str) -> str:
     return f"{base}{tip}"
 
 
-def _strategy_change_note(*, empty_streak: int, web_fetch_retired: bool) -> str:
-    """Consecutive empty/weak injection: one owner for 须换策略 (no web_fetch when retired)."""
+def _strategy_change_note(
+    *,
+    empty_streak: int,
+    web_fetch_retired: bool,
+    uniformly_weak: bool = False,
+) -> str:
+    """Consecutive empty injection: one owner for 须换策略.
+
+    Uniformly-weak next step lives on the weak-SERP note (answer from knowledge;
+    there is nothing kept to ``web_fetch``). This line only forbids repeating the
+    same empty query, and still blocks a retired ``web_fetch`` nudge.
+    """
+    head = (
+        f"【须换策略】已连续 {empty_streak} 次无效/空检索："
+        "禁止沿用同一空转 query"
+    )
+    if uniformly_weak:
+        if web_fetch_retired:
+            return f"{head}；勿再催 web_fetch（已停用）。"
+        return f"{head}。"
     if web_fetch_retired:
         return (
-            f"【须换策略】已连续 {empty_streak} 次无效/空检索："
-            "禁止沿用同一空转 query；基于已有材料收口，"
+            f"{head}；基于已有材料收口，"
             "勿再催 web_fetch（已停用）或把继续检索当默认出路。"
         )
-    return (
-        f"【须换策略】已连续 {empty_streak} 次无效/空检索："
-        "禁止沿用同一空转 query；须改写关键词或先 web_fetch 深读已有材料。"
-    )
+    return f"{head}；须改写关键词或先 web_fetch 深读已有材料。"
 
 
 class WebSearchTool:
@@ -532,7 +546,12 @@ class WebSearchTool:
     def schema(self) -> ToolSchema:
         return ToolSchema(
             name="web_search",
-            description="公网检索，回摘要与链接。",
+            # 何时搜写在本说明。垃圾结果是否当证据在弱 SERP 回执，不抄到这里。
+            description=(
+                "公网检索，回摘要与链接。"
+                "定义、常识、已会的写法这类已能直接作答的内容 ≠ 检索对象"
+                "（时效事实，或用户、任务要求核实的，除外）。"
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -867,8 +886,8 @@ class WebSearchTool:
         if filtered.evidence_gap and budget is not None:
             budget.note_evidence_gap()
         if filtered.uniformly_weak:
-            # Uniformly-weak → empty injection + accurate quality note (not the generic
-            # empty-SERP tip). Model must rephrase; do not cite SERP scraps.
+            # Uniformly-weak → empty injection + quality note (not the generic
+            # empty-SERP tip). This batch is not evidence.
             rel_note = relevance_note(
                 dropped=filtered.dropped,
                 truncated_snippets=filtered.truncated_snippets,
@@ -906,7 +925,9 @@ class WebSearchTool:
         if is_empty_injection and empty_streak >= 2:
             notes.append(
                 _strategy_change_note(
-                    empty_streak=empty_streak, web_fetch_retired=web_fetch_retired
+                    empty_streak=empty_streak,
+                    web_fetch_retired=web_fetch_retired,
+                    uniformly_weak=bool(filtered.uniformly_weak),
                 )
             )
         if notes:

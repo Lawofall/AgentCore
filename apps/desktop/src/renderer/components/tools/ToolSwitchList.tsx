@@ -9,7 +9,6 @@ import { patchConversationCache } from "@/hooks/useConversations";
 import { notifyError, notifySuccess } from "@/lib/toast";
 import { ASSEMBLY_TURN_HINT } from "@/pages/toolbox/assemblyTabs";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
-import type { CapabilityTool } from "@/services/capabilities";
 import {
   type ToolSwitchboard,
   disabledAfterToggle,
@@ -45,28 +44,6 @@ function bindingCaption(
   return `改的是${who}这份装配。正在生成的这一轮不换；从下一次进入回合生效。`;
 }
 
-function switchMatchesQuery(
-  row: { label: string; summary: string; tools?: readonly string[] },
-  query: string,
-  catalog: readonly CapabilityTool[] | undefined,
-): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  const own = [row.label, row.summary, ...(row.tools ?? [])]
-    .join("\n")
-    .toLowerCase();
-  if (own.includes(q)) return true;
-  if (!catalog) return false;
-  const names = new Set(row.tools ?? []);
-  return catalog.some((tool) => {
-    if (!names.has(tool.name)) return false;
-    return [tool.name, tool.summary, tool.blurb, tool.description]
-      .join("\n")
-      .toLowerCase()
-      .includes(q);
-  });
-}
-
 /**
  * One switch per whole tool. The assembly page is one flat card per switch.
  * The composer menu stays one row per switch.
@@ -83,9 +60,6 @@ export function ToolSwitchList({
   showBulk = false,
   heading,
   layout = "rows",
-  catalogTools,
-  query = "",
-  onMissChange,
 }: {
   scope: "conversation" | "draft";
   conversationId?: string;
@@ -104,12 +78,6 @@ export function ToolSwitchList({
   heading?: string;
   /** 组装页一排矮卡，不按目录拆开。输入区菜单仍是行。 */
   layout?: "rows" | "shelf";
-  /** Shelf only. Matches a card when the query hits a member manual. */
-  catalogTools?: readonly CapabilityTool[];
-  /** Shelf only. Filters the switch cards. */
-  query?: string;
-  /** Shelf only. True when a query is set and nothing in this section matches. */
-  onMissChange?: (miss: boolean) => void;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -156,23 +124,6 @@ export function ToolSwitchList({
       : scope === "draft"
         ? overlay(board, draft ?? board.disabled)
         : board;
-
-  const shelfRows =
-    layout === "shelf" && displayed
-      ? displayed.switches.filter((row) =>
-          switchMatchesQuery(row, query, catalogTools),
-        )
-      : [];
-  const shelfMiss =
-    layout === "shelf" &&
-    displayed != null &&
-    Boolean(query.trim()) &&
-    shelfRows.length === 0;
-
-  useEffect(() => {
-    if (layout !== "shelf" || !onMissChange) return;
-    onMissChange(shelfMiss);
-  }, [layout, onMissChange, shelfMiss]);
 
   const commit = async (disabled: string[], pendingKey: string) => {
     if (!displayed || pendingId) return;
@@ -272,7 +223,7 @@ export function ToolSwitchList({
       </SwitchboardSectionHeader>
       {layout === "shelf" ? (
         <div className={ASSEMBLY_CARD_GRID_CLASS}>
-          {shelfRows.map((row) => {
+          {displayed.switches.map((row) => {
             const withheld =
               readOnlyBoundary && (row.id === "files" || row.id === "run");
             return (

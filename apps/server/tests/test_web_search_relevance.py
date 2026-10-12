@@ -130,7 +130,6 @@ def test_relevance_note_uniformly_weak_upgrades_to_quality_warning():
     assert "字面重合不足" in note
     assert "离题 SERP" in note
     assert "搜索引擎降级" not in note
-    assert "待核实" in note
     assert "低相关" not in note  # the dropped-count wording is replaced, not appended
 
 

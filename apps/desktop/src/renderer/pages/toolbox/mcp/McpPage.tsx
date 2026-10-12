@@ -1,9 +1,4 @@
-import {
-  ASSEMBLY_CARD_GRID_CLASS,
-  Button,
-  CatalogTile,
-  SearchField,
-} from "@/components/ui";
+import { ASSEMBLY_CARD_GRID_CLASS, Button, CatalogTile } from "@/components/ui";
 import { Switch } from "@/components/ui/Switch";
 import {
   Dialog,
@@ -24,15 +19,6 @@ import {
 } from "@/pages/toolbox/ConnectorsPage";
 import type { McpServerListItem } from "@shared/mcp-contract";
 import { useState } from "react";
-
-function matchServer(query: string, server: McpServerListItem): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return (
-    server.name.toLowerCase().includes(q) ||
-    (server.runtimeError ?? "").toLowerCase().includes(q)
-  );
-}
 
 /** Standalone MCP route: 启用 writes the open conversation's assembly, else the star. */
 export function McpRoute() {
@@ -57,11 +43,10 @@ export function McpPage({
   onPlugToggle?: (serverId: string, enabled: boolean) => Promise<void>;
 }) {
   const mcp = useMcpConnectors();
-  const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const hits = mcp.servers.filter((server) => matchServer(query, server));
+  const hits = mcp.servers;
   const creating = openId === NEW_CONNECTOR_ID;
   const editing = creating
     ? null
@@ -74,18 +59,9 @@ export function McpPage({
   };
 
   const addActions = mcp.api ? (
-    <>
-      <SearchField
-        aria-label="搜 MCP"
-        placeholder="搜 MCP"
-        value={query}
-        onValueChange={setQuery}
-        className="w-52"
-      />
-      <Button size="md" onClick={() => setOpenId(NEW_CONNECTOR_ID)}>
-        添加 MCP
-      </Button>
-    </>
+    <Button size="md" onClick={() => setOpenId(NEW_CONNECTOR_ID)}>
+      添加 MCP
+    </Button>
   ) : null;
 
   return (
@@ -100,7 +76,6 @@ export function McpPage({
         api={mcp.api}
         loaded={mcp.loaded}
         error={mcp.error}
-        query={query}
         hits={hits}
         selectedId={openId}
         onOpen={(id) => setOpenId(id)}
@@ -169,7 +144,6 @@ function McpBody({
   api,
   loaded,
   error,
-  query,
   hits,
   selectedId,
   onOpen,
@@ -179,7 +153,6 @@ function McpBody({
   api: Window["mcpApi"];
   loaded: boolean;
   error: string | null;
-  query: string;
   hits: McpServerListItem[];
   selectedId: string | null;
   onOpen: (id: string) => void;
@@ -202,7 +175,7 @@ function McpBody({
   if (hits.length === 0) {
     return (
       <div className="flex min-h-[4.5rem] items-center justify-center rounded-xl border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
-        {query.trim() ? "没有匹配的 MCP。" : "还没有 MCP。"}
+        还没有 MCP。
       </div>
     );
   }

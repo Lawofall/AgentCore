@@ -459,8 +459,8 @@ def test_cloud_web_verify_honesty_banner_soft_only():
     clear_cloud_web_verify_gap()
 
 
-def test_max_rounds_ceiling_honesty_steer_and_banner():
-    """max_rounds：steer 禁止无条件通过；用户面不再贴【收口说明】。"""
+def test_max_rounds_ceiling_honesty_downgrades_without_banner():
+    """max_rounds：用户面不贴【收口说明】，正式完成档降为 partial。"""
     from agentcore.runtime.closing_posture import (
         downgrade_verdict_for_max_rounds,
         enforce_ceiling_closing_honesty,
@@ -494,8 +494,8 @@ def test_max_rounds_ceiling_honesty_steer_and_banner():
         current_delivery_verdict.reset(token)
 
 
-def test_token_budget_ceiling_honesty_steer_and_banner_symmetric_with_max_rounds():
-    """token_budget ↔ max_rounds：诚实 steer / 用户面不贴横幅 / verdict 降档对称。"""
+def test_token_budget_ceiling_honesty_downgrades_without_banner():
+    """token_budget ↔ max_rounds：用户面不贴横幅，verdict 降档对称。"""
     from agentcore.runtime.closing_posture import (
         downgrade_verdict_for_ceiling,
         enforce_ceiling_closing_honesty,
@@ -846,7 +846,6 @@ def test_delivery_verdict_set_in_child_task_readable_via_shared_ledger():
     claim = "三路调研已全部收卷。"
     assert closing_honesty_verdict_hit(claim, ledger.delivery_verdict) == "posture_a"
     controller = LoopController(
-        empty_threshold=2,
         tool_failure_warn=3,
         tool_failure_disable=5,
         unproductive_threshold=3,
@@ -911,7 +910,6 @@ def test_honesty_shadow_does_not_rework_or_reset(monkeypatch):
     assert draft_fields["gap_reasons"] == ["evidence_deficit"]
 
     controller = LoopController(
-        empty_threshold=2,
         tool_failure_warn=3,
         tool_failure_disable=5,
         unproductive_threshold=3,

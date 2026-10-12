@@ -4,6 +4,7 @@
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { NarrowLayoutProvider } from "@/lib/narrowLayout";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -440,6 +441,39 @@ function renderComposer(variant?: "card" | "bar") {
   );
 }
 
+const DEFAULT_PLACEHOLDER = "输入消息，@ 引用内容…";
+
+function renderNarrowComposer(variant?: "card" | "bar") {
+  const previous = window.matchMedia;
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: String(query).includes("max-width"),
+    media: String(query),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })) as unknown as typeof window.matchMedia;
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const view = render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <NarrowLayoutProvider>
+          <TooltipProvider>
+            <TurnComposer variant={variant} />
+          </TooltipProvider>
+        </NarrowLayoutProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  return {
+    ...view,
+    restore() {
+      window.matchMedia = previous;
+    },
+  };
+}
+
 function cloudDesk(
   id: string,
   name: string,
@@ -528,6 +562,12 @@ describe("TurnComposer variants", () => {
     expect(screen.getByLabelText(/权限：/)).toBeTruthy();
     expect(screen.getByLabelText("@ 引用")).toBeTruthy();
     expectWorkspaceBeforeAssembly(container);
+    expect(container.querySelector("[data-composer-name-row]")).toBeNull();
+    const actions = container.querySelector("[data-composer-actions]");
+    expect(actions?.contains(screen.getByLabelText("在哪工作"))).toBe(true);
+    expect(actions?.contains(screen.getByRole("button", { name: "发送" }))).toBe(
+      true,
+    );
   });
 
   it("bar: 「更多选项」收纳左簇；未打开时不占常显", () => {
@@ -541,6 +581,9 @@ describe("TurnComposer variants", () => {
     expect(screen.queryByLabelText(/装配：/)).toBeNull();
     expect(screen.queryByLabelText("@ 引用")).toBeNull();
     expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();
+    const actions = document.querySelector("[data-composer-actions]");
+    expect(actions?.contains(screen.getByTestId("composer-body"))).toBe(true);
+    expect(document.querySelector("[data-composer-name-row]")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "更多选项" }));
     const menu = screen.getByTestId("composer-plus-menu");
@@ -1070,6 +1113,88 @@ describe("TurnComposer variants", () => {
     expect(container.querySelector("textarea")).toBeNull();
     expect(screen.getByTestId("composer-body")).toBeTruthy();
     expect(screen.getByRole("textbox")).toBeTruthy();
+  });
+
+  it("wide layout shows the default placeholder copy", () => {
+    renderComposer();
+    expect(screen.getByText(DEFAULT_PLACEHOLDER, { hidden: true })).toBeTruthy();
+  });
+
+  it("narrow layout hides the default placeholder copy", () => {
+    const view = renderNarrowComposer();
+    try {
+      expect(screen.queryByText(DEFAULT_PLACEHOLDER, { hidden: true })).toBeNull();
+      expect(
+        screen.getByRole("textbox", { name: DEFAULT_PLACEHOLDER }),
+      ).toBeTruthy();
+    } finally {
+      view.restore();
+    }
+  });
+
+  it("narrow card splits names and actions onto two rows", () => {
+    const view = renderNarrowComposer("card");
+    try {
+      const nameRow = document.querySelector("[data-composer-name-row]");
+      const actions = document.querySelector("[data-composer-actions]");
+      const halves = document.querySelectorAll("[data-composer-name-half]");
+      const workspace = screen.getByLabelText("在哪工作");
+      const assembly = screen.getByLabelText(/装配：/);
+      expect(nameRow).toBeTruthy();
+      expect(halves).toHaveLength(2);
+      expect(halves[0]?.contains(workspace)).toBe(true);
+      expect(halves[1]?.contains(assembly)).toBe(true);
+      expect(halves[0]?.querySelector(".composer-fill-git")).toBeTruthy();
+      expect(nameRow?.contains(screen.getByLabelText(/权限：/))).toBe(false);
+      expect(nameRow?.contains(screen.getByRole("button", { name: "发送" }))).toBe(
+        false,
+      );
+      expect(actions?.contains(screen.getByLabelText(/权限：/))).toBe(true);
+      expect(actions?.contains(screen.getByLabelText("@ 引用"))).toBe(true);
+      expect(actions?.contains(screen.getByRole("button", { name: "发送" }))).toBe(
+        true,
+      );
+      expect(screen.queryByRole("button", { name: "更多选项" })).toBeNull();
+      expect(actions?.contains(screen.getByTestId("composer-body"))).toBe(false);
+    } finally {
+      view.restore();
+    }
+  });
+
+  it("narrow bar puts the field on its own row above ＋ and 发送", () => {
+    const view = renderNarrowComposer("bar");
+    try {
+      const card = document.querySelector('[data-composer-variant="bar"]');
+      const actions = card?.querySelector("[data-composer-actions]");
+      const body = screen.getByTestId("composer-body");
+      const plus = screen.getByRole("button", { name: "更多选项" });
+      const send = screen.getByRole("button", { name: "发送" });
+      expect(actions).toBeTruthy();
+      expect(card?.contains(body)).toBe(true);
+      expect(actions?.contains(body)).toBe(false);
+      expect(actions?.contains(plus)).toBe(true);
+      expect(actions?.contains(send)).toBe(true);
+      expect(
+        body.compareDocumentPosition(actions as Node) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(document.querySelector("[data-composer-name-row]")).toBeNull();
+      expect(screen.queryByLabelText("在哪工作")).toBeNull();
+    } finally {
+      view.restore();
+    }
+  });
+
+  it("narrow layout still shows the continue placeholder", () => {
+    seedLastAssistant({ finishReason: "interrupted", content: "半成品" });
+    const view = renderNarrowComposer();
+    try {
+      expect(
+        screen.getByText(COMPOSER_CONTINUE_PLACEHOLDER, { hidden: true }),
+      ).toBeTruthy();
+    } finally {
+      view.restore();
+    }
   });
 
   it("migrates a legacy chip-tray draft into inline markers", async () => {

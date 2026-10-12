@@ -186,10 +186,10 @@ class LLMTitleGenerator:
     """TitleGenerator backed by an LLMProvider (fast, non-thinking model).
 
     Called once per conversation, when the title is still empty. Returns "" for
-    empty/whitespace model output (after one empty-response retry) — and likewise
-    on a call-level timeout (``_TITLE_TIMEOUT_SECONDS``, logged, **no** retry) —
-    so the caller can fall back to a naive title; other network/parse errors
-    propagate and are handled at the call site.
+    empty/whitespace model output and on a call-level timeout
+    (``_TITLE_TIMEOUT_SECONDS``, logged) so the caller can fall back to a naive
+    title. A completed empty title is not sampled again. Other network/parse
+    errors propagate and are handled at the call site.
     """
 
     def __init__(
@@ -212,27 +212,11 @@ class LLMTitleGenerator:
             stream=False,
         )
 
-        async def _call_once() -> TitleResult | None:
-            """One timed complete. ``None`` = timeout (caller must not retry)."""
-            try:
-                response = await complete_within_budget(
-                    self._provider, request, budget=_TITLE_TIMEOUT_SECONDS
-                )
-            except TimeoutError:
-                logger.warning("title.timeout", conversation_id=data.conversation_id)
-                return None
-            return _parse_title_result(response.content)
-
-        result = await _call_once()
-        if result is None:
+        try:
+            response = await complete_within_budget(
+                self._provider, request, budget=_TITLE_TIMEOUT_SECONDS
+            )
+        except TimeoutError:
+            logger.warning("title.timeout", conversation_id=data.conversation_id)
             return TitleResult(title="")
-        if result.title.strip():
-            return result
-
-        # Empty body / empty JSON title (e.g. finish_reason=length): retry once,
-        # then let the caller fall back. Timeout above already returned — no retry.
-        logger.info("title.empty_retry", conversation_id=data.conversation_id)
-        retry = await _call_once()
-        if retry is None:
-            return TitleResult(title="")
-        return retry
+        return _parse_title_result(response.content)

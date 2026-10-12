@@ -22,6 +22,7 @@ import {
   runDetailTabId,
   simpleTurnDetailTabId,
   terminalDismissKey,
+  turnTraceTabId,
 } from "./types";
 
 let untitledFileSeq = 0;
@@ -35,6 +36,7 @@ type FacadeActions = Pick<
   | "showRunDetail"
   | "showContentDetail"
   | "showSimpleTurnDetail"
+  | "showTurnTrace"
   | "showWorkspace"
   | "showChanges"
   | "closeChanges"
@@ -95,6 +97,16 @@ export function createFacadeActions(
         messageId,
         promptMessageId,
         answerMessageId,
+      });
+    },
+
+    showTurnTrace: (conversationId, messageId) => {
+      get().openTab({
+        kind: "turn-trace",
+        id: turnTraceTabId(messageId),
+        title: "这一回合",
+        messageId,
+        conversationId,
       });
     },
 

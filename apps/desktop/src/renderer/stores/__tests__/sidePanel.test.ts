@@ -37,6 +37,7 @@ import {
   sidePanelFocusTabId,
   sidePanelMaxWidth,
   simpleTurnDetailTabId,
+  turnTraceTabId,
   terminalDismissKey,
   useSidePanelStore,
 } from "../sidePanel";
@@ -89,6 +90,17 @@ beforeEach(() => {
   listMock.mockReset();
   listMock.mockResolvedValue({ sessions: [], activeSessionId: null });
   detachLocalBrowserHost.mockClear();
+});
+
+describe("showTurnTrace", () => {
+  it("opens a dock tab that cannot float", () => {
+    panel().showTurnTrace("conv-test", "msg-1");
+    expect(panel().open).toBe(true);
+    expect(panel().activeTabId).toBe(turnTraceTabId("msg-1"));
+    const tab = panel().tabs[0];
+    expect(tab?.kind).toBe("turn-trace");
+    expect(panel().floatTab(turnTraceTabId("msg-1"))).toBe(false);
+  });
 });
 
 describe("draft cannot reveal side panel", () => {

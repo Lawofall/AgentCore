@@ -1603,3 +1603,18 @@ class TurnMetricsRepository:
             TurnMetricsRow.created_at >= since
         )
         return int((await self._session.execute(stmt)).scalar_one() or 0)
+
+    async def latest_for_conversation_trace(
+        self, *, conversation_id: str, trace_id: str
+    ) -> TurnMetricsRow | None:
+        """Newest metrics row for one owner conversation's trace, if any."""
+        stmt = (
+            select(TurnMetricsRow)
+            .where(
+                TurnMetricsRow.conversation_id == conversation_id,
+                TurnMetricsRow.trace_id == trace_id,
+            )
+            .order_by(TurnMetricsRow.created_at.desc())
+            .limit(1)
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()

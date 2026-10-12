@@ -47,7 +47,7 @@ TS_EXPORTS: tuple[TsExport, ...] = (
         doc=(
             "Why a `content_reset` / `run_output_reset` fired. Every reason clears\n"
             "the streamed draft and leaves no process trace:\n"
-            "`finish_guard`（交付前结构核验回炉）· `retry`（LLM 流式透明重试）·\n"
+            "`finish_guard`（交付前核验回炉；对话气泡当前无命中项）· `retry`（LLM 流式透明重试）·\n"
             "`soft_gate`（captain 软门控打回）· `narration`（worker 旁白回滚）·\n"
             "`ask_user`（blocking ask_user 吸收）."
         ),

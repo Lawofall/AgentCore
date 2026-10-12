@@ -54,7 +54,7 @@ function providers(
 
 beforeEach(() => {
   vi.mocked(getSearchProviders).mockResolvedValue(providers());
-  useUIStore.setState({ theme: "light" });
+  useUIStore.setState({ theme: "light", developerMode: false });
 });
 
 afterEach(() => {
@@ -87,6 +87,16 @@ describe("GeneralSettings · 主题", () => {
     await renderSettings();
     const system = screen.getByRole("button", { name: /^跟随系统/ });
     expect(system.textContent).toContain("当前解析为");
+  });
+});
+
+describe("GeneralSettings · 开发者模式", () => {
+  it("starts off and writes the switch", async () => {
+    await renderSettings();
+    const toggle = screen.getByRole("switch", { name: "开发者模式" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(toggle);
+    expect(useUIStore.getState().developerMode).toBe(true);
   });
 });
 

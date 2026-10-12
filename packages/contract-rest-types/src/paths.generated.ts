@@ -113,6 +113,7 @@ export const REST_PATH_TEMPLATES = [
   "/v1/conversations/{conversation_id}/messages/{message_id}/regenerate",
   "/v1/conversations/{conversation_id}/messages/{message_id}/resume",
   "/v1/conversations/{conversation_id}/messages/{message_id}/runs/{run_id}/llm-window",
+  "/v1/conversations/{conversation_id}/messages/{message_id}/trace",
   "/v1/conversations/{conversation_id}/permission-axes",
   "/v1/conversations/{conversation_id}/queued-turns",
   "/v1/conversations/{conversation_id}/queued-turns/reorder",

@@ -1137,10 +1137,10 @@ async def test_coordinate_react_loop_e2e(monkeypatch):
 
 
 async def test_captain_silent_listen_rounds_do_not_trip_empty_ladder(monkeypatch):
-    """协调监听豁免：captain 对纯进展事件连续静默（无正文无工具）不进 B2 空响应梯子。
+    """协调监听：captain 对纯进展事件连续静默（无正文无工具）不把回合降级收口。
 
-    连续两轮静默 = 默认 ``engine_empty_response_threshold``；无豁免时第二轮即
-    DEGRADED 提前收口，all_completed 后的终稿不会出现。
+    队还在时的静默继续听团。没有这条例外时，第一轮静默就会 DEGRADED，
+    all_completed 后的终稿不会出现。
     """
     from pathlib import Path
 

@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 import type { SkillStoreListing } from "@/services/skillStore";
 import { Pencil, Trash2 } from "lucide-react";
 import type { DragEvent, MouseEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 const EMPTY_PICKED: ReadonlySet<string> = new Set();
 
@@ -62,15 +62,6 @@ function factoryRowCopy(item: Extract<PromptCatalogItem, { kind: "skill" }>): {
   return { title: blurb, description: when };
 }
 
-function matchQuery(
-  query: string,
-  ...parts: Array<string | undefined>
-): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return parts.some((part) => part?.toLowerCase().includes(q));
-}
-
 const ALWAYS_DROP = "松手后下一回合会带上";
 const UNFILE_DROP = "松手后不归夹";
 
@@ -84,9 +75,6 @@ export function PromptOverview({
   listings = [],
   installedListings = [],
   renamingFolderId = null,
-  query = "",
-  suppressMiss = false,
-  onMissChange,
   factoryControl,
   dragging = false,
   openFolderId = null,
@@ -115,10 +103,6 @@ export function PromptOverview({
   listings?: SkillStoreListing[];
   installedListings?: SkillStoreListing[];
   renamingFolderId?: string | null;
-  query?: string;
-  /** Page-level search draws the miss line. This overview stays quiet. */
-  suppressMiss?: boolean;
-  onMissChange?: (miss: boolean) => void;
   factoryControl?: FactoryCatalogControl;
   /** True while a prompt card is being dragged. Drop strips exist only then. */
   dragging?: boolean;
@@ -146,79 +130,40 @@ export function PromptOverview({
   }) => ReactNode;
 }) {
   const picked = pickedIds ?? EMPTY_PICKED;
-  const q = query.trim();
   const [hoverDrag, setHoverDrag] = useState(false);
   const showStrips = dragging || hoverDrag;
   const alwaysRows = useMemo(
     () => buildAlwaysRows(rail).filter((row) => row.item.kind === "mine"),
     [rail],
   );
-  const visibleAlways = alwaysRows.filter((row) => {
-    const copy = promptItemShelfCopy(row.item, { alwaysChars: row.chars });
-    return matchQuery(q, copy.title, copy.description, row.label);
-  });
-  const pathItems = (rail.pathMine ?? []).filter((item) => {
-    const copy = promptItemShelfCopy(item);
-    return matchQuery(q, copy.title, copy.description, item.label);
-  });
+  const pathItems = rail.pathMine ?? [];
   const showPaths = pathItems.length > 0;
-  const itemMatches = (item: PromptCatalogItem) => {
-    const copy = promptItemShelfCopy(item);
-    return matchQuery(q, copy.title, copy.description, item.label);
-  };
-  const looseItems = (
-    rail.folders.find((folder) => folder.source === "other")?.items ?? []
-  ).filter(itemMatches);
+  const looseItems =
+    rail.folders.find((folder) => folder.source === "other")?.items ?? [];
   const namedFolders = rail.folders.filter(
     (folder) => folder.source !== "other",
   );
   const openFolder =
     namedFolders.find((folder) => folder.id === openFolderId) ?? null;
-  /** Search leaves the folder and lays matching cards on the root shelf. */
-  const drilled = Boolean(openFolder) && !q;
-  const filedOnRoot = q
-    ? namedFolders.flatMap((folder) => folder.items.filter(itemMatches))
-    : [];
-  const folderTiles = namedFolders.filter(
-    (folder) => !q || matchQuery(q, folder.name),
+  const drilled = Boolean(openFolder);
+  const constitution = rail.constitution.filter(
+    (item) => item.kind !== "shared" || item.text.trim() !== "",
   );
-  const constitution = rail.constitution.filter((item) => {
-    if (item.kind === "shared" && item.text.trim() === "") return false;
-    const copy = promptItemShelfCopy(item);
-    return matchQuery(q, copy.title, copy.description, item.label);
-  });
   const showConstitution = constitution.length > 0;
   const factoryRows = rail.official.flatMap((item) => {
     if (item.kind !== "skill") return [];
-    const copy = factoryRowCopy(item);
-    return matchQuery(q, copy.title, copy.description, item.label)
-      ? [{ item, copy }]
-      : [];
+    return [{ item, copy: factoryRowCopy(item) }];
   });
   const showFactory = factoryRows.length > 0;
-  const promptMiss =
-    Boolean(q) &&
-    visibleAlways.length === 0 &&
-    !showPaths &&
-    !showConstitution &&
-    !showFactory &&
-    looseItems.length === 0 &&
-    filedOnRoot.length === 0 &&
-    folderTiles.length === 0;
-  useEffect(() => {
-    onMissChange?.(promptMiss);
-  }, [onMissChange, promptMiss]);
-  const emptySearch = promptMiss && !suppressMiss;
   const looseHot =
     dropDest?.kind === "folder" && dropDest.folder.id === otherFolder.id;
   const alwaysHot = dropDest?.kind === "root";
   const factoryDim = Boolean(factoryControl && !factoryControl.present);
   const hasGrid =
     showFactory ||
-    visibleAlways.length > 0 ||
+    alwaysRows.length > 0 ||
     looseItems.length > 0 ||
-    filedOnRoot.length > 0 ||
-    folderTiles.length > 0;
+    namedFolders.length > 0;
 
   function mineCard(item: PromptCatalogItem, alwaysChars?: number) {
     return (
@@ -415,10 +360,9 @@ export function PromptOverview({
                   ))}
                 </div>
               ) : null}
-              {visibleAlways.map((row) => mineCard(row.item, row.chars))}
+              {alwaysRows.map((row) => mineCard(row.item, row.chars))}
               {looseItems.map((item) => mineCard(item))}
-              {filedOnRoot.map((item) => mineCard(item))}
-              {folderTiles.map((folder) => (
+              {namedFolders.map((folder) => (
                 <FolderTile
                   key={folder.id}
                   folder={folder}
@@ -449,10 +393,6 @@ export function PromptOverview({
           ) : null}
         </section>
       )}
-
-      {emptySearch ? (
-        <p className="text-sm text-muted-foreground">没有匹配「{q}」的条目。</p>
-      ) : null}
     </div>
   );
 }

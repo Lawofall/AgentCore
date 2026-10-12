@@ -43,7 +43,6 @@ from .types import (
     _VALIDATION_PATH_STOP_STEER,
     CIRCUIT_TALLY_KEEP_AVAILABLE,
     DEFAULT_CHANNEL_OP_HANG_LATCH,
-    DEFAULT_EMPTY_THRESHOLD,
     DEFAULT_EXEC_ENV_TIMEOUT_RETIRE,
     DEFAULT_THRESHOLD,
     DEFAULT_TOOL_FAILURE_DISABLE,
@@ -74,7 +73,6 @@ from .types import (
 __all__ = [
     "CIRCUIT_TALLY_KEEP_AVAILABLE",
     "DEFAULT_CHANNEL_OP_HANG_LATCH",
-    "DEFAULT_EMPTY_THRESHOLD",
     "DEFAULT_EXEC_ENV_TIMEOUT_RETIRE",
     "DEFAULT_THRESHOLD",
     "DEFAULT_TOOL_FAILURE_DISABLE",
@@ -119,7 +117,6 @@ class LoopController(
         *,
         window: int = DEFAULT_WINDOW,
         threshold: int = DEFAULT_THRESHOLD,
-        empty_threshold: int = DEFAULT_EMPTY_THRESHOLD,
         tool_failure_warn: int = DEFAULT_TOOL_FAILURE_WARN,
         tool_failure_disable: int = DEFAULT_TOOL_FAILURE_DISABLE,
         validation_path_streak: int = DEFAULT_VALIDATION_PATH_STREAK,
@@ -138,7 +135,6 @@ class LoopController(
     ) -> None:
         self._window = window
         self._threshold = threshold
-        self._empty_threshold = max(1, empty_threshold)
         self._tool_failure_warn = max(1, tool_failure_warn)
         self._tool_failure_disable = max(self._tool_failure_warn, tool_failure_disable)
         self._validation_path_streak = max(1, validation_path_streak)
@@ -177,8 +173,6 @@ class LoopController(
         self._landing_succeeded = False
         self._prev_investigation_fps: frozenset[str] = frozenset()
         self._same_target_investigation_streak = 0
-        # B2 empty-response sub-policy: a separate consecutive-empty-round counter.
-        self._consecutive_empty = 0
         # B2 tool circuit breaker: cumulative per-tool failure counts (run-scoped,
         # never cleared by the nudge window reset) + one-shot latches so each tool
         # fires its warn / disable transition at most once. ``_tool_parse_failures``
