@@ -17,7 +17,10 @@ from agentcore.account.credentials import (
     cloud_write_user_rule,
 )
 from agentcore.memory.document_store import DocumentMemoryStore
-from agentcore.memory.rules_injection import assemble_turn_rules
+from agentcore.memory.rules_injection import (
+    assemble_turn_rules,
+    load_on_demand_user_rules,
+)
 from agentcore.tools.builtin.file_ops import FileDeleteTool, FileWriteTool
 from agentcore.tools.protocol import ToolContext
 
@@ -246,7 +249,13 @@ async def test_assemble_turn_rules_ticketed_hit_after_seed(
         None,
         AccountPrepareSnapshot(
             rules_payload={
-                "global_rules": [{"name": "用户规则.md", "content": "- 永远用中文"}],
+                "global_on_demand_rules": [
+                    {
+                        "name": "用户规则.md",
+                        "content": "- 永远用中文",
+                        "description": "回复语言",
+                    }
+                ],
                 "project_rules": [],
             },
             memory_bodies={("", "偏好.md"): "- 偏好偏好\n"},
@@ -266,7 +275,9 @@ async def test_assemble_turn_rules_ticketed_hit_after_seed(
             "u1",
             folder_id=None,
         )
-    assert "永远用中文" in rules_md
+        on_demand = await load_on_demand_user_rules("u1", folder_id=None)
+    assert rules_md == ""
+    assert any(item.name == "用户规则" for item in on_demand)
     assert "偏好偏好" not in rules_md
 
 

@@ -210,6 +210,7 @@ async def run_chat_pipeline(
     # 回合共享调研台账（引用即出处 P1）：与引用池同入口创建；captain / 调研 worker
     # 注入同一对象，并行登记原子拿 ``#rN``。开辩继承此核，不另起字头。
     # 跨回合 hydrate：合并本会话历史 assistant 的 evidence_ledger（引擎核；LLM 可不带全文）。
+    step_chain_token = None
     evidence_ledger = EvidenceLedgerCore(id_prefix="#r")
     evidence_ledger.merge_history_ledgers(history)
     ledger_token = turn_evidence_ledger.set(evidence_ledger)
@@ -307,6 +308,20 @@ async def run_chat_pipeline(
                 **reused_user_row_from_events(sink.history_snapshot()),
             )
         )
+        from agentcore.runtime.graph.shape.conversation_graph import read_graph_context_ids
+        from agentcore.runtime.graph.shape.step_segment import (
+            bind_step_chain,
+            reset_step_chain,
+        )
+
+        opening_execution_id = (
+            getattr(prepared.base_tool_context, "execution_id", None) or captain_run_id
+        )
+        step_chain_token = bind_step_chain(
+            opening_execution_id,
+            read_graph_context_ids(history),
+            goal=user_message,
+        )
 
         from agentcore.runtime.captain_profile import apply_captain_max_rounds
 
@@ -363,6 +378,9 @@ async def run_chat_pipeline(
         captain_state = await run_captain(captain_spec)
 
         if captain_failed(captain_state):
+            await assembled.delegate_tool.seal_opening_at_turn_end(
+                captain_state.content or captain_state.error or ""
+            )
             return await salvage_failed_captain(
                 message_id=message_id,
                 captain_run_id=captain_run_id,
@@ -373,6 +391,7 @@ async def run_chat_pipeline(
                 roster_writer=roster_writer,
             )
 
+        await assembled.delegate_tool.seal_opening_at_turn_end(captain_state.content or "")
         return await settle_successful_turn(
             message_id=message_id,
             captain_run_id=captain_run_id,
@@ -399,6 +418,10 @@ async def run_chat_pipeline(
             roster_writer=roster_writer,
         )
     finally:
+        if step_chain_token is not None:
+            from agentcore.runtime.graph.shape.step_segment import reset_step_chain
+
+            reset_step_chain(step_chain_token)
         # Every ``await`` below runs through ``teardown_step``: a second Stop (or an
         # overlap supersede) must not pierce the block and skip the remaining flushes.
         from agentcore.runtime.interaction_orphan import orphan_registry_pending
@@ -430,7 +453,7 @@ async def run_chat_pipeline(
         reset_turn_token_meter(turn_token_meter_token)
         reset_turn_auth_dead(turn_auth_dead_token)
         if execution_id_token is not None:
-            from agentcore.runtime.coordination.session import (
+            from agentcore.runtime.graph.session.session import (
                 current_execution_id,
                 release_turn_coordination,
             )

@@ -37,7 +37,8 @@ export type RunStatus =
   | "completed"
   | "failed"
   | "cancelled"
-  | "skipped";
+  | "skipped"
+  | "cut";
 
 export type ExecutionStatus =
   | "planning"
@@ -107,6 +108,7 @@ export const TOOL_LABELS: Record<string, string> = {
   code_diagnostics: "Check types",
   // CEO captain tools (surfaced by the bubble's tool_progress / process timeline).
   delegate: "Delegate",
+  graph: "Graph",
   replan: "Replan",
   debate: "Debate",
   ask_user: "Ask you",

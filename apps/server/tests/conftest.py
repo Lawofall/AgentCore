@@ -113,7 +113,7 @@ def _isolate_coordination_registry():
     file — pytest collects the directory as two Package nodes and the second loses
     the directory conftest's autouse binding). Root autouse survives any order.
     """
-    from agentcore.runtime.coordination.session import clear_active_coordination
+    from agentcore.runtime.graph.session.session import clear_active_coordination
 
     clear_active_coordination()
     yield

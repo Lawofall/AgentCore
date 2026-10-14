@@ -52,7 +52,7 @@ def may_auto_debate(
 
 
 def tool_may_auto_debate(tool: Any) -> bool:
-    """Read flag/count from a DelegateTool / DebateTool's base ToolContext."""
+    """Read flag/count from a GraphTool / DebateTool's base ToolContext."""
     ctx = getattr(tool, "_base_tool_context", None)
     return may_auto_debate(
         deep_research_auto=bool(getattr(ctx, "deep_research_auto", False)),

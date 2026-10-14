@@ -2,7 +2,7 @@
 
 from agentcore.llm.profiles import default_turn_profiles
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
-from agentcore.runtime.delegate.target_desktop import AppliedTargetDesktop
+from agentcore.runtime.graph.desk.target_desktop import AppliedTargetDesktop
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.runs.executor.env import AgentExecutorEnv
 from agentcore.runtime.runs.executor.setup import prepare_agent_node
@@ -88,7 +88,7 @@ async def test_target_desktop_phase_emitted_when_folder_set(monkeypatch):
         )
 
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.target_desktop.apply_target_desktop",
+        "agentcore.runtime.graph.desk.target_desktop.apply_target_desktop",
         _fake_apply,
     )
     plan = _plan(

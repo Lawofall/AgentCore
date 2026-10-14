@@ -108,9 +108,9 @@ def test_older_execution_workers_excluded():
     }
 
 
-def test_host_message_id_plan_skipped_graph_append_counts():
+def test_legacy_host_field_still_counts_the_plan():
     entries = [
-        _plan("e1", [_worker("ignored")], host="host-msg"),
+        _plan("e1", [_worker("w0")], host="host-msg"),
         {
             "kind": "graph_append",
             "payload": {
@@ -118,12 +118,13 @@ def test_host_message_id_plan_skipped_graph_append_counts():
                 "added_run_ids": ["w1", "w2"],
             },
         },
+        _started("w0"),
         _started("w1"),
         _started("w2"),
     ]
     assert team_batch_from_entries(entries) == {
         "kind": "in_flight",
-        "worker_count": 2,
+        "worker_count": 3,
     }
 
 

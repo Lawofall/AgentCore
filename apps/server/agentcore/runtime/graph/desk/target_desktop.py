@@ -1,0 +1,439 @@
+"""Target-desktop wiring for shape-甲 cross-project delegate (P0 桶 B · C0 多 local).
+
+Task carries ``target_folder_id`` → worker tools sit on that Folder root;
+memory / rules / ``consult`` follow the same folder (not session birth).
+Session birth ``folder_id`` is never rewritten. Bare-chat auto cloud desks
+persist on ``Conversation.auto_desk_folder_id`` (orthogonal) for cross-turn
+reuse and CEO file visibility. Distinct local roots may run in the same turn
+(one LocalWorkspace + channel per target); ClaimBook only records.
+
+Public API is re-exported here; cohesive pieces live in
+``target_desktop_gate`` / ``target_desktop_binding`` /
+``target_desktop_auto_cloud`` / ``target_desktop_worker``.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from typing import Any
+
+from agentcore.core.logging import get_logger
+from agentcore.runtime.graph.desk.target_desktop_auto_cloud import (
+    auto_cloud_desk_name as _auto_cloud_desk_name,
+)
+from agentcore.runtime.graph.desk.target_desktop_auto_cloud import (
+    bare_chat_write_tasks_need_target as _bare_chat_write_tasks_need_target,
+)
+from agentcore.runtime.graph.desk.target_desktop_auto_cloud import (
+    clear_stale_auto_desk_folder_id as _clear_stale_auto_desk_folder_id,
+)
+from agentcore.runtime.graph.desk.target_desktop_auto_cloud import (
+    load_auto_desk_folder_id as _load_auto_desk_folder_id,
+)
+from agentcore.runtime.graph.desk.target_desktop_auto_cloud import (
+    load_conversation_title as _load_conversation_title,
+)
+from agentcore.runtime.graph.desk.target_desktop_auto_cloud import (
+    persist_auto_desk_folder_id as _persist_auto_desk_folder_id,
+)
+from agentcore.runtime.graph.desk.target_desktop_auto_cloud import (
+    reclaim_orphan_auto_desk_folder as _reclaim_orphan_auto_desk_folder,
+)
+from agentcore.runtime.graph.desk.target_desktop_binding import (
+    LocalRootClaimBook,
+    TargetFolderBinding,
+    build_target_backend,
+    load_target_folder_binding,
+)
+from agentcore.runtime.graph.desk.target_desktop_binding import (
+    backend_local_root_id as _backend_local_root_id,
+)
+from agentcore.runtime.graph.desk.target_desktop_gate import (
+    CONV_ID_AS_FOLDER_MSG,
+    NO_TARGET_SCRATCH_GATE_MSG,
+    SCRATCH_NO_WRITE_IDENTITY_HINT,
+    TargetDesktopError,
+    bare_chat_local_scratch_write_ok,
+    effective_target_folder_id,
+    format_bare_chat_no_target_error,
+    gate_bare_chat_requires_target,
+    gate_conversation_id_is_not_folder,
+    resolve_bare_chat_write_scope,
+    task_structurally_requires_write_desk,
+)
+from agentcore.runtime.graph.desk.target_desktop_worker import (
+    rebuild_worker_prompt_for_target,
+)
+from agentcore.runtime.graph.desk.target_desktop_worker import (
+    registry_rewire_consult_tools as _registry_rewire_consult_tools,
+)
+from agentcore.runtime.runs.desk.apply import AppliedTargetDesktop, apply_target_desktop
+from agentcore.tools.protocol import ToolContext
+from agentcore.tools.registry import ToolRegistry
+
+logger = get_logger(__name__)
+
+__all__ = [
+    "CONV_ID_AS_FOLDER_MSG",
+    "NO_TARGET_SCRATCH_GATE_MSG",
+    "SCRATCH_NO_WRITE_IDENTITY_HINT",
+    "AppliedTargetDesktop",
+    "LocalRootClaimBook",
+    "TargetDesktopError",
+    "TargetFolderBinding",
+    "AdoptedAutoDesk",
+    "apply_target_desktop",
+    "bare_chat_local_scratch_write_ok",
+    "bind_tool_context_to_landing_desk",
+    "adopt_persisted_auto_desk",
+    "build_target_backend",
+    "effective_target_folder_id",
+    "ensure_bare_chat_auto_cloud_desk",
+    "format_bare_chat_no_target_error",
+    "gate_bare_chat_requires_target",
+    "gate_conversation_id_is_not_folder",
+    "load_target_folder_binding",
+    "rebuild_worker_prompt_for_target",
+    "resolve_bare_chat_write_scope",
+    "task_structurally_requires_write_desk",
+]
+
+
+_TARGET_ROOT_PING_TIMEOUT_S = 5.0
+
+
+class AdoptedAutoDesk:
+    """Birth scratch swapped onto a persisted bare-chat landing Folder."""
+
+    backend: Any
+    folder_id: str
+
+
+@dataclass(frozen=True)
+class _LandingBackendAttempt:
+    backend: Any | None
+    folder_id: str | None = None
+    moved: int = 0
+    missing: bool = False
+
+
+def _sink_from_tool_context(context: ToolContext, sink: Any | None) -> Any:
+    if sink is not None:
+        return sink
+    for holder in (context.workspace_channel, context.desktop_channel):
+        if holder is None:
+            continue
+        candidate = getattr(holder, "sink", None)
+        if candidate is not None:
+            return candidate
+    from agentcore.runtime.events import EventSink
+
+    return EventSink()
+
+
+async def _try_landing_backend(
+    *,
+    folder_id: str,
+    user_id: str,
+    conversation_id: str | None,
+    old_backend: Any,
+    sink: Any,
+) -> _LandingBackendAttempt:
+    """Load Folder, build backend, migrate scratch. Does not boot a guest."""
+    cleaned = folder_id.strip() if isinstance(folder_id, str) else ""
+    if not cleaned:
+        return _LandingBackendAttempt(backend=None)
+    try:
+        binding = await load_target_folder_binding(folder_id=cleaned, user_id=user_id)
+    except TargetDesktopError as e:
+        logger.warning(
+            "delegate.auto_desk_bind_failed",
+            folder_id=cleaned,
+            error=e.message,
+        )
+        return _LandingBackendAttempt(backend=None)
+    except Exception as e:  # noqa: BLE001 — never break the turn on bind miss
+        logger.warning(
+            "delegate.auto_desk_bind_failed",
+            folder_id=cleaned,
+            error=str(e),
+        )
+        return _LandingBackendAttempt(backend=None)
+    if binding is None:
+        logger.warning(
+            "delegate.auto_desk_bind_failed",
+            folder_id=cleaned,
+            error="folder missing or denied",
+        )
+        await _clear_stale_auto_desk_folder_id(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            folder_id=cleaned,
+        )
+        return _LandingBackendAttempt(backend=None, missing=True)
+
+    if not conversation_id:
+        return _LandingBackendAttempt(backend=None)
+
+    backend = build_target_backend(
+        user_id=user_id,
+        folder_id=binding.folder_id,
+        folder_rel_path=binding.rel_path,
+        conversation_id=conversation_id,
+        sink=sink,
+        local_binding=binding.local_binding,
+    )
+    from agentcore.workspace.migrate_tree import migrate_and_transfer_cloud_backend
+
+    moved = migrate_and_transfer_cloud_backend(old_backend, backend)
+    return _LandingBackendAttempt(
+        backend=backend,
+        folder_id=binding.folder_id,
+        moved=moved,
+    )
+
+
+async def adopt_persisted_auto_desk(
+    *,
+    birth_folder_id: str | None,
+    user_id: str,
+    conversation_id: str | None,
+    birth_backend: Any,
+    sink: Any,
+) -> AdoptedAutoDesk | None:
+    """Swap onto the persisted bare-chat landing Folder. Does not provision.
+
+    Prepare / resume boot the returned root so the turn starts a guest on the
+    sitting desk, not the scratch it is about to abandon.
+    Local workspaces and born-into-folder sessions skip. ``None`` keeps birth.
+    """
+    if birth_folder_id:
+        return None
+    if getattr(birth_backend, "location", None) == "local":
+        return None
+    if not user_id or not conversation_id:
+        return None
+    persisted = await _load_auto_desk_folder_id(
+        user_id=user_id, conversation_id=conversation_id
+    )
+    if not persisted:
+        return None
+    attempt = await _try_landing_backend(
+        folder_id=persisted,
+        user_id=user_id,
+        conversation_id=conversation_id,
+        old_backend=birth_backend,
+        sink=sink,
+    )
+    if attempt.backend is None:
+        return None
+    return AdoptedAutoDesk(backend=attempt.backend, folder_id=attempt.folder_id or persisted)
+
+
+async def bind_tool_context_to_landing_desk(
+    context: ToolContext,
+    *,
+    folder_id: str,
+    sink: Any | None = None,
+) -> bool:
+    """Point CEO file tools at the landing Folder without rewriting birth affiliation.
+
+    Mutates ``context.backend`` / ``workspace_channel`` / ``auto_desk_folder_id`` in
+    place, then provisions that root. Returns False when the Folder cannot be
+    bound (caller keeps birth desk).
+    """
+    cleaned = folder_id.strip() if isinstance(folder_id, str) else ""
+    if not cleaned:
+        return False
+    resolved_sink = _sink_from_tool_context(context, sink)
+    attempt = await _try_landing_backend(
+        folder_id=cleaned,
+        user_id=context.user_id,
+        conversation_id=context.conversation_id,
+        old_backend=context.backend,
+        sink=resolved_sink,
+    )
+    if attempt.backend is None:
+        if attempt.missing and getattr(context, "auto_desk_folder_id", None) == cleaned:
+            context.auto_desk_folder_id = None
+        return False
+
+    from agentcore.tools.sandbox.desk_provision import provision_server_desk
+    from agentcore.workspace.locate import workspace_channel_for_tools
+
+    backend = attempt.backend
+    context.backend = backend
+    context.workspace_channel = workspace_channel_for_tools(
+        backend,
+        user_id=context.user_id,
+        conversation_id=context.conversation_id,
+    )
+    context.auto_desk_folder_id = attempt.folder_id
+    context.shared_workspace = True
+    await provision_server_desk(
+        backend,
+        conversation_id=context.conversation_id,
+        sink=resolved_sink,
+    )
+    logger.info(
+        "delegate.auto_desk_ceo_bound",
+        folder_id=attempt.folder_id,
+        conversation_id=context.conversation_id,
+        conversation_untouched=True,
+        scratch_entries_moved=attempt.moved,
+    )
+    return True
+
+
+async def ensure_bare_chat_auto_cloud_desk(
+    *,
+    session_folder_id: str | None,
+    tasks_raw: list[dict[str, Any]],
+    default_target_folder_id: str | None,
+    turn_target_desk: Any,
+    user_id: str,
+    conversation_id: str | None = None,
+    conversation_title: str | None = None,
+    tool_context: ToolContext | None = None,
+    persisted_auto_desk_folder_id: str | None = None,
+    sink: Any = None,
+) -> str | None:
+    """Create or reuse a cloud desk for bare-chat write tasks lacking a target.
+
+    Trigger: no session ``folder_id`` + structural write-desk task + no effective
+    target + no unique ``turn_target_desk``. Only cloud. Never rewrites conversation
+    birth ``folder_id`` (归属). Persists ``Conversation.auto_desk_folder_id`` on first
+    mint so later turns reuse the same desk. At most one mint per turn
+    (``auto_cloud_provisioned``). Does not ask the user. Returns provisioned /
+    reused folder id, or ``None`` when skipped / failed.
+
+    A fresh mint emits ``auto_folder_created`` on ``sink`` so the user is TOLD where
+    their files landed and can rename it on the spot (双模式工作区 §5.4 裸聊行). That
+    is a notice, not a gate: the turn never waits on it. Reuse and race-loss stay
+    silent — the desk was already announced by the turn that minted it.
+    """
+    if session_folder_id:
+        return None
+    backend = getattr(tool_context, "backend", None) if tool_context else None
+    if getattr(backend, "location", None) == "local":
+        return None
+    if not user_id:
+        return None
+    if not _bare_chat_write_tasks_need_target(
+        session_folder_id=session_folder_id,
+        tasks_raw=tasks_raw if isinstance(tasks_raw, list) else [],
+        default_target_folder_id=default_target_folder_id,
+    ):
+        return None
+    if turn_target_desk is None:
+        return None
+    # Multi-project same turn already cleared the unique hint — do not mint a third
+    # and do not force-reuse persisted as a unique default.
+    seen = getattr(turn_target_desk, "_seen", None)
+    if isinstance(seen, set) and seen and not getattr(turn_target_desk, "folder_id", None):
+        return None
+
+    persisted = (
+        persisted_auto_desk_folder_id.strip()
+        if isinstance(persisted_auto_desk_folder_id, str) and persisted_auto_desk_folder_id.strip()
+        else None
+    )
+    if persisted is None:
+        ctx_persisted = getattr(tool_context, "auto_desk_folder_id", None) if tool_context else None
+        if isinstance(ctx_persisted, str) and ctx_persisted.strip():
+            persisted = ctx_persisted.strip()
+    if persisted is None:
+        persisted = await _load_auto_desk_folder_id(
+            user_id=user_id, conversation_id=conversation_id
+        )
+    if persisted:
+        bound = True
+        if tool_context is not None:
+            bound = await bind_tool_context_to_landing_desk(
+                tool_context, folder_id=persisted, sink=sink
+            )
+        if bound:
+            turn_target_desk.note_folder(persisted)
+            logger.info(
+                "delegate.auto_cloud_desk_reused",
+                folder_id=persisted,
+                conversation_id=conversation_id,
+                conversation_untouched=True,
+            )
+            return persisted
+        # Bind cleared a dead pointer — fall through to remint this turn.
+
+    if getattr(turn_target_desk, "auto_cloud_provisioned", False):
+        return None
+
+    turn_target_desk.auto_cloud_provisioned = True
+    title = conversation_title
+    if not (isinstance(title, str) and title.strip()):
+        title = await _load_conversation_title(user_id=user_id, conversation_id=conversation_id)
+    name = _auto_cloud_desk_name(conversation_title=title)
+    try:
+        from agentcore.tools.builtin.folders import create_cloud_folder
+
+        created = await create_cloud_folder(user_id=user_id, name=name)
+    except Exception as e:  # noqa: BLE001 — fall through to gate reject
+        logger.warning(
+            "delegate.auto_cloud_desk_provision_failed",
+            user_id=user_id,
+            conversation_id=conversation_id,
+            error=str(e),
+        )
+        return None
+
+    folder_id = created.get("id") if isinstance(created, dict) else None
+    if not isinstance(folder_id, str) or not folder_id.strip():
+        logger.warning(
+            "delegate.auto_cloud_desk_provision_failed",
+            user_id=user_id,
+            conversation_id=conversation_id,
+            error="missing folder id",
+        )
+        return None
+    folder_id = folder_id.strip()
+    persist = await _persist_auto_desk_folder_id(
+        user_id=user_id,
+        conversation_id=conversation_id,
+        folder_id=folder_id,
+    )
+    announce = True
+    if persist.outcome == "lost" and persist.effective_id:
+        # Race: another turn wrote first — reuse winner, reclaim this turn's mint.
+        # The winning turn announces its own desk; a second notice here would name
+        # a folder this turn just threw away.
+        announce = False
+        orphan_id = folder_id
+        folder_id = persist.effective_id
+        await _reclaim_orphan_auto_desk_folder(user_id=user_id, folder_id=orphan_id)
+    elif persist.outcome == "failed":
+        # Keep minted desk for this turn (do not block). Outcome is explicit — not a
+        # silent None — so we never confuse this with a race loss / reclaim path.
+        logger.warning(
+            "delegate.auto_desk_persist_failed_using_mint",
+            conversation_id=conversation_id,
+            folder_id=folder_id,
+        )
+    turn_target_desk.note_folder(folder_id)
+    if tool_context is not None:
+        if announce:
+            tool_context.note_turn_created_folder(folder_id)
+        await bind_tool_context_to_landing_desk(
+            tool_context, folder_id=folder_id, sink=sink
+        )
+    if announce and sink is not None:
+        from agentcore.runtime.events import auto_folder_created
+
+        sink.emit(auto_folder_created(folder_id=folder_id, name=name))
+    logger.info(
+        "delegate.auto_cloud_desk_provisioned",
+        folder_id=folder_id,
+        name=name,
+        conversation_id=conversation_id,
+        conversation_untouched=True,
+        announced=announce and sink is not None,
+    )
+    return folder_id
+

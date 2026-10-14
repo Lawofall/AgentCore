@@ -993,47 +993,55 @@ describe("debate beat fold helpers", () => {
   });
 });
 
-describe("buildGraphStructure · bookend sink edges", () => {
+describe("buildGraphStructure · segment edges", () => {
   const captain = (): GraphRunLike => ({
     id: "captain",
     dependsOn: [],
     kind: "captain",
   });
 
-  const sinkTargets = (edges: { source: string; target: string }[]) =>
-    edges
-      .filter((e) => e.target === "captain")
-      .map((e) => e.source)
-      .sort();
+  const bookendEdges = (edges: { source: string; target: string }[]) =>
+    edges.filter(
+      (edge) =>
+        edge.source === "__input__" ||
+        edge.target === "captain" ||
+        edge.source === "captain",
+    );
 
-  it("fans parallel leaves into the CEO", () => {
-    const { rawEdges } = buildGraphStructure(
+  it("draws parallel segments without a commander sink", () => {
+    const { nodeIds, rawEdges } = buildGraphStructure(
       [captain(), run("w1"), run("w2"), run("w3")],
       "__input__",
     );
-    expect(sinkTargets(rawEdges)).toEqual(["w1", "w2", "w3"]);
-    expect(
-      rawEdges.filter((e) => e.source === "__input__").map((e) => e.target),
-    ).toEqual(expect.arrayContaining(["w1", "w2", "w3"]));
+    expect(nodeIds).toEqual(expect.arrayContaining(["w1", "w2", "w3"]));
+    expect(nodeIds).not.toContain("captain");
+    expect(bookendEdges(rawEdges)).toEqual([]);
   });
 
-  it("connects only the serial chain tip to the CEO", () => {
+  it("connects a serial chain by depends_on only", () => {
     const { rawEdges } = buildGraphStructure(
       [captain(), run("s1"), run("s2", ["s1"]), run("s3", ["s2"])],
       "__input__",
     );
-    expect(sinkTargets(rawEdges)).toEqual(["s3"]);
     expect(
-      rawEdges.some((e) => e.source === "__input__" && e.target === "s1"),
+      rawEdges.some(
+        (e) => e.kind === "dep" && e.source === "s1" && e.target === "s2",
+      ),
     ).toBe(true);
+    expect(
+      rawEdges.some(
+        (e) => e.kind === "dep" && e.source === "s2" && e.target === "s3",
+      ),
+    ).toBe(true);
+    expect(bookendEdges(rawEdges)).toEqual([]);
   });
 
-  it("connects the debate moderator unit to the CEO", () => {
+  it("does not tie the debate moderator to a commander", () => {
     const { rawEdges } = buildGraphStructure(
       [captain(), ...debateRuns(2)],
       "__input__",
     );
-    expect(sinkTargets(rawEdges)).toEqual(["mod"]);
+    expect(bookendEdges(rawEdges)).toEqual([]);
   });
 
   it("补派 replaces_run_id：接替边 + 失败节点不再汇入 CEO + 补派不挂 input", () => {
@@ -1051,13 +1059,7 @@ describe("buildGraphStructure · bookend sink edges", () => {
         (e) => e.kind === "handoff" && e.source === "w1" && e.target === "w1b",
       ),
     ).toBe(true);
-    expect(sinkTargets(rawEdges)).toEqual(["w1b", "w2"]);
-    expect(
-      rawEdges.some((e) => e.source === "__input__" && e.target === "w1b"),
-    ).toBe(false);
-    expect(
-      rawEdges.some((e) => e.source === "__input__" && e.target === "w1"),
-    ).toBe(true);
+    expect(bookendEdges(rawEdges)).toEqual([]);
   });
 
   it("补派后下游 depends_on 改写指向新 run：主干依赖边自然成立", () => {
@@ -1075,10 +1077,7 @@ describe("buildGraphStructure · bookend sink edges", () => {
         (e) => e.kind === "dep" && e.source === "w1b" && e.target === "w2",
       ),
     ).toBe(true);
-    expect(sinkTargets(rawEdges)).toEqual(["w2"]);
-    expect(
-      rawEdges.some((e) => e.source === "w1" && e.target === "captain"),
-    ).toBe(false);
+    expect(bookendEdges(rawEdges)).toEqual([]);
   });
 
   it("续链：同人续写折进座位，只根接 input 并汇 CEO", () => {
@@ -1100,16 +1099,8 @@ describe("buildGraphStructure · bookend sink edges", () => {
     expect(nodeIds).toContain("w1");
     expect(nodeIds).not.toContain("w1_v2");
     expect(nodeIds).not.toContain("w1_v3");
-    const inputTargets = rawEdges
-      .filter((e) => e.source === "__input__")
-      .map((e) => e.target)
-      .sort();
-    expect(inputTargets).toEqual(["w1"]);
-    expect(sinkTargets(rawEdges)).toEqual(["w1"]);
+    expect(bookendEdges(rawEdges)).toEqual([]);
     expect(rawEdges.filter((e) => e.kind === "continuation")).toEqual([]);
-    expect(
-      rawEdges.some((e) => e.source === "w1" && e.target === "captain"),
-    ).toBe(true);
   });
 
   it("续链上有真实 dependsOn 的续绑到座位根", () => {
@@ -1136,10 +1127,7 @@ describe("buildGraphStructure · bookend sink edges", () => {
       ),
     ).toBe(false);
     expect(rawEdges.filter((e) => e.kind === "continuation")).toEqual([]);
-    expect(sinkTargets(rawEdges)).toEqual(["b"]);
-    expect(
-      rawEdges.filter((e) => e.source === "__input__").map((e) => e.target),
-    ).toEqual(["a"]);
+    expect(bookendEdges(rawEdges)).toEqual([]);
   });
 
   it("drops append-turn captains — no fake CEO 子队 / delegate edge", () => {
@@ -1165,9 +1153,8 @@ describe("buildGraphStructure · bookend sink edges", () => {
       "__input__",
     );
     expect(nodeIds).not.toContain("cap_append");
-    expect(nodeIds).toEqual(
-      expect.arrayContaining(["greeter", "newbie", "__input__", "captain"]),
-    );
+    expect(nodeIds).not.toContain("captain");
+    expect(nodeIds).toEqual(expect.arrayContaining(["greeter", "newbie"]));
     // Extra captain must never become a sub-team parent (would paint「CEO 子队」).
     expect(subTeams).toEqual([]);
     expect(subTeams.every((st) => st.parentId !== "cap_append")).toBe(true);
@@ -1178,7 +1165,7 @@ describe("buildGraphStructure · bookend sink edges", () => {
           (e.source === "cap_append" || e.target === "cap_append"),
       ),
     ).toBe(false);
-    expect(sinkTargets(rawEdges).sort()).toEqual(["greeter", "newbie"]);
+    expect(bookendEdges(rawEdges)).toEqual([]);
     const scene = buildGraphScene({
       runs: [
         { id: "captain", kind: "captain", dependsOn: [] },

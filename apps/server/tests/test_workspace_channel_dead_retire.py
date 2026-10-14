@@ -13,7 +13,7 @@ import pytest
 
 from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
-from agentcore.runtime.coordination.session import (
+from agentcore.runtime.graph.session.session import (
     CoordinationSession,
     clear_active_coordination,
     set_active_coordination,

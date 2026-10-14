@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agentcore.llm.provider.protocol import TokenUsage
-from agentcore.runtime.coordination.session import (
+from agentcore.runtime.graph.session.session import (
     CoordinationSession,
     clear_active_coordination,
     set_active_coordination,

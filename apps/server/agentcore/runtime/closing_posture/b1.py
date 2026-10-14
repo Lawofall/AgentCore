@@ -58,7 +58,7 @@ def reset_turn_scoped_closing_state(*, promotion_ledger: Any = None) -> None:
     collection order. Add a new turn-scoped latch here, not at the call sites.
     """
     # Lazy: delivery_status imports this package, so a module-level import cycles.
-    from agentcore.runtime.delegate.delivery_status import bind_delivery_verdict
+    from agentcore.runtime.graph.drive.delivery_status import bind_delivery_verdict
 
     bind_delivery_verdict(None, promotion_ledger=promotion_ledger)
     clear_cloud_web_verify_gap()

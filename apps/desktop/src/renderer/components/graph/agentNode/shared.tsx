@@ -267,22 +267,23 @@ export function statusFaceLabel(
   switch (status) {
     case "pending":
       return {
-        text: "排队中",
+        text: runStatusLabel("pending"),
         cls: "text-muted-foreground",
         tickElapsed: false,
       };
     case "running": {
       const phaseText = runPhaseLabel(phase, phaseTool, toolLabel);
       return {
-        text: `${phaseText ?? "执行中"}${liveElapsedSuffix(elapsedSec)}`,
+        text: `${phaseText ?? runStatusLabel("running")}${liveElapsedSuffix(elapsedSec)}`,
         cls: "text-primary/90",
         tickElapsed: true,
       };
     }
     case "completed": {
       const dur = durationMs ? formatDuration(durationMs) : null;
+      const sealed = runStatusLabel("completed");
       return {
-        text: dur ? `已完成 · ${dur}` : "已完成",
+        text: dur ? `${sealed} · ${dur}` : sealed,
         cls: "text-muted-foreground",
         tickElapsed: false,
       };
@@ -302,6 +303,12 @@ export function statusFaceLabel(
     case "skipped":
       return {
         text: "未执行",
+        cls: "text-muted-foreground",
+        tickElapsed: false,
+      };
+    case "cut":
+      return {
+        text: "已切出",
         cls: "text-muted-foreground",
         tickElapsed: false,
       };
@@ -407,9 +414,9 @@ export function revisedBadge(kind: PlanRevisionKind): {
   hint: string;
 } {
   if (kind === "bind") {
-    return { label: "职责已定稿", hint: "CEO 据上游产出定稿了这一步的职责" };
+    return { label: "职责已定稿", hint: "上游产出定了这一步的职责" };
   }
-  return { label: "方向已校准", hint: "CEO 据中途发现调整了这一步的方向" };
+  return { label: "方向已校准", hint: "中途发现调整了这一步的方向" };
 }
 
 export type EscalationDisplayKind = "wait" | "adjust" | "contradiction";

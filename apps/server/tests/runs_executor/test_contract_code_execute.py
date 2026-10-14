@@ -20,7 +20,7 @@ import sys
 import pytest
 
 from agentcore.llm.provider.protocol import LLMChunk, ToolCallDelta
-from agentcore.runtime.delegate.completion import collect_delivered_files
+from agentcore.runtime.graph.drive.completion import collect_delivered_files
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.executor import build_agent_executor

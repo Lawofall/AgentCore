@@ -1408,7 +1408,7 @@ async def test_soft_stop_cancel_leaves_undispatched_for_resume(monkeypatch):
     import contextlib
     from types import SimpleNamespace
 
-    import agentcore.runtime.coordination.session as coord_session
+    import agentcore.runtime.graph.session.session as coord_session
 
     monkeypatch.setattr(
         coord_session,

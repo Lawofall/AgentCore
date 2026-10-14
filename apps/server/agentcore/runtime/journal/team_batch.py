@@ -72,7 +72,7 @@ def team_batch_from_entries(entries: Iterable[Any] | None) -> dict[str, Any]:
     frames = _walk(entries)
     latest_eid = ""
     for kind, payload in frames:
-        if (kind == _PLAN and not payload.get("host_message_id")) or kind == _APPEND:
+        if kind in (_PLAN, _APPEND):
             eid = str(payload.get("execution_id") or "").strip()
             if eid:
                 latest_eid = eid
@@ -80,8 +80,6 @@ def team_batch_from_entries(entries: Iterable[Any] | None) -> dict[str, Any]:
     worker_ids: set[str] = set()
     for kind, payload in frames:
         if kind == _PLAN:
-            if payload.get("host_message_id"):
-                continue
             eid = str(payload.get("execution_id") or "").strip()
             if latest_eid and eid and eid != latest_eid:
                 continue

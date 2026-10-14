@@ -118,11 +118,16 @@ class _FakeRepo:
         *,
         apply="always",
         description=None,
+        enroll=False,
     ):  # noqa: ARG002
         from agentcore.documents.frontmatter import set_entry_frontmatter
 
         body = set_entry_frontmatter(content, apply=apply, description=description)
-        doc = _FakeDoc(name, body, apply, description or "")
+        previous = self.docs.get(name)
+        indexed = description or ""
+        if not enroll:
+            indexed = previous.description if previous is not None else ""
+        doc = _FakeDoc(name, body, apply, indexed)
         self.docs[name] = doc
         self.upserted = True
         return doc
@@ -238,41 +243,19 @@ async def test_mutate_rejects_missing_and_reserved_names():
 
 
 @pytest.mark.anyio
-async def test_mutate_user_rule_ai_growth_denied(monkeypatch: pytest.MonkeyPatch):
-    from agentcore.memory.always_quota import (
-        AlwaysQuotaDecision,
-        AlwaysQuotaExceededError,
-        AlwaysUsage,
-    )
-
-    async def _deny(*args, **kwargs):  # noqa: ARG001
-        return AlwaysQuotaDecision(
-            allowed=False,
-            usage=AlwaysUsage(used_chars=100, max_chars=50),
-            message="常驻条目配额已满",
-        )
-
-    async def _no_notify(*args, **kwargs):  # noqa: ARG001
-        return None
-
-    monkeypatch.setattr("agentcore.memory.always_quota.check_always_write", _deny)
-    monkeypatch.setattr(
-        "agentcore.memory.always_quota.notify_always_quota_exceeded", _no_notify
-    )
+async def test_mutate_model_write_does_not_enroll():
     repo = _FakeRepo()
-    with pytest.raises(AlwaysQuotaExceededError) as ei:
-        await mutate_user_rule(
-            repo,  # type: ignore[arg-type]
-            "u1",
-            folder_id=None,
-            action="write",
-            name="回复语言.md",
-            content="以后都用中文回复",
-            apply="always",
-        )
-    assert "配额" in ei.value.message
-    assert ei.value.file == "回复语言.md"
-    assert repo.upserted is False
+    written = await mutate_user_rule(
+        repo,  # type: ignore[arg-type]
+        "u1",
+        folder_id=None,
+        action="write",
+        name="回复语言.md",
+        content="以后都用中文回复",
+        description="回复语言",
+    )
+    assert written.ok and written.changed
+    assert repo.docs["回复语言.md"].description == ""
 
 
 @pytest.mark.anyio
@@ -330,8 +313,9 @@ async def test_mutate_rewrite_omitted_apply_keeps_existing_tier(
         name="回复语言.md",
         content="新正文",
     )
-    assert rewritten.ok and rewritten.apply == "always"
-    assert "常驻" in rewritten.message
+    assert rewritten.ok and rewritten.apply == "on_demand"
+    assert "按需" in rewritten.message
+    assert repo.docs["回复语言.md"].description == ""
 
 
 class _FakeSession:

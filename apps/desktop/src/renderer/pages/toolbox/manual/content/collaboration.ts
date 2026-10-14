@@ -3,14 +3,14 @@ import { MANUAL_SECTION_IDS, manualHref } from "../sectionIds";
 import type { ManualChapterContent } from "../types";
 
 /**
- * 指挥你的团队 —— 结构化内容源（无 JSX）。
+ * 看这张图 —— 结构化内容源（无 JSX）。
  *
  * 口径：按用户动作排；去重、去内部名；真组件演示归机制章。
  */
 export const collaborationChapter: ManualChapterContent = {
   id: "collaboration",
   path: APP_PATHS.toolbox.manual.collaboration,
-  label: "指挥你的团队",
+  label: "看这张图",
   sections: [
     {
       id: MANUAL_SECTION_IDS.collaboration.briefing,
@@ -20,7 +20,7 @@ export const collaborationChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "把目标说清楚，团队产出才准。能直接答的 CEO 自己答；要动手做的才拉团队——角色由 CEO 临时分配，你不用点名。",
+          text: "把目标说清楚。能直接答的，对着你的这扇窗自己答。要拆开做，它再开几段，你不用点名谁来做。",
         },
         {
           type: "paragraph",
@@ -66,7 +66,7 @@ export const collaborationChapter: ManualChapterContent = {
           items: [
             {
               title: "并行",
-              desc: "「分三路并行调研：竞品定价、用户痛点、渠道策略，各自产出一页摘要后由你汇总。」",
+              desc: "「分三路同时查：竞品定价、用户痛点、渠道策略，各自留下一段结论。」",
             },
             {
               title: "串行",
@@ -92,7 +92,7 @@ export const collaborationChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "干到哪了、谁在忙、有没有卡住——聊天里随时能看见，想看大图再放大。",
+          text: "一场对话一张图。右上角「图」在正文和整列画布之间切换。图上只有一种节点：一段工作，从打开到封口。",
         },
         {
           type: "paragraph",
@@ -104,7 +104,7 @@ export const collaborationChapter: ManualChapterContent = {
           items: [
             {
               title: "聊天视图",
-              desc: "唯一的常驻视图：流式输出 + 内嵌协作图 + 状态条，编制与进度一眼可见。",
+              desc: "正文是对着你的这扇窗在说的话。图不嵌在每一条回复里。",
             },
             {
               title: "在画布打开",
@@ -199,7 +199,7 @@ export const collaborationChapter: ManualChapterContent = {
         {
           type: "callout",
           variant: "tip",
-          text: "某个队员干到一半卡住，会单独「升级」上来问你——不会拖住其他还在并行跑的队员。关掉窗口也没关系：停在检查点的任务会被存住，下次从断点续。",
+          text: "某一段答不了，问题回到对着你的这扇窗。别的段继续。关掉窗口也没关系：停在检查点的那段会留下，下次接着问。",
         },
       ],
     },
@@ -303,7 +303,7 @@ export const collaborationChapter: ManualChapterContent = {
                 ),
               },
             },
-            "。收场后还想再辩？直接对 CEO 说话——会重开一场，而不是复活上一场。",
+            "。收场后还想再辩？直接说——会重开一场，而不是复活上一场。",
           ],
         },
       ],
@@ -315,7 +315,7 @@ export const collaborationChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "跑偏了不用干等——随时能停、能纠偏、能续派。",
+          text: "跑偏了不用干等。停止在输入框，停的是对着你的这一轮。",
         },
         {
           type: "bullets",
@@ -325,20 +325,20 @@ export const collaborationChapter: ManualChapterContent = {
               desc: "太慢或方向不对，点停止结束当前回合。",
             },
             {
-              title: "让主 Agent 停某个队员",
-              desc: "说一声即可，它停的是那一个人，不必你再点按钮。这和停掉本机正在跑的程序不是一回事。",
+              title: "停某一段",
+              desc: "直接说停哪一段。这和停掉本机正在跑的程序不是一回事。",
             },
             {
-              title: "团队还在跑时说话",
-              desc: "直接发送马上给主 Agent。要等团队收工后再说，点「排队」。只改某一人仍走详情「立即改此人」。",
+              title: "图还在跑时说话",
+              desc: "直接发送，马上进对着你的这扇窗。要等这段收工后再说，点「排队」。改某一段的方向，走详情「改这一段」。",
             },
             {
               title: "纠偏换方向",
-              desc: "对某个队员点「立即改此人」：取消当前执行、带已有进度换方向。辩论回合不可用——想改辩题请重开一场。",
+              desc: "对某一段点「改这一段」：取消当前执行、带已有进度换方向。辩论另开，不在这张图里改。",
             },
             {
-              title: "带现场续派",
-              desc: "产物大致对、只改局部：唤回原队员带完整现场接着改（口语也叫「同人接续」），图上还是同一个人，右坞往下接新过程。不是从零重来。",
+              title: "接着做",
+              desc: "产物大致对、只改局部：再开一段，接在已经看见的结论上。不是从零重来。",
             },
             {
               title: "辩论进行中说话",
@@ -346,7 +346,7 @@ export const collaborationChapter: ManualChapterContent = {
             },
             {
               title: "续聊或再发",
-              desc: "部分队员失败时，失败会留在图上可见；对 CEO 续聊或再发一条，让团队接着补。",
+              desc: "有段失败时，失败留在图上。再发一条，用 graph 接在已经看见的结论上补。",
             },
             {
               title: "重新生成",
@@ -357,7 +357,7 @@ export const collaborationChapter: ManualChapterContent = {
         {
           type: "callout",
           variant: "warning",
-          text: "发消息默认是「在现有基础上改」。想彻底换方向，明确说「推翻重来」，或用重新生成。续派适合局部打磨；整轮方向错了用重新生成。",
+          text: "发消息默认是在现有结论上接着做。想彻底换方向，明确说「推翻重来」，或用重新生成。",
         },
       ],
     },
@@ -472,7 +472,7 @@ export const collaborationChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "按需那一句是目录上的找书签。只写名词，CEO 往往翻不到；写清干什么、什么时候用，才会在对的时候打开。",
+          text: "按需那一句是目录上的找书签。只写名词，往往翻不到；写清干什么、什么时候用，才会在对的时候打开。",
         },
         {
           type: "paragraph",
@@ -507,7 +507,7 @@ export const collaborationChapter: ManualChapterContent = {
         },
         {
           type: "paragraph",
-          text: "按需、我的、市场上来的：这一句同时说清干什么、什么时候该翻开。空着可以保存，但 CEO 不会主动翻；要当场用就 @。上架到市场必须有这句。",
+          text: "按需、我的、市场上来的：这一句同时说清干什么、什么时候该翻开。空着可以保存，但不会主动翻；要当场用就 @。上架到市场必须有这句。",
         },
         {
           type: "doDont",

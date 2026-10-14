@@ -49,6 +49,7 @@ CHAIN = (OUTER, MIDDLE, CURRENT)
 class _Doc:
     name: str
     content: str
+    description: str = ""
 
 
 class _FakeRuleRepo:
@@ -170,7 +171,8 @@ async def test_an_unknown_folder_has_no_chain_at_all(monkeypatch):
 # --- 本机 DB 路 -------------------------------------------------------------------------
 
 
-async def test_user_rules_inject_global_then_ancestors_then_current():
+async def test_user_rules_do_not_fill_settings():
+    """未入目录的正文不进 `<设定>`。"""
     repo = _FakeRuleRepo(
         always={
             None: [_Doc("全局.md", "- 全局规则")],
@@ -182,20 +184,15 @@ async def test_user_rules_inject_global_then_ancestors_then_current():
     md = compose_injected_rules(
         await _user_rule_fragments(repo, "u1", scope_chain=CHAIN)  # type: ignore[arg-type]
     )
-    positions = [md.index(t) for t in ("全局规则", "外层规则", "中层规则", "当前规则")]
-    assert positions == sorted(positions)
-    assert md.count(_ANCESTOR_SETTINGS_LABEL) == 2
-    assert md.count(_FOLDER_SETTINGS_LABEL) == 1
+    assert md == ""
 
 
-async def test_ancestor_layers_name_the_desk_not_a_wording_override():
-    """同名由解析丢掉远的那份。层标签只说这是上层文件夹。"""
+async def test_unenrolled_rules_do_not_enter_settings():
     repo = _FakeRuleRepo(always={OUTER: [_Doc("外层.md", "- 外层规则")]})
     md = compose_injected_rules(
         await _user_rule_fragments(repo, "u1", scope_chain=CHAIN)  # type: ignore[arg-type]
     )
-    assert "以更近的为准" not in md
-    assert md.index(_ANCESTOR_SETTINGS_LABEL) < md.index("外层规则")
+    assert md == ""
 
 
 async def test_ai_notes_do_not_inject_with_user_rules():
@@ -216,29 +213,34 @@ async def test_ai_notes_do_not_inject_with_user_rules():
         folder_id=CURRENT,
         scope_chain=(OUTER, CURRENT),
     )
-    assert "当前规则" in md
+    assert md == ""
     assert "外层画像" not in md
     assert "当前画像" not in md
     assert "当前导航" not in md
 
 
-async def test_same_name_keeps_only_the_nearest_body():
-    """常驻同名：最近的桌子整份替换外层，不把两份正文拼在一起。"""
+async def test_same_name_keeps_only_the_nearest_catalog_body():
+    """同名只留最近一张已入目录的桌。"""
     repo = _FakeRuleRepo(
-        always={
-            OUTER: [_Doc("用户规则.md", "- 一律用英文写提交信息")],
-            CURRENT: [_Doc("用户规则.md", "- 本仓提交用中文")],
+        on_demand={
+            OUTER: [_Doc("用户规则.md", "- 一律用英文写提交信息", "外层")],
+            CURRENT: [_Doc("用户规则.md", "- 本仓提交用中文", "当前")],
         }
     )
-    md = await assemble_injected_rules(
-        _FakeMemoryStore({}),  # type: ignore[arg-type]
-        repo,  # type: ignore[arg-type]
-        "u1",
-        folder_id=CURRENT,
-        scope_chain=(OUTER, CURRENT),
+    from agentcore.memory.rule_resolve import resolve_rules
+    from agentcore.memory.rules_injection import _scope_live_rules
+    from agentcore.memory.scope_chain import ancestor_scopes
+
+    ancestors = ancestor_scopes(CHAIN)
+    live = await _scope_live_rules(repo, "u1", None, 0)  # type: ignore[arg-type]
+    for index, scope in enumerate(ancestors, start=1):
+        live.extend(await _scope_live_rules(repo, "u1", scope, index))  # type: ignore[arg-type]
+    live.extend(
+        await _scope_live_rules(repo, "u1", CHAIN[-1], len(ancestors) + 1)  # type: ignore[arg-type]
     )
-    assert "本仓提交用中文" in md
-    assert "一律用英文写提交信息" not in md
+    bodies = [rule.content for rule in resolve_rules(live).on_demand]
+    assert any("本仓提交用中文" in body for body in bodies)
+    assert all("一律用英文写提交信息" not in body for body in bodies)
 
 
 async def test_assemble_layers_user_rules_by_scope():
@@ -256,12 +258,7 @@ async def test_assemble_layers_user_rules_by_scope():
         folder_id=CURRENT,
         scope_chain=(OUTER, CURRENT),
     )
-    order = ("全局规则", "外层规则", "当前规则")
-    positions = [md.index(t) for t in order]
-    assert positions == sorted(positions)
-    assert "专属规则" not in md
-    assert "专属记忆" not in md
-    assert "专属设定" in md
+    assert md == ""
 
 
 async def test_no_chain_means_current_layer_only():
@@ -302,9 +299,7 @@ def test_cloud_rules_payload_labels_ancestors_ahead_of_current():
     md = compose_injected_rules(
         _user_rule_fragments_from_cloud(payload, folder_id=CURRENT)
     )
-    positions = [md.index(t) for t in ("全局规则", "外层规则", "中层规则", "当前规则")]
-    assert positions == sorted(positions)
-    assert md.count(_ANCESTOR_SETTINGS_LABEL) == 2
+    assert md == ""
 
 
 def test_older_cloud_without_ancestor_keys_simply_does_not_inherit():
@@ -315,8 +310,7 @@ def test_older_cloud_without_ancestor_keys_simply_does_not_inherit():
     md = compose_injected_rules(
         _user_rule_fragments_from_cloud(payload, folder_id=CURRENT)
     )
-    assert "全局规则" in md and "当前规则" in md
-    assert _ANCESTOR_SETTINGS_LABEL not in md
+    assert md == ""
 
 
 def test_cloud_untagged_ancestors_zip_when_counts_match():
@@ -332,8 +326,7 @@ def test_cloud_untagged_ancestors_zip_when_counts_match():
     md = compose_injected_rules(
         _user_rule_fragments_from_cloud(payload, folder_id=CURRENT)
     )
-    assert md.index("外层规则") < md.index("中层规则")
-    assert md.count(_ANCESTOR_SETTINGS_LABEL) == 2
+    assert md == ""
 
 
 def test_cloud_untagged_ancestors_bag_on_outermost_when_counts_differ():
@@ -350,8 +343,7 @@ def test_cloud_untagged_ancestors_bag_on_outermost_when_counts_differ():
     md = compose_injected_rules(
         _user_rule_fragments_from_cloud(payload, folder_id=CURRENT)
     )
-    assert "规则甲" in md and "规则乙" in md and "规则丙" in md
-    assert md.count(_ANCESTOR_SETTINGS_LABEL) == 1
+    assert md == ""
 
 
 def test_cloud_ancestor_rules_without_chain_dump_as_one_layer():
@@ -362,8 +354,7 @@ def test_cloud_ancestor_rules_without_chain_dump_as_one_layer():
     md = compose_injected_rules(
         _user_rule_fragments_from_cloud(payload, folder_id=CURRENT)
     )
-    assert md.index("外层规则") < md.index("当前规则")
-    assert _ANCESTOR_SETTINGS_LABEL in md
+    assert md == ""
 
 
 def test_a_chain_that_does_not_contain_this_folder_is_refused():
@@ -386,9 +377,7 @@ def test_cloud_empty_folder_chain_means_the_desk_is_gone():
     md = compose_injected_rules(
         _user_rule_fragments_from_cloud(payload, folder_id=CURRENT)
     )
-    assert "全局规则" in md
-    assert "外层规则" not in md
-    assert "当前规则" not in md
+    assert md == ""
     assert cloud_scope_chain({"folder_chain": []}, CURRENT) == ()
 
 
@@ -470,7 +459,7 @@ async def test_ticketed_turn_injects_the_inherited_layers(account_creds):
             "u1",
             folder_id=CURRENT,
         )
-    assert "外层规则" in md
+    assert md == ""
     assert "外层画像" not in md
     assert "当前画像" not in md
 
@@ -499,9 +488,8 @@ async def test_ticketed_turn_skips_dead_desk_settings(account_creds):
             "u1",
             folder_id=CURRENT,
         )
-    assert "全局规则" in md
+    assert md == ""
     assert "沟通偏好" not in md
-    assert "当前规则" not in md
     assert "当前画像" not in md
 
 

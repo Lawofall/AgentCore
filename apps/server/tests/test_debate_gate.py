@@ -254,40 +254,6 @@ def test_note_delegate_batches_marks_debate_executed():
 
 
 @pytest.mark.asyncio
-async def test_selected_debate_not_executed_fires_nudge():
-    # Debate gate only: one discarded wrap-up draft, then real delivery.
-    # Without audit_hard the audit gate does not burn another round.
-    delegate = _StubTool("delegate")
-    history = [
-        LLMMessage(role="tool", content=_settled_reply_with_form("辩论（正反攻防）")),
-    ]
-    provider = _ScriptedProvider(
-        [
-            [_tool_chunk("delegate", json.dumps({"tasks": [{"role": "a", "task": "t"}]}), call_id="d1")],
-            [_content_chunk("汇总已含论证，直接收官")],
-        ]
-    )
-    content, messages = await _run_captain(provider, _registry(delegate), history=history)
-    assert content == "汇总已含论证，直接收官"
-    assert _debate_gate_msgs(messages) == []
-
-
-@pytest.mark.asyncio
-async def test_no_selection_does_not_fire():
-    # No debate signal → debate gate silent; no audit_hard → no audit burn either.
-    delegate = _StubTool("delegate")
-    provider = _ScriptedProvider(
-        [
-            [_tool_chunk("delegate", json.dumps({"tasks": [{"role": "a", "task": "t"}]}), call_id="d1")],
-            [_content_chunk("综述交付")],
-        ]
-    )
-    content, messages = await _run_captain(provider, _registry(delegate))
-    assert content == "综述交付"
-    assert _debate_gate_msgs(messages) == []
-
-
-@pytest.mark.asyncio
 async def test_already_executed_debate_does_not_fire():
     history = [
         LLMMessage(role="tool", content=_settled_reply_with_form("辩论（正反攻防）")),

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from agentcore.core.types import WorkspaceBoundary
 from agentcore.runtime.approvals import ApprovalGate
-from agentcore.runtime.delegate.drive_setup import apply_delegation_grant
+from agentcore.runtime.graph.drive.drive_setup import apply_delegation_grant
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import InteractionRegistry
 

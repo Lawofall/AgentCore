@@ -48,9 +48,11 @@ import { WholeFilePasteHint } from "./WholeFilePasteHint";
 import type { MessageBubbleProps } from "./types";
 
 function spendLabel(run: RunNode, agents: AgentState[]): string {
+  const task = run.task.trim();
+  if (task) return task;
   const titled = agents.find((agent) => agent.id === run.agentId)?.role.trim();
-  if (titled) return titled;
-  return run.role === "captain" ? "队长" : "队员";
+  if (titled && titled !== "CEO") return titled;
+  return "这段";
 }
 
 function invoiceRuns(execution: Execution): SpendRun[] {

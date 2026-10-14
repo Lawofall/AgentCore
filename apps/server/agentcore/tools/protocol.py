@@ -241,7 +241,7 @@ class TurnPromotionLedger:
     天然隔离并发回合。
 
     ``reconciliation`` = 本回合最近一次 ``delivery_status`` 载荷。``promotions`` =
-    路径改写表（空则 :func:`~agentcore.runtime.delegate.promotion.apply_turn_promotions`
+    路径改写表（空则 :func:`~agentcore.runtime.graph.drive.delivery_status.apply_turn_promotions`
     no-op）。live 不再写入搬家行。
 
     ``delivery_verdict`` = 同一对象上的收口档位槽（``DeliveryVerdict | None``）。
@@ -378,6 +378,16 @@ class ToolContext:
     # to "" for unscoped call sites (tests / evals) — a tool simply skips its
     # conversation-scoped optimisation when this is empty.
     conversation_id: str = ""
+    # Direct upstream segment ids for this execution's first think. Empty means
+    # the line starts at a root. ``record_step_segments`` is set on scheduled
+    # lines so each think is drawn; debate speakers leave it off.
+    step_upstream: tuple[str, ...] = ()
+    record_step_segments: bool = False
+    # Goal of this scheduled run. The first LLM call on that run uses it as
+    # the segment title; later calls in the same run do not.
+    step_goal: str = ""
+    # Set on the per-call context copy so parallel actions do not share one id.
+    current_action_id: str = ""
     # Session permission axes as JSON (PermissionAxes.to_dict()). Used by sandbox
     # network grading (P2: command=auto → restricted egress on cloud gVisor).
     permission_axes: str | None = None

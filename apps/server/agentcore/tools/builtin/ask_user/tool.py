@@ -43,7 +43,7 @@ class AskUserTool:
     """The CEO's asking primitive: surface a card, suspend, resume on the answer.
 
     Constructed per turn where the sink is available (mirrors ``ApprovalGate`` /
-    ``DelegateTool``): ``sink`` carries the prompt + resolution to the client,
+    ``GraphTool``): ``sink`` carries the prompt + resolution to the client,
     ``timeout_seconds`` is the ops-configured wait bound (default unlimited / D2 —
     ``None`` at settings maps to a large sentinel).
 
@@ -70,7 +70,7 @@ class AskUserTool:
     captain_run_id: str | None = None
     base_system_prompt: str = ""
     user_message: str = ""
-    # Prior conversation turns (same shape as DelegateTool._history); captured on
+    # Prior conversation turns (same shape as GraphTool._history); captured on
     # suspend for resume parity. Leftover team_preview / plan_review resolved
     # facts do not skip a live ask.
     history: list[dict[str, Any]] | None = None
@@ -186,11 +186,11 @@ class AskUserTool:
         # ⇒ 挂起即收口 (②); save failure ⇒ explicit error (no in-memory wait fallback).
         # CEO 协调模式 Phase 2: snapshot coordination state into the journal before
         # SUSPEND so resume can rebuild draft / completed / budget.
-        from agentcore.runtime.coordination.session import resolve_coordination_session
+        from agentcore.runtime.graph.session.session import resolve_coordination_session
 
         coord = resolve_coordination_session(context.execution_id)
         if coord is not None:
-            from agentcore.runtime.coordination.journal import record_coordination_snapshot
+            from agentcore.runtime.graph.session.journal import record_coordination_snapshot
 
             record_coordination_snapshot(coord)
             # Soft-stop the background scheduler — resume re-drives unfinished workers
@@ -199,7 +199,7 @@ class AskUserTool:
             # events (no ALL_COMPLETED / DRIVE_CANCELLED in the hang-frame snapshot).
             if coord.drive_task is not None and not coord.drive_task.done():
                 coord.soft_stop = True
-                from agentcore.runtime.coordination.drive_cancel import (
+                from agentcore.runtime.graph.session.drive_cancel import (
                     cancel_drive_task,
                 )
 

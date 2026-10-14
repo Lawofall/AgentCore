@@ -269,7 +269,7 @@ def test_resolve_from_live_sse_objects():
 
 def test_salvage_stamps_partial_when_ledger_verdict_partial():
     """end_turn with no SSE partial bits still follows delivery_verdict.partial."""
-    from agentcore.runtime.delegate.delivery_status import (
+    from agentcore.runtime.graph.drive.delivery_status import (
         DeliveryVerdict,
         bind_delivery_verdict,
         current_delivery_verdict,

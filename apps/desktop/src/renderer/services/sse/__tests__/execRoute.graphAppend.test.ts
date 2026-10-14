@@ -203,7 +203,7 @@ describe("execMessageId graph routing", () => {
     );
   });
 
-  it("host_message_id run_plan still merges onto m1 without inserting team on m2", () => {
+  it("host_message_id does not suppress the team marker on the current turn", () => {
     dispatchSSEEvent(
       {
         type: "message_start",
@@ -294,12 +294,12 @@ describe("execMessageId graph routing", () => {
       { conversationId: CONV, source: "server" },
     );
 
-    // Plan merges onto host; m2 stays without its own plan/team.
+    // 同一张执行单仍合进已有槽；旧字段不再挡住当前这轮的图标记。
     const m2 = useConversationStore
       .getState()
       .byId[CONV].messages.find((m) => m.serverMessageId === "m2");
     expect(useExecutionStore.getState().byId.m1?.plan?.runs.length).toBe(2);
     expect(useExecutionStore.getState().byId.m2?.plan).toBeFalsy();
-    expect(m2?.process?.some((s) => s.kind === "team")).toBeFalsy();
+    expect(m2?.process?.some((s) => s.kind === "team")).toBe(true);
   });
 });

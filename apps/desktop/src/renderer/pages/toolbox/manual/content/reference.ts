@@ -228,7 +228,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "CEO 判断这件事一个人答更快，就直接干、不派队员。要并行、独立验证、成篇，或你明确要求多人时，才会组团。",
+                  text: "对着你的这扇窗判断这件事直接答更快，就自己答，不再开段。要并行、独立验证、成篇，或你明确要求拆开时，才会再开几段。",
                 },
               ],
             },
@@ -276,7 +276,7 @@ export const referenceChapter: ManualChapterContent = {
                 {
                   type: "text",
                   text: [
-                    "团队还在跑时直接发送马上给主 Agent；要等收工后再说点「排队」。只改某一人走详情「立即改此人」。局部不满意可带现场续派唤回原队员；方向全错用重新生成或明说「推翻重来」；太慢就点停止。展开见 ",
+                    "图还在跑时直接发送，马上进对着你的这扇窗；要等收工后再说点「排队」。改某一段走详情「改这一段」。局部不满意就再开一段，接在已经看见的结论上；方向全错用重新生成或明说「推翻重来」；太慢就点停止。展开见 ",
                     {
                       text: "中途插手",
                       link: {
@@ -313,7 +313,7 @@ export const referenceChapter: ManualChapterContent = {
                 {
                   type: "text",
                   text: [
-                    "按需那一句要写清干什么、什么时候翻开；空着 CEO 不会主动翻，当场用就 @。展开见 ",
+                    "按需那一句要写清干什么、什么时候翻开；空着不会主动翻，当场用就 @。展开见 ",
                     {
                       text: "怎么写提示词",
                       link: {
@@ -400,7 +400,7 @@ export const referenceChapter: ManualChapterContent = {
                       text: "设置 · 用量",
                       link: { kind: "go", to: APP_PATHS.more.usage },
                     },
-                    " 看花费与额度；复杂任务（多队员、更强模型、更高思考强度）会更贵。手机 ☰ 打开侧栏进「设置」再点「用量」。想把思考强度调低：桌面「设置 · 装配」/ 手机同路径把思考强度调到 low。",
+                    " 看花费与额度；复杂任务（开的段多、更强模型、更高思考强度）会更贵。手机 ☰ 打开侧栏进「设置」再点「用量」。想把思考强度调低：桌面「设置 · 装配」/ 手机同路径把思考强度调到 low。",
                   ],
                 },
               ],
@@ -562,7 +562,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "多半卡在某个队员或外部工具。点停止结束本回合（协作图呈「已停止」），或发消息追问状态；长任务可中途打断，下次从断点续跑。",
+                  text: "多半卡在某一段或外部工具。点停止结束对着你的这一轮（图上呈「已停止」），或发消息追问状态；长任务可中途打断，下次从断点续跑。",
                 },
               ],
             },
@@ -586,7 +586,7 @@ export const referenceChapter: ManualChapterContent = {
                       text: "设置 · 用量",
                       link: { kind: "go", to: APP_PATHS.more.usage },
                     },
-                    " 对明细：多队员并行、更强模型、更高思考强度都会抬高单次成本。可换更省的模型、到 ",
+                    " 对明细：同时开的段多、更强模型、更高思考强度都会抬高单次成本。可换更省的模型、到 ",
                     {
                       text: "设置 · 装配",
                       link: { kind: "go", to: APP_PATHS.more.model },
@@ -660,20 +660,20 @@ export const referenceChapter: ManualChapterContent = {
           type: "faq",
           items: [
             {
-              q: "CEO",
+              q: "对着你的这扇窗",
               a: [
                 {
                   type: "text",
-                  text: "主 Agent——本回合对话 + 按需组团 + 收尾汇报。你只跟它对接；用户才是最终决策者。",
+                  text: "同一时刻有一扇窗在跟你说话。正文是这扇窗的话。要拆开做，由它再开段。",
                 },
               ],
             },
             {
-              q: "队员",
+              q: "一段",
               a: [
                 {
                   type: "text",
-                  text: "被 CEO 委派干某个子任务的 Agent（worker）；干完即走。中文一律称「队员」。",
+                  text: "图上的一个节点：从打开到封口。不是一个人。封口后别的段只拿得到结论。",
                 },
               ],
             },
@@ -682,7 +682,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "你与团队的一通聊天单元（对话页 / 对话列表）。中文一律「对话」指这层实体。",
+                  text: "你和这扇窗的一通聊天（对话页 / 对话列表）。一场对话一张图。中文一律「对话」指这层实体。",
                 },
               ],
             },
@@ -700,7 +700,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "把本次任务的分工、依赖、进度画成的一张实时图。",
+                  text: "这一场对话的图。段和段靠依赖相连。右上角「图」在正文和画布之间切换。",
                 },
               ],
             },
@@ -736,7 +736,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "团队停下来等你拍板的卡片（问答、计划评审、续跑等）——心智是「团队请示领导」。",
+                  text: "对着你的这扇窗停下来等你拍板的卡片（问答、计划评审等）。",
                 },
               ],
             },
@@ -768,11 +768,11 @@ export const referenceChapter: ManualChapterContent = {
               ],
             },
             {
-              q: "带现场续派（同人接续）",
+              q: "接着做",
               a: [
                 {
                   type: "text",
-                  text: "唤回刚干完的同一队员，带着完整现场接着改稿或接强相关新任务——不是新队员从零来。",
+                  text: "再开一段，接在这扇窗已经看见的结论上接着改。不是从零重来。",
                 },
               ],
             },
@@ -781,7 +781,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "同一现场根在图上仍是一个座位（可挂「续 ×N」角标）；各版在右坞往下接，不另开节点。有接续标记才是同人，无标记的同角色再委派仍是冷启动新人。辩论轮次仍分列。",
+                  text: "接着做的几版可以挂在同一段上（可挂「续 ×N」角标），右坞往下接。辩论另开一张图。",
                 },
               ],
             },

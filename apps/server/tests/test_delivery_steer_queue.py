@@ -244,7 +244,7 @@ async def test_coord_queue_skips_interjection(monkeypatch):
     coord.execution_id = "exec-1"
     coord.post = MagicMock(return_value=True)
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        "agentcore.runtime.graph.session.session.active_coordination_for_conversation",
         lambda _cid: coord,
     )
     monkeypatch.setattr(
@@ -307,7 +307,7 @@ async def test_classic_steer_parks_on_live_turn(monkeypatch):
     turn_steer_mod.begin_accepting(cid, execution_id="exec-classic")
 
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        "agentcore.runtime.graph.session.session.active_coordination_for_conversation",
         lambda _cid: None,
     )
     monkeypatch.setattr(messages_mod, "enforce_user_message_rate_limit", AsyncMock())
@@ -361,7 +361,7 @@ async def test_classic_steer_degrades_to_queue_without_accepting(monkeypatch):
     turn_runs.register(conversation_id=cid, task=blocker, sink=EventSink())
 
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        "agentcore.runtime.graph.session.session.active_coordination_for_conversation",
         lambda _cid: None,
     )
     monkeypatch.setattr(messages_mod, "enforce_user_message_rate_limit", AsyncMock())
@@ -538,7 +538,7 @@ async def test_coord_steer_posts_interjection(monkeypatch):
     coord.post = MagicMock(return_value=True)
     coord.stash_interjection = MagicMock()
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        "agentcore.runtime.graph.session.session.active_coordination_for_conversation",
         lambda _cid: coord,
     )
     monkeypatch.setattr(messages_mod, "enforce_user_message_rate_limit", AsyncMock())
@@ -595,7 +595,7 @@ async def test_deliver_queued_item_to_captain_posts_and_keeps_siblings(monkeypat
     coord.stash_interjection = MagicMock()
     coord.take_interjection = MagicMock()
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        "agentcore.runtime.graph.session.session.active_coordination_for_conversation",
         lambda _cid: coord,
     )
     target = new_queued_turn(
@@ -645,7 +645,7 @@ async def test_deliver_queued_item_to_captain_keeps_queue_without_team(monkeypat
     cid = "c-to-captain-idle"
     turn_queue.clear(cid)
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        "agentcore.runtime.graph.session.session.active_coordination_for_conversation",
         lambda _cid: None,
     )
     item = new_queued_turn(content="还在队里", user_id="u")
@@ -673,7 +673,7 @@ async def test_to_captain_route_conflict_when_team_gone(monkeypatch):
         messages_mod, "_require_conversation_write", AsyncMock(return_value=None)
     )
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        "agentcore.runtime.graph.session.session.active_coordination_for_conversation",
         lambda _cid: None,
     )
     item = new_queued_turn(content="留着", user_id="u")

@@ -26,6 +26,7 @@ function isSystemSnapshotLabel(label: string): boolean {
   if (SYSTEM_EXACT_LABELS.has(label)) return true;
   if (label.startsWith("turn-baseline:")) return true;
   if (label.startsWith("handoff:")) return true;
+  if (label.startsWith("seal:")) return true;
   return false;
 }
 
@@ -45,6 +46,7 @@ export function classifySnapshotLabel(label: string | null): SnapshotKind {
 function isHiddenSnapshotLabel(label: string | null): boolean {
   if (!label) return false;
   if (label.startsWith("turn-baseline:")) return true;
+  if (label.startsWith("seal:")) return true;
   return SYSTEM_EXACT_LABELS.has(label);
 }
 

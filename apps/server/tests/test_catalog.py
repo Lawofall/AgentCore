@@ -22,7 +22,7 @@ from agentcore.tools.catalog import (
 # What the CEO holds beyond the read-only built-ins (mirrors pipeline._assemble_ceo_toolset).
 # ``consult`` is AUDIENCE_BOTH — asserted separately.
 _CEO_ORCHESTRATION = {
-    "delegate",
+    "graph",
     "replan",
     "debate",
     "folders",
@@ -214,7 +214,7 @@ def test_tool_blurbs_stay_off_directory_and_prompt():
 # Display face ≠ ceo_orchestration surface. Pin so Folder tools
 # cannot slide back into the orchestration dumpster.
 _CATALOG_FACE: dict[str, ToolFace] = {
-    "delegate": ToolFace.ORCHESTRATION,
+    "graph": ToolFace.ORCHESTRATION,
     "replan": ToolFace.ORCHESTRATION,
     "debate": ToolFace.ORCHESTRATION,
     "consult": ToolFace.ORCHESTRATION,

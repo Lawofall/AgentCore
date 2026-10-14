@@ -173,7 +173,7 @@ describe("ProcessTimeline · 正文不进过程折", () => {
     expect(screen.getByText("结论")).toBeTruthy();
   });
 
-  it("puts the team graph on the slot lane immediately after the answer", () => {
+  it("does not leave a graph slot in the reply", () => {
     const { container } = renderTimeline(
       [
         { kind: "reasoning", text: "先想" },
@@ -183,9 +183,7 @@ describe("ProcessTimeline · 正文不进过程折", () => {
       ],
       false,
     );
-    const answer = container.querySelector(".process-answer");
-    const slot = container.querySelector(".process-slot");
-    expect(slot).toBeTruthy();
-    expect(answer?.nextElementSibling).toBe(slot);
+    expect(container.querySelector(".process-answer")).toBeTruthy();
+    expect(container.querySelector(".process-slot")).toBeNull();
   });
 });

@@ -400,15 +400,9 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
         elif etype == "run_plan":
             ip = p.get("execution_id")
             act = _act_from_plan(p)
-            # 跨回合同图追加：带 host_message_id 的生长 run_plan 不插新 team 标记
-            # （旧 divert 锚点已退役；宿主回合已有 team）。新路径无此字段 → 本回合开图。
             # 协作图时间线落点：某 execution 的首张 run_plan 钉零宽 `team` 标记
             # （同 id 后续批次并进同一张图）。与 EventSink._accumulate_process 同形。
-            if (
-                not p.get("host_message_id")
-                and ip
-                and not has_marker("team", "execution_id", ip)
-            ):
+            if ip and not has_marker("team", "execution_id", ip):
                 process.append({"kind": "team", "execution_id": ip})
             if plan_id is None or plan_id == ip:
                 plan_id = ip
@@ -671,6 +665,15 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
                 run.pop("phase", None)
                 run.pop("phaseTool", None)
             # Agent never started — leave idle (no currentRunId / toolProgress to clear).
+
+        elif etype == "graph_rewind":
+            for rid in p.get("cut_run_ids") or []:
+                run = run_by_id(str(rid))
+                if run is None:
+                    continue
+                run["status"] = "cut"
+                run.pop("phase", None)
+                run.pop("phaseTool", None)
 
         elif etype == "run_progress":
             # Progress is derived from run states below (cumulative, multi-batch safe);

@@ -31,7 +31,7 @@ from agentcore.tools.builtin import (
 )
 from agentcore.tools.builtin.ask_user import AskUserTool
 from agentcore.tools.builtin.consult import ConsultTool
-from agentcore.tools.builtin.delegate import DelegateTool
+from agentcore.tools.builtin.graph import GraphTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registration import register_always_ceo_tools
 from agentcore.tools.registry import ToolRegistry
@@ -99,14 +99,14 @@ def _assemble_ceo_toolset(
     advertise_bind_local_folder: bool = False,
     desktop_online: bool = False,
     worker_envelope: str = "",
-) -> tuple[DelegateTool, Any, ToolRegistry]:
+) -> tuple[GraphTool, Any, ToolRegistry]:
     """Wire the CEO coordinator's toolset (delegate + read/retrieval + consult + …).
 
     ``consult`` is registered asynchronously by the caller via
     :func:`wire_ceo_consult` after this sync assemble (needs ``user_id`` + await
     the merged source). Returns ``(delegate_tool, debate_tool, chat_tools)``.
     """
-    delegate_tool = DelegateTool(
+    delegate_tool = GraphTool(
         llm=llm,
         sink=sink,
         system_prompt=base_system_prompt,
@@ -140,7 +140,7 @@ def _assemble_ceo_toolset(
     )
     from agentcore.tools.switchboard import switch_blocks
 
-    mount_delegate = not switch_blocks("delegate")
+    mount_delegate = not switch_blocks("graph")
     if mount_delegate:
         chat_tools.register(delegate_tool)
     from agentcore.tools.builtin.debate import DebateTool

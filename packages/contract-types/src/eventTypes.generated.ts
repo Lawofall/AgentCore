@@ -26,6 +26,7 @@ export type SSEEventType =
   | "execution_completed"
   | "execution_detached"
   | "external_mount_required"
+  | "graph_rewind"
   | "handoff_apply_done"
   | "handoff_job_started"
   | "handoff_snapshot_done"
@@ -96,6 +97,7 @@ export const SSE_EVENT_TYPE_VALUES = [
   "execution_completed",
   "execution_detached",
   "external_mount_required",
+  "graph_rewind",
   "handoff_apply_done",
   "handoff_job_started",
   "handoff_snapshot_done",

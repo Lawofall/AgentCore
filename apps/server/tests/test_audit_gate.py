@@ -362,26 +362,6 @@ async def test_light_batch_no_gate():
 
 
 @pytest.mark.asyncio
-async def test_light_batch_with_deps_is_substantial():
-    tasks = [
-        {"role": "甲", "task": "写"},
-        {"role": "乙", "task": "审", "depends_on": ["a"]},
-    ]
-    args = json.dumps({"tasks": tasks}, ensure_ascii=False)
-    delegate = _AuditHardStubTool(name="delegate", face=ToolFace.ORCHESTRATION)
-    provider = _ScriptedProvider(
-        [
-            [_tool_chunk("delegate", args, call_id="d1")],
-            [_content_chunk("草稿")],
-        ]
-    )
-    content, messages = await _run_captain(provider, _registry(delegate))
-
-    assert content == "草稿"
-    assert _audit_gate_msgs(messages) == []
-
-
-@pytest.mark.asyncio
 async def test_worker_role_never_fires():
     delegate = _AuditHardStubTool(name="delegate", face=ToolFace.ORCHESTRATION)
     provider = _ScriptedProvider(

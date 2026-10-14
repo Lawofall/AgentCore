@@ -33,7 +33,7 @@ from agentcore.runtime.skills import (
     render_skill_directory,
 )
 from agentcore.runtime.skills.registry import AUDIENCE_WORKER
-from agentcore.tools.builtin.delegate.schema import (
+from agentcore.tools.builtin.graph.schema import (
     DELEGATE_DESCRIPTION,
     DELEGATE_PARAMETERS,
     DELEGATE_STAFF_HOW,
@@ -44,7 +44,7 @@ from agentcore.tools.builtin.delegate.schema import (
 )
 from agentcore.tools.builtin.run import run_description
 
-_TASK_PROPS = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]
+_NODE_PROPS = DELEGATE_PARAMETERS["properties"]["nodes"]["items"]["properties"]
 _HANDBOOK_SIGNATURES = (
     "wait_for",
     "永不代填密码",
@@ -206,10 +206,10 @@ def test_consult_hook_lives_only_in_the_core():
 def test_delegate_schema_keys_one_layer():
     hint = _CEO_CORE_HINT
     props = DELEGATE_PARAMETERS["properties"]
-    assert "depends_on" in _TASK_PROPS
-    assert "target_folder_id" in _TASK_PROPS
-    assert "artifacts" in _TASK_PROPS
-    assert set(props) == {"tasks", "team_brief"}
+    assert "depends_on" in _NODE_PROPS
+    assert "goal" in _NODE_PROPS
+    assert "id" in _NODE_PROPS
+    assert set(props) == {"nodes", "conclusion"}
     for key in (
         "depends_on",
         "target_folder_id",
@@ -254,7 +254,7 @@ def test_delegate_when_is_shared_window_bound():
     assert DELEGATE_WHEN in DELEGATE_DESCRIPTION
     assert DELEGATE_WHEN in NESTED_DELEGATE_DESCRIPTION
     assert DELEGATE_STAFF_HOW in DELEGATE_DESCRIPTION
-    task_desc = _TASK_PROPS["task"]["description"]
+    task_desc = _NODE_PROPS["goal"]["description"]
     assert task_desc == TASK_FILL_HOW
     assert TASK_FILL_HOW not in DELEGATE_DESCRIPTION
     assert TASK_FILL_HOW not in NESTED_DELEGATE_DESCRIPTION

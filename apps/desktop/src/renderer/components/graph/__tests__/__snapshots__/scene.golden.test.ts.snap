@@ -15,10 +15,7 @@ exports[`buildGraphScene · golden > continuation chain → folded into one seat
   ],
   "beatFoldsByHost": {},
   "debateStages": [],
-  "edges": [
-    "dep:__input__->w1",
-    "dep:w1->captain",
-  ],
+  "edges": [],
   "fold": {
     "debateUnits": [],
     "descendants": {},
@@ -110,8 +107,6 @@ exports[`buildGraphScene · golden > debate multibeat → beat folds into round 
     "continuation:mod_r2_pro->mod_closing_pro",
     "delegate:mod->mod_r1_con",
     "delegate:mod->mod_r1_pro",
-    "dep:__input__->mod",
-    "dep:mod->captain",
   ],
   "fold": {
     "debateUnits": [
@@ -238,10 +233,7 @@ exports[`buildGraphScene · golden > multi-act (≥2) → act bands + acts→uni
   "edges": [
     "delegate:mod->mod_r1_con",
     "delegate:mod->mod_r1_pro",
-    "dep:__input__->lens_0",
     "dep:lens_0->synthesizer",
-    "dep:mod->captain",
-    "dep:synthesizer->captain",
     "dep:synthesizer->mod",
   ],
   "fold": {
@@ -351,12 +343,8 @@ exports[`buildGraphScene · golden > multi-delegate → two 委派 lane bands, n
   "beatFoldsByHost": {},
   "debateStages": [],
   "edges": [
-    "dep:__input__->a",
-    "dep:__input__->c",
     "dep:a->b",
-    "dep:b->captain",
     "dep:c->d",
-    "dep:d->captain",
   ],
   "fold": {
     "debateUnits": [],
@@ -444,8 +432,6 @@ exports[`buildGraphScene · golden > nested sub-team → nested compounds + node
     "delegate:lead->eng1",
     "delegate:lead->eng2",
     "delegate:mpm->lead",
-    "dep:__input__->mpm",
-    "dep:mpm->captain",
   ],
   "fold": {
     "debateUnits": [],

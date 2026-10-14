@@ -295,35 +295,6 @@ async def test_wave_stops_new_dispatch_when_auth_dead():
         reset_turn_auth_dead(token)
 
 
-@pytest.mark.asyncio
-async def test_delegate_execute_rejects_when_auth_dead():
-    from agentcore.tools.builtin.delegate.tool import DelegateTool
-
-    token = bind_turn_auth_dead()
-    try:
-        mark_turn_auth_dead(LLMAuthError(provider_name="user"))
-        tool = DelegateTool(
-            llm=MagicMock(),
-            sink=MagicMock(),
-            system_prompt="",
-            user_message="hi",
-            history=[],
-            tools=MagicMock(),
-            base_tool_context=MagicMock(),
-            approval_gate=None,
-        )
-        tool._tools.list_all = MagicMock(return_value=[])
-        result = await tool.execute(
-            {"tasks": []},
-            MagicMock(),
-        )
-        assert result.success is False
-        assert result.contract_failure is True
-        assert "鉴权" in (result.error or "") or "API Key" in (result.error or "")
-    finally:
-        reset_turn_auth_dead(token)
-
-
 def _ok_response() -> LLMResponse:
     return LLMResponse(
         content="ok",

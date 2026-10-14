@@ -3575,6 +3575,20 @@
             ],
             "title": "Evidence Ledger"
           },
+          "graph_context": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/GraphContextNode"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Context"
+          },
           "reasoning_content": {
             "anyOf": [
               {
@@ -8062,6 +8076,85 @@
           "label"
         ],
         "title": "GrantExternalReadonlyRequest",
+        "type": "object"
+      },
+      "GraphContextNode": {
+        "description": "One sealed segment still visible in this CEO window. Not shown to the model.",
+        "properties": {
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Depends On",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "GraphContextNode",
+        "type": "object"
+      },
+      "GraphRewindRequest": {
+        "properties": {
+          "message_id": {
+            "title": "Message Id",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "restore_files": {
+            "default": false,
+            "title": "Restore Files",
+            "type": "boolean"
+          },
+          "target_run_id": {
+            "title": "Target Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "target_run_id"
+        ],
+        "title": "GraphRewindRequest",
+        "type": "object"
+      },
+      "GraphRewindResponse": {
+        "properties": {
+          "cut_run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cut Run Ids",
+            "type": "array"
+          },
+          "files_restored": {
+            "default": false,
+            "title": "Files Restored",
+            "type": "boolean"
+          },
+          "scar": {
+            "title": "Scar",
+            "type": "string"
+          },
+          "target_run_id": {
+            "title": "Target Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scar",
+          "target_run_id"
+        ],
+        "title": "GraphRewindResponse",
         "type": "object"
       },
       "GroupedConversationsResponse": {
@@ -24735,6 +24828,91 @@
           }
         },
         "summary": "Export Conversation",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/graph/rewind": {
+      "post": {
+        "description": "Point the next window at a sealed segment. The assistant waits for the next sentence.",
+        "operationId": "rewind_graph_v1_conversations__conversation_id__graph_rewind_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphRewindRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphRewindResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rewind Graph",
         "tags": [
           "conversations"
         ]

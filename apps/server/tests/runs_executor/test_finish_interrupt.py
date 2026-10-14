@@ -7,7 +7,7 @@ so CEO collect_worker_gaps surfaces the gap.
 """
 
 from agentcore.llm.provider.protocol import LLMChunk, ToolCallDelta
-from agentcore.runtime.delegate.completion import (
+from agentcore.runtime.graph.drive.completion import (
     collect_worker_gaps,
     format_worker_gaps_block,
 )

@@ -85,7 +85,7 @@ def test_resolve_worker_gate_hands_down_gate_for_mcp_on_cloud():
     """MCP 在云端 worker 上必须有卡可弹；空名册也照传门（该免的卡由收口点免）。"""
     from types import SimpleNamespace
 
-    from agentcore.runtime.delegate.drive_setup import resolve_worker_gate
+    from agentcore.runtime.graph.drive.drive_setup import resolve_worker_gate
     from agentcore.tools.mcp.dynamic import McpDynamicTool
 
     registry = ToolRegistry()
@@ -263,7 +263,7 @@ async def test_mcp_cache_miss_logs_harvest_origin(monkeypatch):
         events.append((event, kwargs))
 
     monkeypatch.setattr("agentcore.tools.mcp.wire.logger.info", _capture)
-    from agentcore.runtime.delegate.post_close_gate import (
+    from agentcore.runtime.graph.admit.post_close_gate import (
         bind_user_message_origin,
         reset_user_message_origin,
     )

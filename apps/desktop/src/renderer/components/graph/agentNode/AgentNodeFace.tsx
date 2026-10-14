@@ -8,6 +8,7 @@ import {
   graphBadgePrimary,
 } from "@/components/ui/tone-presets";
 import { useRunningElapsed } from "@/hooks/useRunningElapsed";
+import { formatLiveElapsed } from "@/lib/format";
 import {
   projectRuntime,
   toolLabel,
@@ -25,6 +26,7 @@ import {
   FACE_CARD_HEIGHT,
   basename,
   escalationKindLabel,
+  failureDetailSentence,
   isDebateAgentNode,
   statusFaceLabel,
 } from "./shared";
@@ -43,6 +45,17 @@ export function AgentNodeCardFace({
 }) {
   const isRunning = d.status === "running";
   const statusOverride = useAgentNodeStopOverride(d.runId, d.status);
+  if (!isDebateAgentNode(d)) {
+    return (
+      <SessionSegmentFace
+        d={d}
+        p={p}
+        flashColor={flashColor}
+        flashing={flashing}
+        statusOverride={statusOverride}
+      />
+    );
+  }
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: graph card hosts nested interactive chrome
@@ -91,7 +104,7 @@ export function AgentNodeCardFace({
         p.visibleFaceBadges.has("handoff") && (
           <span
             className={`absolute -right-1.5 -top-1.5 z-10 flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium shadow-sm ring-2 ring-card ${graphBadgeMuted}`}
-            title="已由新队员接手"
+            title="已由下一段接手"
           >
             {p.handoffFace}
           </span>
@@ -124,6 +137,98 @@ export function AgentNodeCardFace({
       )}
     </div>
   );
+}
+
+/**
+ * Session-graph segment: the goal, the conclusion when this call wrote one,
+ * and a mark only where the card would otherwise be misread.
+ */
+function SessionSegmentFace({
+  d,
+  p,
+  flashColor,
+  flashing,
+  statusOverride,
+}: {
+  d: AgentNodeData;
+  p: AgentNodePresentation;
+  flashColor: string;
+  flashing: boolean;
+  statusOverride: string | null;
+}) {
+  const elapsed = useRunningElapsed(d.status === "running", d.startedAt);
+  const elapsedText =
+    d.status === "running" && statusOverride == null
+      ? formatLiveElapsed(elapsed)
+      : "";
+  const title = d.role.trim() || "这段";
+  const conclusion = segmentConclusion(d, title);
+  const mark =
+    statusOverride ?? (d.status === "cut" ? "已切出" : elapsedText);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={p.ariaLabel}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          d.onActivate?.();
+        }
+      }}
+      style={
+        {
+          "--graph-flash-color": flashColor,
+          width: p.cardWidth,
+          height: FACE_CARD_HEIGHT,
+        } as React.CSSProperties
+      }
+      className={`relative cursor-pointer overflow-hidden rounded-xl border px-3 py-2.5 text-left shadow-sm outline-none ring-2 ${p.style.bg} ${p.style.ring} ${flashing ? "animate-graph-node-flash" : ""} ${
+        p.highlighted
+          ? "outline outline-2 outline-offset-2 outline-primary"
+          : "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary/60"
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        <p className="min-w-0 flex-1 line-clamp-2 text-sm font-medium leading-snug text-foreground">
+          {title}
+        </p>
+        {mark ? (
+          <p
+            className={`shrink-0 text-xs tabular-nums leading-snug ${
+              d.status === "running"
+                ? "text-primary/90"
+                : "text-muted-foreground"
+            }`}
+          >
+            {mark}
+          </p>
+        ) : null}
+      </div>
+      {conclusion ? (
+        <p
+          className={`mt-2 line-clamp-2 text-xs leading-snug ${
+            d.status === "failed"
+              ? "text-destructive"
+              : "text-muted-foreground"
+          }`}
+        >
+          {conclusion}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function segmentConclusion(d: AgentNodeData, title: string): string | null {
+  if (d.status === "running" || d.status === "pending") return null;
+  if (d.status === "failed") {
+    return failureDetailSentence(d.failureKind, d.productLanded);
+  }
+  const text = d.outputPreview.trim();
+  if (!text || text === title) return null;
+  return text;
 }
 
 function AgentNodeHeader({

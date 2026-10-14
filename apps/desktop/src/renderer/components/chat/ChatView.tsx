@@ -1,9 +1,10 @@
+import { ConversationGraphFace } from "@/components/graph/ConversationGraphFace";
 import { DraftEmptyState } from "@/components/onboarding/DraftEmptyState";
 import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useComposerDockFlip } from "@/hooks/useComposerDockFlip";
 import { useConversations } from "@/hooks/useConversations";
-import { useChatPaneId } from "@/lib/chatPane";
+import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { shouldCenterDraftComposer } from "@/lib/onboarding";
 import { useChatScroll, useTranscriptResetKey } from "@/lib/useChatScroll";
@@ -14,6 +15,7 @@ import {
   loadOlderMessages,
 } from "@/services/messages";
 import { useComposerDraftStore } from "@/stores/composer";
+import { useGraphFaceStore } from "@/stores/graphFace";
 import {
   useActiveFirstMessageId,
   useActiveHasMessages,
@@ -136,6 +138,11 @@ function ChatTranscriptPane({
   }, [conversationId]);
 
   const [findOpen, setFindOpen] = useState(false);
+  const sliceKey = useChatPaneSliceKey();
+  const face = useGraphFaceStore((s) => s.byKey[sliceKey] ?? "text");
+  useEffect(() => {
+    useGraphFaceStore.getState().reset(sliceKey);
+  }, [sliceKey]);
   useEffect(() => {
     if (isNarrow || !ownsFind) return;
     const onKey = (e: KeyboardEvent) => {
@@ -174,54 +181,61 @@ function ChatTranscriptPane({
   });
 
   return (
-    <div className="relative min-h-0 flex-1">
-      {!isNarrow && (
-        <FindBar open={findOpen} onClose={() => setFindOpen(false)} />
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {hasMessages && face === "graph" && (
+        <div className="min-h-0 flex-1">
+          <ConversationGraphFace />
+        </div>
       )}
-      {!isNarrow && <ConversationOutline />}
-      <div ref={scrollRef} className="h-full overflow-y-auto">
-        {hasMessages && (
-          <div
-            ref={contentRef}
-            className={cn(
-              cn(columnClass, "space-y-4"),
-              isNarrow ? "px-4 pb-4 pt-4" : "px-6 pb-4 pt-10",
-            )}
-          >
-            {(loadingOlder || hasMoreBefore) && (
-              <div className="flex justify-center py-2">
-                <Loader2
-                  size={16}
-                  className={`text-muted-foreground ${
-                    loadingOlder ? "animate-spin" : "opacity-0"
-                  }`}
-                />
-              </div>
-            )}
-            <MessageList />
-            {loadingNewer && (
-              <div className="flex justify-center py-2">
-                <Loader2
-                  size={16}
-                  className="animate-spin text-muted-foreground"
-                />
-              </div>
-            )}
-          </div>
+      <div className={face === "graph" ? "hidden" : "relative min-h-0 flex-1"}>
+        {!isNarrow && (
+          <FindBar open={findOpen} onClose={() => setFindOpen(false)} />
+        )}
+        {!isNarrow && <ConversationOutline />}
+        <div ref={scrollRef} className="h-full overflow-y-auto">
+          {hasMessages && (
+            <div
+              ref={contentRef}
+              className={cn(
+                cn(columnClass, "space-y-4"),
+                isNarrow ? "px-4 pb-4 pt-4" : "px-6 pb-4 pt-10",
+              )}
+            >
+              {(loadingOlder || hasMoreBefore) && (
+                <div className="flex justify-center py-2">
+                  <Loader2
+                    size={16}
+                    className={`text-muted-foreground ${
+                      loadingOlder ? "animate-spin" : "opacity-0"
+                    }`}
+                  />
+                </div>
+              )}
+              <MessageList />
+              {loadingNewer && (
+                <div className="flex justify-center py-2">
+                  <Loader2
+                    size={16}
+                    className="animate-spin text-muted-foreground"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {hasMessages && !atBottom && (
+          <SimpleTooltip label="回到底部">
+            <IconButton
+              size="md"
+              onClick={jumpToBottom}
+              aria-label="回到底部"
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-border bg-card text-muted-foreground shadow-md hover:text-foreground"
+            >
+              <ArrowDown size={16} />
+            </IconButton>
+          </SimpleTooltip>
         )}
       </div>
-      {hasMessages && !atBottom && (
-        <SimpleTooltip label="回到底部">
-          <IconButton
-            size="md"
-            onClick={jumpToBottom}
-            aria-label="回到底部"
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-border bg-card text-muted-foreground shadow-md hover:text-foreground"
-          >
-            <ArrowDown size={16} />
-          </IconButton>
-        </SimpleTooltip>
-      )}
     </div>
   );
 }

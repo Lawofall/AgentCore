@@ -557,17 +557,16 @@ class DocumentRepository:
     async def list_on_demand_user_rules(
         self, user_id: str, folder_id: str | None
     ) -> list[Document]:
-        """On-demand user-rule docs of one scope (``ai_maintained=false``, not memory topics).
+        """User-rule docs of one scope that a person has enrolled.
 
-        These ride the「规则目录」+ ``consult`` — never the always ``<设定>`` budget.
-        Same convention-parent filter as :meth:`list_injectable_rules` for user rules,
-        and the same user-disputed exclusion (a disputed entry leaves the catalog too).
+        Enrollment is a non-empty index ``description``. Apply mode is not a
+        channel: these rows ride the consult catalog only.
         """
         conditions: list[ColumnElement[bool]] = [
             Document.user_id == user_id,
             _scope_clause(folder_id),
             Document.role == "rule",
-            Document.apply_mode == "on_demand",
+            Document.description != "",
             Document.ai_maintained.is_(False),
             Document.kind == "document",
             Document.deleted_at.is_(None),
@@ -635,13 +634,18 @@ class DocumentRepository:
         name: str,
         content: str,
         *,
-        apply: str = "always",
+        apply: str = "on_demand",
         description: str | None = None,
+        enroll: bool = False,
     ) -> Document:
-        """Create-or-replace one named user-rule markdown under ``AgentCore/rules/``."""
+        """Create-or-replace one named user-rule markdown.
+
+        ``enroll`` is the human save. Model writes keep the previous index
+        description (new rows stay out of the catalog).
+        """
         rules_dir = await self.ensure_rules_dir(user_id, folder_id)
         doc = await self.get_user_rule_doc(user_id, folder_id, name)
-        mode: ApplyMode = apply if apply in ("always", "on_demand", "paths") else "always"  # type: ignore[assignment]
+        mode: ApplyMode = apply if apply in ("always", "on_demand", "paths") else "on_demand"  # type: ignore[assignment]
         body = set_entry_frontmatter(content, apply=mode, description=description)
         if doc is None:
             doc = Document(
@@ -657,10 +661,17 @@ class DocumentRepository:
             )
             self._session.add(doc)
             self._set_content_and_derive(doc, body)
+            if not enroll:
+                doc.description = ""
         else:
+            kept = doc.description
             if doc.parent_id != rules_dir.id:
                 doc.parent_id = rules_dir.id
             self._set_content_and_derive(doc, body)
+            if not enroll:
+                doc.description = kept
+        if enroll:
+            doc.apply_mode = "on_demand"
         await self._session.commit()
         await self._session.refresh(doc)
         return doc

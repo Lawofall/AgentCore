@@ -42,7 +42,7 @@ def log_context_capped(
 
 
 def _peek_execution_id() -> str | None:
-    from agentcore.runtime.coordination.session import current_execution_id
+    from agentcore.runtime.graph.session.session import current_execution_id
 
     value = current_execution_id.get()
     return value.strip() if isinstance(value, str) and value.strip() else None

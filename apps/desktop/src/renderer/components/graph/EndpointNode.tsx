@@ -224,7 +224,7 @@ export function EndpointNodeFace({
           )}
         </div>
         <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-          {isInput ? "你的任务" : "CEO 汇总"}
+          {isInput ? "你的任务" : "这段"}
         </p>
       </div>
       {shortStatus ? (
@@ -270,7 +270,7 @@ function captainAriaLabel(
 ): string {
   const face = (statusCaption || shortStatus || "").trim();
   const action = actionLabel ?? "查看最终回答";
-  return face ? `CEO 汇总，${face}，${action}` : `CEO 汇总，${action}`;
+  return face ? `这段，${face}，${action}` : `这段，${action}`;
 }
 
 function sinkLabel(status: RunStatus): string {
@@ -282,6 +282,7 @@ function sinkLabel(status: RunStatus): string {
     failed: "失败",
     cancelled: "已停止",
     skipped: "未执行",
+    cut: "已切出",
   };
   return labels[status] ?? status;
 }

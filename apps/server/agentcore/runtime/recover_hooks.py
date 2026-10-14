@@ -17,16 +17,16 @@ if TYPE_CHECKING:
     from agentcore.runtime.events import EventSink
     from agentcore.runtime.leases.model import TurnLeaseRow
     from agentcore.runtime.turn.state import TurnState
-    from agentcore.tools.builtin.delegate import DelegateTool
+    from agentcore.tools.builtin.graph import GraphTool
 
 logger = get_logger(__name__)
 
-# Tests / future production assign: async (lease, state, *, sink) -> DelegateTool | None
+# Tests / future production assign: async (lease, state, *, sink) -> GraphTool | None
 _crash_delegate_factory: Any = None
 
 
 def set_crash_delegate_factory(factory: Any) -> None:
-    """Install a test/production factory for crash-lease DelegateTool construction."""
+    """Install a test/production factory for crash-lease GraphTool construction."""
     global _crash_delegate_factory
     _crash_delegate_factory = factory
 
@@ -36,8 +36,8 @@ async def build_crash_delegate_tool(
     state: TurnState,
     *,
     sink: EventSink,
-) -> DelegateTool | None:
-    """Return a DelegateTool for crash redrive, or ``None`` when the factory is unset.
+) -> GraphTool | None:
+    """Return a GraphTool for crash redrive, or ``None`` when the factory is unset.
 
     Unwired production path must be loud: callers salvage to ``interrupted`` rather
     than silently dropping unfinished DAG work.

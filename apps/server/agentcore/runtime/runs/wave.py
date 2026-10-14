@@ -80,10 +80,10 @@ def _hold_inflight_for_hot_user() -> bool:
     Lookup failure fails closed (kill) so stop/crash unwind is not skipped.
     """
     try:
-        from agentcore.runtime.coordination.session import active_coordination
         from agentcore.runtime.interaction_orphan import holds_for_hot_user
+        from agentcore.runtime.runs.coord_ports import active_coordination
 
-        sess = active_coordination()
+        sess = active_coordination() if active_coordination is not None else None
     except Exception:  # noqa: BLE001 — cancel path must not skip kill on import miss
         return False
     if sess is None or bool(getattr(sess, "soft_stop", False)):
@@ -488,10 +488,10 @@ class WaveScheduler:
                         if state is None:
                             state = RunState(phase=RunPhase.CANCELLED)
                     elif task.cancelled():
-                        from agentcore.runtime.coordination.drive_cancel import (
-                            note_child_cancel_overflow,
-                        )
+                        from agentcore.runtime.runs.coord_ports import note_child_cancel_overflow
 
+                        if note_child_cancel_overflow is None:
+                            raise asyncio.CancelledError("worker_bare_cancel")
                         overflow = note_child_cancel_overflow(task)
                         raise asyncio.CancelledError(overflow)
                     else:
@@ -584,11 +584,9 @@ class WaveScheduler:
                 # durable skips there or resume would see false terminals.
                 soft_resume = False
                 try:
-                    from agentcore.runtime.coordination.session import (
-                        active_coordination,
-                    )
+                    from agentcore.runtime.runs.coord_ports import active_coordination
 
-                    sess = active_coordination()
+                    sess = active_coordination() if active_coordination is not None else None
                     soft_resume = sess is not None and bool(sess.soft_stop)
                 except Exception:  # noqa: BLE001 — cancel path must still re-raise
                     soft_resume = False

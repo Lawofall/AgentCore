@@ -5,8 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { EmbeddedGraphCanvas } from "./EmbeddedGraphCanvas";
 import { usePrefersReducedMotion } from "./shared";
 
-// 一个有代表性的「2 路并行 → 汇入分析 → CEO 汇总」回合：横向 2 波 worker 列 → 出波次
-// 泳道；逐波点亮演示生命周期。形态静态，状态由 HERO_PHASES 逐帧外注。
+// 两段同时开，再交给下一段封口。形态静态，状态由 HERO_PHASES 逐帧外注。
 const HERO_NODES = [
   {
     id: "__input__",
@@ -67,16 +66,6 @@ const HERO_NODES = [
       focused: false,
     },
   },
-  {
-    id: "hcap",
-    type: "captain" as const,
-    data: {
-      variant: "captain",
-      status: "pending",
-      label: "",
-      preview: "近 7 日成本分析已完成：趋势摘要 + 异常点标注，文件已在工作区。",
-    },
-  },
 ];
 
 const HERO_EDGES: GraphEdge[] = [
@@ -84,45 +73,31 @@ const HERO_EDGES: GraphEdge[] = [
   { id: "__input__->hb", source: "__input__", target: "hb", kind: "dep" },
   { id: "ha->han", source: "ha", target: "han", kind: "dep" },
   { id: "hb->han", source: "hb", target: "han", kind: "dep" },
-  { id: "han->hcap", source: "han", target: "hcap", kind: "dep" },
 ];
 
-// 生命周期分帧：输入恒 completed；worker 逐波 pending→running→completed，CEO 末位汇总。
-// narration 把每一帧讲成一句人话——这才是 hero 的教学价值。
 const HERO_PHASES: { label: string; statuses: Record<string, RunStatus> }[] = [
   {
-    label: "你发出目标，团队就位",
-    statuses: { ha: "pending", hb: "pending", han: "pending", hcap: "pending" },
+    label: "你发出目标，段就位",
+    statuses: { ha: "pending", hb: "pending", han: "pending" },
   },
   {
-    label: "第 1 波 · 两名调研员并行开跑",
-    statuses: { ha: "running", hb: "running", han: "pending", hcap: "pending" },
+    label: "两段同时开",
+    statuses: { ha: "running", hb: "running", han: "pending" },
   },
   {
-    label: "第 2 波 · 调研产出汇入分析师",
+    label: "前两段封口，下一段接着做",
     statuses: {
       ha: "completed",
       hb: "completed",
       han: "running",
-      hcap: "pending",
     },
   },
   {
-    label: "CEO 汇总，答案落进气泡",
+    label: "最后一段封口，答案落进正文",
     statuses: {
       ha: "completed",
       hb: "completed",
       han: "completed",
-      hcap: "running",
-    },
-  },
-  {
-    label: "本回合完成",
-    statuses: {
-      ha: "completed",
-      hb: "completed",
-      han: "completed",
-      hcap: "completed",
     },
   },
 ];

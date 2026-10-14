@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agentcore.runtime.coordination.thrash import (
+from agentcore.runtime.graph.session.thrash import (
     ThrashRecord,
     clear_thrash_registry,
     find_thrash_collision,
@@ -64,25 +64,10 @@ def test_find_thrash_collision_on_similar_task_and_artifacts():
     assert hit is not None
     assert hit[1].run_id == "w1"
     msg = thrash_reject_message(hit[1])
-    assert "continue_from_run_id=`w1`" in msg
+    assert "graph" in msg
+    assert "`w1`" in msg
+    assert "continue_from_run_id" not in msg
     assert 'force=["' not in msg
-
-
-def test_continue_from_thrash_run_skips_collision():
-    note_thrashing_worker(
-        "conv-1",
-        ThrashRecord(run_id="w1", task="修复导出错误", artifacts=("a.ts",), role="工程师"),
-    )
-    cont = _plan(
-        RunSpec(
-            run_id="w2",
-            role="工程师",
-            task="修复导出错误并验证",
-            continue_from_run_id="w1",
-            deliverable=Deliverable( artifacts=["a.ts"]),
-        )
-    )
-    assert find_thrash_collision(cont, recent_thrash_records("conv-1")) is None
 
 
 def test_unrelated_task_does_not_collide():
@@ -105,7 +90,7 @@ def test_thrash_memory_expires_after_ttl(monkeypatch):
     TTL 一起没了还继续拒，就是把 CEO 指向一条已不存在的路（几十轮后重开同主题被拒）。"""
     import time
 
-    from agentcore.runtime.coordination import thrash as thrash_mod
+    from agentcore.runtime.graph.session import thrash as thrash_mod
 
     monkeypatch.setattr(thrash_mod, "_THRASH_TTL_SECONDS", 0.05)
     note_thrashing_worker(
@@ -129,7 +114,7 @@ def test_thrash_memory_expires_after_ttl(monkeypatch):
 
 def test_thrash_memory_evicts_least_recently_used_conversation(monkeypatch):
     """进程内会话数有上限：最久未访问的对话被淘汰，活跃对话的闸不受影响。"""
-    from agentcore.runtime.coordination import thrash as thrash_mod
+    from agentcore.runtime.graph.session import thrash as thrash_mod
 
     monkeypatch.setattr(thrash_mod, "_MAX_THRASH_CONVERSATIONS", 2)
     for cid in ("conv-a", "conv-b"):
@@ -164,8 +149,8 @@ def test_thrash_records_still_collide_within_ttl():
 
 def test_post_worker_progress_thrash_fail_soft(monkeypatch):
     """thrash 记账炸了不得阻断 WORKER_COMPLETED 投递。"""
-    from agentcore.runtime.coordination.host import post_worker_progress
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.host import post_worker_progress
+    from agentcore.runtime.graph.session.session import (
         CoordinationEventKind,
         CoordinationSession,
     )
@@ -190,7 +175,7 @@ def test_post_worker_progress_thrash_fail_soft(monkeypatch):
         raise RuntimeError("thrash accounting exploded")
 
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.thrash.thrash_record_from_node",
+        "agentcore.runtime.graph.session.thrash.thrash_record_from_node",
         _boom,
     )
 

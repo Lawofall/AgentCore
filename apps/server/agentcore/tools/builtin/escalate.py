@@ -134,7 +134,7 @@ class EscalateTool:
                 )
             awaiting = "user"
             try:
-                from agentcore.runtime.coordination.session import (
+                from agentcore.runtime.graph.session.session import (
                     resolve_coordination_session,
                 )
 
@@ -144,7 +144,7 @@ class EscalateTool:
             except Exception:  # noqa: BLE001
                 awaiting = "user"
             if awaiting == "ceo":
-                from agentcore.runtime.coordination.session import (
+                from agentcore.runtime.graph.session.session import (
                     note_coord_worker_busy,
                 )
 
@@ -169,7 +169,7 @@ class EscalateTool:
             except Exception:  # noqa: BLE001 — liveliness only; never break the worker
                 logger.warning("worker.escalate.emit_failed", run_id=context.run_id)
         try:
-            from agentcore.runtime.coordination.bridge import post_escalation_to_coordination
+            from agentcore.runtime.graph.session.bridge import post_escalation_to_coordination
 
             post_escalation_to_coordination(
                 run_id=context.run_id,

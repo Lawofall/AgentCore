@@ -1,4 +1,5 @@
 import { ChatView } from "@/components/chat/ChatView";
+import { GraphFaceToggle } from "@/components/chat/GraphFaceToggle";
 import {
   ConversationHydrateOverlay,
   type ConversationHydratePhase,
@@ -116,6 +117,7 @@ function SplitPane({
             className="flex shrink-0 items-center gap-1"
             onPointerDown={(e) => e.stopPropagation()}
           >
+            <GraphFaceToggle />
             {showDockToggle && <SidePanelToggle />}
             <IconButton
               size="md"

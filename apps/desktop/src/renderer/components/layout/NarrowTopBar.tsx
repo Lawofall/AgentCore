@@ -1,3 +1,4 @@
+import { GraphFaceToggle } from "@/components/chat/GraphFaceToggle";
 import { NarrowMenuButton } from "@/components/layout/NarrowMenuButton";
 import { IconButton } from "@/components/ui";
 import { useConversations } from "@/hooks/useConversations";
@@ -31,6 +32,7 @@ export function NarrowTopBar() {
       <h1 className="min-w-0 flex-1 truncate text-center text-sm font-medium">
         {title}
       </h1>
+      {conversationId && <GraphFaceToggle chrome="plain" iconSize={18} />}
       {conversationId && !panelOpen && (
         <IconButton size="md" aria-label="打开面板" onClick={() => openPanel()}>
           <PanelRight size={18} />

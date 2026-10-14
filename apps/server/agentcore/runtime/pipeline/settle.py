@@ -74,7 +74,7 @@ def _salvage_reply_and_outcome(
         has_error=sink.last_turn_error() is not None,
     )
     if outcome == "ok":
-        from agentcore.runtime.delegate.delivery_status import read_delivery_verdict
+        from agentcore.runtime.graph.drive.delivery_status import read_delivery_verdict
 
         verdict = read_delivery_verdict()
         if verdict is not None and verdict.state == "partial":

@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agentcore.runtime.coordination.session import (
+from agentcore.runtime.graph.session.session import (
     CoordinationSession,
     clear_active_coordination,
     current_execution_id,
@@ -418,7 +418,7 @@ def test_always_on_tools_not_in_gated_set():
 
 
 def test_coordination_period_hint_lives_on_start_echo():
-    from agentcore.runtime.coordination.host import (
+    from agentcore.runtime.graph.session.host import (
         COORDINATION_PERIOD_HINT,
         _coordination_start_echo,
     )

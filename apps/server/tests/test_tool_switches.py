@@ -31,17 +31,18 @@ def test_switch_member_names_follow_the_group_and_delegate_companions():
         "md_export",
         "write",
     )
-    assert switch_member_names("delegate") == (
+    assert switch_member_names("graph") == (
         "cancel_worker",
-        "delegate",
+        "graph",
         "replan",
+        "rewind",
     )
     assert switch_member_names("nope") == ()
 
 
 def test_delegate_off_withholds_companions_and_leaves_debate():
-    names = withheld_names(["delegate"])
-    assert {"delegate", "replan", "cancel_worker"} <= names
+    names = withheld_names(["graph"])
+    assert {"graph", "replan", "cancel_worker", "rewind"} <= names
     assert "debate" not in names
     assert "ask_user" not in names
 
@@ -67,15 +68,15 @@ def test_files_and_web_name_sets():
 
 def test_omit_unregisters_only_the_bound_set():
     registry = ToolRegistry()
-    for name in ("run", "read", "delegate", "replan", "debate"):
+    for name in ("run", "read", "graph", "replan", "debate"):
         registry.register(SimpleNamespace(schema=SimpleNamespace(name=name)))
-    token = bind_disabled_tool_groups(["delegate", "run", "nope"])
+    token = bind_disabled_tool_groups(["graph", "run", "nope"])
     try:
         omit_disabled_tools(registry)
     finally:
         reset_disabled_tool_groups(token)
     assert registry.get_optional("run") is None
-    assert registry.get_optional("delegate") is None
+    assert registry.get_optional("graph") is None
     assert registry.get_optional("replan") is None
     assert registry.get_optional("read") is not None
     assert registry.get_optional("debate") is not None
@@ -102,7 +103,7 @@ def test_ceo_roster_skips_delegate_and_ask_user():
     from agentcore.runtime.skills import build_system_skill_registry
     from agentcore.tools.ceo_toolset import _assemble_ceo_toolset
 
-    token = bind_disabled_tool_groups(["delegate", "ask_user"])
+    token = bind_disabled_tool_groups(["graph", "ask_user"])
     try:
         _delegate, _debate, chat_tools = _assemble_ceo_toolset(
             llm=object(),
@@ -129,7 +130,7 @@ def test_ceo_roster_skips_delegate_and_ask_user():
     finally:
         reset_disabled_tool_groups(token)
     names = set(chat_tools.names)
-    assert "delegate" not in names
+    assert "graph" not in names
     assert "replan" not in names
     assert "cancel_worker" not in names
     assert "ask_user" not in names

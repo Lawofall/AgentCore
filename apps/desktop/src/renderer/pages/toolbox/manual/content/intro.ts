@@ -20,7 +20,7 @@ export const introChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "AgentCore 是 Multi-Agent AI 工作台：你只对接一位 CEO；轻问它直接答，该协作时组团后把结果交给你。",
+          text: "AgentCore 是 Multi-Agent AI 工作台。对着你的是一扇窗：轻问它直接答，要拆开做就开几段，做完把结论交给你。",
         },
         {
           type: "callout",
@@ -45,11 +45,11 @@ export const introChapter: ManualChapterContent = {
           items: [
             {
               title: "说目标，别说步骤",
-              desc: "怎么拆、谁来做、先后顺序——交给 CEO。",
+              desc: "怎么拆、先后顺序，交给对着你的这扇窗。",
             },
             {
-              title: "轻问秒答，该协作才组团",
-              desc: "闲聊或简单问答直接回；要并行、独立验证或成篇时才拉人。",
+              title: "轻问秒答，要拆开才开段",
+              desc: "闲聊或简单问答直接回；要并行、独立验证或成篇时才再开几段。",
             },
             {
               title: "全程透明，随时插手",
@@ -59,7 +59,7 @@ export const introChapter: ManualChapterContent = {
         },
         {
           type: "paragraph",
-          text: "没有固定角色——CEO 按任务临时分配谁上场。",
+          text: "图上只有一种节点：一段工作，从打开到封口。",
         },
       ],
     },
@@ -78,11 +78,11 @@ export const introChapter: ManualChapterContent = {
             },
             {
               title: "看它干活",
-              desc: "轻问秒回；组团时会弹出协作图，谁在做什么一目了然。",
+              desc: "轻问秒回。要拆开做时，点右上角的「图」，能看见每一段在做什么。",
             },
             {
               title: "收结果",
-              desc: "CEO 汇总团队产出交给你。文件落在你的文件夹里——打开的是本机文件夹就在你电脑上，否则在「我的文件」里。",
+              desc: "做完的结论回到对着你的这扇窗。文件落在你的文件夹里——打开的是本机文件夹就在你电脑上，否则在「我的文件」里。",
             },
           ],
         },

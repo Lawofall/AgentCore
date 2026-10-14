@@ -68,8 +68,17 @@ def transcript_rows(
     assistant_content: str,
     evidence_ledger: list[Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """CEO-visible rows for one prior turn. Empty when there is nothing to replay."""
+    """CEO-visible rows for one prior turn. Empty when there is nothing to replay.
+
+    A ``graph_rewind`` fact replaces this turn's tool trace with the kept
+    conclusions and the scar line. The original user message stays the prior row.
+    """
     facts = list(entries or [])
+    from agentcore.runtime.graph.shape.rewind import history_row, latest_rewind_payload
+
+    rewind = latest_rewind_payload(facts)
+    if rewind is not None:
+        return [history_row(rewind)]
     target = captain_run_id(facts) if facts else None
     results: dict[str, str] = {}
     for entry in facts:

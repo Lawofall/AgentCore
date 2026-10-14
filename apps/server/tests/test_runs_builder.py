@@ -27,6 +27,23 @@ def test_single_task_one_node():
     assert n.sibling_summary == ""
 
 
+def test_graph_goal_is_the_work_and_not_a_person():
+    plan, errs = build_run_plan(
+        [
+            {"id": "查成本", "goal": "查近 7 日成本"},
+            {"id": "对基准", "goal": "对齐历史基准"},
+        ],
+        id_prefix="t",
+    )
+    assert errs == []
+    assert len(plan.nodes) == 2
+    cost = plan.by_id("t_查成本")
+    assert cost.task == "查近 7 日成本"
+    assert cost.role == ""
+    assert cost.agent_name == "查近 7 日成本"
+    assert "查近 7 日成本" in plan.by_id("t_对基准").sibling_summary
+
+
 def test_parallel_batch_sets_sibling_summary():
     plan, errs = build_run_plan(
         [{"role": "A", "task": "做A"}, {"role": "B", "task": "做B"}], id_prefix="t"
@@ -364,12 +381,24 @@ def test_role_only_plus_task_only_coalesces_to_one_node():
     assert plan.nodes[0].role == "A" and plan.nodes[0].task == "x"
 
 
-def test_dag_missing_role_collects_error():
+def test_dag_work_without_a_person_is_a_segment():
     tasks = [
         {"id": "s1", "task": "a"},
         {"id": "s2", "role": "B", "task": "b", "depends_on": ["s1"]},
     ]
     plan, errs = build_run_plan(tasks, id_prefix="t")
+    assert errs == []
+    assert plan.by_id("t_s1").role == ""
+    assert plan.by_id("t_s1").task == "a"
+    assert plan.by_id("t_s2").depends_on == ["t_s1"]
+
+
+def test_dag_missing_work_collects_error():
+    tasks = [
+        {"id": "s1"},
+        {"id": "s2", "goal": "b", "depends_on": ["s1"]},
+    ]
+    _plan, errs = build_run_plan(tasks, id_prefix="t")
     assert any("s1" in e for e in errs)
 
 

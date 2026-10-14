@@ -72,7 +72,8 @@ export type RunStatus =
   | "completed"
   | "failed"
   | "cancelled"
-  | "skipped";
+  | "skipped"
+  | "cut";
 
 /** `run_failed.failure_kind` — collaboration-graph face class (additive). */
 export type RunFailureKind = "model" | "call";

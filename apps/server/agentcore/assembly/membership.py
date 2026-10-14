@@ -35,24 +35,19 @@ async def seed_assembly_skills_from_account(
     from agentcore.db.repositories import DocumentRepository
 
     repo = DocumentRepository(session)
-    buckets = (
-        ("always", await repo.list_injectable_rules(user_id, None, ai_maintained=False)),
-        ("on_demand", await repo.list_on_demand_user_rules(user_id, None)),
-        ("paths", await repo.list_path_user_rules(user_id, None)),
-    )
+    docs = await repo.list_on_demand_user_rules(user_id, None)
     seen: set[str] = set()
-    for mode, docs in buckets:
-        for doc in docs:
-            if doc.id in seen:
-                continue
-            seen.add(doc.id)
-            session.add(
-                AssemblySkill(
-                    assembly_id=assembly_id,
-                    document_id=doc.id,
-                    apply_mode=mode,
-                )
+    for doc in docs:
+        if doc.id in seen:
+            continue
+        seen.add(doc.id)
+        session.add(
+            AssemblySkill(
+                assembly_id=assembly_id,
+                document_id=doc.id,
+                apply_mode="on_demand",
             )
+        )
     if seen:
         await session.commit()
 

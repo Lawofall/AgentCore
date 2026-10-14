@@ -1238,7 +1238,7 @@ class HandlerMixin:
         cascaded = False
         client_tools_cancelled = 0
         if conversation_id:
-            from agentcore.runtime.coordination.session import (
+            from agentcore.runtime.graph.session.session import (
                 cancel_coordination_on_user_stop,
             )
             from agentcore.runtime.events.client_tool_reattach import (

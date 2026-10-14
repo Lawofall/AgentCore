@@ -182,16 +182,23 @@ def _nonempty_str(value: Any) -> str:
     return value.strip() if isinstance(value, str) and value.strip() else ""
 
 
+def _work_text(item: dict[str, Any]) -> str:
+    """The segment's work. ``goal`` is the graph field; ``task`` remains for debate."""
+    return _nonempty_str(item.get("goal")) or _nonempty_str(item.get("task"))
+
+
 def _is_complete_task(item: Any) -> bool:
-    """A real task node: object with both role and task (the delegate schema required pair)."""
+    """A real node: a graph ``goal``, or the debate pair of role and task."""
     if not isinstance(item, dict):
         return False
+    if _nonempty_str(item.get("goal")):
+        return True
     return bool(_nonempty_str(item.get("role")) and _nonempty_str(item.get("task")))
 
 
 def _is_pure_stub(item: dict[str, Any]) -> bool:
-    """Metadata-only row (id / depends_on / …) with neither role nor task."""
-    return not _nonempty_str(item.get("role")) and not _nonempty_str(item.get("task"))
+    """Metadata-only row (id / depends_on / …) with no work and no role."""
+    return not _work_text(item) and not _nonempty_str(item.get("role"))
 
 
 def _merge_task_fragments(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
@@ -448,13 +455,9 @@ def build_added_nodes(
     specs: list[RunSpec] = []
     for i, item in enumerate(adds):
         minted = minted_ids[i]
-        role = item.get("role")
-        task = item.get("task")
-        if not (isinstance(role, str) and role.strip()):
-            errors.append(f"add[{i}]: 缺少 role")
-            continue
-        if not (isinstance(task, str) and task.strip()):
-            errors.append(f"add[{i}]: 缺少 task")
+        work = _work_text(item)
+        if not work:
+            errors.append(f"add[{i}]: 缺少 goal")
             continue
         resolved_deps: list[str] = []
         dep_ok = True
@@ -477,7 +480,7 @@ def build_added_nodes(
             continue
         specs.append(
             _inline_spec(
-                {**item, "role": role.strip(), "task": task.strip()},
+                {**item, "goal": item.get("goal") or work, "task": item.get("task") or work},
                 run_id=minted,
                 depends_on=resolved_deps,
                 policy=_dag_policy(item),
@@ -546,11 +549,7 @@ def _flat_plan(
     errors: list[str] = []
     seen_declared: set[str] = set()
     for i, item in enumerate(tasks_raw):
-        role = item.get("role")
-        task = item.get("task")
-        if not (isinstance(role, str) and role.strip()) or not (
-            isinstance(task, str) and task.strip()
-        ):
+        if not _work_text(item):
             errors.append(f"tasks[{i}]: 'role' 和 'task' 字段必填")
             continue
         raw_id = str(item.get("id", "")).strip()
@@ -677,12 +676,9 @@ def _dag_plan(
 
     for i, item in enumerate(tasks_raw):
         raw_id = str(item.get("id", "")).strip() or f"n{i}"
-        role = item.get("role", "")
-        task = item.get("task", "")
-        if not role:
-            errors.append(f"Run '{raw_id}': missing role")
-            continue
-        if not task:
+        work = _work_text(item)
+        role = _nonempty_str(item.get("role"))
+        if not work:
             errors.append(f"Run '{raw_id}': missing task")
             continue
         resolved_deps: list[str] = []
@@ -762,9 +758,12 @@ def _inline_spec(
     default_target_folder_id: str | None = None,
 ) -> RunSpec:
     """Assemble one RunSpec from a task item's inline-role fields (阶段1)."""
-    from agentcore.runtime.delegate.target_desktop import effective_target_folder_id
-
-    role = item["role"]
+    item.pop("continue_from_run_id", None)
+    raw_target = item.get("target_folder_id")
+    target_folder_id = raw_target.strip() if isinstance(raw_target, str) else ""
+    target_folder_id = target_folder_id or None
+    work = _work_text(item)
+    role = _nonempty_str(item.get("role"))
     thinking_raw = item.get("thinking")
     model_raw = item.get("model")
     stance_raw = item.get("stance")
@@ -773,9 +772,9 @@ def _inline_spec(
     return RunSpec(
         run_id=run_id,
         agent_id=run_id,
-        agent_name=role,
+        agent_name=role or work,
         kind=RunKind.AGENT,
-        task=item["task"],
+        task=work,
         role=role,
         system_prompt_supplement=item.get("system_prompt_supplement") or None,
         research_then_draft=bool(item.get("research_then_draft")),
@@ -815,7 +814,6 @@ def _inline_spec(
         parent_run_id=parent_run_id,
         depth=depth,
         replaces_run_id=_parse_replaces_run_id(item.get("replaces_run_id")),
-        continue_from_run_id=_parse_continue_from_run_id(item.get("continue_from_run_id")),
         force_continue=bool(item.get("force_continue")),
         context_inject_files=_str_list(item.get("context_inject_files")),
         require_upstream=bool(item.get("require_upstream")),
@@ -826,10 +824,7 @@ def _inline_spec(
         verify_policy=_parse_verify_policy(item.get("verify_policy")),
         max_rounds=_parse_max_rounds(item.get("max_rounds")),
         policy=policy,
-        target_folder_id=effective_target_folder_id(
-            item.get("target_folder_id"),
-            default=default_target_folder_id,
-        ),
+        target_folder_id=target_folder_id,
     )
 
 
@@ -848,14 +843,6 @@ def _parse_max_rounds(raw: Any) -> int | None:
 
 def _parse_replaces_run_id(raw: Any) -> str | None:
     """Normalise optional ``replaces_run_id`` (回落换人) → stripped id or None."""
-    if not isinstance(raw, str):
-        return None
-    cleaned = raw.strip()
-    return cleaned or None
-
-
-def _parse_continue_from_run_id(raw: Any) -> str | None:
-    """Normalise optional ``continue_from_run_id`` (同人续派) → stripped id or None."""
     if not isinstance(raw, str):
         return None
     cleaned = raw.strip()
@@ -936,7 +923,8 @@ def _sibling_summary(group: list[RunSpec], me: RunSpec) -> str:
 
 def _sibling_line(other: RunSpec) -> str:
     """One sibling roster entry: role, pinned paths, full task (multiline indented)."""
-    lines = [f"- {other.role}"]
+    head = (other.role or "").strip() or "这段"
+    lines = [f"- {head}"]
     pinned = [
         p.strip().replace("\\", "/")
         for p in (other.deliverable.artifacts if other.deliverable else [])

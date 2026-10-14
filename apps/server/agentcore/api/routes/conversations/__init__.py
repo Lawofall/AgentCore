@@ -19,6 +19,7 @@ from . import (
     browser_live,
     browser_sessions,
     context_cut,
+    graph_rewind,
     crud,
     debate_steer,
     external_grants,
@@ -66,5 +67,6 @@ router.include_router(browser_input.router)
 router.include_router(browser_sessions.router)
 # 方案切点（追加在末尾，不改既有 OpenAPI 顺序）。
 router.include_router(context_cut.router)
+router.include_router(graph_rewind.router)
 # 桌面开发者模式：主人可读的折叠脊（追加在末尾）。
 router.include_router(trace_view.router)

@@ -112,6 +112,7 @@ _EVENT_FACTORY_NAMES: frozenset[str] = frozenset(
         "run_completed",
         "run_failed",
         "run_cancelled",
+        "graph_rewind",
         "run_skipped",
         "run_progress",
         "batch_metrics",

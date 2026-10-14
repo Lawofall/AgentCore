@@ -74,12 +74,23 @@ def _injectable_snapshot(*, degraded: bool = False) -> AccountPrepareSnapshot:
     """User rules inject; leftover AI notes stay on the snapshot but not in ``<设定>``."""
     return AccountPrepareSnapshot(
         rules_payload={
-            "global_rules": [{"name": "用户规则.md", "content": "- 总是用中文回答"}],
-            "project_rules": [{"name": "项目规则.md", "content": "- 项目规则"}],
+            "global_rules": [],
+            "project_rules": [],
             "global_on_demand_rules": [
-                {"name": "合规.md", "content": "- 合规摘要行\n", "description": "查阅合规"}
+                {
+                    "name": "用户规则.md",
+                    "content": "- 总是用中文回答",
+                    "description": "回复语言",
+                },
+                {"name": "合规.md", "content": "- 合规摘要行\n", "description": "查阅合规"},
             ],
-            "project_on_demand_rules": [],
+            "project_on_demand_rules": [
+                {
+                    "name": "项目规则.md",
+                    "content": "- 项目规则",
+                    "description": "项目约定",
+                }
+            ],
         },
         memory_bodies={
             ("", "偏好.md"): "- 沟通偏好\n",
@@ -142,18 +153,27 @@ async def test_seed_then_hit(account_creds):
         "F1",
         AccountPrepareSnapshot(
             rules_payload={
-                "global_rules": [{"name": "用户规则.md", "content": "- 全局规则"}],
-                "project_rules": [
-                    {"name": "项目规则.md", "content": "- 项目规则"},
-                ],
+                "global_rules": [],
+                "project_rules": [],
                 "global_on_demand_rules": [
+                    {
+                        "name": "用户规则.md",
+                        "content": "- 全局规则",
+                        "description": "全局",
+                    },
                     {
                         "name": "合规.md",
                         "content": "- 合规摘要行\n更多",
                         "description": "查阅合规",
                     },
                 ],
-                "project_on_demand_rules": [],
+                "project_on_demand_rules": [
+                    {
+                        "name": "项目规则.md",
+                        "content": "- 项目规则",
+                        "description": "项目",
+                    }
+                ],
             },
             memory_bodies={
                 ("", "偏好.md"): "- 沟通偏好\n",
@@ -172,13 +192,12 @@ async def test_seed_then_hit(account_creds):
         )
         on_demand = await load_on_demand_user_rules("u1", folder_id="F1")
 
-    assert "全局规则" in rules_md
-    assert "项目规则" in rules_md
+    assert rules_md == ""
     assert "沟通偏好" not in rules_md
     assert "项目画像" not in rules_md
     assert "项目导航" not in rules_md
-    assert len(on_demand) == 1
-    assert on_demand[0].name == "合规"
+    names = {item.name for item in on_demand}
+    assert names == {"用户规则", "项目规则", "合规"}
 
 
 async def test_folder_none_key_distinct_from_project(account_creds):
@@ -221,9 +240,9 @@ async def test_snapshot_lapses_after_ttl_and_prepare_injects_nothing(
 
     with account_credentials_scope(account_creds):
         rules_md, on_demand = await _prepare_injection("u1", "F1")
-    assert "总是用中文回答" in rules_md
+    assert rules_md == ""
     assert "项目画像" not in rules_md
-    assert len(on_demand) == 1
+    assert {item.name for item in on_demand} == {"用户规则", "项目规则", "合规"}
 
     cache_clock.advance(299.0)
     assert get_account_rules_memory_snapshot("u1", "F1") is not None
@@ -283,9 +302,15 @@ async def test_rewarm_after_lapse_restores_injection(
 
     async def _rules(creds, *, folder_id):
         return {
-            "global_rules": [{"name": "用户规则.md", "content": "- 总是用中文回答"}],
+            "global_rules": [],
             "project_rules": [],
-            "global_on_demand_rules": [],
+            "global_on_demand_rules": [
+                {
+                    "name": "用户规则.md",
+                    "content": "- 总是用中文回答",
+                    "description": "回复语言",
+                }
+            ],
             "project_on_demand_rules": [],
         }
 
@@ -302,8 +327,9 @@ async def test_rewarm_after_lapse_restores_injection(
     await warm_account_rules_memory(account_creds, user_id="u1", folder_id="F1")
     assert account_rules_memory_ttl_remaining("u1", "F1") == pytest.approx(300.0)
     with account_credentials_scope(account_creds):
-        renewed_md, _ = await _prepare_injection("u1", "F1")
-    assert "总是用中文回答" in renewed_md
+        renewed_md, renewed = await _prepare_injection("u1", "F1")
+    assert renewed_md == ""
+    assert any("总是用中文回答" in item.summary or item.name == "用户规则" for item in renewed)
     assert "沟通偏好" not in renewed_md
 
 
@@ -327,17 +353,18 @@ async def test_keepalive_rewarm_keeps_harvest_cache_only_hit_past_ttl(
     snap = get_account_rules_memory_snapshot("u1", "F1")
     assert snap is not None
     with account_credentials_scope(account_creds):
-        from agentcore.runtime.delegate.post_close_gate import (
+        from agentcore.runtime.graph.admit.post_close_gate import (
             bind_user_message_origin,
             reset_user_message_origin,
         )
 
         token = bind_user_message_origin("execution_harvest")
         try:
-            rules_md, _ = await _prepare_injection("u1", "F1")
+            rules_md, on_demand = await _prepare_injection("u1", "F1")
         finally:
             reset_user_message_origin(token)
-    assert "总是用中文回答" in rules_md
+    assert rules_md == ""
+    assert any(item.name == "用户规则" for item in on_demand)
 
 
 async def test_cache_miss_logs_harvest_origin_for_empty_injection(
@@ -353,7 +380,7 @@ async def test_cache_miss_logs_harvest_origin_for_empty_injection(
     monkeypatch.setattr(
         "agentcore.memory.account_prepare_cache.logger.info", _capture
     )
-    from agentcore.runtime.delegate.post_close_gate import (
+    from agentcore.runtime.graph.admit.post_close_gate import (
         bind_user_message_origin,
         reset_user_message_origin,
     )
@@ -380,9 +407,10 @@ async def test_warm_rules_list_once_and_seeds(
         rules_calls["n"] += 1
         assert folder_id == "F1"
         return {
-            "global_rules": [{"name": "用户规则.md", "content": "- r"}],
+            "global_rules": [],
             "project_rules": [],
             "global_on_demand_rules": [
+                {"name": "用户规则.md", "content": "- r", "description": "短规则"},
                 {"name": "附录.md", "content": "- od\n", "description": "查阅附录"},
             ],
             "project_on_demand_rules": [],
@@ -409,9 +437,9 @@ async def test_warm_rules_list_once_and_seeds(
         )
         on_demand = await load_on_demand_user_rules("u1", folder_id="F1")
 
-    assert " - r" in rules_md or "r" in rules_md
+    assert rules_md == ""
     assert "偏好" not in rules_md
-    assert len(on_demand) == 1
+    assert {item.name for item in on_demand} == {"用户规则", "附录"}
     assert rules_calls["n"] == 1  # prepare did not re-hit cloud
 
 
@@ -638,7 +666,15 @@ async def test_warm_pulls_the_ancestor_folders_the_cloud_resolved(
         return {
             "global_rules": [],
             "project_rules": [],
-            "ancestor_rules": [{"name": "用户规则.md", "content": "- 外层规则"}],
+            "ancestor_rules": [],
+            "ancestor_on_demand_rules": [
+                {
+                    "name": "用户规则.md",
+                    "content": "- 外层规则",
+                    "description": "外层",
+                    "folder_id": "F_outer",
+                }
+            ],
             "global_on_demand_rules": [],
             "project_on_demand_rules": [],
             "folder_chain": ["F_outer", folder_id],
@@ -660,7 +696,9 @@ async def test_warm_pulls_the_ancestor_folders_the_cloud_resolved(
             "u1",
             folder_id="F1",
         )
-    assert "外层规则" in rules_md
+        on_demand = await load_on_demand_user_rules("u1", folder_id="F1")
+    assert rules_md == ""
+    assert any(item.name == "用户规则" for item in on_demand)
     assert "F_outer 画像" not in rules_md
     assert "F1 画像" not in rules_md
 
@@ -674,8 +712,17 @@ async def test_warm_empty_folder_chain_drops_the_dead_desk(
     async def _rules(creds, *, folder_id):
         del creds, folder_id
         return {
-            "global_rules": [{"name": "用户规则.md", "content": "- 全局规则"}],
-            "project_rules": [{"name": "用户规则.md", "content": "- 当前规则"}],
+            "global_rules": [],
+            "global_on_demand_rules": [
+                {
+                    "name": "用户规则.md",
+                    "content": "- 全局规则",
+                    "description": "全局",
+                }
+            ],
+            "project_rules": [
+                {"name": "用户规则.md", "content": "- 当前规则", "description": "当前"}
+            ],
             "folder_chain": [],
         }
 
@@ -695,8 +742,9 @@ async def test_warm_empty_folder_chain_drops_the_dead_desk(
             "u1",
             folder_id="F1",
         )
-    assert "全局规则" in rules_md
-    assert "当前规则" not in rules_md
+        on_demand = await load_on_demand_user_rules("u1", folder_id="F1")
+    assert rules_md == ""
+    assert [item.name for item in on_demand] == ["用户规则"]
     assert "F1 画像" not in rules_md
 
 

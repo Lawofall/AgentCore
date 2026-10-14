@@ -61,6 +61,7 @@ const TOOL_LABEL: Record<string, string> = {
   read_image: "Read image",
   code_diagnostics: "Check types",
   delegate: "Delegate",
+  graph: "Graph",
   replan: "Replan",
   debate: "Debate",
   ask_user: "Ask you",

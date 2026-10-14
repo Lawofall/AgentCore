@@ -1989,6 +1989,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/graph/rewind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rewind Graph
+         * @description Point the next window at a sealed segment. The assistant waits for the next sentence.
+         */
+        post: operations["rewind_graph_v1_conversations__conversation_id__graph_rewind_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}/handoff/jobs": {
         parameters: {
             query?: never;
@@ -7672,6 +7692,8 @@ export interface components {
             content: string;
             /** Evidence Ledger */
             evidence_ledger?: unknown[] | null;
+            /** Graph Context */
+            graph_context?: components["schemas"]["GraphContextNode"][] | null;
             /** Reasoning Content */
             reasoning_content?: string | null;
             /**
@@ -9656,6 +9678,47 @@ export interface components {
             mode: "readonly" | "organize" | "attach_rw";
             /** Root Id */
             root_id: string;
+        };
+        /**
+         * GraphContextNode
+         * @description One sealed segment still visible in this CEO window. Not shown to the model.
+         */
+        GraphContextNode: {
+            /** Depends On */
+            depends_on?: string[];
+            /** Id */
+            id: string;
+        };
+        /** GraphRewindRequest */
+        GraphRewindRequest: {
+            /** Message Id */
+            message_id: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Restore Files
+             * @default false
+             */
+            restore_files: boolean;
+            /** Target Run Id */
+            target_run_id: string;
+        };
+        /** GraphRewindResponse */
+        GraphRewindResponse: {
+            /** Cut Run Ids */
+            cut_run_ids?: string[];
+            /**
+             * Files Restored
+             * @default false
+             */
+            files_restored: boolean;
+            /** Scar */
+            scar: string;
+            /** Target Run Id */
+            target_run_id: string;
         };
         /** GroupedConversationsResponse */
         GroupedConversationsResponse: {
@@ -17140,6 +17203,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rewind_graph_v1_conversations__conversation_id__graph_rewind_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GraphRewindRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphRewindResponse"];
                 };
             };
             /** @description Validation Error */

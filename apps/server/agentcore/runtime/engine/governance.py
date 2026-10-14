@@ -91,7 +91,7 @@ def note_delegate_batches(
             args = ""
             if tc is not None and getattr(tc, "function", None) is not None:
                 args = tc.function.arguments or ""
-            from agentcore.runtime.delegate.batch_shape import (
+            from agentcore.runtime.graph.admit.batch_shape import (
                 batch_shape_from_arguments,
             )
 
@@ -310,7 +310,7 @@ def is_workspace_channel_sticky_dead(tool_context: Any | None = None) -> bool:
     Live hub presence wins: a reconnecting or live desktop clears a stale session
     stamp. Session flag covers CEO / teammates whose backend is not a local channel.
     """
-    from agentcore.runtime.coordination.session import active_coordination
+    from agentcore.runtime.graph.session.session import active_coordination
     from agentcore.workspace.presence import local_workspace_files_reachable
 
     session = active_coordination()
@@ -335,7 +335,7 @@ def is_exec_env_sticky_dead(tool_context: Any | None = None) -> bool:
     own. Fall back to the conversation's registered session so teammates still
     inherit the latch. No backend-channel twin (unlike workspace channel-dead).
     """
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         registered_coordination_for_conversation,
         resolve_coordination_session,
     )
@@ -432,7 +432,7 @@ def _revive_workspace_file_family(
     timeout may force-retire one file tool; that is not a family presence retire
     and must stay.
     """
-    from agentcore.runtime.coordination.session import active_coordination
+    from agentcore.runtime.graph.session.session import active_coordination
     from agentcore.workspace.limits import (
         WORKSPACE_CHANNEL_DEAD_RETIRE_STEER,
         WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS,

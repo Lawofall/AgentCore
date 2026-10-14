@@ -221,7 +221,7 @@ async def test_deliver_message_queue_stores_client_triple(tmp_path, monkeypatch)
     turn_runs.register(conversation_id=cid, task=blocker, sink=sink, user_id="u")
     server._register_turn("turn-live", blocker, conversation_id=cid)
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        "agentcore.runtime.graph.session.session.active_coordination_for_conversation",
         lambda _cid: None,
     )
     monkeypatch.setattr(

@@ -122,7 +122,7 @@ export const DEMO_DEBATE_MODEL: DebateModel = {
     crux: "试点范围与回滚门槛",
     recommendation: "",
     strongest_points: {
-      pro: "ROI 路径清晰，队员可两周交付",
+      pro: "ROI 路径清晰，两周可以交付",
       con: "运维与合规成本仍需写清",
     },
     handoffs: [
@@ -148,7 +148,7 @@ export const DEMO_DEBATE_MODEL: DebateModel = {
     },
   ],
   closings: [],
-  opening: "这场请双方围绕试点节奏交锋；CEO 只收简报，最终由你拍板。",
+  opening: "这场请双方围绕试点节奏交锋。结论回到对着你的这扇窗，最终由你拍板。",
   settled: true,
 };
 

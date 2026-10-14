@@ -9,7 +9,7 @@ import pytest
 
 from agentcore.core.types import ToolEffect, WorkspaceBoundary
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
-from agentcore.runtime.delegate.ceo_format import format_for_ceo
+from agentcore.runtime.graph.facing.ceo_format import format_for_ceo
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.serialize import (
     debrief_from_transcript,

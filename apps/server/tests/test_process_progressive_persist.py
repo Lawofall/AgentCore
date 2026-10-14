@@ -516,8 +516,8 @@ def test_run_plan_persists_process_team_immediately():
         current_fact_log.reset(token)
 
 
-def test_run_plan_growth_frame_skips_process_team():
-    """Cross-turn growth run_plan (host_message_id) must not insert/journal a new team."""
+def test_run_plan_with_legacy_host_field_still_journals_team():
+    """旧的 host_message_id 不再挡住本回合的图标记。"""
     from agentcore.runtime.events import run_plan
 
     log = TurnFactLog()
@@ -534,8 +534,8 @@ def test_run_plan_growth_frame_skips_process_team():
                 host_message_id="host-msg-1",
             )
         )
-        assert not any(s.get("kind") == "team" for s in sink.raw_process())
-        assert "process_team" not in [e["kind"] for e in log.entries()]
+        assert any(s.get("kind") == "team" for s in sink.raw_process())
+        assert "process_team" in [e["kind"] for e in log.entries()]
     finally:
         current_fact_log.reset(token)
 
@@ -641,7 +641,6 @@ def test_runs_from_entries_synthesizes_team_when_process_team_missing():
         "content",
     ]
     assert (runs["process"][0].get("execution_id")) == "e-legacy"
-    # Growth frame must not invent a team on the appending turn.
     growth = [
         {
             "kind": "run_plan",
@@ -663,7 +662,10 @@ def test_runs_from_entries_synthesizes_team_when_process_team_missing():
     ]
     growth_runs = runs_from_entries(growth)
     assert growth_runs is not None
-    assert [s["kind"] for s in (growth_runs.get("process") or [])] == ["content"]
+    assert [s["kind"] for s in (growth_runs.get("process") or [])] == [
+        "team",
+        "content",
+    ]
 
 
 def test_settlement_fact_log_phantom_no_longer_duplicates_trailing_process_content():

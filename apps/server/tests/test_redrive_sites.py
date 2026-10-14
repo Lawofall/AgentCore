@@ -1,7 +1,6 @@
 """Crash / infra resume windows: journal hints + unmatched trailing tool calls."""
 
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
-from agentcore.runtime.delegate.drive_setup import uses_session_continuation
 from agentcore.runtime.runs.redrive_sites import (
     ResumeHint,
     ResumeKind,
@@ -136,22 +135,3 @@ def test_bind_resume_hints_lookup_not_in_completed():
     assert current_resume_hints.get() is None
 
 
-def test_session_continuation_yields_to_crash_resume_site():
-    spec = RunSpec(run_id="w2", task="接着写", continue_from_run_id="w1")
-    assert uses_session_continuation(spec) is True
-    assert is_resume_site("w2") is False
-    token = bind_resume_hints(
-        {
-            "w2": ResumeHint(
-                kind=ResumeKind.CRASH,
-                transcript=(LLMMessage(role="assistant", content="partial"),),
-            )
-        }
-    )
-    try:
-        assert is_resume_site("w2") is True
-        assert uses_session_continuation(spec) is False
-        plain = RunSpec(run_id="w3", task="冷开")
-        assert uses_session_continuation(plain) is False
-    finally:
-        reset_resume_hints(token)

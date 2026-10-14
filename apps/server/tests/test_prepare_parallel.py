@@ -104,7 +104,7 @@ async def test_prepare_independent_io_overlaps(monkeypatch, tmp_path):
         return None
 
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.target_desktop.adopt_persisted_auto_desk",
+        "agentcore.runtime.graph.desk.target_desktop.adopt_persisted_auto_desk",
         _no_adopt,
     )
 

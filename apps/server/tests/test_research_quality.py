@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from agentcore.runtime.delegate.batch_shape import annotate_batch_meta
-from agentcore.runtime.delegate.delivery_status import build_delivery_status
+from agentcore.runtime.graph.admit.batch_shape import annotate_batch_meta
+from agentcore.runtime.graph.drive.delivery_status import build_delivery_status
 from agentcore.runtime.loop_controller import LoopController
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.research_quality import (

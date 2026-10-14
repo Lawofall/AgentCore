@@ -76,7 +76,9 @@ async def test_apply_user_rules_always_and_ondemand(session_factory):
         repo = DocumentRepository(session)
         store = DocumentMemoryStore(session=session)
         rules_md = await assemble_injected_rules(store, repo, _EVAL_USER_ID, folder_id=None)
-        assert "RULE_TOKEN_Z9" in rules_md
+        listed = await repo.list_user_rule_docs(_EVAL_USER_ID, None)
+        assert "RULE_TOKEN_Z9" not in rules_md
+        assert any("RULE_TOKEN_Z9" in (d.content or "") for d in listed)
 
     async with session_factory() as session:
         await purge_user_documents(_EVAL_USER_ID, session=session)
@@ -120,7 +122,9 @@ async def test_harness_seeds_then_clears_between_cases(patch_eval_docs_session):
             repo = DocumentRepository(session)
             store = DocumentMemoryStore(session=session)
             rules_md = await assemble_injected_rules(store, repo, _EVAL_USER_ID, folder_id=None)
-            seen_marker.append(rules_md)
+            docs = await repo.list_user_rule_docs(_EVAL_USER_ID, None)
+            seen_marker.append("\n".join(d.content or "" for d in docs))
+            assert rules_md == ""
         return await orig_single(*args, **kwargs)
 
     harness._run_single = _probe_a  # type: ignore[method-assign]
@@ -135,7 +139,9 @@ async def test_harness_seeds_then_clears_between_cases(patch_eval_docs_session):
             assert await store.load(_EVAL_USER_ID, "主题/发射口令.md") == ""
             repo = DocumentRepository(session)
             rules_md = await assemble_injected_rules(store, repo, _EVAL_USER_ID, folder_id=None)
-            assert "RULE_TOKEN_Z9" in rules_md
+            docs = await repo.list_user_rule_docs(_EVAL_USER_ID, None)
+            assert rules_md == ""
+            assert any("RULE_TOKEN_Z9" in (d.content or "") for d in docs)
         return await orig_single(*args, **kwargs)
 
     harness._run_single = _probe_b  # type: ignore[method-assign]

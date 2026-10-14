@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from agentcore.runtime.delegate.completion import (
+from agentcore.runtime.graph.drive.completion import (
     collect_worker_gaps,
     format_worker_gaps_block,
 )
-from agentcore.runtime.delegate.delivery_status import (
+from agentcore.runtime.graph.drive.delivery_status import (
     REASON_NO_EXEC_TABLE,
     build_delivery_status,
 )

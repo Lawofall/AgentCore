@@ -170,7 +170,7 @@ def refresh_result_journal_from_host(
     """
     if not isinstance(result, dict):
         return
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         registered_coordination_for_conversation,
     )
 

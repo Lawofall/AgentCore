@@ -96,16 +96,10 @@ def _resolve_write_apply(
     content: str,
     existing_apply: str | None,
 ) -> ApplyMode | FrontmatterError:
-    if apply in ("always", "on_demand", "paths"):
-        return apply  # type: ignore[return-value]
+    del apply, existing_apply
     parsed = parse_entry_frontmatter(content)
     if isinstance(parsed, FrontmatterError):
         return parsed
-    if parsed.apply_present:
-        return parsed.apply
-    if existing_apply in ("always", "on_demand", "paths"):
-        return existing_apply  # type: ignore[return-value]
-    # 新条目没写 apply：与解析器同一缺省（按需）。
     return "on_demand"
 
 
@@ -147,12 +141,13 @@ async def mutate_user_rule(
     content: str | None = None,
     apply: str | None = None,
     description: str | None = None,
+    enroll: bool = False,
 ) -> UserRuleMutationResult:
     """Persist one named user-rule markdown (tool + account shared).
 
-    Write-side always quota uses ``writer=ai``: net growth past the cap raises
-    :class:`~agentcore.memory.always_quota.AlwaysQuotaExceededError`; shrink / list /
-    read / unchanged skip the gate.
+    ``enroll`` is a person's save: the index description is copied from the
+    body and the row enters the on-demand catalog. Model writes leave that
+    index alone.
     """
     action_key = (action or "write").strip().lower() or "write"
     if action_key not in _RULE_MUTATE_ACTIONS:
@@ -263,49 +258,14 @@ async def mutate_user_rule(
             content=text,
         )
 
-    from agentcore.memory.always_quota import (
-        AlwaysQuotaExceededError,
-        always_entry_chars,
-        check_always_write,
-        notify_always_quota_exceeded,
-    )
-    from agentcore.memory.rule_resolve import counts_as_always_content
-
-    existing_always = existing is not None and counts_as_always_content(
-        existing.content or ""
-    )
-    new_is_always = counts_as_always_content(body)
-    if new_is_always:
-        decision = await check_always_write(
-            repo,
-            user_id,
-            folder_id=folder_id,
-            writer="ai",
-            editing_existing_always=existing_always,
-            exclude_id=existing.id if existing is not None else None,
-            new_content=body,
-            new_is_always=True,
-        )
-        if not decision.allowed:
-            usage = decision.usage
-            assert usage is not None
-            quota_err = AlwaysQuotaExceededError(
-                usage,
-                decision.message,
-                file=filename,
-                scope=folder_id,
-                attempted_chars=always_entry_chars(body),
-            )
-            await notify_always_quota_exceeded(user_id, quota_err)
-            raise quota_err
-
     doc = await repo.upsert_user_rule_doc(
         user_id,
         folder_id,
         filename,
         text,
-        apply=apply_mode,
+        apply="on_demand",
         description=description,
+        enroll=enroll,
     )
     label = _apply_label(apply_mode)
     return UserRuleMutationResult(
@@ -373,7 +333,7 @@ def _join_frags(**kwargs: object) -> list[RuleFragment]:
 async def _scope_live_rules(
     repo: DocumentRepository, user_id: str, folder_id: str | None, rank: int
 ):
-    """Always + on_demand + path docs of one scope, tagged with ``rank``."""
+    """Enrolled user rules of one scope, tagged with ``rank``."""
     from agentcore.assembly.bind import current_omit_desk_rules, current_skill_membership
     from agentcore.memory.rule_resolve import LiveRule, live_rule_from_doc
 
@@ -381,24 +341,19 @@ async def _scope_live_rules(
         return []
     membership = current_skill_membership() if folder_id is None else None
     out: list[LiveRule] = []
-    loaded = (
-        ("always", await repo.list_injectable_rules(user_id, folder_id, ai_maintained=False)),
-        ("on_demand", await repo.list_on_demand_user_rules(user_id, folder_id)),
-        ("paths", await repo.list_path_user_rules(user_id, folder_id)),
-    )
-    for column, docs in loaded:
-        for doc in docs:
-            override = None
-            if membership is not None:
-                mode = membership.get(str(getattr(doc, "id", "") or ""))
-                if mode is None:
-                    continue
-                override = mode
-            live = live_rule_from_doc(
-                doc, column_apply=column, rank=rank, apply_override=override
-            )
-            if live is not None:
-                out.append(live)
+    loaded = await repo.list_on_demand_user_rules(user_id, folder_id)
+    for doc in loaded:
+        override = None
+        if membership is not None:
+            mode = membership.get(str(getattr(doc, "id", "") or ""))
+            if mode is None:
+                continue
+            override = mode
+        live = live_rule_from_doc(
+            doc, column_apply="on_demand", rank=rank, apply_override=override
+        )
+        if live is not None:
+            out.append(live)
     return out
 
 

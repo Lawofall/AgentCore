@@ -66,7 +66,7 @@ async def test_resolve_interaction_rejects_stage_card_kind():
 async def test_drive_top_level_no_longer_hangs_team_preview(monkeypatch):
     """顶层也不再挂 team_preview。"""
     from agentcore.core.types import WorkspaceBoundary
-    from agentcore.runtime.delegate.worker_grant import maybe_auto_grant_before_workers
+    from agentcore.runtime.graph.desk.worker_grant import maybe_auto_grant_before_workers
 
     monkeypatch.setattr(
         "agentcore.runtime.sandbox_approval.worker_gate_applies", lambda *_a, **_k: False

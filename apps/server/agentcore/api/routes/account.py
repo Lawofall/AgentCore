@@ -219,6 +219,13 @@ class HistoryToolCall(BaseModel):
     function: HistoryToolCallFunction = Field(default_factory=HistoryToolCallFunction)
 
 
+class GraphContextNode(BaseModel):
+    """One sealed segment still visible in this CEO window. Not shown to the model."""
+
+    id: str
+    depends_on: list[str] = Field(default_factory=list)
+
+
 class ChatContextItem(BaseModel):
     """One CEO-window row: user, assistant (optional tool_calls), or tool."""
 
@@ -228,6 +235,7 @@ class ChatContextItem(BaseModel):
     tool_call_id: str | None = None
     reasoning_content: str | None = None
     evidence_ledger: list[Any] | None = None
+    graph_context: list[GraphContextNode] | None = None
 
 
 class ChatContextRequest(BaseModel):
@@ -236,6 +244,28 @@ class ChatContextRequest(BaseModel):
 
 class ChatContextResponse(BaseModel):
     history: list[ChatContextItem]
+
+
+def _graph_context_nodes(raw: Any) -> list[GraphContextNode]:
+    if not isinstance(raw, list):
+        return []
+    nodes: list[GraphContextNode] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        node_id = item.get("id")
+        if not isinstance(node_id, str) or not node_id:
+            continue
+        depends = item.get("depends_on") or []
+        if not isinstance(depends, list):
+            depends = []
+        nodes.append(
+            GraphContextNode(
+                id=node_id,
+                depends_on=[str(dep) for dep in depends if isinstance(dep, str) and dep],
+            )
+        )
+    return nodes
 
 
 def _chat_context_items(rows: list[dict[str, Any]]) -> list[ChatContextItem]:
@@ -253,6 +283,7 @@ def _chat_context_items(rows: list[dict[str, Any]]) -> list[ChatContextItem]:
         calls = row.get("tool_calls")
         tcid = row.get("tool_call_id")
         reasoning = row.get("reasoning_content")
+        context = _graph_context_nodes(row.get("graph_context"))
         items.append(
             ChatContextItem(
                 role=role,
@@ -261,6 +292,7 @@ def _chat_context_items(rows: list[dict[str, Any]]) -> list[ChatContextItem]:
                 tool_call_id=tcid if isinstance(tcid, str) and tcid else None,
                 reasoning_content=reasoning if isinstance(reasoning, str) and reasoning else None,
                 evidence_ledger=ledger if isinstance(ledger, list) and ledger else None,
+                graph_context=context or None,
             )
         )
     return items
@@ -427,7 +459,7 @@ async def list_account_user_rules(
     user: AccountApiUser,
     session: AsyncSession = Depends(get_db),
 ) -> AccountRulesListResponse:
-    """User rules for turn assembly: always → ``<设定>``; paths → index; on_demand → catalog."""
+    """User rules for the on-demand catalog. Always and path channels stay empty."""
     repo = DocumentRepository(session)
     folder_chain: list[str] = []
     if body.folder_id:
@@ -440,33 +472,19 @@ async def list_account_user_rules(
     ancestors = folder_chain[:-1]
     current_id = folder_chain[-1] if folder_chain else None
 
-    ancestor_docs: list[Document] = []
     ancestor_on_demand: list[Document] = []
-    ancestor_path: list[Document] = []
     for scope in ancestors:
-        ancestor_docs += await repo.list_injectable_rules(
-            user.user_id, scope, ai_maintained=False
-        )
         ancestor_on_demand += await repo.list_on_demand_user_rules(user.user_id, scope)
-        ancestor_path += await repo.list_path_user_rules(user.user_id, scope)
 
-    project_docs: Sequence[Document] = []
     project_on_demand: Sequence[Document] = []
-    project_path: Sequence[Document] = []
     if current_id:
-        project_docs = await repo.list_injectable_rules(
-            user.user_id, current_id, ai_maintained=False
-        )
         project_on_demand = await repo.list_on_demand_user_rules(
             user.user_id, current_id
         )
-        project_path = await repo.list_path_user_rules(user.user_id, current_id)
     return AccountRulesListResponse(
-        global_rules=_rule_docs(
-            await repo.list_injectable_rules(user.user_id, None, ai_maintained=False)
-        ),
-        project_rules=_rule_docs(project_docs),
-        ancestor_rules=_rule_docs(ancestor_docs),
+        global_rules=[],
+        project_rules=[],
+        ancestor_rules=[],
         global_on_demand_rules=_on_demand_rule_docs(
             await repo.list_on_demand_user_rules(user.user_id, None),
             skip_names=set(),
@@ -477,9 +495,9 @@ async def list_account_user_rules(
         ancestor_on_demand_rules=_on_demand_rule_docs(
             ancestor_on_demand, skip_names=set()
         ),
-        global_path_rules=_rule_docs(await repo.list_path_user_rules(user.user_id, None)),
-        project_path_rules=_rule_docs(project_path),
-        ancestor_path_rules=_rule_docs(ancestor_path),
+        global_path_rules=[],
+        project_path_rules=[],
+        ancestor_path_rules=[],
         folder_chain=folder_chain,
     )
 
@@ -554,6 +572,7 @@ async def _mutate_account_rule(
             content=content,
             apply=apply,
             description=description,
+            enroll=True,
         )
     except AlwaysQuotaExceededError as exc:
         raise HTTPException(

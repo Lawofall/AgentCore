@@ -680,7 +680,12 @@ function computeActDerived(
       roles.push(role);
     }
     if (r.agentId) seenAgents.add(r.agentId);
-    if (face.status === "completed" || face.status === "skipped") completed++;
+    if (
+      face.status === "completed" ||
+      face.status === "skipped" ||
+      face.status === "cut"
+    )
+      completed++;
     if (r.durationMs != null && r.durationMs > 0) {
       durationMs += r.durationMs;
       anyDuration = true;
@@ -707,7 +712,9 @@ function computeActDerived(
   else if (statuses.some((s) => s === "cancelled")) status = "cancelled";
   else if (
     statuses.length > 0 &&
-    statuses.every((s) => s === "completed" || s === "skipped")
+    statuses.every(
+      (s) => s === "completed" || s === "skipped" || s === "cut",
+    )
   )
     status = "completed";
   else status = "planning";

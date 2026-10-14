@@ -21,22 +21,6 @@ from agentcore.runtime.debate.host import (
 )
 
 
-def test_research_chain_evidence_mirrors_research_first_inverse():
-    assert research_chain_evidence([]) is False
-    assert research_chain_evidence([], has_research_artifacts=True) is True
-    handwritten_delegate = [
-        {
-            "kind": "tool_call",
-            "payload": {
-                "name": "delegate",
-                "arguments": '{"tasks":[{"role":"调研员","task":"摸底方向 A"}]}',
-                "success": True,
-            },
-        }
-    ]
-    assert research_chain_evidence(handwritten_delegate) is False
-
-
 def test_next_act_id_defaults_and_increments():
     assert next_act_id([]) == "act-2"
     assert next_act_id(None) == "act-2"
@@ -114,7 +98,7 @@ async def test_resolve_debate_host_attach_fallback_no_mlr(monkeypatch):
         return None
 
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_latest_mlr_execution",
+        "agentcore.runtime.graph.shape.graph_append.resolve_latest_mlr_execution",
         _none,
     )
     got = await resolve_debate_host_attach(
@@ -150,15 +134,15 @@ async def test_resolve_debate_host_attach_success(monkeypatch):
         return host_entries
 
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_latest_mlr_execution",
+        "agentcore.runtime.graph.shape.graph_append.resolve_latest_mlr_execution",
         _eid,
     )
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_host_message_id",
+        "agentcore.runtime.graph.shape.graph_append.resolve_host_message_id",
         _mid,
     )
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.load_host_journal_entries",
+        "agentcore.runtime.graph.shape.graph_append.load_host_journal_entries",
         _load,
     )
     got = await resolve_debate_host_attach(
@@ -191,15 +175,15 @@ async def test_resolve_debate_host_attach_same_turn(monkeypatch):
     ]
 
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_latest_mlr_execution",
+        "agentcore.runtime.graph.shape.graph_append.resolve_latest_mlr_execution",
         AsyncMock(return_value="exec1"),
     )
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_host_message_id",
+        "agentcore.runtime.graph.shape.graph_append.resolve_host_message_id",
         AsyncMock(return_value="m1"),
     )
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.load_host_journal_entries",
+        "agentcore.runtime.graph.shape.graph_append.load_host_journal_entries",
         AsyncMock(return_value=host_entries),
     )
     got = await resolve_debate_host_attach(
@@ -263,15 +247,15 @@ async def test_resolve_debate_host_attach_fallback_incomplete_synthesizer(monkey
     ]
 
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_latest_mlr_execution",
+        "agentcore.runtime.graph.shape.graph_append.resolve_latest_mlr_execution",
         AsyncMock(return_value="exec1"),
     )
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_host_message_id",
+        "agentcore.runtime.graph.shape.graph_append.resolve_host_message_id",
         AsyncMock(return_value="m1"),
     )
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.load_host_journal_entries",
+        "agentcore.runtime.graph.shape.graph_append.load_host_journal_entries",
         AsyncMock(return_value=host_entries),
     )
     got = await resolve_debate_host_attach(
@@ -300,15 +284,15 @@ async def test_resolve_debate_host_attach_namespaced_synthesizer(monkeypatch):
     ]
 
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_latest_mlr_execution",
+        "agentcore.runtime.graph.shape.graph_append.resolve_latest_mlr_execution",
         AsyncMock(return_value="exec1"),
     )
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.resolve_host_message_id",
+        "agentcore.runtime.graph.shape.graph_append.resolve_host_message_id",
         AsyncMock(return_value="m1"),
     )
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.graph_append.load_host_journal_entries",
+        "agentcore.runtime.graph.shape.graph_append.load_host_journal_entries",
         AsyncMock(return_value=host_entries),
     )
     got = await resolve_debate_host_attach(
@@ -328,7 +312,7 @@ async def test_resolve_debate_host_attach_namespaced_synthesizer(monkeypatch):
 @pytest.mark.asyncio
 async def test_resolve_latest_mlr_falls_back_to_appendable_journal(monkeypatch):
     """两套查找对齐：MLR SQL 漏检时，appendable + journal synthesizer 复核仍命中。"""
-    from agentcore.runtime.delegate import graph_append as ga
+    from agentcore.runtime.graph.shape import graph_append as ga
 
     rid = "del_abc_synthesizer"
     host_entries = [

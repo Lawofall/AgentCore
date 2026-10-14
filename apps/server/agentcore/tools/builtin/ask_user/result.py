@@ -39,7 +39,7 @@ def structured_options_summary(
 def _note_user_consulted() -> None:
     """Remember that this coordination stretch heard the user, for the next tell."""
     try:
-        from agentcore.runtime.coordination.session import active_coordination
+        from agentcore.runtime.graph.session.session import active_coordination
 
         session = active_coordination()
     except Exception:  # noqa: BLE001 — asking must not fail if coordination is absent

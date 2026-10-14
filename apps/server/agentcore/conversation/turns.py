@@ -216,7 +216,7 @@ async def stream_chat(
             )
             # Pillar D1: delay sink.close while a detached coordination drive is live
             # (symmetric with sidecar _run_turn). Exception / cancel skip this.
-            from agentcore.runtime.coordination import await_live_detached_drive
+            from agentcore.runtime.graph.session import await_live_detached_drive
 
             await await_live_detached_drive(conversation_id)
 
@@ -377,7 +377,7 @@ async def regenerate_chat(
             llm_supports_tools=llm_supports_tools,
             agent_mentions=stored_mentions or None,
         )
-        from agentcore.runtime.coordination import await_live_detached_drive
+        from agentcore.runtime.graph.session import await_live_detached_drive
 
         await await_live_detached_drive(conversation_id)
 
@@ -664,7 +664,7 @@ async def resume_chat(
                             )
 
         # Same D1 hold as stream_chat / sidecar resume: delay close while detached drive lives.
-        from agentcore.runtime.coordination import await_live_detached_drive
+        from agentcore.runtime.graph.session import await_live_detached_drive
 
         await await_live_detached_drive(conversation_id)
 
@@ -985,7 +985,7 @@ async def continue_chat(
                                 timeout=2.0,
                             )
 
-        from agentcore.runtime.coordination import await_live_detached_drive
+        from agentcore.runtime.graph.session import await_live_detached_drive
 
         await await_live_detached_drive(conversation_id)
 

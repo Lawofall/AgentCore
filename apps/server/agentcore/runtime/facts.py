@@ -119,6 +119,11 @@ class FactKind(StrEnum):
     # Worker mid-run window compact: rolling summary + folded_rounds watermark.
     # Projection-only — ``window_from_journal`` still rebuilds the full transcript.
     WINDOW_COMPACT = "window_compact"
+    # Graph rewind: append-only. The window fold projects from the latest one.
+    # ``runs_from_entries`` synthesizes a display ``graph_rewind`` from this fact.
+    GRAPH_REWIND = "graph_rewind"
+    # Workspace zip taken when a segment seals. The rewind checkbox restores it.
+    SEAL_SNAPSHOT = "seal_snapshot"
 
 
 # The execution-only kinds the DISPLAY projection (runs_from_entries) must skip: they
@@ -404,6 +409,57 @@ class WindowCompactFact:
                 "summary": self.summary,
                 "folded_rounds": self.folded_rounds,
             },
+            ts=ts,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphRewindFact:
+    """Append-only rewind. The journal stays full; the window is a projection."""
+
+    target_id: str
+    scar: str
+    kept_ids: tuple[str, ...] = ()
+    cut_ids: tuple[str, ...] = ()
+    conclusions: tuple[tuple[str, str], ...] = ()
+    original_request: str = ""
+    source: str = "human"
+    window_run_id: str = ""
+    reason: str = ""
+    kind: ClassVar[FactKind] = FactKind.GRAPH_REWIND
+
+    def to_fact(self, ts: str | None = None) -> Fact:
+        return Fact(
+            kind=self.kind.value,
+            payload={
+                "target_id": self.target_id,
+                "kept_ids": list(self.kept_ids),
+                "cut_ids": list(self.cut_ids),
+                "scar": self.scar,
+                "conclusions": [
+                    {"id": node_id, "text": text} for node_id, text in self.conclusions
+                ],
+                "original_request": self.original_request,
+                "source": self.source,
+                "window_run_id": self.window_run_id,
+                "reason": self.reason,
+            },
+            ts=ts,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SealSnapshotFact:
+    """Snapshot id taken when a segment sealed. Rewind restores it only if asked."""
+
+    run_id: str
+    snapshot_id: str
+    kind: ClassVar[FactKind] = FactKind.SEAL_SNAPSHOT
+
+    def to_fact(self, ts: str | None = None) -> Fact:
+        return Fact(
+            kind=self.kind.value,
+            payload={"run_id": self.run_id, "snapshot_id": self.snapshot_id},
             ts=ts,
         )
 

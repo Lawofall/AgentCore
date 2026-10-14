@@ -500,7 +500,7 @@ async def resume_chat_pipeline(
         reset_turn_token_meter(turn_token_meter_token)
         reset_turn_auth_dead(turn_auth_dead_token)
         if execution_id_token is not None:
-            from agentcore.runtime.coordination.session import (
+            from agentcore.runtime.graph.session.session import (
                 current_execution_id,
                 release_turn_coordination,
             )

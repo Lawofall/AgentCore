@@ -1,4 +1,4 @@
-"""Production crash-lease DelegateTool factory (wired at process startup).
+"""Production crash-lease GraphTool factory (wired at process startup).
 
 Rebuilds LLM credentials / workspace / profiles via the same ambient resolution as
 resume, then calls :func:`wire_crash_turn` (sibling of ``wire_resume_turn``). Any
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from agentcore.runtime.events import EventSink
     from agentcore.runtime.leases.model import TurnLeaseRow
     from agentcore.runtime.turn.state import TurnState
-    from agentcore.tools.builtin.delegate import DelegateTool
+    from agentcore.tools.builtin.graph import GraphTool
 
 logger = get_logger(__name__)
 
@@ -73,8 +73,8 @@ async def production_crash_delegate_factory(
     state: TurnState,
     *,
     sink: EventSink,
-) -> DelegateTool | None:
-    """Rebuild a live ``DelegateTool`` for crash redrive, or ``None`` on any failure."""
+) -> GraphTool | None:
+    """Rebuild a live ``GraphTool`` for crash redrive, or ``None`` on any failure."""
     message_id = lease.message_id
     conversation_id = lease.conversation_id
     user_id = lease.user_id

@@ -4,6 +4,7 @@ import {
   type ConversationHydratePhase,
 } from "@/components/chat/ConversationHydrateOverlay";
 import { ConversationSplitView } from "@/components/chat/ConversationSplitView";
+import { GraphFaceToggle } from "@/components/chat/GraphFaceToggle";
 import { SidePanel } from "@/components/layout/SidePanel";
 import { SidePanelToggle } from "@/components/layout/SidePanelToggle";
 import {
@@ -453,7 +454,7 @@ export function ConversationPage() {
   }, [id]);
 
   // 对话页恒聊天。右坞：打开后头栏 PanelRight 关闭；关闭时主区右上浮层打开
-  // （有会话时 Ctrl/Cmd+I；草稿不可用）。
+  // （有会话时 Ctrl/Cmd+I；草稿不可用）。「图」叠在这颗下面，坞开着也留在这个角。
   const panelOpen = useSidePanelStore((s) => s.open);
   const { isNarrow } = useNarrowLayoutState();
   const split = useConversationSplitStore((s) => s.split);
@@ -483,13 +484,14 @@ export function ConversationPage() {
                   onRetry={() => setHydrateRetry((n) => n + 1)}
                 />
               )}
+              {!isNarrow && id && (
+                <div className="absolute right-3 top-2 z-20 flex flex-col items-center gap-2">
+                  {padDockToggle && <SidePanelToggle />}
+                  <GraphFaceToggle />
+                </div>
+              )}
             </div>
           </ChatPaneProvider>
-        )}
-        {padDockToggle && !showSplit && (
-          <div className="absolute right-3 top-2 z-20">
-            <SidePanelToggle />
-          </div>
         )}
       </div>
       {/* 草稿不挂右坞（不出现、不能打开）；有会话才挂载。 */}

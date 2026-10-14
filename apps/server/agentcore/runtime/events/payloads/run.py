@@ -615,6 +615,15 @@ class RunSkippedPayload(WirePayload):
     reason: Literal["cascade", "abort"]
 
 
+class GraphRewindPayload(WirePayload):
+    """Cut segments leave the model window and show as 已切出. The record stays."""
+
+    target_run_id: str
+    cut_run_ids: list[str]
+    scar: str
+    source: Literal["human", "model"]
+
+
 class RunProgressPayload(WirePayload):
     completed: int
     total: int

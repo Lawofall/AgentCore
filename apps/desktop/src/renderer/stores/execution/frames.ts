@@ -8,6 +8,7 @@ import type {
   PlanRevisedPayload,
   PlanRevisionKind,
   ResetReason,
+  GraphRewindPayload,
   RunCancelledPayload,
   RunCompletedPayload,
   RunContextPayload,
@@ -180,6 +181,13 @@ export type RunFrame =
       runId: string;
       agentId: string;
       reason: "cascade" | "abort";
+    }
+  | {
+      t: number;
+      kind: "graph_rewind";
+      targetRunId: string;
+      cutRunIds: string[];
+      scar: string;
     }
   | { t: number; kind: "run_progress"; completed: number; total: number }
   | {
@@ -452,6 +460,16 @@ export function frameFromEvent(event: SSEEvent): RunFrame | null {
         runId: p.run_id,
         agentId: p.agent_id,
         reason: p.reason,
+      };
+    }
+    case "graph_rewind": {
+      const p = event.payload as GraphRewindPayload;
+      return {
+        t,
+        kind: "graph_rewind",
+        targetRunId: p.target_run_id,
+        cutRunIds: p.cut_run_ids ?? [],
+        scar: p.scar,
       };
     }
     case "run_progress": {

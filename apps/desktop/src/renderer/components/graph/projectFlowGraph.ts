@@ -6,7 +6,6 @@ import type { InjectGraphOverlay } from "@/lib/causalInject";
 import {
   estimateTokens,
   formatDisplayCost,
-  headText,
   pickCostMoney,
   tailText,
 } from "@/lib/format";
@@ -36,7 +35,6 @@ import { INPUT_ID } from "./constants";
 import { agentNodeToShell } from "./graphLive";
 import {
   aggregateDebateRoundStatus,
-  captainSinkPreview,
   debateRoundActiveBeat,
   debateRoundPhaseLabel,
   debateRoundSettledMark,
@@ -183,6 +181,18 @@ function sumDurationMs(
 }
 
 /** Pure projection: Execution + layout → React Flow nodes. */
+/** Card title is this segment's goal, not a person name. */
+function segmentTitle(
+  run: { task: string; agentId: string },
+  agent: { role: string } | undefined,
+): string {
+  const task = run.task.trim();
+  if (task) return task;
+  const role = agent?.role.trim() ?? "";
+  if (role && role !== "CEO") return role;
+  return run.agentId.trim() || "这段";
+}
+
 export function projectFlowNodes({
   execution,
   positions,
@@ -388,7 +398,7 @@ export function projectFlowNodes({
         : null;
     const agentData = {
       agentId: run.agentId,
-      role: (hostAgent ?? agent)?.role ?? run.agentId,
+      role: segmentTitle(run, hostAgent ?? agent),
       runId: run.id,
       status: aggregatedStatus,
       isAnimating: aggregatedStatus === "running",
@@ -520,49 +530,11 @@ export function projectFlowNodes({
             },
       } as Node);
     }
-    // Document shell: emit captain whenever the run exists (Live fills status).
-    // Legacy path still requires captainStatus (callers always derive it).
-    if (captainRun && (documentShell || captainStatus)) {
-      const captainPos = placed(captainRun.id);
-      if (captainPos) {
-        const waitCaption = (captainStatusCaption ?? "").trim();
-        // 等待句只进正文。汇点状态跟队长推导走，有进度数字不能改画成进行中。
-        const sinkStatus: RunStatus = captainStatus ?? "pending";
-        const preview = captainSinkPreview({
-          captainStatus: captainStatus ?? "pending",
-          answerPreview: finalAnswer ? headText(finalAnswer.content) : "",
-        });
-        nodes.push({
-          id: captainRun.id,
-          type: "captain",
-          position: captainPos,
-          data: documentShell
-            ? {
-                variant: "captain" as const,
-                runId: captainRun.id,
-                label: "",
-                handleDirection,
-                enterIndex: workerRuns.length + 1,
-              }
-            : {
-                variant: "captain" as const,
-                status: sinkStatus,
-                statusCaption: waitCaption || undefined,
-                label: "",
-                preview,
-                handleDirection,
-                enterIndex: workerRuns.length + 1,
-                focused:
-                  !!finalAnswer && litEndpointMessageId === finalAnswer.id,
-                onActivate: finalAnswer
-                  ? () => activateNode(captainRun.id)
-                  : undefined,
-              },
-        } as Node);
-      } else {
-        missingPosIds.push(captainRun.id);
-      }
-    }
+    // 不再画指挥汇点。参数仍留给边的着色，节点本身不投出来。
+    void captainRun;
+    void captainStatus;
+    void captainStatusCaption;
+    void finalAnswer;
   }
 
   if (isGraphTraceEnabled()) {

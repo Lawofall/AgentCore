@@ -319,18 +319,11 @@ describe("buildGraphScene · golden", () => {
     expect(scene.nodeIds).not.toContain("w1_v3");
     expect(scene.seatFoldsByHost.get("w1")).toEqual(["w1_v2", "w1_v3"]);
     expect(scene.edges.filter((e) => e.kind === "continuation")).toEqual([]);
-    expect(
-      scene.edges
-        .filter((e) => e.kind === "dep" && e.source === INPUT_ID)
-        .map((e) => e.target)
-        .sort(),
-    ).toEqual(["w1"]);
-    expect(
-      scene.edges
-        .filter((e) => e.kind === "dep" && e.target === "captain")
-        .map((e) => e.source)
-        .sort(),
-    ).toEqual(["w1"]);
+    expect(scene.nodeIds).not.toContain("captain");
+    expect(scene.nodeIds).not.toContain(INPUT_ID);
+    expect(scene.edges.some((e) => e.source === INPUT_ID || e.target === "captain")).toBe(
+      false,
+    );
     expect(snapshotScene(scene)).toMatchSnapshot();
   });
 

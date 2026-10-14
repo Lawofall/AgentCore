@@ -150,7 +150,7 @@ async def run_contract_loop(
     reasoning = ""
     verdict = ContractVerdict(ok=True)
     # Web sources this worker consults, de-duped across contract retries.
-    # Pool merge still collect-only into this list → DelegateTool → turn card.
+    # Pool merge still collect-only into this list → GraphTool → turn card.
     # Stable ``#rN`` annotation (when ``env.turn_evidence_ledger`` is set) is
     # separate — not the old ``[n]`` annotate path (引用即出处 P1).
     worker_citations: list[dict] = []

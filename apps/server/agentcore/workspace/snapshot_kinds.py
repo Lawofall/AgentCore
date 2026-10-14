@@ -37,6 +37,8 @@ def classify_snapshot_label(label: str | None) -> SnapshotKind:
         return "auto"
     if label.startswith("turn-baseline:"):
         return "baseline"
+    if label.startswith("seal:"):
+        return "system"
     if label.startswith("handoff:") or label in SYSTEM_EXACT_LABELS:
         return "system"
     return "kept"

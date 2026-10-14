@@ -505,7 +505,7 @@ async def test_captain_coordination_aside_not_in_deliverable():
     证明路径：content_delta 直播过程旁白；非终止工具后回退，最终 messages.content
     只留交付段（阶段结论）。
     """
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         clear_active_coordination,
         set_active_coordination,
@@ -560,8 +560,8 @@ async def test_attached_inject_closing_round_keeps_body_despite_successful_tool(
 
     from structlog.testing import capture_logs
 
-    import agentcore.runtime.coordination.session as session_mod
-    from agentcore.runtime.coordination.session import (
+    import agentcore.runtime.graph.session.session as session_mod
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         bind_host_journal,
         clear_active_coordination,
@@ -636,7 +636,7 @@ async def test_attached_inject_closing_round_keeps_body_despite_successful_tool(
             patch.object(session_mod, "_SETTLE_ATTACH_GRACE_S", 2.0),
             patch.object(session_mod, "_SETTLE_ATTACH_POLL_S", 0.02),
             patch(
-                "agentcore.runtime.coordination.harvest.settle_detached_execution",
+                "agentcore.runtime.graph.session.harvest.settle_detached_execution",
                 new_callable=AsyncMock,
             ) as harvest,
             capture_logs() as logs,
@@ -1015,11 +1015,11 @@ async def test_length_empty_not_exempted_for_captain_coordination(monkeypatch):
         return []
 
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.wait.await_coordination_injection",
+        "agentcore.runtime.graph.session.wait.await_coordination_injection",
         _no_inject,
     )
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.session.active_coordination",
+        "agentcore.runtime.graph.session.session.active_coordination",
         lambda execution_id=None: SimpleNamespace(
             active=True,
             execution_id="e-len",

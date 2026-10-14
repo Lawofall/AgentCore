@@ -86,8 +86,6 @@ def _note_team_slot_from_run_plan(
     Applied after the process lane is fully rebuilt so we do not block G1 snapshot
     hydrate when the journal has ``run_plan`` but no progressive ``process_*``.
     """
-    if payload.get("host_message_id"):
-        return
     eid = payload.get("execution_id") or ""
     if not eid or eid in slots or _has_team_marker(process, eid):
         return
@@ -240,6 +238,22 @@ def runs_from_entries(entries: list[dict[str, Any]] | None) -> dict[str, Any] | 
                     "content": payload.get("content") or "",
                     "reasoning": payload.get("reasoning") or "",
                 }
+            continue
+        elif kind == FactKind.GRAPH_REWIND.value:
+            # Execution fact, but the graph face needs 已切出 on reload. The live
+            # SSE is ephemeral; this row is the durable source the client folds.
+            events.append(
+                {
+                    "type": "graph_rewind",
+                    "payload": {
+                        "target_run_id": payload.get("target_id") or "",
+                        "cut_run_ids": list(payload.get("cut_ids") or []),
+                        "scar": payload.get("scar") or "",
+                        "source": payload.get("source") or "human",
+                    },
+                    "timestamp": entry.get("ts"),
+                }
+            )
             continue
         elif kind in EXECUTION_ONLY_KINDS:
             # Execution-level facts carry engine-rebuild state, not client-foldable
@@ -558,7 +572,9 @@ def window_from_journal(
                 )
     if not window:
         return None
-    return window
+    from agentcore.runtime.graph.shape.rewind import project_journal_window
+
+    return project_journal_window(window, entries, target or "")
 
 
 def completed_from_journal(

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Literal
 from agentcore.core.logging import get_logger
 
 if TYPE_CHECKING:
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
 logger = get_logger(__name__)
 

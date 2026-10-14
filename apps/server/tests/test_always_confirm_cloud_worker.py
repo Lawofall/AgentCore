@@ -17,7 +17,7 @@ from structlog.testing import capture_logs
 from agentcore.core.types import WorkspaceBoundary
 from agentcore.llm.provider.protocol import ToolCall
 from agentcore.runtime.approvals import ApprovalDecision, ApprovalGate
-from agentcore.runtime.delegate.drive_setup import resolve_worker_gate
+from agentcore.runtime.graph.drive.drive_setup import resolve_worker_gate
 from agentcore.runtime.engine.tool_exec_gates import _check_safety_and_approval_gates
 from agentcore.runtime.events import EventSink, EventType, SSEEvent
 from agentcore.runtime.interaction import InteractionRegistry

@@ -231,7 +231,7 @@ const EMPTY_EXEC: ExecutionRuntime = {
   attestedOutcome: null,
 };
 
-const RUN_TERMINAL = new Set(["completed", "failed", "cancelled", "skipped"]);
+const RUN_TERMINAL = new Set(["completed", "failed", "cancelled", "skipped", "cut"]);
 
 function mergeInterjectionLists(
   dest: UserInterjection[],

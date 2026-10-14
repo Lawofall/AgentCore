@@ -19,7 +19,11 @@ import {
 } from "@/lib/processTimeline";
 import type { CheckpointDisplay } from "@/stores/conversation";
 import { useStreamAwareDisclosure } from "@/stores/disclosure";
-import { type ExecutionJournal, useMessageExecution } from "@/stores/execution";
+import {
+  type ExecutionJournal,
+  isDebate,
+  useMessageExecution,
+} from "@/stores/execution";
 import { renderTimelineInteractionCard } from "@/stores/interactions/registryUi";
 import type {
   Citation,
@@ -305,6 +309,7 @@ export function ProcessEndChrome({
   const execution = useMessageExecution(messageId ?? null);
   const last = process[process.length - 1];
   const graphVisibleAtTail = (() => {
+    if (!execution || !isDebate(execution)) return false;
     const slotExecutionId = graphSlotExecutionId(last);
     if (!slotExecutionId) return false;
     if (!execution || execution.id !== slotExecutionId) return false;
@@ -361,6 +366,8 @@ export function ProcessTimeline({
   /** Harvested `run.debrief` — fills an empty successful handoff row. */
   handoffDebrief?: RunDebrief | null;
 }) {
+  const execution = useMessageExecution(messageId ?? null);
+  const showInlineGraph = execution != null && isDebate(execution);
   const hasContentStep = process.some((s) => s.kind === "content");
 
   // 摘要步数与可见行同源，避免「Thought 10」展开只剩 3 行。
@@ -456,6 +463,7 @@ export function ProcessTimeline({
         node: answerMarkdown,
       });
     }
+    if (nodes[i]?.kind === "team" && !showInlineGraph) continue;
     if (shouldCollapseProcess && foldMask[i]) {
       if (!processExpanded) {
         pushSummary(`sum-${nodeKeys[i] ?? String(i)}`);

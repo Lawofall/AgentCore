@@ -81,6 +81,9 @@ class EventType(StrEnum):
     # reason=cascade → on_failure=skip 波及下游；reason=abort → 整波 ABORT / 调度 abort /
     # 父 force_cancel·nested 中止·user_stop（ask_user soft_stop 续跑取消除外）。
     RUN_SKIPPED = "run_skipped"
+    # 从已封口的一段继续。EPHEMERAL on the live stream; reload folds the
+    # ``graph_rewind`` execution fact into the same wire shape.
+    GRAPH_REWIND = "graph_rewind"
     RUN_PROGRESS = "run_progress"
     RUN_TOOL_PROGRESS = "run_tool_progress"
     # Worker/run 活动相位（multi-agent fold 单一源）：等 LLM / 跑工具 / 等子团队 / 收尾。

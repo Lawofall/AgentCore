@@ -332,7 +332,7 @@ describe("ensureTimelineMarkersFromJournal", () => {
     ]);
   });
 
-  it("does not insert team for host_message_id run_plan", () => {
+  it("inserts team even when an old host_message_id is present", () => {
     const process = ensureTimelineMarkersFromJournal(
       [{ kind: "content", text: "再加一人。" }],
       [
@@ -345,7 +345,10 @@ describe("ensureTimelineMarkersFromJournal", () => {
         },
       ],
     );
-    expect(process).toEqual([{ kind: "content", text: "再加一人。" }]);
+    expect(process).toEqual([
+      { kind: "team", execution_id: "exec1" },
+      { kind: "content", text: "再加一人。" },
+    ]);
   });
 
   // 缺 team 且已有队后 content：按 journal 槽插入，禁止尾部 append 把终稿挤到图上方。
@@ -392,6 +395,7 @@ describe("ensureTimelineMarkersFromJournal", () => {
     );
     expect(process).toEqual([
       { kind: "content", text: "再加一人。" },
+      { kind: "team", execution_id: "exec1" },
       { kind: "content", text: "已追加。" },
     ]);
   });

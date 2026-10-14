@@ -119,7 +119,7 @@ def test_contract_landed_outside_artifact_dir_is_silent():
 
 def test_artifact_dir_mismatch_is_delivered_without_todo():
     """仅 artifact_dir 未命中且已落盘：认实际路径，不发 path_hint 待办，不挡 delivered。"""
-    from agentcore.runtime.delegate.delivery_status import build_delivery_status
+    from agentcore.runtime.graph.drive.delivery_status import build_delivery_status
     from agentcore.runtime.runs.executor.shared import _delivery_gaps_from_warnings
     from agentcore.runtime.runs.file_acceptance import (
         REASON_PATH_MISMATCH,
@@ -261,18 +261,18 @@ def test_build_run_plan_leftover_native_key_does_not_clear_artifact_dir():
     assert d.artifacts == [f"{NOTES_DIR}/{name}"]
 
 
-def test_ceo_schema_exposes_artifacts_only():
-    """CEO 填参面只有 artifacts。"""
-    from agentcore.tools.builtin.delegate.schema import DELEGATE_PARAMETERS
+def test_ceo_schema_does_not_expose_artifacts():
+    """填参面不露 artifacts。"""
+    from agentcore.tools.builtin.graph.schema import DELEGATE_PARAMETERS
 
-    task_props = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]
-    assert "artifacts" in task_props
-    assert task_props["artifacts"]["type"] == "array"
+    node_props = DELEGATE_PARAMETERS["properties"]["nodes"]["items"]["properties"]
+    assert "artifacts" not in node_props
+    assert set(node_props) == {"id", "goal", "depends_on"}
 
 
 def test_shared_artifact_dir_not_sibling_cross():
     """同批只共享约定文档目录、无文件级 artifacts → 不触发 sibling 交叉。"""
-    from agentcore.runtime.coordination.append_guard import find_sibling_artifact_crosses
+    from agentcore.runtime.graph.session.append_guard import find_sibling_artifact_crosses
 
     plan, errors = build_run_plan(
         [
@@ -294,7 +294,7 @@ def test_shared_artifact_dir_not_sibling_cross():
 
 
 def test_same_file_artifact_still_sibling_cross():
-    from agentcore.runtime.coordination.append_guard import find_sibling_artifact_crosses
+    from agentcore.runtime.graph.session.append_guard import find_sibling_artifact_crosses
 
     plan, errors = build_run_plan(
         [

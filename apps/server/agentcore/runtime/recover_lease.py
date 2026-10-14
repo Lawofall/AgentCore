@@ -37,7 +37,7 @@ def bind_recovered_turn(execution_id: str, sink: EventSink) -> None:
     task cannot interleave before the next await, so the flag is guaranteed to be set
     before ``finish_detached_coordination`` can read it.
     """
-    from agentcore.runtime.coordination.session import active_coordination
+    from agentcore.runtime.graph.session.session import active_coordination
 
     turn_id = (sink.message_id or "").strip()
     if not turn_id:
@@ -63,7 +63,7 @@ async def _await_crash_redrive_drive(execution_id: str) -> None:
     Called **outside** ``turn_lease_recover_timeout_seconds`` (that budget only
     covers orphan + factory + arm).
     """
-    from agentcore.runtime.coordination.session import active_coordination
+    from agentcore.runtime.graph.session.session import active_coordination
 
     session = active_coordination(execution_id)
     task = getattr(session, "drive_task", None) if session is not None else None
@@ -132,7 +132,7 @@ async def recover_expired_lease(lease: TurnLeaseRow, state: TurnState) -> None:
     """
     from agentcore.config import settings
     from agentcore.core.types import new_id
-    from agentcore.runtime.coordination.session import cancel_coordination_on_user_stop
+    from agentcore.runtime.graph.session.session import cancel_coordination_on_user_stop
     from agentcore.runtime.facts import TurnFactLog, current_fact_log
     from agentcore.runtime.interaction_orphan import orphan_turn_before_recover
     from agentcore.runtime.journal.writer import (
@@ -347,7 +347,7 @@ async def recover_expired_lease(lease: TurnLeaseRow, state: TurnState) -> None:
         # lease is gone, so the closing turn re-acquires it instead of racing our
         # release. ``finish_detached_coordination``'s attach grace wakes on this.
         if eid:
-            from agentcore.runtime.coordination.session import active_coordination
+            from agentcore.runtime.graph.session.session import active_coordination
 
             armed = active_coordination(eid)
             if armed is not None:

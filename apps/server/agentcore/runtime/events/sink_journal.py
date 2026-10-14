@@ -36,7 +36,7 @@ class SinkJournalMixin:
         self, event: SSEEvent
     ) -> asyncio.Future[int | None] | None:
         """Append a DURABLE fact to the host/execution journal (sink-lifetime independent)."""
-        from agentcore.runtime.delegate.graph_append import register_graph_host
+        from agentcore.runtime.graph.shape.graph_append import register_graph_host
         from agentcore.runtime.journal.writer import (
             current_journal_writer,
             is_seal_overflow_kind,
@@ -132,7 +132,7 @@ class SinkJournalMixin:
 
     def _coordination_session_for_event(self, event: SSEEvent):
         """Live coordination session for ``event``, if any."""
-        from agentcore.runtime.coordination.session import (
+        from agentcore.runtime.graph.session.session import (
             active_coordination,
             registered_coordination_for_conversation,
         )

@@ -11,6 +11,7 @@ const WORKER_TERMINAL = new Set<string>([
   "failed",
   "cancelled",
   "skipped",
+  "cut",
 ]);
 
 function seatCountedRuns(

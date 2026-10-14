@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from contextvars import ContextVar
 from typing import Any
 
 from agentcore.core.logging import get_logger
@@ -31,6 +31,14 @@ from agentcore.runtime.events.journal_config import (
 )
 from agentcore.runtime.events.process_persist import ProcessPersistCursor
 from agentcore.runtime.events.sink_journal import SinkJournalMixin
+from agentcore.runtime.events.sink_queue import (
+    _SUBSCRIBER_QUEUE_MAXSIZE,
+    _Frame,
+    _backfill_seq,
+    _bounded_put,
+    _keep_live_settle_event,
+    _keep_live_settle_frame,
+)
 from agentcore.runtime.events.sink_process import (
     MARKER_STANDIN_TOOLS,  # noqa: F401 — public re-export
     ORCHESTRATION_TOOLS,  # noqa: F401 — public re-export
@@ -40,9 +48,12 @@ from agentcore.runtime.events.sink_process import (
 from agentcore.runtime.events.sink_terminal import SinkTerminalMixin
 from agentcore.runtime.events.stream_checkpointer import StreamCheckpointer
 from agentcore.runtime.events.types import EventType, SSEEvent
-from agentcore.runtime.terminal import RUN_CLOSE_EVENT_TYPES, is_live_settle_event
+from agentcore.runtime.terminal import RUN_CLOSE_EVENT_TYPES
 
 logger = get_logger(__name__)
+
+# Re-entrancy guard: a mirrored frame must not mirror itself.
+_think_mirroring: ContextVar[bool] = ContextVar("think_segment_mirroring", default=False)
 
 # Dev-only observation seam (demo-tape recorder): installed by
 # ``agentcore.demo_tape.recorder`` under DEMO_TAPE_RECORD_ENABLED, None otherwise.
@@ -64,95 +75,6 @@ def _run_emit_tap(sink: EventSink, event: SSEEvent) -> None:
         _emit_tap(sink, event)
     except Exception as e:  # noqa: BLE001 — observation must never break the turn
         logger.warning("event_tap.failed", error=str(e))
-
-
-@dataclass(slots=True)
-class _Frame:
-    """One fanned-out event plus the emit-side task that backfills its journal ``seq``."""
-
-    event: SSEEvent
-    seq_ready: asyncio.Task[None] | None = None
-
-
-async def _backfill_seq(event: SSEEvent, barrier: asyncio.Future[int | None]) -> None:
-    """Write the allocated journal ``seq`` onto ``event`` once its write lands.
-
-    Emit-side by construction (云对话多端同权 B2 · §6.1): ``seq`` used to ride a second
-    queue that only paired up because ONE consumer dequeued events and barriers in
-    lockstep. With N subscriber queues that invariant is gone —串号 would follow — so
-    the barrier now resolves once per event, into the event object itself, and每个
-    subscriber只是等它落定 (:meth:`SinkSubscription.get`).
-
-    Never raises: a failed / cancelled journal write only means the frame ships without
-    an ``id:`` line, which must not kill anybody's stream.
-    """
-    try:
-        allocated = await barrier
-    except asyncio.CancelledError:
-        return
-    except Exception as e:  # noqa: BLE001 — seq is best-effort transport metadata
-        logger.warning("event_sink.seq_backfill_failed", type=event.type.value, error=str(e))
-        return
-    if allocated is not None:
-        event.seq = allocated
-
-
-# One观察端's live queue is capped here; a端 too slow to drain sheds its OLDEST
-# *process* frame instead of growing without bound or stalling ``emit``. Settle
-# frames (run close / message_end / error / execution_completed) stay unless the
-# queue is already all settle frames. Sized like the IM firehose
-# (``messaging/hub.py``) — a stuck client loses smoothness; close facts ride live.
-_SUBSCRIBER_QUEUE_MAXSIZE = 1000
-
-
-def _bounded_put[T](
-    queue: asyncio.Queue[T],
-    item: T,
-    *,
-    keep: Callable[[T], bool],
-) -> bool:
-    """Enqueue ``item``. If full, shed the oldest non-keep item.
-
-    Returns True if nothing was shed. False if a frame was discarded: oldest
-    fluency, incoming fluency refused (cannot evict a keep frame), or
-    pathological oldest keep when the queue is already all keepers.
-    """
-    try:
-        queue.put_nowait(item)
-        return True
-    except asyncio.QueueFull:
-        pass
-    drained: list[T] = []
-    while True:
-        try:
-            drained.append(queue.get_nowait())
-        except asyncio.QueueEmpty:
-            break
-    if not drained:
-        queue.put_nowait(item)
-        return True
-    victim = next((i for i, existing in enumerate(drained) if not keep(existing)), None)
-    if victim is not None:
-        drained.pop(victim)
-        drained.append(item)
-    elif keep(item):
-        drained.pop(0)
-        drained.append(item)
-    for existing in drained:
-        queue.put_nowait(existing)
-    return False
-
-
-def _keep_live_settle_frame(item: _Frame | None) -> bool:
-    if item is None:
-        return True
-    return is_live_settle_event(item.event.type)
-
-
-def _keep_live_settle_event(item: SSEEvent | None) -> bool:
-    if item is None:
-        return True
-    return is_live_settle_event(item.type)
 
 
 class SinkSubscription:
@@ -576,14 +498,62 @@ class EventSink(SinkJournalMixin, SinkProcessMixin, SinkTerminalMixin):
         """Buffer a frame nobody is listening to yet (bounded; fluency drops first)."""
         _bounded_put(self._queue, event, keep=_keep_live_settle_event)
 
+    def _mirror_open_think(self, event: SSEEvent) -> None:
+        """Copy this call's thinking and tools onto the open segment.
+
+        The bubble keeps its own frames. The segment is a different run, so
+        the side panel can read the same call.
+        """
+        if _think_mirroring.get():
+            return
+        from agentcore.runtime.graph.shape.step_segment import current_step_chain
+        from agentcore.runtime.events.run import run_reasoning_delta
+
+        chain = current_step_chain()
+        think = chain.think_id if chain is not None else ""
+        if not think:
+            return
+        payload = event.payload or {}
+        mirrored: SSEEvent | None = None
+        if event.type is EventType.REASONING_DELTA:
+            delta = payload.get("delta") or ""
+            if delta:
+                mirrored = run_reasoning_delta(
+                    think,
+                    think,
+                    delta,
+                    replace=bool(payload.get("replace")),
+                )
+        elif event.type is EventType.RUN_REASONING_DELTA:
+            if payload.get("run_id") != think and (payload.get("delta") or ""):
+                mirrored = run_reasoning_delta(
+                    think,
+                    think,
+                    payload.get("delta") or "",
+                    replace=bool(payload.get("replace")),
+                )
+        elif event.type in (
+            EventType.TOOL_USE_START,
+            EventType.TOOL_USE_END,
+            EventType.TOOL_USE_PROGRESS,
+        ):
+            if payload.get("run_id") != think:
+                mirrored = SSEEvent(type=event.type, payload={**payload, "run_id": think})
+        if mirrored is None:
+            return
+        token = _think_mirroring.set(True)
+        try:
+            self.emit(mirrored)
+        finally:
+            _think_mirroring.reset(token)
+
     def emit(self, event: SSEEvent) -> bool:
         """Emit ``event`` to every live观察端. True iff at least one got it.
 
-        A closed sink skips delivery (Pillar A may still journal DURABLE facts when
-        closed); with nobody subscribed the frame spools instead. ``False`` means *no
-        live consumer* — not "bridge dead". CLIENT_TOOL delivery is independent of
-        this sink.
+        While an LLM call's segment is open, thinking and tool frames are
+        also copied onto that segment so its detail can show them.
         """
+        self._mirror_open_think(event)
         if event.type in RUN_CLOSE_EVENT_TYPES:
             run_id = (event.payload or {}).get("run_id")
             if isinstance(run_id, str) and run_id:

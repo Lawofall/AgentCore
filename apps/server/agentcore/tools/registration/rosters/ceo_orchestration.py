@@ -11,12 +11,12 @@ def load_roster() -> tuple[type, ...]:
     from agentcore.tools.builtin.ask_user import AskUserTool
     from agentcore.tools.builtin.consult import ConsultTool
     from agentcore.tools.builtin.debate import DebateTool
-    from agentcore.tools.builtin.delegate import DelegateTool
+    from agentcore.tools.builtin.graph import GraphTool
     from agentcore.tools.builtin.folders import FoldersTool
     from agentcore.tools.builtin.replan import ReplanTool
 
     return (
-        DelegateTool,
+        GraphTool,
         ReplanTool,
         DebateTool,
         ConsultTool,

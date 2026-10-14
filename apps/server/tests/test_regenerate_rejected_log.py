@@ -234,7 +234,7 @@ async def test_regenerate_does_not_touch_orm_after_expire(monkeypatch):
         lambda event, **kw: errors.append((event, kw)),
     )
 
-    import agentcore.runtime.coordination as coord_mod
+    import agentcore.runtime.graph.session as coord_mod
 
     monkeypatch.setattr(coord_mod, "await_live_detached_drive", AsyncMock())
 

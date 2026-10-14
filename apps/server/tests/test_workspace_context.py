@@ -899,7 +899,7 @@ def test_opaque_source_does_not_read_backend_materials_into_facts():
 def test_cloud_exec_probe_failure_is_one_fact_line(monkeypatch):
     """云端 run=未装配 且探测有因：只留一行执行环境，不复写能力格。"""
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.exec_env_remediation.cloud_sandbox_failure_hint",
+        "agentcore.runtime.graph.drive.exec_env_remediation.cloud_sandbox_failure_hint",
         lambda: "not_linux（platform=win32）",
     )
     out = build_workspace_context(
@@ -915,7 +915,7 @@ def test_cloud_exec_probe_failure_is_one_fact_line(monkeypatch):
 def test_cloud_exec_withheld_omits_env_line_without_probe(monkeypatch):
     """云端 run=未装配 但探测空：不声称沙箱不可用，能力格已够。"""
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.exec_env_remediation.cloud_sandbox_failure_hint",
+        "agentcore.runtime.graph.drive.exec_env_remediation.cloud_sandbox_failure_hint",
         lambda: None,
     )
     out = build_workspace_context(

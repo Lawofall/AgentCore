@@ -21,7 +21,7 @@ import pytest
 
 from agentcore.fulfill.dispatch import DeliverResult, deliver_client_tool
 from agentcore.fulfill.hub import FULFILL_CHANNELS, FulfillerHub
-from agentcore.runtime.delegate.target_desktop import (
+from agentcore.runtime.graph.desk.target_desktop import (
     LocalRootClaimBook,
     apply_target_desktop,
 )
@@ -222,17 +222,17 @@ async def _apply_cross_desk_target(
 
     with (
         patch(
-            "agentcore.runtime.delegate.target_desktop.load_target_folder_binding",
+            "agentcore.runtime.graph.desk.target_desktop.load_target_folder_binding",
             new=AsyncMock(return_value=binding),
         ),
         patch(
-            "agentcore.runtime.delegate.target_desktop.rebuild_worker_prompt_for_target",
+            "agentcore.runtime.graph.desk.target_desktop.rebuild_worker_prompt_for_target",
             new=_fake_rebuild,
         ),
         # Seam under test is hub root declaration, not desktop liveness.
         # ``exists .`` needs a settler this fixture does not provide.
         patch(
-            "agentcore.runtime.delegate.target_desktop._assert_target_local_root_ready",
+            "agentcore.runtime.graph.desk.target_desktop._assert_target_local_root_ready",
             new=AsyncMock(return_value=None),
         ),
     ):

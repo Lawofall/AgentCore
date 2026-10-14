@@ -5,7 +5,7 @@ from __future__ import annotations
 from agentcore.core.error_codes import ErrorCode
 from agentcore.core.errors import LLMRateLimitError, mark_llm_leaf_exhausted
 from agentcore.llm.errors import error_context_from
-from agentcore.runtime.delegate.delivery_status import build_delivery_status
+from agentcore.runtime.graph.drive.delivery_status import build_delivery_status
 from agentcore.runtime.events import (
     FinishReason,
     SSEEvent,

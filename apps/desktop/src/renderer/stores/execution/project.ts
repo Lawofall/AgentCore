@@ -486,6 +486,18 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
       }
       break;
     }
+    case "graph_rewind": {
+      for (const id of f.cutRunIds) {
+        ensureRun(s, id);
+        const run = s.runIndex.get(id);
+        if (run) {
+          run.status = "cut";
+          run.phase = null;
+          run.phaseTool = null;
+        }
+      }
+      break;
+    }
     case "run_progress": {
       // Progress is derived from run states below so it stays correct and
       // cumulative across multiple delegate batches (the per-batch wire
@@ -835,6 +847,8 @@ export function describeFrame(frame: RunFrame, plan: ExecutionPlan): string {
       return frame.reason === "abort"
         ? `${role(frame.agentId)} 未执行 · 已中止`
         : `${role(frame.agentId)} 未执行`;
+    case "graph_rewind":
+      return "从这里继续";
     case "run_progress":
       return `进度 ${frame.completed}/${frame.total}`;
     case "batch_metrics":

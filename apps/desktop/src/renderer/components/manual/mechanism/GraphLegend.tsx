@@ -146,8 +146,8 @@ export function GraphLegend() {
               <Bot size={16} className="text-muted-foreground" />
             </IconChip>
           }
-          name="队员节点"
-          desc="一位队员：角色 → 在干什么 → 用时 / 工具。"
+          name="一段"
+          desc="一段工作：要做的事、现在的状态、用时和工具。"
         />
         <LegendRow
           sample={
@@ -155,8 +155,8 @@ export function GraphLegend() {
               <Sparkles size={15} className="text-muted-foreground" />
             </IconChip>
           }
-          name="CEO 汇总"
-          desc="汇聚点：全队状态汇总到这里，最终答案也从这里进气泡。"
+          name="开场这段"
+          desc="对着你的那一段。别的段做完，结论回到这里。"
         />
       </LegendGroup>
 
@@ -192,7 +192,7 @@ export function GraphLegend() {
         <LegendRow
           sample={<EdgeSample variant="delegate" />}
           name="委派（虚线）"
-          desc="队员再带小队时的委派线。"
+          desc="一段再开下一层时的连线。"
         />
         <LegendRow
           sample={<EdgeSample variant="continuation" />}
@@ -235,7 +235,7 @@ export function GraphLegend() {
         <LegendRow
           sample={<span className={graphBadgeMutedPlain}>子任务</span>}
           name="子任务"
-          desc="嵌套小队里的子队员（虚线委派连过来）。"
+          desc="再开出来的下一段（虚线连过来）。"
         />
       </LegendGroup>
     </div>

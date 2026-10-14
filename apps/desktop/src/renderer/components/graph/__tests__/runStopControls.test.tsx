@@ -155,9 +155,10 @@ describe("graph run-stop entries", () => {
     expect(useExecutionStore.getState().byId[MID]?.status).toBe("running");
   });
 
-  it("node status line keeps running copy when not stop-covered", () => {
+  it("node face names the segment and omits a running status word", () => {
     renderNodeFace();
-    expect(screen.getByText(/^执行中/)).toBeTruthy();
+    expect(screen.getByText("研究员")).toBeTruthy();
+    expect(screen.queryByText(/^执行中/)).toBeNull();
     expect(screen.queryByText("停止请求中…")).toBeNull();
   });
 
@@ -165,7 +166,8 @@ describe("graph run-stop entries", () => {
     useRunStopPendingStore.getState().markPending("exec-stop", "r1");
     renderNodeFace(nodeData({ status: "completed", isAnimating: false }));
     expect(screen.queryByText("停止请求中…")).toBeNull();
-    expect(screen.getByText(/^已完成/)).toBeTruthy();
+    expect(screen.queryByText(/^已完成/)).toBeNull();
+    expect(screen.getByText("研究员")).toBeTruthy();
   });
 
   // 卡面是纯展示：按人干预只在右坞 run 详情，图节点不挂改方向 / 停止。

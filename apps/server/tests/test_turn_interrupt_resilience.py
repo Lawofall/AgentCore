@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agentcore.runtime.coordination.inject import format_coordination_events
-from agentcore.runtime.coordination.session import (
+from agentcore.runtime.graph.session.inject import format_coordination_events
+from agentcore.runtime.graph.session.session import (
     CoordinationEvent,
     CoordinationEventKind,
     CoordinationSession,

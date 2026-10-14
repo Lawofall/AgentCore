@@ -1,10 +1,9 @@
 """留人 roster — the live store of recoverable worker runs, keyed by run, scoped
-by conversation (乙 带现场续派).
+by conversation.
 
-A worker's :class:`~agentcore.runtime.runs.session.RunSession` lives here so the CEO
-can 带现场续派 (delegate ``continue_from_run_id``) it later: the ``delegate`` tool
-registers each COMPLETED worker as soon as it finishes, and a continuation task looks
-one up by ``run_id`` to continue it on its own transcript.
+A worker's :class:`~agentcore.runtime.runs.session.RunSession` lives here so a later
+turn can still find that run's transcript. The graph tool registers each COMPLETED
+worker as soon as it finishes.
 
 Two layers (P2 治理, 见 docs/03-AI核心/多轮编排与同人续派.md §四):
 

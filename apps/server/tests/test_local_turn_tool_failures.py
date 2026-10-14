@@ -19,7 +19,7 @@ from agentcore.conversation.store.outbox import (
     to_record_turn_body,
     tool_failures_from_journal,
 )
-from agentcore.tools.builtin.delegate.schema import EMPTY_DELEGATE_MSG
+from agentcore.tools.builtin.graph.schema import EMPTY_DELEGATE_MSG
 
 pytestmark = pytest.mark.anyio
 
@@ -183,7 +183,7 @@ def test_tool_failures_from_journal_git_no_repo_code():
 
 def test_tool_failures_from_journal_declaration_empty():
     """Local delegate declaration empty → code is declaration_empty, not other."""
-    from agentcore.tools.builtin.delegate.schema import EMPTY_DELEGATE_MSG
+    from agentcore.tools.builtin.graph.schema import EMPTY_DELEGATE_MSG
 
     failures = tool_failures_from_journal(
         [

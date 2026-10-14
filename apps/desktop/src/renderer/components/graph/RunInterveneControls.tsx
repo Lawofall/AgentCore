@@ -16,20 +16,16 @@ import { Button, IconButton, Textarea } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { submitRunRedirect } from "@/services/runRedirect";
-import { runtimeOf, useConversationStore } from "@/stores/conversation";
 import type { RunStatus } from "@/stores/execution";
-import { useRunStopPendingStore } from "@/stores/runStopPending";
 import {
   type InterveneGate,
   interveneAckText,
   runRedirectGate,
-  runStopGate,
 } from "@agentcore/protocol-fold-kit";
-import { Loader2, RotateCcw, Square } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { requestRunStop } from "./runStopActions";
 
 export interface RunInterveneControlsProps {
   conversationId: string;
@@ -45,9 +41,7 @@ export interface RunInterveneControlsProps {
   className?: string;
 }
 
-const REDIRECT_LABEL = "立即改此人";
-const STOP_LABEL = "停止这位队员";
-const STOP_BUSY_LABEL = "停止请求中…";
+const REDIRECT_LABEL = "改这一段";
 const REDIRECT_PLACEHOLDER = "具体、可执行的修改方向…";
 
 /** 改方向草稿开头：恒用角色名模板，不扫产出正文。 */
@@ -65,26 +59,10 @@ export function RunInterveneControls({
   headerStart,
   className,
 }: RunInterveneControlsProps) {
-  const stopCovered = useRunStopPendingStore((s) =>
-    s.isRunCovered(executionId, runId),
-  );
-  const wholeTurnStopping = useConversationStore(
-    (s) => runtimeOf(s, conversationId).turnPhase === "stopping",
-  );
-  const [stopSubmitting, setStopSubmitting] = useState(false);
   const [draft, setDraft] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
 
-  useEffect(() => {
-    useRunStopPendingStore
-      .getState()
-      .clearIfSettled(executionId, runId, runStatus);
-  }, [executionId, runId, runStatus]);
-
-  const stopGate = runStopGate(runStatus);
   const redirectGate = runRedirectGate(runStatus);
-  // 停止请求已在飞：`covered` 只在可停态有意义（终局节点由上面的 settle 清理兜底）。
-  const stopBusy = stopGate.enabled && (stopCovered || stopSubmitting);
 
   const openComposer = () => {
     setDraft(seedRedirectDraft(role));
@@ -95,67 +73,25 @@ export function RunInterveneControls({
     setComposerOpen(false);
   };
 
-  const stopLabel = stopBusy ? STOP_BUSY_LABEL : STOP_LABEL;
-  const stopTip = stopBusy
-    ? "停止请求已发出，等待引擎确认（节点状态会随后更新）"
-    : stopGate.enabled
-      ? "只停这位队员的工作；主 Agent 与对话继续（不是结束整轮）"
-      : stopGate.reason;
   const redirectTip = redirectGate.enabled
-    ? "取消这位队员在飞的工作，带着你的新方向重跑（会重新花时间和钱）"
+    ? "取消这一段在做的事，带着新方向再做一遍（会重新花时间和钱）"
     : redirectGate.reason;
-  // 改方向的原因更具体（「跑完了 / 还没开工」），优先说它；辩论幕本就不出改方向按钮，
-  // 那时只说停止为什么不行。
-  const panelReason = redirectCapable
-    ? (redirectGate.reason ?? (wholeTurnStopping ? null : stopGate.reason))
-    : wholeTurnStopping
-      ? null
-      : stopGate.reason;
+  const panelReason = redirectCapable ? (redirectGate.reason ?? null) : null;
 
   return (
     <div className={cn("mb-4 space-y-2", className)}>
       <div className="flex items-center gap-2">
         {headerStart}
-        {(redirectCapable || !wholeTurnStopping) && (
+        {redirectCapable && (
           <span className="flex shrink-0 items-center gap-0.5">
-            {redirectCapable && (
-              <GatedIconButton
-                gate={redirectGate}
-                label={REDIRECT_LABEL}
-                tip={redirectTip}
-                icon={<RotateCcw size={13} />}
-                tone="primary"
-                onClick={openComposer}
-              />
-            )}
-            {!wholeTurnStopping && (
-              <GatedIconButton
-                gate={stopGate}
-                label={stopLabel}
-                tip={stopTip}
-                icon={
-                  stopBusy ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : (
-                    <Square size={13} />
-                  )
-                }
-                tone="destructive"
-                busy={stopBusy}
-                onClick={async () => {
-                  setStopSubmitting(true);
-                  try {
-                    await requestRunStop({
-                      conversationId,
-                      executionId,
-                      runId,
-                    });
-                  } finally {
-                    setStopSubmitting(false);
-                  }
-                }}
-              />
-            )}
+            <GatedIconButton
+              gate={redirectGate}
+              label={REDIRECT_LABEL}
+              tip={redirectTip}
+              icon={<RotateCcw size={13} />}
+              tone="primary"
+              onClick={openComposer}
+            />
           </span>
         )}
       </div>

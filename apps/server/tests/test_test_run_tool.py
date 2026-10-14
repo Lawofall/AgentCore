@@ -1264,7 +1264,7 @@ async def test_sibling_verify_inflight_coalesce(monkeypatch: pytest.MonkeyPatch)
     """Two workers sharing one execution join one sandbox execute (no double burn)."""
     import asyncio
 
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         clear_active_coordination,
         invalidate_verify_cache_for_execution,

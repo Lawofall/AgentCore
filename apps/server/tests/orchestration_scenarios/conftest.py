@@ -14,7 +14,7 @@ from agentcore.runtime.events import EventSink
 from agentcore.runtime.journal import last_turn_end_finish
 from agentcore.runtime.journal.writer import TurnJournalWriter
 from agentcore.runtime.suspension import TurnSuspension, suspension_from_json
-from agentcore.tools.builtin.delegate import DelegateTool
+from agentcore.tools.builtin.graph import GraphTool
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 from tests.delegate.conftest import _upstream_body
@@ -26,14 +26,11 @@ ASK_MESSAGE = "需要你拍板方向后再继续"
 ESC_QUESTION = "数据库选 Postgres 还是 MySQL？"
 ESC_ASSUMPTION = "暂按 Postgres 推进"
 
-# form=prose: bare-chat write-desk gate lets this through without target_folder_id.
-_SINGLE_TASK = [
-    {
-        "role": "研究员",
-        "task": "调研并给出结论",
-        "deliverable": {"form": "prose"},
-    }
-]
+_ONE_SEGMENT = {
+    "conclusion": "先查这一段。",
+    "nodes": [{"id": "研究员", "goal": "调研并给出结论"}],
+    "coordinate": False,
+}
 
 
 class EmptyMemoryStore:
@@ -88,11 +85,8 @@ class RoleScriptedProvider:
                     )
                     return
                 yield _tool_chunk(
-                    "delegate",
-                    json.dumps(
-                        {"tasks": _SINGLE_TASK, "coordinate": False},
-                        ensure_ascii=False,
-                    ),
+                    "graph",
+                    json.dumps(_ONE_SEGMENT, ensure_ascii=False),
                 )
                 return
             yield LLMChunk(delta_content=CEO_FINAL)
@@ -143,7 +137,7 @@ async def _fast_journal_drain(self: TurnJournalWriter) -> None:
 
 
 def patch_orchestration_seams(monkeypatch, provider: RoleScriptedProvider) -> None:
-    """LLM + memory + fail-fast DB; keep real ``_assemble_ceo_toolset`` (true DelegateTool)."""
+    """LLM + memory + fail-fast DB; keep real ``_assemble_ceo_toolset`` (true GraphTool)."""
 
     async def _fake_build_turn_router(*_a, **_k):
         return provider
@@ -160,8 +154,8 @@ def patch_orchestration_seams(monkeypatch, provider: RoleScriptedProvider) -> No
 
     def _assemble_keeping_delegate(**kwargs):
         delegate, debate, chat_tools = real_assemble(**kwargs)
-        assert isinstance(delegate, DelegateTool)
-        assert chat_tools.get("delegate") is delegate
+        assert isinstance(delegate, GraphTool)
+        assert chat_tools.get("graph") is delegate
         return delegate, debate, chat_tools
 
     monkeypatch.setattr(

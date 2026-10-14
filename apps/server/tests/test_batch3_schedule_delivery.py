@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agentcore.runtime.coordination.session import (
+from agentcore.runtime.graph.session.session import (
     CoordinationEventKind,
     CoordinationSession,
     clear_active_coordination,
@@ -150,7 +150,7 @@ async def test_coordination_timeout_force_cancel_via_cancel_ids():
 @pytest.mark.asyncio
 async def test_nested_timeout_arms_without_session():
     """depth>0 path: wrap_executor_with_timeouts(session=None) arms hard timeout."""
-    from agentcore.runtime.coordination.bridge import wrap_executor_with_timeouts
+    from agentcore.runtime.graph.session.bridge import wrap_executor_with_timeouts
 
     armed: list[str] = []
 
@@ -257,7 +257,7 @@ async def test_hard_timeout_still_fires_when_idle():
 @pytest.mark.asyncio
 async def test_nested_drive_pauses_parent_hard_timeout():
     """depth>0 drive 期间对 captain_run_id 调用 mark_waiting_children。"""
-    from agentcore.runtime.delegate.drive import drive
+    from agentcore.runtime.graph.drive.drive import drive
     from agentcore.tools.protocol import ToolResult
 
     pauses: list[bool] = []
@@ -287,7 +287,7 @@ async def test_nested_drive_pauses_parent_hard_timeout():
             return_value=False,
         ),
         patch(
-            "agentcore.runtime.delegate.drive._drive_body",
+            "agentcore.runtime.graph.drive.drive._drive_body",
             side_effect=_fake_body,
         ),
     ):
@@ -308,7 +308,7 @@ async def test_nested_drive_pauses_parent_hard_timeout():
 @pytest.mark.asyncio
 async def test_nested_drive_pauses_on_turn_ceiling_seed_finalize():
     """depth>0 + turn ceiling + seed_completed finalize 仍须 pause（Bugbot 1A 绕过）。"""
-    from agentcore.runtime.delegate.drive import drive
+    from agentcore.runtime.graph.drive.drive import drive
     from agentcore.runtime.runs.types import RunPhase, RunState
     from agentcore.tools.protocol import ToolResult
 
@@ -348,10 +348,10 @@ async def test_nested_drive_pauses_on_turn_ceiling_seed_finalize():
             return_value=True,
         ),
         patch(
-            "agentcore.runtime.delegate.drive._materialise_turn_token_budget_skips",
+            "agentcore.runtime.graph.drive.drive._materialise_turn_token_budget_skips",
         ),
         patch(
-            "agentcore.runtime.delegate.drive.finalize_drive",
+            "agentcore.runtime.graph.drive.drive.finalize_drive",
             side_effect=_fake_finalize,
         ),
         patch(
@@ -377,7 +377,7 @@ async def test_nested_drive_pauses_on_turn_ceiling_seed_finalize():
 @pytest.mark.asyncio
 async def test_root_drive_does_not_pause_hard_timeout():
     """depth=0 根 drive 不调用 mark_waiting_children（普通/协调路径不变）。"""
-    from agentcore.runtime.delegate.drive import drive
+    from agentcore.runtime.graph.drive.drive import drive
     from agentcore.tools.protocol import ToolResult
 
     calls: list[tuple[str, bool]] = []
@@ -402,7 +402,7 @@ async def test_root_drive_does_not_pause_hard_timeout():
             return_value=False,
         ),
         patch(
-            "agentcore.runtime.delegate.drive._drive_body",
+            "agentcore.runtime.graph.drive.drive._drive_body",
             side_effect=_fake_body,
         ),
     ):
@@ -484,7 +484,7 @@ async def test_cancel_force_continue_runs_dependent():
 @pytest.mark.asyncio
 async def test_timeout_force_cancel_stamps_warning():
     """Hard force-cancel path stamps worker_timeout (fixes false negative)."""
-    from agentcore.runtime.coordination.bridge import wrap_executor_with_timeouts
+    from agentcore.runtime.graph.session.bridge import wrap_executor_with_timeouts
 
     session = CoordinationSession(execution_id="exec-stamp2", total_workers=1)
 
@@ -504,7 +504,7 @@ async def test_timeout_force_cancel_stamps_warning():
 
 
 def test_delivery_gaps_on_soft_accept_and_partial_meta():
-    from agentcore.runtime.delegate.delivery_status import build_delivery_status
+    from agentcore.runtime.graph.drive.delivery_status import build_delivery_status
     from agentcore.runtime.runs.executor.shared import _delivery_gaps_from_warnings
     from agentcore.runtime.runs.file_acceptance import build_file_acceptance
 

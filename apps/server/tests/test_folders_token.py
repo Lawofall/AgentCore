@@ -19,7 +19,7 @@ from agentcore.folders.credentials import (
     cloud_list_folders,
     folders_credentials_scope,
 )
-from agentcore.runtime.delegate.target_desktop import (
+from agentcore.runtime.graph.desk.target_desktop import (
     TargetDesktopError,
     load_target_folder_binding,
 )

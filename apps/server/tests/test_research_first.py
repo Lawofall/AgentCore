@@ -27,36 +27,6 @@ def _valid_card(**over: object) -> dict:
     return parsed
 
 
-def test_has_research_chain_evidence_preserves_old_offer_sources():
-    assert has_research_chain_evidence([]) is False
-    assert has_research_chain_evidence([], has_research_artifacts=True) is True
-    entries_card = [
-        {
-            "kind": "run_completed",
-            "payload": {
-                "debrief": {"summary": "有争议", "motion_card": _valid_card()},
-            },
-        }
-    ]
-    assert has_research_chain_evidence(entries_card) is True
-    entries_delegate = [
-        {
-            "kind": "tool_call",
-            "payload": {
-                "name": "delegate",
-                "arguments": (
-                    '{"tasks": [{"role": "法律视角", "task": "T"}]}'
-                ),
-                "success": True,
-                "result": "done",
-                "tool_call_id": "dc1",
-                "run_id": "captain",
-            },
-        }
-    ]
-    assert has_research_chain_evidence(entries_delegate) is False
-
-
 def test_leftover_team_preview_frame_skips_hydrate():
     """存量开工卡：from_json 未知 kind，不进 recover。"""
     with pytest.raises(ValueError, match="unknown suspension kind"):

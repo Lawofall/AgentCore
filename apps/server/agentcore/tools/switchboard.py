@@ -6,7 +6,7 @@ builds the registry; registration skips those names. A loop that is already
 streaming keeps the table it started with.
 
 Coordination controls (``replan`` / ``cancel_worker``) are not switches. They
-leave the table together with ``delegate``.
+leave the table together with ``graph``.
 """
 
 from __future__ import annotations
@@ -47,11 +47,11 @@ SWITCHES: tuple[ToolSwitch, ...] = (
         "关掉之后不再停下来等你拍板。",
     ),
     ToolSwitch(
-        "delegate",
-        "派人",
-        "叫人一起做。",
-        "delegate",
-        "关掉之后不再叫人，这场只剩主管自己干。",
+        "graph",
+        "分节点",
+        "往协作图上加节点，各自一扇窗。",
+        "graph",
+        "关掉之后不再分节点，这场只在当前这扇窗里做。",
     ),
     ToolSwitch("host", "本机", "操作这台电脑。", "host"),
     ToolSwitch("look", "看文件", "读这个文件夹里的文件、列出和搜索。", "read"),
@@ -69,8 +69,8 @@ SWITCHES: tuple[ToolSwitch, ...] = (
 _SWITCH_IDS: frozenset[str] = frozenset(switch.id for switch in SWITCHES)
 _ORDER: dict[str, int] = {switch.id: index for index, switch in enumerate(SWITCHES)}
 
-# Not their own rows. They only exist to manage people ``delegate`` called.
-_DELEGATE_COMPANIONS: frozenset[str] = frozenset({"replan", "cancel_worker"})
+# Not their own rows. They leave the table together with ``graph``.
+_DELEGATE_COMPANIONS: frozenset[str] = frozenset({"replan", "cancel_worker", "rewind"})
 
 
 def normalize_disabled_tools(raw: object) -> tuple[str, ...]:
@@ -98,8 +98,8 @@ def group_tool_names(switch_id: str) -> frozenset[str]:
         return frozenset({"web_search", "web_fetch"})
     if switch_id == "ask_user":
         return frozenset({"ask_user"})
-    if switch_id == "delegate":
-        return frozenset({"delegate"})
+    if switch_id == "graph":
+        return frozenset({"graph"})
     if switch_id == "host":
         from agentcore.tools.registration import host_class_tool_names
 
@@ -122,7 +122,7 @@ def switch_member_names(switch_id: str) -> tuple[str, ...]:
     does not list them as their own cards.
     """
     names = set(group_tool_names(switch_id))
-    if switch_id == "delegate":
+    if switch_id == "graph":
         names |= _DELEGATE_COMPANIONS
     return tuple(sorted(names))
 
@@ -138,7 +138,7 @@ def withheld_names(disabled: object) -> frozenset[str]:
     names: set[str] = set()
     for switch_id in ids:
         names |= group_tool_names(switch_id)
-    if "delegate" in ids:
+    if "graph" in ids:
         names |= _DELEGATE_COMPANIONS
     return frozenset(names)
 

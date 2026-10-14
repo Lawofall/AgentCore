@@ -5,7 +5,7 @@ paths never set the flag, so behavior is unchanged.
 
 Injection points (callers check :func:`is_plan_only`):
 
-- ``DelegateTool.execute`` — after ``build_run_plan`` + ``run_plan`` emit, return
+- ``GraphTool.execute`` — after ``build_run_plan`` + ``run_plan`` emit, return
   ``HANDOFF`` instead of ``drive`` (no workers, no coordination).
 - ``debate.rounds`` first-round — after debater ``run_plan`` emit, raise
   :class:`PlanOnlyAbortError` so the debate tool returns ``HANDOFF`` without running

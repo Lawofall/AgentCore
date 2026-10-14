@@ -41,7 +41,7 @@ export function challengePreviewFromContext(
   return firstSentence(text, 60);
 }
 
-const TERMINAL = new Set(["completed", "failed", "cancelled", "skipped"]);
+const TERMINAL = new Set(["completed", "failed", "cancelled", "skipped", "cut"]);
 
 /**
  * 卡片主文优先级：完成态产出预览 → 辩论续轮焦点/任务首句 → 非辩论/进行中 task。

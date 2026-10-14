@@ -7,6 +7,7 @@ into appropriate HTTP responses. Every ``code`` is a member of the single
 so codes never drift apart from the SSE emitters or the frontend mirror.
 """
 
+import math
 from datetime import UTC, datetime, timedelta
 
 from agentcore.core.error_codes import ErrorCode
@@ -634,6 +635,30 @@ class AuthenticationError(AgentCoreError):
 
     code = ErrorCode.AUTH_ERROR
     status_code = 401
+
+
+class AccountLockedError(AuthenticationError):
+    """Password login is refused until ``locked_until`` (brute-force lockout).
+
+    The sentence stays free of a clock time — the reader's zone is the client's.
+    ``recovery_at`` is the unlock instant (ISO-8601 UTC) and ``retry_after`` is
+    the whole seconds still left, so a login form can count down and the HTTP
+    layer can emit ``Retry-After``. Further attempts must not extend the window;
+    callers pass the stored ``locked_until``, not a fresh duration.
+    """
+
+    def __init__(self, *, locked_until: datetime, now: datetime):
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=UTC)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=UTC)
+        remaining = (locked_until - now).total_seconds()
+        self.retry_after = float(max(1, math.ceil(remaining)))
+        super().__init__(
+            "账户已临时锁定，请稍后再试",
+            retry_after=self.retry_after,
+            recovery_at=utc_moment_iso(locked_until),
+        )
 
 
 class EmailNotVerifiedError(AuthenticationError):

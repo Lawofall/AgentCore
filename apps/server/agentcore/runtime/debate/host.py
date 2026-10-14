@@ -165,7 +165,7 @@ async def resolve_debate_host_attach(
     if not cid:
         return None
 
-    from agentcore.runtime.delegate.graph_append import (
+    from agentcore.runtime.graph.shape.graph_append import (
         load_host_journal_entries,
         resolve_host_message_id,
         resolve_latest_mlr_execution,

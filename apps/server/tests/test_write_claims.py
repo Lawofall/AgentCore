@@ -511,7 +511,7 @@ def test_nested_siblings_still_mutex_under_shared_parent():
     )
 
 def test_handoff_owned_paths_on_complete_unique_dependent():
-    from agentcore.runtime.coordination.append_guard import (
+    from agentcore.runtime.graph.session.append_guard import (
         declare_plan_artifacts,
         handoff_owned_paths_on_complete,
     )
@@ -563,7 +563,7 @@ def test_handoff_owned_paths_on_complete_unique_dependent():
 
 def test_declare_steals_from_completed_owner_across_waves():
     """跨波次修订：新节点声明同 artifact、原主已完成 → 派发即移交。"""
-    from agentcore.runtime.coordination.append_guard import declare_plan_artifacts
+    from agentcore.runtime.graph.session.append_guard import declare_plan_artifacts
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import Deliverable, RunSpec
     from agentcore.workspace.write_claims import WriteCoordinator
@@ -604,7 +604,7 @@ def test_declare_steals_from_completed_owner_across_waves():
 
 def test_declare_still_blocks_running_owner():
     """锁主仍在跑时，无关新节点声明同路径仍冲突（不自动抢）。"""
-    from agentcore.runtime.coordination.append_guard import declare_plan_artifacts
+    from agentcore.runtime.graph.session.append_guard import declare_plan_artifacts
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import Deliverable, RunSpec
     from agentcore.workspace.write_claims import WriteCoordinator
@@ -640,7 +640,7 @@ def test_declare_still_blocks_running_owner():
 
 def test_nested_lookup_owner_status_falls_back_to_parent_session():
     """嵌套 eid 无会话时，lookup 与 resolve_write_coordinator 同款父回退。"""
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         clear_active_coordination,
         current_execution_id,
@@ -668,7 +668,7 @@ def test_nested_lookup_owner_status_falls_back_to_parent_session():
 
 def test_ended_owner_declare_and_claim_handoff_without_completed_run_ids():
     """旁路 ended_owners：不进进度 completed_run_ids 也能 declare/claim 接手。"""
-    from agentcore.runtime.coordination.append_guard import declare_plan_artifacts
+    from agentcore.runtime.graph.session.append_guard import declare_plan_artifacts
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import Deliverable, RunSpec
     from agentcore.workspace.write_claims import WriteCoordinator

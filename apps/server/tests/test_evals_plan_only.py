@@ -169,49 +169,6 @@ def test_run_suite_plan_only_skips_judge_and_averages_samples():
     assert "c1" in means
 
 
-async def test_delegate_plan_only_emits_run_plan_skips_workers():
-    """真实 build_run_plan + run_plan；plan-only 下不进 drive（假 provider 零调用）。"""
-    provider = Provider(["SHOULD_NOT_RUN"])
-    sink = RecordingSink()
-    t = tool(provider, sink=sink)
-    with use_plan_only(True):
-        result = await t.execute(
-            {
-                "tasks": [
-                    {"role": "研究员", "task": "做A"},
-                    {"role": "写手", "task": "做B", "depends_on": []},
-                ],
-            },
-            ctx(),
-        )
-    assert result.success is True
-    assert result.effect is ToolEffect.HANDOFF
-    assert "plan-only" in (result.final_text or "")
-    assert provider.calls == 0
-    assert sink.plan_type == "multi_agent"
-    assert len(sink.plan_runs) == 2
-    roles = {r["role"] for r in sink.plan_runs}
-    assert roles == {"研究员", "写手"}
-    # 对照：未开 plan-only 时 worker 会跑（冒烟确认开关默认关）。
-    provider2 = Provider(["AOUT", "BOUT"])
-    sink2 = RecordingSink()
-    t2 = tool(provider2, sink=sink2)
-    assert is_plan_only() is False
-    result2 = await t2.execute(
-        {
-            "tasks": [
-                {"role": "研究员", "task": "做A"},
-                {"role": "写手", "task": "做B"},
-            ],
-            "coordinate": False,
-        },
-        ctx(),
-    )
-    assert result2.success is True
-    assert result2.effect is ToolEffect.CONTINUE
-    assert provider2.calls >= 1
-
-
 def test_plan_only_abort_propagates_as_named_exception():
     with use_plan_only(True):
         try:
@@ -227,24 +184,6 @@ def test_cli_plan_only_lint_only_collab_shapes():
 
     code = main(["lint", "--suite", "collab_shapes"])
     assert code == 0
-
-
-def test_recording_sink_still_sees_run_plan_under_plan_only_delegate():
-    """RecordingSink 从真实 run_plan 事件采形状（与 harness 同源）。"""
-    sink = RecordingSink()
-
-    async def _go():
-        provider = Provider(["nope"])
-        t = tool(provider, sink=sink)
-        with use_plan_only(True):
-            await t.execute(
-                {"tasks": [{"role": "审校", "task": "查"}, {"role": "作者", "task": "写"}]},
-                ctx(),
-            )
-
-    asyncio.run(_go())
-    assert len(sink.plan_runs) == 2
-    assert {r["role"] for r in sink.plan_runs} == {"审校", "作者"}
 
 
 async def test_debate_plan_only_emits_debater_plan_skips_speakers():

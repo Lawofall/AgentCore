@@ -15,7 +15,7 @@ from agentcore.memory.account_prepare_cache import (
     clear_account_rules_memory_cache,
 )
 from agentcore.runtime.conversation_store import reset_conversation_store_for_tests
-from agentcore.runtime.coordination.session import (
+from agentcore.runtime.graph.session.session import (
     CoordinationSession,
     active_coordination,
     clear_active_coordination,

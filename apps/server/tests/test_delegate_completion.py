@@ -1,7 +1,7 @@
 """Unit tests for delegate completion soft checks (S3: no criteria kind)."""
 
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
-from agentcore.runtime.delegate.completion import (
+from agentcore.runtime.graph.drive.completion import (
     collect_completion_soft_notes,
     collect_worker_gaps,
     format_worker_gaps_block,
@@ -91,8 +91,7 @@ async def test_cold_start_pending_allows_single_worker_delegate():
     t._base_tool_context.cold_start_explore_pending = True
     result = await t.execute(
         {
-            "tasks": [{"role": "调研", "task": "摸仓"}],
-            "coordinate": False,
+            "nodes": [{"id": "调研", "goal": "摸仓"}],
         },
         ctx(),
     )
@@ -108,9 +107,8 @@ def test_format_worker_gaps_block_empty():
 
 
 _HARD_CLOSING = (
-    "**【终稿诚实性·部分交付】**上方契约缺口非空：终稿必须使用「部分交付 / 尚未齐备」"
-    "类措辞，点明未闭合缺口与建议下一步；"
-    "【禁止】写「完整交付 / 全部完成 / 可运行无缺 / 无需审计 / 团队已交付完毕」等完成度断言。"
+    "不能当成全部完成。"
+    "【禁止】写「完整交付 / 全部完成 / 可运行无缺 / 无需审计 / 团队已交付完毕」。"
 )
 
 
@@ -138,7 +136,6 @@ def test_format_soft_only_unverified_note_bans_completeness_not_partial():
     assert "部分交付" not in block
     assert "尚未齐备" not in block
     assert "终稿必须使用" not in block
-    assert _HARD_CLOSING not in block
 
 
 def test_format_soft_only_dogfood_601863c9_unverified_note_shape():
@@ -187,34 +184,21 @@ def test_format_soft_only_dogfood_9628a2f7_unverified_note_shape():
     assert "完整交付" in block
 
 
-def test_format_closed_gaps_block_points_at_delegate_not_replan():
-    """批次已收口：缺口段只指路 delegate 点名，不再写优先 replan。"""
+def test_format_gaps_block_keeps_the_fact_and_drops_the_old_continue_recipe():
     gaps = [
         (
             "验收工程师",
             [{"description": "声明了走查记录但未落盘", "reason": "files_not_landed"}],
         )
     ]
-    block = format_worker_gaps_block(gaps, plan_open=False)
-    assert "replan" not in block
-    assert "再调 delegate" in block
-    assert "continue_from_run_id" in block
-    assert "replaces_run_id" in block
-    assert "别假装收工" in block
-
-
-def test_format_open_gaps_block_still_names_replan():
-    """波边界 / 部分失败计划还开着：缺口段仍可点名 replan(add)。"""
-    gaps = [
-        (
-            "验收工程师",
-            [{"description": "缺一份走查记录", "reason": "files_not_landed"}],
-        )
-    ]
-    block = format_worker_gaps_block(gaps, plan_open=True)
-    assert "`replan(add)`" in block
-    assert "continue_from_run_id" in block
-    assert "再调 delegate" not in block
+    for plan_open in (False, True):
+        block = format_worker_gaps_block(gaps, plan_open=plan_open)
+        assert "声明了走查记录但未落盘" in block
+        assert "files_not_landed" in block
+        assert "replan" not in block
+        assert "delegate" not in block
+        assert "continue_from_run_id" not in block
+        assert "replaces_run_id" not in block
 
 
 def test_format_hard_gap_keeps_partial_delivery_wording():

@@ -35,7 +35,7 @@ class LeadSubteam:
 # A worker's nested-delegate factory: given (captain_run_id, captain_depth) — the
 # worker's own run id + depth — it mints the worker's :class:`LeadSubteam` (its own
 # ``delegate`` + the companion ``replan`` bound to it as the sub-team's captain).
-# Owned by the DelegateTool (which can import the tools package), passed in here so
+# Owned by the GraphTool (which can import the tools package), passed in here so
 # ``runs`` stays free of a concrete tools dependency.
 DelegateFactory = Callable[[str, int], LeadSubteam]
 

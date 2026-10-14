@@ -3,7 +3,7 @@
 # Unique owner for「题材偏好不得改路由」— the flat ``<设定>`` block formats this in.
 _RULES_ROUTING_FENCE = (
     "硬约束：题材/领域偏好与历史任务不得改变本回合路由"
-    "（直答/委派/调研/辩论以用户当前话为准）。"
+    "（直答/分节点/调研/辩论以用户当前话为准）。"
 )
 
 # Single equal-authority block (Agent记忆与知识系统 · 取消权威档): no user-hard /

@@ -35,7 +35,7 @@ def downgrade_verdict_for_ceiling(
     promotion_ledger: Any = None,
 ) -> None:
     """Mark delivery informal when CEO hits a hard ceiling (cannot stay ``delivered``)."""
-    from agentcore.runtime.delegate.delivery_status import (
+    from agentcore.runtime.graph.drive.delivery_status import (
         DeliveryVerdict,
         bind_delivery_verdict,
         read_delivery_verdict,

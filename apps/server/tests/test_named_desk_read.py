@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agentcore.runtime.delegate.target_desktop_binding import TargetFolderBinding
+from agentcore.runtime.graph.desk.target_desktop_binding import TargetFolderBinding
 from agentcore.tools.builtin.file_ops.named_desk_read import (
     named_desk_folder_for_read,
     stamp_named_file_pins,
@@ -110,11 +110,11 @@ async def test_file_read_retries_unique_other_desk(desks: tuple[Path, Path, Tool
     other_ws = ServerWorkspace(root=other, sandbox=SubprocessSandbox())
     with (
         patch(
-            "agentcore.runtime.delegate.target_desktop_binding.load_target_folder_binding",
+            "agentcore.runtime.graph.desk.target_desktop_binding.load_target_folder_binding",
             new=AsyncMock(return_value=_binding("desk-b")),
         ) as load,
         patch(
-            "agentcore.runtime.delegate.target_desktop_binding.build_target_backend",
+            "agentcore.runtime.graph.desk.target_desktop_binding.build_target_backend",
             return_value=other_ws,
         ),
     ):
@@ -131,7 +131,7 @@ async def test_file_read_miss_without_pin_does_not_scan(
 ):
     _birth, _other, ctx = desks
     with patch(
-        "agentcore.runtime.delegate.target_desktop_binding.load_target_folder_binding",
+        "agentcore.runtime.graph.desk.target_desktop_binding.load_target_folder_binding",
         new=AsyncMock(),
     ) as load:
         result = await FileReadTool().execute({"file_path": "missing.md"}, ctx)
@@ -148,7 +148,7 @@ async def test_file_read_worker_does_not_inherit_pin(
     ctx.turn_target_desk.note_folder("desk-b")
     ctx.named_desk_read = False
     with patch(
-        "agentcore.runtime.delegate.target_desktop_binding.load_target_folder_binding",
+        "agentcore.runtime.graph.desk.target_desktop_binding.load_target_folder_binding",
         new=AsyncMock(),
     ) as load:
         result = await FileReadTool().execute({"file_path": "secret.md"}, ctx)
@@ -162,7 +162,7 @@ async def test_file_list_does_not_pin_other_desk(desks: tuple[Path, Path, ToolCo
     (other / "secret.md").write_text("from-other\n", encoding="utf-8")
     ctx.turn_target_desk.note_folder("desk-b")
     with patch(
-        "agentcore.runtime.delegate.target_desktop_binding.load_target_folder_binding",
+        "agentcore.runtime.graph.desk.target_desktop_binding.load_target_folder_binding",
         new=AsyncMock(),
     ) as load:
         result = await FileListTool().execute({"directory": "."}, ctx)

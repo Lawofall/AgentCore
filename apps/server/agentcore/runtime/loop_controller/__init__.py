@@ -537,7 +537,7 @@ class LoopController(
                     if not was_dead:
                         # A2: force a short user-visible honest sentence (not only
                         # tool error / soft steer). Best-effort; never raises.
-                        from agentcore.runtime.coordination.channel_dead_notice import (
+                        from agentcore.runtime.graph.session.channel_dead_notice import (
                             mark_and_emit_channel_dead_user_notice,
                         )
 

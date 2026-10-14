@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agentcore.runtime.delegate.empty_tasks import (
+from agentcore.runtime.graph.admit.empty_tasks import (
     EMPTY_DELEGATE_MSG,
     HANDWRITTEN_TASKS_SKELETON,
 )
@@ -14,7 +14,7 @@ from agentcore.runtime.runs.types import (
     raw_deliverable_expects_landing,
     task_raw_expects_landing,
 )
-from agentcore.tools.builtin.delegate.schema import (
+from agentcore.tools.builtin.graph.schema import (
     DELEGATE_DESCRIPTION,
     DELEGATE_PARAMETERS,
     TASK_ARTIFACTS_SCHEMA,
@@ -133,31 +133,19 @@ def test_describe_deliverable_empty_without_instance_facts():
     assert "交付路径" in desc
 
 
-def test_ceo_schema_advertises_task_artifacts():
-    task_props = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]
-    assert set(task_props) == {
-        "role",
-        "task",
-        "artifacts",
-        "id",
-        "depends_on",
-        "replaces_run_id",
-        "continue_from_run_id",
-        "target_folder_id",
-        "model",
-    }
+def test_ceo_schema_advertises_nodes():
+    node_props = DELEGATE_PARAMETERS["properties"]["nodes"]["items"]["properties"]
+    assert set(node_props) == {"id", "goal", "depends_on"}
+    assert set(DELEGATE_PARAMETERS["properties"]) == {"nodes", "conclusion"}
     assert TASK_ARTIFACTS_SCHEMA["type"] == "array"
     assert "form=prose" not in (TASK_ARTIFACTS_SCHEMA.get("description") or "")
     arts = TASK_ARTIFACTS_SCHEMA.get("description") or ""
     assert "流水线写死" not in arts
     assert "不催写盘" in arts
-    tasks_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["description"]
-    assert HANDWRITTEN_TASKS_SKELETON not in tasks_desc
-    assert "可抄" not in tasks_desc
+    nodes_desc = DELEGATE_PARAMETERS["properties"]["nodes"]["description"]
+    assert HANDWRITTEN_TASKS_SKELETON not in nodes_desc
+    assert "可抄" not in nodes_desc
     assert HANDWRITTEN_TASKS_SKELETON in EMPTY_DELEGATE_MSG
-    assert "省略即可" not in DELEGATE_PARAMETERS["properties"]["team_brief"][
-        "description"
-    ]
     assert "【看】" not in DELEGATE_DESCRIPTION
     assert "【存文档】" not in DELEGATE_DESCRIPTION
     assert "【改工程】" not in DELEGATE_DESCRIPTION

@@ -116,7 +116,7 @@ async def _fork_named_desk_context(
     context: ToolContext, folder_id: str
 ) -> tuple[ToolContext, str] | None:
     """Fresh workspace slot on ``folder_id``. Does not rebind the CEO slot."""
-    from agentcore.runtime.delegate.target_desktop_binding import (
+    from agentcore.runtime.graph.desk.target_desktop_binding import (
         TargetDesktopError,
         build_target_backend,
         load_target_folder_binding,

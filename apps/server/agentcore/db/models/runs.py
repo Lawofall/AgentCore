@@ -107,7 +107,7 @@ class HandoffJob(Base):
 
 # --- Recoverable worker runs (留人 跨进程落盘) ---
 # The in-memory roster (runtime/sessions.py) keeps a finished worker alive within a
-# process so the CEO can 带现场续派 (delegate continue_from_run_id) it; this table is
+# process so a later turn can still find that run; this table is
 # the durable backstop so "让刚才那个人接着干" still hits after a restart or memory
 # eviction. A continuation loads the row on an in-memory miss, continues the run, and
 # writes the extended transcript back. Lifecycle =「对话在，现场就在」: cascaded away

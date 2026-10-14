@@ -379,7 +379,7 @@ async def lifespan(app: FastAPI):
     # Durable RUNNING lease sweeper (crash recover): claim heartbeat-expired leases and
     # redrive unfinished DAG via recover_turn. The boot sweep is awaited here, before
     # the unstarted FIFO is reloaded, so a recovering turn still owns the slot.
-    # Install the DelegateTool factory BEFORE the sweeper so a boot reclaim can redrive
+    # Install the GraphTool factory BEFORE the sweeper so a boot reclaim can redrive
     # (not just salvage) unfinished workers.
     turn_lease_sweep_task: asyncio.Task | None = None
     if settings.turn_lease_enabled:

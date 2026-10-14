@@ -8,17 +8,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agentcore.llm.provider.protocol import TokenUsage
-from agentcore.runtime.coordination.session import (
+from agentcore.runtime.graph.session.session import (
     CoordinationEventKind,
     CoordinationSession,
     clear_active_coordination,
     set_active_coordination,
 )
-from agentcore.runtime.delegate.completion import (
+from agentcore.runtime.graph.drive.completion import (
     collect_worker_gaps,
     format_worker_gaps_block,
 )
-from agentcore.runtime.delegate.delivery_status import build_delivery_status
+from agentcore.runtime.graph.drive.delivery_status import build_delivery_status
 from agentcore.runtime.engine.ceiling import ceiling_finalize
 from agentcore.runtime.events import FinishReason
 from agentcore.runtime.runs.cutoff import (
@@ -81,7 +81,7 @@ def test_collect_worker_gaps_emits_reason_codes():
     }
 
     block = format_worker_gaps_block(gaps)
-    assert "部分交付" in block
+    assert "不能当成全部完成" in block
     assert "综述强制" not in block
     assert "完整" in block or "全部完成" in block
     assert "不必逐条复述" in block
@@ -342,7 +342,7 @@ async def _run_coordinated_worker(
     post-arm session state (CEO TIMEOUT fired / wind-down consumed) from inside the
     fake executor — so the wrapper's stamp decision is exercised deterministically.
     """
-    from agentcore.runtime.coordination.bridge import wrap_executor_with_timeouts
+    from agentcore.runtime.graph.session.bridge import wrap_executor_with_timeouts
 
     clear_active_coordination()
     session = CoordinationSession(execution_id="exec-stamp", total_workers=1)

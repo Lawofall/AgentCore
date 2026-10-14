@@ -203,27 +203,6 @@ async def test_soft_finalize_uses_coordination_tools_not_none():
 
 
 @pytest.mark.asyncio
-async def test_soft_finalize_returns_coordination_tool_calls():
-    provider = _ScriptedProvider([[_tool_chunk("delegate", '{"tasks":[]}')]])
-    messages = [LLMMessage(role="user", content="go")]
-    reg = _registry()
-    result = await run_finalize_round(
-        messages=messages,
-        llm=provider,
-        profile=make_profile_params(),
-        active_model="m",
-        tools=reg,
-        allowed_tool_names=None,
-        disabled_tools=set(),
-        emit_content=lambda _d: None,
-        emit_reasoning=lambda _d: None,
-    )
-    assert result.kind == "coordination_tools"
-    assert result.tool_calls is not None
-    assert result.tool_calls[0].function.name == "delegate"
-
-
-@pytest.mark.asyncio
 async def test_force_finalize_wall_timeout_salvages_prior(monkeypatch):
     """Absolute wall on finalize stream → prior deliverable (no zombie wait)."""
     import asyncio

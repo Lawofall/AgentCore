@@ -55,8 +55,10 @@ def stamp_coord_round_budget(
     rid = (run_id or "").strip()
     if not rid:
         return
-    from agentcore.runtime.coordination.session import note_coord_worker_busy
+    from agentcore.runtime.runs.coord_ports import note_coord_worker_busy
 
+    if note_coord_worker_busy is None:
+        return
     note_coord_worker_busy(
         rid,
         kind,

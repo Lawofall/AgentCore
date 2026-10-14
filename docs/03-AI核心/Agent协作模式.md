@@ -72,7 +72,7 @@ worker 唯一向上通道。`reason` 三选一（缺省 / 无法识别 = `wait`�
 | 叶子 | 正文（不催写时整份 allowance）或文件指针 + 已核路径 | 默认不写；有增量才补，不复述结论 |
 | 有下游 | 只读简报（正文由下游经依赖上下文池完整读走） | 必须写，且带结论 |
 
-有下游时「正文 ↔ 简报重复」是**功能性冗余**（两个读者各需一份），不是缺陷，别再当重复去修。叶子不再靠简报当队长唯一信息源——队长读正文或落盘路径。→ 见代码: `tools/builtin/handoff.py` · `runtime/delegate/ceo_format.py`
+有下游时「正文 ↔ 简报重复」是**功能性冗余**（两个读者各需一份），不是缺陷，别再当重复去修。叶子不再靠简报当队长唯一信息源——队长读正文或落盘路径。→ 见代码: `tools/builtin/handoff.py` · `runtime/graph/facing/ceo_format.py`
 
 被否决：把便条塞进工具 JSON（刚写完长文再倒进 `summary`，引号/换行导致 `args_parse_failed`，窄 salvage 救不了；空 `{}` 是失败后最小合法对象）；从成稿切「## 交接简报」；JSON 里再留一个 `text` 字段；给最后一棒卸掉 handoff 工具；`key_points` 换成纯接力状态（新回合不写这些字段）；门禁改「必须 ≥2 条 key_points」（数条数挡不住结论复述，却误伤只写长 summary 的合规上游 → [拦截纪律](/.cursor/rules/intercept-discipline.mdc)）；叶节点「干了不少」（用过工具 / 正文较长）也强制交接（误伤最后一棒，便条抄正文；队长已能看见正文或文件）。handoff 无参数字段，不做运行时拒收空便条（空交硬拒已撤）。
 

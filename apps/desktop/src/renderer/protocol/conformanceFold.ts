@@ -228,13 +228,9 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
         const payload = ev.payload as RunPlanPayload;
         const next = planFromRunPlan(payload);
         plan = plan && plan.id === next.id ? mergePlanInto(plan, next) : next;
-        // 旧 journal 跨回合同图追加：带 host_message_id 的生长 run_plan 不插 team。
-        // 新路径无此字段 → 本回合开图。
-        if (!payload.host_message_id) {
-          // 协作图时间线落点: the first plan of an execution drops a `team` marker fixing
-          // the graph's slot in the CEO timeline (later same-id batches no-op).
-          messageLane = foldTeamMarker(messageLane, next.id);
-        }
+        // 协作图时间线落点: the first plan of an execution drops a `team` marker fixing
+        // the graph's slot in the CEO timeline (later same-id batches no-op).
+        messageLane = foldTeamMarker(messageLane, next.id);
         break;
       }
       case "run_started": {
@@ -273,6 +269,7 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
       case "run_failed":
       case "run_cancelled":
       case "run_skipped":
+      case "graph_rewind":
       case "run_progress":
       //「计划已调整」轻痕迹 (设计 §7.2): a NON-interrupting trace — folds onto the runs'
       // `revised` via the same frame path (no gate, like the escalate banner).

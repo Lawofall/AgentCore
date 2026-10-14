@@ -1238,7 +1238,7 @@ async def execute_verify(arguments: dict[str, Any], context: ToolContext) -> Too
         # Downgrade loop's busy("tool") → verify so idle patrol can wake CEO
         # during minute-level budgets (wall+0 no longer parks forever).
         if context.run_id:
-            from agentcore.runtime.coordination.session import note_coord_worker_busy
+            from agentcore.runtime.graph.session.session import note_coord_worker_busy
 
             note_coord_worker_busy(context.run_id, "verify")
         try:
@@ -1467,7 +1467,7 @@ async def execute_verify(arguments: dict[str, Any], context: ToolContext) -> Too
     session = None
     eid = (context.execution_id or "").strip()
     if eid:
-        from agentcore.runtime.coordination.session import active_coordination
+        from agentcore.runtime.graph.session.session import active_coordination
 
         session = active_coordination(eid)
 
@@ -1475,7 +1475,7 @@ async def execute_verify(arguments: dict[str, Any], context: ToolContext) -> Too
         # Mark verify while waiting on a sibling inflight too — keeps progress
         # honest without blocking idle patrol (verify ∉ has_inflight_work).
         if context.run_id:
-            from agentcore.runtime.coordination.session import note_coord_worker_busy
+            from agentcore.runtime.graph.session.session import note_coord_worker_busy
 
             note_coord_worker_busy(context.run_id, "verify")
         result, source = await session.coalesce_verify(fingerprint, _run_verify)

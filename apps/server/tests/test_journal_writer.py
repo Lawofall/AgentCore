@@ -209,7 +209,7 @@ def test_sealed_overflow_without_loop_logs_drop_and_skips_fact_log() -> None:
     """No event loop after seal: overflow kind errors, fact log stays empty so 对账能响."""
     from structlog.testing import capture_logs
 
-    from agentcore.runtime.coordination.session import CoordinationSession
+    from agentcore.runtime.graph.session.session import CoordinationSession
     from agentcore.runtime.facts import Fact, TurnFactLog, current_fact_log, record_turn_fact
     from agentcore.runtime.journal.writer import current_journal_writer
 
@@ -240,7 +240,7 @@ def test_sealed_overflow_without_loop_logs_drop_and_skips_fact_log() -> None:
 
 async def test_seal_rebinds_live_host_journal_writer(monkeypatch) -> None:
     """seal() points the coordination session at the unsealed overflow writer."""
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         bind_host_journal,
         clear_active_coordination,

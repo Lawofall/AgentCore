@@ -167,7 +167,7 @@ def _stub_member(monkeypatch, target: str, *, member_turn: bool) -> None:
         return None
 
     monkeypatch.setattr(
-        "agentcore.runtime.delegate.target_desktop.adopt_persisted_auto_desk",
+        "agentcore.runtime.graph.desk.target_desktop.adopt_persisted_auto_desk",
         _no_auto_desk,
     )
 

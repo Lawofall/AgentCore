@@ -6,12 +6,13 @@ import type { ExecutionStatus, RunStatus, WorkerRunPhase } from "./types";
  * must not drift to「已取消」.
  */
 export const RUN_STATUS_LABEL: Record<RunStatus, string> = {
-  pending: "排队中",
-  running: "执行中",
-  completed: "已完成",
+  pending: "等待",
+  running: "进行中",
+  completed: "已封口",
   failed: "失败",
   cancelled: "已停止",
   skipped: "未执行",
+  cut: "已切出",
 };
 
 export function runStatusLabel(status: RunStatus): string {
@@ -39,7 +40,7 @@ export function runPhaseLabel(
           : phaseTool
         : "调用工具";
     case "waiting_children":
-      return "等待子团队";
+      return "等待后面的段";
     case "winding_down":
       return "收尾中";
     default:
@@ -52,7 +53,7 @@ export function executionStatusLabel(status: ExecutionStatus): string {
     case "running":
       return "进行中";
     case "completed":
-      return "已完成";
+      return "已封口";
     case "failed":
       return "失败";
     case "cancelled":

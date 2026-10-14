@@ -2003,7 +2003,7 @@ async def test_resume_folds_checkpoint_into_resolved(monkeypatch, tmp_path: Path
 
 _REAL_MEMORY_RULES = """<设定>
 以下条目请一并遵循。
-硬约束：题材/领域偏好与历史任务不得改变本回合路由（直答/委派/调研/辩论以用户当前话为准）。
+硬约束：题材/领域偏好与历史任务不得改变本回合路由（直答/分节点/调研/辩论以用户当前话为准）。
 
 ## 沟通偏好
 - 倾向用中文交流 <!-- ts:2026-07-13 -->

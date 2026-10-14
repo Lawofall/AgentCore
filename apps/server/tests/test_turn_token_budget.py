@@ -174,39 +174,6 @@ def test_tokens_from_journal_entries_uses_fuse_when_cache_split_present():
 
 
 @pytest.mark.asyncio
-async def test_delegate_execute_rejects_when_ceiling_hit(monkeypatch):
-    from agentcore.tools.builtin.delegate.tool import DelegateTool
-
-    monkeypatch.setattr(
-        "agentcore.runtime.turn.token_budget.resolve_turn_token_ceiling",
-        lambda: 100,
-    )
-    token = bind_turn_token_meter(seed=100)
-    try:
-        assert is_turn_token_ceiling_hit()
-        tool = DelegateTool(
-            llm=MagicMock(),
-            sink=MagicMock(),
-            system_prompt="",
-            user_message="hi",
-            history=[],
-            tools=MagicMock(),
-            base_tool_context=MagicMock(),
-            approval_gate=None,
-        )
-        tool._tools.list_all = MagicMock(return_value=[])
-        result = await tool.execute(
-            {"tasks": []},
-            MagicMock(),
-        )
-        assert result.success is False
-        assert "累计 token" in (result.error or "")
-        assert result.contract_failure is True
-    finally:
-        reset_turn_token_meter(token)
-
-
-@pytest.mark.asyncio
 async def test_wave_should_stop_blocks_new_dispatch(monkeypatch):
     """Turn ceiling hit → WaveScheduler admits no new nodes (in-flight drain only)."""
     from agentcore.runtime.runs.plan import RunPlan
@@ -245,7 +212,7 @@ async def test_wave_should_stop_blocks_new_dispatch(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_materialise_turn_token_budget_skips():
-    from agentcore.runtime.delegate.drive import _materialise_turn_token_budget_skips
+    from agentcore.runtime.graph.drive.drive import _materialise_turn_token_budget_skips
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import Deliverable
 
@@ -279,8 +246,8 @@ async def test_materialise_turn_token_budget_skips():
 
 @pytest.mark.asyncio
 async def test_skip_qa_delivery_status_partial_with_honesty_gaps():
-    from agentcore.runtime.delegate.delivery_status import build_delivery_status
-    from agentcore.runtime.delegate.drive import _materialise_turn_token_budget_skips
+    from agentcore.runtime.graph.drive.delivery_status import build_delivery_status
+    from agentcore.runtime.graph.drive.drive import _materialise_turn_token_budget_skips
     from agentcore.runtime.runs.file_acceptance import build_file_acceptance
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import Deliverable
@@ -409,7 +376,7 @@ def test_turn_token_budget_gate_seed_round_trip():
 
 
 def test_delivery_status_continue_skipped_runs_not_continue_writing():
-    from agentcore.runtime.delegate.delivery_status import build_delivery_status
+    from agentcore.runtime.graph.drive.delivery_status import build_delivery_status
     from agentcore.runtime.runs.file_acceptance import build_file_acceptance
     from agentcore.runtime.runs.plan import RunPlan
 

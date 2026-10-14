@@ -197,7 +197,7 @@ def downgrade_verdict_for_unresolved_write_ownership(
     )
     if not turn_has_unresolved_write_ownership():
         return
-    from agentcore.runtime.delegate.delivery_status import (
+    from agentcore.runtime.graph.drive.delivery_status import (
         DeliveryVerdict,
         bind_delivery_verdict,
         read_delivery_verdict,

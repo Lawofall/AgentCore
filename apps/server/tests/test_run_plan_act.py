@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from agentcore.conformance.projection import _act_from_plan, project_turn
 from agentcore.runtime.debate.events import moderator_plan_event
-from agentcore.runtime.delegate.plan_events import plan_event
+from agentcore.runtime.graph.drive.plan_events import plan_event
 from agentcore.runtime.events import run_plan
 from agentcore.runtime.events.payloads.run import RunPlanPayload
 from agentcore.runtime.runs.plan import RunPlan

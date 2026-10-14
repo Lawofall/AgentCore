@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from .core import _positive_hits
 
 if TYPE_CHECKING:
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
 _CEO_MUTATION_DONE_CLAIMS = re.compile(
     r"(?:"
@@ -72,7 +72,7 @@ def turn_has_product_write_evidence(
         return True
     if delivery_verdict is not None:
         return bool(delivery_verdict.delivered_files)
-    from agentcore.runtime.delegate.delivery_status import read_delivery_verdict
+    from agentcore.runtime.graph.drive.delivery_status import read_delivery_verdict
 
     verdict = read_delivery_verdict()
     if verdict is None:

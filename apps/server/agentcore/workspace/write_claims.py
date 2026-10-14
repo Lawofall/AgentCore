@@ -13,7 +13,7 @@ authority, snapshotted). **交接式写权**：
     or from an ``ended_owners`` holder (nested terminal ghost-lock fix).
   - **Completion handoff** moves owned paths to the unique dependent that listed
     the same artifact.
-  - Explicit transfer: ``replaces_run_id`` / ``continue_from_run_id`` / ``force`` /
+  - Explicit transfer: ``replaces_run_id`` / ``force`` /
     用户结构化裁决 / ``replan`` tell 之后的写权移交
     (user ownership card **only** when lock owner is still ``running``;
     completed/ended holders use same-seat replaces / declare·claim handoff —
@@ -588,7 +588,7 @@ def resolve_write_coordinator(
     Nested sub-teams share the parent coordination session via
     :data:`current_execution_id` when their own ``execution_id`` has no session.
     """
-    from agentcore.runtime.coordination.session import resolve_coordination_session
+    from agentcore.runtime.graph.session.session import resolve_coordination_session
 
     session = resolve_coordination_session(execution_id)
     if session is not None:
@@ -614,7 +614,7 @@ def lookup_owner_status(
     if not rid:
         return None, "unknown"
     try:
-        from agentcore.runtime.coordination.session import resolve_coordination_session
+        from agentcore.runtime.graph.session.session import resolve_coordination_session
 
         session = resolve_coordination_session(execution_id)
     except Exception:  # noqa: BLE001
@@ -694,7 +694,7 @@ def _is_nested_child_of(
     if not child or not parent or child == parent:
         return False
     try:
-        from agentcore.runtime.coordination.session import resolve_coordination_session
+        from agentcore.runtime.graph.session.session import resolve_coordination_session
 
         session = resolve_coordination_session(execution_id)
     except Exception:  # noqa: BLE001

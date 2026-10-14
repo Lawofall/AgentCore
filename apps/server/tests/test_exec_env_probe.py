@@ -1313,10 +1313,10 @@ def test_probe_retire_steer_cloud_isolation_does_not_blame_the_laptop():
 
 
 def test_exec_env_dead_notice_speaks_the_classified_cause():
-    from agentcore.runtime.coordination.exec_env_dead_notice import (
+    from agentcore.runtime.graph.session.exec_env_dead_notice import (
         mark_and_emit_exec_env_dead_user_notice,
     )
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         clear_active_coordination,
         set_active_coordination,

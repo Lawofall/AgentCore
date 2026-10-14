@@ -77,7 +77,7 @@ logger = get_logger(__name__)
 class DebateTool:
     """CEO-agent tool：发起主持人驱动的结构化辩论，返回双产物供 CEO 收尾（非终结）。
 
-    持有与 ``DelegateTool`` 同形的「用量 + 账目 + 引用」累加器（``_acc``），辩手 run（首轮
+    持有与 ``GraphTool`` 同形的「用量 + 账目 + 引用」累加器（``_acc``），辩手 run（首轮
     executor、后续轮 continue_run）与主持人自身 LLM 调用都折算进去，由 pipeline 折回回合总账。
     ``_debater_sessions`` 按 side.key 留住每个辩手的可续写 session，支撑跨轮带记忆。
 

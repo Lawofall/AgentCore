@@ -1,0 +1,20 @@
+"""上轮徒劳重试提示块已撤：失败回执在历史里，不再注入易变尾。"""
+
+from __future__ import annotations
+
+import pytest
+
+
+def test_prior_futile_retries_module_is_gone():
+    with pytest.raises(ImportError):
+        from agentcore.runtime.graph.drive import prior_futile_retries  # noqa: F401
+
+
+def test_ceo_turn_prompt_has_no_futile_retry_section():
+    from agentcore.runtime.resolve.prompt import render_ceo_turn_envelope
+
+    out = render_ceo_turn_envelope(
+        attachment_context="",
+        include_runtime=False,
+    )
+    assert "上轮徒劳重试" not in out

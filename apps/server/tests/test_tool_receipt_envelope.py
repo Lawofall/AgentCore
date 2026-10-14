@@ -11,7 +11,7 @@ from agentcore.api.schemas.messages import normalize_local_turn_tool_failure_cod
 from agentcore.core.text import DEFAULT_ELISION_MARKER
 from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
-from agentcore.runtime.delegate.empty_tasks import EMPTY_DELEGATE_MSG
+from agentcore.runtime.graph.admit.empty_tasks import EMPTY_DELEGATE_MSG
 from agentcore.runtime.engine.tool_exec import (
     TOOL_FAILED_MARKER,
     execute_tools,

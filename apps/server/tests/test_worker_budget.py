@@ -115,8 +115,8 @@ def test_explicit_timeout_ms_still_arms():
 
 
 def test_retired_default_worker_wall_clock_stays_gone():
-    import agentcore.runtime.coordination.session as session_mod
-    import agentcore.runtime.coordination.session_types as session_types
+    import agentcore.runtime.graph.session.session as session_mod
+    import agentcore.runtime.graph.session.session_types as session_types
     import agentcore.runtime.runs.worker_budget as wb
 
     assert not hasattr(wb, "WORKER_TIMEOUT_BACKSTOP_S")

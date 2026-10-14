@@ -79,6 +79,7 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   read_image: { Icon: ScanText, label: "Read image" },
   code_diagnostics: { Icon: Code2, label: "Check types" },
   delegate: { Icon: Users, label: "Delegate" },
+  graph: { Icon: Network, label: "Graph" },
   replan: { Icon: ListRestart, label: "Replan" },
   // CEO 编排原语（组队辩论）：气泡侧只在参数组装心跳时露出，
   // 图标与辩论形态一致（Scale）。

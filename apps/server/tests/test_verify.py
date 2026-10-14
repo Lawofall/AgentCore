@@ -106,7 +106,7 @@ def test_chat_finish_guard_allows_search_only_and_forged_rn():
 
 def test_blocked_empty_delivery_claim_does_not_rework():
     """产物结构窄闸已撤：blocked + 空盘 +「已生成」不再清气泡。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="blocked", delivered_files=(), execution_id="e1"
@@ -122,7 +122,7 @@ def test_blocked_empty_delivery_claim_does_not_rework():
 
 
 def test_named_absent_declared_path_with_landed_claim_does_not_rework():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -141,7 +141,7 @@ def test_named_absent_declared_path_with_landed_claim_does_not_rework():
 
 
 def test_named_absent_path_honest_gap_passes():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -157,7 +157,7 @@ def test_named_absent_path_honest_gap_passes():
         )
         == []
     )
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="blocked", delivered_files=(), execution_id="e1"
@@ -173,7 +173,7 @@ def test_named_absent_path_honest_gap_passes():
 
 
 def test_delivery_claim_check_skipped_for_workers():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="blocked", delivered_files=(), execution_id="e1"
@@ -191,7 +191,7 @@ def test_delivery_claim_check_skipped_for_workers():
 
 
 def test_delivered_verdict_allows_completion_claim():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="delivered",
@@ -209,7 +209,7 @@ def test_delivered_verdict_allows_completion_claim():
 
 
 def test_partial_verdict_rejects_all_success_claim():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -223,7 +223,7 @@ def test_partial_verdict_rejects_all_success_claim():
 
 def test_partial_verdict_rejects_fully_usable_claim():
     """可用性诚实性：blocked/partial +「已完整可用」本轮影子观测，不回炉。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -236,7 +236,7 @@ def test_partial_verdict_rejects_fully_usable_claim():
 
 
 def test_blocked_verdict_rejects_fully_usable_claim():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="blocked",
@@ -250,7 +250,7 @@ def test_blocked_verdict_rejects_fully_usable_claim():
 
 def test_bare_now_usable_does_not_trigger_fully_usable_gate():
     """收窄：裸「现在可用」不再触发；仍仅在 blocked/partial 生效。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -268,7 +268,7 @@ def test_bare_now_usable_does_not_trigger_fully_usable_gate():
 
 
 def test_partial_verdict_allows_negated_fully_usable_phrase():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -286,7 +286,7 @@ def test_partial_verdict_allows_negated_fully_usable_phrase():
 
 
 def test_partial_verdict_allows_honest_gap_summary():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -305,7 +305,7 @@ def test_partial_verdict_allows_honest_gap_summary():
 
 def test_partial_verdict_rejects_fixed_claim():
     """乙并入姿势 A：blocked/partial +「已修好」本轮影子观测，不回炉。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -319,7 +319,7 @@ def test_partial_verdict_rejects_fixed_claim():
 
 def test_blocked_verdict_rejects_verified_green_claims():
     """乙并入姿势 A：blocked + 验证通过 / 测试已通过 / 已跑通 → 命中但不回炉。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="blocked",
@@ -341,7 +341,7 @@ def test_blocked_verdict_rejects_verified_green_claims():
 
 def test_partial_verdict_allows_negated_fixed_phrase():
     """乙：否定前缀「尚未修好」放行（沿用甲 `_GAP_NEGATION_PREFIXES`）。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -360,7 +360,7 @@ def test_partial_verdict_allows_negated_fixed_phrase():
 
 def test_partial_verdict_allows_honest_fix_gap_summary():
     """乙：诚实缺口摘要（未宣称修好/验绿）放行。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -379,7 +379,7 @@ def test_partial_verdict_allows_honest_fix_gap_summary():
 
 def test_partial_verdict_rejects_delivery_done_claims():
     """交付完成闭集并入姿势 A：partial + 文件 → 命中但不回炉。站点「做好了」已退役。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -403,7 +403,7 @@ def test_partial_verdict_rejects_delivery_done_claims():
 def test_site_done_phrase_not_expanded_into_posture_a():
     """禁止案面加词：站点/页面「做好了」不进姿势 A；建站正常收口不误伤。"""
     from agentcore.runtime.closing_posture import claims_posture_a
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     assert not claims_posture_a("站点做好了。")
     assert not claims_posture_a("网站已经做好了。")
@@ -425,7 +425,7 @@ def test_site_done_phrase_not_expanded_into_posture_a():
 
 def test_partial_verdict_allows_negated_delivery_done_phrase():
     """否定前缀「尚未完成交付」放行。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -444,7 +444,7 @@ def test_partial_verdict_allows_negated_delivery_done_phrase():
 
 def test_partial_verdict_allows_honest_delivery_gap_with_landed_file():
     """诚实「已落盘 X；缺口」放行（未命中交付完成闭集）。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -463,7 +463,7 @@ def test_partial_verdict_allows_honest_delivery_gap_with_landed_file():
 
 def test_delivery_done_claim_skipped_for_workers():
     """worker check_citations=False：档位姿势闸不继承。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -483,7 +483,7 @@ def test_delivery_done_claim_skipped_for_workers():
 
 def test_partial_with_files_allows_bare_delivered_and_weak_usable():
     """故意不拦：裸「已交付 / 已经交付」与弱「可用」——勿写成失败。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -506,7 +506,7 @@ def test_partial_with_files_allows_bare_delivered_and_weak_usable():
 
 
 def test_partial_verdict_allows_negated_all_success_phrase():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -524,7 +524,7 @@ def test_partial_verdict_allows_negated_all_success_phrase():
 
 
 def test_blocked_with_files_rejects_all_success_not_file_claim():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     # blocked + some files is unusual but state can be blocked when gaps dominate;
     # posture A still forbidden; bare「已落盘」alone is OK when files exist.
@@ -547,7 +547,7 @@ def test_blocked_with_files_rejects_all_success_not_file_claim():
 
 
 def test_notes_verdict_rejects_posture_a_claim():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     # Soft warnings → notes ≈ 草稿·部分；非正式完成，不得姿势 A。
     verdict = DeliveryVerdict(
@@ -571,7 +571,7 @@ def test_notes_verdict_rejects_posture_a_claim():
 def test_delivery_verdict_oversized_overview_is_shadow_only(monkeypatch):
     """篇幅超限只打影子日志，不回炉、不改写终稿。"""
     from agentcore.runtime.closing_posture import core as honesty_core
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
     from tests.conftest import LogSpy
 
     spy = LogSpy()
@@ -599,7 +599,7 @@ def test_delivery_verdict_oversized_overview_is_shadow_only(monkeypatch):
 
 
 def test_delivery_verdict_allows_short_overview():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="delivered",
@@ -632,7 +632,7 @@ def test_no_delivery_verdict_skips_overview_length_gate():
 
 
 def test_overview_length_gate_disabled_when_max_nonpositive():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="delivered",
@@ -652,7 +652,7 @@ def test_overview_length_gate_disabled_when_max_nonpositive():
 
 
 def test_overview_length_skipped_for_workers():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="delivered",
@@ -674,7 +674,7 @@ def test_overview_length_skipped_for_workers():
 def test_overview_length_shadow_does_not_rework_former_structure_hit(monkeypatch):
     """篇幅影子仍只打日志；旧产物结构命中不再回炉。"""
     from agentcore.runtime.closing_posture import core as honesty_core
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
     from tests.conftest import LogSpy
 
     spy = LogSpy()
@@ -699,7 +699,7 @@ def test_overview_length_shadow_does_not_rework_former_structure_hit(monkeypatch
 
 def test_partial_md_only_pptx_ready_claim_does_not_rework():
     """产物结构窄闸已撤：只落 md/脚本却说 PPT 可打开，不再清气泡。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -717,7 +717,7 @@ def test_partial_md_only_pptx_ready_claim_does_not_rework():
 
 
 def test_partial_md_only_allows_honest_pptx_gap():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -735,7 +735,7 @@ def test_partial_md_only_allows_honest_pptx_gap():
 
 
 def test_pptx_landed_allows_pptx_ready_claim():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="delivered",
@@ -754,7 +754,7 @@ def test_pptx_landed_allows_pptx_ready_claim():
 
 
 def test_pptx_claim_skipped_for_workers():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -773,7 +773,7 @@ def test_pptx_claim_skipped_for_workers():
 
 
 def test_negated_pptx_claim_allowed_when_md_only():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",

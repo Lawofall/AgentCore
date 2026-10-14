@@ -482,6 +482,25 @@ def run_spend(
     )
 
 
+def graph_rewind(
+    *,
+    target_run_id: str,
+    cut_run_ids: list[str],
+    scar: str,
+    source: str,
+) -> SSEEvent:
+    """Live graph face for a rewind. Not journaled; the fact is the durable row."""
+    return SSEEvent(
+        type=EventType.GRAPH_REWIND,
+        payload={
+            "target_run_id": target_run_id,
+            "cut_run_ids": list(cut_run_ids),
+            "scar": scar,
+            "source": source,
+        },
+    )
+
+
 def run_skipped(
     run_id: str,
     agent_id: str,

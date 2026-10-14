@@ -12,7 +12,7 @@ from agentcore.tools.builtin.debate.schema import (
     DEBATE_DESCRIPTION,
     DEBATE_PARAMETERS,
 )
-from agentcore.tools.builtin.delegate.schema import (
+from agentcore.tools.builtin.graph.schema import (
     DELEGATE_DESCRIPTION,
     DELEGATE_PARAMETERS,
 )
@@ -40,10 +40,7 @@ def test_ask_user_web_surface_matches_desktop():
 
 def test_delegate_top_level_parameter_keys():
     """delegate 顶层参数钉现行集合（键从 schema.py 读出，不预埋废字段）。"""
-    assert set(DELEGATE_PARAMETERS["properties"]) == {
-        "tasks",
-        "team_brief",
-    }
+    assert set(DELEGATE_PARAMETERS["properties"]) == {"nodes", "conclusion"}
 
 
 def test_shared_mutation_tail_does_not_repeat_per_tool_receipts():
@@ -99,7 +96,7 @@ def test_on_demand_faces_point_how_to_consult():
     assert "决策简报" not in DEBATE_DESCRIPTION
     assert "非终结" not in DEBATE_DESCRIPTION
     assert "HOW→consult" not in DELEGATE_DESCRIPTION
-    from agentcore.tools.builtin.delegate.schema import (
+    from agentcore.tools.builtin.graph.schema import (
         DELEGATE_STAFF_HOW,
         DELEGATE_WHEN,
         NESTED_DELEGATE_DESCRIPTION,
@@ -166,9 +163,9 @@ def test_on_demand_faces_point_how_to_consult():
     cwd_desc = RunTool().schema.parameters["properties"]["cwd"]["description"]
     assert not cwd_desc.endswith("可选。")
     assert not cwd_desc.startswith("可选")
-    task_props = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]
-    assert not task_props["id"]["description"].startswith("可选")
-    assert not task_props["model"]["description"].startswith("（可选）")
+    node_props = DELEGATE_PARAMETERS["properties"]["nodes"]["items"]["properties"]
+    assert not node_props["id"]["description"].startswith("可选")
+    assert not node_props["goal"]["description"].startswith("可选")
     add_props = _REPLAN_PARAMETERS["properties"]["add"]
     assert not add_props["description"].startswith("可选")
     assert "必填" not in add_props["description"]

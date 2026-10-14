@@ -91,6 +91,7 @@ export const REST_PATH_TEMPLATES = [
   "/v1/conversations/{conversation_id}/duplicate",
   "/v1/conversations/{conversation_id}/envelope-switches",
   "/v1/conversations/{conversation_id}/export",
+  "/v1/conversations/{conversation_id}/graph/rewind",
   "/v1/conversations/{conversation_id}/handoff/jobs",
   "/v1/conversations/{conversation_id}/handoff/jobs/{job_id}",
   "/v1/conversations/{conversation_id}/handoff/jobs/{job_id}/apply",

@@ -104,15 +104,10 @@ export function handleExecutionEvent(
     case "run_plan": {
       const payload = event.payload as RunPlanPayload;
       const mid = execMessageId(conversationId, {
-        // 旧 journal：host_message_id 仍把 plan merge 回宿主槽；新路径不写此字段。
-        host_message_id: payload.host_message_id,
         execution_id: payload.execution_id,
       });
       if (!mid) return true;
       useExecutionStore.getState().ingestPlan(planFromRunPlan(payload), mid);
-      // 旧 journal 跨回合同图追加：不在最新气泡插 team。
-      // 新路径无 host_message_id → 本回合正常开图。
-      if (payload.host_message_id) return true;
       if (
         payload.plan_type === "multi_agent" ||
         payload.plan_type === "debate"
@@ -171,6 +166,10 @@ export function handleExecutionEvent(
             conversationId,
           );
       }
+      return true;
+    }
+    case "graph_rewind": {
+      recordFrameNow(event, conversationId);
       return true;
     }
     case "run_phase":

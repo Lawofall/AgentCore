@@ -227,23 +227,46 @@ def test_runtime_does_not_import_turn_persistence() -> None:
     assert (_PKG_ROOT / "runtime" / "turn" / "closer.py").is_file()
 
 
-def test_runtime_drive_and_coordination_do_not_import_tools_delegate() -> None:
-    """Delegate drive / coordination sit in runtime — no tools.builtin.delegate edge.
-
-    Composition roots (pipeline / resolve / recover) may still construct
-    ``DelegateTool``; the forbidden cycle was ``coordination.host`` ↔
-    ``tools.builtin.delegate.drive``. After the lift, ``runtime.delegate`` and
-    ``runtime.coordination`` must not import the tools-side package at all.
-    """
-    files = _py_files("runtime/delegate", "runtime/coordination")
-    assert _violations(files, ("agentcore.tools.builtin.delegate",)) == {}
+def test_graph_drive_and_session_do_not_import_tools_graph() -> None:
+    """Graph drive / session sit in runtime — no tools.builtin.graph edge."""
+    files = _py_files("runtime/graph/drive", "runtime/graph/session")
+    assert _violations(files, ("agentcore.tools.builtin.graph",)) == {}
 
 
-def test_delegate_tools_package_is_thin_adapter() -> None:
-    """``tools.builtin.delegate`` hosts schema + thin execute + nesting mint only."""
+def test_graph_package_import_boundaries() -> None:
+    """Shape, session, admit, facing, and desk stay off the layers that would cycle."""
+    shape = _py_files("runtime/graph/shape")
+    session = _py_files("runtime/graph/session")
+    admit = _py_files("runtime/graph/admit")
+    facing = _py_files("runtime/graph/facing")
+    desk = _py_files("runtime/graph/desk")
+    assert _violations(shape, ("agentcore.runtime.engine", "agentcore.runtime.graph.drive")) == {}
+    assert _violations(session, ("agentcore.runtime.engine", "agentcore.runtime.graph.drive")) == {}
+    assert _violations(shape, ("agentcore.runtime.graph.admit",)) == {}
+    assert _violations(session, ("agentcore.runtime.graph.shape",)) == {}
+    assert _violations(admit, ("agentcore.runtime.graph.drive",)) == {}
+    assert _violations(
+        facing,
+        (
+            "agentcore.runtime.graph.session",
+            "agentcore.runtime.graph.drive",
+            "agentcore.runtime.engine",
+        ),
+    ) == {}
+    assert _violations(desk, ("agentcore.runtime.graph.drive",)) == {}
+
+
+def test_runs_do_not_import_graph() -> None:
+    """Run execution does not reach back into the graph package."""
+    files = _py_files("runtime/runs")
+    assert _violations(files, ("agentcore.runtime.graph",)) == {}
+
+
+def test_graph_tools_package_is_thin_adapter() -> None:
+    """``tools.builtin.graph`` hosts schema + thin execute + nesting mint only."""
     allowed = {"__init__.py", "schema.py", "tool.py", "nesting.py"}
-    present = {p.name for p in _py_files("tools/builtin/delegate")}
-    assert present <= allowed, f"unexpected delegate tool modules: {present - allowed}"
+    present = {p.name for p in _py_files("tools/builtin/graph")}
+    assert present <= allowed, f"unexpected graph tool modules: {present - allowed}"
 
 
 def test_debate_tools_package_is_thin_adapter() -> None:
@@ -289,13 +312,12 @@ _RUNTIME_LINE_SOFT_MAX = 800
 _RUNTIME_OVERSIZE_EXEMPT: frozenset[str] = frozenset(
     {
         # Grandfathered at P3-A land (do not grow this set casually).
-        "coordination/host.py",
-        "coordination/session.py",
+        "graph/session/session.py",
         "debate/models.py",
         "debate/rounds.py",
         "debate/types.py",
-        "delegate/completion.py",
-        "delegate/delivery_status.py",
+        "graph/drive/completion.py",
+        "graph/drive/delivery_status.py",
         "engine/loop.py",
         "engine/tool_exec_call.py",
         "runs/builder.py",

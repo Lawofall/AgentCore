@@ -12,7 +12,7 @@ import pytest
 
 from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
-from agentcore.runtime.coordination.session import (
+from agentcore.runtime.graph.session.session import (
     CoordinationSession,
     clear_active_coordination,
     current_execution_id,
@@ -302,8 +302,8 @@ async def test_react_loop_round_poll_exec_env_dead_keeps_family():
 
 
 def test_ceo_inject_names_exec_env_dead():
-    from agentcore.runtime.coordination.inject import format_coordination_events
-    from agentcore.runtime.coordination.session import CoordinationEvent, CoordinationEventKind
+    from agentcore.runtime.graph.session.inject import format_coordination_events
+    from agentcore.runtime.graph.session.session import CoordinationEvent, CoordinationEventKind
 
     session = CoordinationSession(execution_id="exec-inj", total_workers=1)
     session.exec_env_dead = True
@@ -321,9 +321,9 @@ def test_ceo_inject_names_exec_env_dead():
 
 
 def test_ceo_inject_user_stop_unchanged_when_exec_env_dead():
-    from agentcore.runtime.coordination.cancel_close import USER_STOPPED_MARK
-    from agentcore.runtime.coordination.inject import format_coordination_events
-    from agentcore.runtime.coordination.session import CoordinationEvent, CoordinationEventKind
+    from agentcore.runtime.graph.session.cancel_close import USER_STOPPED_MARK
+    from agentcore.runtime.graph.session.inject import format_coordination_events
+    from agentcore.runtime.graph.session.session import CoordinationEvent, CoordinationEventKind
 
     session = CoordinationSession(execution_id="exec-stop", total_workers=2)
     session.user_stopped = True
@@ -377,8 +377,8 @@ def test_sticky_dead_falls_back_to_conversation_registry():
 
 
 def test_ceo_inject_cloud_sandbox_unavailable():
-    from agentcore.runtime.coordination.inject import format_coordination_events
-    from agentcore.runtime.coordination.session import CoordinationEvent, CoordinationEventKind
+    from agentcore.runtime.graph.session.inject import format_coordination_events
+    from agentcore.runtime.graph.session.session import CoordinationEvent, CoordinationEventKind
 
     session = CoordinationSession(execution_id="exec-inj-cloud", total_workers=1)
     session.exec_env_dead = True

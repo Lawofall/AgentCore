@@ -35,7 +35,7 @@ _ARGS_PARSE_FAILED_MARKER: dict[str, Any] = {"__args_parse_failed__": True}
 ArgsParseClass = Literal["truncated", "escape", "other"]
 
 # Orchestration tools: anti-wrap / anti-XML tip (keep regardless of class).
-_ORCH_PARSE_TOOLS = frozenset({"delegate", "ask_user"})
+_ORCH_PARSE_TOOLS = frozenset({"graph", "ask_user"})
 
 # User-visible process-line copy for write-tool args parse failures (人话).
 _USER_WRITE_PARSE_MSG = "长文保存失败，请改用更短但完整的写入或按锚续写。"
@@ -417,13 +417,12 @@ def _strategy_for_args_parse(tool_name: str, parse_class: ArgsParseClass) -> str
             "勿向用户讲解 JSON 引号转义。"
         )
     if tool_name in _ORCH_PARSE_TOOLS:
-        if tool_name == "delegate":
+        if tool_name == "graph":
             return (
-                "【策略】payload 顶层直接放字段（delegate：`tasks`），"
+                "【策略】payload 顶层直接放字段（graph：`nodes`），"
                 "禁止再包一层 `arguments` 字符串；参数须为单一合法 JSON 对象，"
                 "禁止混入 XML/<parameter>/<object> 等协议标签；"
-                "按工具 schema 重发精简参数，勿把整篇正文塞进 task 字段"
-                "（细则进 deliverable / team_brief）。"
+                "按工具 schema 重发精简参数，勿把整篇正文塞进 goal 字段。"
             )
         return (
             "【策略】参数必须是单一合法 JSON 对象，禁止混入 XML/"

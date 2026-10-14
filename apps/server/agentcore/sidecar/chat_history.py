@@ -39,6 +39,9 @@ def _replay_extras(item: dict[str, Any], row: dict[str, Any]) -> None:
     ledger = item.get("evidence_ledger")
     if isinstance(ledger, list) and ledger:
         row["evidence_ledger"] = list(ledger)
+    context = item.get("graph_context")
+    if isinstance(context, list) and context:
+        row["graph_context"] = list(context)
 
 
 def coerce_history_rows(raw: object) -> list[dict[str, Any]]:

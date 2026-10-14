@@ -47,7 +47,7 @@ from agentcore.runtime.runs.executor.terminal import (
     handle_agent_node_cancel,
     handle_agent_node_exception,
 )
-from agentcore.runtime.runs.types import RunSpec, RunState
+from agentcore.runtime.runs.types import RunKind, RunPhase, RunSpec, RunState
 
 # Re-exports for existing test imports (do not grow new external ``_`` callers).
 __all__ = [
@@ -158,7 +158,7 @@ async def execute_agent_node(
         )
 
         duration_ms = int((time.monotonic() - start) * 1000)
-        return build_terminal_run_state(
+        state = build_terminal_run_state(
             env,
             spec,
             agent_id,
@@ -186,6 +186,15 @@ async def execute_agent_node(
                 prepared.request_model, prepared.profile
             ),
         )
+        if state.phase is RunPhase.COMPLETED and spec.kind is RunKind.AGENT:
+            from agentcore.runtime.runs.seal_snapshot import snapshot_at_seal
+
+            await snapshot_at_seal(
+                user_id=env.base_tool_context.user_id or "",
+                conversation_id=env.conversation_id or "",
+                run_id=spec.run_id,
+            )
+        return state
     except asyncio.CancelledError as e:
         salvaged = handle_agent_node_cancel(
             env,

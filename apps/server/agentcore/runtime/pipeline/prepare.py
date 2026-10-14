@@ -293,7 +293,7 @@ async def prepare_fresh_turn(
     raise_if_local_workspace_fulfiller_absent(user_id=user_id, backend=backend)
     auto_desk_folder_id: str | None = None
     if folder_id is None:
-        from agentcore.runtime.delegate.target_desktop import adopt_persisted_auto_desk
+        from agentcore.runtime.graph.desk.target_desktop import adopt_persisted_auto_desk
 
         adopted = await adopt_persisted_auto_desk(
             birth_folder_id=folder_id,
@@ -500,7 +500,7 @@ async def prepare_fresh_turn(
     # The workspace backend is resolved per conversation by the caller
     # (folder space vs. its own conversation space) and injected here. The
     # engine and tools never see a Path — they only touch ``context.backend``.
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         invalidate_verify_cache_for_execution,
     )
 
@@ -545,7 +545,7 @@ async def prepare_fresh_turn(
         sitting_folder_id=sitting_folder_id,
     )
     from agentcore.runtime.closing_posture import reset_turn_scoped_closing_state
-    from agentcore.runtime.coordination.session import current_execution_id
+    from agentcore.runtime.graph.session.session import current_execution_id
 
     bound_execution_id = base_tool_context.execution_id
     execution_id_token = current_execution_id.set(bound_execution_id)
@@ -559,7 +559,7 @@ async def prepare_fresh_turn(
     # Do NOT overwrite this turn's minted ``base_tool_context.execution_id`` —
     # dispatch lands on that mint (一回合一张协作图). Observation stays on the
     # adopted live graph via ``current_execution_id`` (set inside adopt).
-    from agentcore.runtime.coordination.session import adopt_active_execution
+    from agentcore.runtime.graph.session.session import adopt_active_execution
 
     adopted = adopt_active_execution(conversation_id, event_sink=sink)
     if adopted is not None:

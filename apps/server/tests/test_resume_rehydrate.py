@@ -233,62 +233,6 @@ async def test_finish_resume_joins_pre_pause_reasoning_multi_cycle():
     assert "恢复后正文" in result["content"]
 
 
-async def test_finish_resume_disposes_open_supervised_and_folds_member_billing():
-    """接缝钉子（resume 收口漏折账）：resume 段 drive 在 SCOPE 边界让出（或部分失败
-    stash）后 CEO 不 replan 直接作答收尾 —— finish_resume_turn 必须与 fresh 路径的
-    settle_successful_turn 同律先 dispose_open_supervised（隐式 stop），把已完成 worker
-    的 usage / ledger 折进本回合账，否则 member 计费漏 fold、来源不上卡。"""
-    from agentcore.llm.provider.protocol import TokenUsage
-    from tests.delegate.conftest import SCOPE_DAG, ScopeProvider, ctx, scope_tool
-
-    provider = ScopeProvider(usage=TokenUsage(input_tokens=100, output_tokens=20))
-    t = scope_tool(provider)
-    first = await t.execute({"tasks": SCOPE_DAG, "coordinate": False}, ctx())
-    assert first.is_terminal is False
-    assert t._supervised is not None  # boundary yield left a dangling supervised plan
-    assert t.usage.get("input", 0) == 0  # yield path deliberately un-folded
-
-    captain_state = SimpleNamespace(
-        content="不再 replan，直接汇报收尾",
-        reasoning="",
-        rounds=1,
-        usage={"input": 7, "output": 3},
-        finish_override=None,
-        cost={
-            "input": 0,
-            "output": 0,
-            "reasoning": 0,
-            "cache_hit": 0,
-            "cache_miss": 0,
-            "total": 0,
-        },
-        model="m",
-        duration_ms=0,
-    )
-    result = await finish_resume_turn(
-        message_id="m1",
-        captain_run_id="cap1",
-        captain_state=captain_state,
-        pre_pause_content="",
-        delegate_tool=t,
-        debate_tool=MagicMock(usage={}, run_ledger=[], citations=[]),
-        profile=make_profile_params(max_rounds=20),
-        citations=[],
-        sink=EventSink(),
-        fact_log=None,
-        audit_recorder=SimpleNamespace(drops=0, flush=AsyncMock()),
-        roster_writer=None,
-        journal_writer=SimpleNamespace(flush=AsyncMock()),
-    )
-
-    assert t._supervised is None  # dangling plan released at resume close
-    assert t.usage.get("input") == 100  # completed upstream folded as implicit stop
-    assert result["input_tokens"] == 107  # captain 7 + member 100
-    member_rows = [r for r in result["cost_runs"] if r.get("role") == "member"]
-    assert len(member_rows) == 1
-    assert member_rows[0]["tokens"].get("input") == 100
-
-
 def test_finish_terminal_preserves_pre_pause_reasoning():
     result = finish_terminal_resume(
         message_id="m1",

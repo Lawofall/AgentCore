@@ -695,12 +695,12 @@ describe("drainOutbox", () => {
     );
     expect(
       normalizeToolFailureCode(
-        'delegate 缺 tasks：默认顶层放非空 `tasks`，可抄：{"tasks":[{"role":"角色","task":"目标+边界+验收"}]}。',
+        'graph 缺 nodes：顶层放非空 `nodes`，可抄：{"nodes":[{"id":"n1","goal":"目标+边界+验收"}]}。',
       ),
     ).toBe("declaration_empty");
     expect(
       normalizeToolFailureCode(
-        'error: validation\ndelegate 缺 tasks：默认顶层放非空 `tasks`，可抄：{"tasks":[{"role":"角色","task":"目标+边界+验收"}]}。\n<!--agentcore:tool_failed-->',
+        'error: validation\ngraph 缺 nodes：顶层放非空 `nodes`，可抄：{"nodes":[{"id":"n1","goal":"目标+边界+验收"}]}。\n<!--agentcore:tool_failed-->',
       ),
     ).toBe("declaration_empty");
     expect(

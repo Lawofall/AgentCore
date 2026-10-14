@@ -12,7 +12,7 @@ from agentcore.runtime.deep_research_auto import (
     may_auto_debate,
     tool_may_auto_debate,
 )
-from agentcore.runtime.delegate.ceo_format import format_for_ceo
+from agentcore.runtime.graph.facing.ceo_format import format_for_ceo
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import InteractionRegistry
 from agentcore.runtime.runs.plan import RunPlan

@@ -169,7 +169,7 @@ def test_reconcile_drops_dispatch_kickoff_pre_pause():
 
 
 def test_partial_verdict_rejects_posture_a():
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -188,7 +188,7 @@ def test_partial_verdict_rejects_posture_a():
 
 def test_partial_verdict_rejects_gathered_claim():
     """案面「已收齐」：partial/blocked/notes 时与收卷同属姿势 A。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -213,7 +213,7 @@ def test_partial_verdict_rejects_gathered_claim():
 
 def test_notes_verdict_rejects_posture_a():
     """notes ≈ 草稿·部分：非正式完成，不得姿势 A。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="notes",
@@ -252,7 +252,7 @@ def test_bare_completed_not_posture_a():
 def test_partial_requires_draft_acknowledgment_without_adding_completion_words():
     """evidence 降档（requires_draft_ack）时「综述已完成」不进姿势 A，缺承认 → 回炉。"""
     from agentcore.runtime.closing_posture import claims_draft_acknowledgment
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -280,7 +280,7 @@ def test_partial_requires_draft_acknowledgment_without_adding_completion_words()
 
 def test_notes_without_posture_a_does_not_require_draft_ack():
     """notes 仅软提醒：无姿势 A 时不强制草稿承认句。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="notes",
@@ -295,7 +295,7 @@ def test_notes_without_posture_a_does_not_require_draft_ack():
 
 def test_ordinary_partial_without_draft_flag_allows_bare_delivered():
     """普通 partial（无 requires_draft_ack）不强制草稿承认——勿误伤建站裸「已交付」。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -309,7 +309,7 @@ def test_ordinary_partial_without_draft_flag_allows_bare_delivered():
 def test_node_failed_draft_ack_blocks_hollow_verified_landing_opening():
     """能力4：partial+requires_draft_ack 时「全部核实落盘」类开场不能裸过（靠 latch，不加词）。"""
     from agentcore.runtime.closing_posture import claims_draft_acknowledgment
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     # 实测漏拦：该句不进姿势 A 闭集——禁加词，靠 draft_ack 闩。
     hollow = "审计已收口，全部结果已核实落盘。各模块如下。"
@@ -341,7 +341,7 @@ def test_capability4_does_not_expand_posture_a_for_verified_landing():
 
 def test_thin_review_expansion_withdrawn_from_posture_a():
     """✅ 收窄姿势 A：撤回 20260803「复核/已修复/可玩」扩面；乙修好/验绿仍在。"""
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
         state="partial",
@@ -465,7 +465,7 @@ def test_max_rounds_ceiling_honesty_downgrades_without_banner():
         downgrade_verdict_for_max_rounds,
         enforce_ceiling_closing_honesty,
     )
-    from agentcore.runtime.delegate.delivery_status import (
+    from agentcore.runtime.graph.drive.delivery_status import (
         DeliveryVerdict,
         current_delivery_verdict,
     )
@@ -500,7 +500,7 @@ def test_token_budget_ceiling_honesty_downgrades_without_banner():
         downgrade_verdict_for_ceiling,
         enforce_ceiling_closing_honesty,
     )
-    from agentcore.runtime.delegate.delivery_status import (
+    from agentcore.runtime.graph.drive.delivery_status import (
         DeliveryVerdict,
         current_delivery_verdict,
     )
@@ -573,7 +573,7 @@ def test_unresolved_write_ownership_downgrades_verdict_no_dinggao_hard_reject():
         note_unresolved_write_ownership,
         turn_has_unresolved_write_ownership,
     )
-    from agentcore.runtime.delegate.delivery_status import (
+    from agentcore.runtime.graph.drive.delivery_status import (
         DeliveryVerdict,
         current_delivery_verdict,
     )
@@ -808,7 +808,7 @@ def test_delivery_verdict_set_in_child_task_readable_via_shared_ledger():
     import asyncio
 
     from agentcore.llm.provider.protocol import TokenUsage
-    from agentcore.runtime.delegate.delivery_status import (
+    from agentcore.runtime.graph.drive.delivery_status import (
         DeliveryVerdict,
         bind_delivery_verdict,
         current_delivery_verdict,
@@ -868,7 +868,7 @@ def test_honesty_shadow_does_not_rework_or_reset(monkeypatch):
     """本该回炉的档位命中只打影子日志，不回炉、不 content_reset。"""
     from agentcore.llm.provider.protocol import TokenUsage
     from agentcore.runtime.closing_posture import core as honesty_core
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
     from agentcore.runtime.engine.directive import Return
     from agentcore.runtime.engine.outcome import RoundOutcome
     from agentcore.runtime.engine.round import decide_no_tool_round

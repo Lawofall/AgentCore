@@ -160,7 +160,7 @@ async def _wire_continuation_toolset(
     raise_if_local_workspace_fulfiller_absent(user_id=user_id, backend=backend)
     auto_desk_folder_id: str | None = None
     if folder_id is None:
-        from agentcore.runtime.delegate.target_desktop import adopt_persisted_auto_desk
+        from agentcore.runtime.graph.desk.target_desktop import adopt_persisted_auto_desk
 
         adopted = await adopt_persisted_auto_desk(
             birth_folder_id=folder_id,
@@ -263,7 +263,7 @@ async def _wire_continuation_toolset(
     backend.ai_list_materials = frozenset()
     from agentcore.llm.image_accept import model_accepts_images
     from agentcore.memory import default_memory_store, load_turn_rule_view
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         invalidate_verify_cache_for_execution,
     )
 
@@ -308,7 +308,7 @@ async def _wire_continuation_toolset(
     if auto_desk_folder_id:
         base_tool_context.turn_target_desk.note_folder(auto_desk_folder_id)
     from agentcore.runtime.closing_posture import reset_turn_scoped_closing_state
-    from agentcore.runtime.coordination.session import current_execution_id
+    from agentcore.runtime.graph.session.session import current_execution_id
 
     bound_execution_id = base_tool_context.execution_id
     execution_id_token = current_execution_id.set(bound_execution_id)
@@ -506,7 +506,7 @@ async def wire_crash_turn(
 
     Process death leaves no paused frame; the factory rebuilds ambient deps from
     ``lease.user_id`` + journal and calls this path so unfinished DAG nodes can
-    ``resume_plan`` with a live ``DelegateTool``.
+    ``resume_plan`` with a live ``GraphTool``.
     """
     return await _wire_continuation_toolset(
         llm=llm,

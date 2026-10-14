@@ -1029,7 +1029,7 @@ def normalize_local_turn_tool_failure_code(message: str, *, code: str | None = N
     if raw_code == "exec_forced_stop":
         return "exec_forced_stop"
     # Empty-tasks reject (structured template, not free-text intent scan).
-    from agentcore.tools.builtin.delegate.schema import is_empty_delegate_error
+    from agentcore.tools.builtin.graph.schema import is_empty_delegate_error
 
     if is_empty_delegate_error(message or ""):
         return "declaration_empty"

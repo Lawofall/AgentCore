@@ -8,7 +8,7 @@ nobody re-tasked: it hit the timeout ceiling and was killed.
 
 import asyncio
 
-from agentcore.runtime.coordination.session import CoordinationSession
+from agentcore.runtime.graph.session.session import CoordinationSession
 from agentcore.runtime.events import EventSink, EventType
 from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.timeout_hard import (

@@ -464,15 +464,15 @@ async def test_consult_handles_missing_name_arg():
 
 def test_skill_layer_keys_and_pointers():
     """一层一处：键在所有者，不在别层。不钉目录摘要、不钉教学中文。"""
-    from agentcore.tools.builtin.delegate.schema import (
+    from agentcore.tools.builtin.graph.schema import (
         DELEGATE_DESCRIPTION,
         DELEGATE_PARAMETERS,
     )
 
-    task_props = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]
+    node_props = DELEGATE_PARAMETERS["properties"]["nodes"]["items"]["properties"]
     top_props = DELEGATE_PARAMETERS["properties"]
 
     assert "target_folder_id" not in DELEGATE_DESCRIPTION
-    assert "depends_on" in task_props
+    assert "depends_on" in node_props
     assert "playbook" not in top_props
     assert "playbook_args" not in top_props

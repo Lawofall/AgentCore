@@ -706,7 +706,7 @@ class TurnExecutionMixin:
                         # still live so run_completed / execution_completed reach the UI
                         # and outbox READY is not sealed mid-DURABLE append. Cancel /
                         # exception skip this await and still close below.
-                        from agentcore.runtime.coordination import await_live_detached_drive
+                        from agentcore.runtime.graph.session import await_live_detached_drive
                         from agentcore.runtime.pipeline.finalize import (
                             refresh_result_journal_from_host,
                         )
@@ -1162,7 +1162,7 @@ class TurnExecutionMixin:
                         stamp_turn_wall(result)
                         await _remember_pause_meter(self._paused_store, turn_id, result)
                         # Same D1 hold as _run_turn: delay close while detached drive lives.
-                        from agentcore.runtime.coordination import await_live_detached_drive
+                        from agentcore.runtime.graph.session import await_live_detached_drive
                         from agentcore.runtime.pipeline.finalize import (
                             refresh_result_journal_from_host,
                         )

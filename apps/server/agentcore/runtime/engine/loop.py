@@ -145,7 +145,7 @@ def _should_hold_return_for_interjection(
         return False
     if profile.max_rounds > 0 and round_idx + 1 >= profile.max_rounds:
         return False
-    from agentcore.runtime.coordination.session import live_team_holds_captain_turn
+    from agentcore.runtime.graph.session.session import live_team_holds_captain_turn
 
     return live_team_holds_captain_turn(role)
 
@@ -336,7 +336,7 @@ async def react_loop(
     def emit_content(delta: str) -> None:
         _emit_content_raw(delta)
         if role == "captain" and (delta or "").strip():
-            from agentcore.runtime.coordination.session import active_coordination
+            from agentcore.runtime.graph.session.session import active_coordination
 
             coord = active_coordination()
             if coord is not None:
@@ -345,7 +345,7 @@ async def react_loop(
     def emit_reset(reason: str) -> None:
         _emit_reset_raw(reason)
         if role == "captain":
-            from agentcore.runtime.coordination.session import active_coordination
+            from agentcore.runtime.graph.session.session import active_coordination
 
             coord = active_coordination()
             if coord is not None:
@@ -468,7 +468,7 @@ async def react_loop(
         # keeps the max so a retry pass cannot wipe run-level spend).
         if role == "captain" or not run_id:
             return
-        from agentcore.runtime.coordination.session import note_coord_worker_busy
+        from agentcore.runtime.graph.session.session import note_coord_worker_busy
 
         note_coord_worker_busy(
             run_id,
@@ -531,6 +531,86 @@ async def react_loop(
 
             begin_accepting(steer_cid, execution_id=tool_context.execution_id)
 
+    worker_step_token = None
+    if role == "worker" and getattr(tool_context, "record_step_segments", False):
+        from agentcore.runtime.graph.shape.step_segment import bind_step_chain
+
+        worker_step_token = bind_step_chain(
+            tool_context.execution_id or run_id,
+            list(getattr(tool_context, "step_upstream", ()) or ()),
+            goal=getattr(tool_context, "step_goal", "") or "",
+        )
+
+    def _reserve_worker_run(round_no: int) -> None:
+        """The scheduled worker run is already the first segment. Don't draw another."""
+        if role != "worker" or round_no != 0 or not run_id:
+            return
+        from agentcore.runtime.graph.shape.step_segment import current_step_chain
+
+        chain = current_step_chain()
+        if chain is None or (chain.think_id and chain.think_id not in chain.sealed):
+            return
+        chain.think_id = run_id
+        chain.thing_ids = [run_id]
+        chain.had_think = True
+        chain.opened_rounds += 1
+        chain.opened_from = list(chain.upstream)
+
+    def _open_committed(round_no: int, calls: list[Any] | None = None) -> None:
+        """Open one segment per thing this thought committed to, before the things run."""
+        from agentcore.runtime.graph.shape.step_segment import (
+            current_step_chain,
+            open_parallel,
+            open_think,
+            things_from_calls,
+        )
+
+        chain = current_step_chain()
+        if chain is None or (chain.think_id and chain.think_id not in chain.sealed):
+            return
+        labels = [label for label, _result in things_from_calls(calls, None)]
+        if len(labels) > 1:
+            events = open_parallel(
+                chain, run_id=run_id, round_idx=round_no, labels=labels
+            )
+        else:
+            events = open_think(
+                chain,
+                run_id=run_id,
+                round_idx=round_no,
+                label=labels[0] if labels else "",
+            )
+        for event in events:
+            sink.emit(event)
+
+    def _finish_open_think(
+        summary: str,
+        *,
+        calls: list[Any] | None = None,
+        results: list[Any] | None = None,
+    ) -> None:
+        from agentcore.runtime.graph.shape.step_segment import (
+            current_step_chain,
+            seal_open_things,
+            things_from_calls,
+        )
+
+        chain = current_step_chain()
+        if chain is None or not chain.think_id or chain.think_id in chain.sealed:
+            if chain is not None:
+                chain.thing_ids = []
+            return
+        # The executor completes the worker run. Don't seal it from the loop.
+        if role == "worker" and chain.think_id == run_id:
+            chain.upstream = [run_id]
+            chain.think_id = ""
+            chain.thing_ids = []
+            return
+        paired = things_from_calls(calls, results)
+        result_text = [result for _label, result in paired] if paired else [summary]
+        for event in seal_open_things(chain, result_text):
+            sink.emit(event)
+
     try:
         from agentcore.runtime.runs.redrive_sites import unmatched_trailing_tool_calls
         from agentcore.tools.write_replay import begin_write_replay, end_write_replay
@@ -544,6 +624,8 @@ async def react_loop(
             )
             replay_token = begin_write_replay()
             try:
+                _reserve_worker_run(round_idx)
+                _open_committed(round_idx, calls=pending)
                 tool_round = await handle_tool_calls_round(
                     outcome=RoundOutcome(
                         content=last_asst.content or "",
@@ -579,6 +661,11 @@ async def react_loop(
                 )
             finally:
                 end_write_replay(replay_token)
+            _finish_open_think(
+                "",
+                calls=pending,
+                results=tool_round.outcome.tool_results,
+            )
             outcome = tool_round.outcome
             directive = tool_round.directive
             final_content = tool_round.final_content
@@ -728,7 +815,7 @@ async def react_loop(
             # every step top (incl. round 0), AFTER on_round_begin and BEFORE LLM.
             # Parallel to coordination inject below — do NOT merge / fake coord_inject.
             if role == "captain" and steer_cid:
-                from agentcore.runtime.coordination.session import current_execution_id
+                from agentcore.runtime.graph.session.session import current_execution_id
                 from agentcore.runtime.turn.steer import drain_injected
 
                 steer_msgs = await drain_injected(
@@ -748,7 +835,7 @@ async def react_loop(
             # CEO 协调模式 Phase 2: only the captain consumes team events (workers share
             # the ContextVar but must not block on the coordination queue).
             if role == "captain":
-                from agentcore.runtime.coordination.wait import await_coordination_injection
+                from agentcore.runtime.graph.session.wait import await_coordination_injection
 
                 coord_t0 = time.perf_counter()
                 coord_msgs = await await_coordination_injection(messages)
@@ -801,6 +888,7 @@ async def react_loop(
             # stamped after prior round / on_round_begin.
             _maybe_retire_workspace_channel_dead()
             _maybe_retire_exec_env_dead()
+            _reserve_worker_run(round_idx)
             try:
                 if role in ("worker", "captain") and run_id and turn_evidence_ledger is None:
                     from .window_compact import maybe_compact_worker_window
@@ -833,7 +921,7 @@ async def react_loop(
                 )
             finally:
                 if role != "captain" and run_id:
-                    from agentcore.runtime.coordination.session import (
+                    from agentcore.runtime.graph.session.session import (
                         clear_coord_worker_busy,
                     )
 
@@ -942,7 +1030,7 @@ async def react_loop(
                     and role == "captain"
                     and outcome.finish_reason != "length"
                 ):
-                    from agentcore.runtime.coordination.session import active_coordination
+                    from agentcore.runtime.graph.session.session import active_coordination
 
                     coord_session = active_coordination()
                     if coord_session is not None and coord_session.active:
@@ -980,6 +1068,8 @@ async def react_loop(
                     )
                     if rolled is not None:
                         final_content = rolled
+                    _open_committed(round_idx)
+                    _finish_open_think(outcome.content or "")
                 else:
                     # Wind-down breach: non-whitelist tool → nudge+handoff-only, or
                     # local synth close (2nd breach / already at hard ceiling).
@@ -990,6 +1080,7 @@ async def react_loop(
                         directive = breach.directive
                     if not skip_tool_exec:
                         _stamp_coord_busy("tool")
+                        _open_committed(round_idx, calls=outcome.tool_calls)
                         try:
                             tool_round = await handle_tool_calls_round(
                                 outcome=outcome,
@@ -1019,11 +1110,16 @@ async def react_loop(
                             )
                         finally:
                             if role != "captain" and run_id:
-                                from agentcore.runtime.coordination.session import (
+                                from agentcore.runtime.graph.session.session import (
                                     clear_coord_worker_busy,
                                 )
 
                                 clear_coord_worker_busy(run_id)
+                        _finish_open_think(
+                            "",
+                            calls=outcome.tool_calls,
+                            results=tool_round.outcome.tool_results,
+                        )
                         outcome = tool_round.outcome
                         directive = tool_round.directive
                         final_content = tool_round.final_content
@@ -1184,6 +1280,25 @@ async def react_loop(
         )
         return _exit(*result)
     finally:
+        from agentcore.runtime.graph.shape.step_segment import (
+            current_step_chain,
+            reply_events,
+            reset_step_chain,
+        )
+
+        step_chain = current_step_chain()
+        if step_chain is not None and step_chain.had_think:
+            _finish_open_think(final_content or "")
+            step_chain.reply_sealed = True
+        elif (
+            step_chain is not None
+            and not step_chain.reply_sealed
+            and (final_content or "").strip()
+        ):
+            for event in reply_events(step_chain, run_id=run_id, text=final_content):
+                sink.emit(event)
+        if worker_step_token is not None:
+            reset_step_chain(worker_step_token)
         _export_terminal_state()
         # 分工具用量分布的落账行：轮尾埋点跑不到末轮（末轮搜完就交卷 / 被取消 / 撞硬顶），
         # 每个花过额度的 worker 在这里留一行最终分项，一行一 run 直接聚合。

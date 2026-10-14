@@ -24,7 +24,7 @@ from agentcore.llm.turn_catalog import (
 )
 from agentcore.runtime.debate.models import debate_needs_model_catalog
 from agentcore.runtime.debate.types import DebateConfig, DebateForm, DebateSide
-from agentcore.runtime.delegate.task_models import (
+from agentcore.runtime.graph.drive.task_models import (
     items_need_model_catalog,
     load_catalog_for_items,
 )

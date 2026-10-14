@@ -74,7 +74,7 @@ def _delivery_gaps_from_warnings(
     before CEO collect/format.
     """
     _ = files_landed
-    from agentcore.runtime.delegate.delivery_status import (
+    from agentcore.runtime.runs.gap_reasons import (
         REASON_FILES_NOT_LANDED,
         REASON_PATH_HINT,
     )

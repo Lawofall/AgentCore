@@ -610,7 +610,7 @@ async def test_recover_expired_lease_degrades_to_interrupted_when_unwired(monkey
 
 
 async def test_recover_expired_lease_redrives_when_factory_wired(monkeypatch):
-    """Factory returns a DelegateTool → recover_turn resume_plan runs (true redrive)."""
+    """Factory returns a GraphTool → recover_turn resume_plan runs (true redrive)."""
     from agentcore.runtime.recover import recover_expired_lease
     from agentcore.runtime.recover_hooks import set_crash_delegate_factory
 
@@ -828,7 +828,7 @@ async def test_recover_expired_lease_marks_recovered_and_binds_closing_to_turn(
     没有 ``recovered_turn_id``，harvest 会另起一条与原回合无关的助手消息；不在
     teardown 交还 ``turn_attached``，收口还得空等 5 秒 stale-attach 才敢开工。
     """
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         active_coordination,
         clear_active_coordination,
@@ -1039,12 +1039,12 @@ async def test_recover_expired_lease_timeout_cancels_drive(monkeypatch):
     import asyncio
 
     from agentcore.config import settings
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         clear_active_coordination,
         set_active_coordination,
     )
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         cancel_coordination_on_user_stop as real_cancel,
     )
     from agentcore.runtime.recover import recover_expired_lease
@@ -1120,7 +1120,7 @@ async def test_recover_expired_lease_timeout_cancels_drive(monkeypatch):
             _fake_release,
         )
         monkeypatch.setattr(
-            "agentcore.runtime.coordination.session.cancel_coordination_on_user_stop",
+            "agentcore.runtime.graph.session.session.cancel_coordination_on_user_stop",
             _spy_cancel,
         )
         await recover_expired_lease(lease, state)
@@ -1141,7 +1141,7 @@ async def test_recover_expired_lease_drive_outlives_timeout_succeeds(monkeypatch
     import asyncio
 
     from agentcore.config import settings
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         clear_active_coordination,
         set_active_coordination,

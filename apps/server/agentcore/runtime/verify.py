@@ -41,7 +41,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.graph.drive.delivery_status import DeliveryVerdict
 
 
 def finish_guard(

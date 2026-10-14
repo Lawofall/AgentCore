@@ -132,7 +132,7 @@ def worker_only_tool_names() -> frozenset[str]:
 # Heavy-dep ALWAYS tools stay handwritten in ``_assemble_ceo_toolset``.
 # Everything else with ``ceo_wire=ALWAYS`` is declaration-loop wired
 # (zero-arg via ``instantiate_declared``).
-_ALWAYS_HAND_WIRE_NAMES = frozenset({"delegate", "debate"})
+_ALWAYS_HAND_WIRE_NAMES = frozenset({"graph", "debate"})
 
 
 def register_always_ceo_tools(
@@ -143,7 +143,7 @@ def register_always_ceo_tools(
     """Register zero/light-arg CEO ALWAYS tools — shared by assemble + resume.
 
     Consumed only from ``tools.ceo_toolset._assemble_ceo_toolset`` so fresh turn
-    and 2b resume cannot diverge. Skips ``delegate`` / ``debate`` (heavy deps).
+    and 2b resume cannot diverge. Skips ``graph`` / ``debate`` (heavy deps).
     ``skill_registry`` is retained for call-site compatibility (consult is
     hand-wired onto the opening table, empty catalog included).
     """

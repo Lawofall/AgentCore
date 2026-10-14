@@ -143,7 +143,7 @@ async def stop_live_turn(conversation_id: str) -> bool:
     Marks user-stop before the orphan pass so the unwind closes as 已停止.
     Does not clear the FIFO. Returns whether a live run was signalled.
     """
-    from agentcore.runtime.coordination.session import cancel_coordination_on_user_stop
+    from agentcore.runtime.graph.session.session import cancel_coordination_on_user_stop
     from agentcore.runtime.events.client_tool_reattach import cancel_pending_client_tools
     from agentcore.runtime.interaction_orphan import orphan_live_turn_hot_pending
 
@@ -179,7 +179,7 @@ async def deliver_queued_item_to_captain(
     then drop the FIFO row (durable + memory) without deleting the user message.
     No active session, or ``post`` refused → ``no_captain`` and the item stays.
     """
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationEvent,
         CoordinationEventKind,
         active_coordination_for_conversation,
@@ -385,7 +385,7 @@ async def deliver_in_flight(
             raise NoLiveTurnError()
         return None
 
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationEvent,
         CoordinationEventKind,
         active_coordination_for_conversation,

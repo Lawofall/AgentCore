@@ -166,7 +166,7 @@ function wrap(ui: ReactElement) {
 
 /** Open the redirect composer, type a direction, submit. */
 function submitDirection(text: string): void {
-  fireEvent.click(screen.getByRole("button", { name: "立即改此人" }));
+  fireEvent.click(screen.getByRole("button", { name: "改这一段" }));
   fireEvent.change(screen.getByPlaceholderText("具体、可执行的修改方向…"), {
     target: { value: text },
   });

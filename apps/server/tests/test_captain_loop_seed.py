@@ -122,42 +122,6 @@ def test_controller_seed_round_trip_json_safe():
     assert restored.validation_thrash_latched is False
 
 
-def test_note_delegate_batches_batch_shape_sets_first_substantial():
-    controller = LoopController()
-    args = (
-        '{"tasks":[{"id":"a","role":"r","task":"t1"},'
-        '{"id":"b","role":"r","task":"t2"},'
-        '{"id":"c","role":"r","task":"t3"}]}'
-    )
-    tool_calls = [
-        ToolCall(id="1", function=ToolCallFunction(name="delegate", arguments=args))
-    ]
-    attempts = [
-        ToolAttempt(fingerprint="d", tool_name="delegate", success=True, meta={})
-    ]
-    note_delegate_batches(controller, tool_calls, attempts)
-    assert controller.has_delegated is True
-    assert controller.delegate_count == 1
-    assert controller.first_batch_substantial is True
-
-
-def test_note_delegate_batches_light_batch_not_substantial():
-    controller = LoopController()
-    args = (
-        '{"tasks":[{"id":"a","role":"r","task":"t1"},'
-        '{"id":"b","role":"r","task":"t2"}]}'
-    )
-    tool_calls = [
-        ToolCall(id="1", function=ToolCallFunction(name="delegate", arguments=args))
-    ]
-    attempts = [
-        ToolAttempt(fingerprint="d", tool_name="delegate", success=True, meta={})
-    ]
-    note_delegate_batches(controller, tool_calls, attempts)
-    assert controller.has_delegated is True
-    assert controller.first_batch_substantial is False
-
-
 def test_note_delegate_batches_debate_counts_as_post_delegate():
     controller = LoopController()
     tool_calls = [

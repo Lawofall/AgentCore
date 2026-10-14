@@ -57,7 +57,7 @@ __all__ = [
 # Delegate payload carriers — used to decide whether a nested wrapper is the
 # sole top-level payload key (narrow unwrap; do not guess other fields).
 _DELEGATE_WRAPPER_KEYS = frozenset({"arguments", "parameters", "input"})
-_DELEGATE_PAYLOAD_KEYS = frozenset({"tasks"}) | _DELEGATE_WRAPPER_KEYS
+_DELEGATE_PAYLOAD_KEYS = frozenset({"nodes"}) | _DELEGATE_WRAPPER_KEYS
 
 # Hybrid leak: ``<parameter name="role":`` (XML open tag broken into JSON key colon).
 _PARAMETER_NAME_COLON_RE = re.compile(
@@ -120,9 +120,9 @@ def sanitize_tool_args(args: Any) -> Any:
 def _delegate_payload_keys_present(args: dict[str, Any]) -> set[str]:
     """Which of ``_DELEGATE_PAYLOAD_KEYS`` are meaningfully present at this level."""
     present: set[str] = set()
-    tasks = args.get("tasks")
-    if isinstance(tasks, list) and bool(tasks):
-        present.add("tasks")
+    nodes = args.get("nodes")
+    if isinstance(nodes, list) and bool(nodes):
+        present.add("nodes")
     for key in _DELEGATE_WRAPPER_KEYS:
         if key not in args:
             continue
@@ -133,20 +133,20 @@ def _delegate_payload_keys_present(args: dict[str, Any]) -> set[str]:
 
 
 def _inner_has_delegate_payload(inner: dict[str, Any]) -> bool:
-    tasks = inner.get("tasks")
-    return isinstance(tasks, list) and bool(tasks)
+    nodes = inner.get("nodes")
+    return isinstance(nodes, list) and bool(nodes)
 
 
 def unwrap_nested_delegate_arguments(args: Any) -> dict[str, Any] | None:
     """Narrow unwrap of double-wrapped delegate payload.
 
     Only when the top-level dict's sole meaningful payload key (among
-    ``tasks`` / ``arguments`` / ``parameters`` / ``input``) is exactly one
+    ``nodes`` / ``arguments`` / ``parameters`` / ``input``) is exactly one
     wrapper among ``arguments`` / ``parameters`` / ``input``, and that value
     is a JSON object string or dict whose inner body carries non-empty
-    ``tasks``.
+    ``nodes``.
     Returns the inner dict to use as replacement, or ``None`` when the shape
-    does not match (including real top-level ``tasks`` plus an unrelated wrapper).
+    does not match (including real top-level ``nodes`` plus an unrelated wrapper).
     """
     if not isinstance(args, dict):
         return None

@@ -15,7 +15,7 @@ import pytest
 
 from agentcore.config import settings
 from agentcore.runtime.context.workspace_context import build_workspace_context
-from agentcore.runtime.delegate.completion import (
+from agentcore.runtime.graph.drive.completion import (
     execution_capability_warning,
 )
 from agentcore.runtime.runs import build_run_plan

@@ -142,14 +142,14 @@ class LoopWindDown:
         guard = get_hard_timeout(self.run_id)
         if guard is not None and guard.consume_wind_down():
             # Keep coordination session mirrors in sync when present.
-            from agentcore.runtime.coordination.session import active_coordination
+            from agentcore.runtime.graph.session.session import active_coordination
 
             session = active_coordination()
             if session is not None:
                 session._timeout_wind_down_pending.discard(self.run_id)
                 session._timeout_wind_down_entered.add(self.run_id)
             return True
-        from agentcore.runtime.coordination.session import active_coordination
+        from agentcore.runtime.graph.session.session import active_coordination
 
         session = active_coordination()
         return bool(session is not None and session.consume_timeout_wind_down(self.run_id))

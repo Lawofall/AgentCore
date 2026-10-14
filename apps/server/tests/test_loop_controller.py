@@ -469,7 +469,7 @@ def test_workspace_channel_dead_disables_landing_tools():
 
 def test_single_op_channel_timeout_does_not_sticky_or_notice():
     """Single-op settle timeout (channel_op) must not latch sticky-dead or user notice."""
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         clear_active_coordination,
         set_active_coordination,
@@ -516,7 +516,7 @@ def test_single_op_channel_timeout_does_not_sticky_or_notice():
 
 def test_two_channel_op_timeouts_latch_hang_dead_without_session_sticky():
     """Consecutive channel_op hangs stop this run's pens; session stays live."""
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         clear_active_coordination,
         set_active_coordination,
@@ -576,7 +576,7 @@ def test_two_channel_op_timeouts_latch_hang_dead_without_session_sticky():
 
 def test_workspace_channel_dead_emits_user_notice_once():
     """A2: sticky-dead stamps session + emits short content_delta on host sink once."""
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         clear_active_coordination,
         set_active_coordination,
@@ -731,7 +731,7 @@ def test_exec_env_timeout_does_not_retire_family_after_two_hits():
 
 
 def test_exec_env_timeout_does_not_emit_user_notice():
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         clear_active_coordination,
         set_active_coordination,

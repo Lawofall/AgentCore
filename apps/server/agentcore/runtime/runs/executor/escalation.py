@@ -64,9 +64,13 @@ def build_escalation_channel(
         # D1: after ask_user soft-stop cancelled a parked worker, CEO may have
         # stashed a resolve_escalation answer — pick it up without re-suspending.
         if awaiting_ceo:
-            from agentcore.runtime.coordination.session import resolve_coordination_session
+            from agentcore.runtime.runs.coord_ports import resolve_coordination_session
 
-            session = resolve_coordination_session(env.base_tool_context.execution_id)
+            session = (
+                resolve_coordination_session(env.base_tool_context.execution_id)
+                if resolve_coordination_session is not None
+                else None
+            )
             if session is not None:
                 stashed = session.take_stashed_resolution(run_id)
                 if stashed is not None:
@@ -99,12 +103,14 @@ def build_escalation_channel(
         esc_kind = reason if reason in ("wait", "adjust") else "wait"
 
         if awaiting_ceo:
-            from agentcore.runtime.coordination.bridge import (
-                post_escalation_to_coordination,
-            )
-            from agentcore.runtime.coordination.session import resolve_coordination_session
+            from agentcore.runtime.runs.coord_ports import post_escalation_to_coordination
+            from agentcore.runtime.runs.coord_ports import resolve_coordination_session
 
-            session = resolve_coordination_session(env.base_tool_context.execution_id)
+            session = (
+                resolve_coordination_session(env.base_tool_context.execution_id)
+                if resolve_coordination_session is not None
+                else None
+            )
             if session is not None and session.active:
                 from agentcore.workspace.write_claims import ownership_escalation_hints
 
@@ -142,7 +148,8 @@ def build_escalation_channel(
                         "escalator_is_lock_owner_nested_child"
                     ),
                 )
-                post_escalation_to_coordination(
+                if post_escalation_to_coordination is not None:
+                    post_escalation_to_coordination(
                     run_id=run_id,
                     role="",
                     reason=esc_kind,
@@ -220,9 +227,13 @@ def build_escalation_channel(
             else:
                 status, answer = "resolved", str(result or "").strip()
         if awaiting_ceo:
-            from agentcore.runtime.coordination.session import resolve_coordination_session
+            from agentcore.runtime.runs.coord_ports import resolve_coordination_session
 
-            session = resolve_coordination_session(env.base_tool_context.execution_id)
+            session = (
+                resolve_coordination_session(env.base_tool_context.execution_id)
+                if resolve_coordination_session is not None
+                else None
+            )
             if session is not None:
                 session.clear_arbitration(run_id)
         resolutions[question] = {"status": status, "answer": answer}

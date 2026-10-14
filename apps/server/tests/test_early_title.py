@@ -56,7 +56,7 @@ def test_fallback_title_marks_a_short_first_line_as_a_fragment():
     没有任何办法追溯标题是不是模型生成的。首行短的任务卡若不留标记，「帮我查一下张伟
     的社保记录」就会变成云端磁盘上真实存在的目录段。
     """
-    from agentcore.runtime.delegate.target_desktop_auto_cloud import auto_cloud_desk_name
+    from agentcore.runtime.graph.desk.target_desktop_auto_cloud import auto_cloud_desk_name
 
     card = "帮我查一下张伟的社保记录\n身份证号是 3101xxxxxxxxxxxxxx，手机 138xxxxxxxx"
     label = fallback_title(card)

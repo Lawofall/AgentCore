@@ -123,11 +123,12 @@ describe("ManualReference", () => {
 
   it("renders glossary terms aligned with product glossary", () => {
     renderReference();
-    expect(screen.getByText("队员")).toBeTruthy();
+    expect(screen.getByText("一段")).toBeTruthy();
+    expect(screen.getByText("对着你的这扇窗")).toBeTruthy();
     expect(screen.getByText("放行")).toBeTruthy();
     expect(screen.getByText("已停止")).toBeTruthy();
     expect(screen.getByText("重新生成")).toBeTruthy();
-    expect(screen.getByText("带现场续派（同人接续）")).toBeTruthy();
+    expect(screen.getByText("接着做")).toBeTruthy();
     expect(screen.getByText("辩论室")).toBeTruthy();
     expect(screen.getByText("接续链")).toBeTruthy();
     expect(screen.getAllByText("画布").length).toBeGreaterThanOrEqual(1);

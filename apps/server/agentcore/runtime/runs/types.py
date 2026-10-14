@@ -118,6 +118,11 @@ def deliverable_expects_landing(deliverable: Deliverable | None) -> bool:
     return bool((deliverable.artifact_dir or "").strip())
 
 
+def plan_has_writable_worker(plan: Any) -> bool:
+    """True when at least one worker expects on-disk landing (pinned paths)."""
+    return any(deliverable_expects_landing(node.deliverable) for node in plan.nodes)
+
+
 def raw_deliverable_expects_landing(raw: object) -> bool:
     """Same landing predicate on a CEO task dict (before parse).
 
@@ -243,9 +248,6 @@ class RunSpec:
     # restoring the pre-lenient cascade. Default False = ≥1 upstream COMPLETED
     # is enough; absent upstreams are annotated in the worker's dependency input.
     require_upstream: bool = False
-    # 同人续派：目标 run 的现场根（RunSession 键）。设了则执行走 continue_run 而非冷开局；
-    # wire 的 continues_run_id 恒等于该值（星型）。校验与闸在驱动层，调度器不读。
-    continue_from_run_id: str | None = None
     # 检索预算（提案 A1）：本 run ``web_search``+``web_fetch`` 合计次数上限。
     # ``None`` = 未解析（手工构造的 spec / 测试）；经 ``build_run_plan`` /
     # ``apply_retrieval_budgets`` 后恒为 ``>=0`` 的 int（全员统一默认；CEO 不可配置）。
@@ -373,7 +375,7 @@ class RunState:
     delivery_gaps: list[dict[str, str]] = field(default_factory=list)
     # 向上升级（worker → CEO）: decisions / blockers this worker raised via the
     # ``escalate`` tool — each ``{question, assumption, reason}`` — harvested from the
-    # transcript when the run finishes (mirrors ``files_touched``). The DelegateTool
+    # transcript when the run finishes (mirrors ``files_touched``). The GraphTool
     # surfaces these PROMINENTLY in the CEO-facing aggregate so the CEO resolves them
     # (ask_user / revise / re-delegate) before finalizing. Distinct from ``warnings``:
     # a warning is a soft quality caveat (判断是否返工), an escalation is a worker-flagged
@@ -383,7 +385,7 @@ class RunState:
     escalations: list[dict[str, Any]] = field(default_factory=list)
     # Web sources this worker consulted (web_search / web_fetch), de-duped across
     # contract retries. Collected un-numbered (the worker text is not annotated):
-    # the DelegateTool folds these into the turn's shared source card so the user
+    # the GraphTool folds these into the turn's shared source card so the user
     # sees what the WHOLE team researched, not just the CEO's own searches.
     citations: list[dict[str, Any]] = field(default_factory=list)
     model: str = ""

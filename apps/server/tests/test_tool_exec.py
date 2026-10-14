@@ -787,35 +787,35 @@ def test_unwrap_nested_delegate_arguments_success_and_no_false_positive():
         unwrap_nested_delegate_arguments,
     )
 
-    inner_tasks = [{"role": "A", "task": "短目标"}]
-    nested = {"arguments": json.dumps({"tasks": inner_tasks}, ensure_ascii=False)}
+    inner_nodes = [{"id": "n1", "goal": "短目标"}]
+    nested = {"arguments": json.dumps({"nodes": inner_nodes}, ensure_ascii=False)}
     out = unwrap_nested_delegate_arguments(nested)
     assert out is not None
-    assert out["tasks"] == inner_tasks
+    assert out["nodes"] == inner_nodes
 
-    as_dict = {"arguments": {"tasks": [{"role": "调研员", "task": "写 X"}]}}
+    as_dict = {"arguments": {"nodes": [{"id": "n1", "goal": "写 X"}]}}
     out2 = unwrap_nested_delegate_arguments(as_dict)
     assert out2 is not None
-    assert out2["tasks"][0]["role"] == "调研员"
+    assert out2["nodes"][0]["id"] == "n1"
 
     # Narrow wrappers: parameters / input sole payload key (same salvage family).
-    via_params = {"parameters": {"tasks": inner_tasks}}
+    via_params = {"parameters": {"nodes": inner_nodes}}
     out_p = unwrap_nested_delegate_arguments(via_params)
-    assert out_p is not None and out_p["tasks"] == inner_tasks
-    via_input = {"input": json.dumps({"tasks": inner_tasks}, ensure_ascii=False)}
+    assert out_p is not None and out_p["nodes"] == inner_nodes
+    via_input = {"input": json.dumps({"nodes": inner_nodes}, ensure_ascii=False)}
     out_i = unwrap_nested_delegate_arguments(via_input)
-    assert out_i is not None and out_i["tasks"] == inner_tasks
+    assert out_i is not None and out_i["nodes"] == inner_nodes
 
-    # Real top-level tasks + unrelated arguments → do not unwrap.
+    # Real top-level nodes + unrelated arguments → do not unwrap.
     mixed = {
-        "tasks": inner_tasks,
-        "arguments": json.dumps({"tasks": [{"role": "B", "task": "其他"}]}, ensure_ascii=False),
+        "nodes": inner_nodes,
+        "arguments": json.dumps({"nodes": [{"id": "b", "goal": "其他"}]}, ensure_ascii=False),
     }
     assert unwrap_nested_delegate_arguments(mixed) is None
-    # Top-level tasks + parameters wrapper → no unwrap.
+    # Top-level nodes + parameters wrapper → no unwrap.
     assert (
         unwrap_nested_delegate_arguments(
-            {"tasks": inner_tasks, "parameters": {"tasks": [{"role": "B", "task": "x"}]}}
+            {"nodes": inner_nodes, "parameters": {"nodes": [{"id": "b", "goal": "x"}]}}
         )
         is None
     )
@@ -828,7 +828,7 @@ def test_unwrap_nested_delegate_arguments_success_and_no_false_positive():
     # Two wrappers at once → no unwrap (ambiguous).
     assert (
         unwrap_nested_delegate_arguments(
-            {"arguments": {"tasks": inner_tasks}, "parameters": {"tasks": inner_tasks}}
+            {"arguments": {"nodes": inner_nodes}, "parameters": {"nodes": inner_nodes}}
         )
         is None
     )

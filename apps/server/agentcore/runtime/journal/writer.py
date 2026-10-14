@@ -343,7 +343,7 @@ class TurnJournalWriter:
     def _rebind_host_writers(self, overflow: TurnJournalWriter) -> None:
         """Point live coordination sessions at the unsealed overflow writer."""
         try:
-            from agentcore.runtime.coordination.session import (
+            from agentcore.runtime.graph.session.session import (
                 rebind_host_journal_writer,
             )
         except ImportError:

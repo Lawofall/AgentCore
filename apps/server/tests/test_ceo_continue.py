@@ -117,12 +117,12 @@ def test_explicit_paused_is_produced():
 
 
 def test_mark_host_turn_paused_sets_live_session(monkeypatch):
-    from agentcore.runtime.coordination.session import CoordinationSession
+    from agentcore.runtime.graph.session.session import CoordinationSession
     from agentcore.runtime.turn.ceo_continue import mark_host_turn_paused
 
     session = CoordinationSession(execution_id="e1", total_workers=0)
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.session.active_coordination",
+        "agentcore.runtime.graph.session.session.active_coordination",
         lambda execution_id=None: session,
     )
     mark_host_turn_paused()
@@ -131,8 +131,8 @@ def test_mark_host_turn_paused_sets_live_session(monkeypatch):
 
 @pytest.mark.anyio
 async def test_harvest_detached_skips_closing_when_host_paused():
-    from agentcore.runtime.coordination.harvest import settle_detached_execution
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.harvest import settle_detached_execution
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         active_coordination,
         set_active_coordination,

@@ -78,6 +78,12 @@ def build_request_window(
                 round=round_idx,
             )
             window = compacted
+    if run_id:
+        from agentcore.runtime.graph.shape.rewind import project_captain_window
+
+        projected = project_captain_window(window, run_id)
+        if projected is not window:
+            window = projected
     return window
 
 
@@ -351,7 +357,7 @@ def decide_no_tool_round(
     # Empty-response streak used to live on the controller. Completed empties
     # now finish here; the parameter stays so callers do not change shape.
     _ = controller
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         active_coordination,
         live_team_holds_captain_turn,
     )
@@ -371,7 +377,7 @@ def decide_no_tool_round(
         from agentcore.runtime.closing_posture import (
             downgrade_verdict_for_unresolved_write_ownership,
         )
-        from agentcore.runtime.delegate.delivery_status import read_delivery_verdict
+        from agentcore.runtime.graph.drive.delivery_status import read_delivery_verdict
 
         # P0-B: latch from write collisions may exist without a delivery card.
         downgrade_verdict_for_unresolved_write_ownership(
@@ -430,7 +436,7 @@ def apply_finish_guard_rework(
     from agentcore.runtime.closing_posture import (
         downgrade_verdict_for_unresolved_write_ownership,
     )
-    from agentcore.runtime.delegate.delivery_status import read_delivery_verdict
+    from agentcore.runtime.graph.drive.delivery_status import read_delivery_verdict
 
     downgrade_verdict_for_unresolved_write_ownership(
         promotion_ledger=promotion_ledger,

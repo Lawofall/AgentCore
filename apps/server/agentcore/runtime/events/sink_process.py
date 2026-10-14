@@ -334,10 +334,6 @@ class SinkProcessMixin:
         futures = self._accumulate_run_process(event)
         t = event.type
         if t == EventType.RUN_PLAN:
-            # 旧 divert 生长帧带 host_message_id：不在新回合插 team（锚点曾由 graph_append
-            # 承担）。新路径每回合新图，无 host_message_id，正常插 team。
-            if event.payload.get("host_message_id"):
-                return futures
             # 协作图时间线落点 (统一团队时间线): the FIRST run_plan of an execution drops a
             # zero-width `team` marker at its chronological spot, so the inline graph renders
             # there rather than at the bottom. Later batches (same execution_id) merge into the

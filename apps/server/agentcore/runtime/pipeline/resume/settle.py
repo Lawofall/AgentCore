@@ -14,7 +14,7 @@ from agentcore.runtime.recover import SettledSuspension
 from agentcore.runtime.suspension import TurnSuspension
 from agentcore.runtime.turn.state import TurnState
 from agentcore.tools.builtin.debate import DebateTool
-from agentcore.tools.builtin.delegate import DelegateTool
+from agentcore.tools.builtin.graph import GraphTool
 
 __all__ = [
     "SettledSuspension",
@@ -114,7 +114,7 @@ async def settle_resumed_suspension(
     note: str,
     selected: list[str],
     sink: EventSink,
-    delegate_tool: DelegateTool,
+    delegate_tool: GraphTool,
     execution_id: str,
     debate_tool: DebateTool | None = None,
 ) -> SettledSuspension:

@@ -237,6 +237,8 @@ export interface SidecarHistoryEntry {
   /** 思考模型在带 tool_calls 的助手行上要求回传。正文行不带。 */
   reasoning_content?: string;
   evidence_ledger?: unknown[];
+  /** 这扇窗口里还在的已封口段。下一轮新段接在这些段的末端。模型看不见。 */
+  graph_context?: { id: string; depends_on?: string[] }[];
 }
 
 /** 一条 web 来源（对齐服务端 `Citation`：url/title/snippet/site 恒在；台账加宽字段可选）。

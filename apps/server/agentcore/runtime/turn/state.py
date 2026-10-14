@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from agentcore.runtime.coordination.journal import coordination_from_journal
+from agentcore.runtime.graph.session.journal import coordination_from_journal
 from agentcore.runtime.journal.fold import (
     completed_from_journal,
     execution_id_from_journal,
@@ -21,7 +21,7 @@ from agentcore.runtime.journal.fold import (
 
 if TYPE_CHECKING:
     from agentcore.llm.provider.protocol import LLMMessage
-    from agentcore.runtime.coordination.session import CoordinationSnapshot
+    from agentcore.runtime.graph.session.session import CoordinationSnapshot
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import RunState
 

@@ -279,7 +279,7 @@ class TurnRunRegistry:
             )
             self._mark_superseded(existing)
             with contextlib.suppress(Exception):
-                from agentcore.runtime.coordination.session import (
+                from agentcore.runtime.graph.session.session import (
                     cancel_coordination_on_user_stop,
                 )
 
@@ -633,7 +633,7 @@ class TurnRunRegistry:
         self._mark_user_stopped(run)
         self._emit_user_stop_close(run)
         with contextlib.suppress(Exception):
-            from agentcore.runtime.coordination.session import (
+            from agentcore.runtime.graph.session.session import (
                 cancel_coordination_on_user_stop,
             )
 
@@ -738,7 +738,7 @@ class TurnRunRegistry:
         for run in live:
             self._mark_user_stopped(run)
             with contextlib.suppress(Exception):
-                from agentcore.runtime.coordination.session import (
+                from agentcore.runtime.graph.session.session import (
                     cancel_coordination_on_user_stop,
                 )
 

@@ -339,7 +339,7 @@ async def test_stream_chat_persists_agent_mentions(monkeypatch):
     monkeypatch.setattr(turns_mod, "run_and_persist", AsyncMock())
     monkeypatch.setattr(turns_mod, "schedule_title_generation", lambda **_k: None)
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.await_live_detached_drive",
+        "agentcore.runtime.graph.session.await_live_detached_drive",
         AsyncMock(),
     )
 
@@ -438,7 +438,7 @@ async def test_regenerate_forwards_stored_agent_mentions(monkeypatch):
     monkeypatch.setattr(turns_mod, "compact_before_turn", AsyncMock())
     monkeypatch.setattr(turns_mod, "run_and_persist", _run)
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.await_live_detached_drive",
+        "agentcore.runtime.graph.session.await_live_detached_drive",
         AsyncMock(),
     )
 
@@ -535,7 +535,7 @@ async def test_regenerate_replaces_agent_mentions_when_edit_sends_empty(monkeypa
     monkeypatch.setattr(turns_mod, "compact_before_turn", AsyncMock())
     monkeypatch.setattr(turns_mod, "run_and_persist", _run)
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.await_live_detached_drive",
+        "agentcore.runtime.graph.session.await_live_detached_drive",
         AsyncMock(),
     )
 

@@ -73,7 +73,7 @@ _cache: dict[tuple[str, str | None], _CacheEntry] = {}
 
 def _cache_miss_origin_fields() -> dict[str, str]:
     """Searchable origin on empty injection (historical ``execution_harvest``)."""
-    from agentcore.runtime.delegate.post_close_gate import current_user_message_origin
+    from agentcore.runtime.graph.admit.post_close_gate import current_user_message_origin
 
     origin = current_user_message_origin()
     return {"origin": origin} if origin else {}

@@ -54,6 +54,10 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
         Disposition.DURABLE,
         "run 未执行（cascade/abort）——重放「未执行」，避免假排队中",
     ),
+    EventType.GRAPH_REWIND: (
+        Disposition.EPHEMERAL,
+        "回转实时标已切出——耐久记录是 graph_rewind 事实，reload 由 fold 合成同形事件",
+    ),
     EventType.RUN_PROGRESS: (Disposition.DURABLE, "run 阶段进度里程碑——重放过程节拍"),
     EventType.BATCH_METRICS: (Disposition.DURABLE, "调度埋点量化——journal 重放；产品不展示"),
     EventType.DEBATE_RESULT: (Disposition.DURABLE, "辩论最终裁决——重放结论"),

@@ -566,6 +566,19 @@ def _upstream_intermediate_persist_hint(spec: RunSpec) -> str:
     )
 
 
+def _segment_name(spec: RunSpec) -> str:
+    """What this segment is called. A person-name is only present for debate."""
+    named = (spec.role or "").strip()
+    if named:
+        return named
+    text = " ".join((spec.task or "").split())
+    if not text:
+        return spec.run_id
+    if len(text) <= 40:
+        return text
+    return text[:40] + "…"
+
+
 def _team_position_block(plan: RunPlan, spec: RunSpec) -> str:
     """The worker's place on the team DAG: its parallel peers and — crucially — where
     its output GOES. Symmetric to :func:`_dep_context_blocks` (which hands a downstream
@@ -589,7 +602,7 @@ def _team_position_block(plan: RunPlan, spec: RunSpec) -> str:
     is included in every team shape that has same-fan-out peers; a node with none
     (a lone pipeline link) skips that section. Every team shape starts with a
     self line so the 看-side roster names who this block is for."""
-    roles = {n.run_id: (n.role or n.run_id) for n in plan.nodes}
+    roles = {n.run_id: _segment_name(n) for n in plan.nodes}
     dependents = [roles[n.run_id] for n in plan.nodes if spec.run_id in n.depends_on]
     upstream = [roles[d] for d in spec.depends_on if d in roles]
 
@@ -619,7 +632,7 @@ def _team_position_block(plan: RunPlan, spec: RunSpec) -> str:
         )
     if not parts:
         return ""
-    me = spec.role or spec.run_id
+    me = _segment_name(spec)
     return f"你：{me}（本职见「你的任务」）\n\n" + "\n\n".join(parts)
 
 
@@ -725,7 +738,7 @@ def _dep_context_blocks(
     for dep_id in depends_on:
         state = completed.get(dep_id)
         dep_spec = plan.by_id(dep_id)
-        label = dep_spec.role if dep_spec and dep_spec.role else dep_id
+        label = _segment_name(dep_spec) if dep_spec is not None else dep_id
         author_summary = ""
         if state and state.debrief:
             author_summary = str((state.debrief or {}).get("summary") or "").strip()

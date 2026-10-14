@@ -150,7 +150,7 @@ def _no_exec_table_gap(
     )
     if not has_opaque_source:
         return None
-    from agentcore.runtime.delegate.delivery_status import REASON_NO_EXEC_TABLE
+    from agentcore.runtime.runs.gap_reasons import REASON_NO_EXEC_TABLE
 
     source_set = {
         _normalize_source_relpath(p) for p in (source_data_paths or ()) if p
@@ -264,7 +264,7 @@ def check_contract(
                 listed = "、".join(f"`{p}`" for p in missing)
                 path_mismatch_warnings.append(f"声明的交付物路径未落盘：{listed}")
 
-    from agentcore.runtime.delegate.delivery_status import (
+    from agentcore.runtime.runs.gap_reasons import (
         REASON_FILES_NOT_LANDED,
         REASON_PATH_HINT,
     )

@@ -343,7 +343,7 @@ async def test_deleted_id_list_is_the_whole_window():
 
 async def test_auto_desk_reclaim_tags_machine_origin(monkeypatch: pytest.MonkeyPatch):
     """裸聊自动云桌回收走同一个 soft_delete，但必须自报家门。"""
-    from agentcore.runtime.delegate.target_desktop_auto_cloud import (
+    from agentcore.runtime.graph.desk.target_desktop_auto_cloud import (
         reclaim_orphan_auto_desk_folder,
     )
 

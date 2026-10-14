@@ -32,6 +32,7 @@ def test_classify_kinds():
     assert classify_snapshot_label(None) == "auto"
     assert classify_snapshot_label("发版前") == "kept"
     assert classify_snapshot_label("turn-baseline:m1") == "baseline"
+    assert classify_snapshot_label("seal:seg_1") == "system"
     assert classify_snapshot_label("handoff:2026-01-01T00:00:00Z") == "system"
     assert classify_snapshot_label("导出") == "system"
     assert classify_snapshot_label("合回到本机") == "system"

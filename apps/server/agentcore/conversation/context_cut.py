@@ -112,7 +112,7 @@ def _refuse(exc: ContextCutError) -> ConflictError:
 
 
 async def _assert_idle(session: AsyncSession, conversation_id: str) -> None:
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         registered_coordination_for_conversation,
     )
 

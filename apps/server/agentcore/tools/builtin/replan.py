@@ -14,10 +14,10 @@ team is still running, without requiring a yielded plan.
 Non-terminal, exactly like ``delegate``: the result returns to the CEO loop (a further
 boundary brief, or the terminal team result).
 
-A thin wrapper: it holds the turn's :class:`~agentcore.tools.builtin.delegate.DelegateTool`
-and forwards to :meth:`DelegateTool.replan`, which owns the paused state (``_supervised``),
+A thin wrapper: it holds the turn's :class:`~agentcore.tools.builtin.graph.GraphTool`
+and forwards to :meth:`GraphTool.replan`, which owns the paused state (``_supervised``),
 the validation, the in-place steer / append, and the resume drive. Worker usage / ledger /
-citations therefore accumulate on the SAME DelegateTool instance the pipeline already
+citations therefore accumulate on the SAME GraphTool instance the pipeline already
 folds into the turn totals — this tool adds no accumulator of its own.
 
 范围：tell（对停着等的人说决定，或给还没开始的人补一句）+ add（追加新节点，
@@ -32,8 +32,6 @@ from typing import TYPE_CHECKING, Any
 
 from agentcore.core.logging import get_logger
 from agentcore.core.types import ToolApproval, ToolFace
-from agentcore.runtime.delegate.task_models import TASK_MODEL_SCHEMA_PROPS
-from agentcore.tools.builtin.delegate.schema import TASK_ARTIFACTS_SCHEMA
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
     AUDIENCE_CEO_ONLY,
@@ -43,13 +41,13 @@ from agentcore.tools.registration import (
 )
 
 if TYPE_CHECKING:
-    from agentcore.tools.builtin.delegate import DelegateTool
+    from agentcore.tools.builtin.graph import GraphTool
 
 logger = get_logger(__name__)
 
 # Schema layer: short trigger. 字段 HOW 在让出简报与参数，不指空 consult。
 _REPLAN_DESCRIPTION = (
-    "对已派出的人说一句话、加人，或让已暂停的计划继续、收口。"
+    "对已在图上的节点补一句、追加节点，或让已暂停的图继续、收口。"
 )
 
 _REPLAN_PARAMETERS = {
@@ -58,8 +56,8 @@ _REPLAN_PARAMETERS = {
         "tell": {
             "type": "array",
             "description": (
-                "对这个人说的话。他正停着等拍板：这句就是决定，他接着干。"
-                "他还没开始：开工前交给他。"
+                "对这个节点说的话。它正停着等拍板：这句就是决定，它接着干。"
+                "它还没开始：开工前交给它。"
                 "偏好、授权或花钱先 ask_user，再把用户的话写在这里。"
             ),
             "items": {
@@ -67,7 +65,7 @@ _REPLAN_PARAMETERS = {
                 "properties": {
                     "run_id": {
                         "type": "string",
-                        "description": "队员的 run_id，或能唯一对应的角色名。",
+                        "description": "节点的 run_id，或能唯一对应的节点 id。",
                     },
                     "note": {
                         "type": "string",
@@ -79,33 +77,25 @@ _REPLAN_PARAMETERS = {
         },
         "add": {
             "type": "array",
-            "description": (
-                "追加全新步骤（role+task；可 depends_on 现有 run_id 或本批 id）。"
-            ),
+            "description": "追加节点（id、goal；可 depends_on 现有 run_id 或本批 id）。",
             "items": {
                 "type": "object",
                 "properties": {
                     "id": {
                         "type": "string",
-                        "description": "本批临时 id，供其它新步 depends_on。",
+                        "description": "本批节点 id，供其它新节点 depends_on。",
                     },
-                    "role": {
+                    "goal": {
                         "type": "string",
-                        "description": "角色名。",
-                    },
-                    "task": {
-                        "type": "string",
-                        "description": "子任务。",
+                        "description": "这一节点要做成的事。",
                     },
                     "depends_on": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "上游 run_id 或本批 id。",
                     },
-                    "artifacts": TASK_ARTIFACTS_SCHEMA,
-                    **TASK_MODEL_SCHEMA_PROPS,
                 },
-                "required": ["role", "task"],
+                "required": ["id", "goal"],
             },
         },
         "stop": {
@@ -120,7 +110,7 @@ _REPLAN_PARAMETERS = {
 class ReplanTool:
     """CEO-agent tool that re-steers / appends and resumes a paused delegate
     plan (non-terminal, like ``delegate``). Thin wrapper over
-    :meth:`DelegateTool.replan` — it shares the DelegateTool's paused state and
+    :meth:`GraphTool.replan` — it shares the GraphTool's paused state and
     accumulator, so it carries no usage surface of its own.
     """
 
@@ -128,12 +118,12 @@ class ReplanTool:
         surface=ToolSurface.CEO_ORCHESTRATION,
         audience=AUDIENCE_CEO_ONLY,
         ceo_wire=CeoWire.COORDINATION,
-        catalog_summary="调整已派出的计划",
-        blurb="改正在跑的分工，而不是从头再派",
+        catalog_summary="调整已声明的图",
+        blurb="补一句、追加节点，或让暂停的图继续",
     )
 
-    def __init__(self, *, delegate: DelegateTool) -> None:
-        # The turn's DelegateTool: owns ``_supervised`` (the paused plan), the
+    def __init__(self, *, delegate: GraphTool) -> None:
+        # The turn's GraphTool: owns ``_supervised`` (the paused plan), the
         # validation + in-place steer / append, the resume drive, and the shared
         # accumulator the pipeline folds. This tool just forwards the call.
         self._delegate = delegate

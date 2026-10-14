@@ -184,7 +184,7 @@ const handoffStep = {
 };
 
 describe("RunDetailBody process timeline", () => {
-  it("hides footer 交接简报 when process already has a successful handoff", () => {
+  it("does not fold a handoff tool into 交接简报", () => {
     const prevDebrief = run.debrief;
     const prevProcess = run.process;
     run.debrief = {
@@ -198,17 +198,18 @@ describe("RunDetailBody process timeline", () => {
           <RunDetailBody messageId="m1" runId="r1" />
         </MemoryRouter>,
       );
-      expect(screen.getByRole("button", { name: "交接简报" })).toBeTruthy();
-      expect(screen.queryByText("交叉验证完成")).toBeNull();
-      expect(screen.queryByText("Handoff")).toBeNull();
+      expect(screen.getAllByRole("button", { name: "交接简报" })).toHaveLength(
+        1,
+      );
       expect(screen.queryByText("简报由系统降级生成")).toBeNull();
+      expect(screen.getByText("收尾。")).toBeTruthy();
     } finally {
       run.debrief = prevDebrief;
       run.process = prevProcess;
     }
   });
 
-  it("keeps footer degraded debrief when process has no successful handoff", () => {
+  it("does not print a degraded debrief as 交接简报", () => {
     const prevDebrief = run.debrief;
     const prevProcess = run.process;
     run.debrief = {
@@ -232,9 +233,10 @@ describe("RunDetailBody process timeline", () => {
           <RunDetailBody messageId="m1" runId="r1" />
         </MemoryRouter>,
       );
-      expect(screen.getByText("交接简报")).toBeTruthy();
-      expect(screen.getByText("简报由系统降级生成")).toBeTruthy();
+      expect(screen.queryByText("交接简报")).toBeNull();
+      expect(screen.queryByText("简报由系统降级生成")).toBeNull();
       expect(screen.queryByText("正文切片当简报")).toBeNull();
+      expect(screen.getByText("没打到 handoff。")).toBeTruthy();
     } finally {
       run.debrief = prevDebrief;
       run.process = prevProcess;
@@ -248,15 +250,17 @@ describe("RunDetailBody process timeline", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("调研员")).toBeTruthy();
     expect(screen.getByText("调研竞品")).toBeTruthy();
+    expect(screen.queryByText("任务")).toBeNull();
+    expect(screen.queryByText("接手")).toBeNull();
+    expect(screen.queryByText("收到的上下文")).toBeNull();
+    expect(screen.queryByText("资源消耗")).toBeNull();
     // Timeline body: reasoning headers + content + tool labels (CEO ProcessTimeline).
     expect(screen.getAllByText("Thought").length).toBeGreaterThan(0);
     expect(screen.getByText(/初步结论/)).toBeTruthy();
     expect(screen.getByText(/最终建议/)).toBeTruthy();
-    // Footer conclusion kept.
-    expect(screen.getByText("结论")).toBeTruthy();
     expect(screen.getByText("完成调研")).toBeTruthy();
+    expect(screen.queryByText("交接简报")).toBeNull();
     // Old partitioned section titles must not appear as standalone section chrome.
     expect(screen.queryByText("输出")).toBeNull();
     expect(screen.queryByText("工具调用")).toBeNull();
@@ -330,6 +334,60 @@ describe("RunDetailBody process timeline", () => {
       mockExecution.planType = prevPlanType;
       mockExecution.agents = prevAgents;
       mockExecution.runs = prevRuns;
+    }
+  });
+
+  it("shows the upstream conclusion and not an empty context section", () => {
+    const prev = run.receivedContext;
+    run.receivedContext = [
+      {
+        channel: "dependency",
+        heading: "上游",
+        body: "上一段的结论是先核价。",
+        chars: 12,
+        truncated: false,
+        source_role: "调研员",
+        source_run_id: "prev",
+        fidelity: "pass_through",
+        files: [],
+      },
+    ];
+    try {
+      render(
+        <MemoryRouter>
+          <RunDetailBody messageId="m1" runId="r1" />
+        </MemoryRouter>,
+      );
+      expect(screen.getByText("上一段")).toBeTruthy();
+      expect(screen.getByText("上一段的结论是先核价。")).toBeTruthy();
+      expect(screen.queryByText("收到的上下文")).toBeNull();
+    } finally {
+      run.receivedContext = prev;
+    }
+  });
+
+  it("shows the same failure sentence as the card, not the raw error", () => {
+    const prevStatus = run.status;
+    const prevError = run.error;
+    const prevKind = run.failureKind;
+    run.status = "failed";
+    run.error = "Traceback: provider exploded";
+    run.failureKind = "model";
+    try {
+      render(
+        <MemoryRouter>
+          <RunDetailBody messageId="m1" runId="r1" />
+        </MemoryRouter>,
+      );
+      expect(
+        screen.getByText("模型响应中断，这一步没有完成。可以让我重试。"),
+      ).toBeTruthy();
+      expect(screen.queryByText(/Traceback/)).toBeNull();
+      expect(screen.queryByText("错误")).toBeNull();
+    } finally {
+      run.status = prevStatus;
+      run.error = prevError;
+      run.failureKind = prevKind;
     }
   });
 });

@@ -5,7 +5,7 @@ import type { ManualChapterContent } from "../types";
 /**
  * 看懂协作（选读）——结构化内容源；真图 / 真 UI 经 embed 槽接入。
  *
- * 口径：真选读、瘦身；用用户叙事讲清「团队怎么开工、怎么分批、怎么收口」，
+ * 口径：真选读、瘦身；用用户叙事讲清「一段怎么开工、怎么接上下一段、怎么封口」，
  * 禁止实现术语（SSE / WaveScheduler / ReAct / finish_reason / depends_on /
  * Prepare·Execute·Finalize / max_parallel 等）。
  */
@@ -16,7 +16,7 @@ export const mechanismChapter: ManualChapterContent = {
   sections: [
     {
       id: MANUAL_SECTION_IDS.mechanism.live,
-      title: "看团队跑一遍",
+      title: "看图跑一遍",
       icon: "PlayCircle",
       ai: "off",
       blocks: [
@@ -24,7 +24,7 @@ export const mechanismChapter: ManualChapterContent = {
           type: "callout",
           variant: "info",
           text: [
-            "这一章是选读——好奇团队在后台怎么转时再来。",
+            "这一章是选读——好奇这张图在后台怎么转时再来。",
             { text: "不看不影响使用", strong: true },
             "。",
           ],
@@ -34,7 +34,7 @@ export const mechanismChapter: ManualChapterContent = {
           text: [
             "下面这张图和你复杂任务里看到的同源，正在",
             { text: "跑一遍", strong: true },
-            "：谁在干活、产出怎么往下交、最后怎么收口。",
+            "：哪段在做、结论怎么交给下一段、最后怎么封口。",
           ],
         },
         { type: "embed", key: "HeroGraph" },
@@ -66,7 +66,7 @@ export const mechanismChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "你点发送之后，团队怎么接单、怎么分工、怎么交到你手里？轻问直接答；该协作才拉起一支团队。",
+          text: "你点发送之后，对着你的这扇窗怎么接、要不要再开段、结论怎么回到你手里？轻问直接答；要拆开才再开几段。",
         },
         {
           type: "cards",
@@ -74,18 +74,18 @@ export const mechanismChapter: ManualChapterContent = {
           items: [
             {
               title: "接单准备",
-              desc: "CEO 接到目标，备好该用的能力与上下文。闲聊当场答；要并行、独立验证或成篇时才组团。",
+              desc: "对着你的这扇窗接到目标，备好该用的能力与上下文。闲聊当场答；要并行、独立验证或成篇时才再开段。",
               icon: "Target",
             },
             {
               title: "分工推进",
-              desc: "能一起干的同一批开干；有先后的等上游交活再解锁。中途要你拍板或放行时会停下来问——其他人不受影响。",
+              desc: "没有先后的同一批开；有先后的等上游封口再开。中途要你拍板或放行时，问题回到对着你的这扇窗，别的段继续。",
               icon: "UsersRound",
               highlight: true,
             },
             {
               title: "收尾交付",
-              desc: "活干完回到 CEO，用自己的声音把结果交给你。中途断线也会尽量保住已完成的部分。",
+              desc: "做完的结论回到对着你的这扇窗，由这扇窗告诉你。中途断线也会尽量保住已经封口的段。",
               icon: "ShieldCheck",
             },
           ],
@@ -95,23 +95,23 @@ export const mechanismChapter: ManualChapterContent = {
           items: [
             {
               title: "你说出目标",
-              desc: "提问落库；协作图左侧出现「你的任务」端点。",
+              desc: "提问落库。右上角可以切到图，开场这段就是第一段。",
             },
             {
-              title: "CEO 判断要不要组团",
-              desc: "闲聊或简单问答直接作答；要并行、独立验证或成篇时才拉团队。",
+              title: "要不要再开段",
+              desc: "闲聊或简单问答直接作答；要并行、独立验证或成篇时才再开几段。",
             },
             {
               title: "分工图成形、分批推进",
-              desc: "本批队员先亮成排队态——开跑前就能看见整张图。没有先后的同一批开干；有先后的等上游齐了再解锁下一批。",
+              desc: "新开的段先是等待——开跑前就能看见整张图。没有先后的同一批开；有先后的等上游封口再开下一段。",
             },
             {
-              title: "队员各自干活",
-              desc: "答案边写边流到节点上。需要你拍板或放行敏感操作时，会单独停下来问你。",
+              title: "每段自己做",
+              desc: "这段在写的话会流到节点上。需要你拍板或放行敏感操作时，问题回到对着你的这扇窗。",
             },
             {
-              title: "CEO 收口，答案落进气泡",
-              desc: "活干完后 CEO 写一段简短概览；图上的汇聚点＝最终答案，点它可跳到气泡。",
+              title: "最后一段封口",
+              desc: "结论回到对着你的这扇窗。没有单独的汇总节点。",
             },
           ],
         },
@@ -136,7 +136,7 @@ export const mechanismChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "并行、串行、辩论、嵌套、带现场续派——下面都是与对话同源的协作图，滚到才加载。",
+          text: "同时开、按顺序、辩论、再开一层、接着做——下面都是和对话同一张图，滚到才加载。",
         },
         {
           type: "paragraph",

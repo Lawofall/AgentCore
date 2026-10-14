@@ -10,13 +10,7 @@ import { RunDetailBody } from "@/components/chat/detail/RunDetailBody";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { AgentState, Execution, RunNode } from "@/stores/execution";
 import { useRunStopPendingStore } from "@/stores/runStopPending";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -211,7 +205,7 @@ describe("RunDetailBody member stop", () => {
     seed({ agentStatus: "idle", runStatus: "pending" });
     wrap(<RunDetailBody messageId="m1" runId="r1" />);
 
-    expect(screen.getByRole("button", { name: "停止这位队员" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "停止这位队员" })).toBeNull();
     expect(screen.queryByText(/正在实时输出/)).toBeNull();
     expect(screen.queryByRole("button", { name: "停止整轮" })).toBeNull();
   });
@@ -220,11 +214,11 @@ describe("RunDetailBody member stop", () => {
     seed({ agentStatus: "working", runStatus: "running" });
     wrap(<RunDetailBody messageId="m1" runId="r1" />);
 
-    expect(screen.getByRole("button", { name: "停止这位队员" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "立即改此人" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "停止这位队员" })).toBeNull();
+    expect(screen.getByRole("button", { name: "改这一段" })).toBeTruthy();
     // 纯图标：可见正文里不再写动作名（名字只在 aria-label / tooltip）。
     expect(screen.queryByText("停止这位队员")).toBeNull();
-    expect(screen.queryByText("立即改此人")).toBeNull();
+    expect(screen.queryByText("改这一段")).toBeNull();
     expect(screen.queryByText(/正在实时输出/)).toBeNull();
     expect(screen.queryByText("接手")).toBeNull();
     expect(screen.queryByRole("button", { name: /记下改法/ })).toBeNull();
@@ -257,7 +251,7 @@ describe("RunDetailBody member stop", () => {
     expect(screen.queryByText("2.0s")).toBeNull();
   });
 
-  it("shows 接手 chip when this run replaces another, without live-output copy", () => {
+  it("does not badge a replacement run as 接手", () => {
     seed({
       agentStatus: "working",
       runStatus: "running",
@@ -265,15 +259,12 @@ describe("RunDetailBody member stop", () => {
     });
     wrap(<RunDetailBody messageId="m1" runId="r1" />);
 
-    const chip = screen.getByText("接手");
-    expect(chip.getAttribute("title")).toMatch(/同角色新人/);
-    expect(
-      screen.queryByText(/接手重写|正在实时输出|同一人接续|辩论主持/),
-    ).toBeNull();
-    expect(screen.getByRole("button", { name: "停止这位队员" })).toBeTruthy();
+    expect(screen.queryByText("接手")).toBeNull();
+    expect(screen.queryByRole("button", { name: "停止这位队员" })).toBeNull();
+    expect(screen.getByRole("button", { name: "改这一段" })).toBeTruthy();
   });
 
-  it("keeps 接手 chip after the replacement run finishes", () => {
+  it("still omits 接手 after the replacement run finishes", () => {
     seed({
       agentStatus: "completed",
       runStatus: "completed",
@@ -281,7 +272,7 @@ describe("RunDetailBody member stop", () => {
     });
     wrap(<RunDetailBody messageId="m1" runId="r1" />);
 
-    expect(screen.getByText("接手")).toBeTruthy();
+    expect(screen.queryByText("接手")).toBeNull();
     expect(screen.queryByRole("button", { name: /停止这位队员/ })).toBeNull();
   });
 
@@ -295,7 +286,7 @@ describe("RunDetailBody member stop", () => {
       wrap(<RunDetailBody messageId="m1" runId="r1" />);
 
       expect(screen.queryByRole("button", { name: /停止这位队员/ })).toBeNull();
-      expect(screen.queryByRole("button", { name: /立即改此人/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /改这一段/ })).toBeNull();
       expect(
         screen.queryByText(/已经跑完|已经结束|已经停下|没有执行|还没开工/),
       ).toBeNull();
@@ -308,28 +299,18 @@ describe("RunDetailBody member stop", () => {
     wrap(<RunDetailBody messageId="m1" runId="r1" />);
 
     // 排队中可停（可用），但没有在跑的工作可改（不可用 + 原因）。
-    expect(screen.getByRole("button", { name: "停止这位队员" })).toBeTruthy();
-    const redirect = screen.getByRole("button", { name: /^立即改此人（/ });
+    expect(screen.queryByRole("button", { name: "停止这位队员" })).toBeNull();
+    const redirect = screen.getByRole("button", { name: /^改这一段（/ });
     expect(redirect.getAttribute("aria-disabled")).toBe("true");
     expect(redirect.getAttribute("title")).toMatch(/还没开工/);
   });
 
-  it("click requests node-scoped stop and disables while pending", async () => {
+  it("does not offer a per-segment stop while working", () => {
     seed({ agentStatus: "working", runStatus: "running" });
     wrap(<RunDetailBody messageId="m1" runId="r1" />);
 
-    const btn = screen.getByRole("button", { name: "停止这位队员" });
-    fireEvent.click(btn);
-
-    await waitFor(() => {
-      expect(submitRunStop).toHaveBeenCalledWith("c1", {
-        executionId: "exec1",
-        runId: "r1",
-      });
-    });
-    const busy = screen.getByRole("button", { name: "停止请求中…" });
-    expect(busy).toBeTruthy();
-    expect((busy as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "停止这位队员" })).toBeNull();
+    expect(submitRunStop).not.toHaveBeenCalled();
   });
 
   // 服务端说够不着（驱动已退出 / run 不在当前计划里）时**什么都没入队**。留一个
@@ -344,15 +325,8 @@ describe("RunDetailBody member stop", () => {
     seed({ agentStatus: "working", runStatus: "running" });
     wrap(<RunDetailBody messageId="m1" runId="r1" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "停止这位队员" }));
-
-    await waitFor(() => {
-      expect(submitRunStop).toHaveBeenCalled();
-    });
-    await waitFor(() => {
-      expect(screen.queryByRole("button", { name: "停止请求中…" })).toBeNull();
-    });
-    expect(screen.getByRole("button", { name: "停止这位队员" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "停止这位队员" })).toBeNull();
+    expect(submitRunStop).not.toHaveBeenCalled();
     expect(useRunStopPendingStore.getState().isRunCovered("exec1", "r1")).toBe(
       false,
     );
@@ -360,14 +334,13 @@ describe("RunDetailBody member stop", () => {
 
   // captain 不是被派出去的队员——引擎的计划里没有它，「只停这位队员」必然落空。
   // 整轮停只挂在 captain 详情（队员栏不夹），与输入框「停止生成」同一条 stopGeneration。
-  it("hides per-member intervene on the captain run, keeps 停止整轮", () => {
+  it("hides per-member intervene and a second stop on the captain run", () => {
     seed({ agentStatus: "working", runStatus: "running", runKind: "captain" });
     wrap(<RunDetailBody messageId="m1" runId="r1" />);
 
     expect(screen.queryByRole("button", { name: /停止这位队员/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /立即改此人/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "停止整轮" })).toBeTruthy();
-    expect(screen.queryByText("停止整轮")).toBeNull();
+    expect(screen.queryByRole("button", { name: /改这一段/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "停止整轮" })).toBeNull();
     expect(screen.queryByText("执行中")).toBeNull();
     expect(screen.queryByRole("button", { name: /记下改法/ })).toBeNull();
   });

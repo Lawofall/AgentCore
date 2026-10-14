@@ -13,7 +13,7 @@ describe("ManualMechanism", () => {
         <ManualMechanism />
       </MemoryRouter>,
     );
-    expect(screen.getByText("看团队跑一遍")).toBeTruthy();
+    expect(screen.getByText("看图跑一遍")).toBeTruthy();
     expect(screen.getByText("看懂协作图")).toBeTruthy();
     expect(screen.getByText("从发消息到收答案")).toBeTruthy();
     expect(screen.getByText("机制场景")).toBeTruthy();
@@ -29,7 +29,7 @@ describe("ManualMechanism", () => {
     expect(screen.getByText("分工推进")).toBeTruthy();
     expect(screen.getByText("收尾交付")).toBeTruthy();
     expect(screen.getByText("你说出目标")).toBeTruthy();
-    expect(screen.getByText("CEO 收口，答案落进气泡")).toBeTruthy();
+    expect(screen.getByText("最后一段封口")).toBeTruthy();
     expect(screen.getByText("中途你会看见的真界面")).toBeTruthy();
     expect(screen.getByText(/不看不影响使用/)).toBeTruthy();
     expect(screen.queryByText(/WaveScheduler/)).toBeNull();

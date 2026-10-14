@@ -10,6 +10,7 @@ import {
   ProcessEndChrome,
   TimelineNodeView,
 } from "@/components/chat/message-bubble/ProcessTimeline";
+import { RewindFromHere } from "@/components/graph/RewindFromHere";
 import { RunInterveneControls } from "@/components/graph/RunInterveneControls";
 import { runActCapabilities } from "@/components/graph/planCapabilities";
 import { Badge, Button, IconButton } from "@/components/ui";
@@ -22,6 +23,8 @@ import { activeRuntime, useConversationStore } from "@/stores/conversation";
 import {
   continuationChains,
   hotfixSeatChain,
+  isDebate,
+  isDebateTaggedRun,
   useMessageRun,
 } from "@/stores/execution";
 import { useSidePanelStore } from "@/stores/sidePanel";
@@ -33,6 +36,7 @@ import {
   isDebateModeratorRun,
   isThinkingLivePlaceholder,
 } from "./debateModerator";
+import { SessionSegmentDetail } from "./SessionSegmentDetail";
 import { receivedContextForList, selectRunTaskSection } from "./runTaskSection";
 import { ContinuationChainSection } from "./sections/RunContinuationChain";
 import { DebriefSection } from "./sections/RunDebrief";
@@ -133,7 +137,7 @@ export function RunDetailBody({
   const working = agent.status === "working";
   const stopTurnAction =
     working && isCaptainRun ? (
-      <SimpleTooltip label="结束整轮（所有队员一起停）">
+      <SimpleTooltip label="结束这一轮">
         <IconButton
           className="text-destructive hover:bg-destructive/10 hover:text-destructive"
           aria-label="停止整轮"
@@ -147,13 +151,33 @@ export function RunDetailBody({
   // pending）。终局整条不渲染、也不写灰字原因——死按钮没有教学价值。排队仍画：可停；
   // 改方向继续变灰 +「还没开工」。动作收进标题行纯图标。
   //
-  // captain 除外（手机早有这道护栏）：主管这一路就是这条对话本身，「只停这位队员」对它
-  // 无意义，引擎的计划里也没有它——出了按钮就是许一个必然落空的愿。要停就停整轮。
+  // captain 除外：主管这一路就是这条对话本身。会话段不再在这扇面板放第二枚停止，
+  // 停在面对用户的输入框。辩论详情仍走下面的整轮停。
   const memberIntervene =
     conversationId != null && !isCaptainRun && isLiveRunStatus(run.status);
   const thinkingLive = isThinkingLivePlaceholder(agent);
 
   const isModerator = isDebateModeratorRun(execution, origin.id);
+  const debateDetail =
+    isDebate(execution) || isDebateTaggedRun(origin) || isModerator;
+  if (!debateDetail) {
+    return (
+      <SessionSegmentDetail
+        messageId={messageId}
+        scrollParent={scrollParent}
+        conversationId={conversationId}
+        execution={execution}
+        run={run}
+        origin={origin}
+        agent={agent}
+        originAgent={originAgent}
+        memberIntervene={memberIntervene}
+        turnInteractive={turnInteractive}
+        redirectCapable={runCaps.runRedirect}
+        seatChain={seatChain}
+      />
+    );
+  }
   const debateChain = seatChain
     ? null
     : (continuationChains(execution).find((c) =>
@@ -255,6 +279,17 @@ export function RunDetailBody({
           {stopTurnAction}
         </div>
       )}
+
+      {conversationId != null &&
+        !turnInteractive &&
+        run.status === "completed" &&
+        run.kind !== "captain" && (
+          <RewindFromHere
+            conversationId={conversationId}
+            messageId={messageId}
+            runId={run.id}
+          />
+        )}
 
       <Section title={taskSection.title}>
         <CollapsibleSpeech

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 from agentcore.core.logging import get_logger
 
 if TYPE_CHECKING:
-    from agentcore.tools.builtin.delegate import DelegateTool
+    from agentcore.tools.builtin.graph import GraphTool
     from agentcore.tools.registry import ToolRegistry
 
 logger = get_logger(__name__)
@@ -60,7 +60,7 @@ def _token_band(*, cjk_chars: int, other_chars: int) -> tuple[int, int]:
 
 def coordination_surface_active(*, execution_id: str | None = None) -> bool:
     """True iff a live coordination session exists (same gate as coord tool execute)."""
-    from agentcore.runtime.coordination.session import active_coordination
+    from agentcore.runtime.graph.session.session import active_coordination
 
     session = active_coordination(execution_id)
     return session is not None and bool(session.active)
@@ -101,7 +101,7 @@ def resync_coordination_binding(chat_tools: ToolRegistry) -> bool:
 
     Returns True when the binding moved.
     """
-    delegate = chat_tools.get_optional("delegate")
+    delegate = chat_tools.get_optional("graph")
     if delegate is None:
         return False
     ctx = getattr(delegate, "_base_tool_context", None)
@@ -110,7 +110,7 @@ def resync_coordination_binding(chat_tools: ToolRegistry) -> bool:
     if not bound:
         return False
 
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         active_coordination,
         current_execution_id,
     )
@@ -144,7 +144,7 @@ def _unregister_named(chat_tools: ToolRegistry, names: tuple[str, ...]) -> list[
 def register_coordination_surface(
     chat_tools: ToolRegistry,
     *,
-    delegate_tool: DelegateTool,
+    delegate_tool: GraphTool,
     include: bool,
 ) -> None:
     """Put replan + root control tools on the opening table. ``include`` is ignored.
@@ -152,11 +152,14 @@ def register_coordination_surface(
     Idle calls fail at execute. Never unregister mid-chain (prefix cache).
     """
     del include
-    from agentcore.runtime.coordination.tools import CancelWorkerTool
+    from agentcore.runtime.graph.session.tools import CancelWorkerTool
     from agentcore.tools.builtin.replan import ReplanTool
+    from agentcore.tools.builtin.rewind import RewindTool
 
     if chat_tools.get_optional("replan") is None:
         chat_tools.register(ReplanTool(delegate=delegate_tool))
+    if chat_tools.get_optional("rewind") is None:
+        chat_tools.register(RewindTool(delegate=delegate_tool))
     if chat_tools.get_optional("cancel_worker") is None:
         chat_tools.register(CancelWorkerTool())
 
@@ -173,12 +176,12 @@ def promote_coordination_surface_if_needed(chat_tools: ToolRegistry) -> bool:
     Nested leads (depth ≥ 1): replan only.
     Idle calls fail at execute. Removing tools would forfeit the prefix cache.
     """
-    delegate = chat_tools.get_optional("delegate")
+    delegate = chat_tools.get_optional("graph")
     if delegate is None:
         return False
 
     depth = int(getattr(delegate, "_depth", 0) or 0)
-    from agentcore.runtime.coordination.tools import CancelWorkerTool
+    from agentcore.runtime.graph.session.tools import CancelWorkerTool
     from agentcore.tools.builtin.replan import ReplanTool
 
     added: list[str] = []
@@ -186,6 +189,12 @@ def promote_coordination_surface_if_needed(chat_tools: ToolRegistry) -> bool:
     if chat_tools.get_optional("replan") is None:
         chat_tools.register(ReplanTool(delegate=delegate))  # type: ignore[arg-type]
         added.append("replan")
+
+    if depth == 0 and chat_tools.get_optional("rewind") is None:
+        from agentcore.tools.builtin.rewind import RewindTool
+
+        chat_tools.register(RewindTool(delegate=delegate))  # type: ignore[arg-type]
+        added.append("rewind")
 
     if depth == 0 and chat_tools.get_optional("cancel_worker") is None:
         chat_tools.register(CancelWorkerTool())

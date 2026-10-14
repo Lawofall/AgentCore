@@ -204,15 +204,15 @@ async def run_one_tool(
         )
 
     if isinstance(args, dict):
-        if name == "delegate":
+        if name == "graph":
             unwrapped = unwrap_nested_delegate_arguments(args)
             if unwrapped is not None:
                 logger.info(
                     "tool.delegate_arguments_unwrapped",
                     tool_call_id=tc.id,
                     inner_keys=sorted(unwrapped.keys())[:20],
-                    has_tasks=isinstance(unwrapped.get("tasks"), list)
-                    and bool(unwrapped.get("tasks")),
+                    has_nodes=isinstance(unwrapped.get("nodes"), list)
+                    and bool(unwrapped.get("nodes")),
                 )
                 args = unwrapped
                 with contextlib.suppress(TypeError, ValueError):
@@ -516,7 +516,12 @@ async def run_one_tool(
     def _emit_progress(phase: str, data: dict[str, Any] | None = None) -> None:
         sink.emit(tool_use_progress(tc.id, name, phase, run_id=event_run_id, extra=data))
 
-    ctx = replace(context, on_phase=_emit_phase, on_progress=_emit_progress)
+    ctx = replace(
+        context,
+        on_phase=_emit_phase,
+        on_progress=_emit_progress,
+        current_action_id=tc.id,
+    )
 
     started = time.monotonic()
     timeout = resolve_tool_timeout(

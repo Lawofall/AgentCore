@@ -86,7 +86,7 @@ def ceo_continue_frame(
 
 def mark_host_turn_paused() -> None:
     """Process-local harvest skip (set in settle, before pipeline teardown)."""
-    from agentcore.runtime.coordination.session import active_coordination
+    from agentcore.runtime.graph.session.session import active_coordination
 
     session = active_coordination()
     if session is None:

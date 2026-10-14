@@ -285,7 +285,7 @@ async def _assemble_ceo_wired(
     live_tool_defs = resolve_openai_tool_defs(chat_tools, None, set()) or []
     chat_tool_defs = pin_chat_tools(conversation_id, live_tool_defs)
     # 可用性诚实性 · 甲：偏窄短问 → 复用最近 delivery_status 发卡到本回合答复面。
-    from agentcore.runtime.delegate.delivery_status import (
+    from agentcore.runtime.graph.drive.delivery_status import (
         maybe_reinject_recent_delivery_for_availability_ask,
     )
 

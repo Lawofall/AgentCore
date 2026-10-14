@@ -437,7 +437,7 @@ def build_workspace_context(
 
     leftover_lines: list[str] = []
     if boundary.allows_execution and not exec_on and not is_local:
-        from agentcore.runtime.delegate.exec_env_remediation import (
+        from agentcore.runtime.graph.drive.exec_env_remediation import (
             cloud_sandbox_failure_hint,
         )
 

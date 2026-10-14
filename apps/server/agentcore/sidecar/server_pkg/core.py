@@ -246,7 +246,7 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
             local_root_id=local_root_id,
             local_subpath=local_subpath or "",
         )
-        from agentcore.runtime.coordination.session import (
+        from agentcore.runtime.graph.session.session import (
             active_coordination_for_conversation,
         )
 
@@ -266,7 +266,7 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
             self._folder_scope.pop(cid, None)
             return
         self._folder_scope[cid] = previous
-        from agentcore.runtime.coordination.session import (
+        from agentcore.runtime.graph.session.session import (
             active_coordination_for_conversation,
         )
 

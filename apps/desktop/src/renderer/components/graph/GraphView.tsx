@@ -8,6 +8,7 @@ import {
 } from "@/stores/conversation";
 import { useDisclosureStore } from "@/stores/disclosure";
 import {
+  type Execution,
   projectRuntime,
   useActiveExecField,
   useExecutionScope,
@@ -74,6 +75,18 @@ interface GraphViewProps {
   ) => void;
   onMeasure?: (m: { height: number; overflowing: boolean }) => void;
   onClose?: () => void;
+  /**
+   * Draw this execution instead of the scoped turn. The conversation graph
+   * passes the folded picture; omit it for a single turn's graph.
+   */
+  pinnedExecution?: Execution | null;
+}
+
+function pinnedSceneEpoch(execution: Execution | null): string {
+  if (!execution) return "";
+  return `${graphViewExecutionEpoch(execution)}::${execution.runs
+    .map((run) => `${run.id}:${run.status}`)
+    .join(",")}`;
 }
 
 export const GraphView = memo(function GraphView({
@@ -83,6 +96,7 @@ export const GraphView = memo(function GraphView({
   onEndpointSelect,
   onMeasure,
   onClose,
+  pinnedExecution,
 }: GraphViewProps = {}) {
   const messageId = useExecutionScope();
   const conversationId = useConversationStore((s) => s.currentConversationId);
@@ -94,11 +108,15 @@ export const GraphView = memo(function GraphView({
   const structureStatusEpoch = useActiveExecField((rt) =>
     graphViewExecutionEpoch(projectRuntime(rt)),
   );
+  const pinnedEpoch =
+    pinnedExecution === undefined ? null : pinnedSceneEpoch(pinnedExecution);
+  const sceneEpoch = pinnedEpoch ?? structureStatusEpoch;
   const execution = useMemo(() => {
-    if (!structureStatusEpoch || !messageId) return null;
+    if (pinnedExecution !== undefined) return pinnedExecution;
+    if (!sceneEpoch || !messageId) return null;
     const rt = useExecutionStore.getState().byId[messageId];
     return rt ? projectRuntime(rt) : null;
-  }, [structureStatusEpoch, messageId]);
+  }, [pinnedExecution, sceneEpoch, messageId]);
   const caps = executionGraphCapabilities(execution);
   const { data: turnAudit } = useTurnAudit(
     caps.auditInject ? conversationId : null,
@@ -136,7 +154,7 @@ export const GraphView = memo(function GraphView({
   const defaultExpandedUnits = useMemo(() => {
     if (!execution) return new Set<string>();
     return expandedUnitsFromFold(execution.runs, new Set());
-  }, [structureStatusEpoch]);
+  }, [sceneEpoch]);
   const [sessionCollapsed, setSessionCollapsed] = useState<Set<string> | null>(
     null,
   );
@@ -199,7 +217,7 @@ export const GraphView = memo(function GraphView({
   // biome-ignore lint/correctness/useExhaustiveDependencies: epoch + expand gate scene
   const focusScene = useMemo(
     () => (execution ? buildGraphScene(execution, { expandedUnits }) : null),
-    [structureStatusEpoch, expandedUnits],
+    [sceneEpoch, expandedUnits],
   );
   const { focusedActId, focusAct, collapseActs } = useActFocus(
     focusScene,
@@ -425,7 +443,7 @@ export const GraphView = memo(function GraphView({
       onFocusAct: () => undefined,
       documentShell: true,
     });
-  }, [documentFingerprint, shellSnapshotKey]);
+  }, [documentFingerprint, shellSnapshotKey, pinnedEpoch]);
 
   const graphActions = useMemo<GraphActionsValue>(
     () => ({

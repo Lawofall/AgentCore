@@ -1,6 +1,6 @@
 """CEO team_brief parse + cap (opening consensus; no note wall)."""
 
-from agentcore.runtime.delegate.team_brief import MAX_TEAM_BRIEF_CHARS, parse_team_brief
+from agentcore.runtime.graph.facing.team_brief import MAX_TEAM_BRIEF_CHARS, parse_team_brief
 
 
 def test_parse_team_brief_trims_and_caps(monkeypatch):

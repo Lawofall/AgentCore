@@ -1,9 +1,8 @@
 """Nearest-name resolution for user rules.
 
-Same consult name across 常驻 / 按需 / 路径: the nearest desk wins, and that
-document is the only one injected. Different names accumulate, outer desks
-first. An empty 按需 description claims the name and stays out of the catalog.
-Unbounded path patterns count as 常驻.
+User rules inject on demand only. The index ``description`` is the enrollment
+bit: empty stays out and does not hide another desk's enrolled row. Same name:
+the nearest enrolled desk wins.
 """
 
 from __future__ import annotations
@@ -45,7 +44,10 @@ class ResolvedRules:
 
 
 def counts_as_always_content(content: str) -> bool:
-    """True when this body occupies the 常驻 pool (always, or an unbounded path rule)."""
+    """True when this body would have occupied the retired user-rule always pool.
+
+    Skill path metering still calls this. User-rule injection does not.
+    """
     parsed = parse_entry_frontmatter(content)
     if isinstance(parsed, FrontmatterError):
         return False
@@ -84,13 +86,18 @@ def live_rule_from_doc(
         apply = parsed.apply if parsed.apply_present else column_apply
     if apply not in _APPLY:
         return None
-    description = parsed.description if parsed.description_present else _description_of(doc)
+    # Enrollment is the index column, not the prose. A description sitting only
+    # in the file does not enter the catalog until a person saves it onto the row.
+    # Empty does not claim the name.
+    description = _description_of(doc).strip()
+    if not description:
+        return None
     return LiveRule(
         name=name,
         content=content,
-        description=(description or "").strip(),
-        apply=apply,
-        patterns=parsed.paths,
+        description=description,
+        apply="on_demand",
+        patterns=(),
         rank=rank,
     )
 
@@ -114,6 +121,8 @@ def resolve_rules(rules: Sequence[LiveRule]) -> ResolvedRules:
     """Last write per name wins. Callers pass nearer rules later."""
     winners: dict[str, LiveRule] = {}
     for rule in rules:
+        if not rule.description.strip():
+            continue
         winners[rule.name] = rule
     always: list[LiveRule] = []
     on_demand: list[LiveRule] = []
@@ -144,19 +153,10 @@ def resolve_rules(rules: Sequence[LiveRule]) -> ResolvedRules:
 
 
 def _channel(rule: LiveRule) -> str | None:
-    if rule.apply == "always":
-        return "always"
-    if rule.apply == "on_demand":
-        return "on_demand" if rule.description else None
-    if rule.apply != "paths":
-        return None
-    if not rule.patterns:
-        return None
-    if patterns_are_unbounded(rule.patterns):
-        return "always"
+    """User rules inject on demand only."""
     if not rule.description:
         return None
-    return "paths"
+    return "on_demand"
 
 
 def _body(content: str) -> str:

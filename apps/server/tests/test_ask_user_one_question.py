@@ -137,31 +137,6 @@ async def test_leftover_assumptions_arg_dropped_from_wire():
 
 
 @pytest.mark.asyncio
-async def test_after_delegate_single_question_is_decision():
-    """途中短问：一道 question 即可挂起，intent=decision。"""
-    tool = _tool()
-    transcript = [
-        LLMMessage(role="user", content="写调研报告"),
-        _assistant_tool("delegate", {"tasks": []}, call_id="d1"),
-        LLMMessage(role="tool", content="ok", tool_call_id="d1"),
-        _assistant_tool("ask_user", {"questions": [{"prompt": "终稿交哪？"}]}, call_id="a1"),
-    ]
-    token = captain_transcript.set(transcript)
-    try:
-        res = await tool.execute(
-            {"questions": [{"prompt": "终稿交哪？"}]},
-            _ctx(),
-        )
-    finally:
-        captain_transcript.reset(token)
-
-    assert res.success is True
-    assert res.effect is ToolEffect.SUSPEND
-    cp = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
-    assert cp.payload["intent"] == "decision"
-
-
-@pytest.mark.asyncio
 async def test_team_preview_resolved_does_not_block_ask():
     """team_preview 拍板后仍可短问（勿再开开工提案拒调已拆除）。"""
     sink = EventSink()

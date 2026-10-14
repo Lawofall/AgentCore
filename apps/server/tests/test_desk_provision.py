@@ -148,7 +148,7 @@ async def test_provision_emits_desk_wait_on_sink():
 
 
 def test_prepare_and_resume_provision_final_sitting_root():
-    from agentcore.runtime.delegate import target_desktop as target_mod
+    from agentcore.runtime.graph.desk import target_desktop as target_mod
     from agentcore.runtime.pipeline import prepare as prepare_mod
     from agentcore.runtime.pipeline.resume import wire as wire_mod
 

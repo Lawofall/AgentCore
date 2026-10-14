@@ -160,7 +160,7 @@ async def _prepare_agent_node(
     turn_envelope = env.worker_envelope
     base_ctx = env.base_tool_context
     if spec.target_folder_id:
-        from agentcore.runtime.delegate.target_desktop import apply_target_desktop
+        from agentcore.runtime.runs.desk.apply import apply_target_desktop
 
         applied = await _timed_phase(
             "target_desktop",
@@ -184,7 +184,7 @@ async def _prepare_agent_node(
     # 无出生且无 target → 坐会话 scratch。云端默认禁写；
     # 本机裸聊 scratch 就是桌，允许写盘。
     from agentcore.llm.image_accept import model_accepts_images
-    from agentcore.runtime.delegate.target_desktop import (
+    from agentcore.runtime.runs.desk.scratch import (
         SCRATCH_NO_WRITE_IDENTITY_HINT,
         bare_chat_local_scratch_write_ok,
         resolve_bare_chat_write_scope,
@@ -206,6 +206,9 @@ async def _prepare_agent_node(
         run_id=spec.run_id,
         agent_id=agent_id,
         execution_id=env.execution_id,
+        step_upstream=tuple(spec.depends_on),
+        record_step_segments=True,
+        step_goal=spec.task or "",
         named_desk_read=False,
         write_coordinator=env.write_coordinator,
         write_ancestors=env.ancestors_by_id.get(spec.run_id, frozenset()),
@@ -308,7 +311,7 @@ async def _prepare_agent_node(
         if deliverable is not None and deliverable.artifacts
         else None
     )
-    from agentcore.runtime.delegate.completion import node_holds_execution_tools
+    from agentcore.runtime.runs.execution_tools import node_holds_execution_tools
     from agentcore.runtime.runs.worker_budget import (
         is_short_write_posture,
         should_tighten_verify_exec_thrash,

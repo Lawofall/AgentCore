@@ -57,8 +57,8 @@ describe("ManualCollaboration", () => {
     expect(document.getElementById("continuation")).toBeNull();
 
     expect(screen.queryByText(/后续规划/)).toBeNull();
-    expect(screen.getByText(/角色由 CEO 临时分配/)).toBeTruthy();
-    expect(screen.getAllByText(/带现场续派/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/对着你的这扇窗自己答/)).toBeTruthy();
+    expect(screen.getAllByText(/接着做/).length).toBeGreaterThan(0);
     expect(screen.getByText("这个文件夹（推荐）")).toBeTruthy();
     expect(screen.getByText(/设为新会话默认/)).toBeTruthy();
     expect(screen.getByText("中途插手")).toBeTruthy();
@@ -74,7 +74,7 @@ describe("ManualCollaboration", () => {
     expect(sectionText("prompts")).toMatch(/没有斜杠菜单/);
     expect(sectionText("checkpoint")).not.toMatch(/工作流等人关卡/);
     expect(screen.queryByText("设为定时")).toBeNull();
-    expect(sectionText("progress")).toMatch(/唯一的常驻视图/);
+    expect(sectionText("progress")).toMatch(/一场对话一张图/);
     expect(sectionText("progress")).toMatch(/拍板就在聊天里/);
     expect(screen.queryByText("设置 · 权限配方")).toBeNull();
     expect(screen.queryByText(/ask_user/)).toBeNull();

@@ -200,7 +200,7 @@ async def handle_tool_calls_round(
         # streams to a SEPARATE process timeline (on_reset is None): its
         # narration stays visible there (透明可见), only its persisted content
         # (messages.content, 旁路 conformance) is trimmed.
-        from agentcore.runtime.coordination.session import (
+        from agentcore.runtime.graph.session.session import (
             attached_inject_closed_visibly,
             resolve_coordination_session,
         )

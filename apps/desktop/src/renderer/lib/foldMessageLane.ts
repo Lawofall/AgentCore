@@ -366,9 +366,6 @@ export function ensureTimelineMarkersFromJournal(
     const ev = events[i];
     const payload = (ev.payload ?? {}) as Record<string, unknown>;
     if (ev.type === "run_plan") {
-      // 旧 journal 跨回合同图追加：生长 run_plan 带 host_message_id，不在追加回合插 team。
-      // 新路径无此字段 → 正常补 team（本回合开图）。
-      if (payload.host_message_id) continue;
       const executionId = payload.execution_id;
       if (typeof executionId === "string" && executionId) {
         const at = journalMarkerInsertIndex(steps, events, i, true);

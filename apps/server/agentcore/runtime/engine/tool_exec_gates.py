@@ -199,7 +199,7 @@ async def _check_safety_and_approval_gates(
        kill switch). A call that needs approval there is DENIED, not waved through.
 
     Callers must therefore pass the turn's gate down verbatim and let this function
-    narrow — see :func:`~agentcore.runtime.delegate.drive_setup.resolve_worker_gate`.
+    narrow — see :func:`~agentcore.runtime.graph.drive.drive_setup.resolve_worker_gate`.
 
     Returns a deny outcome, or ``None`` when the call may proceed to execute.
     """

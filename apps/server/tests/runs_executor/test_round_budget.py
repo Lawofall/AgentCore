@@ -60,7 +60,7 @@ def test_bind_round_budget_on_begin_increments():
 
 def test_bind_round_budget_stamps_coord_spend_on_same_channel():
     """Pass-local used/limit + tokens go out on note_coord_worker_busy, not a second bus."""
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         clear_active_coordination,
         set_active_coordination,
@@ -157,7 +157,7 @@ async def test_main_pass_honors_explicit_max_rounds_without_extra_investigation(
 
 async def test_react_stamps_coord_live_spend_for_ceo_brief():
     """Executor + engine busy channel expose pass-local used and run tokens mid-flight."""
-    from agentcore.runtime.coordination.session import (
+    from agentcore.runtime.graph.session.session import (
         CoordinationSession,
         clear_active_coordination,
         set_active_coordination,

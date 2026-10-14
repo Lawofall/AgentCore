@@ -179,7 +179,6 @@ describe("RunDetailBody seat continuation", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("计时测试员")).toBeTruthy();
     expect(screen.getByText("执行一次约 60 秒的等待")).toBeTruthy();
     expect(screen.getByText("按指示：取消")).toBeTruthy();
     expect(screen.getByText("第二截过程")).toBeTruthy();

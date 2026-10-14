@@ -106,7 +106,7 @@ async def test_deliver_message_steer_received_no_new_turn(tmp_path, monkeypatch)
     server._register_turn(turn_id, blocker, conversation_id=cid)
     turn_steer_mod.begin_accepting(cid, execution_id="exec-sidecar")
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        "agentcore.runtime.graph.session.session.active_coordination_for_conversation",
         lambda _cid: None,
     )
     persist = MagicMock(side_effect=AssertionError("sidecar must not re-persist attachments"))
@@ -620,7 +620,7 @@ async def test_deliver_message_during_history_fetch(tmp_path, monkeypatch):
         hang_history,
     )
     monkeypatch.setattr(
-        "agentcore.runtime.coordination.session.active_coordination_for_conversation",
+        "agentcore.runtime.graph.session.session.active_coordination_for_conversation",
         lambda _cid: None,
     )
     turn_steer_mod._reset_for_tests()

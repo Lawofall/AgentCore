@@ -31,7 +31,7 @@ from agentcore.tools.builtin.ask_user.schema import option_label
 
 if TYPE_CHECKING:
     from agentcore.tools.builtin.debate import DebateTool
-    from agentcore.tools.builtin.delegate import DelegateTool
+    from agentcore.tools.builtin.graph import GraphTool
 
 logger = get_logger(__name__)
 
@@ -59,7 +59,7 @@ async def recover_turn(
     *,
     state: TurnState,
     sink: EventSink,
-    delegate_tool: DelegateTool,
+    delegate_tool: GraphTool,
     execution_id: str,
     suspension: TurnSuspension | None = None,
     decision: CheckpointDecision | None = None,
@@ -133,7 +133,7 @@ async def _settle_resume(
     note: str,
     selected: list[str],
     sink: EventSink,
-    delegate_tool: DelegateTool,
+    delegate_tool: GraphTool,
     debate_tool: DebateTool | None,
     execution_id: str,
 ) -> SettledSuspension:
@@ -198,7 +198,7 @@ async def _settle_resume(
         # attaching a session here would detach unfinished workers to background
         # on turn_released.
         if response.decision is CheckpointDecision.CONTINUE:
-            from agentcore.runtime.coordination.session import (
+            from agentcore.runtime.graph.session.session import (
                 CoordinationSession,
                 current_execution_id,
                 set_active_coordination,
@@ -220,7 +220,7 @@ async def _settle_resume(
                     if base_ctx is not None:
                         base_ctx.execution_id = snap.execution_id
                 if unfinished and plan is not None:
-                    from agentcore.runtime.coordination.host import try_start_coordination
+                    from agentcore.runtime.graph.drive.coord_start import try_start_coordination
 
                     try_start_coordination(
                         delegate_tool,

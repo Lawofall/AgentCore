@@ -238,18 +238,6 @@ def test_parse_delegate_reads_intensity():
     assert "form" not in raw
 
 
-def test_parse_delegate_reads_max_workers():
-    raw = parse_delegate_rich(
-        '{"tasks":[{"role":"撰稿","task":"写 PRD","deliverable":{"artifacts":["prd.md"]}}],'
-        '"playbook_args":{"max_workers":1}}'
-    )
-    assert raw["playbook"] is None
-    assert raw["task_count"] == 1
-    assert "form" not in raw
-    assert raw["max_workers"] == 1
-    assert "form" not in raw["tasks_preview"][0]
-
-
 def test_observe_task_howto_flags_syllabus_not_contract():
     contract = observe_task_howto(
         action="DELEGATE",
@@ -673,79 +661,6 @@ def test_loop_does_not_load_archive_scripts():
     assert "probe_routing_think" not in loop_src
     assert "platform_llm_credentials(" not in loop_src
     assert "platform_llm_credentials(" not in decision_src
-
-
-def test_execution_entry_assembles_surface_and_parses_delegate():
-    """真正走到装配 + 一次决策：LLM 打桩，模块装载与参数解析必须真走。"""
-    import asyncio
-    import json
-
-    from agentcore.evals.eval_modes import KNOWN_MODELS, resolve_profile_set
-    from agentcore.evals.playbook_routing_loop import run_scripted_sample
-    from agentcore.llm.provider.protocol import LLMResponse, TokenUsage, ToolCall, ToolCallFunction
-
-    sc = next(s for s in SCENARIOS if s.key == "app_todo_website_usable")
-
-    class _StubProvider:
-        def __init__(self) -> None:
-            self.requests: list = []
-
-        async def complete(self, request):  # noqa: ANN001
-            self.requests.append(request)
-            assert request.tools, "CEO tool surface must be assembled before the first decision"
-            names = [
-                ((d.get("function") or {}).get("name") if isinstance(d, dict) else None)
-                for d in (request.tools or [])
-            ]
-            assert "delegate" in names
-            return LLMResponse(
-                content="先派团队。",
-                reasoning_content="手写 tasks 从零搭可跑待办。",
-                tool_calls=[
-                    ToolCall(
-                        id="call_1",
-                        function=ToolCallFunction(
-                            name="delegate",
-                            arguments=json.dumps(
-                                {
-                                    "tasks": [
-                                        {
-                                            "role": "实现",
-                                            "task": "从零搭待办 SPA，打开就能用",
-                                        }
-                                    ],
-                                },
-                                ensure_ascii=False,
-                            ),
-                        ),
-                    )
-                ],
-                usage=TokenUsage(input_tokens=11, output_tokens=7),
-            )
-
-    stub = _StubProvider()
-    profiles = resolve_profile_set(
-        "economy", custom_modes={}, ceiling=frozenset(KNOWN_MODELS)
-    )
-    packed = asyncio.run(
-        run_scripted_sample(
-            stub,
-            sc,
-            profiles=profiles,
-            model=profiles.model_for("chat"),
-            rounds=2,
-        )
-    )
-    assert packed["ok"] is True, packed.get("error")
-    assert stub.requests, "provider.complete must be called"
-    assert packed["action"] == "DELEGATE"
-    assert packed["playbook"] is None
-    assert packed["task_count"] == 1
-    assert packed["delegated"] is True
-    assert packed["tool_surface"]["offered"] is True
-    assert packed["tool_surface"].get("playbook_property_present") is False
-    assert packed["tool_surface"].get("playbook_enum") == []
-    assert packed["think_act_divergences"] == []
 
 
 def test_prior_turns_reach_the_model():

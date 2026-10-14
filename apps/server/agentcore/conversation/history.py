@@ -48,6 +48,7 @@ from agentcore.core.inline_body import (
     render_inline_labels,
 )
 from agentcore.db.repositories import ConversationRepository, MessageRepository
+from agentcore.runtime.graph.shape.conversation_graph import visible_context
 from agentcore.runtime.resolve.prompt.envelope import (
     IN_HISTORY_SYSTEM_ORIGIN,
     IN_HISTORY_SYSTEM_USAGE_KEY,
@@ -396,6 +397,11 @@ def _fold_history_messages(
             )
             if replay:
                 flush_failures()
+                context = visible_context(_journal_for(msg, journals))
+                if context:
+                    first = dict(replay[0])
+                    first["graph_context"] = context
+                    replay = [first, *replay[1:]]
                 history.extend(replay)
             elif _is_failed_empty_assistant(msg):
                 pending_failures.append(_failure_category_label(msg))
