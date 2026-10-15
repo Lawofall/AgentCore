@@ -1,18 +1,5 @@
-/**
- * ``AgentCore/`` 约定根的呈现名（``.agentcore``）。磁盘真名不迁盘。
- * 与后端 ``workspace.stage_dirs.AGENTCORE_ROOT`` 对齐。
- */
-
-/** 盘上约定根目录名——与后端 ``stage_dirs.AGENTCORE_ROOT`` 对齐（磁盘真名，勿改）。 */
-export const AGENTCORE_ROOT = "AgentCore";
-
-/**
- * 工作区根下 ``AgentCore/`` 的呈现名：文件夹设定条目合成一个抽屉。
- * 仅改显示：磁盘路径仍是 ``AgentCore/``，不迁盘、不改注入。
- */
-export const AGENTCORE_ROOT_LABEL = ".agentcore";
-
-export const AGENTCORE_ROOT_TOOLTIP = `这个文件夹里给 AI 用的规则（盘上 ${AGENTCORE_ROOT}/）`;
+/** 盘上约定根目录名——与后端 ``stage_dirs.AGENTCORE_ROOT`` 对齐。 */
+export const AGENTCORE_ROOT = "GAgent";
 
 /** Legacy on-disk AI-memory dir under the convention root. Hidden in the file tree like trash. */
 export const AGENTCORE_MEMORY_DIR = "记忆";

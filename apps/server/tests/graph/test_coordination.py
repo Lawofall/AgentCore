@@ -20,10 +20,9 @@ from agentcore.runtime.graph.session.session import (
     set_active_coordination,
     should_enter_coordination,
 )
-from agentcore.runtime.graph.session.tools import CancelWorkerTool
 from agentcore.runtime.events import EventSink, EventType
 from agentcore.runtime.interaction import InteractionRegistry
-from tests.delegate.conftest import Provider, ctx, tool
+from tests.graph.conftest import Provider, ctx, tool
 
 
 def test_should_enter_coordination_gate():
@@ -247,166 +246,21 @@ def test_necessary_decision_points():
     )
 
 
-async def test_cancel_worker_finds_adopted_live_when_context_is_mint():
-    """跨回合 adopt：context.execution_id 是本回合 mint，控制仍能找到旧 live 图。"""
-    clear_active_coordination()
-    from agentcore.runtime.graph.session.session import (
-        current_execution_id,
-        set_active_coordination,
-    )
-
-    session = CoordinationSession(execution_id="e-live", total_workers=2)
-    set_active_coordination(session)
-    session.arm_worker_timeout("w1", role="研究员", timeout_s=60)
-    token = current_execution_id.set("e-live")
-    try:
-        mint_ctx = ctx()
-        mint_ctx.execution_id = "e-mint"
-        result = await CancelWorkerTool().execute({"run_id": "w1"}, mint_ctx)
-        assert result.success is True
-        assert "w1" in session.cancel_run_ids()
-    finally:
-        current_execution_id.reset(token)
-        session.close()
-        clear_active_coordination()
-
-
-async def test_cancel_worker_requests_cancel():
-    clear_active_coordination()
-    session = CoordinationSession(execution_id="e", total_workers=2)
-    from agentcore.runtime.graph.session.session import set_active_coordination
-
-    set_active_coordination(session)
-    # Register the in-flight worker (as bridge does on dispatch) so cancel resolves.
-    session.arm_worker_timeout("w1", role="研究员", timeout_s=60)
-    cancel = CancelWorkerTool()
-    result = await cancel.execute({"run_id": "w1", "reason": "重复"}, ctx())
-    assert result.success is True
-    assert "w1" in session.cancel_run_ids()
-    assert "w1" in session.ceo_cancel_worker_ids
-    assert "w1" in session.ceo_cancel_started_ids
-    session.close()
-    await asyncio.sleep(0)
-    clear_active_coordination()
-
-
-async def test_solo_cancel_worker_requests_cancel():
-    """验收：单 worker 协调 session 上 cancel_worker 可达且生效。"""
-    clear_active_coordination()
-    session = CoordinationSession(execution_id="e", total_workers=1)
-    from agentcore.runtime.graph.session.session import set_active_coordination
-
-    set_active_coordination(session)
-    session.arm_worker_timeout("w1", role="工程师", timeout_s=60)
-    cancel = CancelWorkerTool()
-    result = await cancel.execute({"run_id": "w1", "reason": "用户要求停止"}, ctx())
-    assert result.success is True
-    assert "w1" in session.cancel_run_ids()
-    session.close()
-    await asyncio.sleep(0)
-    clear_active_coordination()
-
-
-async def test_cancel_worker_resolves_suffix_short_name():
-    """短名（run_id 尾缀）唯一匹配 → 解析为引擎全名后进 cancel 集合。"""
-    clear_active_coordination()
-    from agentcore.runtime.graph.session.session import set_active_coordination
-
-    session = CoordinationSession(execution_id="e", total_workers=2)
-    set_active_coordination(session)
-    session.arm_worker_timeout("del_abc_data_researcher", role="数据研究员", timeout_s=60)
-    session.arm_worker_timeout("del_xyz_writer", role="写手", timeout_s=60)
-    cancel = CancelWorkerTool()
-    result = await cancel.execute({"run_id": "data_researcher"}, ctx())
-    assert result.success is True
-    assert "del_abc_data_researcher" in session.cancel_run_ids()
-    assert "del_xyz_writer" not in session.cancel_run_ids()
-    assert "del_abc_data_researcher" in (result.output or "")
-    session.close()
-    await asyncio.sleep(0)
-    clear_active_coordination()
-
-
-async def test_cancel_worker_resolves_role_name():
-    """role 名唯一匹配（run_id 不含 role 尾缀时的回退通道）。"""
-    clear_active_coordination()
-    from agentcore.runtime.graph.session.session import set_active_coordination
-
-    session = CoordinationSession(execution_id="e", total_workers=2)
-    set_active_coordination(session)
-    # run_id 不以 role 结尾 → 尾缀通道落空，靠 role 精确匹配解析。
-    session.arm_worker_timeout("del_run_one", role="researcher", timeout_s=60)
-    session.arm_worker_timeout("del_run_two", role="writer", timeout_s=60)
-    cancel = CancelWorkerTool()
-    result = await cancel.execute({"run_id": "researcher"}, ctx())
-    assert result.success is True
-    assert "del_run_one" in session.cancel_run_ids()
-    assert "由「researcher」解析" in (result.output or "")
-    session.close()
-    await asyncio.sleep(0)
-    clear_active_coordination()
-
-
-async def test_cancel_worker_ambiguous_errors_without_cancel():
-    """多义（同 role / 同尾缀多命中）→ 明确报错、不写 cancel 集合、列出候选。"""
-    clear_active_coordination()
-    from agentcore.runtime.graph.session.session import set_active_coordination
-
-    session = CoordinationSession(execution_id="e", total_workers=2)
-    set_active_coordination(session)
-    session.arm_worker_timeout("del_abc_data_researcher", role="数据研究员", timeout_s=60)
-    session.arm_worker_timeout("del_xyz_data_researcher", role="数据研究员", timeout_s=60)
-    cancel = CancelWorkerTool()
-    result = await cancel.execute({"run_id": "data_researcher"}, ctx())
-    assert result.success is False
-    assert len(session.cancel_run_ids()) == 0
-    assert "del_abc_data_researcher" in (result.error or "")
-    assert "del_xyz_data_researcher" in (result.error or "")
-    session.close()
-    await asyncio.sleep(0)
-    clear_active_coordination()
-
-
-async def test_cancel_worker_miss_lists_running_workers():
-    """不命中 → 报错并列出当前可取消的在跑 worker（run_id + role），不虚假成功。"""
-    clear_active_coordination()
-    from agentcore.runtime.graph.session.session import set_active_coordination
-
-    session = CoordinationSession(execution_id="e", total_workers=2)
-    set_active_coordination(session)
-    session.arm_worker_timeout("del_abc_data_researcher", role="数据研究员", timeout_s=60)
-    session.arm_worker_timeout("del_xyz_writer", role="写手", timeout_s=60)
-    cancel = CancelWorkerTool()
-    result = await cancel.execute({"run_id": "不存在的名字"}, ctx())
-    assert result.success is False
-    assert len(session.cancel_run_ids()) == 0
-    assert "del_abc_data_researcher" in (result.error or "")
-    assert "数据研究员" in (result.error or "")
-    assert "del_xyz_writer" in (result.error or "")
-    session.close()
-    await asyncio.sleep(0)
-    clear_active_coordination()
-
-
-async def test_cancel_worker_already_ended_is_idempotent_success():
-    """完成 / disarm 后：在跑表解析不到，但确认为本会话已结束 → 幂等成功、不进红错。"""
-    clear_active_coordination()
-    from agentcore.runtime.graph.session.session import set_active_coordination
+def test_tell_targets_resolve_running_and_ended():
+    """tell 仍分得清在跑和已结束。模型没有单独取消一段的工具。"""
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import RunSpec
 
     session = CoordinationSession(execution_id="e", total_workers=2)
-    set_active_coordination(session)
     session.live_plan = RunPlan(
         nodes=[
             RunSpec(run_id="del_abc_data_researcher", role="数据研究员", task="研"),
             RunSpec(run_id="del_xyz_writer", role="写手", task="写"),
         ]
     )
-    session.arm_worker_timeout("del_abc_data_researcher", role="数据研究员", timeout_s=60)
-    session.arm_worker_timeout("del_xyz_writer", role="写手", timeout_s=60)
+    session.arm_worker_timeout("del_abc_data_researcher", role="数据研究员")
+    session.arm_worker_timeout("del_xyz_writer", role="写手")
     session.mark_worker_completed("del_abc_data_researcher")
-    # 已完成：不再出现在在跑解析；ended 解析仍命中。
     assert session.resolve_cancel_target("data_researcher").run_id is None
     assert session.resolve_cancel_target("del_abc_data_researcher").run_id is None
     assert (
@@ -414,173 +268,30 @@ async def test_cancel_worker_already_ended_is_idempotent_success():
         == "del_abc_data_researcher"
     )
     assert session.resolve_ended_worker("data_researcher").run_id == "del_abc_data_researcher"
-    # 仍在跑的 worker 照常可解析并取消。
     assert session.resolve_cancel_target("writer").run_id == "del_xyz_writer"
-    cancel = CancelWorkerTool()
-    ended = await cancel.execute({"run_id": "data_researcher"}, ctx())
-    assert ended.success is True
-    assert "已结束" in (ended.output or "")
-    assert "del_abc_data_researcher" not in session.cancel_run_ids()
-    # 全名同样幂等成功。
-    ended_full = await cancel.execute({"run_id": "del_abc_data_researcher"}, ctx())
-    assert ended_full.success is True
-    assert "无需取消" in (ended_full.output or "")
-    # 乱 id 仍失败。
-    miss = await cancel.execute({"run_id": "不存在的名字"}, ctx())
-    assert miss.success is False
     session.close()
-    await asyncio.sleep(0)
-    clear_active_coordination()
 
 
-async def test_cancel_worker_failed_is_idempotent_success():
-    """FAILED 终态：不在跑表，但已结束 → 幂等成功、不进 cancel 集合。"""
-    clear_active_coordination()
-    from agentcore.runtime.graph.session.session import set_active_coordination
+def test_unstarted_node_resolves_as_pending():
+    """还没开工的节点走 tell 的 steer，不进在跑解析。"""
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import RunSpec
 
     session = CoordinationSession(execution_id="e", total_workers=2)
-    set_active_coordination(session)
-    session.live_plan = RunPlan(
-        nodes=[
-            RunSpec(run_id="del_abc_n5", role="冒烟审计员", task="审"),
-            RunSpec(run_id="del_abc_n4", role="集成工程师", task="集"),
-        ]
-    )
-    session.arm_worker_timeout("del_abc_n5", role="冒烟审计员", timeout_s=60)
-    session.arm_worker_timeout("del_abc_n4", role="集成工程师", timeout_s=60)
-    session.mark_worker_completed("del_abc_n5")
-    session.failed_run_ids.add("del_abc_n5")
-    session.vacated_run_ids.add("del_abc_n5")
-    assert session.resolve_cancel_target("del_abc_n5").run_id is None
-    assert session.resolve_ended_worker("del_abc_n5").run_id == "del_abc_n5"
-    cancel = CancelWorkerTool()
-    result = await cancel.execute({"run_id": "del_abc_n5"}, ctx())
-    assert result.success is True
-    assert "已结束" in (result.output or "")
-    assert "无需取消" in (result.output or "")
-    assert "del_abc_n5" not in session.cancel_run_ids()
-    assert "del_abc_n4" not in session.cancel_run_ids()
-    session.close()
-    await asyncio.sleep(0)
-    clear_active_coordination()
-
-
-async def test_cancel_worker_skipped_is_idempotent_success():
-    """SKIPPED 终态：仅 vacated 亦可幂等成功（防御未进 completed 的路径）。"""
-    clear_active_coordination()
-    from agentcore.runtime.graph.session.session import set_active_coordination
-
-    session = CoordinationSession(execution_id="e", total_workers=2)
-    set_active_coordination(session)
-    session.arm_worker_timeout("del_skip_n1", role="写手", timeout_s=60)
-    session.disarm_worker_timeout("del_skip_n1")
-    # Mimic a path that only stamped vacated (skipped seat), not completed.
-    session.vacated_run_ids.add("del_skip_n1")
-    assert session.resolve_cancel_target("del_skip_n1").run_id is None
-    assert session.resolve_ended_worker("del_skip_n1").run_id == "del_skip_n1"
-    cancel = CancelWorkerTool()
-    result = await cancel.execute({"run_id": "del_skip_n1"}, ctx())
-    assert result.success is True
-    assert "无需取消" in (result.output or "")
-    assert len(session.cancel_run_ids()) == 0
-    session.close()
-    await asyncio.sleep(0)
-    clear_active_coordination()
-
-
-async def test_cancel_worker_pending_withdraws_from_queue():
-    """排队未开跑：命中 live_plan → 正式撤出（skipped/vacated），成功文案，不自动改在跑同角色。"""
-    clear_active_coordination()
-    from agentcore.runtime.graph.session.session import set_active_coordination
-    from agentcore.runtime.runs.plan import RunPlan
-    from agentcore.runtime.runs.types import RunSpec
-
-    session = CoordinationSession(execution_id="e", total_workers=2)
-    set_active_coordination(session)
     session.live_plan = RunPlan(
         nodes=[
             RunSpec(run_id="del_wave_n5", role="冒烟审计员", task="审"),
             RunSpec(run_id="del_wave_n4b", role="冒烟审计员", task="审2"),
         ]
     )
-    session.arm_worker_timeout("del_wave_n4b", role="冒烟审计员", timeout_s=60)
+    session.arm_worker_timeout("del_wave_n4b", role="冒烟审计员")
     assert session.resolve_pending_worker("del_wave_n5").run_id == "del_wave_n5"
     assert session.resolve_cancel_target("del_wave_n5").run_id is None
-    cancel = CancelWorkerTool()
-    result = await cancel.execute({"run_id": "del_wave_n5", "reason": "缩 scope"}, ctx())
-    assert result.success is True
-    assert "已从队列撤出" in (result.output or "")
-    assert "del_wave_n5" in session.completed_run_ids
-    assert "del_wave_n5" in session.vacated_run_ids
-    assert "del_wave_n5" in session.cancel_run_ids()
-    assert "del_wave_n5" in session.ceo_cancel_worker_ids
-    assert "del_wave_n5" not in session.ceo_cancel_started_ids
-    # Same-role runner must not be auto-cancelled.
-    assert "del_wave_n4b" not in session.cancel_run_ids()
-    assert "del_wave_n4b" in dict(session.running_workers())
-    # Idempotent after withdraw (ended path).
-    again = await cancel.execute({"run_id": "del_wave_n5"}, ctx())
-    assert again.success is True
-    assert "无需取消" in (again.output or "")
     session.close()
-    await asyncio.sleep(0)
-    clear_active_coordination()
-
-
-async def test_cancel_worker_unknown_rejects_without_auto_retarget():
-    """未知 id：拒绝；列出可取消在跑者，不自动 request_cancel；不误撤 pending。"""
-    clear_active_coordination()
-    from agentcore.runtime.graph.session.session import set_active_coordination
-    from agentcore.runtime.runs.plan import RunPlan
-    from agentcore.runtime.runs.types import RunSpec
-
-    session = CoordinationSession(execution_id="e", total_workers=2)
-    set_active_coordination(session)
-    session.live_plan = RunPlan(
-        nodes=[
-            RunSpec(run_id="del_wave_n5", role="冒烟审计员", task="审"),
-            RunSpec(run_id="del_wave_n4b", role="冒烟审计员", task="审2"),
-        ]
-    )
-    session.arm_worker_timeout("del_wave_n4b", role="冒烟审计员", timeout_s=60)
-    cancel = CancelWorkerTool()
-    result = await cancel.execute({"run_id": "del_wave_n_unknown"}, ctx())
-    assert result.success is False
-    assert len(session.cancel_run_ids()) == 0
-    assert "del_wave_n5" not in session.completed_run_ids
-    assert "del_wave_n5" not in session.vacated_run_ids
-    err = result.error or ""
-    assert "del_wave_n4b" in err
-    assert "当前可取消" in err
-    session.close()
-    await asyncio.sleep(0)
-    clear_active_coordination()
-
-
-async def test_cancel_worker_cancelled_terminal_is_idempotent_success():
-    """CANCELLED 终态同幂等成功（与完成/失败/跳过对齐）。"""
-    clear_active_coordination()
-    from agentcore.runtime.graph.session.session import set_active_coordination
-
-    session = CoordinationSession(execution_id="e", total_workers=1)
-    set_active_coordination(session)
-    session.arm_worker_timeout("del_cancelled_w", role="写手", timeout_s=60)
-    session.mark_worker_completed("del_cancelled_w")
-    session.vacated_run_ids.add("del_cancelled_w")
-    cancel = CancelWorkerTool()
-    result = await cancel.execute({"run_id": "del_cancelled_w"}, ctx())
-    assert result.success is True
-    assert "无需取消" in (result.output or "")
-    assert len(session.cancel_run_ids()) == 0
-    session.close()
-    await asyncio.sleep(0)
-    clear_active_coordination()
 
 
 def test_inject_timeout_shows_full_run_id():
-    """TIMEOUT 注入文案须带全名 run_id，供 CEO 直接抄进 cancel_worker。"""
+    """TIMEOUT 注入文案须带全名 run_id。"""
     from agentcore.runtime.graph.session.inject import format_coordination_events
 
     session = CoordinationSession(execution_id="e", total_workers=2)
@@ -603,13 +314,6 @@ def test_inject_timeout_shows_full_run_id():
     )
     text2 = format_coordination_events(session, [no_elapsed])
     assert "run_id=del_abc_data_researcher" in text2
-
-
-async def test_coord_tools_reject_outside_session():
-    clear_active_coordination()
-    cancel = CancelWorkerTool()
-    bad2 = await cancel.execute({"run_id": "w1"}, ctx())
-    assert bad2.success is False
 
 
 async def test_terminal_not_skipped_when_both_pools_exhausted():
@@ -994,7 +698,7 @@ async def test_coordination_mid_batch_ignores_checkpoint_after():
         set_active_coordination,
     )
     from agentcore.runtime.runs import build_run_plan
-    from tests.delegate.conftest import CKPT_DAG, tool_durable
+    from tests.graph.conftest import CKPT_DAG, tool_durable
 
     clear_active_coordination()
     registry = InteractionRegistry()

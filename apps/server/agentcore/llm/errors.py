@@ -29,7 +29,7 @@ from agentcore.core.errors import (
 
 # Keep in sync with ``db.errors.DATABASE_UNAVAILABLE_MESSAGE`` — do not import
 # ``db.errors`` here (llm → db → repositories → llm.profiles cycle).
-_OUR_SERVICE_UNAVAILABLE_MESSAGE = "AgentCore 服务暂时不可用，请稍后重试"
+_OUR_SERVICE_UNAVAILABLE_MESSAGE = "GAgent 服务暂时不可用，请稍后重试"
 
 # Vendor / origin 530 (and a relayed 「（530）」sentence): the selected model, not us.
 # Keep in sync with desktop ``SELECTED_MODEL_UNAVAILABLE_MESSAGE``.

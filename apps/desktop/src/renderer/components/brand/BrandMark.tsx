@@ -16,18 +16,18 @@ const WORD_CLASS: Record<BrandMarkSize, string> = {
 };
 
 /** Ligature bounds inside assets/agentcore-icon.svg (1024 canvas). */
-const MARK_X = 150;
-const MARK_Y = 245;
-const MARK_W = 727;
+const MARK_X = 164;
+const MARK_Y = 244;
+const MARK_W = 696;
 const MARK_H = 516;
 
-const PATH_A_AND_LOWER_C =
-  "M 412,245 L 266,529 L 150,761 L 250,761 L 303,647 L 313,630 L 498,630 L 477,558 L 349,558 L 347,556 L 421,408 L 451,408 L 518,642 L 538,680 L 562,709 L 591,732 L 615,745 L 642,755 L 664,760 L 823,761 L 832,677 L 703,677 L 685,674 L 667,668 L 648,658 L 631,645 L 616,628 L 604,608 L 595,586 L 494,246 Z";
-const PATH_UPPER_C =
-  "M 877,245 L 729,245 L 699,249 L 667,258 L 636,272 L 610,289 L 586,311 L 564,338 L 547,369 L 582,486 L 598,486 L 602,450 L 607,423 L 617,401 L 640,369 L 654,356 L 671,345 L 695,334 L 714,329 L 732,327 L 868,327 Z";
+const PATH_G_AND_A =
+  "M603.4 244.0 H402.4 C312.4 244.0 226.3 320.0 207.2 410.0 L168.1 594.0 C148.9 684.0 202.8 760.0 292.8 760.0 H342.8 C392.8 760.0 448.2 664.0 479.5 620.0 L747.4 244.0 H643.4 L418.3 560.0 C336.8 708.0 239.8 708.0 264.9 590.0 L301.0 420.0 C312.5 366.0 355.6 328.0 406.6 328.0 H543.6 Z";
+const PATH_A_RIGHT = "M643.4 244.0 H747.4 L859.8 760.0 H755.8 Z";
+const PATH_BAR = "M353.8 520.0 L763.8 520.0 L746.8 600.0 L336.8 600.0 Z";
 
 /**
- * Shared product mark + AgentCore wordmark.
+ * Shared product mark + GAgent wordmark.
  * Display font (`font-brand`) applies to the Latin wordmark only; CJK copy nearby stays on the system stack.
  */
 export function BrandMark({
@@ -51,16 +51,16 @@ export function BrandMark({
     >
       <BrandMarkIcon
         size={MARK_PX[size]}
-        title={showWordmark ? undefined : "AgentCore"}
+        title={showWordmark ? undefined : "GAgent"}
       />
       {showWordmark && (
-        <span className={`font-brand ${WORD_CLASS[size]}`}>AgentCore</span>
+        <span className={`font-brand ${WORD_CLASS[size]}`}>GAgent</span>
       )}
     </div>
   );
 }
 
-/** AC ligature. `size` is the cap height; fill follows the surrounding text color. */
+/** GA ligature. `size` is the cap height; fill follows the surrounding text color. */
 export function BrandMarkIcon({
   size = 24,
   className = "",
@@ -74,8 +74,9 @@ export function BrandMarkIcon({
   const width = Math.round((size * MARK_W) / MARK_H);
   const mark = (
     <>
-      <path d={PATH_A_AND_LOWER_C} />
-      <path d={PATH_UPPER_C} />
+      <path d={PATH_G_AND_A} />
+      <path d={PATH_A_RIGHT} />
+      <path d={PATH_BAR} />
     </>
   );
   const svgClass = `shrink-0 ${className}`;

@@ -66,7 +66,7 @@ function spawnWinRunCommand(command: string): ReturnType<typeof spawn> {
     return spawnWinDetached("wt.exe", [
       "new-tab",
       "--title",
-      "AgentCore",
+      "GAgent",
       "powershell.exe",
       "-NoExit",
       "-NoLogo",

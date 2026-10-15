@@ -1,8 +1,8 @@
 {
   "name": "agentcore-desktop",
   "version": "0.9.36",
-  "description": "AgentCore Desktop - Multi-Agent AI Workspace",
-  "author": "AgentCore",
+  "description": "GAgent Desktop - Multi-Agent AI Workspace",
+  "author": "GAgent",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

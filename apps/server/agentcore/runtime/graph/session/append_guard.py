@@ -308,9 +308,9 @@ def append_overlap_reject_message(
         return (
             "【队员追加已拒绝·座位重叠】当前协作图仍有未完成节点"
             f"（已完成 {completed}/{total}），本次追加与现有计划冲突。"
-            "请等待波次推进，或用 cancel_worker / replan / replaces_run_id "
+            "请等待波次推进，或用 replan / replaces_run_id "
             "显式调整现有计划后再派。"
-            "已完成/已交接节点不能靠 cancel_worker 撤销，须 replaces_run_id 接手补派。"
+            "已完成/已交接节点须 replaces_run_id 接手补派。"
         )
     all_sibling_artifact = all(o.reason == "sibling_artifact" for o in overlaps)
     all_sibling_role = all(o.reason == "sibling_role" for o in overlaps)
@@ -381,8 +381,8 @@ def append_overlap_reject_message(
     return (
         "【队员追加已拒绝·座位/交付物重叠】"
         f"（已完成 {completed}/{total}）。冲突：{detail}。"
-        "请等待波次推进，或显式 cancel_worker / replan / replaces_run_id 接手后再追加；"
-        "已完成/已交接节点不能靠 cancel_worker 撤销，须 replaces_run_id 接手补派；"
+        "请等待波次推进，或显式 replan / replaces_run_id 接手后再追加；"
+        "已完成/已交接节点须 replaces_run_id 接手补派；"
         "勿为「闲着」重复派与计划或已占文件重合的队员；"
         "不要另起同名终稿抢写——应改自己的文件或等整合。"
     )

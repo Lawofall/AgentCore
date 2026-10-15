@@ -14,10 +14,10 @@ describe("withVirtualAgentCore", () => {
   ];
   const disk = (dir: string) => (dir === "" ? diskRoot : undefined);
 
-  it("注入的虚拟节点进筛选与 flatten 行表（与渲染同一份 children）", () => {
-    const childrenOf = withVirtualAgentCore(disk, { injectVirtual: true });
-    const filter = computeFileTreeFilter(childrenOf, ".agentcore");
-    expect(filter.visible.has("AgentCore")).toBe(true);
+  it("不注入虚拟目录，筛选只命中真实文件", () => {
+    const childrenOf = withVirtualAgentCore(disk, {});
+    const filter = computeFileTreeFilter(childrenOf, ".gagent");
+    expect(filter.visible.has("GAgent")).toBe(false);
     expect(filter.visible.has("报告.md")).toBe(false);
 
     expect(
@@ -25,45 +25,23 @@ describe("withVirtualAgentCore", () => {
         childrenOf,
         expanded: new Set(),
       }).map((r) => r.path),
-    ).toEqual(["AgentCore", "合同", "报告.md"]);
+    ).toEqual(["报告.md", "合同"]);
   });
 
-  it("hideRootDirs 之后仍注入虚拟节点", () => {
+  it("hideRootDirs 只藏指定目录", () => {
     const childrenOf = withVirtualAgentCore(disk, {
-      injectVirtual: true,
       hideRootDirs: ["合同"],
     });
-    expect(childrenOf("")?.map((n) => n.path)).toEqual([
-      "AgentCore",
-      "报告.md",
-    ]);
-  });
-
-  it("盘上已有 AgentCore 时不重复注入", () => {
-    const withDisk = (dir: string) =>
-      dir === ""
-        ? [
-            { path: "AgentCore", name: "AgentCore", isDir: true },
-            { path: "报告.md", name: "报告.md", isDir: false },
-          ]
-        : undefined;
-    const childrenOf = withVirtualAgentCore(withDisk, { injectVirtual: true });
-    expect(childrenOf("")?.map((n) => n.path)).toEqual([
-      "AgentCore",
-      "报告.md",
-    ]);
+    expect(childrenOf("")?.map((n) => n.path)).toEqual(["报告.md"]);
   });
 });
 
 describe("watchDirsForExpanded", () => {
-  it("展开 .agentcore 时只 watch 根 + AgentCore", () => {
-    expect(watchDirsForExpanded(new Set(["AgentCore"]))).toEqual([
-      "",
-      "AgentCore",
-    ]);
+  it("watch 根加上已展开的目录", () => {
+    expect(watchDirsForExpanded(new Set(["GAgent"]))).toEqual(["", "GAgent"]);
   });
 
-  it("未展开约定根时不加 AgentCore", () => {
+  it("未展开的目录不进 watch", () => {
     expect(watchDirsForExpanded(new Set(["docs"]))).toEqual(["", "docs"]);
   });
 });

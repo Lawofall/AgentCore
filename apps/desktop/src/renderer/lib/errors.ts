@@ -223,7 +223,7 @@ const OUR_SERVICE_ERROR_CODES: readonly string[] = [
 
 /** Product copy when our cloud (not the vendor) is busy / unavailable. */
 export const OUR_SERVICE_UNAVAILABLE_MESSAGE =
-  "AgentCore 服务暂时不可用，请稍后重试";
+  "GAgent 服务暂时不可用，请稍后重试";
 
 /** Vendor / origin 530 — the selected model, not AgentCore. Keep in sync with
  * ``llm/errors.py::SELECTED_MODEL_UNAVAILABLE_MESSAGE``. */

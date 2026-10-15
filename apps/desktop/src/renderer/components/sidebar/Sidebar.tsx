@@ -153,7 +153,7 @@ export function Sidebar({
           >
             {!collapsed && (
               <span className="flex flex-1 items-center gap-1.5 text-sidebar-foreground">
-                <BrandMarkIcon size={16} title="AgentCore" />
+                <BrandMarkIcon size={16} title="GAgent" />
               </span>
             )}
             {overlay ? (

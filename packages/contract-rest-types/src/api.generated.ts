@@ -210,7 +210,7 @@ export interface paths {
         put?: never;
         /**
          * Delete Account User Rule
-         * @description Delete one named user-rule markdown under .agentcore/rules/.
+         * @description Delete one named markdown document for this account.
          */
         post: operations["delete_account_user_rule_v1_account_rules_delete_post"];
         delete?: never;
@@ -250,7 +250,7 @@ export interface paths {
         put?: never;
         /**
          * Read Account User Rule
-         * @description Read one named user-rule markdown under .agentcore/rules/.
+         * @description Read one named markdown document for this account.
          */
         post: operations["read_account_user_rule_v1_account_rules_read_post"];
         delete?: never;
@@ -270,7 +270,7 @@ export interface paths {
         put?: never;
         /**
          * Write Account User Rule
-         * @description Write a named user-rule markdown under .agentcore/rules/.
+         * @description Write one named markdown document for this account.
          */
         post: operations["write_account_user_rule_v1_account_rules_write_post"];
         delete?: never;
@@ -3818,7 +3818,6 @@ export interface paths {
          * @description Create a tree node (always ``ai_maintained=false`` — user-owned).
          *
          *     A child inherits its parent's ``folder_id`` scope; a root node takes the requested scope.
-         *     New ``role='rule'`` documents with no parent land under ``AgentCore/rules/`` (§5.0).
          */
         post: operations["create_document_v1_documents_post"];
         delete?: never;
@@ -12367,14 +12366,14 @@ export interface components {
         };
         /**
          * SubmitRunStopRequest
-         * @description User mid-flight stop for one or all workers in a delegate batch (只停这项工作).
+         * @description User mid-flight stop for one or all runs on a live graph (只停这项工作).
          *
-         *     Queued while ``delegate`` drives; WaveScheduler drains via the same
-         *     ``cancel_run_ids`` channel as redirect / ``cancel_worker``, but **without** hot
+         *     Queued while a graph drive is live; WaveScheduler drains via the same
+         *     ``cancel_run_ids`` channel as redirect, but **without** hot
          *     revision or cold ``_redir`` follow-up. Does not abort the turn, kill the CEO, or
          *     clear FIFO queued turns.
          *
-         *     ``run_id`` omitted / null → stop every in-flight and queued worker for
+         *     ``run_id`` omitted / null → stop every in-flight and queued run for
          *     ``execution_id``; otherwise only that run.
          */
         SubmitRunStopRequest: {

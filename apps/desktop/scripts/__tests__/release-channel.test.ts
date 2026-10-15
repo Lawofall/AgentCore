@@ -23,11 +23,11 @@ describe("release-channel.mjs", () => {
     const id = resolveReleaseIdentity("stable");
     expect(id).toMatchObject({
       channel: "stable",
-      appId: "xyz.fashitianxia.agentcore",
-      productName: "AgentCore",
-      shortcutName: "AgentCore",
+      appId: "xyz.fashitianxia.gagent",
+      productName: "GAgent",
+      shortcutName: "GAgent",
       publishUrl: "https://downloads.fashitianxia.xyz/desktop/stable",
-      artifactSlug: "AgentCore",
+      artifactSlug: "GAgent",
       channelLabelZh: "稳定",
     });
     expect(id.windowsAppUserModelId).toBe(id.appId);
@@ -37,11 +37,11 @@ describe("release-channel.mjs", () => {
     const id = resolveReleaseIdentity("beta");
     expect(id).toMatchObject({
       channel: "beta",
-      appId: "xyz.fashitianxia.agentcore.beta",
-      productName: "AgentCore 测试版",
-      shortcutName: "AgentCore 测试版",
+      appId: "xyz.fashitianxia.gagent.beta",
+      productName: "GAgent 测试版",
+      shortcutName: "GAgent 测试版",
       publishUrl: "https://downloads.fashitianxia.xyz/desktop/beta",
-      artifactSlug: "AgentCore",
+      artifactSlug: "GAgent",
       channelLabelZh: "测试",
     });
     expect(id.windowsAppUserModelId).toBe(id.appId);

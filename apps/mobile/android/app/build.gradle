@@ -9,10 +9,10 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.agentcore.mobile"
+    namespace = "com.gagent.mobile"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.agentcore.mobile"
+        applicationId "com.gagent.mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Synced from apps/mobile/package.json by scripts/sync-android-version.mjs

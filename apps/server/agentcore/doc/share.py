@@ -218,7 +218,7 @@ def render_doc_share_html(
             layout_cls = "layout has-toc"
     else:
         body = '<p class="meta">（空文档）</p>'
-    meta_line = f"由 AgentCore 发布 · {date_str}" if date_str else "由 AgentCore 发布"
+    meta_line = f"由 GAgent 发布 · {date_str}" if date_str else "由 GAgent 发布"
     return (
         "<!doctype html>\n"
         '<html lang="zh-CN">\n<head>\n'

@@ -46,9 +46,18 @@ def plan_event(
     prev_execution_id: str | None = None,
     act_id: str = "act-1",
 ):
-    """Pre-declare this delegate batch's roster + runs so the graph lights up."""
-    agents = [card(tool, n) for n in plan.nodes]
-    runs = [run_payload(n) for n in plan.nodes]
+    """Pre-declare this delegate batch's roster + runs so the graph lights up.
+
+    Thoughts the loop already opened stay on their own frames. Putting them in
+    this payload again would replace their upstream with the scheduler spec,
+    which cannot carry edges to earlier turns.
+    """
+    from agentcore.runtime.graph.shape.step_segment import published_segment_ids
+
+    published = published_segment_ids()
+    nodes = [node for node in plan.nodes if node.run_id not in published]
+    agents = [card(tool, n) for n in nodes]
+    runs = [run_payload(n) for n in nodes]
     return run_plan(
         execution_id=execution_id,
         plan_type="multi_agent",

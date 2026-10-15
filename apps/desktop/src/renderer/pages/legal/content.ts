@@ -1,9 +1,9 @@
 import type { LegalDocId, LegalDocument } from "./types";
 
-const UPDATED_AT = "2026-09-09";
+const UPDATED_AT = "2026-10-14";
 
 /**
- * In-app legal copy for AgentCore (登录 / 注册 / 关于).
+ * In-app legal copy for GAgent (登录 / 注册 / 关于).
  * Product-facing; not a substitute for counsel review before formal launch.
  */
 export const LEGAL_DOCS: Record<LegalDocId, LegalDocument> = {
@@ -15,14 +15,14 @@ export const LEGAL_DOCS: Record<LegalDocId, LegalDocument> = {
       {
         heading: "一、协议范围",
         paragraphs: [
-          "欢迎使用 AgentCore（以下简称「本服务」）。本协议是您与本服务提供方之间关于注册、登录及使用 AgentCore 相关客户端（桌面端、网页端、手机端等）与后端服务的约定。",
+          "欢迎使用 GAgent（以下简称「本服务」）。本协议是您与本服务提供方之间关于注册、登录及使用 GAgent 相关客户端（桌面端、网页端、手机端等）与后端服务的约定。",
           "您点击同意、勾选确认或以其他方式完成注册 / 登录并使用本服务，即表示您已阅读、理解并同意受本协议约束。若您不同意，请勿注册或使用。",
         ],
       },
       {
         heading: "二、服务说明",
         paragraphs: [
-          "AgentCore 是面向知识工作者的 Multi-Agent AI 工作台，提供对话、Agent 团队协作、工作区文件与相关辅助能力。功能以客户端实际展示及产品说明为准，我们可能持续改进、调整或暂停部分能力。",
+          "GAgent 是面向知识工作者的 Multi-Agent AI 工作台，提供对话、Agent 团队协作、工作区文件与相关辅助能力。功能以客户端实际展示及产品说明为准，我们可能持续改进、调整或暂停部分能力。",
           "本服务可能包含平台代付的试用 / 免费额度，以及可选的自带模型密钥（BYOK）等计费形态。额度、限额与费用规则以应用内展示及现行计费说明为准。",
         ],
       },
@@ -95,7 +95,7 @@ export const LEGAL_DOCS: Record<LegalDocId, LegalDocument> = {
       {
         heading: "一、引言",
         paragraphs: [
-          "AgentCore（以下简称「我们」）重视您的个人信息保护。本政策说明我们如何收集、使用、存储、共享与保护与您相关的信息，以及您享有的权利。",
+          "GAgent（以下简称「我们」）重视您的个人信息保护。本政策说明我们如何收集、使用、存储、共享与保护与您相关的信息，以及您享有的权利。",
           "本政策与《用户服务协议》一并适用。若您不同意，请停止注册或使用。我们不会以「数据完全不出本机」作为默认承诺：对话等业务数据通常会写入云端以便续聊与多端使用。",
         ],
       },

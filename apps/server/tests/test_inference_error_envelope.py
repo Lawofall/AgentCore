@@ -337,7 +337,7 @@ def test_unmapped_envelope_code_falls_back_to_the_our_service_face():
             503,
             1.0,
             {},
-            body=_envelope("DATABASE_UNAVAILABLE", "AgentCore 服务暂时不可用，请稍后重试"),
+            body=_envelope("DATABASE_UNAVAILABLE", "GAgent 服务暂时不可用，请稍后重试"),
             attempt=0,
         )
     assert ei.value.code == "DATABASE_UNAVAILABLE"

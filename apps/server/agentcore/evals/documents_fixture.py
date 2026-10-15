@@ -25,7 +25,7 @@ harness **每例前后硬清**，避免用例间污染。
 }
 ```
 
-``layer=user_rule`` → ``AgentCore/rules/``（``ai_maintained=false``）。
+``layer=user_rule`` → 一篇普通 Markdown（``ai_maintained=false``，不挂父夹）。
 ``content`` 与 ``file``（相对夹具根）二选一。
 
 本模块顶层只依赖 stdlib + ``EvalConfigError``，好让 ``seed_lint`` / ``evals lint``
@@ -218,11 +218,10 @@ async def apply_documents_fixture(
         for entry in manifest.entries:
             assert entry.name is not None
             mode: ApplyMode = entry.apply_mode or "always"
-            rules_dir = await repo.ensure_rules_dir(user_id, None)
             await repo.create(
                 user_id,
                 name=entry.name,
-                parent_id=rules_dir.id,
+                parent_id=None,
                 role="rule",
                 ai_maintained=False,
                 apply_mode=mode,

@@ -204,7 +204,7 @@ async def test_grep_rejects_path_outside_workspace(tmp_path: Path):
     assert "超出了工作区范围" in result.error
     # actionable: names the relative-path fix and gives a concrete example
     assert "工作区相对路径" in result.error
-    assert "AgentCore/文档/research/report.md" in result.error
+    assert "GAgent/文档/research/report.md" in result.error
 
 
 async def test_grep_normalizes_absolute_workspace_path(tmp_path: Path):
@@ -499,7 +499,7 @@ def test_strip_root_label_prefix_rewrites_absolute_label_path():
 def test_strip_root_label_prefix_leaves_relative_and_other_roots_untouched():
     # genuine relative paths are never rewritten — even when the first segment
     # coincidentally equals the label (a real subdir, not an absolute escape).
-    assert strip_root_label_prefix("AgentCore/文档/research/report.md", "workspace") == "AgentCore/文档/research/report.md"
+    assert strip_root_label_prefix("GAgent/文档/research/report.md", "workspace") == "GAgent/文档/research/report.md"
     assert strip_root_label_prefix("workspace/foo", "workspace") == "workspace/foo"
     assert strip_root_label_prefix(".", "workspace") == "."
     # a different absolute root is returned verbatim so the guard still refuses it
@@ -562,8 +562,8 @@ def test_resolve_safe_path_normalization_still_blocks_escapes(tmp_path: Path):
 
 def test_resolve_safe_path_relative_unchanged_with_root_label(tmp_path: Path):
     # relative paths behave identically whether or not root_label is set
-    child = resolve_safe_path(tmp_path, "AgentCore/文档/research/report.md", root_label="workspace")
-    assert child == (tmp_path / "AgentCore" / "文档" / "research" / "report.md").resolve()
+    child = resolve_safe_path(tmp_path, "GAgent/文档/research/report.md", root_label="workspace")
+    assert child == (tmp_path / "GAgent" / "文档" / "research" / "report.md").resolve()
     assert resolve_safe_path(tmp_path, "../evil", root_label="workspace") is None
 
 

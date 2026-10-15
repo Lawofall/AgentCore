@@ -12,7 +12,9 @@ from typing import Any
 
 from agentcore.runtime.events import run_completed, run_plan, run_started
 from agentcore.runtime.events.types import SSEEvent
-from agentcore.runtime.runs.types import RunKind, RunPhase, RunSpec, RunState
+from agentcore.runtime.graph.shape.step_segment import StepChain
+from agentcore.runtime.runs.plan import RunPlan
+from agentcore.runtime.runs.types import RunKind, RunOrigin, RunPhase, RunSpec, RunState
 
 OPENING_CONCLUSION_REQUIRED = (
     "先写下这段的结论。后面的段只看见这句，看不见这段里的查找和修改。"
@@ -30,6 +32,45 @@ def opening_label(user_message: str) -> str:
     if len(text) <= 24:
         return text
     return text[:24] + "…"
+
+
+def spec_for_open_think(
+    chain: StepChain,
+    *,
+    depth: int,
+    parent_run_id: str | None,
+) -> RunSpec:
+    """Scheduler node for the thought the loop already opened.
+
+    The conversation edge is ``opened_from`` on that segment. It does not belong
+    on this spec: the plan topology only knows nodes in the plan, and a later
+    plan frame must not restate this id.
+    """
+    label = chain.think_label or "这段"
+    return RunSpec(
+        run_id=chain.think_id,
+        agent_id=chain.think_id,
+        agent_name=label,
+        kind=RunKind.AGENT,
+        task=label,
+        role=label,
+        depth=depth,
+        parent_run_id=parent_run_id or None,
+    )
+
+
+def plan_with_opening(host_plan: RunPlan | None, opening: RunSpec) -> RunPlan:
+    """Host nodes plus the opening, so edges onto it resolve.
+
+    ``build_run_plan`` returns only the new batch. The opening has to sit in
+    ``existing_plan`` or those edges are unknown runs. The live thought and the
+    captain-run fallback both come through here.
+    """
+    if host_plan is not None and any(node.run_id == opening.run_id for node in host_plan.nodes):
+        return host_plan
+    origin = host_plan.origin if host_plan is not None else RunOrigin.CAPTAIN
+    host_nodes = list(host_plan.nodes) if host_plan is not None else []
+    return RunPlan(nodes=[opening, *host_nodes], origin=origin)
 
 
 def opening_spec(*, captain_run_id: str, user_message: str) -> RunSpec:

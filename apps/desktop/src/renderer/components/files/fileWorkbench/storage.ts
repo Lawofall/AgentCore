@@ -55,8 +55,7 @@ export function saveExpandedWs(set: Set<string>): void {
   saveStringSet(WS_EXPANDED_KEY, set);
 }
 
-// 文件夹 ``.agentcore`` 的展开态走 FileTree
-// per-source 折叠（默认折叠）；AGENTCORE_EXPANDED_KEY 仅 AgentCoreSection 的 folder 残留路径还读。
+// 文件夹条目不再套约定目录。旧展开键只留给已经写在本地的折叠状态。
 const AGENTCORE_COLLAPSED_KEY = "files-agentcore-collapsed";
 const AGENTCORE_EXPANDED_KEY = "files-agentcore-expanded";
 

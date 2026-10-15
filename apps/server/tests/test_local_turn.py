@@ -813,7 +813,7 @@ async def test_record_local_turn_metrics_codes_from_journal(monkeypatch):
     events: list = []
     _patch_persistence(monkeypatch, events, existing_title="已有标题")
 
-    umbrella = "AgentCore 服务暂时不可用，请稍后重试"
+    umbrella = "GAgent 服务暂时不可用，请稍后重试"
     result = await record_local_turn(
         conversation_id="c1",
         user_id="u1",

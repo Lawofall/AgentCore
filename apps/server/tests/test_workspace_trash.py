@@ -1,4 +1,4 @@
-"""Unit tests for AgentCore/trash list + restore."""
+"""Unit tests for GAgent/trash list + restore."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def test_list_purges_expired(tmp_path: Path) -> None:
     target = tmp_path / "old.txt"
     _write(target)
     entry_id = soft_delete_to_trash(root=tmp_path, target=target, original_rel="old.txt")
-    entry_dir = tmp_path / "AgentCore" / "trash" / entry_id
+    entry_dir = tmp_path / "GAgent" / "trash" / entry_id
     stale = (datetime.now(UTC) - timedelta(days=40)).isoformat()
     _stamp_meta(entry_dir, original="old.txt", deleted_at=stale, name="old.txt")
 
@@ -103,7 +103,7 @@ def test_restore_rejects_expired(tmp_path: Path) -> None:
     target = tmp_path / "old.txt"
     _write(target)
     entry_id = soft_delete_to_trash(root=tmp_path, target=target, original_rel="old.txt")
-    entry_dir = tmp_path / "AgentCore" / "trash" / entry_id
+    entry_dir = tmp_path / "GAgent" / "trash" / entry_id
     stale = (datetime.now(UTC) - timedelta(days=40)).isoformat()
     _stamp_meta(entry_dir, original="old.txt", deleted_at=stale, name="old.txt")
     with pytest.raises(TrashExpiredError):
@@ -114,7 +114,7 @@ def test_restore_rejects_traversal_meta(tmp_path: Path) -> None:
     target = tmp_path / "safe.txt"
     _write(target)
     entry_id = soft_delete_to_trash(root=tmp_path, target=target, original_rel="safe.txt")
-    entry_dir = tmp_path / "AgentCore" / "trash" / entry_id
+    entry_dir = tmp_path / "GAgent" / "trash" / entry_id
     _stamp_meta(
         entry_dir,
         original="../escape.txt",
@@ -136,7 +136,7 @@ def test_list_newest_first(tmp_path: Path) -> None:
     newer = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     for eid, ts, name in ((id_a, older, "a.txt"), (id_b, newer, "b.txt")):
         _stamp_meta(
-            tmp_path / "AgentCore" / "trash" / eid,
+            tmp_path / "GAgent" / "trash" / eid,
             original=name,
             deleted_at=ts,
             name=name,
@@ -147,16 +147,16 @@ def test_list_newest_first(tmp_path: Path) -> None:
 
 def test_soft_delete_rejects_self_nest_under_agentcore(tmp_path: Path) -> None:
     """Mechanical guard: never shutil-move a trash ancestor into its own trash."""
-    ac = tmp_path / "AgentCore"
+    ac = tmp_path / "GAgent"
     _write(ac / "rules" / "r.md", "rule")
     (ac / "trash").mkdir(parents=True)
     with pytest.raises(WorkspaceIOError, match="自嵌套"):
-        soft_delete_to_trash(root=tmp_path, target=ac, original_rel="AgentCore")
+        soft_delete_to_trash(root=tmp_path, target=ac, original_rel="GAgent")
     assert (ac / "rules" / "r.md").read_text(encoding="utf-8") == "rule"
 
 
 def test_expand_delete_agentcore_soft_rules_hard_clears_zones(tmp_path: Path) -> None:
-    ac = tmp_path / "AgentCore"
+    ac = tmp_path / "GAgent"
     _write(ac / "rules" / "r.md", "rule-body")
     _write(ac / "index" / "cache.db", "db")
     _write(ac / "trash" / "stale" / "content", "old")
@@ -168,15 +168,15 @@ def test_expand_delete_agentcore_soft_rules_hard_clears_zones(tmp_path: Path) ->
     assert not (ac / "rules").exists()
     assert not (ac / "index").exists()
     assert not (ac / "baselines").exists()
-    # Soft-deletes recreate trash under AgentCore — shell remains.
+    # Soft-deletes recreate trash under GAgent — shell remains.
     assert (ac / "trash").is_dir()
     entries = list_trash_entries(root=tmp_path, retention_days=30)
     assert len(entries) == 1
-    assert entries[0].original_path == "AgentCore/rules"
+    assert entries[0].original_path == "GAgent/rules"
     restored = restore_from_trash(
         root=tmp_path, entry_id=entries[0].entry_id, retention_days=30
     )
-    assert restored == "AgentCore/rules"
-    assert (tmp_path / "AgentCore" / "rules" / "r.md").read_text(encoding="utf-8") == (
+    assert restored == "GAgent/rules"
+    assert (tmp_path / "GAgent" / "rules" / "r.md").read_text(encoding="utf-8") == (
         "rule-body"
     )

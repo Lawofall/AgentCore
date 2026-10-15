@@ -108,7 +108,7 @@ class SessionTimeoutMixin:
                         "reason": (
                             f"队员已运行约 {round(elapsed)}s（阈值 {int(guard.threshold_s)}s），"
                             "仍未交付。执行面已进入硬收尾：禁新调查调用、宽限一轮交卷，"
-                            "超宽限将强制取消。可 cancel_worker 立即终止。"
+                            "超宽限将强制取消。"
                         ),
                     },
                 )

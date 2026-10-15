@@ -18,7 +18,7 @@ skip_if:
 
 ## 一、哲学
 
-Multi-Agent First：组合优于堆叠；单 Agent = 无成员的 Team（统一执行路径）；委派一等公民（depth&lt;3 默认 `delegate`，`replan` 在已有子计划后挂上；depth=3 叶子；单 lead ≤4 sub）；形状由 `depends_on` 数据决定，非独立模式枚举。
+Multi-Agent First：组合优于堆叠；单 Agent = 无成员的 Team（统一执行路径）；委派一等公民（depth&lt;3 默认 `graph`，`replan` 在已有子计划后挂上；depth=3 叶子；单 lead ≤4 sub）；形状由 `depends_on` 数据决定，非独立模式枚举。
 
 | 范式 | 表示 |
 |---|---|
@@ -35,7 +35,7 @@ Multi-Agent First：组合优于堆叠；单 Agent = 无成员的 Team（统一�
 
 worker 唯一向上通道。`reason` 三选一（缺省 / 无法识别 = `wait`，宁停不留言）：
 
-- `wait`：猜错后面白干 → 原地挂起。须写 `assumption`（「按假设继续」、未武装 / 并发满退化、或运维超时回落都落在这句上）。经典路径直挂**用户**（否决挂 CEO——会死锁）；协调模式例外：CEO 波内存活 → 主管用 `replan` 的 `tell` 把决定说回来，同一次 run 继续（单 worker 同样进协调，一并适用）。等 CEO 时该队员不算短调用 in-flight，wait 不得空等该队员。仅嵌套 lead 等阻塞路径不走这条——那时主管卡在 `delegate` 内，挂主管必死锁。
+- `wait`：猜错后面白干 → 原地挂起。须写 `assumption`（「按假设继续」、未武装 / 并发满退化、或运维超时回落都落在这句上）。经典路径直挂**用户**（否决挂 CEO——会死锁）；协调模式例外：CEO 波内存活 → 主管用 `replan` 的 `tell` 把决定说回来，同一次 run 继续（单 worker 同样进协调，一并适用）。等 CEO 时该队员不算短调用 in-flight，wait 不得空等该队员。仅嵌套 lead 等阻塞路径不走这条——那时主管卡在 `graph` 内，挂主管必死锁。
 - `adjust`：自己这份做完，但后面的安排要主管看。人不停。主管用 `tell` 给还没开始的人补一句，或 `add` 加人。
 
 不认旧参数 `blocking` / `kind`。留言式上报已撤：小假设写进交差。不设用户总开关。
@@ -124,7 +124,7 @@ Agent 没有「文件开在编辑器里」。写盘占用只包住**这一次** 
 | 项 | 状态 |
 |---|---|
 | 完整 Preflight Audit | ⏳；薄预览不等于编制确认；编制到即开跑 |
-| 一等 Team 实体 / A2A | **否决**可保存 Team / 上架 Agent（现行组队是 `delegate`；可保存拆法写用户技能；A2A 不另立可发现实体）→ [工具与能力 · 能力商店](/docs/03-AI核心/工具与能力系统.md#能力商店) |
+| 一等 Team 实体 / A2A | **否决**可保存 Team / 上架 Agent（现行组队是 `graph`；可保存拆法写用户技能；A2A 不另立可发现实体）→ [工具与能力 · 能力商店](/docs/03-AI核心/工具与能力系统.md#能力商店) |
 | 独立 Arena | **否决** |
 | 树级共享 Semaphore | **否决**（父子互等死锁） |
 | 便签墙 / worker 侧向广播 | **否决**（第四套实体；不留波内推送。旧 journal `team_note_posted` 跳过、不展示） |

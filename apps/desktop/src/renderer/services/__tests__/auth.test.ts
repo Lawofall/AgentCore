@@ -139,7 +139,7 @@ describe("bootstrapAuth", () => {
 
     expect(result.kind).toBe("unavailable");
     if (result.kind === "unavailable") {
-      expect(result.reason).toContain("AgentCore");
+      expect(result.reason).toContain("GAgent");
       expect(result.reason).not.toContain("请确认数据库");
     }
   });

@@ -145,12 +145,10 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
     const [expanded, setExpanded] = useState<Set<string>>(() =>
       loadExpanded(source.id),
     );
-    // Render / filter / keyboard-select-all share this view (virtual ``.agentcore``
-    // + hideRootDirs). data.childrenOf stays the disk map for truncated counts.
+    // Render / filter / keyboard-select-all share this view (hideRootDirs).
+    // data.childrenOf stays the disk map for truncated counts.
     const childrenOf = withVirtualAgentCore(data.childrenOf, {
-      injectVirtual: Boolean(renderWorkroomLead || onCreateWorkroomEntry),
       hideRootDirs,
-      sortBy,
     });
     const filterActive = filterQuery.trim().length > 0;
     // childrenOf reads live refs; this component re-renders on data bumps, so
@@ -820,14 +818,17 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
       />
     );
 
+    const showEntries =
+      Boolean(renderWorkroomLead || onCreateWorkroomEntry) && !filterActive;
+
     const body =
       rootStatus === "error" ? (
         errorEl
       ) : rootChildren === undefined ? (
         loadingEl
-      ) : rootChildren.length === 0 && !creating ? (
+      ) : rootChildren.length === 0 && !creating && !showEntries ? (
         emptyEl
-      ) : filterEmpty && !creating ? (
+      ) : filterEmpty && !creating && !showEntries ? (
         chrome ? (
           <EmptyHint
             inline
@@ -845,6 +846,26 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
         )
       ) : (
         <ul>
+          {showEntries ? (
+            <li>
+              {onCreateWorkroomEntry ? (
+                <div
+                  className="flex justify-end"
+                  style={{ paddingLeft: indent + 8 }}
+                >
+                  <IconButton
+                    title="新建条目"
+                    onClick={() => {
+                      void onCreateWorkroomEntry();
+                    }}
+                  >
+                    <FilePlus size={14} />
+                  </IconButton>
+                </div>
+              ) : null}
+              {renderWorkroomLead?.(indent)}
+            </li>
+          ) : null}
           {creating?.dir === "" && (
             <InlineCreateRow
               kind={creating.kind}
@@ -891,8 +912,6 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
               onUpload={drop.onUpload}
               onDropTarget={setDropTarget}
               onReloadDir={(dir) => data.reload(dir)}
-              renderWorkroomLead={renderWorkroomLead}
-              onCreateWorkroomEntry={onCreateWorkroomEntry}
             />
           ))}
           {data.truncatedOf("") && (

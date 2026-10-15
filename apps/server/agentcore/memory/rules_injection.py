@@ -289,14 +289,12 @@ def _injectable_body(raw: str) -> str | None:
 
 
 def _labeled_rule_body(name: str, content: str) -> str | None:
-    """Injectable body headed by the catalog address so ``<设定>`` names the entry."""
+    """Injectable body headed by the document name."""
     body = _injectable_body(content)
     if not body:
         return None
     title = (name or "").strip() or "untitled.md"
-    from agentcore.memory.rule_files import rule_entry_relpath
-
-    return f"### {rule_entry_relpath(title)}\n{body}"
+    return f"### {title}\n{body}"
 
 
 @dataclass(frozen=True)

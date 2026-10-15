@@ -3,7 +3,7 @@ import { MANUAL_SECTION_IDS } from "../sectionIds";
 import type { ManualChapterContent } from "../types";
 
 /**
- * 认识 AgentCore —— 第一章内容源。
+ * 认识 GAgent —— 第一章内容源。
  *
  * 口径：实用说明、不营销；上手步骤与空态引导（DraftEmptyState）对齐——平台代付、开箱即用，
  * 第一步就是说目标，BYOK 只是可选升级，不占开头把人支去外部站点。
@@ -11,7 +11,7 @@ import type { ManualChapterContent } from "../types";
 export const introChapter: ManualChapterContent = {
   id: "intro",
   path: APP_PATHS.toolbox.manual.intro,
-  label: "认识 AgentCore",
+  label: "认识 GAgent",
   sections: [
     {
       id: MANUAL_SECTION_IDS.intro.what,
@@ -20,7 +20,7 @@ export const introChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "AgentCore 是 Multi-Agent AI 工作台。对着你的是一扇窗：轻问它直接答，要拆开做就开几段，做完把结论交给你。",
+          text: "GAgent 是 Multi-Agent AI 工作台。对着你的是一扇窗：轻问它直接答，要拆开做就开几段，做完把结论交给你。",
         },
         {
           type: "callout",

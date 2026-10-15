@@ -35,7 +35,7 @@ def test_markdown_has_title_roles_and_content():
     md = conversation_to_markdown(conv, messages)
     assert md.startswith("# 我的对话")
     assert "## 用户" in md
-    assert "## AgentCore" in md
+    assert "## GAgent" in md
     assert "你好，我能帮你什么？" in md
 
 
@@ -223,7 +223,7 @@ def test_share_html_renders_markdown_and_title():
     assert "<title>标题</title>" in page
     assert "<strong>bold</strong>" in page
     assert "<code>code</code>" in page
-    assert "用户" in page and "AgentCore" in page
+    assert "用户" in page and "GAgent" in page
 
 
 def test_share_html_escapes_raw_html_xss():

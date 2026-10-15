@@ -71,7 +71,7 @@ export const NOTICE_TEMPLATES: readonly NoticeTemplate[] = [
 更新完成后刷新即可；一般无需重装客户端。
 本次：…（一句话变更摘要；多条用「；」分隔）
 
-若结束后仍异常，打开消息页「AgentCore 官方」或稍后重试。`,
+若结束后仍异常，打开消息页「GAgent 官方」或稍后重试。`,
     severity: "high",
     surface: "both",
     dismiss_policy: "once",
@@ -99,7 +99,7 @@ export const NOTICE_TEMPLATES: readonly NoticeTemplate[] = [
 更新完成后刷新即可；一般无需重装客户端。
 本次：${summary}
 
-若结束后仍异常，打开消息页「AgentCore 官方」或稍后重试。`,
+若结束后仍异常，打开消息页「GAgent 官方」或稍后重试。`,
       };
     },
   },
@@ -221,7 +221,7 @@ ${highlights}
 
 生效：即日起 / 日期
 详情：…（可选）
-如有疑问，打开消息页「AgentCore 官方」查看本条归档。`,
+如有疑问，打开消息页「GAgent 官方」查看本条归档。`,
     severity: "high",
     surface: "modal",
     dismiss_policy: "once",
@@ -248,7 +248,7 @@ ${highlights}
         body: `${impact}
 
 生效：${effective}
-${detailLine}如有疑问，打开消息页「AgentCore 官方」查看本条归档。`,
+${detailLine}如有疑问，打开消息页「GAgent 官方」查看本条归档。`,
       };
     },
   },
@@ -261,7 +261,7 @@ ${detailLine}如有疑问，打开消息页「AgentCore 官方」查看本条归
 
 请到「设置 · 服务商」接入自己的 Key 即可继续使用。
 
-如有疑问，打开消息页「AgentCore 官方」查看本条归档。`,
+如有疑问，打开消息页「GAgent 官方」查看本条归档。`,
     severity: "high",
     surface: "both",
     dismiss_policy: "once",
@@ -283,7 +283,7 @@ ${detailLine}如有疑问，打开消息页「AgentCore 官方」查看本条归
         body: `平台提供的额度暂时不可用。
 
 请到「设置 · 服务商」接入自己的 Key 即可继续使用。
-${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归档。`,
+${noteBlock}如有疑问，打开消息页「GAgent 官方」查看本条归档。`,
       };
     },
   },
@@ -296,7 +296,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
 
 当前平台模型：DeepSeek V4 Flash（经 OpenCode Go 订阅上游，非免费档。该路上 DeepSeek 按 OpenCode Go 当期 zero-retention / 零留存条款，声明写到 2026-08-31 且按月续约，非永久承诺）。额度仍为每月 / 每日上限；用尽后可在「设置 · 服务商」接入自己的 Key 继续使用。
 
-如有疑问，打开消息页「AgentCore 官方」查看本条归档。`,
+如有疑问，打开消息页「GAgent 官方」查看本条归档。`,
     severity: "normal",
     surface: "both",
     dismiss_policy: "once",
@@ -318,7 +318,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
         body: `平台测试额度已恢复（内测期提供测试额度）。
 
 当前平台模型：DeepSeek V4 Flash（经 OpenCode Go 订阅上游，非免费档。该路上 DeepSeek 按 OpenCode Go 当期 zero-retention / 零留存条款，声明写到 2026-08-31 且按月续约，非永久承诺）。额度仍为每月 / 每日上限；用尽后可在「设置 · 服务商」接入自己的 Key 继续使用。
-${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归档。`,
+${noteBlock}如有疑问，打开消息页「GAgent 官方」查看本条归档。`,
       };
     },
   },
@@ -331,7 +331,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
 
 当前影响：…（登录 / 对话 / 消息等）
 临时建议：稍后再试；已打开的对话可先保存草稿。
-进展会同步到消息页「AgentCore 官方」。`,
+进展会同步到消息页「GAgent 官方」。`,
     severity: "critical",
     surface: "both",
     dismiss_policy: "never",
@@ -355,7 +355,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
 
 当前影响：${impact}
 临时建议：稍后再试；已打开的对话可先保存草稿。
-进展会同步到消息页「AgentCore 官方」。`,
+进展会同步到消息页「GAgent 官方」。`,
       };
     },
   },
@@ -646,7 +646,7 @@ export function surfacePublishHint(
     parts.push("登录后一次性弹窗");
   }
   if (surface === "inbox" || surface === "both" || surface === "modal") {
-    parts.push("IM「AgentCore 官方」一条共享卡片");
+    parts.push("IM「GAgent 官方」一条共享卡片");
   }
   if (surface === "modal" && dismiss === "never") {
     return "弹窗仅支持「可关闭」策略，请改为 once 后再发布";

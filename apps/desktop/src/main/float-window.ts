@@ -36,7 +36,7 @@ const WINDOWS_APP_USER_MODEL_ID =
   typeof __WINDOWS_APP_USER_MODEL_ID__ !== "undefined" &&
   __WINDOWS_APP_USER_MODEL_ID__
     ? __WINDOWS_APP_USER_MODEL_ID__
-    : "xyz.fashitianxia.agentcore";
+    : "xyz.fashitianxia.gagent";
 
 export type FloatWindowDeps = {
   /** 主窗（收 closed 事件）；可暂为空。 */

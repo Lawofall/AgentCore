@@ -24,10 +24,10 @@ describe("sortNodes", () => {
     ]);
   });
 
-  it("盘上 AgentCore/（.agentcore）钉在同级最前", () => {
-    const nodes = [dir("AgentCore"), file("报告.md"), dir("合同")];
+  it("盘上 GAgent/ 钉在同级最前", () => {
+    const nodes = [dir("GAgent"), file("报告.md"), dir("合同")];
     expect(sortNodes(nodes).map((n) => n.path)).toEqual([
-      "AgentCore",
+      "GAgent",
       "合同",
       "报告.md",
     ]);
@@ -45,18 +45,18 @@ describe("sortNodes", () => {
   it("嵌套的同名目录仍按普通目录排", () => {
     const map = bucketTree([
       dir("src"),
-      dir("src/AgentCore"),
+      dir("src/GAgent"),
       file("src/z.ts"),
-      dir("AgentCore"),
+      dir("GAgent"),
       file("readme.md"),
     ]);
     expect(map.get("")?.map((n) => n.path)).toEqual([
-      "AgentCore",
+      "GAgent",
       "src",
       "readme.md",
     ]);
     expect(map.get("src")?.map((n) => n.path)).toEqual([
-      "src/AgentCore",
+      "src/GAgent",
       "src/z.ts",
     ]);
   });

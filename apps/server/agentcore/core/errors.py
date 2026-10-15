@@ -884,7 +884,7 @@ class DatabaseUnavailableError(AgentCoreError):
     status_code = 503
     retryable = True
 
-    def __init__(self, message: str = "AgentCore 服务暂时不可用，请稍后重试", **kwargs):
+    def __init__(self, message: str = "GAgent 服务暂时不可用，请稍后重试", **kwargs):
         super().__init__(message, **kwargs)
 
 

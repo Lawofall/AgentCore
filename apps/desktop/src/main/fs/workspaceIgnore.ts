@@ -19,7 +19,7 @@
  */
 
 /** 与服务端 `stage_dirs.AGENTCORE_ROOT` 对齐。 */
-export const AGENTCORE_ROOT = "AgentCore";
+export const AGENTCORE_ROOT = "GAgent";
 
 /** 与服务端 `attachments.ATTACHMENTS_DIR` / `is_attachment_path` 对齐。 */
 export const ATTACHMENTS_DIR = "attachments";

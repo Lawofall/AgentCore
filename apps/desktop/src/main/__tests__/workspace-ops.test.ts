@@ -672,7 +672,7 @@ describe("executeWorkspaceOp (本地工作区写类 op，P2b)", () => {
       expect(res.ready).toBe(true);
       expect(res.snapshot_id).toBe("msg-1");
       expect(res.size_bytes).toBeGreaterThan(0);
-      const zipPath = join(dir, "AgentCore", "baselines", "msg-1.zip");
+      const zipPath = join(dir, "GAgent", "baselines", "msg-1.zip");
       const st = await stat(zipPath);
       expect(st.size).toBeGreaterThan(0);
     });
@@ -680,7 +680,7 @@ describe("executeWorkspaceOp (本地工作区写类 op，P2b)", () => {
     it("reuses existing zip without rewriting (probe ready)", async () => {
       await run("write", { path: "a.txt", content: "x" });
       valOf(await run("ensure_turn_baseline", { message_id: "msg-reuse" }));
-      const zipPath = join(dir, "AgentCore", "baselines", "msg-reuse.zip");
+      const zipPath = join(dir, "GAgent", "baselines", "msg-reuse.zip");
       const before = await stat(zipPath);
       await new Promise((r) => setTimeout(r, 20));
       const again = valOf(
@@ -713,7 +713,7 @@ describe("executeWorkspaceOp (本地工作区写类 op，P2b)", () => {
         }),
       ) as { ready: boolean };
       expect(res.ready).toBe(true);
-      const zipPath = join(dir, "ws", "AgentCore", "baselines", "msg-sub.zip");
+      const zipPath = join(dir, "ws", "GAgent", "baselines", "msg-sub.zip");
       const st = await stat(zipPath);
       expect(st.size).toBeGreaterThan(0);
       const buf = await readFile(zipPath);
@@ -730,7 +730,7 @@ describe("executeWorkspaceOp (本地工作区写类 op，P2b)", () => {
   });
 
   describe("ensure_turn_baseline 保留策略", () => {
-    const baselineDir = () => join(dir, "AgentCore", "baselines");
+    const baselineDir = () => join(dir, "GAgent", "baselines");
 
     // 落一份占位基线并把 mtime 拨到指定分钟前（负数 = 未来），清理按 mtime 排序。
     const seedBaseline = async (name: string, ageMinutes: number) => {
@@ -785,7 +785,7 @@ describe("executeWorkspaceOp (本地工作区写类 op，P2b)", () => {
       await run("write", { path: "a.txt", content: "x" });
       const versionDir = join(
         dir,
-        "AgentCore",
+        "GAgent",
         "versions",
         "20250101T000000Z-abcd1234",
       );

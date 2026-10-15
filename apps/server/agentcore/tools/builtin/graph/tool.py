@@ -444,6 +444,13 @@ class GraphTool:
                 user_id=getattr(self._base_tool_context, "user_id", "") or "",
             )
         opening_bundle = None
+        from agentcore.runtime.graph.shape.opening_segment import (
+            OPENING_CONCLUSION_REQUIRED,
+            link_empty_deps_to_opening,
+            opening_completed,
+            plan_with_opening,
+            spec_for_open_think,
+        )
         from agentcore.runtime.graph.shape.step_segment import current_step_chain
 
         step_chain = current_step_chain()
@@ -452,14 +459,7 @@ class GraphTool:
         # The open call is the segment being sealed. The host run itself is
         # completed by its executor, not by this tool call.
         step_segment_id = think_id if think_id and think_id != host_run else None
-        if step_segment_id:
-            from agentcore.runtime.graph.shape.opening_segment import (
-                OPENING_CONCLUSION_REQUIRED,
-                link_empty_deps_to_opening,
-                opening_completed,
-            )
-            from agentcore.runtime.runs.types import RunKind, RunSpec
-
+        if step_segment_id and step_chain is not None:
             conclusion = str(arguments.get("conclusion") or "").strip()
             if not conclusion:
                 return ToolResult(
@@ -470,15 +470,9 @@ class GraphTool:
                     contract_failure=True,
                 )
             tasks_raw = link_empty_deps_to_opening(tasks_raw, step_segment_id)
-            think_label = (step_chain.think_label if step_chain is not None else "") or "这段"
             opening_bundle = (
-                RunSpec(
-                    run_id=step_segment_id,
-                    agent_id=step_segment_id,
-                    agent_name=think_label,
-                    kind=RunKind.AGENT,
-                    task=think_label,
-                    role=think_label,
+                spec_for_open_think(
+                    step_chain,
                     depth=self._depth + 1,
                     parent_run_id=self._captain_run_id or None,
                 ),
@@ -486,15 +480,10 @@ class GraphTool:
             )
         elif self._depth == 0 and self._captain_run_id and not self._opening_sealed:
             from agentcore.runtime.graph.shape.opening_segment import (
-                OPENING_CONCLUSION_REQUIRED,
-                link_empty_deps_to_opening,
-                opening_completed,
-                opening_sealed_event,
                 opening_segment_id,
                 opening_spec,
                 plan_contains_opening,
             )
-            from agentcore.runtime.runs.plan import RunPlan as HostPlan
 
             if plan_contains_opening(host_plan_for_append, self._captain_run_id):
                 self._opening_sealed = True
@@ -520,21 +509,7 @@ class GraphTool:
 
         resolve_plan = host_plan_for_append
         if opening_bundle is not None:
-            from agentcore.runtime.runs.types import RunOrigin
-
-            host_nodes = (
-                list(host_plan_for_append.nodes)
-                if host_plan_for_append is not None
-                else []
-            )
-            resolve_plan = HostPlan(
-                nodes=[opening_bundle[0], *host_nodes],
-                origin=(
-                    host_plan_for_append.origin
-                    if host_plan_for_append is not None
-                    else RunOrigin.CAPTAIN
-                ),
-            )
+            resolve_plan = plan_with_opening(host_plan_for_append, opening_bundle[0])
 
         from agentcore.runtime.graph.desk.target_desktop_gate import effective_target_folder_id
 
@@ -952,13 +927,10 @@ class GraphTool:
         if chain is not None:
             if chain.reply_sealed:
                 return
-            body = (text or "").strip()
-            if not body and chain.had_actions:
-                return
             for event in reply_events(
                 chain,
                 run_id=self._captain_run_id or "",
-                text=body,
+                text=(text or "").strip(),
             ):
                 self._sink.emit(event)
             return

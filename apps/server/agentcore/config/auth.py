@@ -107,7 +107,7 @@ class AuthSettings(BaseModel):
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from_address: str = ""
-    smtp_from_name: str = "AgentCore"
+    smtp_from_name: str = "GAgent"
     smtp_tls_mode: Literal["ssl", "starttls", "none"] = "ssl"
     # When true, login refuses accounts whose email_verified_at is NULL.
     # Default off: legacy rows stay usable. Flip only after a backfill.

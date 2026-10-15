@@ -34,7 +34,7 @@ from agentcore.runtime.journal import KIND_TURN_END
 # body) are skipped so the artifact reads as a clean dialogue.
 _EXPORTED_ROLES = ("user", "assistant")
 
-_ROLE_LABELS = {"user": "用户", "assistant": "AgentCore"}
+_ROLE_LABELS = {"user": "用户", "assistant": "GAgent"}
 
 
 def _visible_export_rows(
@@ -113,7 +113,7 @@ def conversation_to_markdown(
     """
     title = (conversation.title or "").strip() or "未命名对话"
     lines: list[str] = [f"# {title}", ""]
-    lines.append(f"> 由 AgentCore 导出 · {_fmt_ts(datetime.now(UTC))} UTC")
+    lines.append(f"> 由 GAgent 导出 · {_fmt_ts(datetime.now(UTC))} UTC")
     lines.append("")
 
     for msg, body in _visible_export_rows(messages, journal_map):

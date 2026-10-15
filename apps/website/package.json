@@ -3,7 +3,7 @@
   "version": "0.2.32",
   "private": true,
   "packageManager": "pnpm@10.28.1",
-  "description": "AgentCore 官网 — 协作智能平台",
+  "description": "GAgent 官网 — 协作智能平台",
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/fetch-release.mjs && next build --webpack",

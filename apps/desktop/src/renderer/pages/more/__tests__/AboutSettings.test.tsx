@@ -72,7 +72,7 @@ describe("AboutSettings", () => {
     const { container } = renderPage();
     const headings = container.querySelectorAll("h1");
     expect(headings).toHaveLength(1);
-    expect(headings[0]?.textContent).toBe("关于 AgentCore");
+    expect(headings[0]?.textContent).toBe("关于 GAgent");
     // 定位语留下了，只是降级成说明卡。
     expect(screen.getByText("协作，是更高级的智能。")).toBeTruthy();
   });

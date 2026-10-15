@@ -57,7 +57,7 @@ def test_has_inflight_work_and_progress_summary():
     assert s.has_inflight_work() is False
     assert s.has_verify_busy() is True
     assert "有界验证中" in s.worker_progress_summary()
-    assert "cancel_worker" in s.worker_progress_summary()
+    assert "cancel_worker" not in s.worker_progress_summary()
     s.clear_worker_busy("w1")
     assert s.has_verify_busy() is False
     # Blocking escalate awaiting CEO: not short in-flight (same as verify).
@@ -203,7 +203,7 @@ async def test_idle_timeout_defers_when_workers_busy(monkeypatch):
 
 
 async def test_idle_patrols_when_only_verify_busy(monkeypatch):
-    """Long verify must not defer patrol — CEO can cancel_worker mid typecheck."""
+    """Long verify must not defer patrol. The model cannot cancel that segment."""
     monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_S", 0.05)
     monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_MAX_S", 1.0)
     clear_active_coordination()
@@ -221,7 +221,7 @@ async def test_idle_patrols_when_only_verify_busy(monkeypatch):
         text = msgs[0].content or ""
         assert "等待团队事件超时" in text
         assert "有界验证中" in text
-        assert "cancel_worker" in text
+        assert "cancel_worker" not in text
         assert session.idle_streak == 1
     finally:
         session.drive_task.cancel()
@@ -289,7 +289,7 @@ def _fake_merge_tool() -> MagicMock:
 
 
 def test_append_overlap_reject_message_mentions_replaces_not_cancel_for_done():
-    """拒派文案须明示 replaces_run_id，并点明已完成不能靠 cancel。"""
+    """拒派文案走 replan / replaces_run_id，不指向按段取消工具。"""
     from agentcore.runtime.graph.session.append_guard import (
         AppendOverlap,
         append_overlap_reject_message,
@@ -297,7 +297,7 @@ def test_append_overlap_reject_message_mentions_replaces_not_cancel_for_done():
 
     empty = append_overlap_reject_message([], completed=0, total=2)
     assert "replaces_run_id" in empty
-    assert "不能靠 cancel" in empty
+    assert "cancel_worker" not in empty
 
     detailed = append_overlap_reject_message(
         [
@@ -314,7 +314,7 @@ def test_append_overlap_reject_message_mentions_replaces_not_cancel_for_done():
     )
     assert "replaces_run_id" in detailed
     assert "replan" in detailed
-    assert "不能靠 cancel" in detailed
+    assert "cancel_worker" not in detailed
     assert "内容策略" in detailed
 
 
@@ -1994,37 +1994,3 @@ async def test_try_start_sibling_ignores_completed_host_same_path():
     finally:
         clear_active_coordination("e-host-union")
 
-
-@pytest.mark.asyncio
-async def test_cancel_worker_vacates_journal_unstarted_without_session():
-    """没有协调 session 时，journal 上从未开工的座位仍可划掉。"""
-    from agentcore.runtime.graph.session.tools import CancelWorkerTool
-    from agentcore.runtime.graph.drive.steer import record_plan_snapshot
-    from agentcore.runtime.facts import TurnFactLog, current_fact_log
-    from agentcore.runtime.journal.fold import plan_from_journal
-    from tests.delegate.conftest import ctx
-
-    clear_active_coordination()
-    log = TurnFactLog()
-    token = current_fact_log.set(log)
-    plan = _plan(
-        RunSpec(run_id="ghost_a", role="前端", task="写"),
-        RunSpec(run_id="ghost_b", role="整合", task="也写"),
-    )
-    record_plan_snapshot(plan)
-    try:
-        cancel = CancelWorkerTool()
-        result = await cancel.execute({"run_id": "ghost_a"}, ctx())
-        assert result.success is True
-        assert "已从队列撤出" in (result.output or "")
-        assert "协调模式" not in (result.error or "")
-        folded = plan_from_journal(log.entries())
-        assert folded is not None
-        assert [n.run_id for n in folded.nodes] == ["ghost_b"]
-        second = await cancel.execute({"run_id": "ghost_b"}, ctx())
-        assert second.success is True
-        folded2 = plan_from_journal(log.entries())
-        assert folded2 is None or [n.run_id for n in folded2.nodes] == []
-    finally:
-        current_fact_log.reset(token)
-        clear_active_coordination()

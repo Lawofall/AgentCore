@@ -372,7 +372,7 @@ def test_product_help_pins_section_ids_and_manual_paths():
     assert "https://fashitianxia.xyz/download" in help_body
     assert "https://app.fashitianxia.xyz" in help_body
     assert ".cursor/rules" in help_body
-    assert ".agentcore/rules" in help_body
+    assert "提示词条目" in help_body
     ids = list_product_help_section_ids()
     assert "workspace" in ids
     assert "what" in ids

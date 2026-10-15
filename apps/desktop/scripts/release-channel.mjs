@@ -72,16 +72,16 @@ export function desktopDownloadUrlForChannel(channel) {
 export function resolveReleaseIdentity(channel) {
   const ch = parseReleaseChannel(channel ?? "stable");
   if (ch === "beta") {
-    const appId = "xyz.fashitianxia.agentcore.beta";
+    const appId = "xyz.fashitianxia.gagent.beta";
     return {
       channel: /** @type {const} */ ("beta"),
       appId,
-      productName: "AgentCore 测试版",
-      shortcutName: "AgentCore 测试版",
+      productName: "GAgent 测试版",
+      shortcutName: "GAgent 测试版",
       publishUrl: "https://downloads.fashitianxia.xyz/desktop/beta",
-      // Same ASCII slug as stable so CDN/sync/官网文件名约定（AgentCore-${ver}-…）不断缝；
+      // Same ASCII slug as stable so CDN/sync/官网文件名约定（GAgent-${ver}-…）不断缝；
       // 通道靠 appId / productName / feed 目录 / GitHub tag 预发布后缀区分。
-      artifactSlug: "AgentCore",
+      artifactSlug: "GAgent",
       channelLabelZh: "测试",
       // 必须等于 appId（NSIS 快捷方式 AUMID）。与稳定轨不同，避免两套安装并进任务栏。
       windowsAppUserModelId: appId,
@@ -91,14 +91,14 @@ export function resolveReleaseIdentity(channel) {
       runtimeIcon: "resources/icon-beta.png",
     };
   }
-  const appId = "xyz.fashitianxia.agentcore";
+  const appId = "xyz.fashitianxia.gagent";
   return {
     channel: /** @type {const} */ ("stable"),
     appId,
-    productName: "AgentCore",
-    shortcutName: "AgentCore",
+    productName: "GAgent",
+    shortcutName: "GAgent",
     publishUrl: "https://downloads.fashitianxia.xyz/desktop/stable",
-    artifactSlug: "AgentCore",
+    artifactSlug: "GAgent",
     channelLabelZh: "稳定",
     // 必须等于 appId。分叉则 Win 系统通知静默失败。
     windowsAppUserModelId: appId,

@@ -138,16 +138,15 @@ def _idle_wait_timeout(session: CoordinationSession) -> float:
 def _idle_patrol_nudge(session: CoordinationSession) -> CoordinationEvent:
     """Periodic「无事件」patrol nudge (distinct from a per-worker TIMEOUT).
 
-    Kept so the CEO can still notice a wedged worker and ``cancel_worker`` — the
-    frequency is throttled by :func:`_idle_wait_timeout`, not removed. When the
+    Kept so the CEO still sees a wedged segment. The frequency is throttled by
+    :func:`_idle_wait_timeout`, not removed. When the
     team truly stalled (no in-flight LLM/tool), attach each worker's progress
     line so the CEO can decide without guessing.
     """
     progress = session.worker_progress_summary()
     reason = (
         f"等待团队事件超时（已完成 {len(session.completed_run_ids)}/"
-        f"{session.total_workers}）。可继续静默等待、cancel_worker（队员"
-        "疑似卡死时）、或 ask_user。"
+        f"{session.total_workers}）。可继续静默等待，或 ask_user。"
         f"\n{progress}"
     )
     return CoordinationEvent(
@@ -286,7 +285,7 @@ async def await_coordination_injection(
                 # do NOT fire a TIMEOUT patrol nudge (那会烧冤枉 LLM 轮). One short
                 # re-wait for real events; if still busy, hold (CEO would only wait).
                 # User interrupt / failure / all_completed still arrive via the queue.
-                # True stall (no in-flight) still yields so CEO can cancel_worker.
+                # True stall (no in-flight) still yields a patrol nudge.
                 if session.has_inflight_work():
                     wait_reason = "idle_active"
                     logger.info(

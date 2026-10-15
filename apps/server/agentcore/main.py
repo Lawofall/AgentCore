@@ -546,7 +546,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AgentCore",
+    title="GAgent",
     description="Multi-Agent AI Workspace API",
     version=system.app_version(),
     lifespan=lifespan,

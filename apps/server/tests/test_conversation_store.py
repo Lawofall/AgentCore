@@ -64,7 +64,7 @@ def test_metrics_error_codes_from_sentence_plus_journal() -> None:
     from agentcore.conversation.store.cloud import _metrics_error_codes
     from agentcore.core.error_codes import ErrorCode
 
-    umbrella = "AgentCore 服务暂时不可用，请稍后重试"
+    umbrella = "GAgent 服务暂时不可用，请稍后重试"
     code, error_type = _metrics_error_codes(
         run_error=umbrella,
         durable=[

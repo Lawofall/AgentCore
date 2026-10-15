@@ -41,7 +41,7 @@ async def _refuse_local_trash(
     if await resolve_local_binding(session, conv) is not None:
         raise ConflictError(
             f"本地工作区不能经 REST {action}工作区软删区；"
-            "系统回收站请在本机恢复，AgentCore/trash 兜底请在桌面端还原"
+            "系统回收站请在本机恢复，GAgent/trash 兜底请在桌面端还原"
         )
 
 

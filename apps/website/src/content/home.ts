@@ -23,7 +23,7 @@ export const t = (v: T, lang: Lang) => v[lang];
 
 /* ── 站点通用 ─────────────────────────────────────────────── */
 
-export const BRAND = "AgentCore";
+export const BRAND = "GAgent";
 
 export const NAV: { href: string; label: T }[] = [
   { href: "#build", label: { zh: "能做什么", en: "What it ships" } },
@@ -502,8 +502,8 @@ export const ROLE = {
     en: "From prompter to [[lead]]",
   },
   lead: {
-    zh: "用 ChatGPT，你得学会「怎么问」。用 AgentCore，你只需要知道「要什么」。",
-    en: "With ChatGPT you have to learn how to ask. With AgentCore you only need to know what you want.",
+    zh: "用 ChatGPT，你得学会「怎么问」。用 GAgent，你只需要知道「要什么」。",
+    en: "With ChatGPT you have to learn how to ask. With GAgent you only need to know what you want.",
   },
   stages: [
     {
@@ -522,7 +522,7 @@ export const ROLE = {
       tone: "mid" as const,
     },
     {
-      product: "AgentCore",
+      product: "GAgent",
       name: { zh: "领导者", en: "Leader" },
       body: {
         zh: "你只需要知道「要什么」。",
@@ -546,7 +546,7 @@ export const COMPARE = {
     en: "Different architecture, different [[result]]",
   },
   headOthers: { zh: "单 Agent 助手", en: "Single-agent assistant" },
-  headOurs: "AgentCore",
+  headOurs: "GAgent",
   rows: [
     {
       dim: { zh: "怎么干活", en: "How work happens" },
@@ -665,8 +665,8 @@ export const CLOSING = {
     en: "Hand the next hard thing\nto a [[team]].",
   },
   lead: {
-    zh: "AgentCore —— 让 AI 像团队一样工作。",
-    en: "AgentCore — make AI work like a team.",
+    zh: "GAgent —— 让 AI 像团队一样工作。",
+    en: "GAgent — make AI work like a team.",
   },
   /** 收口信任信号（对齐旧站能力徽章，措辞须与真实能力一致）。 */
   trust: [
@@ -713,8 +713,8 @@ export const FOOTER = {
     en: "A Multi-Agent workbench for everyone",
   },
   copyright: {
-    zh: "© 2026 AgentCore · 协作智能平台",
-    en: "© 2026 AgentCore · Collaborative Intelligence Platform",
+    zh: "© 2026 GAgent · 协作智能平台",
+    en: "© 2026 GAgent · Collaborative Intelligence Platform",
   },
   stack: "MCP · WEB · DESKTOP · MOBILE",
 };

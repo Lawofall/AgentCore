@@ -49,14 +49,6 @@ function lazySource(
   };
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => {
-    resolve = r;
-  });
-  return { promise, resolve };
-}
-
 function renderTree(
   source: FileSource,
   extra: {
@@ -76,54 +68,51 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-describe("FileTree .agentcore 抽屉", () => {
-  it("展开后露出盘上 文档/ 子项，不摊平工作稿", async () => {
+describe("FileTree 文件夹条目", () => {
+  it("盘上 GAgent 用真名，展开后才见子项", async () => {
     const src = eagerSource([
       { path: "报告.md", name: "报告.md", isDir: false },
-      { path: "AgentCore", name: "AgentCore", isDir: true },
-      { path: "AgentCore/文档", name: "文档", isDir: true },
-      { path: "AgentCore/文档/工作稿", name: "工作稿", isDir: true },
+      { path: "GAgent", name: "GAgent", isDir: true },
+      { path: "GAgent/文档", name: "文档", isDir: true },
+      { path: "GAgent/文档/工作稿", name: "工作稿", isDir: true },
       {
-        path: "AgentCore/文档/已迁入记忆",
+        path: "GAgent/文档/已迁入记忆",
         name: "已迁入记忆",
         isDir: true,
       },
       {
-        path: "AgentCore/文档/工作稿/初稿.md",
+        path: "GAgent/文档/工作稿/初稿.md",
         name: "初稿.md",
         isDir: false,
       },
     ]);
     renderTree(src);
 
-    expect(await screen.findByText(".agentcore")).toBeTruthy();
+    expect(await screen.findByText("GAgent")).toBeTruthy();
+    expect(screen.queryByText(".gagent")).toBeNull();
     expect(screen.queryByText("文档")).toBeNull();
-    expect(screen.queryByText("工作稿")).toBeNull();
 
-    fireEvent.click(screen.getByText(".agentcore"));
+    fireEvent.click(screen.getByText("GAgent"));
     expect(await screen.findByText("文档")).toBeTruthy();
     expect(screen.queryByText("工作稿")).toBeNull();
 
     fireEvent.click(screen.getByText("文档"));
     expect(await screen.findByText("工作稿")).toBeTruthy();
-    expect(screen.getByText("已迁入记忆")).toBeTruthy();
   });
 
-  it("有条目回调且盘上无 AgentCore 时仍挂虚拟 .agentcore，默认折叠", async () => {
+  it("条目直接列在这一层，不套虚拟目录", async () => {
     const src = eagerSource(
       [{ path: "报告.md", name: "报告.md", isDir: false }],
-      "workspace:workroom-virtual",
+      "workspace:workroom-entries",
     );
     renderTree(src, { renderWorkroomLead: () => <div>画像.md</div> });
 
-    expect(await screen.findByText(".agentcore")).toBeTruthy();
-    expect(screen.queryByText("画像.md")).toBeNull();
-    fireEvent.click(screen.getByText(".agentcore"));
     expect(await screen.findByText("画像.md")).toBeTruthy();
-    expect(screen.queryByText("空文件夹")).toBeNull();
+    expect(screen.getByText("报告.md")).toBeTruthy();
+    expect(screen.queryByText(".gagent")).toBeNull();
   });
 
-  it("有条目回调时，其它空目录仍显示空文件夹，不关掉整棵树", async () => {
+  it("有条目时，其它空目录仍显示空文件夹", async () => {
     const src = eagerSource(
       [
         { path: "空目录", name: "空目录", isDir: true },
@@ -133,31 +122,18 @@ describe("FileTree .agentcore 抽屉", () => {
     );
     renderTree(src, { renderWorkroomLead: () => <div>画像.md</div> });
 
-    expect(await screen.findByText(".agentcore")).toBeTruthy();
-    expect(screen.getByText("报告.md")).toBeTruthy();
+    expect(await screen.findByText("画像.md")).toBeTruthy();
     fireEvent.click(screen.getByText("空目录"));
     expect(await screen.findByText("空文件夹")).toBeTruthy();
     expect(screen.getByText("报告.md")).toBeTruthy();
-    expect(screen.getByText(".agentcore")).toBeTruthy();
   });
 
-  it("虚拟 .agentcore 可被筛选命中", async () => {
+  it("全选只数真实文件", async () => {
     const src = eagerSource(
-      [{ path: "报告.md", name: "报告.md", isDir: false }],
-      "workspace:workroom-filter-virtual",
-    );
-    renderTree(src, {
-      renderWorkroomLead: () => <div>画像.md</div>,
-      filterQuery: ".agentcore",
-    });
-
-    expect(await screen.findByText(".agentcore")).toBeTruthy();
-    expect(screen.queryByText("报告.md")).toBeNull();
-  });
-
-  it("虚拟 .agentcore 进全选行表", async () => {
-    const src = eagerSource(
-      [{ path: "报告.md", name: "报告.md", isDir: false }],
+      [
+        { path: "报告.md", name: "报告.md", isDir: false },
+        { path: "附录.md", name: "附录.md", isDir: false },
+      ],
       "workspace:workroom-select-all",
     );
     renderTree(src, { renderWorkroomLead: () => <div>画像.md</div> });
@@ -169,34 +145,10 @@ describe("FileTree .agentcore 抽屉", () => {
     expect(screen.getByText("已选择 2 项")).toBeTruthy();
   });
 
-  it("「新建条目」与 .agentcore 同一 header 行，始终可见", async () => {
+  it("新建条目按钮可见，并调用回调", async () => {
     const src = eagerSource(
       [{ path: "报告.md", name: "报告.md", isDir: false }],
-      "workspace:workroom-create-header",
-    );
-    const onCreate = vi.fn(() => true);
-    renderTree(src, {
-      renderWorkroomLead: () => <div>画像.md</div>,
-      onCreateWorkroomEntry: onCreate,
-    });
-
-    expect(await screen.findByText(".agentcore")).toBeTruthy();
-    const create = screen.getByRole("button", { name: "新建条目" });
-    expect(create).toBeTruthy();
-    expect(
-      screen.getByText(".agentcore").closest("button")?.contains(create),
-    ).toBe(false);
-    expect(create.parentElement?.contains(screen.getByText(".agentcore"))).toBe(
-      true,
-    );
-    expect(create.parentElement?.className).not.toMatch(/group-hover/);
-    expect(screen.queryByText("画像.md")).toBeNull();
-  });
-
-  it("折叠时点新建会建条目并展开抽屉，不把已展开的抽屉折回去", async () => {
-    const src = eagerSource(
-      [{ path: "报告.md", name: "报告.md", isDir: false }],
-      "workspace:workroom-create-expand",
+      "workspace:workroom-create",
     );
     const onCreate = vi.fn(async () => true);
     renderTree(src, {
@@ -206,64 +158,18 @@ describe("FileTree .agentcore 抽屉", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "新建条目" }));
     await waitFor(() => expect(onCreate).toHaveBeenCalled());
-    expect(await screen.findByText("画像.md")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "新建条目" }));
-    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(2));
     expect(screen.getByText("画像.md")).toBeTruthy();
   });
 
-  it("新建失败时不展开抽屉", async () => {
-    const src = eagerSource(
-      [{ path: "报告.md", name: "报告.md", isDir: false }],
-      "workspace:workroom-create-fail",
-    );
-    renderTree(src, {
-      renderWorkroomLead: () => <div>画像.md</div>,
-      onCreateWorkroomEntry: () => false,
-    });
-
-    fireEvent.click(await screen.findByRole("button", { name: "新建条目" }));
-    expect(screen.queryByText("画像.md")).toBeNull();
-  });
-
-  it("展开抽屉直接列出 AgentCore 子项，不挂等 文档/", async () => {
-    const hang = deferred<FileNode[]>();
-    const src = lazySource({}, "local:workroom-lazy-docs", {
-      listDir: async (dir) => {
-        if (dir === "AgentCore/文档") return hang.promise;
-        if (dir === "") {
-          return [
-            { path: "AgentCore", name: "AgentCore", isDir: true },
-            { path: "报告.md", name: "报告.md", isDir: false },
-          ];
-        }
-        if (dir === "AgentCore") {
-          return [{ path: "AgentCore/文档", name: "文档", isDir: true }];
-        }
-        return [];
-      },
-    });
-    renderTree(src);
-
-    fireEvent.click(await screen.findByText(".agentcore"));
-    expect(await screen.findByText("文档")).toBeTruthy();
-    expect(screen.queryByText("工作稿")).toBeNull();
-    expect(screen.queryByText("加载中…")).toBeNull();
-  });
-
-  it("展开抽屉时本机 watch 只覆盖根与 AgentCore", async () => {
+  it("展开 GAgent 时 watch 覆盖该目录", async () => {
     const watched: string[] = [];
     const src = lazySource(
       {
         "": [
-          { path: "AgentCore", name: "AgentCore", isDir: true },
+          { path: "GAgent", name: "GAgent", isDir: true },
           { path: "报告.md", name: "报告.md", isDir: false },
         ],
-        AgentCore: [{ path: "AgentCore/文档", name: "文档", isDir: true }],
-        "AgentCore/文档": [
-          { path: "AgentCore/文档/工作稿", name: "工作稿", isDir: true },
-        ],
+        GAgent: [{ path: "GAgent/文档", name: "文档", isDir: true }],
       },
       "local:workroom-watch-docs",
       {
@@ -275,11 +181,9 @@ describe("FileTree .agentcore 抽屉", () => {
       },
     );
     renderTree(src);
-    expect(await screen.findByText(".agentcore")).toBeTruthy();
-    fireEvent.click(screen.getByText(".agentcore"));
+    fireEvent.click(await screen.findByText("GAgent"));
     await waitFor(() => {
-      expect(watched).toContain("AgentCore");
-      expect(watched).not.toContain("AgentCore/文档");
+      expect(watched).toContain("GAgent");
     });
   });
 });

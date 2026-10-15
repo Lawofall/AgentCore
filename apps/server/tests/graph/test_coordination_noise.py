@@ -338,7 +338,7 @@ async def test_idle_timeout_bumps_backoff_and_real_event_resets(monkeypatch):
     try:
         msgs1, _ = await _inject("e-idle", timeout=2.0)
         assert session.idle_streak == 1
-        # 保留卡死巡查语义：仍发周期性 patrol nudge（可 cancel_worker）。
+        # 保留卡死巡查语义：仍发周期性 patrol nudge。
         assert "等待团队事件超时" in (msgs1[0].content or "")
         msgs2, _ = await _inject("e-idle", timeout=2.0)
         assert session.idle_streak == 2
@@ -356,16 +356,7 @@ async def test_idle_timeout_bumps_backoff_and_real_event_resets(monkeypatch):
 
 def test_coordination_tool_schemas_are_short_triggers():
     """协调套件 when-to-use 留按钮；手册走回执。"""
-    from agentcore.runtime.graph.session.tools import CancelWorkerTool
     from agentcore.tools.builtin.replan import _REPLAN_DESCRIPTION, _REPLAN_PARAMETERS
-
-    cancel = CancelWorkerTool().schema
-    assert "终止" in cancel.description
-    assert set(cancel.parameters["properties"]) == {"run_id"}
-    run_id = cancel.parameters["properties"]["run_id"]["description"]
-    assert "完整 run_id" in run_id
-    assert "同时匹配" not in run_id
-    assert "不会自动改目标" not in run_id
 
     assert "steers" not in _REPLAN_PARAMETERS["properties"]
     assert "via_user" not in str(_REPLAN_PARAMETERS)

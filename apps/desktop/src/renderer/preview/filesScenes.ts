@@ -21,17 +21,17 @@ export const FILES_PREVIEW_PROJECT_FOLDER_ID = "folder-demo";
 
 /**
  * 文件夹自己的盘上文件——预览里跟条目同屏：左栏只有文件夹树；
- * 文件夹条目经 ``renderWorkroomLead`` 进 ``.agentcore``（盘上 ``AgentCore/``），钉在同级最前。
- * 账号提示词在工具箱；文件页只挂文件夹 ``.agentcore``。
+ * 约定根是盘上 ``GAgent/``，文件树用这个真名，钉在同级最前。
+ * 账号提示词在工具箱；文件页只挂文件夹 ``GAgent``。
  */
 const PREVIEW_WORKSPACE_TREE: FileNode[] = [
   { path: "合同", name: "合同", isDir: true },
   { path: "合同/服务协议.md", name: "服务协议.md", isDir: false },
   { path: "报告.md", name: "报告.md", isDir: false },
-  { path: "AgentCore", name: "AgentCore", isDir: true },
-  { path: "AgentCore/文档", name: "文档", isDir: true },
-  { path: "AgentCore/文档/工作稿", name: "工作稿", isDir: true },
-  { path: "AgentCore/文档/工作稿/初稿.md", name: "初稿.md", isDir: false },
+  { path: "GAgent", name: "GAgent", isDir: true },
+  { path: "GAgent/文档", name: "文档", isDir: true },
+  { path: "GAgent/文档/工作稿", name: "工作稿", isDir: true },
+  { path: "GAgent/文档/工作稿/初稿.md", name: "初稿.md", isDir: false },
 ];
 
 const previewReadOnly = () => Promise.reject(new Error("预览为只读桩"));

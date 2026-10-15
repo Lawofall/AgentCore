@@ -79,7 +79,7 @@ async function confirmDanger(opts: {
     defaultId: 0,
     cancelId: 0,
     noLink: true,
-    title: "AgentCore 安全确认",
+    title: "GAgent 安全确认",
     message: opts.message,
     detail: opts.detail,
   };
@@ -106,7 +106,7 @@ async function confirmRunWithSessionOption(opts: {
     defaultId: 0,
     cancelId: 0,
     noLink: true,
-    title: "AgentCore 安全确认",
+    title: "GAgent 安全确认",
     message: opts.message,
     detail: opts.detail,
   };

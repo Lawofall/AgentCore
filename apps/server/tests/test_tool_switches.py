@@ -32,7 +32,6 @@ def test_switch_member_names_follow_the_group_and_delegate_companions():
         "write",
     )
     assert switch_member_names("graph") == (
-        "cancel_worker",
         "graph",
         "replan",
         "rewind",
@@ -42,7 +41,8 @@ def test_switch_member_names_follow_the_group_and_delegate_companions():
 
 def test_delegate_off_withholds_companions_and_leaves_debate():
     names = withheld_names(["graph"])
-    assert {"graph", "replan", "cancel_worker", "rewind"} <= names
+    assert {"graph", "replan", "rewind"} <= names
+    assert "cancel_worker" not in names
     assert "debate" not in names
     assert "ask_user" not in names
 
@@ -132,6 +132,7 @@ def test_ceo_roster_skips_delegate_and_ask_user():
     names = set(chat_tools.names)
     assert "graph" not in names
     assert "replan" not in names
+    assert "rewind" not in names
     assert "cancel_worker" not in names
     assert "ask_user" not in names
     assert "debate" in names

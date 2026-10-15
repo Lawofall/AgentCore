@@ -77,7 +77,7 @@ def test_ancestor_rule_bodies_untagged_bag_on_outermost_when_counts_differ():
 
 def test_labeled_rule_body_prefixes_filename():
     out = _labeled_rule_body("回复语言.md", "---\napply: always\n---\n用中文回复")
-    assert out == "### .agentcore/rules/回复语言.md\n用中文回复"
+    assert out == "### 回复语言.md\n用中文回复"
 
 
 def test_compose_joins_all_fragments_in_order():

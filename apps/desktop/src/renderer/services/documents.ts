@@ -19,10 +19,13 @@ import { scheduleAccountRulesMemoryRefresh } from "@/services/refreshAccountRule
  * 纠错通道 API 仍可标 ``disputed``（停注入、留盘）；产品面不提供停用 / 恢复，不要了就删。
  */
 
-/** Cloud-documents convention root name (§5.0). ≠ local disk `~/Documents/AgentCore`. */
-export const AGENTCORE_ROOT_NAME = "AgentCore";
+/** Cloud-documents convention root name. ≠ local disk `~/Documents/GAgent`. */
+export const AGENTCORE_ROOT_NAME = "GAgent";
 
-/** User-owned rules directory under the convention root (server parents new rules here). */
+/** Leftover document-tree roots. New markdown is not parented under these. */
+const CONVENTION_ROOT_NAMES = new Set([AGENTCORE_ROOT_NAME, "AgentCore"]);
+
+/** Leftover rules folder name under a convention root. Not created for new documents. */
 export const RULES_DIR_NAME = "rules";
 
 /** 每次都带上 / 自己判断何时翻开 / 碰到这类文件就带上. */
@@ -174,10 +177,8 @@ export function listDocuments(
 }
 
 /**
- * Flat list of inject-able **entries** for one scope (global when `folderId` is null).
- * Walks `AgentCore/rules/` (and one nested level) plus leftover top-level docs.
- * Does **not** group by `role` — UI partitions by scope only. The retired
- * `AgentCore/记忆` dir is not listed.
+ * Flat list of markdown entries for one scope (global when `folderId` is null).
+ * Top-level documents, plus leftovers still sitting under a convention `rules/` folder.
  */
 export async function listScopeEntries(
   folderId: string | null = null,
@@ -194,7 +195,7 @@ export async function listScopeEntries(
   const agentcores = tops.filter(
     (n) =>
       n.kind === "folder" &&
-      n.name === AGENTCORE_ROOT_NAME &&
+      CONVENTION_ROOT_NAMES.has(n.name) &&
       n.folderId === folderId,
   );
 
@@ -230,21 +231,32 @@ export async function listScopeEntries(
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "zh"));
 }
 
-/** Account-layer `AgentCore/rules/` children: 夹 + one level of documents. */
+/** Account markdown: top-level entries, plus leftovers under a convention `rules/` folder. */
 export async function listAccountPromptTree(): Promise<{
   rulesDirId: string | null;
   folders: DocumentNode[];
   documents: DocumentNode[];
 }> {
   const tops = await listDocuments(null);
+  const folders: DocumentNode[] = [];
+  const documents: DocumentNode[] = [];
+  const seen = new Set<string>();
+  const take = (node: DocumentNode, bucket: DocumentNode[]) => {
+    if (seen.has(node.id)) return;
+    seen.add(node.id);
+    bucket.push(node);
+  };
+  for (const node of tops) {
+    if (node.folderId != null || node.role !== "rule") continue;
+    if (node.kind === "folder") take(node, folders);
+    else if (node.kind === "document") take(node, documents);
+  }
   const agentcores = tops.filter(
     (n) =>
       n.kind === "folder" &&
-      n.name === AGENTCORE_ROOT_NAME &&
+      CONVENTION_ROOT_NAMES.has(n.name) &&
       n.folderId == null,
   );
-  const folders: DocumentNode[] = [];
-  const documents: DocumentNode[] = [];
   let rulesDirId: string | null = null;
   for (const ac of agentcores) {
     const kids = await listDocuments(ac.id);
@@ -256,13 +268,13 @@ export async function listAccountPromptTree(): Promise<{
     const children = await listDocuments(rulesDir.id);
     for (const child of children) {
       if (child.kind === "folder") {
-        folders.push(child);
+        take(child, folders);
         const nested = await listDocuments(child.id);
         for (const leaf of nested) {
-          if (leaf.kind === "document") documents.push(leaf);
+          if (leaf.kind === "document") take(leaf, documents);
         }
       } else if (child.kind === "document") {
-        documents.push(child);
+        take(child, documents);
       }
     }
   }
@@ -284,7 +296,7 @@ export async function listUserRules(): Promise<DocumentNode[]> {
   }
 
   const agentcores = tops.filter(
-    (n) => n.kind === "folder" && n.name === AGENTCORE_ROOT_NAME,
+    (n) => n.kind === "folder" && CONVENTION_ROOT_NAMES.has(n.name),
   );
   await Promise.all(
     agentcores.map(async (ac) => {
@@ -342,8 +354,7 @@ export function getDocument(id: string): Promise<DocumentDetail> {
 }
 
 /**
- * Create a user-owned entry in a scope (`folderId` null = global).
- * Server still parents under `AgentCore/rules/` until role 三分 is removed.
+ * Create a user-owned markdown document in a scope (`folderId` null = global).
  */
 export function createRuleDocument(
   name: string,
@@ -369,7 +380,7 @@ export function createRuleDocument(
     });
 }
 
-/** User-made 夹 under `AgentCore/rules/` (`role=rule` + `kind=folder`). */
+/** User-made folder of markdown documents (`role=rule` + `kind=folder`). */
 export function createRuleFolder(name: string): Promise<DocumentNode> {
   return api
     .post<DocumentNodeWire>("/v1/documents", {

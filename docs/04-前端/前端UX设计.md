@@ -53,7 +53,7 @@ skip_if:
 
 **操作回执**：场面或控件已经变了，不再另贴成功收据——复制、停止生成、市场安装后按钮变「已装」、多端卡已结。删除 / 归档的撤销条仍是跳过确认后的安全网。失败、降级、结果在画面外（导出 / 合回 / 安装包）仍报。
 
-**产品公告**（运营 Notice，≠ 群公告）：顶栏 Banner（同时 ≤1，紧急/维护）+ 登录后一次性弹窗（`surface=modal`，关即 dismiss）+ 消息页「AgentCore 官方」只读会话回看；Banner/Modal 软轮询；inbox 走 IM 未读。More「公告」已撤（`#/more/notices` → 官方会话）。官方号双模板 ✅（`service` 卡面看完 / `article` 摘要进应用内详情）→ [管理员后台 · 官方号双模板](/docs/05-平台与运维/管理员后台.md#官方号双模板服务通知--图文)。契约 → [管理员后台 · 产品公告](/docs/05-平台与运维/管理员后台.md#产品公告全局-notice)、[消息 IM](/docs/05-平台与运维/消息IM.md)。→ `ProductNoticeBanner`、`ProductNoticeModal`、`ProductNoticeCard`、`ProductNoticeDetail`、MessagesPage 官方号。
+**产品公告**（运营 Notice，≠ 群公告）：顶栏 Banner（同时 ≤1，紧急/维护）+ 登录后一次性弹窗（`surface=modal`，关即 dismiss）+ 消息页「GAgent 官方」只读会话回看；Banner/Modal 软轮询；inbox 走 IM 未读。More「公告」已撤（`#/more/notices` → 官方会话）。官方号双模板 ✅（`service` 卡面看完 / `article` 摘要进应用内详情）→ [管理员后台 · 官方号双模板](/docs/05-平台与运维/管理员后台.md#官方号双模板服务通知--图文)。契约 → [管理员后台 · 产品公告](/docs/05-平台与运维/管理员后台.md#产品公告全局-notice)、[消息 IM](/docs/05-平台与运维/消息IM.md)。→ `ProductNoticeBanner`、`ProductNoticeModal`、`ProductNoticeCard`、`ProductNoticeDetail`、MessagesPage 官方号。
 
 **团队展示**：回复里的过程列表仍走 `ProcessTimeline`。顶栏是正文 / 图，图不嵌进每一条回复。辩论的图仍留在那条回复里。单 Agent / 零 run **不出图**。**否决**气泡顶栏派工铬条（「本轮未派工 / N 人进行中 / 已收工」）→ [协作图 UX](/docs/04-前端/协作图与双视图UX.md)。
 

@@ -1,6 +1,6 @@
-# AgentCore 官网
+# GAgent 官网
 
-协作智能平台 AgentCore 的对外官网。
+协作智能平台 GAgent 的对外官网。
 
 ## 技术栈
 

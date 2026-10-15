@@ -22,7 +22,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-AGENTCORE_ROOT = "AgentCore"
+AGENTCORE_ROOT = "GAgent"
+# One-shot rename source. Not a second live root.
+LEGACY_AGENTCORE_ROOT = "AgentCore"
 # Visible leftover leaf under AgentCore/. Keep in sync with documents.RULES_DIR_NAME
 # (db layer stays db-only — no import from this module).
 RULES_DIR_NAME = "rules"
@@ -58,6 +60,22 @@ REVIEWS_PREFIX = "reviews/"
 DEBATE_PREFIX = "debate/"
 
 
+def adopt_legacy_convention_root(workspace_root: Path) -> bool:
+    """Rename ``AgentCore/`` → ``GAgent/`` when the new root is absent.
+
+    Both present → leave the old directory alone. Not a merge.
+    """
+    new = workspace_root / AGENTCORE_ROOT
+    old = workspace_root / LEGACY_AGENTCORE_ROOT
+    if new.exists() or not old.is_dir():
+        return False
+    try:
+        old.rename(new)
+    except OSError:
+        return False
+    return True
+
+
 def internal_zone_base(*, root: Path, internal_root: Path | None) -> Path:
     """Directory holding ``{index,trash,baselines}`` for one workspace root.
 
@@ -68,7 +86,9 @@ def internal_zone_base(*, root: Path, internal_root: Path | None) -> Path:
     conversation workspaces pass an explicit out-of-tree path because cloud
     folders nest for real (双模式工作区 §5.4).
     """
-    return internal_root if internal_root is not None else root / AGENTCORE_ROOT
+    if internal_root is not None:
+        return internal_root
+    return root / AGENTCORE_ROOT
 
 
 def internal_zone_path(
@@ -79,12 +99,13 @@ def internal_zone_path(
 
 
 def rename_legacy_rules_leaf(workspace_root: Path) -> bool:
-    """One-shot disk rename ``AgentCore/规则`` → ``AgentCore/rules``.
+    """One-shot disk rename ``GAgent/规则`` → ``GAgent/rules``.
 
-    Not a dual-path overlay: after this, the old leaf name is just gone.
-    If ``rules/`` already exists, leftover children that do not clash are
-    moved across and an empty ``规则/`` is removed.
+    Adopts a leftover ``AgentCore/`` root first. Not a dual-path overlay: after
+    this, the old leaf name is just gone. If ``rules/`` already exists, leftover
+    children that do not clash are moved across and an empty ``规则/`` is removed.
     """
+    adopt_legacy_convention_root(workspace_root)
     src = workspace_root / AGENTCORE_ROOT / LEGACY_RULES_DIR_NAME
     dst = workspace_root / AGENTCORE_ROOT / RULES_DIR_NAME
     if not src.is_dir():

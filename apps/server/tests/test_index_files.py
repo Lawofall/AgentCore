@@ -54,7 +54,7 @@ async def test_index_prunes_ignored_dirs(tmp_path: Path):
     joined = "\n".join(paths)
     assert "node_modules" not in joined
     assert ".git" not in joined
-    assert "AgentCore/index" not in joined
+    assert "GAgent/index" not in joined
     assert ".db" not in joined
 
 

@@ -101,8 +101,8 @@ _CURATED_BY_CODE: dict[str, str] = {
     ErrorCode.RATE_LIMITED: "请求过于频繁，请稍后再试。",
     ErrorCode.QUOTA_EXCEEDED: "用量已达上限，请稍后再试或调整配额。",
     ErrorCode.STREAM_ERROR: "工作区/本地文件连不上，请稍后重试或重开桌面。",
-    ErrorCode.DATABASE_UNAVAILABLE: "AgentCore 服务暂时不可用，请稍后重试",
-    "database_unavailable": "AgentCore 服务暂时不可用，请稍后重试",
+    ErrorCode.DATABASE_UNAVAILABLE: "GAgent 服务暂时不可用，请稍后重试",
+    "database_unavailable": "GAgent 服务暂时不可用，请稍后重试",
     # Engine meta codes (not ErrorCode members) — still stable on the wire.
     "retrieval_budget_exhausted": "本次任务的联网查资料次数已用完，这一次没有再去搜。",
     "args_parse_failed": "工具参数无效，已中止本次调用。",

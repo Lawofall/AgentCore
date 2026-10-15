@@ -136,33 +136,33 @@ describe("cloud FileSource listing (fc35aece root zip visibility)", () => {
     });
   });
 
-  it("AgentCore expand hides path-aware internal zones; bare index/ stays", async () => {
+  it("GAgent expand hides path-aware internal zones; bare index/ stays", async () => {
     wsListFiles.mockResolvedValue({
       files: [
-        { path: "AgentCore/index", isDir: true },
-        { path: "AgentCore/trash", isDir: true },
-        { path: "AgentCore/baselines", isDir: true },
-        { path: "AgentCore/记忆", isDir: true },
-        { path: "AgentCore/rules", isDir: true },
+        { path: "GAgent/index", isDir: true },
+        { path: "GAgent/trash", isDir: true },
+        { path: "GAgent/baselines", isDir: true },
+        { path: "GAgent/记忆", isDir: true },
+        { path: "GAgent/rules", isDir: true },
       ],
       truncated: false,
     });
 
     const source = createCloudWorkspaceSource("conv:c1", "工作区");
-    const acKids = await source.listDir("AgentCore");
-    expect(acKids.map((n) => n.path).sort()).toEqual(["AgentCore/rules"]);
+    const acKids = await source.listDir("GAgent");
+    expect(acKids.map((n) => n.path).sort()).toEqual(["GAgent/rules"]);
 
     // Root path also drops leaked zone entries if a payload includes them.
     listWorkspaceFiles.mockResolvedValue({
       files: [
-        { path: "AgentCore", isDir: true },
-        { path: "AgentCore/index", isDir: true },
+        { path: "GAgent", isDir: true },
+        { path: "GAgent/index", isDir: true },
         { path: "index", isDir: true },
       ],
       truncated: false,
     });
     const convSource = createWorkspaceSource("c1");
     const rootKids = await convSource.listDir("");
-    expect(rootKids.map((n) => n.path).sort()).toEqual(["AgentCore", "index"]);
+    expect(rootKids.map((n) => n.path).sort()).toEqual(["GAgent", "index"]);
   });
 });

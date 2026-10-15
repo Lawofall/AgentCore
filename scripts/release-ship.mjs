@@ -102,9 +102,9 @@ function checkDesktopDraft(desktopVer) {
     const j = JSON.parse(r.out);
     const names = (j.assets ?? []).map((a) => a.name);
     const need = [
-      `AgentCore-${desktopVer}-win-x64.exe`,
+      `GAgent-${desktopVer}-win-x64.exe`,
       "latest.yml",
-      `AgentCore-${desktopVer}-mac-arm64.dmg`,
+      `GAgent-${desktopVer}-mac-arm64.dmg`,
       "latest-mac.yml",
     ];
     const missing = need.filter((n) => !names.includes(n));
@@ -141,7 +141,7 @@ function checkAndroidDraft(mobileVer) {
   try {
     const j = JSON.parse(r.out);
     const names = (j.assets ?? []).map((a) => a.name);
-    const need = [`AgentCore-${mobileVer}-android.apk`];
+    const need = [`GAgent-${mobileVer}-android.apk`];
     const missing = need.filter((n) => !names.includes(n));
     console.log(
       `   · ${tag} draft=${j.isDraft} assets=${names.length}${missing.length ? ` 缺: ${missing.join(", ")}` : " （APK 齐）"}`,

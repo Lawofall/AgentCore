@@ -15,7 +15,7 @@ import pytest
 from agentcore.workspace import ignore_parity as ip
 
 ZONE_NAMES = frozenset({"index", "trash", "baselines", "versions"})
-ZONE_RELS = frozenset(f"AgentCore/{zone}" for zone in ZONE_NAMES)
+ZONE_RELS = frozenset(f"GAgent/{zone}" for zone in ZONE_NAMES)
 
 
 def _sources() -> dict[str, str]:
@@ -121,7 +121,7 @@ def test_all_three_zone_copies_parse_to_the_same_thing():
         ),
         pytest.param(
             "renderer_src",
-            "const prefix = `AgentCore/${zone}`;",
+            "const prefix = `GAgent/${zone}`;",
             "const prefix = `${zone}`;",
             "zone_rel_paths (renderer inline copy)",
             id="renderer-drops-the-agentcore-prefix",

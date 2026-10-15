@@ -3,8 +3,8 @@ import type { CapacitorConfig } from "@capacitor/cli";
 // Capacitor 壳（前端技术与架构 §五）。产品页是桌面 dist-web，不是本目录 SPA。
 // `appId` 是 iOS/Android 共用的 reverse-domain；上架后改会让 Keychain/Keystore（含 Bearer）失效。
 const config: CapacitorConfig = {
-  appId: "com.agentcore.mobile",
-  appName: "AgentCore",
+  appId: "com.gagent.mobile",
+  appName: "GAgent",
   // 产品页是桌面 renderer 的 dist-web（`pnpm build` → prepare-cap-web）。
   webDir: "../desktop/dist-web",
   // WebView + DecorView fill under transparent system bars (Cap 8 edge-to-edge).

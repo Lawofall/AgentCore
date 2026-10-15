@@ -77,7 +77,7 @@ pnpm -C apps/mobile release:android -- --skip-draft
 
 | 凭据 | 从哪拿 | 放哪 |
 |---|---|---|
-| `google-services.json` | 控制台 → 添加 Android 应用，包名逐字填 `com.agentcore.mobile` | `apps/mobile/android/app/`（已 gitignore，勿提交） |
+| `google-services.json` | 控制台 → 添加 Android 应用，包名逐字填 `com.gagent.mobile` | `apps/mobile/android/app/`（已 gitignore，勿提交） |
 | 服务账号 JSON | 控制台 → 项目设置 → 服务账号 → 生成新的私钥 | 跑后端的机器上（勿入仓） |
 
 顺带在 GCP 确认 **Firebase Cloud Messaging API (V1)** 已启用——代码打的是 v1 端点，legacy API 开着没用。

@@ -289,7 +289,7 @@ def _outside_workspace_msg(
         return path.strip()
 
     relative_fix = (
-        "请使用工作区相对路径（如 AgentCore/文档/research/report.md；"
+        "请使用工作区相对路径（如 GAgent/文档/research/report.md；"
         "`.` 或裸 `/` 表示整仓）。本机目录请直接给绝对路径或 ~/Downloads。"
     )
     if location == "server":

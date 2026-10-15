@@ -422,7 +422,7 @@ export type ReadyzDiagnosis =
     };
 
 const READY_UNREACHABLE = "连不上 AgentCore 服务，请稍后重试。";
-const READY_UNAVAILABLE = "AgentCore 服务暂时不可用，请稍后重试。";
+const READY_UNAVAILABLE = "GAgent 服务暂时不可用，请稍后重试。";
 
 function isTimeoutCause(err: unknown): boolean {
   let cur: unknown = err;
@@ -591,7 +591,7 @@ export async function bootstrapAuth(): Promise<BootstrapResult> {
   } catch (err) {
     if (isOutage(err)) {
       const reason =
-        (await diagnoseOutage()) ?? "AgentCore 服务暂时不可用，请稍后重试。";
+        (await diagnoseOutage()) ?? "GAgent 服务暂时不可用，请稍后重试。";
       logBootstrap("outage", { stage: "me", reason });
       return { kind: "unavailable", reason };
     }
@@ -617,14 +617,14 @@ export async function bootstrapAuth(): Promise<BootstrapResult> {
     }
     if (outcome === "transient") {
       const reason =
-        (await diagnoseOutage()) ?? "AgentCore 服务暂时不可用，请稍后重试。";
+        (await diagnoseOutage()) ?? "GAgent 服务暂时不可用，请稍后重试。";
       logBootstrap("outage", { stage: "refresh", reason });
       return { kind: "unavailable", reason };
     }
   } catch (err) {
     if (isOutage(err)) {
       const reason =
-        (await diagnoseOutage()) ?? "AgentCore 服务暂时不可用，请稍后重试。";
+        (await diagnoseOutage()) ?? "GAgent 服务暂时不可用，请稍后重试。";
       logBootstrap("outage", { stage: "refresh", reason });
       return { kind: "unavailable", reason };
     }

@@ -52,7 +52,7 @@ async def test_export_markdown_roundtrip(client, session_factory):
     assert body.startswith("# 导出测试")
     assert "你好世界" in body
     assert "这是回答" in body
-    assert "## 用户" in body and "## AgentCore" in body
+    assert "## 用户" in body and "## GAgent" in body
 
 
 async def test_export_json_roundtrip(client, session_factory):

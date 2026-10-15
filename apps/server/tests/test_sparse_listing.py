@@ -57,25 +57,25 @@ def test_ignored_dirs_include_git_and_ide_caches_not_bare_internal():
     assert not is_access_denied_oserror(OSError(2, "No such file"))
 
 def test_internal_zone_relpath_is_path_aware():
-    assert is_internal_zone_relpath("AgentCore/index")
-    assert is_internal_zone_relpath("AgentCore/index/cache.db")
-    assert is_internal_zone_relpath("AgentCore/trash/x")
-    assert is_internal_zone_relpath("AgentCore/baselines/m.zip")
-    assert not is_internal_zone_relpath("AgentCore")
-    assert not is_internal_zone_relpath("AgentCore/rules/x.md")
-    assert not is_internal_zone_relpath("AgentCore/记忆/y.md")
-    assert not is_internal_zone_relpath("AgentCore/文档/z.md")
+    assert is_internal_zone_relpath("GAgent/index")
+    assert is_internal_zone_relpath("GAgent/index/cache.db")
+    assert is_internal_zone_relpath("GAgent/trash/x")
+    assert is_internal_zone_relpath("GAgent/baselines/m.zip")
+    assert not is_internal_zone_relpath("GAgent")
+    assert not is_internal_zone_relpath("GAgent/rules/x.md")
+    assert not is_internal_zone_relpath("GAgent/记忆/y.md")
+    assert not is_internal_zone_relpath("GAgent/文档/z.md")
     assert not is_internal_zone_relpath("index")
     assert not is_internal_zone_relpath("trash/foo")
-    assert not is_internal_zone_relpath("foo/AgentCore/index")
+    assert not is_internal_zone_relpath("foo/GAgent/index")
 
 
 def test_ignored_dir_entry_path_aware_and_ancestor_noise():
-    assert is_ignored_dir_entry(parent_rel="AgentCore", name="index")
-    assert is_ignored_dir_entry(parent_rel="AgentCore", name="trash")
-    assert is_ignored_dir_entry(parent_rel="AgentCore", name="baselines")
+    assert is_ignored_dir_entry(parent_rel="GAgent", name="index")
+    assert is_ignored_dir_entry(parent_rel="GAgent", name="trash")
+    assert is_ignored_dir_entry(parent_rel="GAgent", name="baselines")
     assert not is_ignored_dir_entry(parent_rel="", name="index")
-    assert not is_ignored_dir_entry(parent_rel="AgentCore", name="rules")
+    assert not is_ignored_dir_entry(parent_rel="GAgent", name="rules")
     # Recursive glob under .git: parent carries the noise segment.
     assert is_ignored_dir_entry(parent_rel=".git", name="config")
     assert is_ignored_dir_entry(parent_rel="node_modules/pkg", name="index.js")
@@ -125,7 +125,7 @@ def test_ignored_file_suffixes_combine_both_tiers():
 
 
 def test_ignored_relpath_prunes_nested_noise():
-    assert is_ignored_relpath("AgentCore/index/cache.db")
+    assert is_ignored_relpath("GAgent/index/cache.db")
     assert is_ignored_relpath("node_modules/pkg/index.js")
     assert is_ignored_relpath("vendor/github.com/foo/bar.go")
     assert is_ignored_relpath("logs/dev.jsonl")
@@ -136,7 +136,7 @@ def test_ignored_relpath_prunes_nested_noise():
     assert is_ignored_relpath("debug.log")  # AI noise suffix (combined ignore)
     assert not is_ignored_relpath("src/app.ts")
     assert not is_ignored_relpath("index/app.ts")  # bare user index/
-    assert not is_ignored_relpath("AgentCore/rules/x.md")
+    assert not is_ignored_relpath("GAgent/rules/x.md")
 
 
 def test_partition_bare_lists_all_with_labels():
@@ -336,7 +336,7 @@ async def test_index_files_skips_internal_zone_db_and_media(tmp_path: Path):
     paths, _ = await ServerWorkspace(
         root=tmp_path, sandbox=SubprocessSandbox()
     ).index_files()
-    assert paths == ["AgentCore/rules/x.md", "index/user.py", "ok.txt"]
+    assert paths == ["GAgent/rules/x.md", "index/user.py", "ok.txt"]
 
 
 async def test_list_shows_media_hides_system_noise(tmp_path: Path):
@@ -355,12 +355,12 @@ async def test_list_shows_media_hides_system_noise(tmp_path: Path):
     assert "ok.txt" in names
     assert "hero.png" in names
     assert "noise.db" not in names
-    assert "AgentCore" in names
+    assert "GAgent" in names
     ac_names = {
         e.path.rsplit("/", 1)[-1]
         for e in await ServerWorkspace(
             root=tmp_path, sandbox=SubprocessSandbox()
-        ).list("AgentCore", "*")
+        ).list("GAgent", "*")
     }
     assert "rules" in ac_names
     assert "index" not in ac_names
@@ -388,15 +388,15 @@ async def test_recursive_list_hides_internal_zones_keeps_bare_index(tmp_path: Pa
         ).list(".", "**/*")
     }
     assert "ok.txt" in paths
-    assert "AgentCore" in paths
-    assert "AgentCore/rules" in paths
-    assert "AgentCore/rules/r.md" in paths
+    assert "GAgent" in paths
+    assert "GAgent/rules" in paths
+    assert "GAgent/rules/r.md" in paths
     assert "index" in paths
     assert "index/user.py" in paths
-    assert "AgentCore/index" not in paths
-    assert "AgentCore/trash" not in paths
-    assert "AgentCore/baselines" not in paths
-    assert not any(p == "AgentCore/index" or p.startswith("AgentCore/index/") for p in paths)
+    assert "GAgent/index" not in paths
+    assert "GAgent/trash" not in paths
+    assert "GAgent/baselines" not in paths
+    assert not any(p == "GAgent/index" or p.startswith("GAgent/index/") for p in paths)
     assert not any(p == ".git" or p.startswith(".git/") for p in paths)
 
 
@@ -470,7 +470,8 @@ def test_rename_legacy_rules_leaf(tmp_path: Path):
     src.mkdir(parents=True)
     (src / "r.md").write_text("keep", encoding="utf-8")
     assert rename_legacy_rules_leaf(tmp_path) is True
-    dst = tmp_path / "AgentCore" / "rules" / "r.md"
+    dst = tmp_path / "GAgent" / "rules" / "r.md"
     assert dst.read_text(encoding="utf-8") == "keep"
-    assert not (tmp_path / "AgentCore" / "规则").exists()
+    assert not (tmp_path / "AgentCore").exists()
+    assert not (tmp_path / "GAgent" / "规则").exists()
     assert rename_legacy_rules_leaf(tmp_path) is False

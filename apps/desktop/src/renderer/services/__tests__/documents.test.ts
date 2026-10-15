@@ -50,7 +50,7 @@ beforeEach(() => {
 });
 
 describe("documents client", () => {
-  it("listUserRules collects AgentCore/rules leaves and leftover top-level rules", async () => {
+  it("listUserRules collects GAgent/rules leaves and leftover top-level rules", async () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => {
       if (url === "/v1/documents") {
         return [
@@ -59,14 +59,14 @@ describe("documents client", () => {
             id: "ac-g",
             kind: "folder",
             role: "general",
-            name: "AgentCore",
+            name: "GAgent",
             folder_id: null,
           }),
           node({
             id: "ac-p",
             kind: "folder",
             role: "general",
-            name: "AgentCore",
+            name: "GAgent",
             folder_id: "F1",
           }),
           node({ id: "m", ai_maintained: true, name: "画像.md" }),
@@ -139,7 +139,7 @@ describe("documents client", () => {
             id: "ac",
             kind: "folder",
             role: "general",
-            name: "AgentCore",
+            name: "GAgent",
           }),
         ];
       }

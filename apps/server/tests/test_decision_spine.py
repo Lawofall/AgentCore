@@ -231,13 +231,13 @@ def test_tail_metrics_error_codes_print_on_error_line() -> None:
     events[-1] = {
         **events[-1],
         "finish_reason": "degraded",
-        "error": "AgentCore 服务暂时不可用，请稍后重试",
+        "error": "GAgent 服务暂时不可用，请稍后重试",
     }
     metrics = {
         "trace_id": tid,
         "status": "ok",
         "finish_reason": "degraded",
-        "error": "AgentCore 服务暂时不可用，请稍后重试",
+        "error": "GAgent 服务暂时不可用，请稍后重试",
         "error_code": "INTERNAL_ERROR",
         "error_type": "OurServiceUnavailableError",
         "delegated": True,

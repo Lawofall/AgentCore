@@ -204,11 +204,10 @@ async def _copy_snapshot(
             assert renamed is not None
             return renamed
         return updated
-    rules_dir = await docs.ensure_rules_dir(user_id, None)
     return await docs.create(
         user_id,
         name=filename,
-        parent_id=rules_dir.id,
+        parent_id=None,
         folder_id=None,
         kind="document",
         role="rule",

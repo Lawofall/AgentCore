@@ -116,7 +116,7 @@ describe("文件树的修改时间", () => {
     expect(rowNames()).toEqual(["zzz", "aaa.md"]);
   });
 
-  it("盘上 AgentCore/（.agentcore）钉在同级最前，换排序也不例外", async () => {
+  it("盘上 GAgent/ 钉在同级最前，换排序也不例外", async () => {
     const src = source([
       file("报告.md", 100, NOW),
       {
@@ -127,8 +127,8 @@ describe("文件树的修改时间", () => {
         mtimeMs: NOW,
       },
       {
-        path: "AgentCore",
-        name: "AgentCore",
+        path: "GAgent",
+        name: "GAgent",
         isDir: true,
         sizeBytes: null,
         mtimeMs: 1,
@@ -140,7 +140,7 @@ describe("文件树的修改时间", () => {
       </TooltipProvider>,
     );
 
-    expect(await screen.findByText(".agentcore")).toBeTruthy();
-    expect(rowNames()).toEqual([".agentcore", "合同", "报告.md"]);
+    expect(await screen.findByText("GAgent")).toBeTruthy();
+    expect(rowNames()).toEqual(["GAgent", "合同", "报告.md"]);
   });
 });

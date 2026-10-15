@@ -84,7 +84,7 @@ describe("noticeTemplates", () => {
     expect(seed.body).toContain("平台提供的额度暂时不可用");
     expect(seed.body).toContain("设置 · 服务商");
     expect(seed.body).toContain("接入自己的 Key");
-    expect(seed.body).toContain("AgentCore 官方");
+    expect(seed.body).toContain("GAgent 官方");
     expect(seed.body).not.toMatch(/注册|充值/);
     expect(seed.cta_label).toBe("");
     expect(seed.cta_url).toBe("");

@@ -53,9 +53,9 @@ def test_sibling_uniqueness_is_case_insensitive():
 
 
 def test_agentcore_root_name_is_reserved_only_when_nested():
-    """嵌套子文件夹不能叫 ``AgentCore``（会撞上层工作区根的约定目录）；顶层可以。"""
-    assert unique_sibling_name("AgentCore", [], nested=True) == "AgentCore (2)"
-    assert unique_sibling_name("AgentCore", []) == "AgentCore"
+    """嵌套子文件夹不能叫 ``GAgent``（会撞上层工作区根的约定目录）；顶层可以。"""
+    assert unique_sibling_name("GAgent", [], nested=True) == "GAgent (2)"
+    assert unique_sibling_name("GAgent", []) == "GAgent"
 
 
 def test_rel_path_normalization_and_projection():

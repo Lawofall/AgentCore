@@ -42,10 +42,10 @@ function trackDirectIo() {
       uploadDesktop: (version, desktopDir, channel) => {
         uploads.push({ rail: "desktop", version, desktopDir, channel });
         return {
-          present: [`AgentCore-${version}-win-x64.exe`],
+          present: [`GAgent-${version}-win-x64.exe`],
           hasWin: true,
           hasMac: false,
-          winName: `AgentCore-${version}-win-x64.exe`,
+          winName: `GAgent-${version}-win-x64.exe`,
           macName: "",
         };
       },
@@ -54,7 +54,7 @@ function trackDirectIo() {
       },
       uploadAndroid: (version, androidPath) => {
         uploads.push({ rail: "android", version, androidPath });
-        return { name: `AgentCore-${version}-android.apk` };
+        return { name: `GAgent-${version}-android.apk` };
       },
       writeAndroidFeed: async (version, name) => {
         feeds.push({ rail: "android", version, name });

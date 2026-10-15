@@ -67,7 +67,8 @@ def classify_tells(
                 continue
             if running.run_id:
                 errors.append(
-                    f"tell[{i}]：{running.run_id} 正在干。要改方向用 cancel_worker。"
+                    f"tell[{i}]：{running.run_id} 正在做。"
+                    "tell 只交给还没开始、或正停着等拍板的段。"
                 )
                 continue
 
@@ -124,7 +125,9 @@ def _plan_target(
         if rid in completed_ids:
             return None, f"{raw} 已经做完。"
         if rid in running_ids:
-            return None, f"{raw} 正在干。要改方向用 cancel_worker。"
+            return None, (
+                f"{raw} 正在做。tell 只交给还没开始、或正停着等拍板的段。"
+            )
         return rid, None
     role_hits = [
         str(getattr(n, "run_id", "") or "")

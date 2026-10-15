@@ -250,7 +250,7 @@ export function canOfferEdit(
 }
 
 /** Brand display name for the site-wide official broadcast chat. */
-export const OFFICIAL_CHAT_DISPLAY_NAME = "AgentCore 官方";
+export const OFFICIAL_CHAT_DISPLAY_NAME = "GAgent 官方";
 
 /** The list-row / thread-header name for a chat. */
 export function chatDisplayName(chat: ChatSummary): string {

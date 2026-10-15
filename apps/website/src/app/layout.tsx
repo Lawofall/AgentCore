@@ -33,15 +33,15 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-const TITLE = "AgentCore — 协作智能平台";
+const TITLE = "GAgent — 协作智能平台";
 const DESCRIPTION =
-  "AI 的下一步，不是更聪明的个体，而是更好的协作。AgentCore 让多个 AI Agent 像团队一样分工、协商、互审，共同完成复杂任务——你不是使用者，而是领导者。";
+  "AI 的下一步，不是更聪明的个体，而是更好的协作。GAgent 让多个 AI Agent 像团队一样分工、协商、互审，共同完成复杂任务——你不是使用者，而是领导者。";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   keywords: [
-    "AgentCore",
+    "GAgent",
     "协作智能",
     "Multi-Agent",
     "多 Agent 协作",
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     type: "website",
     locale: "zh_CN",
-    siteName: "AgentCore",
+    siteName: "GAgent",
   },
   twitter: {
     card: "summary_large_image",

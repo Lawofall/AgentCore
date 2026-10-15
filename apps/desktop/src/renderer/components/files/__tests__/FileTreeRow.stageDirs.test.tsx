@@ -82,12 +82,12 @@ function renderDir(
 
 describe("FileTreeRow leftover dirs", () => {
   it("存量 文档/research 当普通目录，无约定柜徽章", () => {
-    const { unmount } = renderDir("AgentCore/文档/research", "research", 2);
+    const { unmount } = renderDir("GAgent/文档/research", "research", 2);
     expect(screen.getByText("research")).toBeTruthy();
     expect(screen.queryByText("调研约定文档 · 2 件")).toBeNull();
     unmount();
 
-    renderDir("AgentCore/文档/debate", "debate", 1);
+    renderDir("GAgent/文档/debate", "debate", 1);
     expect(screen.getByText("debate")).toBeTruthy();
     expect(screen.queryByText("辩论产物 · 1 件")).toBeNull();
     renderDir("src", "src", 3);
@@ -96,18 +96,17 @@ describe("FileTreeRow leftover dirs", () => {
   });
 });
 
-describe("FileTreeRow 约定根呈现名", () => {
-  it("盘上 AgentCore/ 显示「.agentcore」，不再用磁盘真名或旧工作间名", () => {
-    const { unmount } = renderDir("AgentCore", "AgentCore", 1);
-    expect(screen.getByText(".agentcore")).toBeTruthy();
-    expect(screen.queryByText("AgentCore")).toBeNull();
+describe("FileTreeRow 约定根", () => {
+  it("盘上 GAgent/ 用磁盘真名，不盖呈现名", () => {
+    const { unmount } = renderDir("GAgent", "GAgent", 1);
+    expect(screen.getByText("GAgent")).toBeTruthy();
+    expect(screen.queryByText(".gagent")).toBeNull();
     expect(screen.queryByText("AI 工作间")).toBeNull();
     unmount();
 
-    // 嵌套的同名目录不是约定根，保持磁盘真名。
-    renderDir("src/AgentCore", "AgentCore", 1);
-    expect(screen.getByText("AgentCore")).toBeTruthy();
-    expect(screen.queryByText(".agentcore")).toBeNull();
+    renderDir("src/GAgent", "GAgent", 1);
+    expect(screen.getByText("GAgent")).toBeTruthy();
+    expect(screen.queryByText(".gagent")).toBeNull();
   });
 });
 

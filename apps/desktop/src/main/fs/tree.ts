@@ -22,10 +22,24 @@ import {
 /** Keep in sync with server `stage_dirs.RULES_DIR_NAME`. */
 const RULES_DIR_NAME = "rules";
 const LEGACY_RULES_DIR_NAME = "规则";
+/** One-shot rename source. Not a second live root. */
+const LEGACY_AGENTCORE_ROOT = "AgentCore";
 
 export async function renameLegacyRulesLeaf(
   workspaceRoot: string,
 ): Promise<void> {
+  const legacyRoot = join(workspaceRoot, LEGACY_AGENTCORE_ROOT);
+  const nextRoot = join(workspaceRoot, AGENTCORE_ROOT);
+  try {
+    await fs.access(nextRoot);
+  } catch {
+    try {
+      const st = await fs.stat(legacyRoot);
+      if (st.isDirectory()) await fs.rename(legacyRoot, nextRoot);
+    } catch {
+      // missing legacy root, or rename lost a race with the new root
+    }
+  }
   const src = join(workspaceRoot, AGENTCORE_ROOT, LEGACY_RULES_DIR_NAME);
   const dst = join(workspaceRoot, AGENTCORE_ROOT, RULES_DIR_NAME);
   try {

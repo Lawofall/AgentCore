@@ -65,19 +65,19 @@ describe("createLocalRootSource lazy workspace", () => {
     });
   });
 
-  it("listDir hides AgentCore/记忆 like trash", async () => {
+  it("listDir hides GAgent/记忆 like trash", async () => {
     listDir.mockResolvedValue({
       ok: true,
       data: [
         {
-          relPath: "AgentCore/rules",
+          relPath: "GAgent/rules",
           name: "rules",
           kind: "dir",
           size: null,
           modifiedMs: 1,
         },
         {
-          relPath: "AgentCore/记忆",
+          relPath: "GAgent/记忆",
           name: "记忆",
           kind: "dir",
           size: null,
@@ -86,8 +86,8 @@ describe("createLocalRootSource lazy workspace", () => {
       ],
     });
     const src = createLocalRootSource("r1", "project", "");
-    const kids = await src.listDir("AgentCore");
-    expect(kids.map((n) => n.path)).toEqual(["AgentCore/rules"]);
+    const kids = await src.listDir("GAgent");
+    expect(kids.map((n) => n.path)).toEqual(["GAgent/rules"]);
   });
 });
 
@@ -130,14 +130,14 @@ describe("createLocalRootSource listFileIndex", () => {
     expect(listFiles).toHaveBeenCalledWith("r1", { order: "recent" });
   });
 
-  it("hides AgentCore/记忆 from the file index", async () => {
+  it("hides GAgent/记忆 from the file index", async () => {
     listFiles.mockResolvedValue({
       ok: true,
       data: {
         files: [
-          { relPath: "AgentCore/rules/a.md", name: "a.md", mtimeMs: 1 },
-          { relPath: "AgentCore/记忆", name: "记忆", mtimeMs: 2 },
-          { relPath: "AgentCore/记忆/画像.md", name: "画像.md", mtimeMs: 3 },
+          { relPath: "GAgent/rules/a.md", name: "a.md", mtimeMs: 1 },
+          { relPath: "GAgent/记忆", name: "记忆", mtimeMs: 2 },
+          { relPath: "GAgent/记忆/画像.md", name: "画像.md", mtimeMs: 3 },
         ],
         truncated: false,
       },
@@ -146,7 +146,7 @@ describe("createLocalRootSource listFileIndex", () => {
     const listFileIndex = src.listFileIndex;
     if (listFileIndex == null) throw new Error("expected listFileIndex");
     await expect(listFileIndex()).resolves.toEqual({
-      files: [{ relPath: "AgentCore/rules/a.md", mtimeMs: 1 }],
+      files: [{ relPath: "GAgent/rules/a.md", mtimeMs: 1 }],
       truncated: false,
     });
   });

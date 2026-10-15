@@ -28,6 +28,7 @@ from agentcore.runtime.runs.artifact_paths import (
 )
 from agentcore.runtime.runs.types import Deliverable, deliverable_expects_landing
 from agentcore.workspace._paths import strip_root_label_prefix
+from agentcore.workspace.stage_dirs import AGENTCORE_ROOT, LEGACY_AGENTCORE_ROOT
 
 # Sandbox absolute paths models declare (``/workspace/…``) must compare as
 # workspace-relative — same rewrite file tools use before the containment guard.
@@ -126,7 +127,9 @@ def collect_opaque_source_data_paths(
             continue
         if is_attachment_path(path) and path not in material_set:
             continue
-        if path == "AgentCore" or path.startswith("AgentCore/"):
+        if path in (AGENTCORE_ROOT, LEGACY_AGENTCORE_ROOT) or path.startswith(
+            (f"{AGENTCORE_ROOT}/", f"{LEGACY_AGENTCORE_ROOT}/")
+        ):
             continue
         _add(path)
     return out

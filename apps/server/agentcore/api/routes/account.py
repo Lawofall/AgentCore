@@ -591,7 +591,7 @@ async def write_account_user_rule(
     user: AccountApiUser,
     session: AsyncSession = Depends(get_db),
 ) -> AccountRuleMutationResponse:
-    """Write a named user-rule markdown under .agentcore/rules/."""
+    """Write one named markdown document for this account."""
     return await _mutate_account_rule(
         user=user,
         session=session,
@@ -610,7 +610,7 @@ async def read_account_user_rule(
     user: AccountApiUser,
     session: AsyncSession = Depends(get_db),
 ) -> AccountRuleMutationResponse:
-    """Read one named user-rule markdown under .agentcore/rules/."""
+    """Read one named markdown document for this account."""
     return await _mutate_account_rule(
         user=user,
         session=session,
@@ -626,7 +626,7 @@ async def delete_account_user_rule(
     user: AccountApiUser,
     session: AsyncSession = Depends(get_db),
 ) -> AccountRuleMutationResponse:
-    """Delete one named user-rule markdown under .agentcore/rules/."""
+    """Delete one named markdown document for this account."""
     return await _mutate_account_rule(
         user=user,
         session=session,

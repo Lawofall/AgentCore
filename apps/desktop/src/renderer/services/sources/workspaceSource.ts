@@ -232,7 +232,7 @@ function isHiddenAgentCorePath(path: string): boolean {
   if (!p || p === ".") return false;
   if (isAgentCoreMemoryDirPath(p)) return true;
   for (const zone of ["index", "trash", "baselines", "versions"] as const) {
-    const prefix = `AgentCore/${zone}`;
+    const prefix = `GAgent/${zone}`;
     if (p === prefix || p.startsWith(`${prefix}/`)) return true;
   }
   return false;

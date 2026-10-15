@@ -6,6 +6,8 @@ import type { WorkspaceInfo } from "@/services/workspaces";
 
 /** Top-level names that are not user-visible desk files (convention / transfer). */
 const INTERNAL_SCRATCH_ROOT_NAMES = new Set([
+  "GAgent",
+  ".gagent",
   "AgentCore",
   ".agentcore",
   "attachments",

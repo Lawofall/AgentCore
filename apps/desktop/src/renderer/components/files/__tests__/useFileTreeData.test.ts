@@ -198,29 +198,29 @@ describe("useFileTreeData silent patch", () => {
     expect(result.current.childrenOf("docs")).toBeUndefined();
   });
 
-  it("展开 AgentCore 直接列出盘上子项，不挂等 文档/", async () => {
+  it("展开 GAgent 直接列出盘上子项，不挂等 文档/", async () => {
     const hang = deferred<FileNode[]>();
     const source = stubSource("local:workroom-docs-status", async (folder) => {
-      if (folder === "") return [dir("AgentCore")];
-      if (folder === "AgentCore") {
-        return [{ path: "AgentCore/文档", name: "文档", isDir: true }];
+      if (folder === "") return [dir("GAgent")];
+      if (folder === "GAgent") {
+        return [{ path: "GAgent/文档", name: "文档", isDir: true }];
       }
-      if (folder === "AgentCore/文档") return hang.promise;
+      if (folder === "GAgent/文档") return hang.promise;
       return [];
     });
     const { result } = renderHook(() => useFileTreeData(source));
     await waitFor(() => expect(result.current.statusOf("")).toBe("ready"));
 
     act(() => {
-      result.current.ensureDir("AgentCore");
+      result.current.ensureDir("GAgent");
     });
     await waitFor(() =>
       expect(
-        result.current.childrenOf("AgentCore")?.map((n) => n.name),
+        result.current.childrenOf("GAgent")?.map((n) => n.name),
       ).toEqual(["文档"]),
     );
-    expect(result.current.statusOf("AgentCore")).toBe("ready");
-    expect(result.current.childrenOf("AgentCore/文档")).toBeUndefined();
+    expect(result.current.statusOf("GAgent")).toBe("ready");
+    expect(result.current.childrenOf("GAgent/文档")).toBeUndefined();
   });
 });
 

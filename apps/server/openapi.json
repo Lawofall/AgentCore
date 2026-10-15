@@ -14174,7 +14174,7 @@
         "type": "object"
       },
       "SubmitRunStopRequest": {
-        "description": "User mid-flight stop for one or all workers in a delegate batch (只停这项工作).\n\nQueued while ``delegate`` drives; WaveScheduler drains via the same\n``cancel_run_ids`` channel as redirect / ``cancel_worker``, but **without** hot\nrevision or cold ``_redir`` follow-up. Does not abort the turn, kill the CEO, or\nclear FIFO queued turns.\n\n``run_id`` omitted / null → stop every in-flight and queued worker for\n``execution_id``; otherwise only that run.",
+        "description": "User mid-flight stop for one or all runs on a live graph (只停这项工作).\n\nQueued while a graph drive is live; WaveScheduler drains via the same\n``cancel_run_ids`` channel as redirect, but **without** hot\nrevision or cold ``_redir`` follow-up. Does not abort the turn, kill the CEO, or\nclear FIFO queued turns.\n\n``run_id`` omitted / null → stop every in-flight and queued run for\n``execution_id``; otherwise only that run.",
         "properties": {
           "execution_id": {
             "maxLength": 128,
@@ -17478,7 +17478,7 @@
     },
     "/v1/account/rules/delete": {
       "post": {
-        "description": "Delete one named user-rule markdown under .agentcore/rules/.",
+        "description": "Delete one named markdown document for this account.",
         "operationId": "delete_account_user_rule_v1_account_rules_delete_post",
         "parameters": [
           {
@@ -17630,7 +17630,7 @@
     },
     "/v1/account/rules/read": {
       "post": {
-        "description": "Read one named user-rule markdown under .agentcore/rules/.",
+        "description": "Read one named markdown document for this account.",
         "operationId": "read_account_user_rule_v1_account_rules_read_post",
         "parameters": [
           {
@@ -17706,7 +17706,7 @@
     },
     "/v1/account/rules/write": {
       "post": {
-        "description": "Write a named user-rule markdown under .agentcore/rules/.",
+        "description": "Write one named markdown document for this account.",
         "operationId": "write_account_user_rule_v1_account_rules_write_post",
         "parameters": [
           {
@@ -32491,7 +32491,7 @@
         ]
       },
       "post": {
-        "description": "Create a tree node (always ``ai_maintained=false`` — user-owned).\n\nA child inherits its parent's ``folder_id`` scope; a root node takes the requested scope.\nNew ``role='rule'`` documents with no parent land under ``AgentCore/rules/`` (§5.0).",
+        "description": "Create a tree node (always ``ai_maintained=false`` — user-owned).\n\nA child inherits its parent's ``folder_id`` scope; a root node takes the requested scope.",
         "operationId": "create_document_v1_documents_post",
         "parameters": [
           {

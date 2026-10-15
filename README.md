@@ -1,4 +1,4 @@
-# AgentCore
+# GAgent
 
 面向大众的 **Multi-Agent AI 工作台**——真正的 Agent 团队协作，而非「单 Agent + 子任务派发」。
 

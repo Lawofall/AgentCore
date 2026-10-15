@@ -536,7 +536,7 @@ class DebateTool:
                 logger.exception("debate.failed", motion=config.motion[:80])
                 # 终帧交给 finally 统一发（异常路径此前只 return，节点永久转圈）。
                 node_error = f"辩论执行失败：{exc}"
-                return err(f"{node_error}。可重试，或改用 delegate 单独处理。")
+                return err(f"{node_error}。可重试，或改用 graph 单独处理。")
 
             settle_moderator_node(
                 self,

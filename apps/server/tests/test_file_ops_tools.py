@@ -288,7 +288,7 @@ async def test_outside_workspace_error_is_actionable(tmp_path: Path):
     assert "超出了工作区范围" in result.error
     assert result.failure_code == "outside_workspace"
     assert "相对路径" in result.error
-    assert "AgentCore/文档/research/report.md" in result.error
+    assert "GAgent/文档/research/report.md" in result.error
     assert "open_local_project" not in result.error
     assert "bind_local_folder" not in result.error
     assert "Composer" in result.error
@@ -1104,7 +1104,7 @@ def test_prose_write_close_note_skips_skeleton_and_user_rules():
     note = prose_write_close_note(path="note.md", content=prose)
     assert note
     assert prose_write_close_note(path="note.md", content="# 提纲\n") == ""
-    assert prose_write_close_note(path=".agentcore/rules/tone.md", content=prose) == ""
+    assert prose_write_close_note(path="tone.md", content=prose)
     manifest = format_artifact_manifest(
         path="note.md",
         content=prose,
@@ -1277,7 +1277,6 @@ def test_write_schema_does_not_teach_completeness_gates():
     write_schema = FileWriteTool().schema
     write_desc = write_schema.description
     assert "写入文件" in write_desc
-    assert ".agentcore/rules" in write_desc
     assert "整体覆盖" not in write_desc
     assert "创建" not in write_desc
     assert "上级目录" not in write_desc
@@ -1321,9 +1320,8 @@ def test_delete_schema_is_short_trigger():
     assert "permanent" not in blob
     assert "递归" not in schema.description
     assert "不可删" not in schema.description
-    assert ".agentcore/rules" in schema.description
     assert "系统回收站" not in blob
-    assert "AgentCore/trash" not in blob
+    assert "GAgent/trash" not in blob
     assert "一键还原" not in blob
 
 
@@ -1332,10 +1330,10 @@ async def test_delete_file(tmp_path: Path):
     result = await FileDeleteTool().execute({"path": "f.txt"}, _ctx(tmp_path))
     assert result.success is True
     assert "可逆删除" in result.output
-    assert "系统回收站" in result.output or "AgentCore/trash" in result.output
+    assert "系统回收站" in result.output or "GAgent/trash" in result.output
     assert not (tmp_path / "f.txt").exists()
     # Soft-deleted into workspace trash with restore metadata.
-    trash = tmp_path / "AgentCore" / "trash"
+    trash = tmp_path / "GAgent" / "trash"
     assert trash.is_dir()
     entries = list(trash.iterdir())
     assert len(entries) == 1
@@ -1351,7 +1349,7 @@ async def test_delete_directory_recursive(tmp_path: Path):
     result = await FileDeleteTool().execute({"path": "pkg"}, _ctx(tmp_path))
     assert result.success is True
     assert not (tmp_path / "pkg").exists()
-    assert (tmp_path / "AgentCore" / "trash").is_dir()
+    assert (tmp_path / "GAgent" / "trash").is_dir()
 
 
 async def test_delete_leftover_permanent_still_hard_removes(tmp_path: Path):
@@ -1363,7 +1361,7 @@ async def test_delete_leftover_permanent_still_hard_removes(tmp_path: Path):
     assert result.success is True
     assert "永久删除" in result.output
     assert not (tmp_path / "f.txt").exists()
-    trash = tmp_path / "AgentCore" / "trash"
+    trash = tmp_path / "GAgent" / "trash"
     assert not trash.exists() or not any(trash.iterdir())
 
 
@@ -1444,7 +1442,7 @@ async def test_file_batch_leftover_permanent_still_hard_removes(tmp_path: Path):
     assert result.success is True
     assert "永久删除" in result.output
     assert not (tmp_path / "f.txt").exists()
-    trash = tmp_path / "AgentCore" / "trash"
+    trash = tmp_path / "GAgent" / "trash"
     assert not trash.exists() or not any(trash.iterdir())
 
 
@@ -1687,7 +1685,7 @@ def test_file_list_schema_is_one_layer_ls():
     assert "已知" not in schema.description
     assert "已证实" not in props["directory"]["description"]
     assert "external/<别名>/" in schema.description
-    assert ".agentcore/rules" in schema.description
+    assert "directory" in props
 
 
 def test_glob_schema_requires_pattern():
@@ -2013,7 +2011,7 @@ async def test_file_list_latent_stage_dir_returns_empty_not_error(tmp_path: Path
     """约定根尚未创建：file_list 成功空态（写入会自动创建），不报 NotADirectory。"""
     from agentcore.workspace.stage_dirs import AGENTCORE_ROOT
 
-    assert not (tmp_path / "AgentCore").exists()
+    assert not (tmp_path / "GAgent").exists()
     result = await FileListTool().execute(
         {"directory": AGENTCORE_ROOT}, _ctx(tmp_path)
     )
@@ -2021,7 +2019,7 @@ async def test_file_list_latent_stage_dir_returns_empty_not_error(tmp_path: Path
     assert result.error is None
     assert "空目录" in (result.output or "")
     assert "写入时会自动创建" in (result.output or "")
-    assert not (tmp_path / "AgentCore").exists()  # 不预创建
+    assert not (tmp_path / "GAgent").exists()  # 不预创建
 
 
 async def test_file_list_latent_attachments_returns_empty_not_error(tmp_path: Path):

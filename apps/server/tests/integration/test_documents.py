@@ -1,13 +1,10 @@
-"""Document 子系统第一期 integration tests (Agent记忆与知识系统 §5.7).
+"""Document subsystem integration tests.
 
-Against a real PG schema: the tree CRUD API, owner-scoping, user-rule injection (two-tier,
-read-side full injection), the ``write`` ``.agentcore/rules/`` overlay, and the one-time
-file→document migration (idempotent, non-clobbering). Auto-skips when PostgreSQL is
-unavailable (integration conftest).
+Against a real PG schema: the tree CRUD API, owner-scoping, and user-rule documents.
+Auto-skips when PostgreSQL is unavailable (integration conftest).
 """
 
 import uuid
-from pathlib import Path
 
 from agentcore.db.models import Folder
 from agentcore.db.repositories import DocumentRepository
@@ -17,10 +14,6 @@ from agentcore.memory.store import (
     PREFERENCES_MEMORY_FILE,
     topic_path,
 )
-from agentcore.tools.builtin.file_ops import FileWriteTool
-from agentcore.tools.protocol import ToolContext
-from agentcore.tools.sandbox.subprocess import SubprocessSandbox
-from agentcore.workspace.server import ServerWorkspace
 from tests.integration.conftest import register_and_login
 
 # --- Tree CRUD API ---------------------------------------------------------------------------
@@ -208,69 +201,15 @@ async def test_injection_admits_global_and_project_rules(session_factory):
     assert any("项目规则" in (d.content or "") for d in project_rules)
 
 
-# --- write .agentcore/rules → user rule ----------------------------------------------------------
-
-
-def _ctx(user_id: str) -> ToolContext:
-    return ToolContext.create(
-        execution_id="e",
-        run_id="s",
-        agent_id="a",
-        backend=ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox()),
-        user_id=user_id,
-        conversation_id="",
-    )
-
-
-async def test_file_write_rule_writes_user_rule_and_dedupes(session_factory, monkeypatch):
-    from agentcore.tools.builtin.file_ops import user_rules as overlay
-
-    monkeypatch.setattr(overlay, "async_session_factory", session_factory)
-    monkeypatch.setattr(
-        "agentcore.account.credentials.get_account_credentials", lambda: None
-    )
-    uid = str(uuid.uuid4())
-
-    res = await FileWriteTool().execute(
-        {
-            "file_path": ".agentcore/rules/回复语言.md",
-            "content": "以后都用中文",
-        },
-        _ctx(uid),
-    )
-    assert res.success is True
-    assert "已写入" in (res.output or "")
-
-    res2 = await FileWriteTool().execute(
-        {
-            "file_path": ".agentcore/rules/回复语言.md",
-            "content": "以后都用中文",
-        },
-        _ctx(uid),
-    )
-    assert res2.success is True
-    assert (res2.metadata or {}).get("already_applied") is True
-
-    async with session_factory() as session:
-        docs = await DocumentRepository(session).list_user_rule_docs(uid, None)
-    assert any("以后都用中文" in d.content and d.ai_maintained is False for d in docs)
-
-
-# --- one-time file→document migration --------------------------------------------------------
-
-
-
-
 
 # --- AgentCore/ convention layout (§5.0) ------------------------------------------------------
 
 
 async def test_new_writes_land_under_agentcore(session_factory):
-    """Memory notes + user-rule writes land under AgentCore/{记忆,rules}/."""
+    """Memory notes stay under the convention root. User rules are ordinary documents."""
     from agentcore.db.repositories.documents import (
         AGENTCORE_ROOT_NAME,
         MEMORY_ROOT_NAME,
-        RULES_DIR_NAME,
     )
 
     uid = str(uuid.uuid4())
@@ -285,11 +224,8 @@ async def test_new_writes_land_under_agentcore(session_factory):
         ac = await repo.get(mem_root.parent_id, user_id=uid)
         assert ac is not None and ac.name == AGENTCORE_ROOT_NAME and ac.parent_id is None
 
-        rules_dir = await repo.get_rules_dir(uid, None)
-        assert rules_dir is not None and rules_dir.name == RULES_DIR_NAME
-        assert rules_dir.parent_id == ac.id
         rule = await repo.get_user_rule_doc(uid, None, "必须用中文.md")
-        assert rule is not None and rule.parent_id == rules_dir.id
+        assert rule is not None and rule.parent_id is None
         assert rule.name == "必须用中文.md"
 
         note = await repo.get_memory_note(uid, CORE_MEMORY_FILE, None)
@@ -297,71 +233,28 @@ async def test_new_writes_land_under_agentcore(session_factory):
         assert mem_root.name == MEMORY_ROOT_NAME
 
 
-async def test_legacy_rules_dir_renamed_on_read(session_factory):
-    """Leftover ``规则/`` parent is renamed to ``rules/``; children stay injectable."""
-    from agentcore.db.repositories.documents import (
-        LEGACY_RULES_DIR_NAME,
-        RULES_DIR_NAME,
-    )
-
+async def test_user_rule_is_found_by_name_without_a_parent_folder(session_factory):
+    """A markdown rule is the document itself. No rules folder is created or required."""
     uid = str(uuid.uuid4())
     async with session_factory() as session:
         repo = DocumentRepository(session)
-        ac = await repo.ensure_agentcore_root(uid, None)
-        legacy = await repo.create(
-            uid,
-            name=LEGACY_RULES_DIR_NAME,
-            kind="folder",
-            role="general",
-            parent_id=ac.id,
-        )
-        await repo.create(
-            uid,
-            name="语气.md",
-            kind="document",
-            role="rule",
-            parent_id=legacy.id,
-            content="- 简洁",
-        )
-
-    async with session_factory() as session:
-        repo = DocumentRepository(session)
-        rules_dir = await repo.get_rules_dir(uid, None)
-        assert rules_dir is not None and rules_dir.name == RULES_DIR_NAME
+        await repo.upsert_user_rule_doc(uid, None, "语气.md", "- 简洁")
         rule = await repo.get_user_rule_doc(uid, None, "语气.md")
-        assert rule is not None and rule.parent_id == rules_dir.id
+        assert rule is not None and rule.parent_id is None
 
-
-
-
-async def test_injectable_rules_skip_stray_outside_convention(session_factory):
-    """With AgentCore/rules/ present, a top-level stray always-rule is not injectable."""
-
-    uid = str(uuid.uuid4())
-    async with session_factory() as session:
-        repo = DocumentRepository(session)
-        await repo.upsert_user_rule_doc(uid, None, "必须用中文.md", "- 必须用中文")
         stray = await repo.create(
             uid,
             name="漏网规则.md",
             role="rule",
-            content="- 不该注入",
+            content="- 也是一篇",
             parent_id=None,
             apply_mode="always",
         )
-        stray_id = stray.id
-        rules_dir = await repo.get_rules_dir(uid, None)
-        assert rules_dir is not None
-
         docs = await repo.list_injectable_rules(uid, None, ai_maintained=False)
-        ids = {d.id for d in docs}
-        assert stray_id not in ids
-        assert any(d.name == "必须用中文.md" for d in docs)
-        assert all(d.parent_id == rules_dir.id for d in docs)
+        assert stray.id in {d.id for d in docs}
 
 
-
-async def test_create_rule_api_auto_parents_under_agentcore(client):
+async def test_create_rule_api_does_not_parent_under_a_convention_folder(client):
     await register_and_login(client, "acrule")
     r = await client.post(
         "/v1/documents",
@@ -369,17 +262,7 @@ async def test_create_rule_api_auto_parents_under_agentcore(client):
     )
     assert r.status_code == 200, r.text
     doc = r.json()
-    assert doc["role"] == "rule" and doc["parent_id"] is not None
-    assert doc["apply_mode"] == "always"
-
-    r = await client.get(f"/v1/documents/{doc['parent_id']}")
-    assert r.status_code == 200
-    rules_dir = r.json()
-    assert rules_dir["name"] == "rules" and rules_dir["kind"] == "folder"
-
-    r = await client.get(f"/v1/documents/{rules_dir['parent_id']}")
-    assert r.status_code == 200
-    assert r.json()["name"] == "AgentCore"
+    assert doc["role"] == "rule" and doc["parent_id"] is None
 
 
 async def test_user_rule_apply_mode_always_on_demand_and_reject_conditional(

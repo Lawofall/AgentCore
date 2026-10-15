@@ -652,13 +652,7 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     dest: PromptRailFolder | "root",
   ) {
     if (dest === "root") {
-      let parent = rulesDirId;
-      if (!parent) {
-        await createRuleFolder(OTHER_FOLDER_NAME);
-        parent = (await listAccountPromptTree()).rulesDirId;
-      }
-      if (!parent) throw new Error("没找到常驻目录");
-      await reparentDocument(item.mineId, parent, "always");
+      await reparentDocument(item.mineId, null, "always");
       return;
     }
     let folderId = dest.documentId;

@@ -3,16 +3,23 @@
 from types import SimpleNamespace
 
 from agentcore.llm.provider.protocol import LLMMessage
+from agentcore.runtime.graph.facing.plan_events import plan_event
 from agentcore.runtime.graph.shape.conversation_graph import fold_conversation_graph
+from agentcore.runtime.graph.shape.opening_segment import spec_for_open_think
 from agentcore.runtime.graph.shape.step_segment import (
     StepChain,
+    bind_step_chain,
+    current_step_chain,
     open_parallel,
     open_think,
     reply_events,
+    reset_step_chain,
     seal_open_things,
     seal_think,
     things_from_calls,
 )
+from agentcore.runtime.runs.plan import RunPlan
+from agentcore.runtime.runs.types import RunSpec
 
 
 def test_one_call_is_one_segment_and_uses_the_goal():
@@ -111,6 +118,32 @@ def test_thing_label_uses_the_query_and_keeps_the_result():
     )
     message = LLMMessage(role="tool", content="晴", tool_call_id="1")
     assert things_from_calls([call], [message]) == [("遵义天气", "晴")]
+
+
+def test_plan_frame_keeps_the_thought_upstream():
+    token = bind_step_chain("exec", ["seg_prev"], goal="测试下graph功能")
+    try:
+        chain = current_step_chain()
+        assert chain is not None
+        opened = open_think(chain, run_id="cap", round_idx=0)
+        spec = spec_for_open_think(chain, depth=1, parent_run_id="cap")
+        sealed = seal_think(chain, "先看通路")
+        worker = RunSpec(run_id="w1", task="回一句", depends_on=[spec.run_id])
+        framed = plan_event(object(), "e1", RunPlan(nodes=[spec, worker]))
+        framed_ids = [run["id"] for run in framed.payload["runs"]]
+        assert spec.run_id not in framed_ids
+        assert "w1" in framed_ids
+        journal = [
+            {"kind": event.type.value, "payload": event.payload}
+            for event in (*opened, sealed, framed)
+            if event is not None
+        ]
+        graph = fold_conversation_graph([journal])
+        by_id = {segment.id: segment for segment in graph.segments}
+        assert by_id[spec.run_id].depends_on == ("seg_prev",)
+        assert by_id["w1"].depends_on == (spec.run_id,)
+    finally:
+        reset_step_chain(token)
 
 
 def test_spoken_reply_hangs_off_the_sealed_call():

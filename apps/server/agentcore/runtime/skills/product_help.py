@@ -27,7 +27,7 @@ _PRODUCT_HELP_HOW = """\
 对人用产品面说法（对话、协作图、工作区、检查点、审批）≠ `ask_user` / SSE / `run`。
 
 【这是什么】
-AgentCore 是 Multi-Agent AI 工作台：你只对接一位 CEO；轻问它直接答，该协作时组团后把结果交给你。\
+GAgent 是 Multi-Agent AI 工作台：你只对接一位 CEO；轻问它直接答，该协作时组团后把结果交给你。\
 「协作，是更高级的智能」。
 
 【官网】
@@ -48,7 +48,7 @@ HTML「完整预览」仅桌面；Web / 手机走文件面板下载。\
 「下载路径 / 下载链接」= 上述入口 ≠ 传到网盘再给人网址。
 
 【规矩】
-Cursor `.cursor/rules` / `.mdc`（仓内文件）≠ AgentCore `.agentcore/rules/*.md`（提示词条目，不在工作区树）；\
+仓内 Cursor `.cursor/rules` / `.mdc` 是仓库文件；账号里的 Markdown 是提示词条目，不在工作区树。\
 `skills/*.json` ≠ 平台规则迁移目标。
 
 【上报】

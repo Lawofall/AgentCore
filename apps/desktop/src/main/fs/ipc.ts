@@ -301,13 +301,38 @@ export function registerFsIpc(): void {
   // 复用；新建裸聊默认已切云，不再自动调用。幂等：已存在同路径的根则复用。
   ipcMain.handle(FS_CHANNELS.ensureDefaultRoot, async (): Promise<FsRoot> => {
     await ensureReady();
-    const base = join(app.getPath("documents"), "AgentCore");
-    await fs.mkdir(base, { recursive: true });
+    const documents = app.getPath("documents");
+    const next = join(documents, "GAgent");
+    const prev = join(documents, "AgentCore");
+    let moved = false;
+    try {
+      await fs.access(next);
+    } catch {
+      try {
+        const st = await fs.stat(prev);
+        if (st.isDirectory()) {
+          await fs.rename(prev, next);
+          moved = true;
+        }
+      } catch {
+        // no legacy container
+      }
+    }
+    if (moved) {
+      const prevKey = prev.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+      for (const root of getAllRoots()) {
+        if (root.sessionOnly) continue;
+        const key = root.absPath.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+        if (key === prevKey) setRoot({ ...root, absPath: next, name: "GAgent" });
+      }
+      await saveRoots();
+    }
+    await fs.mkdir(next, { recursive: true });
     let absPath: string;
     try {
-      absPath = await fs.realpath(base);
+      absPath = await fs.realpath(next);
     } catch {
-      absPath = base;
+      absPath = next;
     }
     const existing = findRootByAbsPath(absPath);
     if (existing && !existing.sessionOnly)

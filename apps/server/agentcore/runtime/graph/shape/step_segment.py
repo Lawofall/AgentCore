@@ -64,6 +64,22 @@ def current_step_chain() -> StepChain | None:
     return _chain.get()
 
 
+def published_segment_ids() -> set[str]:
+    """Ids this turn's chain has already declared.
+
+    A later delegate plan frame adds workers. Restating these ids would replace
+    the upstream the loop already wrote.
+    """
+    chain = _chain.get()
+    if chain is None:
+        return set()
+    ids = {seg for seg in chain.thing_ids if seg}
+    ids.update(seg for seg in chain.sealed if seg)
+    if chain.think_id:
+        ids.add(chain.think_id)
+    return ids
+
+
 def segment_id(run_id: str, round_idx: int, index: int, action_id: str) -> str:
     token = "".join(ch for ch in action_id if ch.isalnum())[-12:] or "x"
     return f"seg_{run_id}_{round_idx}_{index}_{token}"

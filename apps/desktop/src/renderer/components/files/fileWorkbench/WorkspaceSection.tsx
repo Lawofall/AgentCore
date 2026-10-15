@@ -37,6 +37,7 @@ import { useConversationLocationId } from "@/lib/conversationLocation";
 import type { FileSource } from "@/lib/fileSource";
 import { queryClient } from "@/lib/queryClient";
 import { workspaceKeys } from "@/lib/queryKeys";
+import { AGENTCORE_ROOT } from "@/lib/stageDirs";
 import { notifyActionError, notifyError, notifyInfo } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -481,7 +482,7 @@ export function WorkspaceSection({
       hideRootDirs={hideRootDirs}
       renderWorkroomLead={renderWorkroomLead}
       onCreateWorkroomEntry={onCreateWorkroomEntry}
-      forceExpandPaths={forceExpandWorkroom ? ["AgentCore"] : undefined}
+      forceExpandPaths={forceExpandWorkroom ? [AGENTCORE_ROOT] : undefined}
       onForceExpandApplied={onWorkroomRevealApplied}
       onOpenFile={onOpenFile}
       emptyText="还没有文件——对话里 AI 产出的文件会落在这里"

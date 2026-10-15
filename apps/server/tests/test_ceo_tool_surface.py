@@ -39,8 +39,8 @@ def _clear_coord():
 
 def _fake_delegate(*, supervised: bool = False, depth: int = 0):
     d = MagicMock()
-    d.schema = MagicMock(name="delegate")
-    d.schema.name = "delegate"
+    d.schema = MagicMock(name="graph")
+    d.schema.name = "graph"
     d._sink = MagicMock()
     d._supervised = object() if supervised else None
     # depth≥1 = 队员自带的嵌套 delegate 句柄（spawn_lead_subteam）；协调套件不归它。
@@ -59,7 +59,7 @@ def _activate_coordination(eid: str) -> None:
 
 
 def test_solo_worker_enters_coordination_surface():
-    """验收：total_workers=1 的活跃 session 也注入 cancel_worker 等协调工具面。"""
+    """验收：total_workers=1 的活跃 session 也挂 replan，模型面没有 cancel_worker。"""
     eid = "exec-solo-coord"
     token = current_execution_id.set(eid)
     try:
@@ -79,7 +79,7 @@ def test_solo_worker_enters_coordination_surface():
             delegate_tool=delegate,
             include=True,
         )
-        assert "cancel_worker" in reg.names
+        assert "cancel_worker" not in reg.names
         assert "replan" in reg.names
     finally:
         clear_active_coordination()
@@ -97,7 +97,7 @@ def test_idle_surface_keeps_gated_tools_on_opening_table():
         include=False,
     )
     names = set(reg.names)
-    assert "delegate" in names
+    assert "graph" in names
     assert names >= COORDINATION_GATED_TOOLS
 
 
@@ -117,7 +117,7 @@ def test_coordination_surface_includes_gated_tools():
             include=True,
         )
         names = set(reg.names)
-        assert "delegate" in names
+        assert "graph" in names
         assert names >= COORDINATION_GATED_TOOLS
     finally:
         clear_active_coordination()
@@ -133,8 +133,9 @@ def test_promote_on_root_delegate_adds_control_tools_and_replan():
     assert promote_coordination_surface_if_needed(reg) is True
     names = set(reg.names)
     assert "replan" in names
-    assert "delegate" in names
-    assert "cancel_worker" in names
+    assert "rewind" in names
+    assert "graph" in names
+    assert "cancel_worker" not in names
 
 
 def test_promote_on_coordination_adds_full_surface():
@@ -148,7 +149,7 @@ def test_promote_on_coordination_adds_full_surface():
 
         assert promote_coordination_surface_if_needed(reg) is True
         assert set(reg.names) >= COORDINATION_GATED_TOOLS
-        assert "delegate" in reg.names
+        assert "graph" in reg.names
         # Idempotent
         assert promote_coordination_surface_if_needed(reg) is False
     finally:
@@ -167,12 +168,12 @@ def test_harvest_close_keeps_replan_and_control_tools():
         reg.register(delegate)
         assert promote_coordination_surface_if_needed(reg) is True
         assert "replan" in reg.names
-        assert "cancel_worker" in reg.names
+        assert "cancel_worker" not in reg.names
 
         clear_active_coordination()
         assert promote_coordination_surface_if_needed(reg) is False
         names = set(reg.names)
-        assert "delegate" in names
+        assert "graph" in names
         assert names >= COORDINATION_GATED_TOOLS
     finally:
         clear_active_coordination()
@@ -189,13 +190,13 @@ def test_partial_failure_keeps_control_tools_on_table():
         delegate = _fake_delegate()
         reg.register(delegate)
         assert promote_coordination_surface_if_needed(reg) is True
-        assert "cancel_worker" in reg.names
+        assert "cancel_worker" not in reg.names
 
         delegate._supervised = object()
         clear_active_coordination()
         assert promote_coordination_surface_if_needed(reg) is False
         assert "replan" in reg.names
-        assert "cancel_worker" in reg.names
+        assert "cancel_worker" not in reg.names
     finally:
         clear_active_coordination()
         current_execution_id.reset(token)
@@ -230,11 +231,11 @@ def test_ensure_before_llm_installs_control_tools_when_coordination_live():
         assert "cancel_worker" not in reg.names
 
         assert ensure_coordination_surface_before_llm(reg) is True
-        assert "cancel_worker" in reg.names
+        assert "cancel_worker" not in reg.names
         assert set(reg.names) >= COORDINATION_GATED_TOOLS
         # 再次调用不重复注册
         assert ensure_coordination_surface_before_llm(reg) is False
-        assert "cancel_worker" in reg.names
+        assert "cancel_worker" not in reg.names
     finally:
         clear_active_coordination()
         current_execution_id.reset(token)
@@ -243,8 +244,7 @@ def test_ensure_before_llm_installs_control_tools_when_coordination_live():
 def test_member_never_gets_coordination_suite_from_parent_session():
     """回归钉：队员不得因父图协调活跃而拿到 CEO 协调工具面。
 
-    队员 allowed_tools=None（不限名单），注册即被 offer——depth=1 不得拿到
-    cancel_worker。
+    队员 allowed_tools=None（不限名单），注册即被 offer——depth=1 有 replan，没有 rewind。
     """
     eid = "exec-parent-graph"
     token = current_execution_id.set(eid)
@@ -256,6 +256,7 @@ def test_member_never_gets_coordination_suite_from_parent_session():
 
         assert promote_coordination_surface_if_needed(reg) is True
         assert "replan" in reg.names
+        assert "rewind" not in reg.names
         assert "cancel_worker" not in reg.names
     finally:
         clear_active_coordination()
@@ -269,6 +270,7 @@ def test_nested_lead_still_gets_replan_on_supervised_yield():
 
     assert promote_coordination_surface_if_needed(reg) is True
     assert "replan" in reg.names
+    assert "rewind" not in reg.names
     assert "cancel_worker" not in reg.names
 
 
@@ -278,6 +280,7 @@ def test_nested_lead_opening_includes_replan_without_parent_controls():
     reg.register(_fake_delegate(supervised=False, depth=1))
     assert promote_coordination_surface_if_needed(reg) is True
     assert "replan" in reg.names
+    assert "rewind" not in reg.names
     assert "cancel_worker" not in reg.names
 
 
@@ -312,7 +315,7 @@ def test_resync_binding_follows_hot_graph_merge():
         # 工具表开场已钉死，不靠回绑才挂控制面。
         assert coordination_surface_active() is False
         assert promote_coordination_surface_if_needed(reg) is True
-        assert "cancel_worker" in reg.names
+        assert "cancel_worker" not in reg.names
 
         assert resync_coordination_binding(reg) is True
         assert current_execution_id.get() == host
@@ -400,12 +403,12 @@ def test_assembled_coordination_live_offers_control_tools_on_tool_defs():
     try:
         _activate_coordination(eid)
         reg = _assemble()
-        assert "cancel_worker" in reg.names
+        assert "cancel_worker" not in reg.names
         defs = reg.get_openai_definitions()
         names = {
             (d.get("function") or {}).get("name") or d.get("name") for d in defs
         }
-        assert "cancel_worker" in names
+        assert "cancel_worker" not in names
     finally:
         clear_active_coordination()
         current_execution_id.reset(token)
@@ -413,7 +416,7 @@ def test_assembled_coordination_live_offers_control_tools_on_tool_defs():
 
 def test_always_on_tools_not_in_gated_set():
     """delegate / ask_user / debate 不进协调闸；debate 开场按需。"""
-    for name in ("delegate", "ask_user", "debate", "consult"):
+    for name in ("graph", "ask_user", "debate", "consult"):
         assert name not in COORDINATION_GATED_TOOLS
 
 
@@ -450,7 +453,7 @@ def test_coordination_period_hint_lives_on_start_echo():
 
 
 def test_control_tools_in_gated_set():
-    assert "cancel_worker" in COORDINATION_GATED_TOOLS
+    assert "cancel_worker" not in COORDINATION_GATED_TOOLS
     assert "replan" in COORDINATION_GATED_TOOLS
 
 
@@ -521,7 +524,9 @@ def test_assembled_idle_surface_split():
     """
     reg = _assemble()
     names = set(reg.names)
-    assert {"delegate", "ask_user", "debate"} <= names
+    assert {"graph", "ask_user", "debate"} <= names
+    assert "delegate" not in names
+    assert "cancel_worker" not in names
     assert names >= COORDINATION_GATED_TOOLS
     offered = {
         (d.get("function") or {}).get("name") or d.get("name")
@@ -567,7 +572,7 @@ def test_register_always_ceo_tools_declare_loop():
     assert "create_folder" not in names
     assert "consult" not in names  # CeoWire.CONSULT — hand-wired, not ALWAYS helper
     assert names.isdisjoint(
-        {"delegate", "debate", "ask_user", "remember", "code_search"}
+        {"graph", "delegate", "debate", "ask_user", "remember", "code_search"}
     )
 
 
@@ -588,7 +593,9 @@ def test_assembled_coordination_surface_split():
     try:
         _activate_coordination(eid)
         names = set(_assemble().names)
-        assert {"delegate", "ask_user", "debate"} <= names
+        assert {"graph", "ask_user", "debate"} <= names
+        assert "delegate" not in names
+        assert "cancel_worker" not in names
         assert names >= COORDINATION_GATED_TOOLS
     finally:
         clear_active_coordination()

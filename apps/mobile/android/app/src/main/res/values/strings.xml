@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">AgentCore</string>
-    <string name="title_activity_main">AgentCore</string>
-    <string name="package_name">com.agentcore.mobile</string>
-    <string name="custom_url_scheme">com.agentcore.mobile</string>
+    <string name="app_name">GAgent</string>
+    <string name="title_activity_main">GAgent</string>
+    <string name="package_name">com.gagent.mobile</string>
+    <string name="custom_url_scheme">com.gagent.mobile</string>
 </resources>

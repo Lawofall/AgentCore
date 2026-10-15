@@ -171,16 +171,21 @@ describe("EntriesSection (global)", () => {
 
   it("does not fetch always-quota and does not render a usage meter", async () => {
     renderScope("global");
-    expect(await screen.findByText("还没有全局条目")).toBeTruthy();
+    await waitFor(() => expect(listScopeEntries).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText("加载中…")).toBeNull());
+    expect(screen.queryByText("还没有全局条目")).toBeNull();
     expect(screen.queryByText(/还剩约/)).toBeNull();
     expect(screen.queryByText(/快满了/)).toBeNull();
     expect(screen.queryByLabelText("新建条目")).toBeNull();
   });
 
-  it("shows an empty hint when the scope has no documents yet", async () => {
+  it("renders nothing when the scope has no documents yet", async () => {
     vi.mocked(listScopeEntries).mockResolvedValue([]);
-    const { onOpen } = renderScope("global");
-    expect(await screen.findByText("还没有全局条目")).toBeTruthy();
+    const { onOpen } = renderScope("folder");
+    await waitFor(() => expect(listScopeEntries).toHaveBeenCalledWith("F1"));
+    await waitFor(() => expect(screen.queryByText("加载中…")).toBeNull());
+    expect(screen.queryByText("本文件夹还没有条目")).toBeNull();
+    expect(screen.queryByText("还没有全局条目")).toBeNull();
     expect(screen.queryByText("偏好.md")).toBeNull();
     expect(screen.queryByText("画像.md")).toBeNull();
     expect(onOpen).not.toHaveBeenCalled();

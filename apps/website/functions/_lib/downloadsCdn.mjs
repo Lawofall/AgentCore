@@ -88,17 +88,17 @@ export function desktopSyncDestPrefixes(channel = DESKTOP_CHANNEL_DEFAULT) {
 
 /** @param {string} version */
 export function winInstallerFilename(version) {
-  return `AgentCore-${version}-win-x64.exe`;
+  return `GAgent-${version}-win-x64.exe`;
 }
 
 /** @param {string} version */
 export function macDmgFilename(version) {
-  return `AgentCore-${version}-mac-arm64.dmg`;
+  return `GAgent-${version}-mac-arm64.dmg`;
 }
 
 /** @param {string} version */
 export function androidApkFilename(version) {
-  return `AgentCore-${version}-android.apk`;
+  return `GAgent-${version}-android.apk`;
 }
 
 /** @param {string} version */

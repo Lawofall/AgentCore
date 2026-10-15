@@ -13,7 +13,7 @@ export const HERO = {
   title: { zh: "把整支团队，装进你的电脑", en: "Put the whole team on your desk" },
   lead: {
     zh: "本地文件、系统级工具、更长的会话。桌面客户端与网页版同源，只是能更深地接入你的机器。",
-    en: "Local files, system-level tools, longer sessions. The desktop client is the same AgentCore — with deeper access to your machine.",
+    en: "Local files, system-level tools, longer sessions. The desktop client is the same GAgent — with deeper access to your machine.",
   },
   cta: { zh: "下载适用于本机的版本", en: "Download for your device" },
   detecting: { zh: "识别中…", en: "DETECTING…" },
@@ -105,8 +105,8 @@ export const REQUIREMENTS = {
 export const AUTO_UPDATE = {
   eyebrow: { zh: "检查更新", en: "Check for updates" },
   body: {
-    zh: "已安装用户可在设置 → 关于检查更新。有新版本时应用会把安装包下载到本机「下载」文件夹，打开后按向导覆盖安装。macOS 内测包未签名；替换后若提示「已损坏」，在终端执行 xattr -cr /Applications/AgentCore.app 再打开。",
-    en: "Installed users can check for updates in Settings → About. New versions download the installer to your Downloads folder; open it and follow the wizard. Unsigned macOS builds: if the app is reported damaged after replacing, run xattr -cr /Applications/AgentCore.app in Terminal, then open it.",
+    zh: "已安装用户可在设置 → 关于检查更新。有新版本时应用会把安装包下载到本机「下载」文件夹，打开后按向导覆盖安装。macOS 内测包未签名；替换后若提示「已损坏」，在终端执行 xattr -cr /Applications/GAgent.app 再打开。",
+    en: "Installed users can check for updates in Settings → About. New versions download the installer to your Downloads folder; open it and follow the wizard. Unsigned macOS builds: if the app is reported damaged after replacing, run xattr -cr /Applications/GAgent.app in Terminal, then open it.",
   },
 };
 
@@ -131,12 +131,12 @@ export const INSTALL_STEPS: Partial<Record<PlatformId, T[]>> = {
   ],
   mac: [
     {
-      zh: "下载 DMG，将 AgentCore 拖入「应用程序」文件夹。",
-      en: "Download the DMG and drag AgentCore into Applications.",
+      zh: "下载 DMG，将 GAgent 拖入「应用程序」文件夹。",
+      en: "Download the DMG and drag GAgent into Applications.",
     },
     {
-      zh: "内测包未签名。若提示「已损坏」或无法验证开发者：打开「终端」，执行 xattr -cr /Applications/AgentCore.app，再启动。这是系统拦截，不是安装包坏了。",
-      en: "The beta build is unsigned. If macOS says the app is damaged or the developer cannot be verified, open Terminal, run xattr -cr /Applications/AgentCore.app, then launch it. That's the system blocking an unsigned app, not a broken download.",
+      zh: "内测包未签名。若提示「已损坏」或无法验证开发者：打开「终端」，执行 xattr -cr /Applications/GAgent.app，再启动。这是系统拦截，不是安装包坏了。",
+      en: "The beta build is unsigned. If macOS says the app is damaged or the developer cannot be verified, open Terminal, run xattr -cr /Applications/GAgent.app, then launch it. That's the system blocking an unsigned app, not a broken download.",
     },
     {
       zh: "注册账号并登录；设置 → 关于 可检查更新。",

@@ -195,12 +195,12 @@ function UpdateSection() {
  *
  * 原来这里是 `BrandMark`（含 text-xl 字标）+ 一行 text-base slogan 摞在页头之上，
  * 与 `PageHeader` 的 h1 同级同字号，看上去是两个并列大标题。产品名由页头
- * 「关于 AgentCore」承载，这里降级成一张说明卡：图标 + 定位语。
+ * 「关于 GAgent」承载，这里降级成一张说明卡：图标 + 定位语。
  */
 function BrandCard() {
   return (
     <Card className="flex items-center gap-4 px-4 py-4">
-      <BrandMarkIcon size={36} title="AgentCore" />
+      <BrandMarkIcon size={36} title="GAgent" />
       <div className="min-w-0">
         <p className="text-sm font-medium text-foreground">
           协作，是更高级的智能。
@@ -328,7 +328,7 @@ export function AboutSettings() {
 
   return (
     <div>
-      <PageHeader title="关于 AgentCore" />
+      <PageHeader title="关于 GAgent" />
 
       <SettingsStack>
         <BrandCard />

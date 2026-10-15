@@ -1,8 +1,8 @@
 """CEO orchestration tool surface: idle vs coordination gating.
 
 Injection aligns with the coordination tools' execution gate
-(``active_coordination``): ``delegate`` + ``ask_user`` stay always-on;
-replan and the root control tools are on the opening table too. Idle calls
+(``active_coordination``): ``graph`` + ``ask_user`` stay always-on;
+replan and rewind are on the opening table too. Idle calls
 fail at execute. Never demote mid-chain (prefix cache).
 
 Also owns COST-004 tools-surface observation (exact JSON chars + a token band)
@@ -23,11 +23,9 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# 根 CEO 协调控制面开场即在表上；嵌套 lead 只有 replan。Idle 调用在 execute 失败。
-# 对停着的人说话走 replan.tell，不另立工具。
-_ROOT_COORD_TOOLS: tuple[str, ...] = ("cancel_worker",)
-
-COORDINATION_GATED_TOOLS: frozenset[str] = frozenset(("replan", *_ROOT_COORD_TOOLS))
+# 根 CEO 开场表有 replan 与 rewind；嵌套 lead 只有 replan。Idle 调用在 execute 失败。
+# 对正停着等拍板、或还没开始的段说话走 replan.tell。正在做的段不由模型单独停。
+COORDINATION_GATED_TOOLS: frozenset[str] = frozenset(("replan",))
 
 # A tool schema is Chinese prose (every ``description``) wrapped in ASCII JSON, and the two
 # halves tokenize an order of magnitude apart: a Han character costs about one token on
@@ -70,13 +68,10 @@ def _owns_coordination(delegate: Any) -> bool:
     """True only for the root delegate handle — the one that can own a coordination session.
 
     ``should_enter_coordination`` only ever arms a session at ``depth == 0``, but a
-    ``depth >= 1`` worker carries its own nested ``delegate`` handle AND shares the
-    parent's ``execution_id`` — so an identity-blind promote hands
-    ``cancel_worker`` to plain members, which are then offered for real because
-    workers run unrestricted (``allowed_tools=None``). Nested leads keep
-    ``delegate`` from round 1; ``replan`` is promoted here once ``_supervised``
-    is set (same idle→coordination idea as the CEO). The LeadSubteam bundle
-    still mints both (dispose / 波边界 binding).
+    ``depth >= 1`` worker carries its own nested ``graph`` handle AND shares the
+    parent's ``execution_id``. Nested leads keep ``graph`` from round 1 and gain
+    ``replan`` here; ``rewind`` stays on the root. The LeadSubteam bundle still
+    mints both (dispose / 波边界 binding).
     """
     depth = getattr(delegate, "_depth", 0)
     return depth == 0 if isinstance(depth, int) else False
@@ -147,12 +142,11 @@ def register_coordination_surface(
     delegate_tool: GraphTool,
     include: bool,
 ) -> None:
-    """Put replan + root control tools on the opening table. ``include`` is ignored.
+    """Put replan + rewind on the opening table. ``include`` is ignored.
 
     Idle calls fail at execute. Never unregister mid-chain (prefix cache).
     """
     del include
-    from agentcore.runtime.graph.session.tools import CancelWorkerTool
     from agentcore.tools.builtin.replan import ReplanTool
     from agentcore.tools.builtin.rewind import RewindTool
 
@@ -160,8 +154,6 @@ def register_coordination_surface(
         chat_tools.register(ReplanTool(delegate=delegate_tool))
     if chat_tools.get_optional("rewind") is None:
         chat_tools.register(RewindTool(delegate=delegate_tool))
-    if chat_tools.get_optional("cancel_worker") is None:
-        chat_tools.register(CancelWorkerTool())
 
 
 def ensure_coordination_surface_before_llm(chat_tools: ToolRegistry) -> bool:
@@ -172,7 +164,7 @@ def ensure_coordination_surface_before_llm(chat_tools: ToolRegistry) -> bool:
 def promote_coordination_surface_if_needed(chat_tools: ToolRegistry) -> bool:
     """Ensure gated tools are registered. Never drop them mid-chain.
 
-    Root CEO (depth 0): control tools + replan stay on the opening table.
+    Root CEO (depth 0): replan + rewind stay on the opening table.
     Nested leads (depth ≥ 1): replan only.
     Idle calls fail at execute. Removing tools would forfeit the prefix cache.
     """
@@ -181,7 +173,6 @@ def promote_coordination_surface_if_needed(chat_tools: ToolRegistry) -> bool:
         return False
 
     depth = int(getattr(delegate, "_depth", 0) or 0)
-    from agentcore.runtime.graph.session.tools import CancelWorkerTool
     from agentcore.tools.builtin.replan import ReplanTool
 
     added: list[str] = []
@@ -195,10 +186,6 @@ def promote_coordination_surface_if_needed(chat_tools: ToolRegistry) -> bool:
 
         chat_tools.register(RewindTool(delegate=delegate))  # type: ignore[arg-type]
         added.append("rewind")
-
-    if depth == 0 and chat_tools.get_optional("cancel_worker") is None:
-        chat_tools.register(CancelWorkerTool())
-        added.append("cancel_worker")
 
     if added:
         logger.info(

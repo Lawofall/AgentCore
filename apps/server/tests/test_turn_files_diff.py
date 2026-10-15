@@ -79,9 +79,9 @@ async def test_local_baseline_capture_writes_zip(tmp_path: Path):
     # AgentCore internal zones are pruned from the archive; visible dirs stay.
     entries = read_archive_entries(zip_path.read_bytes())
     assert "src/a.py" in entries
-    assert not any(p.startswith("AgentCore/baselines/") for p in entries)
-    assert not any(p.startswith("AgentCore/index/") for p in entries)
-    assert not any(p.startswith("AgentCore/trash/") for p in entries)
+    assert not any(p.startswith("GAgent/baselines/") for p in entries)
+    assert not any(p.startswith("GAgent/index/") for p in entries)
+    assert not any(p.startswith("GAgent/trash/") for p in entries)
 
 
 @pytest.mark.asyncio
@@ -287,7 +287,7 @@ async def test_local_baseline_prune_never_touches_named_versions(tmp_path: Path,
     monkeypatch.setattr(settings, "workspace_local_baseline_retention_days", 1)
     root = _make_workspace(tmp_path)
     _stub_baseline(root, "old", age_minutes=90 * 24 * 60)
-    version_dir = root / "AgentCore" / "versions" / "20250101T000000Z-abcd1234"
+    version_dir = root / "GAgent" / "versions" / "20250101T000000Z-abcd1234"
     version_dir.mkdir(parents=True)
     (version_dir / "content.zip").write_bytes(b"PK\x03\x04version")
     (version_dir / "meta.json").write_text("{}", encoding="utf-8")

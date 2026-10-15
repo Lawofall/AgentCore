@@ -226,7 +226,7 @@ def test_overlay_530_after_progress_is_selected_model():
     assert (
         overlay_progress_failure_message(
             code="INTERNAL_ERROR",
-            message="AgentCore 服务暂时不可用，请稍后重试",
+            message="GAgent 服务暂时不可用，请稍后重试",
             context={"upstream_status": 530},
         )
         == SELECTED_MODEL_UNAVAILABLE_MESSAGE

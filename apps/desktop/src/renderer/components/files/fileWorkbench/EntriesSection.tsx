@@ -181,16 +181,7 @@ export function EntriesSection({
             加载失败，点此重试
           </button>
         )
-      ) : rows.length === 0 ? (
-        <div
-          className="flex flex-col gap-1 py-1"
-          style={{ paddingLeft: leafPad }}
-        >
-          <p className="text-xs text-muted-foreground/60">
-            {scope.kind === "global" ? "还没有全局条目" : "本文件夹还没有条目"}
-          </p>
-        </div>
-      ) : (
+      ) : rows.length === 0 ? null : (
         rows.map((doc) => renderDocRow(doc))
       )}
     </div>

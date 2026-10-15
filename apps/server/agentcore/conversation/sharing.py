@@ -26,7 +26,7 @@ from markdown_it import MarkdownIt
 from agentcore.db.models import Message
 
 _SHARED_ROLES = ("user", "assistant")
-_ROLE_LABELS = {"user": "用户", "assistant": "AgentCore"}
+_ROLE_LABELS = {"user": "用户", "assistant": "GAgent"}
 
 # Safe-by-default Markdown renderer for untrusted content (see module security note).
 # html=False escapes raw HTML; linkify stays off (no auto-linking, no extra dep).
@@ -140,7 +140,7 @@ def render_share_html(*, title: str, snapshot: Sequence[dict], created_at: datet
         )
     body = "\n".join(parts) if parts else '<p class="meta">（空对话）</p>'
 
-    meta_line = f"由 AgentCore 分享 · {date_str}" if date_str else "由 AgentCore 分享"
+    meta_line = f"由 GAgent 分享 · {date_str}" if date_str else "由 GAgent 分享"
 
     return (
         "<!doctype html>\n"

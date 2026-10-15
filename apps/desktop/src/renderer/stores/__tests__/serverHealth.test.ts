@@ -47,10 +47,10 @@ describe("useServerHealthStore edge logs", () => {
 
     useServerHealthStore
       .getState()
-      .markOffline("AgentCore 服务暂时不可用，请稍后重试。", "heartbeat");
+      .markOffline("GAgent 服务暂时不可用，请稍后重试。", "heartbeat");
     expect(logEventMock).toHaveBeenCalledTimes(1);
     expect(useServerHealthStore.getState().reason).toBe(
-      "AgentCore 服务暂时不可用，请稍后重试。",
+      "GAgent 服务暂时不可用，请稍后重试。",
     );
   });
 

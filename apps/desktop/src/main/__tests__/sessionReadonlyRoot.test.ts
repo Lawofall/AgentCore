@@ -331,7 +331,7 @@ describe("session grant delete stays reversible", () => {
   });
 
   it("keeps hard-delete of internal zones on the product's own workspace root", async () => {
-    const zone = join(dir, "AgentCore", "index");
+    const zone = join(dir, "GAgent", "index");
     await mkdir(zone, { recursive: true });
     await writeFile(join(zone, "cache.db"), "x");
     const workspaceRoot: StoredRoot = {
@@ -341,11 +341,11 @@ describe("session grant delete stays reversible", () => {
     };
 
     const r = await executeWorkspaceOp(workspaceRoot, "delete", {
-      path: "AgentCore/index",
+      path: "GAgent/index",
     });
     expect(r.ok).toBe(true);
     expect(trashItem).not.toHaveBeenCalled();
-    expect(await readdir(join(dir, "AgentCore"))).toEqual([]);
+    expect(await readdir(join(dir, "GAgent"))).toEqual([]);
   });
 });
 

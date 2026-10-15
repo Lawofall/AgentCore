@@ -8,4 +8,4 @@
 
 应用内引用品牌图时，从本目录复制或经构建脚本同步到目标 `public/`，**不要在各 app 各存一份未同步的副本**。
 
-连字母版：`agentcore-icon.svg`（方图底 `#111217`，字形 `#FFFFFF`）。导出 `agentcore-icon-cropped.png`（满铺、四角不透明 → macOS 打包 `apps/desktop/build/icon-mac.png`）；`agentcore-icon-rounded.png`（四角透明 squircle → Windows/Linux 打包 `icon-win.png` 与运行时 `apps/desktop/resources/icon.png`）。界面里的标只取连字、跟文字色，不贴这张方图。
+连字母版：`agentcore-icon.svg`（方图底 `#111217`，字形 `#FFFFFF`，竖笔右倾 12°）。导出 `agentcore-icon-cropped.png`（满铺、四角不透明 → macOS 打包 `apps/desktop/build/icon-mac.png`）；`agentcore-icon-rounded.png`（四角透明圆角矩形，半径为边长的 22% → Windows/Linux 打包 `icon-win.png` 与运行时 `apps/desktop/resources/icon.png`）。界面里的标只取连字、跟文字色，不贴这张方图。

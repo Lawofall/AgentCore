@@ -653,7 +653,7 @@ describe("PromptCatalog 拖拽搬家", () => {
     await renderMineCatalog();
     dropOnAlways("d1");
     await waitFor(() => {
-      expect(reparentDocument).toHaveBeenCalledWith("d1", "rules", "always");
+      expect(reparentDocument).toHaveBeenCalledWith("d1", null, "always");
     });
   });
 
@@ -661,7 +661,7 @@ describe("PromptCatalog 拖拽搬家", () => {
     await renderMineCatalog();
     dropOnAlways("d1");
     await waitFor(() => {
-      expect(reparentDocument).toHaveBeenCalledWith("d1", "rules", "always");
+      expect(reparentDocument).toHaveBeenCalledWith("d1", null, "always");
     });
   });
 

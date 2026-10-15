@@ -313,14 +313,14 @@ class SubmitRunRedirectResponse(BaseModel):
 
 
 class SubmitRunStopRequest(BaseModel):
-    """User mid-flight stop for one or all workers in a delegate batch (只停这项工作).
+    """User mid-flight stop for one or all runs on a live graph (只停这项工作).
 
-    Queued while ``delegate`` drives; WaveScheduler drains via the same
-    ``cancel_run_ids`` channel as redirect / ``cancel_worker``, but **without** hot
+    Queued while a graph drive is live; WaveScheduler drains via the same
+    ``cancel_run_ids`` channel as redirect, but **without** hot
     revision or cold ``_redir`` follow-up. Does not abort the turn, kill the CEO, or
     clear FIFO queued turns.
 
-    ``run_id`` omitted / null → stop every in-flight and queued worker for
+    ``run_id`` omitted / null → stop every in-flight and queued run for
     ``execution_id``; otherwise only that run.
     """
 

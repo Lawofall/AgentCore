@@ -1,9 +1,9 @@
 /**
  * Derive beta pack / runtime icons from stable sources (「测」角标).
  * The ligature is near-neutral, so a hue shift would not mark the channel.
- * Badge sits in the empty top-right. The mark leans 6°, so the C's top
- * terminal sits further right: r is 10% of the side and the margin is
- * 3.125%, which clears that stroke and stays inside the squircle.
+ * Badge sits in the empty top-right. The mark leans 12°. r is 10% of the
+ * side and the margin is 3.125%, which stays clear of the strokes and
+ * inside the rounded plate.
  *
  *   node scripts/generate-beta-icons.mjs
  */

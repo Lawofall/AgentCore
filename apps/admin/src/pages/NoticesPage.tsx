@@ -668,7 +668,7 @@ function ConfirmActionDialog({
     >
       <p className="text-sm text-muted-foreground">
         {publishing
-          ? "发布后立即对所有用户生效。已投递到 IM「AgentCore 官方」的消息无法撤回；后续归档只能停止横幅 / 弹窗展示。"
+          ? "发布后立即对所有用户生效。已投递到 IM「GAgent 官方」的消息无法撤回；后续归档只能停止横幅 / 弹窗展示。"
           : "归档后从横幅 / 弹窗撤下，并且不能再编辑（服务端会拒绝对已归档公告的修改）。已投递的 IM 消息不受影响。"}
       </p>
       {publishing && hint && (

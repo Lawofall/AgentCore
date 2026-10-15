@@ -381,7 +381,7 @@ export const referenceChapter: ManualChapterContent = {
               ],
             },
             {
-              q: "Cursor 规则和 AgentCore 规矩是一回事吗？",
+              q: "Cursor 规则和 GAgent 规矩是一回事吗？",
               a: [
                 {
                   type: "text",

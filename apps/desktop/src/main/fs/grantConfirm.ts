@@ -71,7 +71,7 @@ export async function confirmFolderReadGrant(opts: {
     defaultId: 0,
     cancelId: 0,
     noLink: true,
-    title: "AgentCore",
+    title: "GAgent",
     message: "允许只读访问该文件夹？",
     detail: `${opts.displayLabel}\n本对话可读取其中的文件，不能改原件。仅本次对话。`,
   };
@@ -94,7 +94,7 @@ export async function confirmFolderWriteGrant(opts: {
     defaultId: 0,
     cancelId: 0,
     noLink: true,
-    title: "AgentCore",
+    title: "GAgent",
     message: organize ? "允许整理该文件夹？" : "允许以可读写方式加入该文件夹？",
     detail: organize
       ? `${opts.displayLabel}\n本对话可将文件复制进去（不覆盖已有文件）。`

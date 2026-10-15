@@ -44,7 +44,7 @@ async def test_maybe_capture_skips_empty_message_id(tmp_path: Path):
         workspace_root=root,
     )
     assert sid is None
-    assert not list(root.glob("**/AgentCore/baselines/*.zip"))
+    assert not list(root.glob("**/GAgent/baselines/*.zip"))
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,6 @@ from agentcore.runtime.events import (
     content_delta,
     message_end,
     message_start,
-    run_cancelled,
     run_completed,
     run_plan,
     run_started,
@@ -388,11 +387,9 @@ def _multi_agent_user_interjection_with_mentions() -> list[SSEEvent]:
 
 
 def _multi_agent_solo_coordinate_interjection() -> list[SSEEvent]:
-    """单 worker + 协调：非阻塞开跑 → 执行期插话可达 → CEO cancel_worker。
+    """单段 + 协调：非阻塞开跑 → 执行期插话可达。
 
-    钉「solo 也进协调」组合：leftover team_preview / team_synthesis_preview 仍不发（相邻 ≥2 闸不变），
-    但 delegate 立即返回『团队已启动』，CEO 自由；用户中途「把它停止」经
-    user_interjection 注入后由 cancel_worker 终止队员。
+    正在做的段不由模型单独停。插话注入后 CEO 继续，不发按段取消的工具。
     """
     agents = [
         {
@@ -442,20 +439,7 @@ def _multi_agent_solo_coordinate_interjection() -> list[SSEEvent]:
             content="把它停止",
             status="injected",
         ),
-        content_delta("收到，正在停止这名工程师。"),
-        tool_use_start(
-            "cw1",
-            "cancel_worker",
-            {"run_id": "r1", "reason": "用户要求停止"},
-        ),
-        tool_use_end(
-            "cw1",
-            "cancel_worker",
-            success=True,
-            output="已请求取消队员 r1（工程师）。",
-        ),
-        run_cancelled("r1", "w1", reason="stop", execution_id="exec1"),
-        content_delta("已按你的要求停下。"),
+        content_delta("收到。这一段已经在做。"),
         message_end(FinishReason.END_TURN, input_tokens=1800, output_tokens=320, cost=_COST),
     ]
 

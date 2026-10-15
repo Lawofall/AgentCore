@@ -31,7 +31,7 @@ from agentcore.core.errors import DatabaseUnavailableError
 # Stable user-facing copy for tools / sidecar / HTTP 503 — prefer this over raw
 # WinError / OSError / QueuePool text. Dev logs keep the underlying cause via
 # ``__cause__``.
-DATABASE_UNAVAILABLE_MESSAGE = "AgentCore 服务暂时不可用，请稍后重试"
+DATABASE_UNAVAILABLE_MESSAGE = "GAgent 服务暂时不可用，请稍后重试"
 # ToolResult.error / structured prepare codes (not OS / driver prose).
 DATABASE_UNAVAILABLE_CODE = "database_unavailable"
 

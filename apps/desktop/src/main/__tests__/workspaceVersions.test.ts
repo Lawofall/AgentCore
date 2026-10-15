@@ -39,8 +39,8 @@ describe("workspace named versions (list / delete)", () => {
 
   const versionsDir = (subpath = ""): string =>
     subpath
-      ? join(dir, subpath, "AgentCore", "versions")
-      : join(dir, "AgentCore", "versions");
+      ? join(dir, subpath, "GAgent", "versions")
+      : join(dir, "GAgent", "versions");
 
   const seedVersion = async (
     versionId: string,
@@ -212,9 +212,9 @@ describe("workspace named versions (list / delete)", () => {
       "一",
       "2026-01-01T00:00:00+00:00",
     );
-    await mkdir(join(dir, "AgentCore", "rules"), { recursive: true });
+    await mkdir(join(dir, "GAgent", "rules"), { recursive: true });
 
-    const listed = await listDir(root.id, "AgentCore");
+    const listed = await listDir(root.id, "GAgent");
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.data.map((e) => e.name)).not.toContain("versions");

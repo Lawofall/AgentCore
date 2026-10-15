@@ -38,8 +38,8 @@ export function installerFilename(
 ): string | null {
   const ver = version.trim();
   if (!ver) return null;
-  if (platform === "darwin") return `AgentCore-${ver}-mac-arm64.dmg`;
-  if (platform === "win32") return `AgentCore-${ver}-win-x64.exe`;
+  if (platform === "darwin") return `GAgent-${ver}-mac-arm64.dmg`;
+  if (platform === "win32") return `GAgent-${ver}-win-x64.exe`;
   return null;
 }
 

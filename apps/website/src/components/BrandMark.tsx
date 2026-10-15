@@ -1,4 +1,4 @@
-/** AC ligature bounds inside the repo-root assets/agentcore-icon.svg. */
+/** Previous AC ligature. Desktop app icon master is assets/agentcore-icon.svg. */
 const MARK_X = 150;
 const MARK_Y = 245;
 const MARK_W = 727;

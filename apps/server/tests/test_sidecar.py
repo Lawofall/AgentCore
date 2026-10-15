@@ -706,7 +706,7 @@ def test_sidecar_start_turn_folder_id_param_skips_db(tmp_path, monkeypatch):
     asyncio.run(drive())
     assert captured["folder_id"] == "folder-from-rpc"
     assert "error" not in _response(sent, 2)
-    assert not list(tmp_path.glob("**/AgentCore/baselines/*.zip"))
+    assert not list(tmp_path.glob("**/GAgent/baselines/*.zip"))
 
 
 def test_sidecar_start_turn_explicit_null_folder_id_skips_db(tmp_path, monkeypatch):

@@ -1,4 +1,4 @@
-package com.agentcore.mobile;
+package com.gagent.mobile;
 
 import com.getcapacitor.BridgeActivity;
 

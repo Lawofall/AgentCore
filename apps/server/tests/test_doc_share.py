@@ -56,7 +56,7 @@ def test_render_escapes_title_and_markdown_html():
     assert "<strong>粗</strong>" in html
     assert "noindex, nofollow" in html
     assert "2026-09-12" in html
-    assert "由 AgentCore 发布" in html
+    assert "由 GAgent 发布" in html
 
 
 def test_render_toc_from_headings_and_escapes():

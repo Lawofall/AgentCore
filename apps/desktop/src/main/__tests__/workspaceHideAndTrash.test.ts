@@ -50,13 +50,13 @@ describe("workspace listing hide system files", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("index_files prunes AgentCore/index, *.db, and media (AI tier)", async () => {
+  it("index_files prunes GAgent/index, *.db, and media (AI tier)", async () => {
     await writeFile(join(dir, "notes.md"), "hi");
     await writeFile(join(dir, "hero.png"), "png");
-    await mkdir(join(dir, "AgentCore", "index"), { recursive: true });
-    await writeFile(join(dir, "AgentCore", "index", "cache.db"), "x");
-    await mkdir(join(dir, "AgentCore", "rules"), { recursive: true });
-    await writeFile(join(dir, "AgentCore", "rules", "r.md"), "r");
+    await mkdir(join(dir, "GAgent", "index"), { recursive: true });
+    await writeFile(join(dir, "GAgent", "index", "cache.db"), "x");
+    await mkdir(join(dir, "GAgent", "rules"), { recursive: true });
+    await writeFile(join(dir, "GAgent", "rules", "r.md"), "r");
     await mkdir(join(dir, "index"), { recursive: true });
     await writeFile(join(dir, "index", "user.py"), "u");
     await writeFile(join(dir, "local.db"), "x");
@@ -64,41 +64,41 @@ describe("workspace listing hide system files", () => {
       paths: string[];
     };
     expect(res.paths).toEqual([
-      "AgentCore/rules/r.md",
+      "GAgent/rules/r.md",
       "index/user.py",
       "notes.md",
     ]);
   });
 
-  it("listDir hides internal zones but keeps AgentCore visible dirs and media", async () => {
+  it("listDir hides internal zones but keeps GAgent visible dirs and media", async () => {
     await writeFile(join(dir, "notes.md"), "hi");
     await writeFile(join(dir, "hero.png"), "png");
-    await mkdir(join(dir, "AgentCore", "index"), { recursive: true });
-    await mkdir(join(dir, "AgentCore", "rules"), { recursive: true });
+    await mkdir(join(dir, "GAgent", "index"), { recursive: true });
+    await mkdir(join(dir, "GAgent", "rules"), { recursive: true });
     await writeFile(join(dir, "local.db"), "x");
     const listed = await listDir(root.id, "");
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.data.map((e) => e.name).sort()).toEqual([
-      "AgentCore",
+      "GAgent",
       "hero.png",
       "notes.md",
     ]);
-    const acListed = await listDir(root.id, "AgentCore");
+    const acListed = await listDir(root.id, "GAgent");
     expect(acListed.ok).toBe(true);
     if (!acListed.ok) return;
     expect(acListed.data.map((e) => e.name).sort()).toEqual(["rules"]);
   });
 
-  it("renames leftover AgentCore/规则 to rules on listDir", async () => {
-    await mkdir(join(dir, "AgentCore", "规则"), { recursive: true });
-    await writeFile(join(dir, "AgentCore", "规则", "x.md"), "r");
-    const listed = await listDir(root.id, "AgentCore");
+  it("renames leftover GAgent/规则 to rules on listDir", async () => {
+    await mkdir(join(dir, "GAgent", "规则"), { recursive: true });
+    await writeFile(join(dir, "GAgent", "规则", "x.md"), "r");
+    const listed = await listDir(root.id, "GAgent");
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.data.map((e) => e.name)).toEqual(["rules"]);
     expect(
-      await readFile(join(dir, "AgentCore", "rules", "x.md"), "utf-8"),
+      await readFile(join(dir, "GAgent", "rules", "x.md"), "utf-8"),
     ).toBe("r");
   });
 });
@@ -156,7 +156,7 @@ describe("trashPath soft-delete", () => {
   });
 });
 
-describe("AgentCore/trash list + restore", () => {
+describe("GAgent/trash list + restore", () => {
   let dir: string;
   let root: StoredRoot;
 
@@ -200,15 +200,15 @@ describe("AgentCore/trash list + restore", () => {
     expect(after.ok && after.data).toEqual([]);
   });
 
-  it("deletes AgentCore by expanding children; rules restorable", async () => {
-    await mkdir(join(dir, "AgentCore", "rules"), { recursive: true });
-    await writeFile(join(dir, "AgentCore", "rules", "r.md"), "rule-body");
-    await mkdir(join(dir, "AgentCore", "index"), { recursive: true });
-    await writeFile(join(dir, "AgentCore", "index", "x.db"), "db");
-    await mkdir(join(dir, "AgentCore", "trash"), { recursive: true });
+  it("deletes GAgent by expanding children; rules restorable", async () => {
+    await mkdir(join(dir, "GAgent", "rules"), { recursive: true });
+    await writeFile(join(dir, "GAgent", "rules", "r.md"), "rule-body");
+    await mkdir(join(dir, "GAgent", "index"), { recursive: true });
+    await writeFile(join(dir, "GAgent", "index", "x.db"), "db");
+    await mkdir(join(dir, "GAgent", "trash"), { recursive: true });
 
     const del = await executeWorkspaceOp(root, "delete", {
-      path: "AgentCore",
+      path: "GAgent",
       permanent: false,
     });
     expect(del.ok).toBe(true);
@@ -216,7 +216,7 @@ describe("AgentCore/trash list + restore", () => {
     const listed = await listWorkspaceTrash(root.id);
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
-    expect(listed.data.map((e) => e.originalPath)).toEqual(["AgentCore/rules"]);
+    expect(listed.data.map((e) => e.originalPath)).toEqual(["GAgent/rules"]);
 
     const restored = await restoreWorkspaceTrash(
       root.id,
@@ -224,7 +224,7 @@ describe("AgentCore/trash list + restore", () => {
     );
     expect(restored.ok).toBe(true);
     expect(
-      await readFile(join(dir, "AgentCore", "rules", "r.md"), "utf-8"),
+      await readFile(join(dir, "GAgent", "rules", "r.md"), "utf-8"),
     ).toBe("rule-body");
   });
 });

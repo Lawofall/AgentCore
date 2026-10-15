@@ -190,7 +190,7 @@ async def test_list_missing_declared_stage_dir_returns_empty(tmp_path: Path):
     listing = await _ws(tmp_path).list(AGENTCORE_ROOT, "*")
     assert listing.entries == []
     assert listing.truncated is False
-    assert not (tmp_path / "AgentCore").exists()
+    assert not (tmp_path / "GAgent").exists()
 
 
 async def test_list_missing_guessed_dir_still_raises(tmp_path: Path):
@@ -199,9 +199,9 @@ async def test_list_missing_guessed_dir_still_raises(tmp_path: Path):
 
 
 async def test_list_missing_undeclared_under_agentcore_still_raises(tmp_path: Path):
-    """AgentCore/ 下非约定子树仍报错（口径不得扩成整棵 AgentCore 前缀）。"""
+    """GAgent/ 下非约定子树仍报错（口径不得扩成整棵 GAgent 前缀）。"""
     with pytest.raises(NotADirectory):
-        await _ws(tmp_path).list("AgentCore/not-a-stage", "*")
+        await _ws(tmp_path).list("GAgent/not-a-stage", "*")
 
 
 async def test_list_reports_truncation_instead_of_cutting_silently(tmp_path: Path):
@@ -542,7 +542,7 @@ async def test_delete_removes_file(tmp_path: Path):
     await ws.delete("f.txt")
     assert not (tmp_path / "f.txt").exists()
     assert ws.dirty is True
-    trash = tmp_path / "AgentCore" / "trash"
+    trash = tmp_path / "GAgent" / "trash"
     assert trash.is_dir()
     entries = list(trash.iterdir())
     assert len(entries) == 1
@@ -554,14 +554,14 @@ async def test_delete_removes_directory_recursively(tmp_path: Path):
     (tmp_path / "d" / "sub" / "f.txt").write_text("x", encoding="utf-8")
     await _ws(tmp_path).delete("d")
     assert not (tmp_path / "d").exists()
-    assert (tmp_path / "AgentCore" / "trash").is_dir()
+    assert (tmp_path / "GAgent" / "trash").is_dir()
 
 
 async def test_delete_permanent_hard_removes(tmp_path: Path):
     (tmp_path / "f.txt").write_text("x", encoding="utf-8")
     await _ws(tmp_path).delete("f.txt", permanent=True)
     assert not (tmp_path / "f.txt").exists()
-    trash = tmp_path / "AgentCore" / "trash"
+    trash = tmp_path / "GAgent" / "trash"
     assert not trash.exists() or not any(trash.iterdir())
 
 
@@ -571,8 +571,8 @@ async def test_delete_missing_raises_path_not_found(tmp_path: Path):
 
 
 async def test_delete_agentcore_expands_rules_restorable(tmp_path: Path):
-    """Deleting bare AgentCore/ expands children — no self-nest 500 path."""
-    ac = tmp_path / "AgentCore"
+    """Deleting bare GAgent/ expands children — no self-nest 500 path."""
+    ac = tmp_path / "GAgent"
     (ac / "rules").mkdir(parents=True)
     (ac / "rules" / "r.md").write_text("keep-me", encoding="utf-8")
     (ac / "index").mkdir(parents=True)
@@ -580,7 +580,7 @@ async def test_delete_agentcore_expands_rules_restorable(tmp_path: Path):
     (ac / "trash").mkdir(parents=True)
 
     ws = _ws(tmp_path)
-    await ws.delete("AgentCore")
+    await ws.delete("GAgent")
 
     assert not (ac / "rules").exists()
     assert not (ac / "index").exists()
@@ -588,9 +588,9 @@ async def test_delete_agentcore_expands_rules_restorable(tmp_path: Path):
 
     entries = list_trash_entries(root=tmp_path, retention_days=30)
     assert len(entries) == 1
-    assert entries[0].original_path == "AgentCore/rules"
+    assert entries[0].original_path == "GAgent/rules"
     assert restore_from_trash(root=tmp_path, entry_id=entries[0].entry_id) == (
-        "AgentCore/rules"
+        "GAgent/rules"
     )
     assert (ac / "rules" / "r.md").read_text(encoding="utf-8") == "keep-me"
 

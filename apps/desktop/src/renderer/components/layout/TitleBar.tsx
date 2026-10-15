@@ -27,7 +27,7 @@ export function TitleBar() {
       >
         {!collapsed && (
           <span className="flex flex-1 items-center gap-1.5 text-sidebar-foreground [-webkit-app-region:no-drag]">
-            <BrandMarkIcon size={16} title="AgentCore" />
+            <BrandMarkIcon size={16} title="GAgent" />
             {isBeta && (
               <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
                 测试

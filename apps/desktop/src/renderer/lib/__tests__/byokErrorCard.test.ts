@@ -559,7 +559,7 @@ describe("our-cloud DATABASE_UNAVAILABLE face", () => {
       code: "LLM_ERROR",
       message: SELECTED_MODEL_UNAVAILABLE_MESSAGE,
     });
-    expect(face?.message).not.toContain("AgentCore");
+    expect(face?.message).not.toContain("GAgent");
 
     const described = describeError(
       new StreamError("http", 530, {
@@ -568,7 +568,7 @@ describe("our-cloud DATABASE_UNAVAILABLE face", () => {
       }),
     );
     expect(described?.message).toBe(SELECTED_MODEL_UNAVAILABLE_MESSAGE);
-    expect(described?.message).not.toContain("AgentCore");
+    expect(described?.message).not.toContain("GAgent");
   });
 
   it("true upstream LLM_ERROR still escalates connectivity from the 2nd failure", () => {

@@ -298,7 +298,7 @@ class SessionWorkersMixin:
         busy_label = {
             "llm": "LLM 调用中",
             "tool": "工具执行中",
-            "verify": "有界验证中（可用 cancel_worker 打断）",
+            "verify": "有界验证中",
             "arbitrate": "等待主管仲裁",
         }
         for run_id, role in self.running_workers():

@@ -5,7 +5,7 @@ from the opening table and from execution. The set is read when a turn entry
 builds the registry; registration skips those names. A loop that is already
 streaming keeps the table it started with.
 
-Coordination controls (``replan`` / ``cancel_worker``) are not switches. They
+Coordination controls (``replan`` / ``rewind``) are not switches. They
 leave the table together with ``graph``.
 """
 
@@ -70,7 +70,7 @@ _SWITCH_IDS: frozenset[str] = frozenset(switch.id for switch in SWITCHES)
 _ORDER: dict[str, int] = {switch.id: index for index, switch in enumerate(SWITCHES)}
 
 # Not their own rows. They leave the table together with ``graph``.
-_DELEGATE_COMPANIONS: frozenset[str] = frozenset({"replan", "cancel_worker", "rewind"})
+_DELEGATE_COMPANIONS: frozenset[str] = frozenset({"replan", "rewind"})
 
 
 def normalize_disabled_tools(raw: object) -> tuple[str, ...]:

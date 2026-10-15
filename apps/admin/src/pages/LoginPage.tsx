@@ -140,7 +140,7 @@ export function LoginPage() {
           </div>
           <div>
             <h1 className="text-xl font-semibold text-foreground">
-              AgentCore 管理后台
+              GAgent 管理后台
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {step !== "mfa"

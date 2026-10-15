@@ -26,7 +26,7 @@ skip_if:
 |---|---|---|
 | 用户规则内容、落盘、按需目录 | `agentcore/memory/`（包 facade 已 re-export）+ `file_ops` overlay | — |
 | 注入段序 / `ContextAssembler` / 工作区概览 | `runtime/context/` + 回合拼装 `runtime/resolve/`（含 `prompt/memory_rules.py`） | 勿在 assembler 写规则策略或落盘 |
-| Run / delegate 执行 | `runtime/runs/` → [执行引擎](/docs/03-AI核心/执行引擎架构设计.md) | **不是**用户规则域 |
+| Run / graph 执行 | `runtime/runs/` → [执行引擎](/docs/03-AI核心/执行引擎架构设计.md) | **不是**用户规则域 |
 
 ---
 
@@ -62,7 +62,7 @@ description: 一行摘要
 
 `apply` / `paths` 不参与注入。`ai_maintained` 不进 frontmatter。
 
-**谁写**：人在工具箱或文件页保存，摘要写入索引。对话里模型 `write` `.agentcore/rules/*.md` 只改正文。半截/`…` 收尾拒写入。产品能力目录、工作区路径不进用户规则 → [现行信息](/docs/01-产品/现行信息.md)。
+**谁写**：人在工具箱或文件页保存这篇 Markdown，摘要写入索引。模型改的是同一篇文档的正文。产品能力目录、工作区路径不进这些文档 → [现行信息](/docs/01-产品/现行信息.md)。
 
 **纠错 UI 已撤**。手写提示词用删除。存量 `disputed_at` 见代码，不当人侧入口。**严禁**扫对话原文猜「用户是否在否认某条规则」。
 
@@ -107,4 +107,4 @@ Worker / CEO 默认开场持 `search_conversations` / `read_conversation`。**�
 | 把产品能力目录写入用户规则 | 真源在产品；抄进规则会过时且挤按需目录 |
 | 向量 chunk 自动灌 prompt | 与「文件随时变」不合；agentic 自取永远新鲜 |
 
-查看/编辑：对话内 `write` `.agentcore/rules/*.md` 与工具箱提示词 + 各文件夹 `.agentcore`。→ 见代码：`fileWorkbench/AgentCoreSection.tsx` · `EntriesSection.tsx`
+查看/编辑：工具箱提示词，以及文件夹文件页里的同一篇 Markdown。→ 见代码：`fileWorkbench/EntriesSection.tsx`

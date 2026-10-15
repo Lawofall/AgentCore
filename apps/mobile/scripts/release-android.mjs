@@ -16,7 +16,7 @@
  *   - VITE_API_URL / AGENTCORE_APP_API_URL / AGENTCORE_APP_HOST
  *
  * Tag track: `android-v<ver>` (separate from desktop `v<ver>`).
- * Asset: `AgentCore-<ver>-android.apk`
+ * Asset: `GAgent-<ver>-android.apk`
  */
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
@@ -41,7 +41,7 @@ const RELEASES_REPO = "Lawofall/AgentCore-releases";
 const skipDraft = process.argv.includes("--skip-draft");
 
 function apkAssetName(version) {
-  return `AgentCore-${version}-android.apk`;
+  return `GAgent-${version}-android.apk`;
 }
 
 function gh(args, { allowFail = false, capture = false } = {}) {
