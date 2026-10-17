@@ -26,7 +26,8 @@ harness **每例前后硬清**，避免用例间污染。
 ```
 
 ``layer=user_rule`` → ``AgentCore/rules/``（``ai_maintained=false``）。
-``content`` 与 ``file``（相对夹具根）二选一。
+``content`` 与 ``file``（相对夹具根）二选一。正文自带 frontmatter
+（``apply`` / 按需还要 ``description``）；列上的 ``apply_mode`` 不进按需目录。
 
 本模块顶层只依赖 stdlib + ``EvalConfigError``，好让 ``seed_lint`` / ``evals lint``
 不拖 DB 实现。
